@@ -758,7 +758,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPIProviderSessionRejectsRawFilesystemPathInput`.
   - `TestAPIUnsupportedProviderSessionKindReturnsTypedError`.
 
-- [ ] `tests/functional/provider_sessions/association/association_test.go`
+- [x] `tests/functional/provider_sessions/association/association_test.go`
   - `TestProviderSessionRefAssociatesWithOwningDispatchAndFactorySession`.
   - `TestAbsentProviderSessionIsNotFabricated`.
   - `TestMultipleDispatchesKeepDistinctProviderSessionRefs`.
@@ -767,8 +767,21 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestResponseExecGoldenMetadataSurvivesCLIProjection`.
   - `TestResponseExecGoldenMetadataSurvivesAPIResponseEvents`.
   - `TestResponseExecGoldenMetadataSurvivesReplay`.
-  - The assertions use checked-in expected metadata, not mapper-generated
+    - The assertions use checked-in expected metadata, not mapper-generated
     expected values.
+
+## Wave 2 — operator settings
+
+- [x] `tests/functional/operator_settings/servicewire/servicewire_composition_test.go`
+  - `TestServiceWireCompositionRootServesDocumentAndResolutionOperations`.
+  - `TestServiceFromHomePortsConstructsSettingsRoot`.
+  - `TestServiceFromHomePortsRejectsMissingPorts`.
+  - `TestServiceFromConfigDocumentConstructsFromDocumentPorts`.
+  - `TestServiceFromConfigDocumentRejectsMissingDocumentPorts`.
+  - `TestResolveFromHomeRejectsMissingFilesystemPorts`.
+  - `TestRegisterDefaultsResolutionFromHomeRestoresAdapterOwnership`.
+  - `TestResolveFromHomeUsesSettingsAdapterOwnershipPath`.
+  - `TestResolveFromHomeFallbackPreservesAcceptedSemantics`.
 
 ## Wave 2 — events
 

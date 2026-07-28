@@ -7389,6 +7389,36 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/factory/packaged/fusion/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/fusion",
+      "scenario": "TestPackagedFusionRequiredInputCompletes",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/fusion/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/fusion/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/fusion",
+      "scenario": "TestPackagedFusionOptionalInputsReachWorkers",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/fusion/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/fusion/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/fusion",
+      "scenario": "TestPackagedFusionPartialWorkerFailureUsesDocumentedOutcome",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/fusion/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/factory/packaged/goal/invocation_test.go",
       "package": "you-agent-factory/tests/functional/factory/packaged/goal",
       "scenario": "TestPackagedGoalAcceptCompletesWithSummary",
@@ -7424,36 +7454,6 @@
       "scenario": "TestPackagedGoalPausedSubmissionResumes",
       "lane": "short",
       "destination": "tests/functional/factory/packaged/goal/invocation_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/factory/packaged/fusion/invocation_test.go",
-      "package": "you-agent-factory/tests/functional/factory/packaged/fusion",
-      "scenario": "TestPackagedFusionRequiredInputCompletes",
-      "lane": "short",
-      "destination": "tests/functional/factory/packaged/fusion/invocation_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/factory/packaged/fusion/invocation_test.go",
-      "package": "you-agent-factory/tests/functional/factory/packaged/fusion",
-      "scenario": "TestPackagedFusionOptionalInputsReachWorkers",
-      "lane": "short",
-      "destination": "tests/functional/factory/packaged/fusion/invocation_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/factory/packaged/fusion/invocation_test.go",
-      "package": "you-agent-factory/tests/functional/factory/packaged/fusion",
-      "scenario": "TestPackagedFusionPartialWorkerFailureUsesDocumentedOutcome",
-      "lane": "short",
-      "destination": "tests/functional/factory/packaged/fusion/invocation_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -7557,6 +7557,126 @@
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/provider_sessions/association/association_test.go",
+      "package": "you-agent-factory/tests/functional/provider_sessions/association",
+      "scenario": "TestProviderSessionRefAssociatesWithOwningDispatchAndFactorySession",
+      "lane": "short",
+      "destination": "tests/functional/provider_sessions/association/association_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/provider_sessions/association/association_test.go",
+      "package": "you-agent-factory/tests/functional/provider_sessions/association",
+      "scenario": "TestAbsentProviderSessionIsNotFabricated",
+      "lane": "short",
+      "destination": "tests/functional/provider_sessions/association/association_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/provider_sessions/association/association_test.go",
+      "package": "you-agent-factory/tests/functional/provider_sessions/association",
+      "scenario": "TestMultipleDispatchesKeepDistinctProviderSessionRefs",
+      "lane": "short",
+      "destination": "tests/functional/provider_sessions/association/association_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/operator_settings/servicewire/servicewire_composition_test.go",
+      "package": "you-agent-factory/tests/functional/operator_settings/servicewire",
+      "scenario": "TestServiceWireCompositionRootServesDocumentAndResolutionOperations",
+      "lane": "short",
+      "destination": "tests/functional/operator_settings/servicewire/servicewire_composition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/operator_settings/servicewire/servicewire_composition_test.go",
+      "package": "you-agent-factory/tests/functional/operator_settings/servicewire",
+      "scenario": "TestServiceFromHomePortsConstructsSettingsRoot",
+      "lane": "short",
+      "destination": "tests/functional/operator_settings/servicewire/servicewire_composition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/operator_settings/servicewire/servicewire_composition_test.go",
+      "package": "you-agent-factory/tests/functional/operator_settings/servicewire",
+      "scenario": "TestServiceFromHomePortsRejectsMissingPorts",
+      "lane": "short",
+      "destination": "tests/functional/operator_settings/servicewire/servicewire_composition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/operator_settings/servicewire/servicewire_composition_test.go",
+      "package": "you-agent-factory/tests/functional/operator_settings/servicewire",
+      "scenario": "TestServiceFromConfigDocumentConstructsFromDocumentPorts",
+      "lane": "short",
+      "destination": "tests/functional/operator_settings/servicewire/servicewire_composition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/operator_settings/servicewire/servicewire_composition_test.go",
+      "package": "you-agent-factory/tests/functional/operator_settings/servicewire",
+      "scenario": "TestServiceFromConfigDocumentRejectsMissingDocumentPorts",
+      "lane": "short",
+      "destination": "tests/functional/operator_settings/servicewire/servicewire_composition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/operator_settings/servicewire/servicewire_composition_test.go",
+      "package": "you-agent-factory/tests/functional/operator_settings/servicewire",
+      "scenario": "TestResolveFromHomeRejectsMissingFilesystemPorts",
+      "lane": "short",
+      "destination": "tests/functional/operator_settings/servicewire/servicewire_composition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/operator_settings/servicewire/servicewire_composition_test.go",
+      "package": "you-agent-factory/tests/functional/operator_settings/servicewire",
+      "scenario": "TestRegisterDefaultsResolutionFromHomeRestoresAdapterOwnership",
+      "lane": "short",
+      "destination": "tests/functional/operator_settings/servicewire/servicewire_composition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/operator_settings/servicewire/servicewire_composition_test.go",
+      "package": "you-agent-factory/tests/functional/operator_settings/servicewire",
+      "scenario": "TestResolveFromHomeUsesSettingsAdapterOwnershipPath",
+      "lane": "short",
+      "destination": "tests/functional/operator_settings/servicewire/servicewire_composition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/operator_settings/servicewire/servicewire_composition_test.go",
+      "package": "you-agent-factory/tests/functional/operator_settings/servicewire",
+      "scenario": "TestResolveFromHomeFallbackPreservesAcceptedSemantics",
+      "lane": "short",
+      "destination": "tests/functional/operator_settings/servicewire/servicewire_composition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
     }
   ],
   "scanned_at_utc": "2026-07-28T05:13:00Z",
@@ -7564,7 +7684,7 @@
     "by_catch_all": {
       "bootstrap_portability": 22,
       "guards_batch": 23,
-      "none": 474,
+      "none": 492,
       "replay_contracts": 23,
       "runtime_api": 96,
       "smoke": 62,
@@ -7575,14 +7695,15 @@
       "automations": 7,
       "bootstrap_portability": 21,
       "cli": 59,
-      "factory": 21,
+      "factory": 24,
       "guards_batch": 23,
       "models": 5,
       "observability": 9,
-      "operator_settings": 1,
+      "operator_settings": 10,
       "orchestration": 48,
       "product": 13,
       "providers": 55,
+      "provider_sessions": 3,
       "replay_contracts": 23,
       "runtime_api": 95,
       "sessionparity": 13,
@@ -7594,9 +7715,9 @@
       "workflow": 30,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 736,
+    "customer_top_level_Test_scenarios": 748,
     "lane_functionallong": 95,
-    "lane_short": 641,
+    "lane_short": 653,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 7,
@@ -7622,6 +7743,7 @@
       "you-agent-factory/tests/functional/models/model_list": 2,
       "you-agent-factory/tests/functional/observability/coverage": 9,
       "you-agent-factory/tests/functional/operator_settings/configcore": 1,
+      "you-agent-factory/tests/functional/operator_settings/servicewire": 9,
       "you-agent-factory/tests/functional/orchestration/javascript/composition": 14,
       "you-agent-factory/tests/functional/orchestration/javascript/contracts": 8,
       "you-agent-factory/tests/functional/orchestration/javascript/durability": 3,
@@ -7637,6 +7759,7 @@
       "you-agent-factory/tests/functional/providers/codex": 7,
       "you-agent-factory/tests/functional/providers/cursor": 8,
       "you-agent-factory/tests/functional/providers/kiro": 4,
+      "you-agent-factory/tests/functional/provider_sessions/association": 3,
       "you-agent-factory/tests/functional/replay_contracts": 23,
       "you-agent-factory/tests/functional/runtime_api": 56,
       "you-agent-factory/tests/functional/runtime_api/factory_transformation": 39,
@@ -7682,7 +7805,7 @@
       "you-agent-factory/tests/functional/workstations/repeater": 13,
       "you-agent-factory/tests/functional/workstations/watcher": 9
     },
-    "files_with_customer_Test": 235,
+    "files_with_customer_Test": 239,
     "functional_test_go_files": 251,
     "helper_only_non_customer_files": 51,
     "internal_harness_Test_functions": 15,
@@ -7751,7 +7874,7 @@
       "cli": 56,
       "config_init": 8,
       "models": 1,
-      "operator_settings": 1,
+      "operator_settings": 10,
       "providers": 46,
       "sessionparity": 13,
       "work": 1
@@ -7760,13 +7883,13 @@
   "completeness_audit": {
     "audited_at_utc": "2026-07-28T05:32:00Z",
     "story": "ft-wave2-work-dependencies-mergeability",
-    "live_customer_scenarios": 736,
-    "ledger_rows": 736,
+    "live_customer_scenarios": 748,
+    "ledger_rows": 748,
     "unmapped_scenarios": 0,
-    "checklist_destinations": 435,
+    "checklist_destinations": 436,
     "wrong_layer_destinations": 69,
     "invalid_destinations": 0,
-    "lane_short": 641,
+    "lane_short": 653,
     "lane_functionallong": 95,
     "specialty_targets_documented": 11,
     "deletion_only_batches": 51,

@@ -1199,12 +1199,6 @@
     },
     {
       "fromOwner": "factory_runtime",
-      "toOwner": "providers",
-      "class": "command",
-      "evidence": "pkg/services/factory_runtime/build -\u003e pkg/services/workers/provider/inferencecontract"
-    },
-    {
-      "fromOwner": "factory_runtime",
       "toOwner": "recordings",
       "class": "event",
       "evidence": "pkg/services/factory_runtime -\u003e pkg/services/recordings"
@@ -1340,6 +1334,12 @@
       "toOwner": "transports",
       "class": "command",
       "evidence": "pkg/services/factory_visualization/transports/cli -\u003e pkg/transports/mapping"
+    },
+    {
+      "fromOwner": "factory_visualization",
+      "toOwner": "transports",
+      "class": "command",
+      "evidence": "pkg/services/factory_visualization/transports/http -\u003e pkg/transports/http/generated"
     },
     {
       "fromOwner": "factory_visualization",
@@ -4113,6 +4113,12 @@
     },
     {
       "packagePath": "pkg/services/operator_settings/testlink",
+      "disposition": "retain",
+      "destination": "operator_settings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/transports/cli",
       "disposition": "retain",
       "destination": "operator_settings",
       "destinationKind": "owner"
