@@ -88,6 +88,86 @@ func TestWireFoldPreservesCatalogThroughPublishedRoot(t *testing.T) {
 	}
 }
 
+func TestWireFoldPreservesCatalogResolveDeleteAndCurrentPointerThroughPublishedRoot(t *testing.T) {
+	t.Parallel()
+
+	projectRoot := t.TempDir()
+	globalRoot := t.TempDir()
+	alphaDir := writeFoldPreservationNamedFactory(t, projectRoot, "alpha")
+	_ = writeFoldPreservationNamedFactory(t, projectRoot, "beta")
+	_ = writeFoldPreservationNamedFactory(t, globalRoot, "alpha")
+	service := newWireFoldPreservationService(t)
+	ctx := context.Background()
+
+	resolved, err := service.ResolveNamedFactory(
+		ctx,
+		factorydefinitions.ResolveNamedFactoryRequest{
+			ProjectRoot: projectRoot,
+			GlobalRoot:  globalRoot,
+			Name:        "alpha",
+		},
+	)
+	if err != nil {
+		t.Fatalf("ResolveNamedFactory(alpha) error = %v", err)
+	}
+	if resolved.Resolution.FactoryDir != alphaDir ||
+		resolved.Resolution.Source != factorydefinitions.NamedFactoryResolutionSourceProjectLocal {
+		t.Fatalf("ResolveNamedFactory() = %#v, want project-local alpha at %q", resolved.Resolution, alphaDir)
+	}
+
+	if _, err := service.SetCurrentFactoryPointer(
+		ctx,
+		factorydefinitions.SetCurrentFactoryPointerRequest{RootDir: projectRoot, Name: "beta"},
+	); err != nil {
+		t.Fatalf("SetCurrentFactoryPointer(beta) error = %v", err)
+	}
+	pointer, err := service.GetCurrentFactoryPointer(
+		ctx,
+		factorydefinitions.GetCurrentFactoryPointerRequest{RootDir: projectRoot},
+	)
+	if err != nil {
+		t.Fatalf("GetCurrentFactoryPointer() error = %v", err)
+	}
+	if pointer.Name != "beta" {
+		t.Fatalf("GetCurrentFactoryPointer() = %#v, want beta current pointer", pointer)
+	}
+
+	emptyRoot := t.TempDir()
+	_, missingPointerErr := service.GetCurrentFactoryPointer(
+		ctx,
+		factorydefinitions.GetCurrentFactoryPointerRequest{RootDir: emptyRoot},
+	)
+	if !errors.Is(missingPointerErr, factorydefinitions.ErrCurrentFactoryNotFound) {
+		t.Fatalf(
+			"GetCurrentFactoryPointer(missing) error = %v, want %v",
+			missingPointerErr,
+			factorydefinitions.ErrCurrentFactoryNotFound,
+		)
+	}
+
+	deleted, err := service.DeleteNamedFactory(
+		ctx,
+		factorydefinitions.DeleteNamedFactoryRequest{RootDir: projectRoot, Name: "alpha"},
+	)
+	if err != nil {
+		t.Fatalf("DeleteNamedFactory(alpha) error = %v", err)
+	}
+	if deleted.FactoryDir != alphaDir {
+		t.Fatalf("DeleteNamedFactory() factoryDir = %q, want %q", deleted.FactoryDir, alphaDir)
+	}
+
+	listed, err := service.ListNamedFactories(
+		ctx,
+		factorydefinitions.ListNamedFactoriesRequest{RootDir: projectRoot},
+	)
+	if err != nil {
+		t.Fatalf("ListNamedFactories() after delete error = %v", err)
+	}
+	if len(listed.Entries) != 1 || listed.Entries[0].Name != "beta" {
+		t.Fatalf("ListNamedFactories() after delete = %#v, want only beta", listed.Entries)
+	}
+}
+
 func TestWireFoldPreservesAuthoringThroughPublishedRoot(t *testing.T) {
 	t.Parallel()
 

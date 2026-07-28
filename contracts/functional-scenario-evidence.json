@@ -55,6 +55,12 @@
       ]
     },
     {
+      "test": "tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go::TestCLISubmitBatchSuccessHumanAndJSONShapes",
+      "stableIds": [
+        "cli/you.submit.batch"
+      ]
+    },
+    {
       "test": "tests/release/release_smoke_test.go::TestGoInstallSmoke_InstallsCmdFactoryBinaryIntoCleanGOBIN",
       "stableIds": [
         "cli/you.docs"

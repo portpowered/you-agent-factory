@@ -3,7 +3,7 @@ package factorycontracts
 import (
 	"strings"
 
-	factoryresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/resource"
+	catalogresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/resource"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
 	workertaxonomy "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/taxonomy"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -185,9 +185,9 @@ var publicFactoryWorkerModelOperationContentTypeAliases = map[string]string{
 }
 
 var publicFactoryResourceTypeAliases = map[string]string{
-	factoryresource.TypeModel:          factoryresource.TypeModel,
-	factoryresource.TypeProviderQuota:  factoryresource.TypeProviderQuota,
-	factoryresource.TypeInvocationSlot: factoryresource.TypeInvocationSlot,
+	catalogresource.TypeModel:          catalogresource.TypeModel,
+	catalogresource.TypeProviderQuota:  catalogresource.TypeProviderQuota,
+	catalogresource.TypeInvocationSlot: catalogresource.TypeInvocationSlot,
 }
 
 var publicFactoryWorkstationTypeAliases = map[string]string{

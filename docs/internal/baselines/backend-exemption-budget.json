@@ -255,13 +255,13 @@
     },
     {
       "rule": "backendsizecheck:ignore-function",
-      "target": "pkg/services/factory_definitions/persistence/named_factory_persistence_test.go#TestPersistNamedFactoryOwnsCreateReplaceAndCurrentPointerPolicy",
+      "target": "pkg/services/factory_definitions/internal/services/catalog/persistence/named_factory_persistence_test.go#TestPersistNamedFactoryOwnsCreateReplaceAndCurrentPointerPolicy",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
     },
     {
       "rule": "backendsizecheck:ignore-function",
-      "target": "pkg/services/factory_definitions/persistence/service_test.go#TestServiceRoutesPersistenceThroughFlatCapabilities",
+      "target": "pkg/services/factory_definitions/internal/services/catalog/persistence/service_test.go#TestServiceRoutesPersistenceThroughFlatCapabilities",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
     },
@@ -417,19 +417,19 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_definitions/persistence/named_factory_persistence_test.go#TestPersistNamedFactoryOwnsCreateReplaceAndCurrentPointerPolicy",
+      "target": "pkg/services/factory_definitions/internal/services/catalog/persistence/named_factory_persistence_test.go#TestPersistNamedFactoryOwnsCreateReplaceAndCurrentPointerPolicy",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_definitions/persistence/service.go#service.persistNamedFactory",
+      "target": "pkg/services/factory_definitions/internal/services/catalog/persistence/service.go#service.persistNamedFactory",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_definitions/persistence/service_test.go#TestServiceRoutesPersistenceThroughFlatCapabilities",
+      "target": "pkg/services/factory_definitions/internal/services/catalog/persistence/service_test.go#TestServiceRoutesPersistenceThroughFlatCapabilities",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
     },
@@ -1341,13 +1341,13 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-function-lines",
-      "target": "pkg/services/factory_definitions/persistence/named_factory_persistence_test.go#TestPersistNamedFactoryOwnsCreateReplaceAndCurrentPointerPolicy",
+      "target": "pkg/services/factory_definitions/internal/services/catalog/persistence/named_factory_persistence_test.go#TestPersistNamedFactoryOwnsCreateReplaceAndCurrentPointerPolicy",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-function-lines",
-      "target": "pkg/services/factory_definitions/persistence/service_test.go#TestServiceRoutesPersistenceThroughFlatCapabilities",
+      "target": "pkg/services/factory_definitions/internal/services/catalog/persistence/service_test.go#TestServiceRoutesPersistenceThroughFlatCapabilities",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
     },

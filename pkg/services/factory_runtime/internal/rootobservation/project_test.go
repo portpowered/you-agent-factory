@@ -8,8 +8,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/factorystatus"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/legacysnapshot"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/state"
-	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/token"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 

@@ -9,8 +9,7 @@ import (
 )
 
 // parallelOperationAllowedPackages may still reference deletion-only parallel
-// catalog operation aliases until pkg/wire and remaining construction surfaces
-// finish cutover in a later packet.
+// catalog operation aliases until remaining construction surfaces finish cutover.
 var parallelOperationAllowedPackages = []string{
 	"github.com/portpowered/infinite-you/pkg/wire",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedfactories",

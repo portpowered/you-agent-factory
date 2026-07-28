@@ -293,6 +293,17 @@
   Catalog metadata infers domain `workstations` and subsection `poller` from
   the path; every top-level `Test*` needs a customer-readable Go doc so
   `functionaltestmetadata` stays viz-compatible.
+  Factory_runtime Petri authored eligibility guard functional coverage belongs
+  in `tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go`:
+  prove VISIT_COUNT block-until-satisfied, SAME_NAME correlated release, and
+  VISIT_COUNT/MATCHES_FIELDS failure visibility through public Factory Event
+  dispatch ordering, Work listings, and API status observation via
+  `support.RunFactoryToCompletionWithEdgesAndObservations`,
+  `support.StartFunctionalAPIServer`, and `support.NewShapedProviderCommandRunner`
+  without service-internal Petri imports. Catalog metadata infers domain
+  `factory_runtime` and subsection `orchestrators/petri/guards` from the path;
+  every top-level `Test*` needs a customer-readable Go doc so
+  `functionaltestmetadata` stays viz-compatible.
   Mock-worker replacement functional coverage belongs in
   `tests/functional/workers/mock/replacement_test.go`: prove named-only
   `--with-mock-workers` replacement through
@@ -445,7 +456,7 @@
   context is cancelled. Response-stream stdout write failures cancel the
   invocation through `pkg/transports/cli/run/factory_invocation_input.go`, and
   worker-pool shutdown cancels in-flight executor contexts through
-  `pkg/services/factory_runtime/runtime/worker_pool.go`. Catalog metadata infers domain
+  `pkg/services/factory_runtime/internal/services/orchestration/runtime/worker_pool.go`. Catalog metadata infers domain
   `transport` and subsection `cli/output` from the path. Every top-level `Test*`
   needs a customer-readable Go doc so `functionaltestmetadata` stays
   viz-compatible.
@@ -509,6 +520,15 @@ Wave 0 functional-tests-expansion planning authority lives under
   `edges.WorkersExecutableLocator`, asserting resolved selection via
   `support.NewShapedProviderCommandRunner` call records; catalog metadata
   infers domain `factory/definitions`.
+  `tests/functional/factory_definitions/transports/cli/named_lifecycle/named_lifecycle_test.go`
+  owns named Factory create/list/update/delete, list membership after
+  create/delete, and actionable delete-missing failure through
+  `support.BuildProcess` + `support.FakeInputs` with isolated `--dir`
+  catalog roots, asserting public CLI success/failure output and persisted
+  `factory.json` presence or absence; catalog metadata infers domain
+  `factory_definitions` and subsection `transports/cli/named_lifecycle`.
+  Every top-level `Test*` needs a customer-readable Go doc so
+  `functionaltestmetadata` stays viz-compatible.
   `make pkg-structure` enforces the domain-mirrored functional layout
   `tests/functional/<domain>/<subsection>/...`: new shallow, catch-all, or
   unclassified scenario packages are blocking, while existing nonconforming
@@ -886,6 +906,15 @@ Wave 0 functional-tests-expansion planning authority lives under
   with `test-file-checklist.md`, `migration-ledger-inventory.json`, and customer-readable
   Go docs (plus `//golden:` on the success load test) so `functionaltestmetadata`
   stays viz-compatible.
+
+- `tests/functional/factory_runtime/orchestrators/petri/routing/multi_transition_test.go`
+  owns service-mirrored Factory Runtime Petri multi-transition routing depth
+  through `support.RunFactoryToCompletionWithEdgesAndWork` and public Work /
+  session / Factory Event assertions only. Close catalog metadata with
+  `test-file-checklist.md`, `migration-ledger-inventory.json`,
+  `package-structure-baseline.json` entries for the `factory_runtime` domain
+  noun, and customer-readable Go docs on every top-level `Test*` so
+  `functionaltestmetadata` stays viz-compatible.
 
 - `tests/functional/automations/` owns root.BuildProcess evidence for packaged
   Automations cron scheduling and filesystem watcher preseed. Keep cron workstation

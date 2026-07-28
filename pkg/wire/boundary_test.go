@@ -15,7 +15,7 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factorynamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
@@ -84,7 +84,7 @@ func (*wireTestClock) Now() time.Time {
 
 func TestFactorySessionsServiceRequiresRuntimeClockBinding(t *testing.T) {
 	t.Parallel()
-	namedPathResolver, err := factorynamedpaths.New(platformfilesystem.Local{})
+	namedPathResolver, err := factorydefinitionswire.NewPathResolver(platformfilesystem.Local{})
 	if err != nil {
 		t.Fatalf("construct named-path resolver: %v", err)
 	}
@@ -270,6 +270,39 @@ func TestRunTransportCannotRecreateAnApplicationBuilder(t *testing.T) {
 					}
 				}
 			}
+		}
+	})
+}
+
+// pss-cln-run-fold-engine-pipeline-007: root pkg/wire must reach Factory Runtime
+// only through published root contracts and factory_runtime/wire assembly seams.
+func TestRootWireImportsFactoryRuntimeThroughPublishedSeamsOnly(t *testing.T) {
+	t.Parallel()
+
+	const (
+		factoryRuntimeRootImport = "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+		factoryRuntimeWireImport = factoryRuntimeRootImport + "/wire"
+	)
+
+	parseProductionGoFiles(t, ".", func(path string, file *ast.File) {
+		for _, spec := range file.Imports {
+			importPath, err := strconv.Unquote(spec.Path.Value)
+			if err != nil {
+				t.Fatalf("unquote import in %s: %v", path, err)
+			}
+			if !strings.HasPrefix(importPath, factoryRuntimeRootImport) {
+				continue
+			}
+			if importPath == factoryRuntimeRootImport ||
+				importPath == factoryRuntimeWireImport ||
+				strings.HasPrefix(importPath, factoryRuntimeWireImport+"/") {
+				continue
+			}
+			t.Fatalf(
+				"%s imports forbidden Factory Runtime owner-private path %s; use factory_runtime root contracts and factory_runtime/wire only",
+				path,
+				importPath,
+			)
 		}
 	})
 }

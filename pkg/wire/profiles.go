@@ -31,6 +31,7 @@ import (
 	platformruntimeartifact "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -61,7 +62,9 @@ import (
 func provideCurrentFactoryDirectoryResolver(
 	namedPaths factorydefinitions.NamedPathResolver,
 ) factorydefinitions.CurrentFactoryDirectoryResolver {
-	return namedPaths.ResolveCurrentDir
+	return func(rootDir string) (string, error) {
+		return factorydefinitionswire.ResolveCurrent(namedPaths, rootDir)
+	}
 }
 
 func provideTerminalLoggerBuilder() terminalpolicy.LoggerBuilder {

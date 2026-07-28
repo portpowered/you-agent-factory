@@ -5,19 +5,9 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/portablefiles"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	internalnamedfactories "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedfactories"
 	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
 	internalportableconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig"
 )
-
-// NewNamedFactoryCatalog constructs the persisted named-Factory catalog for
-// the Automations-leased root pkg/wire composition surface.
-func NewNamedFactoryCatalog(
-	paths factorydefinitions.NamedPathResolver,
-	fileSystem factorydefinitions.NamedFactoryCatalogFileSystem,
-) (factorydefinitions.NamedFactoryCatalog, error) {
-	return internalnamedfactories.New(paths, fileSystem)
-}
 
 // NewPathRequiredToolChecker binds host tool lookup to Factory Definitions
 // loading validation for root pkg/wire composition.

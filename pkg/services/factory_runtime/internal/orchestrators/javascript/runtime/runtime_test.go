@@ -13,7 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/javascript/runtime"
 	workflowvalidation "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/javascript/validation"
-	workflowpolicy "github.com/portpowered/infinite-you/pkg/services/factory_runtime/orchestratorcontract"
+	workflowpolicy "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract"
 	factoryruntimetestkit "github.com/portpowered/infinite-you/pkg/services/factory_runtime/testkit"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"

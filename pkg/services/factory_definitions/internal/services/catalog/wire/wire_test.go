@@ -2,6 +2,7 @@ package wire_test
 
 import (
 	"context"
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -9,9 +10,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/directoryreplace"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 )
 
 type recordingPathResolver struct {
@@ -224,5 +228,238 @@ func TestNewService_HostEffectsComeOnlyFromInjectedPorts(t *testing.T) {
 	}
 	if paths.currentName != "alpha" {
 		t.Fatalf("current pointer = %q, want alpha written through injected port", paths.currentName)
+	}
+}
+
+func TestNewPathResolverAndCatalogWireResolveNamedFactoryAndCurrentPointer(t *testing.T) {
+	t.Parallel()
+
+	rootDir := t.TempDir()
+	factoryDir := filepath.Join(rootDir, "alpha")
+	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(factoryDir, "factory.json"), []byte(`{}`), 0o644); err != nil {
+		t.Fatalf("WriteFile(factory.json): %v", err)
+	}
+
+	fileSystem := platformfilesystem.Local{}
+	paths, err := catalogwire.NewPathResolver(fileSystem)
+	if err != nil {
+		t.Fatalf("NewPathResolver: %v", err)
+	}
+	svc, err := catalogwire.NewService(catalog.Dependencies{
+		Paths:      paths,
+		FileSystem: fileSystem,
+	})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	ctx := context.Background()
+	got, err := svc.GetNamedFactory(ctx, factorydefinitions.GetNamedFactoryRequest{
+		RootDir: rootDir,
+		Name:    "alpha",
+	})
+	if err != nil {
+		t.Fatalf("GetNamedFactory: %v", err)
+	}
+	if got.Entry.FactoryDir != factoryDir {
+		t.Fatalf("factoryDir = %q, want %q", got.Entry.FactoryDir, factoryDir)
+	}
+
+	if _, err := svc.SetCurrentFactoryPointer(ctx, factorydefinitions.SetCurrentFactoryPointerRequest{
+		RootDir: rootDir,
+		Name:    "alpha",
+	}); err != nil {
+		t.Fatalf("SetCurrentFactoryPointer: %v", err)
+	}
+	pointer, err := svc.GetCurrentFactoryPointer(ctx, factorydefinitions.GetCurrentFactoryPointerRequest{
+		RootDir: rootDir,
+	})
+	if err != nil {
+		t.Fatalf("GetCurrentFactoryPointer: %v", err)
+	}
+	if pointer.Name != "alpha" || pointer.FactoryDir != factoryDir {
+		t.Fatalf("pointer = %#v, want alpha at %q", pointer, factoryDir)
+	}
+}
+
+func TestNewService_ListGetResolveDeleteNamedFactory(t *testing.T) {
+	t.Parallel()
+
+	projectRoot := t.TempDir()
+	globalRoot := t.TempDir()
+	alphaDir := filepath.Join(projectRoot, "alpha")
+	betaDir := filepath.Join(projectRoot, "beta")
+	for _, spec := range []struct {
+		dir string
+	}{
+		{dir: alphaDir},
+		{dir: betaDir},
+	} {
+		if err := os.MkdirAll(spec.dir, 0o755); err != nil {
+			t.Fatalf("MkdirAll(%s): %v", spec.dir, err)
+		}
+		if err := os.WriteFile(filepath.Join(spec.dir, "factory.json"), []byte(`{}`), 0o644); err != nil {
+			t.Fatalf("WriteFile(%s/factory.json): %v", spec.dir, err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(globalRoot, "alpha"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(global alpha): %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(globalRoot, "alpha", "factory.json"), []byte(`{}`), 0o644); err != nil {
+		t.Fatalf("WriteFile(global alpha/factory.json): %v", err)
+	}
+
+	fileSystem := platformfilesystem.Local{}
+	paths, err := catalogwire.NewPathResolver(fileSystem)
+	if err != nil {
+		t.Fatalf("NewPathResolver: %v", err)
+	}
+	svc, err := catalogwire.NewService(catalog.Dependencies{
+		Paths:      paths,
+		FileSystem: fileSystem,
+	})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	ctx := context.Background()
+	listed, err := svc.ListNamedFactories(ctx, factorydefinitions.ListNamedFactoriesRequest{RootDir: projectRoot})
+	if err != nil {
+		t.Fatalf("ListNamedFactories: %v", err)
+	}
+	if len(listed.Entries) != 2 {
+		t.Fatalf("listed entries = %#v, want alpha and beta", listed.Entries)
+	}
+
+	got, err := svc.GetNamedFactory(ctx, factorydefinitions.GetNamedFactoryRequest{
+		RootDir: projectRoot,
+		Name:    "alpha",
+	})
+	if err != nil {
+		t.Fatalf("GetNamedFactory: %v", err)
+	}
+	if got.Entry.FactoryDir != alphaDir {
+		t.Fatalf("factoryDir = %q, want %q", got.Entry.FactoryDir, alphaDir)
+	}
+
+	resolved, err := svc.ResolveNamedFactory(ctx, factorydefinitions.ResolveNamedFactoryRequest{
+		ProjectRoot: projectRoot,
+		GlobalRoot:  globalRoot,
+		Name:        "alpha",
+	})
+	if err != nil {
+		t.Fatalf("ResolveNamedFactory: %v", err)
+	}
+	if resolved.Resolution.FactoryDir != alphaDir ||
+		resolved.Resolution.Source != factorydefinitions.NamedFactoryResolutionSourceProjectLocal {
+		t.Fatalf("resolution = %#v, want project-local alpha at %q", resolved.Resolution, alphaDir)
+	}
+
+	if _, err := svc.SetCurrentFactoryPointer(ctx, factorydefinitions.SetCurrentFactoryPointerRequest{
+		RootDir: projectRoot,
+		Name:    "beta",
+	}); err != nil {
+		t.Fatalf("SetCurrentFactoryPointer(beta): %v", err)
+	}
+	deleted, err := svc.DeleteNamedFactory(ctx, factorydefinitions.DeleteNamedFactoryRequest{
+		RootDir: projectRoot,
+		Name:    "alpha",
+	})
+	if err != nil {
+		t.Fatalf("DeleteNamedFactory: %v", err)
+	}
+	if deleted.FactoryDir != alphaDir {
+		t.Fatalf("deleted.FactoryDir = %q, want %q", deleted.FactoryDir, alphaDir)
+	}
+
+	listed, err = svc.ListNamedFactories(ctx, factorydefinitions.ListNamedFactoriesRequest{RootDir: projectRoot})
+	if err != nil {
+		t.Fatalf("ListNamedFactories after delete: %v", err)
+	}
+	if len(listed.Entries) != 1 || listed.Entries[0].Name != "beta" {
+		t.Fatalf("listed after delete = %#v, want only beta", listed.Entries)
+	}
+	_, err = svc.GetNamedFactory(ctx, factorydefinitions.GetNamedFactoryRequest{
+		RootDir: projectRoot,
+		Name:    "alpha",
+	})
+	if err == nil || !errors.Is(err, factorydefinitions.ErrNamedFactoryNotFound) {
+		t.Fatalf("GetNamedFactory(alpha) after delete = %v, want %v", err, factorydefinitions.ErrNamedFactoryNotFound)
+	}
+}
+
+func TestNewPersistencePrepareAndCreateAndReplaceNamedFactoryLayout(t *testing.T) {
+	t.Parallel()
+
+	fileSystem := platformfilesystem.Local{}
+	paths, err := catalogwire.NewPathResolver(fileSystem)
+	if err != nil {
+		t.Fatalf("NewPathResolver: %v", err)
+	}
+	validator := factoryvalidation.New(nil)
+	prepared := &factorydefinitions.PreparedFactoryLayoutPayload{}
+	persistence, err := catalogwire.NewPersistence(
+		validator,
+		func([]byte) (factorydefinitions.DefinitionValidationRequest, error) {
+			return factorydefinitions.DefinitionValidationRequest{
+				Config:           &factorydefinitions.FactoryConfig{},
+				CanonicalPayload: []byte(`{}`),
+				CanonicalFactoryLoader: func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+					return nil, nil
+				},
+			}, nil
+		},
+		func(
+			_ context.Context,
+			segment string,
+			payload []byte,
+			_ factorydefinitions.Validator,
+		) (*factorydefinitions.PreparedFactoryLayoutPayload, error) {
+			if segment != "alpha" || string(payload) != "payload" {
+				t.Fatalf("prepare values = %q, %q", segment, payload)
+			}
+			return prepared, nil
+		},
+		func(stagingDir string, _ *factorydefinitions.PreparedFactoryLayoutPayload, _ string) error {
+			return os.WriteFile(
+				filepath.Join(stagingDir, factorydefinitions.FactoryConfigFile),
+				[]byte(`{}`),
+				0o644,
+			)
+		},
+		func(string) error { return nil },
+		nil,
+		nil,
+		nil,
+		fileSystem,
+		paths.RequireDefinitionDir,
+		directoryreplace.Local{},
+	)
+	if err != nil {
+		t.Fatalf("NewPersistence: %v", err)
+	}
+
+	ctx := context.Background()
+	gotPrepared, err := persistence.PrepareFactoryLayout(ctx, "alpha", []byte("payload"))
+	if err != nil || gotPrepared != prepared {
+		t.Fatalf("PrepareFactoryLayout() = %p, %v", gotPrepared, err)
+	}
+
+	rootDir := t.TempDir()
+	targetDir := filepath.Join(rootDir, "alpha")
+	createdDir, err := persistence.CreateNamedFactory(rootDir, "alpha", prepared)
+	if err != nil || createdDir != targetDir {
+		t.Fatalf("CreateNamedFactory() = %q, %v", createdDir, err)
+	}
+	if _, err := os.Stat(filepath.Join(targetDir, factorydefinitions.FactoryConfigFile)); err != nil {
+		t.Fatalf("created factory.json: %v", err)
+	}
+
+	replacedDir, err := persistence.ReplaceNamedFactory(rootDir, "alpha", prepared)
+	if err != nil || replacedDir != targetDir {
+		t.Fatalf("ReplaceNamedFactory() = %q, %v", replacedDir, err)
 	}
 }

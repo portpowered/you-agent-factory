@@ -7,7 +7,6 @@ import (
 	factoryauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout"
 	authoringlayoutprepare "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/prepare"
 	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
-	factorypersistence "github.com/portpowered/infinite-you/pkg/services/factory_definitions/persistence"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	authoredmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/authored"
 )
@@ -40,7 +39,7 @@ func Persistence(
 		fileSystem,
 		ensureInbox,
 	)
-	return factorypersistence.New(
+	return NewPersistence(
 		validator,
 		mapInput,
 		func(

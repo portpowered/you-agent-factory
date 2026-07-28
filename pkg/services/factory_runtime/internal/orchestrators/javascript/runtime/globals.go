@@ -7,7 +7,7 @@ import (
 
 	"github.com/dop251/goja"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	workflowpolicy "github.com/portpowered/infinite-you/pkg/services/factory_runtime/orchestratorcontract"
+	workflowpolicy "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract"
 )
 
 // runtimeGlobals binds the narrow default workflow surface: structured args, meta,

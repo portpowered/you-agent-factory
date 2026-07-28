@@ -10,7 +10,7 @@ import (
 func TestRunAllowsProviderSessionRootAndCanonicalClockImports(t *testing.T) {
 	t.Parallel()
 	repoRoot := t.TempDir()
-	writeGoImportFile(t, repoRoot, "pkg/services/factory_runtime/runtime/clock.go", "runtime", "github.com/portpowered/infinite-you/pkg/platform/clock")
+	writeGoImportFile(t, repoRoot, "pkg/services/factory_runtime/internal/services/orchestration/runtime/clock.go", "runtime", "github.com/portpowered/infinite-you/pkg/platform/clock")
 	writeGoImportFile(t, repoRoot, "pkg/transports/http/provider_sessions.go", "http", "github.com/portpowered/infinite-you/pkg/services/provider_sessions")
 
 	stderr := &bytes.Buffer{}
@@ -26,7 +26,7 @@ func TestRunRejectsRetiredCursorImports(t *testing.T) {
 		filePath string
 		path     string
 	}{
-		{filePath: "pkg/services/factory_runtime/runtime/session.go", path: "github.com/portpowered/infinite-you/pkg/sessionpersistence"},
+		{filePath: "pkg/services/factory_runtime/internal/services/orchestration/runtime/session.go", path: "github.com/portpowered/infinite-you/pkg/sessionpersistence"},
 		{filePath: "pkg/transports/http/storage.go", path: "github.com/portpowered/infinite-you/pkg/internal/cursorstorage"},
 	} {
 		writeGoImportFile(t, repoRoot, retired.filePath, filepath.Base(filepath.Dir(retired.filePath)), retired.path)

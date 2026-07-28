@@ -25,8 +25,6 @@ import (
 	factoryworkstationexecution "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workstationexecution"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
-	factoryruntimejavascript "github.com/portpowered/infinite-you/pkg/services/factory_runtime/javascript"
-	factoryruntimeorchestrationowner "github.com/portpowered/infinite-you/pkg/services/factory_runtime/orchestrationowner"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/models"
@@ -294,7 +292,7 @@ func provideJavaScriptWorkflows(
 	resolveHome factoryruntime.WorkflowHomeResolver,
 	resolveSymlinks factoryruntime.WorkflowSourceResolveSymlinks,
 ) factoryruntime.JavaScriptWorkflows {
-	return factoryruntimejavascript.New(files, resolveHome, resolveSymlinks)
+	return factoryruntimewire.NewJavaScriptWorkflows(files, resolveHome, resolveSymlinks)
 }
 
 func provideJavaScriptWorkflowDefinitions(
@@ -517,14 +515,14 @@ func provideOrchestrationJavaScriptExecution(
 	newID factoryruntime.IDGenerator,
 	workflows factoryruntime.JavaScriptWorkflows,
 ) factoryruntime.OrchestrationJavaScriptExecution {
-	return factoryruntimeorchestrationowner.New(newID, workflows)
+	return factoryruntimewire.NewOrchestrationJavaScriptExecution(newID, workflows)
 }
 
 func provideOrchestrationCompilation(
 	newID factoryruntime.IDGenerator,
 	workflows factoryruntime.JavaScriptWorkflows,
 ) factoryruntime.OrchestrationCompilation {
-	return factoryruntimeorchestrationowner.NewCompilation(newID, workflows, workflows)
+	return factoryruntimewire.NewOrchestrationCompilation(newID, workflows)
 }
 
 func provideFactorySessionExecutionFactory(
