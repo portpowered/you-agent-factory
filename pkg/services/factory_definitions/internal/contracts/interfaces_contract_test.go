@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/runner"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -284,7 +284,7 @@ func generatedWorkstationTypeString(value string) string {
 	return PublicWorkstationTypeFromInternalRuntime(value, "", "")
 }
 func generatedRunnerIDString(value string) string {
-	return PermissivePublicFactoryRunnerID(workerexecution.NormalizeRunnerID(value))
+	return PermissivePublicFactoryRunnerID(workerrunner.NormalizeRunnerID(value))
 }
 func generatedRunnerSelectionSourceString(value string) string {
 	return PermissivePublicFactoryRunnerSelectionSource(value)
@@ -321,7 +321,7 @@ func GeneratedPublicFactoryWorkstationType(value string) factoryapi.WorkstationT
 }
 
 func GeneratedPublicFactoryRunnerID(value string) factoryapi.RunnerID {
-	return factoryapi.RunnerID(PermissivePublicFactoryRunnerID(workerexecution.NormalizeRunnerID(value)))
+	return factoryapi.RunnerID(PermissivePublicFactoryRunnerID(workerrunner.NormalizeRunnerID(value)))
 }
 
 func GeneratedPublicFactoryRunnerSelectionSource(value string) factoryapi.RunnerSelectionSource {

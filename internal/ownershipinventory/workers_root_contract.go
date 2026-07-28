@@ -19,6 +19,7 @@ var WorkersThinRootContractFiles = []string{
 	"execution_context.go",
 	"execution_contracts.go",
 	"execution_requests.go",
+	"execution_requests_test.go",
 	"execution_tokens.go",
 	"failure.go",
 	"interfaces.go",
@@ -49,16 +50,6 @@ type WorkersRootContractMoveTarget struct {
 // WorkersRootContractMoveTargets inventories root implementation clusters beyond
 // the thin Workers service root contract.
 var WorkersRootContractMoveTargets = []WorkersRootContractMoveTarget{
-	{
-		Cluster:     "runners",
-		Destination: workersPackagePrefix + "/internal/services/runners",
-		Files: []string{
-			"opencode_agent_contract_test.go",
-			"runner_policy.go",
-			"runner_registry.go",
-			"runner_registry_test.go",
-		},
-	},
 	{
 		Cluster:     "workstations",
 		Destination: workersPackagePrefix + "/internal/services/workstations",
@@ -157,4 +148,4 @@ func IsWorkersPrivateRootContractMoveDestination(destination string) bool {
 
 // WorkersRootContractBaselineFileCount is the inventoried root .go file count
 // before CLN-WRK-CONTRACT-ROOTS moves begin.
-const WorkersRootContractBaselineFileCount = 41
+const WorkersRootContractBaselineFileCount = 38

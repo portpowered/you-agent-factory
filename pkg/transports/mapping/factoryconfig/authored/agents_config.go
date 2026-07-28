@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/runner"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"gopkg.in/yaml.v3"
@@ -200,7 +200,7 @@ func normalizeWorkstationPublicEnums(cfg *factorydefinitions.FactoryWorkstationC
 	if cfg == nil {
 		return
 	}
-	cfg.Runner = workers.NormalizeRunnerID(cfg.Runner)
+	cfg.Runner = workerrunner.NormalizeRunnerID(cfg.Runner)
 	if cfg.Kind != "" {
 		behavior := factoryapi.WorkstationKind(cfg.Kind)
 		cfg.Kind = internalFactoryWorkstationKindFromPublic(&behavior)

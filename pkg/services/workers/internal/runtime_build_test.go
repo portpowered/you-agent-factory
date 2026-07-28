@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
+	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/runner"
 	runtimeassembly "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly"
 	workstationswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/wire"
 )
@@ -539,7 +540,7 @@ func TestRuntimeBuildUsesPrivateRegistryWithoutRunnerExecution(t *testing.T) {
 	t.Parallel()
 
 	runner := &runtimeRunnerSpy{}
-	metadata, ok := workers.BuiltInRunnerMetadata(workers.RunnerIDCodex)
+	metadata, ok := workerrunner.BuiltInRunnerMetadata(workers.RunnerIDCodex)
 	if !ok {
 		t.Fatal("Codex metadata is unavailable")
 	}

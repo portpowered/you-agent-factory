@@ -3,7 +3,7 @@ package orchestratorcontract
 import (
 	"strings"
 
-	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers"
+	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/runner"
 )
 
 // BuildPreview projects preview/session-start policy metadata from one request.

@@ -7,6 +7,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
+	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/runner"
 )
 
 type service struct {
@@ -116,7 +117,7 @@ func validateRegistration(
 
 func validateIdentity(identity string) error {
 	if identity != strings.TrimSpace(identity) ||
-		identity != workers.NormalizeRunnerID(identity) {
+		identity != workerrunner.NormalizeRunnerID(identity) {
 		return fmt.Errorf("must use canonical lowercase form without surrounding whitespace")
 	}
 	if err := workers.ProviderIdentity(identity).Validate(); err != nil {

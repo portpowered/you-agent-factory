@@ -9,6 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
+	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/runner"
 )
 
 type runnerSpy struct {
@@ -372,7 +373,7 @@ func validMetadata(identity string, displayName string) workers.RunnerMetadata {
 		ID:          identity,
 		DisplayName: displayName,
 		Capabilities: workers.RunnerCapabilities{
-			Baseline: workers.V1BaselineCapabilities(),
+			Baseline: workerrunner.V1BaselineCapabilities(),
 			Optional: []workers.RunnerOptionalCapabilitySupport{{
 				Capability: workers.RunnerOptionalCapabilityImageInput,
 				Status:     workers.RunnerOptionalCapabilityStatusSupported,

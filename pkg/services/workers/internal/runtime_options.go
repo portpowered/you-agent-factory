@@ -309,7 +309,7 @@ func validateRuntimeRunnerIdentity(providers *providerregistry.Registry, runnerI
 	if _, ok := workerrunner.BuiltInRunnerMetadata(runnerID); !ok {
 		return fmt.Errorf("unknown runner %q", runnerID)
 	}
-	if status, ok := workers.BuiltInRunnerStatus(runnerID); ok && !status.Available {
+	if status, ok := workerrunner.BuiltInRunnerStatus(runnerID); ok && !status.Available {
 		return fmt.Errorf("%s", status.UnavailableReason)
 	}
 	return nil
@@ -323,5 +323,5 @@ func validateRuntimeRunnerPrerequisites(
 	if providers != nil {
 		return providers.ValidateRunnerPrerequisites(executableLocator, runnerID)
 	}
-	return workers.ValidateBuiltInRunnerPrerequisites(executableLocator, runnerID)
+	return workerrunner.ValidateBuiltInRunnerPrerequisites(executableLocator, runnerID)
 }

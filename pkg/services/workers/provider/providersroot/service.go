@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/runner"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
@@ -139,7 +140,7 @@ func inferenceRequest(request providers.ExecuteRequest) workers.ProviderInferenc
 }
 
 func modelProviderForProviderIdentity(providerID string) string {
-	switch workers.NormalizeRunnerID(providerID) {
+	switch workerrunner.NormalizeRunnerID(providerID) {
 	case workers.RunnerIDCodex:
 		return string(modelprovider.ProviderCodex)
 	case string(modelprovider.ProviderClaude):

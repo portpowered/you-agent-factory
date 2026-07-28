@@ -10,6 +10,8 @@ or delete any root-level `.go` files.
 **Baseline before CLN-WRK-CONTRACT-ROOTS moves:** **41** root-level `.go` files
 (34 inventoried at INV-WRK-TOPLEVEL capture plus 7 post-inventory additions).
 
+**After runners fold (story 002):** **38** root-level `.go` files (22 keep + 16 move).
+
 Companion directory inventory:
 [`workers-top-level-inventory.md`](workers-top-level-inventory.md).
 
@@ -39,6 +41,7 @@ fold or delete them.
 | `execution_context.go` | keep | Worker execution environment (`Context`, project/session defaults). |
 | `execution_contracts.go` | keep | Canonical inference/script/model/agent event and request vocabulary at the Workers root boundary. |
 | `execution_requests.go` | keep | Runner capability and workstation execution request vocabulary published for selection and dispatch planning. |
+| `execution_requests_test.go` | keep | Root-contract characterization tests for execution request clone helpers retained after runner-registry test split. |
 | `execution_tokens.go` | keep | Worker-facing dispatch token/color view shared across execution paths. |
 | `executor_test_helpers_test.go` | move-to-workers/internal | Root-level executor integration helpers; delete once `executor/` folds under `workstations`. |
 | `failure.go` | keep | Normalized provider failure type (`ProviderError`) at the public boundary. |
@@ -50,16 +53,16 @@ fold or delete them.
 | `mock_workers.go` | move-to-workers/internal | Legacy JSON mock-worker config loader; delete after `interface/` fold replaces it with OpenAPI-generated schema. |
 | `mock_workers_config_test.go` | move-to-workers/internal | Co-located tests for `mock_workers.go`; remove with mock-worker schema fold. |
 | `model_invocation.go` | move-to-workstations | Workstation pool lifecycle errors, requests/results, and `ModelInvoker` wiring belong with workstation execution, not a thin root contract. |
-| `opencode_agent_contract_test.go` | move-to-runners | Runner-selection contract tests for OpenCode agent policy; move with `runner_policy.go`. |
+| `opencode_agent_contract_test.go` | *(folded)* | Moved to `internal/services/runners/runner` with runner policy during story 002. |
 | `progress_observations.go` | keep | Provider-neutral progress fragments accepted by Factory Session response streams. |
 | `prompt_templates.go` | move-to-workstations | Prompting template contract/diagnostic types; fold with `prompting/` debt. |
 | `provider_port.go` | keep | `Provider` inference port explicitly documented for cross-service consumers (for example Recordings replay). |
 | `provider_port_test.go` | keep | Root-contract characterization test for `provider_port.go`. |
 | `response_drafts.go` | keep | Provider response draft shapes and publication-boundary helpers. |
 | `response_draft_validation.go` | move-to-workstations | Draft validation logic ahead of publication; fold with inference/publication path. |
-| `runner_policy.go` | move-to-runners | Built-in runner metadata and `ResolveRunnerSelection` policy implementation. |
-| `runner_registry.go` | move-to-runners | Built-in runner prerequisite validation and availability reporting. |
-| `runner_registry_test.go` | move-to-runners | Co-located tests for `runner_registry.go`. |
+| `runner_policy.go` | *(folded)* | Moved to `internal/services/runners/runner/policy.go` during story 002. |
+| `runner_registry.go` | *(folded)* | Moved to `internal/services/runners/runner/registry.go` during story 002. |
+| `runner_registry_test.go` | *(folded)* | Runner-specific tests moved to `internal/services/runners/runner`; clone tests retained at root in `execution_requests_test.go`. |
 | `runtime_service.go` | keep | `RuntimeService` opening contract for Factory Runtime assembly. |
 | `safe_diagnostics.go` | keep | Canonical safe diagnostics types for history, replay, and projections. |
 | `safe_diagnostics_codec.go` | move-to-workers/internal | Projection/codec logic between worker and safe diagnostics shapes. |
@@ -79,13 +82,13 @@ fold or delete them.
 
 | Classification | Count | Target after CLN-WRK-CONTRACT-ROOTS |
 | --- | ---: | --- |
-| **keep** | 21 | Remain at `pkg/services/workers/` as thin root contracts |
-| **move-to-runners** | 4 | `pkg/services/workers/internal/services/runners` |
+| **keep** | 22 | Remain at `pkg/services/workers/` as thin root contracts |
+| **move-to-runners** | 0 | Folded under `pkg/services/workers/internal/services/runners/runner` (story 002) |
 | **move-to-workstations** | 12 | `pkg/services/workers/internal/services/workstations` |
 | **move-to-runtime_assembly** | 0 | — |
 | **move-to-workers/internal** | 4 | `pkg/services/workers/internal` (3 delete-after-fold) |
 | **temporary documented keep** | 0 | — |
-| **Total** | **41** | 21 keep + 20 move |
+| **Total** | **38** | 22 keep + 16 move |
 
 Keep-set files are limited to interfaces, request/result/value types, documented
 errors/constants, approved pure contract helpers, and root-contract or

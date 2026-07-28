@@ -1,10 +1,11 @@
-package workers_test
+package runner_test
 
 import (
 	"strings"
 	"testing"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/runner"
 )
 
 func TestValidateOpenCodeAgentForRunnerSelection(t *testing.T) {
@@ -49,7 +50,7 @@ func TestValidateOpenCodeAgentForRunnerSelection(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := workerexecution.ValidateOpenCodeAgentForRunnerSelection(tt.workstationAgent, tt.workerAgent, tt.selection)
+			err := workerrunner.ValidateOpenCodeAgentForRunnerSelection(tt.workstationAgent, tt.workerAgent, tt.selection)
 			if len(tt.wantErrSubstrings) == 0 {
 				if err != nil {
 					t.Fatalf("ValidateOpenCodeAgentForRunnerSelection(...) = %v, want nil", err)
@@ -98,7 +99,7 @@ func TestResolveOpenCodeAgent(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := workerexecution.ResolveOpenCodeAgent(tt.workstationAgent, tt.workerAgent)
+			got := workerrunner.ResolveOpenCodeAgent(tt.workstationAgent, tt.workerAgent)
 			if got != tt.wantOpenCodeAgent {
 				t.Fatalf("ResolveOpenCodeAgent(...) = %q, want %q", got, tt.wantOpenCodeAgent)
 			}

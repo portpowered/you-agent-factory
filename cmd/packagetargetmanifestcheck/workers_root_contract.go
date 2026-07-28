@@ -18,6 +18,7 @@ var workersThinRootContractFiles = []string{
 	"execution_context.go",
 	"execution_contracts.go",
 	"execution_requests.go",
+	"execution_requests_test.go",
 	"execution_tokens.go",
 	"failure.go",
 	"interfaces.go",
@@ -46,16 +47,6 @@ type workersRootContractMoveTarget struct {
 // workersRootContractMoveTargets mirrors internal/ownershipinventory
 // WorkersRootContractMoveTargets for package-target manifest checks.
 var workersRootContractMoveTargets = []workersRootContractMoveTarget{
-	{
-		cluster:     "runners",
-		destination: "pkg/services/workers/internal/services/runners",
-		files: []string{
-			"opencode_agent_contract_test.go",
-			"runner_policy.go",
-			"runner_registry.go",
-			"runner_registry_test.go",
-		},
-	},
 	{
 		cluster:     "workstations",
 		destination: "pkg/services/workers/internal/services/workstations",

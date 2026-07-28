@@ -1,15 +1,4 @@
-// Package runner retains same-service compatibility names for the private
-// Workers Runners subservice while canonical runner selection policy lives at
-// pkg/services/workers.
+// Package runner owns private Workers runner selection policy and built-in
+// runner registry mechanics. Peers name Workers root contracts and the
+// transitional workers/runner shim instead of importing this package directly.
 package runner
-
-import workers "github.com/portpowered/infinite-you/pkg/services/workers"
-
-var V1BaselineCapabilities = workers.V1BaselineCapabilities
-var NewCapabilities = workers.NewCapabilities
-var BuiltInRunnerMetadata = workers.BuiltInRunnerMetadata
-var IsBuiltInRunnerID = workers.IsBuiltInRunnerID
-var ResolveOpenCodeAgent = workers.ResolveOpenCodeAgent
-var ValidateOpenCodeAgentForRunnerSelection = workers.ValidateOpenCodeAgentForRunnerSelection
-var ResolveRunnerSelection = workers.ResolveRunnerSelection
-var NormalizeRunnerID = workers.NormalizeRunnerID
