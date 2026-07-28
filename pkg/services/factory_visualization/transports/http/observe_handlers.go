@@ -2,11 +2,8 @@ package http
 
 import (
 	"context"
-	"errors"
 	"io"
 	"net/http"
-
-	"go.uber.org/zap"
 )
 
 // ObserveHTTP decodes an owned Observe HTTP request, invokes the Visualization
@@ -37,15 +34,5 @@ func (a *Adapter) HandleObserve(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *Adapter) writeObserveRequestError(w http.ResponseWriter, err error) {
-	if message, ok := requestFieldValidationMessage(err); ok {
-		a.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
-		return
-	}
-	var decodeErr observeHTTPDecodeError
-	if errors.As(err, &decodeErr) {
-		a.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
-		return
-	}
-	a.logger.Error("factory visualization observe request failed", zap.Error(err))
-	a.writeError(w, http.StatusInternalServerError, "factory visualization observe request failed", "INTERNAL_ERROR")
+	a.writeVisualizationRequestError(w, err, "factory visualization observe request failed")
 }

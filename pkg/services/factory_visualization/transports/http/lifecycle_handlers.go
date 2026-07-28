@@ -2,11 +2,8 @@ package http
 
 import (
 	"context"
-	"errors"
 	"io"
 	"net/http"
-
-	"go.uber.org/zap"
 )
 
 // ActivateLifecycleHTTP decodes an owned Activate HTTP request, invokes the
@@ -91,15 +88,5 @@ func (a *Adapter) HandleStopDrainLifecycle(w http.ResponseWriter, r *http.Reques
 }
 
 func (a *Adapter) writeLifecycleRequestError(w http.ResponseWriter, err error) {
-	if message, ok := requestFieldValidationMessage(err); ok {
-		a.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
-		return
-	}
-	var decodeErr lifecycleHTTPDecodeError
-	if errors.As(err, &decodeErr) {
-		a.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
-		return
-	}
-	a.logger.Error("factory visualization lifecycle request failed", zap.Error(err))
-	a.writeError(w, http.StatusInternalServerError, "factory visualization lifecycle request failed", "INTERNAL_ERROR")
+	a.writeVisualizationRequestError(w, err, "factory visualization lifecycle request failed")
 }

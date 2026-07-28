@@ -2,11 +2,8 @@ package http
 
 import (
 	"context"
-	"errors"
 	"io"
 	"net/http"
-
-	"go.uber.org/zap"
 )
 
 // OpenPresentationHTTP decodes an owned presentation-open HTTP request, invokes
@@ -121,15 +118,5 @@ func (a *Adapter) HandleClosePresentation(w http.ResponseWriter, r *http.Request
 }
 
 func (a *Adapter) writePresentationRequestError(w http.ResponseWriter, err error) {
-	if message, ok := requestFieldValidationMessage(err); ok {
-		a.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
-		return
-	}
-	var decodeErr presentationHTTPDecodeError
-	if errors.As(err, &decodeErr) {
-		a.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
-		return
-	}
-	a.logger.Error("factory visualization presentation request failed", zap.Error(err))
-	a.writeError(w, http.StatusInternalServerError, "factory visualization presentation request failed", "INTERNAL_ERROR")
+	a.writeVisualizationRequestError(w, err, "factory visualization presentation request failed")
 }
