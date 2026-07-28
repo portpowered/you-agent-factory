@@ -1343,12 +1343,6 @@
     },
     {
       "fromOwner": "factory_visualization",
-      "toOwner": "transports",
-      "class": "command",
-      "evidence": "pkg/services/factory_visualization/transports/http -\u003e pkg/transports/http/generated"
-    },
-    {
-      "fromOwner": "factory_visualization",
       "toOwner": "work",
       "class": "command",
       "evidence": "pkg/services/factory_visualization/transports/cli -\u003e pkg/services/work"
@@ -1472,6 +1466,12 @@
       "toOwner": "factory_definitions",
       "class": "query",
       "evidence": "pkg/services/recordings/artifacts -\u003e pkg/services/factory_definitions"
+    },
+    {
+      "fromOwner": "recordings",
+      "toOwner": "factory_runtime",
+      "class": "command",
+      "evidence": "pkg/services/recordings/service -\u003e pkg/services/factory_runtime"
     },
     {
       "fromOwner": "recordings",
@@ -2628,6 +2628,54 @@
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution",
+      "disposition": "move",
+      "destination": "factory_definitions",
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_definitions/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/internal/service",
+      "disposition": "move",
+      "destination": "factory_definitions",
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_definitions/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/packagedcatalog",
+      "disposition": "move",
+      "destination": "factory_definitions",
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_definitions/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/packagedinstallation",
+      "disposition": "move",
+      "destination": "factory_definitions",
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_definitions/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/scaffoldfacts",
+      "disposition": "move",
+      "destination": "factory_definitions",
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_definitions/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/wire",
+      "disposition": "move",
+      "destination": "factory_definitions",
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_definitions/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/validation",
@@ -4526,13 +4574,13 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/work/transports/mcp",
+      "packagePath": "pkg/services/work/transports/http",
       "disposition": "retain",
       "destination": "work",
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/work/transports/http",
+      "packagePath": "pkg/services/work/transports/mcp",
       "disposition": "retain",
       "destination": "work",
       "destinationKind": "owner"

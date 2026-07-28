@@ -29,9 +29,7 @@ func New(
 ) *Service {
 	if packagedCatalog.List == nil ||
 		packagedCatalog.Resolve == nil ||
-		packagedInstaller.Install == nil ||
-		scaffoldInitializer == nil ||
-		scaffoldFactoryNameResolver == nil {
+		packagedInstaller.Install == nil {
 		return nil
 	}
 	return &Service{
@@ -109,7 +107,7 @@ func (s *Service) CreateFactoryScaffold(
 	ctx context.Context,
 	request factorydefinitions.CreateFactoryScaffoldRequest,
 ) (factorydefinitions.CreateFactoryScaffoldResult, error) {
-	if err := s.requirePorts(); err != nil {
+	if err := s.requireScaffoldPorts(); err != nil {
 		return factorydefinitions.CreateFactoryScaffoldResult{}, err
 	}
 	if err := ctx.Err(); err != nil {
@@ -149,10 +147,18 @@ func (s *Service) requirePorts() error {
 	if s == nil ||
 		s.packagedCatalog.List == nil ||
 		s.packagedCatalog.Resolve == nil ||
-		s.packagedInstaller.Install == nil ||
-		s.scaffoldInitializer == nil ||
-		s.scaffoldFactoryNameResolver == nil {
+		s.packagedInstaller.Install == nil {
 		return fmt.Errorf("Factory Definition distribution collaborator is required")
+	}
+	return nil
+}
+
+func (s *Service) requireScaffoldPorts() error {
+	if err := s.requirePorts(); err != nil {
+		return err
+	}
+	if s.scaffoldInitializer == nil || s.scaffoldFactoryNameResolver == nil {
+		return fmt.Errorf("%w: scaffold collaborator is required", factorydefinitions.ErrFactoryDistributeFailed)
 	}
 	return nil
 }

@@ -40,6 +40,7 @@ func NewService(
 	packagedInstaller factorydefinitions.PackagedFactoryInstallationOperations,
 	requiredToolChecker factorydefinitions.RequiredToolChecker,
 	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
+	options ...factorydefinitionsservice.CompositionOption,
 ) (factorydefinitions.Service, error) {
 	if err := validateDependencies(
 		sessionHost,
@@ -102,6 +103,7 @@ func NewService(
 		packagedInstaller,
 		requiredToolChecker,
 		orchestratorValidator,
+		options...,
 	)
 	if definitions == nil {
 		return nil, fmt.Errorf("construct Factory Definitions: implementation rejected its dependencies")

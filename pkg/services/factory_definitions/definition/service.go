@@ -12,6 +12,8 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
+	distributionservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution"
+	distributionwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/wire"
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
 	namedfactorypath "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
 )
@@ -32,10 +34,9 @@ type Service struct {
 	nonCatalogDefaults
 	catalog.Service
 	validationService validationservice.Service
-	host              Host
-	versionFileSystem factoryroot.VersionFileSystem
-	packagedCatalog   factoryroot.PackagedFactoryCatalogOperations
-	packagedInstaller factoryroot.PackagedFactoryInstallationOperations
+	host                Host
+	versionFileSystem   factoryroot.VersionFileSystem
+	distributionService distributionservice.Service
 }
 
 type nonCatalogDefaults interface {
@@ -84,7 +85,7 @@ func NewWithCatalog(
 }
 
 // NewWithCatalogAndPackages constructs the Definitions root collaborator with
-// both persisted and embedded catalog operations.
+// both persisted and embedded catalog operations routed through Distribution.
 func NewWithCatalogAndPackages(
 	host Host,
 	catalogService catalog.Service,
@@ -92,7 +93,12 @@ func NewWithCatalogAndPackages(
 	versionFileSystems ...factoryroot.VersionFileSystem,
 ) *Service {
 	service := NewWithCatalog(host, catalogService, versionFileSystems...)
-	service.packagedCatalog = packagedCatalog
+	service.distributionService = ComposeDistributionService(
+		packagedCatalog,
+		factoryroot.PackagedFactoryInstallationOperations{},
+		nil,
+		nil,
+	)
 	return service
 }
 
@@ -105,13 +111,13 @@ func NewWithCatalogPackagesAndInstallation(
 	packagedInstaller factoryroot.PackagedFactoryInstallationOperations,
 	versionFileSystems ...factoryroot.VersionFileSystem,
 ) *Service {
-	service := NewWithCatalogAndPackages(
-		host,
-		catalogService,
+	service := NewWithCatalog(host, catalogService, versionFileSystems...)
+	service.distributionService = ComposeDistributionService(
 		packagedCatalog,
-		versionFileSystems...,
+		packagedInstaller,
+		nil,
+		nil,
 	)
-	service.packagedInstaller = packagedInstaller
 	return service
 }
 
@@ -130,7 +136,7 @@ func NewWithValidation(
 
 // NewWithCatalogPackagesValidationAndInstallation constructs the complete
 // Definitions root collaborator with catalog, validation, and packaged
-// installation ownership.
+// installation ownership routed through Distribution.
 func NewWithCatalogPackagesValidationAndInstallation(
 	host Host,
 	catalogService catalog.Service,
@@ -147,6 +153,53 @@ func NewWithCatalogPackagesValidationAndInstallation(
 		versionFileSystems...,
 	)
 	service.validationService = validationService
+	return service
+}
+
+// NewWithCatalogPackagesValidationAndDistribution constructs the complete
+// Definitions root collaborator with catalog, validation, and private
+// Distribution ownership for the CTR-DEF distribute slice.
+func NewWithCatalogPackagesValidationAndDistribution(
+	host Host,
+	catalogService catalog.Service,
+	validationService validationservice.Service,
+	distributionService distributionservice.Service,
+	versionFileSystems ...factoryroot.VersionFileSystem,
+) *Service {
+	service := NewWithValidation(host, catalogService, validationService, versionFileSystems...)
+	service.distributionService = distributionService
+	return service
+}
+
+// ComposeDistributionService constructs the private Distribution subservice from
+// exact injected distribute ports for Factory Definitions composition.
+func ComposeDistributionService(
+	packagedCatalog factoryroot.PackagedFactoryCatalogOperations,
+	packagedInstaller factoryroot.PackagedFactoryInstallationOperations,
+	scaffoldInitializer factoryroot.ScaffoldInitializer,
+	scaffoldFactoryNameResolver distributionservice.ScaffoldFactoryNameResolver,
+) distributionservice.Service {
+	if packagedInstaller.Install == nil {
+		packagedInstaller = factoryroot.PackagedFactoryInstallationOperations{
+			Install: func(
+				context.Context,
+				factoryroot.PackagedFactoryInstallParams,
+			) (factoryroot.PackagedFactoryInstallResult, error) {
+				return factoryroot.PackagedFactoryInstallResult{},
+					fmt.Errorf("%w: packaged Factory installation collaborator is required",
+						factoryroot.ErrFactoryDistributeFailed)
+			},
+		}
+	}
+	service, err := distributionwire.NewService(distributionservice.Dependencies{
+		PackagedCatalog:             packagedCatalog,
+		PackagedInstaller:           packagedInstaller,
+		ScaffoldInitializer:         scaffoldInitializer,
+		ScaffoldFactoryNameResolver: scaffoldFactoryNameResolver,
+	})
+	if err != nil {
+		return nil
+	}
 	return service
 }
 
@@ -174,65 +227,40 @@ func (s *Service) ListBuiltInPackagedFactories(
 	ctx context.Context,
 	request factoryroot.ListBuiltInPackagedFactoriesRequest,
 ) (factoryroot.ListBuiltInPackagedFactoriesResult, error) {
-	if s == nil || s.packagedCatalog.List == nil {
+	if s == nil || s.distributionService == nil {
 		return factoryroot.UnimplementedService{}.ListBuiltInPackagedFactories(ctx, request)
 	}
-	return s.packagedCatalog.ListBuiltInPackagedFactories(ctx, request)
+	return s.distributionService.ListBuiltInPackagedFactories(ctx, request)
 }
 
 func (s *Service) ResolveBuiltInPackagedFactory(
 	ctx context.Context,
 	request factoryroot.ResolveBuiltInPackagedFactoryRequest,
 ) (factoryroot.ResolveBuiltInPackagedFactoryResult, error) {
-	if s == nil || s.packagedCatalog.Resolve == nil {
+	if s == nil || s.distributionService == nil {
 		return factoryroot.UnimplementedService{}.ResolveBuiltInPackagedFactory(ctx, request)
 	}
-	return s.packagedCatalog.ResolveBuiltInPackagedFactory(ctx, request)
+	return s.distributionService.ResolveBuiltInPackagedFactory(ctx, request)
 }
 
 func (s *Service) InstallPackagedFactory(
 	ctx context.Context,
 	request factoryroot.InstallPackagedFactoryRequest,
 ) (factoryroot.InstallPackagedFactoryResult, error) {
-	if err := ctx.Err(); err != nil {
-		return factoryroot.InstallPackagedFactoryResult{}, err
+	if s == nil || s.distributionService == nil {
+		return factoryroot.UnimplementedService{}.InstallPackagedFactory(ctx, request)
 	}
-	if err := factoryroot.ValidateInstallPackagedFactoryRequest(request); err != nil {
-		return factoryroot.InstallPackagedFactoryResult{}, err
+	return s.distributionService.InstallPackagedFactory(ctx, request)
+}
+
+func (s *Service) CreateFactoryScaffold(
+	ctx context.Context,
+	request factoryroot.CreateFactoryScaffoldRequest,
+) (factoryroot.CreateFactoryScaffoldResult, error) {
+	if s == nil || s.distributionService == nil {
+		return factoryroot.UnimplementedService{}.CreateFactoryScaffold(ctx, request)
 	}
-	resolved, err := s.ResolveBuiltInPackagedFactory(
-		ctx,
-		factoryroot.ResolveBuiltInPackagedFactoryRequest{Name: request.Name},
-	)
-	if err != nil {
-		return factoryroot.InstallPackagedFactoryResult{}, err
-	}
-	if s == nil || s.packagedInstaller.Install == nil {
-		return factoryroot.InstallPackagedFactoryResult{},
-			fmt.Errorf("%w: packaged Factory installation collaborator is required",
-				factoryroot.ErrFactoryDistributeFailed)
-	}
-	installed, err := s.packagedInstaller.InstallPackagedFactory(
-		ctx,
-		factoryroot.PackagedFactoryInstallParams{
-			NamedFactoriesRoot: request.RootDir,
-			Definition:         resolved.Definition,
-			Format:             request.Format,
-			Replace:            request.Replace,
-		},
-	)
-	if err != nil {
-		return factoryroot.InstallPackagedFactoryResult{},
-			fmt.Errorf("%w: %w", factoryroot.ErrFactoryDistributeFailed, err)
-	}
-	return factoryroot.InstallPackagedFactoryResult{
-		Definition: factoryroot.DistributedFactoryDefinitionFacts{
-			Name:       installed.Name,
-			FactoryDir: installed.FactoryDir,
-		},
-		Outcome: installed.Outcome,
-		Format:  installed.Format,
-	}, nil
+	return s.distributionService.CreateFactoryScaffold(ctx, request)
 }
 
 // Save coordinates the session-scoped definition submission pipeline for the

@@ -36,6 +36,7 @@ func New(
 	packagedInstaller factoryroot.PackagedFactoryInstallationOperations,
 	requiredToolChecker factorydefinitions.RequiredToolChecker,
 	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
+	options ...CompositionOption,
 ) factoryroot.Service {
 	if sessionHost == nil || clock == nil || versionFileSystem == nil ||
 		namedPaths == nil || namedFactoryCatalogFileSystem == nil ||
@@ -88,16 +89,25 @@ func New(
 	validationService, _ := validationwire.NewService(validationservice.Dependencies{
 		Operations:            operations,
 		Effective:             effective,
-		LoadCanonical:       loadCanonical,
+		LoadCanonical:         loadCanonical,
 		RequiredToolChecker:   requiredToolChecker,
 		OrchestratorValidator: orchestratorValidator,
 	})
-	definitions := factorydefinition.NewWithCatalogPackagesValidationAndInstallation(
+	composition := applyCompositionOptions(options)
+	distributionService := factorydefinition.ComposeDistributionService(
+		packagedCatalog,
+		packagedInstaller,
+		composition.scaffoldInitializer,
+		composition.scaffoldFactoryNameResolver,
+	)
+	if distributionService == nil {
+		return nil
+	}
+	definitions := factorydefinition.NewWithCatalogPackagesValidationAndDistribution(
 		host,
 		catalogService,
 		validationService,
-		packagedCatalog,
-		packagedInstaller,
+		distributionService,
 		versionFileSystem,
 	)
 	sessionHost.AttachFactoryDefinitions(definitions)

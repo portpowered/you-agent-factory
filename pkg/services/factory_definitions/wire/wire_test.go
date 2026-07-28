@@ -1,7 +1,9 @@
 package wire_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"reflect"
@@ -14,8 +16,10 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
+	distributionscaffoldfacts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/scaffoldfacts"
 	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
+	factorydefaultscaffold "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/defaultscaffold"
 )
 
 func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
@@ -806,4 +810,105 @@ func (h *recordingSessionHost) AttachFactoryDefinitions(
 ) factorydefinitions.Service {
 	h.attachCalls++
 	return definitions
+}
+
+func TestNewServiceInstallAndScaffoldReturnMatchingDistributedFacts(t *testing.T) {
+	t.Parallel()
+
+	goalJSON, err := json.Marshal(map[string]string{"name": "goal", "project": "builtin-goal"})
+	if err != nil {
+		t.Fatalf("marshal goal factory: %v", err)
+	}
+	packagedCatalog, err := factorydefinitionsservice.NewPackagedFactoryCatalog([]factorydefinitions.PackagedDefinition{{
+		Name:    "@you/goal",
+		Project: "builtin-goal",
+		JSON:    goalJSON,
+		Formats: []factorydefinitions.PackagedFactoryFormat{
+			factorydefinitions.PackagedFactoryFormatJSON,
+		},
+	}})
+	if err != nil {
+		t.Fatalf("NewPackagedFactoryCatalog() error = %v", err)
+	}
+
+	fileSystem := platformfilesystem.Local{}
+	output := &bytes.Buffer{}
+	scaffoldInitializer, err := factorydefaultscaffold.NewScaffoldInitializer(fileSystem, output)
+	if err != nil {
+		t.Fatalf("NewScaffoldInitializer() error = %v", err)
+	}
+
+	ports := validConstructionPorts(t)
+	ports.packagedCatalog = packagedCatalog
+	ports.packagedInstaller = factorydefinitions.PackagedFactoryInstallationOperations{
+		Install: func(
+			_ context.Context,
+			params factorydefinitions.PackagedFactoryInstallParams,
+		) (factorydefinitions.PackagedFactoryInstallResult, error) {
+			return factorydefinitions.PackagedFactoryInstallResult{
+				Name:       params.Definition.Name,
+				FactoryDir: "/customer/factories/@you/goal",
+				Outcome:    factorydefinitions.PackagedFactoryInstallCreated,
+				Format:     params.Format,
+			}, nil
+		},
+	}
+
+	service, err := factorydefinitionswire.NewService(
+		ports.sessionHost,
+		ports.validator,
+		ports.persistence,
+		ports.loader,
+		ports.applySupportedFiles,
+		ports.applyStarterWork,
+		ports.namedPaths,
+		ports.namedFactoryCatalogFileSystem,
+		ports.clock,
+		ports.versionFileSystem,
+		ports.listEffective,
+		ports.packagedCatalog,
+		ports.packagedInstaller,
+		ports.requiredToolChecker,
+		ports.orchestratorValidator,
+		factorydefinitionsservice.WithDistributionScaffold(
+			scaffoldInitializer,
+			distributionscaffoldfacts.LocalFactoryNameResolver(),
+		),
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	installed, err := service.InstallPackagedFactory(
+		t.Context(),
+		factorydefinitions.InstallPackagedFactoryRequest{
+			RootDir: "/customer/factories",
+			Name:    "@you/goal",
+		},
+	)
+	if err != nil {
+		t.Fatalf("InstallPackagedFactory() error = %v", err)
+	}
+	if installed.Definition.Name == "" || installed.Definition.FactoryDir == "" {
+		t.Fatalf("InstallPackagedFactory() facts = %#v, want populated Name and FactoryDir", installed.Definition)
+	}
+
+	scaffoldDir := t.TempDir()
+	scaffolded, err := service.CreateFactoryScaffold(
+		t.Context(),
+		factorydefinitions.CreateFactoryScaffoldRequest{TargetDir: scaffoldDir},
+	)
+	if err != nil {
+		t.Fatalf("CreateFactoryScaffold() error = %v", err)
+	}
+	if scaffolded.Definition.Name == "" || scaffolded.Definition.FactoryDir == "" {
+		t.Fatalf("CreateFactoryScaffold() facts = %#v, want populated Name and FactoryDir", scaffolded.Definition)
+	}
+	if reflect.TypeOf(installed.Definition) != reflect.TypeOf(scaffolded.Definition) {
+		t.Fatalf(
+			"distributed facts types = %T vs %T, want matching DistributedFactoryDefinitionFacts",
+			installed.Definition,
+			scaffolded.Definition,
+		)
+	}
 }

@@ -19,7 +19,7 @@ import (
 	distributionscaffoldfacts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/scaffoldfacts"
 	distributionwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/wire"
 	factorydefaultscaffold "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/defaultscaffold"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packagedinstallation"
+	distributionpackagedinstallation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedinstallation"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 )
 
@@ -379,7 +379,7 @@ func TestDistributionInstallPackagedFactoryThroughInjectedPorts(t *testing.T) {
 	persistence := factorydefinitioncomposition.FactoryDefinitionPersistenceWithValidator(
 		factoryvalidation.New(nil),
 	)
-	installer := packagedinstallation.New(persistence, fileSystem)
+	installer := distributionpackagedinstallation.New(persistence, fileSystem)
 	svc := newDistributionService(t, catalog, factorydefinitions.PackagedFactoryInstallationOperations{
 		Install: installer.InstallPackagedFactory,
 	})
