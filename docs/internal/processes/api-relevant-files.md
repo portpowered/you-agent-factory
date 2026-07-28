@@ -70,6 +70,16 @@ Use this map when changing the public REST contract.
   requests terminate without an error body and deadline failures return 504 via
   `request_context.go`, with guards before root invocation and centralized
   handling in `writeRootOrInternalError`.
+- The Factory Runtime HTTP adapter package must stay registered in the allowed
+  shared manifests only: retain `pkg/services/factory_runtime/transports/http`
+  under destination `factory_runtime` in
+  `docs/internal/packaged-service-structure/package-target-manifest.json` and
+  `docs/internal/baselines/ownership-inventory.json`, and keep measured floors
+  in both `docs/internal/baselines/go-unit-coverage-package-minimums.json` and
+  `docs/internal/baselines/go-functional-coverage-package-minimums.json`.
+  Prove registration with `manifest_registration_test.go`; do not edit
+  `pkg/wire`, `pkg/root`, `pkg/initializer`, top-level CLI composition, or
+  other services' HTTP adapters when reconciling manifest churn.
 - Factory Definitions HTTP decoding, generated-contract mapping, service
   invocation, typed error mapping, and cancel/timeout handling live in
   `pkg/services/factory_definitions/transports/http`. The top-level
