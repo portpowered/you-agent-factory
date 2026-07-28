@@ -4972,6 +4972,24 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/work/internal/contenturl",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/invocationreturnpolicy",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/requestadmission",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/work/internal/service",
       "disposition": "move",
       "destination": "work",
@@ -5023,6 +5041,18 @@
     },
     {
       "packagePath": "pkg/services/work/internal/services/state_access/internal/service",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/services/state_access/lineagegraph",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/services/state_access/stateaccessquery",
       "disposition": "retain",
       "destination": "work",
       "destinationKind": "owner"
