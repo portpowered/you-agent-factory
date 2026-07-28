@@ -1405,7 +1405,7 @@
       "fromOwner": "operator_settings",
       "toOwner": "providers",
       "class": "command",
-      "evidence": "pkg/services/operator_settings/internal/services/resolution/internal/service -\u003e pkg/services/providers"
+      "evidence": "pkg/services/operator_settings/internal/construct -\u003e pkg/services/providers"
     },
     {
       "fromOwner": "operator_settings",
@@ -3206,38 +3206,6 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/factory_runtime/build",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/instance_host",
-      "deletionCondition": "delete public package after IMP-RUN-instance_host private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/checkpointstore",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/checkpoint_recovery",
-      "deletionCondition": "delete public package after IMP-RUN-checkpoint_recovery private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/checkpointsummary",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/checkpoint_recovery",
-      "deletionCondition": "delete public package after IMP-RUN-checkpoint_recovery private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/definitionmapping/maptests",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
-      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
-    },
-    {
       "packagePath": "pkg/services/factory_runtime/exhaustiontests",
       "disposition": "move",
       "destination": "factory_runtime",
@@ -4318,6 +4286,14 @@
       "destinationKind": "owner",
       "successor": "pkg/services/operator_settings/internal/services/document",
       "deletionCondition": "delete public package after IMP-OPS-document private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/internal/construct",
+      "disposition": "move",
+      "destination": "operator_settings",
+      "destinationKind": "owner",
+      "successor": "pkg/services/operator_settings/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-OPS-FOLD-TOPLEVEL cutover proof"
     },
     {
       "packagePath": "pkg/services/operator_settings/internal/service",
