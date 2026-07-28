@@ -266,6 +266,247 @@ func TestCLIRunFactoryByPath(t *testing.T) {
 	functionalevidence.Covers(t, "cli/you.run")
 }
 
+// TestCLIRunFactoryWritesPrimaryResultFromStdin proves you run accepts stdin-only
+// prompt input and writes the invocation primary result to stdout on success.
+func TestCLIRunFactoryWritesPrimaryResultFromStdin(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow CLI run stdin wiring")
+	}
+
+	factoryDir := support.ScaffoldFactory(t, runWiringFactoryConfig())
+	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	prompt := fmt.Sprintf("functional-run-wiring-stdin-%d", time.Now().UnixNano())
+
+	port, err := reserveRunWiringLocalTCPPort()
+	if err != nil {
+		t.Fatalf("reserve port: %v", err)
+	}
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
+
+	mockWorkersPath := writeRunWiringMockWorkersConfig(t)
+	binaryPath := buildRunWiringYouCLIBinary(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(
+		ctx,
+		binaryPath,
+		"run",
+		"--factory", factoryPath,
+		"--with-mock-workers",
+		"--no-record",
+		"--server", baseURL,
+		"--quiet",
+		mockWorkersPath,
+	)
+	cmd.Dir = factoryDir
+	cmd.Stdin = strings.NewReader(prompt)
+
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("you run --factory via stdin: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+	}
+	if got := stdout.String(); got != prompt {
+		t.Fatalf("stdout = %q, want stdin primary result %q", got, prompt)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty stderr on successful stdin invocation", stderr.String())
+	}
+}
+
+// TestCLIRunRejectsConflictingPositionalAndStdinInput proves you run rejects
+// simultaneous positional prompt and stdin input with a stable conflict code and
+// writes no success primary-result payload to stdout.
+func TestCLIRunRejectsConflictingPositionalAndStdinInput(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow CLI run input conflict wiring")
+	}
+
+	factoryDir := support.ScaffoldFactory(t, runWiringFactoryConfig())
+	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+
+	port, err := reserveRunWiringLocalTCPPort()
+	if err != nil {
+		t.Fatalf("reserve port: %v", err)
+	}
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
+
+	mockWorkersPath := writeRunWiringMockWorkersConfig(t)
+	binaryPath := buildRunWiringYouCLIBinary(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(
+		ctx,
+		binaryPath,
+		"run",
+		"--factory", factoryPath,
+		"--with-mock-workers",
+		"--no-record",
+		"--server", baseURL,
+		"--quiet",
+		mockWorkersPath,
+		"from positional",
+	)
+	cmd.Dir = factoryDir
+	cmd.Stdin = strings.NewReader("from stdin")
+
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err = cmd.Run()
+	if err == nil {
+		t.Fatal("expected conflicting positional and stdin invocation inputs to fail")
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty on conflict failure", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "INVOCATION_INPUT_SOURCE_CONFLICT") {
+		t.Fatalf("stderr = %q, want stable conflict code", stderr.String())
+	}
+}
+
+// TestCLIRunFailureWritesNoSuccessPayloadToStdout proves you run writes no
+// success primary-result payload to stdout when invocation primary-result
+// resolution fails.
+func TestCLIRunFailureWritesNoSuccessPayloadToStdout(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow CLI run unresolved primary-result wiring")
+	}
+
+	factoryDir := support.ScaffoldFactory(t, runWiringFactoryConfigWithUnresolvedInvocationReturn())
+	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+
+	port, err := reserveRunWiringLocalTCPPort()
+	if err != nil {
+		t.Fatalf("reserve port: %v", err)
+	}
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
+
+	mockWorkersPath := writeRunWiringMockWorkersConfig(t)
+	binaryPath := buildRunWiringYouCLIBinary(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(
+		ctx,
+		binaryPath,
+		"run",
+		"--factory", factoryPath,
+		"--with-mock-workers",
+		"--no-record",
+		"--server", baseURL,
+		"--quiet",
+		mockWorkersPath,
+		"trigger unresolved result",
+	)
+	cmd.Dir = factoryDir
+
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err = cmd.Run()
+	if err == nil {
+		t.Fatal("expected unresolved invocation primary result to fail")
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty on invocation failure", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "INVOCATION_PRIMARY_RESULT_UNRESOLVED") {
+		t.Fatalf("stderr = %q, want stable unresolved-result code", stderr.String())
+	}
+}
+
+// TestCLIRunCleanInvocationStdoutRemainsPipeable proves quiet you run invocations
+// write only the primary result to stdout without operator lifecycle chatter so
+// repeated runs remain pipeable.
+func TestCLIRunCleanInvocationStdoutRemainsPipeable(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow CLI run clean stdout wiring")
+	}
+
+	factoryDir := support.ScaffoldFactory(t, runWiringFactoryConfig())
+	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	mockWorkersPath := writeRunWiringMockWorkersConfig(t)
+	binaryPath := buildRunWiringYouCLIBinary(t)
+
+	for _, prompt := range []string{
+		"functional-clean-stdout-first",
+		"functional-clean-stdout-second",
+	} {
+		stdout, stderr, err := runRunWiringFactoryCLI(
+			t,
+			factoryDir,
+			binaryPath,
+			mockWorkersPath,
+			nil,
+			factoryPath,
+			prompt,
+		)
+		if err != nil {
+			t.Fatalf("run clean invocation for prompt %q: %v\nstdout:\n%s\nstderr:\n%s", prompt, err, stdout, stderr)
+		}
+		assertRunWiringCleanInvocationStdout(t, stdout, prompt)
+	}
+
+	stdout, stderr, err := runRunWiringFactoryCLI(
+		t,
+		factoryDir,
+		binaryPath,
+		mockWorkersPath,
+		strings.NewReader("functional-clean-stdin-only\n"),
+		factoryPath,
+	)
+	if err != nil {
+		t.Fatalf("run stdin-only clean invocation: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
+	}
+	assertRunWiringCleanInvocationStdout(t, stdout, "functional-clean-stdin-only")
+}
+
+// TestCLIRunAmbiguousPromptAndStdinFailsBeforeRuntimeStartup proves you run
+// rejects ambiguous positional prompt and stdin input before runtime startup with
+// a stable conflict diagnostic and no success stdout payload.
+func TestCLIRunAmbiguousPromptAndStdinFailsBeforeRuntimeStartup(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow CLI run ambiguous input wiring")
+	}
+
+	factoryDir := support.ScaffoldFactory(t, runWiringFactoryConfig())
+	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	mockWorkersPath := writeRunWiringMockWorkersConfig(t)
+	binaryPath := buildRunWiringYouCLIBinary(t)
+
+	stdout, stderr, err := runRunWiringFactoryCLI(
+		t,
+		factoryDir,
+		binaryPath,
+		mockWorkersPath,
+		strings.NewReader("functional-clean-stdin-conflict\n"),
+		factoryPath,
+		"functional-clean-positional-conflict",
+	)
+	if err == nil {
+		t.Fatalf("expected ambiguous stdin and prompt invocation to fail\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+	if stdout != "" {
+		t.Fatalf("stdout = %q, want empty on ambiguous input failure", stdout)
+	}
+	for _, want := range []string{
+		"INVOCATION_INPUT_SOURCE_CONFLICT",
+		"positional_text",
+		"stdin_text",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("stderr = %q, want %q", stderr, want)
+		}
+	}
+}
+
 func runWiringFactoryConfigWithoutDefault() map[string]any {
 	cfg := runWiringFactoryConfig()
 	workTypes := cfg["workTypes"].([]map[string]any)
@@ -281,6 +522,24 @@ func runWiringFactoryConfigWithoutDefault() map[string]any {
 		withoutDefault[i] = cloned
 	}
 	cfg["workTypes"] = withoutDefault
+	return cfg
+}
+
+func runWiringFactoryConfigWithUnresolvedInvocationReturn() map[string]any {
+	cfg := runWiringFactoryConfig()
+	cfg["invocationReturn"] = map[string]any{
+		"policy":        "EXPLICIT",
+		"workTypeName":  "summary",
+		"terminalState": "complete",
+	}
+	cfg["workTypes"] = append(cfg["workTypes"].([]map[string]any), map[string]any{
+		"name": "summary",
+		"states": []map[string]string{
+			{"name": "init", "type": "INITIAL"},
+			{"name": "complete", "type": "TERMINAL"},
+			{"name": "failed", "type": "FAILED"},
+		},
+	})
 	return cfg
 }
 
@@ -404,4 +663,62 @@ func reserveRunWiringLocalTCPPort() (int, error) {
 		return 0, fmt.Errorf("unexpected listener address type %T", listener.Addr())
 	}
 	return addr.Port, nil
+}
+
+func runRunWiringFactoryCLI(
+	t *testing.T,
+	dir string,
+	binaryPath string,
+	mockWorkersPath string,
+	stdin *strings.Reader,
+	factoryPath string,
+	promptArgs ...string,
+) (stdout string, stderr string, runErr error) {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	t.Cleanup(cancel)
+
+	args := []string{
+		"run",
+		"--factory", factoryPath,
+		"--with-mock-workers",
+		"--no-record",
+		"--quiet",
+		mockWorkersPath,
+	}
+	args = append(args, promptArgs...)
+
+	cmd := exec.CommandContext(ctx, binaryPath, args...)
+	cmd.Dir = dir
+	if stdin != nil {
+		cmd.Stdin = stdin
+	}
+
+	var outBuf, errBuf strings.Builder
+	cmd.Stdout = &outBuf
+	cmd.Stderr = &errBuf
+	runErr = cmd.Run()
+	return outBuf.String(), errBuf.String(), runErr
+}
+
+func assertRunWiringCleanInvocationStdout(t *testing.T, got string, want string) {
+	t.Helper()
+
+	got = strings.TrimSuffix(got, "\n")
+	if got != want {
+		t.Fatalf("stdout = %q, want exact primary clean invocation output", got)
+	}
+	for _, forbidden := range []string{
+		"Factory initiated",
+		"Dashboard URL",
+		"Runtime log",
+		"Opening dashboard",
+		"Recording saved to",
+		"Factory:",
+	} {
+		if strings.Contains(got, forbidden) {
+			t.Fatalf("stdout = %q, should not contain operator chatter %q", got, forbidden)
+		}
+	}
 }

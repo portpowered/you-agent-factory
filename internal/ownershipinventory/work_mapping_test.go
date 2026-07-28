@@ -208,6 +208,12 @@ func workCanonicalRetainRest(rest string) bool {
 		return true
 	case strings.HasPrefix(rest, "internal/services/state_access"):
 		return true
+	case rest == "internal/contenturl" || strings.HasPrefix(rest, "internal/contenturl/"):
+		return true
+	case rest == "internal/invocationreturnpolicy" || strings.HasPrefix(rest, "internal/invocationreturnpolicy/"):
+		return true
+	case rest == "internal/requestadmission" || strings.HasPrefix(rest, "internal/requestadmission/"):
+		return true
 	default:
 		return false
 	}

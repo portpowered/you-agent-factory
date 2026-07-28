@@ -24,6 +24,7 @@ type Handler struct {
 	mappings           *mappingcomposition.HTTPBinder
 	modelsContent      work.ContentPreparation
 	validation         factorydefinitions.SubmittedDefinitionValidationOperation
+	invocationWorkType factorydefinitions.InvocationWorkTypeService
 	contentStaging     work.ContentStagingService
 	requestPreparation work.RequestPreparationService
 	sessionRequests    factorysessionshttp.RequestPreparation
@@ -33,16 +34,18 @@ func NewHandler(
 	mappings *mappingcomposition.HTTPBinder,
 	modelsContent work.ContentPreparation,
 	validation factorydefinitions.SubmittedDefinitionValidationOperation,
+	invocationWorkType factorydefinitions.InvocationWorkTypeService,
 	contentStaging work.ContentStagingService,
 	requestPreparation work.RequestPreparationService,
 	sessionRequests factorysessionshttp.RequestPreparation,
 ) (*Handler, error) {
-	if mappings == nil || modelsContent == nil || validation == nil ||
+	if mappings == nil || modelsContent == nil || validation == nil || invocationWorkType == nil ||
 		contentStaging == nil || requestPreparation == nil || sessionRequests == nil {
-		return nil, fmt.Errorf("construct HTTP handler: mappings, service handlers, validation, Work operations, and Factory Session operations are required")
+		return nil, fmt.Errorf("construct HTTP handler: mappings, service handlers, validation, invocation work-type policy, Work operations, and Factory Session operations are required")
 	}
 	return &Handler{
 		mappings: mappings, modelsContent: modelsContent, validation: validation,
+		invocationWorkType: invocationWorkType,
 		contentStaging: contentStaging, requestPreparation: requestPreparation,
 		sessionRequests: sessionRequests,
 	}, nil
@@ -79,6 +82,7 @@ func (handler *Handler) Bind(opened factorysessions.RuntimeHTTPServices) (http.H
 		DurableLister:     opened.SessionExecution,
 		LiveSessionLister: factorysessionshttp.ReadProjectionSessionListReader{Reader: opened.FactorySessions},
 		WorkerPrompts: opened.WorkerPrompts,
+		InvocationWorkType: handler.invocationWorkType,
 		WorkService: work.AdmissionContentService(
 			handler.contentStaging,
 			handler.requestPreparation,
@@ -105,6 +109,7 @@ func (handler *Handler) BindDurableExecution(
 		DurableExecution: durable, DurableLifecycle: durable,
 		DurableListing: durable, DurableProjection: durable,
 		DurableLister: execution, FactoryValidation: handler.validation,
+		InvocationWorkType: handler.invocationWorkType,
 		WorkService: work.AdmissionContentService(
 			handler.contentStaging,
 			handler.requestPreparation,

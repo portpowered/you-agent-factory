@@ -28,12 +28,10 @@ var factoryRuntimeMoveRules = []factoryRuntimeMoveRule{
 	{exact: "internal/legacysnapshot", prefix: "internal/legacysnapshot/", subservice: ""},
 	{exact: "internal/rootobservation", prefix: "internal/rootobservation/", subservice: ""},
 	{exact: "internal/service", prefix: "internal/service/", subservice: ""},
-	{exact: "testkit", prefix: "testkit/", subservice: ""},
 	{exact: "testdata", prefix: "testdata/", subservice: ""},
 	{exact: "context", prefix: "context/", subservice: "orchestration"},
 	{exact: "definitionmapping", prefix: "definitionmapping/", subservice: "orchestration"},
 	{exact: "engine", prefix: "engine/", subservice: "orchestration"},
-	{exact: "exhaustiontests", prefix: "exhaustiontests/", subservice: "orchestration"},
 	{exact: "metrics", prefix: "metrics/", subservice: "orchestration"},
 	{exact: "orchestrationowner", prefix: "orchestrationowner/", subservice: "orchestration"},
 	{exact: "orchestratorcontract", prefix: "orchestratorcontract/", subservice: "orchestration"},
@@ -79,6 +77,10 @@ func isFactoryRuntimeCanonicalRetain(rest string) bool {
 	case rest == "transports" || strings.HasPrefix(rest, "transports/"):
 		return true
 	case rest == "internal" || strings.HasPrefix(rest, "internal/host"):
+		return true
+	case strings.HasPrefix(rest, "internal/testkit"):
+		return true
+	case strings.HasPrefix(rest, "internal/exhaustiontests"):
 		return true
 	case strings.HasPrefix(rest, "internal/services/orchestration"):
 		return true

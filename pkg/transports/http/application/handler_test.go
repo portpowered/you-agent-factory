@@ -62,6 +62,7 @@ func (statusProjectorRole) ProjectFactoryStatusFromObservation(observation facto
 type contentStagingRole struct{ work.ContentStagingService }
 type contentPreparationRole struct{ work.ContentPreparation }
 type workRequestPreparationRole struct{ work.RequestPreparationService }
+type invocationWorkTypeRole struct{ factorydefinitions.InvocationWorkTypeService }
 
 func TestHandlerBindsOpenedRolesWithoutReconstructingStableGraph(t *testing.T) {
 	t.Parallel()
@@ -74,6 +75,7 @@ func TestHandlerBindsOpenedRolesWithoutReconstructingStableGraph(t *testing.T) {
 		mappings,
 		&contentPreparationRole{},
 		&validationRole{},
+		&invocationWorkTypeRole{},
 		&contentStagingRole{},
 		&workRequestPreparationRole{},
 		&requestPreparationRole{},
@@ -109,28 +111,32 @@ func TestNewHandlerRejectsMissingStableOperations(t *testing.T) {
 		t.Fatalf("NewHTTPBinder: %v", err)
 	}
 	validation := &validationRole{}
+	invocationWorkType := &invocationWorkTypeRole{}
 	modelsContent := &contentPreparationRole{}
 	contentStaging := &contentStagingRole{}
 	requestPreparation := &workRequestPreparationRole{}
 	sessionRequests := &requestPreparationRole{}
 	for name, construct := range map[string]func() (*Handler, error){
 		"mappings": func() (*Handler, error) {
-			return NewHandler(nil, modelsContent, validation, contentStaging, requestPreparation, sessionRequests)
+			return NewHandler(nil, modelsContent, validation, invocationWorkType, contentStaging, requestPreparation, sessionRequests)
 		},
 		"models content preparation": func() (*Handler, error) {
-			return NewHandler(mappings, nil, validation, contentStaging, requestPreparation, sessionRequests)
+			return NewHandler(mappings, nil, validation, invocationWorkType, contentStaging, requestPreparation, sessionRequests)
 		},
 		"validation": func() (*Handler, error) {
-			return NewHandler(mappings, modelsContent, nil, contentStaging, requestPreparation, sessionRequests)
+			return NewHandler(mappings, modelsContent, nil, invocationWorkType, contentStaging, requestPreparation, sessionRequests)
+		},
+		"invocation work type": func() (*Handler, error) {
+			return NewHandler(mappings, modelsContent, validation, nil, contentStaging, requestPreparation, sessionRequests)
 		},
 		"content staging": func() (*Handler, error) {
-			return NewHandler(mappings, modelsContent, validation, nil, requestPreparation, sessionRequests)
+			return NewHandler(mappings, modelsContent, validation, invocationWorkType, nil, requestPreparation, sessionRequests)
 		},
 		"request preparation": func() (*Handler, error) {
-			return NewHandler(mappings, modelsContent, validation, contentStaging, nil, sessionRequests)
+			return NewHandler(mappings, modelsContent, validation, invocationWorkType, contentStaging, nil, sessionRequests)
 		},
 		"session requests": func() (*Handler, error) {
-			return NewHandler(mappings, modelsContent, validation, contentStaging, requestPreparation, nil)
+			return NewHandler(mappings, modelsContent, validation, invocationWorkType, contentStaging, requestPreparation, nil)
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -152,6 +158,7 @@ func TestHandlerBindsStandaloneDurableExecution(t *testing.T) {
 		mappings,
 		&contentPreparationRole{},
 		&validationRole{},
+		&invocationWorkTypeRole{},
 		&contentStagingRole{},
 		&workRequestPreparationRole{},
 		&requestPreparationRole{},

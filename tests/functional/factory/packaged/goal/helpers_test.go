@@ -2,6 +2,7 @@ package goal
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -352,6 +353,80 @@ func packagedGoalWorkStateName(state *factoryapi.WorkState) string {
 		return ""
 	}
 	return state.Name
+}
+
+func runPackagedGoalQuietCLIBatch(
+	t *testing.T,
+	mockWorkersPath string,
+	goalText string,
+) (stdout string, stderr string) {
+	t.Helper()
+
+	homeDir := t.TempDir()
+	support.InstallPackagedFactory(t, homeDir, packagedGoalFactoryName)
+
+	args := []string{
+		"you", "run",
+		"--named", packagedGoalFactoryName,
+		"--with-mock-workers",
+		"--no-record",
+		"--quiet",
+		mockWorkersPath,
+		goalText,
+	}
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.WorkingDirectory = t.TempDir()
+
+	if err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
+		t.Fatalf(
+			"Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s",
+			args,
+			err,
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
+	}
+	return inputs.Stdout(), inputs.Stderr()
+}
+
+func runPackagedGoalQuietCLIBatchWithTimeout(
+	t *testing.T,
+	mockWorkersPath string,
+	goalText string,
+	timeout time.Duration,
+) error {
+	t.Helper()
+
+	homeDir := t.TempDir()
+	support.InstallPackagedFactory(t, homeDir, packagedGoalFactoryName)
+
+	args := []string{
+		"you", "run",
+		"--named", packagedGoalFactoryName,
+		"--with-mock-workers",
+		"--no-record",
+		"--quiet",
+		mockWorkersPath,
+		goalText,
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), timeout)
+	defer cancel()
+	inputs := support.FakeInputs(ctx, args)
+	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.WorkingDirectory = t.TempDir()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input)
+	}()
+
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func waitForPackagedGoalWorkIDsComplete(

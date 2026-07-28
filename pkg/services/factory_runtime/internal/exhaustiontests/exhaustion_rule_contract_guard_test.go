@@ -19,7 +19,7 @@ var retiredAuthoredExhaustionIdentifiers = map[string]struct{}{
 }
 
 var approvedTransitionExhaustionSites = map[string]map[string]struct{}{
-	filepath.Clean("factory_runtime/subsystems/circuitbreaker.go"): {
+	filepath.Clean("factory_runtime/internal/services/orchestration/subsystems/circuitbreaker.go"): {
 		"Execute": {},
 	},
 	filepath.Clean("factory_runtime/internal/orchestrators/petri/transition.go"): {
@@ -95,7 +95,7 @@ var ExhaustionRules = struct{}{}
 }
 
 func walkProductionPkgFiles(visit func(path, rel string, file *ast.File, fset *token.FileSet) error) error {
-	return walkProductionPkgFilesAtRoot(filepath.Clean("../.."), visit)
+	return walkProductionPkgFilesAtRoot(filepath.Clean("../../.."), visit)
 }
 
 func walkProductionPkgFilesAtRoot(pkgRoot string, visit func(path, rel string, file *ast.File, fset *token.FileSet) error) error {

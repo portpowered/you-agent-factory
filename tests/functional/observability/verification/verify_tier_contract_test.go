@@ -1,14 +1,12 @@
 //go:build !windows
 
-package smoke
+package verification
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 )
 
+// TestVerifyFastCommandSmoke_UsesOnlyShortOwnedSuites prove verify-fast invokes only short owned suites in order.
 func TestVerifyFastCommandSmoke_UsesOnlyShortOwnedSuites(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
@@ -58,6 +57,7 @@ func TestVerifyFastCommandSmoke_UsesOnlyShortOwnedSuites(t *testing.T) {
 	}
 }
 
+// TestVerifyFastCommandSmoke_FailureReportsOwnedSuiteAndRerunCommand prove verify-fast failure output reports the owning suite rerun command.
 func TestVerifyFastCommandSmoke_FailureReportsOwnedSuiteAndRerunCommand(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
@@ -79,6 +79,7 @@ func TestVerifyFastCommandSmoke_FailureReportsOwnedSuiteAndRerunCommand(t *testi
 	}
 }
 
+// TestVerifyFastCommandSmoke_ContractFailureStopsLaterSuites prove verify-fast stops after a contract-boundary failure without running later suites.
 func TestVerifyFastCommandSmoke_ContractFailureStopsLaterSuites(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
@@ -102,6 +103,7 @@ func TestVerifyFastCommandSmoke_ContractFailureStopsLaterSuites(t *testing.T) {
 	}
 }
 
+// TestVerifyPRCommandSmoke_UsesRequiredLanesOnce prove verify-pr runs each required CI-equivalent lane exactly once.
 func TestVerifyPRCommandSmoke_UsesRequiredLanesOnce(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
@@ -183,6 +185,7 @@ func TestVerifyPRCommandSmoke_UsesRequiredLanesOnce(t *testing.T) {
 	}
 }
 
+// TestVerifyPRCommandSmoke_FailureReportsExactLaneRerun prove verify-pr failure output reports the exact failing lane rerun command.
 func TestVerifyPRCommandSmoke_FailureReportsExactLaneRerun(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
@@ -209,6 +212,7 @@ func TestVerifyPRCommandSmoke_FailureReportsExactLaneRerun(t *testing.T) {
 	}
 }
 
+// TestBackendCoverageAliasesSmoke_RedirectToIndependentLanes prove backend coverage aliases delegate to independent unit and functional lanes.
 func TestBackendCoverageAliasesSmoke_RedirectToIndependentLanes(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
@@ -239,6 +243,7 @@ func TestBackendCoverageAliasesSmoke_RedirectToIndependentLanes(t *testing.T) {
 	}
 }
 
+// TestUICoverageCommandSmoke_RunsPackageCoverageThenReplayCheck prove test-ui-coverage runs package coverage before the replay check.
 func TestUICoverageCommandSmoke_RunsPackageCoverageThenReplayCheck(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
@@ -257,6 +262,7 @@ func TestUICoverageCommandSmoke_RunsPackageCoverageThenReplayCheck(t *testing.T)
 	)
 }
 
+// TestUIPackageCoverageCommandSmoke_InvokesPackageOwnedCoverageScript prove ui-test-coverage invokes the package-owned coverage script.
 func TestUIPackageCoverageCommandSmoke_InvokesPackageOwnedCoverageScript(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	scriptPath := writeMakeEchoScript(t, "ui-script")
@@ -277,6 +283,7 @@ func TestUIPackageCoverageCommandSmoke_InvokesPackageOwnedCoverageScript(t *test
 	}
 }
 
+// TestVerifyCompatibilityAliasSmoke_RedirectsToCanonicalPRTier prove make verify remains a compatibility alias for verify-pr.
 func TestVerifyCompatibilityAliasSmoke_RedirectsToCanonicalPRTier(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
@@ -345,6 +352,7 @@ func TestVerifyCompatibilityAliasSmoke_RedirectsToCanonicalPRTier(t *testing.T) 
 	}
 }
 
+// TestBackendVerificationLaneScriptSmoke_UsesCanonicalOwnedCommandAndCapturesLog prove run-backend-verification.sh invokes the canonical make target and captures command.log.
 func TestBackendVerificationLaneScriptSmoke_UsesCanonicalOwnedCommandAndCapturesLog(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makePath := writeExecutableScript(t, "fake-make", "#!/bin/sh\nprintf '%s\\n' \"fake-make:$*\"\n")
@@ -372,6 +380,7 @@ func TestBackendVerificationLaneScriptSmoke_UsesCanonicalOwnedCommandAndCaptures
 	}
 }
 
+// TestConcurrentUIVerificationLanesScriptSmoke_RunsBothOwnedLanesConcurrently prove run-concurrent-ui-verification-lanes.sh runs both owned lanes concurrently with prefixed output.
 func TestConcurrentUIVerificationLanesScriptSmoke_RunsBothOwnedLanesConcurrently(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makePath := writeExecutableScript(t, "fake-make-concurrent-ui", `#!/bin/sh
@@ -430,6 +439,7 @@ esac
 	}
 }
 
+// TestConcurrentUIVerificationLanesScriptSmoke_FailureReportsExactLaneRerun prove concurrent UI verification failure output reports the exact browser lane rerun command.
 func TestConcurrentUIVerificationLanesScriptSmoke_FailureReportsExactLaneRerun(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makePath := writeExecutableScript(t, "fake-make-concurrent-ui-fail", `#!/bin/sh
@@ -463,6 +473,7 @@ esac
 	}
 }
 
+// TestConcurrentUIVerificationLanesScriptSmoke_DoesNotWaitForDetachedLogHandle prove concurrent UI verification does not wait for a detached process holding output open.
 func TestConcurrentUIVerificationLanesScriptSmoke_DoesNotWaitForDetachedLogHandle(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makePath := writeExecutableScript(t, "fake-make-concurrent-ui-detached", `#!/bin/sh
@@ -486,6 +497,7 @@ printf '%s\n' "fake-make:$1"
 	}
 }
 
+// TestBackendVerificationLaneScriptSmoke_PreservesFailureExitAndLog prove run-backend-verification.sh preserves failure exit codes and command.log output.
 func TestBackendVerificationLaneScriptSmoke_PreservesFailureExitAndLog(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makePath := writeExecutableScript(t, "fake-make-fail", "#!/bin/sh\nprintf '%s\\n' \"fake-make:$*\"\nexit 27\n")
@@ -514,6 +526,7 @@ func TestBackendVerificationLaneScriptSmoke_PreservesFailureExitAndLog(t *testin
 	}
 }
 
+// TestVerifyExtendedCommandSmoke_UsesOnlyExplicitLongSuitesAfterPRTier prove verify-extended runs PR verification then only explicit long and specialty suites.
 func TestVerifyExtendedCommandSmoke_UsesOnlyExplicitLongSuitesAfterPRTier(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
@@ -556,6 +569,7 @@ func TestVerifyExtendedCommandSmoke_UsesOnlyExplicitLongSuitesAfterPRTier(t *tes
 	}
 }
 
+// TestLongTestsCommandSmoke_FailureReportsExactSpecialtyLaneRerun prove long-tests failure output reports the exact specialty lane rerun command.
 func TestLongTestsCommandSmoke_FailureReportsExactSpecialtyLaneRerun(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
@@ -573,6 +587,7 @@ func TestLongTestsCommandSmoke_FailureReportsExactSpecialtyLaneRerun(t *testing.
 	}
 }
 
+// TestVerifyPRInferenceCommandSmoke_RunsSingleNamedRegressionOnly prove verify-pr-inference runs only the named PR inference approval regression.
 func TestVerifyPRInferenceCommandSmoke_RunsSingleNamedRegressionOnly(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
@@ -608,6 +623,7 @@ func TestVerifyPRInferenceCommandSmoke_RunsSingleNamedRegressionOnly(t *testing.
 	}
 }
 
+// TestVerifyPRInferenceCommandSmoke_FailureReportsOwnedRerunCommand prove verify-pr-inference failure output reports the owned rerun command.
 func TestVerifyPRInferenceCommandSmoke_FailureReportsOwnedRerunCommand(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
@@ -623,6 +639,7 @@ func TestVerifyPRInferenceCommandSmoke_FailureReportsOwnedRerunCommand(t *testin
 	}
 }
 
+// TestVerifyPRInferenceCommandSmoke_StaysOutsideRequiredPRAndExtendedTiers prove verify-pr, verify-extended, and long-tests do not invoke verify-pr-inference.
 func TestVerifyPRInferenceCommandSmoke_StaysOutsideRequiredPRAndExtendedTiers(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
@@ -649,116 +666,3 @@ func TestVerifyPRInferenceCommandSmoke_StaysOutsideRequiredPRAndExtendedTiers(t 
 	}
 }
 
-func writeVerifyFastWrapperMakefile(t *testing.T, repoRoot string, overrides map[string]string) string {
-	t.Helper()
-	requirePOSIXShell(t)
-
-	var body strings.Builder
-	body.WriteString("SHELL := sh\n")
-	body.WriteString(fmt.Sprintf("include %s\n\n", filepath.Join(repoRoot, "Makefile")))
-	for target, recipe := range overrides {
-		body.WriteString(fmt.Sprintf("%s:\n", target))
-		for _, line := range strings.Split(strings.TrimSuffix(recipe, "\n"), "\n") {
-			body.WriteString("\t")
-			body.WriteString(line)
-			body.WriteString("\n")
-		}
-		body.WriteString("\n")
-	}
-
-	path := filepath.Join(t.TempDir(), "verify-fast-wrapper.mk")
-	if err := os.WriteFile(path, []byte(body.String()), 0o644); err != nil {
-		t.Fatalf("write wrapper makefile: %v", err)
-	}
-	return filepath.ToSlash(path)
-}
-
-func runMakefileTarget(repoRoot, makefilePath, target string) (string, error) {
-	return runMakefileTargetWithArgs(repoRoot, makefilePath, target)
-}
-
-func runMakefileTargetWithArgs(repoRoot, makefilePath, target string, args ...string) (string, error) {
-	makePath, err := exec.LookPath("make")
-	if err != nil {
-		return "", err
-	}
-
-	makeArgs := []string{
-		"-f", makefilePath,
-		"SHELL=sh",
-		fmt.Sprintf("MAKE=%s -f %s", filepath.ToSlash(makePath), filepath.ToSlash(makefilePath)),
-	}
-	makeArgs = append(makeArgs, args...)
-	makeArgs = append(makeArgs, target)
-
-	cmd := exec.Command(makePath, makeArgs...)
-	cmd.Dir = repoRoot
-
-	var output bytes.Buffer
-	cmd.Stdout = &output
-	cmd.Stderr = &output
-
-	err = cmd.Run()
-	return output.String(), err
-}
-
-func writeMakeEchoScript(t *testing.T, label string) string {
-	t.Helper()
-	requirePOSIXShell(t)
-
-	path := filepath.Join(t.TempDir(), label)
-	body := fmt.Sprintf("#!/bin/sh\nprintf '%%s:' %q\nprintf '%%s\\n' \"$*\"\n", label)
-	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
-		t.Fatalf("write echo script: %v", err)
-	}
-	return filepath.ToSlash(path)
-}
-
-func writeExecutableScript(t *testing.T, label string, body string) string {
-	t.Helper()
-	requirePOSIXShell(t)
-
-	path := filepath.Join(t.TempDir(), label)
-	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
-		t.Fatalf("write executable script: %v", err)
-	}
-	return filepath.ToSlash(path)
-}
-
-func requirePOSIXShell(t *testing.T) {
-	t.Helper()
-	if _, err := exec.LookPath("sh"); err != nil {
-		t.Skipf("POSIX shell smoke test requires sh: %v", err)
-	}
-}
-
-func runScript(repoRoot string, scriptPath string, env ...string) (string, error) {
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		cmd = exec.Command("sh", filepath.ToSlash(scriptPath))
-	} else {
-		cmd = exec.Command(scriptPath)
-	}
-	cmd.Dir = repoRoot
-	cmd.Env = append(os.Environ(), env...)
-
-	var output bytes.Buffer
-	cmd.Stdout = &output
-	cmd.Stderr = &output
-
-	err := cmd.Run()
-	return output.String(), err
-}
-
-func assertOutputOrder(t *testing.T, output string, markers ...string) {
-	t.Helper()
-
-	cursor := 0
-	for _, marker := range markers {
-		next := strings.Index(output[cursor:], marker)
-		if next < 0 {
-			t.Fatalf("output missing marker %q:\n%s", marker, output)
-		}
-		cursor += next + len(marker)
-	}
-}

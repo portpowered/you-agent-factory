@@ -126,6 +126,17 @@
     "pkg/services/factory_definitions/internal/services/distribution/subagent",
     "pkg/services/factory_definitions/internal/services/distribution/tts",
     "pkg/services/factory_definitions/internal/services/distribution/wire",
+    "pkg/services/factory_definitions/internal/services/invocation_policy",
+    "pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope",
+    "pkg/services/factory_definitions/internal/services/invocation_policy/internal/service",
+    "pkg/services/factory_definitions/internal/services/invocation_policy/invocationinterpolation",
+    "pkg/services/factory_definitions/internal/services/invocation_policy/invocationoutput",
+    "pkg/services/factory_definitions/internal/services/invocation_policy/invocationworktype",
+    "pkg/services/factory_definitions/internal/services/invocation_policy/quorumpolicy",
+    "pkg/services/factory_definitions/internal/services/invocation_policy/ttsobservability",
+    "pkg/services/factory_definitions/internal/services/invocation_policy/wire",
+    "pkg/services/factory_definitions/internal/services/invocation_policy/workpropagation",
+    "pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution",
     "pkg/services/factory_definitions/internal/services/snapshots_portability",
     "pkg/services/factory_definitions/internal/services/snapshots_portability/capture",
     "pkg/services/factory_definitions/internal/services/snapshots_portability/editable",
@@ -230,7 +241,7 @@
     "pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/catalog",
     "pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/symbolidentity",
     "pkg/services/factory_runtime/internal/services/orchestration/wire",
-    "pkg/services/factory_runtime/testkit",
+    "pkg/services/factory_runtime/internal/testkit",
     "pkg/services/factory_runtime/transports/cli",
     "pkg/services/factory_runtime/transports/http",
     "pkg/services/factory_runtime/transports/mcp",
@@ -396,6 +407,7 @@
     "pkg/services/providers/internal/services/execution/internal/service",
     "pkg/services/providers/internal/services/execution/wire",
     "pkg/services/providers/internal/testutil/execution",
+    "pkg/services/providers/transports/mcp",
     "pkg/services/providers/wire",
     "pkg/services/recordings",
     "pkg/services/recordings/artifacts",
@@ -1030,6 +1042,61 @@
       "destination": "factory_definitions/internal/services/distribution"
     },
     {
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/invocation_policy"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/invocation_policy"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/internal/service",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/invocation_policy"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/invocationinterpolation",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/invocation_policy"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/invocationoutput",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/invocation_policy"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/invocationworktype",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/invocation_policy"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/quorumpolicy",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/invocation_policy"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/ttsobservability",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/invocation_policy"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/wire",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/invocation_policy"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/workpropagation",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/invocation_policy"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/invocation_policy"
+    },
+    {
       "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/snapshots_portability"
@@ -1550,9 +1617,9 @@
       "destination": "factory_runtime/internal/services/orchestration"
     },
     {
-      "packagePath": "pkg/services/factory_runtime/testkit",
-      "disposition": "move",
-      "destination": "factory_runtime/internal"
+      "packagePath": "pkg/services/factory_runtime/internal/testkit",
+      "disposition": "retain",
+      "destination": "factory_runtime"
     },
     {
       "packagePath": "pkg/services/factory_runtime/transports/cli",
@@ -2376,6 +2443,11 @@
     },
     {
       "packagePath": "pkg/services/providers/internal/testutil/execution",
+      "disposition": "retain",
+      "destination": "providers"
+    },
+    {
+      "packagePath": "pkg/services/providers/transports/mcp",
       "disposition": "retain",
       "destination": "providers"
     },
