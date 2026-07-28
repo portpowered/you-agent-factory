@@ -8,73 +8,117 @@ import (
 	"github.com/portpowered/infinite-you/internal/ownershipinventory"
 )
 
-const (
-	operatorSettingsIdentityInventoryPackagePath = "pkg/services/operator_settings/identityinventory"
-	operatorSettingsIdentityInventoryManifestDest = "operator_settings/internal"
-	operatorSettingsServicewirePackagePath        = "pkg/services/operator_settings/servicewire"
-	operatorSettingsTestlinkPackagePath           = "pkg/services/operator_settings/testlink"
-	operatorSettingsTestprovidersPackagePath      = "pkg/services/operator_settings/testproviders"
-)
-
-func TestMapCommittedOwnerPackageOperatorSettingsUnexpectedSiblingsMoveDestinations(t *testing.T) {
+func TestMapCommittedOwnerPackageOperatorSettingsMoveDestinations(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		packagePath string
-		destination string
+		path        string
+		want        PackageMapping
+		wantRetain  bool
+		retainOwner string
 	}{
-		{packagePath: operatorSettingsIdentityInventoryPackagePath, destination: operatorSettingsIdentityInventoryManifestDest},
-		{packagePath: operatorSettingsServicewirePackagePath, destination: operatorSettingsIdentityInventoryManifestDest},
-		{packagePath: operatorSettingsTestlinkPackagePath, destination: operatorSettingsIdentityInventoryManifestDest},
-		{packagePath: operatorSettingsTestprovidersPackagePath, destination: operatorSettingsIdentityInventoryManifestDest},
+		{
+			path:        "pkg/services/operator_settings",
+			wantRetain:  true,
+			retainOwner: "operator_settings",
+		},
+		{
+			path:        "pkg/services/operator_settings/wire",
+			wantRetain:  true,
+			retainOwner: "operator_settings",
+		},
+		{
+			path:        "pkg/services/operator_settings/transports/http",
+			wantRetain:  true,
+			retainOwner: "operator_settings",
+		},
+		{
+			path: "pkg/services/operator_settings/internal/services/document/wire",
+			want: PackageMapping{
+				PackagePath: "pkg/services/operator_settings/internal/services/document/wire",
+				Disposition: DispositionRetain,
+				Destination: "operator_settings/internal/services/document",
+			},
+		},
+		{
+			path: "pkg/services/operator_settings/identityinventory",
+			want: PackageMapping{
+				PackagePath: "pkg/services/operator_settings/identityinventory",
+				Disposition: DispositionMove,
+				Destination: "operator_settings/internal/services/document",
+			},
+		},
+		{
+			path: "pkg/services/operator_settings/identityinventory/input_index",
+			want: PackageMapping{
+				PackagePath: "pkg/services/operator_settings/identityinventory/input_index",
+				Disposition: DispositionMove,
+				Destination: "operator_settings/internal/services/document",
+			},
+		},
+		{
+			path: "pkg/services/operator_settings/servicewire",
+			want: PackageMapping{
+				PackagePath: "pkg/services/operator_settings/servicewire",
+				Disposition: DispositionMove,
+				Destination: "operator_settings/internal",
+			},
+		},
+		{
+			path: "pkg/services/operator_settings/testlink",
+			want: PackageMapping{
+				PackagePath: "pkg/services/operator_settings/testlink",
+				Disposition: DispositionMove,
+				Destination: "operator_settings/internal",
+			},
+		},
+		{
+			path: "pkg/services/operator_settings/testproviders",
+			want: PackageMapping{
+				PackagePath: "pkg/services/operator_settings/testproviders",
+				Disposition: DispositionMove,
+				Destination: "operator_settings/internal",
+			},
+		},
+		{
+			path: "pkg/services/operator_settings/testdata/fixtures/valid",
+			want: PackageMapping{
+				PackagePath: "pkg/services/operator_settings/testdata/fixtures/valid",
+				Disposition: DispositionMove,
+				Destination: "operator_settings/internal",
+			},
+		},
 	}
+
 	for _, tc := range cases {
-		got, ok := mapCommittedOwnerPackage(tc.packagePath)
+		got, ok := mapCommittedOwnerPackage(tc.path)
 		if !ok {
-			t.Fatalf("mapCommittedOwnerPackage(%q) ok = false", tc.packagePath)
+			t.Fatalf("mapCommittedOwnerPackage(%q) ok = false", tc.path)
 		}
-		want := PackageMapping{
-			PackagePath: tc.packagePath,
-			Disposition: DispositionMove,
-			Destination: tc.destination,
+		if tc.wantRetain {
+			if got.Disposition != DispositionRetain || got.Destination != tc.retainOwner {
+				t.Fatalf("mapCommittedOwnerPackage(%q) = %#v, want retain→%s", tc.path, got, tc.retainOwner)
+			}
+			continue
 		}
-		if got != want {
-			t.Fatalf("mapCommittedOwnerPackage(%q) = %#v, want %#v", tc.packagePath, got, want)
+		if got != tc.want {
+			t.Fatalf("mapCommittedOwnerPackage(%q) = %#v, want %#v", tc.path, got, tc.want)
 		}
 	}
 }
 
-func TestOperatorSettingsCommittedManifestLocksUnexpectedSiblingMoveDestinations(t *testing.T) {
+func TestOperatorSettingsTopLevelUnexpectedCoveredByMoveRules(t *testing.T) {
 	t.Parallel()
 
-	repoRoot := findRepoRoot(t)
-	manifest, err := loadManifest(filepath.Join(repoRoot, manifestRelativePath))
-	if err != nil {
-		t.Fatalf("loadManifest() error = %v", err)
-	}
-
-	wantDestinations := map[string]string{
-		operatorSettingsIdentityInventoryPackagePath: operatorSettingsIdentityInventoryManifestDest,
-		operatorSettingsServicewirePackagePath:       operatorSettingsIdentityInventoryManifestDest,
-		operatorSettingsTestlinkPackagePath:          operatorSettingsIdentityInventoryManifestDest,
-		operatorSettingsTestprovidersPackagePath:       operatorSettingsIdentityInventoryManifestDest,
-	}
-	for packagePath, wantDestination := range wantDestinations {
-		var row *PackageMapping
-		for index := range manifest.Packages {
-			if manifest.Packages[index].PackagePath == packagePath {
-				row = &manifest.Packages[index]
-				break
-			}
+	spec := productOwnerTopLevelSpecs["operator_settings"]
+	for _, child := range spec.unexpected {
+		rest := child
+		destination, ok := nestedOwnerMoveDestination("operator_settings", rest)
+		if !ok {
+			t.Fatalf("nestedOwnerMoveDestination(operator_settings, %q) ok = false", rest)
 		}
-		if row == nil {
-			t.Fatalf("committed package-target manifest missing %q", packagePath)
-		}
-		if row.Disposition != DispositionMove {
-			t.Fatalf("committed manifest row %q disposition = %q, want move", packagePath, row.Disposition)
-		}
-		if row.Destination != wantDestination {
-			t.Fatalf("committed manifest row %q destination = %q, want %s", packagePath, row.Destination, wantDestination)
+		if destination == "operator_settings" {
+			t.Fatalf("unexpected top-level child %q maps to owner root retain destination", child)
 		}
 	}
 }
@@ -161,6 +205,41 @@ func TestOperatorSettingsCommittedBaselinesAlignMoveDestinations(t *testing.T) {
 	}
 }
 
+func TestOperatorSettingsInventoryRejectsRetainToOwnerRoot(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := findRepoRoot(t)
+	manifest, err := loadManifest(filepath.Join(repoRoot, manifestRelativePath))
+	if err != nil {
+		t.Fatalf("loadManifest() error = %v", err)
+	}
+
+	const ownerPrefix = "pkg/services/operator_settings/"
+	for _, packagePath := range manifest.Inventory {
+		if packagePath == "pkg/services/operator_settings" {
+			continue
+		}
+		if !strings.HasPrefix(packagePath, ownerPrefix) {
+			continue
+		}
+		rest := strings.TrimPrefix(packagePath, ownerPrefix)
+		if operatorSettingsCanonicalRetainRest(rest) {
+			continue
+		}
+
+		got, ok := mapCommittedOwnerPackage(packagePath)
+		if !ok {
+			t.Fatalf("mapCommittedOwnerPackage(%q) ok = false", packagePath)
+		}
+		if got.Disposition == DispositionRetain && got.Destination == "operator_settings" {
+			t.Fatalf("unexpected retain→operator_settings for inventory path %q", packagePath)
+		}
+		if got.Disposition != DispositionMove {
+			t.Fatalf("inventory path %q disposition = %q, want move", packagePath, got.Disposition)
+		}
+	}
+}
+
 func TestOperatorSettingsInventoryRejectsRetainToOwnerRootForUnexpectedPublicSibling(t *testing.T) {
 	t.Parallel()
 
@@ -184,5 +263,20 @@ func TestOperatorSettingsInventoryRejectsRetainToOwnerRootForUnexpectedPublicSib
 		if got.Destination == "operator_settings" {
 			t.Fatalf("inventory path %q move destination = owner root, want nested plan path", packagePath)
 		}
+	}
+}
+
+func operatorSettingsCanonicalRetainRest(rest string) bool {
+	switch {
+	case rest == "wire" || strings.HasPrefix(rest, "wire/"):
+		return true
+	case rest == "transports" || strings.HasPrefix(rest, "transports/"):
+		return true
+	case strings.HasPrefix(rest, "internal/services/document"):
+		return true
+	case strings.HasPrefix(rest, "internal/services/resolution"):
+		return true
+	default:
+		return false
 	}
 }

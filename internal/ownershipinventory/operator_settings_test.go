@@ -8,7 +8,8 @@ import (
 
 const (
 	operatorSettingsIdentityInventoryPackagePath = "pkg/services/operator_settings/identityinventory"
-	operatorSettingsIdentityInventorySuccessor = "pkg/services/operator_settings/internal"
+	operatorSettingsIdentityInventorySuccessor     = "pkg/services/operator_settings/internal/services/document"
+	operatorSettingsInternalSuccessor              = "pkg/services/operator_settings/internal"
 	operatorSettingsServicewirePackagePath       = "pkg/services/operator_settings/servicewire"
 	operatorSettingsTestlinkPackagePath          = "pkg/services/operator_settings/testlink"
 	operatorSettingsTestprovidersPackagePath     = "pkg/services/operator_settings/testproviders"
@@ -22,9 +23,9 @@ func TestMapPackageOperatorSettingsUnexpectedSiblingsMoveDestinations(t *testing
 		successor   string
 	}{
 		{packagePath: operatorSettingsIdentityInventoryPackagePath, successor: operatorSettingsIdentityInventorySuccessor},
-		{packagePath: operatorSettingsServicewirePackagePath, successor: operatorSettingsIdentityInventorySuccessor},
-		{packagePath: operatorSettingsTestlinkPackagePath, successor: operatorSettingsIdentityInventorySuccessor},
-		{packagePath: operatorSettingsTestprovidersPackagePath, successor: operatorSettingsIdentityInventorySuccessor},
+		{packagePath: operatorSettingsServicewirePackagePath, successor: operatorSettingsInternalSuccessor},
+		{packagePath: operatorSettingsTestlinkPackagePath, successor: operatorSettingsInternalSuccessor},
+		{packagePath: operatorSettingsTestprovidersPackagePath, successor: operatorSettingsInternalSuccessor},
 	}
 	for _, tc := range cases {
 		got, err := ownershipinventory.MapPackage(tc.packagePath)
@@ -54,8 +55,6 @@ func TestMapPackageOperatorSettingsCanonicalChildrenRetain(t *testing.T) {
 		"pkg/services/operator_settings/wire",
 		"pkg/services/operator_settings/transports",
 		"pkg/services/operator_settings/transports/cli",
-		"pkg/services/operator_settings/internal",
-		"pkg/services/operator_settings/internal/service",
 		"pkg/services/operator_settings/internal/services/document",
 		"pkg/services/operator_settings/internal/services/resolution",
 	}
@@ -81,9 +80,9 @@ func TestOperatorSettingsCommittedOwnershipLocksUnexpectedSiblingMoveDestination
 
 	wantSuccessors := map[string]string{
 		operatorSettingsIdentityInventoryPackagePath: operatorSettingsIdentityInventorySuccessor,
-		operatorSettingsServicewirePackagePath:       operatorSettingsIdentityInventorySuccessor,
-		operatorSettingsTestlinkPackagePath:          operatorSettingsIdentityInventorySuccessor,
-		operatorSettingsTestprovidersPackagePath:       operatorSettingsIdentityInventorySuccessor,
+		operatorSettingsServicewirePackagePath:       operatorSettingsInternalSuccessor,
+		operatorSettingsTestlinkPackagePath:          operatorSettingsInternalSuccessor,
+		operatorSettingsTestprovidersPackagePath:     operatorSettingsInternalSuccessor,
 	}
 	for packagePath, wantSuccessor := range wantSuccessors {
 		var row *ownershipinventory.PackageRow
@@ -108,12 +107,18 @@ func TestOperatorSettingsCommittedOwnershipLocksUnexpectedSiblingMoveDestination
 	}
 }
 
-func TestMapPackageOperatorSettingsHypotheticalUnexpectedSiblingDefaultsToNoMapping(t *testing.T) {
+func TestMapPackageOperatorSettingsUnmatchedPathsDefaultToInternalMove(t *testing.T) {
 	t.Parallel()
 
-	_, err := ownershipinventory.MapPackage("pkg/services/operator_settings/hypothetical")
-	if err == nil {
-		t.Fatal("MapPackage() error = nil, want no committed destination")
+	got, err := ownershipinventory.MapPackage("pkg/services/operator_settings/hypothetical")
+	if err != nil {
+		t.Fatalf("MapPackage() error = %v", err)
+	}
+	if got.Disposition != ownershipinventory.DispositionMove {
+		t.Fatalf("MapPackage() disposition = %q, want move", got.Disposition)
+	}
+	if got.Successor != operatorSettingsInternalSuccessor {
+		t.Fatalf("MapPackage() successor = %q, want %s", got.Successor, operatorSettingsInternalSuccessor)
 	}
 }
 

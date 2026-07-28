@@ -61,6 +61,7 @@ type OpenedInvocationRuntime struct {
 	InputResolver  InvocationInputResolver
 	Execution      factorysessions.ExecutionService
 	Lifecycle      LifecycleRuntime
+	ModelsScope    models.RuntimeScopeRef
 	CloseArtifacts func() error
 }
 

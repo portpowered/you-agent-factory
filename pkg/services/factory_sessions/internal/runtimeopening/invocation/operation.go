@@ -29,6 +29,9 @@ type operation struct {
 	modelTimeout      factorysessions.ModelInvocationTimeout
 	artifactRoots     factoryruntime.RuntimeArtifactRootResolver
 	generateSessionID factorysessions.SessionIDGenerator
+	catalogScopeMu    sync.Mutex
+	catalogScope      models.RuntimeScopeRef
+	catalogScopeClose func(context.Context) error
 }
 
 // NewOperation binds the stable process graph used by all one-shot

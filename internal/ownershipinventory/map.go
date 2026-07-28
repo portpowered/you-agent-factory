@@ -27,9 +27,17 @@ func MapPackage(packagePath string) (PackageRow, error) {
 	case strings.HasPrefix(packagePath, "pkg/services/factory_sessions"):
 		return retainRow(packagePath, "factory_sessions", DestinationKindOwner), nil
 	case strings.HasPrefix(packagePath, "pkg/services/factory_runtime"):
-		return retainRow(packagePath, "factory_runtime", DestinationKindOwner), nil
+		row, ok := factoryRuntimeMapping(packagePath)
+		if !ok {
+			return PackageRow{}, fmt.Errorf("no committed destination for %s", packagePath)
+		}
+		return row, nil
 	case strings.HasPrefix(packagePath, "pkg/services/work/") || packagePath == "pkg/services/work":
-		return retainRow(packagePath, "work", DestinationKindOwner), nil
+		row, ok := workMapping(packagePath)
+		if !ok {
+			return PackageRow{}, fmt.Errorf("no committed destination for %s", packagePath)
+		}
+		return row, nil
 	case strings.HasPrefix(packagePath, "pkg/services/workers"):
 		row, ok := workersMapping(packagePath)
 		if !ok {

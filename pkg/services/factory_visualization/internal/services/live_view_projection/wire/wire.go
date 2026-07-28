@@ -11,12 +11,12 @@ import (
 // NewService constructs the private live_view_projection capability.
 func NewService(
 	source liveviewprojection.Source,
-	projections recordings.ProjectionService,
+	recordingsPeer recordings.Service,
 	clock liveviewprojection.Clock,
 	sink liveviewprojection.Sink,
 	reportError liveviewprojection.ErrorReporter,
 ) (liveviewprojection.Service, error) {
-	svc, err := projectionservice.New(source, projections, clock, sink, reportError)
+	svc, err := projectionservice.New(source, recordingsPeer, clock, sink, reportError)
 	if err != nil {
 		return nil, err
 	}

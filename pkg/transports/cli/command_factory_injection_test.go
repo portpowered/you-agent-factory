@@ -16,6 +16,7 @@ import (
 	factorydefinitionscli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
 	factoryruntimecli "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
+	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
@@ -431,6 +432,121 @@ func TestNewCommandFactoryDoesNotInstallTransportDefaults(t *testing.T) {
 		!reflect.DeepEqual(factory.runDefaults, runcli.RunConfig{}) {
 		t.Fatalf("factory = %#v, want missing operations to remain missing", factory)
 	}
+}
+
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
+func TestNewCommandFactoryPreservesInjectedModelsCLIAdapter(t *testing.T) {
+	t.Parallel()
+
+	adapter := modelscli.BindService(modelscli.Config{
+		Models: compositionModelsRootForFactoryTest{},
+	})
+	factory := NewCommandFactory(CommandOperations{ModelsCLI: adapter})
+	if factory.ModelsCLI == nil {
+		t.Fatal("injected Models CLI adapter is missing from composed factory")
+	}
+}
+
+type compositionModelsRootForFactoryTest struct{}
+
+func (compositionModelsRootForFactoryTest) ListModels(context.Context) (modelinference.List, error) {
+	return modelinference.List{}, nil
+}
+
+func (compositionModelsRootForFactoryTest) GetModel(context.Context, string) (modelinference.Detail, error) {
+	return modelinference.Detail{}, nil
+}
+
+func (compositionModelsRootForFactoryTest) PullModel(context.Context, string) (modelinference.PullResult, error) {
+	return modelinference.PullResult{}, nil
+}
+
+func (compositionModelsRootForFactoryTest) OpenRuntimeScope(context.Context, modelinference.OpenRuntimeScopeRequest) (modelinference.OpenRuntimeScopeResult, error) {
+	return modelinference.OpenRuntimeScopeResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (compositionModelsRootForFactoryTest) CloseRuntimeScope(context.Context, modelinference.CloseRuntimeScopeRequest) (modelinference.CloseRuntimeScopeResult, error) {
+	return modelinference.CloseRuntimeScopeResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (compositionModelsRootForFactoryTest) ListCatalog(context.Context, modelinference.ListModelsRequest) (modelinference.ListModelsResult, error) {
+	return modelinference.ListModelsResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (compositionModelsRootForFactoryTest) GetCatalogModel(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+	return modelinference.GetModelResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (compositionModelsRootForFactoryTest) GetModelReadiness(context.Context, modelinference.GetModelReadinessRequest) (modelinference.GetModelReadinessResult, error) {
+	return modelinference.GetModelReadinessResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (compositionModelsRootForFactoryTest) PullModelForScope(context.Context, modelinference.PullModelRequest) (modelinference.PullResult, error) {
+	return modelinference.PullResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (compositionModelsRootForFactoryTest) PrepareModelAssets(context.Context, modelinference.PrepareModelAssetsRequest) (modelinference.PrepareModelAssetsResult, error) {
+	return modelinference.PrepareModelAssetsResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (compositionModelsRootForFactoryTest) InspectModelAssets(context.Context, modelinference.InspectModelAssetsRequest) (modelinference.InspectModelAssetsResult, error) {
+	return modelinference.InspectModelAssetsResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (compositionModelsRootForFactoryTest) RemoveModelAssets(context.Context, modelinference.RemoveModelAssetsRequest) (modelinference.RemoveModelAssetsResult, error) {
+	return modelinference.RemoveModelAssetsResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (compositionModelsRootForFactoryTest) EnsureModelHost(context.Context, modelinference.EnsureModelHostRequest) (modelinference.EnsureModelHostResult, error) {
+	return modelinference.EnsureModelHostResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (compositionModelsRootForFactoryTest) InspectModelHost(context.Context, modelinference.InspectModelHostRequest) (modelinference.InspectModelHostResult, error) {
+	return modelinference.InspectModelHostResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (compositionModelsRootForFactoryTest) StopModelHost(context.Context, modelinference.StopModelHostRequest) (modelinference.StopModelHostResult, error) {
+	return modelinference.StopModelHostResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (compositionModelsRootForFactoryTest) AcquireModelLease(context.Context, modelinference.AcquireModelLeaseRequest) (modelinference.AcquireModelLeaseResult, error) {
+	return modelinference.AcquireModelLeaseResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (compositionModelsRootForFactoryTest) GetModelLease(context.Context, modelinference.GetModelLeaseRequest) (modelinference.GetModelLeaseResult, error) {
+	return modelinference.GetModelLeaseResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (compositionModelsRootForFactoryTest) ReleaseModelLease(context.Context, modelinference.ReleaseModelLeaseRequest) (modelinference.ReleaseModelLeaseResult, error) {
+	return modelinference.ReleaseModelLeaseResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (compositionModelsRootForFactoryTest) InvokeModelWithLease(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+	return modelinference.InvokeModelResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (compositionModelsRootForFactoryTest) CancelInvocation(context.Context, modelinference.CancelInvocationRequest) (modelinference.CancelInvocationResult, error) {
+	return modelinference.CancelInvocationResult{}, modelinference.ErrUnsupportedOperation
+}
+
+func (compositionModelsRootForFactoryTest) ForRuntime(modelinference.RuntimeBinding) (modelinference.Service, error) {
+	return nil, modelinference.ErrUnsupportedOperation
+}
+
+func (compositionModelsRootForFactoryTest) InspectRuntime(context.Context, string) (modelinference.Runtime, error) {
+	return modelinference.Runtime{}, modelinference.ErrUnsupportedOperation
+}
+
+func (compositionModelsRootForFactoryTest) AcquireLease(context.Context, modelinference.AcquireLeaseRequest) (modelinference.HostLease, error) {
+	return modelinference.HostLease{}, modelinference.ErrUnsupportedOperation
+}
+
+func (compositionModelsRootForFactoryTest) ReleaseLease(context.Context, modelinference.ReleaseLeaseRequest) error {
+	return modelinference.ErrUnsupportedOperation
+}
+
+func (compositionModelsRootForFactoryTest) InvokeLocal(context.Context, modelinference.LocalInvocationRequest) (modelinference.LocalInvocationResult, error) {
+	return modelinference.LocalInvocationResult{}, modelinference.ErrUnsupportedOperation
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.

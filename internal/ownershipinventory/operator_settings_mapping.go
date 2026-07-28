@@ -8,19 +8,20 @@ const (
 )
 
 type operatorSettingsMoveRule struct {
-	exact     string
-	prefix    string
-	successor string
+	exact      string
+	prefix     string
+	subservice string // empty means owner/internal root
 }
 
-// operatorSettingsUnexpectedSiblingMoveRules mirrors
-// cmd/packagetargetmanifestcheck nestedOwnerMoveRules for unexpected Operator
-// Settings public top-level siblings inventoried in INV-SET-TOPLEVEL.
-var operatorSettingsUnexpectedSiblingMoveRules = []operatorSettingsMoveRule{
-	{exact: "identityinventory", prefix: "identityinventory/", successor: operatorSettingsPackagePrefix + "/internal"},
-	{exact: "servicewire", prefix: "servicewire/", successor: operatorSettingsPackagePrefix + "/internal"},
-	{exact: "testlink", prefix: "testlink/", successor: operatorSettingsPackagePrefix + "/internal"},
-	{exact: "testproviders", prefix: "testproviders/", successor: operatorSettingsPackagePrefix + "/internal"},
+// operatorSettingsMoveRules mirrors cmd/packagetargetmanifestcheck nestedOwnerMoveRules
+// for operator_settings. Ownership rows keep owner destination with concrete successor paths.
+var operatorSettingsMoveRules = []operatorSettingsMoveRule{
+	{exact: "identityinventory", prefix: "identityinventory/", subservice: "document"},
+	{exact: "servicewire", prefix: "servicewire/", subservice: ""},
+	{exact: "testlink", prefix: "testlink/", subservice: ""},
+	{exact: "testproviders", prefix: "testproviders/", subservice: ""},
+	{exact: "testdata", prefix: "testdata/", subservice: ""},
+	{exact: "internal/service", prefix: "internal/service/", subservice: ""},
 }
 
 func operatorSettingsMapping(packagePath string) (PackageRow, bool) {
@@ -32,57 +33,57 @@ func operatorSettingsMapping(packagePath string) (PackageRow, bool) {
 		return PackageRow{}, false
 	}
 	rest := strings.TrimPrefix(packagePath, prefix)
-	if isOperatorSettingsCanonicalRetainRest(rest) {
+	if isOperatorSettingsCanonicalRetain(rest) {
 		return retainRow(packagePath, operatorSettingsOwner, DestinationKindOwner), true
 	}
-	successor, ok := operatorSettingsUnexpectedSiblingSuccessor(rest)
+	subservice, ok := operatorSettingsMoveSubservice(rest)
 	if !ok {
-		return PackageRow{}, false
+		subservice = ""
 	}
 	return moveRow(
 		packagePath,
 		operatorSettingsOwner,
-		successor,
-		operatorSettingsDeletionCondition(rest),
+		operatorSettingsSuccessor(subservice),
+		operatorSettingsDeletionCondition(subservice),
 	), true
 }
 
-func isOperatorSettingsCanonicalRetainRest(rest string) bool {
-	top, _, _ := strings.Cut(rest, "/")
-	if top == "" {
-		return false
-	}
-	switch top {
-	case "wire", "transports", "internal":
+func isOperatorSettingsCanonicalRetain(rest string) bool {
+	switch {
+	case rest == "wire" || strings.HasPrefix(rest, "wire/"):
+		return true
+	case rest == "transports" || strings.HasPrefix(rest, "transports/"):
+		return true
+	case strings.HasPrefix(rest, "internal/services/document"):
+		return true
+	case strings.HasPrefix(rest, "internal/services/resolution"):
 		return true
 	default:
 		return false
 	}
 }
 
-func operatorSettingsUnexpectedSiblingSuccessor(rest string) (string, bool) {
-	for _, rule := range operatorSettingsUnexpectedSiblingMoveRules {
+func operatorSettingsMoveSubservice(rest string) (subservice string, ok bool) {
+	for _, rule := range operatorSettingsMoveRules {
 		if rest == rule.exact || (rule.prefix != "" && strings.HasPrefix(rest, rule.prefix)) {
-			return rule.successor, true
+			return rule.subservice, true
 		}
 	}
 	return "", false
 }
 
-func operatorSettingsDeletionCondition(rest string) string {
-	top, _, _ := strings.Cut(rest, "/")
-	switch top {
-	case "identityinventory":
-		return "delete public identityinventory package after INV-SET-TOPLEVEL fold into operator_settings/internal completes"
-	case "servicewire":
-		return "delete public servicewire package after INV-SET-TOPLEVEL fold into operator_settings/internal completes"
-	case "testlink":
-		return "delete public testlink test-helper package after INV-SET-TOPLEVEL fold into operator_settings/internal completes"
-	case "testproviders":
-		return "delete public testproviders test-helper package after INV-SET-TOPLEVEL fold into operator_settings/internal completes"
-	default:
-		return "delete unexpected Operator Settings public sibling after INV-SET-TOPLEVEL private destination cutover completes"
+func operatorSettingsSuccessor(subservice string) string {
+	if subservice == "" {
+		return operatorSettingsPackagePrefix + "/internal"
 	}
+	return operatorSettingsPackagePrefix + "/internal/services/" + subservice
+}
+
+func operatorSettingsDeletionCondition(subservice string) string {
+	if subservice == "" {
+		return "delete transitional top-level package after CLN-OPS-FOLD-TOPLEVEL cutover proof"
+	}
+	return "delete public package after IMP-OPS-" + subservice + " private subservice cutover proof"
 }
 
 func isOperatorSettingsPrivateSuccessor(successor string) bool {
