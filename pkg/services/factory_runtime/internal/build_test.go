@@ -1,4 +1,4 @@
-package service_test
+package internal_test
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimeorchestrationowner "github.com/portpowered/infinite-you/pkg/services/factory_runtime/orchestrationowner"
-	factoryservice "github.com/portpowered/infinite-you/pkg/services/factory_runtime/service"
+	factoryinternal "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
@@ -33,8 +33,8 @@ func TestBuild_ConstructsRunnableBundleWithoutRootService(t *testing.T) {
 		context.Background(), dir, dir, "~default",
 		"", interfaces.RuntimeModeBatch, false, nil, nil, nil, false, nil, nil,
 		"", factory.RuntimeLogStorageConfig{},
-		factoryservice.RuntimeFileLoggingPolicyDisabled,
-		factoryservice.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{},
+		factoryinternal.RuntimeFileLoggingPolicyDisabled,
+		factoryinternal.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{},
 		loaded, zap.NewNop(), "runtime-test", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil, nil,
 		nil,
 		newTestRuntimeLedger,
@@ -114,8 +114,8 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 		context.Background(), dir, dir, "~default",
 		"", interfaces.RuntimeModeBatch, false, nil, nil, nil, false, nil, nil,
 		logDir, factory.RuntimeLogStorageConfig{},
-		factoryservice.RuntimeFileLoggingPolicyDisabled,
-		factoryservice.RuntimeMetricsPolicyDisabled,
+		factoryinternal.RuntimeFileLoggingPolicyDisabled,
+		factoryinternal.RuntimeMetricsPolicyDisabled,
 		metricsDir, factory.RuntimeMetricsStorageConfig{},
 		loaded, zap.NewNop(), "runtime-disabled", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil, nil,
 		nil,
@@ -185,16 +185,16 @@ func testOrchestrationCompilation() factory.OrchestrationCompilation {
 	return factoryruntimeorchestrationowner.NewCompilation(testRuntimeID, nil, nil)
 }
 
-func testRuntimeFactory() *factoryservice.RuntimeFactory {
-	return factoryservice.NewRuntimeFactory(
+func testRuntimeFactory() *factoryinternal.RuntimeFactory {
+	return factoryinternal.NewRuntimeFactory(
 		nil, nil, outputAsPayloadPolicy(), nil, testRuntimeLoggerFactory, nil, nil,
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		testOrchestrationCompilation(),
 	)
 }
 
-func testRuntimeFactoryWithSinks(logDir, metricsDir string) *factoryservice.RuntimeFactory {
-	return factoryservice.NewRuntimeFactory(
+func testRuntimeFactoryWithSinks(logDir, metricsDir string) *factoryinternal.RuntimeFactory {
+	return factoryinternal.NewRuntimeFactory(
 		nil, nil, outputAsPayloadPolicy(), nil, testRuntimeLoggerFactory,
 		testRuntimeLogFactory(logDir), testRuntimeMetricsFactory(metricsDir),
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,

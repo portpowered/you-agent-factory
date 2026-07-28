@@ -1493,6 +1493,12 @@
     },
     {
       "fromOwner": "root",
+      "toOwner": "automations",
+      "class": "construction",
+      "evidence": "pkg/root -\u003e pkg/services/automations"
+    },
+    {
+      "fromOwner": "root",
       "toOwner": "edges",
       "class": "construction",
       "architectureException": true,
@@ -3246,16 +3252,32 @@
       "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
     },
     {
+      "packagePath": "pkg/services/factory_runtime/internal",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_runtime/internal/factorystatus",
+      "disposition": "move",
+      "destination": "factory_runtime",
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-RUN-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/host",
       "disposition": "retain",
       "destination": "factory_runtime",
       "destinationKind": "owner"
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/legacysnapshot",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-RUN-FOLD-TOPLEVEL cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/orchestrators/javascript/preview",

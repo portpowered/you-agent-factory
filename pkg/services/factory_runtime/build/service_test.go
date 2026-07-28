@@ -10,7 +10,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	runtimebuild "github.com/portpowered/infinite-you/pkg/services/factory_runtime/build"
-	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/service/host"
+	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	"go.uber.org/zap"
 )
 

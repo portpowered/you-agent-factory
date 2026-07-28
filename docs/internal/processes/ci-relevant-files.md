@@ -844,3 +844,31 @@ Wave 0 functional-tests-expansion planning authority lives under
   root.BuildProcess inert-construction evidence for Automations hosted Linear
   polling. Assert zero `SubmissionRecorder` submissions after `support.BuildProcess`
   before runtime lifecycle starts, matching the cron inert-construction pattern.
+
+- `tests/functional/automations/script_poller_root_composition_test.go` owns
+  root.BuildProcess inert-construction and post-lifecycle admission evidence for
+  Automations script pollers. Assert zero `ScriptCommandRunner` invocations after
+  `support.BuildProcess` before runtime lifecycle starts, then replace only
+  `serviceedges.Edges.ScriptCommandRunner` on `support.StartFunctionalAPIServer`
+  and observe polled Work through the public Work listing path.
+
+- `tests/functional/automations/reconciliation_root_composition_test.go` owns
+  root.BuildProcess inert-construction and post-composition Automations Root
+  reconciliation admission. Assert zero `SubmissionRecorder` submissions after
+  `support.BuildProcess` before explicit Root invocation, then obtain the published
+  Root through `support.AutomationsRootFromProcessEdges` (backed by
+  `wire.AutomationsRootFromEdges`) and assert converged or created reconcile
+  outcomes without importing `automations/internal`, `automations/wire`, or deleted
+  `automations/service`.
+
+- `pkg/services/automations/packaged_root_shape_test.go` and
+  `pkg/services/automations/peer_import_boundary_test.go` seal FUN-automations
+  packaged-service shape and production peer import boundaries: Automations ships
+  only `wire/`, `internal/`, and `transports/` package directories plus thin root
+  contracts, `service/` stays absent, and production peers import only the
+  published Automations root except the documented `pkg/wire` injector seam.
+
+- `tests/functional/automations/peer_import_boundary_test.go` seals FUN-scoped
+  functional proofs against `automations/internal`, `automations/wire`, and deleted
+  `automations/service` imports while allowing `support.BuildProcess`,
+  `support.AutomationsRootFromProcessEdges`, and published `automations` contracts.

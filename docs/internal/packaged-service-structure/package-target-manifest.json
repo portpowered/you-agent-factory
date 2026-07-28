@@ -169,7 +169,9 @@
     "pkg/services/factory_runtime/context",
     "pkg/services/factory_runtime/definitionmapping",
     "pkg/services/factory_runtime/engine",
+    "pkg/services/factory_runtime/internal",
     "pkg/services/factory_runtime/internal/factorystatus",
+    "pkg/services/factory_runtime/internal/host",
     "pkg/services/factory_runtime/internal/legacysnapshot",
     "pkg/services/factory_runtime/internal/orchestrators/javascript/preview",
     "pkg/services/factory_runtime/internal/orchestrators/javascript/runtime",
@@ -1190,9 +1192,19 @@
       "destination": "factory_runtime/internal/services/orchestration"
     },
     {
+      "packagePath": "pkg/services/factory_runtime/internal",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
       "packagePath": "pkg/services/factory_runtime/internal/factorystatus",
       "disposition": "move",
       "destination": "factory_runtime/internal"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/host",
+      "disposition": "retain",
+      "destination": "factory_runtime"
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/legacysnapshot",
@@ -2492,7 +2504,7 @@
     {
       "packagePath": "pkg/services/workers/internal",
       "disposition": "retain",
-      "destination": "workers/internal"
+      "destination": "workers"
     },
     {
       "packagePath": "pkg/services/workers/internal/services/runners",

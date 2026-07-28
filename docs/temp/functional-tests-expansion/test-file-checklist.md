@@ -632,7 +632,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPIDispatchListAndDetailExposePublicCorrelation`.
   - `TestAPIPartialResultIsAvailableBeforeTerminalCompletion`.
 
-- [ ] `tests/functional/sessions/execution/visibility_test.go`
+- [x] `tests/functional/sessions/execution/visibility_test.go`
   - `TestCLIInvocationIsVisibleThroughAPISessionAndWorkReads`.
   - `TestAPIInvocationResultMatchesCLICompatibleFacts`.
 
@@ -684,7 +684,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPackagedFactoryCatalogHasUniqueStableNames` rejects collisions.
   - `TestNewEmbeddedFactoryRequiresFunctionalMatrixEntry` prevents drift.
 
-- [ ] `tests/functional/factory/packaged/catalog/override_test.go`
+- [x] `tests/functional/factory/packaged/catalog/override_test.go`
   - `TestLocalFactoryOverridesPackagedFactoryWithSameName` covers precedence.
   - `TestInvalidLocalOverrideDoesNotFallBackSilently` covers misconfiguration.
   - `TestUnrelatedLocalFactoryDoesNotHidePackagedFactories` covers enumeration.

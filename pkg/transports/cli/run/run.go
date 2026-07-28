@@ -136,8 +136,9 @@ type Operation struct {
 	invocation        InvocationOperation
 	presentation      factoryvisualization.ResponsePresentation
 	prepareWorkTarget work.SingleWorkTargetPreparation
-	invocationMode    bool
-	recordPath        resolvedRunRecordPath
+	invocationMode         bool
+	recordPath             resolvedRunRecordPath
+	hostedLiveInvocation   *factorysessions.HostedLiveInvocation
 }
 
 // Open resolves run inputs and opens invocation-local runtime state without
@@ -226,6 +227,14 @@ func openHostedRuntime(
 	)
 	openingRequest := buildRuntimeRequest(runtimeCfg, mockWorkersConfig, onBound)
 	openingRequest.Completion = hostedInvocationCompletion(operation)
+	if invocationMode && operation != nil {
+		openingRequest.Ports.RuntimeHTTPServicesBound = func(http factorysessions.RuntimeHTTPServices) {
+			operation.hostedLiveInvocation = &factorysessions.HostedLiveInvocation{
+				Sessions: http.FactorySessions,
+				Invoker:  http.SessionInvocation,
+			}
+		}
+	}
 	if cfg.Port <= 0 {
 		emitVerboseStartupDiagnostics(cfg, recordPath, requestedPort)
 	}
@@ -332,8 +341,12 @@ func (operation *Operation) runInvocation(ctx context.Context) error {
 	if operation == nil || operation.invocationRequest == nil {
 		return fmt.Errorf("run factory invocation: operation is required")
 	}
+	target := operation.invocationTarget
+	if operation.hostedLiveInvocation != nil {
+		target.HostedLiveInvocation = operation.hostedLiveInvocation
+	}
 	return runFactoryInvocation(
-		ctx, operation.cfg, operation.invocationTarget, *operation.invocationRequest,
+		ctx, operation.cfg, target, *operation.invocationRequest,
 		operation.invocation, operation.presentation,
 	)
 }

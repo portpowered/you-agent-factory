@@ -1,4 +1,4 @@
-package service_test
+package internal_test
 
 import (
 	"context"
@@ -20,7 +20,7 @@ import (
 	factoryruntimejavascript "github.com/portpowered/infinite-you/pkg/services/factory_runtime/javascript"
 	orchestration "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration"
 	factoryruntimeorchestrationowner "github.com/portpowered/infinite-you/pkg/services/factory_runtime/orchestrationowner"
-	factoryservice "github.com/portpowered/infinite-you/pkg/services/factory_runtime/service"
+	factoryinternal "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/state"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -112,8 +112,8 @@ func TestBuildThroughOrchestrationPreservesRunnablePetriTopology(t *testing.T) {
 		context.Background(), dir, dir, "~default",
 		"", factorydefinitions.RuntimeModeBatch, false, nil, nil, nil, false, nil, nil,
 		"", factory.RuntimeLogStorageConfig{},
-		factoryservice.RuntimeFileLoggingPolicyDisabled,
-		factoryservice.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{},
+		factoryinternal.RuntimeFileLoggingPolicyDisabled,
+		factoryinternal.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{},
 		loaded, zap.NewNop(), "runtime-cutover", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil, nil,
 		nil,
 		newTestRuntimeLedger,
@@ -164,7 +164,7 @@ func TestBuildThroughOrchestrationOpensInlineJavaScriptFactory(t *testing.T) {
 		t.Fatalf("loadedFactoryFixture: %v", err)
 	}
 	workflows := cutoverJavaScriptWorkflows()
-	bundle, err := factoryservice.NewRuntimeFactory(
+	bundle, err := factoryinternal.NewRuntimeFactory(
 		nil, nil, nil, nil, testRuntimeLoggerFactory, nil, nil,
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		factoryruntimeorchestrationowner.NewCompilation(testRuntimeID, workflows, workflows),
@@ -172,8 +172,8 @@ func TestBuildThroughOrchestrationOpensInlineJavaScriptFactory(t *testing.T) {
 		context.Background(), dir, dir, "~default",
 		"", factorydefinitions.RuntimeModeBatch, false, nil, nil, nil, false, nil, nil,
 		"", factory.RuntimeLogStorageConfig{},
-		factoryservice.RuntimeFileLoggingPolicyDisabled,
-		factoryservice.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{},
+		factoryinternal.RuntimeFileLoggingPolicyDisabled,
+		factoryinternal.RuntimeMetricsPolicyDisabled, "", factory.RuntimeMetricsStorageConfig{},
 		loaded, zap.NewNop(), "runtime-cutover-js", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil, nil,
 		nil,
 		newTestRuntimeLedger,
