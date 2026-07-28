@@ -14,6 +14,7 @@ import (
 const (
 	namedLifecycleFactoryName   = "cli-named-lifecycle"
 	listMembershipFactoryName   = "cli-list-membership"
+	deleteMissingFactoryName    = "cli-delete-missing"
 	namedLifecycleWorkType      = "task"
 	namedLifecycleUpdatedType   = "updated-task"
 	listMembershipWorkType      = "membership-task"
@@ -153,6 +154,50 @@ func TestCLIFactoryListReflectsCreateAndDelete(t *testing.T) {
 
 	assertFactoryListExcludes(t, process, workingDirectory, namedFactoriesRoot, listMembershipFactoryName)
 	assertHumanFactoryListExcludes(t, process, workingDirectory, namedFactoriesRoot, listMembershipFactoryName)
+}
+
+// TestCLIFactoryDeleteMissingReturnsActionableFailure proves deleting a named
+// Factory that is not in the catalog fails with an actionable public diagnostic
+// through root.BuildProcess + Process.Execute without reporting delete success
+// or creating catalog entries.
+func TestCLIFactoryDeleteMissingReturnsActionableFailure(t *testing.T) {
+	workingDirectory := t.TempDir()
+	namedFactoriesRoot := filepath.Join(t.TempDir(), "named-factories")
+
+	process := support.BuildProcess(t, serviceedges.Edges{})
+
+	deleteInputs := support.FakeInputs(t.Context(), []string{
+		"you",
+		"factory", "delete", deleteMissingFactoryName,
+		"--dir", namedFactoriesRoot,
+	})
+	deleteInputs.Input.WorkingDirectory = workingDirectory
+	err := process.Execute(deleteInputs.Input)
+	if err == nil {
+		t.Fatalf(
+			"Process.Execute(factory delete missing) error = nil, want failure; stdout:\n%s\nstderr:\n%s",
+			deleteInputs.Stdout(),
+			deleteInputs.Stderr(),
+		)
+	}
+	if !strings.Contains(err.Error(), "factory not found") {
+		t.Fatalf(
+			"factory delete missing error = %v, want actionable not-found diagnostic; stdout:\n%s\nstderr:\n%s",
+			err,
+			deleteInputs.Stdout(),
+			deleteInputs.Stderr(),
+		)
+	}
+	if strings.Contains(deleteInputs.Stdout(), "Deleted factory "+deleteMissingFactoryName) {
+		t.Fatalf("factory delete missing reported success:\n%s", deleteInputs.Stdout())
+	}
+
+	assertFactoryListExcludes(t, process, workingDirectory, namedFactoriesRoot, deleteMissingFactoryName)
+
+	factoryPath := filepath.Join(namedFactoriesRoot, deleteMissingFactoryName, "factory.json")
+	if _, statErr := os.Stat(factoryPath); !os.IsNotExist(statErr) {
+		t.Fatalf("delete missing created factory.json at %s: %v", factoryPath, statErr)
+	}
 }
 
 func assertFactoryListIncludes(
