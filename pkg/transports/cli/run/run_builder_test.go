@@ -213,7 +213,7 @@ func (f testRunnerOpeners) BuildRunner(
 	if err != nil || visualizationSink == nil {
 		return runner, err
 	}
-	snapshots, ok := runner.(engineStateSnapshotProvider)
+	snapshots, ok := runner.(factoryruntime.LegacySnapshotProvider)
 	if !ok {
 		return runner, nil
 	}

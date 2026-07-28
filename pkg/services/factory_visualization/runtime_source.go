@@ -36,11 +36,11 @@ func (s *currentRuntimeSource) SubscribeFactoryEvents(
 		if runtime == nil || runtime.Factory == nil {
 			return factorysessions.ErrRuntimeNotAvailable
 		}
-		var subscribeErr error
 		legacyRuntime, ok := runtime.Factory.(factoryruntime.APIFactory)
 		if !ok {
 			return fmt.Errorf("legacy Factory Runtime event subscription is required")
 		}
+		var subscribeErr error
 		stream, subscribeErr = legacyRuntime.SubscribeFactoryEvents(ctx, reconnect, scope)
 		return subscribeErr
 	})
@@ -57,36 +57,31 @@ func (s *currentRuntimeSource) GetRuntimeSnapshotFacts(
 		if runtime == nil || runtime.Factory == nil {
 			return factorysessions.ErrRuntimeNotAvailable
 		}
-		legacyObservation, ok := runtime.Factory.(factoryruntime.APIFactory)
-		if !ok {
-			return factorysessions.ErrRuntimeNotAvailable
+		observeResult, observeErr := runtime.Factory.Observe(ctx, factoryruntime.ObserveRequest{
+			Scope: factoryruntime.ObservationScopeFull,
+		})
+		if observeErr != nil {
+			return observeErr
 		}
-		snapshot, snapshotErr := legacyObservation.GetEngineStateSnapshot(ctx)
-		if snapshotErr != nil {
-			return snapshotErr
-		}
-		facts = sanitizeRuntimeSnapshotFacts(snapshot)
+		facts = runtimeSnapshotFactsFromObservation(observeResult.Observation)
 		return nil
 	})
 	return facts, err
 }
 
-func sanitizeRuntimeSnapshotFacts(
-	snapshot *factoryruntime.StateSnapshot,
+func runtimeSnapshotFactsFromObservation(
+	observation factoryruntime.Observation,
 ) *liveviewprojection.RuntimeSnapshotFacts {
-	if snapshot == nil {
-		return nil
-	}
 	return &liveviewprojection.RuntimeSnapshotFacts{
 		RuntimeObservation: liveviewprojection.RuntimeObservation{
-			TickCount:     snapshot.TickCount,
-			FactoryState:  snapshot.FactoryState,
-			RuntimeStatus: snapshot.RuntimeStatus,
-			Uptime:        snapshot.Uptime,
+			TickCount:     observation.Progress.TickCount,
+			FactoryState:  observation.Health.FactoryState,
+			RuntimeStatus: factorydefinitions.RuntimeStatus(observation.Status),
+			Uptime:        observation.Health.Uptime,
 		},
 		ActiveThrottlePauses: append(
 			[]factorydefinitions.ActiveThrottlePause(nil),
-			snapshot.ActiveThrottlePauses...,
+			observation.Health.ActiveThrottlePauses...,
 		),
 	}
 }

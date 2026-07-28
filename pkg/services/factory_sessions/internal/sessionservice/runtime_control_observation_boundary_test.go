@@ -35,6 +35,7 @@ func TestSessionsRuntimeBoundaryExercisesRootControlAndObservation(t *testing.T)
 		t.Fatalf("pause status = %q, want PAUSED", paused.Status)
 	}
 
+	observeCallsBefore := runtimeFactory.observeCalls
 	observed, err := gateway.ObserveForSession(
 		ctx,
 		sessionID,
@@ -43,8 +44,12 @@ func TestSessionsRuntimeBoundaryExercisesRootControlAndObservation(t *testing.T)
 	if err != nil {
 		t.Fatalf("ObserveForSession: %v", err)
 	}
-	if runtimeFactory.observeCalls != 1 {
-		t.Fatalf("Observe calls = %d, want 1 through Runtime root Service", runtimeFactory.observeCalls)
+	if runtimeFactory.observeCalls != observeCallsBefore+1 {
+		t.Fatalf(
+			"Observe calls = %d, want %d through Runtime root Service",
+			runtimeFactory.observeCalls,
+			observeCallsBefore+1,
+		)
 	}
 	if runtimeFactory.lastObserveRequest.Scope != factoryruntime.ObservationScopeStatus {
 		t.Fatalf("observe scope = %q, want STATUS", runtimeFactory.lastObserveRequest.Scope)

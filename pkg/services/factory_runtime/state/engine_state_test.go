@@ -9,6 +9,105 @@ import (
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/token"
 )
 
+func TestSnapshotHasActiveWork(t *testing.T) {
+	t.Parallel()
+
+	snap := engineStateSnapshotFixture()
+	if !SnapshotHasActiveWork(&snap) {
+		t.Fatal("fixture snapshot should report active work")
+	}
+	if SnapshotHasActiveWork(nil) {
+		t.Fatal("nil snapshot should not report active work")
+	}
+
+	dispatched := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *Net]{
+		Dispatches: map[string]*interfaces.DispatchEntry{"d1": {}},
+	}
+	if !SnapshotHasActiveWork(&dispatched) {
+		t.Fatal("dispatch map should report active work")
+	}
+
+	topology := &Net{
+		Places: map[string]*petri.Place{
+			PlaceID("task", "complete"): {
+				ID:     PlaceID("task", "complete"),
+				TypeID: "task",
+				State:  "complete",
+			},
+			PlaceID("task", "init"): {
+				ID:     PlaceID("task", "init"),
+				TypeID: "task",
+				State:  "init",
+			},
+		},
+		WorkTypes: map[string]*WorkType{
+			"task": {
+				ID: "task",
+				States: []StateDefinition{
+					{Value: "complete", Category: StateCategoryTerminal},
+					{Value: "failed", Category: StateCategoryFailed},
+					{Value: "init", Category: StateCategoryInitial},
+				},
+			},
+		},
+	}
+	terminalOnly := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *Net]{
+		Topology: topology,
+		Marking: petri.MarkingSnapshot{
+			Tokens: map[string]*factorytoken.Token{
+				"tok-terminal": {
+					ID:      "tok-terminal",
+					PlaceID: PlaceID("task", "complete"),
+					Color:   factorytoken.Color{WorkTypeID: "task"},
+				},
+			},
+		},
+	}
+	if SnapshotHasActiveWork(&terminalOnly) {
+		t.Fatal("terminal-only marking should not report active work")
+	}
+
+	processing := terminalOnly
+	processing.Marking.Tokens["tok-active"] = &factorytoken.Token{
+		ID:      "tok-active",
+		PlaceID: PlaceID("task", "init"),
+		Color:   factorytoken.Color{WorkTypeID: "task"},
+	}
+	if !SnapshotHasActiveWork(&processing) {
+		t.Fatal("non-terminal work token should report active work")
+	}
+
+	resourceOnly := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *Net]{
+		Marking: petri.MarkingSnapshot{
+			Tokens: map[string]*factorytoken.Token{
+				"tok-resource": {
+					ID:      "tok-resource",
+					PlaceID: "gpu:available",
+					Color:   factorytoken.Color{DataType: factorytoken.DataTypeResource},
+				},
+			},
+		},
+	}
+	if SnapshotHasActiveWork(&resourceOnly) {
+		t.Fatal("resource tokens should not report active work")
+	}
+
+	noTopology := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *Net]{
+		Marking: petri.MarkingSnapshot{
+			Tokens: map[string]*factorytoken.Token{
+				"tok-work": {
+					ID:      "tok-work",
+					PlaceID: PlaceID("task", "init"),
+					Color:   factorytoken.Color{WorkTypeID: "task"},
+				},
+			},
+		},
+	}
+	if !SnapshotHasActiveWork(&noTopology) {
+		t.Fatal("work token without topology should report active work")
+	}
+}
+
 func TestEngineStateSnapshot_AllFieldsAccessible(t *testing.T) {
 	snap := engineStateSnapshotFixture()
 

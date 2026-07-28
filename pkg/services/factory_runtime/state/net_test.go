@@ -31,6 +31,42 @@ func TestPlaceID(t *testing.T) {
 	}
 }
 
+func TestSplitPlaceIDAndCategoryForState(t *testing.T) {
+	t.Parallel()
+
+	workTypeID, stateValue := SplitPlaceID("task:init")
+	if workTypeID != "task" || stateValue != "init" {
+		t.Fatalf("SplitPlaceID = (%q, %q), want (task, init)", workTypeID, stateValue)
+	}
+	workTypeID, stateValue = SplitPlaceID("no-separator")
+	if workTypeID != "no-separator" || stateValue != "" {
+		t.Fatalf("SplitPlaceID without separator = (%q, %q)", workTypeID, stateValue)
+	}
+
+	workTypes := map[string]*WorkType{
+		"task": {
+			ID: "task",
+			States: []StateDefinition{
+				{Value: "complete", Category: StateCategoryTerminal},
+			},
+		},
+	}
+	if got := CategoryForState(workTypes, "task", "complete"); got != StateCategoryTerminal {
+		t.Fatalf("CategoryForState = %q, want TERMINAL", got)
+	}
+	if got := CategoryForState(workTypes, "missing", "init"); got != StateCategoryProcessing {
+		t.Fatalf("unknown work type category = %q, want PROCESSING", got)
+	}
+	if got := CategoryForState(workTypes, "task", "missing"); got != StateCategoryProcessing {
+		t.Fatalf("unknown state category = %q, want PROCESSING", got)
+	}
+
+	got := ValidStatesByType(workTypes)
+	if len(got["task"]) != 1 || !got["task"]["complete"] {
+		t.Fatalf("ValidStatesByType = %#v, want complete state only", got)
+	}
+}
+
 func TestWorkTypeGeneratePlaces(t *testing.T) {
 	wt := &WorkType{
 		ID:   "code-change",

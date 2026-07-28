@@ -8,8 +8,9 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	sessionprojection "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/legacysnapshot"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
+	sessionprojection "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection"
 )
 
 const factoryRuntimeImportRoot = "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -76,7 +77,7 @@ func TestProjectionContextConstructsFromRootObservationAndSnapshot(t *testing.T)
 			LifecycleControlStatus: "PAUSED",
 		},
 	}
-	snapshot := &factoryruntime.StateSnapshot{
+	snapshot := &legacysnapshot.Snapshot{
 		RuntimeStatus:          interfaces.RuntimeStatusIdle,
 		FactoryState:           "RUNNING",
 		LifecycleControlStatus: "PAUSED",

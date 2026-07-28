@@ -19,8 +19,9 @@ type CurrentFactoryReader interface {
 // runtimeAPI is the compatibility unscoped runtime view backed by the selected
 // canonical Factory Session runtime.
 type runtimeAPI struct {
-	runtime     factory.APIFactory
-	definitions CurrentFactoryReader
+	runtime        factory.APIFactory
+	legacySnapshot factory.LegacySnapshotProvider
+	definitions    CurrentFactoryReader
 }
 
 var _ RuntimeAPI = (*runtimeAPI)(nil)
@@ -28,7 +29,11 @@ var _ factory.APIFactory = (*runtimeAPI)(nil)
 
 // NewRuntimeAPI composes the legacy unscoped API from canonical services.
 func NewRuntimeAPI(runtime factory.APIFactory, definitions CurrentFactoryReader) RuntimeAPI {
-	return &runtimeAPI{runtime: runtime, definitions: definitions}
+	var legacySnapshot factory.LegacySnapshotProvider
+	if provider, ok := runtime.(factory.LegacySnapshotProvider); ok {
+		legacySnapshot = provider
+	}
+	return &runtimeAPI{runtime: runtime, legacySnapshot: legacySnapshot, definitions: definitions}
 }
 
 func (a *runtimeAPI) SubmitWorkRequest(ctx context.Context, request work.WorkRequest) (result work.WorkRequestSubmitResult, err error) {
@@ -50,10 +55,10 @@ func (a *runtimeAPI) SubscribeFactoryEvents(ctx context.Context, reconnect *inte
 }
 
 func (a *runtimeAPI) GetEngineStateSnapshot(ctx context.Context) (snapshot *interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net], err error) {
-	if a == nil || a.runtime == nil {
+	if a == nil || a.legacySnapshot == nil {
 		return nil, factorysessions.ErrRuntimeNotAvailable
 	}
-	snapshot, err = a.runtime.GetEngineStateSnapshot(ctx)
+	snapshot, err = a.legacySnapshot.GetEngineStateSnapshot(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get engine state snapshot: %w", err)
 	}

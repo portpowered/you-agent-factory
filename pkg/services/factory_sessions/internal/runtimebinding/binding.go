@@ -379,12 +379,12 @@ func StreamGenerationID(session *livesession.LiveSession) string {
 			return generation
 		}
 		if runtime := instance.RuntimeService(); runtime != nil {
-			if observation, observationErr := LegacyObservationForService(runtime); observationErr == nil {
-				snapshot, err := observation.GetEngineStateSnapshot(context.Background())
-				if err == nil && snapshot != nil {
-					if generation := strings.TrimSpace(snapshot.StreamGenerationID); generation != "" {
-						return generation
-					}
+			observeResult, observeErr := runtime.Observe(context.Background(), factory.ObserveRequest{
+				Scope: factory.ObservationScopeHealth,
+			})
+			if observeErr == nil {
+				if generation := strings.TrimSpace(observeResult.Observation.Health.StreamGenerationID); generation != "" {
+					return generation
 				}
 			}
 		}
@@ -638,8 +638,8 @@ func FactoryForSession(resolver LiveSessionResolver, sessionID string) (factory.
 
 // LegacyObservationForService isolates migration-era Petri snapshot access
 // from the singular Factory Runtime Service contract.
-func LegacyObservationForService(runtime factory.Service) (factory.APIFactory, error) {
-	observation, ok := runtime.(factory.APIFactory)
+func LegacyObservationForService(runtime factory.Service) (factory.LegacySnapshotProvider, error) {
+	observation, ok := runtime.(factory.LegacySnapshotProvider)
 	if !ok || observation == nil {
 		return nil, fmt.Errorf("legacy Factory Runtime observation is unavailable")
 	}
@@ -665,7 +665,7 @@ func LegacyEventSourceForService(runtime factory.Service) (LegacyEventSource, er
 
 // LegacyInvocationSourcesForService resolves the paired compatibility
 // capabilities still needed by invocation observation in one boundary check.
-func LegacyInvocationSourcesForService(runtime factory.Service) (factory.APIFactory, LegacyEventSource, error) {
+func LegacyInvocationSourcesForService(runtime factory.Service) (factory.LegacySnapshotProvider, LegacyEventSource, error) {
 	observation, err := LegacyObservationForService(runtime)
 	if err != nil {
 		return nil, nil, err

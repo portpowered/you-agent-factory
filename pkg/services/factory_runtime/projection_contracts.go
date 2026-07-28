@@ -3,6 +3,7 @@ package factory
 import (
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/state"
 )
 
@@ -31,14 +32,9 @@ func CategoryForState(workTypes map[string]*WorkType, workTypeID string, stateNa
 	return state.CategoryForState(workTypes, workTypeID, stateName)
 }
 
-func SnapshotHasActiveWork(snapshot *StateSnapshot) bool {
-	return state.SnapshotHasActiveWork(snapshot)
-}
-
 var PlaceID = state.PlaceID
 var ValidStatesByType = state.ValidStatesByType
 var NormalizeTransitionTopology = state.NormalizeTransitionTopology
-var NewEngineStateSnapshot = state.NewEngineStateSnapshot
 var GenerateResourcePlaces = state.GenerateResourcePlaces
 var ProjectInitialStructure = state.ProjectInitialStructure
 
@@ -125,12 +121,14 @@ type ObservationResourceView struct {
 }
 
 // ObservationHealth retains live health that cannot be reconstructed solely as
-// Recordings projections (stream generation, lifecycle control, uptime).
+// Recordings projections (stream generation, lifecycle control, uptime, throttle
+// pauses).
 type ObservationHealth struct {
 	FactoryState           string
 	LifecycleControlStatus string
 	StreamGenerationID     string
 	Uptime                 time.Duration
+	ActiveThrottlePauses   []interfaces.ActiveThrottlePause
 }
 
 // Observation is the detached orchestration-neutral observation value published

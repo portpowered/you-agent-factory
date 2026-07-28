@@ -5,20 +5,10 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorycontext "github.com/portpowered/infinite-you/pkg/services/factory_runtime/context"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/legacysnapshot"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/scheduler"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/state"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
-
-// StateSnapshot is the public Factory Runtime observation returned to service
-// consumers without requiring them to import Runtime implementation packages.
-type StateSnapshot = interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
-
-// LegacyEngineObservation retains the migration-only API and Factory Sessions
-// signature without making that snapshot a member of Service. New peers use
-// Observe and do not need this alias.
-type LegacyEngineObservation = StateSnapshot
 
 // Scheduler is the replaceable Factory Runtime transition-selection policy.
 type Scheduler = scheduler.Scheduler
@@ -35,8 +25,8 @@ type WorkMover interface {
 }
 
 // APIFactory is the migration-only factory boundary required by legacy HTTP
-// API and Factory Sessions adapters. New cross-service peers use Service,
-// which does not expose GetEngineStateSnapshot.
+// API and Factory Sessions adapters. New cross-service peers use Service and
+// do not require Petri-shaped engine snapshots.
 type APIFactory interface {
 	// SubmitWorkRequest injects a canonical work request batch idempotently.
 	SubmitWorkRequest(ctx context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error)
@@ -45,11 +35,11 @@ type APIFactory interface {
 	// live events. The live stream closes when ctx is canceled. When reconnect
 	// is non-nil, only events newer than the acknowledged cursor are replayed.
 	SubscribeFactoryEvents(ctx context.Context, reconnect *interfaces.FactoryEventReconnectCursor, scope interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error)
-
-	// GetEngineStateSnapshot returns the aggregate observability snapshot for
-	// migration-era consumers.
-	GetEngineStateSnapshot(ctx context.Context) (*StateSnapshot, error)
 }
+
+// LegacySnapshotProvider is migration-only Petri snapshot access retained for
+// hosted runtimes. It is not part of the APIFactory or Service peer contracts.
+type LegacySnapshotProvider = legacysnapshot.Provider
 
 // Service is the singular Factory Runtime root contract and the only
 // cross-service runtime authority for control, observation, dispatch-plan, and
@@ -134,6 +124,7 @@ type Service interface {
 // cross-service root-slice peers depend on Service rather than this engine seam.
 type Factory interface {
 	APIFactory
+	LegacySnapshotProvider
 	WorkMover
 	Pause(ctx context.Context) error
 	Resume(ctx context.Context) error
