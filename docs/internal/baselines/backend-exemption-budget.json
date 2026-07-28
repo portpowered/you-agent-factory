@@ -21,7 +21,7 @@
     },
     {
       "rule": "backendsizecheck:ignore-file",
-      "target": "pkg/services/factory_definitions/validation/definitionmapping_validation_migration_test.go",
+      "target": "pkg/services/factory_definitions/internal/services/validation/impl/definitionmapping_validation_migration_test.go",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption."
     },
@@ -267,7 +267,7 @@
     },
     {
       "rule": "backendsizecheck:ignore-function",
-      "target": "pkg/services/factory_definitions/validation/validation_test.go#TestValidate_CanonicalFindingsAndStableIdentity",
+      "target": "pkg/services/factory_definitions/internal/services/validation/impl/validation_test.go#TestValidate_CanonicalFindingsAndStableIdentity",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
     },
@@ -405,13 +405,13 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_definitions/persistence/integrationtests/cli_config_migration_test.go#assertDeterministicExpandedRuntimeConfig",
+      "target": "pkg/services/factory_definitions/internal/services/catalog/persistence/integrationtests/cli_config_migration_test.go#assertDeterministicExpandedRuntimeConfig",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_definitions/persistence/integrationtests/cli_config_migration_test.go#assertExistingSplitDefinitionsPreserved",
+      "target": "pkg/services/factory_definitions/internal/services/catalog/persistence/integrationtests/cli_config_migration_test.go#assertExistingSplitDefinitionsPreserved",
       "owner": "backend-maintainers",
       "removalReason": "this helper keeps the preserved split-definition contract inline across all authored files."
     },
@@ -1143,7 +1143,7 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",
-      "target": "pkg/services/factory_definitions/validation/definitionmapping_validation_migration_test.go",
+      "target": "pkg/services/factory_definitions/internal/services/validation/impl/definitionmapping_validation_migration_test.go",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this consolidated file; split responsibilities and remove this exemption."
     },
@@ -1353,7 +1353,7 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-function-lines",
-      "target": "pkg/services/factory_definitions/validation/validation_test.go#TestValidate_CanonicalFindingsAndStableIdentity",
+      "target": "pkg/services/factory_definitions/internal/services/validation/impl/validation_test.go#TestValidate_CanonicalFindingsAndStableIdentity",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
     },

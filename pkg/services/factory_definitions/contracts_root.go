@@ -3,7 +3,7 @@ package factorydefinitions
 import (
 	contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
 	catalogresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/resource"
-	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
+	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
 )
 
 // Root-owned aliases expose the Factory Definition vocabulary without making

@@ -1,9 +1,9 @@
 {
   "packet_id": "DEL-DEF-RESIDUAL",
   "branch_name": "pss-del-def-residual",
-  "recorded_at_utc": "2026-07-28T14:20:00Z",
-  "deletion_hold_active": true,
-  "deletion_hold_reason": "DEL-DEF PR #1603 is open and owns overlapping TOPLEVEL deletion leases; residual deletion must not race live DEL-DEF.",
+  "recorded_at_utc": "2026-07-28T15:06:00Z",
+  "deletion_hold_active": false,
+  "deletion_hold_reason": "",
   "gates": {
     "INV-DEF-INVOCATION-POLICY": {
       "branch_name": "pss-inv-def-invocation-policy",
@@ -87,8 +87,9 @@
     },
     "DEL-DEF": {
       "branch_name": "pss-del-def",
-      "open_pr": 1603,
-      "factory_complete": false,
+      "merged_pr": 1603,
+      "merged_at_utc": "2026-07-28T14:55:00Z",
+      "factory_complete": true,
       "overlapping_deletion_lease_paths": [
         "pkg/services/factory_definitions/service",
         "pkg/services/factory_definitions/authoredlayout",

@@ -3,7 +3,7 @@ package factorycontracts
 import (
 	"context"
 
-	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
+	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
 )
 
 // DefinitionSession is the Factory Definitions projection of a live Factory

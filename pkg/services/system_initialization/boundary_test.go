@@ -24,7 +24,7 @@ var operatorSettingsForbiddenImportPathFragments = []string{
 }
 
 var factoryDefinitionsForbiddenImportRoots = []string{
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packagedinstallation",
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedinstallation",
 }
 
 var factoryDefinitionsForbiddenImportPathFragments = []string{

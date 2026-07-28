@@ -12,12 +12,12 @@ import (
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
-	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
+	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
 )
 
 var validationPeerSurfacePackages = []string{
-	factoryDefinitionsRoot + "/validation",
+	factoryDefinitionsRoot + "/internal/services/validation/impl",
 }
 
 var validationPeerSurfaceSourceFiles = []string{

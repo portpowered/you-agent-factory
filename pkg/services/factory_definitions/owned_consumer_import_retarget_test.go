@@ -10,8 +10,8 @@ import (
 // Definition-owned vocabulary must import the service root instead.
 var ownedConsumerPackages = []string{
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition",
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation",
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/editable",
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl",
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/editable",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/service",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/http",
 }

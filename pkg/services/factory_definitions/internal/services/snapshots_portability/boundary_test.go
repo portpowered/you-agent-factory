@@ -37,10 +37,10 @@ var snapshotsPortabilityForbiddenImportRoots = []string{
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution",
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/snapshotcapture",
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/capture",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading",
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/persistence",
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/persistence",
 }
 
 var snapshotsPortabilityAllowedPublicTypeImportPrefixes = []string{

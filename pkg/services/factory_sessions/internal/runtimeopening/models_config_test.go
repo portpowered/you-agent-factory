@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
 )
 
 type runtimeConfigLookupStub struct {
@@ -16,7 +15,9 @@ type runtimeConfigLookupStub struct {
 func (s runtimeConfigLookupStub) FactoryConfig() *factorydefinitions.FactoryConfig { return s.cfg }
 func (s runtimeConfigLookupStub) FactoryDir() string                               { return s.factoryDir }
 func (s runtimeConfigLookupStub) RuntimeBaseDir() string                           { return s.baseDir }
-func (s runtimeConfigLookupStub) Worker(string) (*workerconfig.Config, bool)       { return nil, false }
+func (s runtimeConfigLookupStub) Worker(string) (*factorydefinitions.FactoryWorkerConfig, bool) {
+	return nil, false
+}
 func (s runtimeConfigLookupStub) Workstation(string) (*factorydefinitions.FactoryWorkstationConfig, bool) {
 	return nil, false
 }

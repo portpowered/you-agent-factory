@@ -798,7 +798,7 @@ Wave 0 functional-tests-expansion planning authority lives under
   `packagedfactorycatalog.LoadPublishedDefinitionCatalog` only from the
   approved wiring and catalog-projection files
   (`pkg/wire/profiles.go`, `pkg/transports/http/handlers_models.go`,
-  `pkg/services/factory_definitions/packages/goal/prompt_drift.go`). Factory
+  `pkg/services/factory_definitions/internal/services/distribution/goal/prompt_drift.go`). Factory
   Definitions list/resolve/install must continue to consume detached catalog
   bytes through `PackagedFactoryCatalogOperations` rather than alternate embed
   or filesystem paths.   Focused unknown-identity resolve/install rejection

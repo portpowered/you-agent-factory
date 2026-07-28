@@ -29,10 +29,9 @@ var validationForbiddenImportRoots = []string{
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution",
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading",
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/persistence",
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/persistence",
 }
 
 var validationAllowedPublicTypeImportPrefixes = []string{
@@ -233,36 +232,14 @@ func TestPackageBoundary_WireSurfaceDoesNotConstructRuntimeOrSelectSiblingLeases
 	assertPackageDirectImportsForbidden(t, wirePackage, validationForbiddenImportRoots)
 }
 
-func TestPackageBoundary_PrivateValidationSubpackagesDoNotImportPublicValidation(t *testing.T) {
-	t.Parallel()
-
-	forbidden := []string{
-		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation",
-		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/namevalue",
-		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers/taxonomy",
-	}
-	for _, packagePath := range []string{
-		validationPublicPackage + "/impl",
-		validationPublicPackage + "/internal/structural",
-		validationPublicPackage + "/internal/topology",
-		validationPublicPackage + "/internal/requiredtools",
-		validationPublicPackage + "/internal/orchestrator",
-		validationPublicPackage + "/internal/service",
-	} {
-		for _, forbiddenImport := range forbidden {
-			assertPackageDirectImportsForbidden(t, packagePath, []string{forbiddenImport})
-		}
-	}
-}
-
-func TestPackageBoundary_OwnerContractsDoNotImportTransitionalAuthoredSchemaShims(t *testing.T) {
+func TestPackageBoundary_OwnerContractsDoNotImportAuthoredSchemaInternals(t *testing.T) {
 	t.Parallel()
 
 	for _, forbiddenImport := range []string{
-		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/namevalue",
-		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers/taxonomy",
+		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/namevalue",
+		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/taxonomy",
 	} {
 		assertPackageDirectImportsForbidden(t, "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts", []string{forbiddenImport})
-		assertPackageDirectImportsForbidden(t, "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers", []string{forbiddenImport})
+		assertPackageDirectImportsForbidden(t, "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers", []string{forbiddenImport})
 	}
 }

@@ -211,7 +211,7 @@ func TestCheckFunctionalCompositionTreeRejectsSecondaryCompositionImport(t *test
 		"github.com/portpowered/infinite-you/pkg/services/factory_runtime",
 		"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state",
 		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/scaffold",
-		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation",
+		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl",
 		"github.com/portpowered/infinite-you/pkg/services/recordings/projections",
 		"github.com/portpowered/infinite-you/pkg/services/recordings/replay",
 		"github.com/portpowered/infinite-you/pkg/services/workers/executor",

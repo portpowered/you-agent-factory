@@ -126,7 +126,7 @@ func TestDecisionEnvelopeOwnershipBoundary_TransitionalGoalShimDelegatesToDecisi
 func TestDecisionEnvelopeOwnershipBoundary_InventoryDoesNotSuccessorDecisionEnvelopeToDistribution(t *testing.T) {
 	t.Parallel()
 
-	got, err := ownershipinventory.MapPackage("pkg/services/factory_definitions/decisionenvelope")
+	got, err := ownershipinventory.MapPackage("pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope")
 	if err != nil {
 		t.Fatalf("MapPackage(decisionenvelope) error = %v", err)
 	}

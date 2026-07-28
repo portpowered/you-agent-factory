@@ -90,7 +90,7 @@ flowchart LR
     subgraph currentDefinitions[Factory definition and configuration]
         currentLoading[[pkg/services/factory_definitions/loading]]
         currentDefinition[[pkg/services/factory_definitions]]
-        currentValidation[[pkg/services/factory_definitions/validation]]
+        currentValidation[[pkg/services/factory_definitions/internal/services/validation/impl]]
         currentMappingAdapter[[pkg/transports/mapping/factoryconfig]]
         currentFactoryFiles[(Factory and system configuration files)]
 

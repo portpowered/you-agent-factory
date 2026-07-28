@@ -5,7 +5,7 @@ import (
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/workstationexecution"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution"
 )
 
 func TestNormalizeWorkstationExecutionLimit_MovesLegacyTimeoutIntoCanonicalLimit(t *testing.T) {

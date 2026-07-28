@@ -79,9 +79,9 @@ func TestMapPackageFactoryDefinitionsMoveDestinations(t *testing.T) {
 			retainOwner: "factory_definitions",
 		},
 		{
-			path: "pkg/services/factory_definitions/validation",
+			path: "pkg/services/factory_definitions/internal/services/validation/impl",
 			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_definitions/validation",
+				PackagePath:       "pkg/services/factory_definitions/internal/services/validation/impl",
 				Disposition:       ownershipinventory.DispositionMove,
 				Destination:       "factory_definitions",
 				DestinationKind:   ownershipinventory.DestinationKindOwner,
@@ -90,9 +90,9 @@ func TestMapPackageFactoryDefinitionsMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/factory_definitions/packages/goal",
+			path: "pkg/services/factory_definitions/internal/services/distribution/goal",
 			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_definitions/packages/goal",
+				PackagePath:       "pkg/services/factory_definitions/internal/services/distribution/goal",
 				Disposition:       ownershipinventory.DispositionMove,
 				Destination:       "factory_definitions",
 				DestinationKind:   ownershipinventory.DestinationKindOwner,
@@ -106,9 +106,9 @@ func TestMapPackageFactoryDefinitionsMoveDestinations(t *testing.T) {
 			retainOwner: "factory_definitions",
 		},
 		{
-			path: "pkg/services/factory_definitions/namevalue",
+			path: "pkg/services/factory_definitions/internal/services/validation/authoredmodel/namevalue",
 			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_definitions/namevalue",
+				PackagePath:       "pkg/services/factory_definitions/internal/services/validation/authoredmodel/namevalue",
 				Disposition:       ownershipinventory.DispositionMove,
 				Destination:       "factory_definitions",
 				DestinationKind:   ownershipinventory.DestinationKindOwner,
@@ -117,9 +117,9 @@ func TestMapPackageFactoryDefinitionsMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/factory_definitions/workers",
+			path: "pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers",
 			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_definitions/workers",
+				PackagePath:       "pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers",
 				Disposition:       ownershipinventory.DispositionMove,
 				Destination:       "factory_definitions",
 				DestinationKind:   ownershipinventory.DestinationKindOwner,
@@ -128,9 +128,9 @@ func TestMapPackageFactoryDefinitionsMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/factory_definitions/workers/taxonomy",
+			path: "pkg/services/factory_definitions/internal/services/validation/authoredmodel/taxonomy",
 			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_definitions/workers/taxonomy",
+				PackagePath:       "pkg/services/factory_definitions/internal/services/validation/authoredmodel/taxonomy",
 				Disposition:       ownershipinventory.DispositionMove,
 				Destination:       "factory_definitions",
 				DestinationKind:   ownershipinventory.DestinationKindOwner,
@@ -139,9 +139,9 @@ func TestMapPackageFactoryDefinitionsMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/factory_definitions/replayconfig",
+			path: "pkg/services/factory_definitions/internal/services/snapshots_portability/replayconfig",
 			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_definitions/replayconfig",
+				PackagePath:       "pkg/services/factory_definitions/internal/services/snapshots_portability/replayconfig",
 				Disposition:       ownershipinventory.DispositionMove,
 				Destination:       "factory_definitions",
 				DestinationKind:   ownershipinventory.DestinationKindOwner,
@@ -150,9 +150,9 @@ func TestMapPackageFactoryDefinitionsMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/factory_definitions/resource",
+			path: "pkg/services/factory_definitions/internal/services/catalog/resource",
 			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_definitions/resource",
+				PackagePath:       "pkg/services/factory_definitions/internal/services/catalog/resource",
 				Disposition:       ownershipinventory.DispositionMove,
 				Destination:       "factory_definitions",
 				DestinationKind:   ownershipinventory.DestinationKindOwner,
@@ -161,9 +161,9 @@ func TestMapPackageFactoryDefinitionsMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/factory_definitions/decisionenvelope",
+			path: "pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope",
 			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_definitions/decisionenvelope",
+				PackagePath:       "pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope",
 				Disposition:       ownershipinventory.DispositionMove,
 				Destination:       "factory_definitions",
 				DestinationKind:   ownershipinventory.DestinationKindOwner,
@@ -172,9 +172,9 @@ func TestMapPackageFactoryDefinitionsMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/factory_definitions/invocationinterpolation",
+			path: "pkg/services/factory_definitions/internal/services/invocation_policy/invocationinterpolation",
 			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_definitions/invocationinterpolation",
+				PackagePath:       "pkg/services/factory_definitions/internal/services/invocation_policy/invocationinterpolation",
 				Disposition:       ownershipinventory.DispositionMove,
 				Destination:       "factory_definitions",
 				DestinationKind:   ownershipinventory.DestinationKindOwner,
@@ -183,9 +183,9 @@ func TestMapPackageFactoryDefinitionsMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/factory_definitions/invocationoutput",
+			path: "pkg/services/factory_definitions/internal/services/invocation_policy/invocationoutput",
 			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_definitions/invocationoutput",
+				PackagePath:       "pkg/services/factory_definitions/internal/services/invocation_policy/invocationoutput",
 				Disposition:       ownershipinventory.DispositionMove,
 				Destination:       "factory_definitions",
 				DestinationKind:   ownershipinventory.DestinationKindOwner,
@@ -194,9 +194,9 @@ func TestMapPackageFactoryDefinitionsMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/factory_definitions/invocationworktype",
+			path: "pkg/services/factory_definitions/internal/services/invocation_policy/invocationworktype",
 			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_definitions/invocationworktype",
+				PackagePath:       "pkg/services/factory_definitions/internal/services/invocation_policy/invocationworktype",
 				Disposition:       ownershipinventory.DispositionMove,
 				Destination:       "factory_definitions",
 				DestinationKind:   ownershipinventory.DestinationKindOwner,
@@ -205,9 +205,9 @@ func TestMapPackageFactoryDefinitionsMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/factory_definitions/quorumpolicy",
+			path: "pkg/services/factory_definitions/internal/services/invocation_policy/quorumpolicy",
 			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_definitions/quorumpolicy",
+				PackagePath:       "pkg/services/factory_definitions/internal/services/invocation_policy/quorumpolicy",
 				Disposition:       ownershipinventory.DispositionMove,
 				Destination:       "factory_definitions",
 				DestinationKind:   ownershipinventory.DestinationKindOwner,
@@ -216,9 +216,9 @@ func TestMapPackageFactoryDefinitionsMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/factory_definitions/workpropagation",
+			path: "pkg/services/factory_definitions/internal/services/invocation_policy/workpropagation",
 			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_definitions/workpropagation",
+				PackagePath:       "pkg/services/factory_definitions/internal/services/invocation_policy/workpropagation",
 				Disposition:       ownershipinventory.DispositionMove,
 				Destination:       "factory_definitions",
 				DestinationKind:   ownershipinventory.DestinationKindOwner,
@@ -227,9 +227,9 @@ func TestMapPackageFactoryDefinitionsMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/factory_definitions/workstationexecution",
+			path: "pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution",
 			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_definitions/workstationexecution",
+				PackagePath:       "pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution",
 				Disposition:       ownershipinventory.DispositionMove,
 				Destination:       "factory_definitions",
 				DestinationKind:   ownershipinventory.DestinationKindOwner,
@@ -238,9 +238,9 @@ func TestMapPackageFactoryDefinitionsMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/factory_definitions/ttsobservability",
+			path: "pkg/services/factory_definitions/internal/services/invocation_policy/ttsobservability",
 			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_definitions/ttsobservability",
+				PackagePath:       "pkg/services/factory_definitions/internal/services/invocation_policy/ttsobservability",
 				Disposition:       ownershipinventory.DispositionMove,
 				Destination:       "factory_definitions",
 				DestinationKind:   ownershipinventory.DestinationKindOwner,

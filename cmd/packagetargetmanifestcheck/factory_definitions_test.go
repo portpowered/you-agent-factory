@@ -76,17 +76,17 @@ func TestMapCommittedOwnerPackageFactoryDefinitionsMoveDestinations(t *testing.T
 			},
 		},
 		{
-			path: "pkg/services/factory_definitions/validation",
+			path: "pkg/services/factory_definitions/internal/services/validation/impl",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/validation",
+				PackagePath: "pkg/services/factory_definitions/internal/services/validation/impl",
 				Disposition: DispositionMove,
 				Destination: "factory_definitions/internal/services/validation",
 			},
 		},
 		{
-			path: "pkg/services/factory_definitions/packages/goal",
+			path: "pkg/services/factory_definitions/internal/services/distribution/goal",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/packages/goal",
+				PackagePath: "pkg/services/factory_definitions/internal/services/distribution/goal",
 				Disposition: DispositionMove,
 				Destination: "factory_definitions/internal/services/invocation_policy",
 			},
@@ -102,105 +102,105 @@ func TestMapCommittedOwnerPackageFactoryDefinitionsMoveDestinations(t *testing.T
 			retainOwner: "factory_definitions/internal",
 		},
 		{
-			path: "pkg/services/factory_definitions/namevalue",
+			path: "pkg/services/factory_definitions/internal/services/validation/authoredmodel/namevalue",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/namevalue",
+				PackagePath: "pkg/services/factory_definitions/internal/services/validation/authoredmodel/namevalue",
 				Disposition: DispositionMove,
 				Destination: "factory_definitions/internal/services/validation",
 			},
 		},
 		{
-			path: "pkg/services/factory_definitions/workers",
+			path: "pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/workers",
+				PackagePath: "pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers",
 				Disposition: DispositionMove,
 				Destination: "factory_definitions/internal/services/validation",
 			},
 		},
 		{
-			path: "pkg/services/factory_definitions/workers/taxonomy",
+			path: "pkg/services/factory_definitions/internal/services/validation/authoredmodel/taxonomy",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/workers/taxonomy",
+				PackagePath: "pkg/services/factory_definitions/internal/services/validation/authoredmodel/taxonomy",
 				Disposition: DispositionMove,
 				Destination: "factory_definitions/internal/services/validation",
 			},
 		},
 		{
-			path: "pkg/services/factory_definitions/replayconfig",
+			path: "pkg/services/factory_definitions/internal/services/snapshots_portability/replayconfig",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/replayconfig",
+				PackagePath: "pkg/services/factory_definitions/internal/services/snapshots_portability/replayconfig",
 				Disposition: DispositionMove,
 				Destination: "factory_definitions/internal/services/snapshots_portability",
 			},
 		},
 		{
-			path: "pkg/services/factory_definitions/resource",
+			path: "pkg/services/factory_definitions/internal/services/catalog/resource",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/resource",
+				PackagePath: "pkg/services/factory_definitions/internal/services/catalog/resource",
 				Disposition: DispositionMove,
 				Destination: "factory_definitions/internal/services/validation",
 			},
 		},
 		{
-			path: "pkg/services/factory_definitions/decisionenvelope",
+			path: "pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/decisionenvelope",
+				PackagePath: "pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope",
 				Disposition: DispositionMove,
 				Destination: "factory_definitions/internal/services/invocation_policy",
 			},
 		},
 		{
-			path: "pkg/services/factory_definitions/invocationinterpolation",
+			path: "pkg/services/factory_definitions/internal/services/invocation_policy/invocationinterpolation",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/invocationinterpolation",
+				PackagePath: "pkg/services/factory_definitions/internal/services/invocation_policy/invocationinterpolation",
 				Disposition: DispositionMove,
 				Destination: "factory_definitions/internal/services/invocation_policy",
 			},
 		},
 		{
-			path: "pkg/services/factory_definitions/invocationoutput",
+			path: "pkg/services/factory_definitions/internal/services/invocation_policy/invocationoutput",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/invocationoutput",
+				PackagePath: "pkg/services/factory_definitions/internal/services/invocation_policy/invocationoutput",
 				Disposition: DispositionMove,
 				Destination: "factory_definitions/internal/services/invocation_policy",
 			},
 		},
 		{
-			path: "pkg/services/factory_definitions/invocationworktype",
+			path: "pkg/services/factory_definitions/internal/services/invocation_policy/invocationworktype",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/invocationworktype",
+				PackagePath: "pkg/services/factory_definitions/internal/services/invocation_policy/invocationworktype",
 				Disposition: DispositionMove,
 				Destination: "factory_definitions/internal/services/invocation_policy",
 			},
 		},
 		{
-			path: "pkg/services/factory_definitions/quorumpolicy",
+			path: "pkg/services/factory_definitions/internal/services/invocation_policy/quorumpolicy",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/quorumpolicy",
+				PackagePath: "pkg/services/factory_definitions/internal/services/invocation_policy/quorumpolicy",
 				Disposition: DispositionMove,
 				Destination: "factory_definitions/internal/services/invocation_policy",
 			},
 		},
 		{
-			path: "pkg/services/factory_definitions/workpropagation",
+			path: "pkg/services/factory_definitions/internal/services/invocation_policy/workpropagation",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/workpropagation",
+				PackagePath: "pkg/services/factory_definitions/internal/services/invocation_policy/workpropagation",
 				Disposition: DispositionMove,
 				Destination: "factory_definitions/internal/services/invocation_policy",
 			},
 		},
 		{
-			path: "pkg/services/factory_definitions/workstationexecution",
+			path: "pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/workstationexecution",
+				PackagePath: "pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution",
 				Disposition: DispositionMove,
 				Destination: "factory_definitions/internal/services/invocation_policy",
 			},
 		},
 		{
-			path: "pkg/services/factory_definitions/ttsobservability",
+			path: "pkg/services/factory_definitions/internal/services/invocation_policy/ttsobservability",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/ttsobservability",
+				PackagePath: "pkg/services/factory_definitions/internal/services/invocation_policy/ttsobservability",
 				Disposition: DispositionMove,
 				Destination: "factory_definitions/internal/services/invocation_policy",
 			},

@@ -9,7 +9,7 @@ import (
 const (
 	transitionalValidationImport = "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	transitionalNamevalueImport  = "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namevalue"
-	transitionalTaxonomyImport     = "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers/taxonomy"
+	transitionalTaxonomyImport   = "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers/taxonomy"
 	validationInternalsImport    = "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
 )
 

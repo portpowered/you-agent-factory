@@ -2,7 +2,7 @@ package factorydefinition
 
 import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	factorynamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
+	factorynamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
 )
 
 var definitionTestNamedPaths = func() *factorynamedpaths.Resolver {

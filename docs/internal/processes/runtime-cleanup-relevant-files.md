@@ -829,7 +829,7 @@ fixtures. Owner HTTP/MCP transports and `definition` remain on the singular
 retain temporary deletion-only aliases until a later cutover packet. CLN-DEF-CONTRACTS
 story 007 deletes the public `factory_definitions/contracts` mega-barrel: implementation
 types move to `internal/contracts`, shared `namevalue` moves to
-`pkg/services/factory_definitions/namevalue`, Recordings and Factory Runtime alias
+`pkg/services/factory_definitions/internal/services/validation/authoredmodel/namevalue`, Recordings and Factory Runtime alias
 from the service root, `cmd/pkgboundarycheck` treats the retired public path as
 prohibited, and `contracts_mega_barrel_boundary_test.go` seals peer cutover.
 parent-private nested validation subservice locks its public surface in

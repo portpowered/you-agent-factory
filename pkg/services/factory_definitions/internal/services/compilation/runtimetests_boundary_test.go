@@ -10,7 +10,7 @@ const compilationRuntimeTestsPackage = "github.com/portpowered/infinite-you/pkg/
 
 var transitionalCompileLoadImports = []string{
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading",
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/loadedsource",
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loadedsource",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/runtimeconfig",
 }
 

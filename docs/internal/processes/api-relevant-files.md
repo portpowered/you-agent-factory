@@ -255,7 +255,7 @@ Use this map when changing the public REST contract.
   targets through the injected port, and import guards on the validation and
   orchestrator packages. Keep Petri engine types off the Definitions validation
   peer surface with
-  `pkg/services/factory_definitions/validation_peer_surface_boundary_test.go`:
+  `pkg/services/factory_definitions/internal/services/validation/impl_peer_surface_boundary_test.go`:
   import guards on the public `validation` package, AST checks on
   `validation_contract.go` and `contracts/validation.go`, and behavioral proofs
   that validation targets use Definitions-owned code/severity/subject vocabulary.

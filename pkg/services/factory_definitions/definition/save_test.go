@@ -15,8 +15,8 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/validationassert"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 
-	factoryeditable "github.com/portpowered/infinite-you/pkg/services/factory_definitions/editable"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
+	factoryeditable "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/editable"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
