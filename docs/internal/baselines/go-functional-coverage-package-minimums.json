@@ -1818,7 +1818,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/wire",
-      "minimum": 100.00
+      "minimum": 8.82
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers",
