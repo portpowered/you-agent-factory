@@ -886,22 +886,37 @@ Wave 0 functional-tests-expansion planning authority lives under
   every top-level `Test*` needs a customer-readable Go doc and `//golden:` manifest
   directive so `functionaltestmetadata` stays viz-compatible.
 
+- `tests/functional/provider_sessions/details/codex_details_test.go` owns Codex
+  Provider Session detail inspection through the public `GET /provider-sessions/detail`
+  boundary after runtime lifecycle starts (FUN post-lifecycle detail activation).
+  Drive proofs through `support.StartFunctionalAPIServer` (`root.BuildProcess` +
+  `edges.Edges` only) with `ProviderSessionResolveHomeDirectory` edge override.
+  Write sanitized Codex rollout fixtures under `~/.codex/sessions/...`, compare
+  success detail to `docs/temp/functional/provider-sessions/codex/success/expected-provider-session-detail.json`
+  with normalized timestamps/size fields, assert missing session ids return HTTP 404
+  `NOT_FOUND` without fabricated detail, and assert corrupt rollouts surface parse
+  diagnostics without fabricated transcript or host-path leakage. Do not widen into
+  `cursor_details_test.go` or `http_test.go`. Close catalog metadata with
+  customer-readable Go docs (plus `//golden:` on the success load test) so
+  `functionaltestmetadata` stays viz-compatible.
+
 - `tests/functional/provider_sessions/details/http_test.go` owns HTTP/API Provider
   Session detail contracts through the public `GET /provider-sessions/detail` boundary
-  via `support.StartFunctionalAPIServer` (root.BuildProcess + Process.Execute) with
+  after runtime lifecycle starts (FUN post-lifecycle detail activation) via
+  `support.StartFunctionalAPIServer` (`root.BuildProcess` + `edges.Edges` only) with
   `ProviderSessionResolveHomeDirectory` edge override and without MockWorkers when
   sanitized on-disk fixtures suffice. Prove golden-backed detail matches checked-in
   expected metadata (`//golden:` on the success load test), reject raw filesystem path
   input with typed `BAD_REQUEST` errors, and return typed `BAD_REQUEST` for unsupported
   provider session kinds without fabricating detail bodies. Reuse same-package Codex/Cursor
   fixture helpers from sibling cells; do not widen into `codex_details_test.go` or
-  `cursor_details_test.go`. Close catalog metadata with `test-file-checklist.md`,
-  `migration-ledger-inventory.json`, and customer-readable Go docs so
+  `cursor_details_test.go`. Close catalog metadata with customer-readable Go docs so
   `functionaltestmetadata` stays viz-compatible.
 
 - `tests/functional/provider_sessions/details/cursor_details_test.go` owns Cursor
   Provider Session detail inspection through the public `GET /provider-sessions/detail`
-  boundary via `support.StartFunctionalAPIServer` with
+  boundary after runtime lifecycle starts (FUN post-lifecycle detail activation) via
+  `support.StartFunctionalAPIServer` (`root.BuildProcess` + `edges.Edges` only) with
   `ProviderSessionResolveHomeDirectory` edge override. Write sanitized Cursor sqlite
   fixtures under `~/.cursor/chats/{workspaceHash}/{sessionID}/store.db`, compare
   success detail to `docs/temp/functional/provider-sessions/cursor/success/expected-provider-session-detail.json`
@@ -909,9 +924,8 @@ Wave 0 functional-tests-expansion planning authority lives under
   `unknownEventCount`/`unknownEvents` without fabricated transcript, and assert
   missing session ids return HTTP 404 `NOT_FOUND` without fabricated detail bodies.
   Do not widen into `codex_details_test.go` or `http_test.go`. Close catalog metadata
-  with `test-file-checklist.md`, `migration-ledger-inventory.json`, and customer-readable
-  Go docs (plus `//golden:` on the success load test) so `functionaltestmetadata`
-  stays viz-compatible.
+  with customer-readable Go docs (plus `//golden:` on the success load test) so
+  `functionaltestmetadata` stays viz-compatible.
 
 - `tests/functional/automations/` owns root.BuildProcess evidence for packaged
   Automations cron scheduling and filesystem watcher preseed. Keep cron workstation
