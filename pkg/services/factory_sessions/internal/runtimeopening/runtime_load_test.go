@@ -15,7 +15,6 @@ import (
 	operatorconfig 	"github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	"go.uber.org/zap"
 )
 
@@ -169,7 +168,7 @@ func TestNewDurableExecutionCanonicalizesOperatorDefaultsAndPresets(t *testing.T
 	executionFactory := func(
 		_ string,
 		_ factorysessions.PersistencePolicy,
-		_ workerprovider.Provider,
+		_ workers.Provider,
 		_ factoryruntime.Clock,
 		_ map[string]struct{},
 		settings factoryruntime.JavaScriptWorkerSettings,

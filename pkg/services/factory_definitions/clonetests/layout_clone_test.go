@@ -6,40 +6,40 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func TestFactoryConfig_SharedSurfaceRetiresExhaustionRules(t *testing.T) {
-	factoryType := reflect.TypeOf(interfaces.FactoryConfig{})
+	factoryType := reflect.TypeOf(factorydefinitions.FactoryConfig{})
 	if _, ok := factoryType.FieldByName("ExhaustionRules"); ok {
-		t.Fatal("interfaces.FactoryConfig must not expose ExhaustionRules")
+		t.Fatal("factorydefinitions.FactoryConfig must not expose ExhaustionRules")
 	}
 }
 
 func TestCloneFactoryConfig_PreservesGuardedLogicalMoveLoopBreakerWorkstations(t *testing.T) {
-	cfg := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{{
+	cfg := &factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{{
 			Name: "story",
-			States: []interfaces.StateConfig{
-				{Name: "review", Type: interfaces.StateTypeProcessing},
-				{Name: "failed", Type: interfaces.StateTypeFailed},
+			States: []factorydefinitions.StateConfig{
+				{Name: "review", Type: factorydefinitions.StateTypeProcessing},
+				{Name: "failed", Type: factorydefinitions.StateTypeFailed},
 			},
 		}},
-		Workstations: []interfaces.FactoryWorkstationConfig{
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{
 			{
 				Name:           "review-story",
 				WorkerTypeName: "reviewer",
-				Inputs:         []interfaces.IOConfig{{WorkTypeName: "story", StateName: "review"}},
-				Outputs:        []interfaces.IOConfig{{WorkTypeName: "story", StateName: "review"}},
-				OnRejection:    []interfaces.IOConfig{{WorkTypeName: "story", StateName: "review"}},
+				Inputs:         []factorydefinitions.IOConfig{{WorkTypeName: "story", StateName: "review"}},
+				Outputs:        []factorydefinitions.IOConfig{{WorkTypeName: "story", StateName: "review"}},
+				OnRejection:    []factorydefinitions.IOConfig{{WorkTypeName: "story", StateName: "review"}},
 			},
 			{
 				Name:    "review-loop-breaker",
-				Type:    interfaces.WorkstationTypeLogical,
-				Inputs:  []interfaces.IOConfig{{WorkTypeName: "story", StateName: "review"}},
-				Outputs: []interfaces.IOConfig{{WorkTypeName: "story", StateName: "failed"}},
-				Guards: []interfaces.GuardConfig{{
-					Type:        interfaces.GuardTypeVisitCount,
+				Type:    factorydefinitions.WorkstationTypeLogical,
+				Inputs:  []factorydefinitions.IOConfig{{WorkTypeName: "story", StateName: "review"}},
+				Outputs: []factorydefinitions.IOConfig{{WorkTypeName: "story", StateName: "failed"}},
+				Guards: []factorydefinitions.GuardConfig{{
+					Type:        factorydefinitions.GuardTypeVisitCount,
 					Workstation: "review-story",
 					MaxVisits:   3,
 				}},
@@ -47,7 +47,7 @@ func TestCloneFactoryConfig_PreservesGuardedLogicalMoveLoopBreakerWorkstations(t
 		},
 	}
 
-	cloned, err := interfaces.CloneFactoryConfig(cfg)
+	cloned, err := factorydefinitions.CloneFactoryConfig(cfg)
 	if err != nil {
 		t.Fatalf("CloneFactoryConfig: %v", err)
 	}
@@ -55,13 +55,13 @@ func TestCloneFactoryConfig_PreservesGuardedLogicalMoveLoopBreakerWorkstations(t
 		t.Fatalf("expected 2 workstations, got %#v", cloned.Workstations)
 	}
 	loopBreaker := cloned.Workstations[1]
-	if loopBreaker.Name != "review-loop-breaker" || loopBreaker.Type != interfaces.WorkstationTypeLogical {
+	if loopBreaker.Name != "review-loop-breaker" || loopBreaker.Type != factorydefinitions.WorkstationTypeLogical {
 		t.Fatalf("expected guarded logical move loop breaker to be preserved, got %#v", loopBreaker)
 	}
 	if len(loopBreaker.Guards) != 1 {
 		t.Fatalf("expected one loop-breaker guard, got %#v", loopBreaker.Guards)
 	}
-	if guard := loopBreaker.Guards[0]; guard.Type != interfaces.GuardTypeVisitCount || guard.Workstation != "review-story" || guard.MaxVisits != 3 {
+	if guard := loopBreaker.Guards[0]; guard.Type != factorydefinitions.GuardTypeVisitCount || guard.Workstation != "review-story" || guard.MaxVisits != 3 {
 		t.Fatalf("expected visit_count guard details to survive clone, got %#v", guard)
 	}
 
@@ -72,17 +72,17 @@ func TestCloneFactoryConfig_PreservesGuardedLogicalMoveLoopBreakerWorkstations(t
 }
 
 func TestCloneFactoryConfig_ClonesMatchesFieldsGuardMatchConfig(t *testing.T) {
-	cfg := &interfaces.FactoryConfig{
-		Workstations: []interfaces.FactoryWorkstationConfig{{
+	cfg := &factorydefinitions.FactoryConfig{
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{{
 			Name: "match-assets",
-			Guards: []interfaces.GuardConfig{{
-				Type:        interfaces.GuardTypeMatchesFields,
-				MatchConfig: &interfaces.GuardMatchConfig{InputKey: ".Name"},
+			Guards: []factorydefinitions.GuardConfig{{
+				Type:        factorydefinitions.GuardTypeMatchesFields,
+				MatchConfig: &factorydefinitions.GuardMatchConfig{InputKey: ".Name"},
 			}},
 		}},
 	}
 
-	cloned, err := interfaces.CloneFactoryConfig(cfg)
+	cloned, err := factorydefinitions.CloneFactoryConfig(cfg)
 	if err != nil {
 		t.Fatalf("CloneFactoryConfig: %v", err)
 	}
@@ -93,16 +93,16 @@ func TestCloneFactoryConfig_ClonesMatchesFieldsGuardMatchConfig(t *testing.T) {
 }
 
 func TestCloneFactoryConfig_PreservesFactoryGuards(t *testing.T) {
-	cfg := &interfaces.FactoryConfig{
-		Guards: []interfaces.FactoryGuardConfig{{
-			Type:          interfaces.GuardTypeInferenceThrottle,
+	cfg := &factorydefinitions.FactoryConfig{
+		Guards: []factorydefinitions.FactoryGuardConfig{{
+			Type:          factorydefinitions.GuardTypeInferenceThrottle,
 			ModelProvider: "claude",
 			Model:         "claude-sonnet",
 			RefreshWindow: "15m",
 		}},
 	}
 
-	cloned, err := interfaces.CloneFactoryConfig(cfg)
+	cloned, err := factorydefinitions.CloneFactoryConfig(cfg)
 	if err != nil {
 		t.Fatalf("CloneFactoryConfig: %v", err)
 	}
@@ -122,42 +122,42 @@ func TestCloneFactoryConfig_PreservesFactoryGuards(t *testing.T) {
 func TestCloneFactoryConfig_PreservesPortableLayout(t *testing.T) {
 	locked := true
 	parentGroupID := "group-root"
-	cfg := &interfaces.FactoryConfig{
-		Layout: &interfaces.FactoryLayoutConfig{
+	cfg := &factorydefinitions.FactoryConfig{
+		Layout: &factorydefinitions.FactoryLayoutConfig{
 			SchemaVersion: 1,
-			Nodes: []interfaces.FactoryLayoutNodeConfig{{
+			Nodes: []factorydefinitions.FactoryLayoutNodeConfig{{
 				ID:       "workstation:plan-task",
-				Position: interfaces.FactoryLayoutPointConfig{X: 144, Y: 288},
-				Size:     &interfaces.FactoryLayoutSizeConfig{Width: 320, Height: 180},
+				Position: factorydefinitions.FactoryLayoutPointConfig{X: 144, Y: 288},
+				Size:     &factorydefinitions.FactoryLayoutSizeConfig{Width: 320, Height: 180},
 				Locked:   &locked,
-				EmptyState: &interfaces.FactoryLayoutEmptyStateConfig{Image: &interfaces.FactoryLayoutImageConfig{
-					Source:          interfaces.FactoryLayoutImageSourceConfig{Kind: "EMBEDDED", MediaType: "image/png", Data: "AQID"},
+				EmptyState: &factorydefinitions.FactoryLayoutEmptyStateConfig{Image: &factorydefinitions.FactoryLayoutImageConfig{
+					Source:          factorydefinitions.FactoryLayoutImageSourceConfig{Kind: "EMBEDDED", MediaType: "image/png", Data: "AQID"},
 					AlternativeText: "Planning queue is empty",
 				}},
 			}},
-			Edges: []interfaces.FactoryLayoutEdgeConfig{{
+			Edges: []factorydefinitions.FactoryLayoutEdgeConfig{{
 				ID: "output:workstation:plan-task->work-type:story",
-				Waypoints: []interfaces.FactoryLayoutPointConfig{{
+				Waypoints: []factorydefinitions.FactoryLayoutPointConfig{{
 					X: 200,
 					Y: 300,
 				}},
-				LabelPosition: &interfaces.FactoryLayoutPointConfig{X: 220, Y: 280},
+				LabelPosition: &factorydefinitions.FactoryLayoutPointConfig{X: 220, Y: 280},
 			}},
-			Groups: []interfaces.FactoryLayoutGroupConfig{{
+			Groups: []factorydefinitions.FactoryLayoutGroupConfig{{
 				ID:            "group-1",
 				Label:         "Planning",
 				NodeIDs:       []string{"workstation:plan-task"},
-				Bounds:        interfaces.FactoryLayoutBoundsConfig{X: 100, Y: 220, Width: 420, Height: 240},
+				Bounds:        factorydefinitions.FactoryLayoutBoundsConfig{X: 100, Y: 220, Width: 420, Height: 240},
 				ParentGroupID: &parentGroupID,
 				Color:         "#ddeeff",
 				Locked:        &locked,
 			}},
-			Viewport:    &interfaces.FactoryLayoutViewportConfig{X: 40, Y: 60, Zoom: 0.85},
-			Preferences: &interfaces.FactoryLayoutPreferencesConfig{Direction: "RIGHT"},
+			Viewport:    &factorydefinitions.FactoryLayoutViewportConfig{X: 40, Y: 60, Zoom: 0.85},
+			Preferences: &factorydefinitions.FactoryLayoutPreferencesConfig{Direction: "RIGHT"},
 		},
 	}
 
-	cloned, err := interfaces.CloneFactoryConfig(cfg)
+	cloned, err := factorydefinitions.CloneFactoryConfig(cfg)
 	if err != nil {
 		t.Fatalf("CloneFactoryConfig: %v", err)
 	}
@@ -196,11 +196,11 @@ func TestCloneFactoryConfig_PreservesPortableLayout(t *testing.T) {
 }
 
 func TestCloneFactoryConfig_ClonesModelOperationBindingWorkContent(t *testing.T) {
-	cfg := &interfaces.FactoryConfig{
-		Workstations: []interfaces.FactoryWorkstationConfig{{
+	cfg := &factorydefinitions.FactoryConfig{
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{{
 			Name:      "writer",
 			Operation: "MODEL_INVOKE",
-			OperationBindings: []interfaces.ModelOperationBinding{{
+			OperationBindings: []factorydefinitions.ModelOperationBinding{{
 				Slot: "draft",
 				Config: []work.WorkContentPart{{
 					Type: work.WorkContentPartTypeText,
@@ -226,7 +226,7 @@ func TestCloneFactoryConfig_ClonesModelOperationBindingWorkContent(t *testing.T)
 		}},
 	}
 
-	cloned, err := interfaces.CloneFactoryConfig(cfg)
+	cloned, err := factorydefinitions.CloneFactoryConfig(cfg)
 	if err != nil {
 		t.Fatalf("CloneFactoryConfig: %v", err)
 	}
@@ -252,10 +252,10 @@ func TestCloneFactoryConfig_ClonesModelOperationBindingWorkContent(t *testing.T)
 }
 
 func TestCloneWorkerConfig_PreservesNilHostedConfig(t *testing.T) {
-	cloned := interfaces.CloneWorkerConfig(interfaces.FactoryWorkerConfig{
+	cloned := factorydefinitions.CloneWorkerConfig(factorydefinitions.FactoryWorkerConfig{
 		Name:     "hosted-linear",
-		Type:     interfaces.WorkerTypeHosted,
-		Provider: interfaces.HostedWorkerProviderLinear,
+		Type:     factorydefinitions.WorkerTypeHosted,
+		Provider: factorydefinitions.HostedWorkerProviderLinear,
 	})
 
 	if cloned.Auth != nil {
@@ -267,24 +267,24 @@ func TestCloneWorkerConfig_PreservesNilHostedConfig(t *testing.T) {
 }
 
 func TestCloneWorkerConfig_DetachesHostedNestedConfig(t *testing.T) {
-	source := interfaces.FactoryWorkerConfig{
+	source := factorydefinitions.FactoryWorkerConfig{
 		Name:     "hosted-linear",
-		Type:     interfaces.WorkerTypeHosted,
-		Provider: interfaces.HostedWorkerProviderLinear,
-		Auth: &interfaces.HostedWorkerAuthConfig{
+		Type:     factorydefinitions.WorkerTypeHosted,
+		Provider: factorydefinitions.HostedWorkerProviderLinear,
+		Auth: &factorydefinitions.HostedWorkerAuthConfig{
 			SecretRef: "linear-secret",
 		},
-		Linear: &interfaces.HostedLinearWorkerConfig{
+		Linear: &factorydefinitions.HostedLinearWorkerConfig{
 			PollInterval: "30s",
 			TeamIDs:      []string{"team-1", "team-2"},
 			StateIDs:     []string{"state-1", "state-2"},
-			Claim: &interfaces.HostedLinearWorkerClaimConfig{
+			Claim: &factorydefinitions.HostedLinearWorkerClaimConfig{
 				AssigneeField: "owner",
 			},
 		},
 	}
 
-	cloned := interfaces.CloneWorkerConfig(source)
+	cloned := factorydefinitions.CloneWorkerConfig(source)
 	if cloned.Auth == nil || cloned.Auth.SecretRef != "linear-secret" {
 		t.Fatalf("cloned auth = %#v, want preserved hosted auth", cloned.Auth)
 	}

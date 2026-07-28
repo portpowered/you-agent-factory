@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func containsAll(value string, substrings ...string) bool {
@@ -19,8 +19,8 @@ func containsAll(value string, substrings ...string) bool {
 
 func TestRuleFactoryGuards_InferenceThrottleRequiresModelProvider(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Guards = []interfaces.FactoryGuardConfig{{
-		Type:          interfaces.GuardTypeInferenceThrottle,
+	cfg.Guards = []factorydefinitions.FactoryGuardConfig{{
+		Type:          factorydefinitions.GuardTypeInferenceThrottle,
 		RefreshWindow: "15m",
 	}}
 
@@ -30,8 +30,8 @@ func TestRuleFactoryGuards_InferenceThrottleRequiresModelProvider(t *testing.T) 
 
 func TestRuleFactoryGuards_InferenceThrottleRejectsInvalidRefreshWindow(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Guards = []interfaces.FactoryGuardConfig{{
-		Type:          interfaces.GuardTypeInferenceThrottle,
+	cfg.Guards = []factorydefinitions.FactoryGuardConfig{{
+		Type:          factorydefinitions.GuardTypeInferenceThrottle,
 		ModelProvider: "claude",
 		RefreshWindow: "tomorrow",
 	}}
@@ -42,8 +42,8 @@ func TestRuleFactoryGuards_InferenceThrottleRejectsInvalidRefreshWindow(t *testi
 
 func TestRuleFactoryGuards_InferenceThrottleRejectsNonPositiveRefreshWindow(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Guards = []interfaces.FactoryGuardConfig{{
-		Type:          interfaces.GuardTypeInferenceThrottle,
+	cfg.Guards = []factorydefinitions.FactoryGuardConfig{{
+		Type:          factorydefinitions.GuardTypeInferenceThrottle,
 		ModelProvider: "claude",
 		RefreshWindow: "0s",
 	}}
@@ -54,7 +54,7 @@ func TestRuleFactoryGuards_InferenceThrottleRejectsNonPositiveRefreshWindow(t *t
 
 func TestRuleFactoryGuards_RejectsUnsupportedType(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Guards = []interfaces.FactoryGuardConfig{{Type: interfaces.GuardTypeVisitCount}}
+	cfg.Guards = []factorydefinitions.FactoryGuardConfig{{Type: factorydefinitions.GuardTypeVisitCount}}
 
 	findings := ruleFactoryGuards(cfg)
 	assertFindingMatch(t, findings, "factory-guard-unknown-type", "guards[0](visit_count)", "factory guards support: inference_throttle_guard")
@@ -62,8 +62,8 @@ func TestRuleFactoryGuards_RejectsUnsupportedType(t *testing.T) {
 
 func TestRuleFactoryGuards_ValidInferenceThrottleGuard(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Guards = []interfaces.FactoryGuardConfig{{
-		Type:          interfaces.GuardTypeInferenceThrottle,
+	cfg.Guards = []factorydefinitions.FactoryGuardConfig{{
+		Type:          factorydefinitions.GuardTypeInferenceThrottle,
 		ModelProvider: "claude",
 		Model:         "claude-sonnet-4-20250514",
 		RefreshWindow: "15m",
@@ -77,9 +77,9 @@ func TestRuleFactoryGuards_ValidInferenceThrottleGuard(t *testing.T) {
 
 func TestRuleGuards_VisitCountMissingWorkstation(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:   "ws",
-		Guards: []interfaces.GuardConfig{{Type: interfaces.GuardTypeVisitCount, MaxVisits: 3}},
+		Guards: []factorydefinitions.GuardConfig{{Type: factorydefinitions.GuardTypeVisitCount, MaxVisits: 3}},
 	}}
 	findings := ruleGuards(cfg)
 	assertFindingExists(t, findings, "guard-visit-count-workstation")
@@ -87,9 +87,9 @@ func TestRuleGuards_VisitCountMissingWorkstation(t *testing.T) {
 
 func TestRuleGuards_VisitCountInvalidWorkstation(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:   "ws",
-		Guards: []interfaces.GuardConfig{{Type: interfaces.GuardTypeVisitCount, Workstation: "nonexistent", MaxVisits: 3}},
+		Guards: []factorydefinitions.GuardConfig{{Type: factorydefinitions.GuardTypeVisitCount, Workstation: "nonexistent", MaxVisits: 3}},
 	}}
 	findings := ruleGuards(cfg)
 	assertFindingExists(t, findings, "guard-visit-count-workstation")
@@ -97,8 +97,8 @@ func TestRuleGuards_VisitCountInvalidWorkstation(t *testing.T) {
 
 func TestRuleGuards_VisitCountZeroMaxVisits(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{
-		{Name: "ws", Guards: []interfaces.GuardConfig{{Type: interfaces.GuardTypeVisitCount, Workstation: "ws", MaxVisits: 0}}},
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{
+		{Name: "ws", Guards: []factorydefinitions.GuardConfig{{Type: factorydefinitions.GuardTypeVisitCount, Workstation: "ws", MaxVisits: 0}}},
 	}
 	findings := ruleGuards(cfg)
 	assertFindingExists(t, findings, "guard-visit-count-max-visits")
@@ -106,9 +106,9 @@ func TestRuleGuards_VisitCountZeroMaxVisits(t *testing.T) {
 
 func TestRuleGuards_MatchesFieldsMissingMatchConfig(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:   "ws",
-		Guards: []interfaces.GuardConfig{{Type: interfaces.GuardTypeMatchesFields}},
+		Guards: []factorydefinitions.GuardConfig{{Type: factorydefinitions.GuardTypeMatchesFields}},
 	}}
 
 	findings := ruleGuards(cfg)
@@ -119,11 +119,11 @@ func TestRuleGuards_MatchesFieldsMissingMatchConfig(t *testing.T) {
 
 func TestRuleGuards_MatchesFieldsEmptyInputKey(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name: "ws",
-		Guards: []interfaces.GuardConfig{{
-			Type:        interfaces.GuardTypeMatchesFields,
-			MatchConfig: &interfaces.GuardMatchConfig{InputKey: "   "},
+		Guards: []factorydefinitions.GuardConfig{{
+			Type:        factorydefinitions.GuardTypeMatchesFields,
+			MatchConfig: &factorydefinitions.GuardMatchConfig{InputKey: "   "},
 		}},
 	}}
 
@@ -135,13 +135,13 @@ func TestRuleGuards_MatchesFieldsEmptyInputKey(t *testing.T) {
 
 func TestRuleHostedWorkers_AcceptsHostedLinearWorker(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.FactoryWorkerConfig{{
+	cfg.Workers = []factorydefinitions.FactoryWorkerConfig{{
 		Name:     "linear-poller",
-		Type:     interfaces.WorkerTypeHosted,
-		Provider: interfaces.HostedWorkerProviderLinear,
-		Auth:     &interfaces.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
-		Linear: &interfaces.HostedLinearWorkerConfig{
-			Mapping: interfaces.HostedLinearWorkerMappingConfig{WorkType: "story", State: "init"},
+		Type:     factorydefinitions.WorkerTypeHosted,
+		Provider: factorydefinitions.HostedWorkerProviderLinear,
+		Auth:     &factorydefinitions.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
+		Linear: &factorydefinitions.HostedLinearWorkerConfig{
+			Mapping: factorydefinitions.HostedLinearWorkerMappingConfig{WorkType: "story", State: "init"},
 		},
 	}}
 
@@ -153,12 +153,12 @@ func TestRuleHostedWorkers_AcceptsHostedLinearWorker(t *testing.T) {
 
 func TestRuleHostedWorkers_RejectsMissingSecretRefAndMapping(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.FactoryWorkerConfig{{
+	cfg.Workers = []factorydefinitions.FactoryWorkerConfig{{
 		Name:     "linear-poller",
-		Type:     interfaces.WorkerTypeHosted,
-		Provider: interfaces.HostedWorkerProviderLinear,
-		Auth:     &interfaces.HostedWorkerAuthConfig{},
-		Linear:   &interfaces.HostedLinearWorkerConfig{},
+		Type:     factorydefinitions.WorkerTypeHosted,
+		Provider: factorydefinitions.HostedWorkerProviderLinear,
+		Auth:     &factorydefinitions.HostedWorkerAuthConfig{},
+		Linear:   &factorydefinitions.HostedLinearWorkerConfig{},
 	}}
 
 	findings := ruleHostedWorkers(cfg)
@@ -169,13 +169,13 @@ func TestRuleHostedWorkers_RejectsMissingSecretRefAndMapping(t *testing.T) {
 
 func TestRuleHostedWorkers_RejectsHostedFieldsOnNonHostedWorker(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.FactoryWorkerConfig{{
+	cfg.Workers = []factorydefinitions.FactoryWorkerConfig{{
 		Name:     "executor",
-		Type:     interfaces.WorkerTypeModel,
-		Provider: interfaces.HostedWorkerProviderLinear,
-		Auth:     &interfaces.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
-		Linear: &interfaces.HostedLinearWorkerConfig{
-			Mapping: interfaces.HostedLinearWorkerMappingConfig{WorkType: "story", State: "init"},
+		Type:     factorydefinitions.WorkerTypeModel,
+		Provider: factorydefinitions.HostedWorkerProviderLinear,
+		Auth:     &factorydefinitions.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
+		Linear: &factorydefinitions.HostedLinearWorkerConfig{
+			Mapping: factorydefinitions.HostedLinearWorkerMappingConfig{WorkType: "story", State: "init"},
 		},
 	}}
 
@@ -187,11 +187,11 @@ func TestRuleHostedWorkers_RejectsHostedFieldsOnNonHostedWorker(t *testing.T) {
 
 func TestRuleGuards_ValidMatchesFieldsGuard(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name: "ws",
-		Guards: []interfaces.GuardConfig{{
-			Type:        interfaces.GuardTypeMatchesFields,
-			MatchConfig: &interfaces.GuardMatchConfig{InputKey: `.Tags["_last_output"]`},
+		Guards: []factorydefinitions.GuardConfig{{
+			Type:        factorydefinitions.GuardTypeMatchesFields,
+			MatchConfig: &factorydefinitions.GuardMatchConfig{InputKey: `.Tags["_last_output"]`},
 		}},
 	}}
 
@@ -203,9 +203,9 @@ func TestRuleGuards_ValidMatchesFieldsGuard(t *testing.T) {
 
 func TestRuleGuards_UnknownType(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:   "ws",
-		Guards: []interfaces.GuardConfig{{Type: "bogus"}},
+		Guards: []factorydefinitions.GuardConfig{{Type: "bogus"}},
 	}}
 	findings := ruleGuards(cfg)
 	assertFindingExists(t, findings, "guard-unknown-type")
@@ -214,18 +214,18 @@ func TestRuleGuards_UnknownType(t *testing.T) {
 func TestRuleGuards_RejectsWorkstationLevelChildFanInTypes(t *testing.T) {
 	tests := []struct {
 		name      string
-		guardType interfaces.GuardType
+		guardType factorydefinitions.GuardType
 	}{
-		{name: "all children complete", guardType: interfaces.GuardTypeAllChildrenComplete},
-		{name: "any child failed", guardType: interfaces.GuardTypeAnyChildFailed},
+		{name: "all children complete", guardType: factorydefinitions.GuardTypeAllChildrenComplete},
+		{name: "any child failed", guardType: factorydefinitions.GuardTypeAnyChildFailed},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := testBaseConfig()
-			cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+			cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 				Name:   "ws",
-				Guards: []interfaces.GuardConfig{{Type: tt.guardType}},
+				Guards: []factorydefinitions.GuardConfig{{Type: tt.guardType}},
 			}}
 			findings := ruleGuards(cfg)
 			assertFindingExists(t, findings, "guard-unknown-type")
@@ -238,10 +238,10 @@ func TestRuleGuards_RejectsWorkstationLevelChildFanInTypes(t *testing.T) {
 
 func TestRuleGuards_ValidGuards(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name: "ws",
-		Guards: []interfaces.GuardConfig{
-			{Type: interfaces.GuardTypeVisitCount, Workstation: "ws", MaxVisits: 3},
+		Guards: []factorydefinitions.GuardConfig{
+			{Type: factorydefinitions.GuardTypeVisitCount, Workstation: "ws", MaxVisits: 3},
 		},
 	}}
 	findings := ruleGuards(cfg)
@@ -252,18 +252,18 @@ func TestRuleGuards_ValidGuards(t *testing.T) {
 
 func TestRuleWorkstationKind_UnknownKind(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{Name: "ws", Kind: "bogus"}}
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{Name: "ws", Kind: "bogus"}}
 	findings := ruleWorkstationKind(cfg)
 	assertFindingExists(t, findings, "workstation-kind")
 }
 
 func TestRuleClassifierWorkstations_RejectsNonClassifierWithoutOutputs(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:           "process-task",
-		Type:           interfaces.WorkstationTypeModel,
+		Type:           factorydefinitions.WorkstationTypeModel,
 		WorkerTypeName: "w1",
-		Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		Inputs:         []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
 	}}
 
 	findings := ruleClassifierWorkstations(cfg)
@@ -272,12 +272,12 @@ func TestRuleClassifierWorkstations_RejectsNonClassifierWithoutOutputs(t *testin
 
 func TestRuleClassifierWorkstations_AllowsNonClassifierWithoutOnFailureWhenOutputsPresent(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:           "process-task",
-		Type:           interfaces.WorkstationTypeModel,
+		Type:           factorydefinitions.WorkstationTypeModel,
 		WorkerTypeName: "w1",
-		Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-		Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+		Inputs:         []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		Outputs:        []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "done"}},
 	}}
 
 	findings := ruleClassifierWorkstations(cfg)
@@ -288,14 +288,14 @@ func TestRuleClassifierWorkstations_AllowsNonClassifierWithoutOnFailureWhenOutpu
 
 func TestRuleClassifierWorkstations_RejectsNonClassifierClassificationRoutes(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:           "process-task",
-		Type:           interfaces.WorkstationTypeModel,
+		Type:           factorydefinitions.WorkstationTypeModel,
 		WorkerTypeName: "w1",
-		Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-		Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
-		ClassificationRoutes: []interfaces.ClassificationRouteConfig{
-			{Label: "approved", Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}}},
+		Inputs:         []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		Outputs:        []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+		ClassificationRoutes: []factorydefinitions.ClassificationRouteConfig{
+			{Label: "approved", Outputs: []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "done"}}},
 		},
 	}}
 
@@ -305,14 +305,14 @@ func TestRuleClassifierWorkstations_RejectsNonClassifierClassificationRoutes(t *
 
 func TestRuleClassifierWorkstations_RejectsMissingRoutesAndLegacySuccessPaths(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:           "classify-story",
-		Type:           interfaces.WorkstationTypeClassify,
+		Type:           factorydefinitions.WorkstationTypeClassify,
 		WorkerTypeName: "w1",
-		Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-		Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
-		OnContinue:     []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-		OnRejection:    []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
+		Inputs:         []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		Outputs:        []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+		OnContinue:     []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		OnRejection:    []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
 	}}
 
 	findings := ruleClassifierWorkstations(cfg)
@@ -324,17 +324,17 @@ func TestRuleClassifierWorkstations_RejectsMissingRoutesAndLegacySuccessPaths(t 
 
 func TestRuleClassifierWorkstations_RejectsDuplicateLabelsWhitespaceAndEmptyOutputs(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:           "classify-story",
-		Type:           interfaces.WorkstationTypeClassify,
+		Type:           factorydefinitions.WorkstationTypeClassify,
 		WorkerTypeName: "w1",
-		Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-		ClassificationRoutes: []interfaces.ClassificationRouteConfig{
-			{Label: "approved", Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}}},
+		Inputs:         []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		ClassificationRoutes: []factorydefinitions.ClassificationRouteConfig{
+			{Label: "approved", Outputs: []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "done"}}},
 			{Label: "approved"},
-			{Label: " needs_review ", Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "review"}}},
-			{Label: "123", Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "review"}}},
-			{Label: "   ", Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}}},
+			{Label: " needs_review ", Outputs: []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "review"}}},
+			{Label: "123", Outputs: []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "review"}}},
+			{Label: "   ", Outputs: []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "failed"}}},
 		},
 	}}
 
@@ -345,16 +345,16 @@ func TestRuleClassifierWorkstations_RejectsDuplicateLabelsWhitespaceAndEmptyOutp
 
 func TestRuleClassifierWorkstations_AllowsValidClassifierTopology(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:           "classify-story",
-		Type:           interfaces.WorkstationTypeClassify,
+		Type:           factorydefinitions.WorkstationTypeClassify,
 		WorkerTypeName: "w1",
-		Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-		ClassificationRoutes: []interfaces.ClassificationRouteConfig{
-			{Label: "approved", Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}}},
-			{Label: "needs_review", Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}}},
+		Inputs:         []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		ClassificationRoutes: []factorydefinitions.ClassificationRouteConfig{
+			{Label: "approved", Outputs: []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "done"}}},
+			{Label: "needs_review", Outputs: []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "failed"}}},
 		},
-		OnFailure: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
+		OnFailure: []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
 	}}
 
 	findings := ruleClassifierWorkstations(cfg)
@@ -365,14 +365,14 @@ func TestRuleClassifierWorkstations_AllowsValidClassifierTopology(t *testing.T) 
 
 func TestRuleClassifierWorkstations_AllowsClassifierWithoutOnFailureWhenRoutesPresent(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:           "classify-story",
-		Type:           interfaces.WorkstationTypeClassify,
+		Type:           factorydefinitions.WorkstationTypeClassify,
 		WorkerTypeName: "w1",
-		Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-		ClassificationRoutes: []interfaces.ClassificationRouteConfig{
-			{Label: "approved", Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}}},
-			{Label: "needs_review", Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}}},
+		Inputs:         []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		ClassificationRoutes: []factorydefinitions.ClassificationRouteConfig{
+			{Label: "approved", Outputs: []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "done"}}},
+			{Label: "needs_review", Outputs: []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "failed"}}},
 		},
 	}}
 
@@ -384,17 +384,17 @@ func TestRuleClassifierWorkstations_AllowsClassifierWithoutOnFailureWhenRoutesPr
 
 func TestRuleCronWorkstations_ValidScheduleCron(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:           "daily-refresh",
-		Kind:           interfaces.WorkstationKindCron,
+		Kind:           factorydefinitions.WorkstationKindCron,
 		WorkerTypeName: "w1",
-		Cron: &interfaces.CronConfig{
+		Cron: &factorydefinitions.CronConfig{
 			Schedule:       "0 * * * *",
 			TriggerAtStart: true,
 			Jitter:         "30s",
 			ExpiryWindow:   "10m",
 		},
-		Outputs: []interfaces.IOConfig{{
+		Outputs: []factorydefinitions.IOConfig{{
 			WorkTypeName: "task",
 			StateName:    "init",
 		}},
@@ -407,16 +407,16 @@ func TestRuleCronWorkstations_ValidScheduleCron(t *testing.T) {
 
 func TestRuleCronWorkstations_ValidRequiredInputCron(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:           "refresh-ready-task",
-		Kind:           interfaces.WorkstationKindCron,
+		Kind:           factorydefinitions.WorkstationKindCron,
 		WorkerTypeName: "w1",
-		Cron:           &interfaces.CronConfig{Schedule: "0 * * * *"},
-		Inputs: []interfaces.IOConfig{{
+		Cron:           &factorydefinitions.CronConfig{Schedule: "0 * * * *"},
+		Inputs: []factorydefinitions.IOConfig{{
 			WorkTypeName: "task",
 			StateName:    "init",
 		}},
-		Outputs: []interfaces.IOConfig{{
+		Outputs: []factorydefinitions.IOConfig{{
 			WorkTypeName: "task",
 			StateName:    "done",
 		}},
@@ -429,10 +429,10 @@ func TestRuleCronWorkstations_ValidRequiredInputCron(t *testing.T) {
 
 func TestRuleCronWorkstations_MissingCronConfig(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:    "daily-refresh",
-		Kind:    interfaces.WorkstationKindCron,
-		Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		Kind:    factorydefinitions.WorkstationKindCron,
+		Outputs: []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
 	}}
 	findings := ruleCronWorkstations(cfg)
 	assertFindingExists(t, findings, "cron-config")
@@ -440,11 +440,11 @@ func TestRuleCronWorkstations_MissingCronConfig(t *testing.T) {
 
 func TestRuleCronWorkstations_MissingSchedule(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:    "daily-refresh",
-		Kind:    interfaces.WorkstationKindCron,
-		Cron:    &interfaces.CronConfig{},
-		Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		Kind:    factorydefinitions.WorkstationKindCron,
+		Cron:    &factorydefinitions.CronConfig{},
+		Outputs: []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
 	}}
 	findings := ruleCronWorkstations(cfg)
 	assertFindingExists(t, findings, "cron-schedule")
@@ -452,11 +452,11 @@ func TestRuleCronWorkstations_MissingSchedule(t *testing.T) {
 
 func TestRuleCronWorkstations_InvalidScheduleNamesWorkstationAndValue(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:    "daily-refresh",
-		Kind:    interfaces.WorkstationKindCron,
-		Cron:    &interfaces.CronConfig{Schedule: "not a cron"},
-		Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		Kind:    factorydefinitions.WorkstationKindCron,
+		Cron:    &factorydefinitions.CronConfig{Schedule: "not a cron"},
+		Outputs: []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
 	}}
 	findings := ruleCronWorkstations(cfg)
 	assertFindingExists(t, findings, "cron-schedule")
@@ -469,16 +469,16 @@ func TestRuleCronWorkstations_InvalidScheduleNamesWorkstationAndValue(t *testing
 }
 
 func TestRuleCronWorkstations_UnsupportedIntervalNamesWorkstationAndField(t *testing.T) {
-	var cron interfaces.CronConfig
+	var cron factorydefinitions.CronConfig
 	if err := json.Unmarshal([]byte(`{"interval":"5m"}`), &cron); err != nil {
 		t.Fatalf("unmarshal cron config: %v", err)
 	}
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:    "daily-refresh",
-		Kind:    interfaces.WorkstationKindCron,
+		Kind:    factorydefinitions.WorkstationKindCron,
 		Cron:    &cron,
-		Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		Outputs: []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
 	}}
 	findings := ruleCronWorkstations(cfg)
 	assertFindingExists(t, findings, "cron-interval")
@@ -489,11 +489,11 @@ func TestRuleCronWorkstations_UnsupportedIntervalNamesWorkstationAndField(t *tes
 
 func TestRuleCronWorkstations_InvalidJitterNamesWorkstationAndField(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:    "daily-refresh",
-		Kind:    interfaces.WorkstationKindCron,
-		Cron:    &interfaces.CronConfig{Schedule: "0 * * * *", Jitter: "-1s"},
-		Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		Kind:    factorydefinitions.WorkstationKindCron,
+		Cron:    &factorydefinitions.CronConfig{Schedule: "0 * * * *", Jitter: "-1s"},
+		Outputs: []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
 	}}
 	findings := ruleCronWorkstations(cfg)
 	assertFindingExists(t, findings, "cron-jitter")
@@ -504,11 +504,11 @@ func TestRuleCronWorkstations_InvalidJitterNamesWorkstationAndField(t *testing.T
 
 func TestRuleCronWorkstations_InvalidExpiryWindowNamesWorkstationAndField(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:    "daily-refresh",
-		Kind:    interfaces.WorkstationKindCron,
-		Cron:    &interfaces.CronConfig{Schedule: "0 * * * *", ExpiryWindow: "0s"},
-		Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		Kind:    factorydefinitions.WorkstationKindCron,
+		Cron:    &factorydefinitions.CronConfig{Schedule: "0 * * * *", ExpiryWindow: "0s"},
+		Outputs: []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
 	}}
 	findings := ruleCronWorkstations(cfg)
 	assertFindingExists(t, findings, "cron-expiry-window")
@@ -519,11 +519,11 @@ func TestRuleCronWorkstations_InvalidExpiryWindowNamesWorkstationAndField(t *tes
 
 func TestRuleCronWorkstations_MissingOutput(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:           "daily-refresh",
-		Kind:           interfaces.WorkstationKindCron,
+		Kind:           factorydefinitions.WorkstationKindCron,
 		WorkerTypeName: "w1",
-		Cron:           &interfaces.CronConfig{Schedule: "0 * * * *"},
+		Cron:           &factorydefinitions.CronConfig{Schedule: "0 * * * *"},
 	}}
 	findings := ruleCronWorkstations(cfg)
 	assertFindingExists(t, findings, "cron-output")
@@ -531,12 +531,12 @@ func TestRuleCronWorkstations_MissingOutput(t *testing.T) {
 
 func TestRuleCronWorkstations_ValidLogicalMoveCronWithoutWorker(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name: "scheduled-route",
-		Type: interfaces.WorkstationTypeLogical,
-		Kind: interfaces.WorkstationKindCron,
-		Cron: &interfaces.CronConfig{Schedule: "0 * * * *"},
-		Outputs: []interfaces.IOConfig{{
+		Type: factorydefinitions.WorkstationTypeLogical,
+		Kind: factorydefinitions.WorkstationKindCron,
+		Cron: &factorydefinitions.CronConfig{Schedule: "0 * * * *"},
+		Outputs: []factorydefinitions.IOConfig{{
 			WorkTypeName: "task",
 			StateName:    "init",
 		}},
@@ -549,12 +549,12 @@ func TestRuleCronWorkstations_ValidLogicalMoveCronWithoutWorker(t *testing.T) {
 
 func TestRuleCronWorkstations_MissingWorker(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name: "daily-refresh",
-		Type: interfaces.WorkstationTypeModel,
-		Kind: interfaces.WorkstationKindCron,
-		Cron: &interfaces.CronConfig{Schedule: "0 * * * *"},
-		Outputs: []interfaces.IOConfig{{
+		Type: factorydefinitions.WorkstationTypeModel,
+		Kind: factorydefinitions.WorkstationKindCron,
+		Cron: &factorydefinitions.CronConfig{Schedule: "0 * * * *"},
+		Outputs: []factorydefinitions.IOConfig{{
 			WorkTypeName: "task",
 			StateName:    "init",
 		}},
@@ -568,10 +568,10 @@ func TestRuleCronWorkstations_MissingWorker(t *testing.T) {
 
 func TestRuleCronWorkstations_NonCronWithCronConfig(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name: "processor",
-		Kind: interfaces.WorkstationKindStandard,
-		Cron: &interfaces.CronConfig{Schedule: "0 * * * *"},
+		Kind: factorydefinitions.WorkstationKindStandard,
+		Cron: &factorydefinitions.CronConfig{Schedule: "0 * * * *"},
 	}}
 	findings := ruleCronWorkstations(cfg)
 	assertFindingExists(t, findings, "cron-type")
@@ -579,15 +579,15 @@ func TestRuleCronWorkstations_NonCronWithCronConfig(t *testing.T) {
 
 func TestRuleWorkerReferences_NonexistentWorker(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{Name: "ws", WorkerTypeName: "nonexistent"}}
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{Name: "ws", WorkerTypeName: "nonexistent"}}
 	findings := ruleWorkerReferences(cfg)
 	assertFindingExists(t, findings, "workstation-worker-ref")
 }
 
 func TestRuleWorkstationKindAndWorker_ValidConfig(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
-		Name: "ws", Kind: interfaces.WorkstationKindRepeater, WorkerTypeName: "w1",
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
+		Name: "ws", Kind: factorydefinitions.WorkstationKindRepeater, WorkerTypeName: "w1",
 	}}
 	f1 := ruleWorkstationKind(cfg)
 	f2 := ruleWorkerReferences(cfg)
@@ -598,9 +598,9 @@ func TestRuleWorkstationKindAndWorker_ValidConfig(t *testing.T) {
 
 func TestRuleWorkstationKind_AcceptsPoller(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:           "poller",
-		Kind:           interfaces.WorkstationKindPoller,
+		Kind:           factorydefinitions.WorkstationKindPoller,
 		WorkerTypeName: "w1",
 	}}
 
@@ -611,13 +611,13 @@ func TestRuleWorkstationKind_AcceptsPoller(t *testing.T) {
 
 func TestRulePollerWorkstations_RejectsUnsupportedWorkerType(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.FactoryWorkerConfig{{
+	cfg.Workers = []factorydefinitions.FactoryWorkerConfig{{
 		Name: "planner",
-		Type: interfaces.WorkerTypeModel,
+		Type: factorydefinitions.WorkerTypeModel,
 	}}
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:           "linear-poller",
-		Kind:           interfaces.WorkstationKindPoller,
+		Kind:           factorydefinitions.WorkstationKindPoller,
 		WorkerTypeName: "planner",
 	}}
 
@@ -633,13 +633,13 @@ func TestRulePollerWorkstations_RejectsUnsupportedWorkerType(t *testing.T) {
 
 func TestRulePollerWorkstations_AcceptsScriptAndHostedWorkers(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.FactoryWorkerConfig{
-		{Name: "script-poller", Type: interfaces.WorkerTypeScript},
-		{Name: "hosted-poller", Type: interfaces.WorkerTypeHosted},
+	cfg.Workers = []factorydefinitions.FactoryWorkerConfig{
+		{Name: "script-poller", Type: factorydefinitions.WorkerTypeScript},
+		{Name: "hosted-poller", Type: factorydefinitions.WorkerTypeHosted},
 	}
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{
-		{Name: "script", Kind: interfaces.WorkstationKindPoller, WorkerTypeName: "script-poller"},
-		{Name: "hosted", Kind: interfaces.WorkstationKindPoller, WorkerTypeName: "hosted-poller"},
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{
+		{Name: "script", Kind: factorydefinitions.WorkstationKindPoller, WorkerTypeName: "script-poller"},
+		{Name: "hosted", Kind: factorydefinitions.WorkstationKindPoller, WorkerTypeName: "hosted-poller"},
 	}
 
 	if findings := rulePollerWorkstations(cfg); len(findings) != 0 {
@@ -649,11 +649,11 @@ func TestRulePollerWorkstations_AcceptsScriptAndHostedWorkers(t *testing.T) {
 
 func TestRulePerInputGuards_MissingParentInput(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name: "ws",
-		Inputs: []interfaces.IOConfig{{
+		Inputs: []factorydefinitions.IOConfig{{
 			WorkTypeName: "task", StateName: "init",
-			Guard: &interfaces.InputGuardConfig{Type: interfaces.GuardTypeAllChildrenComplete},
+			Guard: &factorydefinitions.InputGuardConfig{Type: factorydefinitions.GuardTypeAllChildrenComplete},
 		}},
 	}}
 	findings := rulePerInputGuards(cfg)
@@ -662,11 +662,11 @@ func TestRulePerInputGuards_MissingParentInput(t *testing.T) {
 
 func TestRulePerInputGuards_ParentInputNotMatching(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name: "ws",
-		Inputs: []interfaces.IOConfig{{
+		Inputs: []factorydefinitions.IOConfig{{
 			WorkTypeName: "task", StateName: "init",
-			Guard: &interfaces.InputGuardConfig{Type: interfaces.GuardTypeAllChildrenComplete, ParentInput: "other"},
+			Guard: &factorydefinitions.InputGuardConfig{Type: factorydefinitions.GuardTypeAllChildrenComplete, ParentInput: "other"},
 		}},
 	}}
 	findings := rulePerInputGuards(cfg)
@@ -675,11 +675,11 @@ func TestRulePerInputGuards_ParentInputNotMatching(t *testing.T) {
 
 func TestRulePerInputGuards_SelfReference(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name: "ws",
-		Inputs: []interfaces.IOConfig{{
+		Inputs: []factorydefinitions.IOConfig{{
 			WorkTypeName: "task", StateName: "init",
-			Guard: &interfaces.InputGuardConfig{Type: interfaces.GuardTypeAllChildrenComplete, ParentInput: "task"},
+			Guard: &factorydefinitions.InputGuardConfig{Type: factorydefinitions.GuardTypeAllChildrenComplete, ParentInput: "task"},
 		}},
 	}}
 	findings := rulePerInputGuards(cfg)
@@ -688,16 +688,16 @@ func TestRulePerInputGuards_SelfReference(t *testing.T) {
 
 func TestRulePerInputGuards_InvalidSpawnedBy(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.WorkTypes = append(cfg.WorkTypes, interfaces.WorkTypeConfig{
-		Name: "parent", States: []interfaces.StateConfig{{Name: "init", Type: interfaces.StateTypeInitial}},
+	cfg.WorkTypes = append(cfg.WorkTypes, factorydefinitions.WorkTypeConfig{
+		Name: "parent", States: []factorydefinitions.StateConfig{{Name: "init", Type: factorydefinitions.StateTypeInitial}},
 	})
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name: "ws",
-		Inputs: []interfaces.IOConfig{
+		Inputs: []factorydefinitions.IOConfig{
 			{WorkTypeName: "parent", StateName: "init"},
 			{
 				WorkTypeName: "task", StateName: "init",
-				Guard: &interfaces.InputGuardConfig{Type: interfaces.GuardTypeAllChildrenComplete, ParentInput: "parent", SpawnedBy: "nonexistent"},
+				Guard: &factorydefinitions.InputGuardConfig{Type: factorydefinitions.GuardTypeAllChildrenComplete, ParentInput: "parent", SpawnedBy: "nonexistent"},
 			},
 		},
 	}}
@@ -707,11 +707,11 @@ func TestRulePerInputGuards_InvalidSpawnedBy(t *testing.T) {
 
 func TestRulePerInputGuards_UnsupportedType(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name: "ws",
-		Inputs: []interfaces.IOConfig{{
+		Inputs: []factorydefinitions.IOConfig{{
 			WorkTypeName: "task", StateName: "init",
-			Guard: &interfaces.InputGuardConfig{Type: interfaces.GuardTypeVisitCount},
+			Guard: &factorydefinitions.InputGuardConfig{Type: factorydefinitions.GuardTypeVisitCount},
 		}},
 	}}
 	findings := rulePerInputGuards(cfg)
@@ -720,14 +720,14 @@ func TestRulePerInputGuards_UnsupportedType(t *testing.T) {
 
 func TestRulePerInputGuards_SameNameMissingMatchInput(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name: "ws",
-		Inputs: []interfaces.IOConfig{
+		Inputs: []factorydefinitions.IOConfig{
 			{WorkTypeName: "plan", StateName: "init"},
 			{
 				WorkTypeName: "task",
 				StateName:    "init",
-				Guard:        &interfaces.InputGuardConfig{Type: interfaces.GuardTypeSameName},
+				Guard:        &factorydefinitions.InputGuardConfig{Type: factorydefinitions.GuardTypeSameName},
 			},
 		},
 	}}
@@ -737,15 +737,15 @@ func TestRulePerInputGuards_SameNameMissingMatchInput(t *testing.T) {
 
 func TestRulePerInputGuards_SameNameMatchInputNotMatching(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name: "ws",
-		Inputs: []interfaces.IOConfig{
+		Inputs: []factorydefinitions.IOConfig{
 			{WorkTypeName: "plan", StateName: "init"},
 			{
 				WorkTypeName: "task",
 				StateName:    "init",
-				Guard: &interfaces.InputGuardConfig{
-					Type:       interfaces.GuardTypeSameName,
+				Guard: &factorydefinitions.InputGuardConfig{
+					Type:       factorydefinitions.GuardTypeSameName,
 					MatchInput: "other",
 				},
 			},
@@ -757,15 +757,15 @@ func TestRulePerInputGuards_SameNameMatchInputNotMatching(t *testing.T) {
 
 func TestRulePerInputGuards_SameNameSelfReference(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name: "ws",
-		Inputs: []interfaces.IOConfig{
+		Inputs: []factorydefinitions.IOConfig{
 			{WorkTypeName: "plan", StateName: "init"},
 			{
 				WorkTypeName: "task",
 				StateName:    "init",
-				Guard: &interfaces.InputGuardConfig{
-					Type:       interfaces.GuardTypeSameName,
+				Guard: &factorydefinitions.InputGuardConfig{
+					Type:       factorydefinitions.GuardTypeSameName,
 					MatchInput: "task",
 				},
 			},
@@ -777,15 +777,15 @@ func TestRulePerInputGuards_SameNameSelfReference(t *testing.T) {
 
 func TestRulePerInputGuards_ValidSameNameGuard(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name: "ws",
-		Inputs: []interfaces.IOConfig{
+		Inputs: []factorydefinitions.IOConfig{
 			{WorkTypeName: "plan", StateName: "init"},
 			{
 				WorkTypeName: "task",
 				StateName:    "init",
-				Guard: &interfaces.InputGuardConfig{
-					Type:       interfaces.GuardTypeSameName,
+				Guard: &factorydefinitions.InputGuardConfig{
+					Type:       factorydefinitions.GuardTypeSameName,
 					MatchInput: "plan",
 				},
 			},
@@ -799,14 +799,14 @@ func TestRulePerInputGuards_ValidSameNameGuard(t *testing.T) {
 
 func TestRulePerInputGuards_SameTraceIDMissingMatchInput(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name: "ws",
-		Inputs: []interfaces.IOConfig{
+		Inputs: []factorydefinitions.IOConfig{
 			{WorkTypeName: "plan", StateName: "init"},
 			{
 				WorkTypeName: "task",
 				StateName:    "init",
-				Guard:        &interfaces.InputGuardConfig{Type: interfaces.GuardTypeSameTraceID},
+				Guard:        &factorydefinitions.InputGuardConfig{Type: factorydefinitions.GuardTypeSameTraceID},
 			},
 		},
 	}}
@@ -816,15 +816,15 @@ func TestRulePerInputGuards_SameTraceIDMissingMatchInput(t *testing.T) {
 
 func TestRulePerInputGuards_SameTraceIDMatchInputNotMatching(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name: "ws",
-		Inputs: []interfaces.IOConfig{
+		Inputs: []factorydefinitions.IOConfig{
 			{WorkTypeName: "plan", StateName: "init"},
 			{
 				WorkTypeName: "task",
 				StateName:    "init",
-				Guard: &interfaces.InputGuardConfig{
-					Type:       interfaces.GuardTypeSameTraceID,
+				Guard: &factorydefinitions.InputGuardConfig{
+					Type:       factorydefinitions.GuardTypeSameTraceID,
 					MatchInput: "other",
 				},
 			},
@@ -836,15 +836,15 @@ func TestRulePerInputGuards_SameTraceIDMatchInputNotMatching(t *testing.T) {
 
 func TestRulePerInputGuards_SameTraceIDSelfReference(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name: "ws",
-		Inputs: []interfaces.IOConfig{
+		Inputs: []factorydefinitions.IOConfig{
 			{WorkTypeName: "plan", StateName: "init"},
 			{
 				WorkTypeName: "task",
 				StateName:    "init",
-				Guard: &interfaces.InputGuardConfig{
-					Type:       interfaces.GuardTypeSameTraceID,
+				Guard: &factorydefinitions.InputGuardConfig{
+					Type:       factorydefinitions.GuardTypeSameTraceID,
 					MatchInput: "task",
 				},
 			},
@@ -856,15 +856,15 @@ func TestRulePerInputGuards_SameTraceIDSelfReference(t *testing.T) {
 
 func TestRulePerInputGuards_ValidSameTraceIDGuard(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name: "ws",
-		Inputs: []interfaces.IOConfig{
+		Inputs: []factorydefinitions.IOConfig{
 			{WorkTypeName: "plan", StateName: "init"},
 			{
 				WorkTypeName: "task",
 				StateName:    "init",
-				Guard: &interfaces.InputGuardConfig{
-					Type:       interfaces.GuardTypeSameTraceID,
+				Guard: &factorydefinitions.InputGuardConfig{
+					Type:       factorydefinitions.GuardTypeSameTraceID,
 					MatchInput: "plan",
 				},
 			},
@@ -878,18 +878,18 @@ func TestRulePerInputGuards_ValidSameTraceIDGuard(t *testing.T) {
 
 func TestRulePerInputGuards_ValidGuard(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.WorkTypes = append(cfg.WorkTypes, interfaces.WorkTypeConfig{
-		Name: "parent", States: []interfaces.StateConfig{{Name: "init", Type: interfaces.StateTypeInitial}},
+	cfg.WorkTypes = append(cfg.WorkTypes, factorydefinitions.WorkTypeConfig{
+		Name: "parent", States: []factorydefinitions.StateConfig{{Name: "init", Type: factorydefinitions.StateTypeInitial}},
 	})
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{
 		{Name: "spawner"},
 		{
 			Name: "ws",
-			Inputs: []interfaces.IOConfig{
+			Inputs: []factorydefinitions.IOConfig{
 				{WorkTypeName: "parent", StateName: "init"},
 				{
 					WorkTypeName: "task", StateName: "init",
-					Guard: &interfaces.InputGuardConfig{Type: interfaces.GuardTypeAllChildrenComplete, ParentInput: "parent", SpawnedBy: "spawner"},
+					Guard: &factorydefinitions.InputGuardConfig{Type: factorydefinitions.GuardTypeAllChildrenComplete, ParentInput: "parent", SpawnedBy: "spawner"},
 				},
 			},
 		},
@@ -902,9 +902,9 @@ func TestRulePerInputGuards_ValidGuard(t *testing.T) {
 
 func TestConfigValidator_WorkTypeHandlingBehavior_RejectsMultipleDefaultWorkTypes(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.WorkTypes = []interfaces.WorkTypeConfig{
-		{Name: "story", States: testStoryStates(), HandlingBehavior: []string{interfaces.WorkTypeHandlingBehaviorDefault}},
-		{Name: "task", States: testStoryStates(), HandlingBehavior: []string{interfaces.WorkTypeHandlingBehaviorDefault}},
+	cfg.WorkTypes = []factorydefinitions.WorkTypeConfig{
+		{Name: "story", States: testStoryStates(), HandlingBehavior: []string{factorydefinitions.WorkTypeHandlingBehaviorDefault}},
+		{Name: "task", States: testStoryStates(), HandlingBehavior: []string{factorydefinitions.WorkTypeHandlingBehaviorDefault}},
 	}
 
 	findings := ruleWorkTypeHandlingBehavior(cfg, false)
@@ -913,7 +913,7 @@ func TestConfigValidator_WorkTypeHandlingBehavior_RejectsMultipleDefaultWorkType
 
 func TestConfigValidator_WorkTypeHandlingBehavior_RequiresDefaultWhenConfigured(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.WorkTypes = []interfaces.WorkTypeConfig{{Name: "story", States: testStoryStates()}}
+	cfg.WorkTypes = []factorydefinitions.WorkTypeConfig{{Name: "story", States: testStoryStates()}}
 
 	findings := ruleWorkTypeHandlingBehavior(cfg, true)
 	assertFindingMatch(t, findings, "work-type-handling-behavior-required-default", "factory.workTypes", "expected exactly one work type with handlingBehavior DEFAULT")
@@ -921,7 +921,7 @@ func TestConfigValidator_WorkTypeHandlingBehavior_RequiresDefaultWhenConfigured(
 
 func TestConfigValidator_WorkTypeHandlingBehavior_RejectsUnsupportedValues(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.WorkTypes = []interfaces.WorkTypeConfig{{
+	cfg.WorkTypes = []factorydefinitions.WorkTypeConfig{{
 		Name:             "story",
 		States:           testStoryStates(),
 		HandlingBehavior: []string{"PROMPT"},
@@ -931,19 +931,19 @@ func TestConfigValidator_WorkTypeHandlingBehavior_RejectsUnsupportedValues(t *te
 	assertFindingMatch(t, findings, "work-type-handling-behavior-value", `factory.workTypes[0].handlingBehavior[0]`, `unsupported handlingBehavior value "PROMPT"`)
 }
 
-func testStoryStates() []interfaces.StateConfig {
-	return []interfaces.StateConfig{
-		{Name: "init", Type: interfaces.StateTypeInitial},
-		{Name: "complete", Type: interfaces.StateTypeTerminal},
+func testStoryStates() []factorydefinitions.StateConfig {
+	return []factorydefinitions.StateConfig{
+		{Name: "init", Type: factorydefinitions.StateTypeInitial},
+		{Name: "complete", Type: factorydefinitions.StateTypeTerminal},
 	}
 }
 
 func TestRuleAgentWorkerTools_RejectsMissingPolicy(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.FactoryWorkerConfig{{
+	cfg.Workers = []factorydefinitions.FactoryWorkerConfig{{
 		Name:       "executor",
-		Type:       interfaces.WorkerTypeAgent,
-		AgentTools: &interfaces.AgentToolsConfig{},
+		Type:       factorydefinitions.WorkerTypeAgent,
+		AgentTools: &factorydefinitions.AgentToolsConfig{},
 	}}
 
 	findings := ruleAgentWorkerTools(cfg)
@@ -953,10 +953,10 @@ func TestRuleAgentWorkerTools_RejectsMissingPolicy(t *testing.T) {
 
 func TestRuleAgentWorkerTools_RejectsUnsupportedPolicy(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.FactoryWorkerConfig{{
+	cfg.Workers = []factorydefinitions.FactoryWorkerConfig{{
 		Name: "executor",
-		Type: interfaces.WorkerTypeAgent,
-		AgentTools: &interfaces.AgentToolsConfig{
+		Type: factorydefinitions.WorkerTypeAgent,
+		AgentTools: &factorydefinitions.AgentToolsConfig{
 			Policy: "FULL_SHELL",
 		},
 	}}
@@ -968,11 +968,11 @@ func TestRuleAgentWorkerTools_RejectsUnsupportedPolicy(t *testing.T) {
 
 func TestRuleAgentWorkerTools_RejectsAgentToolsOnInferenceWorker(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.FactoryWorkerConfig{{
+	cfg.Workers = []factorydefinitions.FactoryWorkerConfig{{
 		Name: "infer",
-		Type: interfaces.WorkerTypeInference,
-		AgentTools: &interfaces.AgentToolsConfig{
-			Policy: interfaces.AgentToolPolicyReadOnly,
+		Type: factorydefinitions.WorkerTypeInference,
+		AgentTools: &factorydefinitions.AgentToolsConfig{
+			Policy: factorydefinitions.AgentToolPolicyReadOnly,
 		},
 	}}
 
@@ -983,11 +983,11 @@ func TestRuleAgentWorkerTools_RejectsAgentToolsOnInferenceWorker(t *testing.T) {
 
 func TestRuleAgentWorkerTools_AllowsAgentWorkerPolicy(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.FactoryWorkerConfig{{
+	cfg.Workers = []factorydefinitions.FactoryWorkerConfig{{
 		Name: "executor",
-		Type: interfaces.WorkerTypeAgent,
-		AgentTools: &interfaces.AgentToolsConfig{
-			Policy: interfaces.AgentToolPolicyEnabled,
+		Type: factorydefinitions.WorkerTypeAgent,
+		AgentTools: &factorydefinitions.AgentToolsConfig{
+			Policy: factorydefinitions.AgentToolPolicyEnabled,
 		},
 	}}
 

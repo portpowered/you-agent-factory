@@ -18,8 +18,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	"go.uber.org/zap"
 )
 
@@ -184,7 +182,7 @@ func NewDurableExecution(
 	sessionRequest factorysessions.SessionRuntimeOpeningRequest,
 	root RuntimeRoot,
 	clock factoryruntime.Clock,
-	providerOverride workerprovider.Provider,
+	providerOverride workers.Provider,
 	mockWorkersConfig *workers.MockWorkersConfig,
 	executionFactory FactorySessionExecutionFactory,
 	providerIdentities factorysessions.ProviderIdentityResolver,
@@ -258,8 +256,8 @@ func NewWorkerExecution(
 	logger *zap.Logger,
 	providerCommandRunner workers.CommandRunner,
 	scriptCommandRunner workers.CommandRunner,
-	ptyAllocator agypty.PTYAllocator,
-	providerOverride workerprovider.Provider,
+	ptyAllocator workers.PTYAllocator,
+	providerOverride workers.Provider,
 	state roles.CurrentRuntimeResolver,
 	modelService models.Service,
 	modelsScope models.RuntimeScopeRef,

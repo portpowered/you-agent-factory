@@ -37,7 +37,6 @@ var compilationForbiddenImportRoots = []string{
 
 var compilationAllowedPublicTypeImportPrefixes = []string{
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions",
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts",
 }
 
 func TestPackageBoundary_PublicSurfaceDoesNotImportForbiddenOwnership(t *testing.T) {
@@ -149,7 +148,7 @@ func assertTypeExprUsesAllowedImports(t *testing.T, expr ast.Expr) {
 				return
 			}
 		}
-		t.Fatalf("compilation public surface type %s must use only factory_definitions root or contracts imports", exprString(expr))
+		t.Fatalf("compilation public surface type %s must use only factory_definitions root imports", exprString(expr))
 	default:
 		t.Fatalf("unexpected type expression %T on compilation public surface", expr)
 	}
@@ -159,10 +158,8 @@ func selectorImportPrefix(selector *ast.SelectorExpr) string {
 	switch typed := selector.X.(type) {
 	case *ast.Ident:
 		switch typed.Name {
-		case "factorydefinitions":
+		case "factorydefinitions", "factoryroot":
 			return "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-		case "factorycontracts":
-			return "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 		case "context":
 			return "context"
 		default:

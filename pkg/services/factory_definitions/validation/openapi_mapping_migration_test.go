@@ -3,22 +3,22 @@ package validation
 import (
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func TestFactoryConfigFromOpenAPIJSON_RejectsNonClassifierWithoutOutputsDuringValidation(
 	t *testing.T,
 ) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:           "process-task",
-		Type:           interfaces.WorkstationTypeModel,
+		Type:           factorydefinitions.WorkstationTypeModel,
 		WorkerTypeName: "executor",
-		Inputs: []interfaces.IOConfig{{
+		Inputs: []factorydefinitions.IOConfig{{
 			WorkTypeName: "task",
 			StateName:    "init",
 		}},
-		OnFailure: []interfaces.IOConfig{{
+		OnFailure: []factorydefinitions.IOConfig{{
 			WorkTypeName: "task",
 			StateName:    "failed",
 		}},
@@ -32,15 +32,15 @@ func TestFactoryConfigFromOpenAPIJSON_AllowsMissingOnFailureWhenSuccessRoutingIs
 	t *testing.T,
 ) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:           "process-task",
-		Type:           interfaces.WorkstationTypeModel,
+		Type:           factorydefinitions.WorkstationTypeModel,
 		WorkerTypeName: "executor",
-		Inputs: []interfaces.IOConfig{{
+		Inputs: []factorydefinitions.IOConfig{{
 			WorkTypeName: "task",
 			StateName:    "init",
 		}},
-		Outputs: []interfaces.IOConfig{{
+		Outputs: []factorydefinitions.IOConfig{{
 			WorkTypeName: "task",
 			StateName:    "done",
 		}},
@@ -56,26 +56,26 @@ func TestFactoryConfigFromOpenAPIJSON_RejectsNonClassifierClassificationRoutesDu
 	t *testing.T,
 ) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:           "process-task",
-		Type:           interfaces.WorkstationTypeModel,
+		Type:           factorydefinitions.WorkstationTypeModel,
 		WorkerTypeName: "executor",
-		Inputs: []interfaces.IOConfig{{
+		Inputs: []factorydefinitions.IOConfig{{
 			WorkTypeName: "task",
 			StateName:    "init",
 		}},
-		Outputs: []interfaces.IOConfig{{
+		Outputs: []factorydefinitions.IOConfig{{
 			WorkTypeName: "task",
 			StateName:    "done",
 		}},
-		ClassificationRoutes: []interfaces.ClassificationRouteConfig{{
+		ClassificationRoutes: []factorydefinitions.ClassificationRouteConfig{{
 			Label: "approved",
-			Outputs: []interfaces.IOConfig{{
+			Outputs: []factorydefinitions.IOConfig{{
 				WorkTypeName: "task",
 				StateName:    "done",
 			}},
 		}},
-		OnFailure: []interfaces.IOConfig{{
+		OnFailure: []factorydefinitions.IOConfig{{
 			WorkTypeName: "task",
 			StateName:    "failed",
 		}},
@@ -89,12 +89,12 @@ func TestFactoryConfigFromOpenAPIJSON_RejectsHostedLinearWorkerMissingMappingWit
 	t *testing.T,
 ) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.FactoryWorkerConfig{{
+	cfg.Workers = []factorydefinitions.FactoryWorkerConfig{{
 		Name:     "linear-poller",
-		Type:     interfaces.WorkerTypeHosted,
-		Provider: interfaces.HostedWorkerProviderLinear,
-		Auth:     &interfaces.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
-		Linear:   &interfaces.HostedLinearWorkerConfig{},
+		Type:     factorydefinitions.WorkerTypeHosted,
+		Provider: factorydefinitions.HostedWorkerProviderLinear,
+		Auth:     &factorydefinitions.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
+		Linear:   &factorydefinitions.HostedLinearWorkerConfig{},
 	}}
 
 	findings := ruleHostedWorkers(cfg)

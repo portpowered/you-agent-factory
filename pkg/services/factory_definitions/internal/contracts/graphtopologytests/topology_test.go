@@ -3,7 +3,7 @@ package graphtopologytests
 import (
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
 	factoryresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/resource"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
 )

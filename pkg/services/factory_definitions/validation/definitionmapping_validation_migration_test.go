@@ -8,12 +8,12 @@ import (
 	"strings"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func validateFactoryDefinition(
 	ctx context.Context,
-	cfg *interfaces.FactoryConfig,
+	cfg *factorydefinitions.FactoryConfig,
 ) error {
 	validator := New(nil)
 	if result := validator.ValidateTopology(ctx, cfg, nil); result.HasErrors() {
@@ -36,36 +36,36 @@ func validateFactoryDefinition(
 }
 
 func TestFactoryDefinitionValidation_PerInputGuard_RejectsMissingParentInput(t *testing.T) {
-	input := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{
+	input := &factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{
 			{
 				Name: "task",
-				States: []interfaces.StateConfig{
-					{Name: "init", Type: interfaces.StateTypeInitial},
-					{Name: "complete", Type: interfaces.StateTypeTerminal},
+				States: []factorydefinitions.StateConfig{
+					{Name: "init", Type: factorydefinitions.StateTypeInitial},
+					{Name: "complete", Type: factorydefinitions.StateTypeTerminal},
 				},
 			},
 			{
 				Name: "page",
-				States: []interfaces.StateConfig{
-					{Name: "complete", Type: interfaces.StateTypeTerminal},
+				States: []factorydefinitions.StateConfig{
+					{Name: "complete", Type: factorydefinitions.StateTypeTerminal},
 				},
 			},
 		},
-		Workstations: []interfaces.FactoryWorkstationConfig{
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{
 			{
 				Name: "collector",
-				Inputs: []interfaces.IOConfig{
+				Inputs: []factorydefinitions.IOConfig{
 					{StateName: "init", WorkTypeName: "task"},
 					{
 						StateName:    "complete",
 						WorkTypeName: "page",
-						Guard: &interfaces.InputGuardConfig{
-							Type: interfaces.GuardTypeAllChildrenComplete,
+						Guard: &factorydefinitions.InputGuardConfig{
+							Type: factorydefinitions.GuardTypeAllChildrenComplete,
 						},
 					},
 				},
-				Outputs: []interfaces.IOConfig{
+				Outputs: []factorydefinitions.IOConfig{
 					{StateName: "complete", WorkTypeName: "task"},
 				},
 			},
@@ -79,30 +79,30 @@ func TestFactoryDefinitionValidation_PerInputGuard_RejectsMissingParentInput(t *
 }
 
 func TestFactoryDefinitionValidation_PerInputGuard_RejectsSelfReference(t *testing.T) {
-	input := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{
+	input := &factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{
 			{
 				Name: "page",
-				States: []interfaces.StateConfig{
-					{Name: "init", Type: interfaces.StateTypeInitial},
-					{Name: "complete", Type: interfaces.StateTypeTerminal},
+				States: []factorydefinitions.StateConfig{
+					{Name: "init", Type: factorydefinitions.StateTypeInitial},
+					{Name: "complete", Type: factorydefinitions.StateTypeTerminal},
 				},
 			},
 		},
-		Workstations: []interfaces.FactoryWorkstationConfig{
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{
 			{
 				Name: "bad-guard",
-				Inputs: []interfaces.IOConfig{
+				Inputs: []factorydefinitions.IOConfig{
 					{
 						StateName:    "init",
 						WorkTypeName: "page",
-						Guard: &interfaces.InputGuardConfig{
-							Type:        interfaces.GuardTypeAllChildrenComplete,
+						Guard: &factorydefinitions.InputGuardConfig{
+							Type:        factorydefinitions.GuardTypeAllChildrenComplete,
 							ParentInput: "page", // Self-reference.
 						},
 					},
 				},
-				Outputs: []interfaces.IOConfig{
+				Outputs: []factorydefinitions.IOConfig{
 					{StateName: "complete", WorkTypeName: "page"},
 				},
 			},
@@ -116,37 +116,37 @@ func TestFactoryDefinitionValidation_PerInputGuard_RejectsSelfReference(t *testi
 }
 
 func TestFactoryDefinitionValidation_PerInputGuard_RejectsInvalidParentInput(t *testing.T) {
-	input := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{
+	input := &factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{
 			{
 				Name: "task",
-				States: []interfaces.StateConfig{
-					{Name: "init", Type: interfaces.StateTypeInitial},
-					{Name: "complete", Type: interfaces.StateTypeTerminal},
+				States: []factorydefinitions.StateConfig{
+					{Name: "init", Type: factorydefinitions.StateTypeInitial},
+					{Name: "complete", Type: factorydefinitions.StateTypeTerminal},
 				},
 			},
 			{
 				Name: "page",
-				States: []interfaces.StateConfig{
-					{Name: "complete", Type: interfaces.StateTypeTerminal},
+				States: []factorydefinitions.StateConfig{
+					{Name: "complete", Type: factorydefinitions.StateTypeTerminal},
 				},
 			},
 		},
-		Workstations: []interfaces.FactoryWorkstationConfig{
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{
 			{
 				Name: "collector",
-				Inputs: []interfaces.IOConfig{
+				Inputs: []factorydefinitions.IOConfig{
 					{StateName: "init", WorkTypeName: "task"},
 					{
 						StateName:    "complete",
 						WorkTypeName: "page",
-						Guard: &interfaces.InputGuardConfig{
-							Type:        interfaces.GuardTypeAllChildrenComplete,
+						Guard: &factorydefinitions.InputGuardConfig{
+							Type:        factorydefinitions.GuardTypeAllChildrenComplete,
 							ParentInput: "nonexistent",
 						},
 					},
 				},
-				Outputs: []interfaces.IOConfig{
+				Outputs: []factorydefinitions.IOConfig{
 					{StateName: "complete", WorkTypeName: "task"},
 				},
 			},
@@ -160,38 +160,38 @@ func TestFactoryDefinitionValidation_PerInputGuard_RejectsInvalidParentInput(t *
 }
 
 func TestFactoryDefinitionValidation_PerInputGuard_RejectsInvalidSpawnedBy(t *testing.T) {
-	input := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{
+	input := &factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{
 			{
 				Name: "task",
-				States: []interfaces.StateConfig{
-					{Name: "init", Type: interfaces.StateTypeInitial},
-					{Name: "complete", Type: interfaces.StateTypeTerminal},
+				States: []factorydefinitions.StateConfig{
+					{Name: "init", Type: factorydefinitions.StateTypeInitial},
+					{Name: "complete", Type: factorydefinitions.StateTypeTerminal},
 				},
 			},
 			{
 				Name: "page",
-				States: []interfaces.StateConfig{
-					{Name: "complete", Type: interfaces.StateTypeTerminal},
+				States: []factorydefinitions.StateConfig{
+					{Name: "complete", Type: factorydefinitions.StateTypeTerminal},
 				},
 			},
 		},
-		Workstations: []interfaces.FactoryWorkstationConfig{
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{
 			{
 				Name: "collector",
-				Inputs: []interfaces.IOConfig{
+				Inputs: []factorydefinitions.IOConfig{
 					{StateName: "init", WorkTypeName: "task"},
 					{
 						StateName:    "complete",
 						WorkTypeName: "page",
-						Guard: &interfaces.InputGuardConfig{
-							Type:        interfaces.GuardTypeAllChildrenComplete,
+						Guard: &factorydefinitions.InputGuardConfig{
+							Type:        factorydefinitions.GuardTypeAllChildrenComplete,
 							ParentInput: "task",
 							SpawnedBy:   "nonexistent-workstation",
 						},
 					},
 				},
-				Outputs: []interfaces.IOConfig{
+				Outputs: []factorydefinitions.IOConfig{
 					{StateName: "complete", WorkTypeName: "task"},
 				},
 			},
@@ -205,37 +205,37 @@ func TestFactoryDefinitionValidation_PerInputGuard_RejectsInvalidSpawnedBy(t *te
 }
 
 func TestFactoryDefinitionValidation_PerInputGuard_RejectsUnsupportedType(t *testing.T) {
-	input := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{
+	input := &factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{
 			{
 				Name: "task",
-				States: []interfaces.StateConfig{
-					{Name: "init", Type: interfaces.StateTypeInitial},
-					{Name: "complete", Type: interfaces.StateTypeTerminal},
+				States: []factorydefinitions.StateConfig{
+					{Name: "init", Type: factorydefinitions.StateTypeInitial},
+					{Name: "complete", Type: factorydefinitions.StateTypeTerminal},
 				},
 			},
 			{
 				Name: "page",
-				States: []interfaces.StateConfig{
-					{Name: "complete", Type: interfaces.StateTypeTerminal},
+				States: []factorydefinitions.StateConfig{
+					{Name: "complete", Type: factorydefinitions.StateTypeTerminal},
 				},
 			},
 		},
-		Workstations: []interfaces.FactoryWorkstationConfig{
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{
 			{
 				Name: "collector",
-				Inputs: []interfaces.IOConfig{
+				Inputs: []factorydefinitions.IOConfig{
 					{StateName: "init", WorkTypeName: "task"},
 					{
 						StateName:    "complete",
 						WorkTypeName: "page",
-						Guard: &interfaces.InputGuardConfig{
-							Type:        interfaces.GuardTypeVisitCount,
+						Guard: &factorydefinitions.InputGuardConfig{
+							Type:        factorydefinitions.GuardTypeVisitCount,
 							ParentInput: "task",
 						},
 					},
 				},
-				Outputs: []interfaces.IOConfig{
+				Outputs: []factorydefinitions.IOConfig{
 					{StateName: "complete", WorkTypeName: "task"},
 				},
 			},
@@ -249,36 +249,36 @@ func TestFactoryDefinitionValidation_PerInputGuard_RejectsUnsupportedType(t *tes
 }
 
 func TestFactoryDefinitionValidation_PerInputGuard_RejectsSameNameMissingMatchInput(t *testing.T) {
-	input := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{
+	input := &factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{
 			{
 				Name: "plan",
-				States: []interfaces.StateConfig{
-					{Name: "ready", Type: interfaces.StateTypeProcessing},
+				States: []factorydefinitions.StateConfig{
+					{Name: "ready", Type: factorydefinitions.StateTypeProcessing},
 				},
 			},
 			{
 				Name: "task",
-				States: []interfaces.StateConfig{
-					{Name: "ready", Type: interfaces.StateTypeProcessing},
-					{Name: "matched", Type: interfaces.StateTypeTerminal},
+				States: []factorydefinitions.StateConfig{
+					{Name: "ready", Type: factorydefinitions.StateTypeProcessing},
+					{Name: "matched", Type: factorydefinitions.StateTypeTerminal},
 				},
 			},
 		},
-		Workstations: []interfaces.FactoryWorkstationConfig{
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{
 			{
 				Name: "match-items",
-				Inputs: []interfaces.IOConfig{
+				Inputs: []factorydefinitions.IOConfig{
 					{StateName: "ready", WorkTypeName: "plan"},
 					{
 						StateName:    "ready",
 						WorkTypeName: "task",
-						Guard: &interfaces.InputGuardConfig{
-							Type: interfaces.GuardTypeSameName,
+						Guard: &factorydefinitions.InputGuardConfig{
+							Type: factorydefinitions.GuardTypeSameName,
 						},
 					},
 				},
-				Outputs: []interfaces.IOConfig{
+				Outputs: []factorydefinitions.IOConfig{
 					{StateName: "matched", WorkTypeName: "task"},
 				},
 			},
@@ -292,26 +292,26 @@ func TestFactoryDefinitionValidation_PerInputGuard_RejectsSameNameMissingMatchIn
 }
 
 func TestFactoryDefinitionValidation_PerInputGuard_RejectsSameNameSelfReference(t *testing.T) {
-	input := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{
+	input := &factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{
 			{
 				Name: "plan",
-				States: []interfaces.StateConfig{
-					{Name: "ready", Type: interfaces.StateTypeProcessing},
+				States: []factorydefinitions.StateConfig{
+					{Name: "ready", Type: factorydefinitions.StateTypeProcessing},
 				},
 			},
 			{
 				Name: "task",
-				States: []interfaces.StateConfig{
-					{Name: "ready", Type: interfaces.StateTypeProcessing},
-					{Name: "matched", Type: interfaces.StateTypeTerminal},
+				States: []factorydefinitions.StateConfig{
+					{Name: "ready", Type: factorydefinitions.StateTypeProcessing},
+					{Name: "matched", Type: factorydefinitions.StateTypeTerminal},
 				},
 			},
 		},
-		Workstations: []interfaces.FactoryWorkstationConfig{
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{
 			{
 				Name: "match-items",
-				Inputs: []interfaces.IOConfig{
+				Inputs: []factorydefinitions.IOConfig{
 					{
 						StateName:    "ready",
 						WorkTypeName: "plan",
@@ -323,13 +323,13 @@ func TestFactoryDefinitionValidation_PerInputGuard_RejectsSameNameSelfReference(
 					{
 						StateName:    "ready",
 						WorkTypeName: "task",
-						Guard: &interfaces.InputGuardConfig{
-							Type:       interfaces.GuardTypeSameName,
+						Guard: &factorydefinitions.InputGuardConfig{
+							Type:       factorydefinitions.GuardTypeSameName,
 							MatchInput: "task",
 						},
 					},
 				},
-				Outputs: []interfaces.IOConfig{
+				Outputs: []factorydefinitions.IOConfig{
 					{StateName: "matched", WorkTypeName: "task"},
 				},
 			},
@@ -343,37 +343,37 @@ func TestFactoryDefinitionValidation_PerInputGuard_RejectsSameNameSelfReference(
 }
 
 func TestFactoryDefinitionValidation_PerInputGuard_RejectsSameNameUnknownMatchInput(t *testing.T) {
-	input := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{
+	input := &factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{
 			{
 				Name: "plan",
-				States: []interfaces.StateConfig{
-					{Name: "ready", Type: interfaces.StateTypeProcessing},
+				States: []factorydefinitions.StateConfig{
+					{Name: "ready", Type: factorydefinitions.StateTypeProcessing},
 				},
 			},
 			{
 				Name: "task",
-				States: []interfaces.StateConfig{
-					{Name: "ready", Type: interfaces.StateTypeProcessing},
-					{Name: "matched", Type: interfaces.StateTypeTerminal},
+				States: []factorydefinitions.StateConfig{
+					{Name: "ready", Type: factorydefinitions.StateTypeProcessing},
+					{Name: "matched", Type: factorydefinitions.StateTypeTerminal},
 				},
 			},
 		},
-		Workstations: []interfaces.FactoryWorkstationConfig{
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{
 			{
 				Name: "match-items",
-				Inputs: []interfaces.IOConfig{
+				Inputs: []factorydefinitions.IOConfig{
 					{StateName: "ready", WorkTypeName: "plan"},
 					{
 						StateName:    "ready",
 						WorkTypeName: "task",
-						Guard: &interfaces.InputGuardConfig{
-							Type:       interfaces.GuardTypeSameName,
+						Guard: &factorydefinitions.InputGuardConfig{
+							Type:       factorydefinitions.GuardTypeSameName,
 							MatchInput: "other",
 						},
 					},
 				},
-				Outputs: []interfaces.IOConfig{
+				Outputs: []factorydefinitions.IOConfig{
 					{StateName: "matched", WorkTypeName: "task"},
 				},
 			},
@@ -387,36 +387,36 @@ func TestFactoryDefinitionValidation_PerInputGuard_RejectsSameNameUnknownMatchIn
 }
 
 func TestFactoryDefinitionValidation_PerInputGuard_RejectsSameTraceIDMissingMatchInput(t *testing.T) {
-	input := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{
+	input := &factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{
 			{
 				Name: "plan",
-				States: []interfaces.StateConfig{
-					{Name: "ready", Type: interfaces.StateTypeProcessing},
+				States: []factorydefinitions.StateConfig{
+					{Name: "ready", Type: factorydefinitions.StateTypeProcessing},
 				},
 			},
 			{
 				Name: "task",
-				States: []interfaces.StateConfig{
-					{Name: "ready", Type: interfaces.StateTypeProcessing},
-					{Name: "matched", Type: interfaces.StateTypeTerminal},
+				States: []factorydefinitions.StateConfig{
+					{Name: "ready", Type: factorydefinitions.StateTypeProcessing},
+					{Name: "matched", Type: factorydefinitions.StateTypeTerminal},
 				},
 			},
 		},
-		Workstations: []interfaces.FactoryWorkstationConfig{
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{
 			{
 				Name: "match-items",
-				Inputs: []interfaces.IOConfig{
+				Inputs: []factorydefinitions.IOConfig{
 					{StateName: "ready", WorkTypeName: "plan"},
 					{
 						StateName:    "ready",
 						WorkTypeName: "task",
-						Guard: &interfaces.InputGuardConfig{
-							Type: interfaces.GuardTypeSameTraceID,
+						Guard: &factorydefinitions.InputGuardConfig{
+							Type: factorydefinitions.GuardTypeSameTraceID,
 						},
 					},
 				},
-				Outputs: []interfaces.IOConfig{
+				Outputs: []factorydefinitions.IOConfig{
 					{StateName: "matched", WorkTypeName: "task"},
 				},
 			},
@@ -436,26 +436,26 @@ func TestFactoryDefinitionValidation_PerInputGuard_RejectsSameTraceIDMissingMatc
 }
 
 func TestFactoryDefinitionValidation_PerInputGuard_RejectsSameTraceIDSelfReference(t *testing.T) {
-	input := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{
+	input := &factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{
 			{
 				Name: "plan",
-				States: []interfaces.StateConfig{
-					{Name: "ready", Type: interfaces.StateTypeProcessing},
+				States: []factorydefinitions.StateConfig{
+					{Name: "ready", Type: factorydefinitions.StateTypeProcessing},
 				},
 			},
 			{
 				Name: "task",
-				States: []interfaces.StateConfig{
-					{Name: "ready", Type: interfaces.StateTypeProcessing},
-					{Name: "matched", Type: interfaces.StateTypeTerminal},
+				States: []factorydefinitions.StateConfig{
+					{Name: "ready", Type: factorydefinitions.StateTypeProcessing},
+					{Name: "matched", Type: factorydefinitions.StateTypeTerminal},
 				},
 			},
 		},
-		Workstations: []interfaces.FactoryWorkstationConfig{
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{
 			{
 				Name: "match-items",
-				Inputs: []interfaces.IOConfig{
+				Inputs: []factorydefinitions.IOConfig{
 					{
 						StateName:    "ready",
 						WorkTypeName: "plan",
@@ -467,13 +467,13 @@ func TestFactoryDefinitionValidation_PerInputGuard_RejectsSameTraceIDSelfReferen
 					{
 						StateName:    "ready",
 						WorkTypeName: "task",
-						Guard: &interfaces.InputGuardConfig{
-							Type:       interfaces.GuardTypeSameTraceID,
+						Guard: &factorydefinitions.InputGuardConfig{
+							Type:       factorydefinitions.GuardTypeSameTraceID,
 							MatchInput: "task",
 						},
 					},
 				},
-				Outputs: []interfaces.IOConfig{
+				Outputs: []factorydefinitions.IOConfig{
 					{StateName: "matched", WorkTypeName: "task"},
 				},
 			},
@@ -493,37 +493,37 @@ func TestFactoryDefinitionValidation_PerInputGuard_RejectsSameTraceIDSelfReferen
 }
 
 func TestFactoryDefinitionValidation_PerInputGuard_RejectsSameTraceIDUnknownMatchInput(t *testing.T) {
-	input := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{
+	input := &factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{
 			{
 				Name: "plan",
-				States: []interfaces.StateConfig{
-					{Name: "ready", Type: interfaces.StateTypeProcessing},
+				States: []factorydefinitions.StateConfig{
+					{Name: "ready", Type: factorydefinitions.StateTypeProcessing},
 				},
 			},
 			{
 				Name: "task",
-				States: []interfaces.StateConfig{
-					{Name: "ready", Type: interfaces.StateTypeProcessing},
-					{Name: "matched", Type: interfaces.StateTypeTerminal},
+				States: []factorydefinitions.StateConfig{
+					{Name: "ready", Type: factorydefinitions.StateTypeProcessing},
+					{Name: "matched", Type: factorydefinitions.StateTypeTerminal},
 				},
 			},
 		},
-		Workstations: []interfaces.FactoryWorkstationConfig{
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{
 			{
 				Name: "match-items",
-				Inputs: []interfaces.IOConfig{
+				Inputs: []factorydefinitions.IOConfig{
 					{StateName: "ready", WorkTypeName: "plan"},
 					{
 						StateName:    "ready",
 						WorkTypeName: "task",
-						Guard: &interfaces.InputGuardConfig{
-							Type:       interfaces.GuardTypeSameTraceID,
+						Guard: &factorydefinitions.InputGuardConfig{
+							Type:       factorydefinitions.GuardTypeSameTraceID,
 							MatchInput: "other",
 						},
 					},
 				},
-				Outputs: []interfaces.IOConfig{
+				Outputs: []factorydefinitions.IOConfig{
 					{StateName: "matched", WorkTypeName: "task"},
 				},
 			},
@@ -543,26 +543,26 @@ func TestFactoryDefinitionValidation_PerInputGuard_RejectsSameTraceIDUnknownMatc
 }
 
 func TestFactoryDefinitionValidation_RejectsNonexistentResource(t *testing.T) {
-	input := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{
+	input := &factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{
 			{
 				Name: "task",
-				States: []interfaces.StateConfig{
-					{Name: "init", Type: interfaces.StateTypeInitial},
-					{Name: "complete", Type: interfaces.StateTypeTerminal},
+				States: []factorydefinitions.StateConfig{
+					{Name: "init", Type: factorydefinitions.StateTypeInitial},
+					{Name: "complete", Type: factorydefinitions.StateTypeTerminal},
 				},
 			},
 		},
-		Workstations: []interfaces.FactoryWorkstationConfig{
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{
 			{
 				Name: "processor",
-				Inputs: []interfaces.IOConfig{
+				Inputs: []factorydefinitions.IOConfig{
 					{StateName: "init", WorkTypeName: "task"},
 				},
-				Outputs: []interfaces.IOConfig{
+				Outputs: []factorydefinitions.IOConfig{
 					{StateName: "complete", WorkTypeName: "task"},
 				},
-				Resources: []interfaces.ResourceConfig{
+				Resources: []factorydefinitions.ResourceConfig{
 					{Name: "nonexistent-gpu", Capacity: 1},
 				},
 			},
@@ -576,29 +576,29 @@ func TestFactoryDefinitionValidation_RejectsNonexistentResource(t *testing.T) {
 }
 
 func TestFactoryDefinitionValidation_RejectsInvalidResourceCount(t *testing.T) {
-	input := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{
+	input := &factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{
 			{
 				Name: "task",
-				States: []interfaces.StateConfig{
-					{Name: "init", Type: interfaces.StateTypeInitial},
-					{Name: "complete", Type: interfaces.StateTypeTerminal},
+				States: []factorydefinitions.StateConfig{
+					{Name: "init", Type: factorydefinitions.StateTypeInitial},
+					{Name: "complete", Type: factorydefinitions.StateTypeTerminal},
 				},
 			},
 		},
-		Resources: []interfaces.ResourceConfig{
+		Resources: []factorydefinitions.ResourceConfig{
 			{Name: "gpu", Capacity: 2},
 		},
-		Workstations: []interfaces.FactoryWorkstationConfig{
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{
 			{
 				Name: "processor",
-				Inputs: []interfaces.IOConfig{
+				Inputs: []factorydefinitions.IOConfig{
 					{StateName: "init", WorkTypeName: "task"},
 				},
-				Outputs: []interfaces.IOConfig{
+				Outputs: []factorydefinitions.IOConfig{
 					{StateName: "complete", WorkTypeName: "task"},
 				},
-				Resources: []interfaces.ResourceConfig{
+				Resources: []factorydefinitions.ResourceConfig{
 					{Name: "gpu", Capacity: 0},
 				},
 			},
@@ -612,24 +612,24 @@ func TestFactoryDefinitionValidation_RejectsInvalidResourceCount(t *testing.T) {
 }
 
 func TestFactoryDefinitionValidation_RejectsUnknownWorkstationKind(t *testing.T) {
-	input := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{
+	input := &factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{
 			{
 				Name: "task",
-				States: []interfaces.StateConfig{
-					{Name: "init", Type: interfaces.StateTypeInitial},
-					{Name: "complete", Type: interfaces.StateTypeTerminal},
+				States: []factorydefinitions.StateConfig{
+					{Name: "init", Type: factorydefinitions.StateTypeInitial},
+					{Name: "complete", Type: factorydefinitions.StateTypeTerminal},
 				},
 			},
 		},
-		Workstations: []interfaces.FactoryWorkstationConfig{
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{
 			{
 				Name: "processor",
 				Kind: "unknown_kind",
-				Inputs: []interfaces.IOConfig{
+				Inputs: []factorydefinitions.IOConfig{
 					{StateName: "init", WorkTypeName: "task"},
 				},
-				Outputs: []interfaces.IOConfig{
+				Outputs: []factorydefinitions.IOConfig{
 					{StateName: "complete", WorkTypeName: "task"},
 				},
 			},
@@ -643,27 +643,27 @@ func TestFactoryDefinitionValidation_RejectsUnknownWorkstationKind(t *testing.T)
 }
 
 func TestFactoryDefinitionValidation_RejectsNonexistentWorker(t *testing.T) {
-	input := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{
+	input := &factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{
 			{
 				Name: "task",
-				States: []interfaces.StateConfig{
-					{Name: "init", Type: interfaces.StateTypeInitial},
-					{Name: "complete", Type: interfaces.StateTypeTerminal},
+				States: []factorydefinitions.StateConfig{
+					{Name: "init", Type: factorydefinitions.StateTypeInitial},
+					{Name: "complete", Type: factorydefinitions.StateTypeTerminal},
 				},
 			},
 		},
-		Workers: []interfaces.FactoryWorkerConfig{
+		Workers: []factorydefinitions.FactoryWorkerConfig{
 			{Name: "real-worker"},
 		},
-		Workstations: []interfaces.FactoryWorkstationConfig{
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{
 			{
 				Name:           "processor",
 				WorkerTypeName: "ghost-worker",
-				Inputs: []interfaces.IOConfig{
+				Inputs: []factorydefinitions.IOConfig{
 					{StateName: "init", WorkTypeName: "task"},
 				},
-				Outputs: []interfaces.IOConfig{
+				Outputs: []factorydefinitions.IOConfig{
 					{StateName: "complete", WorkTypeName: "task"},
 				},
 			},
@@ -681,26 +681,26 @@ func TestFactoryDefinitionValidation_RejectsNonexistentWorker(t *testing.T) {
 }
 
 func TestFactoryDefinitionValidation_RejectsInvalidOnRejection(t *testing.T) {
-	input := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{
+	input := &factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{
 			{
 				Name: "task",
-				States: []interfaces.StateConfig{
-					{Name: "init", Type: interfaces.StateTypeInitial},
-					{Name: "complete", Type: interfaces.StateTypeTerminal},
+				States: []factorydefinitions.StateConfig{
+					{Name: "init", Type: factorydefinitions.StateTypeInitial},
+					{Name: "complete", Type: factorydefinitions.StateTypeTerminal},
 				},
 			},
 		},
-		Workstations: []interfaces.FactoryWorkstationConfig{
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{
 			{
 				Name: "processor",
-				Inputs: []interfaces.IOConfig{
+				Inputs: []factorydefinitions.IOConfig{
 					{StateName: "init", WorkTypeName: "task"},
 				},
-				Outputs: []interfaces.IOConfig{
+				Outputs: []factorydefinitions.IOConfig{
 					{StateName: "complete", WorkTypeName: "task"},
 				},
-				OnRejection: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "nonexistent"}},
+				OnRejection: []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "nonexistent"}},
 			},
 		},
 	}
@@ -712,27 +712,27 @@ func TestFactoryDefinitionValidation_RejectsInvalidOnRejection(t *testing.T) {
 }
 
 func TestFactoryDefinitionValidation_RejectsInvalidOnFailure(t *testing.T) {
-	input := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{
+	input := &factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{
 			{
 				Name: "task",
-				States: []interfaces.StateConfig{
-					{Name: "init", Type: interfaces.StateTypeInitial},
-					{Name: "complete", Type: interfaces.StateTypeTerminal},
-					{Name: "failed", Type: interfaces.StateTypeFailed},
+				States: []factorydefinitions.StateConfig{
+					{Name: "init", Type: factorydefinitions.StateTypeInitial},
+					{Name: "complete", Type: factorydefinitions.StateTypeTerminal},
+					{Name: "failed", Type: factorydefinitions.StateTypeFailed},
 				},
 			},
 		},
-		Workstations: []interfaces.FactoryWorkstationConfig{
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{
 			{
 				Name: "processor",
-				Inputs: []interfaces.IOConfig{
+				Inputs: []factorydefinitions.IOConfig{
 					{StateName: "init", WorkTypeName: "task"},
 				},
-				Outputs: []interfaces.IOConfig{
+				Outputs: []factorydefinitions.IOConfig{
 					{StateName: "complete", WorkTypeName: "task"},
 				},
-				OnFailure: []interfaces.IOConfig{{WorkTypeName: "nonexistent-type", StateName: "failed"}},
+				OnFailure: []factorydefinitions.IOConfig{{WorkTypeName: "nonexistent-type", StateName: "failed"}},
 			},
 		},
 	}
@@ -746,35 +746,35 @@ func TestFactoryDefinitionValidation_RejectsInvalidOnFailure(t *testing.T) {
 func TestFactoryDefinitionValidation_RejectsWorkstationLevelChildFanInGuards(t *testing.T) {
 	tests := []struct {
 		name      string
-		guardType interfaces.GuardType
+		guardType factorydefinitions.GuardType
 	}{
-		{name: "all children complete", guardType: interfaces.GuardTypeAllChildrenComplete},
-		{name: "any child failed", guardType: interfaces.GuardTypeAnyChildFailed},
+		{name: "all children complete", guardType: factorydefinitions.GuardTypeAllChildrenComplete},
+		{name: "any child failed", guardType: factorydefinitions.GuardTypeAnyChildFailed},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			input := &interfaces.FactoryConfig{
-				WorkTypes: []interfaces.WorkTypeConfig{
+			input := &factorydefinitions.FactoryConfig{
+				WorkTypes: []factorydefinitions.WorkTypeConfig{
 					{
 						Name: "task",
-						States: []interfaces.StateConfig{
-							{Name: "init", Type: interfaces.StateTypeInitial},
-							{Name: "complete", Type: interfaces.StateTypeTerminal},
-							{Name: "failed", Type: interfaces.StateTypeFailed},
+						States: []factorydefinitions.StateConfig{
+							{Name: "init", Type: factorydefinitions.StateTypeInitial},
+							{Name: "complete", Type: factorydefinitions.StateTypeTerminal},
+							{Name: "failed", Type: factorydefinitions.StateTypeFailed},
 						},
 					},
 				},
-				Workstations: []interfaces.FactoryWorkstationConfig{
+				Workstations: []factorydefinitions.FactoryWorkstationConfig{
 					{
 						Name: "collector",
-						Inputs: []interfaces.IOConfig{
+						Inputs: []factorydefinitions.IOConfig{
 							{StateName: "init", WorkTypeName: "task"},
 						},
-						Outputs: []interfaces.IOConfig{
+						Outputs: []factorydefinitions.IOConfig{
 							{StateName: "complete", WorkTypeName: "task"},
 						},
-						Guards: []interfaces.GuardConfig{
+						Guards: []factorydefinitions.GuardConfig{
 							{Type: tt.guardType},
 						},
 					},
@@ -793,26 +793,26 @@ func TestFactoryDefinitionValidation_RejectsWorkstationLevelChildFanInGuards(t *
 }
 
 func TestFactoryDefinitionValidation_RejectsUnknownGuardType(t *testing.T) {
-	input := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{
+	input := &factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{
 			{
 				Name: "task",
-				States: []interfaces.StateConfig{
-					{Name: "init", Type: interfaces.StateTypeInitial},
-					{Name: "complete", Type: interfaces.StateTypeTerminal},
+				States: []factorydefinitions.StateConfig{
+					{Name: "init", Type: factorydefinitions.StateTypeInitial},
+					{Name: "complete", Type: factorydefinitions.StateTypeTerminal},
 				},
 			},
 		},
-		Workstations: []interfaces.FactoryWorkstationConfig{
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{
 			{
 				Name: "processor",
-				Inputs: []interfaces.IOConfig{
+				Inputs: []factorydefinitions.IOConfig{
 					{StateName: "init", WorkTypeName: "task"},
 				},
-				Outputs: []interfaces.IOConfig{
+				Outputs: []factorydefinitions.IOConfig{
 					{StateName: "complete", WorkTypeName: "task"},
 				},
-				Guards: []interfaces.GuardConfig{
+				Guards: []factorydefinitions.GuardConfig{
 					{Type: "nonexistent_guard"},
 				},
 			},
@@ -826,24 +826,24 @@ func TestFactoryDefinitionValidation_RejectsUnknownGuardType(t *testing.T) {
 }
 
 func TestFactoryDefinitionValidation_RejectsFactoryInferenceThrottleGuardMissingModelProvider(t *testing.T) {
-	input := &interfaces.FactoryConfig{
-		Guards: []interfaces.FactoryGuardConfig{{
-			Type:          interfaces.GuardTypeInferenceThrottle,
+	input := &factorydefinitions.FactoryConfig{
+		Guards: []factorydefinitions.FactoryGuardConfig{{
+			Type:          factorydefinitions.GuardTypeInferenceThrottle,
 			RefreshWindow: "15m",
 		}},
-		WorkTypes: []interfaces.WorkTypeConfig{{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{{
 			Name: "task",
-			States: []interfaces.StateConfig{
-				{Name: "init", Type: interfaces.StateTypeInitial},
-				{Name: "complete", Type: interfaces.StateTypeTerminal},
+			States: []factorydefinitions.StateConfig{
+				{Name: "init", Type: factorydefinitions.StateTypeInitial},
+				{Name: "complete", Type: factorydefinitions.StateTypeTerminal},
 			},
 		}},
-		Workstations: []interfaces.FactoryWorkstationConfig{{
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{{
 			Name: "processor",
-			Inputs: []interfaces.IOConfig{
+			Inputs: []factorydefinitions.IOConfig{
 				{StateName: "init", WorkTypeName: "task"},
 			},
-			Outputs: []interfaces.IOConfig{
+			Outputs: []factorydefinitions.IOConfig{
 				{StateName: "complete", WorkTypeName: "task"},
 			},
 		}},
@@ -859,25 +859,25 @@ func TestFactoryDefinitionValidation_RejectsFactoryInferenceThrottleGuardMissing
 }
 
 func TestFactoryDefinitionValidation_RejectsFactoryInferenceThrottleGuardInvalidRefreshWindow(t *testing.T) {
-	input := &interfaces.FactoryConfig{
-		Guards: []interfaces.FactoryGuardConfig{{
-			Type:          interfaces.GuardTypeInferenceThrottle,
+	input := &factorydefinitions.FactoryConfig{
+		Guards: []factorydefinitions.FactoryGuardConfig{{
+			Type:          factorydefinitions.GuardTypeInferenceThrottle,
 			ModelProvider: "claude",
 			RefreshWindow: "later",
 		}},
-		WorkTypes: []interfaces.WorkTypeConfig{{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{{
 			Name: "task",
-			States: []interfaces.StateConfig{
-				{Name: "init", Type: interfaces.StateTypeInitial},
-				{Name: "complete", Type: interfaces.StateTypeTerminal},
+			States: []factorydefinitions.StateConfig{
+				{Name: "init", Type: factorydefinitions.StateTypeInitial},
+				{Name: "complete", Type: factorydefinitions.StateTypeTerminal},
 			},
 		}},
-		Workstations: []interfaces.FactoryWorkstationConfig{{
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{{
 			Name: "processor",
-			Inputs: []interfaces.IOConfig{
+			Inputs: []factorydefinitions.IOConfig{
 				{StateName: "init", WorkTypeName: "task"},
 			},
-			Outputs: []interfaces.IOConfig{
+			Outputs: []factorydefinitions.IOConfig{
 				{StateName: "complete", WorkTypeName: "task"},
 			},
 		}},
@@ -893,21 +893,21 @@ func TestFactoryDefinitionValidation_RejectsFactoryInferenceThrottleGuardInvalid
 }
 
 func TestFactoryDefinitionValidation_RejectsMatchesFieldsMissingInputKey(t *testing.T) {
-	input := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{{
+	input := &factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{{
 			Name: "task",
-			States: []interfaces.StateConfig{
-				{Name: "init", Type: interfaces.StateTypeInitial},
-				{Name: "complete", Type: interfaces.StateTypeTerminal},
+			States: []factorydefinitions.StateConfig{
+				{Name: "init", Type: factorydefinitions.StateTypeInitial},
+				{Name: "complete", Type: factorydefinitions.StateTypeTerminal},
 			},
 		}},
-		Workers: []interfaces.FactoryWorkerConfig{{Name: "matcher"}},
-		Workstations: []interfaces.FactoryWorkstationConfig{{
+		Workers: []factorydefinitions.FactoryWorkerConfig{{Name: "matcher"}},
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{{
 			Name:           "processor",
 			WorkerTypeName: "matcher",
-			Inputs:         []interfaces.IOConfig{{StateName: "init", WorkTypeName: "task"}},
-			Outputs:        []interfaces.IOConfig{{StateName: "complete", WorkTypeName: "task"}},
-			Guards:         []interfaces.GuardConfig{{Type: interfaces.GuardTypeMatchesFields}},
+			Inputs:         []factorydefinitions.IOConfig{{StateName: "init", WorkTypeName: "task"}},
+			Outputs:        []factorydefinitions.IOConfig{{StateName: "complete", WorkTypeName: "task"}},
+			Guards:         []factorydefinitions.GuardConfig{{Type: factorydefinitions.GuardTypeMatchesFields}},
 		}},
 	}
 
@@ -918,23 +918,23 @@ func TestFactoryDefinitionValidation_RejectsMatchesFieldsMissingInputKey(t *test
 }
 
 func TestFactoryDefinitionValidation_RejectsMatchesFieldsEmptyInputKey(t *testing.T) {
-	input := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{{
+	input := &factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{{
 			Name: "task",
-			States: []interfaces.StateConfig{
-				{Name: "init", Type: interfaces.StateTypeInitial},
-				{Name: "complete", Type: interfaces.StateTypeTerminal},
+			States: []factorydefinitions.StateConfig{
+				{Name: "init", Type: factorydefinitions.StateTypeInitial},
+				{Name: "complete", Type: factorydefinitions.StateTypeTerminal},
 			},
 		}},
-		Workers: []interfaces.FactoryWorkerConfig{{Name: "matcher"}},
-		Workstations: []interfaces.FactoryWorkstationConfig{{
+		Workers: []factorydefinitions.FactoryWorkerConfig{{Name: "matcher"}},
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{{
 			Name:           "processor",
 			WorkerTypeName: "matcher",
-			Inputs:         []interfaces.IOConfig{{StateName: "init", WorkTypeName: "task"}},
-			Outputs:        []interfaces.IOConfig{{StateName: "complete", WorkTypeName: "task"}},
-			Guards: []interfaces.GuardConfig{{
-				Type:        interfaces.GuardTypeMatchesFields,
-				MatchConfig: &interfaces.GuardMatchConfig{InputKey: " "},
+			Inputs:         []factorydefinitions.IOConfig{{StateName: "init", WorkTypeName: "task"}},
+			Outputs:        []factorydefinitions.IOConfig{{StateName: "complete", WorkTypeName: "task"}},
+			Guards: []factorydefinitions.GuardConfig{{
+				Type:        factorydefinitions.GuardTypeMatchesFields,
+				MatchConfig: &factorydefinitions.GuardMatchConfig{InputKey: " "},
 			}},
 		}},
 	}
@@ -946,27 +946,27 @@ func TestFactoryDefinitionValidation_RejectsMatchesFieldsEmptyInputKey(t *testin
 }
 
 func TestFactoryDefinitionValidation_RejectsVisitCountGuardMissingParams(t *testing.T) {
-	input := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{
+	input := &factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{
 			{
 				Name: "task",
-				States: []interfaces.StateConfig{
-					{Name: "init", Type: interfaces.StateTypeInitial},
-					{Name: "complete", Type: interfaces.StateTypeTerminal},
+				States: []factorydefinitions.StateConfig{
+					{Name: "init", Type: factorydefinitions.StateTypeInitial},
+					{Name: "complete", Type: factorydefinitions.StateTypeTerminal},
 				},
 			},
 		},
-		Workstations: []interfaces.FactoryWorkstationConfig{
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{
 			{
 				Name: "processor",
-				Inputs: []interfaces.IOConfig{
+				Inputs: []factorydefinitions.IOConfig{
 					{StateName: "init", WorkTypeName: "task"},
 				},
-				Outputs: []interfaces.IOConfig{
+				Outputs: []factorydefinitions.IOConfig{
 					{StateName: "complete", WorkTypeName: "task"},
 				},
-				Guards: []interfaces.GuardConfig{
-					{Type: interfaces.GuardTypeVisitCount},
+				Guards: []factorydefinitions.GuardConfig{
+					{Type: factorydefinitions.GuardTypeVisitCount},
 				},
 			},
 		},
@@ -979,28 +979,28 @@ func TestFactoryDefinitionValidation_RejectsVisitCountGuardMissingParams(t *test
 }
 
 func TestFactoryDefinitionValidation_RejectsGuardReferencingNonexistentWorkstation(t *testing.T) {
-	input := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{
+	input := &factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{
 			{
 				Name: "task",
-				States: []interfaces.StateConfig{
-					{Name: "init", Type: interfaces.StateTypeInitial},
-					{Name: "complete", Type: interfaces.StateTypeTerminal},
+				States: []factorydefinitions.StateConfig{
+					{Name: "init", Type: factorydefinitions.StateTypeInitial},
+					{Name: "complete", Type: factorydefinitions.StateTypeTerminal},
 				},
 			},
 		},
-		Workstations: []interfaces.FactoryWorkstationConfig{
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{
 			{
 				Name: "processor",
-				Inputs: []interfaces.IOConfig{
+				Inputs: []factorydefinitions.IOConfig{
 					{StateName: "init", WorkTypeName: "task"},
 				},
-				Outputs: []interfaces.IOConfig{
+				Outputs: []factorydefinitions.IOConfig{
 					{StateName: "complete", WorkTypeName: "task"},
 				},
-				Guards: []interfaces.GuardConfig{
+				Guards: []factorydefinitions.GuardConfig{
 					{
-						Type:        interfaces.GuardTypeVisitCount,
+						Type:        factorydefinitions.GuardTypeVisitCount,
 						Workstation: "nonexistent",
 						MaxVisits:   3,
 					},
@@ -1016,22 +1016,22 @@ func TestFactoryDefinitionValidation_RejectsGuardReferencingNonexistentWorkstati
 }
 
 func TestFactoryDefinitionValidation_RejectsNonClassifierWithoutOutputs(t *testing.T) {
-	input := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{{
+	input := &factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{{
 			Name: "task",
-			States: []interfaces.StateConfig{
-				{Name: "init", Type: interfaces.StateTypeInitial},
-				{Name: "done", Type: interfaces.StateTypeTerminal},
-				{Name: "failed", Type: interfaces.StateTypeFailed},
+			States: []factorydefinitions.StateConfig{
+				{Name: "init", Type: factorydefinitions.StateTypeInitial},
+				{Name: "done", Type: factorydefinitions.StateTypeTerminal},
+				{Name: "failed", Type: factorydefinitions.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.FactoryWorkerConfig{{Name: "executor"}},
-		Workstations: []interfaces.FactoryWorkstationConfig{{
+		Workers: []factorydefinitions.FactoryWorkerConfig{{Name: "executor"}},
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{{
 			Name:           "process-task",
-			Type:           interfaces.WorkstationTypeModel,
+			Type:           factorydefinitions.WorkstationTypeModel,
 			WorkerTypeName: "executor",
-			Inputs:         []interfaces.IOConfig{{StateName: "init", WorkTypeName: "task"}},
-			OnFailure:      []interfaces.IOConfig{{StateName: "failed", WorkTypeName: "task"}},
+			Inputs:         []factorydefinitions.IOConfig{{StateName: "init", WorkTypeName: "task"}},
+			OnFailure:      []factorydefinitions.IOConfig{{StateName: "failed", WorkTypeName: "task"}},
 		}},
 	}
 
@@ -1045,26 +1045,26 @@ func TestFactoryDefinitionValidation_RejectsNonClassifierWithoutOutputs(t *testi
 }
 
 func TestFactoryDefinitionValidation_RejectsNonClassifierClassificationRoutes(t *testing.T) {
-	input := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{{
+	input := &factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{{
 			Name: "task",
-			States: []interfaces.StateConfig{
-				{Name: "init", Type: interfaces.StateTypeInitial},
-				{Name: "done", Type: interfaces.StateTypeTerminal},
-				{Name: "failed", Type: interfaces.StateTypeFailed},
+			States: []factorydefinitions.StateConfig{
+				{Name: "init", Type: factorydefinitions.StateTypeInitial},
+				{Name: "done", Type: factorydefinitions.StateTypeTerminal},
+				{Name: "failed", Type: factorydefinitions.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.FactoryWorkerConfig{{Name: "executor"}},
-		Workstations: []interfaces.FactoryWorkstationConfig{{
+		Workers: []factorydefinitions.FactoryWorkerConfig{{Name: "executor"}},
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{{
 			Name:           "process-task",
-			Type:           interfaces.WorkstationTypeModel,
+			Type:           factorydefinitions.WorkstationTypeModel,
 			WorkerTypeName: "executor",
-			Inputs:         []interfaces.IOConfig{{StateName: "init", WorkTypeName: "task"}},
-			Outputs:        []interfaces.IOConfig{{StateName: "done", WorkTypeName: "task"}},
-			ClassificationRoutes: []interfaces.ClassificationRouteConfig{
-				{Label: "approved", Outputs: []interfaces.IOConfig{{StateName: "done", WorkTypeName: "task"}}},
+			Inputs:         []factorydefinitions.IOConfig{{StateName: "init", WorkTypeName: "task"}},
+			Outputs:        []factorydefinitions.IOConfig{{StateName: "done", WorkTypeName: "task"}},
+			ClassificationRoutes: []factorydefinitions.ClassificationRouteConfig{
+				{Label: "approved", Outputs: []factorydefinitions.IOConfig{{StateName: "done", WorkTypeName: "task"}}},
 			},
-			OnFailure: []interfaces.IOConfig{{StateName: "failed", WorkTypeName: "task"}},
+			OnFailure: []factorydefinitions.IOConfig{{StateName: "failed", WorkTypeName: "task"}},
 		}},
 	}
 
@@ -1078,25 +1078,25 @@ func TestFactoryDefinitionValidation_RejectsNonClassifierClassificationRoutes(t 
 }
 
 func TestFactoryDefinitionValidation_RejectsSingleInputWithTwoSameTypeOutputs(t *testing.T) {
-	input := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{
+	input := &factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{
 			{
 				Name: "task",
-				States: []interfaces.StateConfig{
-					{Name: "init", Type: interfaces.StateTypeInitial},
-					{Name: "review", Type: interfaces.StateTypeProcessing},
-					{Name: "complete", Type: interfaces.StateTypeTerminal},
-					{Name: "failed", Type: interfaces.StateTypeFailed},
+				States: []factorydefinitions.StateConfig{
+					{Name: "init", Type: factorydefinitions.StateTypeInitial},
+					{Name: "review", Type: factorydefinitions.StateTypeProcessing},
+					{Name: "complete", Type: factorydefinitions.StateTypeTerminal},
+					{Name: "failed", Type: factorydefinitions.StateTypeFailed},
 				},
 			},
 		},
-		Workstations: []interfaces.FactoryWorkstationConfig{
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{
 			{
 				Name: "splitter",
-				Inputs: []interfaces.IOConfig{
+				Inputs: []factorydefinitions.IOConfig{
 					{StateName: "init", WorkTypeName: "task"},
 				},
-				Outputs: []interfaces.IOConfig{
+				Outputs: []factorydefinitions.IOConfig{
 					{StateName: "review", WorkTypeName: "task"},
 					{StateName: "complete", WorkTypeName: "task"},
 				},
@@ -1114,26 +1114,26 @@ func TestFactoryDefinitionValidation_RejectsSingleInputWithTwoSameTypeOutputs(t 
 }
 
 func TestFactoryDefinitionValidation_RejectsMismatchedCountsAcrossMultiInputSameTypeRoutes(t *testing.T) {
-	input := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{
+	input := &factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{
 			{
 				Name: "task",
-				States: []interfaces.StateConfig{
-					{Name: "ready-a", Type: interfaces.StateTypeInitial},
-					{Name: "ready-b", Type: interfaces.StateTypeInitial},
-					{Name: "complete", Type: interfaces.StateTypeTerminal},
-					{Name: "failed", Type: interfaces.StateTypeFailed},
+				States: []factorydefinitions.StateConfig{
+					{Name: "ready-a", Type: factorydefinitions.StateTypeInitial},
+					{Name: "ready-b", Type: factorydefinitions.StateTypeInitial},
+					{Name: "complete", Type: factorydefinitions.StateTypeTerminal},
+					{Name: "failed", Type: factorydefinitions.StateTypeFailed},
 				},
 			},
 		},
-		Workstations: []interfaces.FactoryWorkstationConfig{
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{
 			{
 				Name: "combiner",
-				Inputs: []interfaces.IOConfig{
+				Inputs: []factorydefinitions.IOConfig{
 					{StateName: "ready-a", WorkTypeName: "task"},
 					{StateName: "ready-b", WorkTypeName: "task"},
 				},
-				Outputs: []interfaces.IOConfig{
+				Outputs: []factorydefinitions.IOConfig{
 					{StateName: "complete", WorkTypeName: "task"},
 				},
 			},

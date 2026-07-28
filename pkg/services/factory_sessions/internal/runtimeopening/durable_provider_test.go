@@ -7,15 +7,43 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
-	workersservice "github.com/portpowered/infinite-you/pkg/services/workers/service"
 )
 
 type stubWorkersCommandRunner struct{}
 
 func (stubWorkersCommandRunner) Run(context.Context, workers.CommandRequest) (workers.CommandResult, error) {
 	return workers.CommandResult{}, nil
+}
+
+func recordingMockCommandRunnerFactory(
+	built *workers.CommandRunner,
+) factoryruntime.WorkersMockCommandRunnerFactory {
+	return func(
+		mockCfg *workers.MockWorkersConfig,
+		_ interfaces.RuntimeDefinitionLookup,
+		next workers.CommandRunner,
+	) workers.CommandRunner {
+		wrapped := &recordingMockCommandRunner{cfg: mockCfg, next: next}
+		*built = wrapped
+		return wrapped
+	}
+}
+
+type recordingMockCommandRunner struct {
+	cfg  *workers.MockWorkersConfig
+	next workers.CommandRunner
+}
+
+func (runner *recordingMockCommandRunner) Run(
+	ctx context.Context,
+	request workers.CommandRequest,
+) (workers.CommandResult, error) {
+	if runner.next == nil {
+		return workers.CommandResult{}, nil
+	}
+	return runner.next.Run(ctx, request)
 }
 
 func TestResolveDurableExecutionProvider_PrefersOverride(t *testing.T) {
@@ -28,8 +56,11 @@ func TestResolveDurableExecutionProvider_PrefersOverride(t *testing.T) {
 		nil,
 		testutil.NewProviderCommandRunner(),
 		func(platformprocess.CommandRunner) workers.CommandRunner { return stubWorkersCommandRunner{} },
-		workersservice.NewMockCommandRunner,
-		func(workers.CommandRunner) (workerprovider.Provider, error) {
+		func(*workers.MockWorkersConfig, interfaces.RuntimeDefinitionLookup, workers.CommandRunner) workers.CommandRunner {
+			t.Fatal("mock command runner factory should not run when override is present")
+			return nil
+		},
+		func(workers.CommandRunner) (workers.Provider, error) {
 			t.Fatal("build provider should not run when override is present")
 			return nil, nil
 		},
@@ -60,14 +91,8 @@ func TestResolveDurableExecutionProvider_BuildsFromMockWrappedRunner(t *testing.
 		nil,
 		testutil.NewProviderCommandRunner(),
 		func(platformprocess.CommandRunner) workers.CommandRunner { return baseRunner },
-		func(mockCfg *workers.MockWorkersConfig, _ interfaces.RuntimeDefinitionLookup, next workers.CommandRunner) workers.CommandRunner {
-			if next != baseRunner {
-				t.Fatalf("next runner = %#v, want base runner %#v", next, baseRunner)
-			}
-			builtRunner = workersservice.NewMockCommandRunner(mockCfg, nil, next)
-			return builtRunner
-		},
-		func(runner workers.CommandRunner) (workerprovider.Provider, error) {
+		recordingMockCommandRunnerFactory(&builtRunner),
+		func(runner workers.CommandRunner) (workers.Provider, error) {
 			if runner != builtRunner {
 				t.Fatalf("build provider runner = %#v, want wrapped %#v", runner, builtRunner)
 			}
@@ -91,8 +116,11 @@ func TestResolveDurableExecutionProvider_ReturnsNilWithoutPassthroughPolicy(t *t
 		nil,
 		testutil.NewProviderCommandRunner(),
 		func(platformprocess.CommandRunner) workers.CommandRunner { return stubWorkersCommandRunner{} },
-		workersservice.NewMockCommandRunner,
-		func(workers.CommandRunner) (workerprovider.Provider, error) {
+		func(*workers.MockWorkersConfig, interfaces.RuntimeDefinitionLookup, workers.CommandRunner) workers.CommandRunner {
+			t.Fatal("mock command runner factory should not run without passthrough unmatched policy")
+			return nil
+		},
+		func(workers.CommandRunner) (workers.Provider, error) {
 			t.Fatal("build provider should not run without passthrough unmatched policy")
 			return nil, nil
 		},
@@ -114,8 +142,11 @@ func TestResolveDurableExecutionProvider_ReturnsNilWithoutMockWorkers(t *testing
 		nil,
 		testutil.NewProviderCommandRunner(),
 		func(platformprocess.CommandRunner) workers.CommandRunner { return stubWorkersCommandRunner{} },
-		workersservice.NewMockCommandRunner,
-		func(workers.CommandRunner) (workerprovider.Provider, error) {
+		func(*workers.MockWorkersConfig, interfaces.RuntimeDefinitionLookup, workers.CommandRunner) workers.CommandRunner {
+			t.Fatal("mock command runner factory should not run without mock workers")
+			return nil
+		},
+		func(workers.CommandRunner) (workers.Provider, error) {
 			t.Fatal("build provider should not run without mock workers")
 			return nil, nil
 		},

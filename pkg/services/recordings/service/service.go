@@ -9,7 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-func NewReplayClock(artifact *factorydefinitions.ReplayArtifact) recordings.Clock {
+func NewReplayClock(artifact *recordings.ReplayArtifact) recordings.Clock {
 	if artifact == nil {
 		return nil
 	}
@@ -17,7 +17,7 @@ func NewReplayClock(artifact *factorydefinitions.ReplayArtifact) recordings.Cloc
 }
 
 func NewReplayExecution(
-	artifact *factorydefinitions.ReplayArtifact,
+	artifact *recordings.ReplayArtifact,
 	decodeFactorySnapshot factorydefinitions.FactorySnapshotJSONDecoder,
 	decodeRuntimeConfig factorydefinitions.ReplayRuntimeConfigDecoder,
 ) (

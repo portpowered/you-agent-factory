@@ -69,8 +69,8 @@ func NewLifecycleRuntimeRecorder(
 	artifact, err := replay.NewEventLogArtifact(
 		recordedAt,
 		snapshot,
-		&factorydefinitions.ReplayWallClockMetadata{StartedAt: recordedAt},
-		factorydefinitions.ReplayDiagnostics{},
+		&recordings.ReplayWallClockMetadata{StartedAt: recordedAt},
+		recordings.ReplayDiagnostics{},
 	)
 	if err != nil {
 		return nil, err

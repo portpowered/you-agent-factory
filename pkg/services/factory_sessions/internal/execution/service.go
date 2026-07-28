@@ -11,8 +11,6 @@ import (
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	recording "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	"sort"
 	"strings"
 	"time"
@@ -399,16 +397,16 @@ func NewJavaScriptExecutionService(
 // fixture-backed live-provider child smoke without MCP host startup. Scope for
 // this provider is the completed CLI live-dispatch smoke lane; MCP live serve and
 // website inspection remain deferred follow-up cells.
-func SmokeLiveChildProvider() workerprovider.Provider {
+func SmokeLiveChildProvider() workers.Provider {
 	return smokeLiveChildProvider{}
 }
 
 type smokeLiveChildProvider struct{}
 
-func (smokeLiveChildProvider) Infer(_ context.Context, _ workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
-	return workerexecution.InferenceResponse{
+func (smokeLiveChildProvider) Infer(_ context.Context, _ workers.ProviderInferenceRequest) (workers.InferenceResponse, error) {
+	return workers.InferenceResponse{
 		Content: `{"text":"live:agent-run-fake-child:summarize-findings:summarize workflows:workflows"}`,
-		ProviderSession: &workerexecution.ProviderSessionMetadata{
+		ProviderSession: &workers.ProviderSessionMetadata{
 			Provider: "mock",
 			Kind:     "session_id",
 			ID:       "live-provider-session-1",

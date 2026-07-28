@@ -2,9 +2,9 @@ package factorydefinition
 
 import (
 	factorydefinitionfixtures "github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func testFactoryDefinitionValidator() *factoryvalidation.Service {

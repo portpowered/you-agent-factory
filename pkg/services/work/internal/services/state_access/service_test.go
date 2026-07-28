@@ -10,7 +10,7 @@ import (
 func TestWireConstructsSingularStateAccessService(t *testing.T) {
 	t.Parallel()
 
-	svc := stateaccesswire.NewService(stateaccesswire.NewRuntimeSessionResolver(nil))
+	svc := stateaccesswire.NewService(stateaccesswire.NewRuntimeSessionResolver(nil), nil)
 	if svc == nil {
 		t.Fatal("wire.NewService() returned nil")
 	}

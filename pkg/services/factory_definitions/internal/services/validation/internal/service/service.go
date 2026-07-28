@@ -7,7 +7,6 @@ import (
 	"fmt"
 
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/orchestrator"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/requiredtools"
@@ -18,22 +17,22 @@ import (
 // Service is the private nested validation implementation behind the CTR-DEF
 // root validate slice.
 type Service struct {
-	operations        factorycontracts.DefinitionValidationOperation
-	effective         factorycontracts.EffectiveDefinitionValidationOperation
-	loadCanonical     factorycontracts.CanonicalFactoryJSONLoader
-	requiredToolChecker     factorycontracts.RequiredToolChecker
-	orchestratorValidator   factorycontracts.OrchestratorDefinitionValidator
+	operations        factoryroot.DefinitionValidationOperation
+	effective         factoryroot.EffectiveDefinitionValidationOperation
+	loadCanonical     factoryroot.CanonicalFactoryJSONLoader
+	requiredToolChecker     factoryroot.RequiredToolChecker
+	orchestratorValidator   factoryroot.OrchestratorDefinitionValidator
 }
 
 var _ validationservice.Service = (*Service)(nil)
 
 // New constructs the validation implementation from exact injected ports.
 func New(
-	operations factorycontracts.DefinitionValidationOperation,
-	effective factorycontracts.EffectiveDefinitionValidationOperation,
-	loadCanonical factorycontracts.CanonicalFactoryJSONLoader,
-	requiredToolChecker factorycontracts.RequiredToolChecker,
-	orchestratorValidator factorycontracts.OrchestratorDefinitionValidator,
+	operations factoryroot.DefinitionValidationOperation,
+	effective factoryroot.EffectiveDefinitionValidationOperation,
+	loadCanonical factoryroot.CanonicalFactoryJSONLoader,
+	requiredToolChecker factoryroot.RequiredToolChecker,
+	orchestratorValidator factoryroot.OrchestratorDefinitionValidator,
 ) *Service {
 	if operations == nil || effective == nil || loadCanonical == nil {
 		return nil
@@ -65,8 +64,8 @@ func (s *Service) ValidateStructuralFactoryDefinition(
 	if err != nil {
 		return factoryroot.ValidateStructuralFactoryDefinitionResult{}, err
 	}
-	profileResult, err := s.operations.ValidateDefinition(ctx, factorycontracts.DefinitionValidationRequest{
-		Profile:                factorycontracts.ResolveValidationProfile(request.Profile),
+	profileResult, err := s.operations.ValidateDefinition(ctx, factoryroot.DefinitionValidationRequest{
+		Profile:                factoryroot.ResolveValidationProfile(request.Profile),
 		Config:                 cfg,
 		CanonicalPayload:       canonical,
 		CanonicalFactoryLoader: s.loadCanonical,
@@ -105,7 +104,7 @@ func (s *Service) ValidateEffectiveFactoryDefinition(
 	if err != nil {
 		return factoryroot.ValidateEffectiveFactoryDefinitionResult{}, err
 	}
-	result, err := s.effective.ValidateEffectiveDefinition(ctx, factorycontracts.EffectiveDefinitionValidationRequest{
+	result, err := s.effective.ValidateEffectiveDefinition(ctx, factoryroot.EffectiveDefinitionValidationRequest{
 		Config: cfg,
 	})
 	if err != nil {
@@ -116,7 +115,7 @@ func (s *Service) ValidateEffectiveFactoryDefinition(
 
 func (s *Service) factoryConfigFromCanonical(
 	canonical []byte,
-) (*factorycontracts.FactoryConfig, error) {
+) (*factoryroot.FactoryConfig, error) {
 	loaded, err := s.loadCanonical(canonical, nil)
 	if err != nil {
 		if errors.Is(err, factoryroot.ErrInvalidNamedFactory) {
@@ -135,7 +134,7 @@ func (s *Service) factoryConfigFromCanonical(
 }
 
 func finishStructuralResult(
-	result factorycontracts.ValidationResult,
+	result factoryroot.ValidationResult,
 ) (factoryroot.ValidateStructuralFactoryDefinitionResult, error) {
 	rootResult := factoryroot.ValidationResult{Targets: append([]factoryroot.ValidationTarget(nil), result.Targets...)}
 	if rootResult.HasBlockingTargets() {
@@ -147,7 +146,7 @@ func finishStructuralResult(
 }
 
 func finishEffectiveResult(
-	result factorycontracts.ValidationResult,
+	result factoryroot.ValidationResult,
 ) (factoryroot.ValidateEffectiveFactoryDefinitionResult, error) {
 	rootResult := factoryroot.ValidationResult{Targets: append([]factoryroot.ValidationTarget(nil), result.Targets...)}
 	if rootResult.HasBlockingTargets() {
@@ -158,9 +157,9 @@ func finishEffectiveResult(
 	return factoryroot.ValidateEffectiveFactoryDefinitionResult{Validation: rootResult}, nil
 }
 
-func mergeValidationResults(parts ...factorycontracts.ValidationResult) factorycontracts.ValidationResult {
+func mergeValidationResults(parts ...factoryroot.ValidationResult) factoryroot.ValidationResult {
 	seen := make(map[string]struct{})
-	var targets []factorycontracts.ValidationTarget
+	var targets []factoryroot.ValidationTarget
 	for _, part := range parts {
 		for _, target := range part.Targets {
 			signature := structuralTargetSignature(target)
@@ -171,10 +170,10 @@ func mergeValidationResults(parts ...factorycontracts.ValidationResult) factoryc
 			targets = append(targets, target)
 		}
 	}
-	return factorycontracts.ValidationResult{Targets: targets}
+	return factoryroot.ValidationResult{Targets: targets}
 }
 
-func structuralTargetSignature(target factorycontracts.ValidationTarget) string {
+func structuralTargetSignature(target factoryroot.ValidationTarget) string {
 	return target.Code + "|" +
 		string(target.Severity) + "|" +
 		string(target.Subject.Type) + "|" +

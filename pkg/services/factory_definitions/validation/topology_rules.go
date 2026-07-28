@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/automations"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func ruleInputTypes(cfg *factorydefinitions.FactoryConfig) []Finding {
