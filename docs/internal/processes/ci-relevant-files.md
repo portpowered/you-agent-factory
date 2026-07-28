@@ -836,6 +836,21 @@ Wave 0 functional-tests-expansion planning authority lives under
   every top-level `Test*` needs a customer-readable Go doc so
   `functionaltestmetadata` stays viz-compatible.
 
+- `tests/functional/provider_sessions/build_process_inert_test.go` owns
+  Provider Sessions inert-construction proof through `support.BuildProcess` /
+  `root.BuildProcess`. Replace `serviceedges.Edges` Provider Session ports
+  (`ProviderSessionResolveHomeDirectory`, `ProviderSessionFileSystem`,
+  `ProviderSessionCodexWalkDirectory`, `ProviderSessionCodexResolveSymlinks`,
+  `ProviderSessionCursorWalkDirectory`, `ProviderSessionCursorResolveSymlinks`,
+  `ProviderSessionCursorOpenDatabase`) with recording stubs and assert directory
+  walks, symlink resolution, filesystem opens, and Cursor database opens stay at
+  zero during composition. Root path derivation may call the home resolver and
+  filesystem `Stat` without session discovery; do not treat
+  `packaged_root_shape` or `del_pses_*` unit gates as substitutes. Catalog
+  metadata infers domain `provider_sessions` and subsection `root_composition`;
+  every top-level `Test*` needs a customer-readable Go doc so
+  `functionaltestmetadata` stays viz-compatible.
+
 - `tests/functional/provider_sessions/association/association_test.go` owns
   Provider Session ref correlation on public Factory Session dispatch projections.
   Drive proofs through `support.StartFunctionalAPIServer` with a JavaScript
