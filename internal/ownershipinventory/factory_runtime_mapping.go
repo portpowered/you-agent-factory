@@ -16,6 +16,8 @@ type factoryRuntimeMoveRule struct {
 // factoryRuntimeMoveRules mirrors cmd/packagetargetmanifestcheck nestedOwnerMoveRules
 // for factory_runtime. Ownership rows keep owner destination with concrete successor paths.
 var factoryRuntimeMoveRules = []factoryRuntimeMoveRule{
+	{exact: "internal", subservice: ""},
+	{exact: "internal/host", prefix: "internal/host/", subservice: ""},
 	{exact: "javascript", prefix: "javascript/", subservice: "orchestration"},
 	{prefix: "internal/orchestrators/", subservice: "orchestration"},
 	{exact: "tooling", prefix: "tooling/", subservice: "orchestration"},

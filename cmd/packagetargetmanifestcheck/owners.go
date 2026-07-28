@@ -249,6 +249,8 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 		{exact: "internal/runtimeopening", prefix: "internal/runtimeopening/", dest: "factory_sessions/internal/services/runtime_opening"},
 	},
 	"factory_runtime": {
+		{exact: "internal", dest: "factory_runtime/internal"},
+		{exact: "internal/host", prefix: "internal/host/", dest: "factory_runtime/internal"},
 		{exact: "javascript", prefix: "javascript/", dest: "factory_runtime/internal/services/orchestration"},
 		{prefix: "internal/orchestrators/", dest: "factory_runtime/internal/services/orchestration"},
 		{exact: "tooling", prefix: "tooling/", dest: "factory_runtime/internal/services/orchestration"},
