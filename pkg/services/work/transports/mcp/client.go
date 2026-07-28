@@ -39,7 +39,18 @@ type canonicalToolHandler func(
 ) (json.RawMessage, error)
 
 var canonicalToolHandlers = map[string]canonicalToolHandler{
-	ToolGet: handleGet,
+	ToolSubmit: handleSubmit,
+	ToolGet:    handleGet,
+}
+
+func handleSubmit(
+	ctx context.Context,
+	service work.Service,
+	input json.RawMessage,
+) (json.RawMessage, error) {
+	return callToolJSON(input, "decode submit work input", func(request SubmitInput) ToolResponse[work.WorkRequestSubmitResult] {
+		return Submit(ctx, service, request)
+	})
 }
 
 func handleGet(

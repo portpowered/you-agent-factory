@@ -158,13 +158,16 @@ func TestToolByName_UnknownToolReturnsFalse(t *testing.T) {
 	}
 }
 
-func TestIsCanonicalToolHandlerRegistered_ReportsGetHandlerOnly(t *testing.T) {
+func TestIsCanonicalToolHandlerRegistered_ReportsGetAndSubmitHandlers(t *testing.T) {
 	t.Parallel()
 
 	if !workmcp.IsCanonicalToolHandlerRegistered(workmcp.ToolGet) {
 		t.Fatal("get handler should be registered")
 	}
-	for _, name := range []string{workmcp.ToolSubmit, workmcp.ToolList, workmcp.ToolMove} {
+	if !workmcp.IsCanonicalToolHandlerRegistered(workmcp.ToolSubmit) {
+		t.Fatal("submit handler should be registered")
+	}
+	for _, name := range []string{workmcp.ToolList, workmcp.ToolMove} {
 		if workmcp.IsCanonicalToolHandlerRegistered(name) {
 			t.Fatalf("handler for %q should not be registered yet", name)
 		}

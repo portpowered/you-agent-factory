@@ -2,7 +2,6 @@ package workmcp
 
 import (
 	"context"
-	"strings"
 
 	work "github.com/portpowered/infinite-you/pkg/services/work"
 )
@@ -29,15 +28,4 @@ func Get(
 		return ToolResponse[work.ReadModel]{Error: &envelope}
 	}
 	return ToolResponse[work.ReadModel]{Result: &result}
-}
-
-func executionErrorEnvelope(err error) ToolErrorEnvelope {
-	return ToolErrorEnvelope{
-		Code:      errorCodeBadRequest,
-		Message:   strings.TrimSpace(err.Error()),
-		Retryable: false,
-		Details: map[string]any{
-			"reason": err.Error(),
-		},
-	}
 }

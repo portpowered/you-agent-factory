@@ -96,8 +96,9 @@ func TestPackageBoundary_DoesNotImportWorkInternal(t *testing.T) {
 
 type fakeWorkRoot struct {
 	work.Service
-	invoked *bool
-	getWork func(context.Context, string, string) (work.ReadModel, error)
+	invoked                     *bool
+	getWork                     func(context.Context, string, string) (work.ReadModel, error)
+	submitWorkRequestForSession func(context.Context, string, work.WorkRequest) (work.WorkRequestSubmitResult, error)
 }
 
 func (fake fakeWorkRoot) markInvoked() {
@@ -116,6 +117,18 @@ func (fake fakeWorkRoot) GetWork(
 		panic("unexpected GetWork on fake Work root")
 	}
 	return fake.getWork(ctx, sessionID, workID)
+}
+
+func (fake fakeWorkRoot) SubmitWorkRequestForSession(
+	ctx context.Context,
+	sessionID string,
+	request work.WorkRequest,
+) (work.WorkRequestSubmitResult, error) {
+	fake.markInvoked()
+	if fake.submitWorkRequestForSession == nil {
+		panic("unexpected SubmitWorkRequestForSession on fake Work root")
+	}
+	return fake.submitWorkRequestForSession(ctx, sessionID, request)
 }
 
 func assertPackageDirectImportsForbidden(t *testing.T, packagePath string, forbiddenRoots []string) {
