@@ -2469,6 +2469,52 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/construction",
+      "minimum": 74.13
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/diagnostics",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/execution",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/execution/recording",
+      "minimum": 67.08
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/executor",
+      "minimum": 76.47
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/executor/agentrun",
+      "minimum": 43.76
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/interface",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal",
       "minimum": 65.85
     },
@@ -2659,6 +2705,18 @@
       "minimum": 53.54
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/invocation",
+      "minimum": 81.57
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/process",
+      "minimum": 61.59
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/prompting",
+      "minimum": 23.80
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider",
       "minimum": 34.00
     },
@@ -2749,6 +2807,16 @@
       "minimum": 6.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/runner",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/service",
       "exception": {
         "kind": "measurement",
@@ -2759,6 +2827,18 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/services/inference",
+      "minimum": 61.19
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/services/testing",
+      "minimum": 34.61
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/skippermissions",
+      "minimum": 19.51
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/wire",
       "exception": {
         "kind": "measurement",
@@ -2767,6 +2847,10 @@
         "deadline": "2027-07-15",
         "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
       }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/worktree",
+      "minimum": 53.54
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli",
