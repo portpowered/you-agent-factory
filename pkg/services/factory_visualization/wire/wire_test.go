@@ -2,14 +2,16 @@ package wire_test
 
 import (
 	"context"
+	"errors"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
-	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 	liveviewprojection "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection"
+	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
@@ -130,16 +132,51 @@ func TestNewRootRejectsMissingConstructionPorts(t *testing.T) {
 	}
 }
 
-func TestNewRootConstructsUsableRootInterface(t *testing.T) {
+func requireLifecycleError(
+	t *testing.T,
+	err error,
+	kind factoryvisualization.LifecycleErrorKind,
+	label string,
+) {
+	t.Helper()
+	var lifeErr *factoryvisualization.LifecycleError
+	if !errors.As(err, &lifeErr) || lifeErr.Kind != kind {
+		t.Fatalf("%s: error = %v, want %s", label, err, kind)
+	}
+}
+
+func TestNewRootConstructsInertRoot(t *testing.T) {
 	t.Parallel()
 
 	subscribeCalls := 0
 	presentCalls := 0
+	projectionReads := 0
+	source := wireSourceStub{
+		subscribeHook: func() {
+			subscribeCalls++
+			panic("event subscription started during inert construction")
+		},
+	}
+	projections := wireRecordingProjectionStub{
+		reconstructHook: func() {
+			projectionReads++
+			panic("projection read during inert construction")
+		},
+	}
+	sink := factoryvisualization.SinkFunc(func(factoryvisualization.View) {
+		presentCalls++
+		panic("presentation sink invoked during inert construction")
+	})
+
+	runtime.GC()
+	time.Sleep(20 * time.Millisecond)
+	baseline := runtime.NumGoroutine()
+
 	root, err := factoryvisualizationwire.NewRoot(
-		wireSourceStub{subscribeHook: func() { subscribeCalls++ }},
-		wireProjectionStub{},
+		source,
+		projections,
 		wireClock{},
-		factoryvisualization.SinkFunc(func(factoryvisualization.View) { presentCalls++ }),
+		sink,
 		nil,
 	)
 	if err != nil {
@@ -149,15 +186,40 @@ func TestNewRootConstructsUsableRootInterface(t *testing.T) {
 		t.Fatal("NewRoot() returned nil root")
 	}
 	var peer factoryvisualization.Root = root
-	if subscribeCalls != 0 || presentCalls != 0 {
-		t.Fatalf("NewRoot() side effects: subscribe=%d present=%d, want inert construction", subscribeCalls, presentCalls)
+	if subscribeCalls != 0 || presentCalls != 0 || projectionReads != 0 {
+		t.Fatalf(
+			"NewRoot() side effects: subscribe=%d present=%d projection=%d, want inert construction",
+			subscribeCalls, presentCalls, projectionReads,
+		)
+	}
+
+	runtime.GC()
+	time.Sleep(20 * time.Millisecond)
+	if leaked := runtime.NumGoroutine() - baseline; leaked > 4 {
+		t.Fatalf(
+			"goroutine leak after construction: baseline=%d current=%d delta=%d, want no lifecycle goroutines",
+			baseline, runtime.NumGoroutine(), leaked,
+		)
 	}
 
 	_, err = peer.Join(context.Background(), factoryvisualization.JoinRequest{})
-	if err == nil {
-		t.Fatal("Join before Activate: error = nil, want not-activated failure")
+	requireLifecycleError(t, err, factoryvisualization.LifecycleErrorNotActivated, "Join before Activate")
+	if subscribeCalls != 0 || presentCalls != 0 || projectionReads != 0 {
+		t.Fatal("Join before Activate must not subscribe, present, or read projections")
 	}
-	if subscribeCalls != 0 || presentCalls != 0 {
-		t.Fatal("Join before Activate must not subscribe or present")
+}
+
+type wireRecordingProjectionStub struct {
+	wireProjectionStub
+	reconstructHook func()
+}
+
+func (s wireRecordingProjectionStub) ReconstructFactoryWorldState(
+	events []factorydefinitions.FactoryEvent,
+	tick int,
+) (factorydefinitions.FactoryWorldState, error) {
+	if s.reconstructHook != nil {
+		s.reconstructHook()
 	}
+	return s.wireProjectionStub.ReconstructFactoryWorldState(events, tick)
 }
