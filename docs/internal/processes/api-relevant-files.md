@@ -31,7 +31,13 @@ Use this map when changing the public REST contract.
   and non-stream handlers return without encoding a body when the context ends
   before success encoding (`request_context.go`).
   Package-boundary tests must prove the adapter does not import
-  `pkg/services/recordings/internal/**`.
+  `pkg/services/recordings/internal/**`. Register the package in
+  `docs/internal/packaged-service-structure/package-target-manifest.json`,
+  refresh `docs/internal/baselines/ownership-inventory.json` with
+  `go run ./cmd/ownershipinventoryfreeze`, and add coverage floors in
+  `docs/internal/baselines/go-unit-coverage-package-minimums.json` and
+  `docs/internal/baselines/go-functional-coverage-package-minimums.json` when
+  introducing new adapter packages.
 - Factory Session CLI request construction, rendering, diagnostics, and
   operation handlers live under
   `pkg/services/factory_sessions/transports/cli`; Factory Session MCP tool

@@ -1527,6 +1527,10 @@
       "minimum": 4.08
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http",
+      "minimum": 77.80
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/system_initialization",
       "minimum": 37.00
     },
