@@ -408,15 +408,15 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loadedsource",
-      "minimum": 0.00
+      "minimum": 74.13
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading",
-      "minimum": 0.00
+      "minimum": 45.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/runtimeconfig",
-      "minimum": 0.00
+      "minimum": 83.62
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire",
@@ -636,11 +636,11 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loadedsource",
-      "minimum": 74.13
+      "minimum": 0.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading",
-      "minimum": 45.00
+      "minimum": 0.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedfactories",
@@ -788,7 +788,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/runtimeconfig",
-      "minimum": 83.62
+      "minimum": 0.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service",

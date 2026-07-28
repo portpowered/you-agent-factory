@@ -40,10 +40,11 @@ func TestCompileLoadFold_TransitionalPublicPackagesRemainPresent(t *testing.T) {
 func TestCompileLoadFold_DefinitionLifecycleHostUnchangedInBranch(t *testing.T) {
 	t.Parallel()
 
+	baseRef := resolveDefinitionDiffBaseRef(t)
 	cmd := exec.Command(
 		"git",
 		"diff",
-		"main...HEAD",
+		baseRef+"...HEAD",
 		"--",
 		"pkg/services/factory_definitions/definition/",
 	)
@@ -57,6 +58,27 @@ func TestCompileLoadFold_DefinitionLifecycleHostUnchangedInBranch(t *testing.T) 
 	if trimmed := strings.TrimSpace(string(output)); trimmed != "" {
 		t.Fatalf("definition/ must remain untouched by CLN-DEF-FOLD-COMPILATION; found diff:\n%s", trimmed)
 	}
+}
+
+func resolveDefinitionDiffBaseRef(t *testing.T) string {
+	t.Helper()
+
+	candidates := []string{
+		strings.TrimSpace(os.Getenv("PR_BASE_SHA")),
+		"origin/main",
+		"main",
+	}
+	for _, candidate := range candidates {
+		if candidate == "" {
+			continue
+		}
+		cmd := exec.Command("git", "rev-parse", "--verify", candidate)
+		if err := cmd.Run(); err == nil {
+			return candidate
+		}
+	}
+	t.Fatal("unable to resolve git base ref for definition/ diff guard; set PR_BASE_SHA or fetch origin/main")
+	return ""
 }
 
 func TestCompileLoadFold_CompilationDoesNotImportDefinitionLifecycleHost(t *testing.T) {
