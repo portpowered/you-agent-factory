@@ -89,3 +89,137 @@ func (recordingPeerContentStaging) ResolveContent(context.Context, string) (Reso
 func (recordingPeerContentStaging) CleanupContent(context.Context, string) error {
 	return nil
 }
+
+func TestMaterializationServiceNilBinderReturnsNil(t *testing.T) {
+	t.Parallel()
+	if got := MaterializationService(nil); got != nil {
+		t.Fatalf("MaterializationService(nil) = %#v, want nil", got)
+	}
+}
+
+func TestAdmissionContentServiceNilBinderReturnsNil(t *testing.T) {
+	t.Parallel()
+	if got := AdmissionContentService(nil, mustRequestPreparationService(t)); got != nil {
+		t.Fatalf("AdmissionContentService(nil, prep) = %#v, want nil", got)
+	}
+	if got := AdmissionContentService(&recordingPeerContentStaging{}, nil); got != nil {
+		t.Fatalf("AdmissionContentService(staging, nil) = %#v, want nil", got)
+	}
+}
+
+func TestAdmissionContentServiceDelegatesContentLifecycle(t *testing.T) {
+	t.Parallel()
+
+	staging := &recordingPeerContentStagingWithLifecycle{}
+	preparation := mustRequestPreparationService(t)
+	service := AdmissionContentService(staging, preparation)
+	ctx := context.Background()
+
+	prepared, err := service.PrepareContent(ctx, []StagedSubmissionItem{{
+		ItemType: "image", StagedFileRef: "peer-stage-ref", FileName: "peer.png", MediaType: "image/png",
+	}})
+	if err != nil || len(prepared) != 1 || prepared[0].URL != "file:///peer.png" {
+		t.Fatalf("PrepareContent = (%#v, %v)", prepared, err)
+	}
+
+	resolved, err := service.ResolveContent(ctx, "peer-stage-ref")
+	if err != nil || resolved.Path != "/tmp/peer.png" {
+		t.Fatalf("ResolveContent = (%#v, %v)", resolved, err)
+	}
+
+	if err := service.CleanupContent(ctx, "peer-stage-ref"); err != nil || !staging.cleaned {
+		t.Fatalf("CleanupContent = %v, cleaned = %v", err, staging.cleaned)
+	}
+
+	_, _, err = service.MaterializeContentURL(ctx, "file:///peer.png")
+	if err == nil || !strings.Contains(err.Error(), "does not support content materialization") {
+		t.Fatalf("MaterializeContentURL error = %v, want materialization unsupported", err)
+	}
+}
+
+func TestMaterializationServiceRejectsUnsupportedSlices(t *testing.T) {
+	t.Parallel()
+
+	service := MaterializationService(ContentMaterializeFunc(func(context.Context, string) (string, ContentCleanup, error) {
+		return "", nil, nil
+	}))
+	ctx := context.Background()
+
+	cases := []struct {
+		name string
+		call func() error
+		want string
+	}{
+		{
+			name: "admission",
+			call: func() error {
+				_, err := service.SubmitWorkRequestForSession(ctx, "session-1", WorkRequest{})
+				return err
+			},
+			want: "does not support admission",
+		},
+		{
+			name: "content stage",
+			call: func() error {
+				_, err := service.StageContent(ctx, StageContentRequest{})
+				return err
+			},
+			want: "does not support content staging",
+		},
+		{
+			name: "invocation input",
+			call: func() error {
+				_, err := service.PrepareInvocationInput(ctx, InvocationInputPreparationRequest{})
+				return err
+			},
+			want: "does not support invocation policy",
+		},
+		{
+			name: "primary result",
+			call: func() error {
+				_, err := service.ResolvePrimaryResult(ctx, PrimaryResultSelectionInput{})
+				return err
+			},
+			want: "does not support invocation policy",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if err := tc.call(); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error = %v, want substring %q", err, tc.want)
+			}
+		})
+	}
+}
+
+type recordingPeerContentStagingWithLifecycle struct {
+	recordingPeerContentStaging
+	cleaned bool
+}
+
+func (s *recordingPeerContentStagingWithLifecycle) PrepareContent(
+	_ context.Context,
+	items []StagedSubmissionItem,
+) ([]WorkContentPart, error) {
+	if len(items) != 1 {
+		return nil, nil
+	}
+	return []WorkContentPart{{
+		Type: WorkContentPartTypeImage,
+		URL:  "file:///peer.png",
+	}}, nil
+}
+
+func (s *recordingPeerContentStagingWithLifecycle) ResolveContent(
+	_ context.Context,
+	ref string,
+) (ResolvedStagedContent, error) {
+	return ResolvedStagedContent{Path: "/tmp/peer.png", URL: "file:///" + ref}, nil
+}
+
+func (s *recordingPeerContentStagingWithLifecycle) CleanupContent(_ context.Context, _ string) error {
+	s.cleaned = true
+	return nil
+}
