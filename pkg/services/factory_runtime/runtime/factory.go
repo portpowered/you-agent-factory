@@ -519,6 +519,7 @@ func (f *factoryImpl) Run(ctx context.Context) error {
 	completedAt := f.clock.Now()
 	f.eventHistory.RecordRunResponse(tick, nextState, runStopReason, completedAt)
 	recordSessionLifecycleCompletionFromFactory(f, tick, nextState, runStopReason, completedAt)
+	closeRuntimeEventSubscriptions(f.eventHistory)
 
 	if errors.Is(runErr, context.Canceled) && stopErr == nil {
 		return nil
@@ -954,4 +955,15 @@ func (f *factoryImpl) WorkflowContext() *factory_context.FactoryContext {
 		return nil
 	}
 	return f.cfg.workflowContext
+}
+
+func closeRuntimeEventSubscriptions(ledger recordings.RuntimeLedger) {
+	if ledger == nil {
+		return
+	}
+	closer, ok := ledger.(interface{ CloseLiveSubscriptions() })
+	if !ok {
+		return
+	}
+	closer.CloseLiveSubscriptions()
 }

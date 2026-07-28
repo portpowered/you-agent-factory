@@ -222,18 +222,18 @@ func (p *ScriptWrapProvider) executeAgy(
 	if result.Failure != nil {
 		providerErr := agyProviderErrorWithSession(req, providerErrorFromAdapterFailure(result.Failure, executeErr, diagnostics))
 		logger.Error("provider failure normalized", providerFailureLogFields(req, providerErr, result.Command, duration)...)
-		p.publishOpenCodeFailure(req.Dispatch.DispatchID, providerErr, len(result.Drafts) > 0)
+		p.publishFailureFragmentWithCanonicalState(req.Dispatch.DispatchID, providerErr.ProviderSession, providerErr, len(result.Drafts) > 0)
 		return workerexecution.InferenceResponse{}, providerErr
 	}
 	if executeErr != nil {
 		if orchestrated := agyadapter.ClassifyOrchestrationError(executeErr); orchestrated.Failure != nil {
 			providerErr := agyProviderErrorWithSession(req, providerErrorFromAdapterFailure(orchestrated.Failure, executeErr, diagnostics))
 			logger.Error("provider failure normalized", providerFailureLogFields(req, providerErr, result.Command, duration)...)
-			p.publishOpenCodeFailure(req.Dispatch.DispatchID, providerErr, len(result.Drafts) > 0)
+			p.publishFailureFragmentWithCanonicalState(req.Dispatch.DispatchID, providerErr.ProviderSession, providerErr, len(result.Drafts) > 0)
 			return workerexecution.InferenceResponse{}, providerErr
 		}
 		providerErr := agyProviderErrorWithSession(req, normalizeProviderExecutionError(req.ModelProvider, result.Command, executeErr, result.Response.ProviderSession, diagnostics))
-		p.publishOpenCodeFailure(req.Dispatch.DispatchID, providerErr, len(result.Drafts) > 0)
+		p.publishFailureFragmentWithCanonicalState(req.Dispatch.DispatchID, providerErr.ProviderSession, providerErr, len(result.Drafts) > 0)
 		return workerexecution.InferenceResponse{}, providerErr
 	}
 	response := result.Response
@@ -241,7 +241,7 @@ func (p *ScriptWrapProvider) executeAgy(
 	response.Diagnostics = diagnostics
 	logger.Info("inferencer: request completed",
 		appendProviderSessionLogFields(providerLogFields(req, "output_len", len(response.Content)), response.ProviderSession)...)
-	p.publishOpenCodeCompleted(req.Dispatch.DispatchID, response.ProviderSession, len(result.Drafts) > 0)
+	p.publishCompletedFragment(req.Dispatch.DispatchID, response.ProviderSession)
 	return response, nil
 }
 

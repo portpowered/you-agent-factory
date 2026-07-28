@@ -34,6 +34,20 @@ var sensitiveMetadataTerms = []string{
 	"token",
 }
 
+// allowedSensitiveMetadataKeys are progress metadata keys that may contain
+// sensitive-looking substrings such as "token" while carrying bounded numeric
+// usage facts rather than secret material.
+var allowedSensitiveMetadataKeys = map[string]struct{}{
+	"input_tokens":            {},
+	"output_tokens":           {},
+	"reasoning_tokens":        {},
+	"reasoning_output_tokens": {},
+	"cached_input_tokens":     {},
+	"total_tokens":            {},
+	"cache_read_tokens":       {},
+	"cache_write_tokens":      {},
+}
+
 func normalizeSuccess(
 	result providers.ExecuteResult,
 	provider providers.ID,
@@ -156,6 +170,9 @@ func requestDiagnosticSecrets(request providers.ExecuteRequest) []string {
 
 func containsSensitiveMetadataTerm(key string) bool {
 	normalized := strings.ToLower(strings.ReplaceAll(key, "-", "_"))
+	if _, allowed := allowedSensitiveMetadataKeys[normalized]; allowed {
+		return false
+	}
 	for _, term := range sensitiveMetadataTerms {
 		if strings.Contains(normalized, term) {
 			return true

@@ -217,3 +217,117 @@ func SubmitDefaultSessionWork(
 	}
 	return result
 }
+
+// OpenFactorySessionAt opens one live Factory Session through the public API.
+func OpenFactorySessionAt(
+	t testing.TB,
+	baseURL string,
+	folderPath string,
+) factoryapi.OpenFactorySessionResponse {
+	t.Helper()
+
+	payload, err := json.Marshal(factoryapi.OpenFactorySessionRequest{FolderPath: folderPath})
+	if err != nil {
+		t.Fatalf("marshal open Factory Session request: %v", err)
+	}
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions"
+	response, err := http.Post(endpoint, "application/json", bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("POST %s: %v", endpoint, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("POST %s status = %d: %s", endpoint, response.StatusCode, strings.TrimSpace(string(body)))
+	}
+	var opened factoryapi.OpenFactorySessionResponse
+	if err := json.NewDecoder(response.Body).Decode(&opened); err != nil {
+		t.Fatalf("decode POST %s: %v", endpoint, err)
+	}
+	if opened.Session == nil || opened.Session.Id == "" {
+		t.Fatalf("open Factory Session response = %#v, want session id", opened)
+	}
+	return opened
+}
+
+// CloseFactorySessionAt closes one live Factory Session through the public API.
+func CloseFactorySessionAt(t testing.TB, baseURL, sessionID string) {
+	t.Helper()
+
+	request, err := http.NewRequest(
+		http.MethodDelete,
+		strings.TrimSuffix(baseURL, "/")+"/factory-sessions/"+sessionID,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("build close Factory Session request: %v", err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("DELETE Factory Session %q: %v", sessionID, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf(
+			"DELETE Factory Session %q status = %d, want 204: %s",
+			sessionID,
+			response.StatusCode,
+			strings.TrimSpace(string(body)),
+		)
+	}
+}
+
+// SubmitSessionWorkAt submits work to one Factory Session through the public API.
+func SubmitSessionWorkAt(
+	t testing.TB,
+	baseURL string,
+	sessionID string,
+	request factoryapi.SubmitWorkRequest,
+) factoryapi.SubmitWorkResponse {
+	t.Helper()
+
+	payload, err := json.Marshal(request)
+	if err != nil {
+		t.Fatalf("marshal submit Work request: %v", err)
+	}
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + sessionID + "/work"
+	response, err := http.Post(endpoint, "application/json", bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("POST %s: %v", endpoint, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("POST %s status = %d: %s", endpoint, response.StatusCode, strings.TrimSpace(string(body)))
+	}
+	var result factoryapi.SubmitWorkResponse
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		t.Fatalf("decode POST %s: %v", endpoint, err)
+	}
+	return result
+}
+
+// WaitForSessionTerminalStatus polls one session-scoped status endpoint until
+// work becomes terminal.
+func WaitForSessionTerminalStatus(
+	t testing.TB,
+	baseURL string,
+	sessionID string,
+	timeout time.Duration,
+) factoryapi.StatusResponse {
+	t.Helper()
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + sessionID + "/status"
+	return WaitForStatus(t, endpoint, timeout, func(status factoryapi.StatusResponse) bool {
+		completed := status.Categories.Terminal + status.Categories.Failed
+		if completed == 0 || status.Categories.Initial != 0 || status.Categories.Processing != 0 {
+			return false
+		}
+		switch status.RuntimeStatus {
+		case string(interfaces.RuntimeStatusIdle), string(interfaces.RuntimeStatusFinished):
+			return true
+		default:
+			return false
+		}
+	})
+}

@@ -1,5 +1,0 @@
-{"type":"system","subtype":"init","session_id":"cursor-reconnect-before"}
-{"type":"tool_call","subtype":"started","call_id":"call-read","tool_call":{"readToolCall":{"args":{"path":"README.md"}}},"session_id":"cursor-reconnect-before"}
-{"type":"tool_call","subtype":"started","call_id":"call-edit","tool_call":{"editToolCall":{"args":{"path":"safe.txt","prompt":"private prompt"}}},"session_id":"cursor-reconnect-before"}
-{"type":"system","subtype":"init","session_id":"cursor-reconnect-after"}
-{"type":"result","subtype":"success","is_error":false,"result":"continued safely","session_id":"cursor-reconnect-after"}
