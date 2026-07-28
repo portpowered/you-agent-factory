@@ -31,6 +31,7 @@
       "url": "http://127.0.0.1/test.png",
       "expect": {
         "outcome": "error",
+        "errorIs": "unsafe",
         "errorContains": ["media url not allowed", "ssrf"]
       }
     },
@@ -39,6 +40,7 @@
       "url": "http://169.254.169.254/latest/meta-data/",
       "expect": {
         "outcome": "error",
+        "errorIs": "unsafe",
         "errorContains": ["media url not allowed", "ssrf"]
       }
     },
@@ -60,6 +62,7 @@
       "statusCode": 404,
       "expect": {
         "outcome": "error",
+        "errorIs": "inaccessible",
         "errorContains": ["media url inaccessible", "http 404"]
       }
     },
@@ -70,7 +73,18 @@
       "maxBytes": 8,
       "expect": {
         "outcome": "error",
+        "errorIs": "inaccessible",
         "errorContains": ["exceeds size limit"]
+      }
+    },
+    {
+      "name": "data_url_exceeds_size",
+      "url": "data:text/plain;base64,MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkw",
+      "maxBytes": 8,
+      "expect": {
+        "outcome": "error",
+        "errorIs": "inaccessible",
+        "errorContains": ["data exceeds size limit"]
       }
     }
   ]

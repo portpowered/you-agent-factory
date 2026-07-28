@@ -1,4 +1,4 @@
-package materialize
+package service
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"time"
 
 	work "github.com/portpowered/infinite-you/pkg/services/work"
+	contentmaterialization "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_materialization"
 )
 
 const (
@@ -100,6 +101,7 @@ func (s *Service) MaterializeContentURL(ctx context.Context, rawURL string) (str
 }
 
 var _ work.ContentMaterializer = (*Service)(nil)
+var _ contentmaterialization.Service = (*Service)(nil)
 
 func (o *Options) maxBytes() int64 {
 	if o == nil || o.MaxBytes <= 0 {

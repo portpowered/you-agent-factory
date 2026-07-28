@@ -1,7 +1,8 @@
-package materialize_test
+package service_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,11 +11,11 @@ import (
 	"testing"
 
 	content "github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/work/materialize"
+	"github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_materialization/internal/service"
 )
 
 func TestURLMaterializationCorpus_LoadsRepresentativeCases(t *testing.T) {
-	corpus, err := materialize.LoadURLMaterializationCorpus()
+	corpus, err := service.LoadURLMaterializationCorpus()
 	if err != nil {
 		t.Fatalf("LoadURLMaterializationCorpus: %v", err)
 	}
@@ -36,7 +37,7 @@ func TestURLMaterializationCorpus_LoadsRepresentativeCases(t *testing.T) {
 }
 
 func TestURLMaterializationCorpus_CasesMatchExpectedOutcomes(t *testing.T) {
-	corpus, err := materialize.LoadURLMaterializationCorpus()
+	corpus, err := service.LoadURLMaterializationCorpus()
 	if err != nil {
 		t.Fatalf("LoadURLMaterializationCorpus: %v", err)
 	}
@@ -45,7 +46,7 @@ func TestURLMaterializationCorpus_CasesMatchExpectedOutcomes(t *testing.T) {
 		tc := tc
 		t.Run(tc.Name, func(t *testing.T) {
 			rawURL, opts, localPath := resolveURLMaterializationFixture(t, tc)
-			gotPath, cleanup, err := materialize.MaterializeContentURL(context.Background(), rawURL, opts)
+			gotPath, cleanup, err := service.MaterializeContentURL(context.Background(), rawURL, opts)
 			defer cleanup()
 
 			switch tc.Expect.Outcome {
@@ -60,12 +61,16 @@ func TestURLMaterializationCorpus_CasesMatchExpectedOutcomes(t *testing.T) {
 	}
 }
 
-func resolveURLMaterializationFixture(t *testing.T, tc materialize.URLMaterializationCase) (string, *materialize.Options, string) {
+func resolveURLMaterializationFixture(t *testing.T, tc service.URLMaterializationCase) (string, *service.Options, string) {
 	t.Helper()
 
 	switch tc.Setup {
 	case "":
-		return tc.URL, newMaterializeTestOptions(), ""
+		opts := newMaterializeTestOptions()
+		if tc.MaxBytes > 0 {
+			opts.MaxBytes = tc.MaxBytes
+		}
+		return tc.URL, opts, ""
 	case "local_file":
 		dir := t.TempDir()
 		localPath := filepath.Join(dir, "fixture.png")
@@ -109,7 +114,7 @@ func resolveURLMaterializationFixture(t *testing.T, tc materialize.URLMaterializ
 
 func assertURLMaterializationSuccess(
 	t *testing.T,
-	tc materialize.URLMaterializationCase,
+	tc service.URLMaterializationCase,
 	gotPath, localPath string,
 	cleanup func(),
 	err error,
@@ -141,10 +146,23 @@ func assertURLMaterializationSuccess(
 	}
 }
 
-func assertURLMaterializationError(t *testing.T, tc materialize.URLMaterializationCase, err error) {
+func assertURLMaterializationError(t *testing.T, tc service.URLMaterializationCase, err error) {
 	t.Helper()
 	if err == nil {
 		t.Fatal("expected materialization error")
+	}
+	switch tc.Expect.ErrorIs {
+	case "":
+	case "unsafe":
+		if !errors.Is(err, content.ErrUnsafeContentURL) {
+			t.Fatalf("error = %v, want errors.Is(..., ErrUnsafeContentURL)", err)
+		}
+	case "inaccessible":
+		if !errors.Is(err, content.ErrContentURLInaccessible) {
+			t.Fatalf("error = %v, want errors.Is(..., ErrContentURLInaccessible)", err)
+		}
+	default:
+		t.Fatalf("unsupported expect.errorIs %q", tc.Expect.ErrorIs)
 	}
 	for _, fragment := range tc.Expect.ErrorContains {
 		if !strings.Contains(err.Error(), fragment) {

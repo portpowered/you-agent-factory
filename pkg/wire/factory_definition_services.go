@@ -29,7 +29,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingreplay "github.com/portpowered/infinite-you/pkg/services/recordings/replay"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workmaterialize "github.com/portpowered/infinite-you/pkg/services/work/materialize"
+	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
 	wirefactorydefinitions "github.com/portpowered/infinite-you/pkg/wire/factorydefinitions"
 )
 
@@ -72,12 +72,12 @@ func provideContentMaterializer(
 	httpDoer := edges.WorkContentHTTPDoer
 	if httpDoer == nil {
 		httpDoer = &http.Client{
-			Timeout:       workmaterialize.DefaultHTTPTimeout,
-			CheckRedirect: workmaterialize.RedirectPolicy(0, false),
+			Timeout:       workwire.DefaultContentMaterializationHTTPTimeout,
+			CheckRedirect: workwire.ContentMaterializationRedirectPolicy(0, false),
 		}
 	}
-	return workmaterialize.New(
-		hostPlatform, 0, 0, 0, false, httpDoer, "",
+	return workwire.NewContentMaterializationService(
+		hostPlatform, httpDoer,
 		inspectPath, createTempFile, removePath, writeFile, openFile,
 	)
 }

@@ -124,6 +124,7 @@
     "pkg/services/factory_definitions/service",
     "pkg/services/factory_definitions/snapshotcapture",
     "pkg/services/factory_definitions/transports/cli",
+    "pkg/services/factory_definitions/transports/http",
     "pkg/services/factory_definitions/ttsobservability",
     "pkg/services/factory_definitions/validation",
     "pkg/services/factory_definitions/wire",
@@ -248,6 +249,7 @@
     "pkg/services/factory_visualization/internal/services/response_event_presentation",
     "pkg/services/factory_visualization/internal/services/response_event_presentation/internal/service",
     "pkg/services/factory_visualization/internal/services/response_event_presentation/wire",
+    "pkg/services/factory_visualization/wire",
     "pkg/services/models",
     "pkg/services/models/internal/artifacts",
     "pkg/services/models/internal/catalog",
@@ -294,6 +296,7 @@
     "pkg/services/provider_sessions/internal/services/cursor_reader/internal/service",
     "pkg/services/provider_sessions/internal/services/cursor_reader/wire",
     "pkg/services/provider_sessions/service",
+    "pkg/services/provider_sessions/transports/http",
     "pkg/services/provider_sessions/wire",
     "pkg/services/providers",
     "pkg/services/providers/internal/service",
@@ -335,11 +338,17 @@
     "pkg/services/system_initialization/internal/workflow",
     "pkg/services/system_initialization/wire",
     "pkg/services/work",
+    "pkg/services/work/internal/services/content_materialization",
+    "pkg/services/work/internal/services/content_materialization/internal/service",
+    "pkg/services/work/internal/services/content_materialization/wire",
+    "pkg/services/work/internal/services/content_staging",
+    "pkg/services/work/internal/services/content_staging/internal/service",
+    "pkg/services/work/internal/services/content_staging/wire",
     "pkg/services/work/internal/services/state_access",
     "pkg/services/work/internal/services/state_access/internal/service",
     "pkg/services/work/internal/services/state_access/wire",
-    "pkg/services/work/materialize",
     "pkg/services/work/service",
+    "pkg/services/work/wire",
     "pkg/services/workers",
     "pkg/services/workers/agypty",
     "pkg/services/workers/cliprovider",
@@ -880,6 +889,11 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/transports/cli",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/transports/http",
       "disposition": "retain",
       "destination": "factory_definitions"
     },
@@ -1504,6 +1518,11 @@
       "destination": "factory_visualization/internal/services/response_event_presentation"
     },
     {
+      "packagePath": "pkg/services/factory_visualization/wire",
+      "disposition": "retain",
+      "destination": "factory_visualization"
+    },
+    {
       "packagePath": "pkg/services/models",
       "disposition": "retain",
       "destination": "models"
@@ -1734,6 +1753,11 @@
       "destination": "provider_sessions"
     },
     {
+      "packagePath": "pkg/services/provider_sessions/transports/http",
+      "disposition": "retain",
+      "destination": "provider_sessions"
+    },
+    {
       "packagePath": "pkg/services/provider_sessions/wire",
       "disposition": "retain",
       "destination": "provider_sessions"
@@ -1939,6 +1963,36 @@
       "destination": "work"
     },
     {
+      "packagePath": "pkg/services/work/internal/services/content_materialization",
+      "disposition": "retain",
+      "destination": "work/internal/services/content_materialization"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/services/content_materialization/internal/service",
+      "disposition": "retain",
+      "destination": "work/internal/services/content_materialization"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/services/content_materialization/wire",
+      "disposition": "retain",
+      "destination": "work/internal/services/content_materialization"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/services/content_staging",
+      "disposition": "retain",
+      "destination": "work/internal/services/content_staging"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/services/content_staging/internal/service",
+      "disposition": "retain",
+      "destination": "work/internal/services/content_staging"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/services/content_staging/wire",
+      "disposition": "retain",
+      "destination": "work/internal/services/content_staging"
+    },
+    {
       "packagePath": "pkg/services/work/internal/services/state_access",
       "disposition": "retain",
       "destination": "work/internal/services/state_access"
@@ -1954,12 +2008,12 @@
       "destination": "work/internal/services/state_access"
     },
     {
-      "packagePath": "pkg/services/work/materialize",
-      "disposition": "move",
-      "destination": "work/internal/services/content_materialization"
+      "packagePath": "pkg/services/work/service",
+      "disposition": "retain",
+      "destination": "work"
     },
     {
-      "packagePath": "pkg/services/work/service",
+      "packagePath": "pkg/services/work/wire",
       "disposition": "retain",
       "destination": "work"
     },
