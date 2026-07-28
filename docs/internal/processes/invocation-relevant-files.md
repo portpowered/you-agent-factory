@@ -2012,13 +2012,38 @@ response-stream output.
   (`TestNoServerNamedInvocationIntegrationAndEquivalenceProof`), combining
   hermetic `@you/goal` success without a TCP listener with shared input-resolution
   and primary-result equivalence on the real bootstrap path.
-- CLI/API invocation parity for packaged `@you/goal` lives in
-  `tests/functional/smoke/cli_named_goal_invocation_parity_smoke_test.go`,
-  comparing live session invocation API responses with real CLI `--json` output
-  for positional, stdin, and named-factory success paths plus representative
-  empty-input and unresolved-primary-result failures. Reuse
-  `scaffoldPackagedGoalInvocationFactoryForSmoke`, `buildYouCLIBinary`, and
-  `support.StartFunctionalAPIServer` when extending parity coverage.
+- CLI/API invocation parity for packaged `@you/goal` is owned by
+  `tests/functional/factory/packaged/cross/package_cli_api_test.go`
+  (`TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree`). The legacy smoke
+  catch-all `tests/functional/smoke/cli_named_goal_invocation_parity_smoke_test.go`
+  remains only until `smoke-delete-06-factory-packaged-cross` retires it.
+- Packaged `@you/goal` CLI-started run inspectability through the public API
+  lives in `tests/functional/factory/packaged/cross/package_cli_api_test.go`
+  (`TestPackagedFactoryInvokedByCLICanBeInspectedByAPI`). Drive the built CLI
+  through `you run --with-server --json` on a `support.NewProcessAPIServer`
+  harness, poll `GET /factory-sessions/~default`, `GET /status`, and
+  `GET /factory-sessions/~default/work` while the run-scoped server is live
+  until goal:complete work, identity-correlated factory events, trace/request-
+  correlated listed work, or peak runtime work signals appear during polling;
+  refresh the snapshot after CLI completion when the server is still live (best-
+  effort retained-event read); collect default-session factory events while the
+  run-scoped server is live; and compare the returned session/status/work/event
+  facts with the CLI `InvocationResponse` identity and primary-result fields using
+  fail-closed assertions. Do not treat uncorrelated `SessionStarted`, bare
+  `RUNNING`, or peak `/status` categories alone as sufficient inspectability proof.
+  Hosted `--with-server` one-shot runs must invoke on the opened API-server
+  session via `HostedLiveInvocation` so `GET /work` and factory events reflect
+  the same CLI-started run.
+- Packaged `@you/goal` CLI/API primary-outcome shape agreement lives in the same
+  cross cell (`TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree`). Compare
+  independent API `POST /factory-sessions/~default/invocations` responses with
+  root-built `you run --json --server …` CLI envelopes for positional, stdin,
+  and named-factory success, plus empty-input, source-conflict, and unresolved
+  primary-result failures. Drive CLI cases through `support.BuildProcess` +
+  `support.FakeInputs` rather than `exec.Command`. For
+  `INVOCATION_PRIMARY_RESULT_UNRESOLVED`, scaffold a goal factory whose
+  `invocationReturn` targets a never-produced `summary` work type (not a script
+  mock worker that fails the goal pipeline).
 - Final `@you/goal` decision-routing smoke coverage lives in
   `tests/functional/smoke/cli_named_goal_routing_smoke_test.go`, exercising
   named-factory CLI `--json` outcomes for accepted, blocked, needs-human, and
