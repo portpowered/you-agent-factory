@@ -7,6 +7,8 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
 // TestCLISubmitBatchDryRunEmitsSummaryWithoutMutation proves you submit batch
@@ -39,6 +41,55 @@ func TestCLISubmitBatchDryRunEmitsSummaryWithoutMutation(t *testing.T) {
 	if requests.Load() != 0 {
 		t.Fatalf("submit batch dry-run sent %d HTTP requests, want 0", requests.Load())
 	}
+}
+
+// TestCLISubmitBatchSuccessHumanAndJSONShapes proves successful you submit batch
+// emits stable human text and --json shapes with request identity, trace context,
+// work count, and accepted work entries when exercised through Process.Execute
+// against a live Factory Session Work upsert path.
+func TestCLISubmitBatchSuccessHumanAndJSONShapes(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow CLI submit batch contract")
+	}
+
+	factoryDir := support.ScaffoldFactory(t, successSubmitBatchFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:     factoryDir,
+		UseMockWorkers: true,
+	})
+	defer server.Stop(t)
+
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{})
+	process := buildBatchContractProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	})
+
+	humanStdout := executeSubmitBatchCLI(t, process, []string{
+		"you", "--server", server.URL(),
+		"submit", "batch", successHumanInlineBatchJSON(),
+	})
+	assertSubmitBatchHumanSuccess(
+		t,
+		humanStdout,
+		successHumanSubmitBatchRequestID,
+		successSubmitBatchWorkName,
+		successSubmitBatchWorkType,
+	)
+
+	jsonStdout := executeSubmitBatchCLI(t, process, []string{
+		"you", "--server", server.URL(), "--json",
+		"submit", "batch", successJSONInlineBatchJSON(),
+	})
+	submitted := decodeSubmitBatchJSONResult(t, jsonStdout)
+	assertSubmitBatchJSONSuccess(
+		t,
+		submitted,
+		successJSONSubmitBatchRequestID,
+		successSubmitBatchWorkName,
+		successSubmitBatchWorkType,
+	)
+
+	functionalevidence.Covers(t, "cli/you.submit.batch")
 }
 
 // TestCLISubmitBatchContractHarnessExecutesThroughRootBuildProcess proves the
