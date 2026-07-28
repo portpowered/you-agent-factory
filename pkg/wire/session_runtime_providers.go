@@ -315,7 +315,7 @@ func provideOrchestratorDefinitionValidator(
 
 func provideFactoryDefinitionValidationService(
 	workflows factoryruntime.JavaScriptWorkflows,
-	loader *factorydefinitionswire.DefinitionLoader,
+	loader *factorydefinitionswire.Loader,
 	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
 ) factorydefinitions.ValidationOperations {
 	_ = workflows
@@ -356,7 +356,7 @@ func provideNamedFactoryCatalog(
 
 func provideFactoryDefinitionPersistence(
 	validator factorydefinitions.Validator,
-	loader *factorydefinitionswire.DefinitionLoader,
+	loader *factorydefinitionswire.Loader,
 	pruneRemovedDocs factorydefinitions.PortableBundledDocsPruner,
 	materializeFiles factorydefinitions.PortableBundledFilesMaterializer,
 	validateWrites factorydefinitions.PortableBundledFileWritesValidator,
@@ -404,7 +404,7 @@ func provideFactoryScaffoldInitializer(
 
 func provideEditableFactoryValidator(
 	validator factorydefinitions.DefinitionValidationOperation,
-	loader *factorydefinitionswire.DefinitionLoader,
+	loader *factorydefinitionswire.Loader,
 ) factorysessions.EditableFactoryValidator {
 	return func(
 		ctx context.Context,

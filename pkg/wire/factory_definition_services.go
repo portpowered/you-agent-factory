@@ -312,8 +312,8 @@ func provideFactoryDefinitionLoader(
 	sourceResolver factorydefinitions.PortableBundledFileSourceResolver,
 	inspectSource factorydefinitions.PortableBundledFileInspection,
 	requiredToolChecker factorydefinitions.RequiredToolChecker,
-) *factorydefinitionswire.DefinitionLoader {
-	return factorydefinitionswire.Loader(
+) *factorydefinitionswire.Loader {
+	return factorydefinitionswire.NewLoader(
 		applySupportedFiles,
 		applyStarterWork,
 		materializeFiles,
@@ -333,7 +333,7 @@ func provideAuthoredFactorySourceLoader(
 }
 
 func provideLoadedFactoryLoader(
-	loader *factorydefinitionswire.DefinitionLoader,
+	loader *factorydefinitionswire.Loader,
 ) factorydefinitions.LoadedFactoryLoader {
 	return func(factoryDir string, workstationLoader factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 		return loader.LoadSourceFromFactoryDir(factoryDir, workstationLoader)

@@ -2746,6 +2746,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_definitions/internal/services/compilation/runtimetests",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_definitions/internal/services/compilation/wire",
       "disposition": "retain",
       "destination": "factory_definitions",

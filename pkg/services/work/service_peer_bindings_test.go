@@ -282,3 +282,12 @@ func (s *recordingPeerContentStagingWithLifecycle) CleanupContent(_ context.Cont
 	s.cleaned = true
 	return nil
 }
+
+func mustRequestPreparationService(t *testing.T) RequestPreparationService {
+	t.Helper()
+	service, err := NewRequestPreparationService(NewContentPreparation())
+	if err != nil {
+		t.Fatalf("NewRequestPreparationService: %v", err)
+	}
+	return service
+}

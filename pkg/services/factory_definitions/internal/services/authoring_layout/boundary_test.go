@@ -13,6 +13,14 @@ import (
 
 const authoringLayoutPublicPackage = "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
 
+const compilationPackageRoot = "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
+
+var authoringLayoutCompilationFoldAllowedImportRoots = []string{
+	compilationPackageRoot + "/loading",
+	compilationPackageRoot + "/loadedsource",
+	compilationPackageRoot + "/runtimeconfig",
+}
+
 var authoringLayoutForbiddenImportRoots = []string{
 	"github.com/portpowered/infinite-you/pkg/wire",
 	"github.com/portpowered/infinite-you/pkg/root",
@@ -42,7 +50,12 @@ var authoringLayoutAllowedPublicTypeImportPrefixes = []string{
 func TestPackageBoundary_PublicSurfaceDoesNotImportForbiddenOwnership(t *testing.T) {
 	t.Parallel()
 
-	assertPackageDirectImportsForbidden(t, authoringLayoutPublicPackage, authoringLayoutForbiddenImportRoots)
+	assertPackageDirectImportsForbidden(
+		t,
+		authoringLayoutPublicPackage,
+		authoringLayoutForbiddenImportRoots,
+		authoringLayoutCompilationFoldAllowedImportRoots...,
+	)
 }
 
 func TestPackageBoundary_PublicSurfaceDeclaresOnlyCTRDEFAuthoringVocabulary(t *testing.T) {
@@ -199,7 +212,12 @@ func exprString(expr ast.Expr) string {
 	}
 }
 
-func assertPackageDirectImportsForbidden(t *testing.T, packagePath string, forbiddenRoots []string) {
+func assertPackageDirectImportsForbidden(
+	t *testing.T,
+	packagePath string,
+	forbiddenRoots []string,
+	allowedRoots ...string,
+) {
 	t.Helper()
 
 	cmd := exec.Command("go", "list", "-f", "{{.Imports}}", packagePath)
@@ -209,11 +227,17 @@ func assertPackageDirectImportsForbidden(t *testing.T, packagePath string, forbi
 	}
 	imports := strings.Fields(strings.Trim(string(output), "[]"))
 	for _, importPath := range imports {
+		for _, allowed := range allowedRoots {
+			if importPath == allowed || strings.HasPrefix(importPath, allowed+"/") {
+				goto nextImport
+			}
+		}
 		for _, forbidden := range forbiddenRoots {
 			if importPath == forbidden || strings.HasPrefix(importPath, forbidden+"/") {
 				t.Fatalf("%s must not import forbidden ownership %s; found direct import %s", packagePath, forbidden, importPath)
 			}
 		}
+	nextImport:
 	}
 }
 
@@ -244,7 +268,12 @@ func TestPackageBoundary_WireSurfaceDoesNotConstructRuntimeOrSelectSiblingLeases
 	}
 
 	wirePackage := authoringLayoutPublicPackage + "/wire"
-	assertPackageDirectImportsForbidden(t, wirePackage, authoringLayoutForbiddenImportRoots)
+	assertPackageDirectImportsForbidden(
+		t,
+		wirePackage,
+		authoringLayoutForbiddenImportRoots,
+		authoringLayoutCompilationFoldAllowedImportRoots...,
+	)
 }
 
 func TestPackageBoundary_InternalLeasePackagesDoNotImportForbiddenOwnership(t *testing.T) {
@@ -256,11 +285,13 @@ func TestPackageBoundary_InternalLeasePackagesDoNotImportForbiddenOwnership(t *t
 		"/persist",
 		"/flatten",
 		"/expand",
+		"/authoredlayout",
 	} {
 		assertPackageDirectImportsForbidden(
 			t,
 			authoringLayoutPublicPackage+packageSuffix,
 			authoringLayoutForbiddenImportRoots,
+			authoringLayoutCompilationFoldAllowedImportRoots...,
 		)
 	}
 }
