@@ -995,7 +995,8 @@ response-stream output.
   in `pkg/services/system_initialization/internal/workflow` and must not import
   `pkg/initializer`, transports, `pkg/wire`, or Settings/Definitions store
   surfaces such as `factory_definitions/packagedinstallation`; boundary proof
-  lives in `internal/workflow/boundary_test.go` and `wire/boundary_test.go`.
+  lives in `boundary_test.go`, `internal/workflow/boundary_test.go`, and
+  `wire/boundary_test.go`.
   Bootstrap owner-local Wire at `pkg/services/system_initialization/wire` must
   stay registered under destination `system_initialization` in
   `docs/internal/packaged-service-structure/package-target-manifest.json`,
