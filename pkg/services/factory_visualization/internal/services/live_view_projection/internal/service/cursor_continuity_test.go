@@ -10,22 +10,6 @@ import (
 	projectionservice "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection/internal/service"
 )
 
-// cursorContinuityProjection records each reconstruction call so continuity
-// tests can assert monotonic event growth without duplicate retained replay.
-type cursorContinuityProjection struct {
-	projectionStub
-	reconstructCalls [][]factorydefinitions.FactoryEvent
-}
-
-func (p *cursorContinuityProjection) ReconstructFactoryWorldState(
-	events []factorydefinitions.FactoryEvent,
-	tick int,
-) (factorydefinitions.FactoryWorldState, error) {
-	copied := append([]factorydefinitions.FactoryEvent(nil), events...)
-	p.reconstructCalls = append(p.reconstructCalls, copied)
-	return p.projectionStub.ReconstructFactoryWorldState(events, tick)
-}
-
 func assertCursor(
 	t *testing.T,
 	cursor *factorydefinitions.FactoryEventReconnectCursor,
@@ -89,7 +73,7 @@ func TestRetainedOnlyStartCursorPointsAtLastRetainedEvent(t *testing.T) {
 	}
 	svc, err := projectionservice.New(
 		source,
-		projectionStub{},
+		newProjectionStub(),
 		fixedClock{now: time.Unix(1, 0)},
 		liveviewprojection.SinkFunc(func(liveviewprojection.View) {}),
 		nil,
@@ -135,12 +119,7 @@ func TestRetainedThenOneLiveAdvanceContinuesSameCursorAuthority(t *testing.T) {
 		snapshot: snapshotFacts(1),
 	}
 	projected := make(chan []factorydefinitions.FactoryEvent, 2)
-	projections := projectionStub{
-		reconstruct: func(events []factorydefinitions.FactoryEvent, tick int) (factorydefinitions.FactoryWorldState, error) {
-			projected <- append([]factorydefinitions.FactoryEvent(nil), events...)
-			return factorydefinitions.FactoryWorldState{}, nil
-		},
-	}
+	projections := newTrackingProjectionStub(projected)
 	rendered := make(chan liveviewprojection.View, 2)
 	svc, err := projectionservice.New(
 		source,
@@ -200,7 +179,7 @@ func TestMultiLiveAdvanceAfterRetainedHistoryContinuesCursor(t *testing.T) {
 		event("retained-b", 2),
 	}
 	live := make(chan factorydefinitions.FactoryEvent, 3)
-	projections := &cursorContinuityProjection{}
+	projections := newCursorContinuityProjection()
 	source := &sourceStub{
 		stream: &factorydefinitions.FactoryEventStream{
 			History: retained,
@@ -260,7 +239,7 @@ func TestLiveDeltasDoNotDuplicateRetainedReplay(t *testing.T) {
 		event("retained-b", 2),
 	}
 	live := make(chan factorydefinitions.FactoryEvent, 2)
-	projections := &cursorContinuityProjection{}
+	projections := newCursorContinuityProjection()
 	source := &sourceStub{
 		stream: &factorydefinitions.FactoryEventStream{
 			History: retained,
@@ -270,11 +249,6 @@ func TestLiveDeltasDoNotDuplicateRetainedReplay(t *testing.T) {
 	}
 	subscribeCalls := 0
 	source.subscribeHook = func() { subscribeCalls++ }
-	projected := make(chan []factorydefinitions.FactoryEvent, 4)
-	projections.reconstruct = func(events []factorydefinitions.FactoryEvent, tick int) (factorydefinitions.FactoryWorldState, error) {
-		projected <- append([]factorydefinitions.FactoryEvent(nil), events...)
-		return factorydefinitions.FactoryWorldState{}, nil
-	}
 
 	svc, err := projectionservice.New(
 		source,
@@ -296,11 +270,22 @@ func TestLiveDeltasDoNotDuplicateRetainedReplay(t *testing.T) {
 		t.Fatalf("subscribe calls after Start = %d, want 1", subscribeCalls)
 	}
 
-	<-projected
+	waitReconstructCalls := func(min int) {
+		t.Helper()
+		deadline := time.Now().Add(2 * time.Second)
+		for len(projections.reconstructCalls) < min {
+			if time.Now().After(deadline) {
+				t.Fatalf("reconstruct calls = %d, want at least %d", len(projections.reconstructCalls), min)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+
+	waitReconstructCalls(1)
 	live <- event("live-a", 3)
-	<-projected
+	waitReconstructCalls(2)
 	live <- event("live-b", 4)
-	<-projected
+	waitReconstructCalls(3)
 
 	if subscribeCalls != 1 {
 		t.Fatalf("subscribe calls after live deltas = %d, want still 1", subscribeCalls)

@@ -9,6 +9,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/testing/recordingsstub"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
@@ -101,7 +102,7 @@ func TestActivateThroughSessionBoundSourceReachesStarted(t *testing.T) {
 	}
 	service, err := New(
 		NewCurrentRuntimeSource(reader),
-		projectionStub{},
+		&recordingsstub.Service{},
 		fixedClock{now: time.Unix(1, 0)},
 		SinkFunc(func(View) {}),
 		nil,
@@ -138,7 +139,7 @@ func TestActivateWithUnavailableSessionRuntimeDoesNotSubscribe(t *testing.T) {
 	}
 	service, err := New(
 		NewCurrentRuntimeSource(reader),
-		projectionStub{},
+		&recordingsstub.Service{},
 		fixedClock{now: time.Unix(1, 0)},
 		SinkFunc(func(View) {}),
 		nil,
@@ -176,9 +177,11 @@ func (s sessionRuntimeReaderStub) WithRuntimeRead(
 
 type sessionBoundRuntimeFactory struct {
 	factoryruntime.Service
-	subscribeHook func()
-	stream        *factorydefinitions.FactoryEventStream
-	observation   factoryruntime.Observation
+	subscribeHook   func()
+	stream          *factorydefinitions.FactoryEventStream
+	observation     factoryruntime.Observation
+	observeRequests []factoryruntime.ObserveRequest
+	observeErr      error
 }
 
 func (f *sessionBoundRuntimeFactory) SubmitWorkRequest(
@@ -200,8 +203,12 @@ func (f *sessionBoundRuntimeFactory) SubscribeFactoryEvents(
 }
 
 func (f *sessionBoundRuntimeFactory) Observe(
-	context.Context,
-	factoryruntime.ObserveRequest,
+	_ context.Context,
+	req factoryruntime.ObserveRequest,
 ) (factoryruntime.ObserveResult, error) {
+	f.observeRequests = append(f.observeRequests, req)
+	if f.observeErr != nil {
+		return factoryruntime.ObserveResult{}, f.observeErr
+	}
 	return factoryruntime.ObserveResult{Observation: f.observation}, nil
 }

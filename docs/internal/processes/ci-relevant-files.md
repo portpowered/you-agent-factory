@@ -529,7 +529,15 @@ Wave 0 functional-tests-expansion planning authority lives under
   may only use the closed destination vocabulary (13 product owners, approved
   non-service families, and the `edges` architecture exception). Nested
   destinations are limited to `<owner>/internal/services/<subservice>` using the
-  plan's committed nested subservice names. The top-level `inventory` array is
+  plan's committed nested subservice names. `factory_runtime` unexpected siblings
+  map to committed subservices in `nestedOwnerMoveRules` (`owners.go`): engine/runtime/state/scheduler/subsystems/token clusters and orchestration helpers → `orchestration`; `build` → `instance_host`; `checkpointstore`/`checkpointsummary` → `checkpoint_recovery`; owner-local residuals (`internal/factorystatus`, `internal/legacysnapshot`, `internal/service`, `internal/rootobservation`, `testkit`) → `factory_runtime/internal`. `workers` unexpected siblings map to `runtime_assembly` (`construction`), `workstations` (`prompting`, `worktree`, `skippermissions`), and `runners` (execution/executor/diagnostics/process/invocation/runner/interface plus `services/*` hosted paths); Providers extraction (`agypty`, `cliprovider`, `provider*`, `provider_test`) stays on the existing move→Providers mapper. `operator_settings` unexpected siblings map `identityinventory` → `document`; `servicewire`, `testlink`, and `testdata` → `operator_settings/internal`. `work` maps `stateaccessrecordings` → `state_access` and `testdata` → `work/internal`; transitional `service/` facades for Automations, Provider Sessions, and Work still use the legacy move→`<owner>/internal` mapper. Factory Definitions residual public dirs include `clonetests` and `systeminitializationtests` → `factory_definitions/internal` alongside the existing catalog/compilation/validation/snapshots/distribution rules; packages already under committed subservices (`internal/services/authoring_layout`, `catalog`, `compilation`, `validation`, `distribution`) retain at the subservice destination while `snapshots_portability` stays transitional move→`factory_definitions/internal`. Product-owner top-level sibling
+  inventories (`cmd/packagetargetmanifestcheck/owner_top_level.go`, mirrored in
+  `internal/ownershipinventory/owner_top_level.go`) classify immediate children
+  under `pkg/services/<owner>/` as expected retain (`wire`, `internal`,
+  `transports`, plus owner-specific retain exceptions such as Factory
+  Definitions `namevalue`) or unexpected move siblings; keep `recordings_top_level`
+  lists wired through the unified registry for INV-REC consistency. The top-level
+  `inventory` array is
   the stable-sorted (byte-order / slash path) ledger seed of every production
   `pkg/` package (directories with at least one non-test `.go` file); regenerate
   with `go run ./cmd/packagetargetmanifestcheck -write-inventory`. Committed
@@ -546,7 +554,10 @@ Wave 0 functional-tests-expansion planning authority lives under
   `inventory[]` path has exactly one stable-sorted `packages[]` row, and the
   checker fails on missing, duplicate, unsorted, closed-vocabulary, or incomplete
   delete-row mappings. Keep `make package-target-manifest-check` in default
-  `make lint`. Keep validators beside this checker rather than inventing
+  `make lint`. Regenerate the full committed manifest with
+  `go run ./cmd/packagetargetmanifestcheck -write-inventory -write-owner-packages -write-edges-packages -write-residual-packages`
+  and regenerate `docs/internal/baselines/ownership-inventory.json` with
+  `go run ./cmd/ownershipinventoryfreeze` after mapping-rule changes. Keep validators beside this checker rather than inventing
   alternate destination trees.
 
 - `cmd/packagedfactorysourcecheck` owns the static source-ownership gate for
@@ -599,6 +610,15 @@ Wave 0 functional-tests-expansion planning authority lives under
   unexpected outputs with the regeneration remedy, and runs through
   `make packaged-factory-catalog-check` in the default lint aggregation.
   PSS-F01 ownership freeze gating lives in `internal/ownershipinventory`:
+  per-owner `*_mapping.go` helpers mirror `cmd/packagetargetmanifestcheck`
+  `nestedOwnerMoveRules` (Recordings, Factory Definitions, Factory Runtime,
+  Workers, Work, and Operator Settings) and emit move rows with concrete
+  `successor` paths rather than prefix-retaining transitional public siblings.
+  Cross-owner retain-rejection guards live in
+  `cmd/packagetargetmanifestcheck/unexpected_sibling_retain_test.go` and
+  `internal/ownershipinventory/unexpected_sibling_retain_test.go` (plus
+  `internal/ownershipinventory/remaining_owners_test.go`); they sweep inventoried
+  unexpected siblings and fail on deliberate retain→owner-root mappings.
   `make ownership-inventory-check` runs `VerifyFreeze` against
   `docs/internal/baselines/ownership-inventory.json` and
   `docs/internal/projects/packaged-service-structure/ownership-path-lease-freeze.json`,
@@ -796,6 +816,20 @@ Wave 0 functional-tests-expansion planning authority lives under
   `provider_sessions` and subsection `association`; every top-level `Test*`
   needs a customer-readable Go doc so `functionaltestmetadata` stays
   viz-compatible.
+
+- `tests/functional/provider_sessions/association/response_exec_metadata_test.go`
+  owns response-exec golden metadata survival across CLI Factory Event projection,
+  API `FactoryResponseEvent` history, and replay observation. Drive proofs through
+  `support.RunFactoryToCompletionWithEdgesAndResponseEvents` or
+  `support.StartFunctionalAPIServer` with `--record` / `--replay`, replaying
+  sanitized FND-006 Codex goldens via `serviceedges.Edges{ProviderCommandRunner:
+  ...}` and asserting against checked-in provider-session, invocation-result, and
+  response-event golden metadata with `support.CompareProviderSessionJSON` /
+  `CompareProviderSessionNDJSON` only (never production mappers under assertion).
+  Do not widen into `association_test.go` correlation scenarios or `details/*`.
+  Catalog metadata infers domain `provider_sessions` and subsection `association`;
+  every top-level `Test*` needs a customer-readable Go doc and `//golden:` manifest
+  directive so `functionaltestmetadata` stays viz-compatible.
 
 - `tests/functional/automations/` owns root.BuildProcess evidence for packaged
   Automations cron scheduling and filesystem watcher preseed. Keep cron workstation

@@ -13,24 +13,25 @@ type workersMoveRule struct {
 	subservice string // empty means owner/internal root
 }
 
-// workersMoveRules mirrors cmd/packagetargetmanifestcheck nestedOwnerMoveRules
-// for workers transitional debt. Ownership rows keep owner destination with
-// concrete successor paths.
+// workersMoveRules mirrors cmd/packagetargetmanifestcheck nestedOwnerMoveRules for
+// workers. Ownership rows keep owner destination with concrete successor paths.
 var workersMoveRules = []workersMoveRule{
 	{exact: "construction", prefix: "construction/", subservice: "runtime_assembly"},
-	{exact: "diagnostics", prefix: "diagnostics/"},
-	{exact: "interface", prefix: "interface/"},
-	{exact: "execution", prefix: "execution/", subservice: "workstations"},
-	{exact: "executor", prefix: "executor/", subservice: "workstations"},
-	{exact: "invocation", prefix: "invocation/", subservice: "workstations"},
 	{exact: "prompting", prefix: "prompting/", subservice: "workstations"},
-	{exact: "skippermissions", prefix: "skippermissions/", subservice: "workstations"},
 	{exact: "worktree", prefix: "worktree/", subservice: "workstations"},
+	{exact: "skippermissions", prefix: "skippermissions/", subservice: "workstations"},
+	{exact: "diagnostics", prefix: "diagnostics/", subservice: "runners"},
+	{exact: "execution", prefix: "execution/", subservice: "runners"},
+	{exact: "executor", prefix: "executor/", subservice: "runners"},
+	{exact: "invocation", prefix: "invocation/", subservice: "runners"},
 	{exact: "process", prefix: "process/", subservice: "runners"},
 	{exact: "runner", prefix: "runner/", subservice: "runners"},
+	{exact: "interface", prefix: "interface/", subservice: "runners"},
+	{exact: "services", prefix: "services/", subservice: "runners"},
+	{exact: "services/hosted_logic", prefix: "services/hosted_logic/", subservice: "runners"},
 	{exact: "services/inference", prefix: "services/inference/", subservice: "runners"},
 	{exact: "services/testing", prefix: "services/testing/", subservice: "runners"},
-	{exact: "services", prefix: "services/", subservice: "runners"},
+	{prefix: "services/", subservice: "runners"},
 }
 
 func workersMapping(packagePath string) (PackageRow, bool) {
@@ -53,7 +54,7 @@ func workersMapping(packagePath string) (PackageRow, bool) {
 		packagePath,
 		workersOwner,
 		workersSuccessor(subservice),
-		workersDeletionCondition(subservice, rest),
+		workersDeletionCondition(subservice),
 	), true
 }
 
@@ -63,9 +64,9 @@ func isWorkersCanonicalRetain(rest string) bool {
 		return true
 	case strings.HasPrefix(rest, "internal/services/runtime_assembly"):
 		return true
-	case strings.HasPrefix(rest, "internal/services/runners"):
-		return true
 	case strings.HasPrefix(rest, "internal/services/workstations"):
+		return true
+	case strings.HasPrefix(rest, "internal/services/runners"):
 		return true
 	default:
 		return false
@@ -88,7 +89,7 @@ func workersSuccessor(subservice string) string {
 	return workersPackagePrefix + "/internal/services/" + subservice
 }
 
-func workersDeletionCondition(subservice, rest string) string {
+func workersDeletionCondition(subservice string) string {
 	if subservice == "" {
 		return "delete transitional top-level package after CLN-WRK-FOLD-TOPLEVEL cutover proof"
 	}
