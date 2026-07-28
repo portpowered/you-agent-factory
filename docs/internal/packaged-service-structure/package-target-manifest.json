@@ -342,6 +342,7 @@
     "pkg/services/operator_settings/transports/mcp",
     "pkg/services/operator_settings/wire",
     "pkg/services/provider_sessions",
+    "pkg/services/provider_sessions/internal/service",
     "pkg/services/provider_sessions/internal/services/codex_reader",
     "pkg/services/provider_sessions/internal/services/codex_reader/internal/service",
     "pkg/services/provider_sessions/internal/services/codex_reader/wire",
@@ -426,6 +427,7 @@
     "pkg/services/workers/executor",
     "pkg/services/workers/executor/agentrun",
     "pkg/services/workers/interface",
+    "pkg/services/workers/internal",
     "pkg/services/workers/internal/services/runners",
     "pkg/services/workers/internal/services/runners/internal/inference",
     "pkg/services/workers/internal/services/runners/internal/script",
@@ -2051,6 +2053,11 @@
       "destination": "provider_sessions"
     },
     {
+      "packagePath": "pkg/services/provider_sessions/internal/service",
+      "disposition": "retain",
+      "destination": "provider_sessions"
+    },
+    {
       "packagePath": "pkg/services/provider_sessions/internal/services/codex_reader",
       "disposition": "retain",
       "destination": "provider_sessions/internal/services/codex_reader"
@@ -2469,6 +2476,11 @@
       "packagePath": "pkg/services/workers/interface",
       "disposition": "move",
       "destination": "workers/internal/services/runners"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal",
+      "disposition": "retain",
+      "destination": "workers"
     },
     {
       "packagePath": "pkg/services/workers/internal/services/runners",

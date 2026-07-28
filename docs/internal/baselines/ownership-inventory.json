@@ -1743,7 +1743,7 @@
       "fromOwner": "workers",
       "toOwner": "factory_sessions",
       "class": "command",
-      "evidence": "pkg/services/workers/service -\u003e pkg/services/factory_sessions"
+      "evidence": "pkg/services/workers/internal -\u003e pkg/services/factory_sessions"
     },
     {
       "fromOwner": "workers",
@@ -4392,6 +4392,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/provider_sessions/internal/service",
+      "disposition": "retain",
+      "destination": "provider_sessions",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/provider_sessions/internal/services/codex_reader",
       "disposition": "retain",
       "destination": "provider_sessions",
@@ -4974,6 +4980,14 @@
       "destinationKind": "owner",
       "successor": "pkg/services/workers/internal/services/runners",
       "deletionCondition": "delete public package after IMP-WRK-runners private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal",
+      "disposition": "move",
+      "destination": "workers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/workers/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-WRK-FOLD-TOPLEVEL cutover proof"
     },
     {
       "packagePath": "pkg/services/workers/internal/services/runners",

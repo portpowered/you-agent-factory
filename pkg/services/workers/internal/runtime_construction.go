@@ -1,4 +1,4 @@
-package service
+package internal
 
 import (
 	"fmt"
@@ -96,7 +96,7 @@ func (s *Service) WithCommandRunners(providerRunner, scriptRunner workers.Comman
 	// Each opened Factory Runtime owns an independent workstation lifecycle.
 	// Sharing the process-level pool would couple route admission, cancellation,
 	// and terminal stop state across otherwise separate Factory Sessions.
-	clone.workstations = workstationswire.NewService()
+	clone.Root = clone.Root.ReplaceWorkstations(workstationswire.NewService())
 	clone.executorBuilder = rebuildExecutorBuilder(
 		s.executorBuilder,
 		clone.providerFactory,
