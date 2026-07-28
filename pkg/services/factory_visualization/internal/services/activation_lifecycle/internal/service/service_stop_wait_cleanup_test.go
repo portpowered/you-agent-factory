@@ -10,6 +10,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	activationlifecycle "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle"
 	lifecycleservice "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle/internal/service"
+	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/testing/recordingsstub"
 )
 
 func TestActivationLifecycleWaitBeforeActivateReturnsNotActivated(t *testing.T) {
@@ -218,7 +219,7 @@ func mustNewActivationLifecycleOwnerWithSource(
 	t.Helper()
 	owner, err := lifecycleservice.New(
 		source,
-		lifecycleProjectionStub{},
+		&recordingsstub.Service{},
 		fixedLifecycleClock{now: time.Unix(1, 0)},
 		lifecycleSinkFunc(func(activationlifecycle.View) {}),
 		nil,

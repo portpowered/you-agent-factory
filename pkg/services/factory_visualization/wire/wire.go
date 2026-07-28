@@ -26,7 +26,7 @@ import (
 // and a nil root.
 func NewRoot(
 	source factoryvisualization.Source,
-	projections recordings.ProjectionService,
+	peer recordings.ProjectionService,
 	clock factoryvisualization.Clock,
 	sink factoryvisualization.Sink,
 	reportError factoryvisualization.ErrorReporter,
@@ -34,17 +34,21 @@ func NewRoot(
 	switch {
 	case source == nil:
 		return nil, fmt.Errorf("construct Factory Visualization: event source is required")
-	case projections == nil:
+	case peer == nil:
 		return nil, fmt.Errorf("construct Factory Visualization: projection service is required")
 	case clock == nil:
 		return nil, fmt.Errorf("construct Factory Visualization: clock is required")
 	case sink == nil:
 		return nil, fmt.Errorf("construct Factory Visualization: presentation sink is required")
 	}
+	recordingsPeer, err := factoryvisualization.RecordingsPeerFromProjectionService(peer)
+	if err != nil {
+		return nil, err
+	}
 
 	activation, err := activationlifecyclewire.NewService(
 		factoryvisualization.ActivationEventSource(source),
-		projections,
+		recordingsPeer,
 		clock,
 		factoryvisualization.ActivationViewSink(sink),
 		activationlifecycle.ErrorReporter(reportError),
@@ -54,7 +58,7 @@ func NewRoot(
 	}
 	projection, err := liveviewprojectionwire.NewService(
 		source,
-		projections,
+		recordingsPeer,
 		clock,
 		factoryvisualization.ProjectionSink(sink),
 		reportError,
@@ -69,7 +73,7 @@ func NewRoot(
 		projection,
 		presentation,
 		source,
-		projections,
+		recordingsPeer,
 		clock,
 		sink,
 		reportError,
