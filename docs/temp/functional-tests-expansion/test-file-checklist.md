@@ -632,7 +632,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPIDispatchListAndDetailExposePublicCorrelation`.
   - `TestAPIPartialResultIsAvailableBeforeTerminalCompletion`.
 
-- [ ] `tests/functional/sessions/execution/visibility_test.go`
+- [x] `tests/functional/sessions/execution/visibility_test.go`
   - `TestCLIInvocationIsVisibleThroughAPISessionAndWorkReads`.
   - `TestAPIInvocationResultMatchesCLICompatibleFacts`.
 
@@ -727,6 +727,9 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPackagedSubagentChildFailureReturnsStableFailure` covers error.
 
 - [x] `tests/functional/factory/packaged/tts/invocation_test.go`
+- [x] `tests/functional/automations/peer_import_boundary_test.go`
+- [x] `tests/functional/automations/reconciliation_root_composition_test.go`
+- [x] `tests/functional/automations/script_poller_root_composition_test.go`
 - [x] `tests/functional/models/root_composition/build_process_inert_test.go`
 - [x] `tests/functional/models/root_composition/catalog_discovery_test.go`
 - [x] `tests/functional/models/root_composition/inference_invoke_test.go`

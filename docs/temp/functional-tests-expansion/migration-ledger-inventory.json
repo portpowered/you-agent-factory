@@ -381,9 +381,79 @@
     {
       "source_path": "tests/functional/automations/hosted_sources_root_composition_test.go",
       "package": "you-agent-factory/tests/functional/automations",
+      "scenario": "TestAutomationsHostedSourcesActivateThroughRuntimeLifecycle",
+      "lane": "short",
+      "destination": "tests/functional/automations/hosted_sources_root_composition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/automations/hosted_sources_root_composition_test.go",
+      "package": "you-agent-factory/tests/functional/automations",
       "scenario": "TestBuildProcessRemainsHostedSourcesInertBeforeRuntimeLifecycle",
       "lane": "short",
       "destination": "tests/functional/automations/hosted_sources_root_composition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/automations/peer_import_boundary_test.go",
+      "package": "you-agent-factory/tests/functional/automations",
+      "scenario": "TestFunctionalAutomationsPackageUsesPublicProcessImportsOnly",
+      "lane": "short",
+      "destination": "tests/functional/automations/peer_import_boundary_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/automations/reconciliation_root_composition_test.go",
+      "package": "you-agent-factory/tests/functional/automations",
+      "scenario": "TestAutomationsReconcileAdmitsAbsentSourceThroughPublishedRootAfterComposition",
+      "lane": "short",
+      "destination": "tests/functional/automations/reconciliation_root_composition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/automations/reconciliation_root_composition_test.go",
+      "package": "you-agent-factory/tests/functional/automations",
+      "scenario": "TestAutomationsReconciliationAdmitsThroughPublishedRootAfterComposition",
+      "lane": "short",
+      "destination": "tests/functional/automations/reconciliation_root_composition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/automations/reconciliation_root_composition_test.go",
+      "package": "you-agent-factory/tests/functional/automations",
+      "scenario": "TestBuildProcessRemainsReconciliationInertBeforeExplicitRootInvocation",
+      "lane": "short",
+      "destination": "tests/functional/automations/reconciliation_root_composition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/automations/script_poller_root_composition_test.go",
+      "package": "you-agent-factory/tests/functional/automations",
+      "scenario": "TestAutomationsScriptPollerAdmitsWorkThroughRuntimeLifecycle",
+      "lane": "short",
+      "destination": "tests/functional/automations/script_poller_root_composition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/automations/script_poller_root_composition_test.go",
+      "package": "you-agent-factory/tests/functional/automations",
+      "scenario": "TestBuildProcessRemainsScriptPollerInertBeforeRuntimeLifecycle",
+      "lane": "short",
+      "destination": "tests/functional/automations/script_poller_root_composition_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -5109,6 +5179,26 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/sessions/execution/visibility_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/execution",
+      "scenario": "TestAPIInvocationResultMatchesCLICompatibleFacts",
+      "lane": "short",
+      "destination": "tests/functional/sessions/execution/visibility_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/execution/visibility_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/execution",
+      "scenario": "TestCLIInvocationIsVisibleThroughAPISessionAndWorkReads",
+      "lane": "short",
+      "destination": "tests/functional/sessions/execution/visibility_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/sessions/lifecycle/crud_test.go",
       "package": "you-agent-factory/tests/functional/sessions/lifecycle",
       "scenario": "TestAPIFactorySessionNotFoundUsesTypedError",
@@ -8599,12 +8689,12 @@
       "deletion_only_batch": "n/a"
     }
   ],
-  "scanned_at_utc": "2026-07-28T10:01:01Z",
+  "scanned_at_utc": "2026-07-28T10:13:19Z",
   "summary": {
     "by_catch_all": {
       "bootstrap_portability": 22,
       "guards_batch": 23,
-      "none": 584,
+      "none": 593,
       "replay_contracts": 23,
       "runtime_api": 96,
       "smoke": 62,
@@ -8612,7 +8702,7 @@
     },
     "by_top_level_package": {
       "acceptance": 12,
-      "automations": 7,
+      "automations": 14,
       "bootstrap_portability": 21,
       "cli": 59,
       "events": 5,
@@ -8628,7 +8718,7 @@
       "replay_contracts": 23,
       "runtime_api": 105,
       "sessionparity": 13,
-      "sessions": 27,
+      "sessions": 29,
       "smoke": 62,
       "transport": 106,
       "work": 23,
@@ -8636,12 +8726,12 @@
       "workflow": 30,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 840,
+    "customer_top_level_Test_scenarios": 849,
     "lane_functionallong": 95,
-    "lane_short": 745,
+    "lane_short": 754,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
-      "you-agent-factory/tests/functional/automations": 7,
+      "you-agent-factory/tests/functional/automations": 14,
       "you-agent-factory/tests/functional/bootstrap_portability": 19,
       "you-agent-factory/tests/functional/bootstrap_portability/metadata_contract": 2,
       "you-agent-factory/tests/functional/cli/factory_run/output": 2,
@@ -8693,7 +8783,7 @@
       "you-agent-factory/tests/functional/sessions": 1,
       "you-agent-factory/tests/functional/sessions/cli": 2,
       "you-agent-factory/tests/functional/sessions/controls": 5,
-      "you-agent-factory/tests/functional/sessions/execution": 3,
+      "you-agent-factory/tests/functional/sessions/execution": 5,
       "you-agent-factory/tests/functional/sessions/lifecycle": 6,
       "you-agent-factory/tests/functional/sessions/mcp": 7,
       "you-agent-factory/tests/functional/sessions/restart": 3,
