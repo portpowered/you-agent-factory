@@ -6,13 +6,31 @@ import (
 	"text/tabwriter"
 
 	acpcli "github.com/portpowered/infinite-you/pkg/transports/cli/acp"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	"github.com/spf13/cobra"
 )
 
 func productionWorkersCommand(options CommandFactory) *cobra.Command {
-	workers := &cobra.Command{Use: "workers", Short: "Manage worker execution integrations"}
-	acp := &cobra.Command{Use: "acp", Short: "Manage ACP provider integrations"}
-	acp.AddCommand(newACPListCommand(options), newACPAddCommand(options), newACPDeleteCommand(options))
+	manifest, err := generated.WorkersFamilyManifest()
+	if err != nil {
+		panic(fmt.Sprintf("load generated workers command manifest: %v", err))
+	}
+	record := func(id string) (string, string) {
+		command, lookupErr := manifest.CommandByID(id)
+		if lookupErr != nil {
+			panic(fmt.Sprintf("load generated workers command %s: %v", id, lookupErr))
+		}
+		return command.Name, command.Documentation.Documentation.Title.CanonicalEnglish
+	}
+	workersName, workersHelp := record("you.workers")
+	acpName, acpHelp := record("you.workers.acp")
+	workers := &cobra.Command{Use: workersName, Short: workersHelp}
+	acp := &cobra.Command{Use: acpName, Short: acpHelp}
+	list, add, deleteCommand := newACPListCommand(options), newACPAddCommand(options), newACPDeleteCommand(options)
+	list.Use, list.Short = record("you.workers.acp.list")
+	add.Use, add.Short = record("you.workers.acp.add")
+	deleteCommand.Use, deleteCommand.Short = record("you.workers.acp.delete")
+	acp.AddCommand(list, add, deleteCommand)
 	workers.AddCommand(acp)
 	return workers
 }

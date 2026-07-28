@@ -1425,7 +1425,7 @@
       "fromOwner": "operator_settings",
       "toOwner": "providers",
       "class": "command",
-      "evidence": "pkg/services/operator_settings/internal/construct -\u003e pkg/services/providers"
+      "evidence": "pkg/services/operator_settings -\u003e pkg/services/providers"
     },
     {
       "fromOwner": "operator_settings",
@@ -1467,7 +1467,7 @@
       "fromOwner": "providers",
       "toOwner": "platform",
       "class": "external_effect",
-      "evidence": "pkg/services/providers/internal/services/execution/internal/adapters/agy -\u003e pkg/platform/filesystem"
+      "evidence": "pkg/services/providers/internal/services/execution/internal/adapters/acp -\u003e pkg/platform/process"
     },
     {
       "fromOwner": "providers",
@@ -1606,7 +1606,7 @@
       "fromOwner": "transports",
       "toOwner": "operator_settings",
       "class": "protocol_composition",
-      "evidence": "pkg/transports/cli/initsetup -\u003e pkg/services/operator_settings"
+      "evidence": "pkg/transports/cli/acp -\u003e pkg/services/operator_settings"
     },
     {
       "fromOwner": "transports",
@@ -1619,6 +1619,12 @@
       "toOwner": "provider_sessions",
       "class": "protocol_composition",
       "evidence": "pkg/transports/http -\u003e pkg/services/provider_sessions"
+    },
+    {
+      "fromOwner": "transports",
+      "toOwner": "providers",
+      "class": "protocol_composition",
+      "evidence": "pkg/transports/cli/acp -\u003e pkg/services/providers"
     },
     {
       "fromOwner": "transports",
@@ -1709,7 +1715,7 @@
       "fromOwner": "wire",
       "toOwner": "providers",
       "class": "construction",
-      "evidence": "pkg/wire -\u003e pkg/services/workers/provider/inferencecontract"
+      "evidence": "pkg/wire -\u003e pkg/services/providers"
     },
     {
       "fromOwner": "wire",
@@ -4622,6 +4628,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/acp",
+      "disposition": "retain",
+      "destination": "providers",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/agy",
       "disposition": "retain",
       "destination": "providers",
@@ -5611,6 +5623,12 @@
     },
     {
       "packagePath": "pkg/transports/cli",
+      "disposition": "retain",
+      "destination": "transports",
+      "destinationKind": "family"
+    },
+    {
+      "packagePath": "pkg/transports/cli/acp",
       "disposition": "retain",
       "destination": "transports",
       "destinationKind": "family"

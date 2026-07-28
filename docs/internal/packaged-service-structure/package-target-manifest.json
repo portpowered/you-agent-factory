@@ -389,6 +389,7 @@
     "pkg/services/providers/internal/services/catalog/internal/service",
     "pkg/services/providers/internal/services/catalog/wire",
     "pkg/services/providers/internal/services/execution",
+    "pkg/services/providers/internal/services/execution/internal/adapters/acp",
     "pkg/services/providers/internal/services/execution/internal/adapters/agy",
     "pkg/services/providers/internal/services/execution/internal/adapters/claude",
     "pkg/services/providers/internal/services/execution/internal/adapters/codex",
@@ -530,6 +531,7 @@
     "pkg/services/workers/wire",
     "pkg/services/workers/worktree",
     "pkg/transports/cli",
+    "pkg/transports/cli/acp",
     "pkg/transports/cli/baseline",
     "pkg/transports/cli/batchload",
     "pkg/transports/cli/clicontract",
@@ -2345,6 +2347,11 @@
       "destination": "providers/internal/services/execution"
     },
     {
+      "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/acp",
+      "disposition": "retain",
+      "destination": "providers/internal/services/execution"
+    },
+    {
       "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/agy",
       "disposition": "retain",
       "destination": "providers/internal/services/execution"
@@ -3046,6 +3053,11 @@
     },
     {
       "packagePath": "pkg/transports/cli",
+      "disposition": "retain",
+      "destination": "transports"
+    },
+    {
+      "packagePath": "pkg/transports/cli/acp",
       "disposition": "retain",
       "destination": "transports"
     },

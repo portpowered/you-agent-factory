@@ -5,6 +5,16 @@
   "clusters": [],
   "files": [
     {
+      "file": "acp_integrations.go",
+      "classification": "thin_root_contract",
+      "note": "Peer-facing ACP integration projection and validation helpers retained at the thin Operator Settings root."
+    },
+    {
+      "file": "acp_integrations_test.go",
+      "classification": "thin_root_contract_test",
+      "note": "Root-contract tests for ACP integration projection and validation."
+    },
+    {
       "file": "backend_scope.go",
       "classification": "thin_root_contract",
       "note": "Peer-facing backend-scope identity types and EnsureLocalBackendScope thin surface delegating to private implementation."
