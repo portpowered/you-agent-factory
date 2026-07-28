@@ -243,10 +243,6 @@
       "minimum": 88.23
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedfactories",
-      "minimum": 60.93
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout",
       "exception": {
         "kind": "measurement",
@@ -293,6 +289,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/internal/service",
       "minimum": 74.35
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedfactories",
+      "minimum": 60.93
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire",
