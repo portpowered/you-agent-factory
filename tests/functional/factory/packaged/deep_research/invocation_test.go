@@ -2,7 +2,9 @@ package deep_research
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -10,7 +12,10 @@ import (
 	"testing"
 	"time"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -198,6 +203,94 @@ func TestPackagedDeepResearchOptionalInputsReachWorkers(t *testing.T) {
 	}
 	if labels["research-specialist-tradeoffs"] {
 		t.Fatalf("dispatch labels = %#v, want tradeoffs specialist omitted when maxSubagents is 1", labels)
+	}
+}
+
+// TestPackagedDeepResearchWorkerFailureReturnsFailedOutcome proves that a
+// configured mock-worker rejection during packaged @you/deep-research invocation
+// returns a failed public terminal outcome without a completed success primary
+// result attributable to the failing run.
+func TestPackagedDeepResearchWorkerFailureReturnsFailedOutcome(t *testing.T) {
+	topic := fmt.Sprintf(
+		"functional packaged deep research worker failure %d",
+		time.Now().UnixNano(),
+	)
+
+	factoryDir := support.InstallPackagedFactory(
+		t,
+		t.TempDir(),
+		factorydefinitions.PackagedDeepResearchFactoryName,
+	)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                factoryDir,
+		UseMockWorkers:            true,
+		MockWorkersConfig:         packagedDeepResearchRejectingMockWorkersConfig(),
+		WaitForServiceModeRuntime: true,
+		Edges: serviceedges.Edges{
+			ProviderCommandRunner: packagedDeepResearchFailingCommandRunner{},
+		},
+	})
+
+	args := map[string]any{
+		"topic":        topic,
+		"maxSubagents": 0,
+	}
+	response := startPackagedDeepResearchInvocation(
+		t,
+		server,
+		factoryDir,
+		"packaged-deep-research-worker-failure",
+		args,
+	)
+	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
+		t.Fatalf("session status = %q, want FAILED; response = %#v", response.Status, response)
+	}
+	if response.Result != nil && response.Result.PrimaryResult != nil && len(*response.Result.PrimaryResult) > 0 {
+		t.Fatalf("primary result = %#v, want no completed success primary result after worker failure", response.Result)
+	}
+	if strings.TrimSpace(response.SessionId) == "" {
+		t.Fatal("sessionId is empty, want durable JavaScript session ID")
+	}
+
+	dispatches := listFactorySessionDispatches(t, server.URL(), response.SessionId)
+	if len(dispatches.Dispatches) != 1 {
+		t.Fatalf(
+			"dispatch count = %d, want one lead synthesis dispatch when maxSubagents is 0",
+			len(dispatches.Dispatches),
+		)
+	}
+	dispatch := dispatches.Dispatches[0]
+	if dispatch.Label == nil || *dispatch.Label != "lead-research-synthesis" {
+		t.Fatalf("dispatch label = %#v, want lead-research-synthesis", dispatch.Label)
+	}
+	if dispatch.Status != factoryapi.FactoryDispatchStatusFAILED {
+		t.Fatalf("dispatch status = %q, want FAILED", dispatch.Status)
+	}
+	if dispatch.FailureDetail == nil || strings.TrimSpace(dispatch.FailureDetail.Message) == "" {
+		t.Fatalf("dispatch failureDetail = %#v, want stable public failure record", dispatch.FailureDetail)
+	}
+}
+
+type packagedDeepResearchFailingCommandRunner struct{}
+
+func (packagedDeepResearchFailingCommandRunner) Run(
+	_ context.Context,
+	_ platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{}, errors.New("packaged deep research provider failure")
+}
+
+func packagedDeepResearchRejectingMockWorkersConfig() *workers.MockWorkersConfig {
+	exitCode := 7
+	return &workers.MockWorkersConfig{
+		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
+		MockWorkers: []workers.MockWorkerConfig{{
+			RunType: workers.MockWorkerRunTypeReject,
+			RejectConfig: &workers.MockWorkerRejectConfig{
+				Stderr:   "packaged deep research mock worker failure",
+				ExitCode: &exitCode,
+			},
+		}},
 	}
 }
 
