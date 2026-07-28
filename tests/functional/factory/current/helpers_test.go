@@ -288,3 +288,68 @@ func hasValidationTargetCode(targets []factoryapi.FactoryValidationTarget, code 
 	}
 	return false
 }
+
+const defaultFunctionalWorkstationName = "plan-task"
+
+func promptTemplateContractURL(serverURL, sessionID, workstationName string) string {
+	return serverURL + "/factory-sessions/" + url.PathEscape(sessionID) + "/factory/workstations/" + url.PathEscape(workstationName) + "/prompt-template-contract"
+}
+
+func promptTemplateValidationURL(serverURL, sessionID, workstationName string) string {
+	return serverURL + "/factory-sessions/" + url.PathEscape(sessionID) + "/factory/workstations/" + url.PathEscape(workstationName) + "/prompt-template-validation"
+}
+
+func getPromptTemplateContract(t *testing.T, serverURL, sessionID, workstationName string) factoryapi.PromptTemplateContract {
+	t.Helper()
+	resp, err := http.Get(promptTemplateContractURL(serverURL, sessionID, workstationName))
+	if err != nil {
+		t.Fatalf("GET prompt-template-contract: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		payload, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		t.Fatalf("GET prompt-template-contract status = %d, want 200: %s", resp.StatusCode, payload)
+	}
+	var contract factoryapi.PromptTemplateContract
+	decodeJSONResponse(t, resp, &contract, "decode prompt-template contract response")
+	return contract
+}
+
+func validatePromptTemplateForSession(
+	t *testing.T,
+	serverURL,
+	sessionID,
+	workstationName,
+	prompt string,
+) factoryapi.PromptTemplateValidationResult {
+	t.Helper()
+	body, err := json.Marshal(factoryapi.PromptTemplateValidationRequest{Prompt: prompt})
+	if err != nil {
+		t.Fatalf("marshal prompt-template validation request: %v", err)
+	}
+	resp, err := http.Post(
+		promptTemplateValidationURL(serverURL, sessionID, workstationName),
+		"application/json",
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		t.Fatalf("POST prompt-template-validation: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		payload, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		t.Fatalf("POST prompt-template-validation status = %d, want 200: %s", resp.StatusCode, payload)
+	}
+	var result factoryapi.PromptTemplateValidationResult
+	decodeJSONResponse(t, resp, &result, "decode prompt-template validation response")
+	return result
+}
+
+func promptTemplateContractHasVariablePath(contract factoryapi.PromptTemplateContract, want string) bool {
+	for _, reference := range contract.AvailableVariables {
+		if reference.Path == want {
+			return true
+		}
+	}
+	return false
+}
