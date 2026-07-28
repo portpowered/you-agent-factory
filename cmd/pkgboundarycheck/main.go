@@ -56,9 +56,6 @@ var allowedServiceValueConstructionSymbols = map[string]map[string]struct{}{
 		"NewLogicalTargetValidationError": {},
 		"NewSessionID":                    {},
 	},
-	"github.com/portpowered/infinite-you/pkg/services/work": {
-		"NewSelection": {},
-	},
 	"github.com/portpowered/infinite-you/pkg/services/operator_settings": {
 		"EnsureLocalBackendScope": {},
 	},

@@ -65,10 +65,10 @@ fold or delete them.
 | `primary_result.go` | Excess fold/consolidation debt | `work/internal` — primary-result selection policy, world-state evaluation, and return-policy resolution logic. |
 | `primary_result_regression_test.go` | Excess fold/consolidation debt | Regression fixtures for `primary_result.go`; relocate with invocation/return-policy fold. |
 | `primary_result_test.go` | Excess fold/consolidation debt | Co-located tests for `primary_result.go`. |
-| `query_list.go` | Excess fold/consolidation debt | `work/internal/services/state_access` — list query normalization, validation, and pagination preparation beyond thin `ListOptions` vocabulary. |
-| `query_list_test.go` | Excess fold/consolidation debt | Co-located tests for `query_list.go`. |
-| `query_select.go` | Excess fold/consolidation debt | `work/internal/services/state_access` — in-memory Work selection and ordering policy used by state-access reads. |
-| `query_select_test.go` | Excess fold/consolidation debt | Co-located tests for `query_select.go`. |
+| `query_list.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 003 to `work/internal/stateaccessquery`; thin list vocabulary and delegators remain on `read_contract.go`. |
+| `query_list_test.go` | Excess fold/consolidation debt | **Folded** with `query_list.go` to `work/internal/stateaccessquery`. |
+| `query_select.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 003 to `work/internal/stateaccessquery`; selection policy is private to state_access reads. |
+| `query_select_test.go` | Excess fold/consolidation debt | **Folded** with `query_select.go` to `work/internal/stateaccessquery`. |
 | `request_codec.go` | Excess fold/consolidation debt | `work/internal` — canonical Work Request JSON decode/preparation roles for batch transports. |
 | `request_normalize.go` | Excess fold/consolidation debt | `work/internal` — `NormalizeWorkRequest`, single-target preparation, and admission normalization policy. |
 | `request_normalize_test.go` | Excess fold/consolidation debt | Co-located tests for `request_normalize.go`. |
@@ -78,7 +78,7 @@ fold or delete them.
 | `visualization.go` | Excess fold/consolidation debt | `work/internal/services/state_access` — batch-file dependency visualization operation binding (`lineage_graph_modules` cluster). |
 | `visualization_test.go` | Excess fold/consolidation debt | Co-located tests for `visualization.go`. |
 
-**Totals:** 51 root-level `.go` files — 21 thin committed root contract (keep), 30
+**Totals:** 47 root-level `.go` files — 21 thin committed root contract (keep), 26
 excess fold/consolidation debt.
 
 `content_staging_impl` and `content_materialization_impl` folded in
@@ -87,6 +87,11 @@ CLN-WORK-CONTRACT-ROOTS story 002: staging contracts remain at
 `work/internal/services/content_materialization/url.go`, and published URL
 vocabulary stays on `content_contract.go` as thin delegators.
 
+`state_access_query` folded in CLN-WORK-CONTRACT-ROOTS story 003: list/selection
+implementation lives under `work/internal/stateaccessquery`, and thin list
+vocabulary plus `NormalizeList` / `NewListRequestPreparation` delegators stay
+on `read_contract.go`.
+
 ## Excess fold clusters
 
 | Cluster | Destination | Root files |
@@ -94,7 +99,6 @@ vocabulary stays on `content_contract.go` as thin delegators.
 | `request_admission` | `work/internal` | `file_inputs.go`, `file_inputs_test.go`, `request_codec.go`, `request_normalize.go`, `request_normalize_test.go`, `request_preparation.go`, `request_preparation_test.go`, `request_submit_test.go` |
 | `invocation_return_policy` | `work/internal` | `arguments.go`, `arguments_test.go`, `invocation_input_preparation.go`, `invocation_input_preparation_test.go`, `invocation_policy_service.go`, `invocation_policy_service_test.go`, `primary_result.go`, `primary_result_test.go`, `primary_result_regression_test.go` |
 | `lineage_graph_modules` | `work/internal/services/state_access` | `dependency_graph.go`, `dependency_graph_test.go`, `dependency_graph_markdown.go`, `dependency_graph_markdown_test.go`, `dependency_graph_mermaid.go`, `dependency_graph_mermaid_test.go`, `lineage.go`, `visualization.go`, `visualization_test.go` |
-| `state_access_query` | `work/internal/services/state_access` | `query_list.go`, `query_list_test.go`, `query_select.go`, `query_select_test.go` |
 
 ## Generator mirror
 

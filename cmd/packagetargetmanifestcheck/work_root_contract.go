@@ -90,16 +90,6 @@ var workExcessRootContractFolds = []workRootContractFoldTarget{
 		},
 		destination: "pkg/services/work/internal/services/state_access",
 	},
-	{
-		cluster: "state_access_query",
-		files: []string{
-			"query_list.go",
-			"query_list_test.go",
-			"query_select.go",
-			"query_select_test.go",
-		},
-		destination: "pkg/services/work/internal/services/state_access",
-	},
 }
 
 func listWorkRootGoFiles(root string) ([]string, error) {

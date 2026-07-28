@@ -1,4 +1,4 @@
-package work
+package stateaccessquery
 
 import (
 	"context"
@@ -16,10 +16,15 @@ const (
 	FilterTraceID      = "traceId"
 
 	SortByStateType = "state.type"
+
+	StateTypeInitial    = "INITIAL"
+	StateTypeProcessing = "PROCESSING"
+	StateTypeTerminal   = "TERMINAL"
+	StateTypeFailed     = "FAILED"
 )
 
-// ListOptions is the plain Work-owned state-access list request contract used by
-// Service.ListWork. Filters, ordering, and pagination stay transport-independent.
+// ListOptions is the validated list-request shape used by state-access query
+// preparation and selection.
 type ListOptions struct {
 	StateName    string
 	StateType    string
@@ -32,22 +37,33 @@ type ListOptions struct {
 }
 
 // PreparedListRequest is the detached, validated value returned to transport
-// adapters. It contains no Work implementation or runtime reference.
+// adapters.
 type PreparedListRequest struct {
 	Options       ListOptions
 	FilterSummary string
 }
 
-// ListRequestPreparation is the exact Work-owned policy role used by
-// transports before representing a Work list request on a protocol.
+// ListRequestPreparation is the pure list preparation role.
 type ListRequestPreparation interface {
 	PrepareListRequest(context.Context, ListOptions) (PreparedListRequest, error)
+}
+
+// ValidationError identifies the query field that failed validation.
+type ValidationError struct {
+	Field   string
+	Message string
+}
+
+func (e *ValidationError) Error() string {
+	if e == nil {
+		return ""
+	}
+	return e.Message
 }
 
 type listRequestPreparation struct{}
 
 // NewListRequestPreparation constructs the pure Work list preparation role.
-// Wire supplies this role to transport adapters; transports never select it.
 func NewListRequestPreparation() ListRequestPreparation {
 	return listRequestPreparation{}
 }
@@ -72,26 +88,7 @@ func (listRequestPreparation) PrepareListRequest(
 	}, nil
 }
 
-// ValidationError identifies the query field that failed validation. Boundary
-// adapters can use Field to present transport-specific field names.
-type ValidationError struct {
-	Field   string
-	Message string
-}
-
-func (e *ValidationError) Error() string {
-	if e == nil {
-		return ""
-	}
-	return e.Message
-}
-
-func validationError(field, message string) error {
-	return &ValidationError{Field: field, Message: message}
-}
-
-// ListQuery is a validated Work-list query. Its options are immutable through
-// the exported API.
+// ListQuery is a validated Work-list query.
 type ListQuery struct {
 	options       ListOptions
 	filterSummary string
@@ -148,6 +145,10 @@ func (q ListQuery) Options() ListOptions {
 // FilterSummary returns the active filter and sort keys in canonical order.
 func (q ListQuery) FilterSummary() string {
 	return q.filterSummary
+}
+
+func validationError(field, message string) error {
+	return &ValidationError{Field: field, Message: message}
 }
 
 func validateNextToken(nextToken string) error {

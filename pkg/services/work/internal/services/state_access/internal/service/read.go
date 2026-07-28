@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	stateaccess "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access"
+	"github.com/portpowered/infinite-you/pkg/services/work/internal/stateaccessquery"
 )
 
 func (s *Service) ListWork(
@@ -18,16 +19,25 @@ func (s *Service) ListWork(
 	if err := requireContext(ctx); err != nil {
 		return work.ListResult{}, err
 	}
-	query, err := work.NormalizeList(options)
+	query, err := stateaccessquery.NormalizeList(stateaccessquery.ListOptions{
+		StateName:    options.StateName,
+		StateType:    options.StateType,
+		Name:         options.Name,
+		WorkTypeName: options.WorkTypeName,
+		TraceID:      options.TraceID,
+		SortBy:       options.SortBy,
+		MaxResults:   options.MaxResults,
+		NextToken:    options.NextToken,
+	})
 	if err != nil {
-		return work.ListResult{}, err
+		return work.ListResult{}, mapQueryValidationError(err)
 	}
 	snapshot, err := s.readSnapshot(ctx, sessionID)
 	if err != nil {
 		return work.ListResult{}, err
 	}
 	normalized := query.Options()
-	selection, err := work.NewSelection(
+	selection, err := stateaccessquery.NewSelection(
 		optional(normalized.StateName),
 		optional(normalized.StateType),
 		optional(normalized.Name),
@@ -36,18 +46,18 @@ func (s *Service) ListWork(
 		normalized.SortBy,
 	)
 	if err != nil {
-		return work.ListResult{}, err
+		return work.ListResult{}, mapQueryValidationError(err)
 	}
 	byID := make(map[string]work.ReadModel, len(snapshot.Items))
-	items := make([]work.Item, 0, len(snapshot.Items))
+	items := make([]stateaccessquery.Item, 0, len(snapshot.Items))
 	for _, item := range snapshot.Items {
 		item = detachReadModel(item)
 		byID[item.CursorID] = item
-		items = append(items, work.Item{
-			ID:                     item.CursorID,
-			Name:                   item.Name,
-			WorkTypeName:           item.WorkTypeName,
-			State:                  item.State,
+		items = append(items, stateaccessquery.Item{
+			ID:           item.CursorID,
+			Name:         item.Name,
+			WorkTypeName: item.WorkTypeName,
+			State: stateToQueryState(item.State),
 			TraceID:                item.TraceID,
 			CurrentChainingTraceID: item.CurrentChainingTraceID,
 		})
@@ -187,4 +197,22 @@ func cloneStopSummary(summary *work.StopSummary) *work.StopSummary {
 		}
 	}
 	return &clone
+}
+
+func stateToQueryState(state *work.State) *stateaccessquery.State {
+	if state == nil {
+		return nil
+	}
+	return &stateaccessquery.State{Name: state.Name, Type: state.Type}
+}
+
+func mapQueryValidationError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var validation *stateaccessquery.ValidationError
+	if errors.As(err, &validation) {
+		return &work.ValidationError{Field: validation.Field, Message: validation.Message}
+	}
+	return err
 }

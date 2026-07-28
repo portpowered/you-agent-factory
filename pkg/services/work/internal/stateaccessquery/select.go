@@ -1,15 +1,8 @@
-package work
+package stateaccessquery
 
 import (
 	"sort"
 	"strings"
-)
-
-const (
-	StateTypeInitial    = "INITIAL"
-	StateTypeProcessing = "PROCESSING"
-	StateTypeTerminal   = "TERMINAL"
-	StateTypeFailed     = "FAILED"
 )
 
 // State is the query-owned projection of a Work state.
@@ -29,7 +22,6 @@ type Item struct {
 }
 
 // SelectionOptions contains filters and ordering for canonical Work selection.
-// Nil filters are absent; non-nil filters, including empty values, are explicit.
 type SelectionOptions struct {
 	StateName    *string
 	StateType    *string

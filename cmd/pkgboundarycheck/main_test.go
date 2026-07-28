@@ -124,7 +124,7 @@ func provideWorkPreparation() { _ = work.NewRequestPreparationService() }
 
 import work "github.com/portpowered/infinite-you/pkg/services/work"
 
-func selectValue() { _, _ = work.NewSelection(nil, work.SelectionOptions{}) }
+func selectValue() { _ = work.ListOptions{WorkTypeName: "story"} }
 `)
 
 	stderr := &bytes.Buffer{}
@@ -278,7 +278,7 @@ func build() { _ = work.NewRequestPreparationService() }
 
 import work "github.com/portpowered/infinite-you/pkg/services/work"
 
-func build() { _ = work.NewSelection }
+func build() { _ = work.NormalizeList }
 `)
 	stderr := &bytes.Buffer{}
 	err = run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)

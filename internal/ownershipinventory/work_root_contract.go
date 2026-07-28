@@ -93,16 +93,6 @@ var WorkExcessRootContractFolds = []WorkRootContractFoldTarget{
 		},
 		Destination: workPackagePrefix + "/internal/services/state_access",
 	},
-	{
-		Cluster: "state_access_query",
-		Files: []string{
-			"query_list.go",
-			"query_list_test.go",
-			"query_select.go",
-			"query_select_test.go",
-		},
-		Destination: workPackagePrefix + "/internal/services/state_access",
-	},
 }
 
 // ListWorkRootGoFiles returns every live root-level .go file name under

@@ -28,7 +28,6 @@ func TestWorkExcessRootContractFoldDestinations(t *testing.T) {
 		"request_admission":        "pkg/services/work/internal",
 		"invocation_return_policy": "pkg/services/work/internal",
 		"lineage_graph_modules":    "pkg/services/work/internal/services/state_access",
-		"state_access_query":       "pkg/services/work/internal/services/state_access",
 	}
 
 	for _, target := range workExcessRootContractFolds {
@@ -138,7 +137,6 @@ func TestWorkExcessRootContractFoldClustersMatchInventoryNote(t *testing.T) {
 		"invocation_return_policy",
 		"lineage_graph_modules",
 		"request_admission",
-		"state_access_query",
 	}
 	if !slices.Equal(gotClusters, wantClusters) {
 		t.Fatalf("fold clusters = %v, want %v", gotClusters, wantClusters)

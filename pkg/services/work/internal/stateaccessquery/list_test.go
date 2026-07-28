@@ -1,21 +1,23 @@
-package work
+package stateaccessquery_test
 
 import (
 	"context"
 	"encoding/base64"
 	"errors"
 	"testing"
+
+	"github.com/portpowered/infinite-you/pkg/services/work/internal/stateaccessquery"
 )
 
 func TestListRequestPreparationReturnsDetachedValidatedValues(t *testing.T) {
 	t.Parallel()
 
-	options := ListOptions{
-		StateType:  StateTypeProcessing,
+	options := stateaccessquery.ListOptions{
+		StateType:  stateaccessquery.StateTypeProcessing,
 		Name:       "alpha",
 		MaxResults: 25,
 	}
-	prepared, err := NewListRequestPreparation().PrepareListRequest(context.Background(), options)
+	prepared, err := stateaccessquery.NewListRequestPreparation().PrepareListRequest(context.Background(), options)
 	if err != nil {
 		t.Fatalf("PrepareListRequest() error = %v", err)
 	}
@@ -30,13 +32,13 @@ func TestListRequestPreparationReturnsDetachedValidatedValues(t *testing.T) {
 func TestListRequestPreparationFailsClosedWithoutLiveContext(t *testing.T) {
 	t.Parallel()
 
-	prepare := NewListRequestPreparation()
-	if _, err := prepare.PrepareListRequest(nil, ListOptions{}); err == nil || err.Error() != "Work list preparation context is required" {
+	prepare := stateaccessquery.NewListRequestPreparation()
+	if _, err := prepare.PrepareListRequest(nil, stateaccessquery.ListOptions{}); err == nil || err.Error() != "Work list preparation context is required" {
 		t.Fatalf("nil-context error = %v", err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := prepare.PrepareListRequest(ctx, ListOptions{}); !errors.Is(err, context.Canceled) {
+	if _, err := prepare.PrepareListRequest(ctx, stateaccessquery.ListOptions{}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled-context error = %v, want context.Canceled", err)
 	}
 }
@@ -45,17 +47,17 @@ func TestNormalizeListAcceptedCombination(t *testing.T) {
 	t.Parallel()
 
 	nextToken := base64.StdEncoding.EncodeToString([]byte("work/42"))
-	options := ListOptions{
+	options := stateaccessquery.ListOptions{
 		StateName:    "in review",
-		StateType:    StateTypeProcessing,
+		StateType:    stateaccessquery.StateTypeProcessing,
 		Name:         "Alpha & Beta",
 		WorkTypeName: "story/review",
 		TraceID:      "trace value",
-		SortBy:       SortByStateType,
+		SortBy:       stateaccessquery.SortByStateType,
 		MaxResults:   25,
 		NextToken:    nextToken,
 	}
-	query, err := NormalizeList(options)
+	query, err := stateaccessquery.NormalizeList(options)
 	if err != nil {
 		t.Fatalf("NormalizeList() error = %v", err)
 	}
@@ -70,7 +72,7 @@ func TestNormalizeListAcceptedCombination(t *testing.T) {
 func TestNormalizeListOmitsEmptyValuesFromSummary(t *testing.T) {
 	t.Parallel()
 
-	query, err := NormalizeList(ListOptions{Name: "kept exactly "})
+	query, err := stateaccessquery.NormalizeList(stateaccessquery.ListOptions{Name: "kept exactly "})
 	if err != nil {
 		t.Fatalf("NormalizeList() error = %v", err)
 	}
@@ -87,20 +89,20 @@ func TestNormalizeListRejectsInvalidInputs(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		options ListOptions
+		options stateaccessquery.ListOptions
 		wantErr string
 	}{
-		{name: "unsupported state type", options: ListOptions{StateType: "RUNNING"}, wantErr: "state.type must be one of INITIAL, PROCESSING, TERMINAL, or FAILED"},
-		{name: "unsupported sort", options: ListOptions{SortBy: "name"}, wantErr: "sortBy must be state.type"},
-		{name: "negative page size", options: ListOptions{MaxResults: -1}, wantErr: "maxResults must be zero or greater"},
-		{name: "malformed cursor", options: ListOptions{NextToken: "not-base64"}, wantErr: "nextToken must be valid standard base64 for a non-empty cursor"},
-		{name: "empty decoded cursor", options: ListOptions{NextToken: "===="}, wantErr: "nextToken must be valid standard base64 for a non-empty cursor"},
+		{name: "unsupported state type", options: stateaccessquery.ListOptions{StateType: "RUNNING"}, wantErr: "state.type must be one of INITIAL, PROCESSING, TERMINAL, or FAILED"},
+		{name: "unsupported sort", options: stateaccessquery.ListOptions{SortBy: "name"}, wantErr: "sortBy must be state.type"},
+		{name: "negative page size", options: stateaccessquery.ListOptions{MaxResults: -1}, wantErr: "maxResults must be zero or greater"},
+		{name: "malformed cursor", options: stateaccessquery.ListOptions{NextToken: "not-base64"}, wantErr: "nextToken must be valid standard base64 for a non-empty cursor"},
+		{name: "empty decoded cursor", options: stateaccessquery.ListOptions{NextToken: "===="}, wantErr: "nextToken must be valid standard base64 for a non-empty cursor"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := NormalizeList(tt.options)
+			_, err := stateaccessquery.NormalizeList(tt.options)
 			if err == nil || err.Error() != tt.wantErr {
 				t.Fatalf("NormalizeList() error = %v, want %q", err, tt.wantErr)
 			}
@@ -111,11 +113,16 @@ func TestNormalizeListRejectsInvalidInputs(t *testing.T) {
 func TestNormalizeListAcceptsEveryStateType(t *testing.T) {
 	t.Parallel()
 
-	for _, stateType := range []string{StateTypeInitial, StateTypeProcessing, StateTypeTerminal, StateTypeFailed} {
+	for _, stateType := range []string{
+		stateaccessquery.StateTypeInitial,
+		stateaccessquery.StateTypeProcessing,
+		stateaccessquery.StateTypeTerminal,
+		stateaccessquery.StateTypeFailed,
+	} {
 		stateType := stateType
 		t.Run(stateType, func(t *testing.T) {
 			t.Parallel()
-			if _, err := NormalizeList(ListOptions{StateType: stateType}); err != nil {
+			if _, err := stateaccessquery.NormalizeList(stateaccessquery.ListOptions{StateType: stateType}); err != nil {
 				t.Fatalf("NormalizeList() error = %v", err)
 			}
 		})
