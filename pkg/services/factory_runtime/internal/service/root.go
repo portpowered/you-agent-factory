@@ -6,6 +6,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
@@ -126,9 +127,15 @@ func (r *Root) AcceptDispatchResult(
 }
 
 func (r *Root) CaptureCheckpoint(
-	_ context.Context,
-	_ factoryruntime.CaptureCheckpointRequest,
+	ctx context.Context,
+	req factoryruntime.CaptureCheckpointRequest,
 ) (factoryruntime.CaptureCheckpointResult, error) {
+	if strings.TrimSpace(req.CheckpointID) == "" {
+		return factoryruntime.CaptureCheckpointResult{}, factoryruntime.ErrCheckpointNotFound
+	}
+	if r != nil && r.active != nil {
+		return r.active.CaptureCheckpoint(ctx, req)
+	}
 	return factoryruntime.CaptureCheckpointResult{}, factoryruntime.ErrCapabilityUnavailable
 }
 

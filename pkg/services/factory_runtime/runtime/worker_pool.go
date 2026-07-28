@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/rootobservation"
+	checkpointrecovery "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
@@ -280,9 +282,50 @@ func mapDispatchPlanningError(err error) error {
 
 func (f *factoryImpl) CaptureCheckpoint(
 	_ context.Context,
-	_ factory.CaptureCheckpointRequest,
+	req factory.CaptureCheckpointRequest,
 ) (factory.CaptureCheckpointResult, error) {
-	return factory.CaptureCheckpointResult{}, f.unavailableRootCapability(false, nil, false)
+	checkpointID := strings.TrimSpace(req.CheckpointID)
+	if checkpointID == "" {
+		return factory.CaptureCheckpointResult{}, factory.ErrCheckpointNotFound
+	}
+	f.mu.RLock()
+	state := f.state
+	recovery := f.checkpointRecovery
+	f.mu.RUnlock()
+	if err := checkpointCaptureLifecycleError(state); err != nil {
+		return factory.CaptureCheckpointResult{}, err
+	}
+	if recovery == nil {
+		return factory.CaptureCheckpointResult{}, factory.ErrCapabilityUnavailable
+	}
+	payload, err := checkpointrecovery.EncodeRuntimeOpaquePayload(checkpointrecovery.ExecutionCaptureFacts{
+		FactoryState: string(state),
+	})
+	if err != nil {
+		return factory.CaptureCheckpointResult{}, err
+	}
+	captured, err := recovery.Capture(checkpointrecovery.CaptureRequest{
+		CheckpointID: checkpointID,
+		Payload:      payload,
+	})
+	if err != nil {
+		return factory.CaptureCheckpointResult{}, err
+	}
+	return factory.CaptureCheckpointResult{
+		Outcome:    factory.CheckpointOutcomeCaptured,
+		Checkpoint: checkpointrecovery.RootCheckpointFromEnvelope(captured.Envelope),
+	}, nil
+}
+
+func checkpointCaptureLifecycleError(state interfaces.FactoryState) error {
+	switch state {
+	case interfaces.FactoryStateRunning, interfaces.FactoryStatePaused, interfaces.FactoryStateIdle:
+		return nil
+	case interfaces.FactoryStateCompleted, interfaces.FactoryStateFailed:
+		return factory.ErrNotRunning
+	default:
+		return factory.ErrNotRunning
+	}
 }
 
 func (f *factoryImpl) LoadCheckpoint(_ context.Context, req factory.LoadCheckpointRequest) (factory.LoadCheckpointResult, error) {

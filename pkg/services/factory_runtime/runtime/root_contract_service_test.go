@@ -596,8 +596,16 @@ func TestFactoryImpl_CheckpointContracts_DoNotReportFalseSuccess(t *testing.T) {
 	ctx := context.Background()
 	impl.state = interfaces.FactoryStatePaused
 
-	_, err := impl.CaptureCheckpoint(ctx, factory.CaptureCheckpointRequest{CheckpointID: "cp-1"})
-	requireRootErrIs(t, err, factory.ErrCapabilityUnavailable, "CaptureCheckpoint(paused)")
+	captured, err := impl.CaptureCheckpoint(ctx, factory.CaptureCheckpointRequest{CheckpointID: "cp-1"})
+	requireNoRootErr(t, err, "CaptureCheckpoint(paused)")
+	if captured.Outcome != factory.CheckpointOutcomeCaptured {
+		t.Fatalf("CaptureCheckpoint(paused) outcome = %q, want CAPTURED", captured.Outcome)
+	}
+	if captured.Checkpoint.CheckpointID != "cp-1" ||
+		captured.Checkpoint.SchemaVersion <= 0 ||
+		len(captured.Checkpoint.Payload) == 0 {
+		t.Fatalf("CaptureCheckpoint(paused) checkpoint = %#v, want opaque captured checkpoint", captured.Checkpoint)
+	}
 	_, err = impl.LoadCheckpoint(ctx, factory.LoadCheckpointRequest{})
 	requireRootErrIs(t, err, factory.ErrCheckpointNotFound, "LoadCheckpoint(empty)")
 	_, err = impl.LoadCheckpoint(ctx, factory.LoadCheckpointRequest{CheckpointID: "cp-1"})

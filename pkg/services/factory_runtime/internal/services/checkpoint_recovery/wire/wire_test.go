@@ -15,3 +15,12 @@ func TestNewProcessLocalCheckpointStoreConstructsWorkingAdapter(t *testing.T) {
 		t.Fatal("NewProcessLocalCheckpointStore() = nil, want process-local adapter")
 	}
 }
+
+func TestNewConstructsCheckpointRecoveryCapability(t *testing.T) {
+	t.Parallel()
+
+	var recovery checkpointrecovery.Service = checkpointrecoverywire.New()
+	if recovery == nil {
+		t.Fatal("New() = nil, want checkpoint recovery capability")
+	}
+}
