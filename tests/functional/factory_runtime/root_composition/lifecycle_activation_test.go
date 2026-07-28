@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
@@ -238,9 +239,13 @@ type factoryRuntimeDelegatingRecorder struct {
 	scriptCommand      atomic.Int32
 }
 
-func newFactoryRuntimeDelegatingRecorder(t *testing.T) *factoryRuntimeDelegatingRecorder {
+func newFactoryRuntimeDelegatingRecorder(t *testing.T, workflowHome ...string) *factoryRuntimeDelegatingRecorder {
 	t.Helper()
-	return &factoryRuntimeDelegatingRecorder{workflowHome: t.TempDir()}
+	home := t.TempDir()
+	if len(workflowHome) > 0 && workflowHome[0] != "" {
+		home = workflowHome[0]
+	}
+	return &factoryRuntimeDelegatingRecorder{workflowHome: home}
 }
 
 func (recorder *factoryRuntimeDelegatingRecorder) edges() serviceedges.Edges {
@@ -274,9 +279,18 @@ func (recorder *factoryRuntimeDelegatingRecorder) totalDispatchPlan() int32 {
 	return recorder.dispatchRecord.Load()
 }
 
+func (recorder *factoryRuntimeDelegatingRecorder) totalJavaScriptOrchestration() int32 {
+	return recorder.workflowReadDir.Load() +
+		recorder.workflowReadFile.Load() +
+		recorder.workflowStat.Load() +
+		recorder.workflowSymlink.Load() +
+		recorder.workflowHomeCalls.Load() +
+		recorder.scriptCommand.Load()
+}
+
 func (recorder *factoryRuntimeDelegatingRecorder) generateID() string {
-	recorder.idGeneratorCalls.Add(1)
-	return "factory-runtime-activation-edge-id"
+	n := recorder.idGeneratorCalls.Add(1)
+	return fmt.Sprintf("factory-runtime-activation-edge-id-%d", n)
 }
 
 func (recorder *factoryRuntimeDelegatingRecorder) walkInputs(root string, walkFn fs.WalkDirFunc) error {
