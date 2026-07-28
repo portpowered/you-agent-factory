@@ -146,6 +146,39 @@ func TestMapPackageWorkersMoveDestinations(t *testing.T) {
 			},
 		},
 		{
+			path: "pkg/services/workers/agypty",
+			wantMove: &ownershipinventory.PackageRow{
+				PackagePath:       "pkg/services/workers/agypty",
+				Disposition:       ownershipinventory.DispositionMove,
+				Destination:       "providers",
+				DestinationKind:   ownershipinventory.DestinationKindOwner,
+				Successor:         "pkg/services/providers",
+				DeletionCondition: "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)",
+			},
+		},
+		{
+			path: "pkg/services/workers/cliprovider",
+			wantMove: &ownershipinventory.PackageRow{
+				PackagePath:       "pkg/services/workers/cliprovider",
+				Disposition:       ownershipinventory.DispositionMove,
+				Destination:       "providers",
+				DestinationKind:   ownershipinventory.DestinationKindOwner,
+				Successor:         "pkg/services/providers",
+				DeletionCondition: "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)",
+			},
+		},
+		{
+			path: "pkg/services/workers/provider_test",
+			wantMove: &ownershipinventory.PackageRow{
+				PackagePath:       "pkg/services/workers/provider_test",
+				Disposition:       ownershipinventory.DispositionMove,
+				Destination:       "providers",
+				DestinationKind:   ownershipinventory.DestinationKindOwner,
+				Successor:         "pkg/services/providers",
+				DeletionCondition: "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)",
+			},
+		},
+		{
 			path: "pkg/services/workers/provider/registry",
 			wantMove: &ownershipinventory.PackageRow{
 				PackagePath:       "pkg/services/workers/provider/registry",

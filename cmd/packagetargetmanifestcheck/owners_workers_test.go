@@ -154,6 +154,92 @@ func TestMapCommittedOwnerPackageWorkersTransitionalDebtMoves(t *testing.T) {
 	}
 }
 
+func TestMapCommittedOwnerPackageWorkersProvidersExtractionMoves(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		path string
+		want PackageMapping
+	}{
+		{
+			path: "pkg/services/workers/agypty",
+			want: PackageMapping{
+				PackagePath: "pkg/services/workers/agypty",
+				Disposition: DispositionMove,
+				Destination: "providers/internal/services/execution",
+			},
+		},
+		{
+			path: "pkg/services/workers/cliprovider",
+			want: PackageMapping{
+				PackagePath: "pkg/services/workers/cliprovider",
+				Disposition: DispositionMove,
+				Destination: "providers/internal/services/execution",
+			},
+		},
+		{
+			path: "pkg/services/workers/provider",
+			want: PackageMapping{
+				PackagePath: "pkg/services/workers/provider",
+				Disposition: DispositionMove,
+				Destination: "providers/internal/services/execution",
+			},
+		},
+		{
+			path: "pkg/services/workers/provider/registry",
+			want: PackageMapping{
+				PackagePath: "pkg/services/workers/provider/registry",
+				Disposition: DispositionMove,
+				Destination: "providers/internal/services/catalog",
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		got, ok := mapCommittedOwnerPackage(tc.path)
+		if !ok {
+			t.Fatalf("mapCommittedOwnerPackage(%q) ok = false", tc.path)
+		}
+		if got != tc.want {
+			t.Fatalf("mapCommittedOwnerPackage(%q) = %#v, want %#v", tc.path, got, tc.want)
+		}
+	}
+}
+
+func TestWorkersTopLevelTransitionalDebtDirectoriesMapToMove(t *testing.T) {
+	t.Parallel()
+
+	topLevelDebt := []string{
+		"construction",
+		"diagnostics",
+		"execution",
+		"executor",
+		"interface",
+		"invocation",
+		"process",
+		"prompting",
+		"runner",
+		"service",
+		"services",
+		"skippermissions",
+		"worktree",
+	}
+
+	for _, dir := range topLevelDebt {
+		path := "pkg/services/workers/" + dir
+		got, ok := mapCommittedOwnerPackage(path)
+		if !ok {
+			t.Fatalf("mapCommittedOwnerPackage(%q) ok = false", path)
+		}
+		if got.Disposition != DispositionMove {
+			t.Fatalf("top-level debt %q disposition = %q, want move", path, got.Disposition)
+		}
+		if got.Destination == "workers" {
+			t.Fatalf("top-level debt %q move destination = owner root, want nested plan path", path)
+		}
+	}
+}
+
 func TestMapCommittedOwnerPackageWorkersCanonicalRetains(t *testing.T) {
 	t.Parallel()
 
@@ -194,6 +280,46 @@ func TestMapCommittedOwnerPackageWorkersCanonicalRetains(t *testing.T) {
 		}
 		if got != tc.want {
 			t.Fatalf("mapCommittedOwnerPackage(%q) = %#v, want %#v", tc.path, got, tc.want)
+		}
+	}
+}
+
+func TestCommittedManifestWorkersRejectsRetainToOwnerRoot(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := findRepoRoot(t)
+	manifest, err := loadManifest(filepath.Join(repoRoot, manifestRelativePath))
+	if err != nil {
+		t.Fatalf("loadManifest() error = %v", err)
+	}
+
+	const ownerPrefix = "pkg/services/workers/"
+	for _, row := range manifest.Packages {
+		if row.PackagePath == "pkg/services/workers" {
+			continue
+		}
+		if !strings.HasPrefix(row.PackagePath, ownerPrefix) {
+			continue
+		}
+		rest := strings.TrimPrefix(row.PackagePath, ownerPrefix)
+		if workersCanonicalRetainRest(rest) {
+			continue
+		}
+		if _, extracted := mapProvidersExtraction(row.PackagePath); extracted {
+			if row.Disposition != DispositionMove || !strings.HasPrefix(row.Destination, "providers/") {
+				t.Fatalf("providers extraction %q = disposition %q destination %q, want move→providers/*",
+					row.PackagePath, row.Disposition, row.Destination)
+			}
+			continue
+		}
+		if row.Disposition == DispositionRetain && row.Destination == "workers" {
+			t.Fatalf("committed manifest row retain→workers for %q", row.PackagePath)
+		}
+		if row.Disposition != DispositionMove {
+			t.Fatalf("committed manifest row %q disposition = %q, want move", row.PackagePath, row.Disposition)
+		}
+		if row.Destination == "workers" {
+			t.Fatalf("committed manifest row %q move destination = owner root, want nested plan path", row.PackagePath)
 		}
 	}
 }
@@ -245,5 +371,20 @@ func TestWorkersInventoryRejectsRetainToOwnerRoot(t *testing.T) {
 				t.Fatalf("inventory path %q disposition = %q, want move", packagePath, got.Disposition)
 			}
 		}
+	}
+}
+
+func workersCanonicalRetainRest(rest string) bool {
+	switch {
+	case rest == "wire" || strings.HasPrefix(rest, "wire/"):
+		return true
+	case strings.HasPrefix(rest, "internal/services/runtime_assembly"):
+		return true
+	case strings.HasPrefix(rest, "internal/services/runners"):
+		return true
+	case strings.HasPrefix(rest, "internal/services/workstations"):
+		return true
+	default:
+		return false
 	}
 }
