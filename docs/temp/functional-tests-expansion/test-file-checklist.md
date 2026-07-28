@@ -561,7 +561,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestClassifierUnknownAndMalformedDecisionFailDistinctly`.
   - `TestClassifierMultiOutputPreservesPayload`.
 
-- [ ] `tests/functional/work/recovery/manual_move_test.go`
+- [x] `tests/functional/work/recovery/manual_move_test.go`
   - `TestFailedCascadeCanBeRecoveredByPublicWorkMove`.
   - `TestTerminalFailedWorkCannotBeRedispatchedIllegally`.
   - `TestAPIMoveWorkResumesRecoverableFlow`.
