@@ -40,42 +40,18 @@ func (service *service) ResolveOperatorDefaults(
 	if err != nil {
 		return operatorsettings.ResolvedDefaults{}, err
 	}
-	resolved, err := service.root.ResolveEffective(operatorsettings.ResolveEffectiveRequest{
-		DocumentBaseline: loaded.Document.Defaults,
-		BackendScopeID:   loaded.Document.BackendScopeID,
-		WorkerPresets:    loaded.Document.WorkerPresets,
-		EnvironmentOverrides: operatorsettings.EffectiveOverrideFacts{
+	return operatorsettings.Resolve(operatorsettings.ResolveInput{
+		File: operatorsettings.Defaults{
+			WorkerModelProvider: loaded.Document.Defaults.WorkerModelProvider,
+			WorkerModel:         loaded.Document.Defaults.WorkerModel,
+		},
+		Env: operatorsettings.Defaults{
 			WorkerModelProvider: strings.TrimSpace(cfg.Environment.WorkerModelProvider),
 			WorkerModel:         strings.TrimSpace(cfg.Environment.WorkerModel),
 		},
-		InvocationOverrides: operatorsettings.EffectiveOverrideFacts{
+		Flag: operatorsettings.Defaults{
 			WorkerModelProvider: strings.TrimSpace(cfg.Flags.WorkerModelProvider),
 			WorkerModel:         strings.TrimSpace(cfg.Flags.WorkerModel),
 		},
-		ConfigPath: path,
-	})
-	if err != nil {
-		return operatorsettings.ResolvedDefaults{}, err
-	}
-	selection := resolved.Selection
-	return operatorsettings.ResolvedDefaults{
-		WorkerModelProvider:       selection.WorkerModelProvider,
-		WorkerModel:               selection.WorkerModel,
-		WorkerModelProviderSource: effectiveLayerSourceToSource(selection.WorkerModelProviderSource),
-		WorkerModelSource:         effectiveLayerSourceToSource(selection.WorkerModelSource),
-		ConfigPath:                selection.ConfigPath,
-	}, nil
-}
-
-func effectiveLayerSourceToSource(
-	source operatorsettings.EffectiveLayerSource,
-) operatorsettings.Source {
-	switch source {
-	case operatorsettings.EffectiveLayerSourceEnv:
-		return operatorsettings.SourceEnv
-	case operatorsettings.EffectiveLayerSourceFlag:
-		return operatorsettings.SourceFlag
-	default:
-		return operatorsettings.SourceFile
-	}
+	}, path)
 }

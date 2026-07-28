@@ -122,19 +122,24 @@ func TestBindResolveOperatorDefaultsDelegatesThroughAdapterService(t *testing.T)
 func TestBindResolveOperatorDefaultsMatchesFreeFunctionFacade(t *testing.T) {
 	t.Parallel()
 
+	homeDir := t.TempDir()
 	root := newCompositionSettingsRoot(nil)
-	root.resolveErr = errors.New("resolve failed")
 	operation := operatorsettingscli.BindResolveOperatorDefaults(root)
 
-	resolvedBound, boundErr := operation(t.TempDir(), operatorsettings.Defaults{}, operatorsettings.FlagOverrides{})
+	flags := operatorsettings.FlagOverrides{WorkerModelProvider: "DEFAULT"}
+	resolvedBound, boundErr := operation(homeDir, operatorsettings.Defaults{}, flags)
 	resolvedDirect, directErr := operatorsettingscli.ResolveOperatorDefaults(
 		operatorsettingscli.ResolveOperatorDefaultsConfig{
-			HomeDir: t.TempDir(),
+			HomeDir: homeDir,
+			Flags:   flags,
 		},
 		root,
 	)
 	if (boundErr == nil) != (directErr == nil) {
 		t.Fatalf("bound error = %v, direct error = %v", boundErr, directErr)
+	}
+	if boundErr != nil && boundErr.Error() != directErr.Error() {
+		t.Fatalf("bound error = %q, direct error = %q", boundErr.Error(), directErr.Error())
 	}
 	if boundErr == nil && resolvedBound != resolvedDirect {
 		t.Fatalf("bound = %#v, direct = %#v", resolvedBound, resolvedDirect)
