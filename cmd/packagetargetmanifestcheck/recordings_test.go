@@ -1,6 +1,7 @@
 package main
 
 import (
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -138,5 +139,105 @@ func TestRecordingsCanonicalRetainRestMatchesTopLevelInventory(t *testing.T) {
 			continue
 		}
 		t.Fatalf("live top-level child %q is missing from committed inventory", name)
+	}
+}
+
+func TestCommittedManifestRecordingsRejectsRetainToOwnerRoot(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := findRepoRoot(t)
+	manifest, err := loadManifest(filepath.Join(repoRoot, manifestRelativePath))
+	if err != nil {
+		t.Fatalf("loadManifest() error = %v", err)
+	}
+
+	const ownerPrefix = "pkg/services/recordings/"
+	for _, row := range manifest.Packages {
+		if row.PackagePath == "pkg/services/recordings" {
+			continue
+		}
+		if !strings.HasPrefix(row.PackagePath, ownerPrefix) {
+			continue
+		}
+		rest := strings.TrimPrefix(row.PackagePath, ownerPrefix)
+		if recordingsCanonicalRetainRest(rest) {
+			continue
+		}
+		if row.Disposition == DispositionRetain && row.Destination == "recordings" {
+			t.Fatalf("committed manifest row retain→recordings for %q", row.PackagePath)
+		}
+		if row.Disposition != DispositionMove {
+			t.Fatalf("committed manifest row %q disposition = %q, want move", row.PackagePath, row.Disposition)
+		}
+		if row.Destination == "recordings" {
+			t.Fatalf("committed manifest row %q move destination = owner root, want nested plan path", row.PackagePath)
+		}
+	}
+}
+
+func TestRecordingsInventoryRejectsRetainToOwnerRoot(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := findRepoRoot(t)
+	manifest, err := loadManifest(filepath.Join(repoRoot, manifestRelativePath))
+	if err != nil {
+		t.Fatalf("loadManifest() error = %v", err)
+	}
+
+	const ownerPrefix = "pkg/services/recordings/"
+	for _, packagePath := range manifest.Inventory {
+		if packagePath == "pkg/services/recordings" {
+			continue
+		}
+		if !strings.HasPrefix(packagePath, ownerPrefix) {
+			continue
+		}
+		rest := strings.TrimPrefix(packagePath, ownerPrefix)
+		if recordingsCanonicalRetainRest(rest) {
+			continue
+		}
+
+		got, ok := mapCommittedOwnerPackage(packagePath)
+		if !ok {
+			t.Fatalf("mapCommittedOwnerPackage(%q) ok = false", packagePath)
+		}
+		if got.Disposition == DispositionRetain && got.Destination == "recordings" {
+			t.Fatalf("unexpected retain→recordings for inventory path %q", packagePath)
+		}
+		if got.Disposition != DispositionMove {
+			t.Fatalf("inventory path %q disposition = %q, want move", packagePath, got.Disposition)
+		}
+	}
+}
+
+func TestRecordingsCommittedManifestAlignMoveDestinations(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := findRepoRoot(t)
+	manifest, err := loadManifest(filepath.Join(repoRoot, manifestRelativePath))
+	if err != nil {
+		t.Fatalf("loadManifest() error = %v", err)
+	}
+
+	const ownerPrefix = "pkg/services/recordings/"
+	for _, row := range manifest.Packages {
+		if !strings.HasPrefix(row.PackagePath, ownerPrefix) {
+			continue
+		}
+		if row.Disposition != DispositionMove {
+			continue
+		}
+
+		got, ok := mapCommittedOwnerPackage(row.PackagePath)
+		if !ok {
+			t.Fatalf("mapCommittedOwnerPackage(%q) ok = false", row.PackagePath)
+		}
+		if got.Disposition != DispositionMove {
+			t.Fatalf("mapCommittedOwnerPackage(%q) disposition = %q, want move", row.PackagePath, got.Disposition)
+		}
+		if got.Destination != row.Destination {
+			t.Fatalf("dual-ledger drift for %q: manifest destination %q, generator has %q",
+				row.PackagePath, row.Destination, got.Destination)
+		}
 	}
 }

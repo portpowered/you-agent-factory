@@ -128,3 +128,29 @@ func TestRecordingsRootContractClassificationPartitionsLiveTree(t *testing.T) {
 		}
 	}
 }
+
+func TestRecordingsExcessRootContractFoldDestinationsRejectOwnerRootRetain(t *testing.T) {
+	t.Parallel()
+
+	const ownerRoot = "pkg/services/recordings"
+	for _, target := range ownershipinventory.RecordingsExcessRootContractFolds {
+		if target.Destination == ownerRoot {
+			t.Fatalf("cluster %q folds to owner root retain destination", target.Cluster)
+		}
+		if !strings.HasPrefix(target.Destination, ownerRoot+"/internal/") {
+			t.Fatalf("cluster %q destination = %q, want private subservice path under %s/internal/", target.Cluster, target.Destination, ownerRoot)
+		}
+		for _, fileName := range target.Files {
+			kind, foldTarget, ok := ownershipinventory.ClassifyRecordingsRootContractFile(fileName)
+			if !ok {
+				t.Fatalf("ClassifyRecordingsRootContractFile(%q) ok = false", fileName)
+			}
+			if kind != "excess_fold" {
+				t.Fatalf("ClassifyRecordingsRootContractFile(%q) = %q, want excess_fold", fileName, kind)
+			}
+			if foldTarget.Destination == ownerRoot {
+				t.Fatalf("excess fold file %q regressed to owner root retain destination", fileName)
+			}
+		}
+	}
+}

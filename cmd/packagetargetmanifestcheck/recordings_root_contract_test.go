@@ -2,6 +2,7 @@ package main
 
 import (
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -68,6 +69,32 @@ func TestRecordingsRootContractClassificationPartitionsLiveTree(t *testing.T) {
 			}
 		default:
 			t.Fatalf("live root .go file %q has unknown kind %q", fileName, kind)
+		}
+	}
+}
+
+func TestRecordingsExcessRootContractFoldDestinationsRejectOwnerRootRetain(t *testing.T) {
+	t.Parallel()
+
+	const ownerRoot = "pkg/services/recordings"
+	for _, target := range recordingsExcessRootContractFolds {
+		if target.destination == ownerRoot {
+			t.Fatalf("cluster %q folds to owner root retain destination", target.cluster)
+		}
+		if !strings.HasPrefix(target.destination, ownerRoot+"/internal/") {
+			t.Fatalf("cluster %q destination = %q, want private subservice path under %s/internal/", target.cluster, target.destination, ownerRoot)
+		}
+		for _, fileName := range target.files {
+			kind, destination, ok := classifyRecordingsRootContractFile(fileName)
+			if !ok {
+				t.Fatalf("classifyRecordingsRootContractFile(%q) ok = false", fileName)
+			}
+			if kind != "excess_fold" {
+				t.Fatalf("classifyRecordingsRootContractFile(%q) = %q, want excess_fold", fileName, kind)
+			}
+			if destination == ownerRoot {
+				t.Fatalf("excess fold file %q regressed to owner root retain destination", fileName)
+			}
 		}
 	}
 }
