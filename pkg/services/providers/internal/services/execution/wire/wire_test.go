@@ -69,7 +69,7 @@ func TestNewBuiltInServiceUsesWorkersRunnerDependencies(t *testing.T) {
 	if err != nil || service == nil {
 		t.Fatalf("NewBuiltInService() = (%v, %v), want execution service", service, err)
 	}
-	if got := executionservice.BuiltInRegistrations(BuiltInDependenciesFromWorkersRunner(runner)); len(got) != 7 {
-		t.Fatalf("built-in registrations = %d, want 7 codex/claude/cursor/gemini/kiro/opencode/pi adapters", len(got))
+	if got := executionservice.BuiltInRegistrations(BuiltInDependenciesFromWorkersRunner(runner)); len(got) != 8 {
+		t.Fatalf("built-in registrations = %d, want 8 agy/codex/claude/cursor/gemini/kiro/opencode/pi adapters", len(got))
 	}
 }
