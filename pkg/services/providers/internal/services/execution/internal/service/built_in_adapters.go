@@ -5,13 +5,15 @@ import (
 	claudeadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude"
 	codexadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex"
 	cursoradapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/cursor"
+	opencodeadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/opencode"
 )
 
 // BuiltInDependencies carries exact provider-native invocation effects.
 type BuiltInDependencies struct {
-	Codex  codexadapter.Effect
-	Claude claudeadapter.Effect
-	Cursor cursoradapter.Effect
+	Codex    codexadapter.Effect
+	Claude   claudeadapter.Effect
+	Cursor   cursoradapter.Effect
+	OpenCode opencodeadapter.Effect
 }
 
 // BuiltInRegistrations returns the immutable set of native adapters currently
@@ -29,5 +31,6 @@ func BuiltInRegistrations(
 		codexadapter.NewRegistration(effects.Codex),
 		claudeadapter.NewRegistration(effects.Claude),
 		cursoradapter.NewRegistration(effects.Cursor),
+		opencodeadapter.NewRegistration(effects.OpenCode),
 	}
 }

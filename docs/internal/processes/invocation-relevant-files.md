@@ -365,6 +365,17 @@ primary-result behavior.
   Prove cancellation, timeout, declared/parse failure, and late-success
   suppression through `conformance_test.go`, `failure_test.go`, and
   `exit_failure_test.go` against the Providers root path.
+- Provider-native OpenCode execution state lives below the same parent-private
+  Providers Execution boundary. Keep its structured JSONL partial-record buffer,
+  text/tool/reasoning correlation, snapshot-vs-delta final selection, flush
+  guard, and detached session extraction invocation-local. Register the adapter
+  for canonical `providers.IDOpenCode` (`opencode`) and support both structured
+  (`--format json`) and final-only success through `ModeStructured` and
+  `ModeFinalOnly` on `NewRegistrationWithMode` / `CommandEffectOptions`.
+  Inject the native effect into the adapter registration; reconcile lifecycle
+  failures with the same precedence rules as other Providers-owned adapters.
+  Story 005 should add negotiation/fallback and degradation diagnostics on top
+  of this registration slice.
 - Keep reusable one-attempt conformance under the Providers-private Execution
   testkit. Build the singular Providers root around a fresh
   controllable adapter for each scenario, observe only Providers-owned

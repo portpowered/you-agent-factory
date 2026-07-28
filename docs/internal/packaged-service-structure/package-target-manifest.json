@@ -327,6 +327,7 @@
     "pkg/services/providers/internal/services/execution/internal/adapters/codex",
     "pkg/services/providers/internal/services/execution/internal/adapters/commanddispatch",
     "pkg/services/providers/internal/services/execution/internal/adapters/cursor",
+    "pkg/services/providers/internal/services/execution/internal/adapters/opencode",
     "pkg/services/providers/internal/services/execution/internal/service",
     "pkg/services/providers/internal/services/execution/wire",
     "pkg/services/providers/internal/testutil/execution",
@@ -1935,6 +1936,11 @@
     },
     {
       "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/cursor",
+      "disposition": "retain",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/opencode",
       "disposition": "retain",
       "destination": "providers/internal/services/execution"
     },

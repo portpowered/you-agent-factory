@@ -9,12 +9,12 @@ import (
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
-func TestBuiltInRegistrationsSelectDistinctCodexClaudeAndCursorAdapters(t *testing.T) {
+func TestBuiltInRegistrationsSelectDistinctCodexClaudeCursorAndOpenCodeAdapters(t *testing.T) {
 	t.Parallel()
 
 	registrations := BuiltInRegistrations()
-	if len(registrations) != 3 {
-		t.Fatalf("registration count = %d, want 3", len(registrations))
+	if len(registrations) != 4 {
+		t.Fatalf("registration count = %d, want 4", len(registrations))
 	}
 
 	byID := make(map[providers.ID]string, len(registrations))
@@ -39,5 +39,8 @@ func TestBuiltInRegistrationsSelectDistinctCodexClaudeAndCursorAdapters(t *testi
 	}
 	if !strings.Contains(byID[providers.IDCursor], "Cursor") {
 		t.Fatalf("Cursor adapter message = %q", byID[providers.IDCursor])
+	}
+	if !strings.Contains(byID[providers.IDOpenCode], "OpenCode") {
+		t.Fatalf("OpenCode adapter message = %q", byID[providers.IDOpenCode])
 	}
 }

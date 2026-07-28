@@ -4222,6 +4222,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/opencode",
+      "disposition": "retain",
+      "destination": "providers",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/providers/internal/services/execution/internal/service",
       "disposition": "retain",
       "destination": "providers",
