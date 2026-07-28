@@ -34,7 +34,7 @@
     {
       "file": "legacy_packages_disposition_test.go",
       "classification": "thin_root_contract_test",
-      "note": "INV disposition, zero-extra absence lock, and import-closure guard proving unexpected public siblings beyond service/ stay inventoried and off production import paths."
+      "note": "INV disposition, zero-extra absence lock, and import-closure guards proving unexpected public siblings beyond service/ stay inventoried and off production import paths for peer and owner public-surface packages including wire/."
     },
     {
       "file": "project_providers_boundary_test.go",
