@@ -4139,6 +4139,36 @@
       "deletion_only_batch": "runtime_api-delete-04-sessions"
     },
     {
+      "source_path": "tests/functional/sessions/restart/logical_identity_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/restart",
+      "scenario": "TestFactorySessionHistoryRemainsReadableAfterRestart",
+      "lane": "short",
+      "destination": "tests/functional/sessions/restart/logical_identity_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/restart/logical_identity_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/restart",
+      "scenario": "TestFactorySessionRestartRemapsLiveIDToLogicalIdentity",
+      "lane": "short",
+      "destination": "tests/functional/sessions/restart/logical_identity_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/restart/logical_identity_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/restart",
+      "scenario": "TestFactorySessionResumeDoesNotRepeatCompletedDispatch",
+      "lane": "short",
+      "destination": "tests/functional/sessions/restart/logical_identity_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/smoke/cli_docs_smoke_test.go",
       "package": "you-agent-factory/tests/functional/smoke",
       "scenario": "TestDocsCommandSmoke_AuthoringFactoriesDescribesMinimalGoalRepeater",
@@ -7189,12 +7219,12 @@
       "deletion_only_batch": "n/a"
     }
   ],
-  "scanned_at_utc": "2026-07-28T03:20:00Z",
+  "scanned_at_utc": "2026-07-28T03:45:00Z",
   "summary": {
     "by_catch_all": {
       "bootstrap_portability": 22,
       "guards_batch": 23,
-      "none": 441,
+      "none": 444,
       "replay_contracts": 23,
       "runtime_api": 96,
       "smoke": 62,
@@ -7216,7 +7246,7 @@
       "replay_contracts": 23,
       "runtime_api": 95,
       "sessionparity": 13,
-      "sessions": 3,
+      "sessions": 6,
       "smoke": 62,
       "transport": 104,
       "work": 2,
@@ -7224,9 +7254,9 @@
       "workflow": 30,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 699,
+    "customer_top_level_Test_scenarios": 702,
     "lane_functionallong": 95,
-    "lane_short": 604,
+    "lane_short": 607,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 7,
@@ -7267,6 +7297,7 @@
       "you-agent-factory/tests/functional/sessionparity": 13,
       "you-agent-factory/tests/functional/sessions": 1,
       "you-agent-factory/tests/functional/sessions/cli": 2,
+      "you-agent-factory/tests/functional/sessions/restart": 3,
       "you-agent-factory/tests/functional/smoke": 62,
       "you-agent-factory/tests/functional/transport/cli/commands": 20,
       "you-agent-factory/tests/functional/transport/cli/output": 13,
@@ -7303,7 +7334,7 @@
       "you-agent-factory/tests/functional/workstations/repeater": 13,
       "you-agent-factory/tests/functional/workstations/watcher": 9
     },
-    "files_with_customer_Test": 234,
+    "files_with_customer_Test": 235,
     "functional_test_go_files": 251,
     "helper_only_non_customer_files": 51,
     "internal_harness_Test_functions": 15,
