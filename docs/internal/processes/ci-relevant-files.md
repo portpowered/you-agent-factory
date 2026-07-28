@@ -874,6 +874,15 @@ Wave 0 functional-tests-expansion planning authority lives under
   Go docs (plus `//golden:` on the success load test) so `functionaltestmetadata`
   stays viz-compatible.
 
+- `tests/functional/factory_runtime/orchestrators/petri/routing/multi_transition_test.go`
+  owns service-mirrored Factory Runtime Petri multi-transition routing depth
+  through `support.RunFactoryToCompletionWithEdgesAndWork` and public Work /
+  session / Factory Event assertions only. Close catalog metadata with
+  `test-file-checklist.md`, `migration-ledger-inventory.json`,
+  `package-structure-baseline.json` entries for the `factory_runtime` domain
+  noun, and customer-readable Go docs on every top-level `Test*` so
+  `functionaltestmetadata` stays viz-compatible.
+
 - `tests/functional/automations/` owns root.BuildProcess evidence for packaged
   Automations cron scheduling and filesystem watcher preseed. Keep cron workstation
   factories explicit with `"behavior": "CRON"` and observe submissions through

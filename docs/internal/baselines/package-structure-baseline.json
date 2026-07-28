@@ -933,6 +933,21 @@
       "target": "bootstrap_portability"
     },
     {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/factory_runtime/orchestrators/petri/routing/doc.go",
+      "target": "factory_runtime"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/factory_runtime/orchestrators/petri/routing/helpers_test.go",
+      "target": "factory_runtime"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/factory_runtime/orchestrators/petri/routing/multi_transition_test.go",
+      "target": "factory_runtime"
+    },
+    {
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/factory_visualization/activation_lifecycle_test.go",
       "target": "factory_visualization"

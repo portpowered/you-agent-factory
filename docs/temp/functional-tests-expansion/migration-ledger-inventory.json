@@ -1909,6 +1909,36 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/factory_runtime/orchestrators/petri/routing/multi_transition_test.go",
+      "package": "you-agent-factory/tests/functional/factory_runtime/orchestrators/petri/routing",
+      "scenario": "TestPetriFailureRoutesToDocumentedFailedPlace",
+      "lane": "short",
+      "destination": "tests/functional/factory_runtime/orchestrators/petri/routing/multi_transition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory_runtime/orchestrators/petri/routing/multi_transition_test.go",
+      "package": "you-agent-factory/tests/functional/factory_runtime/orchestrators/petri/routing",
+      "scenario": "TestPetriMultiStagePipelineCompletesAtPublicTerminals",
+      "lane": "short",
+      "destination": "tests/functional/factory_runtime/orchestrators/petri/routing/multi_transition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory_runtime/orchestrators/petri/routing/multi_transition_test.go",
+      "package": "you-agent-factory/tests/functional/factory_runtime/orchestrators/petri/routing",
+      "scenario": "TestPetriMultiTransitionPreservesWorkCorrelation",
+      "lane": "short",
+      "destination": "tests/functional/factory_runtime/orchestrators/petri/routing/multi_transition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/guards_batch/cascading_failure_test.go",
       "package": "you-agent-factory/tests/functional/guards_batch",
       "scenario": "TestCascadingFailure_CompletedNotCascaded",
@@ -3566,6 +3596,46 @@
       "destination": "tests/functional/workers/inference/process_cleanup_test.go",
       "catch_all": "none",
       "specialty_targets": "script-timeout-companion-smoke-100",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/providers/agy/process_harness_test.go",
+      "package": "you-agent-factory/tests/functional/providers/agy",
+      "scenario": "TestAgyCommandCancellationThroughRootBuildProcessIsCanonical",
+      "lane": "short",
+      "destination": "tests/functional/providers/agy/process_harness_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/providers/agy/process_harness_test.go",
+      "package": "you-agent-factory/tests/functional/providers/agy",
+      "scenario": "TestAgyConductorSuccessThroughRootBuildProcess",
+      "lane": "short",
+      "destination": "tests/functional/providers/agy/process_harness_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/providers/agy/process_harness_test.go",
+      "package": "you-agent-factory/tests/functional/providers/agy",
+      "scenario": "TestAgyNativeFailureThroughRootBuildProcessIsSafe",
+      "lane": "short",
+      "destination": "tests/functional/providers/agy/process_harness_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/providers/agy/process_harness_test.go",
+      "package": "you-agent-factory/tests/functional/providers/agy",
+      "scenario": "TestAgyTimeoutFailureThroughRootBuildProcess",
+      "lane": "short",
+      "destination": "tests/functional/providers/agy/process_harness_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
       "deletion_only_batch": "n/a"
     },
     {
@@ -9189,7 +9259,7 @@
       "deletion_only_batch": "n/a"
     }
   ],
-  "scanned_at_utc": "2026-07-28T12:30:00Z",
+  "scanned_at_utc": "2026-07-28T12:55:00Z",
   "summary": {
     "by_catch_all": {
       "bootstrap_portability": 22,
@@ -9207,6 +9277,7 @@
       "cli": 59,
       "events": 5,
       "factory": 56,
+      "factory_runtime": 3,
       "factory_visualization": 6,
       "guards_batch": 23,
       "models": 25,
@@ -9215,7 +9286,7 @@
       "orchestration": 48,
       "product": 13,
       "provider_sessions": 15,
-      "providers": 64,
+      "providers": 68,
       "replay_contracts": 23,
       "runtime_api": 105,
       "sessionparity": 13,
@@ -9227,9 +9298,9 @@
       "workflow": 30,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 899,
+    "customer_top_level_Test_scenarios": 906,
     "lane_functionallong": 95,
-    "lane_short": 804,
+    "lane_short": 811,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 14,
@@ -9255,6 +9326,7 @@
       "you-agent-factory/tests/functional/factory/packaged/review": 3,
       "you-agent-factory/tests/functional/factory/packaged/subagent": 3,
       "you-agent-factory/tests/functional/factory/packaged/tts": 3,
+      "you-agent-factory/tests/functional/factory_runtime/orchestrators/petri/routing": 3,
       "you-agent-factory/tests/functional/factory_visualization": 6,
       "you-agent-factory/tests/functional/guards_batch": 23,
       "you-agent-factory/tests/functional/models/model_invoke": 4,
@@ -9277,6 +9349,7 @@
       "you-agent-factory/tests/functional/provider_sessions/association": 6,
       "you-agent-factory/tests/functional/provider_sessions/details": 9,
       "you-agent-factory/tests/functional/providers": 36,
+      "you-agent-factory/tests/functional/providers/agy": 4,
       "you-agent-factory/tests/functional/providers/codex": 7,
       "you-agent-factory/tests/functional/providers/cursor": 8,
       "you-agent-factory/tests/functional/providers/gemini": 4,
