@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	providersessionsinternal "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal"
 
 	_ "modernc.org/sqlite"
 )
@@ -211,7 +211,7 @@ func TestNormalizeAgentStorageRoot_ExplicitRootOverridesDiscovery(t *testing.T) 
 	t.Parallel()
 
 	root := t.TempDir()
-	got, err := NormalizeAgentStorageRoot(func() (string, error) { return t.TempDir(), nil }, testFiles, providersessions.OperatingSystem("linux"), root)
+	got, err := NormalizeAgentStorageRoot(func() (string, error) { return t.TempDir(), nil }, testFiles, providersessionsinternal.OperatingSystem("linux"), root)
 	if err != nil {
 		t.Fatalf("NormalizeAgentStorageRoot() = %v", err)
 	}

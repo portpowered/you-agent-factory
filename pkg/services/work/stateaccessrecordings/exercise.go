@@ -1,6 +1,8 @@
-// Package stateaccessrecordings exposes the leased Work state_access
-// Recordings-backed read edge for functional verification without importing
-// Work internal packages from tests/functional.
+// Package stateaccessrecordings is a transitional compile shim that re-exports
+// the Recordings-backed state_access exercise helpers from
+// work/internal/services/state_access/wire. Peer and functional callers will
+// retarget to the Work root contract; baseline deletion of this path is owned
+// by DEL-WORK.
 package stateaccessrecordings
 
 import (
@@ -8,41 +10,25 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	stateaccess "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access"
 	stateaccesswire "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/wire"
 )
 
-func newRecordingsRootService(root recordings.Service) stateaccess.Service {
-	return stateaccesswire.NewService(
-		nilSessionResolver{},
-		stateaccesswire.NewRecordingsAdapter(root),
-	)
-}
-
-// ListWorkFromRecordingsRoot exercises Recordings-backed Work list reads through
-// the published Recordings service root when no live session adapter is available.
+// ListWorkFromRecordingsRoot delegates to the owner-private state_access wire helper.
 func ListWorkFromRecordingsRoot(
 	ctx context.Context,
 	sessionID string,
 	root recordings.Service,
 	options work.ListOptions,
 ) (work.ListResult, error) {
-	return newRecordingsRootService(root).ListWork(ctx, sessionID, options)
+	return stateaccesswire.ListWorkFromRecordingsRoot(ctx, sessionID, root, options)
 }
 
-// GetWorkFromRecordingsRoot exercises Recordings-backed Work get reads through
-// the published Recordings service root when no live session adapter is available.
+// GetWorkFromRecordingsRoot delegates to the owner-private state_access wire helper.
 func GetWorkFromRecordingsRoot(
 	ctx context.Context,
 	sessionID string,
 	workID string,
 	root recordings.Service,
 ) (work.ReadModel, error) {
-	return newRecordingsRootService(root).GetWork(ctx, sessionID, workID)
-}
-
-type nilSessionResolver struct{}
-
-func (nilSessionResolver) ResolveSessionAdapter(string) (stateaccess.SessionAdapter, error) {
-	return nil, nil
+	return stateaccesswire.GetWorkFromRecordingsRoot(ctx, sessionID, workID, root)
 }

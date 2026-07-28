@@ -5,19 +5,20 @@ package service
 
 import (
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	providersessionsinternal "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/service"
 )
 
 // New delegates to the owner-private composed root in internal/service.
 func New(
-	files providersessions.FileSystem,
-	resolveHome providersessions.ResolveHomeDirectory,
-	codexWalkDirectory providersessions.CodexWalkDirectory,
-	codexResolveSymlinks providersessions.CodexResolveSymlinks,
-	cursorWalkDirectory providersessions.CursorWalkDirectory,
-	cursorResolveSymlinks providersessions.CursorResolveSymlinks,
-	cursorOpenDatabase providersessions.CursorOpenSQLDatabase,
-	cursorOperatingSystem providersessions.OperatingSystem,
+	files providersessionsinternal.FileSystem,
+	resolveHome providersessionsinternal.ResolveHomeDirectory,
+	codexWalkDirectory providersessionsinternal.CodexWalkDirectory,
+	codexResolveSymlinks providersessionsinternal.CodexResolveSymlinks,
+	cursorWalkDirectory providersessionsinternal.CursorWalkDirectory,
+	cursorResolveSymlinks providersessionsinternal.CursorResolveSymlinks,
+	cursorOpenDatabase providersessionsinternal.CursorOpenSQLDatabase,
+	cursorOperatingSystem providersessionsinternal.OperatingSystem,
 ) (providersessions.Service, error) {
 	return internalservice.New(
 		files,
@@ -33,12 +34,12 @@ func New(
 
 // NewForRoots delegates to the owner-private composed root in internal/service.
 func NewForRoots(
-	files providersessions.FileSystem,
-	codexWalkDirectory providersessions.CodexWalkDirectory,
-	codexResolveSymlinks providersessions.CodexResolveSymlinks,
-	cursorWalkDirectory providersessions.CursorWalkDirectory,
-	cursorResolveSymlinks providersessions.CursorResolveSymlinks,
-	cursorOpenDatabase providersessions.CursorOpenSQLDatabase,
+	files providersessionsinternal.FileSystem,
+	codexWalkDirectory providersessionsinternal.CodexWalkDirectory,
+	codexResolveSymlinks providersessionsinternal.CodexResolveSymlinks,
+	cursorWalkDirectory providersessionsinternal.CursorWalkDirectory,
+	cursorResolveSymlinks providersessionsinternal.CursorResolveSymlinks,
+	cursorOpenDatabase providersessionsinternal.CursorOpenSQLDatabase,
 	codexRoot, cursorRoot string,
 ) (providersessions.Service, error) {
 	return internalservice.NewForRoots(

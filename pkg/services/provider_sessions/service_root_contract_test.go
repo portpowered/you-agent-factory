@@ -2,9 +2,13 @@ package providersessions_test
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/ownershipinventory"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
@@ -551,10 +555,73 @@ func assertSealTypedFailures(t *testing.T, svc providersessions.Service, fake *r
 	}
 }
 
-// TestRootService_Seal_PublishedSlicesOnSingularRoot proves stories 002-003
-// slices are both reachable through one named Service using only Provider
-// Sessions root contracts (no Codex/Cursor reader, filesystem/SQL/OS effect,
-// Providers catalog/execution, or Workers selection-policy imports).
+// TestProviderSessionsThinRootContractSetSealed locks
+// pss-cln-pses-contract-roots-003: the public provider_sessions root exposes only
+// the committed thin contract set (contracts.go, doc.go) and thin root-contract
+// tests, with implementation folded to internal and transitional service/
+// retained for DEL-PSES.
+func TestProviderSessionsThinRootContractSetSealed(t *testing.T) {
+	t.Parallel()
+
+	root := repositoryRoot(t)
+	if err := ownershipinventory.VerifyProviderSessionsRootGoInventory(root); err != nil {
+		t.Fatalf("VerifyProviderSessionsRootGoInventory() error = %v", err)
+	}
+
+	inventory, err := ownershipinventory.LoadProviderSessionsRootGoInventory(root)
+	if err != nil {
+		t.Fatalf("LoadProviderSessionsRootGoInventory() error = %v", err)
+	}
+
+	wantProduction := []string{"contracts.go", "doc.go"}
+	var gotProduction []string
+	for _, file := range inventory.Files {
+		if file.Classification == ownershipinventory.ProviderSessionsRootGoThinContract {
+			gotProduction = append(gotProduction, file.File)
+		}
+	}
+	slices.Sort(gotProduction)
+	if !slices.Equal(gotProduction, wantProduction) {
+		t.Fatalf("thin root production files = %v, want %v", gotProduction, wantProduction)
+	}
+
+	if foldTargets := ownershipinventory.ProviderSessionsRootGoFoldTargets(inventory); len(foldTargets) != 0 {
+		t.Fatalf("fold targets remain in inventory = %v, want none at sealed root", foldTargets)
+	}
+
+	live, err := ownershipinventory.ListProviderSessionsRootGoFiles(root)
+	if err != nil {
+		t.Fatalf("ListProviderSessionsRootGoFiles() error = %v", err)
+	}
+	for _, name := range []string{
+		"construction_ports.go",
+		"details_providers_boundary_test.go",
+		"inspect_providers_boundary_test.go",
+		"project_providers_boundary_test.go",
+		"readers_providers_boundary_test.go",
+		"service_test.go",
+		"wire_behavioral_proof_test.go",
+	} {
+		if slices.Contains(live, name) {
+			t.Fatalf("%s still present at public provider_sessions root", name)
+		}
+	}
+
+	transitionalServicePath := filepath.Join(root, "pkg", "services", "provider_sessions", "service")
+	if _, err := os.Stat(transitionalServicePath); err != nil {
+		t.Fatalf("transitional service/ package missing (DEL-PSES still owns it): %v", err)
+	}
+
+	var peerSurface providersessions.Service = &rootServiceFake{}
+	if peerSurface == nil {
+		t.Fatal("peer-shaped Service compile-time seal failed")
+	}
+}
+
+// TestRootService_Seal_PublishedSlicesOnSingularRoot proves published Details,
+// Inspect, and Project slices are reachable through one named Service using only
+// Provider Sessions root contracts (no Codex/Cursor reader, filesystem/SQL/OS
+// effect, Providers catalog/execution, or Workers selection-policy imports).
 func TestRootService_Seal_PublishedSlicesOnSingularRoot(t *testing.T) {
 	modifiedAt := time.Date(2026, 7, 24, 5, 0, 0, 0, time.UTC)
 	assistantText := "sealed assistant reply"

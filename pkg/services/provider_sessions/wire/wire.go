@@ -16,14 +16,14 @@ import (
 // Codex/Cursor reader construction without publishing reader types on the
 // returned peer surface.
 func NewService(
-	files providersessions.FileSystem,
-	resolveHome providersessions.ResolveHomeDirectory,
-	codexWalkDirectory providersessions.CodexWalkDirectory,
-	codexResolveSymlinks providersessions.CodexResolveSymlinks,
-	cursorWalkDirectory providersessions.CursorWalkDirectory,
-	cursorResolveSymlinks providersessions.CursorResolveSymlinks,
-	cursorOpenDatabase providersessions.CursorOpenSQLDatabase,
-	cursorOperatingSystem providersessions.OperatingSystem,
+	files FileSystem,
+	resolveHome ResolveHomeDirectory,
+	codexWalkDirectory CodexWalkDirectory,
+	codexResolveSymlinks CodexResolveSymlinks,
+	cursorWalkDirectory CursorWalkDirectory,
+	cursorResolveSymlinks CursorResolveSymlinks,
+	cursorOpenDatabase CursorOpenSQLDatabase,
+	cursorOperatingSystem OperatingSystem,
 ) (providersessions.Service, error) {
 	return internalservice.New(
 		files,
@@ -41,12 +41,12 @@ func NewService(
 // storage roots. Missing required construction ports fail with a deterministic
 // construction error and a nil service.
 func NewForRoots(
-	files providersessions.FileSystem,
-	codexWalkDirectory providersessions.CodexWalkDirectory,
-	codexResolveSymlinks providersessions.CodexResolveSymlinks,
-	cursorWalkDirectory providersessions.CursorWalkDirectory,
-	cursorResolveSymlinks providersessions.CursorResolveSymlinks,
-	cursorOpenDatabase providersessions.CursorOpenSQLDatabase,
+	files FileSystem,
+	codexWalkDirectory CodexWalkDirectory,
+	codexResolveSymlinks CodexResolveSymlinks,
+	cursorWalkDirectory CursorWalkDirectory,
+	cursorResolveSymlinks CursorResolveSymlinks,
+	cursorOpenDatabase CursorOpenSQLDatabase,
 	codexRoot, cursorRoot string,
 ) (providersessions.Service, error) {
 	return internalservice.NewForRoots(

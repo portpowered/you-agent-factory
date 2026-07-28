@@ -626,7 +626,7 @@ func provideApplicationRuntimeAdapter(
 			if logger == nil {
 				logger = zap.NewNop()
 			}
-			visualization, err = visualizationFactory(
+			visualized, err := visualizationFactory(
 				opened.Visualization.Reader, opened.Visualization.Projections, effects.Clock, sink,
 				func(err error) {
 					logger.Error("Factory visualization failed", zap.Error(err))
@@ -634,6 +634,15 @@ func provideApplicationRuntimeAdapter(
 			)
 			if err != nil {
 				return factorysessions.BoundProcessComponents{}, err
+			}
+			if effects.FactoryVisualizationRootObserver != nil {
+				effects.FactoryVisualizationRootObserver(visualized)
+			}
+			// Factory Session lifecycle must not auto-activate Visualization.
+			// Peers leave the composed root inert until explicit Activate.
+			visualization = lifecycle.Functions{
+				StartFunc: func(context.Context) error { return nil },
+				StopFunc:  visualized.Stop,
 			}
 		}
 		handler, err := httpHandler.Bind(opened.HTTP)
