@@ -626,6 +626,12 @@ Wave 0 functional-tests-expansion planning authority lives under
   `migration-ledger-inventory.json`, retarget any specialty Make bindings, and
   refresh `test-file-checklist.md` plus narrowly coupled baselines
   (`package-structure-baseline.json`, `functional-undocumented-tests.json`).
+  Smoke ready-batch closeout (`smoke-delete-04/05/07/10/13`) follows the same
+  release pattern: reconcile `migration-ledger-inventory.json` destination rows
+  (`deletion_only_batch: n/a`), add checklist cells for newly owned destination
+  files (for example `observability/verification/verify_tier_contract_test.go`
+  and `workers/mock/service_config_override_alignment_*`), and drop released batch
+  ids from `ExpectedDeletionOnlyBatches`.
   `tests/functional/factory/definitions/init_test.go` owns public Factory-init
   functional coverage through `session create --init-new-factory` against
   `support.StartFunctionalAPIServer`, with seeded Work run via
