@@ -4026,6 +4026,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/recordings/transports/cli",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/recordings/wire",
       "disposition": "retain",
       "destination": "recordings",
@@ -4039,6 +4045,24 @@
     },
     {
       "packagePath": "pkg/services/work",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/services/content_staging",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/services/content_staging/internal/service",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/services/content_staging/wire",
       "disposition": "retain",
       "destination": "work",
       "destinationKind": "owner"
@@ -4069,6 +4093,12 @@
     },
     {
       "packagePath": "pkg/services/work/service",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/work/wire",
       "disposition": "retain",
       "destination": "work",
       "destinationKind": "owner"
