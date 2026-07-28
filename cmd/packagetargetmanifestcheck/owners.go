@@ -289,6 +289,12 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 		{exact: "codex", prefix: "codex/", dest: "provider_sessions/internal/services/codex_reader"},
 		{exact: "cursor", prefix: "cursor/", dest: "provider_sessions/internal/services/cursor_reader"},
 	},
+	"operator_settings": {
+		{exact: "identityinventory", prefix: "identityinventory/", dest: "operator_settings/internal"},
+		{exact: "servicewire", prefix: "servicewire/", dest: "operator_settings/internal"},
+		{exact: "testlink", prefix: "testlink/", dest: "operator_settings/internal"},
+		{exact: "testproviders", prefix: "testproviders/", dest: "operator_settings/internal"},
+	},
 	"models": {
 		{exact: "internal/catalog", prefix: "internal/catalog/", dest: "models/internal/services/catalog"},
 		{exact: "internal/assets", prefix: "internal/assets/", dest: "models/internal/services/assets"},

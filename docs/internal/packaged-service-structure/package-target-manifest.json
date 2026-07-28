@@ -108,6 +108,12 @@
     "pkg/services/factory_definitions/internal/services/compilation/loading",
     "pkg/services/factory_definitions/internal/services/compilation/runtimeconfig",
     "pkg/services/factory_definitions/internal/services/compilation/wire",
+    "pkg/services/factory_definitions/internal/services/distribution",
+    "pkg/services/factory_definitions/internal/services/distribution/internal/service",
+    "pkg/services/factory_definitions/internal/services/distribution/packagedcatalog",
+    "pkg/services/factory_definitions/internal/services/distribution/packagedinstallation",
+    "pkg/services/factory_definitions/internal/services/distribution/scaffoldfacts",
+    "pkg/services/factory_definitions/internal/services/distribution/wire",
     "pkg/services/factory_definitions/internal/services/snapshots_portability",
     "pkg/services/factory_definitions/internal/services/snapshots_portability/capture",
     "pkg/services/factory_definitions/internal/services/snapshots_portability/internal/service",
@@ -867,6 +873,36 @@
       "packagePath": "pkg/services/factory_definitions/internal/services/compilation/wire",
       "disposition": "move",
       "destination": "factory_definitions/internal/services/compilation"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution",
+      "disposition": "move",
+      "destination": "factory_definitions/internal/services/distribution"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/internal/service",
+      "disposition": "move",
+      "destination": "factory_definitions/internal/services/distribution"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/packagedcatalog",
+      "disposition": "move",
+      "destination": "factory_definitions/internal/services/distribution"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/packagedinstallation",
+      "disposition": "move",
+      "destination": "factory_definitions/internal/services/distribution"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/scaffoldfacts",
+      "disposition": "move",
+      "destination": "factory_definitions/internal/services/distribution"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/wire",
+      "disposition": "move",
+      "destination": "factory_definitions/internal/services/distribution"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability",
@@ -1910,8 +1946,8 @@
     },
     {
       "packagePath": "pkg/services/operator_settings/identityinventory",
-      "disposition": "retain",
-      "destination": "operator_settings"
+      "disposition": "move",
+      "destination": "operator_settings/internal"
     },
     {
       "packagePath": "pkg/services/operator_settings/internal/service",
@@ -1950,18 +1986,18 @@
     },
     {
       "packagePath": "pkg/services/operator_settings/servicewire",
-      "disposition": "retain",
-      "destination": "operator_settings"
+      "disposition": "move",
+      "destination": "operator_settings/internal"
     },
     {
       "packagePath": "pkg/services/operator_settings/testlink",
-      "disposition": "retain",
-      "destination": "operator_settings"
+      "disposition": "move",
+      "destination": "operator_settings/internal"
     },
     {
       "packagePath": "pkg/services/operator_settings/testproviders",
-      "disposition": "retain",
-      "destination": "operator_settings"
+      "disposition": "move",
+      "destination": "operator_settings/internal"
     },
     {
       "packagePath": "pkg/services/operator_settings/transports/cli",

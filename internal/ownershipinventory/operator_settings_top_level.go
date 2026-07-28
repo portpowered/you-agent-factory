@@ -85,6 +85,50 @@ func OperatorSettingsUnexpectedPublicSiblingPackagePaths(inventory OperatorSetti
 	return packagePaths
 }
 
+// VerifyOperatorSettingsUnexpectedPublicSiblingRemaps proves live top-level
+// children match the committed inventory and every unexpected public sibling
+// is remapped move/delete with an explicit private destination rather than
+// retain→operator_settings.
+func VerifyOperatorSettingsUnexpectedPublicSiblingRemaps(root string) error {
+	if err := VerifyOperatorSettingsTopLevelInventory(root); err != nil {
+		return err
+	}
+	inventory, err := LoadOperatorSettingsTopLevelInventory(root)
+	if err != nil {
+		return err
+	}
+	for _, packagePath := range OperatorSettingsUnexpectedPublicSiblingPackagePaths(inventory) {
+		row, err := MapPackage(packagePath)
+		if err != nil {
+			return fmt.Errorf("map unexpected public sibling %q: %w", packagePath, err)
+		}
+		if err := validateOperatorSettingsUnexpectedPublicSiblingRow(packagePath, row); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateOperatorSettingsUnexpectedPublicSiblingRow(packagePath string, row PackageRow) error {
+	if row.Disposition == DispositionRetain && row.Destination == operatorSettingsOwner {
+		return fmt.Errorf("unexpected public sibling %q retains under owner root", packagePath)
+	}
+	switch row.Disposition {
+	case DispositionMove, DispositionDelete:
+	default:
+		return fmt.Errorf("unexpected public sibling %q disposition %q must be move or delete", packagePath, row.Disposition)
+	}
+	if row.Disposition == DispositionMove {
+		if strings.TrimSpace(row.Successor) == "" || strings.TrimSpace(row.DeletionCondition) == "" {
+			return fmt.Errorf("unexpected public sibling %q missing successor/deletionCondition", packagePath)
+		}
+		if !isOperatorSettingsPrivateSuccessor(row.Successor) {
+			return fmt.Errorf("unexpected public sibling %q successor %q outside operator_settings private destinations", packagePath, row.Successor)
+		}
+	}
+	return nil
+}
+
 // VerifyOperatorSettingsTopLevelInventory proves the live filesystem matches the
 // committed Operator Settings top-level inventory rows.
 func VerifyOperatorSettingsTopLevelInventory(root string) error {

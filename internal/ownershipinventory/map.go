@@ -53,7 +53,11 @@ func MapPackage(packagePath string) (PackageRow, error) {
 	case strings.HasPrefix(packagePath, "pkg/services/factory_visualization"):
 		return retainRow(packagePath, "factory_visualization", DestinationKindOwner), nil
 	case strings.HasPrefix(packagePath, "pkg/services/operator_settings"):
-		return retainRow(packagePath, "operator_settings", DestinationKindOwner), nil
+		row, ok := operatorSettingsMapping(packagePath)
+		if !ok {
+			return PackageRow{}, fmt.Errorf("no committed destination for %s", packagePath)
+		}
+		return row, nil
 	case strings.HasPrefix(packagePath, "pkg/services/system_initialization"):
 		return retainRow(packagePath, "system_initialization", DestinationKindOwner), nil
 	case strings.HasPrefix(packagePath, "pkg/initializer"):

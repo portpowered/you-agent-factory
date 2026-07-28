@@ -2726,48 +2726,48 @@
       "disposition": "move",
       "destination": "factory_definitions",
       "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal",
-      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
+      "successor": "pkg/services/factory_definitions/internal/services/distribution",
+      "deletionCondition": "delete public package after IMP-DEF-distribution private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/distribution/internal/service",
       "disposition": "move",
       "destination": "factory_definitions",
       "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal",
-      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
+      "successor": "pkg/services/factory_definitions/internal/services/distribution",
+      "deletionCondition": "delete public package after IMP-DEF-distribution private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/distribution/packagedcatalog",
       "disposition": "move",
       "destination": "factory_definitions",
       "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal",
-      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
+      "successor": "pkg/services/factory_definitions/internal/services/distribution",
+      "deletionCondition": "delete public package after IMP-DEF-distribution private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/distribution/packagedinstallation",
       "disposition": "move",
       "destination": "factory_definitions",
       "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal",
-      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
+      "successor": "pkg/services/factory_definitions/internal/services/distribution",
+      "deletionCondition": "delete public package after IMP-DEF-distribution private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/distribution/scaffoldfacts",
       "disposition": "move",
       "destination": "factory_definitions",
       "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal",
-      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
+      "successor": "pkg/services/factory_definitions/internal/services/distribution",
+      "deletionCondition": "delete public package after IMP-DEF-distribution private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/distribution/wire",
       "disposition": "move",
       "destination": "factory_definitions",
       "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal",
-      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
+      "successor": "pkg/services/factory_definitions/internal/services/distribution",
+      "deletionCondition": "delete public package after IMP-DEF-distribution private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability",
@@ -4223,9 +4223,11 @@
     },
     {
       "packagePath": "pkg/services/operator_settings/identityinventory",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "operator_settings",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/operator_settings/internal",
+      "deletionCondition": "delete public identityinventory package after INV-SET-TOPLEVEL fold into operator_settings/internal completes"
     },
     {
       "packagePath": "pkg/services/operator_settings/internal/service",
@@ -4271,21 +4273,27 @@
     },
     {
       "packagePath": "pkg/services/operator_settings/servicewire",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "operator_settings",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/operator_settings/internal",
+      "deletionCondition": "delete public servicewire package after INV-SET-TOPLEVEL fold into operator_settings/internal completes"
     },
     {
       "packagePath": "pkg/services/operator_settings/testlink",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "operator_settings",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/operator_settings/internal",
+      "deletionCondition": "delete public testlink test-helper package after INV-SET-TOPLEVEL fold into operator_settings/internal completes"
     },
     {
       "packagePath": "pkg/services/operator_settings/testproviders",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "operator_settings",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/operator_settings/internal",
+      "deletionCondition": "delete public testproviders test-helper package after INV-SET-TOPLEVEL fold into operator_settings/internal completes"
     },
     {
       "packagePath": "pkg/services/operator_settings/transports/cli",

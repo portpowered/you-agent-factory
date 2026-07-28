@@ -883,6 +883,16 @@ response-stream output.
   canonical retain children are `internal`, `transports`, and `wire`, with
   `testdata` recorded as `test_only_retain` and unexpected public siblings
   inventoried explicitly before remap stories regenerate ledgers.
+- Unexpected Operator Settings public siblings (`identityinventory`, `servicewire`,
+  `testlink`, `testproviders`) remap through
+  `internal/ownershipinventory/operator_settings_mapping.go` and
+  `cmd/packagetargetmanifestcheck/owners.go` nestedOwnerMoveRules to
+  `operator_settings/internal` (test helpers share the private internal
+  destination because package-target vocabulary allows only `internal` or
+  `internal/services/<subservice>` nesting); regenerate
+  `docs/internal/baselines/ownership-inventory.json` and
+  `docs/internal/packaged-service-structure/package-target-manifest.json` after
+  remap mapping changes.
 - When global named-factory guidance changes, update its authored
   `contracts/cli/commands.json` records and the task-oriented guidance in
   `docs/reference/authoring-factories.md` plus `config.md`; do not restore
