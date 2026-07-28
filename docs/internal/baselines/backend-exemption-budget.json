@@ -423,13 +423,13 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_definitions/loading/loader.go#Loader.validate",
+      "target": "pkg/services/factory_definitions/internal/services/compilation/loading/loader.go#Loader.validate",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_definitions/loading/loader.go#hasInlineRuntimeDefinitions",
+      "target": "pkg/services/factory_definitions/internal/services/compilation/loading/loader.go#hasInlineRuntimeDefinitions",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
     },
@@ -471,7 +471,7 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_definitions/runtimeconfig/merge.go#applyWorkerRuntimeDefinition",
+      "target": "pkg/services/factory_definitions/internal/services/compilation/runtimeconfig/merge.go#applyWorkerRuntimeDefinition",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
     },
