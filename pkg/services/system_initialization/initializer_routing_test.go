@@ -13,10 +13,12 @@ import (
 )
 
 type routingOperatorSettings struct {
+	loadCalls   []string
 	ensureCalls []string
 }
 
 func (settings *routingOperatorSettings) LoadFileConfig(path string) (operatorsettings.Config, error) {
+	settings.loadCalls = append(settings.loadCalls, path)
 	return operatorsettings.Config{}, nil
 }
 
@@ -95,7 +97,77 @@ func TestRootService_InitializeRoutesThroughInternalWorkflow(t *testing.T) {
 	if result.HomeDir != homeDir || result.SystemConfigOutcome != systeminitialization.SystemConfigCreated {
 		t.Fatalf("Initialize() result = %#v", result)
 	}
-	if len(settings.ensureCalls) != 1 || !installer.called {
-		t.Fatalf("settings.ensureCalls = %#v, installer.called = %v", settings.ensureCalls, installer.called)
+	wantConfigPath := operatorsettings.DefaultConfigPath(homeDir)
+	if result.ConfigPath != wantConfigPath {
+		t.Fatalf("ConfigPath = %q, want Settings root DefaultConfigPath %q", result.ConfigPath, wantConfigPath)
+	}
+	if len(settings.ensureCalls) != 1 || settings.ensureCalls[0] != wantConfigPath {
+		t.Fatalf("EnsureLocalBackendScope calls = %#v, want [%q]", settings.ensureCalls, wantConfigPath)
+	}
+	if len(settings.loadCalls) != 1 || settings.loadCalls[0] != wantConfigPath {
+		t.Fatalf("LoadFileConfig calls = %#v, want [%q]", settings.loadCalls, wantConfigPath)
+	}
+	if !installer.called {
+		t.Fatalf("installer.called = false, want packaged install after Settings commands")
+	}
+}
+
+// TestRootService_InitializeSkipPathConstructsSettingsLoadCommandThroughRootCollaborator
+// proves the published Service seam routes skip-path Settings load commands through
+// the injected Settings root collaborator without invoking ensure.
+func TestRootService_InitializeSkipPathConstructsSettingsLoadCommandThroughRootCollaborator(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	configPath := operatorsettings.DefaultConfigPath(homeDir)
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, []byte(`{"customer":"owned"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	settings := &routingOperatorSettings{}
+	installer := &routingPackagedInstaller{}
+	service, err := systeminitializationwire.NewService(
+		settings,
+		factorydefinitions.PackagedFactoryCatalogOperations{
+			List: func(
+				context.Context,
+				factorydefinitions.ListBuiltInPackagedFactoriesRequest,
+			) (factorydefinitions.ListBuiltInPackagedFactoriesResult, error) {
+				return factorydefinitions.ListBuiltInPackagedFactoriesResult{}, nil
+			},
+			Resolve: func(
+				context.Context,
+				factorydefinitions.ResolveBuiltInPackagedFactoryRequest,
+			) (factorydefinitions.ResolveBuiltInPackagedFactoryResult, error) {
+				return factorydefinitions.ResolveBuiltInPackagedFactoryResult{}, nil
+			},
+		},
+		installer,
+		os.Stat,
+		localMigrationFileSystem{},
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	var rootService systeminitialization.Service = service
+	result, err := rootService.Initialize(context.Background(), systeminitialization.Request{HomeDir: homeDir})
+	if err != nil {
+		t.Fatalf("Initialize() error = %v", err)
+	}
+	if result.SystemConfigOutcome != systeminitialization.SystemConfigSkipped {
+		t.Fatalf("SystemConfigOutcome = %q, want skipped", result.SystemConfigOutcome)
+	}
+	if result.ConfigPath != configPath {
+		t.Fatalf("ConfigPath = %q, want %q", result.ConfigPath, configPath)
+	}
+	if len(settings.loadCalls) != 1 || settings.loadCalls[0] != configPath {
+		t.Fatalf("LoadFileConfig calls = %#v, want [%q]", settings.loadCalls, configPath)
+	}
+	if len(settings.ensureCalls) != 0 {
+		t.Fatalf("EnsureLocalBackendScope calls = %#v, want none on skip path", settings.ensureCalls)
 	}
 }

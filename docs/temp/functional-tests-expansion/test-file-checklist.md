@@ -715,7 +715,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ### Current factory
 
-- [ ] `tests/functional/factory/current/read_save_test.go`
+- [x] `tests/functional/factory/current/read_save_test.go`
   - `TestAPIGetAndSaveCurrentFactoryWithinOneSession`.
   - `TestAPISaveCurrentFactoryValidatesBeforePersistence`.
   - `TestAPICurrentFactoriesRemainSessionScoped`.
