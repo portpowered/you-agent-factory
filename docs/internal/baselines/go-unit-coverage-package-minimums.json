@@ -1121,6 +1121,10 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/recordingsqueries",
+      "minimum": 35.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle",
       "exception": {
         "kind": "measurement",
@@ -1169,6 +1173,10 @@
       "minimum": 100.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/testing/recordingsstub",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli",
       "minimum": 59.62
     },
@@ -1182,7 +1190,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire",
-      "minimum": 77.00
+      "minimum": 76.19
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/models",

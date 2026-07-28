@@ -8,6 +8,8 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	activationlifecycle "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle"
+	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/recordingsqueries"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 var (
@@ -19,7 +21,7 @@ var (
 // subscription lifecycle for Factory visualization activation.
 type Service struct {
 	source      activationlifecycle.EventSource
-	projections activationlifecycle.ProjectionService
+	recordings  recordings.Service
 	clock       activationlifecycle.Clock
 	sink        activationlifecycle.ViewSink
 	reportError activationlifecycle.ErrorReporter
@@ -40,7 +42,7 @@ var _ activationlifecycle.Service = (*Service)(nil)
 // New constructs an inert activation lifecycle owner.
 func New(
 	source activationlifecycle.EventSource,
-	projections activationlifecycle.ProjectionService,
+	recordingsPeer recordings.Service,
 	clock activationlifecycle.Clock,
 	sink activationlifecycle.ViewSink,
 	reportError activationlifecycle.ErrorReporter,
@@ -48,15 +50,15 @@ func New(
 	switch {
 	case source == nil:
 		return nil, errors.New("initialize Factory visualization activation: event source is required")
-	case projections == nil:
-		return nil, errors.New("initialize Factory visualization activation: projection service is required")
+	case recordingsPeer == nil:
+		return nil, errors.New("initialize Factory visualization activation: recordings service is required")
 	case clock == nil:
 		return nil, errors.New("initialize Factory visualization activation: clock is required")
 	case sink == nil:
 		return nil, errors.New("initialize Factory visualization activation: presentation sink is required")
 	default:
 		return &Service{
-			source: source, projections: projections, clock: clock,
+			source: source, recordings: recordingsPeer, clock: clock,
 			sink: sink, reportError: reportError,
 		}, nil
 	}
@@ -284,13 +286,22 @@ func (s *Service) projectAndPresent(ctx context.Context) {
 	s.mu.Lock()
 	events := append([]factorydefinitions.FactoryEvent(nil), s.events...)
 	s.mu.Unlock()
-	worldState, err := s.projections.ReconstructFactoryWorldState(events, observation.TickCount)
+	worldView, err := recordingsqueries.ReconstructWorldState(s.recordings, events, observation.TickCount)
 	if err != nil {
 		s.report(fmt.Errorf("project Factory visualization: %w", err))
 		return
 	}
-	renderData := s.projections.SimpleDashboardRenderData(worldState)
-	renderData.ActiveThrottlePauses = s.projections.ProjectActiveThrottlePauses(
+	renderData, err := recordingsqueries.QuerySimpleDashboard(s.recordings, worldView)
+	if err != nil {
+		s.report(fmt.Errorf("project Factory visualization dashboard: %w", err))
+		return
+	}
+	worldState, err := recordingsqueries.DecodeWorldStatePayload(worldView)
+	if err != nil {
+		s.report(fmt.Errorf("decode Factory visualization world state: %w", err))
+		return
+	}
+	renderData.ActiveThrottlePauses = recordingsqueries.ProjectActiveThrottlePauses(
 		worldState.Topology,
 		observation.ActiveThrottlePauses,
 	)

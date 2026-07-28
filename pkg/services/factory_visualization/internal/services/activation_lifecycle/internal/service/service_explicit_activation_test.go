@@ -7,6 +7,7 @@ import (
 
 	activationlifecycle "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle"
 	lifecycleservice "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle/internal/service"
+	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/testing/recordingsstub"
 )
 
 func TestActivationLifecycleExplicitRequestActivation(t *testing.T) {
@@ -20,7 +21,7 @@ func TestActivationLifecycleExplicitRequestActivation(t *testing.T) {
 	source.subscribeHook = func() { subscribeCalls++ }
 	owner, err := lifecycleservice.New(
 		source,
-		lifecycleProjectionStub{},
+		&recordingsstub.Service{},
 		fixedLifecycleClock{now: time.Unix(1, 0)},
 		lifecycleSinkFunc(func(activationlifecycle.View) { presentCalls++ }),
 		nil,
