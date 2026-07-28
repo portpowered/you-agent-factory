@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 )
@@ -83,43 +82,19 @@ func (h *Handler) InvokeModel(w http.ResponseWriter, r *http.Request, modelName 
 }
 
 func (h *Handler) writeInvocationError(w http.ResponseWriter, err error) {
-	if failure, ok := workers.AsInferenceFailure(err); ok {
-		h.writeError(w, inferenceFailureHTTPStatus(failure), failure.Error(), inferenceFailureErrorCode(failure))
-		return
-	}
-	switch {
-	case errors.Is(err, modelinference.ErrNotFound):
-		h.writeError(w, http.StatusNotFound, "model not found", "NOT_FOUND")
-	case errors.Is(err, modelinference.ErrMissing), errors.Is(err, modelinference.ErrNotAvailable):
-		h.writeError(w, http.StatusNotFound, err.Error(), "MODEL_NOT_AVAILABLE")
-	case errors.Is(err, modelinference.ErrLoading):
-		h.writeError(w, http.StatusConflict, err.Error(), "MODEL_RUNTIME_LOADING")
-	case errors.Is(err, modelinference.ErrFailed):
-		h.writeError(w, http.StatusServiceUnavailable, err.Error(), "MODEL_RUNTIME_FAILED")
-	case errors.Is(err, modelinference.ErrUnsupported):
-		h.writeError(w, http.StatusBadRequest, err.Error(), "MODEL_RUNTIME_UNSUPPORTED")
-	case errors.Is(err, modelinference.ErrUnsupportedOperation), errors.Is(err, modelinference.ErrUnsupportedResponseMode):
-		h.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
-	default:
-		h.writeError(w, http.StatusBadRequest, strings.TrimSpace(err.Error()), "BAD_REQUEST")
-	}
+	h.writeRootOrInternalError(w, modelsHTTPOperationInvoke, err, invokeFailedMessage)
 }
 
 func (h *Handler) PullModel(w http.ResponseWriter, r *http.Request, modelName string) {
 	result, err := h.adapter.PullModel(r.Context(), modelName)
 	if err != nil {
-		switch {
-		case errors.Is(err, modelinference.ErrNotFound):
-			h.writeError(w, http.StatusNotFound, "model not found", "NOT_FOUND")
-		case errors.Is(err, modelinference.ErrPullUnsupported):
-			h.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
-		case isModelPullError(err):
+		if isModelPullError(err) {
 			var pullErr *modelinference.PullError
 			errors.As(err, &pullErr)
 			h.writeJSON(w, managedRuntimePullHTTPStatus(pullErr.Result), modelPullResponseFromService(pullErr.Result))
-		default:
-			h.writeError(w, http.StatusInternalServerError, strings.TrimSpace(err.Error()), "INTERNAL_ERROR")
+			return
 		}
+		h.writeRootOrInternalError(w, modelsHTTPOperationPull, err, pullFailedMessage)
 		return
 	}
 	h.writeJSON(w, http.StatusOK, modelPullResponseFromService(result))

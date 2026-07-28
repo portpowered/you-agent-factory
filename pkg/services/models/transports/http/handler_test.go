@@ -213,7 +213,10 @@ func TestHandlerPullModelOwnsErrorMapping(t *testing.T) {
 
 	handler.PullModel(recorder, httptest.NewRequest(http.MethodPost, "/models/voice/pull", nil), "voice")
 
-	if recorder.Code != http.StatusInternalServerError || !strings.Contains(recorder.Body.String(), "cache unavailable") {
+	if recorder.Code != http.StatusInternalServerError || !strings.Contains(recorder.Body.String(), "failed to pull model") {
 		t.Fatalf("response = %d %s, want mapped internal error", recorder.Code, recorder.Body.String())
+	}
+	if strings.Contains(recorder.Body.String(), "cache unavailable") {
+		t.Fatalf("response leaks raw internal error: %s", recorder.Body.String())
 	}
 }
