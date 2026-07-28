@@ -82,7 +82,7 @@ func Execute(
 	}
 	result, err := service.Execute(ctx, input.executeRequest())
 	if err != nil {
-		envelope := executionErrorEnvelope(err)
+		envelope := executeErrorEnvelope(err)
 		return ToolResponse[providers.ExecuteResult]{Error: &envelope}
 	}
 	return ToolResponse[providers.ExecuteResult]{Result: &result}
