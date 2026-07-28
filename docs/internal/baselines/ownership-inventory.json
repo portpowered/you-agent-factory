@@ -2553,8 +2553,8 @@
       "disposition": "move",
       "destination": "factory_definitions",
       "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal",
-      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
+      "successor": "pkg/services/factory_definitions/internal/services/invocation_policy",
+      "deletionCondition": "delete public package after IMP-DEF-invocation_policy private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_definitions/definition",
@@ -2869,24 +2869,24 @@
       "disposition": "move",
       "destination": "factory_definitions",
       "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal",
-      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
+      "successor": "pkg/services/factory_definitions/internal/services/invocation_policy",
+      "deletionCondition": "delete public package after IMP-DEF-invocation_policy private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_definitions/invocationoutput",
       "disposition": "move",
       "destination": "factory_definitions",
       "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal",
-      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
+      "successor": "pkg/services/factory_definitions/internal/services/invocation_policy",
+      "deletionCondition": "delete public package after IMP-DEF-invocation_policy private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_definitions/invocationworktype",
       "disposition": "move",
       "destination": "factory_definitions",
       "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal",
-      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
+      "successor": "pkg/services/factory_definitions/internal/services/invocation_policy",
+      "deletionCondition": "delete public package after IMP-DEF-invocation_policy private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_definitions/loadedsource",
@@ -3027,8 +3027,8 @@
       "disposition": "move",
       "destination": "factory_definitions",
       "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal",
-      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
+      "successor": "pkg/services/factory_definitions/internal/services/invocation_policy",
+      "deletionCondition": "delete public package after IMP-DEF-invocation_policy private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_definitions/replayconfig",
@@ -3101,8 +3101,8 @@
       "disposition": "move",
       "destination": "factory_definitions",
       "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal",
-      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
+      "successor": "pkg/services/factory_definitions/internal/services/invocation_policy",
+      "deletionCondition": "delete public package after IMP-DEF-invocation_policy private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_definitions/validation",
@@ -3201,16 +3201,16 @@
       "disposition": "move",
       "destination": "factory_definitions",
       "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal",
-      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
+      "successor": "pkg/services/factory_definitions/internal/services/invocation_policy",
+      "deletionCondition": "delete public package after IMP-DEF-invocation_policy private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_definitions/workstationexecution",
       "disposition": "move",
       "destination": "factory_definitions",
       "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal",
-      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
+      "successor": "pkg/services/factory_definitions/internal/services/invocation_policy",
+      "deletionCondition": "delete public package after IMP-DEF-invocation_policy private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime",

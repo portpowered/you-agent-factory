@@ -156,8 +156,8 @@ func TestMapPackageFactoryDefinitionsMoveDestinations(t *testing.T) {
 				Disposition:       ownershipinventory.DispositionMove,
 				Destination:       "factory_definitions",
 				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/factory_definitions/internal",
-				DeletionCondition: "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof",
+				Successor:         "pkg/services/factory_definitions/internal/services/invocation_policy",
+				DeletionCondition: "delete public package after IMP-DEF-invocation_policy private subservice cutover proof",
 			},
 		},
 		{

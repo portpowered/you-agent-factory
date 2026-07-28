@@ -138,7 +138,7 @@ func TestMapCommittedOwnerPackageFactoryDefinitionsMoveDestinations(t *testing.T
 			want: PackageMapping{
 				PackagePath: "pkg/services/factory_definitions/decisionenvelope",
 				Disposition: DispositionMove,
-				Destination: "factory_definitions/internal",
+				Destination: "factory_definitions/internal/services/invocation_policy",
 			},
 		},
 		{

@@ -787,7 +787,7 @@
     {
       "packagePath": "pkg/services/factory_definitions/decisionenvelope",
       "disposition": "move",
-      "destination": "factory_definitions/internal"
+      "destination": "factory_definitions/internal/services/invocation_policy"
     },
     {
       "packagePath": "pkg/services/factory_definitions/definition",
@@ -1012,17 +1012,17 @@
     {
       "packagePath": "pkg/services/factory_definitions/invocationinterpolation",
       "disposition": "move",
-      "destination": "factory_definitions/internal"
+      "destination": "factory_definitions/internal/services/invocation_policy"
     },
     {
       "packagePath": "pkg/services/factory_definitions/invocationoutput",
       "disposition": "move",
-      "destination": "factory_definitions/internal"
+      "destination": "factory_definitions/internal/services/invocation_policy"
     },
     {
       "packagePath": "pkg/services/factory_definitions/invocationworktype",
       "disposition": "move",
-      "destination": "factory_definitions/internal"
+      "destination": "factory_definitions/internal/services/invocation_policy"
     },
     {
       "packagePath": "pkg/services/factory_definitions/loadedsource",
@@ -1097,7 +1097,7 @@
     {
       "packagePath": "pkg/services/factory_definitions/quorumpolicy",
       "disposition": "move",
-      "destination": "factory_definitions/internal"
+      "destination": "factory_definitions/internal/services/invocation_policy"
     },
     {
       "packagePath": "pkg/services/factory_definitions/replayconfig",
@@ -1142,7 +1142,7 @@
     {
       "packagePath": "pkg/services/factory_definitions/ttsobservability",
       "disposition": "move",
-      "destination": "factory_definitions/internal"
+      "destination": "factory_definitions/internal/services/invocation_policy"
     },
     {
       "packagePath": "pkg/services/factory_definitions/validation",
@@ -1172,12 +1172,12 @@
     {
       "packagePath": "pkg/services/factory_definitions/workpropagation",
       "disposition": "move",
-      "destination": "factory_definitions/internal"
+      "destination": "factory_definitions/internal/services/invocation_policy"
     },
     {
       "packagePath": "pkg/services/factory_definitions/workstationexecution",
       "disposition": "move",
-      "destination": "factory_definitions/internal"
+      "destination": "factory_definitions/internal/services/invocation_policy"
     },
     {
       "packagePath": "pkg/services/factory_runtime",
