@@ -12,7 +12,7 @@ import (
 	"fmt"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factoryruntimeroot "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/service"
+	factoryruntimeinternal "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -57,7 +57,7 @@ func NewService(
 			return workersCanceler(ctx, request)
 		}
 	}
-	service, err := factoryruntimeroot.NewRoot(
+	service, err := factoryruntimeinternal.NewRoot(
 		newID,
 		workflows,
 		workflowRuntime,
