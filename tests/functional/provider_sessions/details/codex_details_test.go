@@ -21,6 +21,9 @@ import (
 const (
 	codexGoldenExpectedProviderSessionDetailFile = "expected-provider-session-detail.json"
 	codexGoldenRolloutFile                       = "rollout.jsonl"
+	codexCorruptTranscriptFixtureDir             = "docs/temp/functional/provider-sessions/codex/corrupt-transcript"
+	codexCorruptTranscriptRolloutFile            = "corrupt-rollout.jsonl"
+	codexCorruptTranscriptSessionID              = "session_fixture_codex_corrupt_transcript"
 	codexMissingTranscriptSessionID              = "session_fixture_codex_missing_transcript"
 )
 
@@ -123,6 +126,61 @@ func TestCodexProviderSessionMissingTranscriptReturnsNotFound(t *testing.T) {
 	}
 
 	assertCodexProviderSessionErrorBodySafe(t, "missing-transcript", body, homeDir)
+}
+
+// TestCodexProviderSessionCorruptTranscriptReturnsSafeDiagnostic proves that a
+// corrupt Codex rollout transcript remains inspectable through the public Provider
+// Session detail surface with client-safe parse diagnostics instead of fabricated
+// transcript content or unsafe host-path leakage.
+func TestCodexProviderSessionCorruptTranscriptReturnsSafeDiagnostic(t *testing.T) {
+	repoRoot := testutil.MustRepoRoot(t)
+	fixturePath := filepath.Join(repoRoot, filepath.FromSlash(codexCorruptTranscriptFixtureDir), codexCorruptTranscriptRolloutFile)
+	rolloutContent, err := os.ReadFile(fixturePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", codexCorruptTranscriptRolloutFile, err)
+	}
+	if err := support.ValidateProviderSessionFixtureContent(
+		"codex-corrupt-transcript",
+		codexCorruptTranscriptRolloutFile,
+		rolloutContent,
+	); err != nil {
+		t.Fatalf("corrupt rollout fixture must stay sanitized: %v", err)
+	}
+
+	homeDir := t.TempDir()
+	writeCodexGoldenRolloutFixture(t, codexSessionsRoot(homeDir), codexCorruptTranscriptSessionID, string(rolloutContent))
+
+	server := startCodexProviderSessionDetailServer(t, homeDir, serviceedges.Edges{})
+	defer server.Stop(t)
+
+	detail := support.GetJSON[factoryapi.ProviderSessionDetailResponse](
+		t,
+		codexProviderSessionDetailURL(server.URL(), codexCorruptTranscriptSessionID),
+	)
+	if detail.ProviderSession.Id != codexCorruptTranscriptSessionID {
+		t.Fatalf("detail provider session id = %q, want %q", detail.ProviderSession.Id, codexCorruptTranscriptSessionID)
+	}
+	if detail.ProviderSession.Provider != factoryapi.Codex {
+		t.Fatalf("detail provider = %q, want codex", detail.ProviderSession.Provider)
+	}
+	if detail.Parse.MalformedLineCount == 0 && len(detail.Parse.ParseErrors) == 0 {
+		t.Fatalf("parse summary = %#v, want malformed-line or parse-error diagnostics", detail.Parse)
+	}
+	if detail.Parse.MalformedLineCount != 1 || len(detail.Parse.ParseErrors) != 1 {
+		t.Fatalf("parse summary = %#v, want one malformed-line diagnostic", detail.Parse)
+	}
+	if detail.Parse.ParseErrors[0].Message != "truncated JSON event record" {
+		t.Fatalf("parse error = %#v, want truncated JSON diagnostic", detail.Parse.ParseErrors[0])
+	}
+	if len(detail.Transcript) != 0 {
+		t.Fatalf("transcript = %#v, want no fabricated entries for corrupt rollout", detail.Transcript)
+	}
+
+	encoded, err := json.Marshal(detail)
+	if err != nil {
+		t.Fatalf("marshal detail: %v", err)
+	}
+	assertCodexProviderSessionErrorBodySafe(t, "corrupt-transcript", string(encoded), homeDir)
 }
 
 func startCodexProviderSessionDetailServer(
