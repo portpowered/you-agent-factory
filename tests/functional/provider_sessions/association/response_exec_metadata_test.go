@@ -54,6 +54,31 @@ func TestResponseExecGoldenMetadataSurvivesCLIProjection(t *testing.T) {
 	}
 }
 
+// TestResponseExecGoldenMetadataSurvivesAPIResponseEvents replays a sanitized
+// Codex provider execution transcript through root.BuildProcess and proves
+// public FactoryResponseEvent history after API observation preserves
+// checked-in response-event golden metadata without mapper-generated
+// expectations.
+//
+//golden: docs/temp/functional/provider-sessions/codex/success/manifest.json
+func TestResponseExecGoldenMetadataSurvivesAPIResponseEvents(t *testing.T) {
+	t.Parallel()
+
+	loaded := loadResponseExecCodexGoldenCase(t, responseExecCodexSuccessGoldenCase)
+	replay := runResponseExecCodexGoldenReplay(t, loaded)
+	observed := observeResponseExecResponseEventGoldens(t, replay.ResponseEvents)
+
+	if err := support.CompareProviderSessionNDJSON(
+		loaded.Manifest.ID,
+		"expected-response-events",
+		loaded.Manifest.NormalizedFields,
+		loaded.Expected.ResponseEvents,
+		observed,
+	); err != nil {
+		t.Fatalf("CompareProviderSessionNDJSON(response-events): %v", err)
+	}
+}
+
 func loadResponseExecCodexGoldenCase(t *testing.T, caseName string) support.ProviderSessionCase {
 	t.Helper()
 
@@ -70,10 +95,11 @@ func loadResponseExecCodexGoldenCase(t *testing.T, caseName string) support.Prov
 }
 
 type responseExecCodexReplayResult struct {
-	Loaded        support.ProviderSessionCase
-	Listed        factoryapi.ListWorkResponse
-	FactoryEvents []factoryapi.FactoryEvent
-	Runner        *testutil.ProviderCommandRunner
+	Loaded         support.ProviderSessionCase
+	Listed         factoryapi.ListWorkResponse
+	FactoryEvents  []factoryapi.FactoryEvent
+	ResponseEvents []factoryapi.FactoryResponseEvent
+	Runner         *testutil.ProviderCommandRunner
 }
 
 func runResponseExecCodexGoldenReplay(
@@ -106,7 +132,7 @@ func runResponseExecCodexGoldenReplay(
 		ExitCode: exitCode,
 	})
 
-	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+	_, listed, events, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(
 		t,
 		dir,
 		serviceedges.Edges{ProviderCommandRunner: runner},
@@ -124,11 +150,85 @@ func runResponseExecCodexGoldenReplay(
 	}
 
 	return responseExecCodexReplayResult{
-		Loaded:        loaded,
-		Listed:        listed,
-		FactoryEvents: events,
-		Runner:        runner,
+		Loaded:         loaded,
+		Listed:         listed,
+		FactoryEvents:  events,
+		ResponseEvents: responseEvents,
+		Runner:         runner,
 	}
+}
+
+func observeResponseExecResponseEventGoldens(
+	t *testing.T,
+	events []factoryapi.FactoryResponseEvent,
+) []json.RawMessage {
+	t.Helper()
+
+	records := make([]json.RawMessage, 0, len(events))
+	for _, event := range events {
+		record := projectResponseExecResponseEventGolden(event)
+		if len(record) == 0 {
+			continue
+		}
+		records = append(records, record)
+	}
+	return records
+}
+
+func projectResponseExecResponseEventGolden(event factoryapi.FactoryResponseEvent) json.RawMessage {
+	record := map[string]any{}
+	if nativeType := strings.TrimSpace(event.Provenance.NativeEventType); nativeType != "" {
+		record["type"] = strings.ToLower(nativeType)
+	} else {
+		record["type"] = strings.ToLower(string(event.Kind) + "." + strings.ToLower(string(event.Phase)))
+	}
+	if event.ItemId != nil && strings.TrimSpace(*event.ItemId) != "" {
+		record["itemId"] = strings.TrimSpace(*event.ItemId)
+	}
+
+	switch event.Kind {
+	case factoryapi.FactoryResponseEventKindTool:
+		payload, err := event.Payload.AsFactoryResponseEventToolPayload()
+		if err == nil {
+			if payload.ToolName != "" {
+				record["toolName"] = payload.ToolName
+			}
+			if payload.ToolCallId != "" {
+				record["itemId"] = payload.ToolCallId
+			}
+		}
+	case factoryapi.FactoryResponseEventKindMessage:
+		switch event.Phase {
+		case factoryapi.FactoryResponseEventPhaseDelta:
+			payload, err := event.Payload.AsFactoryResponseEventMessageDeltaPayload()
+			if err == nil && payload.TextDelta != nil {
+				record["text"] = *payload.TextDelta
+			}
+		case factoryapi.FactoryResponseEventPhaseCompleted:
+			payload, err := event.Payload.AsFactoryResponseEventMessagePayload()
+			if err == nil {
+				for _, block := range payload.ContentBlocks {
+					text, err := block.AsFactoryResponseEventTextContentBlock()
+					if err == nil && text.Text != "" {
+						record["text"] = text.Text
+						break
+					}
+				}
+			}
+			record["finishReason"] = "stop"
+		}
+	case factoryapi.FactoryResponseEventKindRun:
+		payload, err := event.Payload.AsFactoryResponseEventRunPayload()
+		if err == nil && payload.Status != nil && strings.TrimSpace(*payload.Status) != "" {
+			record["status"] = strings.ToLower(strings.TrimSpace(*payload.Status))
+		}
+	}
+
+	encoded, err := json.Marshal(record)
+	if err != nil {
+		return nil
+	}
+	return encoded
 }
 
 func observeResponseExecFactoryEventGoldens(
