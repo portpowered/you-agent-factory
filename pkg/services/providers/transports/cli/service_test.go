@@ -12,14 +12,23 @@ type recordingProvidersRoot struct {
 	listProvidersCalls int
 	getProviderCalls   int
 	executeCalls       int
+	listResult         providers.ListProvidersResult
+	listErr            error
+	listFn             func(context.Context) (providers.ListProvidersResult, error)
 }
 
 func (fake *recordingProvidersRoot) ListProviders(
-	context.Context,
-	providers.ListProvidersRequest,
+	ctx context.Context,
+	_ providers.ListProvidersRequest,
 ) (providers.ListProvidersResult, error) {
 	fake.listProvidersCalls++
-	return providers.ListProvidersResult{}, nil
+	if fake.listFn != nil {
+		return fake.listFn(ctx)
+	}
+	if fake.listErr != nil {
+		return providers.ListProvidersResult{}, fake.listErr
+	}
+	return fake.listResult, nil
 }
 
 func (fake *recordingProvidersRoot) GetProvider(

@@ -7,6 +7,7 @@ import (
 
 // Service exposes Providers CLI command operations to Cobra composition.
 type Service interface {
+	List(ListConfig) error
 	isProvidersCLIService()
 }
 
