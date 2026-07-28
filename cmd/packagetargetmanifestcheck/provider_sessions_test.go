@@ -129,6 +129,15 @@ func TestVerifyProviderSessionsDualLedgerAlignmentPassesOnRepository(t *testing.
 	}
 }
 
+func TestVerifyProviderSessionsINVDispositionBeyondServicePassesOnRepository(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := findRepoRoot(t)
+	if err := ownershipinventory.VerifyProviderSessionsINVDispositionBeyondService(repoRoot); err != nil {
+		t.Fatalf("VerifyProviderSessionsINVDispositionBeyondService() error = %v", err)
+	}
+}
+
 func TestProviderSessionsCommittedBaselinesAlignMoveDestinations(t *testing.T) {
 	t.Parallel()
 

@@ -32,6 +32,11 @@
       "note": "Implementation integration test exercising Inspect through provider_sessions/wire construction."
     },
     {
+      "file": "legacy_packages_disposition_test.go",
+      "classification": "thin_root_contract_test",
+      "note": "INV disposition and import-closure guard proving zero-extra unexpected public siblings beyond service/ are consumed and remain off production import paths."
+    },
+    {
       "file": "project_providers_boundary_test.go",
       "classification": "fold_target_implementation_test",
       "foldDestination": "pkg/services/provider_sessions/internal",
