@@ -41,6 +41,11 @@ fold or delete them.
 | `service_root_contract_seal_test.go` | Thin committed root contract (keep) | Peer-shaped characterization consumer exercising every published `Service` slice through one root dependency. |
 | `service_root_contract_test.go` | Thin committed root contract (keep) | Root-contract fake and per-slice success/failure characterization for admission, content, state access, and invocation slices. |
 | `content_staging_public_seam_test.go` | Thin committed root contract (keep) | Root-contract characterization test for the published content staging slice on `Service`. |
+| `legacy_packages_disposition_test.go` | Thin committed root contract (keep) | Post-inventory characterization test locking transitional public sibling retention and published-surface import boundaries after legacy package fold. |
+| `service_import_boundary_test.go` | Thin committed root contract (keep) | Post-inventory import-boundary proof sealing production packages against transitional `work/service` imports. |
+| `service_peer_bindings.go` | Thin committed root contract (keep) | Post-inventory peer-binding constructors projecting published `Service` slices (`MaterializationService`, `AdmissionContentService`, and related bindings). |
+| `service_peer_bindings_test.go` | Thin committed root contract (keep) | Co-located characterization tests for `service_peer_bindings.go` peer constructors. |
+| `wire_behavioral_proof_test.go` | Thin committed root contract (keep) | Post-inventory wire behavioral proof exercising admission, content, state-access, and invocation observables through `work/wire`. |
 | `arguments.go` | Excess fold/consolidation debt | `work/internal` — invocation argument normalization, metadata projection, and signature binding logic (`invocation_return_policy` cluster). |
 | `arguments_test.go` | Excess fold/consolidation debt | Co-located tests for `arguments.go`; move with invocation/return-policy fold. |
 | `content_staging.go` | Excess fold/consolidation debt | `work/internal/services/content_staging` — staging filesystem effects, `ContentStagingService` wiring, and staging implementation helpers beyond thin `Service` slice types. |
@@ -55,6 +60,8 @@ fold or delete them.
 | `file_inputs_test.go` | Excess fold/consolidation debt | Co-located tests for `file_inputs.go`. |
 | `invocation_input_preparation.go` | Excess fold/consolidation debt | `work/internal` — `PrepareInvocationInput` implementation and argv/stdin normalization policy. |
 | `invocation_input_preparation_test.go` | Excess fold/consolidation debt | Co-located tests for `invocation_input_preparation.go`. |
+| `invocation_policy_service.go` | Excess fold/consolidation debt | `work/internal` — `NewInvocationPolicyService` invocation/return-policy slice constructor and inert `Service` implementation body (`invocation_return_policy` cluster). |
+| `invocation_policy_service_test.go` | Excess fold/consolidation debt | Co-located tests for `invocation_policy_service.go`; relocate with invocation/return-policy fold. |
 | `lineage.go` | Excess fold/consolidation debt | `work/internal/services/state_access` — payload lineage projection types and replay-safe derivation helpers. |
 | `primary_result.go` | Excess fold/consolidation debt | `work/internal` — primary-result selection policy, world-state evaluation, and return-policy resolution logic. |
 | `primary_result_regression_test.go` | Excess fold/consolidation debt | Regression fixtures for `primary_result.go`; relocate with invocation/return-policy fold. |
@@ -72,7 +79,7 @@ fold or delete them.
 | `visualization.go` | Excess fold/consolidation debt | `work/internal/services/state_access` — batch-file dependency visualization operation binding (`lineage_graph_modules` cluster). |
 | `visualization_test.go` | Excess fold/consolidation debt | Co-located tests for `visualization.go`. |
 
-**Totals:** 45 root-level `.go` files — 15 thin committed root contract (keep), 30
+**Totals:** 52 root-level `.go` files — 20 thin committed root contract (keep), 32
 excess fold/consolidation debt.
 
 ## Excess fold clusters
@@ -80,7 +87,7 @@ excess fold/consolidation debt.
 | Cluster | Destination | Root files |
 | --- | --- | --- |
 | `request_admission` | `work/internal` | `file_inputs.go`, `file_inputs_test.go`, `request_codec.go`, `request_normalize.go`, `request_normalize_test.go`, `request_preparation.go`, `request_preparation_test.go`, `request_submit_test.go` |
-| `invocation_return_policy` | `work/internal` | `arguments.go`, `arguments_test.go`, `invocation_input_preparation.go`, `invocation_input_preparation_test.go`, `primary_result.go`, `primary_result_test.go`, `primary_result_regression_test.go` |
+| `invocation_return_policy` | `work/internal` | `arguments.go`, `arguments_test.go`, `invocation_input_preparation.go`, `invocation_input_preparation_test.go`, `invocation_policy_service.go`, `invocation_policy_service_test.go`, `primary_result.go`, `primary_result_test.go`, `primary_result_regression_test.go` |
 | `lineage_graph_modules` | `work/internal/services/state_access` | `dependency_graph.go`, `dependency_graph_test.go`, `dependency_graph_markdown.go`, `dependency_graph_markdown_test.go`, `dependency_graph_mermaid.go`, `dependency_graph_mermaid_test.go`, `lineage.go`, `visualization.go`, `visualization_test.go` |
 | `state_access_query` | `work/internal/services/state_access` | `query_list.go`, `query_list_test.go`, `query_select.go`, `query_select_test.go` |
 | `content_staging_impl` | `work/internal/services/content_staging` | `content_staging.go` |
