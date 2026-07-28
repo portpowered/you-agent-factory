@@ -14,6 +14,14 @@ const (
 	ToolInstallPackaged = "you.factory_definition.install_packaged"
 )
 
+// Stable error envelope fields shared by every Factory Definition MCP tool.
+var sharedErrorStableFields = []string{
+	"error.code",
+	"error.message",
+	"error.retryable",
+	"error.details",
+}
+
 // ToolErrorEnvelope is the stable MCP failure shape for Factory Definition tools.
 type ToolErrorEnvelope struct {
 	Code      string         `json:"code"`
