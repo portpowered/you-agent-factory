@@ -3079,27 +3079,7 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/operator_settings/identityinventory",
-      "target": "pkg/services/operator_settings"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/operator_settings/servicewire",
-      "target": "pkg/services/operator_settings"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/operator_settings/testdata",
-      "target": "pkg/services/operator_settings"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/operator_settings/testlink",
-      "target": "pkg/services/operator_settings"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/operator_settings/testproviders",
       "target": "pkg/services/operator_settings"
     },
     {
