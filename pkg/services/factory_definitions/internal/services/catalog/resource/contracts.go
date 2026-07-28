@@ -1,4 +1,5 @@
-// Package resource owns authored Factory resource capacity contracts.
+// Package resource owns authored Factory resource capacity contracts for the
+// catalog fold lease.
 package resource
 
 type Config struct {

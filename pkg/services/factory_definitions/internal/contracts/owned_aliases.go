@@ -1,7 +1,7 @@
 package factorycontracts
 
 import (
-	resource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/resource"
+	catalogresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/resource"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
 )
 
@@ -13,12 +13,12 @@ type HostedWorkerAuthConfig = workerconfig.HostedWorkerAuthConfig
 type AgentToolsConfig = workerconfig.AgentToolsConfig
 type ModelOperation = workerconfig.ModelOperation
 type ModelOperationSlot = workerconfig.ModelOperationSlot
-type ResourceConfig = resource.Config
+type ResourceConfig = catalogresource.Config
 
 const (
-	ResourceTypeInvocationSlot = resource.TypeInvocationSlot
-	ResourceTypeModel          = resource.TypeModel
-	ResourceTypeProviderQuota  = resource.TypeProviderQuota
+	ResourceTypeInvocationSlot = catalogresource.TypeInvocationSlot
+	ResourceTypeModel          = catalogresource.TypeModel
+	ResourceTypeProviderQuota  = catalogresource.TypeProviderQuota
 	ModelLocalityLocal         = workerconfig.ModelLocalityLocal
 	ModelLocalityCloud         = workerconfig.ModelLocalityCloud
 	AgentToolPolicyDisabled    = workerconfig.AgentToolPolicyDisabled

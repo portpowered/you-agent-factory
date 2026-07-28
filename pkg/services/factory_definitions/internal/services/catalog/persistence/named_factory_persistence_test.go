@@ -10,7 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/directoryreplace"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorypersistence "github.com/portpowered/infinite-you/pkg/services/factory_definitions/persistence"
+	catalogpersistence "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/persistence"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 )
 
@@ -26,7 +26,7 @@ func TestPersistNamedFactoryOwnsCreateReplaceAndCurrentPointerPolicy(t *testing.
 	var preparedNames []string
 	var preparedPayloads []string
 	var currentNames []string
-	service, err := factorypersistence.New(
+	service, err := catalogpersistence.New(
 		factoryvalidation.New(nil),
 		func([]byte) (factorydefinitions.DefinitionValidationRequest, error) {
 			return validPersistenceValidationRequest(), nil
@@ -123,7 +123,7 @@ func TestPersistNamedFactoryReturnsResolvedTargetWithPersistenceFailure(t *testi
 	t.Parallel()
 
 	wantErr := errors.New("prepare failed")
-	service, err := factorypersistence.New(
+	service, err := catalogpersistence.New(
 		factoryvalidation.New(nil),
 		func([]byte) (factorydefinitions.DefinitionValidationRequest, error) {
 			return factorydefinitions.DefinitionValidationRequest{}, wantErr

@@ -10,7 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/directoryreplace"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorypersistence "github.com/portpowered/infinite-you/pkg/services/factory_definitions/persistence"
+	catalogpersistence "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/persistence"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 )
 
@@ -37,7 +37,7 @@ func TestServiceRoutesPersistenceThroughFlatCapabilities(t *testing.T) {
 	canonicalLoads := 0
 	writeCalls := 0
 
-	service, err := factorypersistence.New(
+	service, err := catalogpersistence.New(
 		validator,
 		func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
 			if string(payload) != "payload" {
@@ -151,7 +151,7 @@ func TestCreateNamedFactory_DiscardsStagingWhenLayoutValidationFails(t *testing.
 	t.Parallel()
 
 	validator := factoryvalidation.New(nil)
-	service, err := factorypersistence.New(
+	service, err := catalogpersistence.New(
 		validator,
 		func([]byte) (factorydefinitions.DefinitionValidationRequest, error) {
 			return validPersistenceValidationRequest(), nil
@@ -230,7 +230,7 @@ func TestReplaceFactoryLayout_ValidationFailureLeavesCommittedFactoryUnchanged(t
 	t.Parallel()
 
 	validator := factoryvalidation.New(nil)
-	service, err := factorypersistence.New(
+	service, err := catalogpersistence.New(
 		validator,
 		func([]byte) (factorydefinitions.DefinitionValidationRequest, error) {
 			return validPersistenceValidationRequest(), nil

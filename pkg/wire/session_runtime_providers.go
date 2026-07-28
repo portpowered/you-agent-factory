@@ -21,7 +21,6 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
-	factorynamedfactories "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedfactories"
 	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
 	factoryworkstationexecution "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workstationexecution"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -353,7 +352,7 @@ func provideNamedFactoryCatalog(
 	namedPaths factorydefinitions.NamedPathResolver,
 	fileSystem factorydefinitions.NamedFactoryCatalogFileSystem,
 ) (factorydefinitions.NamedFactoryCatalog, error) {
-	return factorynamedfactories.New(namedPaths, fileSystem)
+	return factorydefinitionswire.NewNamedFactoryCatalog(namedPaths, fileSystem)
 }
 
 func provideFactoryDefinitionPersistence(

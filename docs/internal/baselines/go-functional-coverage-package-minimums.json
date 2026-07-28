@@ -355,6 +355,24 @@
       "minimum": 37.50
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths",
+      "minimum": 69.41
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/persistence",
+      "minimum": 64.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/resource",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire",
       "minimum": 62.50
     },
@@ -626,11 +644,23 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedfactories",
-      "minimum": 66.66
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this transitional compile shim.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "DEL-DEF removes the public namedfactories shim or the functional coverage profile reports measurable statements for this package."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths",
-      "minimum": 69.41
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this transitional compile shim.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "DEL-DEF removes the public namedpaths shim or the functional coverage profile reports measurable statements for this package."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namevalue",
@@ -714,7 +744,13 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/persistence",
-      "minimum": 64.00
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this transitional compile shim.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "DEL-DEF removes the public persistence shim or the functional coverage profile reports measurable statements for this package."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig",

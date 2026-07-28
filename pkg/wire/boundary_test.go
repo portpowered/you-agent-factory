@@ -15,7 +15,7 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factorynamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
@@ -84,7 +84,7 @@ func (*wireTestClock) Now() time.Time {
 
 func TestFactorySessionsServiceRequiresRuntimeClockBinding(t *testing.T) {
 	t.Parallel()
-	namedPathResolver, err := factorynamedpaths.New(platformfilesystem.Local{})
+	namedPathResolver, err := factorydefinitionswire.NewPathResolver(platformfilesystem.Local{})
 	if err != nil {
 		t.Fatalf("construct named-path resolver: %v", err)
 	}
