@@ -611,8 +611,16 @@
       "minimum": 89.63
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal",
+      "minimum": 25.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/factorystatus",
       "minimum": 90.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host",
+      "minimum": 44.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/legacysnapshot",
