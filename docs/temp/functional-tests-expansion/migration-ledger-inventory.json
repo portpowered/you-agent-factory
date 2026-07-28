@@ -1489,106 +1489,6 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/factory_definitions/transports/cli/validate_persist/validate_persist_test.go",
-      "package": "you-agent-factory/tests/functional/factory_definitions/transports/cli/validate_persist",
-      "scenario": "TestCLIFactoryValidateRejectsInvalidDefinitionActionably",
-      "lane": "short",
-      "destination": "tests/functional/factory_definitions/transports/cli/validate_persist/validate_persist_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/factory_definitions/transports/cli/validate_persist/validate_persist_test.go",
-      "package": "you-agent-factory/tests/functional/factory_definitions/transports/cli/validate_persist",
-      "scenario": "TestCLIFactoryValidateDoesNotMutateOnFailure",
-      "lane": "short",
-      "destination": "tests/functional/factory_definitions/transports/cli/validate_persist/validate_persist_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/factory_definitions/transports/cli/validate_persist/validate_persist_test.go",
-      "package": "you-agent-factory/tests/functional/factory_definitions/transports/cli/validate_persist",
-      "scenario": "TestCLIFactoryPersistFromFileThenRunSucceeds",
-      "lane": "short",
-      "destination": "tests/functional/factory_definitions/transports/cli/validate_persist/validate_persist_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go",
-      "package": "you-agent-factory/tests/functional/factory_runtime/orchestrators/petri/guards",
-      "scenario": "TestPetriAuthoredEligibilityGuardBlocksDispatchUntilSatisfied",
-      "lane": "short",
-      "destination": "tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go",
-      "package": "you-agent-factory/tests/functional/factory_runtime/orchestrators/petri/guards",
-      "scenario": "TestPetriParentOrSameNameGuardReleasesExpectedWork",
-      "lane": "short",
-      "destination": "tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go",
-      "package": "you-agent-factory/tests/functional/factory_runtime/orchestrators/petri/guards",
-      "scenario": "TestPetriVisitOrMatchGuardFailureIsVisibleInPublicWorkState",
-      "lane": "short",
-      "destination": "tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/provider_sessions/build_process_inert_test.go",
-      "package": "you-agent-factory/tests/functional/provider_sessions",
-      "scenario": "TestProviderSessionsRemainInertThroughRootBuildProcessConstruction",
-      "lane": "short",
-      "destination": "tests/functional/provider_sessions/build_process_inert_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/provider_sessions/peer_import_boundary_test.go",
-      "package": "you-agent-factory/tests/functional/provider_sessions",
-      "scenario": "TestFunctionalProviderSessionsPackageUsesPublicProcessImportsOnly",
-      "lane": "short",
-      "destination": "tests/functional/provider_sessions/peer_import_boundary_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/workers/transports/cli/run/modes/output_modes_test.go",
-      "package": "you-agent-factory/tests/functional/workers/transports/cli/run/modes",
-      "scenario": "TestCLIRunSuccessPrimaryResultTextJSONAndNDJSON",
-      "lane": "short",
-      "destination": "tests/functional/workers/transports/cli/run/modes/output_modes_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/workers/transports/cli/run/modes/output_modes_test.go",
-      "package": "you-agent-factory/tests/functional/workers/transports/cli/run/modes",
-      "scenario": "TestCLIRunFailureOmitsFalseSuccessPrimaryResult",
-      "lane": "short",
-      "destination": "tests/functional/workers/transports/cli/run/modes/output_modes_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
       "source_path": "tests/functional/factory/definitions/validation_test.go",
       "package": "you-agent-factory/tests/functional/factory/definitions",
       "scenario": "TestAPIPreviewDoesNotStartWorkersOrSessions",
@@ -8829,36 +8729,6 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/workers/transports/cli/run/help/invocation_help_test.go",
-      "package": "you-agent-factory/tests/functional/workers/transports/cli/run/help",
-      "scenario": "TestCLIRunHelpDistinguishesRequiredAndOptionalParameters",
-      "lane": "short",
-      "destination": "tests/functional/workers/transports/cli/run/help/invocation_help_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/workers/transports/cli/run/help/invocation_help_test.go",
-      "package": "you-agent-factory/tests/functional/workers/transports/cli/run/help",
-      "scenario": "TestCLIRunHelpDoesNotDispatchExternalWork",
-      "lane": "short",
-      "destination": "tests/functional/workers/transports/cli/run/help/invocation_help_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/workers/transports/cli/run/help/invocation_help_test.go",
-      "package": "you-agent-factory/tests/functional/workers/transports/cli/run/help",
-      "scenario": "TestCLIRunHelpShowsInvocationSignatureForNamedFactory",
-      "lane": "short",
-      "destination": "tests/functional/workers/transports/cli/run/help/invocation_help_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
       "source_path": "tests/functional/workers/transports/cli/run/modes/output_modes_test.go",
       "package": "you-agent-factory/tests/functional/workers/transports/cli/run/modes",
       "scenario": "TestCLIRunFailureOmitsFalseSuccessPrimaryResult",
@@ -9559,9 +9429,9 @@
       "workflow": 30,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 913,
+    "customer_top_level_Test_scenarios": 919,
     "lane_functionallong": 95,
-    "lane_short": 818,
+    "lane_short": 824,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 14,
@@ -9592,9 +9462,6 @@
       "you-agent-factory/tests/functional/factory_definitions/transports/cli/validate_persist": 3,
       "you-agent-factory/tests/functional/factory_runtime/orchestrators/petri/guards": 3,
       "you-agent-factory/tests/functional/factory_runtime/orchestrators/petri/routing": 3,
-      "you-agent-factory/tests/functional/factory_runtime/orchestrators/petri/guards": 3,
-      "you-agent-factory/tests/functional/factory_definitions/transports/cli/named_lifecycle": 3,
-      "you-agent-factory/tests/functional/factory_definitions/transports/cli/validate_persist": 3,
       "you-agent-factory/tests/functional/factory_visualization": 6,
       "you-agent-factory/tests/functional/guards_batch": 15,
       "you-agent-factory/tests/functional/models/model_invoke": 4,
@@ -9618,7 +9485,6 @@
       "you-agent-factory/tests/functional/provider_sessions": 2,
       "you-agent-factory/tests/functional/provider_sessions/association": 6,
       "you-agent-factory/tests/functional/provider_sessions/details": 9,
-      "you-agent-factory/tests/functional/provider_sessions": 2,
       "you-agent-factory/tests/functional/providers": 36,
       "you-agent-factory/tests/functional/providers/agy": 4,
       "you-agent-factory/tests/functional/providers/codex": 7,
@@ -9757,21 +9623,21 @@
     }
   },
   "completeness_audit": {
-    "audited_at_utc": "2026-07-28T13:53:41Z",
-    "story": "ft-wave2-work-relationships-parent-child-003",
-    "live_customer_scenarios": 913,
-    "ledger_rows": 913,
+    "audited_at_utc": "2026-07-28T14:30:00Z",
+    "story": "ft-wave2-factory-definitions-import-export-mergeability-5",
+    "live_customer_scenarios": 919,
+    "ledger_rows": 919,
     "unmapped_scenarios": 0,
-    "checklist_destinations": 441,
+    "checklist_destinations": 442,
     "wrong_layer_destinations": 69,
     "invalid_destinations": 0,
-    "lane_short": 818,
+    "lane_short": 824,
     "lane_functionallong": 95,
     "specialty_targets_documented": 11,
     "deletion_only_batches": 51,
     "validator": "go run ./cmd/migrationledgercheck",
-    "row_count": 913,
-    "short_lane_rows": 818,
+    "row_count": 919,
+    "short_lane_rows": 824,
     "functionallong_lane_rows": 95
   }
 }
