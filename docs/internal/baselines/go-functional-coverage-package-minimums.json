@@ -2203,6 +2203,10 @@
       "minimum": 61.06
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/service",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_materialization",
       "exception": {
         "kind": "measurement",
@@ -2255,10 +2259,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/wire",
       "minimum": 76.90
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/service",
-      "minimum": 0.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/service",
