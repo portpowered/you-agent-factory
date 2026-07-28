@@ -45,14 +45,6 @@ var RecordingsExcessRootContractFolds = []RecordingsRootContractFoldTarget{
 		Destination: recordingsPackagePrefix + "/internal/services/artifacts_export",
 	},
 	{
-		Cluster: "replay",
-		Files: []string{
-			"replay_contract.go",
-			"replay_import_boundary_test.go",
-		},
-		Destination: recordingsPackagePrefix + "/internal/services/replay",
-	},
-	{
 		Cluster: "live_recording_target",
 		Files: []string{
 			"live_recording_target.go",
