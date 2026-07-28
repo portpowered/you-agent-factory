@@ -1,18 +1,18 @@
-package checkpointsummary_test
+package javascriptsummary_test
 
 import (
 	"testing"
 	"time"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/checkpointsummary"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptsummary"
 )
 
 func TestServiceBuildProjectsStableDispatchAndArtifactState(t *testing.T) {
 	t.Parallel()
 
 	createdAt := time.Date(2026, 7, 19, 12, 0, 0, 0, time.FixedZone("test", -7*60*60))
-	summary := checkpointsummary.New().Build(factoryruntime.JavaScriptCheckpointSummaryInput{
+	summary := javascriptsummary.New().Build(factoryruntime.JavaScriptCheckpointSummaryInput{
 		SessionID:    " session-1 ",
 		CheckpointID: " checkpoint-1 ",
 		CreatedAt:    createdAt,
@@ -64,7 +64,7 @@ func TestServiceBuildProjectsStableDispatchAndArtifactState(t *testing.T) {
 func TestServiceLatestUsesLastCheckpointRecord(t *testing.T) {
 	t.Parallel()
 
-	summary := checkpointsummary.New().Latest(factoryruntime.JavaScriptCheckpointSummaryInput{
+	summary := javascriptsummary.New().Latest(factoryruntime.JavaScriptCheckpointSummaryInput{
 		SessionID: "session-1",
 		Records: []factoryruntime.JavaScriptRuntimeRecord{
 			{

@@ -3,6 +3,7 @@ package wire_test
 import (
 	"testing"
 
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	checkpointrecovery "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery"
 	checkpointrecoverywire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/wire"
 )
@@ -22,5 +23,23 @@ func TestNewConstructsCheckpointRecoveryCapability(t *testing.T) {
 	var recovery checkpointrecovery.Service = checkpointrecoverywire.New()
 	if recovery == nil {
 		t.Fatal("New() = nil, want checkpoint recovery capability")
+	}
+}
+
+func TestNewJavaScriptCheckpointStoreConstructsWorkingAdapter(t *testing.T) {
+	t.Parallel()
+
+	var store factoryruntime.JavaScriptCheckpointStore = checkpointrecoverywire.NewJavaScriptCheckpointStore()
+	if store == nil {
+		t.Fatal("NewJavaScriptCheckpointStore() = nil, want JavaScript checkpoint store")
+	}
+}
+
+func TestNewJavaScriptCheckpointSummariesConstructsWorkingProjector(t *testing.T) {
+	t.Parallel()
+
+	summaries := checkpointrecoverywire.NewJavaScriptCheckpointSummaries()
+	if summaries == nil {
+		t.Fatal("NewJavaScriptCheckpointSummaries() = nil, want JavaScript checkpoint summary projector")
 	}
 }

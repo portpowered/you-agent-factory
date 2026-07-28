@@ -26,7 +26,6 @@ var checkpointRootContractTypes = []reflect.Type{
 
 var forbiddenCheckpointPeerImportPrefixes = []string{
 	factoryRuntimeRootPackage + "/internal/services/checkpoint_recovery",
-	factoryRuntimeRootPackage + "/checkpointstore",
 }
 
 var checkpointPeerConsumerPackages = []string{

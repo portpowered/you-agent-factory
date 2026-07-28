@@ -13,7 +13,6 @@ import (
 const (
 	factoryRuntimeRootImport         = "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryRuntimeCheckpointRecovery = factoryRuntimeRootImport + "/internal/services/checkpoint_recovery"
-	factoryRuntimeCheckpointStore    = factoryRuntimeRootImport + "/checkpointstore"
 	recordingsRootImport             = "github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
@@ -26,7 +25,6 @@ var sessionsCheckpointPeerLeaseRoots = []string{
 
 var forbiddenSessionsCheckpointRecoveryImports = []string{
 	factoryRuntimeCheckpointRecovery,
-	factoryRuntimeCheckpointStore,
 }
 
 // sessionsResumeCoordinator stays on Recordings plus Runtime root checkpoint
