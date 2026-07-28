@@ -714,18 +714,22 @@ Wave 0 functional-tests-expansion planning authority lives under
   safety through `support.BuildProcess` + `support.FlattenFactoryConfig` /
   `support.CreateNamedFactory` CLI round-trips with `support.RunFactoryToCompletionWithEdgesAndWork`
   for terminal run proofs; siblings `agent_factory_export_import_fixture_test.go`,
-  `export_import_fixture_test.go`, `export_import_nested_docs_test.go`, and
-  `api_export_import_e2e_smoke_test.go` own delete-03 fixture/nested-docs and
-  customer-path smoke proofs via `flattenFactoryConfigWithEdges`
-  (local `BuildProcess` + `ProviderCommandRunner` zero-call helper), public
-  `factory create` / `factory list` Current Factory signals, and
-  `support.StartFunctionalAPIServer` + `support.SubmitDefaultSessionWork` only
-  when proving imported-factory work acceptance; compare flatten readback with
+  `export_import_fixture_test.go`, `export_import_nested_docs_test.go`,
+  `api_export_import_e2e_smoke_test.go`, `automat_portability_fixture_test.go`, and
+  `automat_portability_integration_test.go` own delete-03 fixture/nested-docs,
+  customer-path smoke, and delete-04 AutomatPortability flatten/expand/dispatch-readiness
+  proofs via `flattenFactoryConfigWithEdges` (or local flatten/expand helpers with
+  `ProviderCommandRunner` zero-call assertions), `ScriptCommandRunner` capture for
+  bounded script dispatch smoke, public `factory create` / `factory list` Current
+  Factory signals, and `support.StartFunctionalAPIServer` + `support.SubmitDefaultSessionWork`
+  only when proving imported-factory work acceptance; compare flatten readback with
   JSON-normalized factory contracts because named identity lives in `factory list`
-  while authored `name` may remain on flatten payloads; delete-03 catch-all
-  `tests/functional/bootstrap_portability` export/import Test* are retired —
-  do not reintroduce them under bootstrap_portability; catalog metadata
-  infers domain `factory/definitions`.
+  while authored `name` may remain on flatten payloads; artifact-contract-closeout
+  remap target for AutomatPortability is
+  `./tests/functional/factory/definitions -run 'TestAutomatPortabilityFixture_'`;
+  delete-03/04 catch-all `tests/functional/bootstrap_portability` export/import and
+  AutomatPortability Test* are retired — do not reintroduce them under
+  bootstrap_portability; catalog metadata infers domain `factory/definitions`.
   `tests/functional/factory/definitions/validation_test.go` and sibling
   `metadata_contract_test.go` own Factory definition validation rejection,
   metadata contract round-trip/canonicalization, and invocation-help rendering
