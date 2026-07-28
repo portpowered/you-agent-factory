@@ -610,7 +610,9 @@ func provideFactorySessionExecutionFactory(
 	) (factorysessions.ExecutionService, error) {
 		executor := workerinvocation.NewExecutor(provider)
 		var liveChildInvocation factorysessionwire.LiveChildInvocationFactory
-		if adaptRunner != nil {
+		usesConfiguredACP := len(acpIntegrations) > 0
+		usesInjectedProviderRunner := allocator != nil && edges.ProviderCommandRunner != nil
+		if adaptRunner != nil && (usesConfiguredACP || usesInjectedProviderRunner) {
 			commandRunner, err := provideWorkersProviderCommandRunner(edges)
 			if err != nil {
 				return nil, fmt.Errorf("resolve provider runner for live child invocation: %w", err)
