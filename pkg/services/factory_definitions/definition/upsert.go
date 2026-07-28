@@ -16,7 +16,7 @@ func (s *Service) SaveUpsertNamedSnapshotAndActivateForSession(
 	sessionID string,
 	request EditableFactory,
 ) (EditableFactory, error) {
-	if s == nil || s.host == nil {
+	if s == nil || s.host == nil || s.activationGateway == nil {
 		return EditableFactory{}, fmt.Errorf("factory definition service is required")
 	}
 	if request.Snapshot == nil {
@@ -38,8 +38,8 @@ func (s *Service) SaveUpsertNamedSnapshotAndActivateForSession(
 	}
 
 	var saved EditableFactory
-	err = s.host.WithActivationLock(func() error {
-		if err := s.host.RequireIdleRuntimeForSession(ctx, sessionID); err != nil {
+	err = s.activationGateway.WithActivationLock(func() error {
+		if err := s.activationGateway.RequireIdleRuntimeForSession(ctx, sessionID); err != nil {
 			return err
 		}
 
@@ -48,7 +48,7 @@ func (s *Service) SaveUpsertNamedSnapshotAndActivateForSession(
 			return err
 		}
 
-		nextVersion := s.NextEditableFactoryVersion(currentVersion, s.host.SaveNow())
+		nextVersion := s.NextEditableFactoryVersion(currentVersion, s.activationGateway.SaveNow())
 		prepared, err := s.PreparePersistedFactoryPayload(request.Name, request.Snapshot, nextVersion)
 		if err != nil {
 			return err
@@ -111,7 +111,7 @@ func (s *Service) finalizeUpsertNamedAndActivateForSession(
 		return EditableFactory{}, fmt.Errorf("write session current factory pointer: %w", err)
 	}
 
-	if err := s.host.ActivateSessionEditableFactory(
+	if err := s.activationGateway.ActivateSessionEditableFactory(
 		ctx,
 		session,
 		sessionID,

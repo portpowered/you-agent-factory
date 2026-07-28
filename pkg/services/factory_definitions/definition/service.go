@@ -33,6 +33,7 @@ type Service struct {
 	catalog.Service
 	validationService validationservice.Service
 	host              Host
+	activationGateway factoryroot.DefinitionActivationGateway
 	versionFileSystem factoryroot.VersionFileSystem
 	packagedCatalog   factoryroot.PackagedFactoryCatalogOperations
 	packagedInstaller factoryroot.PackagedFactoryInstallationOperations
@@ -58,7 +59,11 @@ type nonCatalogDefaults interface {
 }
 
 // New constructs a factory-definition read collaborator with explicit dependencies.
-func New(host Host, versionFileSystems ...factoryroot.VersionFileSystem) *Service {
+func New(
+	host Host,
+	activationGateway factoryroot.DefinitionActivationGateway,
+	versionFileSystems ...factoryroot.VersionFileSystem,
+) *Service {
 	var versionFileSystem factoryroot.VersionFileSystem
 	if len(versionFileSystems) > 0 {
 		versionFileSystem = versionFileSystems[0]
@@ -67,6 +72,7 @@ func New(host Host, versionFileSystems ...factoryroot.VersionFileSystem) *Servic
 		nonCatalogDefaults: factoryroot.UnimplementedService{},
 		Service:            factoryroot.UnimplementedService{},
 		host:               host,
+		activationGateway:  activationGateway,
 		versionFileSystem:  versionFileSystem,
 	}
 }
@@ -75,10 +81,11 @@ func New(host Host, versionFileSystems ...factoryroot.VersionFileSystem) *Servic
 // catalog ownership for the CTR-DEF catalog slice.
 func NewWithCatalog(
 	host Host,
+	activationGateway factoryroot.DefinitionActivationGateway,
 	catalogService catalog.Service,
 	versionFileSystems ...factoryroot.VersionFileSystem,
 ) *Service {
-	service := New(host, versionFileSystems...)
+	service := New(host, activationGateway, versionFileSystems...)
 	service.Service = catalogService
 	return service
 }
@@ -87,11 +94,12 @@ func NewWithCatalog(
 // both persisted and embedded catalog operations.
 func NewWithCatalogAndPackages(
 	host Host,
+	activationGateway factoryroot.DefinitionActivationGateway,
 	catalogService catalog.Service,
 	packagedCatalog factoryroot.PackagedFactoryCatalogOperations,
 	versionFileSystems ...factoryroot.VersionFileSystem,
 ) *Service {
-	service := NewWithCatalog(host, catalogService, versionFileSystems...)
+	service := NewWithCatalog(host, activationGateway, catalogService, versionFileSystems...)
 	service.packagedCatalog = packagedCatalog
 	return service
 }
@@ -100,6 +108,7 @@ func NewWithCatalogAndPackages(
 // root collaborator for catalog selection and canonical packaged installation.
 func NewWithCatalogPackagesAndInstallation(
 	host Host,
+	activationGateway factoryroot.DefinitionActivationGateway,
 	catalogService catalog.Service,
 	packagedCatalog factoryroot.PackagedFactoryCatalogOperations,
 	packagedInstaller factoryroot.PackagedFactoryInstallationOperations,
@@ -107,6 +116,7 @@ func NewWithCatalogPackagesAndInstallation(
 ) *Service {
 	service := NewWithCatalogAndPackages(
 		host,
+		activationGateway,
 		catalogService,
 		packagedCatalog,
 		versionFileSystems...,
@@ -119,11 +129,12 @@ func NewWithCatalogPackagesAndInstallation(
 // validation ownership for the CTR-DEF validate slice.
 func NewWithValidation(
 	host Host,
+	activationGateway factoryroot.DefinitionActivationGateway,
 	catalogService catalog.Service,
 	validationService validationservice.Service,
 	versionFileSystems ...factoryroot.VersionFileSystem,
 ) *Service {
-	service := NewWithCatalog(host, catalogService, versionFileSystems...)
+	service := NewWithCatalog(host, activationGateway, catalogService, versionFileSystems...)
 	service.validationService = validationService
 	return service
 }
@@ -133,6 +144,7 @@ func NewWithValidation(
 // installation ownership.
 func NewWithCatalogPackagesValidationAndInstallation(
 	host Host,
+	activationGateway factoryroot.DefinitionActivationGateway,
 	catalogService catalog.Service,
 	validationService validationservice.Service,
 	packagedCatalog factoryroot.PackagedFactoryCatalogOperations,
@@ -141,6 +153,7 @@ func NewWithCatalogPackagesValidationAndInstallation(
 ) *Service {
 	service := NewWithCatalogPackagesAndInstallation(
 		host,
+		activationGateway,
 		catalogService,
 		packagedCatalog,
 		packagedInstaller,
@@ -324,9 +337,10 @@ func (s *Service) GetCurrentFactoryForSession(_ context.Context, sessionID strin
 func CurrentFactorySnapshotForSession(
 	ctx context.Context,
 	host Host,
+	activationGateway factoryroot.DefinitionActivationGateway,
 	sessionID string,
 ) (*interfaces.FactorySnapshot, error) {
-	current, err := New(host).GetCurrentFactoryForSession(ctx, sessionID)
+	current, err := New(host, activationGateway).GetCurrentFactoryForSession(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}

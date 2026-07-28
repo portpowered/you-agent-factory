@@ -49,7 +49,7 @@ func newRootValidateServiceForPeer(t *testing.T) factoryroot.Service {
 	if err != nil {
 		t.Fatalf("validationwire.NewService: %v", err)
 	}
-	return factorydefinition.NewWithValidation(nil, catalogService, validationService)
+	return factorydefinition.NewWithValidation(nil, factorydefinition.StubActivationGateway(), catalogService, validationService)
 }
 
 func crossPathValidAlphaEffectivePayload(t *testing.T) []byte {

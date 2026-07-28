@@ -18,6 +18,7 @@ import (
 // New constructs the public Factory Definitions service.
 func New(
 	sessionHost factoryroot.SessionHost,
+	activationGateway factoryroot.DefinitionActivationGateway,
 	clock factoryroot.Clock,
 	versionFileSystem factoryroot.VersionFileSystem,
 	validator factorydefinitions.Validator,
@@ -37,7 +38,7 @@ func New(
 	requiredToolChecker factorydefinitions.RequiredToolChecker,
 	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
 ) factoryroot.Service {
-	if sessionHost == nil || clock == nil || versionFileSystem == nil ||
+	if sessionHost == nil || activationGateway == nil || clock == nil || versionFileSystem == nil ||
 		namedPaths == nil || namedFactoryCatalogFileSystem == nil ||
 		packagedCatalog.List == nil || packagedCatalog.Resolve == nil ||
 		packagedInstaller.Install == nil {
@@ -66,13 +67,8 @@ func New(
 		namedPaths.ResolveExistingDir,
 		sessionHost.RequireSession, sessionHost.SessionRuntimeConfig,
 		sessionHost.SessionFactoryPersistRoot, sessionHost.ValidateEditableFactorySnapshot,
-		sessionHost.GetCurrentFactorySnapshotForSession, sessionHost.WithActivationLock,
-		sessionHost.RequireIdleRuntimeForSession, sessionHost.ActivateSessionEditableFactory,
+		sessionHost.GetCurrentFactorySnapshotForSession,
 		replaceFactoryLayout,
-		clock.Now,
-		sessionHost.RunSessionID, sessionHost.SessionForActivation,
-		sessionHost.NamedFactoryActivationPaths, sessionHost.RequireIdleBeforeNamedFactoryActivation,
-		sessionHost.SwapPersistedNamedFactoryRuntime,
 	)
 	if err != nil {
 		return nil
@@ -94,6 +90,7 @@ func New(
 	})
 	definitions := factorydefinition.NewWithCatalogPackagesValidationAndInstallation(
 		host,
+		activationGateway,
 		catalogService,
 		validationService,
 		packagedCatalog,

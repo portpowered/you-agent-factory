@@ -2,7 +2,6 @@ package factorycontracts
 
 import (
 	"context"
-	"time"
 
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
 )
@@ -146,16 +145,7 @@ type SessionHost interface {
 	SessionFactoryPersistRoot(*DefinitionSession) string
 	ValidateEditableFactorySnapshot(context.Context, *FactorySnapshot) error
 	GetCurrentFactorySnapshotForSession(context.Context, string) (*FactorySnapshot, error)
-	WithActivationLock(func() error) error
-	RequireIdleRuntimeForSession(context.Context, string) error
-	ActivateSessionEditableFactory(context.Context, *DefinitionSession, string, string, string, string, string) error
 	ReplaceFactoryLayoutAtDir(string, *PreparedFactoryLayoutPayload) (*FactorySplitLayoutReplaceResult, error)
-	SaveNow() time.Time
-	RunSessionID() string
-	SessionForActivation(string) *DefinitionSession
-	NamedFactoryActivationPaths(*DefinitionSession) (string, string)
-	RequireIdleBeforeNamedFactoryActivation(context.Context, string, *DefinitionSession) error
-	SwapPersistedNamedFactoryRuntime(context.Context, string, *DefinitionSession, string, string, string, string) error
 	AttachFactoryDefinitions(Service) Service
 }
 

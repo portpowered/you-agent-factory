@@ -20,7 +20,7 @@ import (
 	authoredmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/authored"
 )
 
-var testDefinitionService = factorydefinition.New(stubDefinitionHost{})
+var testDefinitionService = factorydefinition.New(stubDefinitionHost{}, factorydefinition.StubActivationGateway())
 
 func prepareExternalFactoryLayoutForDefinitionTest(
 	ctx context.Context,
@@ -259,10 +259,11 @@ func saveFactoryThroughDefinition(
 	mode factoryapi.FactorySaveMode,
 	request factoryapi.Factory,
 ) (factoryapi.Factory, error) {
-	return factorydefinitionmapping.New(factorydefinition.New(saveDefinitionHostAdapter{
+	adapter := saveDefinitionHostAdapter{
 		saveHost: saveHost,
 		rootDir:  rootDir,
-	})).Save(ctx, sessionID, mode, request)
+	}
+	return factorydefinitionmapping.New(factorydefinition.New(adapter, adapter)).Save(ctx, sessionID, mode, request)
 }
 
 func (h saveDefinitionHostAdapter) PersistRootDir() string { return h.rootDir }

@@ -3,7 +3,6 @@ package factorydefinition
 import (
 	"context"
 	"fmt"
-	"time"
 
 	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
@@ -23,33 +22,7 @@ type Host interface {
 	ValidateEditableFactorySnapshot(ctx context.Context, snapshot *factorycontracts.FactorySnapshot) error
 
 	GetCurrentFactorySnapshotForSession(ctx context.Context, sessionID string) (*factorycontracts.FactorySnapshot, error)
-	WithActivationLock(fn func() error) error
-	RequireIdleRuntimeForSession(ctx context.Context, sessionID string) error
-	ActivateSessionEditableFactory(
-		ctx context.Context,
-		session *factorydefinitions.DefinitionSession,
-		sessionID string,
-		sessionRootDir string,
-		factoryDir string,
-		name string,
-		runtimeName string,
-	) error
 	ReplaceFactoryLayoutAtDir(targetDir string, prepared *factorydefinitions.PreparedFactoryLayoutPayload) (*factorydefinitions.FactorySplitLayoutReplaceResult, error)
-	SaveNow() time.Time
-
-	RunSessionID() string
-	SessionForActivation(sessionID string) *factorydefinitions.DefinitionSession
-	NamedFactoryActivationPaths(session *factorydefinitions.DefinitionSession) (persistRoot, folderPath string)
-	RequireIdleBeforeNamedFactoryActivation(ctx context.Context, sessionID string, session *factorydefinitions.DefinitionSession) error
-	SwapPersistedNamedFactoryRuntime(
-		ctx context.Context,
-		sessionID string,
-		session *factorydefinitions.DefinitionSession,
-		persistRoot string,
-		folderPath string,
-		factoryDir string,
-		name string,
-	) error
 }
 
 type loadedFactoryHost interface {
@@ -202,16 +175,7 @@ type dependencyHost struct {
 	sessionFactoryPersistRoot               func(*factorydefinitions.DefinitionSession) string
 	validateEditableFactorySnapshot         func(context.Context, *factorycontracts.FactorySnapshot) error
 	getCurrentFactorySnapshotForSession     func(context.Context, string) (*factorycontracts.FactorySnapshot, error)
-	withActivationLock                      func(func() error) error
-	requireIdleRuntimeForSession            func(context.Context, string) error
-	activateSessionEditableFactory          func(context.Context, *factorydefinitions.DefinitionSession, string, string, string, string, string) error
 	replaceFactoryLayoutAtDir               func(string, *factorydefinitions.PreparedFactoryLayoutPayload) (*factorydefinitions.FactorySplitLayoutReplaceResult, error)
-	saveNow                                 func() time.Time
-	runSessionID                            func() string
-	sessionForActivation                    func(string) *factorydefinitions.DefinitionSession
-	namedFactoryActivationPaths             func(*factorydefinitions.DefinitionSession) (string, string)
-	requireIdleBeforeNamedFactoryActivation func(context.Context, string, *factorydefinitions.DefinitionSession) error
-	swapPersistedNamedFactoryRuntime        func(context.Context, string, *factorydefinitions.DefinitionSession, string, string, string, string) error
 }
 
 // NewHost adapts flat process callbacks to the canonical Definition Host.
@@ -233,20 +197,8 @@ func NewHost(
 	sessionFactoryPersistRoot func(*factorydefinitions.DefinitionSession) string,
 	validateEditableFactorySnapshot func(context.Context, *factorycontracts.FactorySnapshot) error,
 	getCurrentFactorySnapshotForSession func(context.Context, string) (*factorycontracts.FactorySnapshot, error),
-	withActivationLock func(func() error) error,
-	requireIdleRuntimeForSession func(context.Context, string) error,
-	activateSessionEditableFactory func(context.Context, *factorydefinitions.DefinitionSession, string, string, string, string, string) error,
 	replaceFactoryLayoutAtDir func(string, *factorydefinitions.PreparedFactoryLayoutPayload) (*factorydefinitions.FactorySplitLayoutReplaceResult, error),
-	saveNow func() time.Time,
-	runSessionID func() string,
-	sessionForActivation func(string) *factorydefinitions.DefinitionSession,
-	namedFactoryActivationPaths func(*factorydefinitions.DefinitionSession) (string, string),
-	requireIdleBeforeNamedFactoryActivation func(context.Context, string, *factorydefinitions.DefinitionSession) error,
-	swapPersistedNamedFactoryRuntime func(context.Context, string, *factorydefinitions.DefinitionSession, string, string, string, string) error,
 ) (Host, error) {
-	if saveNow == nil {
-		return nil, fmt.Errorf("Factory Definition clock is required")
-	}
 	return dependencyHost{
 		persistRootDir: persistRootDir, workstationLoader: workstationLoader,
 		loadFactory: loadFactory, readCurrentFactoryPointer: readCurrentFactoryPointer,
@@ -261,13 +213,7 @@ func NewHost(
 		sessionFactoryPersistRoot:           sessionFactoryPersistRoot,
 		validateEditableFactorySnapshot:     validateEditableFactorySnapshot,
 		getCurrentFactorySnapshotForSession: getCurrentFactorySnapshotForSession,
-		withActivationLock:                  withActivationLock, requireIdleRuntimeForSession: requireIdleRuntimeForSession,
-		activateSessionEditableFactory: activateSessionEditableFactory,
-		replaceFactoryLayoutAtDir:      replaceFactoryLayoutAtDir, saveNow: saveNow,
-		runSessionID: runSessionID, sessionForActivation: sessionForActivation,
-		namedFactoryActivationPaths:             namedFactoryActivationPaths,
-		requireIdleBeforeNamedFactoryActivation: requireIdleBeforeNamedFactoryActivation,
-		swapPersistedNamedFactoryRuntime:        swapPersistedNamedFactoryRuntime,
+		replaceFactoryLayoutAtDir:           replaceFactoryLayoutAtDir,
 	}, nil
 }
 
@@ -420,87 +366,11 @@ func (h dependencyHost) GetCurrentFactorySnapshotForSession(ctx context.Context,
 	return h.getCurrentFactorySnapshotForSession(ctx, sessionID)
 }
 
-func (h dependencyHost) WithActivationLock(fn func() error) error {
-	if h.withActivationLock == nil {
-		return fmt.Errorf("factory service is required")
-	}
-	return h.withActivationLock(fn)
-}
-
-func (h dependencyHost) RequireIdleRuntimeForSession(ctx context.Context, sessionID string) error {
-	if h.requireIdleRuntimeForSession == nil {
-		return fmt.Errorf("factory service is required")
-	}
-	return h.requireIdleRuntimeForSession(ctx, sessionID)
-}
-
-func (h dependencyHost) ActivateSessionEditableFactory(
-	ctx context.Context,
-	session *factorydefinitions.DefinitionSession,
-	sessionID string,
-	sessionRootDir string,
-	factoryDir string,
-	name string,
-	runtimeName string,
-) error {
-	if h.activateSessionEditableFactory == nil {
-		return fmt.Errorf("factory service is required")
-	}
-	return h.activateSessionEditableFactory(ctx, session, sessionID, sessionRootDir, factoryDir, name, runtimeName)
-}
-
 func (h dependencyHost) ReplaceFactoryLayoutAtDir(targetDir string, prepared *factorydefinitions.PreparedFactoryLayoutPayload) (*factorydefinitions.FactorySplitLayoutReplaceResult, error) {
 	if h.replaceFactoryLayoutAtDir == nil {
 		return nil, fmt.Errorf("Factory Definition layout replacer is required")
 	}
 	return h.replaceFactoryLayoutAtDir(targetDir, prepared)
-}
-
-func (h dependencyHost) SaveNow() time.Time {
-	return h.saveNow().UTC()
-}
-
-func (h dependencyHost) RunSessionID() string {
-	if h.runSessionID == nil {
-		return ""
-	}
-	return h.runSessionID()
-}
-
-func (h dependencyHost) SessionForActivation(sessionID string) *factorydefinitions.DefinitionSession {
-	if h.sessionForActivation == nil {
-		return nil
-	}
-	return h.sessionForActivation(sessionID)
-}
-
-func (h dependencyHost) NamedFactoryActivationPaths(session *factorydefinitions.DefinitionSession) (string, string) {
-	if h.namedFactoryActivationPaths == nil {
-		return "", ""
-	}
-	return h.namedFactoryActivationPaths(session)
-}
-
-func (h dependencyHost) RequireIdleBeforeNamedFactoryActivation(ctx context.Context, sessionID string, session *factorydefinitions.DefinitionSession) error {
-	if h.requireIdleBeforeNamedFactoryActivation == nil {
-		return fmt.Errorf("factory service is required")
-	}
-	return h.requireIdleBeforeNamedFactoryActivation(ctx, sessionID, session)
-}
-
-func (h dependencyHost) SwapPersistedNamedFactoryRuntime(
-	ctx context.Context,
-	sessionID string,
-	session *factorydefinitions.DefinitionSession,
-	persistRoot string,
-	folderPath string,
-	factoryDir string,
-	name string,
-) error {
-	if h.swapPersistedNamedFactoryRuntime == nil {
-		return fmt.Errorf("factory service is required")
-	}
-	return h.swapPersistedNamedFactoryRuntime(ctx, sessionID, session, persistRoot, folderPath, factoryDir, name)
 }
 
 var _ Host = dependencyHost{}

@@ -362,7 +362,15 @@ func openRuntime(
 	if factoryDefinitionsFactory == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Definitions factory is required")
 	}
-	factoryDefinitionOwner := factoryDefinitionsFactory(definitionHost, factoryDefinitionValidator)
+	activationGatewayProvider, ok := sessionRuntime.(factorysessions.DefinitionActivationGatewayProvider)
+	if !ok {
+		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Session runtime must expose DefinitionActivationGateway")
+	}
+	factoryDefinitionOwner := factoryDefinitionsFactory(
+		definitionHost,
+		activationGatewayProvider.DefinitionActivationGateway(),
+		factoryDefinitionValidator,
+	)
 	if factoryDefinitionOwner == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Definitions factory returned nil service")
 	}

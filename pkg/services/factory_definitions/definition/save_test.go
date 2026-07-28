@@ -31,7 +31,7 @@ func TestValidateEditableFactoryTopology_MatchesValidateFactoryAPIPrePersist(t *
 		t.Fatalf("DecodeCrossPathInvalidFactory: %v", err)
 	}
 
-	svc := New(stubDefinitionHost{})
+	svc := newTestService(stubDefinitionHost{})
 	saveErr := svc.ValidateEditableFactoryTopology(context.Background(), mustFactorySnapshot(factory))
 	var topologyErr *interfaces.ValidationTopologyError
 	if !errors.As(saveErr, &topologyErr) {
@@ -62,7 +62,7 @@ func TestSaveReplaceCurrentForSession_RejectsStaleBaseVersion(t *testing.T) {
 			Version: &currentVersion,
 		},
 	}
-	svc := New(host)
+	svc := newTestService(host, host)
 
 	staleVersion := factoryapi.HybridLogicalTimestamp{
 		Logical:  4,
@@ -137,7 +137,7 @@ func TestSaveReplaceCurrentForSession_PersistsSplitLayout(t *testing.T) {
 			},
 		},
 	}
-	svc := New(host)
+	svc := newTestService(host, host)
 
 	replacement := factoryapi.Factory{
 		Name: apisurface.DefaultCurrentFactoryName,
@@ -226,7 +226,7 @@ func TestSaveReplaceCurrentForSession_ReplacesNamedCurrentFactoryLayout(t *testi
 			},
 		},
 	}
-	svc := New(host)
+	svc := newTestService(host, host)
 	replacement := factoryapi.Factory{
 		Name: "alpha",
 		Id:   saveStringPointer("alpha"),
@@ -292,7 +292,7 @@ func TestSaveReplaceCurrentForSession_RestoresLayoutWhenActivationFails(t *testi
 			},
 		},
 	}
-	svc := New(host)
+	svc := newTestService(host, host)
 	replacement := factoryapi.Factory{
 		Name: apisurface.DefaultCurrentFactoryName,
 		Id:   saveStringPointer("root-runtime"),
@@ -379,7 +379,7 @@ func TestService_NilReceiverReturnsRequiredErrors(t *testing.T) {
 func TestValidateUpsertNamedFactoryRequest_RejectsInvalidFactoryName(t *testing.T) {
 	t.Parallel()
 
-	err := New(stubDefinitionHost{}).ValidateUpsertNamedFactoryRequest(context.Background(), "bad/name", nil)
+	err := newTestService(stubDefinitionHost{}).ValidateUpsertNamedFactoryRequest(context.Background(), "bad/name", nil)
 	if !errors.Is(err, apisurface.ErrInvalidNamedFactoryName) {
 		t.Fatalf("ValidateUpsertNamedFactoryRequest error = %v, want invalid named factory name", err)
 	}
@@ -415,7 +415,7 @@ func TestService_SerializeNamedFactoryUpsertResponse_ReturnsThinBundledFiles(t *
 		t.Fatalf("LoadRuntimeConfig: %v", err)
 	}
 
-	got, err := New(stubDefinitionHost{workflowID: "workflow-1"}).SerializeNamedFactoryUpsertResponse("alpha", runtimeCfg)
+	got, err := newTestService(stubDefinitionHost{workflowID: "workflow-1"}).SerializeNamedFactoryUpsertResponse("alpha", runtimeCfg)
 	if err != nil {
 		t.Fatalf("SerializeNamedFactoryUpsertResponse: %v", err)
 	}
@@ -439,7 +439,7 @@ func TestSaveReplaceCurrentForSession_RejectsInvalidWritableCurrentName(t *testi
 			Name: "bad/name",
 		},
 	}
-	_, err := New(host).SaveReplaceCurrentSnapshotForSession(context.Background(), factorysessions.DefaultSessionID, mustEditableFactoryForTest(t, factoryapi.Factory{}))
+	_, err := newTestService(host, host).SaveReplaceCurrentSnapshotForSession(context.Background(), factorysessions.DefaultSessionID, mustEditableFactoryForTest(t, factoryapi.Factory{}))
 	if !errors.Is(err, apisurface.ErrInvalidNamedFactoryName) {
 		t.Fatalf("SaveReplaceCurrentForSession error = %v, want invalid named factory name", err)
 	}

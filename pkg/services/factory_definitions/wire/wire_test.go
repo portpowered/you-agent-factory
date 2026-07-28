@@ -118,9 +118,7 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			ports := base
 			test.mutate(&ports)
-			service, err := factorydefinitionswire.NewService(
-				ports.sessionHost,
-				ports.validator,
+			service, err := factorydefinitionswire.NewService(ports.sessionHost, ports.activationGateway, ports.validator,
 				ports.persistence,
 				ports.loader,
 				ports.applySupportedFiles,
@@ -167,9 +165,7 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 		t.Fatalf("NewPackagedFactoryCatalog() error = %v", err)
 	}
 
-	service, err := factorydefinitionswire.NewService(
-		sessionHost,
-		stubValidator{},
+	service, err := factorydefinitionswire.NewService(sessionHost, sessionHost, stubValidator{},
 		stubPersistence{},
 		&factoryloading.Loader{},
 		func(string, *factorydefinitions.FactoryConfig, bool, bool) error { return nil },
@@ -266,9 +262,7 @@ func TestNewServiceServesPublishedPackagedCatalogPeerBehavior(t *testing.T) {
 
 	ports := validConstructionPorts(t)
 	ports.packagedCatalog = packagedCatalog
-	service, err := factorydefinitionswire.NewService(
-		ports.sessionHost,
-		ports.validator,
+	service, err := factorydefinitionswire.NewService(ports.sessionHost, ports.activationGateway, ports.validator,
 		ports.persistence,
 		ports.loader,
 		ports.applySupportedFiles,
@@ -347,9 +341,7 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	t.Parallel()
 
 	ports := validConstructionPorts(t)
-	service, err := factorydefinitionswire.NewService(
-		ports.sessionHost,
-		ports.validator,
+	service, err := factorydefinitionswire.NewService(ports.sessionHost, ports.activationGateway, ports.validator,
 		ports.persistence,
 		ports.loader,
 		ports.applySupportedFiles,
@@ -396,6 +388,7 @@ func (stubOrchestratorValidator) ValidateJavaScriptFactoryDefinition(
 
 type constructionPorts struct {
 	sessionHost                   factorydefinitions.SessionHost
+	activationGateway             factorydefinitions.DefinitionActivationGateway
 	validator                     factorydefinitions.Validator
 	persistence                   factorydefinitions.Persistence
 	loader                        *factoryloading.Loader
@@ -427,8 +420,10 @@ func validConstructionPorts(t *testing.T) constructionPorts {
 		t.Fatalf("NewPackagedFactoryCatalog() error = %v", err)
 	}
 
+	host := stubSessionHost{}
 	return constructionPorts{
-		sessionHost:                   &stubSessionHost{},
+		sessionHost:                   host,
+		activationGateway:             host,
 		validator:                     stubValidator{},
 		persistence:                   stubPersistence{},
 		loader:                        &factoryloading.Loader{},

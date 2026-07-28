@@ -730,12 +730,15 @@ baseline target for that package. Characterization proof for the seam belongs
 in a root-package external test that implements `Service` using only
 `pkg/services/factory_definitions` imports.
 
-CUT-DEF-SES publishes `factorysessions.DefinitionActivationGateway` at
-`pkg/services/factory_sessions/activation_contract.go` as the narrow Sessions-root
-activation edge (lock serialization, idle gating, runtime swap) without
-`AttachFactoryDefinitions`. Implementation lives in
-`pkg/services/factory_sessions/internal/sessionservice/definition_activation_gateway.go`
-and is exposed from `SessionRuntime.DefinitionActivationGateway()`.
+CUT-DEF-SES publishes `factorydefinitions.DefinitionActivationGateway` at
+`pkg/services/factory_definitions/activation_contract.go` as the narrow
+Definitions-owned activation requester contract; Sessions aliases it from
+`pkg/services/factory_sessions/activation_contract.go` and implements it via
+`pkg/services/factory_sessions/internal/sessionservice/definition_activation_gateway.go`,
+exposed from `SessionRuntime.DefinitionActivationGateway()` and
+`definitionHost.DefinitionActivationGateway()`. Definitions save/activate/swap
+paths consume the gateway directly; `SessionHost` no longer carries activation
+ports.
 
 When publishing additive CTR-DEF catalog (or later) slices on that root
 `Service`, declare plain request/result value types beside the interface,

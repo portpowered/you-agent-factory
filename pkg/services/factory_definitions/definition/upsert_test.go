@@ -32,7 +32,7 @@ func TestSaveUpsertNamedAndActivateForSession_PersistsChosenTargetName(t *testin
 			},
 		},
 	}
-	svc := New(host)
+	svc := newTestService(host, host)
 
 	imported := factoryapi.Factory{
 		Name: "imported-target",
@@ -113,7 +113,7 @@ func TestSaveUpsertNamedAndActivateForSession_ReplacesExistingNamedFactory(t *te
 	}
 
 	host := &upsertDefinitionHost{sessionRootDir: sessionRoot}
-	svc := New(host)
+	svc := newTestService(host, host)
 	replacement := factoryapi.Factory{
 		Name: "imported-target",
 		Id:   upsertStringPointer("embedded-runtime"),

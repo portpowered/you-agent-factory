@@ -26,6 +26,7 @@ import (
 // returned peer surface.
 func NewService(
 	sessionHost factorydefinitions.SessionHost,
+	activationGateway factorydefinitions.DefinitionActivationGateway,
 	validator factorydefinitions.Validator,
 	persistence factorydefinitions.Persistence,
 	loader *factoryloading.Loader,
@@ -43,6 +44,7 @@ func NewService(
 ) (factorydefinitions.Service, error) {
 	if err := validateDependencies(
 		sessionHost,
+		activationGateway,
 		validator,
 		persistence,
 		loader,
@@ -72,6 +74,7 @@ func NewService(
 
 	definitions := factorydefinitionsservice.New(
 		sessionHost,
+		activationGateway,
 		clock,
 		versionFileSystem,
 		validator,
@@ -119,6 +122,7 @@ func NewService(
 
 func validateDependencies(
 	sessionHost factorydefinitions.SessionHost,
+	activationGateway factorydefinitions.DefinitionActivationGateway,
 	validator factorydefinitions.Validator,
 	persistence factorydefinitions.Persistence,
 	loader *factoryloading.Loader,
@@ -136,6 +140,9 @@ func validateDependencies(
 ) error {
 	if sessionHost == nil {
 		return fmt.Errorf("construct Factory Definitions: session host is required")
+	}
+	if activationGateway == nil {
+		return fmt.Errorf("construct Factory Definitions: activation gateway is required")
 	}
 	if validator == nil {
 		return fmt.Errorf("construct Factory Definitions: validator is required")
