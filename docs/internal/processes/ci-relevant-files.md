@@ -489,6 +489,13 @@ Wave 0 functional-tests-expansion planning authority lives under
   `support.RunFactoryToCompletionWithEdgesAndWork` and terminal assertions via
   `support.CountWorkAtCustomerState`; catalog metadata infers domain
   `factory/definitions`.
+  `tests/functional/factory/definitions/defaults_test.go` owns operator
+  default provider/model supply, Factory-authored override precedence, and
+  single-discovered-provider fallback through `support.BuildProcess` +
+  `support.StartProcessCommand` with operator `HOME` global config or
+  `edges.WorkersExecutableLocator`, asserting resolved selection via
+  `support.NewShapedProviderCommandRunner` call records; catalog metadata
+  infers domain `factory/definitions`.
   `make pkg-structure` enforces the domain-mirrored functional layout
   `tests/functional/<domain>/<subsection>/...`: new shallow, catch-all, or
   unclassified scenario packages are blocking, while existing nonconforming

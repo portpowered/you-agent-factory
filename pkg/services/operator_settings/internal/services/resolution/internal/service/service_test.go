@@ -10,8 +10,8 @@ import (
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution/internal/service"
 	resolution "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution"
+	"github.com/portpowered/infinite-you/pkg/services/operator_settings/testproviders"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 )
 
 func newResolutionService(t *testing.T) resolution.Service {
@@ -25,11 +25,7 @@ func newResolutionService(t *testing.T) resolution.Service {
 
 func mustProvidersRoot(t *testing.T) providers.Service {
 	t.Helper()
-	root, err := providerswire.NewService()
-	if err != nil {
-		t.Fatalf("providerswire.NewService() = %v", err)
-	}
-	return root
+	return testproviders.StandardCatalog()
 }
 
 type resolutionProvidersFake struct {

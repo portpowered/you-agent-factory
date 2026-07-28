@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	state "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/dashboard"
@@ -39,8 +38,8 @@ func renderSimpleDashboard(output io.Writer, input factoryvisualization.View) {
 
 func dashboardEngineSnapshotHeader(
 	runtime factoryvisualization.RuntimeObservation,
-) interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net] {
-	return interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net]{
+) state.RuntimeEngineStateSnapshot {
+	return state.RuntimeEngineStateSnapshot{
 		TickCount:     runtime.TickCount,
 		FactoryState:  runtime.FactoryState,
 		RuntimeStatus: runtime.RuntimeStatus,

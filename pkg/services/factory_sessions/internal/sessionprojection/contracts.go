@@ -7,6 +7,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/legacysnapshot"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 )
 
@@ -15,7 +16,7 @@ import (
 type ProjectionBuildInput struct {
 	Session             *livesession.LiveSession
 	RuntimeConfig       interfaces.RuntimeConfigLookup
-	Snapshot            *factoryruntime.StateSnapshot
+	Snapshot            *legacysnapshot.Snapshot
 	Observation         factoryruntime.Observation
 	BackendScopeID      string
 	LogicalSessionKey   string

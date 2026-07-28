@@ -13,7 +13,7 @@ type ProjectionContext struct {
 	Session                *ScopedLiveSessionSummary
 	FactorySessionID       string
 	FactoryCfg             *interfaces.FactoryConfig
-	Snapshot               *factory.StateSnapshot
+	Snapshot               *interfaces.EngineStateSnapshot[factory.PetriMarkingSnapshot, *factory.RuntimeNet]
 	Observation            factory.Observation
 	LifecycleControlStatus string
 	BackendScopeID         string

@@ -34,13 +34,12 @@ func FormatSimpleDashboard(
 // FormatSimpleDashboardWithRenderData renders a dashboard using the dedicated
 // simple-dashboard render DTO for session accounting.
 func FormatSimpleDashboardWithRenderData(
-	es interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net],
+	es state.RuntimeEngineStateSnapshot,
 	renderData recordings.SimpleDashboardRenderData,
 	now time.Time,
 ) string {
-	return formatSimpleDashboard(
+	return formatSimpleDashboardHeader(
 		es,
-		es.Topology,
 		now,
 		dashboardActiveViewFromRenderData(renderData),
 		dashboardQueueCountViewsFromRenderData(renderData),
@@ -48,6 +47,36 @@ func FormatSimpleDashboardWithRenderData(
 		dashboardDispatchHistoryFromRenderData(renderData.Session.DispatchHistory),
 		dashboardSessionViewFromRenderData(renderData),
 	)
+}
+
+func formatSimpleDashboardHeader(
+	es state.RuntimeEngineStateSnapshot,
+	now time.Time,
+	active dashboardActiveView,
+	queueCounts []dashboardQueueCountView,
+	workstationActivity []dashboardWorkstationActivityView,
+	completedHistory []dashboardDispatchHistoryView,
+	summary dashboardSessionView,
+) string {
+	var b strings.Builder
+
+	b.WriteString("╔══════════════════════════════════════════╗\n")
+	fmt.Fprintf(&b, "║  Factory: %-10s  Runtime: %-8s  ║\n",
+		es.FactoryState, es.RuntimeStatus)
+	fmt.Fprintf(&b, "║  Uptime:  %-10s  Tick: %-11d  ║\n",
+		FormatDuration(es.Uptime.Truncate(time.Second)), es.TickCount)
+	b.WriteString("╚══════════════════════════════════════════╝\n")
+
+	renderActiveWorkstations(&b, active, now)
+	renderQueueCounts(&b, queueCounts)
+	renderWorkstationActivity(&b, workstationActivity)
+	renderCompletedWorkstations(&b, completedHistory)
+
+	if summary.HasData {
+		renderSessionMetrics(&b, summary, dashboardSessionStartTime(es.Uptime, now))
+	}
+
+	return b.String()
 }
 
 func formatSimpleDashboard(
@@ -63,27 +92,20 @@ func formatSimpleDashboard(
 	if topology == nil {
 		topology = es.Topology
 	}
-	var b strings.Builder
-
-	// Header: factory state and uptime.
-	b.WriteString("╔══════════════════════════════════════════╗\n")
-	fmt.Fprintf(&b, "║  Factory: %-10s  Runtime: %-8s  ║\n",
-		es.FactoryState, es.RuntimeStatus)
-	fmt.Fprintf(&b, "║  Uptime:  %-10s  Tick: %-11d  ║\n",
-		FormatDuration(es.Uptime.Truncate(time.Second)), es.TickCount)
-	b.WriteString("╚══════════════════════════════════════════╝\n")
-
-	_ = topology
-	renderActiveWorkstations(&b, active, now)
-	renderQueueCounts(&b, queueCounts)
-	renderWorkstationActivity(&b, workstationActivity)
-	renderCompletedWorkstations(&b, completedHistory)
-
-	if summary.HasData {
-		renderSessionMetrics(&b, summary, dashboardSessionStartTime(es.Uptime, now))
-	}
-
-	return b.String()
+	return formatSimpleDashboardHeader(
+		state.RuntimeEngineStateSnapshot{
+			FactoryState:  es.FactoryState,
+			RuntimeStatus: es.RuntimeStatus,
+			TickCount:     es.TickCount,
+			Uptime:        es.Uptime,
+		},
+		now,
+		active,
+		queueCounts,
+		workstationActivity,
+		completedHistory,
+		summary,
+	)
 }
 
 func renderCompletedWorkstations(b *strings.Builder, completedHistory []dashboardDispatchHistoryView) {

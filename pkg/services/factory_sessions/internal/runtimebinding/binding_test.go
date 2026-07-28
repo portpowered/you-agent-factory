@@ -11,6 +11,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/legacysnapshot"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
@@ -30,25 +31,34 @@ func newRuntimeBindingState() *sessionruntime.Service {
 }
 
 type hostedInstanceFake struct {
-	dir          string
-	folder       string
-	backendScope string
-	service      factory.Service
-	config       factory.LoadedConfig
+	dir              string
+	folder           string
+	backendScope     string
+	service          factory.Service
+	config           factory.LoadedConfig
+	streamGeneration string
+	startTime        time.Time
 }
 
 func (instance *hostedInstanceFake) RuntimeService() factory.Service { return instance.service }
 func (instance *hostedInstanceFake) Directory() string               { return instance.dir }
 func (instance *hostedInstanceFake) FolderDirectory() string         { return instance.folder }
 func (instance *hostedInstanceFake) BackendScope() string            { return instance.backendScope }
-func (*hostedInstanceFake) StartTime() time.Time                     { return time.Time{} }
+func (instance *hostedInstanceFake) StartTime() time.Time {
+	if instance.startTime.IsZero() {
+		return time.Time{}
+	}
+	return instance.startTime
+}
 func (instance *hostedInstanceFake) LoadedRuntimeConfig() factory.LoadedConfig {
 	return instance.config
 }
 func (*hostedInstanceFake) CanonicalEvents() []interfaces.FactoryEvent { return nil }
 func (*hostedInstanceFake) AddEventTypeRecorder(func(interfaces.FactoryEventType)) {
 }
-func (*hostedInstanceFake) StreamGeneration() string { return "" }
+func (instance *hostedInstanceFake) StreamGeneration() string {
+	return instance.streamGeneration
+}
 func (*hostedInstanceFake) RuntimeLogger() *zap.Logger {
 	return zap.NewNop()
 }
@@ -194,7 +204,6 @@ func TestShutdownOtherLiveSessionsKeepsExceptAndJoinsFailures(t *testing.T) {
 }
 
 type replacementFactory struct {
-	factory.Factory
 	factory.Service
 }
 
@@ -203,10 +212,12 @@ func (replacementFactory) Run(ctx context.Context) error {
 	return ctx.Err()
 }
 
-func (replacementFactory) GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[factory.PetriMarkingSnapshot, *factory.Net], error) {
-	return &interfaces.EngineStateSnapshot[factory.PetriMarkingSnapshot, *factory.Net]{
-		RuntimeStatus: interfaces.RuntimeStatusActive,
-		FactoryState:  string(interfaces.FactoryStateRunning),
+func (replacementFactory) Observe(context.Context, factory.ObserveRequest) (factory.ObserveResult, error) {
+	return factory.ObserveResult{
+		Observation: factory.Observation{
+			Status: factory.ObservationStatusActive,
+			Health: factory.ObservationHealth{FactoryState: string(interfaces.FactoryStateRunning)},
+		},
 	}, nil
 }
 
@@ -377,4 +388,113 @@ func registerTestSession(state *sessionruntime.Service, sessionID string) *lives
 		Handle:    &runtimebinding.SessionState{Instance: instance, Handle: handle},
 	})
 	return state.Resolve(sessionID)
+}
+
+type streamGenerationService struct {
+	factory.Service
+	streamGenerationID string
+}
+
+func (service streamGenerationService) Observe(context.Context, factory.ObserveRequest) (factory.ObserveResult, error) {
+	return factory.ObserveResult{
+		Observation: factory.Observation{
+			Health: factory.ObservationHealth{StreamGenerationID: service.streamGenerationID},
+		},
+	}, nil
+}
+
+type legacySnapshotService struct {
+	factory.Service
+}
+
+func (legacySnapshotService) GetEngineStateSnapshot(context.Context) (*legacysnapshot.Snapshot, error) {
+	return nil, nil
+}
+
+type legacyEventService struct {
+	factory.Service
+}
+
+func (legacyEventService) GetFactoryEvents(context.Context) ([]interfaces.FactoryEvent, error) {
+	return nil, nil
+}
+
+func TestStreamGenerationIDPrefersInstanceTokenThenObserveThenStartTime(t *testing.T) {
+	t.Parallel()
+
+	instanceToken := &hostedInstanceFake{streamGeneration: "stream-from-instance"}
+	session := &livesession.LiveSession{
+		Handle: &runtimebinding.SessionState{
+			Instance: instanceToken,
+			Handle:   newHostedHandleFake(instanceToken),
+		},
+	}
+	if got := runtimebinding.StreamGenerationID(session); got != "stream-from-instance" {
+		t.Fatalf("instance stream generation = %q, want stream-from-instance", got)
+	}
+
+	observeToken := &hostedInstanceFake{
+		service: streamGenerationService{streamGenerationID: "stream-from-observe"},
+	}
+	observeSession := &livesession.LiveSession{
+		Handle: &runtimebinding.SessionState{
+			Instance: observeToken,
+			Handle:   newHostedHandleFake(observeToken),
+		},
+	}
+	if got := runtimebinding.StreamGenerationID(observeSession); got != "stream-from-observe" {
+		t.Fatalf("observe stream generation = %q, want stream-from-observe", got)
+	}
+
+	startedAt := time.Date(2026, 7, 28, 5, 0, 0, 0, time.UTC)
+	startTimeInstance := &hostedInstanceFake{startTime: startedAt}
+	startTimeSession := &livesession.LiveSession{
+		Handle: &runtimebinding.SessionState{
+			Instance: startTimeInstance,
+			Handle:   newHostedHandleFake(startTimeInstance),
+		},
+	}
+	if got := runtimebinding.StreamGenerationID(startTimeSession); got != startedAt.UTC().Format(time.RFC3339Nano) {
+		t.Fatalf("start-time stream generation = %q, want %q", got, startedAt.UTC().Format(time.RFC3339Nano))
+	}
+}
+
+func TestLegacyObservationHelpersResolveMigrationCapabilities(t *testing.T) {
+	t.Parallel()
+
+	if _, err := runtimebinding.LegacyObservationForService(replacementFactory{}); err == nil {
+		t.Fatal("expected legacy observation error for service without snapshot provider")
+	}
+
+	legacy := struct {
+		factory.Service
+		legacySnapshotService
+	}{Service: replacementFactory{}}
+	provider, err := runtimebinding.LegacyObservationForService(legacy)
+	if err != nil || provider == nil {
+		t.Fatalf("LegacyObservationForService = (%v, %v), want provider", provider, err)
+	}
+
+	if _, err := runtimebinding.LegacyEventSourceForService(replacementFactory{}); err == nil {
+		t.Fatal("expected legacy event source error")
+	}
+
+	events := struct {
+		factory.Service
+		legacyEventService
+	}{Service: replacementFactory{}}
+	source, err := runtimebinding.LegacyEventSourceForService(events)
+	if err != nil || source == nil {
+		t.Fatalf("LegacyEventSourceForService = (%v, %v), want source", source, err)
+	}
+
+	combined := struct {
+		factory.Service
+		legacySnapshotService
+		legacyEventService
+	}{Service: replacementFactory{}}
+	snapshotProvider, eventSource, err := runtimebinding.LegacyInvocationSourcesForService(combined)
+	if err != nil || snapshotProvider == nil || eventSource == nil {
+		t.Fatalf("LegacyInvocationSourcesForService = (%v, %v, %v)", snapshotProvider, eventSource, err)
+	}
 }

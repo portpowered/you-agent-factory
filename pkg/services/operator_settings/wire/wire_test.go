@@ -9,18 +9,15 @@ import (
 	"time"
 
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	"github.com/portpowered/infinite-you/pkg/services/operator_settings/testproviders"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 )
 
 func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	t.Parallel()
 
-	providersRoot, err := providerswire.NewService()
-	if err != nil {
-		t.Fatalf("providerswire.NewService() = %v", err)
-	}
+	providersRoot := testproviders.StandardCatalog()
 
 	service, err := settingswire.NewService(
 		&stubFileSystem{},
@@ -46,10 +43,7 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 func TestNewServiceServesPublishedPeerBehavior(t *testing.T) {
 	t.Parallel()
 
-	providersRoot, err := providerswire.NewService()
-	if err != nil {
-		t.Fatalf("providerswire.NewService() = %v", err)
-	}
+	providersRoot := testproviders.StandardCatalog()
 
 	service, err := settingswire.NewService(
 		&stubFileSystem{},
@@ -189,10 +183,7 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 func TestNewServiceRejectsMissingRequiredPorts(t *testing.T) {
 	t.Parallel()
 
-	providersRoot, err := providerswire.NewService()
-	if err != nil {
-		t.Fatalf("providerswire.NewService() = %v", err)
-	}
+	providersRoot := testproviders.StandardCatalog()
 
 	tests := []struct {
 		name string
