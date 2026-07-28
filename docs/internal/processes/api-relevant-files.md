@@ -144,6 +144,12 @@ Use this map when changing the public REST contract.
   `pkg/transports/http` server composes injected service-owned adapters; HTTP-DEF
   proves fake-root parity at the adapter edge without importing Definitions
   internals.
+  pss-cln-def-fold-toplevel seals non-owner production imports of the transitional
+  `factory_definitions/service` compile shim to the documented Automations-leased
+  `pkg/wire` residual only; the repository-wide guard is
+  `pkg/services/factory_definitions/non_owner_service_import_boundary_test.go`,
+  with `pkg/services/factory_definitions/service` registered in
+  `cmd/pkgboundarycheck` converged service subpackage roots.
   CUT-DEF-RUN seals Factory Definitions production imports of Factory Runtime to
   the service root only (`pkg/services/factory_runtime`) for orchestration
   semantic-validation edges; the lease-wide guard is
