@@ -924,13 +924,18 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/bootstrap_portability/watcher_current_factory_activation_long_test.go",
+      "filePath": "tests/functional/bootstrap_portability/work_assertions_test.go",
       "target": "bootstrap_portability"
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/bootstrap_portability/work_assertions_test.go",
-      "target": "bootstrap_portability"
+      "filePath": "tests/functional/factory_runtime/doc.go",
+      "target": "factory_runtime"
+    },
+    {
+      "rule": "functional-test-missing-subsection",
+      "filePath": "tests/functional/factory_runtime/peer_import_boundary_test.go",
+      "target": "factory_runtime"
     },
     {
       "rule": "functional-test-missing-subsection",
@@ -1001,6 +1006,21 @@
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/guards_batch/resource_token_name_test.go",
       "target": "guards_batch"
+    },
+    {
+      "rule": "functional-test-missing-subsection",
+      "filePath": "tests/functional/provider_sessions/build_process_inert_test.go",
+      "target": "provider_sessions"
+    },
+    {
+      "rule": "functional-test-missing-subsection",
+      "filePath": "tests/functional/provider_sessions/doc.go",
+      "target": "provider_sessions"
+    },
+    {
+      "rule": "functional-test-missing-subsection",
+      "filePath": "tests/functional/provider_sessions/peer_import_boundary_test.go",
+      "target": "provider_sessions"
     },
     {
       "rule": "functional-test-missing-subsection",
@@ -1084,11 +1104,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/replay_contracts/canonical_topology_snapshot_projection_test.go",
-      "target": "replay_contracts"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/replay_contracts/doc.go",
       "target": "replay_contracts"
     },
@@ -1105,11 +1120,6 @@
     {
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/replay_contracts/replay_factory_only_serialization_smoke_long_test.go",
-      "target": "replay_contracts"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/replay_contracts/replay_legacy_unary_retirement_smoke_long_test.go",
       "target": "replay_contracts"
     },
     {
@@ -1155,11 +1165,6 @@
     {
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/replay_contracts/replay_work_dispatch_contract_smoke_long_test.go",
-      "target": "replay_contracts"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/replay_contracts/short_helpers_contract_test.go",
       "target": "replay_contracts"
     },
     {
@@ -1251,6 +1256,16 @@
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/smoke/service_pipeline_config_helpers_test.go",
       "target": "smoke"
+    },
+    {
+      "rule": "functional-test-missing-subsection",
+      "filePath": "tests/functional/work/doc.go",
+      "target": "work"
+    },
+    {
+      "rule": "functional-test-missing-subsection",
+      "filePath": "tests/functional/work/peer_import_boundary_test.go",
+      "target": "work"
     },
     {
       "rule": "functional-test-missing-subsection",
@@ -1404,8 +1419,23 @@
     },
     {
       "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/factory_definitions/transports/cli/validate_persist/validate_persist_test.go",
+      "target": "factory_definitions"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
       "filePath": "tests/functional/factory_definitions/transports/cli/yaml_parity/yaml_parity_test.go",
       "target": "factory_definitions"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/factory_runtime/orchestrators/petri/guards/doc.go",
+      "target": "factory_runtime"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go",
+      "target": "factory_runtime"
     },
     {
       "rule": "functional-test-unclassified-domain",
@@ -1420,6 +1450,31 @@
     {
       "rule": "functional-test-unclassified-domain",
       "filePath": "tests/functional/factory_runtime/orchestrators/petri/routing/multi_transition_test.go",
+      "target": "factory_runtime"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/factory_runtime/root_composition/build_process_inert_test.go",
+      "target": "factory_runtime"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/factory_runtime/root_composition/doc.go",
+      "target": "factory_runtime"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/factory_runtime/root_composition/lifecycle_activation_test.go",
+      "target": "factory_runtime"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/factory_runtime/root_composition/packaged_root_shape_test.go",
+      "target": "factory_runtime"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/factory_runtime/root_composition/workflow_orchestration_activation_test.go",
       "target": "factory_runtime"
     },
     {
@@ -1601,6 +1656,11 @@
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_definitions/named_paths.go",
       "target": "ValidateName"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_definitions/packages_contract.go",
+      "target": "CustomerVisibleFactoryName"
     },
     {
       "rule": "service-root-exported-function",
@@ -2034,7 +2094,12 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/recordings/live_recording_target.go",
+      "filePath": "pkg/services/recordings/contracts.go",
+      "target": "BuildFactoryWorldWorkstationRequestProjectionSlice"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/recordings/internal/services/recording_lifecycle/live_recording_target.go",
       "target": "NewLiveRecordingTargetPlanner"
     },
     {
@@ -2044,33 +2109,108 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/recordings/workstation_requests.go",
-      "target": "BuildFactoryWorldWorkstationRequestProjectionSlice"
+      "filePath": "pkg/services/recordings/portable_recording_build.go",
+      "target": "BuildPortableRecording"
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/arguments.go",
-      "target": "InvocationSignatureHash"
+      "filePath": "pkg/services/recordings/portable_recording_validate.go",
+      "target": "DecodePortableRecording"
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/arguments.go",
-      "target": "NamedArgumentInputsFromAnyMap"
+      "filePath": "pkg/services/recordings/portable_recording_validate.go",
+      "target": "ValidatePortableRecording"
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/arguments.go",
-      "target": "NormalizeArguments"
+      "filePath": "pkg/services/work/admission_contract.go",
+      "target": "NewContentPreparation"
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/arguments.go",
-      "target": "NormalizeInvocationValueMode"
+      "filePath": "pkg/services/work/admission_contract.go",
+      "target": "NewFactoryRequestBatchPreparation"
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/arguments.go",
-      "target": "RuntimeInvocationArguments"
+      "filePath": "pkg/services/work/admission_contract.go",
+      "target": "NewPayloadFileReader"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/work/admission_contract.go",
+      "target": "NewRequestFileLoader"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/work/admission_contract.go",
+      "target": "NewRequestPreparationService"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/work/admission_contract.go",
+      "target": "NewSingleWorkTargetPreparation"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/work/admission_contract.go",
+      "target": "NormalizeGeneratedSubmissionBatch"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/work/admission_contract.go",
+      "target": "NormalizeWorkRequest"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/work/admission_contract.go",
+      "target": "ParseCanonicalWorkRequestJSON"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/work/admission_contract.go",
+      "target": "ResolveWorkRequestCurrentChainingTraceID"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/work/admission_contract.go",
+      "target": "SubmitResultFromNormalized"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/work/admission_contract.go",
+      "target": "SubmitWorkName"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/work/admission_contract.go",
+      "target": "ValidateCanonicalWorkRequestJSON"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/work/admission_contract.go",
+      "target": "ValidateWorkRequestTraceFieldAliases"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/work/admission_contract.go",
+      "target": "ValidateWorkRequestTraceFields"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/work/admission_contract.go",
+      "target": "WorkRequestFromSubmitRequests"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/work/admission_contract.go",
+      "target": "WorkRequestRecordFromSubmitRequests"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/work/admission_contract.go",
+      "target": "WorkRequestSubmitResultFromNormalized"
     },
     {
       "rule": "service-root-exported-function",
@@ -2149,31 +2289,6 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/dependency_graph.go",
-      "target": "DeriveFromWorkRequest"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/dependency_graph_markdown.go",
-      "target": "RenderMarkdownMermaid"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/dependency_graph_mermaid.go",
-      "target": "RenderMermaidFlowchart"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/file_inputs.go",
-      "target": "NewPayloadFileReader"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/file_inputs.go",
-      "target": "NewRequestFileLoader"
-    },
-    {
-      "rule": "service-root-exported-function",
       "filePath": "pkg/services/work/input.go",
       "target": "ResolveAPITextInputContent"
     },
@@ -2184,53 +2299,123 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/invocation_input_preparation.go",
-      "target": "NewInvocationInputPreparation"
+      "filePath": "pkg/services/work/internal/services/content_materialization/url.go",
+      "target": "ContentURLAndFileConflictError"
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/invocation_policy_service.go",
-      "target": "NewInvocationPolicyService"
+      "filePath": "pkg/services/work/internal/services/content_materialization/url.go",
+      "target": "FilesystemPathToContentURL"
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/lineage.go",
-      "target": "CanonicalChainingTraceIDs"
+      "filePath": "pkg/services/work/internal/services/content_materialization/url.go",
+      "target": "ResolveDispatchContentURL"
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/lineage.go",
-      "target": "CurrentChainingTraceIDFromWorkItems"
+      "filePath": "pkg/services/work/internal/services/content_materialization/url.go",
+      "target": "ValidateContentURL"
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/lineage.go",
-      "target": "PreviousChainingTraceIDsFromWorkItems"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/primary_result.go",
+      "filePath": "pkg/services/work/invocation_return_policy_contract.go",
       "target": "ClassifyFailedInvocation"
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/primary_result.go",
+      "filePath": "pkg/services/work/invocation_return_policy_contract.go",
       "target": "ClassifyInvocationControlState"
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/primary_result.go",
+      "filePath": "pkg/services/work/invocation_return_policy_contract.go",
       "target": "ClassifyMissingPrimaryResult"
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/primary_result.go",
+      "filePath": "pkg/services/work/invocation_return_policy_contract.go",
       "target": "ClassifyMissingPrimaryResultWorkItem"
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/primary_result.go",
+      "filePath": "pkg/services/work/invocation_return_policy_contract.go",
+      "target": "InvocationSignatureHash"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/work/invocation_return_policy_contract.go",
+      "target": "NamedArgumentInputsFromAnyMap"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/work/invocation_return_policy_contract.go",
+      "target": "NewInvocationInputPreparation"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/work/invocation_return_policy_contract.go",
+      "target": "NewInvocationPolicyService"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/work/invocation_return_policy_contract.go",
+      "target": "NormalizeArguments"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/work/invocation_return_policy_contract.go",
+      "target": "NormalizeInvocationValueMode"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/work/invocation_return_policy_contract.go",
+      "target": "QualifyInvocationArgumentError"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/work/invocation_return_policy_contract.go",
       "target": "ResolvePrimaryResult"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/work/invocation_return_policy_contract.go",
+      "target": "RuntimeInvocationArguments"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/work/lineage_contract.go",
+      "target": "CanonicalChainingTraceIDs"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/work/lineage_contract.go",
+      "target": "CurrentChainingTraceIDFromWorkItems"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/work/lineage_contract.go",
+      "target": "DeriveFromWorkRequest"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/work/lineage_contract.go",
+      "target": "NewVisualizationOperation"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/work/lineage_contract.go",
+      "target": "PreviousChainingTraceIDsFromWorkItems"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/work/lineage_contract.go",
+      "target": "RenderMarkdownMermaid"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/work/lineage_contract.go",
+      "target": "RenderMermaidFlowchart"
     },
     {
       "rule": "service-root-exported-function",
@@ -2249,86 +2434,6 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/request_codec.go",
-      "target": "NewFactoryRequestBatchPreparation"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/request_codec.go",
-      "target": "ParseCanonicalWorkRequestJSON"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/request_codec.go",
-      "target": "ResolveWorkRequestCurrentChainingTraceID"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/request_codec.go",
-      "target": "ValidateCanonicalWorkRequestJSON"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/request_codec.go",
-      "target": "ValidateWorkRequestTraceFieldAliases"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/request_codec.go",
-      "target": "ValidateWorkRequestTraceFields"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/request_codec.go",
-      "target": "WorkRequestFromSubmitRequests"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/request_codec.go",
-      "target": "WorkRequestSubmitResultFromNormalized"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/request_normalize.go",
-      "target": "NewSingleWorkTargetPreparation"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/request_normalize.go",
-      "target": "NormalizeGeneratedSubmissionBatch"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/request_normalize.go",
-      "target": "NormalizeWorkRequest"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/request_normalize.go",
-      "target": "SubmitResultFromNormalized"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/request_normalize.go",
-      "target": "SubmitWorkName"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/request_normalize.go",
-      "target": "WorkRequestRecordFromSubmitRequests"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/request_preparation.go",
-      "target": "NewContentPreparation"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/request_preparation.go",
-      "target": "NewRequestPreparationService"
-    },
-    {
-      "rule": "service-root-exported-function",
       "filePath": "pkg/services/work/service_peer_bindings.go",
       "target": "AdmissionContentService"
     },
@@ -2336,11 +2441,6 @@
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/work/service_peer_bindings.go",
       "target": "MaterializationService"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/visualization.go",
-      "target": "NewVisualizationOperation"
     },
     {
       "rule": "service-root-exported-function",
@@ -2569,31 +2669,6 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/workers/services/inference/inference.go",
-      "target": "DirectInferenceWorkstationConfig"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/workers/services/inference/inference.go",
-      "target": "InferenceOperationUserMessage"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/workers/services/inference/inference.go",
-      "target": "MarshalWorkContentOutput"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/workers/services/inference/inference.go",
-      "target": "ResolveInferenceOperationBindings"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/workers/services/inference/inference.go",
-      "target": "WorkContentFromInferenceOutput"
-    },
-    {
-      "rule": "service-root-exported-function",
       "filePath": "pkg/services/workers/token_lineage.go",
       "target": "ChainingTraceDepthFromColors"
     },
@@ -2640,12 +2715,12 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/edges",
-      "target": "<none>"
+      "target": "\u003cnone\u003e"
     },
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/factory_definitions",
-      "target": "pkg/services/factory_definitions/activation_contract.go:DefinitionActivationGateway,pkg/services/factory_definitions/authored_layout_filesystem.go:AuthoredLayoutReaderFileSystem,pkg/services/factory_definitions/authored_layout_filesystem.go:AuthoredLayoutWriterFileSystem,pkg/services/factory_definitions/authored_layout_filesystem.go:InputInboxSentinelEnsurer,pkg/services/factory_definitions/config_file_operations.go:FactoryConfigPathSource,pkg/services/factory_definitions/decision_envelope_contract.go:DecisionEnvelopeService,pkg/services/factory_definitions/invocation_interpolation_contract.go:InvocationInterpolationService,pkg/services/factory_definitions/invocation_output_contract.go:InvocationOutputShapingService,pkg/services/factory_definitions/invocation_work_type_contract.go:InvocationWorkTypeService,pkg/services/factory_definitions/loading_effects.go:Clock,pkg/services/factory_definitions/loading_effects.go:LoadingFileSystem,pkg/services/factory_definitions/loading_effects.go:VersionFileSystem,pkg/services/factory_definitions/named_catalog_ports.go:NamedFactoryCatalogFileSystem,pkg/services/factory_definitions/named_path_ports.go:NamedPathFileSystem,pkg/services/factory_definitions/named_path_ports.go:NamedPathResolver,pkg/services/factory_definitions/packaged_installation.go:PackagedFactoryInstaller,pkg/services/factory_definitions/packaged_installation_ports.go:PackagedInstallationFileSystem,pkg/services/factory_definitions/packages_contract.go:PackagedGoalPromptFileSystem,pkg/services/factory_definitions/persistence_ports.go:DirectoryReplacementStore,pkg/services/factory_definitions/persistence_ports.go:PersistenceFileSystem,pkg/services/factory_definitions/portable_bundled_validation.go:PortableBundledFileInspection,pkg/services/factory_definitions/quorum_policy_contract.go:QuorumPolicyService,pkg/services/factory_definitions/replay_runtime.go:ReplayRuntimeConfig,pkg/services/factory_definitions/scaffold_contract.go:ScaffoldFileSystem,pkg/services/factory_definitions/scaffold_contract.go:ScaffoldOutput,pkg/services/factory_definitions/service_contract.go:Service,pkg/services/factory_definitions/service_contract.go:SessionHost,pkg/services/factory_definitions/tts_observability_contract.go:TTSObservabilityService,pkg/services/factory_definitions/work_propagation_contract.go:WorkPropagationPolicyService,pkg/services/factory_definitions/workstation_execution_contract.go:WorkstationExecutionPolicyService"
+      "target": "pkg/services/factory_definitions/activation_contract.go:DefinitionActivationGateway,pkg/services/factory_definitions/authored_layout_filesystem.go:AuthoredLayoutReaderFileSystem,pkg/services/factory_definitions/authored_layout_filesystem.go:AuthoredLayoutWriterFileSystem,pkg/services/factory_definitions/authored_layout_filesystem.go:InputInboxSentinelEnsurer,pkg/services/factory_definitions/config_file_operations.go:FactoryConfigPathSource,pkg/services/factory_definitions/decision_envelope_contract.go:DecisionEnvelopeService,pkg/services/factory_definitions/invocation_interpolation_contract.go:InvocationInterpolationService,pkg/services/factory_definitions/invocation_output_contract.go:InvocationOutputShapingService,pkg/services/factory_definitions/invocation_work_type_contract.go:InvocationWorkTypeService,pkg/services/factory_definitions/loading_effects.go:Clock,pkg/services/factory_definitions/loading_effects.go:LoadingFileSystem,pkg/services/factory_definitions/loading_effects.go:VersionFileSystem,pkg/services/factory_definitions/named_catalog_ports.go:NamedFactoryCatalogFileSystem,pkg/services/factory_definitions/named_path_ports.go:NamedPathFileSystem,pkg/services/factory_definitions/named_path_ports.go:NamedPathResolver,pkg/services/factory_definitions/packaged_installation.go:PackagedFactoryInstaller,pkg/services/factory_definitions/packaged_installation_ports.go:PackagedInstallationFileSystem,pkg/services/factory_definitions/packages_contract.go:PackagedGoalPromptFileSystem,pkg/services/factory_definitions/persistence_ports.go:DirectoryReplacementStore,pkg/services/factory_definitions/persistence_ports.go:PersistenceFileSystem,pkg/services/factory_definitions/portable_bundled_validation.go:PortableBundledFileInspection,pkg/services/factory_definitions/quorum_policy_contract.go:QuorumPolicyService,pkg/services/factory_definitions/replay_runtime.go:ReplayRuntimeConfig,pkg/services/factory_definitions/scaffold_contract.go:ScaffoldFileSystem,pkg/services/factory_definitions/scaffold_contract.go:ScaffoldOutput,pkg/services/factory_definitions/service_contract.go:Service,pkg/services/factory_definitions/service_contract.go:SessionHost,pkg/services/factory_definitions/tts_observability_contract.go:TTSObservabilityService,pkg/services/factory_definitions/validation_contract.go:ValidationOperations,pkg/services/factory_definitions/work_propagation_contract.go:WorkPropagationPolicyService,pkg/services/factory_definitions/workstation_execution_contract.go:WorkstationExecutionPolicyService"
     },
     {
       "rule": "service-root-interface-count",
@@ -2704,13 +2779,8 @@
     },
     {
       "rule": "service-root-interface-count",
-      "filePath": "pkg/services/provider_sessions",
-      "target": "pkg/services/provider_sessions/construction_ports.go:FileSystem,pkg/services/provider_sessions/contracts.go:Service"
-    },
-    {
-      "rule": "service-root-interface-count",
       "filePath": "pkg/services/recordings",
-      "target": "pkg/services/recordings/contracts.go:Clock,pkg/services/recordings/contracts.go:CompletionDeliveryPlanner,pkg/services/recordings/contracts.go:InitialStructureSource,pkg/services/recordings/contracts.go:Ledger,pkg/services/recordings/contracts.go:ProjectionService,pkg/services/recordings/contracts.go:ReplayHook,pkg/services/recordings/contracts.go:RuntimeEventLedger,pkg/services/recordings/contracts.go:RuntimeLedger,pkg/services/recordings/contracts.go:RuntimeRecorder,pkg/services/recordings/contracts.go:Service,pkg/services/recordings/contracts.go:WorkerEventRecorder,pkg/services/recordings/contracts.go:WorkstationRequestProjector,pkg/services/recordings/live_recording_target.go:LiveRecordingTargetPlanner,pkg/services/recordings/live_recording_target.go:RecordingClock"
+      "target": "pkg/services/recordings/contracts.go:Clock,pkg/services/recordings/contracts.go:CompletionDeliveryPlanner,pkg/services/recordings/contracts.go:InitialStructureSource,pkg/services/recordings/contracts.go:Ledger,pkg/services/recordings/contracts.go:LiveRecordingTargetPlanner,pkg/services/recordings/contracts.go:ProjectionService,pkg/services/recordings/contracts.go:RecordingClock,pkg/services/recordings/contracts.go:ReplayHook,pkg/services/recordings/contracts.go:RuntimeEventLedger,pkg/services/recordings/contracts.go:RuntimeLedger,pkg/services/recordings/contracts.go:RuntimeRecorder,pkg/services/recordings/contracts.go:Service,pkg/services/recordings/contracts.go:WorkerEventRecorder,pkg/services/recordings/contracts.go:WorkstationRequestProjector,pkg/services/recordings/portable_recording.go:PortableRecordingWriter,pkg/services/recordings/portable_recording.go:RecordingTemporaryFile"
     },
     {
       "rule": "service-root-interface-count",
@@ -2725,7 +2795,7 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/work",
-      "target": "pkg/services/work/content_contract.go:ContentHTTPDoer,pkg/services/work/content_contract.go:ContentMaterializer,pkg/services/work/content_contract.go:ContentTemporaryFile,pkg/services/work/content_staging_contract.go:ContentStagingClock,pkg/services/work/content_staging_contract.go:ContentStagingFileSystem,pkg/services/work/content_staging_contract.go:ContentStagingRandom,pkg/services/work/content_staging_contract.go:ContentStagingService,pkg/services/work/contracts.go:InvocationWorldStateProvider,pkg/services/work/file_inputs.go:FileSource,pkg/services/work/invocation_input_preparation.go:InvocationInputPreparation,pkg/services/work/read_contract.go:ListRequestPreparation,pkg/services/work/request_codec.go:FactoryRequestBatchPreparation,pkg/services/work/request_preparation.go:ContentPreparation,pkg/services/work/request_preparation.go:RequestPreparationService,pkg/services/work/service_contract.go:FileSubmissionService,pkg/services/work/service_contract.go:Runtime,pkg/services/work/service_contract.go:RuntimeResolver,pkg/services/work/service_contract.go:Service,pkg/services/work/visualization.go:VisualizationFileSystem"
+      "target": "pkg/services/work/admission_contract.go:ContentPreparation,pkg/services/work/admission_contract.go:FactoryRequestBatchPreparation,pkg/services/work/admission_contract.go:FileSource,pkg/services/work/admission_contract.go:RequestPreparationService,pkg/services/work/content_contract.go:ContentHTTPDoer,pkg/services/work/content_contract.go:ContentMaterializer,pkg/services/work/content_contract.go:ContentTemporaryFile,pkg/services/work/content_staging_contract.go:ContentStagingClock,pkg/services/work/content_staging_contract.go:ContentStagingFileSystem,pkg/services/work/content_staging_contract.go:ContentStagingRandom,pkg/services/work/content_staging_contract.go:ContentStagingService,pkg/services/work/contracts.go:InvocationWorldStateProvider,pkg/services/work/invocation_return_policy_contract.go:InvocationInputPreparation,pkg/services/work/lineage_contract.go:VisualizationFileSystem,pkg/services/work/read_contract.go:ListRequestPreparation,pkg/services/work/service_contract.go:FileSubmissionService,pkg/services/work/service_contract.go:Runtime,pkg/services/work/service_contract.go:RuntimeResolver,pkg/services/work/service_contract.go:Service"
     },
     {
       "rule": "service-root-interface-count",
@@ -2745,17 +2815,17 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/workers/services/agents",
-      "target": "<none>"
+      "target": "\u003cnone\u003e"
     },
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/workers/services/inference",
-      "target": "<none>"
+      "target": "\u003cnone\u003e"
     },
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/workers/services/testing",
-      "target": "<none>"
+      "target": "\u003cnone\u003e"
     },
     {
       "rule": "service-root-missing-internal",
@@ -2824,6 +2894,21 @@
     },
     {
       "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/catalog/namedpaths",
+      "target": "pkg/services/factory_definitions/internal/services/catalog"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/catalog/persistence",
+      "target": "pkg/services/factory_definitions/internal/services/catalog"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/catalog/resource",
+      "target": "pkg/services/factory_definitions/internal/services/catalog"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_definitions/internal/services/compilation/canonical",
       "target": "pkg/services/factory_definitions/internal/services/compilation"
     },
@@ -2840,6 +2925,11 @@
     {
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_definitions/internal/services/compilation/runtimeconfig",
+      "target": "pkg/services/factory_definitions/internal/services/compilation"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/compilation/runtimetests",
       "target": "pkg/services/factory_definitions/internal/services/compilation"
     },
     {
@@ -2889,12 +2979,52 @@
     },
     {
       "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope",
+      "target": "pkg/services/factory_definitions/internal/services/invocation_policy"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/invocation_policy/invocationinterpolation",
+      "target": "pkg/services/factory_definitions/internal/services/invocation_policy"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/invocation_policy/invocationoutput",
+      "target": "pkg/services/factory_definitions/internal/services/invocation_policy"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/invocation_policy/invocationworktype",
+      "target": "pkg/services/factory_definitions/internal/services/invocation_policy"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/invocation_policy/quorumpolicy",
+      "target": "pkg/services/factory_definitions/internal/services/invocation_policy"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/invocation_policy/ttsobservability",
+      "target": "pkg/services/factory_definitions/internal/services/invocation_policy"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/invocation_policy/workpropagation",
+      "target": "pkg/services/factory_definitions/internal/services/invocation_policy"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution",
+      "target": "pkg/services/factory_definitions/internal/services/invocation_policy"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/capture",
       "target": "pkg/services/factory_definitions/internal/services/snapshots_portability"
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig",
+      "filePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/editable",
       "target": "pkg/services/factory_definitions/internal/services/snapshots_portability"
     },
     {
@@ -2911,6 +3041,21 @@
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/prepare",
       "target": "pkg/services/factory_definitions/internal/services/snapshots_portability"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/replayconfig",
+      "target": "pkg/services/factory_definitions/internal/services/snapshots_portability"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/validation/authoredmodel",
+      "target": "pkg/services/factory_definitions/internal/services/validation"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/validation/impl",
+      "target": "pkg/services/factory_definitions/internal/services/validation"
     },
     {
       "rule": "service-root-unexpected-directory",
@@ -3124,28 +3269,33 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/recordings/artifacts",
-      "target": "pkg/services/recordings"
+      "filePath": "pkg/services/recordings/internal/services/artifacts_export/artifacts",
+      "target": "pkg/services/recordings/internal/services/artifacts_export"
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/recordings/events",
-      "target": "pkg/services/recordings"
+      "filePath": "pkg/services/recordings/internal/services/canonical_ledger/events",
+      "target": "pkg/services/recordings/internal/services/canonical_ledger"
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/recordings/projections",
-      "target": "pkg/services/recordings"
+      "filePath": "pkg/services/recordings/internal/services/projection_query/projections",
+      "target": "pkg/services/recordings/internal/services/projection_query"
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/recordings/replay",
-      "target": "pkg/services/recordings"
+      "filePath": "pkg/services/recordings/internal/services/replay/replay",
+      "target": "pkg/services/recordings/internal/services/replay"
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/recordings/service",
-      "target": "pkg/services/recordings"
+      "filePath": "pkg/services/work/internal/services/state_access/lineagegraph",
+      "target": "pkg/services/work/internal/services/state_access"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/work/internal/services/state_access/stateaccessquery",
+      "target": "pkg/services/work/internal/services/state_access"
     },
     {
       "rule": "service-root-unexpected-directory",
@@ -3186,6 +3336,66 @@
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/workers/interface",
       "target": "pkg/services/workers"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/workers/internal/services/runners/agents",
+      "target": "pkg/services/workers/internal/services/runners"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/workers/internal/services/runners/inference",
+      "target": "pkg/services/workers/internal/services/runners"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/workers/internal/services/runners/process",
+      "target": "pkg/services/workers/internal/services/runners"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/workers/internal/services/runners/runner",
+      "target": "pkg/services/workers/internal/services/runners"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/workers/internal/services/runners/testing",
+      "target": "pkg/services/workers/internal/services/runners"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/workers/internal/services/runtime_assembly/construction",
+      "target": "pkg/services/workers/internal/services/runtime_assembly"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/workers/internal/services/workstations/execution",
+      "target": "pkg/services/workers/internal/services/workstations"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/workers/internal/services/workstations/executor",
+      "target": "pkg/services/workers/internal/services/workstations"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/workers/internal/services/workstations/invocation",
+      "target": "pkg/services/workers/internal/services/workstations"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/workers/internal/services/workstations/prompting",
+      "target": "pkg/services/workers/internal/services/workstations"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/workers/internal/services/workstations/skippermissions",
+      "target": "pkg/services/workers/internal/services/workstations"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/workers/internal/services/workstations/worktree",
+      "target": "pkg/services/workers/internal/services/workstations"
     },
     {
       "rule": "service-root-unexpected-directory",

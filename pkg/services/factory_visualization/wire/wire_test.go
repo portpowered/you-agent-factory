@@ -14,7 +14,7 @@ import (
 	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/testing/recordingsstub"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingsservice "github.com/portpowered/infinite-you/pkg/services/recordings/service"
+	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 )
 
 type wireSourceStub struct {
@@ -147,7 +147,7 @@ func TestNewRootAdaptsProjectionOnlyPeer(t *testing.T) {
 
 	root, err := factoryvisualizationwire.NewRoot(
 		wireSourceStub{},
-		recordingsservice.NewProjectionService(),
+		recordingswire.NewProjectionService(),
 		wireClock{},
 		factoryvisualization.SinkFunc(func(factoryvisualization.View) {}),
 		nil,

@@ -13,7 +13,9 @@ import (
 var recordingsThinRootContractFiles = []string{
 	"contracts.go",
 	"contracts_test.go",
+	"del_rec_proof_gate_test.go",
 	"metadata.go",
+	"packaged_root_shape_test.go",
 	"portable_recording.go",
 	"portable_recording_build.go",
 	"portable_recording_validate.go",

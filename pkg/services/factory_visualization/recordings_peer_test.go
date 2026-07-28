@@ -6,13 +6,13 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingsservice "github.com/portpowered/infinite-you/pkg/services/recordings/service"
+	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 )
 
 func TestRecordingsPeerFromProjectionServiceAdaptsLegacyProjectionPeer(t *testing.T) {
 	t.Parallel()
 
-	peer := recordingsservice.NewProjectionService()
+	peer := recordingswire.NewProjectionService()
 	service, err := factoryvisualization.RecordingsPeerFromProjectionService(peer)
 	if err != nil {
 		t.Fatalf("RecordingsPeerFromProjectionService: %v", err)
