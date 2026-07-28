@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
 // TestFailedCascadeCanBeRecoveredByPublicWorkMove proves a failed DEPENDS_ON
@@ -95,6 +96,8 @@ func TestFailedCascadeCanBeRecoveredByPublicWorkMove(t *testing.T) {
 	if !support.HasWorkAtCustomerState(listed, parentWorkID, support.WorkCustomerLocation("task", "complete")) {
 		t.Fatalf("work listing = %#v, want parent at task:complete", listed.Results)
 	}
+
+	functionalevidence.Covers(t, "rest/moveWorkBySessionId")
 }
 
 // TestTerminalFailedWorkCannotBeRedispatchedIllegally proves terminal failed work

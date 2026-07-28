@@ -34,20 +34,6 @@ func startRecoveryAPIServer(
 	})
 }
 
-func postMoveWorkExpectStatus(
-	t *testing.T,
-	baseURL, workID, stateName string,
-	wantStatus int,
-) (int, string) {
-	t.Helper()
-
-	status, body := postMoveWorkStatus(t, baseURL, workID, stateName)
-	if status != wantStatus {
-		t.Fatalf("POST /work/%s/move status = %d, want %d: %s", workID, status, wantStatus, body)
-	}
-	return status, body
-}
-
 func postMoveWorkStatus(t *testing.T, baseURL, workID, stateName string) (int, string) {
 	t.Helper()
 	return postMoveWorkStatusWithRequestID(t, baseURL, workID, stateName, "")
