@@ -88,6 +88,58 @@ var providerSessionsProductionPublicSurfacePackages = []string{
 	"github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http",
 }
 
+// providerSessionsRootBehaviorProofFiles are committed fold-target implementation
+// tests that exercise wire-constructed Details, Inspect, and Project on Codex- and
+// Cursor-backed reader fixtures for the published Service peer surface.
+var providerSessionsRootBehaviorProofFiles = []string{
+	"wire_behavioral_proof_test.go",
+	"details_providers_boundary_test.go",
+	"inspect_providers_boundary_test.go",
+	"project_providers_boundary_test.go",
+	"service_test.go",
+}
+
+// TestProviderSessionsRootBehaviorPreserved seals pss-cln-pses-legacy-packages-004:
+// focused wire-constructed behavioral proofs and Providers-root boundary tests
+// remain inventoried and the root-go inventory gate stays green so legacy-sibling
+// cleanup cannot silently drop Details/Inspect/Project observability coverage.
+func TestProviderSessionsRootBehaviorPreserved(t *testing.T) {
+	t.Parallel()
+
+	root := repositoryRoot(t)
+	if err := ownershipinventory.VerifyProviderSessionsRootGoInventory(root); err != nil {
+		t.Fatalf("VerifyProviderSessionsRootGoInventory() error = %v", err)
+	}
+
+	inventory, err := ownershipinventory.LoadProviderSessionsRootGoInventory(root)
+	if err != nil {
+		t.Fatalf("LoadProviderSessionsRootGoInventory() error = %v", err)
+	}
+
+	inventoried := make(map[string]ownershipinventory.ProviderSessionsRootGoFile, len(inventory.Files))
+	for _, file := range inventory.Files {
+		inventoried[file.File] = file
+	}
+
+	for _, name := range providerSessionsRootBehaviorProofFiles {
+		file, ok := inventoried[name]
+		if !ok {
+			t.Fatalf("root behavior proof file %q missing from committed root-go inventory", name)
+		}
+		if file.Classification != ownershipinventory.ProviderSessionsRootGoFoldTargetImplTest {
+			t.Fatalf(
+				"%s classification = %q, want %q",
+				name,
+				file.Classification,
+				ownershipinventory.ProviderSessionsRootGoFoldTargetImplTest,
+			)
+		}
+		if file.FoldDestination != "pkg/services/provider_sessions/internal" {
+			t.Fatalf("%s foldDestination = %q, want pkg/services/provider_sessions/internal", name, file.FoldDestination)
+		}
+	}
+}
+
 // TestProductionPackagesDoNotImportUnexpectedPublicSiblingsBeyondService seals
 // pss-cln-pses-legacy-packages-003: no production importer outside INV-recorded
 // private destinations may depend on an unexpected Provider Sessions public
