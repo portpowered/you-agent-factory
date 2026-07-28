@@ -824,3 +824,10 @@ Wave 0 functional-tests-expansion planning authority lives under
   root.BuildProcess inert-construction evidence for Automations hosted Linear
   polling. Assert zero `SubmissionRecorder` submissions after `support.BuildProcess`
   before runtime lifecycle starts, matching the cron inert-construction pattern.
+
+- `tests/functional/automations/script_poller_root_composition_test.go` owns
+  root.BuildProcess inert-construction and post-lifecycle admission evidence for
+  Automations script pollers. Assert zero `ScriptCommandRunner` invocations after
+  `support.BuildProcess` before runtime lifecycle starts, then replace only
+  `serviceedges.Edges.ScriptCommandRunner` on `support.StartFunctionalAPIServer`
+  and observe polled Work through the public Work listing path.
