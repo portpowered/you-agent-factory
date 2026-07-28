@@ -955,7 +955,8 @@ response-stream output.
 - Operator Settings transitional construction (ConfigDocument assembly,
   home-port defaults resolution, and resolution-service wiring) lives in
   `pkg/services/operator_settings/internal/construct`; `pkg/services/operator_settings/wire`
-  is the sole public construction bridge returning published peer surfaces.
+  is the sole public construction bridge returning published peer surfaces; root
+  `pkg/wire` constructs ConfigDocument through `operator_settings/wire` only.
   `servicewire` retains thin delegation entry points until DEL-SET deletes the path.
 - Operator Settings top-level directory inventory for INV-SET-TOPLEVEL lives in
   `docs/internal/projects/packaged-service-structure/operator-settings-top-level-inventory.json`
