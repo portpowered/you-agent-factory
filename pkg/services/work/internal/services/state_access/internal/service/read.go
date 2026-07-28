@@ -8,7 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	stateaccess "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access"
-	"github.com/portpowered/infinite-you/pkg/services/work/internal/stateaccessquery"
+	"github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/stateaccessquery"
 )
 
 func (s *Service) ListWork(

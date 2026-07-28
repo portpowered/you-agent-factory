@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/services/work/internal/stateaccessquery"
+	"github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/stateaccessquery"
 )
 
 func TestSelectFiltersStateTypeAndWorkTypeWithStableOrdering(t *testing.T) {

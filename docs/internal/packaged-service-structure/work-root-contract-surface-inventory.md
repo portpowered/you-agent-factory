@@ -53,34 +53,34 @@ fold or delete them.
 | `wire_behavioral_proof_test.go` | Thin committed root contract (keep) | Post-inventory wire behavioral proof exercising admission, content, state-access, and invocation observables through `work/wire`. |
 | `arguments.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 006 to `work/internal/invocationreturnpolicy`; argument vocabulary and delegators stay on `invocation_return_policy_contract.go`. |
 | `arguments_test.go` | Excess fold/consolidation debt | **Folded** with `arguments.go` to `work/internal/invocationreturnpolicy`. |
-| `dependency_graph.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 004 to `work/internal/lineagegraph`; thin lineage/graph/visualization vocabulary and delegators remain on `lineage_contract.go`. |
-| `dependency_graph_markdown.go` | Excess fold/consolidation debt | **Folded** with `dependency_graph.go` to `work/internal/lineagegraph`. |
-| `dependency_graph_markdown_test.go` | Excess fold/consolidation debt | **Folded** with `dependency_graph.go` to `work/internal/lineagegraph`. |
-| `dependency_graph_mermaid.go` | Excess fold/consolidation debt | **Folded** with `dependency_graph.go` to `work/internal/lineagegraph`. |
-| `dependency_graph_mermaid_test.go` | Excess fold/consolidation debt | **Folded** with `dependency_graph.go` to `work/internal/lineagegraph`. |
-| `dependency_graph_test.go` | Excess fold/consolidation debt | **Folded** with `dependency_graph.go` to `work/internal/lineagegraph`. |
+| `dependency_graph.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 004 to `work/internal/services/state_access/lineagegraph`; thin lineage/graph/visualization vocabulary and delegators remain on `lineage_contract.go`. |
+| `dependency_graph_markdown.go` | Excess fold/consolidation debt | **Folded** with `dependency_graph.go` to `work/internal/services/state_access/lineagegraph`. |
+| `dependency_graph_markdown_test.go` | Excess fold/consolidation debt | **Folded** with `dependency_graph.go` to `work/internal/services/state_access/lineagegraph`. |
+| `dependency_graph_mermaid.go` | Excess fold/consolidation debt | **Folded** with `dependency_graph.go` to `work/internal/services/state_access/lineagegraph`. |
+| `dependency_graph_mermaid_test.go` | Excess fold/consolidation debt | **Folded** with `dependency_graph.go` to `work/internal/services/state_access/lineagegraph`. |
+| `dependency_graph_test.go` | Excess fold/consolidation debt | **Folded** with `dependency_graph.go` to `work/internal/services/state_access/lineagegraph`. |
 | `file_inputs.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 005 to `work/internal/requestadmission`; thin file-loader delegators stay on `admission_contract.go`. |
 | `file_inputs_test.go` | Excess fold/consolidation debt | **Folded** with `file_inputs.go` to `work/internal/requestadmission`. |
 | `invocation_input_preparation.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 006 to `work/internal/invocationreturnpolicy`; `NewInvocationInputPreparation` delegator stays on `invocation_return_policy_contract.go`. |
 | `invocation_input_preparation_test.go` | Excess fold/consolidation debt | **Folded** with `invocation_input_preparation.go` to `work/internal/invocationreturnpolicy`. |
 | `invocation_policy_service.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 006 to `work/internal/invocationreturnpolicy`; `NewInvocationPolicyService` adapter stays on `invocation_return_policy_contract.go`. |
-| `lineage.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 004 to `work/internal/lineagegraph`; payload-lineage projection types and delegators remain on `lineage_contract.go`. |
-| `lineage_contract.go` | Thin committed root contract (keep) | Published lineage/graph/visualization vocabulary plus thin delegators to `work/internal/lineagegraph`. |
+| `lineage.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 004 to `work/internal/services/state_access/lineagegraph`; payload-lineage projection types and delegators remain on `lineage_contract.go`. |
+| `lineage_contract.go` | Thin committed root contract (keep) | Published lineage/graph/visualization vocabulary plus thin delegators to `work/internal/services/state_access/lineagegraph`. |
 | `primary_result.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 006 to `work/internal/invocationreturnpolicy`; `ResolvePrimaryResult` and classification delegators stay on `invocation_return_policy_contract.go`. |
 | `primary_result_regression_test.go` | Thin committed root contract (keep) | Regression fixtures for published `ResolvePrimaryResult`; retained at root after story 006 fold. |
 | `primary_result_test.go` | Thin committed root contract (keep) | Behavioral tests for published `ResolvePrimaryResult`; retained at root after story 006 fold. |
-| `query_list.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 003 to `work/internal/stateaccessquery`; thin list vocabulary and delegators remain on `read_contract.go`. |
-| `query_list_test.go` | Excess fold/consolidation debt | **Folded** with `query_list.go` to `work/internal/stateaccessquery`. |
-| `query_select.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 003 to `work/internal/stateaccessquery`; selection policy is private to state_access reads. |
-| `query_select_test.go` | Excess fold/consolidation debt | **Folded** with `query_select.go` to `work/internal/stateaccessquery`. |
+| `query_list.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 003 to `work/internal/services/state_access/stateaccessquery`; thin list vocabulary and delegators remain on `read_contract.go`. |
+| `query_list_test.go` | Excess fold/consolidation debt | **Folded** with `query_list.go` to `work/internal/services/state_access/stateaccessquery`. |
+| `query_select.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 003 to `work/internal/services/state_access/stateaccessquery`; selection policy is private to state_access reads. |
+| `query_select_test.go` | Excess fold/consolidation debt | **Folded** with `query_select.go` to `work/internal/services/state_access/stateaccessquery`. |
 | `request_codec.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 005 to `work/internal/requestadmission`; canonical JSON decode/preparation delegators stay on `admission_contract.go`. |
 | `request_normalize.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 005 to `work/internal/requestadmission`; `NormalizeWorkRequest` and related delegators stay on `admission_contract.go`. |
 | `request_normalize_test.go` | Excess fold/consolidation debt | **Folded** with `request_normalize.go` to `work/internal/requestadmission`. |
 | `request_preparation.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 005 to `work/internal/requestadmission`; `RequestPreparationService` delegators stay on `admission_contract.go`. |
 | `request_preparation_test.go` | Excess fold/consolidation debt | **Folded** with `request_preparation.go` to `work/internal/requestadmission`. |
 | `request_submit_test.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 005 to `work/internal/requestadmission`. |
-| `visualization.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 004 to `work/internal/lineagegraph`; `NewVisualizationOperation` stays on `lineage_contract.go` as a thin delegator. |
-| `visualization_test.go` | Excess fold/consolidation debt | **Folded** with `visualization.go` to `work/internal/lineagegraph`. |
+| `visualization.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 004 to `work/internal/services/state_access/lineagegraph`; `NewVisualizationOperation` stays on `lineage_contract.go` as a thin delegator. |
+| `visualization_test.go` | Excess fold/consolidation debt | **Folded** with `visualization.go` to `work/internal/services/state_access/lineagegraph`. |
 
 **Totals:** 30 root-level `.go` files — 30 thin committed root contract (keep), 0
 excess fold/consolidation debt.
@@ -92,13 +92,13 @@ CLN-WORK-CONTRACT-ROOTS story 002: staging contracts remain at
 vocabulary stays on `content_contract.go` as thin delegators.
 
 `state_access_query` folded in CLN-WORK-CONTRACT-ROOTS story 003: list/selection
-implementation lives under `work/internal/stateaccessquery`, and thin list
+implementation lives under `work/internal/services/state_access/stateaccessquery`, and thin list
 vocabulary plus `NormalizeList` / `NewListRequestPreparation` delegators stay
 on `read_contract.go`.
 
 `lineage_graph_modules` folded in CLN-WORK-CONTRACT-ROOTS story 004:
 lineage/graph/visualization implementation lives under
-`work/internal/lineagegraph`, and thin published vocabulary plus delegators stay
+`work/internal/services/state_access/lineagegraph`, and thin published vocabulary plus delegators stay
 on `lineage_contract.go`.
 
 `request_admission` folded in CLN-WORK-CONTRACT-ROOTS story 005:
