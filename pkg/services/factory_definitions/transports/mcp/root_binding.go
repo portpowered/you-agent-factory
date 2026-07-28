@@ -40,7 +40,25 @@ func resolveSubmittedDefinitionValidation(binding RootBinding) (factorydefinitio
 	return submittedDefinitionValidationFromRoot{binding.Definitions}, nil
 }
 
-var errValidationUnavailable = fmt.Errorf("factory definition validation is unavailable")
+func resolveInstallPackagedFactory(binding RootBinding) (factorydefinitions.InstallPackagedFactoryOperation, error) {
+	if binding.Install != nil {
+		return binding.Install, nil
+	}
+	if binding.Definitions == nil {
+		return nil, errInstallUnavailable
+	}
+	return func(
+		ctx context.Context,
+		request factorydefinitions.InstallPackagedFactoryRequest,
+	) (factorydefinitions.InstallPackagedFactoryResult, error) {
+		return binding.Definitions.InstallPackagedFactory(ctx, request)
+	}, nil
+}
+
+var (
+	errValidationUnavailable = fmt.Errorf("factory definition validation is unavailable")
+	errInstallUnavailable    = fmt.Errorf("packaged factory installation is unavailable")
+)
 
 type submittedDefinitionValidationFromRoot struct {
 	root DefinitionsRoot

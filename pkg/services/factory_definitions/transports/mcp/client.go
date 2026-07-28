@@ -28,9 +28,10 @@ func Bind(binding RootBinding) ToolOperation {
 type toolHandler func(context.Context, RootBinding, json.RawMessage) (json.RawMessage, error)
 
 var registeredToolHandlers = map[string]toolHandler{
-	ToolValidate:    callValidateTool,
-	ToolGetCurrent:  callGetCurrentTool,
-	ToolSaveCurrent: callSaveCurrentTool,
+	ToolValidate:        callValidateTool,
+	ToolGetCurrent:      callGetCurrentTool,
+	ToolSaveCurrent:     callSaveCurrentTool,
+	ToolInstallPackaged: callInstallPackagedTool,
 }
 
 // CallTool invokes one Factory Definition tool against explicitly supplied
@@ -94,4 +95,22 @@ func callSaveCurrentTool(
 		return json.Marshal(ToolResponse[factoryapi.Factory]{Error: &envelope})
 	}
 	return json.Marshal(SaveCurrent(ctx, binding.Definitions, request))
+}
+
+func callInstallPackagedTool(
+	ctx context.Context,
+	binding RootBinding,
+	input json.RawMessage,
+) (json.RawMessage, error) {
+	var request InstallPackagedInput
+	if err := json.Unmarshal(input, &request); err != nil {
+		envelope := decodeInputErrorEnvelope("decode install packaged input", err)
+		return json.Marshal(ToolResponse[InstallPackagedResult]{Error: &envelope})
+	}
+	install, err := resolveInstallPackagedFactory(binding)
+	if err != nil {
+		envelope := unavailableInstallErrorEnvelope()
+		return json.Marshal(ToolResponse[InstallPackagedResult]{Error: &envelope})
+	}
+	return json.Marshal(InstallPackaged(ctx, install, request))
 }

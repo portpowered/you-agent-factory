@@ -11,16 +11,22 @@ import (
 )
 
 const (
-	errorCodeBadRequest               = "BAD_REQUEST"
-	errorCodeInvalidFactory           = "INVALID_FACTORY"
-	errorCodeSessionNotFound          = "factory_definition.session.not_found"
-	errorCodeCurrentFactoryNotFound   = "factory_definition.current_factory.not_found"
-	errorCodeStaleFactoryVersion      = "STALE_FACTORY_VERSION"
-	errorCodeInternalCurrentFactory   = "factory_definition.current_factory.internal"
-	errorMessageSessionNotFound       = "factory session not found"
+	errorCodeBadRequest                 = "BAD_REQUEST"
+	errorCodeInvalidFactory             = "INVALID_FACTORY"
+	errorCodeSessionNotFound            = "factory_definition.session.not_found"
+	errorCodeCurrentFactoryNotFound     = "factory_definition.current_factory.not_found"
+	errorCodeStaleFactoryVersion        = "STALE_FACTORY_VERSION"
+	errorCodeInternalCurrentFactory     = "factory_definition.current_factory.internal"
+	errorCodeUnknownPackagedFactory     = "factory_definition.packaged.unknown_identity"
+	errorCodeFactoryAlreadyExists       = "FACTORY_ALREADY_EXISTS"
+	errorCodePackagedDistributeFailed   = "factory_definition.packaged.distribute_failed"
+	errorMessageSessionNotFound         = "factory session not found"
 	errorMessageCurrentFactoryNotFound  = "Current factory not found."
 	errorMessageStaleFactoryVersion     = "Current factory definition is stale. Refresh the graph before saving."
 	errorMessageInternalCurrentFactory  = "failed to load current factory"
+	errorMessageMissingPackageIdentity  = "package name is required"
+	errorMessageNamedFactoryExists      = "Named factory already exists."
+	errorMessagePackagedDistributeFailed = "factory distribute failed"
 	invalidFactoryDefinitionMessage   = "Factory payload is not a valid Agent Factory definition."
 	invalidRequestPayloadMessage      = "invalid request payload"
 )
@@ -190,6 +196,87 @@ func opaqueCurrentFactoryErrorEnvelope(action string) ToolErrorEnvelope {
 	return ToolErrorEnvelope{
 		Code:      errorCodeInternalCurrentFactory,
 		Message:   message,
+		Retryable: false,
+	}
+}
+
+func unavailableInstallErrorEnvelope() ToolErrorEnvelope {
+	return ToolErrorEnvelope{
+		Code:      "factory_definition.service.unavailable",
+		Message:   "packaged factory installation is unavailable",
+		Retryable: false,
+	}
+}
+
+func missingPackageIdentityErrorEnvelope() ToolErrorEnvelope {
+	return ToolErrorEnvelope{
+		Code:      errorCodeBadRequest,
+		Message:   errorMessageMissingPackageIdentity,
+		Retryable: false,
+	}
+}
+
+func installPackagedErrorEnvelope(err error) ToolErrorEnvelope {
+	if err == nil {
+		return opaqueInstallPackagedErrorEnvelope()
+	}
+	if envelope, ok := unknownPackagedFactoryErrorEnvelope(err); ok {
+		return envelope
+	}
+	if errors.Is(err, factorydefinitions.ErrIncompatibleFactoryDistributeOptions) {
+		return ToolErrorEnvelope{
+			Code:      errorCodeBadRequest,
+			Message:   err.Error(),
+			Retryable: false,
+		}
+	}
+	if errors.Is(err, factorydefinitions.ErrNamedFactoryAlreadyExists) {
+		return ToolErrorEnvelope{
+			Code:      errorCodeFactoryAlreadyExists,
+			Message:   errorMessageNamedFactoryExists,
+			Retryable: false,
+		}
+	}
+	if errors.Is(err, factorydefinitions.ErrFactoryDistributeFailed) {
+		return ToolErrorEnvelope{
+			Code:      errorCodePackagedDistributeFailed,
+			Message:   errorMessagePackagedDistributeFailed,
+			Retryable: false,
+		}
+	}
+	return opaqueInstallPackagedErrorEnvelope()
+}
+
+func unknownPackagedFactoryErrorEnvelope(err error) (ToolErrorEnvelope, bool) {
+	var unknown *factorydefinitions.UnknownPackagedFactoryError
+	if !errors.As(err, &unknown) && !errors.Is(err, factorydefinitions.ErrUnknownPackagedFactoryIdentity) {
+		return ToolErrorEnvelope{}, false
+	}
+	details := map[string]any{}
+	if unknown != nil {
+		if trimmed := strings.TrimSpace(unknown.Name); trimmed != "" {
+			details["package"] = trimmed
+		}
+		if len(unknown.Available) > 0 {
+			details["available"] = append([]string(nil), unknown.Available...)
+		}
+	}
+	message := factorydefinitions.ErrUnknownPackagedFactoryIdentity.Error()
+	if unknown != nil && unknown.Error() != "" {
+		message = unknown.Error()
+	}
+	return ToolErrorEnvelope{
+		Code:      errorCodeUnknownPackagedFactory,
+		Message:   message,
+		Retryable: false,
+		Details:   details,
+	}, true
+}
+
+func opaqueInstallPackagedErrorEnvelope() ToolErrorEnvelope {
+	return ToolErrorEnvelope{
+		Code:      errorCodePackagedDistributeFailed,
+		Message:   errorMessagePackagedDistributeFailed,
 		Retryable: false,
 	}
 }
