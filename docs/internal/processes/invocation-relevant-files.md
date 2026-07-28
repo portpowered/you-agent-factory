@@ -2018,6 +2018,16 @@ response-stream output.
   empty-input and unresolved-primary-result failures. Reuse
   `scaffoldPackagedGoalInvocationFactoryForSmoke`, `buildYouCLIBinary`, and
   `support.StartFunctionalAPIServer` when extending parity coverage.
+- Packaged `@you/goal` CLI-started run inspectability through the public API
+  lives in `tests/functional/factory/packaged/cross/package_cli_api_test.go`
+  (`TestPackagedFactoryInvokedByCLICanBeInspectedByAPI`). Drive the built CLI
+  through `you run --with-server --json` on a `support.NewProcessAPIServer`
+  harness, poll `GET /factory-sessions/~default`, `GET /status`, and
+  `GET /factory-sessions/~default/work` while the run-scoped server is live,
+  and compare the returned session/status facts with the CLI `InvocationResponse`
+  identity and primary-result fields. Do not use `support.WaitForTerminalStatus`
+  for packaged goal one-shot invocations because `/status` categories may stay
+  empty after completion.
 - Final `@you/goal` decision-routing smoke coverage lives in
   `tests/functional/smoke/cli_named_goal_routing_smoke_test.go`, exercising
   named-factory CLI `--json` outcomes for accepted, blocked, needs-human, and
