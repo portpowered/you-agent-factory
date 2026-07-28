@@ -23,6 +23,7 @@ type EffectiveCatalogService = factorydefinitionsinternal.EffectiveCatalogServic
 // New constructs the public Factory Definitions service.
 func New(
 	sessionHost factorydefinitions.SessionHost,
+	activationGateway factorydefinitions.DefinitionActivationGateway,
 	clock factorydefinitions.Clock,
 	versionFileSystem factorydefinitions.VersionFileSystem,
 	validator factorydefinitions.Validator,
@@ -45,6 +46,7 @@ func New(
 ) factorydefinitions.Service {
 	return factorydefinitionsinternal.New(
 		sessionHost,
+		activationGateway,
 		clock,
 		versionFileSystem,
 		validator,
@@ -72,6 +74,7 @@ func New(
 // authoring slice.
 func NewWithAuthoringLayout(
 	sessionHost factorydefinitions.SessionHost,
+	activationGateway factorydefinitions.DefinitionActivationGateway,
 	clock factorydefinitions.Clock,
 	versionFileSystem factorydefinitions.VersionFileSystem,
 	validator factorydefinitions.Validator,
@@ -95,6 +98,7 @@ func NewWithAuthoringLayout(
 ) factorydefinitions.Service {
 	return factorydefinitionsinternal.NewWithAuthoringLayout(
 		sessionHost,
+		activationGateway,
 		clock,
 		versionFileSystem,
 		validator,

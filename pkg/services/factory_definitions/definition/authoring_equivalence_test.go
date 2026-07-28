@@ -81,6 +81,7 @@ func newRootAuthoringServiceForPeer(t *testing.T) factoryroot.Service {
 
 	return factorydefinition.NewWithCatalogPackagesValidationInstallationAndAuthoring(
 		nil,
+		factorydefinition.StubActivationGateway(),
 		catalogService,
 		nil,
 		authoringLayout,
@@ -548,6 +549,7 @@ func newRootAuthoringServiceWithCorruptingWriteForPeer(t *testing.T) factoryroot
 
 	return factorydefinition.NewWithCatalogPackagesValidationInstallationAndAuthoring(
 		nil,
+		factorydefinition.StubActivationGateway(),
 		catalogService,
 		nil,
 		authoringLayout,

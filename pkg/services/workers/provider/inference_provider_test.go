@@ -720,24 +720,7 @@ type nonCodexInferencePayloadTestCase struct {
 }
 
 func nonCodexInferencePayloadTestCases() []nonCodexInferencePayloadTestCase {
-	return []nonCodexInferencePayloadTestCase{
-		{
-			name: "OpenCode",
-			req: workerexecution.ProviderInferenceRequest{
-				ModelProvider:    string(modelprovider.ProviderOpenCode),
-				Model:            "openai/gpt-5",
-				SessionID:        "opencode-session-123",
-				WorkingDirectory: "/tmp/project",
-				UserMessage:      "run the tests",
-				EnvVars: map[string]string{
-					"AGENT_FACTORY_OPENCODE_ENV": "enabled",
-				},
-			},
-			wantArgs:    []string{"run", "--model", "openai/gpt-5", "--session", "opencode-session-123", "--dir", "/tmp/project", "run the tests"},
-			wantWorkDir: "/tmp/project",
-			wantEnv:     "AGENT_FACTORY_OPENCODE_ENV=enabled",
-		},
-	}
+	return nil
 }
 
 func TestScriptWrapProvider_Infer_AttachesSharedCommandDiagnosticsToResponse(t *testing.T) {

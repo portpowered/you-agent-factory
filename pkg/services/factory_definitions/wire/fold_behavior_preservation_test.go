@@ -373,6 +373,7 @@ func newWireFoldPreservationService(t *testing.T, options ...foldPreservationOpt
 
 	service, err := factorydefinitionswire.NewService(
 		stubSessionHost{},
+		wireStubActivationGateway{},
 		validator,
 		persistence,
 		loader,

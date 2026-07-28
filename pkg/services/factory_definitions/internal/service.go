@@ -18,6 +18,7 @@ import (
 // New constructs the public Factory Definitions service.
 func New(
 	sessionHost factoryroot.SessionHost,
+	activationGateway factoryroot.DefinitionActivationGateway,
 	clock factoryroot.Clock,
 	versionFileSystem factoryroot.VersionFileSystem,
 	validator factoryroot.Validator,
@@ -40,6 +41,7 @@ func New(
 ) factoryroot.Service {
 	return NewWithAuthoringLayout(
 		sessionHost,
+		activationGateway,
 		clock,
 		versionFileSystem,
 		validator,
@@ -68,6 +70,7 @@ func New(
 // authoring slice.
 func NewWithAuthoringLayout(
 	sessionHost factoryroot.SessionHost,
+	activationGateway factoryroot.DefinitionActivationGateway,
 	clock factoryroot.Clock,
 	versionFileSystem factoryroot.VersionFileSystem,
 	validator factoryroot.Validator,
@@ -89,7 +92,7 @@ func NewWithAuthoringLayout(
 	authoringLayout authoringlayout.Service,
 	options ...CompositionOption,
 ) factoryroot.Service {
-	if sessionHost == nil || clock == nil || versionFileSystem == nil ||
+	if sessionHost == nil || activationGateway == nil || clock == nil || versionFileSystem == nil ||
 		namedPaths == nil || namedFactoryCatalogFileSystem == nil ||
 		packagedCatalog.List == nil || packagedCatalog.Resolve == nil ||
 		packagedInstaller.Install == nil {
@@ -118,13 +121,8 @@ func NewWithAuthoringLayout(
 		namedPaths.ResolveExistingDir,
 		sessionHost.RequireSession, sessionHost.SessionRuntimeConfig,
 		sessionHost.SessionFactoryPersistRoot, sessionHost.ValidateEditableFactorySnapshot,
-		sessionHost.GetCurrentFactorySnapshotForSession, sessionHost.WithActivationLock,
-		sessionHost.RequireIdleRuntimeForSession, sessionHost.ActivateSessionEditableFactory,
+		sessionHost.GetCurrentFactorySnapshotForSession,
 		replaceFactoryLayout,
-		clock.Now,
-		sessionHost.RunSessionID, sessionHost.SessionForActivation,
-		sessionHost.NamedFactoryActivationPaths, sessionHost.RequireIdleBeforeNamedFactoryActivation,
-		sessionHost.SwapPersistedNamedFactoryRuntime,
 	)
 	if err != nil {
 		return nil
@@ -154,14 +152,13 @@ func NewWithAuthoringLayout(
 	if distributionService == nil {
 		return nil
 	}
-	definitions := factorydefinition.NewWithCatalogPackagesValidationDistributionAndAuthoring(
+	return factorydefinition.NewWithCatalogPackagesValidationDistributionAndAuthoring(
 		host,
+		activationGateway,
 		catalogService,
 		validationService,
 		authoringLayout,
 		distributionService,
 		versionFileSystem,
 	)
-	sessionHost.AttachFactoryDefinitions(definitions)
-	return definitions
 }

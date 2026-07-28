@@ -1,2 +1,0 @@
-{"type":"system","subtype":"init","session_id":"cursor-session-unterminated"}
-{"type":"assistant","timestamp_ms":7,"message":{"role":"assistant","content":[{"type":"text","text":"tail"}]},"session_id":"cursor-session-unterminated"}

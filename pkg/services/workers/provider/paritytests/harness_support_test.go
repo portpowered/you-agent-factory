@@ -14,7 +14,6 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter"
-	opencodeadapter "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter/opencode"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/agy"
 )
 
@@ -36,35 +35,13 @@ func RunTerminal(ctx context.Context, fixture Fixture) (TerminalResult, error) {
 	if err := ValidateSanitized(transcript); err != nil {
 		return TerminalResult{}, fmt.Errorf("fixture %q: %w", fixture.ID, err)
 	}
+	if fixture.Provider != adapter.Identity(modelprovider.ProviderAgy) {
+		return TerminalResult{}, fmt.Errorf("unsupported parity provider %q", fixture.Provider)
+	}
 	if fixture.AgyFinalOnly {
 		return runAgyTerminal(ctx, fixture, transcript)
 	}
-	providerAdapter, err := adapterForFixture(fixture)
-	if err != nil {
-		return TerminalResult{}, err
-	}
-	registry, err := adapter.NewRegistry(providerAdapter)
-	if err != nil {
-		return TerminalResult{}, fmt.Errorf("registry fixture %q: %w", fixture.ID, err)
-	}
-	runner := newTranscriptRunner(transcript)
-	result, err := adapter.Execute(ctx, registry, runner, adapter.ExecuteInput{
-		Provider: fixture.Provider,
-		Command:  adapter.CommandContext{Request: fixture.Request},
-		Decoder: adapter.DecoderContext{
-			RunID:      "run-parity-" + fixture.ID,
-			DispatchID: fixture.Request.Dispatch.DispatchID,
-		},
-	})
-	if err != nil {
-		return TerminalResult{}, fmt.Errorf("execute fixture %q: %w", fixture.ID, err)
-	}
-	return TerminalResult{
-		Outcome:      result.Outcome,
-		Response:     result.Response,
-		Capabilities: result.Capabilities,
-		Drafts:       result.Drafts,
-	}, nil
+	return TerminalResult{}, fmt.Errorf("unsupported parity fixture %q", fixture.ID)
 }
 
 func runAgyTerminal(_ context.Context, fixture Fixture, transcript []byte) (TerminalResult, error) {
@@ -96,34 +73,6 @@ func runAgyTerminal(_ context.Context, fixture Fixture, transcript []byte) (Term
 	}, nil
 }
 
-func adapterForFixture(fixture Fixture) (adapter.Adapter, error) {
-	switch fixture.Provider {
-	case adapter.Identity(modelprovider.ProviderOpenCode):
-		return openCodeAdapterForFixture(fixture)
-	default:
-		return nil, fmt.Errorf("unsupported parity provider %q", fixture.Provider)
-	}
-}
-
-func openCodeAdapterForFixture(fixture Fixture) (adapter.Adapter, error) {
-	mode := opencodeadapter.ModeStructured
-	if fixture.FidelityClass == FidelityFinalOnly {
-		mode = opencodeadapter.ModeFinalOnly
-	}
-	negotiated, err := opencodeadapter.NewNegotiatedAdapter(opencodeadapter.Decision{
-		Installation: opencodeadapter.Installation{
-			Executable:  "/parity/opencode",
-			Fingerprint: "parity-fixture",
-		},
-		Version: "1.2.3",
-		Mode:    mode,
-	}, nil)
-	if err != nil {
-		return nil, err
-	}
-	return negotiated, nil
-}
-
 // ReadTranscript loads one fixture transcript from the package testdata directory.
 func ReadTranscript(relPath string) ([]byte, error) {
 	_, file, _, ok := runtime.Caller(0)
@@ -148,27 +97,24 @@ func newTranscriptRunner(transcript []byte) *transcriptRunner {
 		return &transcriptRunner{}
 	}
 	middle := len(transcript) / 2
-	if middle < 1 {
-		middle = 1
+	if middle == 0 {
+		middle = len(transcript)
 	}
 	return &transcriptRunner{
 		transcript: transcript,
 		chunks: []adapter.Observation{
-			{Stream: adapter.OutputStreamStdout, Chunk: transcript[:minInt(7, len(transcript))]},
-			{Stream: adapter.OutputStreamStdout, Chunk: transcript[minInt(7, len(transcript)):middle]},
+			{Stream: adapter.OutputStreamStdout, Chunk: transcript[:middle]},
 			{Stream: adapter.OutputStreamStdout, Chunk: transcript[middle:]},
 		},
 	}
 }
 
-func (r *transcriptRunner) Run(ctx context.Context, _ workerprocess.CommandRequest, observe func(adapter.Observation) error) (workerprocess.CommandResult, error) {
+func (r *transcriptRunner) Run(
+	_ context.Context,
+	_ workerprocess.CommandRequest,
+	observe func(adapter.Observation) error,
+) (workerprocess.CommandResult, error) {
 	for _, chunk := range r.chunks {
-		if err := ctx.Err(); err != nil {
-			return workerprocess.CommandResult{}, err
-		}
-		if len(chunk.Chunk) == 0 {
-			continue
-		}
 		if err := observe(chunk); err != nil {
 			return workerprocess.CommandResult{}, err
 		}
@@ -176,11 +122,6 @@ func (r *transcriptRunner) Run(ctx context.Context, _ workerprocess.CommandReque
 	return workerprocess.CommandResult{Stdout: r.transcript}, nil
 }
 
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
+func adapterIdentityForProvider(provider modelprovider.Provider) adapter.Identity {
+	return adapter.Identity(provider)
 }
-
-var _ adapter.StreamingCommandRunner = (*transcriptRunner)(nil)

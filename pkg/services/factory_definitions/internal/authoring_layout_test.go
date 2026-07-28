@@ -62,7 +62,7 @@ var _ authoringlayout.Service = stubAuthoringLayout{}
 func TestAttachAuthoringLayout_DelegatesCTRDEFAuthoringSlice(t *testing.T) {
 	t.Parallel()
 
-	base := factorydefinition.New(nil)
+	base := factorydefinition.New(nil, factorydefinition.StubActivationGateway())
 	attached, err := factoryinternal.AttachAuthoringLayout(base, stubAuthoringLayout{})
 	if err != nil {
 		t.Fatalf("AttachAuthoringLayout: %v", err)
@@ -128,7 +128,7 @@ func TestAttachAuthoringLayout_RejectsMissingDependencies(t *testing.T) {
 		t.Fatal("AttachAuthoringLayout(nil service) expected error")
 	}
 	if _, err := factoryinternal.AttachAuthoringLayout(
-		factorydefinition.New(nil),
+		factorydefinition.New(nil, factorydefinition.StubActivationGateway()),
 		nil,
 	); err == nil {
 		t.Fatal("AttachAuthoringLayout(nil authoring) expected error")

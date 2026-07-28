@@ -9,6 +9,7 @@ import (
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 )
 
@@ -32,6 +33,24 @@ type DefinitionHostCallbacks struct {
 	NamedFactoryActivationPaths             func(*livesession.LiveSession) (string, string)
 	RequireIdleBeforeNamedFactoryActivation func(context.Context, string, *livesession.LiveSession) error
 	SwapPersistedNamedFactoryRuntime        func(context.Context, string, *livesession.LiveSession, string, string, string, string) error
+}
+
+// InstallFactoryDefinitions binds the wire-constructed Definitions service into
+// one session runtime. Runtime opening owns this one-way edge; Definitions
+// construction must not call back into Sessions through SessionHost.
+func InstallFactoryDefinitions(runtime roles.ApplicationRuntime, definitions interfaces.Service) error {
+	if runtime == nil {
+		return fmt.Errorf("session runtime is required")
+	}
+	if definitions == nil {
+		return fmt.Errorf("factory definitions service is required")
+	}
+	sessionRuntime, ok := runtime.(*SessionRuntime)
+	if !ok {
+		return fmt.Errorf("session runtime does not support Factory Definitions binding")
+	}
+	sessionRuntime.AttachFactoryDefinitionService(definitions)
+	return nil
 }
 
 // AttachFactoryDefinitionService installs the Wire-constructed definition
