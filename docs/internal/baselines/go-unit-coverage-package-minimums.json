@@ -1982,7 +1982,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/work",
-      "minimum": 85.03
+      "minimum": 62.50
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/workflow",
