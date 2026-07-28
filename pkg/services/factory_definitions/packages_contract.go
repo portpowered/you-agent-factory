@@ -1,6 +1,10 @@
 package factorydefinitions
 
-import contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
+import (
+	"strings"
+
+	contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
+)
 
 type PackagedDefinition = contracts.PackagedDefinition
 type PackagedFactoryFormat = contracts.PackagedFactoryFormat
@@ -25,3 +29,20 @@ const (
 	PackagedReviewExecuteWorkstationName = "execute-review-work"
 	PackagedReviewWorkstationName        = "review-review-work"
 )
+
+// CustomerVisibleFactoryName returns the customer-facing Factory identifier for
+// diagnostics when runtime configs use authored or generated short names.
+func CustomerVisibleFactoryName(cfg *FactoryConfig) string {
+	if cfg == nil {
+		return ""
+	}
+	name := strings.TrimSpace(cfg.Name)
+	if strings.HasPrefix(name, "@you/") {
+		return name
+	}
+	project := strings.TrimSpace(cfg.Project)
+	if strings.HasPrefix(project, "builtin-") {
+		return "@you/" + strings.TrimPrefix(project, "builtin-")
+	}
+	return name
+}

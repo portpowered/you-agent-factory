@@ -216,8 +216,6 @@
     "pkg/services/factory_runtime/runtime/buffers",
     "pkg/services/factory_runtime/runtimecontract",
     "pkg/services/factory_runtime/scheduler",
-    "pkg/services/factory_runtime/service",
-    "pkg/services/factory_runtime/service/host",
     "pkg/services/factory_runtime/state",
     "pkg/services/factory_runtime/state/validation",
     "pkg/services/factory_runtime/subsystems",
@@ -1274,8 +1272,8 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal",
-      "disposition": "retain",
-      "destination": "factory_runtime"
+      "disposition": "move",
+      "destination": "factory_runtime/internal"
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/factorystatus",
@@ -1284,8 +1282,8 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/host",
-      "disposition": "retain",
-      "destination": "factory_runtime"
+      "disposition": "move",
+      "destination": "factory_runtime/internal"
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/legacysnapshot",
@@ -1446,16 +1444,6 @@
       "packagePath": "pkg/services/factory_runtime/scheduler",
       "disposition": "move",
       "destination": "factory_runtime/internal/services/orchestration"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/service",
-      "disposition": "move",
-      "destination": "factory_runtime/internal"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/service/host",
-      "disposition": "move",
-      "destination": "factory_runtime/internal"
     },
     {
       "packagePath": "pkg/services/factory_runtime/state",
@@ -2094,8 +2082,8 @@
     },
     {
       "packagePath": "pkg/services/operator_settings/internal/construct",
-      "disposition": "retain",
-      "destination": "operator_settings"
+      "disposition": "move",
+      "destination": "operator_settings/internal"
     },
     {
       "packagePath": "pkg/services/operator_settings/internal/service",
@@ -2629,8 +2617,8 @@
     },
     {
       "packagePath": "pkg/services/workers/internal",
-      "disposition": "retain",
-      "destination": "workers"
+      "disposition": "move",
+      "destination": "workers/internal"
     },
     {
       "packagePath": "pkg/services/workers/internal/services/runners",
