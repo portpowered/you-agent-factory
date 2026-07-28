@@ -635,6 +635,31 @@ response-stream output.
   `io.Writer`, queue capacity, backpressure, or final-write ordering as their
   policy source of truth on that seam. Characterization proof:
   `TestRootContractInvariants_AllSlicesThroughSingularRoot`.
+- Factory Visualization production packages may import Factory Runtime only
+  through `pkg/services/factory_runtime`; nested Runtime implementation,
+  Petri, and legacy helper paths are forbidden. Inventory proof:
+  `pkg/services/factory_visualization/runtime_import_boundary_test.go`
+  (`TestProductionPackagesImportFactoryRuntimeRootOnly`).
+- Session-bound Visualization observation flows through
+  `pkg/services/factory_visualization/runtime_source.go`, which constructs
+  root `factory_runtime.ObserveRequest` values and calls `Service.Observe`
+  for snapshot facts while retaining migration-only `APIFactory` casts for
+  event subscription. Behavioral proof:
+  `pkg/services/factory_visualization/runtime_observation_boundary_test.go`
+  (`TestRuntimeObservationUsesRootServiceObserve`).
+- CLI visualization presentation maps dashboard header facts from
+  Visualization-owned `RuntimeObservation` fields through
+  `dashboard.SimpleDashboardHeader` instead of Petri-shaped
+  `RuntimeEngineStateSnapshot` aliases. The leased CLI transport package does
+  not import Factory Runtime. Proof:
+  `pkg/services/factory_visualization/transports/cli/presentation_runtime_snapshot_boundary_test.go`
+  (`TestPresentationSinkUsesVisualizationOwnedRuntimeFacts`).
+- CUT-VIS-RUN story 004 consumer-edge proofs exercise session-bound
+  activation, detached `Observe`, and snapshot-fact reads only through root
+  `Service.Observe`, fail closed without Petri snapshot helpers, and propagate
+  typed observe failures. Behavioral proof:
+  `pkg/services/factory_visualization/runtime_consumer_boundary_test.go`
+  (`TestVisualizationConsumerObservationExercisesRuntimeRoot`).
 - Shared ordered output serialization and final-once terminal write helpers
   (transport-shaped, non-authority):
   `pkg/services/factory_visualization/factory_event_stream.go`,

@@ -14,6 +14,7 @@ CLI manifests/generators, or provider registry/conductor surfaces.
 | `internal/psslease` | Decode/validate FND-10 contract; focused fixture tests |
 | `internal/ownershipinventory` | Builds/validates the PSS-F01 freeze using FND-10 mechanics |
 | `docs/temp/projects/packaged-service-structure/plan.md` | Source plan prose and Changed-Path Lease Matrix |
+| [`docs/temp/projects/packaged-service-structure/dec-run-rec-durability.md`](../../../temp/projects/packaged-service-structure/dec-run-rec-durability.md) | DEC-RUN-REC-DURABILITY — Runtime checkpoint vs Recordings history ownership |
 
 `docs/temp/**` remains local planner working state (gitignored). The committed
 ledger under this directory is the reviewable program-metadata source for

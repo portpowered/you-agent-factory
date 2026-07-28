@@ -96,6 +96,9 @@ func (o *SessionOwner) resolveObservation(
 	if classified, ok := work.ClassifyMissingPrimaryResult(selectionInput); ok {
 		return o.failedResult(sessionID, input, classified), true, nil
 	}
+	if classified, ok := work.ClassifyFailedInvocation(sessionID, selectionInput); ok {
+		return o.failedResult(sessionID, input, classified), true, nil
+	}
 	if _, exists := observation.WorldState.WorkRequestsByID[input.RequestID]; !exists || observation.ActiveWork {
 		return FactoryInvocationResult{}, false, nil
 	}

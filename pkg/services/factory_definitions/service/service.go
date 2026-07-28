@@ -37,6 +37,7 @@ func New(
 	packagedInstaller factoryroot.PackagedFactoryInstallationOperations,
 	requiredToolChecker factoryroot.RequiredToolChecker,
 	orchestratorValidator factoryroot.OrchestratorDefinitionValidator,
+	options ...CompositionOption,
 ) factoryroot.Service {
 	return NewWithAuthoringLayout(
 		sessionHost,
@@ -60,6 +61,7 @@ func New(
 		requiredToolChecker,
 		orchestratorValidator,
 		nil,
+		options...,
 	)
 }
 
@@ -88,6 +90,7 @@ func NewWithAuthoringLayout(
 	requiredToolChecker factoryroot.RequiredToolChecker,
 	orchestratorValidator factoryroot.OrchestratorDefinitionValidator,
 	authoringLayout authoringlayout.Service,
+	options ...CompositionOption,
 ) factoryroot.Service {
 	if sessionHost == nil || activationGateway == nil || clock == nil || versionFileSystem == nil ||
 		namedPaths == nil || namedFactoryCatalogFileSystem == nil ||
@@ -139,14 +142,23 @@ func NewWithAuthoringLayout(
 		RequiredToolChecker:   requiredToolChecker,
 		OrchestratorValidator: orchestratorValidator,
 	})
-	return factorydefinition.NewWithCatalogPackagesValidationInstallationAndAuthoring(
+	composition := applyCompositionOptions(options)
+	distributionService := factorydefinition.ComposeDistributionService(
+		packagedCatalog,
+		packagedInstaller,
+		composition.scaffoldInitializer,
+		composition.scaffoldFactoryNameResolver,
+	)
+	if distributionService == nil {
+		return nil
+	}
+	return factorydefinition.NewWithCatalogPackagesValidationDistributionAndAuthoring(
 		host,
 		activationGateway,
 		catalogService,
 		validationService,
 		authoringLayout,
-		packagedCatalog,
-		packagedInstaller,
+		distributionService,
 		versionFileSystem,
 	)
 }
