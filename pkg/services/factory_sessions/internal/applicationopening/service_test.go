@@ -146,6 +146,64 @@ func TestOpenApplicationResolvesThenOpensAndBindsExactInputs(t *testing.T) {
 	}
 }
 
+func TestOpenApplicationPrefersEdgeInjectedVisualizationSink(t *testing.T) {
+	t.Parallel()
+
+	type markerSink struct {
+		factoryvisualization.Sink
+	}
+	edge := &markerSink{Sink: factoryvisualization.SinkFunc(func(factoryvisualization.View) {})}
+	var boundSink factoryvisualization.Sink
+	service, err := New(
+		func(
+			context.Context,
+			*factorysessions.RuntimeOpeningRequest,
+			roles.ApplicationOpeningPorts,
+			*zap.Logger,
+		) (RuntimeInputs, error) {
+			return RuntimeInputs{
+				Request: &factorysessions.RuntimeOpeningRequest{},
+				Effects: runtimeopening.ExternalEffects{FactoryVisualizationSink: edge},
+				Logger:  zap.NewNop(),
+			}, nil
+		},
+		runtimeOpenerFunc(func(
+			context.Context,
+			*factorysessions.RuntimeOpeningRequest,
+			runtimeopening.ExternalEffects,
+			*zap.Logger,
+		) (roles.OpenedApplicationRuntime, error) {
+			return roles.OpenedApplicationRuntime{}, nil
+		}),
+		func(
+			_ roles.OpenedApplicationRuntime,
+			_ runtimeopening.ExternalEffects,
+			sink factoryvisualization.Sink,
+		) (factorysessions.BoundProcessComponents, error) {
+			boundSink = sink
+			return factorysessions.BoundProcessComponents{}, nil
+		},
+		func(roles.LifecyclePlanRequest) (lifecycle.Plan, error) {
+			return lifecycle.Plan{}, nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("New(): %v", err)
+	}
+
+	if _, err := service.OpenApplication(
+		context.Background(),
+		roles.ApplicationOpeningRequest{Runtime: &factorysessions.RuntimeOpeningRequest{}},
+		zap.NewNop(),
+		factoryvisualization.SinkFunc(func(factoryvisualization.View) {}),
+	); err != nil {
+		t.Fatalf("OpenApplication(): %v", err)
+	}
+	if boundSink != edge {
+		t.Fatal("adapter sink = default CLI sink, want edge-injected FactoryVisualizationSink")
+	}
+}
+
 func TestCompletionWaitsForRuntimeHostReadinessAndPublishesOnce(t *testing.T) {
 	var observerCalls, completionCalls atomic.Int32
 	ports, completion := gateCompletionOnRuntimeHost(

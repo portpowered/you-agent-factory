@@ -567,7 +567,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPIUpsertWorkRequestUsesCanonicalIdentity`.
   - `TestAPIUnknownWorkReturnsTypedNotFound`.
 
-- [ ] `tests/functional/work/submission/stage_and_submit_test.go`
+- [x] `tests/functional/work/submission/stage_and_submit_test.go`
   - `TestAPIStageAndSubmitFileCreatesExpectedWork`.
 
 - [x] `tests/functional/work/relationships/dependencies_test.go`
@@ -582,7 +582,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestRecordingsBackedWorkReadsMapRichWorldState`.
   - `TestRecordingsBackedWorkReadsSurfaceTypedProjectionFailures`.
 
-- [ ] `tests/functional/work/relationships/parent_child_test.go`
+- [x] `tests/functional/work/relationships/parent_child_test.go`
   - `TestParentChildLineageSurvivesDispatchAndReplay`.
   - `TestChildFailureProjectsToDocumentedParentView`.
 
@@ -708,6 +708,24 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestExportedFactoryCanBeImportedAndRun`.
   - `TestImportExportPreservesNestedDocsScriptsAndMetadata`.
   - `TestInvalidImportDoesNotReplaceCurrentFactory`.
+
+### Factory visualization
+
+- [x] `tests/functional/factory_visualization/activation_lifecycle_test.go`
+  - `TestVisualizationActivatesThroughPublicRootAfterLifecycle`.
+
+- [x] `tests/functional/factory_visualization/inert_construction_test.go`
+  - `TestVisualizationRemainsInertThroughRootBuildProcessConstruction`.
+
+- [x] `tests/functional/factory_visualization/observe_live_view_test.go`
+  - `TestVisualizationObserveThroughPublicRootAfterLifecycle`.
+
+- [x] `tests/functional/factory_visualization/peer_import_boundary_test.go`
+  - `TestFunctionalProofsImportOnlyPublishedVisualizationSurfaces`.
+  - `TestProductionPeersReachVisualizationThroughPublishedSurfacesOnly`.
+
+- [x] `tests/functional/factory_visualization/response_presentation_test.go`
+  - `TestVisualizationResponsePresentationThroughPublicRootAfterLifecycle`.
 
 ### Packaged factories
 
