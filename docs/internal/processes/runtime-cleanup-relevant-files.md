@@ -743,7 +743,13 @@ helpers that accept only `factoryroot.Service`, shared cross-path fixtures
 (`CrossPathValidAlphaFactoryJSON` / `CrossPathInvalidFactoryJSON`), distinct
 `ErrInvalidFactoryDefinitionPayload` vs `FactoryDefinitionValidationFailure`
 with CTR-DEF characterization codes, and effective success via alpha fixture
-plus required DEFAULT handling work type. Authoring slices similarly stay on the
+plus required DEFAULT handling work type. `definition/compile_equivalence_test.go`:
+owner-local `newRootCompileServiceForPeer` construction,
+`peerExerciseRootCompileSuccess` / `peerExerciseRootCompileTypedFailures`
+helpers that accept only `factoryroot.Service`, authored-directory vs canonical
+equivalence with merged worker/workstation facts, and distinct
+`ErrInvalidAuthoredFactorySource` vs `ErrUnresolvedDefinitionReference`.
+Authoring slices similarly stay on the
 singular `Service` with prepare/flatten/expand/create/replace request
 shapes that omit filesystem effects and mapping codecs; publish
 `ErrMalformedFactoryLayoutPayload` and `AtomicFactoryWriteFailure`
