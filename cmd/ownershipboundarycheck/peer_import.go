@@ -25,11 +25,8 @@ var approvedPeerServiceContractImports = map[string]struct{}{
 	"pkg/services/factory_sessions/internal/executionopening\x00github.com/portpowered/infinite-you/pkg/services/workers/agypty":                   {},
 	"pkg/services/factory_sessions/internal/runtimeopening\x00github.com/portpowered/infinite-you/pkg/services/workers/agypty":                     {},
 	"pkg/services/recordings\x00github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":                               {},
-	"pkg/services/recordings/replay\x00github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":                        {},
-	"pkg/services/recordings/artifacts\x00github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":                      {},
 	"pkg/services/recordings/internal/services/artifacts_export/artifacts\x00github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract": {},
 	"pkg/services/recordings/internal/services/replay/replay\x00github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract": {},
-	"pkg/services/recordings/service\x00github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":                       {},
 }
 
 func isApprovedPeerServiceContractImport(packagePath, importPath string) bool {

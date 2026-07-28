@@ -7,7 +7,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	recordingworkstation "github.com/portpowered/infinite-you/pkg/services/recordings/projections/workstation"
+	recordingworkstation "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/projections/workstation"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
