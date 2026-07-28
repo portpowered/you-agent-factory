@@ -607,6 +607,10 @@ Wave 0 functional-tests-expansion planning authority lives under
   unexpected outputs with the regeneration remedy, and runs through
   `make packaged-factory-catalog-check` in the default lint aggregation.
   PSS-F01 ownership freeze gating lives in `internal/ownershipinventory`:
+  per-owner `*_mapping.go` helpers mirror `cmd/packagetargetmanifestcheck`
+  `nestedOwnerMoveRules` (Recordings, Factory Definitions, Factory Runtime,
+  Workers, Work, and Operator Settings) and emit move rows with concrete
+  `successor` paths rather than prefix-retaining transitional public siblings.
   `make ownership-inventory-check` runs `VerifyFreeze` against
   `docs/internal/baselines/ownership-inventory.json` and
   `docs/internal/projects/packaged-service-structure/ownership-path-lease-freeze.json`,

@@ -27,11 +27,23 @@ func MapPackage(packagePath string) (PackageRow, error) {
 	case strings.HasPrefix(packagePath, "pkg/services/factory_sessions"):
 		return retainRow(packagePath, "factory_sessions", DestinationKindOwner), nil
 	case strings.HasPrefix(packagePath, "pkg/services/factory_runtime"):
-		return retainRow(packagePath, "factory_runtime", DestinationKindOwner), nil
+		row, ok := factoryRuntimeMapping(packagePath)
+		if !ok {
+			return PackageRow{}, fmt.Errorf("no committed destination for %s", packagePath)
+		}
+		return row, nil
 	case strings.HasPrefix(packagePath, "pkg/services/work/") || packagePath == "pkg/services/work":
-		return retainRow(packagePath, "work", DestinationKindOwner), nil
+		row, ok := workMapping(packagePath)
+		if !ok {
+			return PackageRow{}, fmt.Errorf("no committed destination for %s", packagePath)
+		}
+		return row, nil
 	case strings.HasPrefix(packagePath, "pkg/services/workers"):
-		return retainRow(packagePath, "workers", DestinationKindOwner), nil
+		row, ok := workersMapping(packagePath)
+		if !ok {
+			return PackageRow{}, fmt.Errorf("no committed destination for %s", packagePath)
+		}
+		return row, nil
 	case strings.HasPrefix(packagePath, "pkg/services/providers"):
 		return retainRow(packagePath, "providers", DestinationKindOwner), nil
 	case strings.HasPrefix(packagePath, "pkg/services/provider_sessions"):
@@ -49,7 +61,11 @@ func MapPackage(packagePath string) (PackageRow, error) {
 	case strings.HasPrefix(packagePath, "pkg/services/factory_visualization"):
 		return retainRow(packagePath, "factory_visualization", DestinationKindOwner), nil
 	case strings.HasPrefix(packagePath, "pkg/services/operator_settings"):
-		return retainRow(packagePath, "operator_settings", DestinationKindOwner), nil
+		row, ok := operatorSettingsMapping(packagePath)
+		if !ok {
+			return PackageRow{}, fmt.Errorf("no committed destination for %s", packagePath)
+		}
+		return row, nil
 	case strings.HasPrefix(packagePath, "pkg/services/system_initialization"):
 		return retainRow(packagePath, "system_initialization", DestinationKindOwner), nil
 	case strings.HasPrefix(packagePath, "pkg/initializer"):

@@ -42,6 +42,8 @@ var factoryDefinitionsMoveRules = []factoryDefinitionsMoveRule{
 	{exact: "runtimeconfig", prefix: "runtimeconfig/"},
 	{exact: "replayconfig", prefix: "replayconfig/"},
 	{exact: "workers", prefix: "workers/"},
+	{exact: "clonetests", prefix: "clonetests/"},
+	{exact: "systeminitializationtests", prefix: "systeminitializationtests/"},
 	{prefix: "internal/testcomposition"},
 }
 
