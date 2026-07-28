@@ -55,6 +55,12 @@ func (service *compositionService) canInvokeThroughOwned(cfg InvokeConfig) bool 
 	if strings.TrimSpace(cfg.Server) != "" {
 		return false
 	}
+	// Owned invoke currently supports JSON metadata only. Audio export still
+	// routes through the bootstrap-owned factory invocation path until the
+	// scoped inference runtime streams artifacts for AUDIO_STREAM.
+	if !cfg.JSON {
+		return false
+	}
 	root, ok := service.owned.(*rootService)
 	return ok && root != nil && root.openInvokeScope != nil
 }

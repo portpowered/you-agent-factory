@@ -34,13 +34,27 @@ func (stub functionalModelsRoot) CloseRuntimeScope(context.Context, modelinferen
 	return modelinference.CloseRuntimeScopeResult{}, modelinference.ErrUnsupportedOperation
 }
 
-func (stub functionalModelsRoot) ListCatalog(context.Context, modelinference.ListModelsRequest) (modelinference.ListModelsResult, error) {
+func (stub functionalModelsRoot) ListCatalog(ctx context.Context, request modelinference.ListModelsRequest) (modelinference.ListModelsResult, error) {
+	if stub.listModels != nil {
+		list, err := stub.listModels(ctx)
+		if err != nil {
+			return modelinference.ListModelsResult{}, err
+		}
+		return modelinference.ListModelsResult{Models: list.Results}, nil
+	}
 	return modelinference.ListModelsResult{}, modelinference.ErrUnsupportedOperation
 }
 
 func (stub functionalModelsRoot) GetCatalogModel(ctx context.Context, request modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
 	if stub.getCatalogModel != nil {
 		return stub.getCatalogModel(ctx, request)
+	}
+	if stub.getModel != nil {
+		detail, err := stub.getModel(ctx, request.Name)
+		if err != nil {
+			return modelinference.GetModelResult{}, err
+		}
+		return modelinference.GetModelResult{Model: detail}, nil
 	}
 	return modelinference.GetModelResult{}, modelinference.ErrUnsupportedOperation
 }
@@ -49,7 +63,10 @@ func (stub functionalModelsRoot) GetModelReadiness(context.Context, modelinferen
 	return modelinference.GetModelReadinessResult{}, modelinference.ErrUnsupportedOperation
 }
 
-func (stub functionalModelsRoot) PullModelForScope(context.Context, modelinference.PullModelRequest) (modelinference.PullResult, error) {
+func (stub functionalModelsRoot) PullModelForScope(ctx context.Context, request modelinference.PullModelRequest) (modelinference.PullResult, error) {
+	if stub.pullModel != nil {
+		return stub.pullModel(ctx, request.Name)
+	}
 	return modelinference.PullResult{}, modelinference.ErrUnsupportedOperation
 }
 
@@ -182,6 +199,16 @@ func (inv functionalCompositionInvocation) CompositionModelsRoot() modelinferenc
 	return inv.root
 }
 
+func (inv functionalCompositionInvocation) CompositionOpenCatalogScope(
+	context.Context,
+) (modelscli.InvokeRuntimeScope, error) {
+	scope, err := (modelinference.RuntimeScopeRef{}).Parse("functional-coverage:test-scope")
+	if err != nil {
+		return modelscli.InvokeRuntimeScope{}, err
+	}
+	return modelscli.InvokeRuntimeScope{Scope: scope}, nil
+}
+
 func (inv functionalCompositionInvocation) CompositionOpenInvokeScope(
 	ctx context.Context,
 	_ modelscli.InvokeConfig,
@@ -195,14 +222,18 @@ func (inv functionalCompositionInvocation) CompositionOpenInvokeScope(
 
 func functionalOwnedService(t *testing.T, root functionalModelsRoot) modelscli.Service {
 	t.Helper()
+	openScope := func(context.Context) (modelscli.InvokeRuntimeScope, error) {
+		scope, err := (modelinference.RuntimeScopeRef{}).Parse("functional-coverage:test-scope")
+		if err != nil {
+			return modelscli.InvokeRuntimeScope{}, err
+		}
+		return modelscli.InvokeRuntimeScope{Scope: scope}, nil
+	}
 	service := modelscli.BindService(modelscli.Config{
-		Models: root,
+		Models:           root,
+		OpenCatalogScope: openScope,
 		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
-			scope, err := (modelinference.RuntimeScopeRef{}).Parse("functional-coverage:test-scope")
-			if err != nil {
-				return modelscli.InvokeRuntimeScope{}, err
-			}
-			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
+			return openScope(context.Background())
 		},
 	})
 	if service == nil {

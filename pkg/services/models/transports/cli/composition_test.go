@@ -42,11 +42,25 @@ func (stub compositionModelsRoot) CloseRuntimeScope(context.Context, modelinfere
 	return modelinference.CloseRuntimeScopeResult{}, modelinference.ErrUnsupportedOperation
 }
 
-func (stub compositionModelsRoot) ListCatalog(context.Context, modelinference.ListModelsRequest) (modelinference.ListModelsResult, error) {
+func (stub compositionModelsRoot) ListCatalog(ctx context.Context, request modelinference.ListModelsRequest) (modelinference.ListModelsResult, error) {
+	if stub.listModels != nil {
+		list, err := stub.listModels(ctx)
+		if err != nil {
+			return modelinference.ListModelsResult{}, err
+		}
+		return modelinference.ListModelsResult{Models: list.Results}, nil
+	}
 	return modelinference.ListModelsResult{}, modelinference.ErrUnsupportedOperation
 }
 
-func (stub compositionModelsRoot) GetCatalogModel(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+func (stub compositionModelsRoot) GetCatalogModel(ctx context.Context, request modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+	if stub.getModel != nil {
+		detail, err := stub.getModel(ctx, request.Name)
+		if err != nil {
+			return modelinference.GetModelResult{}, err
+		}
+		return modelinference.GetModelResult{Model: detail}, nil
+	}
 	return modelinference.GetModelResult{}, modelinference.ErrUnsupportedOperation
 }
 
@@ -54,7 +68,10 @@ func (stub compositionModelsRoot) GetModelReadiness(context.Context, modelinfere
 	return modelinference.GetModelReadinessResult{}, modelinference.ErrUnsupportedOperation
 }
 
-func (stub compositionModelsRoot) PullModelForScope(context.Context, modelinference.PullModelRequest) (modelinference.PullResult, error) {
+func (stub compositionModelsRoot) PullModelForScope(ctx context.Context, request modelinference.PullModelRequest) (modelinference.PullResult, error) {
+	if stub.pullModel != nil {
+		return stub.pullModel(ctx, request.Name)
+	}
 	return modelinference.PullResult{}, modelinference.ErrUnsupportedOperation
 }
 
@@ -169,6 +186,18 @@ func (inv compositionInvocation) CompositionModelsRoot() modelinference.Service 
 	return inv.root
 }
 
+func compositionCatalogScope() (modelscli.InvokeRuntimeScope, error) {
+	scope, err := (modelinference.RuntimeScopeRef{}).Parse("composition-test:catalog-scope")
+	if err != nil {
+		return modelscli.InvokeRuntimeScope{}, err
+	}
+	return modelscli.InvokeRuntimeScope{Scope: scope}, nil
+}
+
+func (inv compositionInvocation) CompositionOpenCatalogScope(context.Context) (modelscli.InvokeRuntimeScope, error) {
+	return compositionCatalogScope()
+}
+
 func (inv compositionInvocation) CompositionOpenInvokeScope(
 	ctx context.Context,
 	cfg modelscli.InvokeConfig,
@@ -190,6 +219,9 @@ func TestBindServiceDelegatesThroughAdapterService(t *testing.T) {
 					Results: []modelinference.Summary{{Name: "OMNIVOICE_Q4_K_M"}},
 				}, nil
 			},
+		},
+		OpenCatalogScope: func(context.Context) (modelscli.InvokeRuntimeScope, error) {
+			return compositionCatalogScope()
 		},
 	})
 	if service == nil {
@@ -214,8 +246,11 @@ func TestBindServiceMatchesNewServiceFacade(t *testing.T) {
 			return modelinference.Detail{}, modelinference.ErrNotFound
 		},
 	}
-	bound := modelscli.BindService(modelscli.Config{Models: root})
-	constructed := modelscli.NewService(modelscli.Config{Models: root})
+	openCatalog := func(context.Context) (modelscli.InvokeRuntimeScope, error) {
+		return compositionCatalogScope()
+	}
+	bound := modelscli.BindService(modelscli.Config{Models: root, OpenCatalogScope: openCatalog})
+	constructed := modelscli.NewService(modelscli.Config{Models: root, OpenCatalogScope: openCatalog})
 	if bound == nil || constructed == nil {
 		t.Fatal("BindService() or NewService() = nil, want Models CLI service")
 	}
@@ -328,6 +363,16 @@ func (inv factorySessionPresentationInvocation) ExportModelInvocationArtifact(st
 
 func (inv factorySessionPresentationInvocation) ModelsPresentationRoot() modelinference.Service {
 	return inv.root
+}
+
+func (inv factorySessionPresentationInvocation) OpenModelsCatalogScope(
+	ctx context.Context,
+) (factorysessions.ModelsPresentationScope, error) {
+	scope, err := (modelinference.RuntimeScopeRef{}).Parse("composition-test:catalog-scope")
+	if err != nil {
+		return factorysessions.ModelsPresentationScope{}, err
+	}
+	return factorysessions.ModelsPresentationScope{Scope: scope}, nil
 }
 
 func (inv factorySessionPresentationInvocation) OpenModelsPresentationScope(

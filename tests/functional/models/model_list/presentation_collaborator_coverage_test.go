@@ -31,7 +31,28 @@ func TestProcessModelsList_RoutesThroughPresentationCollaboratorWithoutServer(t 
 	}
 }
 
-// TestProcessModelsInspect_RoutesThroughPresentationCollaboratorWithoutServer proves
+// TestProcessModelsList_ReusesCatalogScopeAcrossCommands proves repeated local
+// models list commands reuse the process-scoped catalog scope opened by the
+// presentation collaborator.
+func TestProcessModelsList_ReusesCatalogScopeAcrossCommands(t *testing.T) {
+	t.Parallel()
+
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	for i := 0; i < 2; i++ {
+		inputs := support.FakeInputs(t.Context(), []string{"you", "--json", "models", "list"})
+		if err := process.Execute(inputs.Input); err != nil {
+			t.Fatalf("Process.Execute(local models list #%d) error = %v\nstderr=%s", i+1, err, inputs.Stderr())
+		}
+		var response factoryapi.ListModelsResponse
+		if err := json.Unmarshal([]byte(inputs.Stdout()), &response); err != nil {
+			t.Fatalf("decode local models list output #%d: %v\n%s", i+1, err, inputs.Stdout())
+		}
+		if response.Results == nil {
+			t.Fatalf("list response #%d = %#v, want results array", i+1, response)
+		}
+	}
+}
+
 // local models inspect uses the presentation collaborator-owned adapter path.
 func TestProcessModelsInspect_RoutesThroughPresentationCollaboratorWithoutServer(t *testing.T) {
 	t.Parallel()

@@ -58,10 +58,18 @@ func parityInvokeScope(t *testing.T) modelscli.InvokeRuntimeScope {
 	return modelscli.InvokeRuntimeScope{Scope: testRuntimeScope(t)}
 }
 
+func parityCatalogScopeOpener(t *testing.T) func(context.Context) (modelscli.InvokeRuntimeScope, error) {
+	t.Helper()
+	return func(context.Context) (modelscli.InvokeRuntimeScope, error) {
+		return parityInvokeScope(t), nil
+	}
+}
+
 func parityRootService(t *testing.T, root stubModelsRoot) modelscli.Service {
 	t.Helper()
 	service := modelscli.NewService(modelscli.Config{
 		Models: root,
+		OpenCatalogScope: parityCatalogScopeOpener(t),
 		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
 			return parityInvokeScope(t), nil
 		},

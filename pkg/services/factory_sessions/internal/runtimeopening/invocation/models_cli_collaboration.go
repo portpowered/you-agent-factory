@@ -13,26 +13,53 @@ func (o *operation) ModelsPresentationRoot() models.Service {
 	if o == nil || o.openRuntime == nil {
 		return nil
 	}
-	o.presentationMu.Lock()
-	defer o.presentationMu.Unlock()
-	if o.presentationRoot != nil {
-		return o.presentationRoot
+	return o.openRuntime.ModelsRoot()
+}
+
+func (o *operation) OpenModelsCatalogScope(
+	ctx context.Context,
+) (factorysessions.ModelsPresentationScope, error) {
+	if o == nil || o.openRuntime == nil {
+		return factorysessions.ModelsPresentationScope{}, errors.New("invocation operation is required")
+	}
+	o.catalogScopeMu.Lock()
+	defer o.catalogScopeMu.Unlock()
+	if !o.catalogScope.IsZero() {
+		return factorysessions.ModelsPresentationScope{
+			Scope: o.catalogScope,
+			Close: o.catalogScopeClose,
+		}, nil
 	}
 	root := o.openRuntime.ModelsRoot()
 	if root == nil {
-		return nil
+		return factorysessions.ModelsPresentationScope{}, errors.New("models presentation root is unavailable")
 	}
-	bound, err := root.ForRuntime(models.RuntimeBinding{
-		RuntimeConfig: func() *models.RuntimeConfig {
-			cfg := models.RuntimeConfig{}
-			return &cfg
-		},
+	opened, err := root.OpenRuntimeScope(ctx, models.OpenRuntimeScopeRequest{
+		Config: models.RuntimeScopeConfig{Runtime: models.RuntimeConfig{}},
 	})
 	if err != nil {
-		return root
+		return factorysessions.ModelsPresentationScope{}, err
 	}
-	o.presentationRoot = bound
-	return bound
+	scope := opened.Scope
+	closeFn := func(closeCtx context.Context) error {
+		closed, closeErr := root.CloseRuntimeScope(closeCtx, models.CloseRuntimeScopeRequest{Scope: scope})
+		if closeErr != nil {
+			return closeErr
+		}
+		if !closed.Closed {
+			return errors.New("close Models catalog scope: scope was not closed")
+		}
+		o.catalogScopeMu.Lock()
+		defer o.catalogScopeMu.Unlock()
+		if o.catalogScope == scope {
+			o.catalogScope = models.RuntimeScopeRef{}
+			o.catalogScopeClose = nil
+		}
+		return nil
+	}
+	o.catalogScope = scope
+	o.catalogScopeClose = closeFn
+	return factorysessions.ModelsPresentationScope{Scope: scope, Close: closeFn}, nil
 }
 
 func (o *operation) OpenModelsPresentationScope(

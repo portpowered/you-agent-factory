@@ -28,13 +28,27 @@ func (stub stubModelsRoot) CloseRuntimeScope(context.Context, modelinference.Clo
 	return modelinference.CloseRuntimeScopeResult{}, modelinference.ErrUnsupportedOperation
 }
 
-func (stub stubModelsRoot) ListCatalog(context.Context, modelinference.ListModelsRequest) (modelinference.ListModelsResult, error) {
+func (stub stubModelsRoot) ListCatalog(ctx context.Context, request modelinference.ListModelsRequest) (modelinference.ListModelsResult, error) {
+	if stub.listModels != nil {
+		list, err := stub.listModels(ctx)
+		if err != nil {
+			return modelinference.ListModelsResult{}, err
+		}
+		return modelinference.ListModelsResult{Models: list.Results}, nil
+	}
 	return modelinference.ListModelsResult{}, modelinference.ErrUnsupportedOperation
 }
 
 func (stub stubModelsRoot) GetCatalogModel(ctx context.Context, request modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
 	if stub.getCatalogModel != nil {
 		return stub.getCatalogModel(ctx, request)
+	}
+	if stub.getModel != nil {
+		detail, err := stub.getModel(ctx, request.Name)
+		if err != nil {
+			return modelinference.GetModelResult{}, err
+		}
+		return modelinference.GetModelResult{Model: detail}, nil
 	}
 	return modelinference.GetModelResult{}, modelinference.ErrUnsupportedOperation
 }
@@ -43,7 +57,10 @@ func (stub stubModelsRoot) GetModelReadiness(context.Context, modelinference.Get
 	return modelinference.GetModelReadinessResult{}, modelinference.ErrUnsupportedOperation
 }
 
-func (stub stubModelsRoot) PullModelForScope(context.Context, modelinference.PullModelRequest) (modelinference.PullResult, error) {
+func (stub stubModelsRoot) PullModelForScope(ctx context.Context, request modelinference.PullModelRequest) (modelinference.PullResult, error) {
+	if stub.pullModel != nil {
+		return stub.pullModel(ctx, request.Name)
+	}
 	return modelinference.PullResult{}, modelinference.ErrUnsupportedOperation
 }
 
@@ -149,6 +166,10 @@ func TestConstructedService_ListSuccessThroughModelsRoot(t *testing.T) {
 	t.Parallel()
 
 	var out bytes.Buffer
+	scope, err := (modelinference.RuntimeScopeRef{}).Parse("service-test:scope")
+	if err != nil {
+		t.Fatalf("parse runtime scope: %v", err)
+	}
 	service := modelscli.NewService(modelscli.Config{
 		Models: stubModelsRoot{
 			listModels: func(context.Context) (modelinference.List, error) {
@@ -162,6 +183,9 @@ func TestConstructedService_ListSuccessThroughModelsRoot(t *testing.T) {
 					}},
 				}, nil
 			},
+		},
+		OpenCatalogScope: func(context.Context) (modelscli.InvokeRuntimeScope, error) {
+			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
 		},
 	})
 	if service == nil {
@@ -186,6 +210,13 @@ func TestConstructedService_InspectMapsModelsRootNotFound(t *testing.T) {
 			getModel: func(context.Context, string) (modelinference.Detail, error) {
 				return modelinference.Detail{}, modelinference.ErrNotFound
 			},
+		},
+		OpenCatalogScope: func(context.Context) (modelscli.InvokeRuntimeScope, error) {
+			scope, parseErr := (modelinference.RuntimeScopeRef{}).Parse("service-test:scope")
+			if parseErr != nil {
+				return modelscli.InvokeRuntimeScope{}, parseErr
+			}
+			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
 		},
 	})
 	if service == nil {
@@ -212,6 +243,13 @@ func TestBindServiceDelegatesToNewService(t *testing.T) {
 			listModels: func(context.Context) (modelinference.List, error) {
 				return modelinference.List{}, nil
 			},
+		},
+		OpenCatalogScope: func(context.Context) (modelscli.InvokeRuntimeScope, error) {
+			scope, parseErr := (modelinference.RuntimeScopeRef{}).Parse("service-test:scope")
+			if parseErr != nil {
+				return modelscli.InvokeRuntimeScope{}, parseErr
+			}
+			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
 		},
 	})
 	if service == nil {

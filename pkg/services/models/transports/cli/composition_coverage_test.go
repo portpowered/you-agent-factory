@@ -224,6 +224,13 @@ func TestConstructedService_InspectMapsOperationSlots(t *testing.T) {
 				}, nil
 			},
 		},
+		OpenCatalogScope: func(context.Context) (modelscli.InvokeRuntimeScope, error) {
+			scope, err := (modelinference.RuntimeScopeRef{}).Parse("composition-coverage:catalog-scope")
+			if err != nil {
+				return modelscli.InvokeRuntimeScope{}, err
+			}
+			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
+		},
 	})
 	var out bytes.Buffer
 	if err := service.Inspect(modelscli.InspectConfig{

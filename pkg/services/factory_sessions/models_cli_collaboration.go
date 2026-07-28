@@ -13,6 +13,7 @@ import (
 // transport types.
 type ModelsCLIPresentationCollaborator interface {
 	ModelsPresentationRoot() models.Service
+	OpenModelsCatalogScope(context.Context) (ModelsPresentationScope, error)
 	OpenModelsPresentationScope(context.Context, ModelsPresentationScopeRequest) (ModelsPresentationScope, error)
 }
 

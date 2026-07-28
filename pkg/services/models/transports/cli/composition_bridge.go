@@ -16,6 +16,16 @@ func (inv compositionCollaboratorInvocation) CompositionModelsRoot() modelinfere
 	return inv.collaborator.ModelsPresentationRoot()
 }
 
+func (inv compositionCollaboratorInvocation) CompositionOpenCatalogScope(
+	ctx context.Context,
+) (InvokeRuntimeScope, error) {
+	opened, err := inv.collaborator.OpenModelsCatalogScope(ctx)
+	if err != nil {
+		return InvokeRuntimeScope{}, err
+	}
+	return InvokeRuntimeScope{Scope: opened.Scope, Close: opened.Close}, nil
+}
+
 func (inv compositionCollaboratorInvocation) CompositionOpenInvokeScope(
 	ctx context.Context,
 	cfg InvokeConfig,

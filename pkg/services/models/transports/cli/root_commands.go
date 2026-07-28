@@ -1,9 +1,12 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 )
 
 func (service *rootService) List(cfg ListConfig) error {
@@ -16,15 +19,17 @@ func (service *rootService) List(cfg ListConfig) error {
 	if strings.TrimSpace(cfg.Server) != "" {
 		return service.listRemote(cfg)
 	}
-	listed, err := service.models.ListModels(cfg.Context)
-	if err != nil {
-		return mapModelsRootError(err)
-	}
-	response := listToGenerated(listed)
-	if cfg.JSON {
-		return json.NewEncoder(cfg.Output).Encode(response)
-	}
-	return renderList(response, cfg.Output)
+	return service.withCatalogScope(cfg.Context, func(scope modelinference.RuntimeScopeRef) error {
+		listed, err := service.models.ListCatalog(cfg.Context, modelinference.ListModelsRequest{Scope: scope})
+		if err != nil {
+			return mapModelsRootError(err)
+		}
+		response := listToGenerated(modelinference.List{Results: listed.Models})
+		if cfg.JSON {
+			return json.NewEncoder(cfg.Output).Encode(response)
+		}
+		return renderList(response, cfg.Output)
+	})
 }
 
 func (service *rootService) Inspect(cfg InspectConfig) error {
@@ -37,15 +42,20 @@ func (service *rootService) Inspect(cfg InspectConfig) error {
 	if strings.TrimSpace(cfg.Server) != "" {
 		return service.inspectRemote(cfg)
 	}
-	detail, err := service.models.GetModel(cfg.Context, strings.TrimSpace(cfg.ModelName))
-	if err != nil {
-		return mapModelsRootError(err)
-	}
-	response := detailToGenerated(detail)
-	if cfg.JSON {
-		return json.NewEncoder(cfg.Output).Encode(response)
-	}
-	return renderModel(response, cfg.Output)
+	modelName := strings.TrimSpace(cfg.ModelName)
+	return service.withCatalogScope(cfg.Context, func(scope modelinference.RuntimeScopeRef) error {
+		result, err := service.models.GetCatalogModel(cfg.Context, modelinference.GetModelRequest{
+			Scope: scope, Name: modelName,
+		})
+		if err != nil {
+			return mapModelsRootError(err)
+		}
+		response := detailToGenerated(result.Model)
+		if cfg.JSON {
+			return json.NewEncoder(cfg.Output).Encode(response)
+		}
+		return renderModel(response, cfg.Output)
+	})
 }
 
 func (service *rootService) Pull(cfg PullConfig) error {
@@ -62,20 +72,43 @@ func (service *rootService) Pull(cfg PullConfig) error {
 	if strings.TrimSpace(cfg.Server) != "" {
 		return service.pullRemote(cfg)
 	}
-	result, err := service.models.PullModel(cfg.Context, modelName)
-	response := pullResultToGenerated(result)
-	if cfg.JSON {
-		if encodeErr := json.NewEncoder(cfg.Output).Encode(response); encodeErr != nil {
-			return encodeErr
+	return service.withCatalogScope(cfg.Context, func(scope modelinference.RuntimeScopeRef) error {
+		result, err := service.models.PullModelForScope(cfg.Context, modelinference.PullModelRequest{
+			Scope: scope, Name: modelName,
+		})
+		response := pullResultToGenerated(result)
+		if cfg.JSON {
+			if encodeErr := json.NewEncoder(cfg.Output).Encode(response); encodeErr != nil {
+				return encodeErr
+			}
 		}
+		if err != nil {
+			return mapModelsRootError(err)
+		}
+		if cfg.JSON {
+			return nil
+		}
+		return renderPull(response, cfg.Output)
+	})
+}
+
+func (service *rootService) withCatalogScope(
+	ctx context.Context,
+	run func(modelinference.RuntimeScopeRef) error,
+) error {
+	if service.openCatalogScope == nil {
+		return fmt.Errorf("models catalog scope opener is required")
 	}
+	scope, err := service.openCatalogScope(ctx)
 	if err != nil {
 		return mapModelsRootError(err)
 	}
-	if cfg.JSON {
-		return nil
+	if scope.Close != nil {
+		defer func() {
+			_ = scope.Close(ctx)
+		}()
 	}
-	return renderPull(response, cfg.Output)
+	return run(scope.Scope)
 }
 
 func (service *rootService) listRemote(cfg ListConfig) error {

@@ -13,6 +13,12 @@ type CompositionModelsRoot interface {
 	CompositionModelsRoot() modelinference.Service
 }
 
+// CompositionOpenCatalogScope exposes process-scoped catalog opening from
+// injected composition collaborators for local list/inspect/pull behavior.
+type CompositionOpenCatalogScope interface {
+	CompositionOpenCatalogScope(context.Context) (InvokeRuntimeScope, error)
+}
+
 // CompositionInvokeScopeOpener exposes invoke-scope opening from injected
 // composition collaborators when the invocation operation can supply it.
 type CompositionInvokeScopeOpener interface {
@@ -38,6 +44,9 @@ func ConfigFromComposition(httpProtocol clihttp.Protocol, invocation InvocationO
 	cfg.Artifacts = compositionArtifactExporter{invocation: invocation}
 	if root, ok := invocation.(CompositionModelsRoot); ok {
 		cfg.Models = root.CompositionModelsRoot()
+	}
+	if opener, ok := invocation.(CompositionOpenCatalogScope); ok {
+		cfg.OpenCatalogScope = opener.CompositionOpenCatalogScope
 	}
 	if opener, ok := invocation.(CompositionInvokeScopeOpener); ok {
 		cfg.OpenInvokeScope = opener.CompositionOpenInvokeScope

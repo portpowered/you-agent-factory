@@ -21,13 +21,15 @@ type Config struct {
 	HTTP            clihttp.Protocol
 	Artifacts       models.InvocationArtifactExporter
 	OpenInvokeScope func(context.Context, InvokeConfig) (InvokeRuntimeScope, error)
+	OpenCatalogScope func(context.Context) (InvokeRuntimeScope, error)
 }
 
 type rootService struct {
-	models          models.Service
-	http            clihttp.Protocol
-	artifacts       models.InvocationArtifactExporter
-	openInvokeScope func(context.Context, InvokeConfig) (InvokeRuntimeScope, error)
+	models           models.Service
+	http             clihttp.Protocol
+	artifacts        models.InvocationArtifactExporter
+	openInvokeScope  func(context.Context, InvokeConfig) (InvokeRuntimeScope, error)
+	openCatalogScope func(context.Context) (InvokeRuntimeScope, error)
 }
 
 // NewService constructs the Models-owned CLI service from the accepted Models root.
@@ -36,9 +38,10 @@ func NewService(cfg Config) Service {
 		return nil
 	}
 	return &rootService{
-		models:          cfg.Models,
-		http:            cfg.HTTP,
-		artifacts:       cfg.Artifacts,
-		openInvokeScope: cfg.OpenInvokeScope,
+		models:           cfg.Models,
+		http:             cfg.HTTP,
+		artifacts:        cfg.Artifacts,
+		openInvokeScope:  cfg.OpenInvokeScope,
+		openCatalogScope: cfg.OpenCatalogScope,
 	}
 }
