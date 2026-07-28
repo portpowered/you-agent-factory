@@ -43,6 +43,17 @@ Use this map when changing the public REST contract.
   generated discovery, SDK registration, and stdio composition. Service-owned
   adapters consume Factory Sessions root contracts and do not import or
   construct its implementation packages or private subservices.
+- The Sessions MCP adapter package must stay registered in the allowed shared
+  manifests only: retain `pkg/services/factory_sessions/transports/mcp` under
+  destination `factory_sessions` in
+  `docs/internal/packaged-service-structure/package-target-manifest.json` and
+  `docs/internal/baselines/ownership-inventory.json`, and keep measured floors in
+  both `docs/internal/baselines/go-unit-coverage-package-minimums.json` and
+  `docs/internal/baselines/go-functional-coverage-package-minimums.json`.
+  Prove registration with `manifest_registration_test.go`; do not edit
+  `pkg/wire`, `pkg/root`, `pkg/initializer`, top-level CLI composition, shared
+  MCP host/composition fan-in, or other services' MCP adapters when reconciling
+  manifest churn.
 - Provider Session HTTP decoding, generated-contract mapping, service
   invocation, typed root error mapping (`error_mapping.go`), cancel/timeout edge
   mapping, and response encoding for owned Provider Sessions operations live in
