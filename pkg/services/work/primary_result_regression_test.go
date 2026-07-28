@@ -108,7 +108,7 @@ func resolvePrimaryResultRegressionFixture(name string) (work.PrimaryResultSelec
 func readPrimaryResultRegressionFixtureBytes(t *testing.T, name string) []byte {
 	t.Helper()
 
-	fixturePath := filepath.Join("testdata", "primary_result_regression", name+".json")
+	fixturePath := filepath.Join("internal", "testdata", "primary_result_regression", name+".json")
 	raw, err := os.ReadFile(fixturePath)
 	if err != nil {
 		t.Fatalf("read fixture %q: %v", fixturePath, err)
