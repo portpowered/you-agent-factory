@@ -72,6 +72,7 @@ type SessionOwner struct {
 	interpolation factorydefinitions.InvocationInterpolationService
 	workTypes     factorydefinitions.InvocationWorkTypeService
 	inputFiles    fileeffects.InvocationInputReader
+	workService   work.Service
 }
 
 // NewSessionOwner constructs the canonical Factory Session invocation owner.
@@ -85,11 +86,13 @@ func NewSessionOwner(
 	interpolation factorydefinitions.InvocationInterpolationService,
 	workTypes factorydefinitions.InvocationWorkTypeService,
 	inputFiles fileeffects.InvocationInputReader,
+	workService work.Service,
 ) *SessionOwner {
 	return &SessionOwner{
 		factoryConfig: factoryConfig, submitWork: submitWork, observe: observe,
 		waitNextFn: waitNext, telemetry: telemetry, specialCase: specialCase,
 		interpolation: interpolation, workTypes: workTypes, inputFiles: inputFiles,
+		workService: workService,
 	}
 }
 
@@ -101,7 +104,7 @@ func (o *SessionOwner) InvokeFactorySession(
 	sessionID string,
 	request InvocationRequest,
 ) (FactoryInvocationResult, error) {
-	if o == nil || o.factoryConfig == nil || o.submitWork == nil || o.observe == nil {
+	if o == nil || o.factoryConfig == nil || o.submitWork == nil || o.observe == nil || o.workService == nil {
 		return FactoryInvocationResult{}, fmt.Errorf("factory session invocation owner dependencies are unavailable")
 	}
 	factoryCfg, err := o.factoryConfig(sessionID)
@@ -114,7 +117,7 @@ func (o *SessionOwner) InvokeFactorySession(
 
 	sourceHint := SessionInvocationSourceHint(request)
 	o.normalizationAttempt(factoryCfg, sourceHint)
-	resolved, err := ResolveSessionInvocationInput(factoryCfg, request)
+	resolved, err := o.resolveSessionInvocationInput(ctx, factoryCfg, request)
 	if err != nil {
 		o.normalizationFailure(sessionID, factoryCfg, sourceHint, err)
 		return FactoryInvocationResult{}, err
@@ -183,7 +186,10 @@ func (o *SessionOwner) ResolveInvocationInput(
 	cfg *factorydefinitions.FactoryConfig,
 	request factorysessions.InvocationRequest,
 ) (factorysessions.ResolvedInvocationInput, error) {
-	resolved, err := ResolveSessionInvocationInput(cfg, request)
+	if o == nil || o.workService == nil {
+		return factorysessions.ResolvedInvocationInput{}, fmt.Errorf("factory session invocation owner dependencies are unavailable")
+	}
+	resolved, err := o.resolveSessionInvocationInput(context.Background(), cfg, request)
 	if err != nil {
 		return factorysessions.ResolvedInvocationInput{}, err
 	}
@@ -193,9 +199,13 @@ func (o *SessionOwner) ResolveInvocationInput(
 	}, nil
 }
 
-// ResolveSessionInvocationInput applies the shared compatibility-content and
+// resolveSessionInvocationInput applies the shared compatibility-content and
 // structured-argument contract used by API and CLI invocation paths.
-func ResolveSessionInvocationInput(cfg *factorydefinitions.FactoryConfig, request InvocationRequest) (ResolvedSessionInvocationInput, error) {
+func (o *SessionOwner) resolveSessionInvocationInput(
+	ctx context.Context,
+	cfg *factorydefinitions.FactoryConfig,
+	request InvocationRequest,
+) (ResolvedSessionInvocationInput, error) {
 	if request.PreparedInvocationInput != nil {
 		return resolvedPreparedSessionInvocationInput(cfg, request)
 	}
@@ -208,13 +218,13 @@ func ResolveSessionInvocationInput(cfg *factorydefinitions.FactoryConfig, reques
 		return ResolvedSessionInvocationInput{}, err
 	}
 	if request.Args == nil {
-		return resolveCompatibilitySessionInvocationInput(content)
+		return o.resolveCompatibilitySessionInvocationInput(ctx, content)
 	}
 	var signature *factorydefinitions.InvocationSignatureConfig
 	if cfg != nil {
 		signature = cfg.InvocationSignature
 	}
-	return resolveStructuredSessionInvocationInput(signature, directArgs, content)
+	return o.resolveStructuredSessionInvocationInput(ctx, signature, directArgs, content)
 }
 
 func resolvedPreparedSessionInvocationInput(
@@ -266,25 +276,24 @@ func resolvedPreparedSessionInvocationInput(
 	}, nil
 }
 
-func resolveCompatibilitySessionInvocationInput(content []work.WorkContentPart) (ResolvedSessionInvocationInput, error) {
+func (o *SessionOwner) resolveCompatibilitySessionInvocationInput(
+	ctx context.Context,
+	content []work.WorkContentPart,
+) (ResolvedSessionInvocationInput, error) {
 	if len(content) == 0 {
 		return ResolvedSessionInvocationInput{}, &factorydefinitions.RequestValidationError{Message: "content is required when args are omitted"}
 	}
-	normalized, err := work.NormalizeArguments(work.NormalizeArgumentsInput{CompatibilityContent: content})
+	prepared, err := o.workService.PrepareInvocationInput(ctx, work.InvocationInputPreparationRequest{
+		CompatibilityContent: content,
+	})
 	if err != nil {
 		return ResolvedSessionInvocationInput{}, normalizeSessionInvocationError(err)
 	}
-	if normalized.CompatibilityInput == nil {
-		return ResolvedSessionInvocationInput{}, &factorydefinitions.RequestValidationError{Message: "content did not resolve to one logical invocation input"}
-	}
-	return ResolvedSessionInvocationInput{
-		Source:              normalized.CompatibilityInput.Source,
-		Content:             normalized.CompatibilityInput.Content,
-		NormalizedArguments: &normalized,
-	}, nil
+	return resolvedSessionInvocationInputFromPrepared(nil, prepared)
 }
 
-func resolveStructuredSessionInvocationInput(
+func (o *SessionOwner) resolveStructuredSessionInvocationInput(
+	ctx context.Context,
 	signature *factorydefinitions.InvocationSignatureConfig,
 	directArgs []work.NamedArgumentInput,
 	content []work.WorkContentPart,
@@ -296,7 +305,7 @@ func resolveStructuredSessionInvocationInput(
 			Argument: firstStructuredArgumentKey(directArgs),
 		}
 	}
-	normalized, err := work.NormalizeArguments(work.NormalizeArgumentsInput{
+	prepared, err := o.workService.PrepareInvocationInput(ctx, work.InvocationInputPreparationRequest{
 		Signature:            signature,
 		DirectArgs:           directArgs,
 		CompatibilityContent: content,
@@ -304,6 +313,27 @@ func resolveStructuredSessionInvocationInput(
 	if err != nil {
 		return ResolvedSessionInvocationInput{}, normalizeSessionInvocationError(err)
 	}
+	return resolvedSessionInvocationInputFromPrepared(signature, prepared)
+}
+
+func resolvedSessionInvocationInputFromPrepared(
+	signature *factorydefinitions.InvocationSignatureConfig,
+	prepared work.PreparedInvocationInput,
+) (ResolvedSessionInvocationInput, error) {
+	if prepared.ResolvedInput != nil {
+		resolved := *prepared.ResolvedInput
+		return ResolvedSessionInvocationInput{
+			Source:              resolved.Source,
+			Content:             resolved.Content,
+			NormalizedArguments: &work.NormalizedArguments{CompatibilityInput: &resolved},
+		}, nil
+	}
+	if prepared.NormalizedArguments == nil {
+		return ResolvedSessionInvocationInput{}, &factorydefinitions.RequestValidationError{
+			Message: "content did not resolve to one logical invocation input",
+		}
+	}
+	normalized := *prepared.NormalizedArguments
 	source := StructuredArgumentsInputSource
 	if normalized.CompatibilityInput != nil {
 		source = normalized.CompatibilityInput.Source

@@ -136,6 +136,20 @@ func TestResolveSignatureFactoryInvocationInput_NormalizesPositionalNamedBoolean
 	}
 }
 
+func TestPrepareInvocationInputCompatibilityContentUsesPublishedRequestShape(t *testing.T) {
+	t.Parallel()
+
+	prepared, err := prepareInvocationInput(t, InvocationInputPreparationRequest{
+		CompatibilityContent: []WorkContentPart{{Type: WorkContentPartTypeText, Text: "hello"}},
+	})
+	if err != nil {
+		t.Fatalf("PrepareInvocationInput: %v", err)
+	}
+	if prepared.ResolvedInput == nil || len(prepared.ResolvedInput.Content) != 1 || prepared.ResolvedInput.Content[0].Text != "hello" {
+		t.Fatalf("prepared = %#v, want compatibility hello content", prepared)
+	}
+}
+
 func TestResolveSignatureFactoryInvocationInput_RejectsMissingNamedValue(t *testing.T) {
 	_, err := prepareInvocationInput(t, InvocationInputPreparationRequest{
 		Arguments: []string{"draft", "--mode"}, Signature: signatureFactoryInvocationConfig(),

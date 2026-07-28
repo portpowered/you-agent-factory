@@ -796,6 +796,12 @@ response-stream output.
   `pkg/services/recordings/runtime_import_boundary_test.go` when adding similar
   CUT consumer-edge import proofs: `go list` every package under the Sessions
   root and fail on any import outside `pkg/services/work`.
+- Factory Sessions invocation input preparation and primary-result selection
+  route through `work.Service` (`PrepareInvocationInput`,
+  `ResolvePrimaryResult`) injected on `SessionOwner` via
+  `invocationservice.Dependencies.Work`. Use `work.NewInvocationPolicyService()`
+  when only the published invocation/return-policy slice is needed; prove the
+  sealed edge with `pkg/services/factory_sessions/work_invocation_boundary_test.go`.
 - Work owner-local Wire at `pkg/services/work/wire` must stay registered under
   destination `work` in
   `docs/internal/packaged-service-structure/package-target-manifest.json`,

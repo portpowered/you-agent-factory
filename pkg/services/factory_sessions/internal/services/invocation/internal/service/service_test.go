@@ -28,6 +28,7 @@ func TestNewRejectsMissingRequiredDependencies(t *testing.T) {
 		{name: "interpolation", drop: func(deps *invocationservice.Dependencies) { deps.Interpolation = nil }, want: "interpolation service"},
 		{name: "Work Type", drop: func(deps *invocationservice.Dependencies) { deps.WorkTypes = nil }, want: "Work Type service"},
 		{name: "input reader", drop: func(deps *invocationservice.Dependencies) { deps.InputFiles = nil }, want: "input file reader"},
+		{name: "Work service", drop: func(deps *invocationservice.Dependencies) { deps.Work = nil }, want: "Work service"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -213,6 +214,7 @@ func validDependencies(calls *int) invocationservice.Dependencies {
 			count()
 			return nil, nil
 		},
+		Work: work.NewInvocationPolicyService(),
 	}
 }
 

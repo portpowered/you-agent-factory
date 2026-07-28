@@ -42,6 +42,9 @@ func New(deps invocationservice.Dependencies) (*Service, error) {
 	if deps.InputFiles == nil {
 		return nil, fmt.Errorf("construct Factory Session invocation: input file reader is required")
 	}
+	if deps.Work == nil {
+		return nil, fmt.Errorf("construct Factory Session invocation: Work service is required")
+	}
 	return &Service{owner: legacyinvocation.NewSessionOwner(
 		deps.FactoryConfig,
 		deps.SubmitWork,
@@ -52,6 +55,7 @@ func New(deps invocationservice.Dependencies) (*Service, error) {
 		deps.Interpolation,
 		deps.WorkTypes,
 		deps.InputFiles,
+		deps.Work,
 	)}, nil
 }
 
