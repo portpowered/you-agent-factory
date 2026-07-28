@@ -1,6 +1,7 @@
 package invocationinterpolation
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -152,6 +153,97 @@ func InterpolateWorkstationConfig(workstation factorydefinitions.FactoryWorkstat
 			return factorydefinitions.FactoryWorkstationConfig{}, err
 		}
 		next.Env[key] = resolved
+	}
+	if len(next.OperationBindings) > 0 {
+		bindings, err := interpolateModelOperationBindings(next.OperationBindings, args, readFile)
+		if err != nil {
+			return factorydefinitions.FactoryWorkstationConfig{}, err
+		}
+		next.OperationBindings = bindings
+	}
+	return next, nil
+}
+
+func interpolateModelOperationBindings(
+	bindings []factorydefinitions.ModelOperationBinding,
+	args *work.InvocationArguments,
+	readFile factorydefinitions.FileReader,
+) ([]factorydefinitions.ModelOperationBinding, error) {
+	if len(bindings) == 0 {
+		return bindings, nil
+	}
+	next := make([]factorydefinitions.ModelOperationBinding, len(bindings))
+	for index, binding := range bindings {
+		next[index] = binding
+		pathPrefix := fmt.Sprintf("workstations.operationBindings[%d](%s)", index, binding.Slot)
+		var err error
+		next[index].Config, err = interpolateWorkContentParts(binding.Config, args, pathPrefix+".config", readFile)
+		if err != nil {
+			return nil, err
+		}
+		next[index].DefaultContent, err = interpolateWorkContentParts(binding.DefaultContent, args, pathPrefix+".defaultContent", readFile)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return next, nil
+}
+
+func interpolateWorkContentParts(
+	parts []work.WorkContentPart,
+	args *work.InvocationArguments,
+	fieldDescriptor string,
+	readFile factorydefinitions.FileReader,
+) ([]work.WorkContentPart, error) {
+	if len(parts) == 0 {
+		return parts, nil
+	}
+	next := make([]work.WorkContentPart, len(parts))
+	for index, part := range parts {
+		interpolated, err := interpolateWorkContentPart(part, args, fmt.Sprintf("%s[%d]", fieldDescriptor, index), readFile)
+		if err != nil {
+			return nil, err
+		}
+		next[index] = interpolated
+	}
+	return next, nil
+}
+
+func interpolateWorkContentPart(
+	part work.WorkContentPart,
+	args *work.InvocationArguments,
+	fieldDescriptor string,
+	readFile factorydefinitions.FileReader,
+) (work.WorkContentPart, error) {
+	next := part
+	var err error
+	if next.Text, err = interpolateInvocationField(next.Text, args, fieldDescriptor+".text", false, readFile); err != nil {
+		return work.WorkContentPart{}, err
+	}
+	if next.URL, err = interpolateInvocationField(next.URL, args, fieldDescriptor+".url", false, readFile); err != nil {
+		return work.WorkContentPart{}, err
+	}
+	if next.File, err = interpolateInvocationField(next.File, args, fieldDescriptor+".file", false, readFile); err != nil {
+		return work.WorkContentPart{}, err
+	}
+	if next.Slot, err = interpolateInvocationField(next.Slot, args, fieldDescriptor+".slot", false, readFile); err != nil {
+		return work.WorkContentPart{}, err
+	}
+	if next.Label, err = interpolateInvocationField(next.Label, args, fieldDescriptor+".label", false, readFile); err != nil {
+		return work.WorkContentPart{}, err
+	}
+	if next.Role, err = interpolateInvocationField(next.Role, args, fieldDescriptor+".role", false, readFile); err != nil {
+		return work.WorkContentPart{}, err
+	}
+	if next.ContentType, err = interpolateInvocationField(next.ContentType, args, fieldDescriptor+".contentType", false, readFile); err != nil {
+		return work.WorkContentPart{}, err
+	}
+	if len(next.JSON) > 0 {
+		interpolated, err := interpolateInvocationField(string(next.JSON), args, fieldDescriptor+".json", false, readFile)
+		if err != nil {
+			return work.WorkContentPart{}, err
+		}
+		next.JSON = json.RawMessage(interpolated)
 	}
 	return next, nil
 }

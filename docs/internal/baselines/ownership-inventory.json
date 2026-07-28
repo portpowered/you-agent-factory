@@ -1106,7 +1106,7 @@
       "toOwner": "provider_sessions",
       "class": "external_effect",
       "architectureException": true,
-      "evidence": "pkg/services/edges -\u003e pkg/services/provider_sessions"
+      "evidence": "pkg/services/edges -\u003e pkg/services/provider_sessions/wire"
     },
     {
       "fromOwner": "edges",
@@ -4449,6 +4449,12 @@
     },
     {
       "packagePath": "pkg/services/provider_sessions",
+      "disposition": "retain",
+      "destination": "provider_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/internal",
       "disposition": "retain",
       "destination": "provider_sessions",
       "destinationKind": "owner"

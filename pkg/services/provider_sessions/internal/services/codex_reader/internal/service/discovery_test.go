@@ -14,12 +14,13 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	providersessionsinternal "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal"
 	codexreader "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/codex_reader"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
 type trackingFileSystem struct {
-	base       providersessions.FileSystem
+	base       providersessionsinternal.FileSystem
 	cancel     context.CancelFunc
 	cancelStat int
 	openCalls  int
@@ -228,9 +229,9 @@ func TestDiscoveryMetadataIsContainedNormalizedAndUTC(t *testing.T) {
 
 func newTestReader(
 	t *testing.T,
-	files providersessions.FileSystem,
-	walk providersessions.CodexWalkDirectory,
-	resolve providersessions.CodexResolveSymlinks,
+	files providersessionsinternal.FileSystem,
+	walk providersessionsinternal.CodexWalkDirectory,
+	resolve providersessionsinternal.CodexResolveSymlinks,
 	root string,
 ) codexreader.Service {
 	t.Helper()

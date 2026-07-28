@@ -13,6 +13,7 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	providersessionsinternal "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
@@ -178,7 +179,7 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 		cursorWalk.walk,
 		cursorSymlinks.resolve,
 		cursorDatabase.open,
-		providersessions.OperatingSystem(runtime.GOOS),
+		providersessionsinternal.OperatingSystem(runtime.GOOS),
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -241,25 +242,25 @@ func (r *recordingCursorOpenDatabase) open(string, string) (*sql.DB, error) {
 func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 	t.Parallel()
 
-	resolveHome := providersessions.ResolveHomeDirectory(func() (string, error) { return t.TempDir(), nil })
+	resolveHome := providersessionsinternal.ResolveHomeDirectory(func() (string, error) { return t.TempDir(), nil })
 	tests := []struct {
 		name                  string
-		files                 providersessions.FileSystem
-		home                  providersessions.ResolveHomeDirectory
-		codexWalk             providersessions.CodexWalkDirectory
-		codexSymlinks         providersessions.CodexResolveSymlinks
-		cursorWalk            providersessions.CursorWalkDirectory
-		cursorSymlinks        providersessions.CursorResolveSymlinks
-		cursorDatabase        providersessions.CursorOpenSQLDatabase
-		cursorOperatingSystem providersessions.OperatingSystem
+		files                 providersessionsinternal.FileSystem
+		home                  providersessionsinternal.ResolveHomeDirectory
+		codexWalk             providersessionsinternal.CodexWalkDirectory
+		codexSymlinks         providersessionsinternal.CodexResolveSymlinks
+		cursorWalk            providersessionsinternal.CursorWalkDirectory
+		cursorSymlinks        providersessionsinternal.CursorResolveSymlinks
+		cursorDatabase        providersessionsinternal.CursorOpenSQLDatabase
+		cursorOperatingSystem providersessionsinternal.OperatingSystem
 	}{
-		{name: "filesystem", home: resolveHome, codexWalk: filepath.WalkDir, codexSymlinks: filepath.EvalSymlinks, cursorWalk: filepath.WalkDir, cursorSymlinks: filepath.EvalSymlinks, cursorDatabase: sql.Open, cursorOperatingSystem: providersessions.OperatingSystem(runtime.GOOS)},
-		{name: "home resolver", files: platformfilesystem.Local{}, codexWalk: filepath.WalkDir, codexSymlinks: filepath.EvalSymlinks, cursorWalk: filepath.WalkDir, cursorSymlinks: filepath.EvalSymlinks, cursorDatabase: sql.Open, cursorOperatingSystem: providersessions.OperatingSystem(runtime.GOOS)},
-		{name: "Codex walker", files: platformfilesystem.Local{}, home: resolveHome, codexSymlinks: filepath.EvalSymlinks, cursorWalk: filepath.WalkDir, cursorSymlinks: filepath.EvalSymlinks, cursorDatabase: sql.Open, cursorOperatingSystem: providersessions.OperatingSystem(runtime.GOOS)},
-		{name: "Codex symlink resolver", files: platformfilesystem.Local{}, home: resolveHome, codexWalk: filepath.WalkDir, cursorWalk: filepath.WalkDir, cursorSymlinks: filepath.EvalSymlinks, cursorDatabase: sql.Open, cursorOperatingSystem: providersessions.OperatingSystem(runtime.GOOS)},
-		{name: "Cursor walker", files: platformfilesystem.Local{}, home: resolveHome, codexWalk: filepath.WalkDir, codexSymlinks: filepath.EvalSymlinks, cursorSymlinks: filepath.EvalSymlinks, cursorDatabase: sql.Open, cursorOperatingSystem: providersessions.OperatingSystem(runtime.GOOS)},
-		{name: "Cursor symlink resolver", files: platformfilesystem.Local{}, home: resolveHome, codexWalk: filepath.WalkDir, codexSymlinks: filepath.EvalSymlinks, cursorWalk: filepath.WalkDir, cursorDatabase: sql.Open, cursorOperatingSystem: providersessions.OperatingSystem(runtime.GOOS)},
-		{name: "Cursor database opener", files: platformfilesystem.Local{}, home: resolveHome, codexWalk: filepath.WalkDir, codexSymlinks: filepath.EvalSymlinks, cursorWalk: filepath.WalkDir, cursorSymlinks: filepath.EvalSymlinks, cursorOperatingSystem: providersessions.OperatingSystem(runtime.GOOS)},
+		{name: "filesystem", home: resolveHome, codexWalk: filepath.WalkDir, codexSymlinks: filepath.EvalSymlinks, cursorWalk: filepath.WalkDir, cursorSymlinks: filepath.EvalSymlinks, cursorDatabase: sql.Open, cursorOperatingSystem: providersessionsinternal.OperatingSystem(runtime.GOOS)},
+		{name: "home resolver", files: platformfilesystem.Local{}, codexWalk: filepath.WalkDir, codexSymlinks: filepath.EvalSymlinks, cursorWalk: filepath.WalkDir, cursorSymlinks: filepath.EvalSymlinks, cursorDatabase: sql.Open, cursorOperatingSystem: providersessionsinternal.OperatingSystem(runtime.GOOS)},
+		{name: "Codex walker", files: platformfilesystem.Local{}, home: resolveHome, codexSymlinks: filepath.EvalSymlinks, cursorWalk: filepath.WalkDir, cursorSymlinks: filepath.EvalSymlinks, cursorDatabase: sql.Open, cursorOperatingSystem: providersessionsinternal.OperatingSystem(runtime.GOOS)},
+		{name: "Codex symlink resolver", files: platformfilesystem.Local{}, home: resolveHome, codexWalk: filepath.WalkDir, cursorWalk: filepath.WalkDir, cursorSymlinks: filepath.EvalSymlinks, cursorDatabase: sql.Open, cursorOperatingSystem: providersessionsinternal.OperatingSystem(runtime.GOOS)},
+		{name: "Cursor walker", files: platformfilesystem.Local{}, home: resolveHome, codexWalk: filepath.WalkDir, codexSymlinks: filepath.EvalSymlinks, cursorSymlinks: filepath.EvalSymlinks, cursorDatabase: sql.Open, cursorOperatingSystem: providersessionsinternal.OperatingSystem(runtime.GOOS)},
+		{name: "Cursor symlink resolver", files: platformfilesystem.Local{}, home: resolveHome, codexWalk: filepath.WalkDir, codexSymlinks: filepath.EvalSymlinks, cursorWalk: filepath.WalkDir, cursorDatabase: sql.Open, cursorOperatingSystem: providersessionsinternal.OperatingSystem(runtime.GOOS)},
+		{name: "Cursor database opener", files: platformfilesystem.Local{}, home: resolveHome, codexWalk: filepath.WalkDir, codexSymlinks: filepath.EvalSymlinks, cursorWalk: filepath.WalkDir, cursorSymlinks: filepath.EvalSymlinks, cursorOperatingSystem: providersessionsinternal.OperatingSystem(runtime.GOOS)},
 		{name: "operating system", files: platformfilesystem.Local{}, home: resolveHome, codexWalk: filepath.WalkDir, codexSymlinks: filepath.EvalSymlinks, cursorWalk: filepath.WalkDir, cursorSymlinks: filepath.EvalSymlinks, cursorDatabase: sql.Open},
 	}
 	for _, test := range tests {
@@ -299,7 +300,7 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 		filepath.WalkDir,
 		filepath.EvalSymlinks,
 		sql.Open,
-		providersessions.OperatingSystem(runtime.GOOS),
+		providersessionsinternal.OperatingSystem(runtime.GOOS),
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)

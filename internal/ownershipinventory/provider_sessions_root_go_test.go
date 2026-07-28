@@ -112,31 +112,60 @@ func TestProviderSessionsRootGoInventoryClassifiesThinRootContractSurfaces(t *te
 	}
 }
 
-func TestProviderSessionsRootGoInventoryNamesConstructionPortsFoldTarget(t *testing.T) {
+func TestProviderSessionsConstructionPortsFoldedToInternal(t *testing.T) {
 	t.Parallel()
 
 	root := repositoryRoot(t)
-	inventory, err := ownershipinventory.LoadProviderSessionsRootGoInventory(root)
+	live, err := ownershipinventory.ListProviderSessionsRootGoFiles(root)
 	if err != nil {
-		t.Fatalf("LoadProviderSessionsRootGoInventory() error = %v", err)
+		t.Fatalf("ListProviderSessionsRootGoFiles() error = %v", err)
 	}
-
-	targets := ownershipinventory.ProviderSessionsRootGoFoldTargets(inventory)
-	var construction *ownershipinventory.ProviderSessionsRootGoFile
-	for index := range targets {
-		if targets[index].File == "construction_ports.go" {
-			construction = &targets[index]
-			break
+	for _, name := range live {
+		if name == "construction_ports.go" {
+			t.Fatal("construction_ports.go still present at public provider_sessions root")
 		}
 	}
-	if construction == nil {
-		t.Fatal("fold targets missing construction_ports.go")
+
+	internalPath := filepath.Join(root, "pkg/services/provider_sessions/internal/construction_ports.go")
+	if _, err := os.Stat(internalPath); err != nil {
+		t.Fatalf("internal construction_ports.go missing: %v", err)
 	}
-	if construction.Classification != ownershipinventory.ProviderSessionsRootGoFoldTargetConstruction {
-		t.Fatalf("construction_ports.go classification = %q, want %q", construction.Classification, ownershipinventory.ProviderSessionsRootGoFoldTargetConstruction)
+}
+
+func TestProviderSessionsImplementationTestsFoldedToInternal(t *testing.T) {
+	t.Parallel()
+
+	root := repositoryRoot(t)
+	live, err := ownershipinventory.ListProviderSessionsRootGoFiles(root)
+	if err != nil {
+		t.Fatalf("ListProviderSessionsRootGoFiles() error = %v", err)
 	}
-	if construction.FoldDestination != "pkg/services/provider_sessions/internal" {
-		t.Fatalf("construction_ports.go foldDestination = %q, want pkg/services/provider_sessions/internal", construction.FoldDestination)
+	for _, name := range []string{
+		"details_providers_boundary_test.go",
+		"inspect_providers_boundary_test.go",
+		"project_providers_boundary_test.go",
+		"readers_providers_boundary_test.go",
+		"service_test.go",
+		"wire_behavioral_proof_test.go",
+	} {
+		if slices.Contains(live, name) {
+			t.Fatalf("%s still present at public provider_sessions root", name)
+		}
+	}
+
+	internalRoot := filepath.Join(root, "pkg/services/provider_sessions/internal")
+	for _, name := range []string{
+		"details_providers_boundary_test.go",
+		"inspect_providers_boundary_test.go",
+		"project_providers_boundary_test.go",
+		"readers_providers_boundary_test.go",
+		"service_test.go",
+		"wire_behavioral_proof_test.go",
+	} {
+		path := filepath.Join(internalRoot, name)
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("internal implementation test %s missing: %v", name, err)
+		}
 	}
 }
 
@@ -153,17 +182,11 @@ func TestProviderSessionsRootGoInventoryDistinguishesThinContractTestsFromImplem
 		"legacy_packages_disposition_test.go",
 		"providers_import_boundary_test.go",
 		"root_contracts_providers_boundary_test.go",
+		"root_wire_behavioral_boundary_test.go",
 		"service_import_boundary_test.go",
 		"service_root_contract_test.go",
 	}
-	wantFoldTests := []string{
-		"details_providers_boundary_test.go",
-		"inspect_providers_boundary_test.go",
-		"project_providers_boundary_test.go",
-		"readers_providers_boundary_test.go",
-		"service_test.go",
-		"wire_behavioral_proof_test.go",
-	}
+	wantFoldTests := []string{}
 
 	var gotThinTests []string
 	var gotFoldTests []string

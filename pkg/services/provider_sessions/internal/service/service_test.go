@@ -8,6 +8,7 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	providersessionsinternal "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/service"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
@@ -18,11 +19,11 @@ func TestNewForRootsSatisfiesPublishedProviderSessionsService(t *testing.T) {
 	codexRoot := writeCodexSessionFixture(t, "internal-root-1")
 	service, err := internalservice.NewForRoots(
 		platformfilesystem.Local{},
-		providersessions.CodexWalkDirectory(filepath.WalkDir),
-		providersessions.CodexResolveSymlinks(filepath.EvalSymlinks),
-		providersessions.CursorWalkDirectory(filepath.WalkDir),
-		providersessions.CursorResolveSymlinks(filepath.EvalSymlinks),
-		providersessions.CursorOpenSQLDatabase(sql.Open),
+		providersessionsinternal.CodexWalkDirectory(filepath.WalkDir),
+		providersessionsinternal.CodexResolveSymlinks(filepath.EvalSymlinks),
+		providersessionsinternal.CursorWalkDirectory(filepath.WalkDir),
+		providersessionsinternal.CursorResolveSymlinks(filepath.EvalSymlinks),
+		providersessionsinternal.CursorOpenSQLDatabase(sql.Open),
 		codexRoot,
 		t.TempDir(),
 	)
