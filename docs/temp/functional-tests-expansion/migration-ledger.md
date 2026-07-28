@@ -429,15 +429,13 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | tests/functional/providers/packaged_script_runtime_test.go | you-agent-factory/tests/functional/providers | TestPackagedScriptRuntime_NonZeroExitUsesStandardFailureOutcome | short | tests/functional/workers/script/execution_test.go | none | none | n/a |
 | tests/functional/providers/runtime_logging_smoke_test.go | you-agent-factory/tests/functional/providers | TestRuntimeLoggingSmoke_SuccessAndFailureRespectOutputEnvAndRollingPolicies | short | tests/functional/observability/logging/redaction_test.go | none | none | n/a |
 
-#### `replay_contracts` (24 scenarios, catch_all=`replay_contracts`)
+#### `replay_contracts` (19 scenarios, catch_all=`replay_contracts`)
 
 | source_path | package | scenario | lane | destination | catch_all | specialty_targets | deletion_only_batch |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| tests/functional/replay_contracts/canonical_topology_snapshot_projection_test.go | you-agent-factory/tests/functional/replay_contracts | TestCanonicalTopologySnapshotsPreservePublicIdentityAndResourceEvidence | short | tests/functional/events/factory_events/order_and_cursor_test.go | replay_contracts | none | replay_contracts-delete-02-events-factory-events |
 | tests/functional/replay_contracts/replay_event_stream_artifact_smoke_long_test.go | you-agent-factory/tests/functional/replay_contracts | TestReplayEventStreamArtifactSmoke_ReplaysCheckedInSampleArtifact | functionallong | tests/functional/events/replay/record_replay_test.go | replay_contracts | artifact-contract-closeout | replay_contracts-delete-01-events-replay |
 | tests/functional/replay_contracts/replay_event_stream_artifact_smoke_long_test.go | you-agent-factory/tests/functional/replay_contracts | TestReplayEventStreamArtifactSmoke_ReplaysCheckedInSampleArtifactWithCopiedRootFactoryDefinition | functionallong | tests/functional/events/replay/record_replay_test.go | replay_contracts | artifact-contract-closeout | replay_contracts-delete-01-events-replay |
 | tests/functional/replay_contracts/replay_factory_only_serialization_smoke_long_test.go | you-agent-factory/tests/functional/replay_contracts | TestReplayFactoryOnlySerializationSmoke_RecordReplayUsesRunStartedFactoryPayload | functionallong | tests/functional/events/replay/record_replay_test.go | replay_contracts | none | replay_contracts-delete-01-events-replay |
-| tests/functional/replay_contracts/replay_legacy_unary_retirement_smoke_long_test.go | you-agent-factory/tests/functional/replay_contracts | TestLegacyUnaryRetirementSmoke_ReplaySubmitsCanonicalBatchWorkRequests | functionallong | tests/functional/work/submission/batch_inputs_test.go | replay_contracts | none | replay_contracts-delete-04-work-submission |
 | tests/functional/replay_contracts/replay_record_end_to_end_long_test.go | you-agent-factory/tests/functional/replay_contracts | TestRecordReplayEndToEnd_CLIRecordReplayAndRegressionHarnessSucceed | functionallong | tests/functional/events/replay/record_replay_test.go | replay_contracts | none | replay_contracts-delete-01-events-replay |
 | tests/functional/replay_contracts/replay_record_end_to_end_long_test.go | you-agent-factory/tests/functional/replay_contracts | TestRecordReplayEndToEnd_DefaultLiveRecordingPathReplaysThroughExistingFlow | functionallong | tests/functional/events/replay/record_replay_test.go | replay_contracts | none | replay_contracts-delete-01-events-replay |
 | tests/functional/replay_contracts/replay_record_end_to_end_long_test.go | you-agent-factory/tests/functional/replay_contracts | TestRecordReplayEndToEnd_FactoryRequestBatchAndWorkerGeneratedBatchReplayDeterministically | functionallong | tests/functional/events/replay/record_replay_test.go | replay_contracts | none | replay_contracts-delete-01-events-replay |
@@ -454,9 +452,6 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | tests/functional/replay_contracts/replay_work_dispatch_contract_smoke_long_test.go | you-agent-factory/tests/functional/replay_contracts | TestReplayWorkDispatchContractSmoke_CanonicalWorkRequestPreservesPayload | functionallong | tests/functional/events/replay/record_replay_test.go | replay_contracts | none | replay_contracts-delete-01-events-replay |
 | tests/functional/replay_contracts/replay_work_dispatch_contract_smoke_long_test.go | you-agent-factory/tests/functional/replay_contracts | TestReplayWorkDispatchContractSmoke_LegacySubmitRequestAdapterPreservesPayload | functionallong | tests/functional/events/replay/record_replay_test.go | replay_contracts | none | replay_contracts-delete-01-events-replay |
 | tests/functional/replay_contracts/replay_work_dispatch_contract_smoke_long_test.go | you-agent-factory/tests/functional/replay_contracts | TestReplayWorkDispatchContractSmoke_RecordReplayKeepsSplitContractCorrelation | functionallong | tests/functional/events/replay/record_replay_test.go | replay_contracts | none | replay_contracts-delete-01-events-replay |
-| tests/functional/replay_contracts/short_helpers_contract_test.go | you-agent-factory/tests/functional/replay_contracts | TestFactoryRelationsValueReturnsUnderlyingSlice | short | wrong-layer: package-integration — package-local replay helper contracts (replayEventCount, factoryRelationsValue) without root.BuildProcess / public transport boundary. Replacement evidence owner: tests/functional/internal/support/deadcode_contract_test.go. | replay_contracts | none | replay_contracts-delete-06-wrong-layer |
-| tests/functional/replay_contracts/short_helpers_contract_test.go | you-agent-factory/tests/functional/replay_contracts | TestReplayEventCountCountsMatchingEventTypes | short | wrong-layer: package-integration — package-local replay helper contracts (replayEventCount, factoryRelationsValue) without root.BuildProcess / public transport boundary. Replacement evidence owner: tests/functional/internal/support/deadcode_contract_test.go. | replay_contracts | none | replay_contracts-delete-06-wrong-layer |
-| tests/functional/replay_contracts/worker_public_contract_smoke_long_test.go | you-agent-factory/tests/functional/replay_contracts | TestWorkerPublicContractSmoke_CanonicalWorkerExecutesAndKeepsRuntimeOnlyFieldsPrivate | functionallong | tests/functional/workers/script/execution_test.go | replay_contracts | artifact-contract-closeout | replay_contracts-delete-05-workers-script |
 
 #### `runtime_api` (108 scenarios, catch_all=`runtime_api`)
 
@@ -1175,11 +1170,11 @@ ownership reaches zero.
 | `bootstrap_portability-delete-04-portable-config` | bootstrap_portability | 10 | factory/definitions, transport/cli | artifact-contract-closeout |
 | `bootstrap_portability-delete-05-factory-current` | bootstrap_portability | 3 | factory/current | consumed |
 | `replay_contracts-delete-01-events-replay` | replay_contracts | 16 | events/replay | artifact-contract-closeout |
-| `replay_contracts-delete-02-events-factory-events` | replay_contracts | 1 | events/factory_events | none |
+| `replay_contracts-delete-02-events-factory-events` | replay_contracts | 1 | events/factory_events | released |
 | `replay_contracts-delete-03-events-response-events` | replay_contracts | 3 | events/response_events | none |
-| `replay_contracts-delete-04-work-submission` | replay_contracts | 1 | work/submission | none |
-| `replay_contracts-delete-05-workers-script` | replay_contracts | 1 | workers/script | artifact-contract-closeout |
-| `replay_contracts-delete-06-wrong-layer` | replay_contracts | 2 | approved wrong-layer (package-integration) | none |
+| `replay_contracts-delete-04-work-submission` | replay_contracts | 1 | work/submission | released |
+| `replay_contracts-delete-05-workers-script` | replay_contracts | 1 | workers/script | released |
+| `replay_contracts-delete-06-wrong-layer` | replay_contracts | 2 | approved wrong-layer (package-integration) | released |
 
 #### guards_batch plan
 
@@ -1322,11 +1317,9 @@ Batch execution guidance for later move work:
 | tests/functional/guards_batch/partial_batch_long_test.go | you-agent-factory/tests/functional/guards_batch | TestPartialBatch_ThrottledProviderFailureWithoutAuthoredGuardEventuallyFails | functionallong | tests/functional/resilience/batch/partial_batch_test.go | guards_batch | none | guards_batch-delete-06-resilience-batch |
 | tests/functional/guards_batch/resource_contention_test.go | you-agent-factory/tests/functional/guards_batch | TestConfigDriven_ResourceContention | short | tests/functional/resources/fairness_long_test.go | guards_batch | none | guards_batch-delete-05-resources-fairness |
 | tests/functional/guards_batch/resource_token_name_test.go | you-agent-factory/tests/functional/guards_batch | TestResourceGated_DispatchTokenName | short | tests/functional/resources/concurrency_test.go | guards_batch | none | guards_batch-delete-04-resources-concurrency |
-| tests/functional/replay_contracts/canonical_topology_snapshot_projection_test.go | you-agent-factory/tests/functional/replay_contracts | TestCanonicalTopologySnapshotsPreservePublicIdentityAndResourceEvidence | short | tests/functional/events/factory_events/order_and_cursor_test.go | replay_contracts | none | replay_contracts-delete-02-events-factory-events |
 | tests/functional/replay_contracts/replay_event_stream_artifact_smoke_long_test.go | you-agent-factory/tests/functional/replay_contracts | TestReplayEventStreamArtifactSmoke_ReplaysCheckedInSampleArtifact | functionallong | tests/functional/events/replay/record_replay_test.go | replay_contracts | artifact-contract-closeout | replay_contracts-delete-01-events-replay |
 | tests/functional/replay_contracts/replay_event_stream_artifact_smoke_long_test.go | you-agent-factory/tests/functional/replay_contracts | TestReplayEventStreamArtifactSmoke_ReplaysCheckedInSampleArtifactWithCopiedRootFactoryDefinition | functionallong | tests/functional/events/replay/record_replay_test.go | replay_contracts | artifact-contract-closeout | replay_contracts-delete-01-events-replay |
 | tests/functional/replay_contracts/replay_factory_only_serialization_smoke_long_test.go | you-agent-factory/tests/functional/replay_contracts | TestReplayFactoryOnlySerializationSmoke_RecordReplayUsesRunStartedFactoryPayload | functionallong | tests/functional/events/replay/record_replay_test.go | replay_contracts | none | replay_contracts-delete-01-events-replay |
-| tests/functional/replay_contracts/replay_legacy_unary_retirement_smoke_long_test.go | you-agent-factory/tests/functional/replay_contracts | TestLegacyUnaryRetirementSmoke_ReplaySubmitsCanonicalBatchWorkRequests | functionallong | tests/functional/work/submission/batch_inputs_test.go | replay_contracts | none | replay_contracts-delete-04-work-submission |
 | tests/functional/replay_contracts/replay_record_end_to_end_long_test.go | you-agent-factory/tests/functional/replay_contracts | TestRecordReplayEndToEnd_CLIRecordReplayAndRegressionHarnessSucceed | functionallong | tests/functional/events/replay/record_replay_test.go | replay_contracts | none | replay_contracts-delete-01-events-replay |
 | tests/functional/replay_contracts/replay_record_end_to_end_long_test.go | you-agent-factory/tests/functional/replay_contracts | TestRecordReplayEndToEnd_DefaultLiveRecordingPathReplaysThroughExistingFlow | functionallong | tests/functional/events/replay/record_replay_test.go | replay_contracts | none | replay_contracts-delete-01-events-replay |
 | tests/functional/replay_contracts/replay_record_end_to_end_long_test.go | you-agent-factory/tests/functional/replay_contracts | TestRecordReplayEndToEnd_FactoryRequestBatchAndWorkerGeneratedBatchReplayDeterministically | functionallong | tests/functional/events/replay/record_replay_test.go | replay_contracts | none | replay_contracts-delete-01-events-replay |
@@ -1343,9 +1336,6 @@ Batch execution guidance for later move work:
 | tests/functional/replay_contracts/replay_work_dispatch_contract_smoke_long_test.go | you-agent-factory/tests/functional/replay_contracts | TestReplayWorkDispatchContractSmoke_CanonicalWorkRequestPreservesPayload | functionallong | tests/functional/events/replay/record_replay_test.go | replay_contracts | none | replay_contracts-delete-01-events-replay |
 | tests/functional/replay_contracts/replay_work_dispatch_contract_smoke_long_test.go | you-agent-factory/tests/functional/replay_contracts | TestReplayWorkDispatchContractSmoke_LegacySubmitRequestAdapterPreservesPayload | functionallong | tests/functional/events/replay/record_replay_test.go | replay_contracts | none | replay_contracts-delete-01-events-replay |
 | tests/functional/replay_contracts/replay_work_dispatch_contract_smoke_long_test.go | you-agent-factory/tests/functional/replay_contracts | TestReplayWorkDispatchContractSmoke_RecordReplayKeepsSplitContractCorrelation | functionallong | tests/functional/events/replay/record_replay_test.go | replay_contracts | none | replay_contracts-delete-01-events-replay |
-| tests/functional/replay_contracts/short_helpers_contract_test.go | you-agent-factory/tests/functional/replay_contracts | TestFactoryRelationsValueReturnsUnderlyingSlice | short | wrong-layer: package-integration — package-local replay helper contracts (replayEventCount, factoryRelationsValue) without root.BuildProcess / public transport boundary. Replacement evidence owner: tests/functional/internal/support/deadcode_contract_test.go. | replay_contracts | none | replay_contracts-delete-06-wrong-layer |
-| tests/functional/replay_contracts/short_helpers_contract_test.go | you-agent-factory/tests/functional/replay_contracts | TestReplayEventCountCountsMatchingEventTypes | short | wrong-layer: package-integration — package-local replay helper contracts (replayEventCount, factoryRelationsValue) without root.BuildProcess / public transport boundary. Replacement evidence owner: tests/functional/internal/support/deadcode_contract_test.go. | replay_contracts | none | replay_contracts-delete-06-wrong-layer |
-| tests/functional/replay_contracts/worker_public_contract_smoke_long_test.go | you-agent-factory/tests/functional/replay_contracts | TestWorkerPublicContractSmoke_CanonicalWorkerExecutesAndKeepsRuntimeOnlyFieldsPrivate | functionallong | tests/functional/workers/script/execution_test.go | replay_contracts | artifact-contract-closeout | replay_contracts-delete-05-workers-script |
 
 ---
 ## Remaining packages and wrong-layer approvals
@@ -1687,11 +1677,11 @@ without inventing destinations. Prefer independent, reviewable batch sizes.
 | `bootstrap_portability-delete-04-portable-config` | bootstrap_portability | 10 | factory/definitions, transport/cli | planned |
 | `bootstrap_portability-delete-05-factory-current` | bootstrap_portability | 3 | factory/current | consumed |
 | `replay_contracts-delete-01-events-replay` | replay_contracts | 16 | events/replay | planned |
-| `replay_contracts-delete-02-events-factory-events` | replay_contracts | 1 | events/factory_events | planned |
+| `replay_contracts-delete-02-events-factory-events` | replay_contracts | 1 | events/factory_events | released |
 | `replay_contracts-delete-03-events-response-events` | replay_contracts | 3 | events/response_events | planned |
-| `replay_contracts-delete-04-work-submission` | replay_contracts | 1 | work/submission | planned |
-| `replay_contracts-delete-05-workers-script` | replay_contracts | 1 | workers/script | planned |
-| `replay_contracts-delete-06-wrong-layer` | replay_contracts | 2 | approved wrong-layer (package-integration) | planned |
+| `replay_contracts-delete-04-work-submission` | replay_contracts | 1 | work/submission | released |
+| `replay_contracts-delete-05-workers-script` | replay_contracts | 1 | workers/script | released |
+| `replay_contracts-delete-06-wrong-layer` | replay_contracts | 2 | approved wrong-layer (package-integration) | released |
 
 ## Completeness audit
 

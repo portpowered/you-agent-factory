@@ -109,6 +109,10 @@ intentionally small enough to distribute across many agents.
   - `TestCLIWorkingDirectoryDoesNotLeakIntoOutput` verifies portable output.
   - `TestCLIMissingWorkingDirectoryAssetFailsActionably` covers failure.
 
+- [x] `tests/functional/transport/cli/parameters/working_directory_long_test.go`
+  - `TestCLIProviderExecResolvesWorkdirAgainstFactoryRuntimeRoot` verifies
+    provider exec resolves workdir against the Factory runtime root.
+
 ### CLI output modes and streaming
 
 - [x] `tests/functional/transport/cli/output/json_result_test.go`
@@ -241,6 +245,14 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
     vs optional parameters are visibly distinguished.
   - `TestCLIRunHelpDoesNotDispatchExternalWork` verifies help is read-only and
     does not invoke provider command execution.
+
+- [x] `tests/functional/workers/transports/cli/run/lifecycle/lifecycle_test.go`
+  - `TestCLIRunCleanInvocationCompletesWithoutDashboardStartup` verifies clean
+    invocation completes without dashboard startup.
+  - `TestCLIRunServerAttachedInvocationTargetsExistingFactorySession` verifies
+    server-attached run targets an existing Factory Session.
+  - `TestCLIRunCleanInvocationFailurePreservesPublicError` verifies clean
+    invocation failure preserves the public error surface.
 
 - [x] `tests/functional/workers/transports/cli/run/modes/output_modes_test.go`
   - `TestCLIRunSuccessPrimaryResultTextJSONAndNDJSON`.
@@ -584,6 +596,14 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCLISubmitBatchContractHarnessExecutesThroughRootBuildProcess` verifies
     the Work-owned CLI batch contract cell uses root.BuildProcess + edges.Edges.
 
+- [x] `tests/functional/work/transports/cli/submit/unary_contract/unary_contract_test.go`
+  - `TestCLISubmitUnaryFileAndStdinReachWork` verifies unary submit from file and
+    stdin reaches Work on a running Factory Session.
+  - `TestCLISubmitUnaryDefaultAndExplicitSessionTargeting` verifies default and
+  explicit session targeting for unary submit.
+  - `TestCLISubmitUnaryStructuredFailurePreservesPublicMessage` verifies
+    structured failure surfaces a public CLI message.
+
 - [x] `tests/functional/work/recordings/recordings_read_test.go`
   - `TestRecordingsBackedWorkReadsUseRecordingsRootContract`.
   - `TestGetWorkFromRecordingsRootUsesRecordingsServiceRoot`.
@@ -816,6 +836,23 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPetriParentOrSameNameGuardReleasesExpectedWork`.
   - `TestPetriVisitOrMatchGuardFailureIsVisibleInPublicWorkState`.
 
+- [x] `tests/functional/factory_runtime/peer_import_boundary_test.go`
+  - `TestFunctionalFactoryRuntimePackageUsesPublicProcessImportsOnly`.
+  - `TestProductionPeersReachFactoryRuntimeThroughPublishedSurfacesOnly`.
+
+- [x] `tests/functional/factory_runtime/root_composition/build_process_inert_test.go`
+  - `TestFactoryRuntimeEffectsRemainInertThroughRootBuildProcessConstruction`.
+
+- [x] `tests/functional/factory_runtime/root_composition/lifecycle_activation_test.go`
+  - `TestFactoryRuntimeControlObservationAndDispatchPlanActivateThroughRootBuildProcessAfterLifecycle`.
+
+- [x] `tests/functional/factory_runtime/root_composition/packaged_root_shape_test.go`
+  - `TestFactoryRuntimePackagedRootShapeMatchesCanonicalServiceLayout`.
+
+- [x] `tests/functional/factory_runtime/root_composition/workflow_orchestration_activation_test.go`
+  - `TestFactoryRuntimeJavaScriptWorkflowActivatesThroughRootBuildProcessAfterLifecycle`.
+  - `TestFactoryRuntimePetriOrchestrationActivatesThroughRootBuildProcessAfterLifecycle`.
+
 ### Packaged factories
 
 - [x] `tests/functional/factory/packaged/catalog/discovery_test.go`
@@ -902,6 +939,14 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPIGetAndSaveCurrentFactoryWithinOneSession`.
   - `TestAPISaveCurrentFactoryValidatesBeforePersistence`.
   - `TestAPICurrentFactoriesRemainSessionScoped`.
+
+- [x] `tests/functional/factory/current/read_save_long_test.go`
+  - `TestCurrentFactoryActivationSwitchesPersistedFactories` verifies activation
+    switches persisted factories and resolves the current factory.
+  - `TestCurrentFactoryLiveAPIReadsFollowActivatedFactory` verifies live API
+    reads follow the activated factory.
+  - `TestCurrentFactoryWatchedFileExecutionFollowsActivatedFactory` verifies
+    watched-file execution follows the activated factory.
 
 - [x] `tests/functional/factory/current/prompt_template_test.go`
   - `TestAPIPromptTemplateContractAndValidationRoundTrip`.
