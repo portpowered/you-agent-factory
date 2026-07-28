@@ -47,7 +47,8 @@ sources, 12 Workers transitional debt, 0 `transports`.
 
 ## Out of scope for this note
 
-- Root-level `.go` contract surfaces (see companion inventory in story 002).
+- Root-level `.go` contract surfaces (see companion inventory in
+  [`workers-root-contract-surface-inventory.md`](workers-root-contract-surface-inventory.md)).
 - `packagetargetmanifestcheck` / `ownershipinventory` remap rows and JSON baseline
   regeneration (stories 003–005).
 - Production package moves, folds, deletes, or `pkg/wire` edits.
