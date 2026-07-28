@@ -529,7 +529,8 @@ Wave 0 functional-tests-expansion planning authority lives under
   may only use the closed destination vocabulary (13 product owners, approved
   non-service families, and the `edges` architecture exception). Nested
   destinations are limited to `<owner>/internal/services/<subservice>` using the
-  plan's committed nested subservice names. Product-owner top-level sibling
+  plan's committed nested subservice names. `factory_runtime` unexpected siblings
+  map to committed subservices in `nestedOwnerMoveRules` (`owners.go`): engine/runtime/state/scheduler/subsystems/token clusters and orchestration helpers → `orchestration`; `build` → `instance_host`; `checkpointstore`/`checkpointsummary` → `checkpoint_recovery`; owner-local residuals (`internal/service`, `internal/rootobservation`, `testkit`) → `factory_runtime/internal`. Product-owner top-level sibling
   inventories (`cmd/packagetargetmanifestcheck/owner_top_level.go`, mirrored in
   `internal/ownershipinventory/owner_top_level.go`) classify immediate children
   under `pkg/services/<owner>/` as expected retain (`wire`, `internal`,
