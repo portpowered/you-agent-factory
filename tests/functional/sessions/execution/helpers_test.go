@@ -1,0 +1,319 @@
+package execution_test
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+)
+
+const (
+	terminalSuccessPrimaryResult      = "primary result COMPLETE"
+	inlineJavaScriptWorkflowFileName  = "results-dispatches.workflow.js"
+)
+
+type blockingInvocationRunner struct {
+	started chan struct{}
+}
+
+func newBlockingInvocationRunner() *blockingInvocationRunner {
+	return &blockingInvocationRunner{started: make(chan struct{}, 1)}
+}
+
+func (r *blockingInvocationRunner) Run(ctx context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	select {
+	case r.started <- struct{}{}:
+	default:
+	}
+	<-ctx.Done()
+	return platformprocess.CommandResult{}, ctx.Err()
+}
+
+var _ platformprocess.CommandRunner = (*blockingInvocationRunner)(nil)
+
+func simplePipelineConfig() map[string]any {
+	return map[string]any{
+		"workTypes": []map[string]any{{
+			"name": "task",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": []map[string]string{{"name": "worker-a"}},
+		"workstations": []map[string]any{{
+			"name":      "process",
+			"worker":    "worker-a",
+			"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
+			"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
+			"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
+		}},
+	}
+}
+
+func scaffoldInvocationFactory(t *testing.T, overrides map[string]any) string {
+	t.Helper()
+
+	cfg := simplePipelineConfig()
+	for key, value := range overrides {
+		cfg[key] = value
+	}
+	workTypes := cfg["workTypes"].([]map[string]any)
+	for i := range workTypes {
+		if name, _ := workTypes[i]["name"].(string); name == "task" {
+			workTypes[i]["handlingBehavior"] = []string{"DEFAULT"}
+		}
+	}
+	dir := support.ScaffoldFactory(t, cfg)
+	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+	return dir
+}
+
+func scaffoldInlineJavaScriptFactory(t *testing.T) string {
+	t.Helper()
+
+	dir := support.ScaffoldFactory(t, map[string]any{
+		"orchestrator": map[string]any{
+			"kind": "JAVASCRIPT",
+			"javascript": map[string]any{
+				"inlineSource": map[string]any{
+					"encoding": "utf-8",
+					"inline":   `workflow.final("` + terminalSuccessPrimaryResult + `");`,
+				},
+			},
+		},
+	})
+	if err := os.WriteFile(
+		filepath.Join(dir, inlineJavaScriptWorkflowFileName),
+		[]byte(`workflow.final("`+terminalSuccessPrimaryResult+`");`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write inline JavaScript workflow: %v", err)
+	}
+	return dir
+}
+
+func startInvocationServer(
+	t *testing.T,
+	factoryDir string,
+	providerRunner, scriptRunner platformprocess.CommandRunner,
+) *support.FunctionalAPIServer {
+	t.Helper()
+
+	edges := serviceedges.Edges{}
+	support.ConfigureWorkerCommands(t, &edges, providerRunner, scriptRunner)
+	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                factoryDir,
+		WaitForServiceModeRuntime: true,
+		Edges:                     edges,
+	})
+}
+
+func textInvocationRequest(t *testing.T, text string, timeoutMillis *int64) factoryapi.InvocationRequest {
+	t.Helper()
+
+	var part factoryapi.WorkContentPart
+	if err := part.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
+		Type: factoryapi.WorkContentPartTypeText,
+		Text: text,
+	}); err != nil {
+		t.Fatalf("build invocation text content: %v", err)
+	}
+	sourceKind := factoryapi.InvocationInputSourceKindText
+	content := factoryapi.WorkContent{part}
+	return factoryapi.InvocationRequest{
+		SourceKind:    &sourceKind,
+		Content:       &content,
+		TimeoutMillis: timeoutMillis,
+	}
+}
+
+func postInvocation(t *testing.T, serverURL string, request factoryapi.InvocationRequest) factoryapi.InvocationResponse {
+	t.Helper()
+
+	body, err := json.Marshal(request)
+	if err != nil {
+		t.Fatalf("marshal invocation request: %v", err)
+	}
+	response, err := http.Post(
+		strings.TrimSuffix(serverURL, "/")+"/factory-sessions/"+factorysessions.DefaultSessionID+"/invocations",
+		"application/json",
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		t.Fatalf("POST /factory-sessions/~default/invocations: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		payload, _ := io.ReadAll(response.Body)
+		t.Fatalf(
+			"POST /factory-sessions/~default/invocations status = %d: %s",
+			response.StatusCode,
+			strings.TrimSpace(string(payload)),
+		)
+	}
+
+	var decoded factoryapi.InvocationResponse
+	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
+		t.Fatalf("decode invocation response: %v", err)
+	}
+	return decoded
+}
+
+func startInlineJavaScriptSync(
+	t *testing.T,
+	serverURL, factoryDir string,
+) factoryapi.FactorySessionSyncExecutionResponse {
+	t.Helper()
+
+	workflowPath := filepath.Join(factoryDir, inlineJavaScriptWorkflowFileName)
+	payload, err := json.Marshal(factoryapi.FactorySessionExecutionRequest{
+		RequestId: "results-dispatches-inline-js-sync",
+		Source: factoryapi.FactorySessionExecutionSource{
+			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowFile,
+			WorkflowFile: &workflowPath,
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal sync execution request: %v", err)
+	}
+
+	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-sessions/sync"
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("build sync execution request: %v", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("POST %s: %v", endpoint, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		payload, _ := io.ReadAll(response.Body)
+		t.Fatalf("POST %s status = %d, want 200: %s", endpoint, response.StatusCode, strings.TrimSpace(string(payload)))
+	}
+
+	var result factoryapi.FactorySessionSyncExecutionResponse
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		t.Fatalf("decode sync execution response: %v", err)
+	}
+	return result
+}
+
+func readDurableSessionResult(
+	t *testing.T,
+	serverURL, sessionID string,
+) factoryapi.FactorySessionResult {
+	t.Helper()
+
+	return support.GetJSON[factoryapi.FactorySessionResult](
+		t,
+		strings.TrimSuffix(serverURL, "/")+"/factory-sessions/"+sessionID+"/results?mode=final",
+	)
+}
+
+func assertInvocationPrimaryResultText(
+	t *testing.T,
+	response factoryapi.InvocationResponse,
+	wantText string,
+) {
+	t.Helper()
+
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("invocation status = %q, want COMPLETED", response.Status)
+	}
+	if response.PrimaryResult == nil || len(*response.PrimaryResult) != 1 {
+		t.Fatalf("invocation primaryResult = %#v, want one text part", response.PrimaryResult)
+	}
+	part, err := (*response.PrimaryResult)[0].AsWorkTextContentPart()
+	if err != nil {
+		t.Fatalf("primaryResult[0] as text part: %v", err)
+	}
+	if part.Text != wantText {
+		t.Fatalf("primaryResult text = %q, want %q", part.Text, wantText)
+	}
+}
+
+func assertFactorySessionResultPrimaryText(
+	t *testing.T,
+	result factoryapi.FactorySessionResult,
+	wantText string,
+) {
+	t.Helper()
+
+	if result.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
+		t.Fatalf("resultStatus = %q, want FINAL", result.ResultStatus)
+	}
+	if result.PrimaryResult == nil || len(*result.PrimaryResult) != 1 {
+		t.Fatalf("primaryResult = %#v, want one content part", result.PrimaryResult)
+	}
+	part, err := (*result.PrimaryResult)[0].AsWorkJsonContentPart()
+	if err != nil {
+		t.Fatalf("primaryResult[0] as json part: %v", err)
+	}
+	got, ok := part.Json.(string)
+	if !ok || got != wantText {
+		t.Fatalf("primaryResult json = %#v, want string %q", part.Json, wantText)
+	}
+}
+
+func assertTerminalWorkPrimaryText(
+	t *testing.T,
+	serverURL, wantText string,
+) {
+	t.Helper()
+
+	listed := support.GetJSON[factoryapi.ListWorkResponse](
+		t,
+		support.DefaultSessionWorkURL(serverURL, "/work"),
+	)
+	if len(listed.Results) != 1 {
+		t.Fatalf("listed work count = %d, want 1; listed=%#v", len(listed.Results), listed.Results)
+	}
+	item := listed.Results[0]
+	if item.State == nil || generatedWorkStateType(item.State) != factoryapi.WorkStateTypeTERMINAL {
+		t.Fatalf("work state = %#v, want TERMINAL", item.State)
+	}
+	if item.Content == nil || len(*item.Content) != 1 {
+		t.Fatalf("work content = %#v, want one text part", item.Content)
+	}
+	part, err := (*item.Content)[0].AsWorkTextContentPart()
+	if err != nil {
+		t.Fatalf("work content[0] as text part: %v", err)
+	}
+	if part.Text != wantText {
+		t.Fatalf("work content text = %q, want %q", part.Text, wantText)
+	}
+}
+
+func generatedWorkStateType(state *factoryapi.WorkState) factoryapi.WorkStateType {
+	if state == nil {
+		return ""
+	}
+	return state.Type
+}
+
+func waitForBlockingInvocationStart(t *testing.T, blocking *blockingInvocationRunner) {
+	t.Helper()
+
+	select {
+	case <-blocking.started:
+	case <-time.After(time.Second):
+		t.Fatal("blocking invocation did not start")
+	}
+}
