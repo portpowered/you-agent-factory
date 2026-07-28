@@ -1183,7 +1183,7 @@
       "fromOwner": "factory_runtime",
       "toOwner": "automations",
       "class": "command",
-      "evidence": "pkg/services/factory_runtime/service -\u003e pkg/services/automations"
+      "evidence": "pkg/services/factory_runtime/internal -\u003e pkg/services/automations"
     },
     {
       "fromOwner": "factory_runtime",
@@ -3247,9 +3247,11 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-RUN-FOLD-TOPLEVEL cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/factorystatus",
@@ -3261,9 +3263,11 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/host",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-RUN-FOLD-TOPLEVEL cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/legacysnapshot",
@@ -3454,22 +3458,6 @@
       "destinationKind": "owner",
       "successor": "pkg/services/factory_runtime/internal/services/orchestration",
       "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/service",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal",
-      "deletionCondition": "delete transitional service/ package after owner wire retargets to internal implementation and DEL cutover proof completes"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/service/host",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal",
-      "deletionCondition": "delete transitional service/ package after owner wire retargets to internal implementation and DEL cutover proof completes"
     },
     {
       "packagePath": "pkg/services/factory_runtime/state",
