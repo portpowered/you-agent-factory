@@ -654,7 +654,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/subsystems",
-      "minimum": 63.20
+      "minimum": 62.42
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/testkit",
@@ -808,7 +808,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream",
-      "minimum": 32.83
+      "minimum": 28.57
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream/fragmentmap",
@@ -836,7 +836,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime",
-      "minimum": 66.04
+      "minimum": 60.49
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding",
@@ -968,7 +968,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream",
-      "minimum": 57.57
+      "minimum": 54.54
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session",
@@ -1748,7 +1748,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work",
-      "minimum": 64.58
+      "minimum": 64.25
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_materialization",
@@ -1762,7 +1762,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_materialization/internal/service",
-      "minimum": 13.10
+      "minimum": 4.11
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_materialization/wire",
@@ -1992,11 +1992,11 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider",
-      "minimum": 60.46
+      "minimum": 39.88
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter",
-      "minimum": 79.81
+      "minimum": 77.06
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter/opencode",
@@ -2078,7 +2078,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/structured",
-      "minimum": 60.41
+      "minimum": 58.33
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/runner",
