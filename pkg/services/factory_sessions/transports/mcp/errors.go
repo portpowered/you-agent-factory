@@ -1,6 +1,7 @@
 package factorysession
 
 import (
+	"context"
 	"errors"
 	"strings"
 
@@ -19,12 +20,77 @@ const (
 	errorCodeSessionNotFound            = "factory_session.session.not_found"
 	errorCodeResultNotReady             = "factory_session.result.not_ready"
 	errorCodeReconnectCursorNotFound    = "factory_session.events.reconnect_cursor_not_found"
+	errorCodeInternalExecution          = "factory_session.execution.internal"
+	errorCodeRequestCanceled            = "factory_session.request.canceled"
+	errorCodeRequestTimedOut            = "factory_session.request.timed_out"
 	errorMessageServiceUnavailable      = "factory session execution service is unavailable"
+	errorMessageInternalExecution       = "factory session execution failed"
 	errorMessageStartRequestIDConflict  = "execution request id was reused with a different start tuple"
 	errorMessageSessionNotFound         = "factory session not found"
 	errorMessageResultNotReady          = "factory session result is not ready"
 	errorMessageReconnectCursorNotFound = "event reconnect cursor not found in session history"
+	errorMessageRequestCanceled         = "factory session request was canceled"
+	errorMessageRequestTimedOut         = "factory session request timed out"
 )
+
+func requestContextErrorResponse[T any](ctx context.Context) (ToolResponse[T], bool) {
+	if envelope, ok := contextRequestErrorEnvelope(ctx.Err()); ok {
+		return ToolResponse[T]{Error: &envelope}, true
+	}
+	return ToolResponse[T]{}, false
+}
+
+func contextRequestErrorEnvelope(err error) (ToolErrorEnvelope, bool) {
+	if err == nil {
+		return ToolErrorEnvelope{}, false
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return contextDeadlineExceededErrorEnvelope(), true
+	}
+	if errors.Is(err, context.Canceled) {
+		return contextCanceledErrorEnvelope(), true
+	}
+	return ToolErrorEnvelope{}, false
+}
+
+func contextCanceledErrorEnvelope() ToolErrorEnvelope {
+	return ToolErrorEnvelope{
+		Code:      errorCodeRequestCanceled,
+		Message:   errorMessageRequestCanceled,
+		Retryable: false,
+		Details: map[string]any{
+			"reason": "CANCELED",
+		},
+	}
+}
+
+func contextDeadlineExceededErrorEnvelope() ToolErrorEnvelope {
+	return ToolErrorEnvelope{
+		Code:      errorCodeRequestTimedOut,
+		Message:   errorMessageRequestTimedOut,
+		Retryable: true,
+		Details: map[string]any{
+			"reason": "TIMED_OUT",
+		},
+	}
+}
+
+func decodeInputErrorEnvelope(context string, err error) ToolErrorEnvelope {
+	message := context
+	details := map[string]any{}
+	if err != nil {
+		if trimmed := strings.TrimSpace(err.Error()); trimmed != "" {
+			message = context + ": " + trimmed
+		}
+		details["reason"] = err.Error()
+	}
+	return ToolErrorEnvelope{
+		Code:      errorCodeBadRequest,
+		Message:   message,
+		Retryable: false,
+		Details:   details,
+	}
+}
 
 func requestValidationErrorEnvelope(err error) ToolErrorEnvelope {
 	var validationErr *apisurface.RequestValidationError
@@ -152,6 +218,9 @@ func controlErrorEnvelope(sessionID string, err error) ToolErrorEnvelope {
 }
 
 func executionErrorEnvelope(err error) ToolErrorEnvelope {
+	if envelope, ok := contextRequestErrorEnvelope(err); ok {
+		return envelope
+	}
 	var validationErr *factorysessionexecution.ExecutionValidationError
 	if errors.As(err, &validationErr) {
 		code := errorCodeBadRequest
@@ -174,7 +243,43 @@ func executionErrorEnvelope(err error) ToolErrorEnvelope {
 			Retryable: false,
 		}
 	}
-	return requestValidationErrorEnvelope(err)
+	var requestValidationErr *apisurface.RequestValidationError
+	if errors.As(err, &requestValidationErr) {
+		return requestValidationErrorEnvelope(err)
+	}
+	if isSafeClientFacingError(err) {
+		return ToolErrorEnvelope{
+			Code:      errorCodeBadRequest,
+			Message:   strings.TrimSpace(err.Error()),
+			Retryable: false,
+			Details: map[string]any{
+				"reason": err.Error(),
+			},
+		}
+	}
+	return unmappedExecutionErrorEnvelope()
+}
+
+func isSafeClientFacingError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := err.Error()
+	if strings.Contains(message, "factory_sessions/internal") {
+		return false
+	}
+	if strings.Contains(message, "goroutine ") {
+		return false
+	}
+	return strings.TrimSpace(message) != ""
+}
+
+func unmappedExecutionErrorEnvelope() ToolErrorEnvelope {
+	return ToolErrorEnvelope{
+		Code:      errorCodeInternalExecution,
+		Message:   errorMessageInternalExecution,
+		Retryable: false,
+	}
 }
 
 func validationDetailsFromPreview(preview factoryapi.FactoryPreviewResult) map[string]any {

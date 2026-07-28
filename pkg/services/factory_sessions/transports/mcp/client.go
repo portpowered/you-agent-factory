@@ -32,6 +32,25 @@ type RequestPreparation interface {
 // protocol tests replace this exact function role.
 type ToolOperation func(context.Context, string, json.RawMessage) (json.RawMessage, error)
 
+// RootDependencies are the accepted Factory Sessions root roles consumed by
+// the MCP adapter. Execution is the durable-session execution slice of the
+// singular Service root; transports inject an implementation or test fake
+// rather than importing Sessions internals or constructing canonical state.
+type RootDependencies struct {
+	Execution factorysessionexecution.ExecutionService
+	Prepare   RequestPreparation
+	Workflows factoryruntime.WorkflowPreviewOperation
+}
+
+// Bind constructs the canonical ToolOperation from explicit Sessions root
+// dependencies. Adapter tests replace Execution with a root-shaped fake
+// without constructing real session durability or live runtime state.
+func Bind(deps RootDependencies) ToolOperation {
+	return func(ctx context.Context, name string, input json.RawMessage) (json.RawMessage, error) {
+		return CallTool(ctx, deps.Execution, deps.Prepare, deps.Workflows, name, input)
+	}
+}
+
 // BindToolOperation binds the canonical tool registry to explicit Factory
 // Sessions and workflow roles without constructing an alternate MCP client.
 func BindToolOperation(
@@ -39,19 +58,22 @@ func BindToolOperation(
 	prepare RequestPreparation,
 	workflows factoryruntime.WorkflowPreviewOperation,
 ) ToolOperation {
-	return func(ctx context.Context, name string, input json.RawMessage) (json.RawMessage, error) {
-		return CallTool(ctx, service, prepare, workflows, name, input)
-	}
+	return Bind(RootDependencies{
+		Execution: service,
+		Prepare:   prepare,
+		Workflows: workflows,
+	})
 }
 
-func callToolJSON[Input any, Response any](
+func callToolJSON[Input any, Output any](
 	input json.RawMessage,
 	decodeErr string,
-	handler func(Input) Response,
+	handler func(Input) ToolResponse[Output],
 ) (json.RawMessage, error) {
 	var request Input
 	if err := json.Unmarshal(input, &request); err != nil {
-		return nil, fmt.Errorf("%s: %w", decodeErr, err)
+		envelope := decodeInputErrorEnvelope(decodeErr, err)
+		return json.Marshal(ToolResponse[Output]{Error: &envelope})
 	}
 	return json.Marshal(handler(request))
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/inference"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/script"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/service"
+	agentwire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/services/agent/wire"
 )
 
 // NewService validates registrations into one immutable private registry.
@@ -69,6 +70,23 @@ func NewInferenceRegistry(
 	service, registryErr := NewService([]runners.Registration{{
 		Identity: runners.InferenceIdentity,
 		Metadata: inferenceMetadata(),
+		Runner:   implementation,
+	}})
+	return service, errors.Join(err, registryErr)
+}
+
+// NewAgentRegistry constructs one inert Agent Runner over the singular
+// Providers root and publishes it through the immutable private registry.
+func NewAgentRegistry(
+	dependencies runners.AgentDependencies,
+) (runners.Service, error) {
+	implementation, err := agentwire.NewService(
+		dependencies.Providers,
+		dependencies.Publish,
+	)
+	service, registryErr := NewService([]runners.Registration{{
+		Identity: runners.AgentIdentity,
+		Metadata: agentMetadata(),
 		Runner:   implementation,
 	}})
 	return service, errors.Join(err, registryErr)
@@ -159,6 +177,35 @@ func inferenceMetadata() workers.RunnerMetadata {
 			workers.RunnerOptionalCapabilitySupport{
 				Capability: workers.RunnerOptionalCapabilityStructuredOutput,
 				Status:     workers.RunnerOptionalCapabilityStatusUnsupported,
+			},
+			workers.RunnerOptionalCapabilitySupport{
+				Capability: workers.RunnerOptionalCapabilityWorkingDirectory,
+				Status:     workers.RunnerOptionalCapabilityStatusSupported,
+			},
+			workers.RunnerOptionalCapabilitySupport{
+				Capability: workers.RunnerOptionalCapabilityWorktree,
+				Status:     workers.RunnerOptionalCapabilityStatusSupported,
+			},
+		),
+	}
+}
+
+func agentMetadata() workers.RunnerMetadata {
+	return workers.RunnerMetadata{
+		ID:          runners.AgentIdentity,
+		DisplayName: "Agent",
+		Capabilities: workers.NewCapabilities(
+			workers.RunnerOptionalCapabilitySupport{
+				Capability: workers.RunnerOptionalCapabilityImageInput,
+				Status:     workers.RunnerOptionalCapabilityStatusUnsupported,
+			},
+			workers.RunnerOptionalCapabilitySupport{
+				Capability: workers.RunnerOptionalCapabilitySessionResume,
+				Status:     workers.RunnerOptionalCapabilityStatusSupported,
+			},
+			workers.RunnerOptionalCapabilitySupport{
+				Capability: workers.RunnerOptionalCapabilityStructuredOutput,
+				Status:     workers.RunnerOptionalCapabilityStatusSupported,
 			},
 			workers.RunnerOptionalCapabilitySupport{
 				Capability: workers.RunnerOptionalCapabilityWorkingDirectory,

@@ -8,15 +8,6 @@
       ]
     },
     {
-      "test": "tests/functional/runtime_api/api_generated_smoke_test.go::TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAligned",
-      "stableIds": [
-        "rest/getEventsBySessionId",
-        "rest/getStatusBySessionId",
-        "rest/listWorkBySessionId",
-        "rest/submitWorkBySessionId"
-      ]
-    },
-    {
       "test": "tests/functional/runtime_api/api_manual_work_recovery_test.go::TestManualWorkRecovery_CascadeFailureThenAPIMovesResumeProgress",
       "stableIds": [
         "rest/moveWorkBySessionId"
@@ -44,6 +35,15 @@
       "test": "tests/functional/transport/cli/commands/work_wiring_test.go::TestCLIWorkMoveChangesState",
       "stableIds": [
         "cli/you.work.move"
+      ]
+    },
+    {
+      "test": "tests/functional/transport/http/server/generated_client_test.go::TestGeneratedClientAndServerSchemaStayAligned",
+      "stableIds": [
+        "rest/getEventsBySessionId",
+        "rest/getStatusBySessionId",
+        "rest/listWorkBySessionId",
+        "rest/submitWorkBySessionId"
       ]
     },
     {

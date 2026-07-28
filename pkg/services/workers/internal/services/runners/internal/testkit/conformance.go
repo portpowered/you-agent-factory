@@ -26,6 +26,9 @@ type Subject struct {
 	ExpectedResult     workers.RunnerExecutionResult
 	CapturedRequest    func() (workers.RunnerExecutionRequest, bool)
 	AssertCaptured     func(*testing.T)
+	// SkipUnsupportedCapability omits the unsupported-capability subtest for
+	// Runners that delegate optional-capability policy to outer registry edges.
+	SkipUnsupportedCapability bool
 }
 
 // Run proves success, caller-mutation isolation, normalized failures, and
@@ -68,6 +71,9 @@ func Run(t *testing.T, subject Subject) {
 	})
 
 	t.Run("unsupported capability is normalized", func(t *testing.T) {
+		if subject.SkipUnsupportedCapability {
+			t.Skip("optional capability policy is enforced outside this Runner")
+		}
 		_, err := subject.Runner.Execute(t.Context(), subject.UnsupportedRequest)
 		if !errors.Is(err, workers.ErrUnsupportedRunnerCapability) {
 			t.Fatalf("Execute(unsupported) error = %v, want capability error", err)

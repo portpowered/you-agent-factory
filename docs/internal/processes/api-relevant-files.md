@@ -8,9 +8,25 @@ Use this map when changing the public REST contract.
   `pkg/transports/http` server only composes that injected adapter with other
   service-owned handlers and registers the generated routes; runtime binding
   occurs in `pkg/transports/http/application`.
+- Factory Definitions HTTP decoding, generated-contract mapping, service
+  invocation, typed error mapping, and cancel/timeout handling live in
+  `pkg/services/factory_definitions/transports/http`. The top-level
+  `pkg/transports/http` server composes injected service-owned adapters; HTTP-DEF
+  proves fake-root parity at the adapter edge without importing Definitions
+  internals.
 - The Sessions HTTP adapter package must stay registered in the allowed shared
   manifests only: retain `pkg/services/factory_sessions/transports/http` under
   destination `factory_sessions` in
+  `docs/internal/packaged-service-structure/package-target-manifest.json` and
+  `docs/internal/baselines/ownership-inventory.json`, and keep measured floors in
+  both `docs/internal/baselines/go-unit-coverage-package-minimums.json` and
+  `docs/internal/baselines/go-functional-coverage-package-minimums.json`.
+  Prove registration with `manifest_registration_test.go`; do not edit
+  `pkg/wire`, `pkg/root`, `pkg/initializer`, top-level CLI composition, or
+  other services' HTTP adapters when reconciling manifest churn.
+- The Definitions HTTP adapter package must stay registered in the allowed shared
+  manifests only: retain `pkg/services/factory_definitions/transports/http` under
+  destination `factory_definitions` in
   `docs/internal/packaged-service-structure/package-target-manifest.json` and
   `docs/internal/baselines/ownership-inventory.json`, and keep measured floors in
   both `docs/internal/baselines/go-unit-coverage-package-minimums.json` and
@@ -27,6 +43,37 @@ Use this map when changing the public REST contract.
   generated discovery, SDK registration, and stdio composition. Service-owned
   adapters consume Factory Sessions root contracts and do not import or
   construct its implementation packages or private subservices.
+- The Sessions MCP adapter package must stay registered in the allowed shared
+  manifests only: retain `pkg/services/factory_sessions/transports/mcp` under
+  destination `factory_sessions` in
+  `docs/internal/packaged-service-structure/package-target-manifest.json` and
+  `docs/internal/baselines/ownership-inventory.json`, and keep measured floors in
+  both `docs/internal/baselines/go-unit-coverage-package-minimums.json` and
+  `docs/internal/baselines/go-functional-coverage-package-minimums.json`.
+  Prove registration with `manifest_registration_test.go`; do not edit
+  `pkg/wire`, `pkg/root`, `pkg/initializer`, top-level CLI composition, shared
+  MCP host/composition fan-in, or other services' MCP adapters when reconciling
+  manifest churn.
+- Provider Session HTTP decoding, generated-contract mapping, service
+  invocation, typed root error mapping (`error_mapping.go`), cancel/timeout edge
+  mapping, and response encoding for owned Provider Sessions operations live in
+  `pkg/services/provider_sessions/transports/http`. The
+  top-level `pkg/transports/http` server still hosts the generated route until
+  PSS-I02 fan-in; the owner-local adapter consumes `providersessions.Service`
+  (or a fake root in tests) and must not import
+  `pkg/services/provider_sessions/internal/**`. HTTP-PSES owns
+  `getProviderSessionDetails` only (`OwnedHTTPOperationIDs`); root Inspect and
+  Project slices remain peer APIs without adapter-owned HTTP mapping in this
+  packet, so do not author new shared OpenAPI Provider Sessions routes here.
+  Request-context cancellation and deadline-exceeded conditions map to
+  `INTERNAL_ERROR` / `provider session inspection canceled` and
+  `504` / `PROVIDER_SESSION_INSPECTION_TIMEOUT` / `provider session inspection timed out`
+  respectively; thread `r.Context()` through the adapter and use a goroutine/select
+  seam because the root `Details` slice does not accept request context.
+  Register the adapter package in `docs/internal/packaged-service-structure/package-target-manifest.json`,
+  `docs/internal/baselines/ownership-inventory.json`, and the
+  `go-*-coverage-package-minimums.json` baselines when adding or moving the
+  owner-local transport package.
 - Shared filesystem documents represented in OpenAPI should decode and encode
   through the generated model in a focused `pkg/transports/mapping` package,
   then map into domain-owned values. Inject that codec into the service
