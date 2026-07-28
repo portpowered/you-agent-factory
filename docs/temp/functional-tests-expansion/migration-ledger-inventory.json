@@ -389,6 +389,76 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/automations/hosted_sources_root_composition_test.go",
+      "package": "you-agent-factory/tests/functional/automations",
+      "scenario": "TestAutomationsHostedSourcesActivateThroughRuntimeLifecycle",
+      "lane": "short",
+      "destination": "tests/functional/automations/hosted_sources_root_composition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/automations/peer_import_boundary_test.go",
+      "package": "you-agent-factory/tests/functional/automations",
+      "scenario": "TestFunctionalAutomationsPackageUsesPublicProcessImportsOnly",
+      "lane": "short",
+      "destination": "tests/functional/automations/peer_import_boundary_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/automations/reconciliation_root_composition_test.go",
+      "package": "you-agent-factory/tests/functional/automations",
+      "scenario": "TestAutomationsReconcileAdmitsAbsentSourceThroughPublishedRootAfterComposition",
+      "lane": "short",
+      "destination": "tests/functional/automations/reconciliation_root_composition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/automations/reconciliation_root_composition_test.go",
+      "package": "you-agent-factory/tests/functional/automations",
+      "scenario": "TestAutomationsReconciliationAdmitsThroughPublishedRootAfterComposition",
+      "lane": "short",
+      "destination": "tests/functional/automations/reconciliation_root_composition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/automations/reconciliation_root_composition_test.go",
+      "package": "you-agent-factory/tests/functional/automations",
+      "scenario": "TestBuildProcessRemainsReconciliationInertBeforeExplicitRootInvocation",
+      "lane": "short",
+      "destination": "tests/functional/automations/reconciliation_root_composition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/automations/script_poller_root_composition_test.go",
+      "package": "you-agent-factory/tests/functional/automations",
+      "scenario": "TestAutomationsScriptPollerAdmitsWorkThroughRuntimeLifecycle",
+      "lane": "short",
+      "destination": "tests/functional/automations/script_poller_root_composition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/automations/script_poller_root_composition_test.go",
+      "package": "you-agent-factory/tests/functional/automations",
+      "scenario": "TestBuildProcessRemainsScriptPollerInertBeforeRuntimeLifecycle",
+      "lane": "short",
+      "destination": "tests/functional/automations/script_poller_root_composition_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/bootstrap_portability/agent_factory_export_import_fixture_test.go",
       "package": "you-agent-factory/tests/functional/bootstrap_portability",
       "scenario": "TestAgentFactoryExportImportFixture_AuthoredLayoutInterpolatesProjectSpecificPromptContent",
@@ -1244,6 +1314,26 @@
       "scenario": "TestUnrelatedLocalFactoryDoesNotHidePackagedFactories",
       "lane": "short",
       "destination": "tests/functional/factory/packaged/catalog/override_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/catalog/required_inputs_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/catalog",
+      "scenario": "TestPackagedFactoriesNameMissingInputAndFactory",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/catalog/required_inputs_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/catalog/required_inputs_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/catalog",
+      "scenario": "TestPackagedFactoriesRejectMissingRequiredInputs",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/catalog/required_inputs_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -8602,10 +8692,10 @@
     },
     "by_top_level_package": {
       "acceptance": 12,
-      "automations": 7,
+      "automations": 14,
       "bootstrap_portability": 21,
       "cli": 59,
-      "factory": 36,
+      "factory": 38,
       "guards_batch": 23,
       "models": 5,
       "observability": 9,
@@ -8626,12 +8716,12 @@
       "workstations": 34,
       "events": 32
     },
-    "customer_top_level_Test_scenarios": 837,
+    "customer_top_level_Test_scenarios": 848,
     "lane_functionallong": 95,
-    "lane_short": 742,
+    "lane_short": 753,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
-      "you-agent-factory/tests/functional/automations": 7,
+      "you-agent-factory/tests/functional/automations": 14,
       "you-agent-factory/tests/functional/bootstrap_portability": 19,
       "you-agent-factory/tests/functional/bootstrap_portability/metadata_contract": 2,
       "you-agent-factory/tests/functional/cli/factory_run/output": 2,
@@ -8643,7 +8733,7 @@
       "you-agent-factory/tests/functional/cli/session_resume": 6,
       "you-agent-factory/tests/functional/factory/current": 6,
       "you-agent-factory/tests/functional/factory/definitions": 6,
-      "you-agent-factory/tests/functional/factory/packaged/catalog": 10,
+      "you-agent-factory/tests/functional/factory/packaged/catalog": 12,
       "you-agent-factory/tests/functional/factory/packaged/deep_research": 3,
       "you-agent-factory/tests/functional/factory/packaged/fusion": 3,
       "you-agent-factory/tests/functional/factory/packaged/goal": 4,

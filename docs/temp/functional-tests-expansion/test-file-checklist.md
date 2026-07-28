@@ -478,9 +478,19 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAutomationsFilesystemWatcherPreseedsThroughRuntimeLifecycle`.
 - [x] `tests/functional/automations/hosted_sources_root_composition_test.go`
   - `TestBuildProcessRemainsHostedSourcesInertBeforeRuntimeLifecycle`.
+  - `TestAutomationsHostedSourcesActivateThroughRuntimeLifecycle`.
 
-- [x] `tests/functional/automations/hosted_sources_root_composition_test.go`
-  - `TestBuildProcessRemainsHostedSourcesInertBeforeRuntimeLifecycle`.
+- [x] `tests/functional/automations/peer_import_boundary_test.go`
+  - `TestFunctionalAutomationsPackageUsesPublicProcessImportsOnly`.
+
+- [x] `tests/functional/automations/reconciliation_root_composition_test.go`
+  - `TestBuildProcessRemainsReconciliationInertBeforeExplicitRootInvocation`.
+  - `TestAutomationsReconciliationAdmitsThroughPublishedRootAfterComposition`.
+  - `TestAutomationsReconcileAdmitsAbsentSourceThroughPublishedRootAfterComposition`.
+
+- [x] `tests/functional/automations/script_poller_root_composition_test.go`
+  - `TestBuildProcessRemainsScriptPollerInertBeforeRuntimeLifecycle`.
+  - `TestAutomationsScriptPollerAdmitsWorkThroughRuntimeLifecycle`.
 
 ## Wave 1 — workstations
 
@@ -689,7 +699,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestInvalidLocalOverrideDoesNotFallBackSilently` covers misconfiguration.
   - `TestUnrelatedLocalFactoryDoesNotHidePackagedFactories` covers enumeration.
 
-- [ ] `tests/functional/factory/packaged/catalog/required_inputs_test.go`
+- [x] `tests/functional/factory/packaged/catalog/required_inputs_test.go`
   - `TestPackagedFactoriesRejectMissingRequiredInputs` runs the package matrix.
   - `TestPackagedFactoriesNameMissingInputAndFactory` verifies diagnostics.
 
