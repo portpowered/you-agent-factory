@@ -10,6 +10,7 @@ const (
 	factoryDefinitionsWirePackage = "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	transitionalServiceImport     = "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
 	transitionalDefinitionImport  = "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition"
+	transitionalValidationImport  = "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 )
 
 var transitionalSnapshotPackages = []string{
@@ -31,6 +32,13 @@ func TestWire_DoesNotImportTransitionalDefinitionShim(t *testing.T) {
 
 	assertWireDoesNotImport(t, transitionalDefinitionImport,
 		"must construct from factory_definitions/internal lifecycle composition, not public definition shim")
+}
+
+func TestWire_DoesNotImportTransitionalValidationShim(t *testing.T) {
+	t.Parallel()
+
+	assertWireDoesNotImport(t, transitionalValidationImport,
+		"must construct from factory_definitions root validation contracts, not transitional validation shim")
 }
 
 func assertWireDoesNotImport(t *testing.T, forbiddenImport, message string) {

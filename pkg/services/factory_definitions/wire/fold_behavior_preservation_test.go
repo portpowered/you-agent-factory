@@ -18,7 +18,6 @@ import (
 	factorydefinitionsinternal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
 	factorydefinitiontestcomposition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/testcomposition"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	authoredmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/authored"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -327,7 +326,7 @@ func newWireFoldPreservationService(t *testing.T, options ...foldPreservationOpt
 	}
 
 	composition := newFoldPreservationComposition()
-	validator := factoryvalidation.New(nil)
+	validator := factorydefinitionswire.NewValidationOperations(nil)
 	mapInput := func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
 		return validationentry.MapFactoryJSONForPersistence(payload, composition.LoadCanonicalJSON)
 	}

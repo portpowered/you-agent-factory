@@ -15,7 +15,7 @@ import (
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
 
@@ -234,7 +234,7 @@ func validatePublishedArtifact(
 			entry.Project,
 		)
 	}
-	if validation := factoryvalidation.Validate(factory); validation.HasBlockingTargets() {
+	if validation := factorydefinitionswire.ValidateFactoryDefinition(factory); validation.HasBlockingTargets() {
 		var findings []string
 		for _, target := range validation.BlockingTargets() {
 			findings = append(findings, fmt.Sprintf("%s %s: %s", target.Code, target.Path, target.Message))
