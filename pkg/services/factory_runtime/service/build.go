@@ -24,12 +24,7 @@ import (
 
 const defaultSessionID = "~default"
 
-type runtimeWorkstationService interface {
-	StartWorkstationPool(context.Context, workers.WorkstationPoolStartRequest) (workers.WorkstationPoolStartResult, error)
-	StopWorkstationPool(context.Context) (workers.WorkstationPoolStopResult, error)
-	DispatchWorkstation(context.Context, workers.WorkstationDispatchRequest) (workers.WorkstationDispatchResult, error)
-	CancelWorkstationDispatch(context.Context, workers.WorkstationDispatchCancelRequest) (workers.WorkstationDispatchCancelResult, error)
-}
+type runtimeWorkstationService = workers.WorkstationExecutionService
 
 // RuntimeFactory constructs hosted runtime bundles. It is stateless.
 type RuntimeFactory struct {

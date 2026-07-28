@@ -633,7 +633,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ### Packaged factories
 
-- [ ] `tests/functional/factory/packaged/catalog/discovery_test.go`
+- [x] `tests/functional/factory/packaged/catalog/discovery_test.go`
   - `TestPackagedFactoryCatalogListsEveryEmbeddedFactory` compares runtime
     discovery with the embedded package inventory.
   - `TestPackagedFactoryCatalogHasUniqueStableNames` rejects collisions.
@@ -648,7 +648,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPackagedFactoriesRejectMissingRequiredInputs` runs the package matrix.
   - `TestPackagedFactoriesNameMissingInputAndFactory` verifies diagnostics.
 
-- [ ] `tests/functional/factory/packaged/deep_research/invocation_test.go`
+- [x] `tests/functional/factory/packaged/deep_research/invocation_test.go`
   - `TestPackagedDeepResearchRequiredInputCompletes` verifies dispatch sequence
     and primary result with mock workers.
   - `TestPackagedDeepResearchOptionalInputsReachWorkers` covers overrides.
@@ -659,7 +659,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPackagedFusionOptionalInputsReachWorkers` covers supported options.
   - `TestPackagedFusionPartialWorkerFailureUsesDocumentedOutcome` covers error.
 
-- [ ] `tests/functional/factory/packaged/goal/invocation_test.go`
+- [x] `tests/functional/factory/packaged/goal/invocation_test.go`
   - `TestPackagedGoalAcceptCompletesWithSummary` covers accepted routing.
   - `TestPackagedGoalRejectRepeatsThenCompletes` covers feedback propagation.
   - `TestPackagedGoalUnknownDecisionFails` covers classifier failure.
