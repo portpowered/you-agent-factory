@@ -65,3 +65,68 @@ func TestPausedFactorySessionBuffersSubmittedWork(t *testing.T) {
 		t.Fatalf("work %q reached task:complete while session was paused: %#v", workID, listed.Results)
 	}
 }
+
+// TestResumedFactorySessionDrainsBufferedWorkInOrder proves resume drains work
+// buffered during pause in submission order through public session-control and
+// dispatch observation boundaries.
+func TestResumedFactorySessionDrainsBufferedWorkInOrder(t *testing.T) {
+	factoryDir := support.ScaffoldFactory(t, pauseResumeControlsFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:        factoryDir,
+		MockWorkersConfig: pauseResumeControlsSlowMockWorkersConfig(),
+	})
+	defer server.Stop(t)
+
+	baseURL := server.URL()
+	sessionID := factorysessions.DefaultSessionID
+
+	pause := postSessionLifecycleControl(
+		t,
+		baseURL,
+		sessionID,
+		factoryapi.FactorySessionLifecycleControlKindPause,
+	)
+	if pause.Operation != factoryapi.FactorySessionLifecycleControlKindPause ||
+		pause.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("pause response = %#v, want accepted pause", pause)
+	}
+
+	first := support.SubmitDefaultSessionWork(t, baseURL, factoryapi.SubmitWorkRequest{
+		Name:         stringPointer("paused-buffered-first"),
+		WorkTypeName: "task",
+		Payload:      map[string]string{"title": "First paused submission"},
+	})
+	second := support.SubmitDefaultSessionWork(t, baseURL, factoryapi.SubmitWorkRequest{
+		Name:         stringPointer("paused-buffered-second"),
+		WorkTypeName: "task",
+		Payload:      map[string]string{"title": "Second paused submission"},
+	})
+	firstID := stringPointerValue(first.WorkId)
+	secondID := stringPointerValue(second.WorkId)
+	if firstID == "" || secondID == "" {
+		t.Fatalf("submit while paused missing work ids: first=%#v second=%#v", first, second)
+	}
+
+	listed := support.ListDefaultSessionWork(t, baseURL)
+	for _, workID := range []string{firstID, secondID} {
+		if support.HasWorkAtCustomerState(listed, workID, support.WorkCustomerLocation("task", "complete")) {
+			t.Fatalf("work %q reached task:complete before resume: %#v", workID, listed.Results)
+		}
+	}
+
+	resume := postSessionLifecycleControl(
+		t,
+		baseURL,
+		sessionID,
+		factoryapi.FactorySessionLifecycleControlKindResume,
+	)
+	if resume.Operation != factoryapi.FactorySessionLifecycleControlKindResume ||
+		resume.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("resume response = %#v, want accepted resume", resume)
+	}
+	if resume.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("resume status = %q, want RUNNING", resume.Status)
+	}
+
+	assertBufferedWorkDrainedInSubmissionOrder(t, server, firstID, secondID)
+}
