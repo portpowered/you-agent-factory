@@ -1,0 +1,188 @@
+package quorum
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+)
+
+const (
+	packagedQuorumBranchAWorkstation = "run-quorum-branch-a"
+	packagedQuorumBranchBWorkstation = "run-quorum-branch-b"
+	packagedQuorumMergeWorkstation   = "merge-quorum"
+)
+
+type packagedQuorumCommandRunner struct {
+	mu               sync.Mutex
+	callCounts       map[string]int
+	capturedMergePromptText string
+}
+
+func newPackagedQuorumCommandRunner() *packagedQuorumCommandRunner {
+	return &packagedQuorumCommandRunner{
+		callCounts: make(map[string]int),
+	}
+}
+
+func (runner *packagedQuorumCommandRunner) Run(
+	_ context.Context,
+	request platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	lane := packagedQuorumRequestLane(request)
+	runner.mu.Lock()
+	runner.callCounts[lane]++
+	runner.mu.Unlock()
+
+	switch lane {
+	case packagedQuorumBranchAWorkstation:
+		return packagedQuorumCodexResult("branch A COMPLETE"), nil
+	case packagedQuorumBranchBWorkstation:
+		return packagedQuorumCodexResult("branch B COMPLETE"), nil
+	case packagedQuorumMergeWorkstation:
+		prompt := packagedQuorumCommandPrompt(request)
+		runner.mu.Lock()
+		runner.capturedMergePromptText = prompt
+		runner.mu.Unlock()
+		return packagedQuorumCodexResult("merged quorum response:\n" + prompt + "\nCOMPLETE"), nil
+	default:
+		return platformprocess.CommandResult{}, nil
+	}
+}
+
+func packagedQuorumCodexResult(result string) platformprocess.CommandResult {
+	return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout(result)}
+}
+
+func packagedQuorumCommandPrompt(request platformprocess.CommandRequest) string {
+	if len(request.Stdin) > 0 {
+		return string(request.Stdin)
+	}
+	if len(request.Args) > 0 {
+		return request.Args[len(request.Args)-1]
+	}
+	return ""
+}
+
+func packagedQuorumRequestLane(request platformprocess.CommandRequest) string {
+	prompt := packagedQuorumCommandPrompt(request)
+	switch {
+	case strings.Contains(prompt, "Produce branch A's independent assessment"):
+		return packagedQuorumBranchAWorkstation
+	case strings.Contains(prompt, "Produce branch B's independent assessment"):
+		return packagedQuorumBranchBWorkstation
+	case strings.Contains(prompt, "Synthesize the two quorum assessments"):
+		return packagedQuorumMergeWorkstation
+	default:
+		return "unknown"
+	}
+}
+
+func (runner *packagedQuorumCommandRunner) callCount(workstation string) int {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return runner.callCounts[workstation]
+}
+
+func (runner *packagedQuorumCommandRunner) capturedMergePrompt() string {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return runner.capturedMergePromptText
+}
+
+func runPackagedQuorumCLIJSONInvocation(
+	t *testing.T,
+	runner platformprocess.CommandRunner,
+	requestText string,
+) factoryapi.InvocationResponse {
+	t.Helper()
+
+	homeDir := t.TempDir()
+	support.InstallPackagedFactory(t, homeDir, factorydefinitions.PackagedQuorumFactoryName)
+
+	args := []string{
+		"you", "--json", "run",
+		"--named", factorydefinitions.PackagedQuorumFactoryName,
+		"--no-record",
+		requestText,
+	}
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.WorkingDirectory = t.TempDir()
+
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	})
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf(
+			"Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s",
+			args,
+			err,
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
+	}
+	if inputs.Stderr() != "" {
+		t.Fatalf("stderr = %q, want empty successful-run stderr", inputs.Stderr())
+	}
+
+	var response factoryapi.InvocationResponse
+	if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stdout())), &response); decodeErr != nil {
+		t.Fatalf("decode invocation JSON stdout: %v\nstdout:\n%s", decodeErr, inputs.Stdout())
+	}
+	return response
+}
+
+func invocationPrimaryResultText(t *testing.T, response factoryapi.InvocationResponse) string {
+	t.Helper()
+
+	if response.PrimaryResult == nil || len(*response.PrimaryResult) != 1 {
+		t.Fatalf("primaryResult = %#v, want one text part", response.PrimaryResult)
+	}
+	part, err := (*response.PrimaryResult)[0].AsWorkTextContentPart()
+	if err != nil {
+		t.Fatalf("primaryResult[0] as text part: %v", err)
+	}
+	return part.Text
+}
+
+func assertMergedQuorumPrimaryResult(t *testing.T, result, originalRequest string) {
+	t.Helper()
+	assertPromptIncludes(
+		t,
+		result,
+		"Original request:\n",
+		originalRequest,
+		"Branch A output:\n",
+		"branch A",
+		"Branch B output:\n",
+		"branch B",
+	)
+}
+
+func assertPromptIncludes(t *testing.T, text string, values ...string) {
+	t.Helper()
+	lastIndex := 0
+	for _, value := range values {
+		nextIndex := strings.Index(text[lastIndex:], value)
+		if nextIndex < 0 {
+			t.Fatalf("text = %q, missing %q", text, value)
+		}
+		lastIndex += nextIndex + len(value)
+	}
+}
+
+func packagedQuorumRequestText(t *testing.T) string {
+	t.Helper()
+	return fmt.Sprintf("functional packaged quorum required input %d", time.Now().UnixNano())
+}
