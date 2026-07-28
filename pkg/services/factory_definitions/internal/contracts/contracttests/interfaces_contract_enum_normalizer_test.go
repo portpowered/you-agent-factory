@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
-	factoryresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/resource"
+	catalogresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/resource"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -102,7 +102,7 @@ func publicFactoryEnumNormalizerProviderCases() []publicFactoryEnumNormalizerCas
 			name:       "resource type",
 			alias:      "MODEL",
 			unknown:    "custom-resource",
-			want:       factoryresource.TypeModel,
+			want:       catalogresource.TypeModel,
 			permissive: interfaces.PermissivePublicFactoryResourceType,
 			strict:     interfaces.StrictPublicFactoryResourceType,
 		},

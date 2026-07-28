@@ -3,7 +3,7 @@ package factorycontracts
 import (
 	"strings"
 
-	factoryresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/resource"
+	catalogresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/resource"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
 )
 
@@ -18,7 +18,7 @@ func CanonicalFactoryGraphEntityID(explicitID, fallbackName string) string {
 	return fallbackName
 }
 
-func CanonicalFactoryGraphResourceID(resource factoryresource.Config) string {
+func CanonicalFactoryGraphResourceID(resource catalogresource.Config) string {
 	return CanonicalFactoryGraphEntityID(resource.ID, resource.Name)
 }
 

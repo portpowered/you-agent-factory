@@ -2700,6 +2700,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/resource",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_definitions/internal/services/catalog/wire",
       "disposition": "retain",
       "destination": "factory_definitions",
