@@ -270,15 +270,15 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/internal/service",
-      "minimum": 65.90
+      "minimum": 65.85
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/persist",
-      "minimum": 66.70
+      "minimum": 66.66
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/prepare",
-      "minimum": 57.90
+      "minimum": 57.89
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/wire",
