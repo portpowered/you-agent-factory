@@ -11,8 +11,8 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	settingsdocument "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document"
 	settingsconstruct "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/construct"
+	settingsdocument "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 )
 
@@ -49,6 +49,23 @@ func TestConfigDocumentServiceRoutesLoadUpdatePersistThroughNestedDocumentOwner(
 	}
 	if reloaded.FileConfig().Defaults != updated.FileConfig().Defaults {
 		t.Fatalf("reloaded defaults = %#v, want %#v", reloaded.FileConfig().Defaults, updated.FileConfig().Defaults)
+	}
+
+	withACP, err := service.ConfigureACPIntegrationAdd(context.Background(), path, operatorsettings.ACPIntegration{
+		ID: "entry-1", Name: "cursor-acp", Transport: "stdio", Command: "cursor-agent acp",
+	})
+	if err != nil {
+		t.Fatalf("ConfigureACPIntegrationAdd() = %v", err)
+	}
+	if got := withACP.FileConfig().Workers.ACP.Integrations; len(got) != 1 || got[0].Name != "cursor-acp" {
+		t.Fatalf("ACP integrations after add = %#v", got)
+	}
+	withoutACP, err := service.ConfigureACPIntegrationDelete(context.Background(), path, "cursor-acp")
+	if err != nil {
+		t.Fatalf("ConfigureACPIntegrationDelete() = %v", err)
+	}
+	if got := withoutACP.FileConfig().Workers.ACP.Integrations; len(got) != 0 {
+		t.Fatalf("ACP integrations after delete = %#v, want empty", got)
 	}
 }
 

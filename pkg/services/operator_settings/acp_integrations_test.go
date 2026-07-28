@@ -1,6 +1,7 @@
 package operatorsettings
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"testing"
@@ -58,5 +59,34 @@ func TestACPIntegrationRejectsDuplicateAndMalformedProviderIdentities(t *testing
 		ID: "entry-1", Name: "Cursor ACP", Transport: "stdio", Command: "cursor-agent acp",
 	}); err == nil {
 		t.Fatal("AddACPIntegration(malformed name) error = nil")
+	}
+	for _, integration := range []ACPIntegration{
+		{ID: "entry-1", Name: "missing-command", Transport: "stdio"},
+		{ID: "entry-1", Name: "custom-acp", Transport: "http", Command: "agent acp"},
+	} {
+		if _, err := service.AddACPIntegration(ConfigDocument{}, integration); err == nil {
+			t.Fatalf("AddACPIntegration(%#v) error = nil", integration)
+		}
+	}
+	duplicateID := ConfigDocument{config: Config{Workers: WorkerSettings{ACP: ACPSettings{Integrations: []ACPIntegration{
+		{ID: "same", Name: "first-acp", Transport: "stdio", Command: "first acp"},
+		{ID: "same", Name: "second-acp", Transport: "stdio", Command: "second acp"},
+	}}}}}
+	if _, err := duplicateID.config.Normalize(); err == nil {
+		t.Fatal("Normalize(duplicate ACP ID) error = nil")
+	}
+}
+
+func TestConfigureACPIntegrationHonorsCanceledContextBeforeIO(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	service := ConfigDocumentService{}
+	if _, err := service.ConfigureACPIntegrationAdd(ctx, "config.json", ACPIntegration{}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("ConfigureACPIntegrationAdd(canceled) = %v", err)
+	}
+	if _, err := service.ConfigureACPIntegrationDelete(ctx, "config.json", "cursor-acp"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("ConfigureACPIntegrationDelete(canceled) = %v", err)
 	}
 }

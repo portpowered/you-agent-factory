@@ -14,6 +14,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	acpcli "github.com/portpowered/infinite-you/pkg/transports/cli/acp"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
@@ -962,5 +963,41 @@ func TestModelsCommand_HelpMentionsDiscoverySurface(t *testing.T) {
 		if !bytes.Contains([]byte(help), []byte(want)) {
 			t.Fatalf("models help missing %q:\n%s", want, help)
 		}
+	}
+}
+
+func TestWorkersACPCommandsValidateAndRouteRequests(t *testing.T) {
+	t.Parallel()
+
+	options := CommandFactory{
+		homeDir: func() (string, error) { return t.TempDir(), nil },
+		acp:     acpcli.Service{},
+	}
+	tests := []struct {
+		name     string
+		args     []string
+		want     string
+		canceled bool
+	}{
+		{name: "list requires providers factory", args: []string{"acp", "list"}, want: "Providers factory is required"},
+		{name: "add validates transport", args: []string{"acp", "add", "--name", "custom-acp", "--transport", "http", "--argument", "agent acp"}, want: "transport must be stdio"},
+		{name: "add routes to service", args: []string{"acp", "add", "--name", "custom-acp", "--argument", "agent acp"}, want: "ID generator is required"},
+		{name: "delete routes to service", args: []string{"acp", "delete", "--name", "custom-acp"}, want: "context canceled", canceled: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			command := productionWorkersCommand(options)
+			command.SetOut(io.Discard)
+			command.SetErr(io.Discard)
+			command.SetArgs(test.args)
+			if test.canceled {
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+				command.SetContext(ctx)
+			}
+			if err := command.Execute(); err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("Execute(%v) error = %v, want containing %q", test.args, err, test.want)
+			}
+		})
 	}
 }
