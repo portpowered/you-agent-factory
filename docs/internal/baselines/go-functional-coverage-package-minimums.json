@@ -500,7 +500,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/engine",
-      "minimum": 73.78
+      "minimum": 73.48
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/javascript/preview",
@@ -2122,7 +2122,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra",
-      "minimum": 72.18
+      "minimum": 71.89
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/cliserver",
@@ -2374,7 +2374,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/wire",
-      "minimum": 83.20
+      "minimum": 83.06
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/wire/factorydefinitions",

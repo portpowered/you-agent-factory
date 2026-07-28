@@ -1081,16 +1081,6 @@
     {
       "source_path": "tests/functional/cli/root_discovery/root_discovery_test.go",
       "package": "you-agent-factory/tests/functional/cli/root_discovery",
-      "scenario": "TestBareRootPrintsConciseHelpWithoutProductEffects",
-      "lane": "short",
-      "destination": "tests/functional/transport/cli/process/help_and_version_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/cli/root_discovery/root_discovery_test.go",
-      "package": "you-agent-factory/tests/functional/cli/root_discovery",
       "scenario": "TestContinuousRunScopedServerKeepsListenerUntilCancellation",
       "lane": "short",
       "destination": "tests/functional/transport/cli/process/help_and_version_test.go",
@@ -7067,6 +7057,36 @@
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/process/help_and_version_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/process",
+      "scenario": "TestCLIHelpListsPublicCommandFamilies",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/process/help_and_version_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/process/help_and_version_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/process",
+      "scenario": "TestCLISubcommandHelpUsesStableUsageAndExitZero",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/process/help_and_version_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/process/help_and_version_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/process",
+      "scenario": "TestCLIVersionWritesOneMachineReadableVersion",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/process/help_and_version_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
     }
   ],
   "scanned_at_utc": "2026-07-27T23:58:26Z",
@@ -7084,7 +7104,7 @@
       "acceptance": 13,
       "automations": 7,
       "bootstrap_portability": 21,
-      "cli": 63,
+      "cli": 62,
       "factory": 4,
       "guards_batch": 23,
       "models": 5,
@@ -7104,9 +7124,9 @@
       "workflow": 30,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 687,
+    "customer_top_level_Test_scenarios": 689,
     "lane_functionallong": 95,
-    "lane_short": 592,
+    "lane_short": 594,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 13,
       "you-agent-factory/tests/functional/automations": 7,
@@ -7117,7 +7137,7 @@
       "you-agent-factory/tests/functional/cli/input_contract": 25,
       "you-agent-factory/tests/functional/cli/mcp_resume": 8,
       "you-agent-factory/tests/functional/cli/named_invocation": 6,
-      "you-agent-factory/tests/functional/cli/root_discovery": 10,
+      "you-agent-factory/tests/functional/cli/root_discovery": 9,
       "you-agent-factory/tests/functional/cli/session_resume": 6,
       "you-agent-factory/tests/functional/factory/catalog": 3,
       "you-agent-factory/tests/functional/factory/runtime_lifecycle": 1,
@@ -7151,7 +7171,7 @@
       "you-agent-factory/tests/functional/transport/cli/commands": 20,
       "you-agent-factory/tests/functional/transport/cli/output": 13,
       "you-agent-factory/tests/functional/transport/cli/parameters": 19,
-      "you-agent-factory/tests/functional/transport/cli/process": 4,
+      "you-agent-factory/tests/functional/transport/cli/process": 7,
       "you-agent-factory/tests/functional/transport/docs": 1,
       "you-agent-factory/tests/functional/transport/http": 1,
       "you-agent-factory/tests/functional/transport/http/server": 14,
