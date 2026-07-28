@@ -16,8 +16,13 @@ import (
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/executor/agentrun"
 	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/prompting"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
+	runnerswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
+	providerconductor "github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
 	providercontract "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
+	"github.com/portpowered/infinite-you/pkg/services/workers/provider/providersroot"
+	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 	providerstructured "github.com/portpowered/infinite-you/pkg/services/workers/provider/structured"
 	"github.com/portpowered/infinite-you/pkg/services/workers/skippermissions"
 )
@@ -75,9 +80,11 @@ type Service struct {
 	worktreePreparer  workers.FactoryWorktreePreparer
 	agentRunHarness   workeragentrun.HarnessAdapter
 	retryRandom       platformrandom.Source
-	workstationFiles  platformfilesystem.ReadFileInspector
-	resolveRunner     workers.RunnerSelectionResolver
-	resolveProvider   workers.ProviderIdentityResolver
+	workstationFiles                  platformfilesystem.ReadFileInspector
+	resolveRunner                     workers.RunnerSelectionResolver
+	resolveProvider                   workers.ProviderIdentityResolver
+	providerRegistry                  *providerregistry.Registry
+	agentDispatchUsesRegisteredRunner bool
 }
 
 // New constructs a worker executor service from process-owned factories.
@@ -130,6 +137,29 @@ func (s *Service) WithProviderIdentityResolution(resolve workers.ProviderIdentit
 	}
 	clone := *s
 	clone.resolveProvider = resolve
+	return &clone
+}
+
+// WithProviderRegistry returns a service copy that can route agent dispatch
+// through conductor-backed provider integrations on the Providers root.
+func (s *Service) WithProviderRegistry(registry *providerregistry.Registry) *Service {
+	if s == nil {
+		return nil
+	}
+	clone := *s
+	clone.providerRegistry = registry
+	return &clone
+}
+
+// WithAgentRunnerCutover returns a service copy that resolves agent dispatch
+// through the registered parent-private Agent Runner and injected Providers
+// root instead of the superseded provider-factory runner path.
+func (s *Service) WithAgentRunnerCutover(enabled bool) *Service {
+	if s == nil {
+		return nil
+	}
+	clone := *s
+	clone.agentDispatchUsesRegisteredRunner = enabled
 	return &clone
 }
 
@@ -191,7 +221,7 @@ func (s *Service) Build(
 	switch def.Type {
 	case interfaces.WorkerTypeModel, interfaces.WorkerTypeAgent, interfaces.WorkerTypeInference:
 		effectiveSkipPermissions := effectiveWorkerSkipPermissions(def, invocationSkipPermissionsOverride)
-		runner, err := s.providerRunner(
+		runner, err := s.agentRunner(
 			runtimeConfig, def, logger, effectiveSkipPermissions,
 			providerOverride, inferenceProgressPublisher,
 		)
@@ -205,7 +235,6 @@ func (s *Service) Build(
 			runner,
 			logger,
 			clock,
-			s.retryRandom,
 			s.decisionEnvelopes,
 		)
 		agentRun := workeragentrun.NewAgentRunExecutorWithDependencies(
@@ -288,7 +317,7 @@ func (s *Service) BuildLogical(
 	)
 }
 
-func (s *Service) providerRunner(
+func (s *Service) agentRunner(
 	runtimeConfig interfaces.RuntimeConfigLookup,
 	def *interfaces.FactoryWorkerConfig,
 	logger logging.Logger,
@@ -296,31 +325,103 @@ func (s *Service) providerRunner(
 	providerOverride providercontract.Provider,
 	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
 ) (workers.Runner, error) {
-	var runner workers.Runner
 	if providerOverride != nil {
-		runner = workerexecutor.RunnerFromProvider(providerOverride)
-	} else {
-		if s == nil || s.providerFactory == nil {
-			return nil, fmt.Errorf("provider worker factory is required")
-		}
-		var responseExecutor workerprovider.ResponseStreamExecutor
-		if inferenceProgressPublisher != nil {
-			responseExecutor = providerstructured.NewExecutor()
-		}
-		built, err := s.providerFactory.New(
-			effectiveSkipPermissions,
-			logger,
-			nil,
-			inferenceProgressPublisher,
-			responseExecutor,
-			strings.TrimSpace(runtimeConfig.FactoryDir()),
-		)
-		if err != nil {
-			return nil, err
-		}
-		runner = built
+		return workerexecutor.RunnerFromProvider(providerOverride), nil
 	}
-	return runner, nil
+	if s != nil && s.agentDispatchUsesRegisteredRunner {
+		return s.resolveRegisteredAgentRunner(
+			runtimeConfig,
+			logger,
+			effectiveSkipPermissions,
+			inferenceProgressPublisher,
+		)
+	}
+	return s.legacyProviderRunner(
+		runtimeConfig,
+		logger,
+		effectiveSkipPermissions,
+		inferenceProgressPublisher,
+	)
+}
+
+func (s *Service) resolveRegisteredAgentRunner(
+	runtimeConfig interfaces.RuntimeConfigLookup,
+	logger logging.Logger,
+	effectiveSkipPermissions bool,
+	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
+) (workers.Runner, error) {
+	if s == nil || s.providerFactory == nil {
+		return nil, fmt.Errorf("provider worker factory is required")
+	}
+	publish := agentProgressPublisherOrNoop(inferenceProgressPublisher)
+	providersConfig := providersroot.Config{
+		Factory:          s.providerFactory,
+		SkipPermissions:  effectiveSkipPermissions,
+		Logger:           logger,
+		Publish:          publish,
+		FactoryDirectory: strings.TrimSpace(runtimeConfig.FactoryDir()),
+	}
+	if s.providerRegistry != nil {
+		providersConfig.ProviderRegistry = s.providerRegistry
+		providersConfig.Conductor = providerconductor.New(s.providerRegistry)
+	}
+	providersRoot, err := providersroot.NewService(providersConfig)
+	if err != nil {
+		return nil, fmt.Errorf("construct Providers root for agent dispatch: %w", err)
+	}
+	registry, err := runnerswire.NewAgentRegistry(runners.AgentDependencies{
+		Providers: providersRoot,
+		Publish:   publish,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("construct agent runner registry: %w", err)
+	}
+	binding, err := registry.Resolve(runners.ResolutionRequest{
+		Identity: runners.AgentIdentity,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("resolve agent runner: %w", err)
+	}
+	if binding.Runner == nil {
+		return nil, fmt.Errorf("resolve agent runner: runner is nil")
+	}
+	return binding.Runner, nil
+}
+
+func agentProgressPublisherOrNoop(
+	publisher workerprovider.InferenceProgressPublisher,
+) workerprovider.InferenceProgressPublisher {
+	if publisher != nil {
+		return publisher
+	}
+	return func(_ workers.ProgressFragment) {}
+}
+
+func (s *Service) legacyProviderRunner(
+	runtimeConfig interfaces.RuntimeConfigLookup,
+	logger logging.Logger,
+	effectiveSkipPermissions bool,
+	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
+) (workers.Runner, error) {
+	if s == nil || s.providerFactory == nil {
+		return nil, fmt.Errorf("provider worker factory is required")
+	}
+	var responseExecutor workerprovider.ResponseStreamExecutor
+	if inferenceProgressPublisher != nil {
+		responseExecutor = providerstructured.NewExecutor()
+	}
+	built, err := s.providerFactory.New(
+		effectiveSkipPermissions,
+		logger,
+		nil,
+		inferenceProgressPublisher,
+		responseExecutor,
+		strings.TrimSpace(runtimeConfig.FactoryDir()),
+	)
+	if err != nil {
+		return nil, err
+	}
+	return built, nil
 }
 
 // runnerProviderAdapter lets the provider-boundary recorder observe the final

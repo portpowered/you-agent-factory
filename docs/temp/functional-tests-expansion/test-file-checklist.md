@@ -28,7 +28,7 @@ intentionally small enough to distribute across many agents.
 
 ### CLI process contract
 
-- [ ] `tests/functional/transport/cli/process/help_and_version_test.go`
+- [x] `tests/functional/transport/cli/process/help_and_version_test.go`
   - `TestCLIHelpListsPublicCommandFamilies` verifies root help includes the
     supported public command families without hidden/internal commands.
   - `TestCLISubcommandHelpUsesStableUsageAndExitZero` verifies representative

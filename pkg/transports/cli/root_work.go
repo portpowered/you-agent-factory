@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/portpowered/infinite-you/internal/cliversion"
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
@@ -190,6 +191,8 @@ type RootSubcommands struct {
 // root owns only its persistent behavior and receives its top-level commands
 // from the command composition graph.
 func NewRootCommandFromSubcommands(root *cobra.Command, subcommands RootSubcommands) *cobra.Command {
+	root.Version = cliversion.String()
+	root.SetVersionTemplate("{{.Version}}\n")
 	root.AddCommand(subcommands.Commands...)
 	return root
 }

@@ -111,6 +111,7 @@ pkg/services/factory_runtime/engine/options_test.go: unreachable func: WithResul
 pkg/services/factory_runtime/engine/options_test.go: unreachable func: WithResultBufferDrainObserver
 pkg/services/factory_runtime/engine/options_test.go: unreachable func: WithTokenTransformer
 pkg/services/factory_runtime/engine/options_test.go: unreachable func: WithWorkstationResponseRecorder
+pkg/services/factory_runtime/internal/services/orchestration/binding.go: unreachable func: compiledBinding.isOrchestrationBinding
 pkg/services/factory_runtime/runtime/factory.go: unreachable func: WorkflowContext
 pkg/services/factory_runtime/runtime/factory_event_history_test.go: unreachable func: assertBatchRequestReplayEvents
 pkg/services/factory_runtime/runtime/factory_event_history_test.go: unreachable func: assertDispatchResponseCount
@@ -181,14 +182,21 @@ pkg/services/factory_sessions/transports/cli/sessionexecution/run.go: unreachabl
 pkg/services/factory_sessions/transports/cli/sessionexecution/run.go: unreachable func: writeResultFailureHuman
 pkg/services/factory_sessions/transports/mcp/inventory_boundary.go: unreachable func: VerifyProjectedMCPBoundaryInventories
 pkg/services/factory_sessions/transports/mcp/registry_test.go: unreachable func: writeWorkflow
+pkg/services/models/internal/host/catalog_host.go: unreachable func: CatalogHost.InspectAssetReadiness
+pkg/services/models/internal/host/catalog_host.go: unreachable func: CatalogHost.ResolveIdentity
 pkg/services/models/internal/host/contract.go: unreachable func: cloneOperations
+pkg/services/models/internal/local/puller.go: unreachable func: NewDeferredScopedAssetPuller
+pkg/services/models/internal/services/runtime_host/internal/service/wired.go: unreachable func: LeasesOwner
 pkg/services/models/transports/cli/non_ready_invoke_test.go: unreachable func: nonReadyLocalModelFactoryConfig
+pkg/services/operator_settings/wire/wire.go: unreachable func: NewService
 pkg/services/provider_sessions/internal/services/codex_reader/internal/service/detail.go: unreachable func: ParseSummary
+pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor/inspection.go: unreachable func: inspection.canceled
+pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor/store_load.go: unreachable func: LoadSessionFromStoreDB
 pkg/services/recordings/replay/event_artifact.go: unreachable func: runStartedFactorySnapshotFromEvent
 pkg/services/recordings/replay/factory_snapshot.go: unreachable func: runtimeWorkersByName
 pkg/services/recordings/replay/recorder.go: unreachable func: Recorder.BindRecordingService
-pkg/services/work/materialize/materialize.go: unreachable func: Options.maxRedirects
-pkg/services/work/materialize/materialize.go: unreachable func: Options.timeout
+pkg/services/work/internal/services/content_materialization/internal/service/materialize.go: unreachable func: Options.maxRedirects
+pkg/services/work/internal/services/content_materialization/internal/service/materialize.go: unreachable func: Options.timeout
 pkg/services/workers/executor/workstation_executor_test.go: unreachable func: writeRuntimeLookupAgentsMD
 pkg/services/workers/executor/workstation_executor_test.go: unreachable func: writeRuntimeLookupFactoryJSON
 pkg/services/workers/executor/workstation_executor_test.go: unreachable func: writeRuntimeLookupFixture
@@ -196,7 +204,6 @@ pkg/services/workers/prompting/prompt.go: unreachable func: NewDefaultPromptRend
 pkg/services/workers/prompting/prompt_contract.go: unreachable func: NewService
 pkg/services/workers/prompting/prompt_contract.go: unreachable func: Service.BuildPromptTemplateContract
 pkg/services/workers/prompting/prompt_contract.go: unreachable func: Service.ValidatePromptTemplate
-pkg/services/workers/service/composition.go: unreachable func: NewHostedPollers
 pkg/services/workers/services/testing/runner_test.go: unreachable func: shellArgsForTest
 pkg/services/workers/services/testing/runner_test.go: unreachable func: shellCommandForTest
 pkg/transports/cli/baseline/command_tree.go: unreachable func: SerializeCommandTree
@@ -297,7 +304,6 @@ tests/functional/guards_batch/helpers_test.go: unreachable func: multiChapterPar
 tests/functional/guards_batch/helpers_test.go: unreachable func: workerGeneratedBatchOutput
 tests/functional/internal/support/api_server.go: unreachable func: FunctionalAPIServer.WaitForExitError
 tests/functional/internal/support/events.go: unreachable func: LastFactoryEventTick
-tests/functional/internal/support/http_observation.go: unreachable func: SubmitDefaultSessionWork
 tests/functional/internal/support/process.go: unreachable func: ProcessCommand.AcceptError
 tests/functional/internal/support/process_api_server.go: unreachable func: ProcessAPIServer.Ready
 tests/functional/internal/support/process_factory.go: unreachable func: RunFactoryToCompletion
@@ -321,6 +327,10 @@ tests/functional/runtime_api/api_inference_events_test.go: unreachable func: has
 tests/functional/runtime_api/api_runtime_config_alignment_smoke_support_test.go: unreachable func: assertRuntimeConfigAlignmentResourceManifest
 tests/functional/runtime_api/api_runtime_config_alignment_support_test.go: unreachable func: runtimeConfigAlignmentComparableFactory
 tests/functional/runtime_api/functional_server_test.go: unreachable func: withWorkerCommands
+tests/functional/runtime_api/runtime_support_test.go: unreachable func: requireGeneratedSchemaRunStartedPayload
+tests/functional/smoke/helpers_test.go: unreachable func: waitForSmokeServerReady
+tests/functional/workers/inference/claude/golden_common.go: unreachable func: claudeInvocationResultGolden
+tests/functional/workers/inference/claude/golden_common.go: unreachable func: successfulInferenceResponsePayload
 tests/functional/workers/script/helpers_test.go: unreachable func: assertCommandArgs
 tests/functional/workers/script/helpers_test.go: unreachable func: assertProviderArgsPrompt
 tests/functional/workers/script/helpers_test.go: unreachable func: assertProviderStdin
@@ -336,7 +346,6 @@ tests/functional/workers/script/helpers_test.go: unreachable func: writeNamedWor
 tests/functional/workers/script/helpers_test.go: unreachable func: writeNamedWorkstationPromptTemplate
 tests/functional/workers/script/helpers_test.go: unreachable func: writeScriptWorkerArgs
 tests/functional/workers/script/helpers_test.go: unreachable func: writeTwoInputResourceSeeds
-tests/functional/workflow/dispatcher_lifecycle_test.go: unreachable func: assertCompletedWorkTraces
 tests/functional/workflow/helpers_test.go: unreachable func: assertDispatchHistoryContainsWorkstation
 tests/functional/workflow/helpers_test.go: unreachable func: assertDispatchHistoryContainsWorkstationRoute
 tests/functional/workflow/helpers_test.go: unreachable func: capturingExecutor.Execute

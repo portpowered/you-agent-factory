@@ -3,6 +3,7 @@ package workers
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -286,13 +287,42 @@ func safeDiagnosticMetadata(input map[string]string) map[string]string {
 	out := make(map[string]string, len(input))
 	for key, value := range input {
 		if isSafeProviderMetadataKey(key) {
-			out[key] = value
+			out[key] = safeDiagnosticMetadataValue(key, value)
 		}
 	}
 	if len(out) == 0 {
 		return nil
 	}
 	return out
+}
+
+func safeDiagnosticMetadataValue(key, value string) string {
+	switch strings.ToLower(strings.TrimSpace(key)) {
+	case "working_directory", "worktree":
+		if isHostSpecificDiagnosticPath(value) {
+			return MetadataOnlyCommandEnvValue
+		}
+	}
+	return value
+}
+
+var hostSpecificDiagnosticPathPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)^/(?:Users|home)/`),
+	regexp.MustCompile(`(?i)^[A-Za-z]:\\Users\\`),
+	regexp.MustCompile(`(?i)^[A-Za-z]:/Users/`),
+}
+
+func isHostSpecificDiagnosticPath(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return false
+	}
+	for _, pattern := range hostSpecificDiagnosticPathPatterns {
+		if pattern.MatchString(value) {
+			return true
+		}
+	}
+	return false
 }
 
 func isSafeProviderMetadataKey(key string) bool {
@@ -310,6 +340,8 @@ func isSafeProviderMetadataKey(key string) bool {
 		"source",
 		"stderr_excerpt",
 		"stdout_excerpt",
+		"worktree",
+		"working_directory",
 		"worker_type",
 		"workstation_type":
 		return true

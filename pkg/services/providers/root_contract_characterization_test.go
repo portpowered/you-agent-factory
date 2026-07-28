@@ -137,14 +137,24 @@ func TestRootContract_ContractValuesStayInertWhenHeld(t *testing.T) {
 	}
 
 	request := providers.ExecuteRequest{
-		Provider:    providers.IDCodex,
-		AttemptID:   "inert-attempt",
-		UserMessage: "hello",
+		Provider:           providers.IDCodex,
+		AttemptID:          "inert-attempt",
+		UserMessage:        "hello",
+		EnvVars:            map[string]string{"FIXTURE": "original"},
+		ProcessEnvironment: []string{"FIXTURE=original"},
 	}
 	clonedRequest := request.Clone()
 	request.UserMessage = "mutated"
+	request.EnvVars["FIXTURE"] = "mutated"
+	request.ProcessEnvironment[0] = "FIXTURE=mutated"
 	if clonedRequest.UserMessage == "mutated" {
 		t.Fatal("ExecuteRequest.Clone() shares mutable user message state")
+	}
+	if clonedRequest.EnvVars["FIXTURE"] == "mutated" {
+		t.Fatal("ExecuteRequest.Clone() shares mutable env vars state")
+	}
+	if clonedRequest.ProcessEnvironment[0] == "FIXTURE=mutated" {
+		t.Fatal("ExecuteRequest.Clone() shares mutable process environment state")
 	}
 
 	session := providers.SessionRef{
