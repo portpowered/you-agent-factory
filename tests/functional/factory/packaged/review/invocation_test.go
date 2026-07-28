@@ -65,3 +65,18 @@ func TestPackagedReviewRejectionCarriesFeedback(t *testing.T) {
 		)
 	}
 }
+
+// TestPackagedReviewRetryExhaustionFails proves packaged @you/review invocation
+// returns a failed public terminal outcome with no completed success primary
+// result when the edge-mocked provider cannot satisfy the packaged approval gate,
+// for example because work dispatch fails before review can approve output.
+func TestPackagedReviewRetryExhaustionFails(t *testing.T) {
+	submitted := "customer request"
+	runner := packagedReviewFailingCommandRunner{}
+
+	response, _, execErr := runPackagedReviewCLIJSONFailureInvocation(t, runner, submitted)
+	if execErr == nil {
+		t.Fatal("Process.Execute error = nil, want terminal packaged-review provider failure")
+	}
+	assertPackagedReviewBoundedFailureFailed(t, response)
+}
