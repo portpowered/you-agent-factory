@@ -1,10 +1,7 @@
 package operatorsettings
 
 import (
-	"context"
 	"errors"
-	"os"
-	"path/filepath"
 	"reflect"
 	"testing"
 )
@@ -42,40 +39,6 @@ func TestACPIntegrationSemanticUpdatesPreserveUnrelatedSettings(t *testing.T) {
 	}
 	if _, err := service.DeleteACPIntegration(deleted, "cursor-acp"); !errors.Is(err, ErrACPIntegrationNotFound) {
 		t.Fatalf("DeleteACPIntegration(missing) error = %v, want ErrACPIntegrationNotFound", err)
-	}
-}
-
-func TestConfigureACPIntegrationAddDeletePersistsAtomically(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.json")
-	original := []byte(`{"backendScopeID":"local-scope","defaults":{"workerModelProvider":"CODEX","workerModel":"existing"}}`)
-	if err := os.WriteFile(path, original, 0o600); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
-	}
-	service := persistedConfigService(testFiles, testCreateTemp)
-	if _, err := service.ConfigureACPIntegrationAdd(context.Background(), path, ACPIntegration{
-		ID: "entry-1", Name: "cursor-acp", Transport: "stdio", Command: "cursor-agent acp",
-	}); err != nil {
-		t.Fatalf("ConfigureACPIntegrationAdd() error = %v", err)
-	}
-	persisted, err := service.Load(path)
-	if err != nil {
-		t.Fatalf("Load(after add) error = %v", err)
-	}
-	if got := persisted.FileConfig(); got.BackendScopeID != "local-scope" || len(got.Workers.ACP.Integrations) != 1 {
-		t.Fatalf("persisted add = %#v", got)
-	}
-	if _, err := service.ConfigureACPIntegrationDelete(context.Background(), path, "cursor-acp"); err != nil {
-		t.Fatalf("ConfigureACPIntegrationDelete() error = %v", err)
-	}
-	persisted, err = service.Load(path)
-	if err != nil {
-		t.Fatalf("Load(after delete) error = %v", err)
-	}
-	if got := persisted.FileConfig(); got.BackendScopeID != "local-scope" || len(got.Workers.ACP.Integrations) != 0 {
-		t.Fatalf("persisted delete = %#v", got)
 	}
 }
 

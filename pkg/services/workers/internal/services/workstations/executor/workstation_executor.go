@@ -427,7 +427,11 @@ func (we *WorkstationExecutor) applyCodexFactoryWorktreePreparation(
 	requestContext *resolvedWorkstationExecutionContext,
 	start time.Time,
 ) *workerexecution.WorkResult {
-	selection, err := we.resolveRunnerSelection(workstationDef.Runner, workerDef.ModelProvider)
+	selectionIdentity := workstationDef.Runner
+	if executorProvider := strings.TrimSpace(workerDef.ExecutorProvider); executorProvider != "" && !strings.EqualFold(executorProvider, "SCRIPT_WRAP") {
+		selectionIdentity = executorProvider
+	}
+	selection, err := we.resolveRunnerSelection(selectionIdentity, workerDef.ModelProvider)
 	if err != nil {
 		failed := worktree.FailedWorkResultFromPreparation(
 			dispatch.DispatchID,

@@ -8,10 +8,10 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/models"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -23,21 +23,21 @@ import (
 // aggregate into this owner-defined contract before it reaches a runtime
 // opening consumer.
 type ExternalEffects struct {
-	Clock                     factoryruntime.Clock
-	ProviderOverride          workers.Provider
-	ModelPullMetricsRecorder  models.PullMetricsRecorder
-	InvocationMetricsRecorder roles.InvocationMetricsRecorder
-	ProviderCommandRunner     platformprocess.CommandRunner
-	ScriptCommandRunner       platformprocess.CommandRunner
-	SubmissionRecorder        recordings.SubmissionRecorder
-	DispatchRecorder          recordings.DispatchRecorder
+	Clock                            factoryruntime.Clock
+	ProviderOverride                 workers.Provider
+	ModelPullMetricsRecorder         models.PullMetricsRecorder
+	InvocationMetricsRecorder        roles.InvocationMetricsRecorder
+	ProviderCommandRunner            platformprocess.CommandRunner
+	ScriptCommandRunner              platformprocess.CommandRunner
+	SubmissionRecorder               recordings.SubmissionRecorder
+	DispatchRecorder                 recordings.DispatchRecorder
 	RuntimeHostObserver              factorysessions.RuntimeHostObserver
 	FactoryVisualizationSink         factoryvisualization.Sink
 	FactoryVisualizationRootObserver factoryvisualization.RootObserver
-	HostedClock               workers.HostedPollerClock
-	HostedHTTPClient          workers.HostedPollerHTTPDoer
-	HostedSecretResolver      workers.HostedPollerSecretResolver
-	HostedLinearEndpoint      string
+	HostedClock                      workers.HostedPollerClock
+	HostedHTTPClient                 workers.HostedPollerHTTPDoer
+	HostedSecretResolver             workers.HostedPollerSecretResolver
+	HostedLinearEndpoint             string
 }
 
 // The factory roles below are consumed only while opening a Factory Session
@@ -64,6 +64,7 @@ type FactorySessionExecutionFactory = func(
 	map[string]struct{},
 	factoryruntime.JavaScriptWorkerSettings,
 	*workers.MockWorkersConfig,
+	[]operatorsettings.ACPIntegration,
 ) (factorysessions.ExecutionService, error)
 
 type ConductorInvocationWithProgressFactory = func(
@@ -95,7 +96,7 @@ type WorkersRuntimeFactory = func(
 	workers.Provider,
 	func() time.Time,
 	work.ContentMaterializer,
-	[]providers.Integration,
+	[]operatorsettings.ACPIntegration,
 ) (workers.RuntimeService, error)
 
 type AutomationHostedSourcesFactory = automations.HostedSourcesFactory
@@ -108,6 +109,11 @@ type FactoryDefinitionsFactory = func(
 	factorydefinitions.Validator,
 ) factorydefinitions.Service
 
+type DurableExecution struct {
+	Service         factorysessions.ExecutionService
+	ACPIntegrations []operatorsettings.ACPIntegration
+}
+
 type DurableExecutionFactory func(
 	factorydefinitions.RuntimeOpeningRequest,
 	factorysessions.SessionRuntimeOpeningRequest,
@@ -117,7 +123,7 @@ type DurableExecutionFactory func(
 	*workers.MockWorkersConfig,
 	FactorySessionExecutionFactory,
 	factorysessions.ProviderIdentityResolver,
-) (factorysessions.ExecutionService, error)
+) (DurableExecution, error)
 
 type WorkerExecutionFactory func(
 	factoryruntime.RuntimeOpeningRequest,
@@ -133,4 +139,5 @@ type WorkerExecutionFactory func(
 	models.RuntimeScopeRef,
 	work.Service,
 	WorkersRuntimeFactory,
+	[]operatorsettings.ACPIntegration,
 ) (workers.RuntimeService, error)

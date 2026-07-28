@@ -454,6 +454,9 @@ func TestNewServiceRejectsMissingRequiredConstructionPorts(t *testing.T) {
 					nil,
 					CursorPlatformDependencies{},
 					AgyPTYPlatformDependencies{},
+					nil,
+					nil,
+					nil,
 				)
 			},
 			want: "construct Providers: catalog is required",

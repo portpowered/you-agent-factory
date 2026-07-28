@@ -2,6 +2,9 @@ package acp_test
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -11,6 +14,42 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+func TestACPFailureRedactsConfiguredSecretsFromStderr(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"ACP stderr redaction"}`))
+	writeACPWorker(t, dir, "cursor-acp")
+	workstation := []byte("---\ntype: MODEL_WORKSTATION\nenv:\n  ACP_TEST_API_TOKEN: super-secret-token\n---\n\nTest workstation.\n")
+	if err := os.WriteFile(filepath.Join(dir, "workstations", "process", "AGENTS.md"), workstation, 0o600); err != nil {
+		t.Fatalf("write ACP workstation environment: %v", err)
+	}
+	t.Setenv(acpHelperEnvironment, "stderr")
+
+	var starts atomic.Int32
+	_, listed, _, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(t, dir, serviceedges.Edges{
+		PlatformProcessCommandFactory: acpHelperCommandFactory(&starts),
+		ProvidersExecutableLocator:    availableExecutableLocator{},
+	}, 20*time.Second)
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
+		t.Fatalf("failed work = %d, want 1", got)
+	}
+	for _, event := range responseEvents {
+		if event.Kind != "ERROR" || event.Phase != "FAILED" || event.Provenance.Provider != "cursor-acp" {
+			continue
+		}
+		payload, err := event.Payload.AsFactoryResponseEventErrorPayload()
+		if err != nil {
+			t.Fatalf("decode ACP error response: %v", err)
+		}
+		if strings.Contains(payload.Message, "super-secret-token") {
+			t.Fatalf("ACP error response leaked configured secret: %q", payload.Message)
+		}
+		if strings.Contains(payload.Message, "agent diagnostic token=<redacted>") {
+			return
+		}
+	}
+	t.Fatalf("ACP response stream omitted redacted stderr diagnostic: %#v", responseEvents)
+}
 
 func TestACPProtocolFailuresMapToStableWorkerFailureClasses(t *testing.T) {
 	for _, test := range []struct {

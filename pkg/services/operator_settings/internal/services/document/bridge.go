@@ -21,6 +21,9 @@ func documentFromConfig(config operatorsettings.Config) operatorsettings.Documen
 			Logging: operatorsettings.DocumentRuntimeArtifactSettings(config.Runtime.Logging),
 			Metrics: operatorsettings.DocumentRuntimeArtifactSettings(config.Runtime.Metrics),
 		},
+		Workers: operatorsettings.DocumentWorkerSettings{ACP: operatorsettings.DocumentACPSettings{
+			Integrations: append([]operatorsettings.ACPIntegration(nil), config.Workers.ACP.Integrations...),
+		}},
 	}
 	if config.WorkerPresets != nil {
 		document.WorkerPresets = make([]operatorsettings.DocumentWorkerPreset, len(config.WorkerPresets))
@@ -47,6 +50,9 @@ func configFromDocument(document operatorsettings.Document) operatorsettings.Con
 			Logging: operatorsettings.RuntimeArtifactSettings(document.Runtime.Logging),
 			Metrics: operatorsettings.RuntimeArtifactSettings(document.Runtime.Metrics),
 		},
+		Workers: operatorsettings.WorkerSettings{ACP: operatorsettings.ACPSettings{
+			Integrations: append([]operatorsettings.ACPIntegration(nil), document.Workers.ACP.Integrations...),
+		}},
 	}
 	if document.WorkerPresets != nil {
 		config.WorkerPresets = make([]operatorsettings.WorkerPreset, len(document.WorkerPresets))

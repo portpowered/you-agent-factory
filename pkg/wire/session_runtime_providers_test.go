@@ -150,6 +150,7 @@ func TestProvideFactorySessionExecutionFactory_BuildsLiveChildInvocation(t *test
 			nil,
 			factoryruntime.JavaScriptWorkerSettings{},
 			mockWorkers,
+			nil,
 		)
 		if err != nil {
 			t.Fatalf("factory(mockWorkers=%#v) error = %v", mockWorkers, err)

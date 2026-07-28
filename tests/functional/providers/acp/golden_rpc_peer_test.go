@@ -28,6 +28,7 @@ type rpcEnvelope struct {
 type rpcError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
+	Data    any    `json:"data,omitempty"`
 }
 
 func goldenACPCommandFactory(starts *atomic.Int32) platformprocess.CommandFactory {

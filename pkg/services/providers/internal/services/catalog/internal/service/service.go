@@ -9,10 +9,11 @@ import (
 )
 
 type service struct {
-	providers []providers.Descriptor
-	byID      map[providers.ID]providers.Descriptor
-	aliases   map[string]providers.ID
-	probe     catalog.ProbeQuery
+	providers        []providers.Descriptor
+	byID             map[providers.ID]providers.Descriptor
+	aliases          map[string]providers.ID
+	probe            catalog.ProbeQuery
+	extraDescriptors []providers.Descriptor
 }
 
 var _ catalog.Service = (*service)(nil)
@@ -24,15 +25,26 @@ func New(options ...Option) (catalog.Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	byID, aliases := indexDescriptors(descriptors)
 	s := &service{
 		providers: descriptors,
-		byID:      byID,
-		aliases:   aliases,
 	}
 	for _, option := range options {
 		option(s)
 	}
+	for _, descriptor := range s.extraDescriptors {
+		replaced := false
+		for index := range s.providers {
+			if s.providers[index].ID == descriptor.ID {
+				s.providers[index] = descriptor.Clone()
+				replaced = true
+				break
+			}
+		}
+		if !replaced {
+			s.providers = append(s.providers, descriptor.Clone())
+		}
+	}
+	s.byID, s.aliases = indexDescriptors(s.providers)
 	return s, nil
 }
 

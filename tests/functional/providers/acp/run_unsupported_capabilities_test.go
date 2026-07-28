@@ -17,12 +17,12 @@ func TestYouRunReturnsUnsupportedFilesystemAndTerminalRPCsAtTheACPBoundary(t *te
 	t.Setenv(acpHelperEnvironment, "unsupported")
 
 	var starts atomic.Int32
-	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
+	_, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
 		PlatformProcessCommandFactory: acpHelperCommandFactory(&starts),
 		ProvidersExecutableLocator:    availableExecutableLocator{},
 	}, 20*time.Second)
 	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
-		t.Fatalf("completed work = %d, want 1 after all unsupported RPCs were rejected", got)
+		t.Fatalf("completed work = %d, want 1 after all unsupported RPCs were rejected; events=%#v", got, events)
 	}
 	if starts.Load() != 1 {
 		t.Fatalf("ACP process starts = %d, want 1", starts.Load())

@@ -92,33 +92,34 @@ type (
 	ProcessLifecycleFactory = processlifecycle.Factory
 	RuntimeHostService      = runtimehosting.Service
 
-	RuntimeOpeningExternalEffects   = runtimeopening.ExternalEffects
-	WorkFactory                     = runtimeopening.WorkFactory
-	AutomationFactory               = runtimeopening.AutomationFactory
-	FactorySessionExecutionFactory  = runtimeopening.FactorySessionExecutionFactory
+	RuntimeOpeningExternalEffects          = runtimeopening.ExternalEffects
+	WorkFactory                            = runtimeopening.WorkFactory
+	AutomationFactory                      = runtimeopening.AutomationFactory
+	FactorySessionExecutionFactory         = runtimeopening.FactorySessionExecutionFactory
 	ConductorInvocationWithProgressFactory = runtimeopening.ConductorInvocationWithProgressFactory
-	RecordingsProjectionFactory     = runtimeopening.RecordingsProjectionFactory
-	RecordingsFactory               = runtimeopening.RecordingsFactory
-	RuntimeLedgerFactory            = runtimeopening.RuntimeLedgerFactory
-	ReplayClockFactory              = runtimeopening.ReplayClockFactory
-	WorkersRuntimeFactory           = runtimeopening.WorkersRuntimeFactory
-	AutomationHostedSourcesFactory      = runtimeopening.AutomationHostedSourcesFactory
-	WorkersLocalRuntimeHooksFactory = runtimeopening.WorkersLocalRuntimeHooksFactory
-	FactoryDefinitionsFactory       = runtimeopening.FactoryDefinitionsFactory
-	DurableExecutionFactory         = runtimeopening.DurableExecutionFactory
-	WorkerExecutionFactory          = runtimeopening.WorkerExecutionFactory
-	WorkerCommandRunnerAdapter           = runtimeopening.WorkerCommandRunnerAdapter
-	ProviderFromCommandRunnerFactory     = runtimeopening.ProviderFromCommandRunnerFactory
-	FactoryRuntimeAssembler              = runtimeopening.FactoryRuntimeAssembler
-	RuntimeOpeningFactory           = runtimeopening.Factory
-	RuntimeRoot                     = runtimeopening.RuntimeRoot
+	RecordingsProjectionFactory            = runtimeopening.RecordingsProjectionFactory
+	RecordingsFactory                      = runtimeopening.RecordingsFactory
+	RuntimeLedgerFactory                   = runtimeopening.RuntimeLedgerFactory
+	ReplayClockFactory                     = runtimeopening.ReplayClockFactory
+	WorkersRuntimeFactory                  = runtimeopening.WorkersRuntimeFactory
+	AutomationHostedSourcesFactory         = runtimeopening.AutomationHostedSourcesFactory
+	WorkersLocalRuntimeHooksFactory        = runtimeopening.WorkersLocalRuntimeHooksFactory
+	FactoryDefinitionsFactory              = runtimeopening.FactoryDefinitionsFactory
+	DurableExecutionFactory                = runtimeopening.DurableExecutionFactory
+	DurableExecution                       = runtimeopening.DurableExecution
+	WorkerExecutionFactory                 = runtimeopening.WorkerExecutionFactory
+	WorkerCommandRunnerAdapter             = runtimeopening.WorkerCommandRunnerAdapter
+	ProviderFromCommandRunnerFactory       = runtimeopening.ProviderFromCommandRunnerFactory
+	FactoryRuntimeAssembler                = runtimeopening.FactoryRuntimeAssembler
+	RuntimeOpeningFactory                  = runtimeopening.Factory
+	RuntimeRoot                            = runtimeopening.RuntimeRoot
 
-	StandaloneSessionExecutionFactory = executionopening.StandaloneSessionExecutionFactory
+	StandaloneSessionExecutionFactory   = executionopening.StandaloneSessionExecutionFactory
 	WorkerInvocationFactory             = executionopening.WorkerInvocationFactory
 	WorkerInvocationWithProgressFactory = executionopening.WorkerInvocationWithProgressFactory
 	LiveChildInvocationFactory          = execution.LiveChildInvocationFactory
-	ExecutionOpeningFactory           = executionopening.Factory
-	StdioOpeningService               = executionopening.StdioOpeningService
+	ExecutionOpeningFactory             = executionopening.Factory
+	StdioOpeningService                 = executionopening.StdioOpeningService
 )
 
 var (
@@ -134,50 +135,50 @@ var (
 )
 
 type RuntimeOpeningDependencies struct {
-	ProviderSessions                providersessions.Service
-	FactoryWorkflows                factoryruntime.JavaScriptWorkflowDefinitions
-	WorkflowPreview                 factoryruntime.WorkflowPreviewOperation
-	FactoryDefinitionValidator      factorydefinitions.Validator
-	NamedPaths                      factorydefinitions.NamedPathResolver
-	DurableExecutionFactory         DurableExecutionFactory
-	WorkerExecutionFactory          WorkerExecutionFactory
-	ModelService                    models.Service
-	WorkFactory                     WorkFactory
-	AutomationFactory               AutomationFactory
-	FactorySessionsService          factorysessions.Service
-	FactorySessionExecutionFactory  FactorySessionExecutionFactory
-	RecordingsProjectionFactory     RecordingsProjectionFactory
-	RecordingsFactory               RecordingsFactory
-	RuntimeLedgerFactory            RuntimeLedgerFactory
-	RuntimeRecorderFactory          recordings.RuntimeRecorderFactory
-	ReplayClockFactory              ReplayClockFactory
-	ReplayExecutionFactory          recordings.ReplayExecutionFactory
-	WorkersRuntimeFactory           WorkersRuntimeFactory
-	WorkersRuntimeExecutorsFactory  factoryruntime.WorkersRuntimeExecutorsFactory
-	WorkersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory
-	AutomationHostedSourcesFactory AutomationHostedSourcesFactory
-	WorkersLocalRuntimeHooksFactory WorkersLocalRuntimeHooksFactory
-	FactoryDefinitionsFactory       FactoryDefinitionsFactory
-	FactoryScaffoldInitializer      factorysessions.FactoryScaffoldInitializer
-	EditableFactoryValidator        factorysessions.EditableFactoryValidator
-	InitialFactorySnapshotFactory   factorydefinitions.InitialFactorySnapshotFactory
-	FactoryRuntimeAssembler         FactoryRuntimeAssembler
-	ContentMaterializer             work.ContentMaterializer
-	LoadFactory                     factorydefinitions.LoadedFactoryLoader
-	NewLoadedFactory                factorydefinitions.LoadedFactorySourceFactory
-	DecodeReplayConfig              factorydefinitions.ReplayRuntimeConfigDecoder
-	LoadReplay                      recordings.ReplayArtifactLoader
-	CaptureLoadedFactorySnapshot    factorydefinitions.LoadedFactorySnapshotCapturer
-	ResolveClock                    factoryruntime.ClockResolver
-	NewSessionLogger                factoryruntime.SessionLoggerFactory
-	AdaptWorkerCommandRunner            WorkerCommandRunnerAdapter
-	ProviderFromCommandRunnerFactory    ProviderFromCommandRunnerFactory
-	ProcessRuntimeFactory               ProcessRuntimeFactory
-	EnsureOperatorBackendScope      operatorsettings.BackendScopeEnsurer
-	GenerateRuntimeInstanceID       factorysessions.RuntimeInstanceIDGenerator
-	ResolveHome                     factorysessions.HomeDirectoryResolver
-	ReplayFiles                     ReplayRecordingReader
-	ProviderIdentities              factorysessions.ProviderIdentityResolver
+	ProviderSessions                 providersessions.Service
+	FactoryWorkflows                 factoryruntime.JavaScriptWorkflowDefinitions
+	WorkflowPreview                  factoryruntime.WorkflowPreviewOperation
+	FactoryDefinitionValidator       factorydefinitions.Validator
+	NamedPaths                       factorydefinitions.NamedPathResolver
+	DurableExecutionFactory          DurableExecutionFactory
+	WorkerExecutionFactory           WorkerExecutionFactory
+	ModelService                     models.Service
+	WorkFactory                      WorkFactory
+	AutomationFactory                AutomationFactory
+	FactorySessionsService           factorysessions.Service
+	FactorySessionExecutionFactory   FactorySessionExecutionFactory
+	RecordingsProjectionFactory      RecordingsProjectionFactory
+	RecordingsFactory                RecordingsFactory
+	RuntimeLedgerFactory             RuntimeLedgerFactory
+	RuntimeRecorderFactory           recordings.RuntimeRecorderFactory
+	ReplayClockFactory               ReplayClockFactory
+	ReplayExecutionFactory           recordings.ReplayExecutionFactory
+	WorkersRuntimeFactory            WorkersRuntimeFactory
+	WorkersRuntimeExecutorsFactory   factoryruntime.WorkersRuntimeExecutorsFactory
+	WorkersMockCommandRunnerFactory  factoryruntime.WorkersMockCommandRunnerFactory
+	AutomationHostedSourcesFactory   AutomationHostedSourcesFactory
+	WorkersLocalRuntimeHooksFactory  WorkersLocalRuntimeHooksFactory
+	FactoryDefinitionsFactory        FactoryDefinitionsFactory
+	FactoryScaffoldInitializer       factorysessions.FactoryScaffoldInitializer
+	EditableFactoryValidator         factorysessions.EditableFactoryValidator
+	InitialFactorySnapshotFactory    factorydefinitions.InitialFactorySnapshotFactory
+	FactoryRuntimeAssembler          FactoryRuntimeAssembler
+	ContentMaterializer              work.ContentMaterializer
+	LoadFactory                      factorydefinitions.LoadedFactoryLoader
+	NewLoadedFactory                 factorydefinitions.LoadedFactorySourceFactory
+	DecodeReplayConfig               factorydefinitions.ReplayRuntimeConfigDecoder
+	LoadReplay                       recordings.ReplayArtifactLoader
+	CaptureLoadedFactorySnapshot     factorydefinitions.LoadedFactorySnapshotCapturer
+	ResolveClock                     factoryruntime.ClockResolver
+	NewSessionLogger                 factoryruntime.SessionLoggerFactory
+	AdaptWorkerCommandRunner         WorkerCommandRunnerAdapter
+	ProviderFromCommandRunnerFactory ProviderFromCommandRunnerFactory
+	ProcessRuntimeFactory            ProcessRuntimeFactory
+	EnsureOperatorBackendScope       operatorsettings.BackendScopeEnsurer
+	GenerateRuntimeInstanceID        factorysessions.RuntimeInstanceIDGenerator
+	ResolveHome                      factorysessions.HomeDirectoryResolver
+	ReplayFiles                      ReplayRecordingReader
+	ProviderIdentities               factorysessions.ProviderIdentityResolver
 }
 
 func NewRuntimeOpeningFactory(deps RuntimeOpeningDependencies) (*RuntimeOpeningFactory, error) {

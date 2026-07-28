@@ -226,8 +226,13 @@ func (p *Pool) Dispatch(
 	defer route.release(entry)
 
 	execution := workers.CloneWorkstationExecutionRequest(request.Execution)
-	execution.RunnerID = route.binding.RunnerSelection.RunnerID
-	execution.RunnerSelectionSource = route.binding.RunnerSelection.Source
+	if executorProvider := strings.TrimSpace(execution.ExecutorProvider); executorProvider != "" && !strings.EqualFold(executorProvider, "SCRIPT_WRAP") {
+		execution.RunnerID = executorProvider
+		execution.RunnerSelectionSource = workers.RunnerSelectionSourceWorkstation
+	} else {
+		execution.RunnerID = route.binding.RunnerSelection.RunnerID
+		execution.RunnerSelectionSource = route.binding.RunnerSelection.Source
+	}
 	result, executeErr := execute(executionCtx, route.binding.Executor, execution)
 	result.DispatchID = execution.Dispatch.DispatchID
 	result.TransitionID = execution.Dispatch.TransitionID

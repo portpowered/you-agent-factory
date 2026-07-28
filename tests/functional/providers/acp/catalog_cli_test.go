@@ -29,8 +29,9 @@ func TestRootBuiltACPCommandsAddListDeleteOneSettingsBackedCatalogEntry(t *testi
 	}
 
 	listed := executeACPCommand(t, process, home, working, "workers", "acp", "list")
-	if !strings.Contains(listed, "custom-acp") || !strings.Contains(listed, "ACP") || !strings.Contains(listed, "AVAILABLE") {
-		t.Fatalf("list output omitted configured provider facts: %q", listed)
+	if !strings.Contains(listed, "custom-acp") || !strings.Contains(listed, "ACP") || !strings.Contains(listed, "selectable") {
+		data, _ := os.ReadFile(filepath.Join(home, ".you-agent-factory", "config.json"))
+		t.Fatalf("list output omitted configured provider facts: %q; config=%s", listed, data)
 	}
 
 	deleted := executeACPCommand(t, process, home, working, "workers", "acp", "delete", "--name", "custom-acp")

@@ -72,7 +72,8 @@ func TestACPFailureRetainsPartialSnapshotAndTerminalErrorEvent(t *testing.T) {
 			if err != nil {
 				t.Fatalf("decode ACP error: %v", err)
 			}
-			terminalError = payload.Code == "ACP_PROMPT_FAILED" && strings.Contains(payload.Message, "functional ACP prompt failure")
+			terminalError = payload.Code == "ACP_PROMPT_FAILED" && strings.TrimSpace(payload.Message) != "" &&
+				!strings.Contains(payload.Message, "functional ACP prompt failure")
 		}
 	}
 	if !partial || !terminalError {
@@ -116,12 +117,12 @@ func TestACPModelIsAppliedOnlyThroughAdvertisedSessionConfig(t *testing.T) {
 	t.Setenv(acpHelperEnvironment, "model")
 
 	var starts atomic.Int32
-	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
+	factoryEvents, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
 		PlatformProcessCommandFactory: acpHelperCommandFactory(&starts),
 		ProvidersExecutableLocator:    availableExecutableLocator{},
 	}, 20*time.Second)
 	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
-		t.Fatalf("completed work = %d, want 1", got)
+		t.Fatalf("completed work = %d, want 1; events=%#v", got, factoryEvents)
 	}
 }
 
@@ -137,12 +138,12 @@ func TestACPReceivesCanonicalWorkResourceAsSDKResourceLink(t *testing.T) {
 	t.Setenv(acpHelperEnvironment, "resource")
 
 	var starts atomic.Int32
-	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
+	factoryEvents, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
 		PlatformProcessCommandFactory: acpHelperCommandFactory(&starts),
 		ProvidersExecutableLocator:    availableExecutableLocator{},
 	}, 20*time.Second)
 	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
-		t.Fatalf("completed work = %d, want 1", got)
+		t.Fatalf("completed work = %d, want 1; events=%#v", got, factoryEvents)
 	}
 }
 
@@ -158,7 +159,7 @@ func assertResponseEventsStayOutOfFactoryReplay(t *testing.T, events []factoryap
 
 func assertACPResponseEventSequence(t *testing.T, events []factoryapi.FactoryResponseEvent) {
 	t.Helper()
-	want := []string{"MESSAGE", "REASONING", "TOOL", "PLAN", "USAGE", "MESSAGE", "TOOL", "FILE_CHANGE", "MESSAGE"}
+	want := []string{"RUN", "MESSAGE", "MESSAGE", "REASONING", "REASONING", "TOOL", "PLAN", "USAGE", "MESSAGE", "FILE_CHANGE", "REASONING", "TOOL", "MESSAGE", "RUN"}
 	got := make([]string, 0, len(events))
 	var previous int64
 	for _, event := range events {
@@ -182,8 +183,12 @@ func assertACPResponseEventSequence(t *testing.T, events []factoryapi.FactoryRes
 			t.Fatalf("ACP response event kinds = %v, want %v", got, want)
 		}
 	}
+	message := events[len(events)-2]
+	if message.Kind != "MESSAGE" || message.Phase != "COMPLETED" || message.Provenance.Representation != "SNAPSHOT" {
+		t.Fatalf("authoritative ACP response event = %#v, want completed MESSAGE snapshot", message)
+	}
 	final := events[len(events)-1]
-	if final.Kind != "MESSAGE" || final.Phase != "COMPLETED" || final.Provenance.Representation != "SNAPSHOT" {
-		t.Fatalf("terminal ACP response event = %#v, want completed MESSAGE snapshot", final)
+	if final.Kind != "RUN" || final.Phase != "COMPLETED" {
+		t.Fatalf("terminal ACP response event = %#v, want completed RUN", final)
 	}
 }

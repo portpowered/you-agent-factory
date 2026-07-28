@@ -32,30 +32,34 @@ func (service Service) Delete(ctx context.Context, home, name string) error {
 	return err
 }
 
-func (service Service) List(ctx context.Context, home string) (providers.ListResponse, error) {
+func (service Service) List(ctx context.Context, home string) (providers.ListProvidersResult, error) {
 	if service.ProvidersFactory == nil {
-		return providers.ListResponse{}, fmt.Errorf("Providers factory is required")
+		return providers.ListProvidersResult{}, fmt.Errorf("Providers factory is required")
 	}
 	document, err := service.Settings.Load(operatorsettings.DefaultConfigPath(home))
 	if err != nil {
-		return providers.ListResponse{}, err
+		return providers.ListProvidersResult{}, err
 	}
 	configured := document.FileConfig().Workers.ACP.Integrations
-	integrations := make([]providers.Integration, len(configured))
+	integrations := make([]providers.ACPIntegration, len(configured))
 	for index, value := range configured {
-		integrations[index] = providers.Integration{
+		integrations[index] = providers.ACPIntegration{
 			ID: value.ID, Name: providers.ID(value.Name), Transport: value.Transport, Command: value.Command,
 		}
 	}
 	root, err := service.ProvidersFactory(integrations)
 	if err != nil {
-		return providers.ListResponse{}, err
+		return providers.ListProvidersResult{}, err
 	}
-	return root.List(ctx, providers.ListRequest{})
+	return root.ListProviders(ctx, providers.ListProvidersRequest{})
 }
 
 func ValidateAdd(name, transport, command string) error {
-	if err := providers.ID(strings.TrimSpace(name)).Validate(); err != nil {
+	name = strings.TrimSpace(name)
+	if name != strings.ToLower(name) || strings.ContainsAny(name, " \t\r\n") {
+		return fmt.Errorf("ACP provider name must be lowercase and contain no whitespace")
+	}
+	if err := providers.ID(name).Validate(); err != nil {
 		return err
 	}
 	if strings.ToLower(strings.TrimSpace(transport)) != "stdio" {

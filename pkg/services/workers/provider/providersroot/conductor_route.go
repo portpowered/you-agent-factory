@@ -9,9 +9,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
 	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 )
 
 func (s *Service) shouldRouteConductor(providerID string) bool {
@@ -69,23 +69,23 @@ func invocationRequestFromExecute(
 	}
 	execution := workers.RunnerExecutionRequest{
 		Dispatch: work.WorkDispatch{
-			DispatchID:       invocationID,
-			WorkerType:       strings.TrimSpace(request.WorkerType),
-			WorkstationName:  strings.TrimSpace(request.WorkstationName),
+			DispatchID:      invocationID,
+			WorkerType:      strings.TrimSpace(request.WorkerType),
+			WorkstationName: strings.TrimSpace(request.WorkstationName),
 		},
-		RunnerID:         request.Provider.String(),
-		WorkerType:       strings.TrimSpace(request.WorkerType),
-		WorkstationType:  strings.TrimSpace(request.WorkstationName),
-		Model:            strings.TrimSpace(request.Model),
-		SystemPrompt:     request.SystemPrompt,
-		UserMessage:      request.UserMessage,
-		InputTokens:      cloneInputTokens(request.InputTokens),
-		OutputSchema:     request.OutputSchema,
+		RunnerID:           request.Provider.String(),
+		WorkerType:         strings.TrimSpace(request.WorkerType),
+		WorkstationType:    strings.TrimSpace(request.WorkstationName),
+		Model:              strings.TrimSpace(request.Model),
+		SystemPrompt:       request.SystemPrompt,
+		UserMessage:        request.UserMessage,
+		InputTokens:        cloneInputTokens(request.InputTokens),
+		OutputSchema:       request.OutputSchema,
 		WorkingDirectory:   request.WorkingDirectory,
-		Worktree:             request.Worktree,
-		EnvVars:              cloneMetadata(request.EnvVars),
-		ProcessEnvironment:   append([]string(nil), request.ProcessEnvironment...),
-		SkipPermissions:      skipPermissions,
+		Worktree:           request.Worktree,
+		EnvVars:            cloneMetadata(request.EnvVars),
+		ProcessEnvironment: append([]string(nil), request.ProcessEnvironment...),
+		SkipPermissions:    skipPermissions,
 	}
 	if request.ResumeSession != nil {
 		execution.SessionID = request.ResumeSession.ID
@@ -172,6 +172,7 @@ func executeFailureFromConductor(failure inference.Failure) providers.ExecuteFai
 		Kind:    executeFailureKindFromConductor(failure),
 		Message: failure.Message(),
 	}
+	metadata := cloneMetadata(failure.Diagnostics())
 	if session := failure.ProviderSession(); session != nil {
 		executeFailure.SessionRef = &providers.SessionRef{
 			Provider: providers.ID(
@@ -180,15 +181,15 @@ func executeFailureFromConductor(failure inference.Failure) providers.ExecuteFai
 			Kind: session.Kind(),
 			ID:   session.ID(),
 		}
-		executeFailure.Diagnostics = &providers.ExecuteDiagnostics{
-			Metadata: map[string]string{
-				"provider_session_provider": workers.CanonicalProviderSessionProvider(
-					session.Provider(),
-				),
-				"provider_session_kind": session.Kind(),
-				"provider_session_id":   session.ID(),
-			},
+		if metadata == nil {
+			metadata = make(map[string]string, 3)
 		}
+		metadata["provider_session_provider"] = workers.CanonicalProviderSessionProvider(session.Provider())
+		metadata["provider_session_kind"] = session.Kind()
+		metadata["provider_session_id"] = session.ID()
+	}
+	if len(metadata) > 0 {
+		executeFailure.Diagnostics = &providers.ExecuteDiagnostics{Metadata: metadata}
 	}
 	return executeFailure
 }

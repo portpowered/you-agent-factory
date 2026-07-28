@@ -210,23 +210,23 @@ func resolvedDialect(resolved ResolvedSource) string {
 // JavaScriptRuntimeService executes simple JavaScript workflows through the real
 // workflow runtime and projects outcomes through shared durable session read models.
 type JavaScriptRuntimeService struct {
-	projectRoot         string
-	childExecutorMode   string
-	providerExecutor    workers.InvocationExecutor
-	persistence         runtimepersist.Store
-	clock               factory.Clock
-	syncWaits           SyncWaitScheduler
-	checkpointSummaries factory.JavaScriptCheckpointSummaries
-	workflowDefinitions factory.JavaScriptWorkflowDefinitions
-	orchestration     factory.OrchestrationJavaScriptExecution
-	childValues         factory.JavaScriptChildValues
-	workerPresetIDs     map[string]struct{}
-	workerSettings      factory.JavaScriptWorkerSettings
-	recordingWriter     recording.PortableRecordingWriter
-	generateSessionID   internalcontracts.SessionIDGenerator
-	liveChildInvocation LiveChildInvocationFactory
+	projectRoot             string
+	childExecutorMode       string
+	providerExecutor        workers.InvocationExecutor
+	persistence             runtimepersist.Store
+	clock                   factory.Clock
+	syncWaits               SyncWaitScheduler
+	checkpointSummaries     factory.JavaScriptCheckpointSummaries
+	workflowDefinitions     factory.JavaScriptWorkflowDefinitions
+	orchestration           factory.OrchestrationJavaScriptExecution
+	childValues             factory.JavaScriptChildValues
+	workerPresetIDs         map[string]struct{}
+	workerSettings          factory.JavaScriptWorkerSettings
+	recordingWriter         recording.PortableRecordingWriter
+	generateSessionID       internalcontracts.SessionIDGenerator
+	liveChildInvocation     LiveChildInvocationFactory
 	generateResponseEventID factorysessions.ResponseEventIDGenerator
-	responseStreams     responsestreamservice.Service
+	responseStreams         responsestreamservice.Service
 
 	mu            sync.RWMutex
 	sessions      map[string]*runtimeSessionState
@@ -263,27 +263,27 @@ func NewJavaScriptRuntimeService(
 	}
 	projectRoot = strings.TrimSpace(projectRoot)
 	service := &JavaScriptRuntimeService{
-		projectRoot:         projectRoot,
-		childExecutorMode:   normalizeChildExecutorMode(childExecutorMode),
-		providerExecutor:    providerExecutor,
-		clock:               clock,
-		syncWaits:           syncWaits,
-		checkpointSummaries: checkpointSummaries,
-		workflowDefinitions: workflowDefinitions,
-		orchestration:       orchestration,
-		childValues:         childValues,
-		workerPresetIDs:     workerPresetIDs,
-		workerSettings:      workerSettings,
-		recordingWriter:     recordingWriter,
+		projectRoot:             projectRoot,
+		childExecutorMode:       normalizeChildExecutorMode(childExecutorMode),
+		providerExecutor:        providerExecutor,
+		clock:                   clock,
+		syncWaits:               syncWaits,
+		checkpointSummaries:     checkpointSummaries,
+		workflowDefinitions:     workflowDefinitions,
+		orchestration:           orchestration,
+		childValues:             childValues,
+		workerPresetIDs:         workerPresetIDs,
+		workerSettings:          workerSettings,
+		recordingWriter:         recordingWriter,
 		generateSessionID:       generateSessionID,
-		liveChildInvocation:       liveChildInvocation,
-		generateResponseEventID:   generateResponseEventID,
-		responseStreams:           responseStreams,
-		persistence:               persistence,
-		sessions:            make(map[string]*runtimeSessionState),
-		startReplay:         make(map[string]startReplayRecord),
-		startInflight:       make(map[string]*startInflightFlight),
-		controlReplay:       make(map[string]controlReplayRecord),
+		liveChildInvocation:     liveChildInvocation,
+		generateResponseEventID: generateResponseEventID,
+		responseStreams:         responseStreams,
+		persistence:             persistence,
+		sessions:                make(map[string]*runtimeSessionState),
+		startReplay:             make(map[string]startReplayRecord),
+		startInflight:           make(map[string]*startInflightFlight),
+		controlReplay:           make(map[string]controlReplayRecord),
 	}
 	return service
 }

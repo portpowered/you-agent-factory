@@ -1,182 +1,143 @@
+// Package acp owns the parent-private Agent Client Protocol execution adapter.
 package acp
 
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	acpsdk "github.com/coder/acp-go-sdk"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
-	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 )
 
-type Adapter struct {
-	newCommand platformprocess.CommandFactory
+// Command is one configured stdio ACP launch command.
+type Command struct {
+	Name string
+	Args []string
 }
 
-func New(newCommand platformprocess.CommandFactory) (*Adapter, error) {
-	if newCommand == nil {
-		return nil, errors.New("ACP process command factory is required")
-	}
-	return &Adapter{newCommand: newCommand}, nil
+// NewRegistration binds one configured ACP command to a canonical Providers ID.
+func NewRegistration(id providers.ID, command Command, newCommand platformprocess.CommandFactory, locator platformprocess.ExecutableLocator) execution.Registration {
+	return execution.Registration{Provider: id, Attempt: newAttempt(id, command, newCommand, locator)}
 }
 
-func (a *Adapter) Execute(ctx context.Context, descriptor catalog.Descriptor, request providers.ExecuteRequest) (providers.ExecuteResponse, error) {
-	stream, err := a.ExecuteStream(ctx, descriptor, request)
-	if err != nil {
-		return providers.ExecuteResponse{}, err
-	}
-	defer stream.Close()
-	for range stream.Updates {
-	}
-	outcome, ok := <-stream.Outcome
-	if !ok {
-		return providers.ExecuteResponse{}, errors.New("ACP execution stream closed without an outcome")
-	}
-	return outcome.Response, outcome.Err
-}
-
-func (a *Adapter) ExecuteStream(ctx context.Context, descriptor catalog.Descriptor, request providers.ExecuteRequest) (*providers.ExecutionStream, error) {
-	streamCtx, cancel := context.WithCancel(ctx)
-	updates := make(chan providers.ExecutionUpdate, 64)
-	outcomes := make(chan providers.ExecuteOutcome, 1)
-	go func() {
-		defer close(updates)
-		defer close(outcomes)
-		response, err := a.execute(streamCtx, descriptor, request, func(update providers.ExecutionUpdate) error {
-			select {
-			case updates <- update:
-				return nil
-			case <-streamCtx.Done():
-				return context.Cause(streamCtx)
+func newAttempt(id providers.ID, command Command, newCommand platformprocess.CommandFactory, locator platformprocess.ExecutableLocator) execution.Attempt {
+	return func(ctx context.Context, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
+		if newCommand == nil || strings.TrimSpace(command.Name) == "" {
+			return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: "ACP command is unavailable"}
+		}
+		if locator != nil {
+			if _, err := locator.LookPath(command.Name); err != nil {
+				return providers.ExecuteResult{}, dependencyFailure(fmt.Sprintf("ACP executable %q is unavailable", command.Name))
 			}
-		})
-		outcomes <- providers.ExecuteOutcome{Response: response, Err: err}
-	}()
-	return &providers.ExecutionStream{Updates: updates, Outcome: outcomes, Close: cancel}, nil
+		}
+		return execute(ctx, id, command, newCommand, request)
+	}
 }
 
-func (a *Adapter) execute(
-	ctx context.Context,
-	descriptor catalog.Descriptor,
-	request providers.ExecuteRequest,
-	emit func(providers.ExecutionUpdate) error,
-) (providers.ExecuteResponse, error) {
+func execute(ctx context.Context, id providers.ID, command Command, newCommand platformprocess.CommandFactory, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
 	if err := ctx.Err(); err != nil {
-		return providers.ExecuteResponse{}, err
-	}
-	if strings.TrimSpace(descriptor.Provider.Command) == "" {
-		return providers.ExecuteResponse{}, fmt.Errorf("%w: ACP provider %q has no command", providers.ErrInvalidRequest, descriptor.Provider.ID)
+		return providers.ExecuteResult{}, nativeFailure(err)
 	}
 	cwd, err := absoluteWorkingDirectory(request.WorkingDirectory)
 	if err != nil {
-		return providers.ExecuteResponse{}, err
+		return providers.ExecuteResult{}, invalidFailure(err)
 	}
-	prompt, err := promptBlocks(request)
-	if err != nil {
-		return providers.ExecuteResponse{}, err
+	prompt := []acpsdk.ContentBlock{}
+	if text := strings.TrimSpace(request.SystemPrompt); text != "" {
+		prompt = append(prompt, acpsdk.TextBlock("System instructions:\n"+text))
 	}
+	prompt = append(prompt, acpsdk.TextBlock(request.UserMessage))
+	prompt = append(prompt, resourceLinks(request.InputTokens, request.UserMessage)...)
 
-	cmd := a.newCommand(descriptor.Provider.Command, descriptor.Provider.Arguments...)
+	cmd := newCommand(command.Name, command.Args...)
 	if cmd == nil {
-		return providers.ExecuteResponse{}, fmt.Errorf("ACP command factory returned nil for %q", descriptor.Provider.Command)
+		return providers.ExecuteResult{}, dependencyFailure("ACP command factory returned nil")
 	}
-	cmd.Dir = cwd
-	cmd.Env = environment(request.Environment)
+	cmd.Dir, cmd.Env = cwd, requestEnvironment(request)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		return providers.ExecuteResponse{}, fmt.Errorf("open ACP stdin: %w", err)
+		return providers.ExecuteResult{}, dependencyFailure(err.Error())
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return providers.ExecuteResponse{}, fmt.Errorf("open ACP stdout: %w", err)
+		return providers.ExecuteResult{}, dependencyFailure(err.Error())
 	}
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	platformprocess.ConfigureSubprocessTree(cmd)
 	if err := cmd.Start(); err != nil {
-		return providers.ExecuteResponse{}, fmt.Errorf("start ACP provider %q: %w", descriptor.Provider.ID, err)
+		return providers.ExecuteResult{}, dependencyFailure(fmt.Sprintf("start ACP provider %q: %v", id, err))
 	}
 	tree, _ := platformprocess.AttachSubprocessTree(cmd)
 	finished := make(chan error, 1)
 	go func() { finished <- cmd.Wait() }()
 	defer func() {
 		_ = stdin.Close()
-		if cmd.Process != nil {
-			_ = platformprocess.TerminateSubprocessTree(cmd, tree)
-		}
 		select {
 		case <-finished:
-		default:
+		case <-time.After(500 * time.Millisecond):
+			if cmd.Process != nil {
+				_ = platformprocess.TerminateSubprocessTree(cmd, tree)
+			}
 			<-finished
 		}
 		platformprocess.CloseSubprocessTree(cmd, tree)
 	}()
 
-	client := &client{skipPermissions: request.SkipPermissions, emit: emit}
+	client := &client{skipPermissions: request.SkipPermissions}
 	connection := acpsdk.NewClientSideConnection(client, stdin, stdout)
-	initialize, err := connection.Initialize(ctx, acpsdk.InitializeRequest{
-		ProtocolVersion:    acpsdk.ProtocolVersionNumber,
-		ClientCapabilities: acpsdk.ClientCapabilities{},
-	})
+	initialized, err := connection.Initialize(ctx, acpsdk.InitializeRequest{ProtocolVersion: acpsdk.ProtocolVersionNumber, ClientCapabilities: acpsdk.ClientCapabilities{}})
 	if err != nil {
-		if ctx.Err() != nil {
-			return providers.ExecuteResponse{}, context.Cause(ctx)
-		}
-		return providers.ExecuteResponse{}, protocolError("initialize", descriptor.Provider.ID, err, safeACPStderr(stderr.String(), request.Environment))
+		return providers.ExecuteResult{}, rpcFailure(ctx, "initialize", id, err, stderr.String(), request)
 	}
-	if initialize.ProtocolVersion != acpsdk.ProtocolVersionNumber {
-		return providers.ExecuteResponse{}, fmt.Errorf("%w: ACP provider %q negotiated unsupported protocol version %v", providers.ErrIncompatibleProtocol, descriptor.Provider.ID, initialize.ProtocolVersion)
+	if initialized.ProtocolVersion != acpsdk.ProtocolVersionNumber {
+		return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindMisconfigured, Message: fmt.Sprintf("ACP provider %q negotiated unsupported protocol version %v", id, initialized.ProtocolVersion)}
 	}
 	session, err := connection.NewSession(ctx, acpsdk.NewSessionRequest{Cwd: cwd, McpServers: []acpsdk.McpServer{}})
 	if err != nil {
-		if ctx.Err() != nil {
-			return providers.ExecuteResponse{}, context.Cause(ctx)
-		}
 		var requestErr *acpsdk.RequestError
 		if errors.As(err, &requestErr) && requestErr.Code == -32000 {
-			return providers.ExecuteResponse{}, fmt.Errorf("%w: ACP provider %q requires authentication%s", providers.ErrAuthenticationRequired, descriptor.Provider.ID, authenticationMethodHint(initialize.AuthMethods))
+			return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindAuthentication, Message: "ACP authentication required" + authenticationMethodHint(initialized.AuthMethods)}
 		}
-		return providers.ExecuteResponse{}, protocolError("session/new", descriptor.Provider.ID, err, safeACPStderr(stderr.String(), request.Environment))
+		return providers.ExecuteResult{}, rpcFailure(ctx, "session/new", id, err, stderr.String(), request)
 	}
 	client.setSessionID(string(session.SessionId))
 	modelConfig, err := applyAdvertisedModel(ctx, connection, session, request.Model)
 	if err != nil {
-		return providers.ExecuteResponse{}, protocolError("session/set_config_option", descriptor.Provider.ID, err, safeACPStderr(stderr.String(), request.Environment))
+		return providers.ExecuteResult{}, rpcFailure(ctx, "session/set_config_option", id, err, stderr.String(), request)
 	}
 	if _, err := connection.Prompt(ctx, acpsdk.PromptRequest{SessionId: session.SessionId, Prompt: prompt}); err != nil {
-		if ctx.Err() != nil {
-			if content := client.content(); content != "" {
-				_ = client.emitUpdate(providers.ExecutionUpdate{Kind: providers.ExecutionUpdateMessage, NativeType: "session/prompt", ItemID: "assistant-message", Text: content, Final: true, Partial: true})
-			}
-			return providers.ExecuteResponse{}, context.Cause(ctx)
-		}
-		promptErr := protocolError("session/prompt", descriptor.Provider.ID, err, safeACPStderr(stderr.String(), request.Environment))
-		if content := client.content(); content != "" {
-			_ = client.emitUpdate(providers.ExecutionUpdate{Kind: providers.ExecutionUpdateMessage, NativeType: "session/prompt", ItemID: "assistant-message", Text: content, Final: true, Partial: true})
-		}
-		_ = client.emitUpdate(providers.ExecutionUpdate{Kind: providers.ExecutionUpdateError, NativeType: "session/prompt", ItemID: "acp-prompt-error", Error: &providers.ErrorUpdate{Code: "ACP_PROMPT_FAILED", Message: promptErr.Error()}})
-		return providers.ExecuteResponse{}, promptErr
+		return providers.ExecuteResult{}, withPartial(rpcFailure(ctx, "session/prompt", id, err, stderr.String(), request), client)
 	}
-	if content := client.content(); content != "" {
-		if err := client.emitUpdate(providers.ExecutionUpdate{Kind: providers.ExecutionUpdateMessage, NativeType: "session/prompt", ItemID: "assistant-message", Text: content, Final: true}); err != nil {
-			return providers.ExecuteResponse{}, err
-		}
+	return providers.ExecuteResult{Content: client.content(), SessionRef: &providers.SessionRef{Provider: id, Kind: providers.SessionIDKind, ID: string(session.SessionId)}, Diagnostics: &providers.ExecuteDiagnostics{Progress: client.progressFacts(), Metadata: map[string]string{"execution_kind": "acp", "protocol_version": fmt.Sprint(initialized.ProtocolVersion), "model_config": modelConfig}}}, nil
+}
+
+func requestEnvironment(request providers.ExecuteRequest) []string {
+	if request.EnvVars == nil {
+		return append([]string(nil), request.ProcessEnvironment...)
 	}
-	return providers.ExecuteResponse{
-		Content: client.content(),
-		Session: &providers.SessionRef{ProviderID: descriptor.Provider.ID, Kind: "session_id", ID: string(session.SessionId)},
-		Diagnostics: &providers.SafeDiagnostics{Metadata: map[string]string{
-			"execution_kind":   string(providers.ExecutionKindACP),
-			"protocol_version": fmt.Sprint(initialize.ProtocolVersion),
-			"model_config":     modelConfig,
-		}},
-	}, nil
+	values := append([]string(nil), request.ProcessEnvironment...)
+	for key, value := range request.EnvVars {
+		values = append(values, key+"="+value)
+	}
+	return values
+}
+
+func absoluteWorkingDirectory(value string) (string, error) {
+	if strings.TrimSpace(value) == "" {
+		return "", errors.New("ACP working directory is required")
+	}
+	return filepath.Abs(value)
 }
 
 func applyAdvertisedModel(ctx context.Context, connection *acpsdk.ClientSideConnection, session acpsdk.NewSessionResponse, model string) (string, error) {
@@ -185,15 +146,10 @@ func applyAdvertisedModel(ctx context.Context, connection *acpsdk.ClientSideConn
 		return "not_requested", nil
 	}
 	for _, config := range session.ConfigOptions {
-		if config.Select == nil || config.Select.Category == nil || *config.Select.Category != acpsdk.SessionConfigOptionCategoryModel {
+		if config.Select == nil || config.Select.Category == nil || *config.Select.Category != acpsdk.SessionConfigOptionCategoryModel || !selectOptionContains(config.Select.Options, acpsdk.SessionConfigValueId(model)) {
 			continue
 		}
-		if !selectOptionContains(config.Select.Options, acpsdk.SessionConfigValueId(model)) {
-			continue
-		}
-		_, err := connection.SetSessionConfigOption(ctx, acpsdk.SetSessionConfigOptionRequest{ValueId: &acpsdk.SetSessionConfigOptionValueId{
-			SessionId: session.SessionId, ConfigId: config.Select.Id, Value: acpsdk.SessionConfigValueId(model),
-		}})
+		_, err := connection.SetSessionConfigOption(ctx, acpsdk.SetSessionConfigOptionRequest{ValueId: &acpsdk.SetSessionConfigOptionValueId{SessionId: session.SessionId, ConfigId: config.Select.Id, Value: acpsdk.SessionConfigValueId(model)}})
 		if err != nil {
 			return "failed", err
 		}
@@ -223,7 +179,7 @@ func selectOptionContains(options acpsdk.SessionConfigSelectOptions, model acpsd
 }
 
 func authenticationMethodHint(methods []acpsdk.AuthMethod) string {
-	labels := make([]string, 0, len(methods))
+	labels := []string{}
 	for _, method := range methods {
 		switch {
 		case method.Agent != nil:
@@ -240,96 +196,142 @@ func authenticationMethodHint(methods []acpsdk.AuthMethod) string {
 	return "; advertised methods: " + strings.Join(labels, ", ")
 }
 
-func absoluteWorkingDirectory(value string) (string, error) {
-	if strings.TrimSpace(value) == "" {
-		return "", fmt.Errorf("%w: ACP working directory is required", providers.ErrInvalidRequest)
+func rpcFailure(ctx context.Context, method string, id providers.ID, err error, stderr string, request providers.ExecuteRequest) error {
+	if ctx.Err() != nil {
+		return nativeFailure(ctx.Err())
 	}
-	abs, err := filepath.Abs(value)
-	if err != nil {
-		return "", fmt.Errorf("%w: resolve ACP working directory: %v", providers.ErrInvalidRequest, err)
-	}
-	return abs, nil
-}
-
-func promptBlocks(request providers.ExecuteRequest) ([]acpsdk.ContentBlock, error) {
-	blocks := make([]acpsdk.ContentBlock, 0, len(request.Prompt)+1)
-	if instructions := strings.TrimSpace(request.Instructions); instructions != "" {
-		blocks = append(blocks, acpsdk.TextBlock("System instructions:\n"+instructions))
-	}
-	for index, part := range request.Prompt {
-		switch part.Kind {
-		case providers.ContentKindText:
-			blocks = append(blocks, acpsdk.TextBlock(part.Text))
-		case providers.ContentKindResourceLink:
-			if strings.TrimSpace(part.URI) == "" {
-				return nil, fmt.Errorf("%w: prompt resource link %d requires a URI", providers.ErrInvalidRequest, index)
-			}
-			block := acpsdk.ResourceLinkBlock(firstNonBlank(part.Name, part.URI), part.URI)
-			if part.MimeType != "" {
-				block.ResourceLink.MimeType = stringPointer(part.MimeType)
-			}
-			blocks = append(blocks, block)
-		default:
-			return nil, fmt.Errorf("%w: prompt content part %d has unsupported kind %q", providers.ErrInvalidRequest, index, part.Kind)
-		}
-	}
-	if len(blocks) == 0 {
-		blocks = append(blocks, acpsdk.TextBlock(""))
-	}
-	return blocks, nil
-}
-
-func firstNonBlank(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
-		}
-	}
-	return "resource"
-}
-
-func stringPointer(value string) *string { return &value }
-
-func environment(entries []providers.EnvironmentEntry) []string {
-	if len(entries) == 0 {
-		return nil
-	}
-	result := make([]string, 0, len(entries))
-	for _, entry := range entries {
-		if entry.Name != "" {
-			result = append(result, entry.Name+"="+entry.Value)
-		}
-	}
-	return result
-}
-
-func protocolError(method string, id providers.ID, err error, stderr string) error {
-	detail := strings.TrimSpace(stderr)
+	detail := safeACPStderr(stderr, request.EnvVars)
+	message := fmt.Sprintf("ACP provider %q %s failed: %s", id, method, safeRPCMessage(err))
 	if detail != "" {
-		return fmt.Errorf("%w: ACP provider %q %s failed: %v (stderr: %s)", providers.ErrProtocol, id, method, err, detail)
+		message += " (stderr: " + detail + ")"
 	}
-	return fmt.Errorf("%w: ACP provider %q %s failed: %v", providers.ErrProtocol, id, method, err)
+	kind := providers.ExecuteFailureKindUnknown
+	if method == "initialize" {
+		native := strings.ToLower(err.Error())
+		if strings.Contains(native, "protocol version") || strings.Contains(native, "protocolversion") {
+			kind = providers.ExecuteFailureKindMisconfigured
+		}
+	}
+	return providers.ExecuteFailure{Kind: kind, Message: message}
+}
+func safeRPCMessage(err error) string {
+	var requestErr *acpsdk.RequestError
+	if errors.As(err, &requestErr) && strings.TrimSpace(requestErr.Message) != "" {
+		return strings.TrimSpace(requestErr.Message)
+	}
+	message := strings.TrimSpace(err.Error())
+	if message != "" && len(message) <= 256 && !strings.ContainsAny(message, "{}[]\\/") {
+		return message
+	}
+	return "RPC request failed"
 }
 
-func safeACPStderr(value string, environment []providers.EnvironmentEntry) string {
-	redacted := value
-	for _, entry := range environment {
-		if !sensitiveEnvironmentName(entry.Name) || len(entry.Value) < 4 {
+var renderedURL = regexp.MustCompile(`https?://[^\s\]\)]+`)
+
+func resourceLinks(values []any, renderedPrompt string) []acpsdk.ContentBlock {
+	var blocks []acpsdk.ContentBlock
+	seen := map[string]struct{}{}
+	for _, value := range values {
+		encoded, err := json.Marshal(value)
+		if err != nil {
 			continue
 		}
-		redacted = strings.ReplaceAll(redacted, entry.Value, "<redacted>")
+		var decoded any
+		if json.Unmarshal(encoded, &decoded) != nil {
+			continue
+		}
+		for _, block := range resourceLinksFromJSON(decoded) {
+			if _, ok := seen[block.ResourceLink.Uri]; ok {
+				continue
+			}
+			seen[block.ResourceLink.Uri] = struct{}{}
+			blocks = append(blocks, block)
+		}
 	}
-	redacted = strings.TrimSpace(redacted)
-	if len(redacted) > 1024 {
-		redacted = redacted[:1024]
+	for _, url := range renderedURL.FindAllString(renderedPrompt, -1) {
+		if _, ok := seen[url]; ok {
+			continue
+		}
+		block := acpsdk.ResourceLinkBlock(url, url)
+		ext := strings.ToLower(filepath.Ext(url))
+		mime := map[string]string{".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp"}[ext]
+		if mime != "" {
+			block.ResourceLink.MimeType = &mime
+		}
+		seen[url] = struct{}{}
+		blocks = append(blocks, block)
 	}
-	return redacted
+	return blocks
 }
 
+func resourceLinksFromJSON(value any) []acpsdk.ContentBlock {
+	var blocks []acpsdk.ContentBlock
+	switch typed := value.(type) {
+	case []any:
+		for _, child := range typed {
+			blocks = append(blocks, resourceLinksFromJSON(child)...)
+		}
+	case map[string]any:
+		url, _ := typed["url"].(string)
+		if strings.TrimSpace(url) != "" {
+			name, _ := typed["label"].(string)
+			if strings.TrimSpace(name) == "" {
+				name = url
+			}
+			block := acpsdk.ResourceLinkBlock(name, url)
+			if mime, ok := typed["contentType"].(string); ok && mime != "" {
+				block.ResourceLink.MimeType = &mime
+			}
+			blocks = append(blocks, block)
+		}
+		for key, child := range typed {
+			if key != "url" {
+				blocks = append(blocks, resourceLinksFromJSON(child)...)
+			}
+		}
+	}
+	return blocks
+}
+func invalidFailure(err error) error {
+	return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindInvalidRequest, Message: err.Error()}
+}
+func dependencyFailure(message string) error {
+	return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: message}
+}
+func nativeFailure(err error) error {
+	kind := providers.ExecuteFailureKindUnknown
+	if errors.Is(err, context.Canceled) {
+		kind = providers.ExecuteFailureKindCanceled
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		kind = providers.ExecuteFailureKindTimeout
+	}
+	return providers.ExecuteFailure{Kind: kind, Message: err.Error()}
+}
+func withPartial(err error, c *client) error {
+	var f providers.ExecuteFailure
+	if errors.As(err, &f) {
+		f.Diagnostics = &providers.ExecuteDiagnostics{Progress: c.progressFacts(), Metadata: map[string]string{"partial_content": c.content()}}
+		return f
+	}
+	return err
+}
+func safeACPStderr(value string, env map[string]string) string {
+	for name, secret := range env {
+		if sensitiveEnvironmentName(name) && len(secret) >= 4 {
+			value = strings.ReplaceAll(value, secret, "<redacted>")
+		}
+	}
+	value = strings.TrimSpace(value)
+	if len(value) > 1024 {
+		return value[:1024]
+	}
+	return value
+}
 func sensitiveEnvironmentName(name string) bool {
-	canonical := strings.ToUpper(strings.TrimSpace(name))
+	name = strings.ToUpper(strings.TrimSpace(name))
 	for _, marker := range []string{"API_KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL"} {
-		if strings.Contains(canonical, marker) {
+		if strings.Contains(name, marker) {
 			return true
 		}
 	}
@@ -340,130 +342,131 @@ type client struct {
 	mu              sync.Mutex
 	skipPermissions bool
 	text            strings.Builder
-	sequence        int64
 	sessionID       string
-	emit            func(providers.ExecutionUpdate) error
+	progress        []providers.ExecuteProgress
 }
 
-func (c *client) SessionUpdate(ctx context.Context, notification acpsdk.SessionNotification) error {
-	update := notification.Update
-	mapped, text := mapSessionUpdate(update)
-	if len(mapped) == 0 {
-		return nil
-	}
+func (c *client) SessionUpdate(_ context.Context, n acpsdk.SessionNotification) error {
+	p, text := mapSessionUpdate(n.Update)
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	if text != "" {
 		c.text.WriteString(text)
 	}
-	c.mu.Unlock()
-	for _, item := range mapped {
-		if err := c.emitUpdate(item); err != nil {
-			return err
-		}
-	}
+	c.progress = append(c.progress, p...)
 	return nil
 }
-
-func (c *client) setSessionID(value string) {
+func (c *client) setSessionID(v string) { c.mu.Lock(); c.sessionID = v; c.mu.Unlock() }
+func (c *client) content() string       { c.mu.Lock(); defer c.mu.Unlock(); return c.text.String() }
+func (c *client) progressFacts() []providers.ExecuteProgress {
 	c.mu.Lock()
-	c.sessionID = value
-	c.mu.Unlock()
+	defer c.mu.Unlock()
+	out := make([]providers.ExecuteProgress, len(c.progress))
+	for i := range c.progress {
+		out[i] = c.progress[i].Clone()
+	}
+	return out
 }
 
-func mapSessionUpdate(update acpsdk.SessionUpdate) ([]providers.ExecutionUpdate, string) {
+func mapSessionUpdate(update acpsdk.SessionUpdate) ([]providers.ExecuteProgress, string) {
+	phase, detail, kind, itemID := "update", "", "unknown", ""
+	metadata := map[string]string{}
 	switch {
 	case update.AgentMessageChunk != nil && update.AgentMessageChunk.Content.Text != nil:
-		chunk := update.AgentMessageChunk
-		return []providers.ExecutionUpdate{{
-			Kind: providers.ExecutionUpdateMessage, NativeType: chunk.SessionUpdate,
-			ItemID: optionalItemID(chunk.MessageId, "assistant-message"), Text: chunk.Content.Text.Text,
-		}}, chunk.Content.Text.Text
+		kind = "message"
+		metadata["native_type"] = "agent_message_chunk"
+		phase = "delta"
+		detail = update.AgentMessageChunk.Content.Text.Text
+		itemID = optionalItemID(update.AgentMessageChunk.MessageId, "assistant-message")
 	case update.AgentThoughtChunk != nil && update.AgentThoughtChunk.Content.Text != nil:
-		chunk := update.AgentThoughtChunk
-		return []providers.ExecutionUpdate{{
-			Kind: providers.ExecutionUpdateReasoning, NativeType: chunk.SessionUpdate,
-			ItemID: optionalItemID(chunk.MessageId, "assistant-reasoning"), Text: chunk.Content.Text.Text,
-		}}, ""
+		kind = "reasoning"
+		metadata["native_type"] = "agent_thought_chunk"
+		phase = "delta"
+		detail = update.AgentThoughtChunk.Content.Text.Text
+		itemID = optionalItemID(update.AgentThoughtChunk.MessageId, "assistant-reasoning")
 	case update.ToolCall != nil:
-		tool := update.ToolCall
-		mapped := []providers.ExecutionUpdate{{
-			Kind: providers.ExecutionUpdateTool, NativeType: tool.SessionUpdate, ItemID: string(tool.ToolCallId),
-			Tool: &providers.ToolUpdate{ID: string(tool.ToolCallId), Name: tool.Title, Status: string(tool.Status), RawInput: tool.RawInput, RawOutput: tool.RawOutput},
-		}}
-		return append(mapped, mapFileChanges(tool.SessionUpdate, string(tool.ToolCallId), tool.Content)...), ""
+		kind = "tool"
+		metadata["native_type"] = "tool_call"
+		phase = "started"
+		detail = update.ToolCall.Title
+		itemID = string(update.ToolCall.ToolCallId)
+		metadata["status"] = string(update.ToolCall.Status)
+		encodeMetadata(metadata, "raw_input", update.ToolCall.RawInput)
 	case update.ToolCallUpdate != nil:
-		tool := update.ToolCallUpdate
-		status := ""
-		if tool.Status != nil {
-			status = string(*tool.Status)
+		kind = "tool"
+		metadata["native_type"] = "tool_call_update"
+		phase = "updated"
+		itemID = string(update.ToolCallUpdate.ToolCallId)
+		if update.ToolCallUpdate.Title != nil {
+			detail = *update.ToolCallUpdate.Title
 		}
-		name := ""
-		if tool.Title != nil {
-			name = *tool.Title
+		if update.ToolCallUpdate.Status != nil {
+			metadata["status"] = string(*update.ToolCallUpdate.Status)
 		}
-		mapped := []providers.ExecutionUpdate{{
-			Kind: providers.ExecutionUpdateTool, NativeType: tool.SessionUpdate, ItemID: string(tool.ToolCallId),
-			Tool: &providers.ToolUpdate{ID: string(tool.ToolCallId), Name: name, Status: status, RawInput: tool.RawInput, RawOutput: tool.RawOutput},
-		}}
-		return append(mapped, mapFileChanges(tool.SessionUpdate, string(tool.ToolCallId), tool.Content)...), ""
+		encodeMetadata(metadata, "raw_output", update.ToolCallUpdate.RawOutput)
+		progress := []providers.ExecuteProgress{{Phase: phase, Detail: detail, Metadata: metadata}}
+		for _, content := range update.ToolCallUpdate.Content {
+			if content.Diff == nil {
+				continue
+			}
+			operation := "modified"
+			if content.Diff.OldText == nil {
+				operation = "created"
+			}
+			progress = append(progress, providers.ExecuteProgress{
+				Phase:  "updated",
+				Detail: content.Diff.Path,
+				Metadata: map[string]string{
+					"kind":                "file_change",
+					"item_id":             "file:" + content.Diff.Path,
+					"native_type":         "tool_call_update",
+					"provider_session_id": "",
+					"path":                content.Diff.Path,
+					"operation":           operation,
+				},
+			})
+		}
+		return progress, ""
 	case update.Plan != nil:
-		entries := make([]providers.PlanEntry, len(update.Plan.Entries))
-		for index, entry := range update.Plan.Entries {
-			entries[index] = providers.PlanEntry{ID: fmt.Sprintf("plan-step-%d", index+1), Description: entry.Content, Status: string(entry.Status)}
-		}
-		return []providers.ExecutionUpdate{{Kind: providers.ExecutionUpdatePlan, NativeType: update.Plan.SessionUpdate, ItemID: "plan", Plan: entries}}, ""
+		kind = "plan"
+		metadata["native_type"] = "plan"
+		phase = "updated"
+		itemID = "plan"
+		encodeMetadata(metadata, "entries", update.Plan.Entries)
 	case update.UsageUpdate != nil:
-		return []providers.ExecutionUpdate{{
-			Kind: providers.ExecutionUpdateUsage, NativeType: update.UsageUpdate.SessionUpdate, ItemID: "usage",
-			Usage: &providers.UsageUpdate{UsedTokens: int64(update.UsageUpdate.Used), MaxTokens: int64(update.UsageUpdate.Size)},
-		}}, ""
+		kind = "usage"
+		metadata["native_type"] = "usage_update"
+		phase = "updated"
+		itemID = "usage"
+		metadata["used_tokens"] = fmt.Sprint(update.UsageUpdate.Used)
+		metadata["max_tokens"] = fmt.Sprint(update.UsageUpdate.Size)
 	case update.SessionInfoUpdate != nil:
-		metadata := map[string]string{}
+		kind = "session"
+		metadata["native_type"] = "session_info_update"
+		phase = "started"
+		itemID = "session"
 		if update.SessionInfoUpdate.Title != nil {
-			metadata["title"] = *update.SessionInfoUpdate.Title
+			detail = *update.SessionInfoUpdate.Title
 		}
-		if update.SessionInfoUpdate.UpdatedAt != nil {
-			metadata["updated_at"] = *update.SessionInfoUpdate.UpdatedAt
-		}
-		return []providers.ExecutionUpdate{{Kind: providers.ExecutionUpdateSession, NativeType: update.SessionInfoUpdate.SessionUpdate, ItemID: "session", Metadata: metadata}}, ""
 	default:
 		return nil, ""
 	}
-}
-
-func mapFileChanges(nativeType, toolCallID string, content []acpsdk.ToolCallContent) []providers.ExecutionUpdate {
-	var updates []providers.ExecutionUpdate
-	for index, item := range content {
-		if item.Diff == nil {
-			continue
+	metadata["kind"], metadata["item_id"], metadata["provider_session_id"] = kind, itemID, ""
+	return []providers.ExecuteProgress{{Phase: phase, Detail: detail, Metadata: metadata}}, func() string {
+		if kind == "message" {
+			return detail
 		}
-		operation := "update"
-		if item.Diff.OldText == nil {
-			operation = "create"
-		} else if item.Diff.NewText == "" {
-			operation = "delete"
-		}
-		updates = append(updates, providers.ExecutionUpdate{
-			Kind: providers.ExecutionUpdateFileChange, NativeType: nativeType,
-			ItemID:     fmt.Sprintf("%s-file-%d", toolCallID, index+1),
-			FileChange: &providers.FileChangeUpdate{Path: item.Diff.Path, Operation: operation, Summary: "ACP tool file diff"},
-		})
-	}
-	return updates
+		return ""
+	}()
 }
-
-func (c *client) emitUpdate(update providers.ExecutionUpdate) error {
-	c.mu.Lock()
-	c.sequence++
-	update.Sequence = c.sequence
-	update.ProviderSessionID = c.sessionID
-	c.mu.Unlock()
-	if c.emit == nil {
-		return nil
+func encodeMetadata(target map[string]string, key string, value any) {
+	if value == nil {
+		return
 	}
-	return c.emit(update)
+	if data, err := json.Marshal(value); err == nil {
+		target[key] = string(data)
+	}
 }
-
 func optionalItemID(value *string, fallback string) string {
 	if value != nil && strings.TrimSpace(*value) != "" {
 		return strings.TrimSpace(*value)
@@ -471,26 +474,19 @@ func optionalItemID(value *string, fallback string) string {
 	return fallback
 }
 
-func (c *client) content() string {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.text.String()
-}
-
 func (c *client) RequestPermission(ctx context.Context, request acpsdk.RequestPermissionRequest) (acpsdk.RequestPermissionResponse, error) {
 	if ctx.Err() != nil {
 		return acpsdk.RequestPermissionResponse{Outcome: acpsdk.NewRequestPermissionOutcomeCancelled()}, nil
 	}
-	wantAllow := c.skipPermissions
+	want := c.skipPermissions
 	for _, option := range request.Options {
 		allow := option.Kind == acpsdk.PermissionOptionKindAllowOnce || option.Kind == acpsdk.PermissionOptionKindAllowAlways
-		if allow == wantAllow {
+		if allow == want {
 			return acpsdk.RequestPermissionResponse{Outcome: acpsdk.NewRequestPermissionOutcomeSelected(option.OptionId)}, nil
 		}
 	}
 	return acpsdk.RequestPermissionResponse{Outcome: acpsdk.NewRequestPermissionOutcomeCancelled()}, nil
 }
-
 func (*client) ReadTextFile(context.Context, acpsdk.ReadTextFileRequest) (acpsdk.ReadTextFileResponse, error) {
 	return acpsdk.ReadTextFileResponse{}, errors.New("ACP filesystem reads are not supported")
 }

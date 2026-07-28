@@ -14,18 +14,18 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
+	runnerswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
 	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/prompting"
-	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
-	runnerswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/skippermissions"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 	providerconductor "github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
 	providercontract "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/providersroot"
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 	providerstructured "github.com/portpowered/infinite-you/pkg/services/workers/provider/structured"
-	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/skippermissions"
 )
 
 // Builder constructs one configured worker without owning runtime lifecycle.
@@ -72,15 +72,15 @@ type Result struct {
 
 // Service is a stateless worker executor constructor.
 type Service struct {
-	providerFactory   *workerprovider.Factory
-	scriptFactory     *workerexecutor.ScriptFactory
-	interpolation     interfaces.InvocationInterpolationService
-	executionPolicy   interfaces.WorkstationExecutionPolicyService
-	decisionEnvelopes interfaces.DecisionEnvelopeService
-	factoryDocs       workers.FactoryDocsLoader
-	worktreePreparer  workers.FactoryWorktreePreparer
-	agentRunHarness   workeragentrun.HarnessAdapter
-	retryRandom       platformrandom.Source
+	providerFactory                   *workerprovider.Factory
+	scriptFactory                     *workerexecutor.ScriptFactory
+	interpolation                     interfaces.InvocationInterpolationService
+	executionPolicy                   interfaces.WorkstationExecutionPolicyService
+	decisionEnvelopes                 interfaces.DecisionEnvelopeService
+	factoryDocs                       workers.FactoryDocsLoader
+	worktreePreparer                  workers.FactoryWorktreePreparer
+	agentRunHarness                   workeragentrun.HarnessAdapter
+	retryRandom                       platformrandom.Source
 	workstationFiles                  platformfilesystem.ReadFileInspector
 	resolveRunner                     workers.RunnerSelectionResolver
 	resolveProvider                   workers.ProviderIdentityResolver
@@ -326,7 +326,8 @@ func (s *Service) agentRunner(
 	providerOverride providercontract.Provider,
 	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
 ) (workers.Runner, error) {
-	if providerOverride != nil {
+	usesNamedExecutorProvider := def != nil && strings.TrimSpace(def.ExecutorProvider) != "" && !strings.EqualFold(strings.TrimSpace(def.ExecutorProvider), "SCRIPT_WRAP")
+	if providerOverride != nil && !usesNamedExecutorProvider {
 		return workerexecutor.RunnerFromProvider(providerOverride), nil
 	}
 	if s != nil && s.agentDispatchUsesRegisteredRunner {

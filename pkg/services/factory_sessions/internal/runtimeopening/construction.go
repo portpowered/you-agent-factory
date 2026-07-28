@@ -186,28 +186,28 @@ func NewDurableExecution(
 	mockWorkersConfig *workers.MockWorkersConfig,
 	executionFactory FactorySessionExecutionFactory,
 	providerIdentities factorysessions.ProviderIdentityResolver,
-) (factorysessions.ExecutionService, error) {
+) (DurableExecution, error) {
 	if executionFactory == nil {
-		return nil, fmt.Errorf("compose durable session execution: Factory Sessions execution factory is required")
+		return DurableExecution{}, fmt.Errorf("compose durable session execution: Factory Sessions execution factory is required")
 	}
 	projectRoot := firstNonEmpty(definitionRequest.ExecutionBaseDir, definitionRequest.Directory, root.FactoryRootDir)
 	configPath, err := operatorConfigPath(sessionRequest)
 	if err != nil {
-		return nil, err
+		return DurableExecution{}, err
 	}
 	operatorConfig, err := loadOperatorConfig(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("compose durable session worker presets: %w", err)
+		return DurableExecution{}, fmt.Errorf("compose durable session worker presets: %w", err)
 	}
 	if providerIdentities == nil {
-		return nil, fmt.Errorf("compose durable session worker presets: provider identity resolver is required")
+		return DurableExecution{}, fmt.Errorf("compose durable session worker presets: provider identity resolver is required")
 	}
 	workerPresetIDs := make(map[string]struct{}, len(operatorConfig.WorkerPresets))
 	workerPresets := make(map[string]factoryruntime.JavaScriptWorkerPreset, len(operatorConfig.WorkerPresets))
 	for index, preset := range operatorConfig.WorkerPresets {
 		canonicalProvider, err := providerIdentities(preset.ModelProvider)
 		if err != nil {
-			return nil, fmt.Errorf(
+			return DurableExecution{}, fmt.Errorf(
 				"compose durable session worker presets: workerPresets[%d].modelProvider: %w",
 				index,
 				err,
@@ -224,7 +224,7 @@ func NewDurableExecution(
 	if strings.TrimSpace(defaultProvider) != "" {
 		defaultProvider, err = providerIdentities(defaultProvider)
 		if err != nil {
-			return nil, fmt.Errorf(
+			return DurableExecution{}, fmt.Errorf(
 				"compose durable session worker presets: defaults.workerModelProvider: %w",
 				err,
 			)
@@ -242,11 +242,15 @@ func NewDurableExecution(
 			DefaultModel:         operatorConfig.Defaults.WorkerModel,
 		},
 		mockWorkersConfig,
+		append([]operatorconfig.ACPIntegration(nil), operatorConfig.Workers.ACP.Integrations...),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("compose durable session persistence: %w", err)
+		return DurableExecution{}, fmt.Errorf("compose durable session persistence: %w", err)
 	}
-	return execution, nil
+	return DurableExecution{
+		Service:         execution,
+		ACPIntegrations: append([]operatorconfig.ACPIntegration(nil), operatorConfig.Workers.ACP.Integrations...),
+	}, nil
 }
 
 func NewWorkerExecution(
@@ -263,6 +267,7 @@ func NewWorkerExecution(
 	modelsScope models.RuntimeScopeRef,
 	workService work.Service,
 	factory WorkersRuntimeFactory,
+	acpIntegrations []operatorconfig.ACPIntegration,
 ) (workers.RuntimeService, error) {
 	if factory == nil {
 		return nil, fmt.Errorf("Workers runtime factory is required")
@@ -288,6 +293,7 @@ func NewWorkerExecution(
 		providerOverride,
 		now,
 		work.ContentMaterializeFunc(workService.MaterializeContentURL),
+		append([]operatorconfig.ACPIntegration(nil), acpIntegrations...),
 	)
 }
 

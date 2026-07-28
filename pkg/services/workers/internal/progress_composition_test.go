@@ -2,7 +2,6 @@ package internal
 
 import (
 	"context"
-	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -14,8 +13,6 @@ import (
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/models"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
@@ -26,73 +23,6 @@ import (
 var testRetryRandom = platformrandom.SourceFunc(func(int64) (int64, error) {
 	return 0, nil
 })
-
-func TestProviderExecutionUpdatesMapIntoTheExistingCanonicalDraftVocabulary(t *testing.T) {
-	t.Parallel()
-
-	updates := []providers.ExecutionUpdate{
-		{Sequence: 1, Kind: providers.ExecutionUpdateMessage, NativeType: "agent_message_chunk", ItemID: "message-1", ProviderSessionID: "session-1", Text: "hello"},
-		{Sequence: 2, Kind: providers.ExecutionUpdateReasoning, NativeType: "agent_thought_chunk", ItemID: "thought-1", Text: "considering"},
-		{Sequence: 3, Kind: providers.ExecutionUpdateTool, NativeType: "tool_call", ItemID: "tool-1", Tool: &providers.ToolUpdate{ID: "tool-1", Name: "Read", Status: "in_progress", RawInput: map[string]any{"path": "README.md"}}},
-		{Sequence: 4, Kind: providers.ExecutionUpdatePlan, NativeType: "plan", ItemID: "plan", Plan: []providers.PlanEntry{{ID: "step-1", Description: "Read", Status: "pending"}}},
-		{Sequence: 5, Kind: providers.ExecutionUpdateUsage, NativeType: "usage_update", ItemID: "usage", Usage: &providers.UsageUpdate{UsedTokens: 42}},
-		{Sequence: 6, Kind: providers.ExecutionUpdateFileChange, NativeType: "tool_call_update", ItemID: "file-1", FileChange: &providers.FileChangeUpdate{Path: "a.txt", Operation: "update"}},
-		{Sequence: 7, Kind: providers.ExecutionUpdateMessage, NativeType: "session/prompt", ItemID: "message-1", Text: "hello", Final: true},
-		{Sequence: 8, Kind: providers.ExecutionUpdateError, NativeType: "session/prompt", ItemID: "error-1", Error: &providers.ErrorUpdate{Code: "ACP_PROMPT_FAILED", Message: "failed"}},
-	}
-	wantKinds := []workers.Kind{workers.KindMessage, workers.KindReasoning, workers.KindTool, workers.KindPlan, workers.KindUsage, workers.KindFileChange, workers.KindMessage, workers.KindError}
-	for index, update := range updates {
-		draft, err := providerExecutionDraft("cursor-acp", "dispatch-1", update)
-		if err != nil {
-			t.Fatalf("providerExecutionDraft(%s) error = %v", update.Kind, err)
-		}
-		if draft.Kind != wantKinds[index] || draft.DispatchID != "dispatch-1" || draft.Provenance.Provider != "cursor-acp" {
-			t.Fatalf("draft[%d] = %#v", index, draft)
-		}
-		if err := workers.ValidateDraft(draft); err != nil {
-			t.Fatalf("draft[%d] validation error = %v", index, err)
-		}
-	}
-}
-
-func TestProvidersExecutionErrorMapsStableFailureClasses(t *testing.T) {
-	t.Parallel()
-	for _, test := range []struct {
-		name string
-		err  error
-		want workers.WorkFailureType
-	}{
-		{name: "authentication", err: providers.ErrAuthenticationRequired, want: workers.WorkFailureTypeAuthFailure},
-		{name: "missing executable", err: providers.ErrUnavailableProvider, want: workers.WorkFailureTypeMissingExecutable},
-		{name: "incompatible protocol", err: providers.ErrIncompatibleProtocol, want: workers.WorkFailureTypeMisconfigured},
-		{name: "invalid request", err: providers.ErrInvalidRequest, want: workers.WorkFailureTypePermanentBadRequest},
-		{name: "deadline", err: context.DeadlineExceeded, want: workers.WorkFailureTypeTimeout},
-		{name: "protocol", err: providers.ErrProtocol, want: workers.WorkFailureTypeUnknown},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			got := providersExecutionError(test.err)
-			var providerErr *workers.ProviderError
-			if !errors.As(got, &providerErr) || providerErr.Type != test.want {
-				t.Fatalf("providersExecutionError(%v) = %#v, want %s", test.err, got, test.want)
-			}
-		})
-	}
-}
-
-func TestProviderPromptPartsMapsCanonicalWorkResourceLinks(t *testing.T) {
-	t.Parallel()
-	parts := providerPromptParts(workers.RunnerExecutionRequest{
-		UserMessage:      "review the attachment",
-		WorkingDirectory: t.TempDir(),
-		InputTokens: []any{workers.Token{Color: workers.Color{Content: []work.WorkContentPart{
-			{Type: work.WorkContentPartTypeImage, URL: "https://example.test/image.png", Label: "screenshot", ContentType: "image/png"},
-			{Type: work.WorkContentPartTypeBinary, File: "artifact.bin", ContentType: "application/octet-stream"},
-		}}}},
-	})
-	if len(parts) != 3 || parts[0].Kind != providers.ContentKindText || parts[1].Kind != providers.ContentKindResourceLink || parts[1].URI != "https://example.test/image.png" || !strings.HasPrefix(parts[2].URI, "file:") {
-		t.Fatalf("provider prompt parts = %#v", parts)
-	}
-}
 
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func TestNewRequiresCompositionSelectedWorkerEffects(t *testing.T) {

@@ -347,6 +347,12 @@ func inferenceRequestForExecutionRequest(request workerexecution.WorkstationExec
 		WorkingDirectory:             request.WorkingDirectory,
 	}
 	if workerDef != nil {
+		if executorProvider := strings.TrimSpace(workerDef.ExecutorProvider); executorProvider != "" {
+			req.ExecutorProvider = executorProvider
+			if !strings.EqualFold(executorProvider, "SCRIPT_WRAP") {
+				req.RunnerID = executorProvider
+			}
+		}
 		req.Model = workerDef.Model
 		req.ModelProvider = modelProviderForExecution(workerDef.ModelProvider, workerexecution.ResolvedRunnerSelection{
 			RunnerID: request.RunnerID,

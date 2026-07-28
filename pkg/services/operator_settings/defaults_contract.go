@@ -2,11 +2,14 @@ package operatorsettings
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 )
+
+var acpProviderIdentityPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$`)
 
 const (
 	// EnvDefaultWorkerModelProvider is the environment variable for the default
@@ -158,6 +161,9 @@ func (cfg Config) Normalize() (Config, error) {
 }
 
 func (settings WorkerSettings) normalize() (WorkerSettings, error) {
+	if settings.ACP.Integrations == nil {
+		return WorkerSettings{}, nil
+	}
 	integrations := make([]ACPIntegration, len(settings.ACP.Integrations))
 	ids := make(map[string]struct{}, len(integrations))
 	names := make(map[string]struct{}, len(integrations))
@@ -169,8 +175,8 @@ func (settings WorkerSettings) normalize() (WorkerSettings, error) {
 		if integration.ID == "" || integration.Name == "" || integration.Command == "" {
 			return WorkerSettings{}, fmt.Errorf("workers.acp.integrations[%d] requires non-empty id, name, and command", index)
 		}
-		if err := providers.ID(integration.Name).Validate(); err != nil {
-			return WorkerSettings{}, fmt.Errorf("workers.acp.integrations[%d].name: %w", index, err)
+		if err := providers.ID(integration.Name).Validate(); err != nil || !acpProviderIdentityPattern.MatchString(integration.Name) {
+			return WorkerSettings{}, fmt.Errorf("workers.acp.integrations[%d].name %q must use canonical lowercase letters, digits, dots, or hyphens", index, integration.Name)
 		}
 		if integration.Transport != "stdio" {
 			return WorkerSettings{}, fmt.Errorf("workers.acp.integrations[%d] %q has unsupported transport %q: accepted value is stdio", index, integration.Name, integration.Transport)

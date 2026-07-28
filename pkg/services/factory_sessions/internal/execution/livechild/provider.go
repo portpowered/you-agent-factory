@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+	"time"
+
 	workflowresult "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	"strings"
-	"time"
 )
 
 // ProviderChildExecutor routes one child agent.run through a real provider inference call.
@@ -18,6 +19,7 @@ type ProviderChildExecutor struct {
 	executor    workers.InvocationExecutor
 	records     workflowresult.JavaScriptChildRecordSink
 	childValues workflowresult.JavaScriptChildValues
+	workingDir  string
 	maxRetries  int
 	sleep       func(context.Context, time.Duration) error
 }
@@ -42,15 +44,21 @@ func NewRetryingProviderChildExecutor(
 	records workflowresult.JavaScriptChildRecordSink,
 	maxRetries int,
 	childValues workflowresult.JavaScriptChildValues,
+	workingDirectories ...string,
 ) *ProviderChildExecutor {
 	if maxRetries < 0 {
 		maxRetries = 0
+	}
+	workingDir := ""
+	if len(workingDirectories) > 0 {
+		workingDir = strings.TrimSpace(workingDirectories[0])
 	}
 	return &ProviderChildExecutor{
 		sessionID:   sessionID,
 		executor:    executor,
 		records:     records,
 		childValues: childValues,
+		workingDir:  workingDir,
 		maxRetries:  maxRetries,
 		sleep:       sleepWithContext,
 	}
@@ -65,6 +73,10 @@ func (e *ProviderChildExecutor) Execute(ctx context.Context, req workflowresult.
 
 	dispatchID, childIndex := e.childDispatchIdentity(req)
 	providerName, providerSessionRef := "", ""
+	runnerID := strings.TrimSpace(req.ExecutorProvider)
+	if runnerID == "" {
+		runnerID = strings.TrimSpace(req.Command)
+	}
 	artifactID := e.records.NextChildArtifactID()
 	artifactRef := workflowresult.FormatArtifactURI(e.sessionID, artifactID)
 
@@ -81,7 +93,7 @@ func (e *ProviderChildExecutor) Execute(ctx context.Context, req workflowresult.
 		Command:         req.Command,
 		Sandbox:         req.Sandbox,
 		SchemaDigest:    e.childValues.SchemaDigest(req.OutputSchema),
-		RunnerID:        strings.TrimSpace(req.Command),
+		RunnerID:        runnerID,
 		ExecutionMode:   workflowresult.JavaScriptChildExecutionModeLive,
 		ArtifactRef:     artifactRef,
 	}
@@ -89,6 +101,7 @@ func (e *ProviderChildExecutor) Execute(ctx context.Context, req workflowresult.
 	e.records.AppendChildDispatch(base, workflowresult.JavaScriptChildDispatchStatusQueued)
 
 	inferReq := providerInferenceRequestFromChild(e.sessionID, dispatchID, req)
+	inferReq.WorkingDirectory = e.workingDir
 	execution, err := e.executeWithRetry(ctx, inferReq, base)
 	base.Attempt = execution.Attempt
 	if err != nil {
@@ -221,18 +234,23 @@ func providerInferenceRequestFromChild(
 		}
 	}
 	preset := strings.TrimSpace(req.Preset)
+	runnerID := strings.TrimSpace(req.ExecutorProvider)
+	if runnerID == "" {
+		runnerID = strings.TrimSpace(req.Command)
+	}
 	inferReq := workerexecution.ProviderInferenceRequest{
 		Dispatch: work.WorkDispatch{
 			DispatchID: dispatchID,
 			WorkerType: preset,
 		},
-		UserMessage:   req.Prompt,
-		Model:         req.Model,
-		ModelProvider: req.ModelProvider,
-		OutputSchema:  outputSchema,
-		SessionID:     sessionID,
-		RunnerID:      strings.TrimSpace(req.Command),
-		WorkerType:    preset,
+		UserMessage:      req.Prompt,
+		Model:            req.Model,
+		ModelProvider:    req.ModelProvider,
+		OutputSchema:     outputSchema,
+		SessionID:        sessionID,
+		RunnerID:         runnerID,
+		ExecutorProvider: strings.TrimSpace(req.ExecutorProvider),
+		WorkerType:       preset,
 	}
 	return inferReq
 }

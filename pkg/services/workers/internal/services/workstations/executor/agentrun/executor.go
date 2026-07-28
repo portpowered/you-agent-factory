@@ -217,6 +217,9 @@ func agentRunInferenceRequest(
 		req.ModelLocality = workerDef.ModelLocality
 		req.SessionID = workerDef.SessionID
 	}
+	if executorProvider := strings.TrimSpace(req.ExecutorProvider); executorProvider != "" && !strings.EqualFold(executorProvider, "SCRIPT_WRAP") {
+		req.RunnerID = executorProvider
+	}
 	return req
 }
 

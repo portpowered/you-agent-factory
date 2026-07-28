@@ -33,7 +33,7 @@ func newACPListCommand(options CommandFactory) *cobra.Command {
 			}
 			writer := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 4, 2, ' ', 0)
 			for _, provider := range response.Providers {
-				if _, err := fmt.Fprintf(writer, "%s\t%s\t%s\n", provider.ID, provider.ExecutionKind, provider.Availability.State); err != nil {
+				if _, err := fmt.Fprintf(writer, "%s\tACP\t%s\n", provider.ID, provider.Availability); err != nil {
 					return err
 				}
 			}

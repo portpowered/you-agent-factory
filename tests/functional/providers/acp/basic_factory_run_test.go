@@ -3,16 +3,13 @@ package acp_test
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	acpsdk "github.com/coder/acp-go-sdk"
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -38,7 +35,7 @@ func TestFactoryRunRoutesExecutorProviderThroughACPAdapter(t *testing.T) {
 	}, 20*time.Second)
 
 	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
-		t.Fatalf("completed work = %d, want 1", got)
+		t.Fatalf("completed work = %d, want 1; events=%#v", got, events)
 	}
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 0 {
 		t.Fatalf("failed work = %d, want 0", got)
@@ -204,205 +201,12 @@ func (p *legacyProvider) Infer(context.Context, workers.ProviderInferenceRequest
 
 func TestACPAgentHelperProcess(t *testing.T) {
 	mode := os.Getenv(acpHelperEnvironment)
-	if mode != "1" && mode != "fail" && mode != "auth" && mode != "model" && mode != "resource" && mode != "version" && mode != "init-fail" && mode != "malformed" && mode != "eof" && mode != "block" && mode != "isolate" && mode != "unsupported" {
+	if mode != "1" && mode != "fail" && mode != "auth" && mode != "model" && mode != "resource" && mode != "version" && mode != "init-fail" && mode != "stderr" && mode != "malformed" && mode != "eof" && mode != "block" && mode != "isolate" && mode != "unsupported" {
 		return
 	}
-	if mode == "malformed" {
-		_, _ = fmt.Fprintln(os.Stdout, "{not-json")
-		os.Exit(0)
-		return
+	if err := runFunctionalRPCPeer(mode, os.Stdin, os.Stdout, os.Stderr); err != nil {
+		_, _ = os.Stderr.WriteString(err.Error() + "\n")
+		os.Exit(2)
 	}
-	if mode == "eof" {
-		os.Exit(0)
-		return
-	}
-	agent := &functionalAgent{
-		failPrompt: mode == "fail", requireAuth: mode == "auth", requireModel: mode == "model",
-		requireResource: mode == "resource", incompatibleVersion: mode == "version", failInitialize: mode == "init-fail",
-		blockPrompt: mode == "block", sessionID: os.Getenv("YOU_TEST_ACP_SESSION_ID"), unsupportedClientMethods: mode == "unsupported",
-	}
-	connection := acpsdk.NewAgentSideConnection(agent, os.Stdout, os.Stdin)
-	agent.connection = connection
-	<-connection.Done()
+	os.Exit(0)
 }
-
-type functionalAgent struct {
-	connection               *acpsdk.AgentSideConnection
-	failPrompt               bool
-	requireAuth              bool
-	requireModel             bool
-	requireResource          bool
-	model                    string
-	incompatibleVersion      bool
-	failInitialize           bool
-	blockPrompt              bool
-	sessionID                string
-	unsupportedClientMethods bool
-}
-
-func (a *functionalAgent) Initialize(context.Context, acpsdk.InitializeRequest) (acpsdk.InitializeResponse, error) {
-	if a.failInitialize {
-		return acpsdk.InitializeResponse{}, errors.New("functional ACP initialization failure")
-	}
-	methods := []acpsdk.AuthMethod{}
-	if a.requireAuth {
-		methods = append(methods, acpsdk.AuthMethod{Agent: &acpsdk.AuthMethodAgent{Id: "login", Name: "Agent login"}})
-	}
-	var version acpsdk.ProtocolVersion = acpsdk.ProtocolVersionNumber
-	if a.incompatibleVersion {
-		version = acpsdk.ProtocolVersion(999)
-	}
-	return acpsdk.InitializeResponse{
-		ProtocolVersion:   version,
-		AgentCapabilities: acpsdk.AgentCapabilities{},
-		AuthMethods:       methods,
-	}, nil
-}
-
-func (a *functionalAgent) NewSession(context.Context, acpsdk.NewSessionRequest) (acpsdk.NewSessionResponse, error) {
-	if a.requireAuth {
-		return acpsdk.NewSessionResponse{}, acpsdk.NewAuthRequired(nil)
-	}
-	sessionID := a.sessionID
-	if sessionID == "" {
-		sessionID = "acp-session-functional-1"
-	}
-	response := acpsdk.NewSessionResponse{SessionId: acpsdk.SessionId(sessionID)}
-	if a.requireModel {
-		category := acpsdk.SessionConfigOptionCategoryModel
-		options := acpsdk.SessionConfigSelectOptionsUngrouped{{Name: "Test model", Value: "test-model"}}
-		response.ConfigOptions = []acpsdk.SessionConfigOption{{Select: &acpsdk.SessionConfigOptionSelect{
-			Type: "select", Id: "model", Name: "Model", Category: &category, CurrentValue: "default",
-			Options: acpsdk.SessionConfigSelectOptions{Ungrouped: &options},
-		}}}
-	}
-	return response, nil
-}
-
-func (a *functionalAgent) Prompt(ctx context.Context, request acpsdk.PromptRequest) (acpsdk.PromptResponse, error) {
-	if a.blockPrompt {
-		if signal := os.Getenv("YOU_TEST_ACP_PROMPT_SIGNAL"); signal != "" {
-			_ = os.WriteFile(signal, []byte("prompt-started"), 0o600)
-		}
-		<-ctx.Done()
-		return acpsdk.PromptResponse{}, context.Cause(ctx)
-	}
-	if a.unsupportedClientMethods {
-		calls := []struct {
-			name string
-			call func() error
-		}{
-			{name: "fs/read_text_file", call: func() error {
-				_, err := a.connection.ReadTextFile(ctx, acpsdk.ReadTextFileRequest{SessionId: request.SessionId, Path: "/fixture/read.txt"})
-				return err
-			}},
-			{name: "fs/write_text_file", call: func() error {
-				_, err := a.connection.WriteTextFile(ctx, acpsdk.WriteTextFileRequest{SessionId: request.SessionId, Path: "/fixture/write.txt", Content: "fixture"})
-				return err
-			}},
-			{name: "terminal/create", call: func() error {
-				_, err := a.connection.CreateTerminal(ctx, acpsdk.CreateTerminalRequest{SessionId: request.SessionId, Command: "echo"})
-				return err
-			}},
-			{name: "terminal/kill", call: func() error {
-				_, err := a.connection.KillTerminal(ctx, acpsdk.KillTerminalRequest{SessionId: request.SessionId, TerminalId: "terminal-1"})
-				return err
-			}},
-			{name: "terminal/output", call: func() error {
-				_, err := a.connection.TerminalOutput(ctx, acpsdk.TerminalOutputRequest{SessionId: request.SessionId, TerminalId: "terminal-1"})
-				return err
-			}},
-			{name: "terminal/release", call: func() error {
-				_, err := a.connection.ReleaseTerminal(ctx, acpsdk.ReleaseTerminalRequest{SessionId: request.SessionId, TerminalId: "terminal-1"})
-				return err
-			}},
-			{name: "terminal/wait_for_exit", call: func() error {
-				_, err := a.connection.WaitForTerminalExit(ctx, acpsdk.WaitForTerminalExitRequest{SessionId: request.SessionId, TerminalId: "terminal-1"})
-				return err
-			}},
-		}
-		for _, call := range calls {
-			if err := call.call(); err == nil || !strings.Contains(err.Error(), "not supported") {
-				return acpsdk.PromptResponse{}, fmt.Errorf("%s error = %v, want unsupported capability", call.name, err)
-			}
-		}
-	}
-	if a.requireResource {
-		found := false
-		for _, block := range request.Prompt {
-			if block.ResourceLink != nil && block.ResourceLink.Uri == "https://example.test/fixture.png" && block.ResourceLink.MimeType != nil && *block.ResourceLink.MimeType == "image/png" {
-				found = true
-			}
-		}
-		if !found {
-			return acpsdk.PromptResponse{}, errors.New("ACP prompt omitted canonical resource link")
-		}
-	}
-	if a.requireModel && a.model != "test-model" {
-		return acpsdk.PromptResponse{}, errors.New("advertised model was not applied")
-	}
-	if a.failPrompt {
-		if err := a.connection.SessionUpdate(ctx, acpsdk.SessionNotification{SessionId: request.SessionId, Update: acpsdk.UpdateAgentMessageText("partial ACP answer")}); err != nil {
-			return acpsdk.PromptResponse{}, err
-		}
-		return acpsdk.PromptResponse{}, errors.New("functional ACP prompt failure")
-	}
-	updates := []acpsdk.SessionUpdate{
-		acpsdk.UpdateAgentMessageText("ACP root "),
-		acpsdk.UpdateAgentThoughtText("checking the Factory state"),
-		{ToolCall: &acpsdk.SessionUpdateToolCall{
-			SessionUpdate: "tool_call", ToolCallId: "tool-1", Title: "Inspect Factory",
-			Status: acpsdk.ToolCallStatusInProgress, RawInput: map[string]any{"scope": "factory"},
-		}},
-		{Plan: &acpsdk.SessionUpdatePlan{SessionUpdate: "plan", Entries: []acpsdk.PlanEntry{
-			{Content: "Complete the ACP turn", Priority: acpsdk.PlanEntryPriorityHigh, Status: acpsdk.PlanEntryStatusInProgress},
-		}}},
-		{UsageUpdate: &acpsdk.SessionUsageUpdate{SessionUpdate: "usage_update", Used: 12, Size: 4096}},
-		acpsdk.UpdateAgentMessageText("execution COMPLETE"),
-		{ToolCallUpdate: &acpsdk.SessionToolCallUpdate{
-			SessionUpdate: "tool_call_update", ToolCallId: "tool-1",
-			Title: stringPointer("Inspect Factory"), Status: toolStatusPointer(acpsdk.ToolCallStatusCompleted),
-			RawOutput: map[string]any{"ok": true}, Content: []acpsdk.ToolCallContent{{Diff: &acpsdk.ToolCallContentDiff{
-				Type: "diff", Path: "factory/result.txt", NewText: "complete\n",
-			}}},
-		}},
-	}
-	for _, update := range updates {
-		if err := a.connection.SessionUpdate(ctx, acpsdk.SessionNotification{SessionId: request.SessionId, Update: update}); err != nil {
-			return acpsdk.PromptResponse{}, err
-		}
-	}
-	return acpsdk.PromptResponse{StopReason: acpsdk.StopReasonEndTurn}, nil
-}
-
-func stringPointer(value string) *string { return &value }
-
-func toolStatusPointer(value acpsdk.ToolCallStatus) *acpsdk.ToolCallStatus { return &value }
-
-func (*functionalAgent) Authenticate(context.Context, acpsdk.AuthenticateRequest) (acpsdk.AuthenticateResponse, error) {
-	return acpsdk.AuthenticateResponse{}, nil
-}
-func (*functionalAgent) Logout(context.Context, acpsdk.LogoutRequest) (acpsdk.LogoutResponse, error) {
-	return acpsdk.LogoutResponse{}, nil
-}
-func (*functionalAgent) Cancel(context.Context, acpsdk.CancelNotification) error { return nil }
-func (*functionalAgent) CloseSession(context.Context, acpsdk.CloseSessionRequest) (acpsdk.CloseSessionResponse, error) {
-	return acpsdk.CloseSessionResponse{}, nil
-}
-func (*functionalAgent) ListSessions(context.Context, acpsdk.ListSessionsRequest) (acpsdk.ListSessionsResponse, error) {
-	return acpsdk.ListSessionsResponse{}, nil
-}
-func (*functionalAgent) ResumeSession(context.Context, acpsdk.ResumeSessionRequest) (acpsdk.ResumeSessionResponse, error) {
-	return acpsdk.ResumeSessionResponse{}, nil
-}
-func (a *functionalAgent) SetSessionConfigOption(_ context.Context, request acpsdk.SetSessionConfigOptionRequest) (acpsdk.SetSessionConfigOptionResponse, error) {
-	if request.ValueId != nil {
-		a.model = string(request.ValueId.Value)
-	}
-	return acpsdk.SetSessionConfigOptionResponse{}, nil
-}
-func (*functionalAgent) SetSessionMode(context.Context, acpsdk.SetSessionModeRequest) (acpsdk.SetSessionModeResponse, error) {
-	return acpsdk.SetSessionModeResponse{}, nil
-}
-
-var _ acpsdk.Agent = (*functionalAgent)(nil)

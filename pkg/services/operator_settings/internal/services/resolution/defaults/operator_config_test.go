@@ -1,11 +1,10 @@
 package settingsresolution_test
 
-
 import (
-	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"bytes"
 	"encoding/json"
 	"fmt"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"io"
 	"os"
 	"path/filepath"
@@ -87,7 +86,7 @@ func decodeTestConfig(data []byte) (operatorsettings.Config, error) {
 	}
 	if generated.Workers != nil && generated.Workers.Acp != nil && generated.Workers.Acp.Integrations != nil {
 		for _, integration := range *generated.Workers.Acp.Integrations {
-			config.Workers.ACP.Integrations = append(config.Workers.ACP.Integrations, ACPIntegration{
+			config.Workers.ACP.Integrations = append(config.Workers.ACP.Integrations, operatorsettings.ACPIntegration{
 				ID: integration.Id, Name: integration.Name, Transport: string(integration.Transport), Command: integration.Command,
 			})
 		}

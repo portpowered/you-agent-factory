@@ -27,50 +27,50 @@ type WorkerCommandRunnerAdapter func(platformprocess.CommandRunner) workers.Comm
 // Wire selects all implementation functions once; OpenRuntime supplies only
 // invocation data and external edges.
 type Factory struct {
-	durableExecutionFactory         DurableExecutionFactory
-	workerExecutionFactory          WorkerExecutionFactory
-	modelService                    models.Service
-	workFactory                     WorkFactory
-	automationFactory               AutomationFactory
-	factorySessionsService          factorysessions.Service
-	factorySessionExecutionFactory  FactorySessionExecutionFactory
-	recordingsProjectionFactory     RecordingsProjectionFactory
-	recordingsFactory               RecordingsFactory
-	runtimeLedgerFactory            RuntimeLedgerFactory
-	runtimeRecorderFactory          recordings.RuntimeRecorderFactory
-	replayClockFactory              ReplayClockFactory
-	replayExecutionFactory          recordings.ReplayExecutionFactory
-	workersRuntimeFactory           WorkersRuntimeFactory
-	workersRuntimeExecutorsFactory  factoryruntime.WorkersRuntimeExecutorsFactory
-	workersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory
-	automationHostedSourcesFactory AutomationHostedSourcesFactory
-	workersLocalRuntimeHooksFactory WorkersLocalRuntimeHooksFactory
-	factoryDefinitionsFactory       FactoryDefinitionsFactory
-	factoryScaffoldInitializer      factorysessions.FactoryScaffoldInitializer
-	editableFactoryValidator        factorysessions.EditableFactoryValidator
-	initialFactorySnapshotFactory   factorydefinitions.InitialFactorySnapshotFactory
-	factoryRuntimeAssembler         FactoryRuntimeAssembler
-	workService                     work.Service
-	providerSessions                providersessions.Service
-	factoryDefinitionValidator      factorydefinitions.Validator
-	namedPaths                      factorydefinitions.NamedPathResolver
-	factoryWorkflows                factoryruntime.JavaScriptWorkflowDefinitions
-	workflowPreview                 factoryruntime.WorkflowPreviewOperation
-	loadFactory                     factorydefinitions.LoadedFactoryLoader
-	newLoadedFactory                factorydefinitions.LoadedFactorySourceFactory
-	decodeReplayConfig              factorydefinitions.ReplayRuntimeConfigDecoder
-	loadReplay                      recordings.ReplayArtifactLoader
-	captureLoadedFactorySnapshot    factorydefinitions.LoadedFactorySnapshotCapturer
-	resolveClock                    factoryruntime.ClockResolver
-	newSessionLogger                factoryruntime.SessionLoggerFactory
-	adaptWorkerCommandRunner        WorkerCommandRunnerAdapter
+	durableExecutionFactory          DurableExecutionFactory
+	workerExecutionFactory           WorkerExecutionFactory
+	modelService                     models.Service
+	workFactory                      WorkFactory
+	automationFactory                AutomationFactory
+	factorySessionsService           factorysessions.Service
+	factorySessionExecutionFactory   FactorySessionExecutionFactory
+	recordingsProjectionFactory      RecordingsProjectionFactory
+	recordingsFactory                RecordingsFactory
+	runtimeLedgerFactory             RuntimeLedgerFactory
+	runtimeRecorderFactory           recordings.RuntimeRecorderFactory
+	replayClockFactory               ReplayClockFactory
+	replayExecutionFactory           recordings.ReplayExecutionFactory
+	workersRuntimeFactory            WorkersRuntimeFactory
+	workersRuntimeExecutorsFactory   factoryruntime.WorkersRuntimeExecutorsFactory
+	workersMockCommandRunnerFactory  factoryruntime.WorkersMockCommandRunnerFactory
+	automationHostedSourcesFactory   AutomationHostedSourcesFactory
+	workersLocalRuntimeHooksFactory  WorkersLocalRuntimeHooksFactory
+	factoryDefinitionsFactory        FactoryDefinitionsFactory
+	factoryScaffoldInitializer       factorysessions.FactoryScaffoldInitializer
+	editableFactoryValidator         factorysessions.EditableFactoryValidator
+	initialFactorySnapshotFactory    factorydefinitions.InitialFactorySnapshotFactory
+	factoryRuntimeAssembler          FactoryRuntimeAssembler
+	workService                      work.Service
+	providerSessions                 providersessions.Service
+	factoryDefinitionValidator       factorydefinitions.Validator
+	namedPaths                       factorydefinitions.NamedPathResolver
+	factoryWorkflows                 factoryruntime.JavaScriptWorkflowDefinitions
+	workflowPreview                  factoryruntime.WorkflowPreviewOperation
+	loadFactory                      factorydefinitions.LoadedFactoryLoader
+	newLoadedFactory                 factorydefinitions.LoadedFactorySourceFactory
+	decodeReplayConfig               factorydefinitions.ReplayRuntimeConfigDecoder
+	loadReplay                       recordings.ReplayArtifactLoader
+	captureLoadedFactorySnapshot     factorydefinitions.LoadedFactorySnapshotCapturer
+	resolveClock                     factoryruntime.ClockResolver
+	newSessionLogger                 factoryruntime.SessionLoggerFactory
+	adaptWorkerCommandRunner         WorkerCommandRunnerAdapter
 	providerFromCommandRunnerFactory ProviderFromCommandRunnerFactory
-	processRuntimeFactory           roles.ProcessRuntimeFactory
-	ensureOperatorBackendScope      operatorsettings.BackendScopeEnsurer
-	generateRuntimeInstanceID       factorysessions.RuntimeInstanceIDGenerator
-	resolveHome                     factorysessions.HomeDirectoryResolver
-	replayFiles                     fileeffects.ReplayRecordingReader
-	providerIdentities              factorysessions.ProviderIdentityResolver
+	processRuntimeFactory            roles.ProcessRuntimeFactory
+	ensureOperatorBackendScope       operatorsettings.BackendScopeEnsurer
+	generateRuntimeInstanceID        factorysessions.RuntimeInstanceIDGenerator
+	resolveHome                      factorysessions.HomeDirectoryResolver
+	replayFiles                      fileeffects.ReplayRecordingReader
+	providerIdentities               factorysessions.ProviderIdentityResolver
 }
 
 // backendsizecheck:ignore-function service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
@@ -158,50 +158,50 @@ func NewFactory(
 		return nil, fmt.Errorf("provider identity resolver is required")
 	}
 	return &Factory{
-		durableExecutionFactory:         durableExecutionFactory,
-		workerExecutionFactory:          workerExecutionFactory,
-		modelService:                    modelService,
-		workFactory:                     workFactory,
-		automationFactory:               automationFactory,
-		factorySessionsService:          factorySessionsService,
-		factorySessionExecutionFactory:  factorySessionExecutionFactory,
-		recordingsProjectionFactory:     recordingsProjectionFactory,
-		recordingsFactory:               recordingsFactory,
-		runtimeLedgerFactory:            runtimeLedgerFactory,
-		runtimeRecorderFactory:          runtimeRecorderFactory,
-		replayClockFactory:              replayClockFactory,
-		replayExecutionFactory:          replayExecutionFactory,
-		workersRuntimeFactory:           workersRuntimeFactory,
-		workersRuntimeExecutorsFactory:  workersRuntimeExecutorsFactory,
-		workersMockCommandRunnerFactory: workersMockCommandRunnerFactory,
-		automationHostedSourcesFactory: automationHostedSourcesFactory,
-		workersLocalRuntimeHooksFactory: workersLocalRuntimeHooksFactory,
-		factoryDefinitionsFactory:       factoryDefinitionsFactory,
-		factoryScaffoldInitializer:      factoryScaffoldInitializer,
-		editableFactoryValidator:        editableFactoryValidator,
-		initialFactorySnapshotFactory:   initialFactorySnapshotFactory,
-		factoryRuntimeAssembler:         factoryRuntimeAssembler,
-		workService:                     workService,
-		providerSessions:                providerSessions,
-		factoryDefinitionValidator:      factoryDefinitionValidator,
-		namedPaths:                      namedPaths,
-		factoryWorkflows:                factoryWorkflows,
-		workflowPreview:                 workflowPreview,
-		loadFactory:                     loadFactory,
-		newLoadedFactory:                newLoadedFactory,
-		decodeReplayConfig:              decodeReplayConfig,
-		loadReplay:                      loadReplay,
-		captureLoadedFactorySnapshot:    captureLoadedFactorySnapshot,
-		resolveClock:                    resolveClock,
-		newSessionLogger:                newSessionLogger,
+		durableExecutionFactory:          durableExecutionFactory,
+		workerExecutionFactory:           workerExecutionFactory,
+		modelService:                     modelService,
+		workFactory:                      workFactory,
+		automationFactory:                automationFactory,
+		factorySessionsService:           factorySessionsService,
+		factorySessionExecutionFactory:   factorySessionExecutionFactory,
+		recordingsProjectionFactory:      recordingsProjectionFactory,
+		recordingsFactory:                recordingsFactory,
+		runtimeLedgerFactory:             runtimeLedgerFactory,
+		runtimeRecorderFactory:           runtimeRecorderFactory,
+		replayClockFactory:               replayClockFactory,
+		replayExecutionFactory:           replayExecutionFactory,
+		workersRuntimeFactory:            workersRuntimeFactory,
+		workersRuntimeExecutorsFactory:   workersRuntimeExecutorsFactory,
+		workersMockCommandRunnerFactory:  workersMockCommandRunnerFactory,
+		automationHostedSourcesFactory:   automationHostedSourcesFactory,
+		workersLocalRuntimeHooksFactory:  workersLocalRuntimeHooksFactory,
+		factoryDefinitionsFactory:        factoryDefinitionsFactory,
+		factoryScaffoldInitializer:       factoryScaffoldInitializer,
+		editableFactoryValidator:         editableFactoryValidator,
+		initialFactorySnapshotFactory:    initialFactorySnapshotFactory,
+		factoryRuntimeAssembler:          factoryRuntimeAssembler,
+		workService:                      workService,
+		providerSessions:                 providerSessions,
+		factoryDefinitionValidator:       factoryDefinitionValidator,
+		namedPaths:                       namedPaths,
+		factoryWorkflows:                 factoryWorkflows,
+		workflowPreview:                  workflowPreview,
+		loadFactory:                      loadFactory,
+		newLoadedFactory:                 newLoadedFactory,
+		decodeReplayConfig:               decodeReplayConfig,
+		loadReplay:                       loadReplay,
+		captureLoadedFactorySnapshot:     captureLoadedFactorySnapshot,
+		resolveClock:                     resolveClock,
+		newSessionLogger:                 newSessionLogger,
 		adaptWorkerCommandRunner:         adaptWorkerCommandRunner,
 		providerFromCommandRunnerFactory: providerFromCommandRunnerFactory,
 		processRuntimeFactory:            processRuntimeFactory,
-		ensureOperatorBackendScope:      ensureOperatorBackendScope,
-		generateRuntimeInstanceID:       generateRuntimeInstanceID,
-		resolveHome:                     resolveHome,
-		replayFiles:                     replayFiles,
-		providerIdentities:              providerIdentities,
+		ensureOperatorBackendScope:       ensureOperatorBackendScope,
+		generateRuntimeInstanceID:        generateRuntimeInstanceID,
+		resolveHome:                      resolveHome,
+		replayFiles:                      replayFiles,
+		providerIdentities:               providerIdentities,
 	}, nil
 }
 

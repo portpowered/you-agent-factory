@@ -33,7 +33,11 @@ func TestJavaScriptFactoryAgentRunRoutesExecutorProviderThroughACP(t *testing.T)
 		t.Fatalf("Process.Execute(JavaScript ACP Factory) error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
 	}
 	if starts.Load() != 1 {
-		t.Fatalf("ACP process starts = %d, want 1", starts.Load())
+		var legacyRequest any
+		if legacyRunner.CallCount() > 0 {
+			legacyRequest = legacyRunner.LastRequest()
+		}
+		t.Fatalf("ACP process starts = %d, want 1; legacy request=%#v; stdout=%s; stderr=%s", starts.Load(), legacyRequest, inputs.Stdout(), inputs.Stderr())
 	}
 	if legacyRunner.CallCount() != 0 {
 		t.Fatalf("legacy provider runner calls = %d, want 0", legacyRunner.CallCount())

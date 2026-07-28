@@ -43,16 +43,15 @@ func TestProviderChildExecutor_Execute_RecordsLiveProviderDispatch(t *testing.T)
 		},
 	}))
 	collectorSink := newTestChildRecordSink()
-	executor := NewRetryingProviderChildExecutor("session-live-child", provider, collectorSink, 0, scriptedChildValues{}, "/project/root")
+	executor := NewProviderChildExecutor("session-live-child", provider, collectorSink, scriptedChildValues{})
 
 	result, err := executor.Execute(context.Background(), factory.JavaScriptChildExecutionRequest{
-		Prompt:           "summarize workflows",
-		Label:            "summarize-findings",
-		ModelProvider:    "CODEX",
-		Model:            "gpt-test",
-		ExecutorProvider: "cursor-acp",
-		WorkflowName:     "agent-run-fake-child",
-		ArgsSubject:      "workflows",
+		Prompt:        "summarize workflows",
+		Label:         "summarize-findings",
+		ModelProvider: "CODEX",
+		Model:         "gpt-test",
+		WorkflowName:  "agent-run-fake-child",
+		ArgsSubject:   "workflows",
 		OutputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -80,9 +79,6 @@ func TestProviderChildExecutor_Execute_RecordsLiveProviderDispatch(t *testing.T)
 	}
 	if provider.lastInput.Request.ModelProvider != "CODEX" || provider.lastInput.Request.Model != "gpt-test" {
 		t.Fatalf("provider worker settings = (%q, %q), want (CODEX, gpt-test)", provider.lastInput.Request.ModelProvider, provider.lastInput.Request.Model)
-	}
-	if provider.lastInput.Request.ExecutorProvider != "cursor-acp" || provider.lastInput.Request.WorkingDirectory != "/project/root" {
-		t.Fatalf("provider execution selection = (%q, %q), want cursor-acp and project root", provider.lastInput.Request.ExecutorProvider, provider.lastInput.Request.WorkingDirectory)
 	}
 	if got := collectorSink.statusTransitions("dispatch-1"); len(got) != 3 {
 		t.Fatalf("recorded status transitions = %#v, want queued/running/completed", got)

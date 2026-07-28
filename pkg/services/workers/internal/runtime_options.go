@@ -9,13 +9,13 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
+	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/runner"
 	workerconstruction "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/construction"
 	modelrecording "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution/recording"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
-	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
-	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/runner"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/skippermissions"
+	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 )
 
 // BuildRuntimeExecutors constructs every configured runtime worker through the
@@ -166,12 +166,6 @@ func (s *Service) runtimeRunnerDecorators(
 			return resolveInferenceRunner(
 				inner, s.models, s.modelsScope, factoryCfg, definition,
 			)
-		},
-		func(inner workers.Runner, _ *interfaces.FactoryWorkerConfig) workers.Runner {
-			if s.providers == nil {
-				return inner
-			}
-			return providersExecutionRunner{next: inner, providers: s.providers, publish: progressPublisher}
 		},
 		func(inner workers.Runner, definition *interfaces.FactoryWorkerConfig) workers.Runner {
 			return modelrecording.NewRunner(inner, factoryCfg, definition, recorder, now)

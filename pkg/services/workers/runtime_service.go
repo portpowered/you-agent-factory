@@ -2,7 +2,6 @@ package workers
 
 import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	"github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
 // RuntimeOpeningRequest contains only Worker execution selection for one
@@ -12,7 +11,6 @@ type RuntimeOpeningRequest struct {
 	MockWorkers                       *MockWorkersConfig
 	InvocationSkipPermissionsOverride *bool
 	SkipBuiltInPrerequisiteValidation bool
-	ProviderIntegrations              []providers.Integration
 }
 
 // ScriptEventRecorder receives one Worker-owned script execution event.
