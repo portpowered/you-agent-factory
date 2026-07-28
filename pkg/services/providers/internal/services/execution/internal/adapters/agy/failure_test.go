@@ -92,7 +92,7 @@ func TestPTYEffectClassifiesDistinctExecutionOutcomes(t *testing.T) {
 			if ctx == nil {
 				ctx = context.Background()
 			}
-			executable := "/missing/agy"
+			executable := "agy"
 			deps := executableDependencies(nil)
 			if tc.setup != nil {
 				executable, deps = tc.setup(t)
