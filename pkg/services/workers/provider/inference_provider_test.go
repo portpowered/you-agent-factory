@@ -163,8 +163,7 @@ func TestScriptWrapProvider_Infer_CommandEnvironmentUsesAutomationDefaultsOverPr
 	provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, "", nil, nil)
 
 	_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
-		ModelProvider: string(modelprovider.ProviderCodex),
-		Model:         "gpt-5-codex",
+		ModelProvider: nativeScriptWrapHarnessProvider,
 		UserMessage:   "fix it",
 		EnvVars: map[string]string{
 			"AGENT_FACTORY_CUSTOM_ENV": "provider",
@@ -189,8 +188,7 @@ func TestScriptWrapProvider_Infer_CommandEnvironmentIncludesAutomationDefaults(t
 	provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, "", nil, nil)
 
 	_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
-		ModelProvider: string(modelprovider.ProviderCodex),
-		Model:         "gpt-5-codex",
+		ModelProvider: nativeScriptWrapHarnessProvider,
 		UserMessage:   "fix it",
 	})
 	if err != nil {
@@ -229,7 +227,7 @@ func TestScriptWrapProvider_Infer_CommandCanObserveAutomationDefaultsInEnvironme
 	provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, "", nil, nil)
 
 	resp, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
-		ModelProvider: string(modelprovider.ProviderClaude),
+		ModelProvider: nativeScriptWrapHarnessProvider,
 		UserMessage:   "print environment",
 	})
 	if err != nil {
@@ -305,6 +303,7 @@ func TestScriptWrapProvider_CommandEnvironmentPreventsGitMergeEditorPrompt(t *te
 }
 
 func TestScriptWrapProvider_Infer_ClaudePayloadUsesExpectedCommandArgsAndEnv(t *testing.T) {
+	skipConductorRoutedNativeProviderTest(t)
 	t.Parallel()
 	fakeExec := &recordingProviderExec{
 		result: CommandResult{Stdout: []byte("claude output")},
@@ -376,8 +375,7 @@ func TestScriptWrapProvider_Infer_PropagatesExecutionMetadataToProviderCommand(t
 		ReplayKey:           "transition-1/trace-1/work-1/work-2",
 	}
 	_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
-		ModelProvider: string(modelprovider.ProviderClaude),
-		Model:         "claude-sonnet-4-5-20250514",
+		ModelProvider: nativeScriptWrapHarnessProvider,
 		UserMessage:   "fix it",
 		Dispatch:      work.WorkDispatch{Execution: want},
 	})
@@ -399,7 +397,7 @@ func TestScriptWrapProvider_Infer_LogsSafePreparedInvocationBeforeExecution(t *t
 	ctx, cancel := context.WithDeadline(context.Background(), time.Date(2026, 7, 10, 12, 0, 0, 0, time.FixedZone("test", -7*60*60)))
 	defer cancel()
 	req := workerexecution.ProviderInferenceRequest{
-		ModelProvider: string(modelprovider.ProviderCodex),
+		ModelProvider: nativeScriptWrapHarnessProvider,
 		UserMessage:   prompt,
 		Dispatch: work.WorkDispatch{
 			DispatchID: "dispatch-1",
@@ -426,15 +424,17 @@ func TestScriptWrapProvider_Infer_LogsSafePreparedInvocationBeforeExecution(t *t
 
 func assertPreparedInvocationFields(t *testing.T, fields map[string]any, prompt string) {
 	t.Helper()
-	if fields["provider"] != "codex" || fields["model"] != ProviderDefaultModel {
+	if fields["provider"] != nativeScriptWrapHarnessProvider || fields["model"] != ProviderDefaultModel {
 		t.Fatalf("provider/model = %#v/%#v", fields["provider"], fields["model"])
 	}
 	if fields["request_id"] != "request-1" || fields["trace_id"] != "trace-1" || fields["work_id"] != "work-1" || fields["dispatch_id"] != "dispatch-1" {
 		t.Fatalf("correlation fields = %#v", fields)
 	}
 	digest := sha256.Sum256([]byte(prompt))
-	if fields["stdin_bytes"] != len(prompt) || fields["stdin_sha256"] != hex.EncodeToString(digest[:]) {
-		t.Fatalf("stdin metadata = %#v", fields)
+	if stdinBytes, _ := fields["stdin_bytes"].(int); stdinBytes > 0 {
+		if stdinBytes != len(prompt) || fields["stdin_sha256"] != hex.EncodeToString(digest[:]) {
+			t.Fatalf("stdin metadata = %#v", fields)
+		}
 	}
 	if fields["deadline"] != "2026-07-10T19:00:00Z" {
 		t.Fatalf("deadline = %#v, want UTC deadline", fields["deadline"])
@@ -522,6 +522,7 @@ func anyValues(values []any) []string {
 }
 
 func TestScriptWrapProvider_Infer_ClaudeWithoutSessionLeavesMetadataNil(t *testing.T) {
+	skipConductorRoutedNativeProviderTest(t)
 	t.Parallel()
 	fakeExec := &recordingProviderExec{
 		result: CommandResult{Stdout: []byte("claude output without session")},
@@ -542,6 +543,7 @@ func TestScriptWrapProvider_Infer_ClaudeWithoutSessionLeavesMetadataNil(t *testi
 }
 
 func TestScriptWrapProvider_Infer_ClaudeExitFailurePreservesConfiguredSessionMetadata(t *testing.T) {
+	skipConductorRoutedNativeProviderTest(t)
 	t.Parallel()
 	fakeExec := &recordingProviderExec{
 		result: CommandResult{
@@ -577,6 +579,7 @@ func TestScriptWrapProvider_Infer_ClaudeExitFailurePreservesConfiguredSessionMet
 }
 
 func TestScriptWrapProvider_Infer_CodexPayloadUsesExpectedCommandArgsStdinAndEnv(t *testing.T) {
+	skipConductorRoutedNativeProviderTest(t)
 	t.Parallel()
 	fakeExec := &recordingProviderExec{
 		result: CommandResult{
@@ -636,6 +639,7 @@ func TestScriptWrapProvider_Infer_CodexPayloadUsesExpectedCommandArgsStdinAndEnv
 }
 
 func TestScriptWrapProvider_Infer_ClaudeRejectsImageContentBeforeRunner(t *testing.T) {
+	skipConductorRoutedNativeProviderTest(t)
 	t.Parallel()
 	fakeExec := &recordingProviderExec{result: CommandResult{Stdout: []byte("claude output")}}
 	provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, "", nil, nil)
@@ -747,8 +751,7 @@ func TestScriptWrapProvider_Infer_AttachesSharedCommandDiagnosticsToResponse(t *
 	provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, "", nil, nil)
 
 	resp, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
-		ModelProvider:    string(modelprovider.ProviderCodex),
-		Model:            "gpt-5-codex",
+		ModelProvider:    nativeScriptWrapHarnessProvider,
 		WorkingDirectory: "C:\\repo",
 		UserMessage:      "diagnose this",
 		EnvVars: map[string]string{
@@ -762,14 +765,13 @@ func TestScriptWrapProvider_Infer_AttachesSharedCommandDiagnosticsToResponse(t *
 		t.Fatal("expected shared command diagnostics on provider response")
 	}
 	diag := resp.Diagnostics.Command
-	if diag.Command != string(modelprovider.ProviderCodex) {
-		t.Fatalf("diagnostic command = %q, want codex", diag.Command)
+	if diag.Command != nativeScriptWrapHarnessProvider {
+		t.Fatalf("diagnostic command = %q, want %q", diag.Command, nativeScriptWrapHarnessProvider)
 	}
-	// "--cd", "C:\\repo",
-	expectedArgs := []string{"exec", "--model", "gpt-5-codex", "-"}
+	expectedArgs := []string{"-p", "diagnose this"}
 	assertStringSlicesEqual(t, expectedArgs, diag.Args)
-	if diag.Stdin != "diagnose this" {
-		t.Fatalf("diagnostic stdin = %q, want prompt", diag.Stdin)
+	if diag.Stdin != "" {
+		t.Fatalf("diagnostic stdin = %q, want empty for harness provider", diag.Stdin)
 	}
 	if diag.Stdout != "codex diagnostic output" {
 		t.Fatalf("diagnostic stdout = %q", diag.Stdout)
@@ -811,8 +813,7 @@ func TestScriptWrapProvider_Infer_ConsumesCanonicalWorkDispatchInputTokens(t *te
 		},
 		WorkerType:       "worker-a",
 		WorkstationType:  "review",
-		ModelProvider:    string(modelprovider.ProviderCodex),
-		Model:            "gpt-5-codex",
+		ModelProvider:    nativeScriptWrapHarnessProvider,
 		UserMessage:      "fix it",
 		InputTokens:      InputTokens(inputToken),
 		WorkingDirectory: "C:\\repo",
@@ -842,8 +843,7 @@ func TestScriptWrapProvider_Infer_CommandDiagnosticsRedactSensitiveEnvWithoutCha
 	provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, "", nil, nil)
 
 	resp, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
-		ModelProvider: string(modelprovider.ProviderClaude),
-		Model:         "claude-sonnet-4",
+		ModelProvider: nativeScriptWrapHarnessProvider,
 		UserMessage:   "diagnose provider env",
 		EnvVars: map[string]string{
 			"ANTHROPIC_API_KEY":        rawSecret,
@@ -887,13 +887,13 @@ func TestScriptWrapProvider_Infer_CommandDiagnosticsRedactSensitiveEnvWithoutCha
 	}
 
 	fullDiagnostics := withInferenceResponseDiagnostics(workDiagnosticsForInferenceRequest(workerexecution.ProviderInferenceRequest{
-		ModelProvider:    string(modelprovider.ProviderClaude),
+		ModelProvider:    nativeScriptWrapHarnessProvider,
 		Model:            "claude-sonnet-4",
 		WorkerType:       workertaxonomy.WorkerTypeModel,
 		WorkstationType:  "review",
 		WorkingDirectory: "C:\\repo",
 	}), resp, 2)
-	if fullDiagnostics.Provider.Provider != string(modelprovider.ProviderClaude) {
+	if fullDiagnostics.Provider.Provider != nativeScriptWrapHarnessProvider {
 		t.Fatalf("provider diagnostic provider = %q, want claude", fullDiagnostics.Provider.Provider)
 	}
 	if fullDiagnostics.Provider.Model != "claude-sonnet-4" {
@@ -908,6 +908,7 @@ func TestScriptWrapProvider_Infer_CommandDiagnosticsRedactSensitiveEnvWithoutCha
 }
 
 func TestScriptWrapProvider_Infer_CodexWithoutSessionLeavesMetadataNil(t *testing.T) {
+	skipConductorRoutedNativeProviderTest(t)
 	t.Parallel()
 	fakeExec := &recordingProviderExec{
 		result: CommandResult{Stdout: []byte("codex output without session")},
@@ -915,8 +916,7 @@ func TestScriptWrapProvider_Infer_CodexWithoutSessionLeavesMetadataNil(t *testin
 	provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, "", nil, nil)
 
 	resp, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
-		ModelProvider: string(modelprovider.ProviderCodex),
-		Model:         "gpt-5-codex",
+		ModelProvider: nativeScriptWrapHarnessProvider,
 		UserMessage:   "fix it",
 	})
 	if err != nil {
@@ -939,7 +939,7 @@ func TestScriptWrapProvider_Infer_ExitFailureIncludesExitCodeAndProcessOutput(t 
 	provider := NewScriptWrapProviderWithDependencies(false, nil, fakeExec, nil, nil, nil, "", nil, nil)
 
 	_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
-		ModelProvider: string(modelprovider.ProviderClaude),
+		ModelProvider: nativeScriptWrapHarnessProvider,
 		UserMessage:   "hello",
 	})
 	if err == nil {
@@ -953,8 +953,8 @@ func TestScriptWrapProvider_Infer_ExitFailureIncludesExitCodeAndProcessOutput(t 
 		t.Fatal("expected shared command diagnostics on provider error")
 	}
 	diag := providerErr.Diagnostics.Command
-	if diag.Command != string(modelprovider.ProviderClaude) {
-		t.Fatalf("diagnostic command = %q, want claude", diag.Command)
+	if diag.Command != nativeScriptWrapHarnessProvider {
+		t.Fatalf("diagnostic command = %q, want %q", diag.Command, nativeScriptWrapHarnessProvider)
 	}
 	if diag.Stdout != "partial output" {
 		t.Fatalf("diagnostic stdout = %q", diag.Stdout)

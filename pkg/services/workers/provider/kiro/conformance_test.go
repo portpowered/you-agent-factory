@@ -88,8 +88,8 @@ func TestBuiltInRegistrySelectsKiroByCanonicalIdentityAndAlias(t *testing.T) {
 	if providers.UsesNativeRunner("kiro") {
 		t.Fatal("UsesNativeRunner(kiro) = true, want neutral conductor route")
 	}
-	if !providers.UsesNativeRunner(workers.RunnerIDCodex) {
-		t.Fatal("UsesNativeRunner(codex) = false, want retained native route")
+	if providers.UsesNativeRunner(workers.RunnerIDCodex) || providers.UsesNativeRunner("claude") {
+		t.Fatal("UsesNativeRunner(codex/claude) = true, want neutral conductor route")
 	}
 }
 

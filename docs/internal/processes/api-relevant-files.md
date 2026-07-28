@@ -13,6 +13,26 @@ Use this map when changing the public REST contract.
   `pkg/services/recordings/transports/http`. The adapter consumes the accepted
   `recordings.Service` root only; fake-root tests inject a focused root fake
   without constructing ledger, lifecycle, replay, or artifact-export graphs.
+  CUT-REC-RUN seals Recordings production imports of Factory Runtime to the
+  service root only (`pkg/services/factory_runtime`); the lease-wide guard is
+  `pkg/services/recordings/runtime_import_boundary_test.go` and fails closed on
+  nested `factory_runtime/**`, legacy `pkg/factory/**`, and
+  `pkg/transports/mapping/factory*` production imports. Lifecycle recorder
+  Runtime-facing event vocabulary is published through
+  `pkg/services/factory_runtime/recording_event_contracts.go` and proven by
+  `pkg/services/recordings/service/lifecycle_runtime_recorder_boundary_test.go`.
+  Replay-execution hook/plan handoff vocabulary is published through
+  `pkg/services/factory_runtime/replay_execution_contracts.go` and proven by
+  `pkg/services/recordings/service/replay_execution_boundary_test.go`.
+  Projection/observation Runtime-owned marking, result, and observation
+  vocabulary is published through
+  `pkg/services/factory_runtime/observation_projection_contracts.go` and proven
+  by
+  `pkg/services/recordings/projections/projection_observation_boundary_test.go`.
+  Runtime root request construction for control, observation, and dispatch-plan
+  handoff is published through
+  `pkg/services/factory_runtime/runtime_request_contracts.go` and proven by
+  `pkg/services/recordings/runtime_request_boundary_test.go`.
   Event subscribe/history decode and SSE encoding live in
   `event_subscribe_mapping.go` and `handlers_events.go`; map reconnect query
   params into `recordings.SubscribeRequest` before `SubscribeFrom`, and encode
@@ -38,6 +58,38 @@ Use this map when changing the public REST contract.
   `docs/internal/baselines/go-unit-coverage-package-minimums.json` and
   `docs/internal/baselines/go-functional-coverage-package-minimums.json` when
   introducing new adapter packages.
+- Work HTTP decoding, generated-contract mapping, Work root invocation, typed
+  error mapping, and cancel/timeout handling live in
+  `pkg/services/work/transports/http`. The adapter consumes the accepted
+  `work.Service` root only; fake-root tests inject a focused root fake without
+  constructing state-access, content-staging, or materialization graphs.
+  Package-boundary tests must prove the adapter does not import
+  `pkg/services/work/internal/**`. Register the package in
+  `docs/internal/packaged-service-structure/package-target-manifest.json`,
+  refresh `docs/internal/baselines/ownership-inventory.json` with
+  `go run ./cmd/ownershipinventoryfreeze`, and add coverage floors in
+  `docs/internal/baselines/go-unit-coverage-package-minimums.json` and
+  `docs/internal/baselines/go-functional-coverage-package-minimums.json` when
+  introducing new adapter packages. Work list/get decode and JSON encoding live
+  in `read_mapping.go` and `handlers_read.go`; map query params through
+  `ListOptionsFromAPI` + `work.NormalizeList`, invoke `ListWork` / `GetWork` on
+  the accepted root, and encode detached `work.ReadModel` values through
+  `WorkReadModelToAPI` / `ListWorkResponseToAPI`. Work stage/submit/upsert
+  decode and JSON encoding live in `admission_mapping.go` and
+  `handlers_admission.go`; decode bodies through adapter-owned validation,
+  invoke `StageContent` / `PrepareContent` / `SubmitWorkRequestForSession` on
+  the accepted root, and encode detached admission results through
+  `StageSubmitWorkFileResponseToAPI` / `SubmitWorkResponseToAPI` /
+  `UpsertWorkResponseToAPI`. Work move decode and JSON encoding live in
+  `move_mapping.go` and `handlers_move.go`; decode bodies through
+  adapter-owned validation, invoke `MoveWorkAndRead` on the accepted root, and
+  encode detached post-move `work.ReadModel` values through `WorkReadModelToAPI`.
+  Typed Work root failures map through `error_mapping.go` via `RootErrorResponse`
+  and `writeRootOrInternalError`; unmapped failures sanitize to INTERNAL_ERROR
+  without leaking internal package paths. Request-context cancellation and
+  deadline exhaustion end without mapping to INTERNAL_ERROR; canceled requests
+  terminate without an ErrorResponse body and deadline exhaustion returns 504
+  (`request_context.go`).
 - Factory Runtime HTTP decoding, generated-contract mapping, Runtime root
   invocation, typed error mapping, and cancel/timeout handling live in
   `pkg/services/factory_runtime/transports/http`. The adapter consumes the
@@ -137,6 +189,29 @@ Use this map when changing the public REST contract.
   `docs/internal/baselines/ownership-inventory.json`, and the
   `go-*-coverage-package-minimums.json` baselines; prove registration with
   `manifest_registration_test.go`.
+- Models HTTP decoding, root contract mapping, typed error translation, and
+  cancel/timeout handling live in `pkg/services/models/transports/http`.
+  HTTP-MOD proves fake-root parity at the adapter edge without importing Models
+  internals or owning canonical model/runtime state. Catalog list/get decode and
+  encode live in `catalog_operations.go`; pull and invoke decode/encode live in
+  `pull_operations.go` and `invoke_operations.go`; typed root failures map
+  through `root_error_mapping.go`; request-context outcomes map through
+  `request_context.go`. Package-boundary tests must prove the adapter does not
+  import `pkg/services/models/internal/**`. Register the package in
+  `docs/internal/packaged-service-structure/package-target-manifest.json`,
+  `docs/internal/baselines/ownership-inventory.json`, and the
+  `go-*-coverage-package-minimums.json` baselines; prove registration with
+  `manifest_registration_test.go`.
+- The Models HTTP adapter package must stay registered in the allowed shared
+  manifests only: retain `pkg/services/models/transports/http` under destination
+  `models` in
+  `docs/internal/packaged-service-structure/package-target-manifest.json` and
+  `docs/internal/baselines/ownership-inventory.json`, and keep measured floors in
+  both `docs/internal/baselines/go-unit-coverage-package-minimums.json` and
+  `docs/internal/baselines/go-functional-coverage-package-minimums.json`.
+  Prove registration with `manifest_registration_test.go`; do not edit
+  `pkg/wire`, `pkg/root`, `pkg/initializer`, top-level CLI composition, or
+  other services' HTTP adapters when reconciling manifest churn.
 - Factory Definitions MCP tool decoding, invocation, result/error mapping, and
   catalog parity live under `pkg/services/factory_definitions/transports/mcp`.
   Top-level MCP retains generated discovery, SDK registration, and stdio
@@ -212,6 +287,19 @@ Use this map when changing the public REST contract.
   Prove registration with `manifest_registration_test.go`; do not edit
   `pkg/wire`, `pkg/root`, `pkg/initializer`, top-level CLI composition, shared
   MCP host/composition fan-in, HTTP-REC, CLI-REC, or other services' MCP
+  adapters when reconciling manifest churn.
+- Operator Settings MCP tool decoding, invocation, result/error mapping, and
+  catalog parity live under `pkg/services/operator_settings/transports/mcp`. The
+  Settings MCP adapter package must stay registered in the allowed shared
+  manifests only: retain `pkg/services/operator_settings/transports/mcp` under
+  destination `operator_settings` in
+  `docs/internal/packaged-service-structure/package-target-manifest.json` and
+  `docs/internal/baselines/ownership-inventory.json`, and keep measured floors in
+  both `docs/internal/baselines/go-unit-coverage-package-minimums.json` and
+  `docs/internal/baselines/go-functional-coverage-package-minimums.json`.
+  Prove registration with `manifest_registration_test.go`; do not edit
+  `pkg/wire`, `pkg/root`, `pkg/initializer`, top-level CLI composition, shared
+  MCP host/composition fan-in, HTTP-SET, CLI-SET, or other services' MCP
   adapters when reconciling manifest churn.
 - Work MCP tool decoding, invocation, result/error mapping, and catalog parity
   live under `pkg/services/work/transports/mcp`. The Work MCP adapter package

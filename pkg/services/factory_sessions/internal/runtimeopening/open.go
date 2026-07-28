@@ -171,6 +171,7 @@ func openRuntime(
 		root,
 		clock,
 		providerForDurable,
+		configured.Workers.MockWorkers,
 		factorySessionExecutionFactory,
 		providerIdentities,
 	)
