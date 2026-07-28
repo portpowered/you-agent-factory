@@ -1,6 +1,10 @@
 package submission_test
 
 import (
+	"encoding/json"
+	"io"
+	"net/http"
+	"strings"
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -15,6 +19,8 @@ const (
 	httpUpsertCanonicalRequestID = "work-http-upsert-canonical"
 	httpUpsertCanonicalWorkName  = "http-upsert-canonical-task"
 	httpUpsertCanonicalWorkID    = "work-http-upsert-canonical-id"
+
+	httpUnknownWorkID = "work-http-unknown-missing-id"
 )
 
 // TestAPISubmitBatchThenListAndGetWork proves a successful public HTTP batch
@@ -184,6 +190,103 @@ func TestAPIUpsertWorkRequestUsesCanonicalIdentity(t *testing.T) {
 			got.Name,
 			httpUpsertCanonicalWorkName,
 		)
+	}
+}
+
+// TestAPIUnknownWorkReturnsTypedNotFound proves GET for a Work identity that
+// does not exist in the running Factory Session returns a typed not-found public
+// error outcome (structured 404 with NOT_FOUND family/code) rather than an opaque
+// 500 or unstructured failure body.
+func TestAPIUnknownWorkReturnsTypedNotFound(t *testing.T) {
+	factoryDir := support.ScaffoldFactory(t, batchInputsFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:     factoryDir,
+		UseMockWorkers: true,
+	})
+	defer server.Stop(t)
+
+	endpoint := support.DefaultSessionWorkURL(server.URL(), "/work/"+httpUnknownWorkID)
+	response, err := http.Get(endpoint)
+	if err != nil {
+		t.Fatalf("GET %s: %v", endpoint, err)
+	}
+	defer response.Body.Close()
+	assertAPIUnknownWorkTypedNotFoundHTTPResponse(t, response, httpUnknownWorkID)
+}
+
+func assertAPIUnknownWorkTypedNotFoundHTTPResponse(
+	t *testing.T,
+	response *http.Response,
+	workID string,
+) {
+	t.Helper()
+
+	if response.StatusCode != http.StatusNotFound {
+		payload, _ := io.ReadAll(response.Body)
+		t.Fatalf(
+			"GET unknown Work %q status = %d, want 404: %s",
+			workID,
+			response.StatusCode,
+			payload,
+		)
+	}
+
+	contentType := response.Header.Get("Content-Type")
+	if !strings.Contains(contentType, "application/json") {
+		payload, _ := io.ReadAll(response.Body)
+		t.Fatalf(
+			"GET unknown Work %q Content-Type = %q, want application/json structured error body: %s",
+			workID,
+			contentType,
+			payload,
+		)
+	}
+
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("GET unknown Work %q read body: %v", workID, err)
+	}
+	var errResp factoryapi.ErrorResponse
+	if err := json.Unmarshal(body, &errResp); err != nil {
+		t.Fatalf("GET unknown Work %q decode structured error: %v\nbody: %s", workID, err, body)
+	}
+	if errResp.Family != factoryapi.ErrorFamilyNotFound {
+		t.Fatalf(
+			"GET unknown Work %q error family = %q, want %q: %#v",
+			workID,
+			errResp.Family,
+			factoryapi.ErrorFamilyNotFound,
+			errResp,
+		)
+	}
+	if errResp.Code != factoryapi.ErrorResponseCodeNOTFOUND {
+		t.Fatalf(
+			"GET unknown Work %q error code = %q, want %q: %#v",
+			workID,
+			errResp.Code,
+			factoryapi.ErrorResponseCodeNOTFOUND,
+			errResp,
+		)
+	}
+	if strings.TrimSpace(errResp.Message) == "" {
+		t.Fatalf(
+			"GET unknown Work %q error message is empty, want customer-readable not-found text: %#v",
+			workID,
+			errResp,
+		)
+	}
+	if !strings.Contains(strings.ToLower(errResp.Message), "not found") {
+		t.Fatalf(
+			"GET unknown Work %q error message = %q, want not-found guidance: %#v",
+			workID,
+			errResp.Message,
+			errResp,
+		)
+	}
+
+	var shown factoryapi.Work
+	if json.Unmarshal(body, &shown) == nil && strings.TrimSpace(shown.Name) != "" {
+		t.Fatalf("GET unknown Work %q must not emit a success Work payload: %#v", workID, shown)
 	}
 }
 
