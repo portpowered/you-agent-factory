@@ -27,6 +27,15 @@ func RootErrorResponse(err error) (int, factoryapi.ErrorResponse, bool) {
 		return 0, factoryapi.ErrorResponse{}, false
 	}
 
+	if status, response, ok := automationsRequestContextErrorResponse(err); ok {
+		if response == nil {
+			return 0, factoryapi.ErrorResponse{}, true
+		}
+		if errResp, ok := response.(factoryapi.ErrorResponse); ok {
+			return status, errResp, true
+		}
+	}
+
 	if IsLifecycleBadRequest(err) || IsConvergenceBadRequest(err) {
 		return badRequestErrorResponse(automationsInvalidRequestMessage)
 	}
@@ -48,6 +57,9 @@ func RootErrorResponse(err error) (int, factoryapi.ErrorResponse, bool) {
 }
 
 func (a *Adapter) writeRootError(w http.ResponseWriter, err error) bool {
+	if a.writeAutomationsRequestContextOutcome(w, err) {
+		return true
+	}
 	if status, response, ok := RootErrorResponse(err); ok {
 		a.writeJSON(w, status, response)
 		return true

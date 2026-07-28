@@ -17,6 +17,9 @@ func (a *Adapter) Reconcile(
 	if err != nil {
 		return ReconcileResponse{}, err
 	}
+	if err := guardRequestContext(ctx); err != nil {
+		return ReconcileResponse{}, err
+	}
 	result, err := a.invokeReconcile(ctx, request)
 	if err != nil {
 		return ReconcileResponse{}, err
@@ -34,6 +37,9 @@ func (a *Adapter) GetStatus(
 	if err != nil {
 		return GetStatusResponse{}, err
 	}
+	if err := guardRequestContext(ctx); err != nil {
+		return GetStatusResponse{}, err
+	}
 	result, err := a.invokeGetStatus(ctx, request)
 	if err != nil {
 		return GetStatusResponse{}, err
@@ -49,6 +55,9 @@ func (a *Adapter) GetCursor(
 ) (GetCursorResponse, error) {
 	request, err := GetCursorRequestFromHTTP(input)
 	if err != nil {
+		return GetCursorResponse{}, err
+	}
+	if err := guardRequestContext(ctx); err != nil {
 		return GetCursorResponse{}, err
 	}
 	result, err := a.invokeGetCursor(ctx, request)

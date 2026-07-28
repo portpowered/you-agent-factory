@@ -17,6 +17,9 @@ func (a *Adapter) StartSource(
 	if err != nil {
 		return StartSourceResponse{}, err
 	}
+	if err := guardRequestContext(ctx); err != nil {
+		return StartSourceResponse{}, err
+	}
 	result, err := a.invokeStartSource(ctx, request)
 	if err != nil {
 		return StartSourceResponse{}, err
@@ -32,6 +35,9 @@ func (a *Adapter) StopSource(
 ) (StopSourceResponse, error) {
 	request, err := StopSourceRequestFromHTTP(input)
 	if err != nil {
+		return StopSourceResponse{}, err
+	}
+	if err := guardRequestContext(ctx); err != nil {
 		return StopSourceResponse{}, err
 	}
 	result, err := a.invokeStopSource(ctx, request)
@@ -51,6 +57,9 @@ func (a *Adapter) WaitSource(
 	if err != nil {
 		return WaitSourceResponse{}, err
 	}
+	if err := guardRequestContext(ctx); err != nil {
+		return WaitSourceResponse{}, err
+	}
 	result, err := a.invokeWaitSource(ctx, request)
 	if err != nil {
 		return WaitSourceResponse{}, err
@@ -66,6 +75,9 @@ func (a *Adapter) SourceStatus(
 ) (SourceStatusResponse, error) {
 	request, err := SourceStatusRequestFromHTTP(input)
 	if err != nil {
+		return SourceStatusResponse{}, err
+	}
+	if err := guardRequestContext(ctx); err != nil {
 		return SourceStatusResponse{}, err
 	}
 	result, err := a.invokeSourceStatus(ctx, request)
