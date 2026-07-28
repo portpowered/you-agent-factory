@@ -5671,9 +5671,9 @@
     {
       "source_path": "tests/functional/work/visualization/dependency_graph_test.go",
       "package": "you-agent-factory/tests/functional/work/visualization",
-      "scenario": "TestDependencyGraphVisualization_RendersCompleteEscapedFlowchart",
+      "scenario": "TestWorkVisualizeProducesDeterministicGraph",
       "lane": "short",
-      "destination": "wrong-layer: unit \u2014 calls pkg/services/work graph helpers directly without root.BuildProcess or CLI visualize command. Replacement evidence owner: pkg/services/work unit tests.",
+      "destination": "tests/functional/work/visualization/dependency_graph_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
