@@ -567,7 +567,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPIMoveWorkResumesRecoverableFlow`.
   - `TestAPIInvalidMoveReturnsConflictWithoutMutation`.
 
-- [ ] `tests/functional/work/visualization/dependency_graph_test.go`
+- [x] `tests/functional/work/visualization/dependency_graph_test.go`
   - `TestWorkVisualizeProducesDeterministicGraph`.
 
 ## Wave 2 — sessions

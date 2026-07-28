@@ -1263,10 +1263,6 @@
       "name": "TestVerifyPRInferenceCommandSmoke_StaysOutsideRequiredPRAndExtendedTiers"
     },
     {
-      "file": "work/visualization/dependency_graph_test.go",
-      "name": "TestDependencyGraphVisualization_RendersCompleteEscapedFlowchart"
-    },
-    {
       "file": "workflow/code_review_loop_long_test.go",
       "name": "TestCodeReviewLoop"
     },
