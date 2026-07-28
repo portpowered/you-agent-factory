@@ -235,10 +235,6 @@
       "minimum": 44.60
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/authoredlayout",
-      "minimum": 61.47
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/decisionenvelope",
       "exception": {
         "kind": "measurement",
@@ -723,31 +719,11 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loadedsource",
       "exception": {
-        "kind": "measurement",
-        "justification": "The active functional coverage profile contains no measurable statements for this transitional public shim after compile/load behavior moved to compilation-owned packages.",
+        "kind": "migration",
+        "justification": "DEL-DEF folded loaded-source behavior under internal compilation services; the functional profile no longer exercises the transitional public loadedsource package.",
         "owner": "factory-definition-maintainers",
-        "deadline": "2027-07-15",
-        "removalGate": "The functional coverage profile reports at least one measurable statement for this package or the transitional public package is deleted."
-      }
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading",
-      "exception": {
-        "kind": "measurement",
-        "justification": "The active functional coverage profile contains no measurable statements for this transitional public shim after compile/load behavior moved to compilation-owned packages.",
-        "owner": "factory-definition-maintainers",
-        "deadline": "2027-07-15",
-        "removalGate": "The functional coverage profile reports at least one measurable statement for this package or the transitional public package is deleted."
-      }
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedfactories",
-      "exception": {
-        "kind": "measurement",
-        "justification": "The active functional coverage profile contains no measurable statements for this transitional compile shim.",
-        "owner": "backend-quality",
-        "deadline": "2027-07-15",
-        "removalGate": "DEL-DEF removes the public namedfactories shim or the functional coverage profile reports measurable statements for this package."
+        "deadline": "2026-12-31",
+        "removalGate": "Functional coverage for loaded-source behavior is restored through internal compilation owner tests or the public package is deleted."
       }
     },
     {
@@ -851,16 +827,6 @@
       }
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig",
-      "exception": {
-        "kind": "measurement",
-        "justification": "Transitional var re-export shim; implementation coverage lives under snapshots_portability/portableconfig.",
-        "owner": "factory-definition-maintainers",
-        "deadline": "2027-07-15",
-        "removalGate": "DEL-DEF deletes this transitional public package path."
-      }
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/quorumpolicy",
       "exception": {
         "kind": "measurement",
@@ -891,16 +857,6 @@
       }
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/runtimeconfig",
-      "exception": {
-        "kind": "measurement",
-        "justification": "The active functional coverage profile contains no measurable statements for this transitional public shim after compile/load behavior moved to compilation-owned packages.",
-        "owner": "factory-definition-maintainers",
-        "deadline": "2027-07-15",
-        "removalGate": "The functional coverage profile reports at least one measurable statement for this package or the transitional public package is deleted."
-      }
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service",
       "exception": {
         "kind": "migration",
@@ -913,11 +869,11 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/snapshotcapture",
       "exception": {
-        "kind": "measurement",
-        "justification": "Transitional var re-export shim; implementation coverage lives under snapshots_portability/capture.",
+        "kind": "migration",
+        "justification": "DEL-DEF folded snapshot capture behavior under internal snapshots_portability services; the functional profile no longer exercises the transitional public snapshotcapture package.",
         "owner": "factory-definition-maintainers",
-        "deadline": "2027-07-15",
-        "removalGate": "DEL-DEF deletes this transitional public package path."
+        "deadline": "2026-12-31",
+        "removalGate": "Functional coverage for snapshot capture is restored through internal snapshots_portability owner tests or the public package is deleted."
       }
     },
     {
@@ -2317,6 +2273,26 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/transports/cli",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/transports/http",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/transports/mcp",
       "exception": {
         "kind": "measurement",
@@ -2741,26 +2717,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/wire",
       "minimum": 76.90
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/work/service",
-      "exception": {
-        "kind": "measurement",
-        "justification": "The transitional work/service compile shim delegates to work/internal and has no functional coverage profile statements until DEL-WORK removes the path.",
-        "owner": "backend-quality",
-        "deadline": "2027-07-15",
-        "removalGate": "The functional coverage profile reports at least one measurable statement for this package or the transitional path is deleted."
-      }
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/work/stateaccessrecordings",
-      "exception": {
-        "kind": "measurement",
-        "justification": "The transitional stateaccessrecordings compile shim delegates to work/internal/services/state_access/wire and has no functional coverage profile statements after peer proofs retargeted to work/wire.",
-        "owner": "backend-quality",
-        "deadline": "2027-07-15",
-        "removalGate": "The functional coverage profile reports at least one measurable statement for this package or DEL-WORK deletes the shim."
-      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/transports/cli",
@@ -3543,10 +3499,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/wire",
       "minimum": 82.64
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/wire/factorydefinitions",
-      "minimum": 82.92
     }
   ]
 }

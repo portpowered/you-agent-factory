@@ -19,6 +19,7 @@ import (
 	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryeditable "github.com/portpowered/infinite-you/pkg/services/factory_definitions/editable"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -44,7 +45,6 @@ import (
 	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 	workerworktree "github.com/portpowered/infinite-you/pkg/services/workers/worktree"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
-	wirefactorydefinitions "github.com/portpowered/infinite-you/pkg/wire/factorydefinitions"
 	"go.uber.org/zap"
 )
 
@@ -318,7 +318,7 @@ func provideFactoryDefinitionValidationService(
 	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
 ) factorydefinitions.ValidationOperations {
 	_ = workflows
-	return wirefactorydefinitions.ValidationOperations(
+	return factorydefinitionswire.NewValidationOperations(
 		orchestratorValidator,
 		loader.LoadSourceFromCanonicalJSON,
 	)
@@ -343,7 +343,7 @@ func provideSubmittedDefinitionValidationOperation(
 }
 
 func provideLoadedFactorySourceFactory() factorydefinitions.LoadedFactorySourceFactory {
-	return wirefactorydefinitions.LoadedFactorySourceFactory()
+	return factorydefinitionswire.LoadedFactorySourceFactory()
 }
 
 func provideNamedFactoryCatalog(
@@ -366,7 +366,7 @@ func provideFactoryDefinitionPersistence(
 	namedPaths factorydefinitions.NamedPathResolver,
 	directoryReplacementStore factorydefinitions.DirectoryReplacementStore,
 ) (factorydefinitions.Persistence, error) {
-	return wirefactorydefinitions.Persistence(
+	return factorydefinitionswire.Persistence(
 		validator,
 		func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
 			return validationentry.MapFactoryJSONForPersistence(
@@ -410,7 +410,7 @@ func provideEditableFactoryValidator(
 		snapshot *factorydefinitions.FactorySnapshot,
 		workstationLoader factorydefinitions.WorkstationLoader,
 	) error {
-		return factorydefinitionswire.ValidateEditableSnapshot(
+		return factoryeditable.ValidateSnapshot(
 			ctx,
 			snapshot,
 			workstationLoader,
@@ -438,11 +438,11 @@ func provideInitialFactorySnapshotFactory(
 	) (*factorydefinitions.FactorySnapshot, error) {
 		return factorydefinitionsservice.CaptureInitialSnapshot(
 			loaded,
-			wirefactorydefinitions.PortableFactoryConfigPreparer(
+			factorydefinitionswire.PortableFactoryConfigPreparer(
 				applySupportedFiles,
 				applyStarterWork,
 			),
-			wirefactorydefinitions.FactorySnapshotCapturer(),
+			factorydefinitionswire.FactorySnapshotCapturer(),
 		)
 	}
 }
@@ -680,7 +680,7 @@ func providePortableRecordingWriter(edges serviceedges.Edges) (recordings.Portab
 }
 
 func provideLoadedFactorySnapshotCapturer() factorydefinitions.LoadedFactorySnapshotCapturer {
-	return wirefactorydefinitions.LoadedFactorySnapshotCapturer()
+	return factorydefinitionswire.LoadedFactorySnapshotCapturer()
 }
 
 func provideRuntimeRecorderFactory(
@@ -718,8 +718,8 @@ func provideReplayExecutionFactory() recordings.ReplayExecutionFactory {
 	) {
 		return recordingswire.NewReplayExecution(
 			artifact,
-			wirefactorydefinitions.FactorySnapshotJSONDecoder(),
-			wirefactorydefinitions.ReplayRuntimeConfigDecoder(),
+			factorydefinitionswire.FactorySnapshotJSONDecoder(),
+			factorydefinitionswire.ReplayRuntimeConfigDecoder(),
 		)
 	}
 }

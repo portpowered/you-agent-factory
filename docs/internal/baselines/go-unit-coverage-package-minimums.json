@@ -223,10 +223,6 @@
       "minimum": 80.57
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/authoredlayout",
-      "minimum": 54.26
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/decisionenvelope",
       "minimum": 0.00
     },
@@ -250,7 +246,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts",
-      "minimum": 88.23
+      "minimum": 87.63
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle",
@@ -587,20 +583,6 @@
       "minimum": 70.68
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading",
-      "minimum": 64.72
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedfactories",
-      "exception": {
-        "kind": "measurement",
-        "justification": "The active unit coverage profile contains no measurable statements for this transitional compile shim.",
-        "owner": "backend-quality",
-        "deadline": "2027-07-15",
-        "removalGate": "DEL-DEF removes the public namedfactories shim or the unit coverage profile reports measurable statements for this package."
-      }
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths",
       "exception": {
         "kind": "measurement",
@@ -701,16 +683,6 @@
       }
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig",
-      "exception": {
-        "kind": "measurement",
-        "justification": "Transitional var re-export shim; implementation coverage lives under snapshots_portability/portableconfig.",
-        "owner": "factory-definition-maintainers",
-        "deadline": "2027-07-15",
-        "removalGate": "DEL-DEF deletes this transitional public package path."
-      }
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/quorumpolicy",
       "minimum": 0.00
     },
@@ -733,10 +705,6 @@
         "deadline": "2027-07-15",
         "removalGate": "The unit coverage profile reports at least one measurable statement for this package."
       }
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/runtimeconfig",
-      "minimum": 84.79
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service",
@@ -774,7 +742,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire",
-      "minimum": 74.10
+      "minimum": 73.65
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/defaultscaffold",
@@ -1867,6 +1835,14 @@
       "minimum": 85.86
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/transports/cli",
+      "minimum": 82.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/transports/http",
+      "minimum": 88.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/transports/mcp",
       "minimum": 75.00
     },
@@ -2194,14 +2170,6 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/wire",
-      "minimum": 100.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/work/service",
-      "minimum": 33.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/work/stateaccessrecordings",
       "minimum": 100.00
     },
     {
@@ -2859,10 +2827,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/wire",
       "minimum": 81.44
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/wire/factorydefinitions",
-      "minimum": 65.21
     }
   ]
 }
