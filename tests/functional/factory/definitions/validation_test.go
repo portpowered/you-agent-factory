@@ -181,9 +181,9 @@ func TestAPIValidateFactoryAcceptsValidAndRejectsInvalidDefinitions(t *testing.T
 	}
 }
 
-// TestAPIPreviewFactoryReturnsPublicTopology proves the public Preview API accepts a
-// valid Factory source and that the running session exposes customer-visible work
-// types, workers, workstations, and route wiring without Petri-net vocabulary.
+// TestAPIPreviewFactoryReturnsPublicTopology proves the public Preview API returns the
+// customer-facing preview projection for a valid orchestrator source: resolved workflow
+// reference, effective policy bounds, and result constraints without Petri-net vocabulary.
 func TestAPIPreviewFactoryReturnsPublicTopology(t *testing.T) {
 	runner := support.NewRecordingCommandRunner("runtime must not execute")
 	edges := serviceedges.Edges{ProviderCommandRunner: runner}
@@ -202,18 +202,7 @@ func TestAPIPreviewFactoryReturnsPublicTopology(t *testing.T) {
 	if previewStatus != http.StatusOK {
 		t.Fatalf("POST /factories/preview status = %d, want 200", previewStatus)
 	}
-	if !previewResult.Valid {
-		t.Fatalf("preview result = %#v, want valid preview acceptance", previewResult)
-	}
-	if previewResult.SourceResolution.Found != true {
-		t.Fatalf("preview source resolution = %#v, want resolved source", previewResult.SourceResolution)
-	}
-	if previewResult.SourceResolution.SourceHash == nil || strings.TrimSpace(*previewResult.SourceResolution.SourceHash) == "" {
-		t.Fatalf("preview source resolution = %#v, want non-empty source hash", previewResult.SourceResolution)
-	}
-
-	currentFactory := getDefaultSessionFactory(t, server.URL())
-	assertPublicFactoryTopology(t, currentFactory)
+	assertPublicPreviewProjection(t, previewResult, definitionsPreviewWorkflowName)
 
 	if runner.CallCount() != 0 {
 		t.Fatalf("provider command runner calls = %d, want 0 during preview inspection", runner.CallCount())
@@ -488,6 +477,11 @@ const definitionsPreviewWorkflowSource = `
 meta({ name: "definitions-preview", version: 1 });
 phase("setup");
 log("definitions preview topology fixture");
+workflow.log("step");
+workflow.artifact({ kind: "log", label: "step" });
+const result = await agent.run({ prompt: "preview topology" });
+workflow.final({ ok: true, result });
+pipeline([], function () {}, function () {});
 `
 
 func writeDefinitionsPreviewWorkflow(t *testing.T, projectRoot string) {
@@ -541,50 +535,73 @@ func postPreviewFactory(
 	return result, response.StatusCode
 }
 
-func assertPublicFactoryTopology(t *testing.T, factory factoryapi.Factory) {
+func assertPublicPreviewProjection(
+	t *testing.T,
+	preview factoryapi.FactoryPreviewResult,
+	workflowName string,
+) {
 	t.Helper()
 
-	if factory.WorkTypes == nil || len(*factory.WorkTypes) != 1 {
-		t.Fatalf("factory work types = %#v, want one public work type", factory.WorkTypes)
+	if !preview.Valid {
+		t.Fatalf("preview result = %#v, want valid preview acceptance", preview)
 	}
-	workType := (*factory.WorkTypes)[0]
-	if workType.Name != "task" {
-		t.Fatalf("factory work type name = %q, want task", workType.Name)
-	}
-	if len(workType.States) < 2 {
-		t.Fatalf("factory work type states = %#v, want init and completion states", workType.States)
+	if len(preview.SourceValidationIssues) != 0 {
+		t.Fatalf("preview source validation issues = %#v, want empty for valid source", preview.SourceValidationIssues)
 	}
 
-	if factory.Workers == nil || len(*factory.Workers) != 1 {
-		t.Fatalf("factory workers = %#v, want one worker", factory.Workers)
+	resolution := preview.SourceResolution
+	if !resolution.Found {
+		t.Fatalf("preview source resolution = %#v, want resolved source", resolution)
 	}
-	if (*factory.Workers)[0].Name != "worker-a" {
-		t.Fatalf("factory worker name = %q, want worker-a", (*factory.Workers)[0].Name)
+	if resolution.RequestKind != string(factoryapi.WORKFLOWNAME) {
+		t.Fatalf("preview request kind = %q, want WORKFLOW_NAME", resolution.RequestKind)
+	}
+	if resolution.RequestValue == nil || strings.TrimSpace(*resolution.RequestValue) != workflowName {
+		t.Fatalf("preview request value = %v, want %q", resolution.RequestValue, workflowName)
+	}
+	if resolution.ResolvedKind == nil || strings.TrimSpace(*resolution.ResolvedKind) != string(factoryapi.WORKFLOWFILE) {
+		t.Fatalf("preview resolved kind = %v, want WORKFLOW_FILE for resolved workflow file source", resolution.ResolvedKind)
+	}
+	wantSourceRef := definitionsPreviewWorkflowDir + "/" + workflowName + ".js"
+	if resolution.SourceRef == nil || strings.TrimSpace(*resolution.SourceRef) != wantSourceRef {
+		t.Fatalf("preview source ref = %v, want %q", resolution.SourceRef, wantSourceRef)
+	}
+	if resolution.SourceHash == nil || strings.TrimSpace(*resolution.SourceHash) == "" {
+		t.Fatalf("preview source resolution = %#v, want non-empty source hash", resolution)
+	}
+	if resolution.OrchestratorKind == nil || strings.TrimSpace(*resolution.OrchestratorKind) == "" {
+		t.Fatalf("preview orchestrator kind = %v, want non-empty public orchestrator label", resolution.OrchestratorKind)
 	}
 
-	if factory.Workstations == nil || len(*factory.Workstations) != 1 {
-		t.Fatalf("factory workstations = %#v, want one workstation", factory.Workstations)
+	policy := preview.PolicyPreview
+	if strings.TrimSpace(policy.PolicyHash) == "" {
+		t.Fatalf("preview policy hash = %q, want non-empty hash", policy.PolicyHash)
 	}
-	workstation := (*factory.Workstations)[0]
-	if workstation.Name != "process" {
-		t.Fatalf("factory workstation name = %q, want process", workstation.Name)
+	if policy.MaxChildCount <= 0 {
+		t.Fatalf("preview max child count = %d, want positive bound", policy.MaxChildCount)
 	}
-	if workstation.Worker != "worker-a" {
-		t.Fatalf("factory workstation worker = %q, want worker-a", workstation.Worker)
+	if policy.MaxConcurrency <= 0 {
+		t.Fatalf("preview max concurrency = %d, want positive bound", policy.MaxConcurrency)
 	}
-	if len(workstation.Inputs) != 1 {
-		t.Fatalf("factory workstation inputs = %#v, want one input route", workstation.Inputs)
+	if len(policy.EffectivePolicy) == 0 {
+		t.Fatalf("preview effective policy = %#v, want customer-visible policy projection", policy.EffectivePolicy)
 	}
-	input := workstation.Inputs[0]
-	if input.WorkType != "task" || input.State != "init" {
-		t.Fatalf("factory workstation input route = %#v, want task/init", input)
+	if len(policy.ValidationIssues) != 0 {
+		t.Fatalf("preview policy validation issues = %#v, want empty for valid source", policy.ValidationIssues)
 	}
-	if workstation.Outputs == nil || len(*workstation.Outputs) != 1 {
-		t.Fatalf("factory workstation outputs = %#v, want one output route", workstation.Outputs)
+
+	constraints := preview.ResultConstraints
+	if constraints.ArtifactUriScheme != "you-artifact" {
+		t.Fatalf("preview artifact uri scheme = %q, want you-artifact", constraints.ArtifactUriScheme)
 	}
-	output := (*workstation.Outputs)[0]
-	if output.WorkType != "task" || output.State != "complete" {
-		t.Fatalf("factory workstation output route = %#v, want task/complete", output)
+	if !constraints.RequiresStructuredCloneableJson {
+		t.Fatalf("preview requires structured cloneable json = false, want true")
+	}
+	if constraints.MaxEmbeddedBytes <= 0 {
+		t.Fatalf("preview max embedded bytes = %d, want positive bound", constraints.MaxEmbeddedBytes)
+	}
+	if len(constraints.RejectedValueKinds) == 0 {
+		t.Fatalf("preview rejected value kinds = %#v, want public rejection vocabulary", constraints.RejectedValueKinds)
 	}
 }
 
