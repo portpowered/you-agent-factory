@@ -86,10 +86,19 @@ excess fold/consolidation debt.
 | `content_staging_impl` | `work/internal/services/content_staging` | `content_staging.go` |
 | `content_materialization_impl` | `work/internal/services/content_materialization` | `content_url.go` |
 
+## Generator mirror
+
+Committed generator tables mirror this inventory:
+
+- `internal/ownershipinventory/work_root_contract.go` — `WorkThinRootContractFiles`,
+  `WorkExcessRootContractFolds`, `ClassifyWorkRootContractFile`, and
+  `WorkRootContractInventory`.
+- `cmd/packagetargetmanifestcheck/work_root_contract.go` — package-target manifest
+  mirror for the same thin retain vs excess fold partition.
+
 ## Out of scope for this note
 
 - Nested packages under immediate child directories (classified in
   [`work-top-level-inventory.md`](work-top-level-inventory.md)).
-- `packagetargetmanifestcheck` / `ownershipinventory` root-contract generator
-  tables and JSON baseline regeneration (stories 003–006).
+- JSON baseline regeneration (story 006).
 - Production package moves, folds, deletes, or `pkg/wire` edits.
