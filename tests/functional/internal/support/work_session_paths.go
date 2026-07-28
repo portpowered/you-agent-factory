@@ -33,5 +33,10 @@ func DefaultSessionWorkURL(baseURL, path string) string {
 
 // DefaultSessionEventsURL joins baseURL with the canonical default-session event stream.
 func DefaultSessionEventsURL(baseURL string) string {
-	return strings.TrimSuffix(baseURL, "/") + DefaultSessionEventsAPIPath
+	return SessionEventsURL(baseURL, factorysessions.DefaultSessionID)
+}
+
+// SessionEventsURL joins baseURL with the canonical event stream for one Factory Session.
+func SessionEventsURL(baseURL, sessionID string) string {
+	return strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + sessionID + "/events"
 }

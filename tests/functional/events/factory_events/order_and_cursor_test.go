@@ -163,6 +163,83 @@ func TestAPIInvalidEventCursorReturnsTypedError(t *testing.T) {
 	assertFactoryEventsSameRelativeOrder(t, retained, validRead)
 }
 
+// TestFactoryEventStreamIsOrderedAndClosesAtSessionTermination proves a live
+// Factory Event SSE stream delivers events in ascending order while the Factory
+// Session is active and closes when the session terminates through the public
+// session boundary.
+func TestFactoryEventStreamIsOrderedAndClosesAtSessionTermination(t *testing.T) {
+	dir := support.ScaffoldSingleStepFactory(t, "stream-order-close")
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		UseMockWorkers:            true,
+		WaitForServiceModeRuntime: true,
+	})
+	t.Cleanup(func() { server.Stop(t) })
+
+	opened := support.OpenFactorySessionAt(t, server.URL(), dir)
+	sessionID := opened.Session.Id
+
+	stream := support.OpenFactoryEventStreamAt(t, support.SessionEventsURL(server.URL(), sessionID))
+
+	name := "stream-order-close-work"
+	support.SubmitSessionWorkAt(t, server.URL(), sessionID, factoryapi.SubmitWorkRequest{
+		Name:         &name,
+		WorkTypeName: "task",
+		Payload: map[string]string{
+			"title": "prove ordered stream closes at session termination",
+		},
+	})
+
+	collected := collectFactoryEventStreamUntilQuiet(t, stream, 15*time.Second)
+	if len(collected) < 4 {
+		t.Fatalf("live Factory Event count = %d, want at least 4 events before session close", len(collected))
+	}
+	assertFactoryEventsAscendingOrder(t, collected)
+
+	support.CloseFactorySessionAt(t, server.URL(), sessionID)
+	stream.WaitClosed(5 * time.Second)
+}
+
+func collectFactoryEventStreamUntilQuiet(
+	t *testing.T,
+	stream *support.FactoryEventStream,
+	timeout time.Duration,
+) []factoryapi.FactoryEvent {
+	t.Helper()
+
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	var collected []factoryapi.FactoryEvent
+	var quiet *time.Timer
+	var quietC <-chan time.Time
+	for {
+		select {
+		case <-deadline.C:
+			return collected
+		case <-quietC:
+			return collected
+		default:
+			event, ok := stream.TryNextEvent(50 * time.Millisecond)
+			if !ok {
+				continue
+			}
+			collected = append(collected, event)
+			if quiet == nil {
+				quiet = time.NewTimer(250 * time.Millisecond)
+			} else {
+				if !quiet.Stop() {
+					select {
+					case <-quiet.C:
+					default:
+					}
+				}
+				quiet.Reset(250 * time.Millisecond)
+			}
+			quietC = quiet.C
+		}
+	}
+}
+
 func assertFactoryEventsInvalidCursorError(t *testing.T, errResp factoryapi.ErrorResponse) {
 	t.Helper()
 
