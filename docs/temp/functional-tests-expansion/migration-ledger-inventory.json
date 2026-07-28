@@ -289,16 +289,6 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/acceptance/output_outcomes_test.go",
-      "package": "you-agent-factory/tests/functional/acceptance",
-      "scenario": "TestInvocationOutput_TerminalFailureExitsNonZero",
-      "lane": "short",
-      "destination": "tests/functional/transport/cli/process/stdout_stderr_test.go",
-      "catch_all": "none",
-      "specialty_targets": "test-built-cli-acceptance",
-      "deletion_only_batch": "n/a"
-    },
-    {
       "source_path": "tests/functional/acceptance/provider_outcomes_test.go",
       "package": "you-agent-factory/tests/functional/acceptance",
       "scenario": "TestProviderPosture_Absent_UnresolvedDefaultRejectsWithDocumentedGuidance",
@@ -7117,21 +7107,101 @@
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/process/stdin_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/process",
+      "scenario": "TestRunReadsPromptFromStdin",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/process/stdin_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/process/stdin_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/process",
+      "scenario": "TestSubmitBatchReadsJSONFromStdin",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/process/stdin_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/process/stdin_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/process",
+      "scenario": "TestCLIEmptyRequiredStdinFailsWithoutDispatch",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/process/stdin_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/process/stdout_stderr_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/process",
+      "scenario": "TestCLISuccessWritesPrimaryResultOnlyToStdout",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/process/stdout_stderr_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/process/stdout_stderr_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/process",
+      "scenario": "TestCLIFailureWritesDiagnosticToStderr",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/process/stdout_stderr_test.go",
+      "catch_all": "none",
+      "specialty_targets": "test-built-cli-acceptance",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/process/stdout_stderr_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/process",
+      "scenario": "TestCLIQuietModeSuppressesNonResultNoise",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/process/stdout_stderr_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/process/context_cancellation_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/process",
+      "scenario": "TestCLIContextCancellationStopsExternalWork",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/process/context_cancellation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/process/context_cancellation_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/process",
+      "scenario": "TestCLIContextCancellationEmitsNoSuccessResult",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/process/context_cancellation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
     }
   ],
-  "scanned_at_utc": "2026-07-28T01:55:00Z",
+  "scanned_at_utc": "2026-07-28T03:20:00Z",
   "summary": {
     "by_catch_all": {
       "bootstrap_portability": 22,
       "guards_batch": 23,
-      "none": 434,
+      "none": 441,
       "replay_contracts": 23,
       "runtime_api": 96,
       "smoke": 62,
       "workflow": 30
     },
     "by_top_level_package": {
-      "acceptance": 13,
+      "acceptance": 12,
       "automations": 7,
       "bootstrap_portability": 21,
       "cli": 62,
@@ -7148,17 +7218,17 @@
       "sessionparity": 13,
       "sessions": 3,
       "smoke": 62,
-      "transport": 96,
+      "transport": 104,
       "work": 2,
       "workers": 70,
       "workflow": 30,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 692,
+    "customer_top_level_Test_scenarios": 699,
     "lane_functionallong": 95,
-    "lane_short": 597,
+    "lane_short": 604,
     "by_full_package": {
-      "you-agent-factory/tests/functional/acceptance": 13,
+      "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 7,
       "you-agent-factory/tests/functional/bootstrap_portability": 19,
       "you-agent-factory/tests/functional/bootstrap_portability/metadata_contract": 2,
@@ -7201,7 +7271,7 @@
       "you-agent-factory/tests/functional/transport/cli/commands": 20,
       "you-agent-factory/tests/functional/transport/cli/output": 13,
       "you-agent-factory/tests/functional/transport/cli/parameters": 19,
-      "you-agent-factory/tests/functional/transport/cli/process": 9,
+      "you-agent-factory/tests/functional/transport/cli/process": 17,
       "you-agent-factory/tests/functional/transport/docs": 1,
       "you-agent-factory/tests/functional/transport/http": 1,
       "you-agent-factory/tests/functional/transport/http/server": 14,
@@ -7233,7 +7303,7 @@
       "you-agent-factory/tests/functional/workstations/repeater": 13,
       "you-agent-factory/tests/functional/workstations/watcher": 9
     },
-    "files_with_customer_Test": 232,
+    "files_with_customer_Test": 234,
     "functional_test_go_files": 251,
     "helper_only_non_customer_files": 51,
     "internal_harness_Test_functions": 15,

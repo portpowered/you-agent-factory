@@ -81,6 +81,7 @@
     "pkg/services/automations/internal/services/script_pollers/internal/service",
     "pkg/services/automations/internal/services/script_pollers/wire",
     "pkg/services/automations/service",
+    "pkg/services/automations/transports/http",
     "pkg/services/automations/wire",
     "pkg/services/edges",
     "pkg/services/factory_definitions",
@@ -126,6 +127,7 @@
     "pkg/services/factory_definitions/snapshotcapture",
     "pkg/services/factory_definitions/transports/cli",
     "pkg/services/factory_definitions/transports/http",
+    "pkg/services/factory_definitions/transports/mcp",
     "pkg/services/factory_definitions/ttsobservability",
     "pkg/services/factory_definitions/validation",
     "pkg/services/factory_definitions/wire",
@@ -178,6 +180,9 @@
     "pkg/services/factory_runtime/tooling/javascript/callbehavior",
     "pkg/services/factory_runtime/tooling/javascript/catalog",
     "pkg/services/factory_runtime/tooling/javascript/symbolidentity",
+    "pkg/services/factory_runtime/transports/cli",
+    "pkg/services/factory_runtime/transports/http",
+    "pkg/services/factory_runtime/transports/mcp",
     "pkg/services/factory_runtime/wire",
     "pkg/services/factory_sessions",
     "pkg/services/factory_sessions/internal/applicationopening",
@@ -252,6 +257,9 @@
     "pkg/services/factory_visualization/internal/services/response_event_presentation",
     "pkg/services/factory_visualization/internal/services/response_event_presentation/internal/service",
     "pkg/services/factory_visualization/internal/services/response_event_presentation/wire",
+    "pkg/services/factory_visualization/transports/cli",
+    "pkg/services/factory_visualization/transports/http",
+    "pkg/services/factory_visualization/transports/mcp",
     "pkg/services/factory_visualization/wire",
     "pkg/services/models",
     "pkg/services/models/internal/artifacts",
@@ -282,13 +290,19 @@
     "pkg/services/models/internal/services/runtime_scopes/wire",
     "pkg/services/models/transports/cli",
     "pkg/services/models/transports/http",
+    "pkg/services/models/transports/mcp",
     "pkg/services/models/wire",
     "pkg/services/operator_settings",
     "pkg/services/operator_settings/identityinventory",
     "pkg/services/operator_settings/internal/service",
+    "pkg/services/operator_settings/internal/services/document",
+    "pkg/services/operator_settings/internal/services/document/internal/service",
+    "pkg/services/operator_settings/internal/services/document/wire",
     "pkg/services/operator_settings/internal/services/resolution",
     "pkg/services/operator_settings/internal/services/resolution/internal/service",
     "pkg/services/operator_settings/internal/services/resolution/wire",
+    "pkg/services/operator_settings/servicewire",
+    "pkg/services/operator_settings/testlink",
     "pkg/services/operator_settings/wire",
     "pkg/services/provider_sessions",
     "pkg/services/provider_sessions/internal/services/codex_reader",
@@ -338,10 +352,13 @@
     "pkg/services/recordings/projections/dashboard",
     "pkg/services/recordings/replay",
     "pkg/services/recordings/service",
+    "pkg/services/recordings/transports/cli",
     "pkg/services/recordings/transports/http",
+    "pkg/services/recordings/transports/mcp",
     "pkg/services/recordings/wire",
     "pkg/services/system_initialization",
     "pkg/services/system_initialization/internal/workflow",
+    "pkg/services/system_initialization/transports/cli",
     "pkg/services/system_initialization/wire",
     "pkg/services/work",
     "pkg/services/work/internal/services/content_materialization",
@@ -354,6 +371,7 @@
     "pkg/services/work/internal/services/state_access/internal/service",
     "pkg/services/work/internal/services/state_access/wire",
     "pkg/services/work/service",
+    "pkg/services/work/transports/mcp",
     "pkg/services/work/wire",
     "pkg/services/workers",
     "pkg/services/workers/agypty",
@@ -406,6 +424,7 @@
     "pkg/services/workers/services/inference",
     "pkg/services/workers/services/testing",
     "pkg/services/workers/skippermissions",
+    "pkg/services/workers/wire",
     "pkg/services/workers/worktree",
     "pkg/transports/cli",
     "pkg/transports/cli/baseline",
@@ -680,6 +699,11 @@
     },
     {
       "packagePath": "pkg/services/automations/service",
+      "disposition": "move",
+      "destination": "automations/internal"
+    },
+    {
+      "packagePath": "pkg/services/automations/transports/http",
       "disposition": "retain",
       "destination": "automations"
     },
@@ -890,8 +914,8 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/service",
-      "disposition": "retain",
-      "destination": "factory_definitions"
+      "disposition": "move",
+      "destination": "factory_definitions/internal"
     },
     {
       "packagePath": "pkg/services/factory_definitions/snapshotcapture",
@@ -905,6 +929,11 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/transports/http",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/transports/mcp",
       "disposition": "retain",
       "destination": "factory_definitions"
     },
@@ -1110,13 +1139,13 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/service",
-      "disposition": "retain",
-      "destination": "factory_runtime"
+      "disposition": "move",
+      "destination": "factory_runtime/internal"
     },
     {
       "packagePath": "pkg/services/factory_runtime/service/host",
-      "disposition": "retain",
-      "destination": "factory_runtime"
+      "disposition": "move",
+      "destination": "factory_runtime/internal"
     },
     {
       "packagePath": "pkg/services/factory_runtime/state",
@@ -1167,6 +1196,21 @@
       "packagePath": "pkg/services/factory_runtime/tooling/javascript/symbolidentity",
       "disposition": "move",
       "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/transports/cli",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/transports/http",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/transports/mcp",
+      "disposition": "retain",
+      "destination": "factory_runtime"
     },
     {
       "packagePath": "pkg/services/factory_runtime/wire",
@@ -1539,6 +1583,21 @@
       "destination": "factory_visualization/internal/services/response_event_presentation"
     },
     {
+      "packagePath": "pkg/services/factory_visualization/transports/cli",
+      "disposition": "retain",
+      "destination": "factory_visualization"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/transports/http",
+      "disposition": "retain",
+      "destination": "factory_visualization"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/transports/mcp",
+      "disposition": "retain",
+      "destination": "factory_visualization"
+    },
+    {
       "packagePath": "pkg/services/factory_visualization/wire",
       "disposition": "retain",
       "destination": "factory_visualization"
@@ -1689,6 +1748,11 @@
       "destination": "models"
     },
     {
+      "packagePath": "pkg/services/models/transports/mcp",
+      "disposition": "retain",
+      "destination": "models"
+    },
+    {
       "packagePath": "pkg/services/models/wire",
       "disposition": "retain",
       "destination": "models"
@@ -1709,6 +1773,21 @@
       "destination": "operator_settings"
     },
     {
+      "packagePath": "pkg/services/operator_settings/internal/services/document",
+      "disposition": "retain",
+      "destination": "operator_settings/internal/services/document"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/internal/services/document/internal/service",
+      "disposition": "retain",
+      "destination": "operator_settings/internal/services/document"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/internal/services/document/wire",
+      "disposition": "retain",
+      "destination": "operator_settings/internal/services/document"
+    },
+    {
       "packagePath": "pkg/services/operator_settings/internal/services/resolution",
       "disposition": "retain",
       "destination": "operator_settings/internal/services/resolution"
@@ -1722,6 +1801,16 @@
       "packagePath": "pkg/services/operator_settings/internal/services/resolution/wire",
       "disposition": "retain",
       "destination": "operator_settings/internal/services/resolution"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/servicewire",
+      "disposition": "retain",
+      "destination": "operator_settings"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/testlink",
+      "disposition": "retain",
+      "destination": "operator_settings"
     },
     {
       "packagePath": "pkg/services/operator_settings/wire",
@@ -1770,8 +1859,8 @@
     },
     {
       "packagePath": "pkg/services/provider_sessions/service",
-      "disposition": "retain",
-      "destination": "provider_sessions"
+      "disposition": "move",
+      "destination": "provider_sessions/internal"
     },
     {
       "packagePath": "pkg/services/provider_sessions/transports/http",
@@ -1965,11 +2054,21 @@
     },
     {
       "packagePath": "pkg/services/recordings/service",
+      "disposition": "move",
+      "destination": "recordings/internal"
+    },
+    {
+      "packagePath": "pkg/services/recordings/transports/cli",
       "disposition": "retain",
       "destination": "recordings"
     },
     {
       "packagePath": "pkg/services/recordings/transports/http",
+      "disposition": "retain",
+      "destination": "recordings"
+    },
+    {
+      "packagePath": "pkg/services/recordings/transports/mcp",
       "disposition": "retain",
       "destination": "recordings"
     },
@@ -1985,6 +2084,11 @@
     },
     {
       "packagePath": "pkg/services/system_initialization/internal/workflow",
+      "disposition": "retain",
+      "destination": "system_initialization"
+    },
+    {
+      "packagePath": "pkg/services/system_initialization/transports/cli",
       "disposition": "retain",
       "destination": "system_initialization"
     },
@@ -2045,6 +2149,11 @@
     },
     {
       "packagePath": "pkg/services/work/service",
+      "disposition": "move",
+      "destination": "work/internal"
+    },
+    {
+      "packagePath": "pkg/services/work/transports/mcp",
       "disposition": "retain",
       "destination": "work"
     },
@@ -2290,8 +2399,8 @@
     },
     {
       "packagePath": "pkg/services/workers/service",
-      "disposition": "retain",
-      "destination": "workers"
+      "disposition": "move",
+      "destination": "workers/internal"
     },
     {
       "packagePath": "pkg/services/workers/services/inference",
@@ -2305,6 +2414,11 @@
     },
     {
       "packagePath": "pkg/services/workers/skippermissions",
+      "disposition": "retain",
+      "destination": "workers"
+    },
+    {
+      "packagePath": "pkg/services/workers/wire",
       "disposition": "retain",
       "destination": "workers"
     },

@@ -744,11 +744,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/acceptance/output_outcomes_test.go",
-      "target": "acceptance"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/acceptance/provider_outcomes_test.go",
       "target": "acceptance"
     },

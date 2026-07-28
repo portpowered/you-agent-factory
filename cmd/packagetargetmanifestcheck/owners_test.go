@@ -124,6 +124,22 @@ func TestMapCommittedOwnerPackageUsesPlanNestedDestinations(t *testing.T) {
 			},
 		},
 		{
+			path: "pkg/services/automations/service",
+			want: PackageMapping{
+				PackagePath: "pkg/services/automations/service",
+				Disposition: DispositionMove,
+				Destination: "automations/internal",
+			},
+		},
+		{
+			path: "pkg/services/work/service",
+			want: PackageMapping{
+				PackagePath: "pkg/services/work/service",
+				Disposition: DispositionMove,
+				Destination: "work/internal",
+			},
+		},
+		{
 			path: "pkg/services/operator_settings",
 			want: PackageMapping{
 				PackagePath: "pkg/services/operator_settings",

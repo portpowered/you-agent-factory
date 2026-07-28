@@ -42,7 +42,7 @@ intentionally small enough to distribute across many agents.
   - `TestCLIUnknownCommandReturnsUsageExitCode` verifies stdout remains empty
     and the process returns the documented non-success code.
 
-- [ ] `tests/functional/transport/cli/process/stdin_test.go`
+- [x] `tests/functional/transport/cli/process/stdin_test.go`
   - `TestRunReadsPromptFromStdin` verifies `you run -` consumes stdin and sends
     the exact value to the selected worker.
   - `TestSubmitBatchReadsJSONFromStdin` verifies `you submit batch -` consumes
@@ -50,7 +50,7 @@ intentionally small enough to distribute across many agents.
   - `TestCLIEmptyRequiredStdinFailsWithoutDispatch` verifies EOF/empty input is
     rejected before any external worker effect.
 
-- [ ] `tests/functional/transport/cli/process/stdout_stderr_test.go`
+- [x] `tests/functional/transport/cli/process/stdout_stderr_test.go`
   - `TestCLISuccessWritesPrimaryResultOnlyToStdout` verifies success data is
     not mixed with diagnostics.
   - `TestCLIFailureWritesDiagnosticToStderr` verifies stdout does not contain a
@@ -64,7 +64,7 @@ intentionally small enough to distribute across many agents.
   - `TestCLIInterruptedExitCode` covers cancellation/interruption.
   - `TestCLISuccessExitCode` covers normal quiescence.
 
-- [ ] `tests/functional/transport/cli/process/context_cancellation_test.go`
+- [x] `tests/functional/transport/cli/process/context_cancellation_test.go`
   - `TestCLIContextCancellationStopsExternalWork` verifies the injected
     provider process is cancelled.
   - `TestCLIContextCancellationEmitsNoSuccessResult` verifies the terminal

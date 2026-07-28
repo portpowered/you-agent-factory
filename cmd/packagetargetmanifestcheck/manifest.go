@@ -211,6 +211,10 @@ func validateDestination(destination string, closed map[string]struct{}) error {
 	if nested == "" {
 		return nil
 	}
+	// Transitional service/ packages fold into the owner's private internal tree.
+	if nested == "internal" {
+		return nil
+	}
 	// Nested destinations may only name committed internal/services/<subservice> targets.
 	if !strings.HasPrefix(nested, "internal/services/") {
 		return fmt.Errorf("%q uses nested path %q; only internal/services/<subservice> nesting is allowed", destination, nested)

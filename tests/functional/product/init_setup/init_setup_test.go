@@ -255,7 +255,7 @@ func TestInitSuppliedInputsPreserveConfigWhenAtomicWriteCannotStart(t *testing.T
 		},
 	}
 	err := fixture.execute(edges, io.Discard, "you", "init", "--provider", "codex", "--model", "new-model")
-	if err == nil || !strings.Contains(err.Error(), "create operator config temp file") ||
+	if err == nil || !strings.Contains(err.Error(), "create operator document temp file") ||
 		!errors.Is(err, tempFailure) {
 		t.Fatalf("Process.Execute() error = %v, want temporary-file failure", err)
 	}

@@ -251,6 +251,7 @@ var cliCommandOperationsSet = wire.NewSet(
 	provideWorkRequestFileLoader,
 	provideTerminalLoggerBuilder,
 	provideLiveRecordingTargetPlanner,
+	provideRecordingsCLIAdapter,
 	provideCLIRunDefaults,
 	provideSubmitPayloadReader,
 	provideOperatorDefaultsResolver,

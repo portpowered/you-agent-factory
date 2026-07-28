@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	operatorsettingsservicewire "github.com/portpowered/infinite-you/pkg/services/operator_settings/servicewire"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 )
 
@@ -133,12 +134,14 @@ func assertRuntimePreserved(t *testing.T, got operatorsettings.RuntimeSettings) 
 }
 
 func operatorConfigService() operatorsettings.ConfigDocumentService {
-	return operatorsettings.ConfigDocumentService{
-		Files: operatorConfigOS{},
-		CreateTemp: func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
+	return operatorsettingsservicewire.NewConfigDocumentService(
+		operatorConfigOS{},
+		func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
 			return os.CreateTemp(dir, pattern)
 		},
-		Providers: func(value string) (string, bool) {
+		globalconfigmapping.Decode,
+		globalconfigmapping.Encode,
+		func(value string) (string, bool) {
 			switch strings.ToLower(strings.TrimSpace(value)) {
 			case "codex", "openai":
 				return "CODEX", true
@@ -148,10 +151,8 @@ func operatorConfigService() operatorsettings.ConfigDocumentService {
 				return "", false
 			}
 		},
-		Decoder:         globalconfigmapping.Decode,
-		Encoder:         globalconfigmapping.Encode,
-		PersistenceLock: &sync.Mutex{},
-	}
+		&sync.Mutex{},
+	)
 }
 
 func assertOperatorConfig(t *testing.T, document operatorsettings.ConfigDocument, provider, model string) {

@@ -42,10 +42,11 @@ func S24Scenarios() []Scenario {
 			TestName:          "TestCLIValidationFailureExitCode",
 		},
 		{
-			ID:                "s24-terminal-failure-exit",
-			Title:             "Terminal invocation failure",
-			DocumentedOutcome: "A terminal invocation failure exits the built CLI with a non-zero operating-system status.",
-			TestName:          "TestInvocationOutput_TerminalFailureExitsNonZero",
+			ID:    "s24-terminal-failure-exit",
+			Title: "Terminal invocation failure",
+			DocumentedOutcome: "A terminal invocation failure exits the built CLI with a non-zero operating-system status, " +
+				"writes diagnostics to stderr, and leaves stdout free of a false primary result.",
+			TestName: "TestCLIFailureWritesDiagnosticToStderr",
 		},
 		{
 			ID:    "s24-local-model-invoke",

@@ -83,7 +83,8 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	invocationInputPreparation := work.NewInvocationInputPreparation()
 	loggerBuilder := provideTerminalLoggerBuilder()
 	liveRecordingTargetPlanner := provideLiveRecordingTargetPlanner()
-	v4 := provideCLIRunDefaults(liveRecordingTargetPlanner)
+	adapter := provideRecordingsCLIAdapter()
+	v4 := provideCLIRunDefaults(liveRecordingTargetPlanner, adapter)
 	batchInputFileSystem := provideBatchInputFileSystem()
 	directoryCreator := provideRunDirectoryCreator()
 	opener := provideBrowserOpener(edges2)
@@ -733,6 +734,7 @@ var cliCommandOperationsSet = wire2.NewSet(
 	provideWorkRequestFileLoader,
 	provideTerminalLoggerBuilder,
 	provideLiveRecordingTargetPlanner,
+	provideRecordingsCLIAdapter,
 	provideCLIRunDefaults,
 	provideSubmitPayloadReader,
 	provideOperatorDefaultsResolver,

@@ -688,9 +688,10 @@ response-stream output.
 - Packaged topic smoke markers:
   `tests/functional/smoke/cli_docs_smoke_test.go` (`run` topic)
 - Built-executable coverage for this lane is limited to operating-system exit
-  status in `tests/functional/acceptance/output_outcomes_test.go` and
-  `tests/functional/acceptance/invalid_quiet_outcomes_test.go`; stdout, stderr,
-  and event-presentation behavior belongs to the canonical raw packages above.
+  status in `tests/functional/acceptance/invalid_quiet_outcomes_test.go`;
+  stdout, stderr, and event-presentation behavior belongs to the canonical raw
+  packages above, with terminal failure stream contracts owned by
+  `tests/functional/transport/cli/process/stdout_stderr_test.go`.
 
 **Maintainer verification commands**
 
@@ -789,6 +790,13 @@ response-stream output.
   remaining request-validation error and `FactoryInvocationResult` session
   result shape stay at their current boundary until Factory Session contracts
   converge; the Factory Session owner constructs that shared result.
+- Work owner-local Wire at `pkg/services/work/wire` must stay registered under
+  destination `work` in
+  `docs/internal/packaged-service-structure/package-target-manifest.json`,
+  `docs/internal/baselines/ownership-inventory.json`, and both
+  `go-*-coverage-package-minimums.json` baselines; prove registration with
+  `wire/manifest_registration_test.go` rather than re-editing manifests when
+  IMP-WORK already landed the rows.
 - `pkg/work/content/contract` translates between generated OpenAPI `WorkContent`
   and the backend-owned `work.WorkContentPart` shape; pure content rules remain
   in `pkg/work/content`.
@@ -833,6 +841,13 @@ response-stream output.
   `internal/service` and `wire` only. Query the accepted `providers.Service` root
   for provider identity canonicalization at resolve time; do not cache availability
   in settings state or add Providers→Operator Settings imports.
+- Operator Settings owner-local Wire at `pkg/services/operator_settings/wire`
+  must stay registered under destination `operator_settings` in
+  `docs/internal/packaged-service-structure/package-target-manifest.json`,
+  `docs/internal/baselines/ownership-inventory.json`, and both
+  `go-*-coverage-package-minimums.json` baselines; prove registration with
+  `wire/manifest_registration_test.go` rather than re-editing manifests when
+  IMP-SET already landed the rows.
 - When global named-factory guidance changes, update its authored
   `contracts/cli/commands.json` records and the task-oriented guidance in
   `docs/reference/authoring-factories.md` plus `config.md`; do not restore
@@ -898,7 +913,18 @@ response-stream output.
   in `pkg/services/system_initialization/internal/workflow` and must not import
   `pkg/initializer`, transports, `pkg/wire`, or Settings/Definitions store
   surfaces such as `factory_definitions/packagedinstallation`; boundary proof
-  lives in `internal/workflow/boundary_test.go` and `wire/boundary_test.go`. Bare root/help, invalid commands,
+  lives in `internal/workflow/boundary_test.go` and `wire/boundary_test.go`.
+  Bootstrap owner-local Wire at `pkg/services/system_initialization/wire` must
+  stay registered under destination `system_initialization` in
+  `docs/internal/packaged-service-structure/package-target-manifest.json`,
+  `docs/internal/baselines/ownership-inventory.json`, and both
+  `go-*-coverage-package-minimums.json` baselines; prove registration with
+  `wire/manifest_registration_test.go` rather than re-editing manifests when
+  IMP-BOOT already landed the rows. The Bootstrap CLI adapter at
+  `pkg/services/system_initialization/transports/cli` must stay registered under
+  destination `system_initialization` in the same shared manifests; prove
+  registration with `transports/cli/manifest_registration_test.go` rather than
+  re-editing manifests when CLI-BOOT already landed the rows. Bare root/help, invalid commands,
   and `you init` do not activate system initialization: `you init` owns only the
   atomic provider/model settings update. The retired `you config init` command,
   its CLI renderer, and installer invocation must remain absent. Root-built
@@ -1637,8 +1663,9 @@ response-stream output.
   operator-default resolution and named `@you/goal` mock-worker runs; invalid-goal
   process exit status and unrelated invalid-topology guidance are asserted in
   `tests/functional/acceptance/invalid_quiet_outcomes_test.go`, while terminal
-  invocation failure exit status is asserted in
-  `tests/functional/acceptance/output_outcomes_test.go`. Presentation bytes and
+  invocation failure stderr diagnostics, non-zero exit status, and absence of a
+  false primary result on stdout are asserted in
+  `tests/functional/transport/cli/process/stdout_stderr_test.go`. Presentation bytes and
   event shapes are intentionally owned by the raw Factory-run suites. Local-model
   invoke and goal-repeat customer outcomes are asserted in
   `tests/functional/acceptance/invoke_repeat_subagent_outcomes_test.go` via

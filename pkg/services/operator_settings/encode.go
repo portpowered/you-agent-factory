@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
-	"path/filepath"
 	"strings"
 	"sync"
 )
@@ -35,7 +33,15 @@ type ConfigDocumentService struct {
 	Providers       ProviderCatalog
 	Decoder         ConfigDecoder
 	Encoder         ConfigEncoder
+	DocumentOwner   DocumentOwner
 	PersistenceLock sync.Locker
+}
+
+func (service ConfigDocumentService) resolvedDocumentOwner() (DocumentOwner, error) {
+	if service.DocumentOwner != nil {
+		return service.DocumentOwner, nil
+	}
+	return newDocumentOwnerFromConstructor(service)
 }
 
 // ErrProviderModelInputCanceled is returned by a prompt when the operator
@@ -54,21 +60,15 @@ func (service ConfigDocumentService) Load(path string) (ConfigDocument, error) {
 }
 
 func (service ConfigDocumentService) load(path string) (ConfigDocument, error) {
-	if service.Files == nil {
-		return ConfigDocument{}, fmt.Errorf("operator config filesystem is required")
-	}
-	data, err := service.Files.ReadFile(path)
+	owner, err := service.resolvedDocumentOwner()
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return emptyConfigDocument(), nil
-		}
-		return ConfigDocument{}, fmt.Errorf("read operator config %s: %w", path, err)
+		return ConfigDocument{}, err
 	}
-	document, err := service.Parse(data)
+	result, err := owner.LoadDocument(LoadDocumentRequest{Path: path})
 	if err != nil {
-		return ConfigDocument{}, fmt.Errorf("parse operator config %s: %w", path, err)
+		return ConfigDocument{}, err
 	}
-	return document, nil
+	return configDocumentFromDocument(result.Document), nil
 }
 
 // Parse validates bytes through the injected canonical global-config codec.
@@ -103,22 +103,18 @@ func (service ConfigDocumentService) MergeProviderModelDefaults(
 	document ConfigDocument,
 	update ProviderModelUpdate,
 ) (ConfigDocument, error) {
-	validatedUpdate, err := service.validateProviderModelUpdate(update)
+	owner, err := service.resolvedDocumentOwner()
 	if err != nil {
 		return ConfigDocument{}, err
 	}
-	config := document.FileConfig()
-	if validatedUpdate.Provider != nil {
-		config.Defaults.WorkerModelProvider = *validatedUpdate.Provider
-	}
-	if validatedUpdate.Model != nil {
-		config.Defaults.WorkerModel = strings.TrimSpace(*validatedUpdate.Model)
-	}
-	config, err = config.Normalize()
+	merged, err := owner.MergeDocumentProviderModel(
+		documentFromConfigDocument(document),
+		documentProviderModelUpdateFromProviderModelUpdate(update),
+	)
 	if err != nil {
 		return ConfigDocument{}, err
 	}
-	return ConfigDocument{config: config}, nil
+	return configDocumentFromDocument(merged), nil
 }
 
 // ConfigureProviderModel applies pre-supplied values through the complete
@@ -137,24 +133,24 @@ func (service ConfigDocumentService) ConfigureProviderModel(
 	service.PersistenceLock.Lock()
 	defer service.PersistenceLock.Unlock()
 
-	document, err := service.load(path)
+	if err := operationContextError(ctx); err != nil {
+		return ConfigDocument{}, err
+	}
+	owner, err := service.resolvedDocumentOwner()
+	if err != nil {
+		return ConfigDocument{}, err
+	}
+	result, err := owner.ApplyDocumentUpdate(ApplyDocumentUpdateRequest{
+		Path:          path,
+		ProviderModel: documentProviderModelUpdateFromProviderModelUpdate(update),
+	})
 	if err != nil {
 		return ConfigDocument{}, err
 	}
 	if err := operationContextError(ctx); err != nil {
 		return ConfigDocument{}, err
 	}
-	candidate, err := service.MergeProviderModelDefaults(document, update)
-	if err != nil {
-		return ConfigDocument{}, err
-	}
-	if err := operationContextError(ctx); err != nil {
-		return ConfigDocument{}, err
-	}
-	if err := service.persistLocked(ctx, path, candidate); err != nil {
-		return ConfigDocument{}, err
-	}
-	return candidate, nil
+	return configDocumentFromDocument(result.Document), nil
 }
 
 // ConfigureProviderModelPrompted acquires values through a write-free prompt,
@@ -201,26 +197,6 @@ func operationContextError(ctx context.Context) error {
 	return nil
 }
 
-func (service ConfigDocumentService) validateProviderModelUpdate(update ProviderModelUpdate) (ProviderModelUpdate, error) {
-	if update.Provider == nil {
-		return update, nil
-	}
-	provider := strings.TrimSpace(*update.Provider)
-	if provider == "" {
-		return ProviderModelUpdate{}, fmt.Errorf("worker model provider is required")
-	}
-	if service.Providers == nil {
-		return ProviderModelUpdate{}, fmt.Errorf("operator provider catalog is required")
-	}
-	canonical, ok := service.Providers(provider)
-	canonical = strings.TrimSpace(canonical)
-	if !ok || canonical == "" {
-		return ProviderModelUpdate{}, fmt.Errorf("unsupported worker model provider %q", provider)
-	}
-	update.Provider = &canonical
-	return update, nil
-}
-
 // Marshal encodes the complete validated document as JSON.
 func (service ConfigDocumentService) Marshal(document ConfigDocument) ([]byte, error) {
 	if service.Encoder == nil {
@@ -251,85 +227,14 @@ func (service ConfigDocumentService) Persist(ctx context.Context, path string, d
 	}
 	service.PersistenceLock.Lock()
 	defer service.PersistenceLock.Unlock()
-	return service.persistLocked(ctx, path, document)
-}
-
-func (service ConfigDocumentService) persistLocked(ctx context.Context, path string, document ConfigDocument) error {
-	if ctx == nil {
-		return fmt.Errorf("operator config context is required")
-	}
-	if service.Files == nil {
-		return fmt.Errorf("operator config filesystem is required")
-	}
-	if service.CreateTemp == nil {
-		return fmt.Errorf("operator config temporary-file creator is required")
-	}
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return fmt.Errorf("operator config path is required")
-	}
-	if err := ctx.Err(); err != nil {
-		return fmt.Errorf("persist operator config: %w", err)
-	}
-	data, err := service.Marshal(document)
+	owner, err := service.resolvedDocumentOwner()
 	if err != nil {
 		return err
 	}
-	if err := ctx.Err(); err != nil {
-		return fmt.Errorf("persist operator config: %w", err)
-	}
-
-	dir := filepath.Dir(path)
-	if err := service.Files.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("create operator config directory %q: %w", dir, err)
-	}
-	tmp, err := service.CreateTemp(dir, filepath.Base(path)+".*.tmp")
-	if err != nil {
-		return fmt.Errorf("create operator config temp file: %w", err)
-	}
-	return service.commitTemporaryFile(ctx, tmp, path, data)
-}
-
-func (service ConfigDocumentService) commitTemporaryFile(
-	ctx context.Context,
-	tmp TemporaryFile,
-	path string,
-	data []byte,
-) error {
-	tmpPath := tmp.Name()
-	committed := false
-	defer func() {
-		if !committed {
-			_ = service.Files.Remove(tmpPath)
-		}
-	}()
-
-	written, err := tmp.Write(data)
-	if err == nil && written != len(data) {
-		err = io.ErrShortWrite
-	}
-	if err != nil {
-		_ = tmp.Close()
-		return fmt.Errorf("write operator config temp file: %w", err)
-	}
-	if err := tmp.Sync(); err != nil {
-		_ = tmp.Close()
-		return fmt.Errorf("sync operator config temp file: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("close operator config temp file: %w", err)
-	}
-	if err := service.Files.Chmod(tmpPath, 0o600); err != nil {
-		return fmt.Errorf("set operator config temp file permissions: %w", err)
-	}
-	if err := ctx.Err(); err != nil {
-		return fmt.Errorf("persist operator config before commit: %w", err)
-	}
-	if err := service.Files.Rename(tmpPath, path); err != nil {
-		return fmt.Errorf("replace operator config with temp file: %w", err)
-	}
-	committed = true
-	return nil
+	return owner.PersistDocument(ctx, PersistDocumentRequest{
+		Path:     path,
+		Document: documentFromConfigDocument(document),
+	})
 }
 
 func emptyConfigDocument() ConfigDocument {

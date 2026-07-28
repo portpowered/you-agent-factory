@@ -14,6 +14,7 @@ import (
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionscli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
+	factoryruntimecli "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -433,6 +434,18 @@ func TestNewCommandFactoryDoesNotInstallTransportDefaults(t *testing.T) {
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
+func TestNewCommandFactoryPreservesInjectedRuntimeCLIAdapter(t *testing.T) {
+	t.Parallel()
+
+	adapter := factoryruntimecli.BindService(factoryruntimecli.Config{})
+	factory := NewCommandFactory(CommandOperations{
+		RunDefaults: runcli.RunConfig{RuntimeCLI: adapter},
+	})
+	if factory.runDefaults.RuntimeCLI == nil {
+		t.Fatal("injected Runtime CLI adapter is missing from composed run defaults")
+	}
+}
+
 func TestNewCommandFactoryPreservesInjectedOperations(t *testing.T) {
 	t.Parallel()
 
