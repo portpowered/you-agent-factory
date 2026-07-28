@@ -966,7 +966,8 @@ response-stream output.
   points until DEL-SET deletes the path; `wire/servicewire_import_boundary_test.go`
   fails if production packages outside the owner reintroduce servicewire imports.
   Fold-preservation behavioral proofs live in `wire/behavioral_preservation_test.go`
-  and construct exclusively through `operator_settings/wire` for document load/update,
+  and `wire/legacy_packages_behavior_preservation_test.go`; they construct
+  exclusively through `operator_settings/wire` for document load/update,
   identity scope preservation, resolve-effective, and defaults-resolution-from-home.
 - Operator Settings top-level directory inventory for INV-SET-TOPLEVEL lives in
   `docs/internal/projects/packaged-service-structure/operator-settings-top-level-inventory.json`
