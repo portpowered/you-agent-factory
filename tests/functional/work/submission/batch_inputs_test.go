@@ -20,6 +20,7 @@ import (
 
 const (
 	batchInputsWorkType = "task"
+	batchInputsAltWorkType = "review"
 
 	batchInputsInlineRequestID = "work-batch-inputs-inline"
 	batchInputsInlineWorkName  = "inline-shape-task"
@@ -28,7 +29,13 @@ const (
 	batchInputsFileWorkName  = "file-shape-task"
 
 	batchInputsStdinRequestID = "work-batch-inputs-stdin"
-	batchInputsStdinWorkName    = "stdin-shape-task"
+	batchInputsStdinWorkName  = "stdin-shape-task"
+
+	batchInputsDefaultTypeRequestID = "work-batch-inputs-default-type"
+	batchInputsDefaultTypeWorkName  = "default-type-task"
+
+	batchInputsExplicitTypeRequestID = "work-batch-inputs-explicit-type"
+	batchInputsExplicitTypeWorkName  = "explicit-type-review"
 )
 
 // TestWorkBatchAcceptsInlineFileAndStdinShapes proves the public Work Request
@@ -100,6 +107,68 @@ func TestWorkBatchAcceptsInlineFileAndStdinShapes(t *testing.T) {
 	})
 }
 
+// TestWorkBatchSelectsDefaultAndExplicitWorkTypes proves public Work Request
+// batch ingress materializes the Factory default work type when a batch work
+// entry omits workTypeName and honors an explicit workTypeName when provided.
+func TestWorkBatchSelectsDefaultAndExplicitWorkTypes(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow work batch work-type selection sweep")
+	}
+
+	factoryDir := support.ScaffoldFactory(t, batchWorkTypeSelectionFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:     factoryDir,
+		UseMockWorkers: true,
+	})
+	defer server.Stop(t)
+
+	baseURL := server.URL()
+	binaryPath := buildYouCLIBinary(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	t.Run("default", func(t *testing.T) {
+		batchJSON := fmt.Sprintf(
+			`{"requestId":%q,"type":"FACTORY_REQUEST_BATCH","works":[{"name":%q,"payload":{"title":"Default work type selection"}}]}`,
+			batchInputsDefaultTypeRequestID,
+			batchInputsDefaultTypeWorkName,
+		)
+		output, err := runYouSubmitBatch(ctx, binaryPath, factoryDir, baseURL, batchJSON, nil)
+		if err != nil {
+			t.Fatalf("you submit batch default work type: %v\noutput:\n%s", err, output)
+		}
+		submitted := decodeBatchSubmitJSON(t, output)
+		assertBatchWorkListedWithWorkType(
+			t,
+			baseURL,
+			batchInputsDefaultTypeWorkName,
+			submitted.Works[0].WorkID,
+			batchInputsWorkType,
+		)
+	})
+
+	t.Run("explicit", func(t *testing.T) {
+		batchJSON := fmt.Sprintf(
+			`{"requestId":%q,"type":"FACTORY_REQUEST_BATCH","works":[{"name":%q,"workTypeName":%q,"payload":{"title":"Explicit work type selection"}}]}`,
+			batchInputsExplicitTypeRequestID,
+			batchInputsExplicitTypeWorkName,
+			batchInputsAltWorkType,
+		)
+		output, err := runYouSubmitBatch(ctx, binaryPath, factoryDir, baseURL, batchJSON, nil)
+		if err != nil {
+			t.Fatalf("you submit batch explicit work type: %v\noutput:\n%s", err, output)
+		}
+		submitted := decodeBatchSubmitJSON(t, output)
+		assertBatchWorkListedWithWorkType(
+			t,
+			baseURL,
+			batchInputsExplicitTypeWorkName,
+			submitted.Works[0].WorkID,
+			batchInputsAltWorkType,
+		)
+	})
+}
+
 type batchInputsSubmitJSON struct {
 	RequestID string `json:"requestId"`
 	TraceID   string `json:"traceId"`
@@ -110,30 +179,62 @@ type batchInputsSubmitJSON struct {
 	} `json:"works"`
 }
 
+func batchWorkTypeStates() []map[string]any {
+	return []map[string]any{
+		{"name": "init", "type": "INITIAL"},
+		{"name": "complete", "type": "TERMINAL"},
+		{"name": "failed", "type": "FAILED"},
+	}
+}
+
+func batchWorkTypeWorkstation(name, workType string) map[string]any {
+	return map[string]any{
+		"name":      name,
+		"worker":    "mock-worker",
+		"inputs":    []map[string]string{{"workType": workType, "state": "init"}},
+		"outputs":   []map[string]string{{"workType": workType, "state": "complete"}},
+		"onFailure": []map[string]string{{"workType": workType, "state": "failed"}},
+	}
+}
+
 func batchInputsFactoryConfig() map[string]any {
 	return map[string]any{
 		"name": "work-batch-inputs",
 		"workTypes": []map[string]any{
 			{
-				"name": batchInputsWorkType,
-				"states": []map[string]any{
-					{"name": "init", "type": "INITIAL"},
-					{"name": "complete", "type": "TERMINAL"},
-					{"name": "failed", "type": "FAILED"},
-				},
+				"name":   batchInputsWorkType,
+				"states": batchWorkTypeStates(),
 			},
 		},
 		"workers": []map[string]string{
 			{"name": "mock-worker"},
 		},
 		"workstations": []map[string]any{
+			batchWorkTypeWorkstation("process-task", batchInputsWorkType),
+		},
+	}
+}
+
+func batchWorkTypeSelectionFactoryConfig() map[string]any {
+	return map[string]any{
+		"name": "work-batch-work-type-selection",
+		"workTypes": []map[string]any{
 			{
-				"name":      "process-task",
-				"worker":    "mock-worker",
-				"inputs":    []map[string]string{{"workType": batchInputsWorkType, "state": "init"}},
-				"outputs":   []map[string]string{{"workType": batchInputsWorkType, "state": "complete"}},
-				"onFailure": []map[string]string{{"workType": batchInputsWorkType, "state": "failed"}},
+				"name":             batchInputsWorkType,
+				"handlingBehavior": []string{"DEFAULT"},
+				"states":           batchWorkTypeStates(),
 			},
+			{
+				"name":   batchInputsAltWorkType,
+				"states": batchWorkTypeStates(),
+			},
+		},
+		"workers": []map[string]string{
+			{"name": "mock-worker"},
+		},
+		"workstations": []map[string]any{
+			batchWorkTypeWorkstation("process-task", batchInputsWorkType),
+			batchWorkTypeWorkstation("process-review", batchInputsAltWorkType),
 		},
 	}
 }
@@ -206,9 +307,15 @@ func assertBatchSubmitAcknowledgment(t *testing.T, output []byte, requestID, wor
 
 func assertBatchWorkListedAfterSubmit(t *testing.T, baseURL, workName, workID string) {
 	t.Helper()
+	assertBatchWorkListedWithWorkType(t, baseURL, workName, workID, "")
+}
+
+func assertBatchWorkListedWithWorkType(t *testing.T, baseURL, workName, workID, workType string) {
+	t.Helper()
 
 	listed := support.ListDefaultSessionWork(t, baseURL)
-	if !listedWorkContainsNameAndID(listed, workName, workID) {
+	item, ok := findListedWorkByNameAndID(listed, workName, workID)
+	if !ok {
 		t.Fatalf(
 			"public work list missing submitted work name=%q workId=%q: %#v",
 			workName,
@@ -216,18 +323,36 @@ func assertBatchWorkListedAfterSubmit(t *testing.T, baseURL, workName, workID st
 			listed.Results,
 		)
 	}
+	if workType == "" {
+		return
+	}
+	if support.StringPointerValue(item.WorkTypeName) != workType {
+		t.Fatalf(
+			"public work list workTypeName = %q, want %q for name=%q workId=%q: %#v",
+			support.StringPointerValue(item.WorkTypeName),
+			workType,
+			workName,
+			workID,
+			item,
+		)
+	}
 }
 
-func listedWorkContainsNameAndID(listed factoryapi.ListWorkResponse, workName, workID string) bool {
+func findListedWorkByNameAndID(listed factoryapi.ListWorkResponse, workName, workID string) (factoryapi.Work, bool) {
 	for _, item := range listed.Results {
 		if item.Name != workName {
 			continue
 		}
 		if support.StringPointerValue(item.WorkId) == workID {
-			return true
+			return item, true
 		}
 	}
-	return false
+	return factoryapi.Work{}, false
+}
+
+func listedWorkContainsNameAndID(listed factoryapi.ListWorkResponse, workName, workID string) bool {
+	_, ok := findListedWorkByNameAndID(listed, workName, workID)
+	return ok
 }
 
 func bytesTrimSpace(raw []byte) []byte {
