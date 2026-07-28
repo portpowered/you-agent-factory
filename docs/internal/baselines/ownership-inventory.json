@@ -4218,12 +4218,6 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/work/wire",
-      "disposition": "retain",
-      "destination": "work",
-      "destinationKind": "owner"
-    },
-    {
       "packagePath": "pkg/services/workers",
       "disposition": "retain",
       "destination": "workers",
