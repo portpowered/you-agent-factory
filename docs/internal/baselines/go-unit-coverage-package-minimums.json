@@ -247,6 +247,10 @@
       "minimum": 88.23
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle",
+      "minimum": 76.40
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout",
       "exception": {
         "kind": "measurement",
