@@ -115,6 +115,13 @@ Use this map when changing the public REST contract.
   `package-structure-baseline.json`, `ownership-inventory.json`, and
   `package-target-manifest.json` rows together and remove deleted paths from
   `workMoveRules` / `nestedOwnerMoveRules["work"]`.
+- DEL-WORK story 004 (`pss-del-work-004`) lowers unit and functional coverage
+  baseline rows for deleted transitional `service/` and `stateaccessrecordings/`
+  import paths only. Observable coverage gate proofs live in
+  `pkg/services/work/del_work_baseline_gate_test.go`; burn down
+  `go-unit-coverage-package-minimums.json` and
+  `go-functional-coverage-package-minimums.json` rows together without touching
+  other Work package coverage floors.
 - Factory Runtime HTTP decoding, generated-contract mapping, Runtime root
   invocation, typed error mapping, and cancel/timeout handling live in
   `pkg/services/factory_runtime/transports/http`. The adapter consumes the

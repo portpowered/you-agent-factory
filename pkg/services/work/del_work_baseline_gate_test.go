@@ -10,14 +10,14 @@ import (
 )
 
 const (
-	deletedTransitionalWorkServicePackagePath           = "pkg/services/work/service"
+	deletedTransitionalWorkServicePackagePath            = "pkg/services/work/service"
 	deletedTransitionalStateAccessRecordingsPackagePath = "pkg/services/work/stateaccessrecordings"
 )
 
-// DEL-WORK story 003 lowers structure, ownership, and package-target baselines
-// for the deleted transitional service/ and stateaccessrecordings/ packages.
-// Each subtest proves one ledger no longer lists a deleted path as retain or
-// move debt. Coverage baseline burn-down is sealed in story 004.
+// DEL-WORK stories 003 and 004 lower structure, ownership, package-target, and
+// coverage baselines for the deleted transitional service/ and
+// stateaccessrecordings/ packages. Each subtest proves one ledger no longer
+// lists a deleted path as retain or move debt.
 
 func TestDelWorkBaselineGate_DeletedTransitionalPackagesBaselinesRemoved(t *testing.T) {
 	t.Parallel()
@@ -99,4 +99,40 @@ func TestDelWorkBaselineGate_DeletedTransitionalPackagesBaselinesRemoved(t *test
 			}
 		}
 	})
+
+	t.Run("unit_coverage_minimums_omit_deleted_transitional_packages", func(t *testing.T) {
+		t.Parallel()
+		assertCoverageMinimumsOmitDeletedTransitionalPackages(t, root, "go-unit-coverage-package-minimums.json")
+	})
+
+	t.Run("functional_coverage_minimums_omit_deleted_transitional_packages", func(t *testing.T) {
+		t.Parallel()
+		assertCoverageMinimumsOmitDeletedTransitionalPackages(t, root, "go-functional-coverage-package-minimums.json")
+	})
+}
+
+func assertCoverageMinimumsOmitDeletedTransitionalPackages(t *testing.T, root, fileName string) {
+	t.Helper()
+
+	path := filepath.Join(root, "docs", "internal", "baselines", fileName)
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%q) error = %v", path, err)
+	}
+	var baseline struct {
+		Packages []struct {
+			Package string `json:"package"`
+		} `json:"packages"`
+	}
+	if err := json.Unmarshal(payload, &baseline); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	for _, row := range baseline.Packages {
+		switch row.Package {
+		case deletedTransitionalWorkServiceImportPath:
+			t.Fatalf("%s still lists deleted transitional package %q", fileName, deletedTransitionalWorkServiceImportPath)
+		case deletedTransitionalStateAccessRecordingsImportPath:
+			t.Fatalf("%s still lists deleted transitional package %q", fileName, deletedTransitionalStateAccessRecordingsImportPath)
+		}
+	}
 }

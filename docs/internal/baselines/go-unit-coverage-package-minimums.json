@@ -2127,14 +2127,6 @@
       "minimum": 100.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/work/service",
-      "minimum": 33.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/work/stateaccessrecordings",
-      "minimum": 100.00
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/transports/cli",
       "minimum": 70.83
     },
