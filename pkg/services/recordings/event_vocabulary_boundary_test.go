@@ -13,7 +13,7 @@ const (
 )
 
 var eventVocabularyConsumerPackages = []string{
-	"github.com/portpowered/infinite-you/pkg/services/recordings/events/kinds",
+	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/events/kinds",
 }
 
 var worldStateVocabularyConsumerPackages = []string{

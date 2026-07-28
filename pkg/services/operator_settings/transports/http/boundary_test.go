@@ -25,6 +25,9 @@ func TestPackageBoundary_DoesNotImportOperatorSettingsInternal(t *testing.T) {
 	forbiddenPrefixes := []string{
 		"github.com/portpowered/infinite-you/pkg/services/operator_settings/internal",
 		"github.com/portpowered/infinite-you/pkg/services/operator_settings/servicewire",
+		"github.com/portpowered/infinite-you/pkg/services/operator_settings/identityinventory",
+		"github.com/portpowered/infinite-you/pkg/services/operator_settings/testlink",
+		"github.com/portpowered/infinite-you/pkg/services/operator_settings/testproviders",
 	}
 	for _, dep := range strings.Fields(string(output)) {
 		for _, forbidden := range forbiddenPrefixes {

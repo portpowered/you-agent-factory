@@ -966,7 +966,8 @@ response-stream output.
   points until DEL-SET deletes the path; `wire/servicewire_import_boundary_test.go`
   fails if production packages outside the owner reintroduce servicewire imports.
   Fold-preservation behavioral proofs live in `wire/behavioral_preservation_test.go`
-  and construct exclusively through `operator_settings/wire` for document load/update,
+  and `wire/legacy_packages_behavior_preservation_test.go`; they construct
+  exclusively through `operator_settings/wire` for document load/update,
   identity scope preservation, resolve-effective, and defaults-resolution-from-home.
 - Operator Settings top-level directory inventory for INV-SET-TOPLEVEL lives in
   `docs/internal/projects/packaged-service-structure/operator-settings-top-level-inventory.json`
@@ -1083,9 +1084,9 @@ response-stream output.
   `docs/internal/baselines/ownership-inventory.json`, and both
   `go-*-coverage-package-minimums.json` baselines; prove registration with
   `wire/manifest_registration_test.go` rather than re-editing manifests when
-  IMP-BOOT already landed the rows. Bootstrap composition at
-  `pkg/wire/profiles.go` must construct the packaged ensure-installer for
-  `provideSystemInitializationService` through
+  IMP-BOOT already landed the rows.   Bootstrap composition at
+  `pkg/wire/profiles.go` must construct packaged install/scaffold behavior through
+  `factorydefinitionsservice.NewPackagedFactoryInstallationService` and
   `factorydefinitionsservice.NewPackagedFactoryInstaller`, not
   `factory_definitions/packagedinstallation`; composed initialize proofs live in
   `pkg/wire/system_initialization_composition_test.go`. Focused initialize/scaffold
@@ -2106,8 +2107,22 @@ response-stream output.
 - `pkg/transports/cli/run/packaged_tts_invocation.go` logs named-factory resolution context at
   the CLI boundary without recording packaged-factory metrics or logging submitted
   text or generated artifact bodies.
-- `pkg/services/factory_definitions/packages/goal/` owns packaged `@you/goal` factory metadata
-  constants (`PackagedFactoryName`, `PackagedInvokeWorkstationName`).
+- `pkg/services/factory_definitions/internal/services/distribution/goal/` owns packaged
+  `@you/goal` asset/materialize/metadata modules used by distribute install/catalog
+  paths. It must not import `factory_definitions/decisionenvelope` or define
+  decision-envelope interpretation symbols; boundary proof lives in
+  `internal/decision_envelope_ownership_boundary_test.go`.
+- `pkg/services/factory_definitions/packages/goal/` remains a transitional shim for
+  folded asset/metadata modules and for `decision_envelope.go`, which still
+  re-exports `factory_definitions/decisionenvelope` until
+  `CLN-DEF-FOLD-INVOCATION-POLICY` cutover. This distribution fold does not claim
+  invocation-policy or decision-envelope ownership complete.
+- `pkg/services/factory_definitions/decisionenvelope/` implements packaged goal
+  decision-envelope interpretation behind the Definitions root contract and is
+  not absorbed into distribution ownership by this packet.
+- `pkg/services/factory_definitions/packages/goal/` transitional metadata constants
+  (`PackagedFactoryName`, `PackagedInvokeWorkstationName`) delegate to
+  distribution-owned goal modules.
 - `packages/packaged-factories/generated/manifest.json` is the single
   registration point for shipped named Factories. Regeneration derives it from
   authored Factory directories, and normal initializer startup materializes every

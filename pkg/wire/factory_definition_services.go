@@ -27,7 +27,7 @@ import (
 	factorydefaultscaffold "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/defaultscaffold"
 	factoryworkpropagation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workpropagation"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingreplay "github.com/portpowered/infinite-you/pkg/services/recordings/replay"
+	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
 	wirefactorydefinitions "github.com/portpowered/infinite-you/pkg/wire/factorydefinitions"
@@ -348,9 +348,10 @@ func provideReplayArtifactStorage() platformreplay.Storage {
 }
 
 func provideReplayArtifactLoader(storage platformreplay.Storage) recordings.ReplayArtifactLoader {
-	return func(path string) (*factorydefinitions.ReplayArtifact, error) {
-		return recordingreplay.Load(storage, path, wirefactorydefinitions.FactorySnapshotJSONDecoder())
-	}
+	return recordingswire.NewReplayArtifactLoader(
+		storage,
+		wirefactorydefinitions.FactorySnapshotJSONDecoder(),
+	)
 }
 
 func provideReplayRuntimeConfigDecoder() factorydefinitions.ReplayRuntimeConfigDecoder {

@@ -32,7 +32,6 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorynamedfactories "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedfactories"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packagedinstallation"
 	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -378,7 +377,7 @@ func providePackagedFactoryInstallation(
 	persistence factorydefinitions.Persistence,
 	fileSystem factorydefinitions.PackagedInstallationFileSystem,
 ) factorydefinitions.PackagedFactoryInstallationOperations {
-	installer := packagedinstallation.New(persistence, fileSystem)
+	installer := factorydefinitionsservice.NewPackagedFactoryInstallationService(persistence, fileSystem)
 	return factorydefinitions.PackagedFactoryInstallationOperations{
 		Install: installer.InstallPackagedFactory,
 	}

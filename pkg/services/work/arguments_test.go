@@ -166,6 +166,24 @@ func TestNormalizeArguments_SignatureRejectsMissingRequiredInput(t *testing.T) {
 	assertArgumentErrorCode(t, err, ArgumentErrorCodeMissingRequiredInput)
 }
 
+func TestQualifyInvocationArgumentErrorAddsFactoryNameToMissingRequiredInputDiagnostic(t *testing.T) {
+	t.Parallel()
+
+	err := QualifyInvocationArgumentError(&ArgumentError{
+		Code:      ArgumentErrorCodeMissingRequiredInput,
+		Message:   `required invocation parameter "topic" is missing`,
+		Parameter: "topic",
+	}, "@you/deep-research")
+	var argumentErr *ArgumentError
+	if !errors.As(err, &argumentErr) {
+		t.Fatalf("error = %T, want *ArgumentError", err)
+	}
+	want := `required invocation parameter "topic" is missing (factory "@you/deep-research")`
+	if argumentErr.Message != want {
+		t.Fatalf("Message = %q, want %q", argumentErr.Message, want)
+	}
+}
+
 func TestNormalizeArguments_SignatureRejectsStringValidationMismatch(t *testing.T) {
 	_, err := NormalizeArguments(NormalizeArgumentsInput{
 		Signature: signatureConfig(namedParameter("count", "", nil, false, typeHintNumberString, "")),

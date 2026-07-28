@@ -8,7 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/recordings/replay"
+	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/replay"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -21,8 +21,8 @@ import (
 func TestNewReplayExecutionConstructsWorkersRootPorts(t *testing.T) {
 	t.Parallel()
 
-	fixturePath := filepath.Join("..", "replay", "testdata", "inference-events.replay.json")
-	artifact, err := replay.Load(
+	fixturePath := filepath.Join("services", "replay", "replay", "testdata", "inference-events.replay.json")
+	artifact, err := replayimpl.Load(
 		platformreplay.NewLocal(runtime.GOOS),
 		filepath.FromSlash(fixturePath),
 		workersRootBoundaryFactorySnapshotDecoder,

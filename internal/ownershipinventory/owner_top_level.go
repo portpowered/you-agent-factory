@@ -35,7 +35,7 @@ var productOwnerTopLevelSpecs = map[string]OwnerTopLevelSpec{
 	},
 	"factory_definitions": {
 		Owner:          "factory_definitions",
-		ExpectedRetain: []string{"internal", "namevalue", "transports", "wire"},
+		ExpectedRetain: []string{"internal", "transports", "wire"},
 		Unexpected: []string{
 			"authoredlayout",
 			"clonetests",
@@ -47,6 +47,7 @@ var productOwnerTopLevelSpecs = map[string]OwnerTopLevelSpec{
 			"invocationworktype",
 			"loadedsource",
 			"loading",
+			"namevalue",
 			"namedfactories",
 			"namedpaths",
 			"packagedinstallation",
@@ -72,8 +73,6 @@ var productOwnerTopLevelSpecs = map[string]OwnerTopLevelSpec{
 		ExpectedRetain: []string{"internal", "transports", "wire"},
 		Unexpected: []string{
 			"build",
-			"checkpointstore",
-			"checkpointsummary",
 			"context",
 			"definitionmapping",
 			"engine",
@@ -86,7 +85,6 @@ var productOwnerTopLevelSpecs = map[string]OwnerTopLevelSpec{
 			"runtime",
 			"runtimecontract",
 			"scheduler",
-			"service",
 			"state",
 			"subsystems",
 			"testdata",
