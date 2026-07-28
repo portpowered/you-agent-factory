@@ -2021,11 +2021,12 @@ response-stream output.
   (`TestPackagedFactoryInvokedByCLICanBeInspectedByAPI`). Drive the built CLI
   through `you run --with-server --json` on a `support.NewProcessAPIServer`
   harness, poll `GET /factory-sessions/~default`, `GET /status`, and
-  `GET /factory-sessions/~default/work` while the run-scoped server is live,
-  and compare the returned session/status facts with the CLI `InvocationResponse`
-  identity and primary-result fields. Do not use `support.WaitForTerminalStatus`
-  for packaged goal one-shot invocations because `/status` categories may stay
-  empty after completion.
+  `GET /factory-sessions/~default/work` while the run-scoped server is live
+  until goal:complete work, terminal/runtime activity, or correlated factory events appear;
+  refresh the snapshot after CLI completion when the server is still live; collect
+  default-session factory events while the run-scoped server is live; and compare
+  the returned session/status/work/event facts with the CLI `InvocationResponse`
+  identity and primary-result fields using fail-closed assertions.
 - Packaged `@you/goal` CLI/API primary-outcome shape agreement lives in the same
   cross cell (`TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree`). Compare
   independent API `POST /factory-sessions/~default/invocations` responses with
