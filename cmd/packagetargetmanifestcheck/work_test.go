@@ -137,6 +137,49 @@ func TestWorkTopLevelUnexpectedCoveredByMoveRules(t *testing.T) {
 	}
 }
 
+func TestWorkUnexpectedSiblingMoveDestinationsLocked(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		path            string
+		wantDestination string
+	}{
+		{
+			path:            "pkg/services/work/service",
+			wantDestination: "work/internal",
+		},
+		{
+			path:            "pkg/services/work/stateaccessrecordings",
+			wantDestination: "work/internal/services/state_access",
+		},
+		{
+			path:            "pkg/services/work/testdata",
+			wantDestination: "work/internal",
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.path, func(t *testing.T) {
+			t.Parallel()
+
+			got, ok := mapCommittedOwnerPackage(tc.path)
+			if !ok {
+				t.Fatalf("mapCommittedOwnerPackage(%q) ok = false", tc.path)
+			}
+			if mappingIsRetainToOwnerRoot(got, "work") {
+				t.Fatalf("mapCommittedOwnerPackage(%q) regressed to retain→work", tc.path)
+			}
+			if got.Disposition != DispositionMove {
+				t.Fatalf("mapCommittedOwnerPackage(%q) disposition = %q, want move", tc.path, got.Disposition)
+			}
+			if got.Destination != tc.wantDestination {
+				t.Fatalf("mapCommittedOwnerPackage(%q) destination = %q, want %q", tc.path, got.Destination, tc.wantDestination)
+			}
+		})
+	}
+}
+
 func TestWorkInventoryRejectsRetainToOwnerRoot(t *testing.T) {
 	t.Parallel()
 

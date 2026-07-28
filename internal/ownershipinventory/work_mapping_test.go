@@ -142,6 +142,52 @@ func TestWorkTopLevelUnexpectedMoveDestinationsMatchInventory(t *testing.T) {
 	}
 }
 
+func TestWorkUnexpectedSiblingMoveDestinationsLocked(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		path          string
+		wantSuccessor string
+	}{
+		{
+			path:          "pkg/services/work/service",
+			wantSuccessor: "pkg/services/work/internal",
+		},
+		{
+			path:          "pkg/services/work/stateaccessrecordings",
+			wantSuccessor: "pkg/services/work/internal/services/state_access",
+		},
+		{
+			path:          "pkg/services/work/testdata",
+			wantSuccessor: "pkg/services/work/internal",
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.path, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := ownershipinventory.MapPackage(tc.path)
+			if err != nil {
+				t.Fatalf("MapPackage(%q) error = %v", tc.path, err)
+			}
+			if got.Disposition == ownershipinventory.DispositionRetain && got.Destination == "work" {
+				t.Fatalf("MapPackage(%q) regressed to retain→work", tc.path)
+			}
+			if got.Disposition != ownershipinventory.DispositionMove {
+				t.Fatalf("MapPackage(%q) disposition = %q, want move", tc.path, got.Disposition)
+			}
+			if got.Successor != tc.wantSuccessor {
+				t.Fatalf("MapPackage(%q) successor = %q, want %q", tc.path, got.Successor, tc.wantSuccessor)
+			}
+			if got.DeletionCondition == "" {
+				t.Fatalf("MapPackage(%q) missing deletionCondition", tc.path)
+			}
+		})
+	}
+}
+
 func TestWorkInventoryRejectsRetainToOwnerRoot(t *testing.T) {
 	t.Parallel()
 

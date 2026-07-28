@@ -107,6 +107,35 @@ func TestWorkExcessRootContractFoldDestinations(t *testing.T) {
 	}
 }
 
+func TestWorkExcessRootContractFoldDestinationsRejectOwnerRootRetain(t *testing.T) {
+	t.Parallel()
+
+	const ownerRoot = "pkg/services/work"
+	for _, target := range ownershipinventory.WorkExcessRootContractFolds {
+		if target.Destination == ownerRoot {
+			t.Fatalf("cluster %q folds to owner root retain destination", target.Cluster)
+		}
+		if !ownershipinventory.IsWorkPrivateRootContractFoldDestination(target.Destination) {
+			t.Fatalf("cluster %q destination = %q, want private fold path under %s/internal", target.Cluster, target.Destination, ownerRoot)
+		}
+		for _, fileName := range target.Files {
+			kind, foldTarget, ok := ownershipinventory.ClassifyWorkRootContractFile(fileName)
+			if !ok {
+				t.Fatalf("ClassifyWorkRootContractFile(%q) ok = false", fileName)
+			}
+			if kind != "excess_fold" {
+				t.Fatalf("ClassifyWorkRootContractFile(%q) = %q, want excess_fold", fileName, kind)
+			}
+			if foldTarget.Destination == ownerRoot {
+				t.Fatalf("excess fold file %q regressed to owner root retain destination", fileName)
+			}
+			if !ownershipinventory.IsWorkPrivateRootContractFoldDestination(foldTarget.Destination) {
+				t.Fatalf("excess fold file %q destination = %q, want private fold path under %s/internal", fileName, foldTarget.Destination, ownerRoot)
+			}
+		}
+	}
+}
+
 func TestWorkRootContractClassificationPartitionsLiveTree(t *testing.T) {
 	t.Parallel()
 
