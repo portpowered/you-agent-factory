@@ -1,16 +1,16 @@
-package checkpointstore_test
+package javascriptstore_test
 
 import (
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/checkpointstore"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptstore"
 )
 
 func TestStoreKeepsRecordsIsolatedAndSorted(t *testing.T) {
 	t.Parallel()
 
-	store := checkpointstore.New()
+	store := javascriptstore.New()
 	store.Put(factorydefinitions.JavaScriptCheckpointRecord{ID: "checkpoint-b"})
 	store.Put(factorydefinitions.JavaScriptCheckpointRecord{ID: "checkpoint-a"})
 	store.Put(factorydefinitions.JavaScriptCheckpointRecord{})

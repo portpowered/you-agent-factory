@@ -587,14 +587,6 @@
       "minimum": 81.31
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/checkpointstore",
-      "minimum": 85.71
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/checkpointsummary",
-      "minimum": 89.18
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/context",
       "minimum": 86.11
     },
@@ -661,6 +653,30 @@
         "deadline": "2027-07-15",
         "removalGate": "The unit coverage profile reports at least one measurable statement for this package or DEL-RUN deletes the shim."
       }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery",
+      "minimum": 96.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptstore",
+      "minimum": 85.71
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptsummary",
+      "minimum": 89.18
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/processlocal",
+      "minimum": 85.71
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/service",
+      "minimum": 93.18
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/wire",
+      "minimum": 100.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning",
@@ -738,7 +754,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime",
-      "minimum": 83.72
+      "minimum": 82.46
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime/buffers",

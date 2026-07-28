@@ -1,6 +1,6 @@
-// Package checkpointstore implements Factory Runtime's JavaScript checkpoint
-// storage contract. The composition root selects this implementation.
-package checkpointstore
+// Package javascriptstore implements Factory Runtime's JavaScript checkpoint
+// storage contract inside the parent-private checkpoint recovery layout.
+package javascriptstore
 
 import (
 	"sort"

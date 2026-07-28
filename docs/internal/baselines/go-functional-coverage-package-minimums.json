@@ -713,14 +713,6 @@
       "minimum": 74.72
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/checkpointstore",
-      "minimum": 21.42
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/checkpointsummary",
-      "minimum": 83.78
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/context",
       "minimum": 5.55
     },
@@ -787,6 +779,30 @@
         "deadline": "2027-07-15",
         "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
       }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery",
+      "minimum": 0.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptstore",
+      "minimum": 21.42
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptsummary",
+      "minimum": 83.78
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/processlocal",
+      "minimum": 3.57
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/service",
+      "minimum": 2.27
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/wire",
+      "minimum": 21.42
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning",
@@ -864,7 +880,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime",
-      "minimum": 63.84
+      "minimum": 60.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime/buffers",

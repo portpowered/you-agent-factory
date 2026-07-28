@@ -3190,22 +3190,6 @@
       "deletionCondition": "delete public package after IMP-RUN-instance_host private subservice cutover proof"
     },
     {
-      "packagePath": "pkg/services/factory_runtime/checkpointstore",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/checkpoint_recovery",
-      "deletionCondition": "delete public package after IMP-RUN-checkpoint_recovery private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/checkpointsummary",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/checkpoint_recovery",
-      "deletionCondition": "delete public package after IMP-RUN-checkpoint_recovery private subservice cutover proof"
-    },
-    {
       "packagePath": "pkg/services/factory_runtime/context",
       "disposition": "move",
       "destination": "factory_runtime",
@@ -3328,6 +3312,42 @@
       "destinationKind": "owner",
       "successor": "pkg/services/factory_runtime/internal",
       "deletionCondition": "delete transitional top-level package after CLN-RUN-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/checkpoint_recovery",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptstore",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptsummary",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/processlocal",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/service",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/checkpoint_recovery/wire",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/services/dispatch_planning",
