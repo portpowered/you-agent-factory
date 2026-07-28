@@ -14,6 +14,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/transports/http/apitypes"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -27,7 +28,7 @@ func startCurrentFactoryServer(t *testing.T, rootDir string) *support.Functional
 	})
 }
 
-func seedNamedFactoryRoot(t *testing.T, rootDir, name, workType string) {
+func seedNamedFactoryRoot(t *testing.T, rootDir, name, workType string) string {
 	t.Helper()
 
 	sourceDir := t.TempDir()
@@ -35,7 +36,7 @@ func seedNamedFactoryRoot(t *testing.T, rootDir, name, workType string) {
 	if err := os.WriteFile(sourcePath, functionalNamedFactoryPayloadWithWorkType(t, name, workType), 0o600); err != nil {
 		t.Fatalf("write customer Factory source %s: %v", name, err)
 	}
-	support.CreateAndActivateNamedFactoryAtRoot(t, sourceDir, rootDir, name, sourcePath)
+	return support.CreateAndActivateNamedFactoryAtRoot(t, sourceDir, rootDir, name, sourcePath)
 }
 
 func createNamedFactoryFixture(t *testing.T, rootDir, name string, payload []byte) string {
@@ -109,6 +110,64 @@ func saveCurrentFactoryForSession(t *testing.T, serverURL, sessionID, body strin
 
 func sessionFactoryURL(serverURL, sessionID string) string {
 	return serverURL + "/factory-sessions/" + url.PathEscape(sessionID) + "/factory"
+}
+
+func assertCurrentFactoryNameAndDirectory(t *testing.T, serverURL, wantName, wantDir string) {
+	t.Helper()
+
+	current := getCurrentFactory(t, serverURL)
+	if current.Name != factoryapi.FactoryName(wantName) {
+		t.Fatalf("current factory name = %q, want %q", current.Name, wantName)
+	}
+	if current.FactoryDirectory == nil || *current.FactoryDirectory != wantDir {
+		t.Fatalf("current factory directory = %#v, want %q", current.FactoryDirectory, wantDir)
+	}
+}
+
+func activateNamedPersistedFactoryOverHTTP(t *testing.T, serverURL string, payload []byte) {
+	t.Helper()
+
+	var factory factoryapi.Factory
+	if err := json.Unmarshal(payload, &factory); err != nil {
+		t.Fatalf("decode named factory API payload: %v", err)
+	}
+	// UPSERT_NAMED_AND_ACTIVATE is an optimistic-concurrency write. These
+	// fixtures are persisted before the process starts, so emulate a client
+	// editing that stored definition by submitting an advanced version.
+	factory.Version = &factoryapi.HybridLogicalTimestamp{
+		Logical:  apitypes.Int64String(1<<62 - 1),
+		Physical: time.Now().UTC().Add(time.Hour),
+	}
+	mode := factoryapi.FactorySaveModeUpsertNamedAndActivate
+	body, err := json.Marshal(factoryapi.SaveFactoryForSessionRequest{
+		Factory: factory,
+		Mode:    &mode,
+	})
+	if err != nil {
+		t.Fatalf("encode named factory activation: %v", err)
+	}
+	request, err := http.NewRequest(
+		http.MethodPut,
+		serverURL+"/factory-sessions/~default/factory",
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		t.Fatalf("build named factory activation request: %v", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("activate named factory over HTTP: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		responseBody, _ := io.ReadAll(response.Body)
+		t.Fatalf(
+			"activate named factory status = %d, want 200: %s",
+			response.StatusCode,
+			string(responseBody),
+		)
+	}
 }
 
 func getCurrentFactory(t *testing.T, serverURL string) factoryapi.Factory {
