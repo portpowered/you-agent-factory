@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -16,6 +17,8 @@ import (
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -104,6 +107,223 @@ func TestPackagedFactoryInvokedByCLICanBeInspectedByAPI(t *testing.T) {
 		inspection.listed,
 		wantPackagedGoalPrimaryResult,
 	)
+}
+
+// TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree proves packaged @you/goal
+// CLI and API invocations agree on compatible public primary-outcome facts:
+// terminal status, primary-result text on success, and stable public error codes
+// on representative empty-input, source-conflict, and unresolved-primary-result
+// failures across positional, stdin, and named-factory success paths.
+func TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow packaged factory CLI/API primary-outcome parity")
+	}
+
+	t.Run("positional success", func(t *testing.T) {
+		dir := scaffoldPackagedGoalInvocationFactory(t)
+		factoryPath := filepath.Join(dir, factorydefinitions.FactoryConfigFile)
+		mockWorkersPath := writeDefaultMockWorkersConfig(t)
+		goalText := fmt.Sprintf(
+			"functional-packaged-cross-cli-api-parity-positional-%d",
+			time.Now().UnixNano(),
+		)
+
+		apiResponse := invokePackagedGoalViaAPI(t, dir, mockWorkersPath, goalText)
+		cliResponse, _, stderr, err := runPackagedGoalInvocationCLIJSON(
+			t,
+			dir,
+			factoryPath,
+			mockWorkersPath,
+			isolatedHomeEnvironment(t.TempDir()),
+			nil,
+			goalText,
+		)
+		if err != nil {
+			t.Fatalf("CLI positional invocation: %v\nstderr:\n%s", err, stderr)
+		}
+		assertPackagedGoalCLIAPIPrimaryOutcomeParity(
+			t,
+			apiResponse,
+			cliResponse,
+			wantPackagedGoalPrimaryResult,
+		)
+	})
+
+	t.Run("stdin success", func(t *testing.T) {
+		dir := scaffoldPackagedGoalInvocationFactory(t)
+		factoryPath := filepath.Join(dir, factorydefinitions.FactoryConfigFile)
+		mockWorkersPath := writeDefaultMockWorkersConfig(t)
+		goalText := fmt.Sprintf(
+			"functional-packaged-cross-cli-api-parity-stdin-%d",
+			time.Now().UnixNano(),
+		)
+
+		apiResponse := invokePackagedGoalViaAPI(t, dir, mockWorkersPath, goalText)
+		cliResponse, _, stderr, err := runPackagedGoalInvocationCLIJSON(
+			t,
+			dir,
+			factoryPath,
+			mockWorkersPath,
+			isolatedHomeEnvironment(t.TempDir()),
+			strings.NewReader(goalText),
+		)
+		if err != nil {
+			t.Fatalf("CLI stdin invocation: %v\nstderr:\n%s", err, stderr)
+		}
+		assertPackagedGoalCLIAPIPrimaryOutcomeParity(
+			t,
+			apiResponse,
+			cliResponse,
+			wantPackagedGoalPrimaryResult,
+		)
+	})
+
+	t.Run("named factory success", func(t *testing.T) {
+		homeDir := t.TempDir()
+		factoryDir := support.InstallPackagedFactory(
+			t,
+			homeDir,
+			factorydefinitions.PackagedGoalFactoryName,
+		)
+		mockWorkersPath := writePackagedGoalMockWorkersConfig(t)
+		goalText := fmt.Sprintf(
+			"functional-packaged-cross-cli-api-parity-named-%d",
+			time.Now().UnixNano(),
+		)
+
+		apiResponse := invokePackagedGoalViaAPI(t, factoryDir, mockWorkersPath, goalText)
+		cliResponse, _, stderr, err := runPackagedGoalNamedInvocationCLIJSON(
+			t,
+			homeDir,
+			mockWorkersPath,
+			goalText,
+		)
+		if err != nil {
+			t.Fatalf("CLI named invocation: %v\nstderr:\n%s", err, stderr)
+		}
+		assertPackagedGoalCLIAPIPrimaryOutcomeParity(
+			t,
+			apiResponse,
+			cliResponse,
+			wantPackagedGoalPrimaryResult,
+		)
+	})
+
+	t.Run("empty input rejected", func(t *testing.T) {
+		dir := scaffoldPackagedGoalInvocationFactory(t)
+		factoryPath := filepath.Join(dir, factorydefinitions.FactoryConfigFile)
+		mockWorkersPath := writeDefaultMockWorkersConfig(t)
+
+		apiErr := postPackagedGoalInvocationExpectError(t, dir, mockWorkersPath, "   ")
+		if string(apiErr.Code) != "INVOCATION_INPUT_EMPTY" {
+			t.Fatalf("API error code = %q, want INVOCATION_INPUT_EMPTY", apiErr.Code)
+		}
+
+		_, _, stderr, err := runPackagedGoalInvocationCLIJSON(
+			t,
+			dir,
+			factoryPath,
+			mockWorkersPath,
+			isolatedHomeEnvironment(t.TempDir()),
+			nil,
+			"   ",
+		)
+		if err == nil {
+			t.Fatal("expected CLI empty invocation input to fail")
+		}
+		if !strings.Contains(err.Error(), "INVOCATION_INPUT_EMPTY") &&
+			!strings.Contains(stderr, "INVOCATION_INPUT_EMPTY") {
+			t.Fatalf("CLI failure = %v\nstderr = %q, want INVOCATION_INPUT_EMPTY", err, stderr)
+		}
+	})
+
+	t.Run("source conflict rejected before invocation", func(t *testing.T) {
+		dir := scaffoldPackagedGoalInvocationFactory(t)
+		factoryPath := filepath.Join(dir, factorydefinitions.FactoryConfigFile)
+		mockWorkersPath := writeDefaultMockWorkersConfig(t)
+		conflictMessage := "invocation input sources conflict: positional_text, stdin_text"
+
+		_, stdout, stderr, err := runPackagedGoalInvocationCLI(
+			t,
+			dir,
+			factoryPath,
+			mockWorkersPath,
+			isolatedHomeEnvironment(t.TempDir()),
+			strings.NewReader("from stdin"),
+			"from positional",
+		)
+		if err == nil {
+			t.Fatal("expected conflicting positional and stdin invocation inputs to fail")
+		}
+		if stdout != "" {
+			t.Fatalf("stdout = %q, want empty on conflict failure", stdout)
+		}
+		if !strings.Contains(stderr, "INVOCATION_INPUT_SOURCE_CONFLICT") {
+			t.Fatalf("stderr = %q, want stable conflict code", stderr)
+		}
+		if !strings.Contains(stderr, conflictMessage) {
+			t.Fatalf("stderr = %q, want conflict detail %q", stderr, conflictMessage)
+		}
+	})
+
+	t.Run("unresolved primary result reports stable failure", func(t *testing.T) {
+		dir := scaffoldPackagedGoalInvocationFactoryWithUnresolvedPrimaryResult(t)
+		factoryPath := filepath.Join(dir, factorydefinitions.FactoryConfigFile)
+		goalText := fmt.Sprintf(
+			"functional-packaged-cross-cli-api-parity-unresolved-%d",
+			time.Now().UnixNano(),
+		)
+		mockWorkersPath := writeDefaultMockWorkersConfig(t)
+
+		apiResponse := invokePackagedGoalViaAPI(t, dir, mockWorkersPath, goalText)
+		if apiResponse.Status != factoryapi.InvocationTerminalStatusFailed {
+			t.Fatalf("API status = %q, want FAILED", apiResponse.Status)
+		}
+		if apiResponse.ErrorCode == nil ||
+			*apiResponse.ErrorCode != factoryapi.INVOCATIONPRIMARYRESULTUNRESOLVED {
+			t.Fatalf(
+				"API errorCode = %v, want INVOCATION_PRIMARY_RESULT_UNRESOLVED",
+				errorCodeString(apiResponse.ErrorCode),
+			)
+		}
+		if apiResponse.PrimaryResult != nil {
+			t.Fatalf("API primaryResult = %#v, want nil on unresolved output", apiResponse.PrimaryResult)
+		}
+
+		cliResponse, _, stderr, err := runPackagedGoalInvocationCLIJSON(
+			t,
+			dir,
+			factoryPath,
+			mockWorkersPath,
+			isolatedHomeEnvironment(t.TempDir()),
+			nil,
+			goalText,
+		)
+		if err == nil {
+			t.Fatal("expected CLI unresolved invocation primary result to fail")
+		}
+		if !strings.Contains(err.Error(), "INVOCATION_PRIMARY_RESULT_UNRESOLVED") &&
+			!strings.Contains(stderr, "INVOCATION_PRIMARY_RESULT_UNRESOLVED") {
+			t.Fatalf(
+				"CLI failure = %v\nstderr = %q, want INVOCATION_PRIMARY_RESULT_UNRESOLVED",
+				err,
+				stderr,
+			)
+		}
+		if cliResponse.Status != factoryapi.InvocationTerminalStatusFailed {
+			t.Fatalf("CLI status = %q, want FAILED", cliResponse.Status)
+		}
+		if cliResponse.ErrorCode == nil ||
+			*cliResponse.ErrorCode != factoryapi.INVOCATIONPRIMARYRESULTUNRESOLVED {
+			t.Fatalf(
+				"CLI errorCode = %v, want INVOCATION_PRIMARY_RESULT_UNRESOLVED",
+				errorCodeString(cliResponse.ErrorCode),
+			)
+		}
+		if cliResponse.PrimaryResult != nil {
+			t.Fatalf("CLI primaryResult = %#v, want nil on unresolved output", cliResponse.PrimaryResult)
+		}
+	})
 }
 
 type packagedGoalAPIInspection struct {
@@ -394,4 +614,382 @@ func stringValue(value *string) string {
 		return ""
 	}
 	return *value
+}
+
+func scaffoldPackagedGoalInvocationFactory(t *testing.T) string {
+	t.Helper()
+	return scaffoldPackagedGoalInvocationFactoryWithConfig(t, packagedGoalInvocationFactoryConfig())
+}
+
+func scaffoldPackagedGoalInvocationFactoryWithUnresolvedPrimaryResult(t *testing.T) string {
+	t.Helper()
+
+	cfg := packagedGoalInvocationFactoryConfig()
+	cfg["invocationReturn"] = map[string]any{
+		"policy":        "EXPLICIT",
+		"workTypeName":  "summary",
+		"terminalState": "complete",
+	}
+	cfg["workTypes"] = append(cfg["workTypes"].([]map[string]any), map[string]any{
+		"name": "summary",
+		"states": []map[string]string{
+			{"name": "init", "type": "INITIAL"},
+			{"name": "complete", "type": "TERMINAL"},
+			{"name": "failed", "type": "FAILED"},
+		},
+	})
+	return scaffoldPackagedGoalInvocationFactoryWithConfig(t, cfg)
+}
+
+func scaffoldPackagedGoalInvocationFactoryWithConfig(t *testing.T, cfg map[string]any) string {
+	t.Helper()
+
+	dir := support.ScaffoldFactory(t, cfg)
+	support.WriteAgentConfig(
+		t,
+		dir,
+		"goal-executor",
+		support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"),
+	)
+	return dir
+}
+
+func packagedGoalInvocationFactoryConfig() map[string]any {
+	return map[string]any{
+		"name": "@you/goal",
+		"invocationReturn": map[string]any{
+			"policy":        "EXPLICIT",
+			"workTypeName":  "goal",
+			"terminalState": "complete",
+		},
+		"workTypes": []map[string]any{
+			{
+				"name":             "goal",
+				"handlingBehavior": []string{"DEFAULT"},
+				"states": []map[string]string{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "complete", "type": "TERMINAL"},
+					{"name": "failed", "type": "FAILED"},
+				},
+			},
+		},
+		"workers": []map[string]string{{"name": "goal-executor"}},
+		"workstations": []map[string]any{
+			{
+				"name":      "execute-goal",
+				"worker":    "goal-executor",
+				"inputs":    []map[string]string{{"workType": "goal", "state": "init"}},
+				"outputs":   []map[string]string{{"workType": "goal", "state": "complete"}},
+				"onFailure": []map[string]string{{"workType": "goal", "state": "failed"}},
+			},
+		},
+	}
+}
+
+func writeDefaultMockWorkersConfig(t *testing.T) string {
+	t.Helper()
+
+	return support.WriteMockWorkersConfig(t, workers.NewEmptyMockWorkersConfig())
+}
+
+func errorCodeString(code *factoryapi.InvocationResponseErrorCode) string {
+	if code == nil {
+		return "<nil>"
+	}
+	return string(*code)
+}
+
+func invokePackagedGoalViaAPI(
+	t *testing.T,
+	factoryDir string,
+	mockWorkersPath string,
+	goalText string,
+) factoryapi.InvocationResponse {
+	t.Helper()
+	return postPackagedGoalInvocation(t, factoryDir, mockWorkersPath, textInvocationRequestBody(goalText))
+}
+
+func postPackagedGoalInvocation(
+	t *testing.T,
+	factoryDir string,
+	mockWorkersPath string,
+	body []byte,
+) factoryapi.InvocationResponse {
+	t.Helper()
+
+	server := startPackagedGoalParityAPIServer(t, factoryDir, mockWorkersPath)
+	response, err := http.Post(
+		strings.TrimSuffix(server.URL(), "/")+
+			"/factory-sessions/"+factorysessions.DefaultSessionID+"/invocations",
+		"application/json",
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		t.Fatalf("POST /factory-sessions/~default/invocations: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		payload, _ := io.ReadAll(response.Body)
+		t.Fatalf(
+			"POST /factory-sessions/~default/invocations status = %d, want 200: %s",
+			response.StatusCode,
+			string(payload),
+		)
+	}
+
+	var decoded factoryapi.InvocationResponse
+	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
+		t.Fatalf("decode invocation response: %v", err)
+	}
+	return decoded
+}
+
+func postPackagedGoalInvocationExpectError(
+	t *testing.T,
+	factoryDir string,
+	mockWorkersPath string,
+	goalText string,
+) factoryapi.ErrorResponse {
+	t.Helper()
+
+	body := textInvocationRequestBody(goalText)
+	server := startPackagedGoalParityAPIServer(t, factoryDir, mockWorkersPath)
+	response, err := http.Post(
+		strings.TrimSuffix(server.URL(), "/")+
+			"/factory-sessions/"+factorysessions.DefaultSessionID+"/invocations",
+		"application/json",
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		t.Fatalf("POST /factory-sessions/~default/invocations: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusBadRequest {
+		payload, _ := io.ReadAll(response.Body)
+		t.Fatalf(
+			"POST /factory-sessions/~default/invocations status = %d, want 400: %s",
+			response.StatusCode,
+			string(payload),
+		)
+	}
+
+	var decoded factoryapi.ErrorResponse
+	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
+		t.Fatalf("decode invocation error response: %v", err)
+	}
+	return decoded
+}
+
+func startPackagedGoalParityAPIServer(
+	t *testing.T,
+	factoryDir string,
+	mockWorkersPath string,
+) *support.FunctionalAPIServer {
+	t.Helper()
+
+	payload, err := os.ReadFile(mockWorkersPath)
+	if err != nil {
+		t.Fatalf("read customer mock-workers config: %v", err)
+	}
+	var mockWorkersConfig workers.MockWorkersConfig
+	if err := json.Unmarshal(payload, &mockWorkersConfig); err != nil {
+		t.Fatalf("decode customer mock-workers config: %v", err)
+	}
+
+	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                factoryDir,
+		WaitForServiceModeRuntime: true,
+		MockWorkersConfig:         &mockWorkersConfig,
+	})
+}
+
+func textInvocationRequestBody(goalText string) []byte {
+	sourceKind := factoryapi.InvocationInputSourceKindText
+	body, err := json.Marshal(factoryapi.InvocationRequest{
+		SourceKind: &sourceKind,
+		Content:    invocationTextContentPtr(goalText),
+	})
+	if err != nil {
+		panic(fmt.Sprintf("marshal invocation request: %v", err))
+	}
+	return body
+}
+
+func invocationTextContentPtr(goalText string) *factoryapi.WorkContent {
+	var part factoryapi.WorkContentPart
+	if err := part.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
+		Type: factoryapi.WorkContentPartTypeText,
+		Text: goalText,
+	}); err != nil {
+		panic(fmt.Sprintf("build invocation text content: %v", err))
+	}
+	content := factoryapi.WorkContent{part}
+	return &content
+}
+
+func runPackagedGoalInvocationCLIJSON(
+	t *testing.T,
+	factoryDir string,
+	factoryPath string,
+	mockWorkersPath string,
+	env []string,
+	stdin io.Reader,
+	args ...string,
+) (factoryapi.InvocationResponse, string, string, error) {
+	t.Helper()
+	return runPackagedGoalInvocationCLIWithMode(
+		t,
+		factoryDir,
+		[]string{"--factory", factoryPath},
+		mockWorkersPath,
+		env,
+		stdin,
+		true,
+		args...,
+	)
+}
+
+func runPackagedGoalNamedInvocationCLIJSON(
+	t *testing.T,
+	homeDir string,
+	mockWorkersPath string,
+	goalText string,
+) (factoryapi.InvocationResponse, string, string, error) {
+	t.Helper()
+	return runPackagedGoalInvocationCLIWithMode(
+		t,
+		t.TempDir(),
+		[]string{"--named", factorydefinitions.PackagedGoalFactoryName},
+		mockWorkersPath,
+		isolatedHomeEnvironment(homeDir),
+		nil,
+		true,
+		goalText,
+	)
+}
+
+func runPackagedGoalInvocationCLI(
+	t *testing.T,
+	factoryDir string,
+	factoryPath string,
+	mockWorkersPath string,
+	env []string,
+	stdin io.Reader,
+	args ...string,
+) (factoryapi.InvocationResponse, string, string, error) {
+	t.Helper()
+	return runPackagedGoalInvocationCLIWithMode(
+		t,
+		factoryDir,
+		[]string{"--factory", factoryPath},
+		mockWorkersPath,
+		env,
+		stdin,
+		false,
+		args...,
+	)
+}
+
+func runPackagedGoalInvocationCLIWithMode(
+	t *testing.T,
+	workingDirectory string,
+	sourceArgs []string,
+	mockWorkersPath string,
+	env []string,
+	stdin io.Reader,
+	jsonMode bool,
+	args ...string,
+) (factoryapi.InvocationResponse, string, string, error) {
+	t.Helper()
+
+	port, err := reserveLocalTCPPort()
+	if err != nil {
+		t.Fatalf("reserve port: %v", err)
+	}
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+
+	cmdArgs := []string{"you"}
+	if jsonMode {
+		cmdArgs = append(cmdArgs, "--json")
+	}
+	cmdArgs = append(cmdArgs, "run")
+	cmdArgs = append(cmdArgs, sourceArgs...)
+	cmdArgs = append(
+		cmdArgs,
+		"--with-mock-workers",
+		"--no-record",
+		"--server", baseURL,
+		mockWorkersPath,
+	)
+	cmdArgs = append(cmdArgs, args...)
+
+	inputs := support.FakeInputs(ctx, cmdArgs)
+	inputs.Input.WorkingDirectory = workingDirectory
+	inputs.Input.Env = env
+	if stdin != nil {
+		inputs.Input.Stdin = stdin
+		stdinIsTTY := false
+		inputs.Input.StdinIsTTY = &stdinIsTTY
+	}
+
+	runErr := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input)
+
+	var response factoryapi.InvocationResponse
+	if jsonMode && strings.TrimSpace(inputs.Stdout()) != "" {
+		if err := json.Unmarshal(
+			bytes.TrimSpace([]byte(inputs.Stdout())),
+			&response,
+		); err != nil {
+			t.Fatalf("decode CLI invocation response: %v\nstdout:\n%s", err, inputs.Stdout())
+		}
+	}
+	return response, inputs.Stdout(), inputs.Stderr(), runErr
+}
+
+func assertPackagedGoalCLIAPIPrimaryOutcomeParity(
+	t *testing.T,
+	apiResponse factoryapi.InvocationResponse,
+	cliResponse factoryapi.InvocationResponse,
+	wantPrimaryResult string,
+) {
+	t.Helper()
+
+	if apiResponse.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("API status = %q, want COMPLETED", apiResponse.Status)
+	}
+	if cliResponse.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("CLI status = %q, want COMPLETED", cliResponse.Status)
+	}
+	if strings.TrimSpace(apiResponse.RequestId) == "" || strings.TrimSpace(apiResponse.TraceId) == "" {
+		t.Fatalf(
+			"API submission identity = request %q trace %q, want non-empty invocation scope",
+			apiResponse.RequestId,
+			apiResponse.TraceId,
+		)
+	}
+	if strings.TrimSpace(cliResponse.RequestId) == "" || strings.TrimSpace(cliResponse.TraceId) == "" {
+		t.Fatalf(
+			"CLI submission identity = request %q trace %q, want non-empty invocation scope",
+			cliResponse.RequestId,
+			cliResponse.TraceId,
+		)
+	}
+
+	apiText := invocationPrimaryResultText(t, apiResponse)
+	cliText := invocationPrimaryResultText(t, cliResponse)
+	if apiText != wantPrimaryResult {
+		t.Fatalf("API primaryResult = %q, want %q", apiText, wantPrimaryResult)
+	}
+	if cliText != wantPrimaryResult {
+		t.Fatalf("CLI primaryResult = %q, want %q", cliText, wantPrimaryResult)
+	}
+	if apiText != cliText {
+		t.Fatalf("primaryResult mismatch: API = %q, CLI = %q", apiText, cliText)
+	}
+	if apiResponse.PrimaryResult == nil || cliResponse.PrimaryResult == nil {
+		t.Fatal("expected both API and CLI success responses to include primaryResult")
+	}
 }

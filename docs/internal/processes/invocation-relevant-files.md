@@ -2028,6 +2028,16 @@ response-stream output.
   identity and primary-result fields. Do not use `support.WaitForTerminalStatus`
   for packaged goal one-shot invocations because `/status` categories may stay
   empty after completion.
+- Packaged `@you/goal` CLI/API primary-outcome shape agreement lives in the same
+  cross cell (`TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree`). Compare
+  independent API `POST /factory-sessions/~default/invocations` responses with
+  root-built `you run --json --server …` CLI envelopes for positional, stdin,
+  and named-factory success, plus empty-input, source-conflict, and unresolved
+  primary-result failures. Drive CLI cases through `support.BuildProcess` +
+  `support.FakeInputs` rather than `exec.Command`. For
+  `INVOCATION_PRIMARY_RESULT_UNRESOLVED`, scaffold a goal factory whose
+  `invocationReturn` targets a never-produced `summary` work type (not a script
+  mock worker that fails the goal pipeline).
 - Final `@you/goal` decision-routing smoke coverage lives in
   `tests/functional/smoke/cli_named_goal_routing_smoke_test.go`, exercising
   named-factory CLI `--json` outcomes for accepted, blocked, needs-human, and
