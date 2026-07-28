@@ -64,6 +64,9 @@ Use this map when changing the public REST contract.
   `move_mapping.go` and `handlers_move.go`; decode bodies through
   adapter-owned validation, invoke `MoveWorkAndRead` on the accepted root, and
   encode detached post-move `work.ReadModel` values through `WorkReadModelToAPI`.
+  Typed Work root failures map through `error_mapping.go` via `RootErrorResponse`
+  and `writeRootOrInternalError`; unmapped failures sanitize to INTERNAL_ERROR
+  without leaking internal package paths.
 - Factory Definitions HTTP decoding, generated-contract mapping, service
   invocation, typed error mapping, and cancel/timeout handling live in
   `pkg/services/factory_definitions/transports/http`. The top-level

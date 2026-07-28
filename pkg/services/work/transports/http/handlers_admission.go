@@ -1,13 +1,10 @@
 package http
 
 import (
-	"errors"
 	"net/http"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 // StageSubmitWorkFileBySessionId decodes one stage-submit-work-file request,
@@ -36,7 +33,7 @@ func (a *Adapter) StageSubmitWorkFileBySessionId(
 
 	result, err := a.invokeStageContent(r.Context(), stageRequest)
 	if err != nil {
-		a.writeAdmissionRootError(w, err, "failed to stage submit-work file")
+		a.writeRootOrInternalError(w, err, "failed to stage submit-work file")
 		return
 	}
 	a.writeJSON(w, http.StatusCreated, StageSubmitWorkFileResponseToAPI(result))
@@ -68,7 +65,7 @@ func (a *Adapter) SubmitWorkBySessionId(
 
 	result, err := a.invokeSubmitWorkRequestForSession(r.Context(), string(sessionID), workRequest)
 	if err != nil {
-		a.writeAdmissionRootError(w, err, "failed to submit work")
+		a.writeRootOrInternalError(w, err, "failed to submit work")
 		return
 	}
 	a.writeJSON(w, http.StatusCreated, SubmitWorkResponseToAPI(result, string(sessionID)))
@@ -113,7 +110,7 @@ func (a *Adapter) UpsertWorkRequestBySessionId(
 
 	result, err := a.invokeSubmitWorkRequestForSession(r.Context(), string(sessionID), workRequest)
 	if err != nil {
-		a.writeAdmissionRootError(w, err, "failed to submit work request")
+		a.writeRootOrInternalError(w, err, "failed to submit work request")
 		return
 	}
 	a.writeJSON(w, http.StatusCreated, UpsertWorkResponseToAPI(result))
@@ -127,20 +124,3 @@ func (a *Adapter) writeAdmissionDecodeError(w http.ResponseWriter, err error) {
 	a.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
 }
 
-func (a *Adapter) writeAdmissionRootError(w http.ResponseWriter, err error, fallbackMessage string) {
-	if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
-		a.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
-		return
-	}
-	var stagingErr *work.ContentStagingError
-	if errors.As(err, &stagingErr) {
-		a.writeError(w, http.StatusBadRequest, stagingErr.Message, "BAD_REQUEST")
-		return
-	}
-	var validation *work.ValidationError
-	if errors.As(err, &validation) {
-		a.writeError(w, http.StatusBadRequest, validation.Message, "BAD_REQUEST")
-		return
-	}
-	a.writeError(w, http.StatusInternalServerError, fallbackMessage, "INTERNAL_ERROR")
-}

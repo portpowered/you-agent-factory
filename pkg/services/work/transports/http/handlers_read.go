@@ -7,7 +7,6 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 // ListWorkBySessionId decodes one session-scoped list-work request, invokes the
@@ -32,7 +31,7 @@ func (a *Adapter) ListWorkBySessionId(
 
 	result, err := a.invokeListWork(r.Context(), string(sessionID), options)
 	if err != nil {
-		a.writeReadRootError(w, err, "failed to list Work")
+		a.writeRootOrInternalError(w, err, "failed to list Work")
 		return
 	}
 	a.writeJSON(w, http.StatusOK, ListWorkResponseToAPI(result))
@@ -59,7 +58,7 @@ func (a *Adapter) GetWorkBySessionId(
 
 	result, err := a.invokeGetWork(r.Context(), string(sessionID), workID)
 	if err != nil {
-		a.writeReadRootError(w, err, "failed to get Work")
+		a.writeRootOrInternalError(w, err, "failed to get Work")
 		return
 	}
 	a.writeJSON(w, http.StatusOK, WorkReadModelToAPI(result))
@@ -74,19 +73,3 @@ func (a *Adapter) writeListDecodeError(w http.ResponseWriter, err error) {
 	a.writeError(w, http.StatusBadRequest, "invalid list-work request", "BAD_REQUEST")
 }
 
-func (a *Adapter) writeReadRootError(w http.ResponseWriter, err error, fallbackMessage string) {
-	if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
-		a.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
-		return
-	}
-	if errors.Is(err, work.ErrWorkNotFound) {
-		a.writeError(w, http.StatusNotFound, "work not found", "NOT_FOUND")
-		return
-	}
-	var validation *work.ValidationError
-	if errors.As(err, &validation) {
-		a.writeError(w, http.StatusBadRequest, validation.Message, "BAD_REQUEST")
-		return
-	}
-	a.writeError(w, http.StatusInternalServerError, fallbackMessage, "INTERNAL_ERROR")
-}

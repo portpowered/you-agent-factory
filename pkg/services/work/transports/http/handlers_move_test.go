@@ -311,6 +311,50 @@ func TestMoveWorkBySessionId_MapsSessionNotFound(t *testing.T) {
 	}
 }
 
+func TestMoveWorkBySessionId_MapsMoveValidationFailures(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		err     error
+		message string
+	}{
+		{name: "invalid state", err: state.ErrMoveWorkInvalidState, message: "invalid target state for work type"},
+		{name: "in flight dispatch", err: state.ErrMoveWorkInFlightDispatch, message: "work is in an active dispatch"},
+		{name: "engine terminated", err: state.ErrMoveWorkEngineTerminated, message: "engine has terminated"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			adapter := NewAdapter(&rootFake{
+				moveWorkAndRead: func(context.Context, string, string, string, string) (work.ReadModel, error) {
+					return work.ReadModel{}, testCase.err
+				},
+			})
+			recorder := httptest.NewRecorder()
+
+			adapter.MoveWorkBySessionId(
+				recorder,
+				httptest.NewRequest(
+					http.MethodPost,
+					"/factory-sessions/session-1/work/work-1/move",
+					strings.NewReader(`{"stateName":"complete"}`),
+				),
+				"session-1",
+				"work-1",
+			)
+
+			body := recorder.Body.String()
+			if recorder.Code != http.StatusBadRequest || !strings.Contains(body, testCase.message) {
+				t.Fatalf("response = %d %s, want move validation bad request", recorder.Code, body)
+			}
+			if strings.Contains(body, `"code":"INTERNAL_ERROR"`) {
+				t.Fatalf("response = %s, must not collapse move validation into internal error", body)
+			}
+		})
+	}
+}
+
 func TestMoveWorkBySessionId_MapsUnmappedRootFailureToInternalError(t *testing.T) {
 	t.Parallel()
 

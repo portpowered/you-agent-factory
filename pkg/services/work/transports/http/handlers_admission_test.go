@@ -352,3 +352,87 @@ func TestSubmitWorkBySessionId_UsesPrepareContentBeforeAdmission(t *testing.T) {
 		t.Fatalf("status = %d %s, want 201", recorder.Code, recorder.Body.String())
 	}
 }
+
+func TestSubmitWorkBySessionId_MapsAdmissionTypedFailures(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name       string
+		err        error
+		wantStatus int
+		wantCode   string
+	}{
+		{
+			name:       "invalid",
+			err:        work.ErrInvalidWorkRequest,
+			wantStatus: http.StatusBadRequest,
+			wantCode:   "BAD_REQUEST",
+		},
+		{
+			name:       "conflict",
+			err:        work.ErrWorkRequestConflict,
+			wantStatus: http.StatusConflict,
+			wantCode:   "CONFLICT",
+		},
+		{
+			name:       "rejected",
+			err:        work.ErrWorkRequestRejected,
+			wantStatus: http.StatusBadRequest,
+			wantCode:   "BAD_REQUEST",
+		},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			adapter := NewAdapter(&rootFake{
+				submitWorkRequestForSession: func(context.Context, string, work.WorkRequest) (work.WorkRequestSubmitResult, error) {
+					return work.WorkRequestSubmitResult{}, testCase.err
+				},
+			})
+			recorder := httptest.NewRecorder()
+
+			adapter.SubmitWorkBySessionId(
+				recorder,
+				httptest.NewRequest(http.MethodPost, "/factory-sessions/session-1/work", strings.NewReader(`{
+					"name":"draft-prd",
+					"workTypeName":"prd"
+				}`)),
+				"session-1",
+			)
+
+			body := recorder.Body.String()
+			if recorder.Code != testCase.wantStatus || !strings.Contains(body, `"code":"`+testCase.wantCode+`"`) {
+				t.Fatalf("response = %d %s, want %d with code %s", recorder.Code, body, testCase.wantStatus, testCase.wantCode)
+			}
+			if strings.Contains(body, `"code":"INTERNAL_ERROR"`) {
+				t.Fatalf("response = %s, must not collapse admission failure into internal error", body)
+			}
+		})
+	}
+}
+
+func TestStageSubmitWorkFileBySessionId_MapsContentStagingFailure(t *testing.T) {
+	t.Parallel()
+
+	adapter := NewAdapter(&rootFake{
+		stageContent: func(context.Context, work.StageContentRequest) (work.StageContentResult, error) {
+			return work.StageContentResult{}, &work.ContentStagingError{Message: "staging unavailable"}
+		},
+	})
+	recorder := httptest.NewRecorder()
+
+	adapter.StageSubmitWorkFileBySessionId(
+		recorder,
+		httptest.NewRequest(http.MethodPost, "/factory-sessions/session-1/work/stage-submit-file", strings.NewReader(`{
+			"itemType":"document",
+			"contentBase64":"dGVzdA==",
+			"fileName":"draft.txt",
+			"mediaType":"text/plain"
+		}`)),
+		"session-1",
+	)
+
+	if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), "staging unavailable") {
+		t.Fatalf("response = %d %s, want staging bad request", recorder.Code, recorder.Body.String())
+	}
+}
