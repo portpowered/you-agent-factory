@@ -20,10 +20,12 @@ import (
 )
 
 const (
-	validationCodeDuplicateIdentifier        = "factory.duplicateIdentifier"
-	validationCodeDanglingWorkerReference    = "factory.worker.danglingReference"
-	validationCodeDanglingPlaceReference     = "factory.route.danglingPlaceReference"
-	validationCodeLayoutUnknownNodeReference = "factory.layout.unknownNodeReference"
+	validationCodeDuplicateIdentifier                 = "factory.duplicateIdentifier"
+	validationCodeDanglingWorkerReference             = "factory.worker.danglingReference"
+	validationCodeDanglingPlaceReference              = "factory.route.danglingPlaceReference"
+	validationCodeLayoutUnknownNodeReference          = "factory.layout.unknownNodeReference"
+	validationCodeWorkstationMissingFailureRoute      = "factory.workstation.missingFailureRoute"
+	validationCodeConflictingWorkStateOutputs         = "factory.workstation.conflictingWorkStateOutputs"
 )
 
 // TestFactoryValidationAcceptsMultiWorkTypeExecutableTopology proves a
