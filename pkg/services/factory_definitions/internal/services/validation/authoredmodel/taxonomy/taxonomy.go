@@ -1,4 +1,5 @@
-// Package taxonomy owns worker and worker-execution behavior identifiers.
+// Package workertaxonomy owns worker and worker-execution behavior identifiers
+// for authored Factory definition validation and compatibility paths.
 package workertaxonomy
 
 import "strings"

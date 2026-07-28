@@ -23,7 +23,6 @@ import (
 	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
 	factorynamedfactories "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedfactories"
 	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	factoryworkstationexecution "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workstationexecution"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
@@ -322,27 +321,28 @@ func provideFactoryDefinitionValidationService(
 	workflows factoryruntime.JavaScriptWorkflows,
 	loader *factoryloading.Loader,
 	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
-) *factoryvalidation.Service {
-	return factoryvalidation.New(
+) factorydefinitions.ValidationOperations {
+	_ = workflows
+	return wirefactorydefinitions.ValidationOperations(
 		orchestratorValidator,
 		loader.LoadSourceFromCanonicalJSON,
 	)
 }
 
 func provideFactoryDefinitionValidator(
-	service *factoryvalidation.Service,
+	service factorydefinitions.ValidationOperations,
 ) factorydefinitions.Validator {
 	return service
 }
 
 func provideDefinitionValidationOperation(
-	service *factoryvalidation.Service,
+	service factorydefinitions.ValidationOperations,
 ) factorydefinitions.DefinitionValidationOperation {
 	return service
 }
 
 func provideSubmittedDefinitionValidationOperation(
-	service *factoryvalidation.Service,
+	service factorydefinitions.ValidationOperations,
 ) factorydefinitions.SubmittedDefinitionValidationOperation {
 	return service
 }

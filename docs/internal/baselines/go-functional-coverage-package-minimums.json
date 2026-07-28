@@ -559,6 +559,18 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/namevalue",
+      "minimum": 72.22
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/taxonomy",
+      "minimum": 54.34
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl",
+      "minimum": 54.47
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/orchestrator",
       "minimum": 0.00
     },
@@ -622,7 +634,13 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namevalue",
-      "minimum": 72.22
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this transitional DEL-DEF shim package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packagedinstallation",
@@ -786,7 +804,13 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation",
-      "minimum": 54.47
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this transitional DEL-DEF shim package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire",
@@ -803,12 +827,22 @@
       "minimum": 66.66
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/validation",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers",
       "minimum": 66.12
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers/taxonomy",
-      "minimum": 54.34
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this transitional DEL-DEF shim package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workpropagation",
