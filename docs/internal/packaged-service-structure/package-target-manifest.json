@@ -126,6 +126,7 @@
     "pkg/services/factory_definitions/snapshotcapture",
     "pkg/services/factory_definitions/transports/cli",
     "pkg/services/factory_definitions/transports/http",
+    "pkg/services/factory_definitions/transports/mcp",
     "pkg/services/factory_definitions/ttsobservability",
     "pkg/services/factory_definitions/validation",
     "pkg/services/factory_definitions/wire",
@@ -909,6 +910,11 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/transports/http",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/transports/mcp",
       "disposition": "retain",
       "destination": "factory_definitions"
     },
