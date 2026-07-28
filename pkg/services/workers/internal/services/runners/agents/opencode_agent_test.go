@@ -12,7 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	executorpkg "github.com/portpowered/infinite-you/pkg/services/workers/executor"
+	executorpkg "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 )
 
 func TestAgentExecutor_ForwardsOpenCodeAgentOnOpenCodeDispatch(t *testing.T) {

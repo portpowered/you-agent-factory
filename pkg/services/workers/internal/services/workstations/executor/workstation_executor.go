@@ -13,7 +13,7 @@ import (
 	"time"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/runner"
+	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/runner"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 

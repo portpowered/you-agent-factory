@@ -13,7 +13,7 @@ import (
 	runtimefixtures "github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 )
 
 type staticRuntimeConfig = runtimefixtures.RuntimeConfigLookupFixture

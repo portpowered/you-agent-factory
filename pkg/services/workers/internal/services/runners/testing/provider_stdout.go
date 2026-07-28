@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 )
 
 func mockAcceptStdout(command string, text string) string {

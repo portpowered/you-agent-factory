@@ -18,8 +18,8 @@ import (
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
-	mockworker "github.com/portpowered/infinite-you/pkg/services/workers/services/testing"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
+	mockworker "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/testing"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 )
 
 func TestWithAgentRunnerCutoverPreservesRunnerSelectionWiring(t *testing.T) {

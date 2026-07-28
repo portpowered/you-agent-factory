@@ -10,7 +10,7 @@ import (
 
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/runner"
+	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/runner"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerinvocation "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/invocation"

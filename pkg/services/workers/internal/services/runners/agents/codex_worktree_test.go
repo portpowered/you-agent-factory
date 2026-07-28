@@ -12,7 +12,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	executorpkg "github.com/portpowered/infinite-you/pkg/services/workers/executor"
+	executorpkg "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 )
 
 func withAgentRunnerID(runnerID string) func(*workerexecution.WorkstationExecutionRequest) {

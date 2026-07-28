@@ -12,8 +12,8 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	executorpkg "github.com/portpowered/infinite-you/pkg/services/workers/executor"
-	"github.com/portpowered/infinite-you/pkg/services/workers/prompting"
+	executorpkg "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/prompting"
 )
 
 func reviewAgentRequest(dispatchID string, content string) (workerexecution.WorkstationExecutionRequest, *agentMockProvider) {

@@ -12,7 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 	runnerwire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 )
 
 // ScriptExecutor adapts the common Runner result onto the workstation result

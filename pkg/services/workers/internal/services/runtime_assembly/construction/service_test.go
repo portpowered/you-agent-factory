@@ -15,8 +15,8 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
-	mockworker "github.com/portpowered/infinite-you/pkg/services/workers/services/testing"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
+	mockworker "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/testing"
 )
 
 func TestServiceBuildProviderBackedExposesDispatchAndDirectBoundaries(t *testing.T) {
