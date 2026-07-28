@@ -1089,3 +1089,21 @@ those slices are consolidated in `runtime/worker_pool.go` (kept out of
 `runtime/factory.go` to preserve the backend-size file limit). Nested IMP-RUN
 moves, Wire/root, CLI-manifest, provider-conductor, Workers construction, and
 OpenAPI package-motion edits remain outside this seal.
+
+## DEL-RUN-ENGINE-PIPELINE pre-start gates
+
+`DEL-RUN-ENGINE-PIPELINE` must not begin leased pipeline deletion or baseline
+burn-down until both prerequisite packets are Factory-complete:
+
+| Gate | Branch | Status artifact |
+| --- | --- | --- |
+| `DEL-RUN-SERVICE` | `pss-del-run-service` | merged PR #1596; `factory_runtime/service` absent; `wire/service_deletion_proof_test.go` |
+| `CLN-RUN-FOLD-ENGINE-PIPELINE` | `pss-cln-run-fold-engine-pipeline` | merged PR required before story 002; while incomplete, transitional public pipeline packages remain and `deletion_hold_active` stays true |
+
+Record the operational gate snapshot in
+`docs/internal/processes/del-run-engine-pipeline-prestart-gates.json` and lock
+the confirmation with
+`pkg/services/factory_runtime/wire/engine_pipeline_prestart_gate_test.go`.
+When `CLN-RUN-FOLD-ENGINE-PIPELINE` merges, flip
+`gates.CLN-RUN-FOLD-ENGINE-PIPELINE.factory_complete` to `true`, clear
+`deletion_hold_active`, and begin story 002 deletion work.
