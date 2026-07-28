@@ -14,6 +14,8 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
+	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/completionprojection"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
@@ -21,6 +23,22 @@ import (
 )
 
 type processCommandRunner struct{}
+
+func TestProvideSessionsCLIServiceReturnsConstructedAdapter(t *testing.T) {
+	t.Parallel()
+
+	standard, err := provideStandardCLIHTTPProtocol()
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := provideSessionsCLIService(standard, factorysessionwire.NewRequestPreparation())
+	if service == nil {
+		t.Fatal("provideSessionsCLIService() = nil, want Sessions CLI service")
+	}
+	if err := service.Show(sessioncli.ShowConfig{SessionID: "session-alpha"}); err == nil {
+		t.Fatal("Show without output = nil, want required output error")
+	}
+}
 
 func TestCLIRunDefaultsRetainWireSelectedRecordingTargetPlanner(t *testing.T) {
 	t.Parallel()

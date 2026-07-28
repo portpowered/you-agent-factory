@@ -1157,6 +1157,12 @@
     },
     {
       "fromOwner": "factory_definitions",
+      "toOwner": "transports",
+      "class": "command",
+      "evidence": "pkg/services/factory_definitions/wire -\u003e pkg/transports/mapping/factoryconfig"
+    },
+    {
+      "fromOwner": "factory_definitions",
       "toOwner": "work",
       "class": "command",
       "evidence": "pkg/services/factory_definitions/contracts -\u003e pkg/services/work"
@@ -1297,7 +1303,7 @@
       "fromOwner": "factory_visualization",
       "toOwner": "factory_definitions",
       "class": "query",
-      "evidence": "pkg/services/factory_visualization -\u003e pkg/services/factory_definitions"
+      "evidence": "pkg/services/factory_visualization/internal/contracts -\u003e pkg/services/factory_definitions"
     },
     {
       "fromOwner": "factory_visualization",
@@ -1396,6 +1402,12 @@
       "evidence": "pkg/services/provider_sessions -\u003e pkg/services/providers"
     },
     {
+      "fromOwner": "provider_sessions",
+      "toOwner": "transports",
+      "class": "command",
+      "evidence": "pkg/services/provider_sessions/transports/http -\u003e pkg/transports/http/generated"
+    },
+    {
       "fromOwner": "providers",
       "toOwner": "models",
       "class": "command",
@@ -1472,13 +1484,13 @@
       "fromOwner": "system_initialization",
       "toOwner": "factory_definitions",
       "class": "query",
-      "evidence": "pkg/services/system_initialization -\u003e pkg/services/factory_definitions"
+      "evidence": "pkg/services/system_initialization/internal/workflow -\u003e pkg/services/factory_definitions"
     },
     {
       "fromOwner": "system_initialization",
       "toOwner": "operator_settings",
       "class": "command",
-      "evidence": "pkg/services/system_initialization -\u003e pkg/services/operator_settings"
+      "evidence": "pkg/services/system_initialization/internal/workflow -\u003e pkg/services/operator_settings"
     },
     {
       "fromOwner": "transports",
@@ -2406,6 +2418,24 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/automations/internal/services/script_pollers",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/script_pollers/internal/service",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/script_pollers/wire",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/automations/service",
       "disposition": "retain",
       "destination": "automations",
@@ -2773,6 +2803,12 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/validation/topologytests",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/wire",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
@@ -3528,6 +3564,24 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_visualization/internal/services/response_event_presentation",
+      "disposition": "retain",
+      "destination": "factory_visualization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/internal/services/response_event_presentation/internal/service",
+      "disposition": "retain",
+      "destination": "factory_visualization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/internal/services/response_event_presentation/wire",
+      "disposition": "retain",
+      "destination": "factory_visualization",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/models",
       "disposition": "retain",
       "destination": "models",
@@ -3607,6 +3661,30 @@
     },
     {
       "packagePath": "pkg/services/models/internal/services/catalog/wire",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/inference",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/inference/internal/artifacts",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/inference/internal/service",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/inference/wire",
       "disposition": "retain",
       "destination": "models",
       "destinationKind": "owner"
@@ -3775,6 +3853,12 @@
     },
     {
       "packagePath": "pkg/services/provider_sessions/service",
+      "disposition": "retain",
+      "destination": "provider_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/transports/http",
       "disposition": "retain",
       "destination": "provider_sessions",
       "destinationKind": "owner"
@@ -4027,6 +4111,18 @@
     },
     {
       "packagePath": "pkg/services/system_initialization",
+      "disposition": "retain",
+      "destination": "system_initialization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/system_initialization/internal/workflow",
+      "disposition": "retain",
+      "destination": "system_initialization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/system_initialization/wire",
       "disposition": "retain",
       "destination": "system_initialization",
       "destinationKind": "owner"

@@ -276,6 +276,23 @@
   inline workflows when override validation fails before dispatch. Catalog
   metadata infers domain `orchestration` and subsection `javascript/workers`
   from the path.
+  Script-poller packaged-owner evidence belongs to
+  `pkg/services/automations/internal/services/script_pollers` and is reached
+  only through `pkg/services/automations/service`. Unit evidence covers submit,
+  timeout/restart, malformed rejection, and cursor persistence in the packaged
+  owner tests; Automations-root composition evidence belongs in
+  `pkg/services/automations/service/service_internal_test.go`
+  (`TestProductionRootScriptPollerCursorThroughCompositionPath`). Root
+  `BuildProcess` functional evidence belongs in
+  `tests/functional/workstations/poller/poller_test.go` and
+  `tests/functional/workstations/poller/build_process_test.go`: drive POLLER
+  workstation supervision through `tests/functional/internal/support.BuildProcess`
+  with injected `edges.Edges.ScriptCommandRunner` and optional
+  `edges.Edges.Clock`, observe Work admission through public session listings,
+  and prove construction remains inert before an explicit run invocation.
+  Catalog metadata infers domain `workstations` and subsection `poller` from
+  the path; every top-level `Test*` needs a customer-readable Go doc so
+  `functionaltestmetadata` stays viz-compatible.
   Mock-worker replacement functional coverage belongs in
   `tests/functional/workers/mock/replacement_test.go`: prove named-only
   `--with-mock-workers` replacement through
@@ -345,6 +362,18 @@
   infers domain `transport` and subsection `http/server` from the path; every
   top-level `Test*` needs a customer-readable Go doc so `functionaltestmetadata`
   stays viz-compatible.
+  HTTP generated-client functional coverage belongs in
+  `tests/functional/transport/http/server/generated_client_test.go`: prove status
+  and Factory Session round-trips through the published generated HTTP client
+  with caller-owned HTTP dependencies and cancellation/deadline bounds, prove
+  representative structured API failures decode into typed client results, and
+  prove generated client and server schemas stay aligned with the published
+  OpenAPI contract against the live functional server. `make api-smoke` and
+  `artifact-contract-closeout` run
+  `TestGeneratedClientAndServerSchemaStayAligned` from this cell. Catalog
+  metadata infers domain `transport` and subsection `http/server` from the path;
+  every top-level `Test*` needs a customer-readable Go doc so
+  `functionaltestmetadata` stays viz-compatible.
   HTTP API server OpenAPI routing functional coverage belongs in
   `tests/functional/transport/http/server/routing_test.go`: prove every
   published OpenAPI operation inventory entry reaches a non-404 handler through

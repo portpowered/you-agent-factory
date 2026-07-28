@@ -1,0 +1,261 @@
+package service_test
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+
+	automations "github.com/portpowered/infinite-you/pkg/services/automations"
+	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
+)
+
+func TestRunScriptPoller_CommitsCursorAfterSuccessfulAdvance(t *testing.T) {
+	t.Parallel()
+
+	factoryDir := t.TempDir()
+	stdout := []byte(`{
+		"requestId":"linear-issue-batch-cursor",
+		"type":"FACTORY_REQUEST_BATCH",
+		"works":[{"name":"issue-cursor","workTypeName":"task","payload":{"id":"ISSUE-CURSOR"}}],
+		"cursor":"opaque-cursor-2",
+		"checkpoint":"checkpoint-2"
+	}`)
+	runner := &sequenceCommandRunner{
+		outcomes: []runOutcome{{result: workers.CommandResult{Stdout: stdout}}},
+	}
+	submitted := &recordingSubmitter{}
+	recorder := scriptpollers.NewMemoryCursorRecorder()
+	svc := newScriptPollersServiceWithOptions(scriptPollersServiceOptions{
+		runner:         runner,
+		cursorRecorder: recorder,
+	})
+	poller := newCanonicalScriptPollerWorkstation()
+	worker := newCanonicalScriptPollerWorker()
+	runtimeCfg := newScriptPollerLoadedRuntimeConfig(t, factoryDir, poller, worker)
+	supervision := scriptpollers.ScriptPollerSupervision{
+		AutomationID: "workflow-cursor",
+		SourceID:     "source-cursor",
+		InstanceID:   "instance-cursor-1",
+	}
+
+	err := svc.RunScriptPoller(
+		context.Background(),
+		runner,
+		runtimeCfg,
+		poller,
+		worker,
+		supervision,
+		submitted.submit,
+	)
+	if err == nil || !strings.Contains(err.Error(), "exited unexpectedly") {
+		t.Fatalf("RunScriptPoller error = %v, want unexpected exit after successful submit", err)
+	}
+	if submitted.calls != 1 {
+		t.Fatalf("submit calls = %d, want 1", submitted.calls)
+	}
+
+	cursor, err := svc.GetCursor(context.Background(), automations.GetCursorRequest{
+		InstanceID: supervision.InstanceID,
+	})
+	if err != nil {
+		t.Fatalf("GetCursor() error = %v", err)
+	}
+	if cursor.AutomationID != supervision.AutomationID ||
+		cursor.InstanceID != supervision.InstanceID ||
+		cursor.Cursor != "opaque-cursor-2" ||
+		cursor.Checkpoint != "checkpoint-2" {
+		t.Fatalf("GetCursor() = %+v, want committed opaque recovery facts", cursor)
+	}
+}
+
+func TestRunScriptPoller_ResumesWithCompatibleCursorInCommandEnv(t *testing.T) {
+	t.Parallel()
+
+	factoryDir := t.TempDir()
+	recorder := scriptpollers.NewMemoryCursorRecorder()
+	ctx := context.Background()
+	const instanceID = "instance-resume"
+	if err := recorder.CommitCursor(ctx, scriptpollers.CommitCursorRequest{
+		AutomationID: "workflow-resume",
+		InstanceID:   instanceID,
+		Cursor:       "opaque-cursor-resume",
+		Checkpoint:   "checkpoint-resume",
+	}); err != nil {
+		t.Fatalf("CommitCursor() error = %v", err)
+	}
+
+	runner := &sequenceCommandRunner{
+		outcomes: []runOutcome{{result: workers.CommandResult{Stdout: []byte(`{"requestId":"noop","type":"FACTORY_REQUEST_BATCH","works":[{"name":"noop","workTypeName":"task"}]}`)}}},
+	}
+	svc := newScriptPollersServiceWithOptions(scriptPollersServiceOptions{
+		runner:         runner,
+		cursorRecorder: recorder,
+	})
+	poller := newCanonicalScriptPollerWorkstation()
+	worker := newCanonicalScriptPollerWorker()
+	runtimeCfg := newScriptPollerLoadedRuntimeConfig(t, factoryDir, poller, worker)
+	supervision := scriptpollers.ScriptPollerSupervision{
+		AutomationID:   "workflow-resume",
+		SourceID:       "source-resume",
+		InstanceID:     instanceID,
+		ExpectedCursor: "opaque-cursor-resume",
+	}
+
+	err := svc.RunScriptPoller(
+		ctx,
+		runner,
+		runtimeCfg,
+		poller,
+		worker,
+		supervision,
+		func(context.Context, work.WorkRequest) error { return nil },
+	)
+	if err == nil || !strings.Contains(err.Error(), "exited unexpectedly") {
+		t.Fatalf("RunScriptPoller error = %v", err)
+	}
+	if runner.callCount() != 1 {
+		t.Fatalf("runner calls = %d, want 1", runner.callCount())
+	}
+	runner.mu.Lock()
+	req := runner.reqs[0]
+	runner.mu.Unlock()
+	if !containsEnv(req.Env, scriptpollers.ScriptPollerCursorEnvVar+"=opaque-cursor-resume") ||
+		!containsEnv(req.Env, scriptpollers.ScriptPollerCheckpointEnvVar+"=checkpoint-resume") {
+		t.Fatalf("command env = %#v, want resume cursor/checkpoint injected", req.Env)
+	}
+}
+
+func TestRunScriptPoller_RejectsStaleCursorWithoutSubmit(t *testing.T) {
+	t.Parallel()
+
+	recorder := scriptpollers.NewMemoryCursorRecorder()
+	ctx := context.Background()
+	const instanceID = "instance-stale-run"
+	if err := recorder.CommitCursor(ctx, scriptpollers.CommitCursorRequest{
+		AutomationID: "workflow-stale-run",
+		InstanceID:   instanceID,
+		Cursor:       "cursor-current",
+	}); err != nil {
+		t.Fatalf("CommitCursor() error = %v", err)
+	}
+
+	runner := &sequenceCommandRunner{
+		outcomes: []runOutcome{{result: workers.CommandResult{Stdout: []byte(`{"requestId":"stale","type":"FACTORY_REQUEST_BATCH","works":[{"name":"stale","workTypeName":"task"}]}`)}}},
+	}
+	submitted := &recordingSubmitter{}
+	svc := newScriptPollersServiceWithOptions(scriptPollersServiceOptions{
+		runner:         runner,
+		cursorRecorder: recorder,
+	})
+	poller := newCanonicalScriptPollerWorkstation()
+	worker := newCanonicalScriptPollerWorker()
+	runtimeCfg := newScriptPollerLoadedRuntimeConfig(t, t.TempDir(), poller, worker)
+
+	err := svc.RunScriptPoller(
+		ctx,
+		runner,
+		runtimeCfg,
+		poller,
+		worker,
+		scriptpollers.ScriptPollerSupervision{
+			AutomationID:   "workflow-stale-run",
+			InstanceID:     instanceID,
+			ExpectedCursor: "cursor-stale",
+		},
+		submitted.submit,
+	)
+	assertAutomationsConflict(t, err, scriptpollers.GetCursorOperation)
+	if submitted.calls != 0 {
+		t.Fatalf("submit calls = %d, want 0 on stale cursor conflict", submitted.calls)
+	}
+	if runner.callCount() != 0 {
+		t.Fatalf("runner calls = %d, want 0 before stale cursor rejection", runner.callCount())
+	}
+
+	cursor, err := svc.GetCursor(ctx, automations.GetCursorRequest{InstanceID: instanceID})
+	if err != nil {
+		t.Fatalf("GetCursor() error = %v", err)
+	}
+	if cursor.Cursor != "cursor-current" {
+		t.Fatalf("cursor after stale run = %q, want authoritative cursor-current", cursor.Cursor)
+	}
+}
+
+func TestRunScriptPoller_CursorPersistFailureDoesNotReportSuccess(t *testing.T) {
+	t.Parallel()
+
+	stdout := []byte(`{
+		"requestId":"linear-issue-batch-persist-fail",
+		"type":"FACTORY_REQUEST_BATCH",
+		"works":[{"name":"issue-persist","workTypeName":"task"}],
+		"cursor":"opaque-cursor-next"
+	}`)
+	runner := &sequenceCommandRunner{
+		outcomes: []runOutcome{{result: workers.CommandResult{Stdout: stdout}}},
+	}
+	submitted := &recordingSubmitter{}
+	svc := newScriptPollersServiceWithOptions(scriptPollersServiceOptions{
+		runner: runner,
+		cursorRecorder: failingCursorRecorder{
+			commitErr: errors.New("disk unavailable"),
+		},
+	})
+
+	poller := newCanonicalScriptPollerWorkstation()
+	worker := newCanonicalScriptPollerWorker()
+	runtimeCfg := newScriptPollerLoadedRuntimeConfig(t, t.TempDir(), poller, worker)
+
+	err := svc.RunScriptPoller(
+		context.Background(),
+		runner,
+		runtimeCfg,
+		poller,
+		worker,
+		scriptpollers.ScriptPollerSupervision{
+			AutomationID: "workflow-persist-fail",
+			InstanceID:   "instance-persist-fail",
+		},
+		submitted.submit,
+	)
+	if err == nil || !strings.Contains(err.Error(), "cursor persistence failed") {
+		t.Fatalf("RunScriptPoller error = %v, want cursor persistence failure", err)
+	}
+	if submitted.calls != 1 {
+		t.Fatalf("submit calls = %d, want 1 before persistence failure surfaces", submitted.calls)
+	}
+}
+
+type failingCursorRecorder struct {
+	commitErr error
+}
+
+func (f failingCursorRecorder) GetCursor(
+	_ context.Context,
+	request automations.GetCursorRequest,
+) (automations.GetCursorResult, error) {
+	return scriptpollers.NewMemoryCursorRecorder().GetCursor(context.Background(), request)
+}
+
+func (f failingCursorRecorder) CommitCursor(context.Context, scriptpollers.CommitCursorRequest) error {
+	return f.commitErr
+}
+
+func assertAutomationsConflict(t *testing.T, err error, op string) {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("%s error = nil, want conflict", op)
+	}
+	typed, ok := err.(*automations.Error)
+	if !ok {
+		t.Fatalf("%s error type = %T, want *automations.Error", op, err)
+	}
+	if typed.Op != op || typed.Code != automations.ErrorCodeConflict {
+		t.Fatalf("%s error = %+v, want op=%q code=%q", op, typed, op, automations.ErrorCodeConflict)
+	}
+	if !errors.Is(err, automations.ErrConflict) {
+		t.Fatalf("%s error = %v, want errors.Is ErrConflict", op, err)
+	}
+}
