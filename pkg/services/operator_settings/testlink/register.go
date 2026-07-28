@@ -5,8 +5,8 @@ package testlink
 import (
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	operatorsettingsservicewire "github.com/portpowered/infinite-you/pkg/services/operator_settings/servicewire"
+	"github.com/portpowered/infinite-you/pkg/services/operator_settings/testproviders"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 )
 
 // RegisterDocumentOwner wires the nested document owner into Operator Settings
@@ -19,7 +19,7 @@ func RegisterDocumentOwner() {
 // servicewire composition in tests that do not load pkg/wire.
 func RegisterProvidersRoot() {
 	operatorsettings.ConfigureProvidersRootConstructor(func() (providers.Service, error) {
-		return providerswire.NewService()
+		return testproviders.StandardCatalog(), nil
 	})
 }
 
