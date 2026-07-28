@@ -1,4 +1,4 @@
-package validation
+package impl
 
 import factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 

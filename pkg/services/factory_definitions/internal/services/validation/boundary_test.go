@@ -232,3 +232,19 @@ func TestPackageBoundary_WireSurfaceDoesNotConstructRuntimeOrSelectSiblingLeases
 	wirePackage := validationPublicPackage + "/wire"
 	assertPackageDirectImportsForbidden(t, wirePackage, validationForbiddenImportRoots)
 }
+
+func TestPackageBoundary_PrivateValidationSubpackagesDoNotImportPublicValidation(t *testing.T) {
+	t.Parallel()
+
+	for _, packagePath := range []string{
+		validationPublicPackage + "/internal/structural",
+		validationPublicPackage + "/internal/topology",
+		validationPublicPackage + "/internal/requiredtools",
+		validationPublicPackage + "/internal/orchestrator",
+		validationPublicPackage + "/internal/service",
+	} {
+		assertPackageDirectImportsForbidden(t, packagePath, []string{
+			"github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation",
+		})
+	}
+}

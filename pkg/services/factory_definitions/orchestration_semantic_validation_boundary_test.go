@@ -12,6 +12,7 @@ import (
 
 var orchestrationSemanticValidationPackages = []string{
 	factoryDefinitionsRoot + "/validation",
+	factoryDefinitionsRoot + "/internal/services/validation/impl",
 	factoryDefinitionsRoot + "/internal/services/validation/internal/orchestrator",
 }
 

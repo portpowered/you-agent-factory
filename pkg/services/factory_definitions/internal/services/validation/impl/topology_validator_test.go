@@ -1,6 +1,7 @@
-package validation
+package impl
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -942,4 +943,33 @@ func inferenceOperationFixture() []factorydefinitions.ModelOperation {
 			ContentTypes: []string{factorydefinitions.ModelOperationContentTypeAudio},
 		}},
 	}}
+}
+
+func ruleWorkerWorkstationBehaviorCompatibility(
+	cfg *factorydefinitions.FactoryConfig,
+) []Finding {
+	return FactoryDefinitionFindings(
+		New(nil).
+			WorkerWorkstationBehaviorCompatibility(context.Background(), cfg),
+	)
+}
+
+func ruleWorkTypeHandlingBehavior(
+	cfg *factorydefinitions.FactoryConfig,
+	requireDefault bool,
+) []Finding {
+	return FactoryDefinitionFindings(
+		New(nil).
+			WorkTypeHandlingBehavior(context.Background(), cfg, requireDefault),
+	)
+}
+
+func ruleCanonicalFactoryDefinitionValidation(
+	cfg *factorydefinitions.FactoryConfig,
+) []Finding {
+	return FactoryDefinitionFindings(
+		New(nil).
+			Validate(context.Background(), cfg, nil).
+			Targets,
+	)
 }
