@@ -1,6 +1,7 @@
 package review
 
 import (
+	"strings"
 	"testing"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -25,5 +26,42 @@ func TestPackagedReviewApprovalCompletes(t *testing.T) {
 	}
 	if got := runner.CallCount(); got != 2 {
 		t.Fatalf("provider invocation count = %d, want work then review", got)
+	}
+}
+
+// TestPackagedReviewRejectionCarriesFeedback proves packaged @you/review
+// invocation carries the original request, rejected prior candidate, and
+// reviewer feedback into the revised work attempt after a first-pass rejection,
+// then completes with the later approved candidate as the primary result.
+func TestPackagedReviewRejectionCarriesFeedback(t *testing.T) {
+	submitted := "write release notes"
+	runner := support.NewShapedProviderCommandRunner(
+		platformprocess.CommandResult{Stdout: []byte("first candidate")},
+		platformprocess.CommandResult{Stdout: []byte(`{"decision":"REJECTED","feedback":"add the missing release date"}`)},
+		platformprocess.CommandResult{Stdout: []byte("revised candidate")},
+		platformprocess.CommandResult{Stdout: []byte(`{"decision":"ACCEPTED","output":"approved revised candidate"}`)},
+	)
+
+	response := runPackagedReviewCLIJSONInvocation(t, runner, submitted)
+	assertPackagedReviewCompletedWithText(t, response, "approved revised candidate")
+	if invocationPrimaryResultText(t, response) == submitted {
+		t.Fatal("primaryResult echoed submitted request text")
+	}
+	if got := runner.CallCount(); got != 4 {
+		t.Fatalf("provider invocation count = %d, want work, review, revised work, review", got)
+	}
+
+	requests := runner.Requests()
+	if len(requests) != 4 {
+		t.Fatalf("recorded provider requests = %d, want 4", len(requests))
+	}
+	secondWorkPrompt := providerCommandPrompt(requests[2])
+	if !strings.Contains(secondWorkPrompt, submitted) ||
+		!strings.Contains(secondWorkPrompt, "first candidate") ||
+		!strings.Contains(secondWorkPrompt, "add the missing release date") {
+		t.Fatalf(
+			"revised work prompt = %q, want request, rejected candidate, and review feedback",
+			secondWorkPrompt,
+		)
 	}
 }

@@ -73,6 +73,13 @@ func assertPackagedReviewCompletedWithText(
 	}
 }
 
+func providerCommandPrompt(request platformprocess.CommandRequest) string {
+	if len(request.Stdin) > 0 {
+		return string(request.Stdin)
+	}
+	return strings.Join(request.Args, " ")
+}
+
 func invocationPrimaryResultText(t *testing.T, response factoryapi.InvocationResponse) string {
 	t.Helper()
 
