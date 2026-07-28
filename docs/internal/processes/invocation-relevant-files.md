@@ -2007,6 +2007,15 @@ response-stream output.
   source together with its source identity, args schema, agents, and default
   policy; resolving its scoped name again from the session directory loses the
   materialized named-factory context.
+- Functional coverage for packaged `@you/fusion` Petri invocation belongs in
+  `tests/functional/factory/packaged/fusion/invocation_test.go`. Exercise
+  `POST /factory-sessions/~default/invocations` with `InvocationRequest.Args`,
+  observe multi-worker merge order through public factory dispatch events
+  (`draft-fusion` then `refine-fusion`), and correlate optional overrides from
+  `MODEL_REQUEST`, `INFERENCE_RESPONSE`, and `AGENT_RUN_RESPONSE` on the
+  factory event stream. Durable-session `GET /factory-sessions/{id}/dispatches`
+  is for JavaScript workflow sessions such as deep-research, not Petri
+  invocation-only runs.
 - Functional coverage for `@you/deep-research` belongs in
   `tests/functional/smoke/cli_named_deep_research_smoke_test.go` and
   `tests/functional/runtime_api/api_packaged_deep_research_invocation_test.go`.

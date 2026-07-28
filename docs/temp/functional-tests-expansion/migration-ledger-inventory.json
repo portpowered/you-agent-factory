@@ -5713,7 +5713,7 @@
       "package": "you-agent-factory/tests/functional/workers/inference/claude",
       "scenario": "TestClaudeConductorSuccessThroughRootBuildProcess",
       "lane": "short",
-      "destination": "tests/functional/workers/inference/claude/conductor_test.go",
+      "destination": "wrong-layer: package-integration \u2014 root.BuildProcess and Providers wire composition smoke without proving a customer product scenario. Replacement evidence owner: pkg/root and pkg/services/providers/wire package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -5773,7 +5773,7 @@
       "package": "you-agent-factory/tests/functional/workers/inference/codex",
       "scenario": "TestCodexConductorSuccessThroughRootBuildProcess",
       "lane": "short",
-      "destination": "tests/functional/workers/inference/codex/conductor_test.go",
+      "destination": "wrong-layer: package-integration \u2014 root.BuildProcess and Providers wire composition smoke without proving a customer product scenario. Replacement evidence owner: pkg/root and pkg/services/providers/wire package-integration tests.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -7357,14 +7357,84 @@
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/goal/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/goal",
+      "scenario": "TestPackagedGoalAcceptCompletesWithSummary",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/goal/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/goal/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/goal",
+      "scenario": "TestPackagedGoalRejectRepeatsThenCompletes",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/goal/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/goal/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/goal",
+      "scenario": "TestPackagedGoalUnknownDecisionFails",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/goal/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/goal/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/goal",
+      "scenario": "TestPackagedGoalPausedSubmissionResumes",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/goal/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/fusion/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/fusion",
+      "scenario": "TestPackagedFusionRequiredInputCompletes",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/fusion/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/fusion/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/fusion",
+      "scenario": "TestPackagedFusionOptionalInputsReachWorkers",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/fusion/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/fusion/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/fusion",
+      "scenario": "TestPackagedFusionPartialWorkerFailureUsesDocumentedOutcome",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/fusion/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
     }
   ],
-  "scanned_at_utc": "2026-07-28T04:25:00Z",
+  "scanned_at_utc": "2026-07-28T04:37:00Z",
   "summary": {
     "by_catch_all": {
       "bootstrap_portability": 22,
       "guards_batch": 23,
-      "none": 460,
+      "none": 467,
       "replay_contracts": 23,
       "runtime_api": 96,
       "smoke": 62,
@@ -7375,7 +7445,7 @@
       "automations": 7,
       "bootstrap_portability": 21,
       "cli": 62,
-      "factory": 11,
+      "factory": 18,
       "guards_batch": 23,
       "models": 5,
       "observability": 9,
@@ -7394,9 +7464,9 @@
       "workflow": 30,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 716,
+    "customer_top_level_Test_scenarios": 723,
     "lane_functionallong": 95,
-    "lane_short": 621,
+    "lane_short": 628,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 7,
@@ -7411,6 +7481,8 @@
       "you-agent-factory/tests/functional/cli/session_resume": 6,
       "you-agent-factory/tests/functional/factory/packaged/catalog": 7,
       "you-agent-factory/tests/functional/factory/packaged/deep_research": 3,
+      "you-agent-factory/tests/functional/factory/packaged/fusion": 3,
+      "you-agent-factory/tests/functional/factory/packaged/goal": 4,
       "you-agent-factory/tests/functional/factory/runtime_lifecycle": 1,
       "you-agent-factory/tests/functional/guards_batch": 23,
       "you-agent-factory/tests/functional/models/model_invoke": 3,
@@ -7551,15 +7623,15 @@
     }
   },
   "completeness_audit": {
-    "audited_at_utc": "2026-07-28T04:25:00Z",
+    "audited_at_utc": "2026-07-28T04:37:00Z",
     "story": "ft-wave2-work-dependencies-mergeability",
-    "live_customer_scenarios": 716,
-    "ledger_rows": 716,
+    "live_customer_scenarios": 723,
+    "ledger_rows": 723,
     "unmapped_scenarios": 0,
     "checklist_destinations": 435,
     "wrong_layer_destinations": 69,
     "invalid_destinations": 0,
-    "lane_short": 621,
+    "lane_short": 628,
     "lane_functionallong": 95,
     "specialty_targets_documented": 11,
     "deletion_only_batches": 52,

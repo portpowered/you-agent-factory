@@ -666,12 +666,12 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPackagedDeepResearchOptionalInputsReachWorkers` covers overrides.
   - `TestPackagedDeepResearchWorkerFailureReturnsFailedOutcome` covers failure.
 
-- [ ] `tests/functional/factory/packaged/fusion/invocation_test.go`
+- [x] `tests/functional/factory/packaged/fusion/invocation_test.go`
   - `TestPackagedFusionRequiredInputCompletes` verifies its multi-worker merge.
   - `TestPackagedFusionOptionalInputsReachWorkers` covers supported options.
   - `TestPackagedFusionPartialWorkerFailureUsesDocumentedOutcome` covers error.
 
-- [ ] `tests/functional/factory/packaged/goal/invocation_test.go`
+- [x] `tests/functional/factory/packaged/goal/invocation_test.go`
   - `TestPackagedGoalAcceptCompletesWithSummary` covers accepted routing.
   - `TestPackagedGoalRejectRepeatsThenCompletes` covers feedback propagation.
   - `TestPackagedGoalUnknownDecisionFails` covers classifier failure.
