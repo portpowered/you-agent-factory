@@ -9,7 +9,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/work/stateaccessrecordings"
+	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
 )
 
 // TestRecordingsBackedWorkReadsUseRecordingsRootContract proves functional
@@ -38,18 +38,18 @@ func TestRecordingsBackedWorkReadsUseRecordingsRootContract(t *testing.T) {
 		},
 	}
 	ctx := context.Background()
+	svc := workwire.RecordingsStateAccessService(fake)
 
-	list, err := stateaccessrecordings.ListWorkFromRecordingsRoot(
+	list, err := svc.ListWork(
 		ctx,
 		"session-recordings-functional",
-		fake,
 		work.ListOptions{},
 	)
 	if err != nil {
-		t.Fatalf("ListWorkFromRecordingsRoot: %v", err)
+		t.Fatalf("ListWork: %v", err)
 	}
 	if len(list.Results) != 1 || list.Results[0].WorkID != "work-story" {
-		t.Fatalf("ListWorkFromRecordingsRoot = %#v, want one story work item", list)
+		t.Fatalf("ListWork = %#v, want one story work item", list)
 	}
 	if len(fake.subscribeRequests) < 1 || len(fake.reconstructRequests) < 1 {
 		t.Fatalf("subscribe=%d reconstruct=%d, want at least 1 each",
@@ -87,17 +87,18 @@ func TestGetWorkFromRecordingsRootUsesRecordingsServiceRoot(t *testing.T) {
 		},
 	}
 
-	got, err := stateaccessrecordings.GetWorkFromRecordingsRoot(
+	svc := workwire.RecordingsStateAccessService(fake)
+
+	got, err := svc.GetWork(
 		context.Background(),
 		"session-recordings-functional",
 		"work-active",
-		fake,
 	)
 	if err != nil {
-		t.Fatalf("GetWorkFromRecordingsRoot: %v", err)
+		t.Fatalf("GetWork: %v", err)
 	}
 	if got.WorkID != "work-active" || got.State == nil || got.State.Type != work.StateTypeProcessing {
-		t.Fatalf("GetWorkFromRecordingsRoot = %#v, want active processing work item", got)
+		t.Fatalf("GetWork = %#v, want active processing work item", got)
 	}
 	if len(fake.reconstructRequests) != 1 || fake.reconstructRequests[0].SelectedTick != 5 {
 		t.Fatalf("reconstruct requests = %#v, want highest tick 5", fake.reconstructRequests)
@@ -120,17 +121,18 @@ func TestRecordingsBackedWorkReadsMapRichWorldState(t *testing.T) {
 		},
 	}
 
-	list, err := stateaccessrecordings.ListWorkFromRecordingsRoot(
+	svc := workwire.RecordingsStateAccessService(fake)
+
+	list, err := svc.ListWork(
 		context.Background(),
 		"session-recordings-functional",
-		fake,
 		work.ListOptions{WorkTypeName: "story", MaxResults: 2},
 	)
 	if err != nil {
-		t.Fatalf("ListWorkFromRecordingsRoot: %v", err)
+		t.Fatalf("ListWork: %v", err)
 	}
 	if len(list.Results) != 2 || list.NextToken == "" {
-		t.Fatalf("ListWorkFromRecordingsRoot = %#v, want paginated story items", list)
+		t.Fatalf("ListWork = %#v, want paginated story items", list)
 	}
 
 	byID := make(map[string]work.ReadModel, len(list.Results))
@@ -144,14 +146,13 @@ func TestRecordingsBackedWorkReadsMapRichWorldState(t *testing.T) {
 		t.Fatalf("relations = %#v, want one depends_on relation", byID["work-active"].Relations)
 	}
 
-	failed, err := stateaccessrecordings.GetWorkFromRecordingsRoot(
+	failed, err := svc.GetWork(
 		context.Background(),
 		"session-recordings-functional",
 		"work-failed",
-		fake,
 	)
 	if err != nil {
-		t.Fatalf("GetWorkFromRecordingsRoot(failed): %v", err)
+		t.Fatalf("GetWork(failed): %v", err)
 	}
 	if failed.State == nil || failed.State.Type != work.StateTypeFailed {
 		t.Fatalf("failed work state = %#v, want failed", failed.State)
@@ -161,17 +162,20 @@ func TestRecordingsBackedWorkReadsMapRichWorldState(t *testing.T) {
 func TestRecordingsBackedWorkReadsSurfaceTypedProjectionFailures(t *testing.T) {
 	t.Parallel()
 
-	_, err := stateaccessrecordings.ListWorkFromRecordingsRoot(
+	svc := workwire.RecordingsStateAccessService(
+		&functionalRecordingsRootFake{reconstructErr: recordings.ErrInvalidProjectionInput},
+	)
+
+	_, err := svc.ListWork(
 		context.Background(),
 		"session-recordings-functional",
-		&functionalRecordingsRootFake{reconstructErr: recordings.ErrInvalidProjectionInput},
 		work.ListOptions{},
 	)
 	if err == nil {
-		t.Fatal("ListWorkFromRecordingsRoot error = nil, want typed projection failure")
+		t.Fatal("ListWork error = nil, want typed projection failure")
 	}
 	if !errors.Is(err, recordings.ErrInvalidProjectionInput) {
-		t.Fatalf("ListWorkFromRecordingsRoot error = %v, want ErrInvalidProjectionInput", err)
+		t.Fatalf("ListWork error = %v, want ErrInvalidProjectionInput", err)
 	}
 }
 

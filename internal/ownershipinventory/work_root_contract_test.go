@@ -40,8 +40,13 @@ func TestWorkThinRootContractFiles(t *testing.T) {
 		"recordings_import_boundary_test.go",
 		"recordings_request_boundary_test.go",
 		"service_contract.go",
+		"service_import_boundary_test.go",
+		"service_peer_bindings.go",
+		"service_peer_bindings_test.go",
 		"service_root_contract_seal_test.go",
 		"service_root_contract_test.go",
+		"wire_behavioral_proof_test.go",
+		"legacy_packages_disposition_test.go",
 	}
 	if !slices.Equal(ownershipinventory.WorkThinRootContractFiles, want) {
 		t.Fatalf("WorkThinRootContractFiles = %v, want %v", ownershipinventory.WorkThinRootContractFiles, want)
