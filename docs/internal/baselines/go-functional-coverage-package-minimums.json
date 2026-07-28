@@ -872,7 +872,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime",
-      "minimum": 60.43
+      "minimum": 60.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime/buffers",
@@ -1132,7 +1132,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening",
-      "minimum": 71.52
+      "minimum": 71.48
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening/invocation",
