@@ -1403,6 +1403,10 @@
       "minimum": 90.90
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/service",
+      "minimum": 40.30
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/codex_reader",
       "exception": {
         "kind": "measurement",
