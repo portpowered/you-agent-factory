@@ -239,12 +239,12 @@
       "minimum": 68.75
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts",
-      "minimum": 88.23
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal",
       "minimum": 50.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts",
+      "minimum": 88.23
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout",

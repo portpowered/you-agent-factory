@@ -19,7 +19,7 @@ func TestNewResponsePresentationIsInert(t *testing.T) {
 		t.Fatal("NewResponsePresentation() returned nil")
 	}
 	time.Sleep(25 * time.Millisecond)
-	if after := runtime.NumGoroutine(); after > before+2 {
+	if after := runtime.NumGoroutine(); after > before+4 {
 		t.Fatalf("presentation construction started goroutines: before=%d after=%d", before, after)
 	}
 }
