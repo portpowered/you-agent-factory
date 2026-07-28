@@ -1,10 +1,12 @@
 package routing
 
 import (
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -138,6 +140,151 @@ func TestPetriMultiStagePipelineCompletesAtPublicTerminals(t *testing.T) {
 		assertQuiescentSession(t, session, 1, 0)
 		if runner.CallCount() != 3 {
 			t.Errorf("provider command call count = %d, want 3", runner.CallCount())
+		}
+	})
+}
+
+// TestPetriFailureRoutesToDocumentedFailedPlace proves worker or provider
+// failures in multi-transition Petri Factory routing project Work to the
+// Factory-documented failed place on public Work / session surfaces. Failed
+// dispatch outcomes are asserted on Factory Events when that is the natural
+// observation surface, without routing the same Work to success terminals or
+// inspecting internal Petri markings.
+func TestPetriFailureRoutesToDocumentedFailedPlace(t *testing.T) {
+	t.Run("two_stage_service_simple_second_stage_exit_routes_to_failed", func(t *testing.T) {
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
+		traceID := "trace-two-stage-failure"
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			WorkTypeID: "task",
+			TraceID:    traceID,
+			Payload:    []byte(`{"title":"two-stage failure routing"}`),
+		})
+
+		runner := testutil.NewProviderCommandRunner(
+			platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("Done. COMPLETE")},
+			platformprocess.CommandResult{
+				Stderr:   []byte("stage-two provider unavailable"),
+				ExitCode: 1,
+			},
+		)
+		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+			t,
+			dir,
+			serviceedges.Edges{ProviderCommandRunner: runner},
+			10*time.Second,
+		)
+
+		failedTerminal := support.WorkCustomerLocation("task", "failed")
+		successTerminal := support.WorkCustomerLocation("task", "complete")
+		assertWorkAtCustomerStates(t, listed, map[string]int{
+			failedTerminal: 1,
+			successTerminal: 0,
+			support.WorkCustomerLocation("task", "init"):        0,
+			support.WorkCustomerLocation("task", "processing"): 0,
+		})
+		assertTerminalWorkCorrelatesToTraceIDs(t, listed, failedTerminal, []string{traceID})
+		assertTraceAbsentAtCustomerState(t, listed, successTerminal, traceID)
+		assertQuiescentSession(t, session, 0, 1)
+
+		failedWorkID, ok := workIDAtCustomerState(t, listed, failedTerminal, traceID)
+		if !ok {
+			t.Fatalf("missing failed Work for trace %q at %s", traceID, failedTerminal)
+		}
+		assertFailedDispatchForWork(t, support.ObserveDispatchEvents(t, events), failedWorkID)
+		if runner.CallCount() != 2 {
+			t.Errorf("provider command call count = %d, want 2", runner.CallCount())
+		}
+	})
+
+	t.Run("cross_work_type_dispatcher_executor_exit_routes_prd_to_failed", func(t *testing.T) {
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dispatcher_workflow"))
+		traceID := "trace-dispatcher-executor-failure"
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			WorkTypeID: "idea",
+			TraceID:    traceID,
+			Payload:    []byte(`{"title":"dispatcher failure routing"}`),
+		})
+
+		runner := testutil.NewProviderCommandRunner(
+			platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("Done. COMPLETE")},
+			platformprocess.CommandResult{
+				Stderr:   []byte("executor subprocess failed"),
+				ExitCode: 1,
+			},
+		)
+		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+			t,
+			dir,
+			serviceedges.Edges{ProviderCommandRunner: runner},
+			15*time.Second,
+		)
+
+		failedTerminal := support.WorkCustomerLocation("prd", "failed")
+		successTerminal := support.WorkCustomerLocation("prd", "complete")
+		assertWorkAtCustomerStates(t, listed, map[string]int{
+			failedTerminal: 1,
+			successTerminal: 0,
+			support.WorkCustomerLocation("idea", "init"):        0,
+			support.WorkCustomerLocation("prd", "init"):         0,
+			support.WorkCustomerLocation("prd", "in-review"):      0,
+		})
+		assertTerminalWorkCorrelatesToTraceIDs(t, listed, failedTerminal, []string{traceID})
+		assertTraceAbsentAtCustomerState(t, listed, successTerminal, traceID)
+		assertQuiescentSession(t, session, 0, 1)
+
+		failedWorkID, ok := workIDAtCustomerState(t, listed, failedTerminal, traceID)
+		if !ok {
+			t.Fatalf("missing failed Work for trace %q at %s", traceID, failedTerminal)
+		}
+		assertFailedDispatchForWork(t, support.ObserveDispatchEvents(t, events), failedWorkID)
+		if runner.CallCount() != 2 {
+			t.Errorf("provider command call count = %d, want 2", runner.CallCount())
+		}
+	})
+
+	t.Run("code_review_reviewer_error_routes_to_failed", func(t *testing.T) {
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
+		traceID := "trace-code-review-failure"
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			WorkTypeID: "code-change",
+			TraceID:    traceID,
+			Payload:    []byte(`{"task":"routing failure review"}`),
+		})
+
+		provider := testutil.NewMockWorkerMapProviderWithDefault(map[string][]testutil.WorkResponse{
+			"swe":      {{Content: "Done. COMPLETE"}},
+			"reviewer": {{Content: "", Error: errors.New("reviewer inference failed")}},
+		})
+		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+			t,
+			dir,
+			serviceedges.Edges{ProviderOverride: provider},
+			15*time.Second,
+		)
+
+		failedTerminal := support.WorkCustomerLocation("code-change", "failed")
+		successTerminal := support.WorkCustomerLocation("code-change", "complete")
+		assertWorkAtCustomerStates(t, listed, map[string]int{
+			failedTerminal:  1,
+			successTerminal: 0,
+			support.WorkCustomerLocation("code-change", "init"):      0,
+			support.WorkCustomerLocation("code-change", "in-review"): 0,
+		})
+		assertTerminalWorkCorrelatesToTraceIDs(t, listed, failedTerminal, []string{traceID})
+		assertTraceAbsentAtCustomerState(t, listed, successTerminal, traceID)
+		assertQuiescentSession(t, session, 0, 1)
+
+		failedWorkID, ok := workIDAtCustomerState(t, listed, failedTerminal, traceID)
+		if !ok {
+			t.Fatalf("missing failed Work for trace %q at %s", traceID, failedTerminal)
+		}
+		assertFailedDispatchForWork(t, support.ObserveDispatchEvents(t, events), failedWorkID)
+		if provider.CallCount("swe") != 1 || provider.CallCount("reviewer") != 1 {
+			t.Errorf(
+				"provider calls = swe:%d reviewer:%d, want swe:1 reviewer:1",
+				provider.CallCount("swe"),
+				provider.CallCount("reviewer"),
+			)
 		}
 	})
 }

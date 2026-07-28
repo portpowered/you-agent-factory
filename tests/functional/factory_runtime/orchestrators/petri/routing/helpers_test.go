@@ -7,6 +7,67 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+func workIDAtCustomerState(
+	t *testing.T,
+	listed factoryapi.ListWorkResponse,
+	location string,
+	traceID string,
+) (string, bool) {
+	t.Helper()
+	for _, item := range listed.Results {
+		if support.WorkItemCustomerLocation(item) != location {
+			continue
+		}
+		if item.TraceId == nil || *item.TraceId != traceID {
+			continue
+		}
+		if item.WorkId == nil || *item.WorkId == "" {
+			t.Fatalf("work at %s for trace %q missing workId", location, traceID)
+		}
+		return *item.WorkId, true
+	}
+	return "", false
+}
+
+func assertTraceAbsentAtCustomerState(
+	t *testing.T,
+	listed factoryapi.ListWorkResponse,
+	location string,
+	traceID string,
+) {
+	t.Helper()
+	for _, item := range listed.Results {
+		if support.WorkItemCustomerLocation(item) != location {
+			continue
+		}
+		if item.TraceId != nil && *item.TraceId == traceID {
+			t.Errorf("trace %q should not be at %s", traceID, location)
+		}
+	}
+}
+
+func assertFailedDispatchForWork(
+	t *testing.T,
+	dispatches []support.DispatchEventObservation,
+	workID string,
+) {
+	t.Helper()
+
+	for _, dispatch := range dispatches {
+		if !support.DispatchObservationIncludesWork(dispatch, workID) {
+			continue
+		}
+		if dispatch.Response == nil {
+			continue
+		}
+		if dispatch.Response.Outcome != factoryapi.WorkOutcomeFailed {
+			continue
+		}
+		return
+	}
+	t.Fatalf("no failed dispatch observation for work %q", workID)
+}
+
 func assertWorkAtCustomerStates(t *testing.T, listed factoryapi.ListWorkResponse, wants map[string]int) {
 	t.Helper()
 	for location, want := range wants {
