@@ -92,6 +92,13 @@
     "pkg/services/factory_definitions/editable",
     "pkg/services/factory_definitions/internal/contracts",
     "pkg/services/factory_definitions/internal/namedfactories",
+    "pkg/services/factory_definitions/internal/services/authoring_layout",
+    "pkg/services/factory_definitions/internal/services/authoring_layout/expand",
+    "pkg/services/factory_definitions/internal/services/authoring_layout/flatten",
+    "pkg/services/factory_definitions/internal/services/authoring_layout/internal/service",
+    "pkg/services/factory_definitions/internal/services/authoring_layout/persist",
+    "pkg/services/factory_definitions/internal/services/authoring_layout/prepare",
+    "pkg/services/factory_definitions/internal/services/authoring_layout/wire",
     "pkg/services/factory_definitions/internal/services/catalog",
     "pkg/services/factory_definitions/internal/services/catalog/internal/service",
     "pkg/services/factory_definitions/internal/services/catalog/wire",
@@ -780,6 +787,41 @@
       "destination": "factory_definitions/internal/services/catalog"
     },
     {
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout",
+      "disposition": "move",
+      "destination": "factory_definitions/internal/services/authoring_layout"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/expand",
+      "disposition": "move",
+      "destination": "factory_definitions/internal/services/authoring_layout"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/flatten",
+      "disposition": "move",
+      "destination": "factory_definitions/internal/services/authoring_layout"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/internal/service",
+      "disposition": "move",
+      "destination": "factory_definitions/internal/services/authoring_layout"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/persist",
+      "disposition": "move",
+      "destination": "factory_definitions/internal/services/authoring_layout"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/prepare",
+      "disposition": "move",
+      "destination": "factory_definitions/internal/services/authoring_layout"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/wire",
+      "disposition": "move",
+      "destination": "factory_definitions/internal/services/authoring_layout"
+    },
+    {
       "packagePath": "pkg/services/factory_definitions/internal/services/catalog",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/catalog"
@@ -796,37 +838,37 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/compilation",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_definitions/internal/services/compilation"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/compilation/canonical",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_definitions/internal/services/compilation"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/compilation/internal/service",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_definitions/internal/services/compilation"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/compilation/loadedsource",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_definitions/internal/services/compilation"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/compilation/loading",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_definitions/internal/services/compilation"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/compilation/runtimeconfig",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_definitions/internal/services/compilation"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/compilation/wire",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_definitions/internal/services/compilation"
     },
     {
@@ -2311,38 +2353,38 @@
     },
     {
       "packagePath": "pkg/services/workers/construction",
-      "disposition": "retain",
-      "destination": "workers"
+      "disposition": "move",
+      "destination": "workers/internal/services/runtime_assembly"
     },
     {
       "packagePath": "pkg/services/workers/diagnostics",
-      "disposition": "retain",
-      "destination": "workers"
+      "disposition": "move",
+      "destination": "workers/internal"
     },
     {
       "packagePath": "pkg/services/workers/execution",
-      "disposition": "retain",
-      "destination": "workers"
+      "disposition": "move",
+      "destination": "workers/internal/services/workstations"
     },
     {
       "packagePath": "pkg/services/workers/execution/recording",
-      "disposition": "retain",
-      "destination": "workers"
+      "disposition": "move",
+      "destination": "workers/internal/services/workstations"
     },
     {
       "packagePath": "pkg/services/workers/executor",
-      "disposition": "retain",
-      "destination": "workers"
+      "disposition": "move",
+      "destination": "workers/internal/services/workstations"
     },
     {
       "packagePath": "pkg/services/workers/executor/agentrun",
-      "disposition": "retain",
-      "destination": "workers"
+      "disposition": "move",
+      "destination": "workers/internal/services/workstations"
     },
     {
       "packagePath": "pkg/services/workers/interface",
-      "disposition": "retain",
-      "destination": "workers"
+      "disposition": "move",
+      "destination": "workers/internal"
     },
     {
       "packagePath": "pkg/services/workers/internal/services/runners",
@@ -2421,18 +2463,18 @@
     },
     {
       "packagePath": "pkg/services/workers/invocation",
-      "disposition": "retain",
-      "destination": "workers"
+      "disposition": "move",
+      "destination": "workers/internal/services/workstations"
     },
     {
       "packagePath": "pkg/services/workers/process",
-      "disposition": "retain",
-      "destination": "workers"
+      "disposition": "move",
+      "destination": "workers/internal/services/runners"
     },
     {
       "packagePath": "pkg/services/workers/prompting",
-      "disposition": "retain",
-      "destination": "workers"
+      "disposition": "move",
+      "destination": "workers/internal/services/workstations"
     },
     {
       "packagePath": "pkg/services/workers/provider",
@@ -2526,8 +2568,8 @@
     },
     {
       "packagePath": "pkg/services/workers/runner",
-      "disposition": "retain",
-      "destination": "workers"
+      "disposition": "move",
+      "destination": "workers/internal/services/runners"
     },
     {
       "packagePath": "pkg/services/workers/service",
@@ -2546,8 +2588,8 @@
     },
     {
       "packagePath": "pkg/services/workers/skippermissions",
-      "disposition": "retain",
-      "destination": "workers"
+      "disposition": "move",
+      "destination": "workers/internal/services/workstations"
     },
     {
       "packagePath": "pkg/services/workers/wire",
@@ -2556,8 +2598,8 @@
     },
     {
       "packagePath": "pkg/services/workers/worktree",
-      "disposition": "retain",
-      "destination": "workers"
+      "disposition": "move",
+      "destination": "workers/internal/services/workstations"
     },
     {
       "packagePath": "pkg/transports/cli",
