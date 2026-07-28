@@ -52,7 +52,7 @@ type factoryImpl struct {
 	resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult]
 	dispatchFlow *dispatchPlanningResultHook
 	dispatchPlan dispatchplanning.Service
-	workers      *runtimeWorkersBoundary
+	workers      workers.WorkstationPoolBoundary
 	eventHistory recordings.RuntimeLedger
 	state        interfaces.FactoryState
 	startedAt    time.Time
@@ -76,7 +76,7 @@ type runtimeConfig struct {
 	net                       *state.Net
 	scheduler                 scheduler.Scheduler
 	workerExecutors           map[string]workers.WorkerExecutor
-	workerService             workstationExecutionBoundary
+	workerService             workers.WorkstationExecutionService
 	runtimeConfig             interfaces.RuntimeDefinitionLookup
 	workflowContext           *factory_context.FactoryContext
 	runtimeMode               interfaces.RuntimeMode
@@ -111,7 +111,7 @@ func New(
 	net *state.Net,
 	runtimeScheduler scheduler.Scheduler,
 	workerExecutors map[string]workers.WorkerExecutor,
-	workerService workstationExecutionBoundary,
+	workerService workers.WorkstationExecutionService,
 	runtimeDefinitions interfaces.RuntimeDefinitionLookup,
 	workflowContext *factory_context.FactoryContext,
 	runtimeMode interfaces.RuntimeMode,
@@ -410,14 +410,14 @@ func configureRuntimeDispatch(
 ) (
 	*dispatchPlanningResultHook,
 	dispatchplanning.Service,
-	*runtimeWorkersBoundary,
+	workers.WorkstationPoolBoundary,
 ) {
-	workersBoundary := newRuntimeWorkersBoundary(
-		cfg.workerService,
-		cfg.net,
-		cfg.workerExecutors,
-		!cfg.inlineDispatch && cfg.completionDeliveryPlanner == nil,
-	)
+	workersBoundary := workers.NewWorkstationPoolBoundary(workers.WorkstationPoolBoundaryConfig{
+		Service:    cfg.workerService,
+		Executors:  cfg.workerExecutors,
+		RouteNames: runtimeWorkstationRouteNames(cfg.net, cfg.workerExecutors),
+		Async:      !cfg.inlineDispatch && cfg.completionDeliveryPlanner == nil,
+	})
 	var resultHook *dispatchPlanningResultHook
 	planner := dispatchplanningwire.New(
 		func(ctx context.Context, request workers.WorkstationDispatchRequest) error {
@@ -442,7 +442,7 @@ func newFactoryImpl(
 	resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult],
 	dispatchFlow *dispatchPlanningResultHook,
 	dispatchPlan dispatchplanning.Service,
-	workersBoundary *runtimeWorkersBoundary,
+	workersBoundary workers.WorkstationPoolBoundary,
 	eventHistory recordings.RuntimeLedger,
 ) *factoryImpl {
 	return &factoryImpl{

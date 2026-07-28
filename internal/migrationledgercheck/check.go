@@ -151,6 +151,9 @@ func Check(repoRoot, ledgerPath, checklistPath string) error {
 	problems = append(problems, checkLaneSummary(ledger)...)
 	problems = append(problems, checkDeletionOnlyBatches(ledger)...)
 	problems = append(problems, checkSpecialtyTargets(ledger)...)
+	if err := CheckPackagedFactoryInvocationMatrix(repoRoot, checklistPath); err != nil {
+		problems = append(problems, err.Error())
+	}
 	if len(problems) > 0 {
 		slices.Sort(problems)
 		return fmt.Errorf("migration ledger completeness check failed (%d problems):\n- %s", len(problems), strings.Join(problems, "\n- "))
