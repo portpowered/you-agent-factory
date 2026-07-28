@@ -134,7 +134,9 @@ func TestFactoryTransformation_CreateNamedFactoryPreservesPortableLayoutThroughA
 	assertPortableLayoutPayload(t, persisted["layout"])
 
 	submitWorkAndExpectStatus(t, server.URL(), "beta-task", "layout-named-factory", http.StatusCreated)
-	assertImportExportNamedFactoryRunnerIdle(t, runner)
+	if runner.CallCount() != 1 {
+		t.Fatalf("provider command runner calls = %d, want 1 for accepted layout-named-factory submission", runner.CallCount())
+	}
 }
 
 func TestFactoryTransformation_UpsertNamedFactoryReplacePreservesPortableLayout(t *testing.T) {
