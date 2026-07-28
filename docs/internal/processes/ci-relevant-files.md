@@ -529,7 +529,14 @@ Wave 0 functional-tests-expansion planning authority lives under
   may only use the closed destination vocabulary (13 product owners, approved
   non-service families, and the `edges` architecture exception). Nested
   destinations are limited to `<owner>/internal/services/<subservice>` using the
-  plan's committed nested subservice names. The top-level `inventory` array is
+  plan's committed nested subservice names. Product-owner top-level sibling
+  inventories (`cmd/packagetargetmanifestcheck/owner_top_level.go`, mirrored in
+  `internal/ownershipinventory/owner_top_level.go`) classify immediate children
+  under `pkg/services/<owner>/` as expected retain (`wire`, `internal`,
+  `transports`, plus owner-specific retain exceptions such as Factory
+  Definitions `namevalue`) or unexpected move siblings; keep `recordings_top_level`
+  lists wired through the unified registry for INV-REC consistency. The top-level
+  `inventory` array is
   the stable-sorted (byte-order / slash path) ledger seed of every production
   `pkg/` package (directories with at least one non-test `.go` file); regenerate
   with `go run ./cmd/packagetargetmanifestcheck -write-inventory`. Committed
