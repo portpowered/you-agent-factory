@@ -831,3 +831,12 @@ Wave 0 functional-tests-expansion planning authority lives under
   `support.BuildProcess` before runtime lifecycle starts, then replace only
   `serviceedges.Edges.ScriptCommandRunner` on `support.StartFunctionalAPIServer`
   and observe polled Work through the public Work listing path.
+
+- `tests/functional/automations/reconciliation_root_composition_test.go` owns
+  root.BuildProcess inert-construction and post-composition Automations Root
+  reconciliation admission. Assert zero `SubmissionRecorder` submissions after
+  `support.BuildProcess` before explicit Root invocation, then obtain the published
+  Root through `support.AutomationsRootFromProcessEdges` (backed by
+  `wire.AutomationsRootFromEdges`) and assert converged or created reconcile
+  outcomes without importing `automations/internal`, `automations/wire`, or deleted
+  `automations/service`.
