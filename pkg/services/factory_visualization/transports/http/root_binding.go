@@ -73,3 +73,15 @@ func (a *Adapter) StopDrain(
 	}
 	return root.StopDrain(ctx, req)
 }
+
+// Observe invokes the Visualization root Observe slice.
+func (a *Adapter) Observe(
+	ctx context.Context,
+	req factoryvisualization.ObserveRequest,
+) (factoryvisualization.ObserveResult, error) {
+	root, err := a.requireVisualizationRoot()
+	if err != nil {
+		return factoryvisualization.ObserveResult{}, err
+	}
+	return root.Observe(ctx, req)
+}
