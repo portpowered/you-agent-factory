@@ -10,7 +10,6 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
 	snapshotsportability "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability"
 	snapshotsportabilitycapture "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/capture"
 	snapshotsportabilitymaterialize "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/materialize"
@@ -20,24 +19,24 @@ import (
 
 type stubLoadedSource struct {
 	dir string
-	cfg *factorycontracts.FactoryConfig
+	cfg *factorydefinitions.FactoryConfig
 }
 
-func (s stubLoadedSource) FactoryConfig() *factorycontracts.FactoryConfig { return s.cfg }
+func (s stubLoadedSource) FactoryConfig() *factorydefinitions.FactoryConfig { return s.cfg }
 func (s stubLoadedSource) FactoryDir() string                             { return s.dir }
 func (s stubLoadedSource) RuntimeBaseDir() string                         { return "" }
 func (s stubLoadedSource) SetRuntimeBaseDir(string)                       {}
-func (s stubLoadedSource) PortableBundledFileReplacements() []factorycontracts.PortableBundledFileReplacement {
+func (s stubLoadedSource) PortableBundledFileReplacements() []factorydefinitions.PortableBundledFileReplacement {
 	return nil
 }
 func (s stubLoadedSource) MutateWorkers(func(*workerconfig.Config) error) error { return nil }
-func (s stubLoadedSource) Workstation(string) (*factorycontracts.FactoryWorkstationConfig, bool) {
+func (s stubLoadedSource) Workstation(string) (*factorydefinitions.FactoryWorkstationConfig, bool) {
 	return nil, false
 }
 func (s stubLoadedSource) Worker(string) (*workerconfig.Config, bool) { return nil, false }
 
-func stubLoadCanonical(payload []byte, _ factorycontracts.WorkstationLoader) (factorycontracts.MutableLoadedFactorySource, error) {
-	var cfg factorycontracts.FactoryConfig
+func stubLoadCanonical(payload []byte, _ factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+	var cfg factorydefinitions.FactoryConfig
 	if err := json.Unmarshal(payload, &cfg); err != nil {
 		return nil, factorydefinitions.ErrInvalidNamedFactory
 	}
@@ -46,9 +45,9 @@ func stubLoadCanonical(payload []byte, _ factorycontracts.WorkstationLoader) (fa
 
 func stubPreparePortable(
 	_ string,
-	factoryConfig *factorycontracts.FactoryConfig,
+	factoryConfig *factorydefinitions.FactoryConfig,
 	_ bool,
-) (*factorycontracts.FactoryConfig, error) {
+) (*factorydefinitions.FactoryConfig, error) {
 	return factoryConfig, nil
 }
 

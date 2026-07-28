@@ -96,6 +96,24 @@ func TestPrepareWorkRequestUsesStableRequestLineageFallback(t *testing.T) {
 	}
 }
 
+func TestPrepareWorkRequestFillsMissingBatchWorkTypeFromDefault(t *testing.T) {
+	service := mustRequestPreparationService(t)
+	prepared, err := service.PrepareWorkRequest(context.Background(), WorkRequestPreparation{
+		Request: WorkRequest{
+			RequestID: "request-default-type",
+			Type:      WorkRequestTypeFactoryRequestBatch,
+			Works:     []Work{{Name: "draft", Payload: map[string]string{"title": "Draft"}}},
+		},
+		DefaultWorkTypeID: "task",
+	})
+	if err != nil {
+		t.Fatalf("PrepareWorkRequest: %v", err)
+	}
+	if prepared.Works[0].WorkTypeID != "task" {
+		t.Fatalf("work type = %q, want task", prepared.Works[0].WorkTypeID)
+	}
+}
+
 func TestPrepareWorkRequestOwnsPublicContentAliasNormalization(t *testing.T) {
 	original := WorkRequest{
 		RequestID: "request-aliases",

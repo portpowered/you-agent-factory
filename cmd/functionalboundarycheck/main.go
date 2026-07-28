@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	defaultScenarioPath = "tests/functional/runtime_api/api_request_batch_boundary_smoke_test.go"
+	defaultScenarioPath = "tests/functional/work/submission/batch_inputs_test.go"
 	diagnosticPrefix    = "[agent-factory:functional-boundary]"
 	providerTestRoot    = "tests/functional/providers/"
 	serviceImportPrefix = "github.com/portpowered/infinite-you/pkg/services/"

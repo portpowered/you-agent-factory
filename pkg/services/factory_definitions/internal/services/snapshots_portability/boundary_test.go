@@ -38,7 +38,7 @@ var snapshotsPortabilityForbiddenImportRoots = []string{
 
 var snapshotsPortabilityAllowedPublicTypeImportPrefixes = []string{
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions",
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts",
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts",
 }
 
 func TestPackageBoundary_PublicSurfaceDoesNotImportForbiddenOwnership(t *testing.T) {
@@ -163,7 +163,7 @@ func selectorImportPrefix(selector *ast.SelectorExpr) string {
 		case "factorydefinitions":
 			return "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 		case "factorycontracts":
-			return "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
+			return "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 		case "context":
 			return "context"
 		default:
