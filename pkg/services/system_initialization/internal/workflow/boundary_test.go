@@ -106,6 +106,42 @@ func TestWorkflowPackageBoundary_DoesNotImportInitializerOrStoreOwnershipPackage
 	}
 }
 
+func TestInitializeProductionUsesSettingsRootConfigPathAndCollaboratorPorts(t *testing.T) {
+	t.Parallel()
+
+	source, err := os.ReadFile("workflow.go")
+	if err != nil {
+		t.Fatalf("read workflow.go: %v", err)
+	}
+	text := string(source)
+
+	for _, required := range []string{
+		"operatorsettings.DefaultConfigPath(",
+		"settings.LoadFileConfig(",
+		"settings.EnsureLocalBackendScope(",
+	} {
+		if !strings.Contains(text, required) {
+			t.Errorf(
+				"workflow.go must route Initialize Settings commands through %q via the injected collaborator",
+				required,
+			)
+		}
+	}
+
+	for _, forbidden := range []string{
+		".you-agent-factory",
+		"operatorsettings.LoadFileConfig(",
+		"operatorsettings.EnsureLocalBackendScope(",
+	} {
+		if strings.Contains(text, forbidden) {
+			t.Errorf(
+				"workflow.go must not own Settings path formulas or package-level store APIs via %q",
+				forbidden,
+			)
+		}
+	}
+}
+
 func TestInitializeRollbackProofDoesNotDependOnInitializer(t *testing.T) {
 	t.Parallel()
 
