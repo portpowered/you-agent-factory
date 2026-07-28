@@ -333,3 +333,67 @@ func TestCommandHandlerInvokePreservesDependencyFailures(t *testing.T) {
 		t.Fatalf("defaults failure = %v, want %v", err, defaultsErr)
 	}
 }
+
+func TestCommandHandlerOmitsManifestDefaultServerFromModelsConfig(t *testing.T) {
+	t.Parallel()
+
+	var gotServer string
+	handler := NewCommandHandler(
+		commandServiceFake{
+			list: func(cfg ListConfig) error {
+				gotServer = cfg.Server
+				return nil
+			},
+		},
+		nil, nil, nil, nil,
+	)
+	inherited, err := resolvedinput.Resolve(
+		[]resolvedinput.Definition{
+			{
+				ID: serverInputID, Kind: resolvedinput.ValueKindString,
+				Precedence: []resolvedinput.Source{resolvedinput.SourceManifestDefault},
+			},
+			{
+				ID: jsonInputID, Kind: resolvedinput.ValueKindBool,
+				Precedence: []resolvedinput.Source{resolvedinput.SourceManifestDefault},
+			},
+			{
+				ID: verboseInputID, Kind: resolvedinput.ValueKindBool,
+				Precedence: []resolvedinput.Source{resolvedinput.SourceManifestDefault},
+			},
+			{
+				ID: debugInputID, Kind: resolvedinput.ValueKindBool,
+				Precedence: []resolvedinput.Source{resolvedinput.SourceManifestDefault},
+			},
+		},
+		[]resolvedinput.Candidate{
+			{
+				InputID: serverInputID, Source: resolvedinput.SourceManifestDefault,
+				Value: resolvedinput.StringValue("http://localhost:7437"),
+			},
+			{
+				InputID: jsonInputID, Source: resolvedinput.SourceManifestDefault,
+				Value: resolvedinput.BoolValue(false),
+			},
+			{
+				InputID: verboseInputID, Source: resolvedinput.SourceManifestDefault,
+				Value: resolvedinput.BoolValue(false),
+			},
+			{
+				InputID: debugInputID, Source: resolvedinput.SourceManifestDefault,
+				Value: resolvedinput.BoolValue(false),
+			},
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := &cobra.Command{Use: "models"}
+	cmd.SetOut(io.Discard)
+	if err := handler.List(cmd, resolvedinput.Inputs{}, inherited); err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if gotServer != "" {
+		t.Fatalf("server = %q, want empty for manifest-default --server", gotServer)
+	}
+}

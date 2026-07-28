@@ -92,7 +92,9 @@ func (h *CommandHandler) applyResolvedCommon(
 	diagnostics *io.Writer,
 ) error {
 	var err error
-	if *server, err = inputs.String(serverInputID); err != nil {
+	if state, ok := inputs.State(serverInputID); ok && state.Default {
+		*server = ""
+	} else if *server, err = inputs.String(serverInputID); err != nil {
 		return err
 	}
 	if *json, err = inputs.Bool(jsonInputID); err != nil {

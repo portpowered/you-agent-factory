@@ -149,6 +149,22 @@ func TestMapCommittedOwnerPackageFactoryDefinitionsMoveDestinations(t *testing.T
 				Destination: "factory_definitions/internal",
 			},
 		},
+		{
+			path: "pkg/services/factory_definitions/clonetests",
+			want: PackageMapping{
+				PackagePath: "pkg/services/factory_definitions/clonetests",
+				Disposition: DispositionMove,
+				Destination: "factory_definitions/internal",
+			},
+		},
+		{
+			path: "pkg/services/factory_definitions/systeminitializationtests",
+			want: PackageMapping{
+				PackagePath: "pkg/services/factory_definitions/systeminitializationtests",
+				Disposition: DispositionMove,
+				Destination: "factory_definitions/internal",
+			},
+		},
 	}
 
 	for _, tc := range cases {
@@ -164,6 +180,33 @@ func TestMapCommittedOwnerPackageFactoryDefinitionsMoveDestinations(t *testing.T
 		}
 		if got != tc.want {
 			t.Fatalf("mapCommittedOwnerPackage(%q) = %#v, want %#v", tc.path, got, tc.want)
+		}
+	}
+}
+
+func TestFactoryDefinitionsTopLevelUnexpectedCoveredByMoveRules(t *testing.T) {
+	t.Parallel()
+
+	spec := productOwnerTopLevelSpecs["factory_definitions"]
+	for _, child := range spec.unexpected {
+		rest := child
+		if child == "service" {
+			got, ok := mapLegacyServiceImplementationPackage("factory_definitions", "pkg/services/factory_definitions/"+child, rest)
+			if !ok {
+				t.Fatalf("mapLegacyServiceImplementationPackage() ok = false for %q", child)
+			}
+			if got.Disposition != DispositionMove || got.Destination != "factory_definitions/internal" {
+				t.Fatalf("service move mapping = %#v, want move→factory_definitions/internal", got)
+			}
+			continue
+		}
+
+		destination, ok := nestedOwnerMoveDestination("factory_definitions", rest)
+		if !ok {
+			t.Fatalf("nestedOwnerMoveDestination(factory_definitions, %q) ok = false", rest)
+		}
+		if destination == "factory_definitions" {
+			t.Fatalf("unexpected top-level child %q maps to owner root retain destination", child)
 		}
 	}
 }
@@ -246,7 +289,13 @@ func factoryDefinitionsCanonicalRetainRest(rest string) bool {
 		return true
 	case strings.HasPrefix(rest, "internal/services/catalog"):
 		return true
+	case strings.HasPrefix(rest, "internal/services/authoring_layout"):
+		return true
 	case strings.HasPrefix(rest, "internal/services/validation"):
+		return true
+	case strings.HasPrefix(rest, "internal/services/compilation"):
+		return true
+	case strings.HasPrefix(rest, "internal/services/distribution"):
 		return true
 	case strings.HasPrefix(rest, "internal/contracts"):
 		return true

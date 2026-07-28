@@ -28,12 +28,7 @@ func TestStartAppliesRetainedHistoryBeforeFirstLiveDelta(t *testing.T) {
 		snapshot: snapshotFacts(2),
 	}
 	projected := make(chan []factorydefinitions.FactoryEvent, 1)
-	projections := projectionStub{
-		reconstruct: func(events []factorydefinitions.FactoryEvent, tick int) (factorydefinitions.FactoryWorldState, error) {
-			projected <- append([]factorydefinitions.FactoryEvent(nil), events...)
-			return factorydefinitions.FactoryWorldState{}, nil
-		},
-	}
+	projections := newTrackingProjectionStub(projected)
 	rendered := make(chan liveviewprojection.View, 1)
 	svc, err := projectionservice.New(
 		source,
@@ -100,7 +95,7 @@ func TestStartRetainsVisualizationOwnedCursorAndEventsAfterSubscribe(t *testing.
 	}
 	svc, err := projectionservice.New(
 		source,
-		projectionStub{},
+		newProjectionStub(),
 		fixedClock{now: now},
 		liveviewprojection.SinkFunc(func(liveviewprojection.View) {}),
 		nil,
@@ -176,7 +171,7 @@ func TestStartInvalidSubscriptionDoesNotLeaveHalfStartedSubscriber(t *testing.T)
 			presented := make(chan liveviewprojection.View, 1)
 			svc, err := projectionservice.New(
 				test.source,
-				projectionStub{},
+				newProjectionStub(),
 				fixedClock{now: time.Unix(1, 0)},
 				liveviewprojection.SinkFunc(func(view liveviewprojection.View) { presented <- view }),
 				nil,
@@ -226,7 +221,7 @@ func TestStartSubscribesOnceForRetainedThenLive(t *testing.T) {
 	}
 	svc, err := projectionservice.New(
 		source,
-		projectionStub{},
+		newProjectionStub(),
 		fixedClock{now: time.Unix(1, 0)},
 		liveviewprojection.SinkFunc(func(liveviewprojection.View) {}),
 		nil,

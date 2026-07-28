@@ -67,18 +67,18 @@ func TestMapPackageMovesProviderPackagesOutOfWorkers(t *testing.T) {
 }
 
 func TestMapPackageMovesLegacyServiceImplementationPackages(t *testing.T) {
-	row, err := ownershipinventory.MapPackage("pkg/services/automations/service")
+	row, err := ownershipinventory.MapPackage("pkg/services/work/service")
 	if err != nil {
 		t.Fatalf("MapPackage() error = %v", err)
 	}
 	if row.Disposition != ownershipinventory.DispositionMove {
 		t.Fatalf("disposition = %q, want move", row.Disposition)
 	}
-	if row.Destination != "automations" {
-		t.Fatalf("destination = %q, want automations", row.Destination)
+	if row.Destination != "work" {
+		t.Fatalf("destination = %q, want work", row.Destination)
 	}
-	if row.Successor != "pkg/services/automations/internal" {
-		t.Fatalf("successor = %q, want pkg/services/automations/internal", row.Successor)
+	if row.Successor != "pkg/services/work/internal" {
+		t.Fatalf("successor = %q, want pkg/services/work/internal", row.Successor)
 	}
 	if row.DeletionCondition == "" {
 		t.Fatal("expected deletion condition on move row")

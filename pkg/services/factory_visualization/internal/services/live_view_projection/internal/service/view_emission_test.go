@@ -75,12 +75,7 @@ func TestStartEmitsSanitizedVisualizationOwnedView(t *testing.T) {
 			},
 		},
 	}
-	projections := projectionStub{
-		reconstruct: func([]factorydefinitions.FactoryEvent, int) (factorydefinitions.FactoryWorldState, error) {
-			return factorydefinitions.FactoryWorldState{}, nil
-		},
-	}
-	projections.dashboardData = renderData
+	projections := newProjectionStubWithDashboard(renderData)
 	rendered := make(chan liveviewprojection.View, 1)
 	svc, err := projectionservice.New(
 		source,
@@ -129,7 +124,7 @@ func TestObserveSnapshotUnavailableDoesNotEmitView(t *testing.T) {
 	presented := make(chan liveviewprojection.View, 1)
 	svc, err := projectionservice.New(
 		source,
-		projectionStub{},
+		newProjectionStub(),
 		fixedClock{now: time.Unix(1, 0)},
 		liveviewprojection.SinkFunc(func(view liveviewprojection.View) { presented <- view }),
 		nil,
@@ -170,11 +165,7 @@ func TestObserveReconstructionFailedDoesNotReturnSuccessView(t *testing.T) {
 		},
 		snapshot: snapshotFacts(3),
 	}
-	projections := projectionStub{
-		reconstruct: func([]factorydefinitions.FactoryEvent, int) (factorydefinitions.FactoryWorldState, error) {
-			return factorydefinitions.FactoryWorldState{}, reconstructErr
-		},
-	}
+	projections := newFailingProjectionStub(reconstructErr)
 	svc, err := projectionservice.New(
 		source,
 		projections,

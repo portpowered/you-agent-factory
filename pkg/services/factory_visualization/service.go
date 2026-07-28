@@ -62,7 +62,7 @@ type Service struct {
 	presentationOwner responsePresentationOwner
 
 	source      Source
-	projections recordings.ProjectionService
+	recordings  recordings.Service
 	clock       Clock
 	sink        Sink
 	reportError ErrorReporter
@@ -75,7 +75,7 @@ type Service struct {
 // New constructs an inert Factory visualization service.
 func New(
 	source Source,
-	projections recordings.ProjectionService,
+	peer recordings.ProjectionService,
 	clock Clock,
 	sink Sink,
 	reportError ErrorReporter,
@@ -83,16 +83,20 @@ func New(
 	switch {
 	case source == nil:
 		return nil, errors.New("initialize Factory visualization: event source is required")
-	case projections == nil:
+	case peer == nil:
 		return nil, errors.New("initialize Factory visualization: projection service is required")
 	case clock == nil:
 		return nil, errors.New("initialize Factory visualization: clock is required")
 	case sink == nil:
 		return nil, errors.New("initialize Factory visualization: presentation sink is required")
 	}
+	recordingsPeer, err := RecordingsPeerFromProjectionService(peer)
+	if err != nil {
+		return nil, err
+	}
 	activation, err := activationlifecyclewire.NewService(
 		ActivationEventSource(source),
-		projections,
+		recordingsPeer,
 		clock,
 		ActivationViewSink(sink),
 		activationlifecycle.ErrorReporter(reportError),
@@ -102,7 +106,7 @@ func New(
 	}
 	projection, err := liveviewprojectionwire.NewService(
 		source,
-		projections,
+		recordingsPeer,
 		clock,
 		ProjectionSink(sink),
 		reportError,
@@ -115,7 +119,7 @@ func New(
 		projection,
 		defaultResponsePresentationOwner(),
 		source,
-		projections,
+		recordingsPeer,
 		clock,
 		sink,
 		reportError,

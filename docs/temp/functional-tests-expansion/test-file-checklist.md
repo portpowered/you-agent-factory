@@ -269,6 +269,12 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCodexGoldenDerivesProviderSessionAndResponseEvents` compares all public
     metadata goldens.
 
+- [x] `tests/functional/workers/inference/codex/conductor_test.go`
+  - `TestCodexConductorSuccessThroughRootBuildProcess` proves Codex execution through
+    the product graph via `root.BuildProcess`.
+  - `TestCodexCommandCancellationThroughRootBuildProcessIsCanonical` proves canonical
+    cancellation through the shared process boundary.
+
 - [x] `tests/functional/workers/inference/codex/worktree_workstation_test.go`
   - `TestCodexWorktreeWorkstationDispatch_MaterializesCheckoutAndOmitsCLIWorktreeFlag`
     proves named worktree checkout materialization and omits the CLI `--worktree`
@@ -285,6 +291,12 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 - [x] `tests/functional/workers/inference/claude/golden_success_test.go`
   - `TestClaudeGoldenFullStreamTextSuccess` covers deltas and final snapshot.
   - `TestClaudeGoldenToolLifecycleAndSessionIdentity` covers tools/session.
+
+- [x] `tests/functional/workers/inference/claude/conductor_test.go`
+  - `TestClaudeConductorSuccessThroughRootBuildProcess` proves Claude execution through
+    the product graph via `root.BuildProcess`.
+  - `TestClaudeCommandCancellationThroughRootBuildProcessIsCanonical` proves canonical
+    cancellation through the shared process boundary.
 
 - [x] `tests/functional/workers/inference/claude/golden_failure_test.go`
   - `TestClaudeGoldenStructuredFailure` covers normalized error metadata.
@@ -534,6 +546,12 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestWorkBatchSelectsDefaultAndExplicitWorkTypes`.
   - `TestWorkBatchRejectsUnknownTypeWithoutPartialMutation`.
 
+- [x] `tests/functional/work/recordings/recordings_read_test.go`
+  - `TestRecordingsBackedWorkReadsUseRecordingsRootContract`.
+  - `TestGetWorkFromRecordingsRootUsesRecordingsServiceRoot`.
+  - `TestRecordingsBackedWorkReadsMapRichWorldState`.
+  - `TestRecordingsBackedWorkReadsSurfaceTypedProjectionFailures`.
+
 - [ ] `tests/functional/work/submission/http_test.go`
   - `TestAPISubmitBatchThenListAndGetWork`.
   - `TestAPIUpsertWorkRequestUsesCanonicalIdentity`.
@@ -542,16 +560,23 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 - [ ] `tests/functional/work/submission/stage_and_submit_test.go`
   - `TestAPIStageAndSubmitFileCreatesExpectedWork`.
 
-- [ ] `tests/functional/work/relationships/dependencies_test.go`
+- [x] `tests/functional/work/relationships/dependencies_test.go`
   - `TestDependentWorkWaitsForPrerequisiteTargetState`.
   - `TestDependentWorkDoesNotDispatchAfterPrerequisiteFailure`.
   - `TestFanInReleasesOnlyAfterEveryPrerequisite`.
+  - `TestWorkWithoutDependsOnRelationsDispatchesNormally`.
+
+- [x] `tests/functional/work/recordings/recordings_read_test.go`
+  - `TestRecordingsBackedWorkReadsUseRecordingsRootContract`.
+  - `TestGetWorkFromRecordingsRootUsesRecordingsServiceRoot`.
+  - `TestRecordingsBackedWorkReadsMapRichWorldState`.
+  - `TestRecordingsBackedWorkReadsSurfaceTypedProjectionFailures`.
 
 - [ ] `tests/functional/work/relationships/parent_child_test.go`
   - `TestParentChildLineageSurvivesDispatchAndReplay`.
   - `TestChildFailureProjectsToDocumentedParentView`.
 
-- [ ] `tests/functional/work/routing/logical_move_test.go`
+- [x] `tests/functional/work/routing/logical_move_test.go`
   - `TestLogicalMoveCompletesWithoutWorkerDispatch`.
   - `TestLogicalMovePreservesWorkPayloadAndLineage`.
   - `TestLogicalMoveMultipleOutputsCreatesEveryExpectedWork`.
@@ -691,7 +716,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPackagedQuorumOptionalMemberSettingsReachWorkers` covers overrides.
   - `TestPackagedQuorumInsufficientSuccessfulMembersFails` covers failure.
 
-- [ ] `tests/functional/factory/packaged/review/invocation_test.go`
+- [x] `tests/functional/factory/packaged/review/invocation_test.go`
   - `TestPackagedReviewApprovalCompletes` covers first-pass approval.
   - `TestPackagedReviewRejectionCarriesFeedback` covers retry context.
   - `TestPackagedReviewRetryExhaustionFails` covers bounded failure.
@@ -763,12 +788,25 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAbsentProviderSessionIsNotFabricated`.
   - `TestMultipleDispatchesKeepDistinctProviderSessionRefs`.
 
-- [ ] `tests/functional/provider_sessions/association/response_exec_metadata_test.go`
+- [x] `tests/functional/provider_sessions/association/response_exec_metadata_test.go`
   - `TestResponseExecGoldenMetadataSurvivesCLIProjection`.
   - `TestResponseExecGoldenMetadataSurvivesAPIResponseEvents`.
   - `TestResponseExecGoldenMetadataSurvivesReplay`.
-  - The assertions use checked-in expected metadata, not mapper-generated
+    - The assertions use checked-in expected metadata, not mapper-generated
     expected values.
+
+## Wave 2 — operator settings
+
+- [x] `tests/functional/operator_settings/servicewire/servicewire_composition_test.go`
+  - `TestServiceWireCompositionRootServesDocumentAndResolutionOperations`.
+  - `TestServiceFromHomePortsConstructsSettingsRoot`.
+  - `TestServiceFromHomePortsRejectsMissingPorts`.
+  - `TestServiceFromConfigDocumentConstructsFromDocumentPorts`.
+  - `TestServiceFromConfigDocumentRejectsMissingDocumentPorts`.
+  - `TestResolveFromHomeRejectsMissingFilesystemPorts`.
+  - `TestRegisterDefaultsResolutionFromHomeRestoresAdapterOwnership`.
+  - `TestResolveFromHomeUsesSettingsAdapterOwnershipPath`.
+  - `TestResolveFromHomeFallbackPreservesAcceptedSemantics`.
 
 ## Wave 2 — events
 

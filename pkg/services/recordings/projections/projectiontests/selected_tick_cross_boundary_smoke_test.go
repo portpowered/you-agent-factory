@@ -9,7 +9,6 @@ import (
 	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingprojections "github.com/portpowered/infinite-you/pkg/services/recordings/projections"
 	"github.com/portpowered/infinite-you/pkg/services/recordings/projections/dashboard"
@@ -44,12 +43,12 @@ func TestSelectedTickCrossBoundarySmoke_ReconstructsCanonicalStateAcrossSupporte
 
 	now := t0.Add(12 * time.Second)
 	output := dashboard.FormatSimpleDashboardWithRenderData(
-		factoryruntime.DashboardEngineStateSnapshot(
-			"RUNNING",
-			interfaces.RuntimeStatusActive,
-			11,
-			11*time.Second,
-		),
+		dashboard.SimpleDashboardHeader{
+			FactoryState:  "RUNNING",
+			RuntimeStatus: interfaces.RuntimeStatusActive,
+			TickCount:     11,
+			Uptime:        11 * time.Second,
+		},
 		projections.SimpleDashboardRenderDataFromWorldState(worldState),
 		now,
 	)

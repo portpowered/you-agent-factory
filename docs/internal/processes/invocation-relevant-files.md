@@ -635,6 +635,31 @@ response-stream output.
   `io.Writer`, queue capacity, backpressure, or final-write ordering as their
   policy source of truth on that seam. Characterization proof:
   `TestRootContractInvariants_AllSlicesThroughSingularRoot`.
+- Factory Visualization production packages may import Factory Runtime only
+  through `pkg/services/factory_runtime`; nested Runtime implementation,
+  Petri, and legacy helper paths are forbidden. Inventory proof:
+  `pkg/services/factory_visualization/runtime_import_boundary_test.go`
+  (`TestProductionPackagesImportFactoryRuntimeRootOnly`).
+- Session-bound Visualization observation flows through
+  `pkg/services/factory_visualization/runtime_source.go`, which constructs
+  root `factory_runtime.ObserveRequest` values and calls `Service.Observe`
+  for snapshot facts while retaining migration-only `APIFactory` casts for
+  event subscription. Behavioral proof:
+  `pkg/services/factory_visualization/runtime_observation_boundary_test.go`
+  (`TestRuntimeObservationUsesRootServiceObserve`).
+- CLI visualization presentation maps dashboard header facts from
+  Visualization-owned `RuntimeObservation` fields through
+  `dashboard.SimpleDashboardHeader` instead of Petri-shaped
+  `RuntimeEngineStateSnapshot` aliases. The leased CLI transport package does
+  not import Factory Runtime. Proof:
+  `pkg/services/factory_visualization/transports/cli/presentation_runtime_snapshot_boundary_test.go`
+  (`TestPresentationSinkUsesVisualizationOwnedRuntimeFacts`).
+- CUT-VIS-RUN story 004 consumer-edge proofs exercise session-bound
+  activation, detached `Observe`, and snapshot-fact reads only through root
+  `Service.Observe`, fail closed without Petri snapshot helpers, and propagate
+  typed observe failures. Behavioral proof:
+  `pkg/services/factory_visualization/runtime_consumer_boundary_test.go`
+  (`TestVisualizationConsumerObservationExercisesRuntimeRoot`).
 - Shared ordered output serialization and final-once terminal write helpers
   (transport-shaped, non-authority):
   `pkg/services/factory_visualization/factory_event_stream.go`,
@@ -1871,6 +1896,13 @@ response-stream output.
   approval. Run the same gate for default configuration, edited materialized
   worker configuration, and `--default-worker-model-provider` /
   `--default-worker-model` operator overrides.
+- Factory-owned packaged `@you/review` invocation coverage lives in
+  `tests/functional/factory/packaged/review/invocation_test.go`. Prefer
+  `root.BuildProcess` + `Process.Execute` with `you --json run --named @you/review`
+  and `edges.Edges.ProviderCommandRunner` mocks shaped through
+  `support.NewShapedProviderCommandRunner` (work stdout then reviewer decision
+  envelope JSON) over `--with-mock-workers` when proving approval, rejection
+  feedback retry context, and bounded failure.
 - Named `@you/goal` operator-control smoke coverage lives in
   `tests/functional/smoke/cli_named_goal_operator_controls_smoke_test.go`,
   proving API and CLI pause/resume buffering, ordered post-resume drain via
@@ -2092,6 +2124,16 @@ response-stream output.
   stable-ID local/inherited inputs, missing injected dependencies, and
   initializer/home failures that must not invoke the operation. Do not weaken
   `go-unit-coverage-package-minimums.json` for migration-owned packages.
+- The Models CLI adapter at `pkg/services/models/transports/cli` must stay
+  registered under destination `models` in
+  `docs/internal/packaged-service-structure/package-target-manifest.json`,
+  `docs/internal/baselines/ownership-inventory.json`, and both
+  `go-*-coverage-package-minimums.json` baselines; prove registration with
+  `manifest_registration_test.go` rather than re-editing manifests when IMP-MOD
+  already landed the rows. When adapter-owned root paths add statements, restore
+  the unit floor with behavioral coverage for composition facade delegation,
+  remote `--server` list/inspect/pull, and catalog capability/slot mapping
+  instead of weakening `go-unit-coverage-package-minimums.json`.
 - Functional coverage does not inherit unit-test hits. After the same cutover,
   restore `go-functional-coverage-package-minimums.json` floors with short
   `tests/functional/...` evidence that exercises the migrated packages under the
