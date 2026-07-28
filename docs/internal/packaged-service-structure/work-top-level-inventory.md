@@ -43,9 +43,12 @@ Move destinations align with `workMoveRules` / `nestedOwnerMoveRules` for `work`
 `service` and `testdata` → `work/internal`; `stateaccessrecordings` →
 `work/internal/services/state_access`.
 
-## Out of scope for this note
+## Related inventory
 
-- Root-level `.go` contract surfaces (see story `pss-inv-work-toplevel-002`).
+- Root-level `.go` contract surfaces:
+  [`work-root-contract-surface-inventory.md`](work-root-contract-surface-inventory.md).
+
+## Out of scope for this note
 - `packagetargetmanifestcheck` / `ownershipinventory` remap confirmation and JSON
   baseline regeneration (stories 003–006).
 - Production package moves, folds, deletes, or `pkg/wire` edits.
