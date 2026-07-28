@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -18,9 +20,12 @@ import (
 )
 
 const (
-	dependencyStartWorkstation  = "start"
-	dependencyFinishWorkstation = "finish"
-	dependencyRequiredState     = "complete"
+	dependencyStartWorkstation   = "start"
+	dependencyFinishWorkstation  = "finish"
+	dependencyExecuteWorkstation = "execute"
+	dependencyReviewWorkstation  = "review"
+	dependencyRequiredState      = "complete"
+	dependencyArchivedState      = "archived"
 )
 
 // TestDependentWorkWaitsForPrerequisiteTargetState proves through public Work
@@ -52,17 +57,17 @@ func TestDependentWorkWaitsForPrerequisiteTargetState(t *testing.T) {
 		},
 	})
 
-	provider := testutil.NewMockProvider(
-		workerexecution.InferenceResponse{Content: "COMPLETE"},
-		workerexecution.InferenceResponse{Content: "COMPLETE"},
-		workerexecution.InferenceResponse{Content: "COMPLETE"},
-		workerexecution.InferenceResponse{Content: "COMPLETE"},
+	runner := testutil.NewProviderCommandRunner(
+		dependencyProviderSuccess(),
+		dependencyProviderSuccess(),
+		dependencyProviderSuccess(),
+		dependencyProviderSuccess(),
 	)
 
 	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
 		t,
 		dir,
-		serviceedges.Edges{ProviderOverride: provider},
+		serviceedges.Edges{ProviderCommandRunner: runner},
 		15*time.Second,
 	)
 
@@ -78,12 +83,13 @@ func TestDependentWorkWaitsForPrerequisiteTargetState(t *testing.T) {
 		t.Fatalf("dependent work %q not at %q in public listing: %#v", dependentWorkID, dependencyRequiredState, listed)
 	}
 
-	if got := len(support.ProviderCallsForWorker(provider, "starter")); got != 2 {
-		t.Fatalf("starter provider calls = %d, want 2 (prerequisite then dependent)", got)
+	if runner.CallCount() != 4 {
+		t.Fatalf(
+			"provider command runner calls = %d, want 4 starter and finisher invocations for prerequisite then dependent",
+			runner.CallCount(),
+		)
 	}
-	if got := len(support.ProviderCallsForWorker(provider, "finisher")); got != 2 {
-		t.Fatalf("finisher provider calls = %d, want 2 (prerequisite then dependent)", got)
-	}
+	assertDependencyProviderRequests(t, runner)
 
 	prerequisiteCompleteSequence, dependentStartSequence := dependencyDispatchOrdering(
 		t,
@@ -194,14 +200,12 @@ func TestWorkWithoutDependsOnRelationsDispatchesNormally(t *testing.T) {
 		Payload:    []byte("no dependency relations"),
 	})
 
-	provider := testutil.NewMockProvider(
-		workerexecution.InferenceResponse{Content: "COMPLETE"},
-	)
+	runner := testutil.NewProviderCommandRunner(dependencyProviderSuccess())
 
 	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
 		t,
 		dir,
-		serviceedges.Edges{ProviderOverride: provider},
+		serviceedges.Edges{ProviderCommandRunner: runner},
 		5*time.Second,
 	)
 
@@ -214,9 +218,10 @@ func TestWorkWithoutDependsOnRelationsDispatchesNormally(t *testing.T) {
 		t.Fatalf("work %q without DEPENDS_ON not at complete in public listing: %#v", workID, listed)
 	}
 
-	if got := len(support.ProviderCallsForWorker(provider, "processor")); got != 1 {
-		t.Fatalf("processor provider calls = %d, want 1 for no-deps pass-through", got)
+	if runner.CallCount() != 1 {
+		t.Fatalf("provider command runner calls = %d, want 1 for no-deps pass-through", runner.CallCount())
 	}
+	assertDependencyProviderRequests(t, runner)
 
 	dispatchSequence := -1
 	for _, event := range events {
@@ -362,6 +367,185 @@ func TestFanInReleasesOnlyAfterEveryPrerequisite(t *testing.T) {
 	if session.Runtime.Progress.Categories.Terminal != 3 || session.Runtime.Progress.Categories.Failed != 0 {
 		t.Fatalf("session progress categories = %+v, want three terminal and zero failed", session.Runtime.Progress.Categories)
 	}
+}
+
+// TestDependentWorkBlockedUntilPrerequisiteArchived proves through public Work
+// listings, captured provider command invocations, and Factory Event dispatch
+// ordering that a DEPENDS_ON dependent requiring archived stays undispatched
+// until the prerequisite reaches archived, then both reach archived without
+// failed terminals on the happy path.
+func TestDependentWorkBlockedUntilPrerequisiteArchived(t *testing.T) {
+	runDependencyTerminalHappyPath(t, "prd-A-work-id", "PRD A")
+}
+
+// TestDependentWorkBlockedDuringPrerequisiteProcessing proves the same archived
+// terminal unlock behavior when the prerequisite work identifier reflects an
+// in-flight processing phase before both items reach archived.
+func TestDependentWorkBlockedDuringPrerequisiteProcessing(t *testing.T) {
+	runDependencyTerminalHappyPath(t, "prd-A-processing", "PRD A")
+}
+
+// TestDependentWorkAndPrerequisiteBothReachArchived proves both prerequisite
+// and dependent Work reach the archived terminal when the dependency requires
+// that upstream terminal state.
+func TestDependentWorkAndPrerequisiteBothReachArchived(t *testing.T) {
+	runDependencyTerminalHappyPath(t, "prd-A-both", "PRD A")
+}
+
+func runDependencyTerminalHappyPath(t *testing.T, prerequisiteWorkID, prerequisitePayload string) {
+	t.Helper()
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dependency_terminal"))
+	dependentWorkID := prerequisiteWorkID + "-dependent"
+
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		WorkTypeID: "prd",
+		WorkID:     prerequisiteWorkID,
+		Payload:    []byte(prerequisitePayload),
+	})
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		WorkTypeID: "prd",
+		WorkID:     dependentWorkID,
+		Payload:    []byte("PRD B"),
+		Relations: []work.Relation{
+			{
+				Type:          work.RelationDependsOn,
+				TargetWorkID:  prerequisiteWorkID,
+				RequiredState: dependencyArchivedState,
+			},
+		},
+	})
+
+	runner := testutil.NewProviderCommandRunner(
+		dependencyProviderSuccess(),
+		dependencyProviderSuccess(),
+		dependencyProviderSuccess(),
+		dependencyProviderSuccess(),
+	)
+
+	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		t,
+		dir,
+		serviceedges.Edges{ProviderCommandRunner: runner},
+		10*time.Second,
+	)
+
+	assertDependencyWorkLocations(t, listed, map[string]int{
+		support.WorkCustomerLocation("prd", dependencyArchivedState): 2,
+		support.WorkCustomerLocation("prd", "init"):                    0,
+		support.WorkCustomerLocation("prd", "in-review"):               0,
+		support.WorkCustomerLocation("prd", "failed"):                  0,
+	})
+	if !support.HasWorkAtCustomerState(listed, prerequisiteWorkID, support.WorkCustomerLocation("prd", dependencyArchivedState)) {
+		t.Fatalf("prerequisite work %q not at archived in public listing: %#v", prerequisiteWorkID, listed)
+	}
+	if !support.HasWorkAtCustomerState(listed, dependentWorkID, support.WorkCustomerLocation("prd", dependencyArchivedState)) {
+		t.Fatalf("dependent work %q not at archived in public listing: %#v", dependentWorkID, listed)
+	}
+
+	if runner.CallCount() != 4 {
+		t.Fatalf(
+			"provider command runner calls = %d, want 4 executor and reviewer invocations for prerequisite then dependent",
+			runner.CallCount(),
+		)
+	}
+	assertDependencyProviderRequests(t, runner)
+
+	prerequisiteArchivedSequence, dependentExecuteSequence := archivedTerminalDispatchOrdering(
+		t,
+		events,
+		prerequisiteWorkID,
+		dependentWorkID,
+	)
+	if dependentExecuteSequence <= prerequisiteArchivedSequence {
+		t.Fatalf(
+			"dependent %q execute dispatch at sequence = %d, want after prerequisite %q archived sequence %d",
+			dependentWorkID,
+			dependentExecuteSequence,
+			prerequisiteWorkID,
+			prerequisiteArchivedSequence,
+		)
+	}
+
+	if session.Runtime.Progress.Categories.Terminal != 2 || session.Runtime.Progress.Categories.Failed != 0 {
+		t.Fatalf("session progress categories = %+v, want two terminal and zero failed", session.Runtime.Progress.Categories)
+	}
+}
+
+func dependencyProviderSuccess() platformprocess.CommandResult {
+	return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("COMPLETE")}
+}
+
+func assertDependencyProviderRequests(t *testing.T, runner *testutil.ProviderCommandRunner) {
+	t.Helper()
+
+	for index, request := range runner.Requests() {
+		if strings.TrimSpace(request.Command) == "" {
+			t.Fatalf("provider command request %d missing command: %#v", index, request)
+		}
+		if len(request.Args) == 0 {
+			t.Fatalf("provider command request %d missing args: %#v", index, request)
+		}
+	}
+}
+
+func archivedTerminalDispatchOrdering(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	prerequisiteWorkID, dependentWorkID string,
+) (prerequisiteArchivedSequence, dependentExecuteSequence int) {
+	t.Helper()
+
+	prerequisiteArchivedSequence = -1
+	dependentExecuteSequence = -1
+
+	for _, event := range events {
+		switch event.Type {
+		case factoryapi.FactoryEventTypeDispatchResponse:
+			payload, err := event.Payload.AsDispatchResponseEventPayload()
+			if err != nil {
+				continue
+			}
+			if payload.Outcome != factoryapi.WorkOutcomeAccepted || payload.TransitionId != dependencyReviewWorkstation {
+				continue
+			}
+			if !dispatchEventIncludesWork(event.Context.WorkIds, prerequisiteWorkID) {
+				continue
+			}
+			prerequisiteArchivedSequence = event.Context.Sequence
+		case factoryapi.FactoryEventTypeDispatchRequest:
+			payload, err := event.Payload.AsDispatchRequestEventPayload()
+			if err != nil {
+				continue
+			}
+			if payload.TransitionId != dependencyExecuteWorkstation {
+				continue
+			}
+			if !dispatchRequestIncludesWork(payload, dependentWorkID) {
+				continue
+			}
+			if prerequisiteArchivedSequence < 0 {
+				t.Fatalf(
+					"dependent work %q received %q dispatch before prerequisite %q reached %q",
+					dependentWorkID,
+					dependencyExecuteWorkstation,
+					prerequisiteWorkID,
+					dependencyArchivedState,
+				)
+			}
+			if dependentExecuteSequence < 0 {
+				dependentExecuteSequence = event.Context.Sequence
+			}
+		}
+	}
+
+	if prerequisiteArchivedSequence < 0 {
+		t.Fatalf("prerequisite work %q never reached %q through public dispatch", prerequisiteWorkID, dependencyArchivedState)
+	}
+	if dependentExecuteSequence < 0 {
+		t.Fatalf("dependent work %q never received a public %q dispatch", dependentWorkID, dependencyExecuteWorkstation)
+	}
+	return prerequisiteArchivedSequence, dependentExecuteSequence
 }
 
 func assertDependencyWorkLocations(t *testing.T, listed factoryapi.ListWorkResponse, wants map[string]int) {

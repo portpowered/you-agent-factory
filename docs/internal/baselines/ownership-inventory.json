@@ -1769,7 +1769,7 @@
       "fromOwner": "workers",
       "toOwner": "factory_definitions",
       "class": "query",
-      "evidence": "pkg/services/workers/construction -\u003e pkg/services/factory_definitions"
+      "evidence": "pkg/services/workers/internal -\u003e pkg/services/factory_definitions"
     },
     {
       "fromOwner": "workers",
@@ -1781,13 +1781,13 @@
       "fromOwner": "workers",
       "toOwner": "models",
       "class": "command",
-      "evidence": "pkg/services/workers/execution/recording -\u003e pkg/services/models"
+      "evidence": "pkg/services/workers -\u003e pkg/services/models"
     },
     {
       "fromOwner": "workers",
       "toOwner": "platform",
       "class": "external_effect",
-      "evidence": "pkg/services/workers/construction -\u003e pkg/platform/filesystem"
+      "evidence": "pkg/services/workers/internal -\u003e pkg/platform/filesystem"
     },
     {
       "fromOwner": "workers",
@@ -1799,7 +1799,7 @@
       "fromOwner": "workers",
       "toOwner": "providers",
       "class": "command",
-      "evidence": "pkg/services/workers/construction -\u003e pkg/services/workers/provider"
+      "evidence": "pkg/services/workers/internal -\u003e pkg/services/workers/agypty"
     },
     {
       "fromOwner": "workers",
@@ -5132,56 +5132,48 @@
       "disposition": "move",
       "destination": "workers",
       "destinationKind": "owner",
-      "successor": "pkg/services/workers/internal/services/runners",
-      "deletionCondition": "delete public package after IMP-WRK-runners private subservice cutover proof"
+      "successor": "pkg/services/workers/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-WRK-FOLD-TOPLEVEL cutover proof"
     },
     {
       "packagePath": "pkg/services/workers/execution",
       "disposition": "move",
       "destination": "workers",
       "destinationKind": "owner",
-      "successor": "pkg/services/workers/internal/services/runners",
-      "deletionCondition": "delete public package after IMP-WRK-runners private subservice cutover proof"
+      "successor": "pkg/services/workers/internal/services/workstations",
+      "deletionCondition": "delete public package after IMP-WRK-workstations private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/workers/execution/recording",
       "disposition": "move",
       "destination": "workers",
       "destinationKind": "owner",
-      "successor": "pkg/services/workers/internal/services/runners",
-      "deletionCondition": "delete public package after IMP-WRK-runners private subservice cutover proof"
+      "successor": "pkg/services/workers/internal/services/workstations",
+      "deletionCondition": "delete public package after IMP-WRK-workstations private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/workers/executor",
       "disposition": "move",
       "destination": "workers",
       "destinationKind": "owner",
-      "successor": "pkg/services/workers/internal/services/runners",
-      "deletionCondition": "delete public package after IMP-WRK-runners private subservice cutover proof"
+      "successor": "pkg/services/workers/internal/services/workstations",
+      "deletionCondition": "delete public package after IMP-WRK-workstations private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/workers/executor/agentrun",
       "disposition": "move",
       "destination": "workers",
       "destinationKind": "owner",
-      "successor": "pkg/services/workers/internal/services/runners",
-      "deletionCondition": "delete public package after IMP-WRK-runners private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/workers/executor/workstation",
-      "disposition": "move",
-      "destination": "workers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/workers/internal/services/runners",
-      "deletionCondition": "delete public package after IMP-WRK-runners private subservice cutover proof"
+      "successor": "pkg/services/workers/internal/services/workstations",
+      "deletionCondition": "delete public package after IMP-WRK-workstations private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/workers/interface",
       "disposition": "move",
       "destination": "workers",
       "destinationKind": "owner",
-      "successor": "pkg/services/workers/internal/services/runners",
-      "deletionCondition": "delete public package after IMP-WRK-runners private subservice cutover proof"
+      "successor": "pkg/services/workers/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-WRK-FOLD-TOPLEVEL cutover proof"
     },
     {
       "packagePath": "pkg/services/workers/internal",
@@ -5192,7 +5184,35 @@
       "deletionCondition": "delete transitional top-level package after CLN-WRK-FOLD-TOPLEVEL cutover proof"
     },
     {
+      "packagePath": "pkg/services/workers/internal/diagnostics",
+      "disposition": "move",
+      "destination": "workers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/workers/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-WRK-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/interface",
+      "disposition": "move",
+      "destination": "workers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/workers/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-WRK-FOLD-TOPLEVEL cutover proof"
+    },
+    {
       "packagePath": "pkg/services/workers/internal/services/runners",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/runners/agents",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/runners/inference",
       "disposition": "retain",
       "destination": "workers",
       "destinationKind": "owner"
@@ -5240,6 +5260,24 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/workers/internal/services/runners/process",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/runners/runner",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/runners/testing",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/workers/internal/services/runners/wire",
       "disposition": "retain",
       "destination": "workers",
@@ -5247,6 +5285,12 @@
     },
     {
       "packagePath": "pkg/services/workers/internal/services/runtime_assembly",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/runtime_assembly/construction",
       "disposition": "retain",
       "destination": "workers",
       "destinationKind": "owner"
@@ -5270,7 +5314,55 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/workers/internal/services/workstations/execution",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/workstations/execution/recording",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/workstations/executor",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/workstations/executor/agentrun",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/workstations/executor/workstation",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/workers/internal/services/workstations/internal/service",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/workstations/invocation",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/workstations/prompting",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/workstations/skippermissions",
       "disposition": "retain",
       "destination": "workers",
       "destinationKind": "owner"
@@ -5282,12 +5374,18 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/workers/internal/services/workstations/worktree",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/workers/invocation",
       "disposition": "move",
       "destination": "workers",
       "destinationKind": "owner",
-      "successor": "pkg/services/workers/internal/services/runners",
-      "deletionCondition": "delete public package after IMP-WRK-runners private subservice cutover proof"
+      "successor": "pkg/services/workers/internal/services/workstations",
+      "deletionCondition": "delete public package after IMP-WRK-workstations private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/workers/process",

@@ -3,7 +3,7 @@ package workers_test
 import (
 	"context"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/executor"
+	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,7 +13,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/prompting"
+	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/prompting"
 )
 
 func canonicalWorkerTestPath(value string) string {
