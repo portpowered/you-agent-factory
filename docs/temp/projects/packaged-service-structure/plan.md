@@ -49,6 +49,20 @@ It is **not** a prerequisite for admitting IMP-RUN-04 with a process-local/defau
 CheckpointStore adapter. Future Recordings-backed durable checkpoint byte storage
 follows DEC-RUN-REC-DURABILITY phase table (see decision note).
 
+## Changed-Path Lease Matrix (DEC-RUN-REC-DURABILITY)
+
+Decision packets publish planner authority without touching Runtime or Recordings
+implementation. **DEC-RUN-REC-DURABILITY** (`pss-dec-run-rec-durability`) holds
+the following exclusive changed-path lease:
+
+| Packet | `leaseClass` | Exclusive paths | Forbidden paths (must be untouched) |
+| --- | --- | --- | --- |
+| **DEC-RUN-REC-DURABILITY** | `decision-planner-state` | `docs/temp/projects/packaged-service-structure/**`; optional IMP-RUN-04 hold text in `docs/temp/meta.md`; supporting durable-artifact infrastructure: `.gitignore` gitignore exceptions for tracked `docs/temp/**` planner paths; `docs/internal/projects/packaged-service-structure/README.md` cross-link index row | `pkg/services/factory_runtime/**` (including `checkpoint_recovery`); `pkg/services/recordings/**`; any new top-level Checkpoint service package |
+
+Reviewers verify the lease with the commands recorded in
+[`checklist.md`](checklist.md) under **DEC-RUN-REC-DURABILITY changed-path lease
+proof**.
+
 ## Related documents
 
 | Document | Role |

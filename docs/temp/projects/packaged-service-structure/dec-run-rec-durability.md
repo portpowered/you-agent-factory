@@ -119,6 +119,10 @@ This decision packet **does not**:
 - change Runtime or Recordings public package layout beyond docs/checklist/meta,
 - make Runtime a second canonical event ledger.
 
+Changed-path lease proof and reviewer verification commands live in
+[`checklist.md`](checklist.md) (**DEC-RUN-REC-DURABILITY changed-path lease
+proof**) and the lease matrix in [`plan.md`](plan.md).
+
 ## Consequences
 
 ### Positive

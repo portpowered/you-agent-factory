@@ -37,6 +37,48 @@ When admitting IMP-RUN-04 implementation:
 - Recordings-backed durable CheckpointStore adapter remains follow-on after
   Recordings durable log work
 
+## DEC-RUN-REC-DURABILITY changed-path lease proof
+
+Lease matrix: [`plan.md`](plan.md) **Changed-Path Lease Matrix
+(DEC-RUN-REC-DURABILITY)**.
+
+- [x] Diff does not add or modify `pkg/services/factory_runtime/**` (including
+  `checkpoint_recovery`)
+- [x] Diff does not add or modify `pkg/services/recordings/**` for durable
+  log/cursor/retention or durable checkpoint storage
+- [x] Diff does not create a top-level Checkpoint service package; plan language
+  keeps Checkpoint/Recovery as a Runtime private subservice
+- [x] Changed paths stay within the DEC-RUN-REC-DURABILITY lease:
+  `docs/temp/projects/packaged-service-structure/**`, optional IMP-RUN-04 hold
+  text in `docs/temp/meta.md`, plus supporting durable-artifact infrastructure
+  (`.gitignore` exceptions, `docs/internal/projects/packaged-service-structure/README.md`
+  cross-link index)
+
+### Verification commands (merge base `main`)
+
+Run from the repository root after fetching `main`:
+
+```sh
+# Forbidden implementation surfaces must be empty
+test -z "$(git diff --name-only main...HEAD -- pkg/services/factory_runtime pkg/services/recordings)"
+
+# No checkpoint implementation paths in the packet diff
+! git diff --name-only main...HEAD | rg -i 'pkg/services/.*/checkpoint'
+
+# Observed changed paths (2026-07-28 UTC, branch pss-dec-run-rec-durability)
+git diff --name-only main...HEAD
+```
+
+Expected changed paths for this packet:
+
+- `.gitignore`
+- `docs/internal/projects/packaged-service-structure/README.md`
+- `docs/temp/meta.md`
+- `docs/temp/projects/packaged-service-structure/README.md`
+- `docs/temp/projects/packaged-service-structure/checklist.md`
+- `docs/temp/projects/packaged-service-structure/dec-run-rec-durability.md`
+- `docs/temp/projects/packaged-service-structure/plan.md`
+
 ## Planner cross-links
 
 | Surface | IMP-RUN-04 guidance |
