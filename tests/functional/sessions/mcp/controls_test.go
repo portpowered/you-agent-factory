@@ -94,6 +94,39 @@ func TestMCPPauseResumeAndCancelTargetCanonicalFactorySession(t *testing.T) {
 	closeMCPServer(t, nil, serveErr)
 }
 
+// TestMCPControlledSessionIsReadableThroughAPI proves an MCP-controlled Factory
+// Session remains readable through the public API with the same session id and
+// shared Factory Session vocabulary after MCP start and lifecycle interaction.
+func TestMCPControlledSessionIsReadableThroughAPI(t *testing.T) {
+	projectRoot := setupBusyLoopWorkflowFixture(t)
+	apiServer := startFunctionalAPIServerForMCPControls(t, projectRoot)
+	baseURL := apiServer.URL()
+
+	client, shutdown, serveErr := startRootRuntimeMCPServer(t, projectRoot, nil)
+	assertMCPInitialized(t, client)
+
+	sessionID := startMCPRunningSession(t, client)
+	mcpControl(
+		t,
+		client,
+		sessionID,
+		factoryapi.FactorySessionLifecycleControlKindPause,
+		factoryapi.FactorySessionLifecycleControlOutcomeAccepted,
+	)
+
+	mcpRead := readMCPSessionDurableReadModel(t, client, sessionID)
+	assertCanonicalSessionID(t, mcpRead.SessionId, sessionID, "mcp read")
+	if mcpRead.Status != factoryapi.FactorySessionDurableLifecycleStatusPaused {
+		t.Fatalf("mcp read status = %q, want PAUSED", mcpRead.Status)
+	}
+
+	apiRead := readAPIFactorySessionDurableReadModel(t, baseURL, sessionID)
+	assertAPIReadMatchesMCPSharedFactorySessionVocabulary(t, mcpRead, apiRead)
+
+	shutdown()
+	closeMCPServer(t, nil, serveErr)
+}
+
 func toolNamesFromListResult(t *testing.T, result map[string]any) []string {
 	t.Helper()
 	rawTools, ok := result["tools"].([]any)
