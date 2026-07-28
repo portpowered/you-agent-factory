@@ -102,6 +102,12 @@
     "pkg/services/factory_definitions/internal/services/compilation/loading",
     "pkg/services/factory_definitions/internal/services/compilation/runtimeconfig",
     "pkg/services/factory_definitions/internal/services/compilation/wire",
+    "pkg/services/factory_definitions/internal/services/snapshots_portability",
+    "pkg/services/factory_definitions/internal/services/snapshots_portability/capture",
+    "pkg/services/factory_definitions/internal/services/snapshots_portability/internal/service",
+    "pkg/services/factory_definitions/internal/services/snapshots_portability/materialize",
+    "pkg/services/factory_definitions/internal/services/snapshots_portability/prepare",
+    "pkg/services/factory_definitions/internal/services/snapshots_portability/wire",
     "pkg/services/factory_definitions/internal/services/validation",
     "pkg/services/factory_definitions/internal/services/validation/internal/orchestrator",
     "pkg/services/factory_definitions/internal/services/validation/internal/requiredtools",
@@ -383,6 +389,7 @@
     "pkg/services/work/internal/services/state_access/internal/service",
     "pkg/services/work/internal/services/state_access/wire",
     "pkg/services/work/service",
+    "pkg/services/work/stateaccessrecordings",
     "pkg/services/work/transports/cli",
     "pkg/services/work/transports/http",
     "pkg/services/work/transports/mcp",
@@ -820,6 +827,36 @@
       "packagePath": "pkg/services/factory_definitions/internal/services/compilation/wire",
       "disposition": "move",
       "destination": "factory_definitions/internal/services/compilation"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability",
+      "disposition": "move",
+      "destination": "factory_definitions/internal/services/snapshots_portability"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/capture",
+      "disposition": "move",
+      "destination": "factory_definitions/internal/services/snapshots_portability"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/internal/service",
+      "disposition": "move",
+      "destination": "factory_definitions/internal/services/snapshots_portability"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/materialize",
+      "disposition": "move",
+      "destination": "factory_definitions/internal/services/snapshots_portability"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/prepare",
+      "disposition": "move",
+      "destination": "factory_definitions/internal/services/snapshots_portability"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/wire",
+      "disposition": "move",
+      "destination": "factory_definitions/internal/services/snapshots_portability"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/validation",
@@ -2225,6 +2262,11 @@
       "packagePath": "pkg/services/work/service",
       "disposition": "move",
       "destination": "work/internal"
+    },
+    {
+      "packagePath": "pkg/services/work/stateaccessrecordings",
+      "disposition": "retain",
+      "destination": "work"
     },
     {
       "packagePath": "pkg/services/work/transports/cli",
