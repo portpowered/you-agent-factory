@@ -151,7 +151,12 @@ Use this map when changing the public REST contract.
   `pkg/services/factory_definitions/orchestration_semantic_validation_boundary_test.go`:
   Definitions-owned strategy checks without a Runtime port, orchestration-invalid
   targets through the injected port, and import guards on the validation and
-  orchestrator packages.
+  orchestrator packages. Keep Petri engine types off the Definitions validation
+  peer surface with
+  `pkg/services/factory_definitions/validation_peer_surface_boundary_test.go`:
+  import guards on the public `validation` package, AST checks on
+  `validation_contract.go` and `contracts/validation.go`, and behavioral proofs
+  that validation targets use Definitions-owned code/severity/subject vocabulary.
 - Factory Visualization HTTP decoding, root contract mapping, typed error
   translation, and cancel/timeout handling live in
   `pkg/services/factory_visualization/transports/http`. HTTP-VIS proves
