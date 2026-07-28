@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -45,6 +46,10 @@ const (
 	batchInputsMixedBatchRequestID   = "work-batch-inputs-mixed-batch"
 	batchInputsMixedValidWorkName    = "mixed-valid-task"
 	batchInputsMixedInvalidWorkName  = "mixed-invalid-task"
+
+	batchIngressRegressionRequestID = "request-http-batch-ingress-regression"
+	batchIngressRegressionWorkID    = "work-http-batch-ingress-regression"
+	batchIngressRegressionTraceID   = "trace-http-batch-ingress-regression"
 )
 
 // TestWorkBatchAcceptsInlineFileAndStdinShapes proves the public Work Request
@@ -217,6 +222,142 @@ func TestWorkBatchRejectsUnknownTypeWithoutPartialMutation(t *testing.T) {
 		assertWorkNotListedByName(t, baseURL, batchInputsMixedInvalidWorkName)
 		assertListedWorkCount(t, baseURL, baselineCount)
 	})
+}
+
+// TestBlockedDispatchConcurrentBatchIngressRegression proves accepted batch ingress
+// stays HTTP-observable (WORK_REQUEST plus Work list/get) while an unrelated
+// dispatch remains blocked, and same-request-ID replay stays idempotent.
+func TestBlockedDispatchConcurrentBatchIngressRegression(t *testing.T) {
+	factoryDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
+	dispatchRelease := make(chan struct{})
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                factoryDir,
+		WaitForServiceModeRuntime: true,
+		ProviderOverride:          support.BlockingInferenceProvider(dispatchRelease),
+	})
+	defer server.Stop(t)
+
+	baseURL := server.URL()
+	body, err := json.Marshal(factoryapi.SubmitWorkRequest{
+		Name:         stringPtr("blocked-dispatch-for-ingress-regression"),
+		WorkTypeName: batchInputsWorkType,
+		Payload:      map[string]string{"title": "blocked dispatch for batch ingress regression"},
+	})
+	if err != nil {
+		t.Fatalf("marshal POST /work request: %v", err)
+	}
+	submitted := postSubmitWork(t, baseURL, body)
+	if submitted.TraceId == "" {
+		t.Fatal("POST /work returned an empty trace ID")
+	}
+	waitForServiceModeSessionActive(t, baseURL, 10*time.Second)
+
+	workTypeName := batchInputsWorkType
+	batchRequest := factoryapi.WorkRequest{
+		RequestId: batchIngressRegressionRequestID,
+		Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
+		Works: &[]factoryapi.Work{{
+			Name:         "http-ingress-regression",
+			WorkId:       stringPtr(batchIngressRegressionWorkID),
+			WorkTypeName: &workTypeName,
+			TraceId:      stringPtr(batchIngressRegressionTraceID),
+			Payload:      map[string]string{"title": "concurrent batch ingress regression"},
+		}},
+	}
+
+	first := support.UpsertDefaultSessionWorkRequest(t, baseURL, batchRequest)
+	if first.RequestId != batchIngressRegressionRequestID {
+		t.Fatalf("PUT /work-requests request_id = %q, want %q", first.RequestId, batchIngressRegressionRequestID)
+	}
+	if len(first.Works) != 1 || first.Works[0].WorkId != batchIngressRegressionWorkID {
+		t.Fatalf(
+			"PUT /work-requests works = %#v, want one work with id %q",
+			first.Works,
+			batchIngressRegressionWorkID,
+		)
+	}
+
+	support.AssertSingleWorkRequestEvent(
+		t,
+		server.GetFactoryEvents(t),
+		batchIngressRegressionRequestID,
+		batchIngressRegressionWorkID,
+		workTypeName,
+	)
+	assertBatchIngressWorkListAndGetVisible(t, baseURL, batchIngressRegressionWorkID)
+
+	replayed := support.UpsertDefaultSessionWorkRequest(t, baseURL, batchRequest)
+	if replayed.RequestId != first.RequestId || replayed.TraceId != first.TraceId {
+		t.Fatalf("idempotent PUT identity changed: first=%#v replay=%#v", first, replayed)
+	}
+	support.AssertSingleWorkRequestEvent(
+		t,
+		server.GetFactoryEvents(t),
+		batchIngressRegressionRequestID,
+		batchIngressRegressionWorkID,
+		workTypeName,
+	)
+
+	select {
+	case <-dispatchRelease:
+		t.Fatal("blocked dispatch released before ingress regression assertions finished")
+	default:
+	}
+
+	close(dispatchRelease)
+}
+
+func waitForServiceModeSessionActive(t *testing.T, baseURL string, timeout time.Duration) {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		session := support.GetDefaultSession(t, baseURL)
+		if session.Runtime.Progress.FactoryState == "RUNNING" &&
+			session.Runtime.Progress.InFlightCount > 0 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	session := support.GetDefaultSession(t, baseURL)
+	t.Fatalf("timed out waiting for active service-mode session: %#v", session.Runtime)
+}
+
+func assertBatchIngressWorkListAndGetVisible(t *testing.T, baseURL, workID string) {
+	t.Helper()
+
+	listed := support.ListDefaultSessionWork(t, baseURL)
+	if !batchIngressWorkListingContainsID(listed, workID) {
+		t.Fatalf(
+			"work %q missing from public Work list before blocked dispatch completed; listed=%#v",
+			workID,
+			listed.Results,
+		)
+	}
+
+	endpoint := support.DefaultSessionWorkURL(baseURL, "/work/"+workID)
+	response, err := http.Get(endpoint)
+	if err != nil {
+		t.Fatalf("GET %s: %v", endpoint, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("GET %s status = %d, want 200 while blocked dispatch continues", endpoint, response.StatusCode)
+	}
+
+	work := support.GetJSON[factoryapi.Work](t, endpoint)
+	if support.StringPointerValue(work.WorkId) != workID {
+		t.Fatalf("GET /work/%s workId = %q, want %q", workID, support.StringPointerValue(work.WorkId), workID)
+	}
+}
+
+func batchIngressWorkListingContainsID(listed factoryapi.ListWorkResponse, workID string) bool {
+	for _, item := range listed.Results {
+		if support.StringPointerValue(item.WorkId) == workID {
+			return true
+		}
+	}
+	return false
 }
 
 // TestWorkBatchDependencyOrderingNormalizesRuntimeWork proves batch upsert with

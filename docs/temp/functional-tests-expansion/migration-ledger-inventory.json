@@ -7291,6 +7291,16 @@
     {
       "source_path": "tests/functional/work/submission/batch_inputs_test.go",
       "package": "you-agent-factory/tests/functional/work/submission",
+      "scenario": "TestBlockedDispatchConcurrentBatchIngressRegression",
+      "lane": "short",
+      "destination": "tests/functional/work/submission/batch_inputs_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/work/submission/batch_inputs_test.go",
+      "package": "you-agent-factory/tests/functional/work/submission",
       "scenario": "TestWorkBatchAcceptsInlineFileAndStdinShapes",
       "lane": "short",
       "destination": "tests/functional/work/submission/batch_inputs_test.go",

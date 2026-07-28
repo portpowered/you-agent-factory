@@ -4,11 +4,6 @@
   "entries": [
     {
       "rule": "deprecated-runtime-api-file",
-      "filePath": "tests/functional/runtime_api/api_batch_ingress_starvation_regression_test.go",
-      "target": "tests/functional/runtime_api"
-    },
-    {
-      "rule": "deprecated-runtime-api-file",
       "filePath": "tests/functional/runtime_api/api_batch_submission_boundary_smoke_long_test.go",
       "target": "tests/functional/runtime_api"
     },
@@ -251,11 +246,6 @@
       "rule": "deprecated-runtime-api-file",
       "filePath": "tests/functional/runtime_api/topology_projection_smoke_long_test.go",
       "target": "tests/functional/runtime_api"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_batch_ingress_starvation_regression_test.go",
-      "target": "TestBlockedDispatchConcurrentBatchIngressRegression"
     },
     {
       "rule": "deprecated-runtime-api-test",
