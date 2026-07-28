@@ -334,6 +334,7 @@
     "pkg/services/models/wire",
     "pkg/services/operator_settings",
     "pkg/services/operator_settings/identityinventory",
+    "pkg/services/operator_settings/internal/construct",
     "pkg/services/operator_settings/internal/service",
     "pkg/services/operator_settings/internal/services/document",
     "pkg/services/operator_settings/internal/services/document/internal/service",
@@ -367,6 +368,7 @@
     "pkg/services/providers/internal/services/catalog/internal/service",
     "pkg/services/providers/internal/services/catalog/wire",
     "pkg/services/providers/internal/services/execution",
+    "pkg/services/providers/internal/services/execution/internal/adapters/agy",
     "pkg/services/providers/internal/services/execution/internal/adapters/claude",
     "pkg/services/providers/internal/services/execution/internal/adapters/codex",
     "pkg/services/providers/internal/services/execution/internal/adapters/commanddispatch",
@@ -2026,6 +2028,11 @@
       "destination": "operator_settings/internal/services/document"
     },
     {
+      "packagePath": "pkg/services/operator_settings/internal/construct",
+      "disposition": "retain",
+      "destination": "operator_settings"
+    },
+    {
       "packagePath": "pkg/services/operator_settings/internal/service",
       "disposition": "move",
       "destination": "operator_settings/internal"
@@ -2187,6 +2194,11 @@
     },
     {
       "packagePath": "pkg/services/providers/internal/services/execution",
+      "disposition": "retain",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/agy",
       "disposition": "retain",
       "destination": "providers/internal/services/execution"
     },
