@@ -127,7 +127,6 @@ var prohibitedTransportTestPolicyOperations = map[string]map[string]string{
 		"SupportedProviders": "models",
 	},
 	workImportPath: {
-		"NewSelection":           "work",
 		"NormalizeList":          "work",
 		"PrepareInvocationInput": "work",
 	},

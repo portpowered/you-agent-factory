@@ -17,10 +17,12 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-// TestAPIProviderSessionDetailsUseGoldenExpectedMetadata loads a sanitized Codex
-// Provider Session through the public HTTP/API detail endpoint served by
-// root.BuildProcess + Process.Execute and proves the response structurally
-// matches checked-in expected Provider Session metadata.
+// TestAPIProviderSessionDetailsUseGoldenExpectedMetadata proves HTTP/API Provider
+// Session detail activates through the public GET /provider-sessions/detail endpoint
+// after runtime lifecycle starts on a process composed only via
+// support.StartFunctionalAPIServer (root.BuildProcess + edges.Edges). It loads a
+// sanitized Codex success rollout and proves identity/provider/kind plus readable
+// transcript structurally match checked-in expected Provider Session metadata.
 //golden: docs/temp/functional/provider-sessions/codex/success/manifest.json
 func TestAPIProviderSessionDetailsUseGoldenExpectedMetadata(t *testing.T) {
 	repoRoot := testutil.MustRepoRoot(t)
@@ -60,15 +62,13 @@ func TestAPIProviderSessionDetailsUseGoldenExpectedMetadata(t *testing.T) {
 		t,
 		codexProviderSessionDetailURL(server.URL(), request.SessionID),
 	)
-	if detail.ProviderSession.Id != request.SessionID {
-		t.Fatalf("detail provider session id = %q, want %q", detail.ProviderSession.Id, request.SessionID)
-	}
-	if detail.ProviderSession.Provider != factoryapi.Codex {
-		t.Fatalf("detail provider = %q, want codex", detail.ProviderSession.Provider)
-	}
-	if detail.ProviderSession.Kind != factoryapi.LoadableProviderSessionKindSessionID {
-		t.Fatalf("detail kind = %q, want session_id", detail.ProviderSession.Kind)
-	}
+	assertProviderSessionDetailIdentity(
+		t,
+		detail,
+		request.SessionID,
+		factoryapi.Codex,
+		factoryapi.LoadableProviderSessionKindSessionID,
+	)
 	if len(detail.Transcript) == 0 {
 		t.Fatal("provider session detail transcript is empty, want readable success-session content")
 	}

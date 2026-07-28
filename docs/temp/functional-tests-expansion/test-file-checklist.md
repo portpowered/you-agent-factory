@@ -234,6 +234,14 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestScriptWorkerReceivesDeclaredEnvironmentOnly`.
   - `TestScriptWorkerMissingExecutableFailsActionably`.
 
+- [x] `tests/functional/workers/transports/cli/run/help/invocation_help_test.go`
+  - `TestCLIRunHelpShowsInvocationSignatureForNamedFactory` verifies run --help
+    prints invocation signature for a named Factory.
+  - `TestCLIRunHelpDistinguishesRequiredAndOptionalParameters` verifies required
+    vs optional parameters are visibly distinguished.
+  - `TestCLIRunHelpDoesNotDispatchExternalWork` verifies help is read-only and
+    does not invoke provider command execution.
+
 ### Inference workers — shared contract
 
 - [x] `tests/functional/workers/inference/selection_test.go`
@@ -556,6 +564,16 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestWorkBatchSelectsDefaultAndExplicitWorkTypes`.
   - `TestWorkBatchRejectsUnknownTypeWithoutPartialMutation`.
 
+- [x] `tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go`
+  - `TestCLISubmitBatchDryRunEmitsSummaryWithoutMutation` verifies dry-run
+    summary without Work upsert.
+  - `TestCLISubmitBatchSuccessHumanAndJSONShapes` verifies human and JSON success
+    shapes through Process.Execute.
+  - `TestCLISubmitBatchInvalidJSONFailsBeforeUpsert` verifies malformed JSON fails
+    before any Work mutation.
+  - `TestCLISubmitBatchContractHarnessExecutesThroughRootBuildProcess` verifies
+    the Work-owned CLI batch contract cell uses root.BuildProcess + edges.Edges.
+
 - [x] `tests/functional/work/recordings/recordings_read_test.go`
   - `TestRecordingsBackedWorkReadsUseRecordingsRootContract`.
   - `TestGetWorkFromRecordingsRootUsesRecordingsServiceRoot`.
@@ -717,6 +735,14 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestGlobalConfigSuppliesDefaultProviderAndModel`.
   - `TestExplicitFactoryConfigOverridesGlobalDefaults`.
   - `TestSingleDiscoveredProviderIsUsedWhenNoDefaultExists`.
+
+- [x] `tests/functional/factory_definitions/transports/cli/named_lifecycle/named_lifecycle_test.go`
+  - `TestCLIFactoryNamedCreateListUpdateDelete` verifies create, list, update, and
+    delete for a named Factory through root.BuildProcess + Process.Execute.
+  - `TestCLIFactoryListReflectsCreateAndDelete` verifies list membership after
+    create and removal.
+  - `TestCLIFactoryDeleteMissingReturnsActionableFailure` verifies delete of a
+    missing named Factory returns an actionable failure without mutation.
 
 - [ ] `tests/functional/factory/definitions/import_export_test.go`
   - `TestExportedFactoryCanBeImportedAndRun`.

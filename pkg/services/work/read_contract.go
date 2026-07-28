@@ -1,8 +1,28 @@
 package work
 
-import "errors"
+import (
+	"context"
+	"errors"
 
-const DefaultListMaxResults = 50
+	"github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/stateaccessquery"
+)
+
+const (
+	DefaultListMaxResults = 50
+
+	FilterStateName    = "state.name"
+	FilterStateType    = "state.type"
+	FilterName         = "name"
+	FilterWorkTypeName = "workTypeName"
+	FilterTraceID      = "traceId"
+
+	SortByStateType = "state.type"
+
+	StateTypeInitial    = "INITIAL"
+	StateTypeProcessing = "PROCESSING"
+	StateTypeTerminal   = "TERMINAL"
+	StateTypeFailed     = "FAILED"
+)
 
 // ErrWorkNotFound is the typed state-access failure returned when list/get /
 // move-and-read cannot resolve the requested Work. Peers branch with errors.Is.
@@ -76,3 +96,153 @@ type StopDispatchSummary struct {
 }
 
 type StopFailureDetail struct{ Reason, Message string }
+
+// State is the query-owned projection of a Work state.
+type State struct {
+	Name string
+	Type string
+}
+
+// ListOptions is the plain Work-owned state-access list request contract used by
+// Service.ListWork. Filters, ordering, and pagination stay transport-independent.
+type ListOptions struct {
+	StateName    string
+	StateType    string
+	Name         string
+	WorkTypeName string
+	TraceID      string
+	SortBy       string
+	MaxResults   int
+	NextToken    string
+}
+
+// PreparedListRequest is the detached, validated value returned to transport
+// adapters. It contains no Work implementation or runtime reference.
+type PreparedListRequest struct {
+	Options       ListOptions
+	FilterSummary string
+}
+
+// ListRequestPreparation is the exact Work-owned policy role used by
+// transports before representing a Work list request on a protocol.
+type ListRequestPreparation interface {
+	PrepareListRequest(context.Context, ListOptions) (PreparedListRequest, error)
+}
+
+// ValidationError identifies the query field that failed validation. Boundary
+// adapters can use Field to present transport-specific field names.
+type ValidationError struct {
+	Field   string
+	Message string
+}
+
+func (e *ValidationError) Error() string {
+	if e == nil {
+		return ""
+	}
+	return e.Message
+}
+
+// ListQuery is a validated Work-list query. Its options are immutable through
+// the exported API.
+type ListQuery struct {
+	query stateaccessquery.ListQuery
+}
+
+// Options returns the normalized query values.
+func (q ListQuery) Options() ListOptions {
+	opts := q.query.Options()
+	return ListOptions{
+		StateName:    opts.StateName,
+		StateType:    opts.StateType,
+		Name:         opts.Name,
+		WorkTypeName: opts.WorkTypeName,
+		TraceID:      opts.TraceID,
+		SortBy:       opts.SortBy,
+		MaxResults:   opts.MaxResults,
+		NextToken:    opts.NextToken,
+	}
+}
+
+// FilterSummary returns the active filter and sort keys in canonical order.
+func (q ListQuery) FilterSummary() string {
+	return q.query.FilterSummary()
+}
+
+// NewListRequestPreparation constructs the pure Work list preparation role.
+// Wire supplies this role to transport adapters; transports never select it.
+func NewListRequestPreparation() ListRequestPreparation {
+	return listRequestPreparationAdapter{}
+}
+
+type listRequestPreparationAdapter struct{}
+
+func (listRequestPreparationAdapter) PrepareListRequest(
+	ctx context.Context,
+	options ListOptions,
+) (PreparedListRequest, error) {
+	prepared, err := stateaccessquery.NewListRequestPreparation().PrepareListRequest(
+		ctx,
+		listOptionsToQuery(options),
+	)
+	if err != nil {
+		return PreparedListRequest{}, mapQueryValidationError(err)
+	}
+	return PreparedListRequest{
+		Options:       listOptionsFromQuery(prepared.Options),
+		FilterSummary: prepared.FilterSummary,
+	}, nil
+}
+
+// NormalizeList validates options and returns their canonical values and
+// active-filter summary.
+func NormalizeList(options ListOptions) (ListQuery, error) {
+	query, err := stateaccessquery.NormalizeList(listOptionsToQuery(options))
+	if err != nil {
+		return ListQuery{}, mapQueryValidationError(err)
+	}
+	return ListQuery{query: query}, nil
+}
+
+// ValidWorkStateType reports whether stateType is an allowed Work-list state
+// type filter.
+func ValidWorkStateType(stateType string) bool {
+	return stateaccessquery.ValidWorkStateType(stateType)
+}
+
+func listOptionsToQuery(options ListOptions) stateaccessquery.ListOptions {
+	return stateaccessquery.ListOptions{
+		StateName:    options.StateName,
+		StateType:    options.StateType,
+		Name:         options.Name,
+		WorkTypeName: options.WorkTypeName,
+		TraceID:      options.TraceID,
+		SortBy:       options.SortBy,
+		MaxResults:   options.MaxResults,
+		NextToken:    options.NextToken,
+	}
+}
+
+func listOptionsFromQuery(options stateaccessquery.ListOptions) ListOptions {
+	return ListOptions{
+		StateName:    options.StateName,
+		StateType:    options.StateType,
+		Name:         options.Name,
+		WorkTypeName: options.WorkTypeName,
+		TraceID:      options.TraceID,
+		SortBy:       options.SortBy,
+		MaxResults:   options.MaxResults,
+		NextToken:    options.NextToken,
+	}
+}
+
+func mapQueryValidationError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var validation *stateaccessquery.ValidationError
+	if errors.As(err, &validation) {
+		return &ValidationError{Field: validation.Field, Message: validation.Message}
+	}
+	return err
+}

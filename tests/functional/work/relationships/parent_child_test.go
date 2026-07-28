@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -228,6 +229,7 @@ func TestChildFailureProjectsToDocumentedParentView(t *testing.T) {
 	assertParentChildFailureProjectionInFactoryEvents(t, events, parentChildFailureRequestID, parentChildFailureChildID)
 }
 
+
 // TestDispatchPreservesSubmittedWorkPayloadTagsAndType proves through provider
 // dispatch observations that the executor input preserves the submitted payload,
 // tags, and work type identity for dispatched Work.
@@ -375,6 +377,217 @@ func TestParentAndDependsOnLineageSurviveOnChildDispatch(t *testing.T) {
 	if !foundDependsOn {
 		t.Fatal("DEPENDS_ON relation missing from child dispatch token")
 	}
+}
+
+// TestDependentWorkFailsWhenDirectPrerequisiteFails proves through public Work
+// listings and captured provider command invocations that when a DEPENDS_ON
+// prerequisite fails before reaching its required state, the dependent Work
+// projects to failed without reaching a successful terminal state.
+func TestDependentWorkFailsWhenDirectPrerequisiteFails(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "cascading_failure"))
+
+	parentWorkID := "parent-work-id"
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		WorkTypeID:  "task",
+		WorkID:      parentWorkID,
+		TargetState: "processing",
+		Payload:     []byte("parent"),
+	})
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		WorkTypeID: "task",
+		Payload:    []byte("child"),
+		Relations: []work.Relation{
+			{Type: work.RelationDependsOn, TargetWorkID: parentWorkID, RequiredState: "complete"},
+		},
+	})
+
+	runner := testutil.NewProviderCommandRunner(
+		cascadingFailureProviderError("upstream service down"),
+	)
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(
+		t,
+		dir,
+		serviceedges.Edges{ProviderCommandRunner: runner},
+		10*time.Second,
+	)
+
+	assertCascadingFailurePlaces(t, listed, map[string]int{
+		"task:failed":     2,
+		"task:init":       0,
+		"task:processing": 0,
+		"task:complete":   0,
+	})
+	assertFailedDependsOnWork(t, listed, parentWorkID)
+	if runner.CallCount() != 1 {
+		t.Fatalf(
+			"provider command runner calls = %d, want 1 finisher failure for prerequisite already at processing",
+			runner.CallCount(),
+		)
+	}
+	assertCascadingFailureProviderRequests(t, runner)
+}
+
+// TestTransitiveDependencyFailureCascadesToFailedTerminals proves through public
+// Work listings and captured provider command invocations that a
+// parent→child→grandchild DEPENDS_ON chain reaches failed terminals on every
+// related Work item when the upstream finisher path fails.
+func TestTransitiveDependencyFailureCascadesToFailedTerminals(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "cascading_failure"))
+
+	pWorkID := "P-work-id"
+	c1WorkID := "C1-work-id"
+
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		WorkTypeID: "task",
+		WorkID:     pWorkID,
+		Payload:    []byte("P"),
+	})
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		WorkTypeID: "task",
+		WorkID:     c1WorkID,
+		Payload:    []byte("C1"),
+		Relations: []work.Relation{
+			{Type: work.RelationDependsOn, TargetWorkID: pWorkID, RequiredState: "complete"},
+		},
+	})
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		WorkTypeID: "task",
+		Payload:    []byte("C2"),
+		Relations: []work.Relation{
+			{Type: work.RelationDependsOn, TargetWorkID: c1WorkID, RequiredState: "complete"},
+		},
+	})
+
+	runner := testutil.NewProviderCommandRunner(
+		cascadingFailureProviderSuccess(),
+		cascadingFailureProviderError("crash"),
+		cascadingFailureProviderSuccess(),
+		cascadingFailureProviderError("crash"),
+		cascadingFailureProviderSuccess(),
+		cascadingFailureProviderError("crash"),
+	)
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(
+		t,
+		dir,
+		serviceedges.Edges{ProviderCommandRunner: runner},
+		10*time.Second,
+	)
+
+	assertCascadingFailurePlaces(t, listed, map[string]int{
+		"task:failed":     3,
+		"task:init":       0,
+		"task:processing": 0,
+		"task:complete":   0,
+	})
+	assertFailedDependsOnWork(t, listed, pWorkID)
+	assertFailedDependsOnWork(t, listed, c1WorkID)
+	if runner.CallCount() != 2 {
+		t.Fatalf(
+			"provider command runner calls = %d, want 2 starter and finisher invocations before dependents cascade to failed",
+			runner.CallCount(),
+		)
+	}
+	assertCascadingFailureProviderRequests(t, runner)
+}
+
+// TestCompletedPrerequisiteIsNotCascadedWhenDependentFails proves through public
+// Work listings and captured provider command invocations that a prerequisite
+// Work already at complete is left unchanged when a later dependent Work fails.
+func TestCompletedPrerequisiteIsNotCascadedWhenDependentFails(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "cascading_failure"))
+
+	aWorkID := "A-work-id"
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		WorkTypeID: "task",
+		WorkID:     aWorkID,
+		Payload:    []byte("A"),
+	})
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		WorkTypeID: "task",
+		Payload:    []byte("B"),
+		Relations: []work.Relation{
+			{Type: work.RelationDependsOn, TargetWorkID: aWorkID, RequiredState: "complete"},
+		},
+	})
+
+	runner := testutil.NewProviderCommandRunner(
+		cascadingFailureProviderSuccess(),
+		cascadingFailureProviderSuccess(),
+		cascadingFailureProviderSuccess(),
+		cascadingFailureProviderError("oops"),
+	)
+	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(
+		t,
+		dir,
+		serviceedges.Edges{ProviderCommandRunner: runner},
+		10*time.Second,
+	)
+
+	assertCascadingFailurePlaces(t, listed, map[string]int{
+		"task:complete": 1,
+		"task:failed":   1,
+	})
+	if !support.HasWorkAtCustomerState(listed, aWorkID, support.WorkCustomerLocation("task", "complete")) {
+		t.Fatalf("prerequisite work %q not at complete after dependent failure: %#v", aWorkID, listed.Results)
+	}
+	if runner.CallCount() != 4 {
+		t.Fatalf(
+			"provider command runner calls = %d, want 4 starter and finisher invocations for prerequisite then dependent",
+			runner.CallCount(),
+		)
+	}
+	assertCascadingFailureProviderRequests(t, runner)
+}
+
+func assertCascadingFailureProviderRequests(t *testing.T, runner *testutil.ProviderCommandRunner) {
+	t.Helper()
+
+	for index, request := range runner.Requests() {
+		if strings.TrimSpace(request.Command) == "" {
+			t.Fatalf("provider command request %d missing command: %#v", index, request)
+		}
+		if len(request.Args) == 0 {
+			t.Fatalf("provider command request %d missing args: %#v", index, request)
+		}
+	}
+}
+
+func cascadingFailureProviderSuccess() platformprocess.CommandResult {
+	return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("COMPLETE")}
+}
+
+func cascadingFailureProviderError(message string) platformprocess.CommandResult {
+	return platformprocess.CommandResult{ExitCode: 1, Stderr: []byte(message)}
+}
+
+func assertCascadingFailurePlaces(
+	t *testing.T,
+	listed factoryapi.ListWorkResponse,
+	wants map[string]int,
+) {
+	t.Helper()
+	for placeID, want := range wants {
+		if got := support.CountWorkAtCustomerState(listed, placeID); got != want {
+			t.Fatalf("%s work count = %d, want %d; listed=%#v", placeID, got, want, listed.Results)
+		}
+	}
+}
+
+func assertFailedDependsOnWork(t *testing.T, listed factoryapi.ListWorkResponse, targetWorkID string) {
+	t.Helper()
+	for _, item := range listed.Results {
+		if item.State == nil || item.State.Name != "failed" || item.Relations == nil {
+			continue
+		}
+		for _, relation := range *item.Relations {
+			if relation.Type == factoryapi.RelationTypeDependsOn &&
+				relation.TargetWorkId != nil &&
+				*relation.TargetWorkId == targetWorkID {
+				return
+			}
+		}
+	}
+	t.Fatalf("listed failed Work missing DEPENDS_ON dependency on %q: %#v", targetWorkID, listed.Results)
 }
 
 func assertParentChildBatchSubmitAcknowledgment(t *testing.T, output []byte, requestID string) {

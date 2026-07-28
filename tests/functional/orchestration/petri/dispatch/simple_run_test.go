@@ -695,6 +695,182 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 	})
 }
 
+// TestPetriExecutorDispatchTerminalRouting proves executor failure and success
+// routing for Petri workstations with and without authored failure arcs using
+// root.BuildProcess + ProviderCommandRunner captures (retired guards_batch
+// executor_failure scenarios).
+func TestPetriExecutorDispatchTerminalRouting(t *testing.T) {
+	t.Run("provider_process_failure_without_failure_arcs_routes_to_failed", func(t *testing.T) {
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_failure_no_arcs"))
+		traceID := "trace-executor-process-failure"
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			WorkTypeID: "task",
+			TraceID:    traceID,
+			Payload:    []byte("work payload"),
+		})
+
+		runner := &recordingProviderCommandRunner{runErr: errors.New("executor crashed")}
+		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+			t,
+			dir,
+			serviceedges.Edges{ProviderCommandRunner: runner},
+			10*time.Second,
+		)
+
+		failedTerminal := support.WorkCustomerLocation("task", "failed")
+		assertWorkAtCustomerStates(t, listed, map[string]int{
+			failedTerminal: 1,
+			support.WorkCustomerLocation("task", "init"):        0,
+			support.WorkCustomerLocation("task", "processing"): 0,
+		})
+		assertTerminalWorkCorrelatesToTraceIDs(t, listed, failedTerminal, []string{traceID})
+		assertQuiescentSession(t, session, 0, 1)
+
+		failedWorkID, ok := workIDAtCustomerState(t, listed, failedTerminal, traceID)
+		if !ok {
+			t.Fatalf("missing failed Work for trace %q at %s", traceID, failedTerminal)
+		}
+		assertFailedDispatchForWork(t, support.ObserveDispatchEvents(t, events), failedWorkID)
+		assertFailedDispatchResponseErrorForWork(t, support.ObserveDispatchEvents(t, events), failedWorkID)
+		if runner.callCount() != 1 {
+			t.Errorf("provider command call count = %d, want 1", runner.callCount())
+		}
+	})
+
+	t.Run("provider_nonzero_exit_without_failure_arcs_routes_to_failed", func(t *testing.T) {
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_failure_no_arcs"))
+		traceID := "trace-executor-exit-failure"
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			WorkTypeID: "task",
+			TraceID:    traceID,
+			Payload:    []byte("work"),
+		})
+
+		runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+			Stderr:   []byte("provider unavailable"),
+			ExitCode: 1,
+		})
+		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+			t,
+			dir,
+			serviceedges.Edges{ProviderCommandRunner: runner},
+			10*time.Second,
+		)
+
+		failedTerminal := support.WorkCustomerLocation("task", "failed")
+		assertWorkAtCustomerStates(t, listed, map[string]int{
+			failedTerminal: 1,
+			support.WorkCustomerLocation("task", "init"):        0,
+			support.WorkCustomerLocation("task", "processing"): 0,
+		})
+		assertTerminalWorkCorrelatesToTraceIDs(t, listed, failedTerminal, []string{traceID})
+		assertQuiescentSession(t, session, 0, 1)
+
+		failedWorkID, ok := workIDAtCustomerState(t, listed, failedTerminal, traceID)
+		if !ok {
+			t.Fatalf("missing failed Work for trace %q at %s", traceID, failedTerminal)
+		}
+		assertFailedDispatchForWork(t, support.ObserveDispatchEvents(t, events), failedWorkID)
+		if runner.CallCount() != 1 {
+			t.Errorf("provider command call count = %d, want 1", runner.CallCount())
+		}
+	})
+
+	t.Run("provider_failure_with_failure_arcs_routes_to_failed_not_done", func(t *testing.T) {
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_failure_with_arcs"))
+		traceID := "trace-executor-failure-arcs"
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			WorkTypeID: "task",
+			TraceID:    traceID,
+			Payload:    []byte("work"),
+		})
+
+		runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+			Stderr:   []byte("intentional failure"),
+			ExitCode: 1,
+		})
+		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+			t,
+			dir,
+			serviceedges.Edges{ProviderCommandRunner: runner},
+			10*time.Second,
+		)
+
+		failedTerminal := support.WorkCustomerLocation("task", "failed")
+		doneTerminal := support.WorkCustomerLocation("task", "done")
+		assertWorkAtCustomerStates(t, listed, map[string]int{
+			failedTerminal: 1,
+			doneTerminal:   0,
+			support.WorkCustomerLocation("task", "init"): 0,
+		})
+		assertTerminalWorkCorrelatesToTraceIDs(t, listed, failedTerminal, []string{traceID})
+		assertTraceAbsentAtCustomerState(t, listed, doneTerminal, traceID)
+		assertQuiescentSession(t, session, 0, 1)
+
+		failedWorkID, ok := workIDAtCustomerState(t, listed, failedTerminal, traceID)
+		if !ok {
+			t.Fatalf("missing failed Work for trace %q at %s", traceID, failedTerminal)
+		}
+		assertFailedDispatchForWork(t, support.ObserveDispatchEvents(t, events), failedWorkID)
+		assertNoAcceptedDispatchMovesWorkToCustomerState(t, events, failedWorkID, doneTerminal)
+		if runner.CallCount() != 1 {
+			t.Errorf("provider command call count = %d, want 1", runner.CallCount())
+		}
+	})
+
+	t.Run("provider_success_leaves_work_at_authored_done_place", func(t *testing.T) {
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+		traceID := "trace-executor-success"
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			WorkTypeID: "task",
+			TraceID:    traceID,
+			Payload:    []byte("work"),
+		})
+
+		runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+			Stdout: support.CodexSuccessStdout("COMPLETE"),
+		})
+		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(
+			t,
+			dir,
+			serviceedges.Edges{ProviderCommandRunner: runner},
+			10*time.Second,
+		)
+
+		doneTerminal := support.WorkCustomerLocation("task", "done")
+		assertWorkAtCustomerStates(t, listed, map[string]int{
+			doneTerminal: 1,
+			support.WorkCustomerLocation("task", "init"):   0,
+			support.WorkCustomerLocation("task", "failed"): 0,
+		})
+		assertTerminalWorkCorrelatesToTraceIDs(t, listed, doneTerminal, []string{traceID})
+		assertQuiescentSession(t, session, 1, 0)
+		if runner.CallCount() != 1 {
+			t.Errorf("provider command call count = %d, want 1", runner.CallCount())
+		}
+	})
+}
+
+type recordingProviderCommandRunner struct {
+	requests []platformprocess.CommandRequest
+	runErr   error
+}
+
+func (r *recordingProviderCommandRunner) Run(
+	_ context.Context,
+	req platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	r.requests = append(r.requests, req)
+	if r.runErr != nil {
+		return platformprocess.CommandResult{}, r.runErr
+	}
+	return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("COMPLETE")}, nil
+}
+
+func (r *recordingProviderCommandRunner) callCount() int {
+	return len(r.requests)
+}
+
 // TestPetriInvocationInputAndOutputMapping proves submitted Work payload and
 // Trace identity map into worker invocation inputs at the external-effect edge
 // and that public Work projections and Factory Events keep outputs and lineage
@@ -908,6 +1084,30 @@ func assertCompletedWorkName(t *testing.T, response factoryapi.ListWorkResponse,
 		return
 	}
 	t.Errorf("listed Work missing %s:complete", workType)
+}
+
+func assertFailedDispatchResponseErrorForWork(
+	t *testing.T,
+	dispatches []support.DispatchEventObservation,
+	workID string,
+) {
+	t.Helper()
+
+	for _, dispatch := range dispatches {
+		if !support.DispatchObservationIncludesWork(dispatch, workID) {
+			continue
+		}
+		if dispatch.Response == nil {
+			continue
+		}
+		if dispatch.Response.Outcome != factoryapi.WorkOutcomeFailed {
+			continue
+		}
+		if dispatch.Response.Error != nil && *dispatch.Response.Error != "" {
+			return
+		}
+	}
+	t.Fatalf("no failed dispatch response with public error for work %q", workID)
 }
 
 func assertFailedDispatchForWork(

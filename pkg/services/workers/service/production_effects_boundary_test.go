@@ -17,15 +17,15 @@ func TestWorkersCompletedEffectInjectionsHaveNoOwnerFallbacks(t *testing.T) {
 	}
 	workersDir := filepath.Clean(filepath.Join(filepath.Dir(filename), ".."))
 	checks := map[string][][]byte{
-		"construction/service.go":                         {[]byte("time.Now")},
-		"execution/recording/model.go":                    {[]byte("time.Now")},
+		"internal/services/runtime_assembly/construction/service.go": {[]byte("time.Now")},
+		"internal/services/workstations/execution/recording/model.go":                    {[]byte("time.Now")},
 		"provider/recording_provider.go":                  {[]byte("time.Now")},
-		"executor/agentrun/executor.go":                   {[]byte("time.Now"), []byte("time.Since")},
-		"executor/workstation_executor.go":                {[]byte("time.Now"), []byte("time.Since"), []byte("os.Getwd")},
-		"executor/script.go":                              {[]byte("time.Now"), []byte("time.Since"), []byte("os.Environ")},
+		"internal/services/workstations/executor/agentrun/executor.go":                   {[]byte("time.Now"), []byte("time.Since")},
+		"internal/services/workstations/executor/workstation_executor.go":                {[]byte("time.Now"), []byte("time.Since"), []byte("os.Getwd")},
+		"internal/services/workstations/executor/script.go":                              {[]byte("time.Now"), []byte("time.Since"), []byte("os.Environ")},
 		"provider/commandenv/environment.go":              {[]byte("os.Environ")},
-		"prompting/prompt_docs.go":                        {[]byte("os.Stat"), []byte("os.ReadFile"), []byte("filepath.WalkDir")},
-		"worktree/prepare.go":                             {[]byte("time.Since")},
+		"internal/services/workstations/prompting/prompt_docs.go":                        {[]byte("os.Stat"), []byte("os.ReadFile"), []byte("filepath.WalkDir")},
+		"internal/services/workstations/worktree/prepare.go": {[]byte("time.Since")},
 	}
 
 	for relative, forbidden := range checks {
