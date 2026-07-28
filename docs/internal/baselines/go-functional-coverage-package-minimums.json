@@ -2259,6 +2259,10 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/projections/workstation",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/replay",
       "exception": {
         "kind": "measurement",
