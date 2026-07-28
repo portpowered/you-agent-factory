@@ -4672,6 +4672,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/recordings/internal/services/artifacts_export/artifacts",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/recordings/internal/services/artifacts_export/internal/service",
       "disposition": "retain",
       "destination": "recordings",

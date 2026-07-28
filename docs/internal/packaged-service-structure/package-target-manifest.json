@@ -386,6 +386,7 @@
     "pkg/services/recordings/internal",
     "pkg/services/recordings/internal/canonical",
     "pkg/services/recordings/internal/services/artifacts_export",
+    "pkg/services/recordings/internal/services/artifacts_export/artifacts",
     "pkg/services/recordings/internal/services/artifacts_export/internal/service",
     "pkg/services/recordings/internal/services/artifacts_export/wire",
     "pkg/services/recordings/internal/services/canonical_ledger",
@@ -2287,6 +2288,11 @@
     },
     {
       "packagePath": "pkg/services/recordings/internal/services/artifacts_export",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/artifacts_export"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/artifacts_export/artifacts",
       "disposition": "retain",
       "destination": "recordings/internal/services/artifacts_export"
     },

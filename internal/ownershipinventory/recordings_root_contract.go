@@ -57,6 +57,13 @@ var RecordingsExcessRootContractFolds = []RecordingsRootContractFoldTarget{
 		Destination: recordingsPackagePrefix + "/internal/services/projection_query",
 	},
 	{
+		Cluster: "artifacts",
+		Files: []string{
+			"artifacts_import_boundary_test.go",
+		},
+		Destination: recordingsPackagePrefix + "/internal/services/artifacts_export",
+	},
+	{
 		Cluster: "replay",
 		Files: []string{
 			"replay_contract.go",

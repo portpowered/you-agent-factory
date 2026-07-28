@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	recording "github.com/portpowered/infinite-you/pkg/services/recordings/artifacts"
+	recording "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export/artifacts"
 )
 
 func TestContractFixtures(t *testing.T) {

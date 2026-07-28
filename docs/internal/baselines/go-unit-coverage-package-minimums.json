@@ -1641,8 +1641,12 @@
       "minimum": 85.26
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/artifacts",
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export/artifacts",
       "minimum": 91.25
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/artifacts",
+      "minimum": 0.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/events",
