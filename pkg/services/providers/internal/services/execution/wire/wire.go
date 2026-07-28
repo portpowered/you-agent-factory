@@ -8,6 +8,7 @@ import (
 	claudeadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude"
 	codexadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex"
 	cursoradapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/cursor"
+	geminiadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/gemini"
 	opencodeadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/opencode"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -67,6 +68,7 @@ func BuiltInDependenciesFromWorkersRunner(
 			TemporaryDir:    platform.TemporaryDir,
 			TemporaryFiles:  platform.TemporaryFiles,
 		}),
+		Gemini:   geminiadapter.NewCommandEffect(runner),
 		OpenCode: opencodeadapter.NewCommandEffect(runner),
 	}
 }

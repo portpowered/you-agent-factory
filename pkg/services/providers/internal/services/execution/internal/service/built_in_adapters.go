@@ -5,6 +5,7 @@ import (
 	claudeadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude"
 	codexadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex"
 	cursoradapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/cursor"
+	geminiadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/gemini"
 	opencodeadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/opencode"
 )
 
@@ -13,6 +14,7 @@ type BuiltInDependencies struct {
 	Codex    codexadapter.Effect
 	Claude   claudeadapter.Effect
 	Cursor   cursoradapter.Effect
+	Gemini   geminiadapter.Effect
 	OpenCode opencodeadapter.Effect
 }
 
@@ -31,6 +33,7 @@ func BuiltInRegistrations(
 		codexadapter.NewRegistration(effects.Codex),
 		claudeadapter.NewRegistration(effects.Claude),
 		cursoradapter.NewRegistration(effects.Cursor),
+		geminiadapter.NewRegistration(effects.Gemini),
 		opencodeadapter.NewRegistration(effects.OpenCode),
 	}
 }
