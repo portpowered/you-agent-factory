@@ -286,6 +286,109 @@ func TestNewServiceInjectsPlatformDependenciesThroughWireOptions(t *testing.T) {
 	}
 }
 
+func TestNewServiceServesPublishedCatalogAndExecuteCompositionForMigratedIdentities(t *testing.T) {
+	t.Parallel()
+
+	probeCalls := 0
+	root, err := NewService(CatalogOption(catalogwire.WithProbeQuery(func(
+		_ context.Context,
+		descriptor providers.Descriptor,
+	) (catalog.ProbeFacts, error) {
+		probeCalls++
+		return catalog.ProbeFacts{
+			Readiness:     descriptor.Readiness,
+			Prerequisites: descriptor.Prerequisites,
+		}, nil
+	})))
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	if probeCalls != 0 {
+		t.Fatalf("construction probe calls = %d, want inert construction", probeCalls)
+	}
+
+	list, err := root.ListProviders(context.Background(), providers.ListProvidersRequest{})
+	if err != nil {
+		t.Fatalf("ListProviders() = %v", err)
+	}
+	wantMigratedIDs := []providers.ID{
+		providers.IDAgy,
+		providers.IDClaude,
+		providers.IDCodex,
+		providers.IDCursor,
+		providers.IDGemini,
+		providers.IDKiro,
+		providers.IDOpenCode,
+		providers.IDPi,
+	}
+	byID := indexProvidersByID(list.Providers)
+	for _, id := range wantMigratedIDs {
+		descriptor, ok := byID[id]
+		if !ok {
+			t.Fatalf("ListProviders() missing migrated identity %q", id)
+		}
+		if descriptor.ID != id {
+			t.Fatalf("ListProviders()[%q].ID = %q", id, descriptor.ID)
+		}
+	}
+
+	for _, id := range wantMigratedIDs {
+		got, getErr := root.GetProvider(context.Background(), providers.GetProviderRequest{ID: id})
+		if getErr != nil {
+			t.Fatalf("GetProvider(%q) = %v", id, getErr)
+		}
+		if got.Provider.ID != id {
+			t.Fatalf("GetProvider(%q).Provider.ID = %q", id, got.Provider.ID)
+		}
+	}
+
+	probeCallsBeforeExecute := probeCalls
+	executeTests := []struct {
+		id   providers.ID
+		name string
+	}{
+		{id: providers.IDCodex, name: "Codex"},
+		{id: providers.IDClaude, name: "Claude"},
+		{id: providers.IDCursor, name: "Cursor"},
+		{id: providers.IDAgy, name: "Agy"},
+		{id: providers.IDGemini, name: "Gemini"},
+		{id: providers.IDKiro, name: "Kiro"},
+		{id: providers.IDOpenCode, name: "OpenCode"},
+		{id: providers.IDPi, name: "Pi"},
+	}
+	for _, test := range executeTests {
+		_, executeErr := root.Execute(context.Background(), providers.ExecuteRequest{
+			Provider:  test.id,
+			AttemptID: "migrated-composition-" + string(test.id),
+		})
+		if errors.Is(executeErr, providers.ErrUnknownProvider) {
+			t.Fatalf(
+				"Execute(%q) = %v, want execution bound through published registry",
+				test.id,
+				executeErr,
+			)
+		}
+		var failure providers.ExecuteFailure
+		if !errors.As(executeErr, &failure) ||
+			failure.Kind != providers.ExecuteFailureKindDependency ||
+			!strings.Contains(failure.Message, test.name) {
+			t.Fatalf(
+				"Execute(%q) error = %#v, want dependency failure from bound %s adapter without effects",
+				test.id,
+				executeErr,
+				test.name,
+			)
+		}
+	}
+	if probeCalls <= probeCallsBeforeExecute {
+		t.Fatalf(
+			"execution probe calls = %d before %d after explicit Execute, want catalog probing only after Execute",
+			probeCallsBeforeExecute,
+			probeCalls,
+		)
+	}
+}
+
 func TestNewServiceBindsCodexAndClaudeFromCatalogWithoutEffects(t *testing.T) {
 	t.Parallel()
 
@@ -412,6 +515,14 @@ func (i *inertPathInspector) Stat(string) (fs.FileInfo, error) {
 
 func reflectDeepZeroExecuteResult(result providers.ExecuteResult) bool {
 	return result == providers.ExecuteResult{}
+}
+
+func indexProvidersByID(descriptors []providers.Descriptor) map[providers.ID]providers.Descriptor {
+	byID := make(map[providers.ID]providers.Descriptor, len(descriptors))
+	for _, descriptor := range descriptors {
+		byID[descriptor.ID] = descriptor
+	}
+	return byID
 }
 
 type recordingWorkersCommandRunner struct {
