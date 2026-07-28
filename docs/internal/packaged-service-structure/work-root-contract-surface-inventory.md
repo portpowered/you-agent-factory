@@ -27,9 +27,10 @@ fold or delete them.
 | File | Classification | Later target / rationale |
 | --- | --- | --- |
 | `admission_contract.go` | Thin committed root contract (keep) | Admission slice typed failures (`ErrInvalidWorkRequest`, `ErrWorkRequestConflict`, `ErrWorkRequestRejected`) peers branch on via `errors.Is`. |
-| `content_contract.go` | Thin committed root contract (keep) | Content materialization effect ports and `ContentMaterializer` narrow role published at the Work root boundary. |
+| `content_contract.go` | Thin committed root contract (keep) | Content materialization effect ports, `ContentMaterializer` narrow role, and published content URL vocabulary delegators for peers. |
 | `content_materialization_public_seam_test.go` | Thin committed root contract (keep) | Root-contract characterization test for the published content materialization slice on `Service`. |
 | `content_materialize_contract.go` | Thin committed root contract (keep) | Materialization slice typed failures (`ErrUnsafeContentURL`, `ErrContentURLInaccessible`). |
+| `content_staging_contract.go` | Thin committed root contract (keep) | Content staging effect ports, `ContentStagingService` narrow role, staging request/result vocabulary, and typed staging failures. |
 | `contracts.go` | Thin committed root contract (keep) | Canonical Work request, content-part, relation, invocation-config, and admission vocabulary shared across published slices. |
 | `input.go` | Thin committed root contract (keep) | Invocation input vocabulary (`InputSourceLabel`, `ResolvedInput`, `TextInputSources`, `InputErrorCode`) consumed by peers without importing implementation packages. |
 | `input_test.go` | Thin committed root contract (keep) | Co-located characterization tests for `input.go` root vocabulary. |
@@ -48,8 +49,6 @@ fold or delete them.
 | `wire_behavioral_proof_test.go` | Thin committed root contract (keep) | Post-inventory wire behavioral proof exercising admission, content, state-access, and invocation observables through `work/wire`. |
 | `arguments.go` | Excess fold/consolidation debt | `work/internal` — invocation argument normalization, metadata projection, and signature binding logic (`invocation_return_policy` cluster). |
 | `arguments_test.go` | Excess fold/consolidation debt | Co-located tests for `arguments.go`; move with invocation/return-policy fold. |
-| `content_staging.go` | Excess fold/consolidation debt | `work/internal/services/content_staging` — staging filesystem effects, `ContentStagingService` wiring, and staging implementation helpers beyond thin `Service` slice types. |
-| `content_url.go` | Excess fold/consolidation debt | `work/internal/services/content_materialization` — content URL validation and filesystem-to-URL mapping helpers. |
 | `dependency_graph.go` | Excess fold/consolidation debt | `work/internal/services/state_access` — batch dependency graph derivation (`lineage_graph_modules` cluster). |
 | `dependency_graph_markdown.go` | Excess fold/consolidation debt | `work/internal/services/state_access` — markdown dependency-graph rendering helpers. |
 | `dependency_graph_markdown_test.go` | Excess fold/consolidation debt | Co-located tests for `dependency_graph_markdown.go`. |
@@ -79,8 +78,14 @@ fold or delete them.
 | `visualization.go` | Excess fold/consolidation debt | `work/internal/services/state_access` — batch-file dependency visualization operation binding (`lineage_graph_modules` cluster). |
 | `visualization_test.go` | Excess fold/consolidation debt | Co-located tests for `visualization.go`. |
 
-**Totals:** 52 root-level `.go` files — 20 thin committed root contract (keep), 32
+**Totals:** 51 root-level `.go` files — 21 thin committed root contract (keep), 30
 excess fold/consolidation debt.
+
+`content_staging_impl` and `content_materialization_impl` folded in
+CLN-WORK-CONTRACT-ROOTS story 002: staging contracts remain at
+`content_staging_contract.go`, URL helpers live under
+`work/internal/services/content_materialization/url.go`, and published URL
+vocabulary stays on `content_contract.go` as thin delegators.
 
 ## Excess fold clusters
 
@@ -90,8 +95,6 @@ excess fold/consolidation debt.
 | `invocation_return_policy` | `work/internal` | `arguments.go`, `arguments_test.go`, `invocation_input_preparation.go`, `invocation_input_preparation_test.go`, `invocation_policy_service.go`, `invocation_policy_service_test.go`, `primary_result.go`, `primary_result_test.go`, `primary_result_regression_test.go` |
 | `lineage_graph_modules` | `work/internal/services/state_access` | `dependency_graph.go`, `dependency_graph_test.go`, `dependency_graph_markdown.go`, `dependency_graph_markdown_test.go`, `dependency_graph_mermaid.go`, `dependency_graph_mermaid_test.go`, `lineage.go`, `visualization.go`, `visualization_test.go` |
 | `state_access_query` | `work/internal/services/state_access` | `query_list.go`, `query_list_test.go`, `query_select.go`, `query_select_test.go` |
-| `content_staging_impl` | `work/internal/services/content_staging` | `content_staging.go` |
-| `content_materialization_impl` | `work/internal/services/content_materialization` | `content_url.go` |
 
 ## Generator mirror
 

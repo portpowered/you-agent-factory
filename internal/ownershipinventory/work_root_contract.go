@@ -19,6 +19,7 @@ var WorkThinRootContractFiles = []string{
 	"content_contract.go",
 	"content_materialization_public_seam_test.go",
 	"content_materialize_contract.go",
+	"content_staging_contract.go",
 	"content_staging_public_seam_test.go",
 	"contracts.go",
 	"input.go",
@@ -101,20 +102,6 @@ var WorkExcessRootContractFolds = []WorkRootContractFoldTarget{
 			"query_select_test.go",
 		},
 		Destination: workPackagePrefix + "/internal/services/state_access",
-	},
-	{
-		Cluster: "content_staging_impl",
-		Files: []string{
-			"content_staging.go",
-		},
-		Destination: workPackagePrefix + "/internal/services/content_staging",
-	},
-	{
-		Cluster: "content_materialization_impl",
-		Files: []string{
-			"content_url.go",
-		},
-		Destination: workPackagePrefix + "/internal/services/content_materialization",
 	},
 }
 

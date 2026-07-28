@@ -25,12 +25,10 @@ func TestWorkExcessRootContractFoldDestinations(t *testing.T) {
 	t.Parallel()
 
 	want := map[string]string{
-		"request_admission":            "pkg/services/work/internal",
-		"invocation_return_policy":     "pkg/services/work/internal",
-		"lineage_graph_modules":        "pkg/services/work/internal/services/state_access",
-		"state_access_query":           "pkg/services/work/internal/services/state_access",
-		"content_staging_impl":         "pkg/services/work/internal/services/content_staging",
-		"content_materialization_impl": "pkg/services/work/internal/services/content_materialization",
+		"request_admission":        "pkg/services/work/internal",
+		"invocation_return_policy": "pkg/services/work/internal",
+		"lineage_graph_modules":    "pkg/services/work/internal/services/state_access",
+		"state_access_query":       "pkg/services/work/internal/services/state_access",
 	}
 
 	for _, target := range workExcessRootContractFolds {
@@ -137,8 +135,6 @@ func TestWorkExcessRootContractFoldClustersMatchInventoryNote(t *testing.T) {
 	}
 	slices.Sort(gotClusters)
 	wantClusters := []string{
-		"content_materialization_impl",
-		"content_staging_impl",
 		"invocation_return_policy",
 		"lineage_graph_modules",
 		"request_admission",
