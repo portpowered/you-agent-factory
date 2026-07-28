@@ -21,9 +21,10 @@ import (
 // TestPetriSingleWorkerRunCompletesAtQuiescence proves a simple Petri Factory
 // started through the customer process reaches quiescence with submitted Work
 // at the expected success terminal locations. Subtests absorb cold-start,
-// preseeded and late-submit admission, archive-terminal completion, single- and
-// two-stage pipelines, and ideation happy-path coverage without inspecting
-// internal Petri markings.
+// preseeded and late-submit admission, archive-terminal completion, config-driven
+// and scaffolded service-pipeline happy paths, noop fallback, multi-item
+// completion, single- and two-stage pipelines, and ideation happy-path coverage
+// without inspecting internal Petri markings.
 func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 	t.Run("simple_single_worker_pipeline_completes", func(t *testing.T) {
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "e2e"))
@@ -375,6 +376,112 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 		})
 		assertTerminalWorkCorrelatesToTraceIDs(t, listed, terminal, []string{trace1, trace2})
 		assertQuiescentSession(t, session, 2, 0)
+	})
+
+	t.Run("config_driven_happy_path_two_stage_completes", func(t *testing.T) {
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "happy_path"))
+		testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "Config-driven happy path"}`))
+
+		provider := testutil.NewMockProvider(
+			workerexecution.InferenceResponse{Content: "Step one done. COMPLETE"},
+			workerexecution.InferenceResponse{Content: "Step two done. COMPLETE"},
+		)
+		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+			ProviderOverride: provider,
+		}, 10*time.Second)
+
+		terminal := support.WorkCustomerLocation("task", "complete")
+		assertWorkAtCustomerStates(t, listed, map[string]int{terminal: 1})
+		assertQuiescentSession(t, session, 1, 0)
+		if provider.CallCount() != 2 {
+			t.Errorf("provider call count = %d, want 2", provider.CallCount())
+		}
+	})
+
+	t.Run("noop_pipeline_completes_without_provider", func(t *testing.T) {
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "noop_pipeline"))
+		testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "noop fallback test"}`))
+
+		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(
+			t,
+			dir,
+			serviceedges.Edges{},
+			10*time.Second,
+		)
+
+		terminal := support.WorkCustomerLocation("task", "complete")
+		assertWorkAtCustomerStates(t, listed, map[string]int{terminal: 1})
+		assertQuiescentSession(t, session, 1, 0)
+	})
+
+	t.Run("service_simple_multiple_work_items_complete", func(t *testing.T) {
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
+		testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "queued-1"}`))
+		testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "queued-2"}`))
+
+		provider := testutil.NewMockProvider(
+			workerexecution.InferenceResponse{Content: "Done. COMPLETE"},
+			workerexecution.InferenceResponse{Content: "Done. COMPLETE"},
+			workerexecution.InferenceResponse{Content: "Done. COMPLETE"},
+			workerexecution.InferenceResponse{Content: "Done. COMPLETE"},
+		)
+		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+			ProviderOverride: provider,
+		}, 10*time.Second)
+
+		terminal := support.WorkCustomerLocation("task", "complete")
+		assertWorkAtCustomerStates(t, listed, map[string]int{terminal: 2})
+		assertQuiescentSession(t, session, 2, 0)
+		if provider.CallCount() != 4 {
+			t.Errorf("provider call count = %d, want 4", provider.CallCount())
+		}
+	})
+
+	t.Run("scaffolded_multiple_work_items_complete_independently", func(t *testing.T) {
+		dir := support.ScaffoldFactory(t, simpleSingleWorkerPipelineConfig())
+		support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+		for i := 0; i < 3; i++ {
+			testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+				WorkTypeID: "task",
+				TraceID:    fmt.Sprintf("trace-e2e-batch-%d", i),
+				Payload:    []byte(`{"title":"batch item"}`),
+			})
+		}
+
+		provider := testutil.NewMockProvider(
+			workerexecution.InferenceResponse{Content: "Done. COMPLETE"},
+			workerexecution.InferenceResponse{Content: "Done. COMPLETE"},
+			workerexecution.InferenceResponse{Content: "Done. COMPLETE"},
+		)
+		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+			ProviderOverride: provider,
+		}, 10*time.Second)
+
+		terminal := support.WorkCustomerLocation("task", "complete")
+		assertWorkAtCustomerStates(t, listed, map[string]int{terminal: 3})
+		assertQuiescentSession(t, session, 3, 0)
+	})
+
+	t.Run("scaffolded_two_stage_service_pipeline_completes", func(t *testing.T) {
+		dir := support.ScaffoldFactory(t, twoStageServicePipelineConfig())
+		writeServicePipelineWorkerConfig(t, dir, "worker-a")
+		writeServicePipelineWorkerConfig(t, dir, "worker-b")
+		testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"two-stage service pipeline"}`))
+
+		provider := testutil.NewMockProvider(
+			workerexecution.InferenceResponse{Content: "Step one done. COMPLETE"},
+			workerexecution.InferenceResponse{Content: "Step two done. COMPLETE"},
+		)
+		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+			ProviderOverride: provider,
+		}, 10*time.Second)
+
+		terminal := support.WorkCustomerLocation("task", "complete")
+		assertWorkAtCustomerStates(t, listed, map[string]int{terminal: 1})
+		assertQuiescentSession(t, session, 1, 0)
+		if provider.CallCount() != 2 {
+			t.Errorf("provider call count = %d, want 2", provider.CallCount())
+		}
 	})
 }
 
@@ -1186,6 +1293,52 @@ func simpleSingleWorkerPipelineConfig() map[string]any {
 			},
 		},
 	}
+}
+
+func twoStageServicePipelineConfig() map[string]any {
+	return map[string]any{
+		"workTypes": []map[string]any{
+			{
+				"name": "task",
+				"states": []map[string]string{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "processing", "type": "PROCESSING"},
+					{"name": "complete", "type": "TERMINAL"},
+					{"name": "failed", "type": "FAILED"},
+				},
+			},
+		},
+		"workers": []map[string]string{
+			{"name": "worker-a"},
+			{"name": "worker-b"},
+		},
+		"workstations": []map[string]any{
+			{
+				"name":      "step-one",
+				"worker":    "worker-a",
+				"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
+				"outputs":   []map[string]string{{"workType": "task", "state": "processing"}},
+				"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
+			},
+			{
+				"name":      "step-two",
+				"worker":    "worker-b",
+				"inputs":    []map[string]string{{"workType": "task", "state": "processing"}},
+				"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
+				"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
+			},
+		},
+	}
+}
+
+func writeServicePipelineWorkerConfig(t *testing.T, dir, workerName string) {
+	t.Helper()
+	support.WriteAgentConfig(
+		t,
+		dir,
+		workerName,
+		support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"),
+	)
 }
 
 func assertQuiescentSession(t *testing.T, session factoryapi.FactorySession, wantTerminal, wantFailed int) {

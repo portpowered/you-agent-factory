@@ -978,15 +978,15 @@ can execute independently until package ownership reaches zero.
 | --- | --- | ---: | --- | --- |
 | `smoke-delete-02-workstations-execution` | smoke | 4 | workstations/execution | released |
 | `smoke-delete-03-factory-definitions` | smoke | 3 | factory/definitions | none |
-| `smoke-delete-04-transport-cli` | smoke | 10 | transport/cli | none |
-| `smoke-delete-05-factory-packaged` | smoke | 12 | factory/packaged, work/routing | none |
+| `smoke-delete-04-transport-cli` | smoke | 10 | transport/cli | released |
+| `smoke-delete-05-factory-packaged` | smoke | 12 | factory/packaged, work/routing | released |
 | `smoke-delete-06-factory-packaged-cross` | smoke | 6 | factory/packaged/cross | none |
-| `smoke-delete-07-sessions-controls` | smoke | 4 | sessions/controls | none |
+| `smoke-delete-07-sessions-controls` | smoke | 4 | sessions/controls | released |
 | `smoke-delete-09-guards` | smoke | 2 | guards | none |
-| `smoke-delete-10-workers-mock` | smoke | 2 | workers/mock | none |
+| `smoke-delete-10-workers-mock` | smoke | 2 | workers/mock | released |
 | `smoke-delete-11-resilience-process` | smoke | 6 | resilience/process | none |
 | `smoke-delete-12-product-docs` | smoke | 2 | product/docs | docs-reference-smoke |
-| `smoke-delete-13-wrong-layer` | smoke | 22 | approved wrong-layer (contract-smoke-outside-functional) | none |
+| `smoke-delete-13-wrong-layer` | smoke | 22 | approved wrong-layer (contract-smoke-outside-functional) | released |
 | `workflow-delete-01-orchestration-dispatch` | workflow | 1 | orchestration/petri, factory/packaged/review | released |
 | `workflow-delete-02-work-routing` | workflow | 7 | work/routing | released |
 | `workflow-delete-03-work-relationships` | workflow | 8 | work/relationships | released |
@@ -1699,15 +1699,15 @@ without inventing destinations. Prefer independent, reviewable batch sizes.
 | `runtime_api-delete-11-wrong-layer` | runtime_api | 2 | approved wrong-layer (unit / contract-smoke-outside-functional) | planned |
 | `smoke-delete-02-workstations-execution` | smoke | 4 | workstations/execution | released |
 | `smoke-delete-03-factory-definitions` | smoke | 3 | factory/definitions | planned |
-| `smoke-delete-04-transport-cli` | smoke | 10 | transport/cli | planned |
-| `smoke-delete-05-factory-packaged` | smoke | 12 | factory/packaged, work/routing | planned |
+| `smoke-delete-04-transport-cli` | smoke | 10 | transport/cli | released |
+| `smoke-delete-05-factory-packaged` | smoke | 12 | factory/packaged, work/routing | released |
 | `smoke-delete-06-factory-packaged-cross` | smoke | 6 | factory/packaged/cross | planned |
-| `smoke-delete-07-sessions-controls` | smoke | 4 | sessions/controls | planned |
+| `smoke-delete-07-sessions-controls` | smoke | 4 | sessions/controls | released |
 | `smoke-delete-09-guards` | smoke | 2 | guards | planned |
-| `smoke-delete-10-workers-mock` | smoke | 2 | workers/mock | planned |
+| `smoke-delete-10-workers-mock` | smoke | 2 | workers/mock | released |
 | `smoke-delete-11-resilience-process` | smoke | 6 | resilience/process | planned |
 | `smoke-delete-12-product-docs` | smoke | 2 | product/docs | planned |
-| `smoke-delete-13-wrong-layer` | smoke | 22 | approved wrong-layer (contract-smoke-outside-functional) | planned |
+| `smoke-delete-13-wrong-layer` | smoke | 22 | approved wrong-layer (contract-smoke-outside-functional) | released |
 | `workflow-delete-01-orchestration-dispatch` | workflow | 1 | orchestration/petri, factory/packaged/review | released |
 | `workflow-delete-02-work-routing` | workflow | 7 | work/routing | released |
 | `workflow-delete-03-work-relationships` | workflow | 8 | work/relationships | released |

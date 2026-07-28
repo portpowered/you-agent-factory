@@ -866,6 +866,111 @@ func waitForTerminalWorkPrimaryText(
 	}
 }
 
+// pollHostedCLIInvocationObservations polls the hosted --with-server API while
+// the CLI run is still alive. One-shot hosted runs tear down the API as soon
+// as the CLI process exits, so session identity and any terminal /work facts
+// must be observed before the done channel closes.
+func pollHostedCLIInvocationObservations(
+	t *testing.T,
+	serverURL, wantWorkText string,
+	done <-chan struct{},
+) (factoryapi.FactorySession, bool) {
+	t.Helper()
+	session, workVisible, err := tryPollHostedCLIInvocationObservations(serverURL, wantWorkText, done)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return session, workVisible
+}
+
+func tryPollHostedCLIInvocationObservations(
+	serverURL, wantWorkText string,
+	done <-chan struct{},
+) (factoryapi.FactorySession, bool, error) {
+
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+
+	var (
+		sessionRead    bool
+		workVisible    bool
+		sessionDuring  factoryapi.FactorySession
+		lastSessionErr string
+	)
+
+	for {
+		if !sessionRead {
+			if session, ok, diagnostic := tryGetDefaultSession(serverURL); ok {
+				sessionDuring = session
+				sessionRead = true
+			} else if diagnostic != "" {
+				lastSessionErr = diagnostic
+			}
+		}
+		if !workVisible {
+			if ok, _ := tryReadTerminalWorkPrimaryText(serverURL, wantWorkText); ok {
+				workVisible = true
+			}
+		}
+		if sessionRead && workVisible {
+			return sessionDuring, true, nil
+		}
+
+		select {
+		case <-done:
+			if !sessionRead {
+				return factoryapi.FactorySession{}, false, fmt.Errorf(
+					"hosted CLI run finished before session identity was readable at %s: %s",
+					serverURL,
+					lastSessionErr,
+				)
+			}
+			return sessionDuring, workVisible, nil
+		default:
+		}
+
+		select {
+		case <-done:
+			if !sessionRead {
+				return factoryapi.FactorySession{}, false, fmt.Errorf(
+					"hosted CLI run finished before session identity was readable at %s: %s",
+					serverURL,
+					lastSessionErr,
+				)
+			}
+			return sessionDuring, workVisible, nil
+		case <-ticker.C:
+		}
+	}
+}
+
+func tryGetDefaultSession(serverURL string) (factoryapi.FactorySession, bool, string) {
+	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-sessions/" + factorysessions.DefaultSessionID
+	response, err := http.Get(endpoint)
+	if err != nil {
+		return factoryapi.FactorySession{}, false, fmt.Sprintf("GET %s: %v", endpoint, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		payload, _ := io.ReadAll(response.Body)
+		return factoryapi.FactorySession{}, false, fmt.Sprintf(
+			"GET %s status = %d: %s",
+			endpoint,
+			response.StatusCode,
+			strings.TrimSpace(string(payload)),
+		)
+	}
+	var envelope factoryapi.FactorySessionGetResponse
+	if err := json.NewDecoder(response.Body).Decode(&envelope); err != nil {
+		return factoryapi.FactorySession{}, false, fmt.Sprintf("decode GET %s: %v", endpoint, err)
+	}
+	session, err := envelope.AsFactorySession()
+	if err != nil {
+		return factoryapi.FactorySession{}, false, fmt.Sprintf("decode default live Factory Session: %v", err)
+	}
+	return session, true, ""
+}
+
 func tryReadTerminalWorkPrimaryText(serverURL, wantText string) (bool, string) {
 	endpoint := support.DefaultSessionWorkURL(serverURL, "/work")
 	response, err := http.Get(endpoint)

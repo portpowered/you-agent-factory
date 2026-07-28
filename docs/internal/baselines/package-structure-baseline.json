@@ -1329,11 +1329,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/verify_fast_command_smoke_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/workflow/config_driven_retry_loop_breaker_test.go",
       "target": "workflow"
     },

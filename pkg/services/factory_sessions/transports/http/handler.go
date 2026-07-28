@@ -36,6 +36,7 @@ type Adapter struct {
 	durableLister      DurableExecutionSessionLister
 	liveSessionLister  LiveSessionListReader
 	workerPrompts      workers.PromptTemplates
+	invocationWorkType factorydefinitions.InvocationWorkTypeService
 	workService        work.Service
 	sessionRequests    RequestPreparation
 	logger             *zap.Logger
@@ -61,6 +62,7 @@ type Dependencies struct {
 	DurableLister      DurableExecutionSessionLister
 	LiveSessionLister  LiveSessionListReader
 	WorkerPrompts      workers.PromptTemplates
+	InvocationWorkType factorydefinitions.InvocationWorkTypeService
 	WorkService        work.Service
 	SessionRequests    RequestPreparation
 }
@@ -91,7 +93,8 @@ func NewHandler(deps Dependencies, logger *zap.Logger) *Adapter {
 		durableExecution: deps.DurableExecution, durableLifecycle: deps.DurableLifecycle,
 		durableListing: deps.DurableListing, durableProjection: deps.DurableProjection,
 		durableLister: deps.DurableLister, liveSessionLister: deps.LiveSessionLister,
-		workerPrompts: deps.WorkerPrompts, workService: deps.WorkService,
+		workerPrompts: deps.WorkerPrompts, invocationWorkType: deps.InvocationWorkType,
+		workService: deps.WorkService,
 		sessionRequests: deps.SessionRequests,
 		logger: logger,
 	}

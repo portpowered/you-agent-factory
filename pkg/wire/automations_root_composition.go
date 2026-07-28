@@ -8,6 +8,7 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 	"go.uber.org/zap"
@@ -57,7 +58,12 @@ func AutomationsRootFromEdges(
 		commandRunner = workerprocess.AdaptCommandRunner(edges.ScriptCommandRunner)
 	}
 
-	service := provideAutomationFactory(edges)(
+	ports, err := factorydefinitionswire.InvocationPolicyPortsFromNestedOwner()
+	if err != nil {
+		return automations.Root{}, fmt.Errorf("compose Automations root: %w", err)
+	}
+
+	service := provideAutomationFactory(edges, ports.WorkstationExecution)(
 		zap.NewNop(),
 		platformclock.Real{},
 		commandRunner,
