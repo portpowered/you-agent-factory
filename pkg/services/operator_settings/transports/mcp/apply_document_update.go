@@ -48,7 +48,7 @@ func ApplyDocumentUpdate(
 		},
 	})
 	if err != nil {
-		envelope := executionErrorEnvelope(err)
+		envelope := applyDocumentUpdateErrorEnvelope(input.Path, err)
 		return ToolResponse[operatorsettings.ApplyDocumentUpdateResult]{Error: &envelope}
 	}
 	return ToolResponse[operatorsettings.ApplyDocumentUpdateResult]{Result: &result}

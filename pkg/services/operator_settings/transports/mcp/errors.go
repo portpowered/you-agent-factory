@@ -13,12 +13,16 @@ const (
 	errorCodeServiceUnavailable    = "operator_settings.service.unavailable"
 	errorCodeDocumentMalformed     = "operator_settings.document.malformed"
 	errorCodeDocumentNotFound      = "operator_settings.document.not_found"
+	errorCodeDocumentUnsupported   = "operator_settings.document.unsupported"
+	errorCodeDocumentConflict      = "operator_settings.document.conflict"
 	errorCodeInternalExecution     = "operator_settings.execution.internal"
 	errorCodeRequestCanceled       = "operator_settings.request.canceled"
 	errorCodeRequestTimedOut       = "operator_settings.request.timed_out"
 	errorMessageServiceUnavailable = "operator settings service is unavailable"
 	errorMessageDocumentMalformed  = "operator document is malformed"
 	errorMessageDocumentNotFound   = "operator document not found"
+	errorMessageDocumentUnsupported = "operator document update is unsupported"
+	errorMessageDocumentConflict   = "operator document persist conflict"
 	errorMessageRequestCanceled    = "operator settings request was canceled"
 	errorMessageRequestTimedOut    = "operator settings request timed out"
 	errorMessageInternalExecution  = "operator settings execution failed"
@@ -91,6 +95,30 @@ func unavailableServiceErrorEnvelope() ToolErrorEnvelope {
 	}
 }
 
+func applyDocumentUpdateErrorEnvelope(path string, err error) ToolErrorEnvelope {
+	var failure operatorsettings.DocumentFailure
+	if errors.As(err, &failure) {
+		switch failure.Kind {
+		case operatorsettings.DocumentFailureKindMalformed:
+			return documentMalformedErrorEnvelope(documentFailurePath(path, failure), err)
+		case operatorsettings.DocumentFailureKindUnsupported:
+			return documentUnsupportedErrorEnvelope(documentFailurePath(path, failure), err)
+		case operatorsettings.DocumentFailureKindConflict:
+			return documentConflictErrorEnvelope(documentFailurePath(path, failure), err)
+		}
+	}
+	if errors.Is(err, operatorsettings.ErrDocumentMalformed) {
+		return documentMalformedErrorEnvelope(path, err)
+	}
+	if errors.Is(err, operatorsettings.ErrDocumentUnsupported) {
+		return documentUnsupportedErrorEnvelope(path, err)
+	}
+	if errors.Is(err, operatorsettings.ErrDocumentConflict) {
+		return documentConflictErrorEnvelope(path, err)
+	}
+	return executionErrorEnvelope(err)
+}
+
 func loadDocumentErrorEnvelope(path string, err error) ToolErrorEnvelope {
 	var failure operatorsettings.DocumentFailure
 	if errors.As(err, &failure) {
@@ -130,6 +158,24 @@ func documentNotFoundErrorEnvelope(path string, err error) ToolErrorEnvelope {
 	return ToolErrorEnvelope{
 		Code:      errorCodeDocumentNotFound,
 		Message:   errorMessageDocumentNotFound,
+		Retryable: false,
+		Details:   documentFailureDetails(path, err),
+	}
+}
+
+func documentUnsupportedErrorEnvelope(path string, err error) ToolErrorEnvelope {
+	return ToolErrorEnvelope{
+		Code:      errorCodeDocumentUnsupported,
+		Message:   errorMessageDocumentUnsupported,
+		Retryable: false,
+		Details:   documentFailureDetails(path, err),
+	}
+}
+
+func documentConflictErrorEnvelope(path string, err error) ToolErrorEnvelope {
+	return ToolErrorEnvelope{
+		Code:      errorCodeDocumentConflict,
+		Message:   errorMessageDocumentConflict,
 		Retryable: false,
 		Details:   documentFailureDetails(path, err),
 	}
