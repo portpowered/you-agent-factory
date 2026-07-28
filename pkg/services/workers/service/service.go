@@ -64,6 +64,7 @@ type Service struct {
 	temporaryFiles                    platformfilesystem.TemporaryFileSystem
 	executableLocator                 platformprocess.ExecutableLocator
 	providerRegistry                  *providerregistry.Registry
+	providerRegistryRebinder          ProviderRegistryRebinder
 	invocationConductor               *providerconductor.Conductor
 	runtimeAssembly                   runtimeassembly.Service
 	workstations                      workstations.Service

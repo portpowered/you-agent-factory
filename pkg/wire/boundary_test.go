@@ -24,7 +24,11 @@ import (
 func TestProvideProviderRegistryComposesBuiltIns(t *testing.T) {
 	t.Parallel()
 
-	providers, err := provideProviderRegistry(serviceedges.Edges{})
+	providersService, err := provideProvidersService(serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("provideProvidersService() error = %v", err)
+	}
+	providers, err := provideProviderRegistry(serviceedges.Edges{}, providersService)
 	if err != nil {
 		t.Fatalf("provideProviderRegistry() error = %v", err)
 	}

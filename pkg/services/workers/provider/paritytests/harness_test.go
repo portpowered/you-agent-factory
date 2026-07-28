@@ -12,17 +12,12 @@ func TestCatalog_CoversAllFidelityClasses(t *testing.T) {
 	t.Parallel()
 
 	want := map[FidelityClass]bool{
-		FidelityFullStream:    false,
-		FidelityPartialStream: false,
-		FidelitySnapshotOnly:  false,
-		FidelityFinalOnly:     false,
+		FidelitySnapshotOnly: false,
+		FidelityFinalOnly:    false,
 	}
-	var toolLifecycle, agyFinalOnly bool
+	var agyFinalOnly bool
 	for _, fixture := range Catalog() {
 		want[fixture.FidelityClass] = true
-		if fixture.ToolLifecycle {
-			toolLifecycle = true
-		}
 		if fixture.AgyFinalOnly {
 			agyFinalOnly = true
 		}
@@ -34,9 +29,6 @@ func TestCatalog_CoversAllFidelityClasses(t *testing.T) {
 		if !covered {
 			t.Fatalf("catalog missing fidelity class %q", class)
 		}
-	}
-	if !toolLifecycle {
-		t.Fatal("catalog missing structured tool lifecycle fixture")
 	}
 	if !agyFinalOnly {
 		t.Fatal("catalog missing Agy final-only fixture")

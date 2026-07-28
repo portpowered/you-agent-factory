@@ -484,6 +484,42 @@ func TestProjectRuntimeOpeningExternalEffectsSelectsExactPortsFromProcessEdges(t
 	}
 }
 
+func TestProjectRuntimeOpeningExternalEffectsDefaultsCommandRunnersWhenUnset(t *testing.T) {
+	t.Parallel()
+
+	effects := projectRuntimeOpeningExternalEffects(serviceedges.Edges{
+		Clock: platformclock.Real{},
+	})
+	if effects.ProviderCommandRunner == nil || effects.ScriptCommandRunner == nil {
+		t.Fatalf(
+			"command runners = (%v, %v), want default platform runners when process edges omit overrides",
+			effects.ProviderCommandRunner,
+			effects.ScriptCommandRunner,
+		)
+	}
+}
+
+func TestProjectRuntimeOpeningExternalEffectsPreservesCommandRunnerOverrides(t *testing.T) {
+	t.Parallel()
+
+	providerRunner := &processCommandRunner{}
+	scriptRunner := &processCommandRunner{}
+	effects := projectRuntimeOpeningExternalEffects(serviceedges.Edges{
+		Clock:                 platformclock.Real{},
+		ProviderCommandRunner: providerRunner,
+		ScriptCommandRunner:   scriptRunner,
+	})
+	if effects.ProviderCommandRunner != providerRunner || effects.ScriptCommandRunner != scriptRunner {
+		t.Fatalf(
+			"command runners = (%v, %v), want explicit process-edge overrides (%v, %v)",
+			effects.ProviderCommandRunner,
+			effects.ScriptCommandRunner,
+			providerRunner,
+			scriptRunner,
+		)
+	}
+}
+
 type runtimeInputMetricsRecorder struct{}
 
 func (*runtimeInputMetricsRecorder) RecordInvocationMetric(factorysessions.InvocationMetric) {}

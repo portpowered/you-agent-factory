@@ -327,6 +327,29 @@ primary-result behavior.
   authoritative completed message as `final_result_agreement`, even when it
   uses a different item correlation, so no earlier represented result can be
   overwritten before completion validation.
+- Provider-native Codex execution state lives below the parent-private
+  Providers Execution implementation. Keep its JSONL partial-record buffer,
+  item/tool correlation, progress projection, flush guard, authoritative final
+  candidate, and detached session extraction invocation-local. Inject the
+  native effect into the adapter registration; do not let adapter construction
+  start a process or let Workers-owned request/response types cross this
+  boundary. Reconcile context termination, provider-declared terminal records,
+  native effect errors, decode errors, flush errors, and final-selection errors
+  before returning: context wins, recognized declared failures outrank unknown
+  native outcomes, and every failure returns a zero result with only bounded
+  Providers-owned diagnostics.
+- Provider-native Claude execution state lives below the same parent-private
+  Providers Execution boundary. Keep its stream-json partial-record buffer,
+  message/content-block/tool correlation, mixed text/tool progress projection,
+  deferred message completion, flush guard, authoritative result record
+  selection, and detached session extraction invocation-local. Classify terminal
+  `result` records by subtype and bounded result text before declaring failure,
+  mirroring Codex declared-record precedence over native effect errors. Inject the
+  native effect into the adapter registration and keep system/control records
+  out of customer-visible content; preserve native `text_delta` whitespace with
+  `boundedStreamDetail` (do not `TrimSpace` stream fragments) so full-stream
+  fidelity concatenation matches completed snapshots; reconcile lifecycle failures
+  with the same precedence rules as other Providers-owned adapters.
 - Keep reusable one-attempt conformance under the Providers-private Execution
   testkit. Build the singular Providers root around a fresh
   controllable adapter for each scenario, observe only Providers-owned
@@ -414,7 +437,23 @@ primary-result behavior.
   authored public provider vocabulary such as `CODEX` canonicalizes to the
   internal command identity (`codex` / `models.ProviderCodex`) before native
   Infer; packaged-quorum and other built-in smoke assertions must expect that
-  canonical command, not the public enum spelling.   Fake custom Integration E2E
+  canonical command, not the public enum spelling. After the Codex/Claude
+  conductor cutover, functional tests that inject subprocess stdout through
+  `Edges.ProviderCommandRunner` must emit provider-native JSONL
+  (`tests/functional/internal/support.CodexSuccessStdout`,
+  `ClaudeSuccessStdout`, or `NewShapedProviderCommandRunner`); plain-text
+  stdout hangs or fails protocol validation because conductor integrations
+  decode through the Providers-owned adapters. Codex progress maps
+  `turn.started`/`turn.completed` to RUN lifecycle events and lowercases RUN
+  payload status for REST smoke assertions. Codex and Claude conductor
+  integrations must emit the authoritative `message.completed` snapshot from
+  `ExecuteResult.Content`, not sanitized `ExecuteDiagnostics.Progress`
+  message facts, because Providers root redacts request prompt substrings from
+  diagnostic progress and the inference protocol requires completed-message
+  content to agree with the terminal response. When skipping diagnostic
+  `message.completed` facts, reuse the native `message_id` correlation on the
+  authoritative snapshot so earlier `message.started` lifecycles still
+  terminate. Fake custom Integration E2E
   proof belongs in `tests/functional/workers/inference/` (approved
   domain/subsection under `make pkg-structure`; leave legacy
   `tests/functional/providers/contract/doc.go` as the required package
@@ -802,6 +841,13 @@ response-stream output.
   `internal/service` and `wire` only. Query the accepted `providers.Service` root
   for provider identity canonicalization at resolve time; do not cache availability
   in settings state or add Providers→Operator Settings imports.
+- Operator Settings owner-local Wire at `pkg/services/operator_settings/wire`
+  must stay registered under destination `operator_settings` in
+  `docs/internal/packaged-service-structure/package-target-manifest.json`,
+  `docs/internal/baselines/ownership-inventory.json`, and both
+  `go-*-coverage-package-minimums.json` baselines; prove registration with
+  `wire/manifest_registration_test.go` rather than re-editing manifests when
+  IMP-SET already landed the rows.
 - When global named-factory guidance changes, update its authored
   `contracts/cli/commands.json` records and the task-oriented guidance in
   `docs/reference/authoring-factories.md` plus `config.md`; do not restore
