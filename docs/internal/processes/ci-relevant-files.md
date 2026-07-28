@@ -182,6 +182,30 @@
   `workstations` and subsection `execution` from the path; every top-level
   `Test*` needs a customer-readable Go doc so `functionaltestmetadata` stays
   viz-compatible.
+  Packaged Factory invocation functional coverage belongs in
+  `tests/functional/factory/packaged/`: prove `@you/deep-research` default and
+  optional bounded-research overrides through `deep_research/invocation_test.go`;
+  prove `@you/goal` accept/reject/pause and quiet CLI batch completion through
+  `goal/invocation_test.go`; prove `@you/quorum` branch/merge role flags and
+  merged primary results through `quorum/invocation_test.go`; prove
+  `@you/review` rejection-then-approval and provider/model override wiring
+  through `review/invocation_test.go`. Drive proofs through
+  `support.BuildProcess` + `support.FakeInputs` or
+  `support.StartFunctionalAPIServer` with `edges.Edges.ProviderCommandRunner`
+  or `MockWorkersConfig` as appropriate; prefer edge-mocked Codex providers over
+  live execution. Catalog metadata infers domain `factory` and subsection
+  `packaged/<factory>` from the path; every top-level `Test*` needs a
+  customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
+  Classifier routing functional coverage belongs in
+  `tests/functional/work/routing/classifier_test.go`: prove accepted, approved,
+  rework loop-back, rejection retry, multi-output payload preservation, and
+  distinct unknown/malformed failure markers through scaffolded classifier
+  fixtures and `support.RunFactoryToCompletionWithEdgesAndObservations` with
+  injected `edges.Edges.ProviderCommandRunner`. Legacy packaged `@you/goal`
+  plan/check/review routing smokes are obsolete; interrupted inspect ownership
+  stays in `tests/functional/sessions/controls/`. Catalog metadata infers domain
+  `work` and subsection `routing` from the path; every top-level `Test*` needs a
+  customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
   Inline JavaScript Factory loading functional coverage belongs in
   `tests/functional/orchestration/javascript/loading/inline_javascript_test.go`:
   drive sync Factory Session execution through `support.BuildProcess` +

@@ -1051,14 +1051,6 @@
       "name": "TestFactoryPromptRun_RealCLIWritesPrimaryResultFromStdin"
     },
     {
-      "file": "smoke/cli_named_deep_research_smoke_test.go",
-      "name": "TestNamedDeepResearchCLI_DefaultInvocationReturnsLeadSynthesis"
-    },
-    {
-      "file": "smoke/cli_named_deep_research_smoke_test.go",
-      "name": "TestNamedDeepResearchCLI_InvokesConfiguredBoundedResearchWithApprovedFlags"
-    },
-    {
       "file": "smoke/cli_named_goal_invocation_parity_smoke_test.go",
       "name": "TestNamedGoalInvocationParity_EmptyInputRejectedWithStableCode"
     },
@@ -1081,46 +1073,6 @@
     {
       "file": "smoke/cli_named_goal_invocation_parity_smoke_test.go",
       "name": "TestNamedGoalInvocationParity_UnresolvedPrimaryResultReportsStableFailure"
-    },
-    {
-      "file": "smoke/cli_named_goal_routing_smoke_test.go",
-      "name": "TestNamedGoalRouting_AcceptedCompletesWithPrimaryResult"
-    },
-    {
-      "file": "smoke/cli_named_goal_routing_smoke_test.go",
-      "name": "TestNamedGoalRouting_ClassifierNonSuccessOutcomesSurfaceDistinctStates"
-    },
-    {
-      "file": "smoke/cli_named_goal_routing_smoke_test.go",
-      "name": "TestNamedGoalRouting_InterruptedSuppressesSuccessPrimaryResult"
-    },
-    {
-      "file": "smoke/cli_named_goal_routing_smoke_test.go",
-      "name": "TestNamedGoalRouting_ReworkLoopsBackThenCompletesWithGoalContext"
-    },
-    {
-      "file": "smoke/cli_named_goal_routing_smoke_test.go",
-      "name": "TestNamedGoalRouting_StructuredUnknownDecisionRoutesToFailed"
-    },
-    {
-      "file": "smoke/cli_named_goal_routing_smoke_test.go",
-      "name": "TestNamedGoalRouting_UnknownClassifierLabelRoutesToFailed"
-    },
-    {
-      "file": "smoke/cli_named_goal_run_smoke_test.go",
-      "name": "TestNamedGoalRun_RealCLICompletesBatchInvocationWithPrimaryResultOnStdout"
-    },
-    {
-      "file": "smoke/cli_named_goal_run_smoke_test.go",
-      "name": "TestNamedGoalRun_RealCLIExitsAfterBatchCompletionWithoutContinuousMode"
-    },
-    {
-      "file": "smoke/cli_named_quorum_invocation_smoke_test.go",
-      "name": "TestNamedQuorumRun_RealCLIAcceptsRoleFlagsAndReturnsOneMergeResult"
-    },
-    {
-      "file": "smoke/cli_named_review_invocation_smoke_test.go",
-      "name": "TestNamedReviewInvocationVariants_RealCLIRequireApprovalAfterRejection"
     },
     {
       "file": "smoke/config_driven_execution_test.go",

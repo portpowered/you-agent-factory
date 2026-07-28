@@ -1239,32 +1239,7 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/cli_named_deep_research_smoke_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/smoke/cli_named_goal_invocation_parity_smoke_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/cli_named_goal_routing_smoke_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/cli_named_goal_run_smoke_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/cli_named_quorum_invocation_smoke_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/cli_named_review_invocation_smoke_test.go",
       "target": "smoke"
     },
     {
