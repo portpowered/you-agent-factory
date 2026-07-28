@@ -41,46 +41,6 @@ func TestMapCommittedOwnerPackageOperatorSettingsMoveDestinations(t *testing.T) 
 			},
 		},
 		{
-			path: "pkg/services/operator_settings/identityinventory",
-			want: PackageMapping{
-				PackagePath: "pkg/services/operator_settings/identityinventory",
-				Disposition: DispositionMove,
-				Destination: "operator_settings/internal/services/document",
-			},
-		},
-		{
-			path: "pkg/services/operator_settings/identityinventory/input_index",
-			want: PackageMapping{
-				PackagePath: "pkg/services/operator_settings/identityinventory/input_index",
-				Disposition: DispositionMove,
-				Destination: "operator_settings/internal/services/document",
-			},
-		},
-		{
-			path: "pkg/services/operator_settings/servicewire",
-			want: PackageMapping{
-				PackagePath: "pkg/services/operator_settings/servicewire",
-				Disposition: DispositionMove,
-				Destination: "operator_settings/internal",
-			},
-		},
-		{
-			path: "pkg/services/operator_settings/testlink",
-			want: PackageMapping{
-				PackagePath: "pkg/services/operator_settings/testlink",
-				Disposition: DispositionMove,
-				Destination: "operator_settings/internal",
-			},
-		},
-		{
-			path: "pkg/services/operator_settings/testproviders",
-			want: PackageMapping{
-				PackagePath: "pkg/services/operator_settings/testproviders",
-				Disposition: DispositionMove,
-				Destination: "operator_settings/internal",
-			},
-		},
-		{
 			path: "pkg/services/operator_settings/testdata/fixtures/valid",
 			want: PackageMapping{
 				PackagePath: "pkg/services/operator_settings/testdata/fixtures/valid",

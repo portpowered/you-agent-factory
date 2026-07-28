@@ -3,11 +3,11 @@ package servicewire
 import (
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/services/operator_settings/testlink"
+	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 )
 
-// TestMain registers operator-settings composition hooks before servicewire tests run.
+// TestMain registers operator-settings composition hooks before wire composition tests run.
 func TestMain(m *testing.M) {
-	testlink.RegisterComposition()
+	settingswire.RegisterTestComposition()
 	m.Run()
 }

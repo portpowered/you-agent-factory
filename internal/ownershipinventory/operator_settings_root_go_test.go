@@ -163,6 +163,8 @@ func TestOperatorSettingsRootGoInventoryDistinguishesThinContractTestsFromImplem
 	}
 
 	wantThinTests := []string{
+		"del_set_proof_gate_test.go",
+		"packaged_root_shape_test.go",
 		"root_contract_legacy_preservation_test.go",
 		"root_wire_behavioral_boundary_test.go",
 		"service_root_contract_invariants_test.go",

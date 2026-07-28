@@ -24,6 +24,8 @@ var OperatorSettingsThinRootContractFiles = []string{
 	"service_contract.go",
 	"root_contract_legacy_preservation_test.go",
 	"service_root_contract_invariants_test.go",
+	"del_set_proof_gate_test.go",
+	"packaged_root_shape_test.go",
 }
 
 // OperatorSettingsRootContractFoldTarget names one excess root contract/helper cluster
