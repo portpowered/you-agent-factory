@@ -12,7 +12,6 @@ import (
 	workerconstruction "github.com/portpowered/infinite-you/pkg/services/workers/construction"
 	modelrecording "github.com/portpowered/infinite-you/pkg/services/workers/execution/recording"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/executor"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/runner"
@@ -30,7 +29,7 @@ func (s *Service) BuildRuntimeExecutors(
 	logger logging.Logger,
 	skipBuiltInRunnerPrerequisiteValidation bool,
 	invocationSkipPermissionsOverride *bool,
-	providerOverride workerprovider.Provider,
+	providerOverride workers.Provider,
 	inferenceProgressPublisher workers.ProgressPublisher,
 	scriptRecorder workers.ScriptEventRecorder,
 	inferenceRecorder workers.InferenceEventRecorder,
