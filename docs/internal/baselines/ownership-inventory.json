@@ -1473,7 +1473,7 @@
       "fromOwner": "providers",
       "toOwner": "transports",
       "class": "command",
-      "evidence": "pkg/services/providers/transports/http -\u003e pkg/transports/http/generated"
+      "evidence": "pkg/services/providers/transports/cli -\u003e pkg/transports/cli/clidiag"
     },
     {
       "fromOwner": "providers",
@@ -4763,6 +4763,12 @@
     },
     {
       "packagePath": "pkg/services/providers/internal/testutil/execution",
+      "disposition": "retain",
+      "destination": "providers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/providers/transports/cli",
       "disposition": "retain",
       "destination": "providers",
       "destinationKind": "owner"
