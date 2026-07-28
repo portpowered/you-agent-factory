@@ -274,7 +274,6 @@ pkg/transports/mapping/validationentry/validator_test.go: unreachable func: prog
 pkg/transports/mapping/validationentry/validator_test.go: unreachable func: programmableFactoryValidator.WorkTypeHandlingBehavior
 pkg/transports/mapping/validationentry/validator_test.go: unreachable func: programmableFactoryValidator.WorkerWorkstationBehaviorCompatibility
 pkg/transports/mapping/validationentry/validator_test.go: unreachable func: testCanonicalFactoryLoader
-pkg/wire/factorydefinitions/snapshot.go: unreachable func: FactorySnapshotDirectoryLoader
 tests/functional/bootstrap_portability/automat_portability_fixture_test.go: unreachable func: assertAutomatBundledFileEntryWithoutInline
 tests/functional/bootstrap_portability/export_import_fixture_test.go: unreachable func: exportImportFixture.persistAs
 tests/functional/guards_batch/executor_review_state_lane_classification.go: unreachable func: activeReviewInitCount

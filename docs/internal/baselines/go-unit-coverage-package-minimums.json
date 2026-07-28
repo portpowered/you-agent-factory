@@ -2341,10 +2341,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/wire",
       "minimum": 81.45
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/wire/factorydefinitions",
-      "minimum": 70.73
     }
   ]
 }
