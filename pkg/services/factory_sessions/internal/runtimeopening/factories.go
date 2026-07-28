@@ -30,8 +30,9 @@ type ExternalEffects struct {
 	ScriptCommandRunner       platformprocess.CommandRunner
 	SubmissionRecorder        recordings.SubmissionRecorder
 	DispatchRecorder          recordings.DispatchRecorder
-	RuntimeHostObserver       factorysessions.RuntimeHostObserver
-	FactoryVisualizationSink  factoryvisualization.Sink
+	RuntimeHostObserver              factorysessions.RuntimeHostObserver
+	FactoryVisualizationSink         factoryvisualization.Sink
+	FactoryVisualizationRootObserver factoryvisualization.RootObserver
 	HostedClock               workers.HostedPollerClock
 	HostedHTTPClient          workers.HostedPollerHTTPDoer
 	HostedSecretResolver      workers.HostedPollerSecretResolver

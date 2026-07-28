@@ -134,8 +134,9 @@ type Edges struct {
 	APIServerStarter          platformhttpserver.Starter
 	BrowserOpener             platformbrowser.Opener
 	InvocationMetricsRecorder factorysessions.InvocationMetricsRecorder
-	RuntimeHostObserver       factorysessions.RuntimeHostObserver
-	FactoryVisualizationSink  factoryvisualization.Sink
+	RuntimeHostObserver                factorysessions.RuntimeHostObserver
+	FactoryVisualizationSink           factoryvisualization.Sink
+	FactoryVisualizationRootObserver   factoryvisualization.RootObserver
 	ModelPullMetricsRecorder  models.PullMetricsRecorder
 	ProviderOverride          providercontract.Provider
 	providercontract.ProviderRegistrations
@@ -474,6 +475,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.FactoryVisualizationSink != nil {
 		defaults.FactoryVisualizationSink = replacements.FactoryVisualizationSink
+	}
+	if replacements.FactoryVisualizationRootObserver != nil {
+		defaults.FactoryVisualizationRootObserver = replacements.FactoryVisualizationRootObserver
 	}
 	if replacements.ModelPullMetricsRecorder != nil {
 		defaults.ModelPullMetricsRecorder = replacements.ModelPullMetricsRecorder
