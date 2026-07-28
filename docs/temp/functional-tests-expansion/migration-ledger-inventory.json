@@ -929,36 +929,6 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/cli/mcp_resume/resume_non_regression_test.go",
-      "package": "you-agent-factory/tests/functional/cli/mcp_resume",
-      "scenario": "TestMCPResumeSmokeLane_ResumeControlStaysOnCanonicalFactorySessionTools",
-      "lane": "short",
-      "destination": "tests/functional/sessions/mcp/controls_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/cli/mcp_resume/resume_non_regression_test.go",
-      "package": "you-agent-factory/tests/functional/cli/mcp_resume",
-      "scenario": "TestMCPResumeSmokeLane_ResumeReadModelsUseSharedFactorySessionVocabulary",
-      "lane": "short",
-      "destination": "tests/functional/sessions/mcp/controls_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/cli/mcp_resume/resume_non_regression_test.go",
-      "package": "you-agent-factory/tests/functional/cli/mcp_resume",
-      "scenario": "TestMCPResumeSmokeLane_RuntimeBackedAsyncServeRegression",
-      "lane": "short",
-      "destination": "tests/functional/sessions/mcp/controls_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
       "source_path": "tests/functional/cli/mcp_resume/serve_runtime_resume_smoke_test.go",
       "package": "you-agent-factory/tests/functional/cli/mcp_resume",
       "scenario": "TestRunServe_RuntimeResumeSmoke_DispatchContinuityPreservesCompletedChildDispatchesWithoutReplay",
@@ -7427,14 +7397,84 @@
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/mcp/controls_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/mcp",
+      "scenario": "TestMCPPauseResumeAndCancelTargetCanonicalFactorySession",
+      "lane": "short",
+      "destination": "tests/functional/sessions/mcp/controls_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/mcp/controls_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/mcp",
+      "scenario": "TestMCPControlledSessionIsReadableThroughAPI",
+      "lane": "short",
+      "destination": "tests/functional/sessions/mcp/controls_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/mcp/controls_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/mcp",
+      "scenario": "TestMCPSynchronousFactorySessionReturnsTerminalResult",
+      "lane": "short",
+      "destination": "tests/functional/sessions/mcp/controls_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/mcp/controls_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/mcp",
+      "scenario": "TestMCPSynchronousFailureReturnsStructuredFailure",
+      "lane": "short",
+      "destination": "tests/functional/sessions/mcp/controls_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/mcp/controls_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/mcp",
+      "scenario": "TestMCPAsyncFactorySessionCanBePolledToSuccess",
+      "lane": "short",
+      "destination": "tests/functional/sessions/mcp/controls_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/mcp/controls_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/mcp",
+      "scenario": "TestMCPAsyncFactorySessionCanBePolledToFailure",
+      "lane": "short",
+      "destination": "tests/functional/sessions/mcp/controls_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/mcp/controls_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/mcp",
+      "scenario": "TestMCPAsyncCancellationIsVisibleThroughAPI",
+      "lane": "short",
+      "destination": "tests/functional/sessions/mcp/controls_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
     }
   ],
-  "scanned_at_utc": "2026-07-28T04:37:00Z",
+  "scanned_at_utc": "2026-07-28T04:49:00Z",
   "summary": {
     "by_catch_all": {
       "bootstrap_portability": 22,
       "guards_batch": 23,
-      "none": 467,
+      "none": 471,
       "replay_contracts": 23,
       "runtime_api": 96,
       "smoke": 62,
@@ -7444,7 +7484,7 @@
       "acceptance": 12,
       "automations": 7,
       "bootstrap_portability": 21,
-      "cli": 62,
+      "cli": 59,
       "factory": 18,
       "guards_batch": 23,
       "models": 5,
@@ -7456,7 +7496,7 @@
       "replay_contracts": 23,
       "runtime_api": 95,
       "sessionparity": 13,
-      "sessions": 6,
+      "sessions": 13,
       "smoke": 62,
       "transport": 106,
       "work": 6,
@@ -7464,9 +7504,9 @@
       "workflow": 30,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 723,
+    "customer_top_level_Test_scenarios": 727,
     "lane_functionallong": 95,
-    "lane_short": 628,
+    "lane_short": 632,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 7,
@@ -7475,7 +7515,7 @@
       "you-agent-factory/tests/functional/cli/factory_run/output": 2,
       "you-agent-factory/tests/functional/cli/factory_run/yaml_io_parity": 6,
       "you-agent-factory/tests/functional/cli/input_contract": 25,
-      "you-agent-factory/tests/functional/cli/mcp_resume": 8,
+      "you-agent-factory/tests/functional/cli/mcp_resume": 5,
       "you-agent-factory/tests/functional/cli/named_invocation": 6,
       "you-agent-factory/tests/functional/cli/root_discovery": 9,
       "you-agent-factory/tests/functional/cli/session_resume": 6,
@@ -7510,6 +7550,7 @@
       "you-agent-factory/tests/functional/sessionparity": 13,
       "you-agent-factory/tests/functional/sessions": 1,
       "you-agent-factory/tests/functional/sessions/cli": 2,
+      "you-agent-factory/tests/functional/sessions/mcp": 7,
       "you-agent-factory/tests/functional/sessions/restart": 3,
       "you-agent-factory/tests/functional/smoke": 62,
       "you-agent-factory/tests/functional/transport/cli/commands": 20,
@@ -7623,15 +7664,15 @@
     }
   },
   "completeness_audit": {
-    "audited_at_utc": "2026-07-28T04:37:00Z",
+    "audited_at_utc": "2026-07-28T04:49:00Z",
     "story": "ft-wave2-work-dependencies-mergeability",
-    "live_customer_scenarios": 723,
-    "ledger_rows": 723,
+    "live_customer_scenarios": 727,
+    "ledger_rows": 727,
     "unmapped_scenarios": 0,
     "checklist_destinations": 435,
     "wrong_layer_destinations": 69,
     "invalid_destinations": 0,
-    "lane_short": 628,
+    "lane_short": 632,
     "lane_functionallong": 95,
     "specialty_targets_documented": 11,
     "deletion_only_batches": 52,
