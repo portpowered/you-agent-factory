@@ -619,6 +619,13 @@ Wave 0 functional-tests-expansion planning authority lives under
   `internal/ownershipinventory/unexpected_sibling_retain_test.go` (plus
   `internal/ownershipinventory/remaining_owners_test.go`); they sweep inventoried
   unexpected siblings and fail on deliberate retain→owner-root mappings.
+  Factory Definitions invocation-policy inventory locks live in
+  `internal/ownershipinventory/factory_definitions_invocation_policy_lock_test.go`
+  and mirrored residual-destination cases in
+  `cmd/packagetargetmanifestcheck/factory_definitions_test.go`; they assert the
+  nested `factory_definitions/invocation_policy` rationale card, dual-ledger move
+  targets for residual policy packages, snapshots_portability retain rows, and
+  absence of inventory deletes for the packet.
   `make ownership-inventory-check` runs `VerifyFreeze` against
   `docs/internal/baselines/ownership-inventory.json` and
   `docs/internal/projects/packaged-service-structure/ownership-path-lease-freeze.json`,
@@ -839,6 +846,20 @@ Wave 0 functional-tests-expansion planning authority lives under
   Catalog metadata infers domain `provider_sessions` and subsection `association`;
   every top-level `Test*` needs a customer-readable Go doc and `//golden:` manifest
   directive so `functionaltestmetadata` stays viz-compatible.
+
+- `tests/functional/provider_sessions/details/cursor_details_test.go` owns Cursor
+  Provider Session detail inspection through the public `GET /provider-sessions/detail`
+  boundary via `support.StartFunctionalAPIServer` with
+  `ProviderSessionResolveHomeDirectory` edge override. Write sanitized Cursor sqlite
+  fixtures under `~/.cursor/chats/{workspaceHash}/{sessionID}/store.db`, compare
+  success detail to `docs/temp/functional/provider-sessions/cursor/success/expected-provider-session-detail.json`
+  with `modifiedAt` and `sizeBytes` normalized, assert unavailable blobs surface
+  `unknownEventCount`/`unknownEvents` without fabricated transcript, and assert
+  missing session ids return HTTP 404 `NOT_FOUND` without fabricated detail bodies.
+  Do not widen into `codex_details_test.go` or `http_test.go`. Close catalog metadata
+  with `test-file-checklist.md`, `migration-ledger-inventory.json`, and customer-readable
+  Go docs (plus `//golden:` on the success load test) so `functionaltestmetadata`
+  stays viz-compatible.
 
 - `tests/functional/automations/` owns root.BuildProcess evidence for packaged
   Automations cron scheduling and filesystem watcher preseed. Keep cron workstation

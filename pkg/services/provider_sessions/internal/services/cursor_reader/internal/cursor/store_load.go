@@ -6,10 +6,11 @@ import (
 	"strings"
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	providersessionsinternal "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal"
 )
 
 // LoadSessionFromStoreDB loads session data from a single store.db file.
-func LoadSessionFromStoreDB(ins *inspection, files providersessions.FileSystem, openSQLDatabase providersessions.CursorOpenSQLDatabase, dbPath string) (map[string]*RawBubble, []*RawComposer, map[string][]*MessageContext, SessionTokenUsage, error) {
+func LoadSessionFromStoreDB(ins *inspection, files providersessionsinternal.FileSystem, openSQLDatabase providersessionsinternal.CursorOpenSQLDatabase, dbPath string) (map[string]*RawBubble, []*RawComposer, map[string][]*MessageContext, SessionTokenUsage, error) {
 	db, err := OpenDatabase(files, openSQLDatabase, dbPath)
 	if err != nil {
 		return nil, nil, nil, SessionTokenUsage{}, err

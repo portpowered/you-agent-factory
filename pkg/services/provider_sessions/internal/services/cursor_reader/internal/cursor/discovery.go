@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	providersessionsinternal "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal"
 )
 
 // UpstreamSourceCommit is the iksnae/cursor-session default-branch HEAD recorded at port time.
@@ -21,7 +21,7 @@ type AgentStorageRoot string
 
 // DefaultAgentStorageRoot returns the default cursor-agent chats directory for the current OS.
 // v1 reads cursor-agent CLI storage only; Cursor desktop globalStorage is out of scope.
-func DefaultAgentStorageRoot(resolveHome providersessions.ResolveHomeDirectory, files providersessions.FileSystem, operatingSystem providersessions.OperatingSystem) (AgentStorageRoot, error) {
+func DefaultAgentStorageRoot(resolveHome providersessionsinternal.ResolveHomeDirectory, files providersessionsinternal.FileSystem, operatingSystem providersessionsinternal.OperatingSystem) (AgentStorageRoot, error) {
 	if strings.TrimSpace(string(operatingSystem)) == "" {
 		return "", fmt.Errorf("cursor operating system is required")
 	}
@@ -75,7 +75,7 @@ func defaultAgentStorageRootCandidates(goos string, home string) ([]string, erro
 }
 
 // NormalizeAgentStorageRoot cleans and validates a configured root directory.
-func NormalizeAgentStorageRoot(resolveHome providersessions.ResolveHomeDirectory, files providersessions.FileSystem, operatingSystem providersessions.OperatingSystem, root string) (AgentStorageRoot, error) {
+func NormalizeAgentStorageRoot(resolveHome providersessionsinternal.ResolveHomeDirectory, files providersessionsinternal.FileSystem, operatingSystem providersessionsinternal.OperatingSystem, root string) (AgentStorageRoot, error) {
 	trimmed := filepath.Clean(strings.TrimSpace(root))
 	if trimmed == "" || trimmed == "." {
 		defaultRoot, err := DefaultAgentStorageRoot(resolveHome, files, operatingSystem)

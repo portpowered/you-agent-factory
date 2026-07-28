@@ -15,6 +15,7 @@ import (
 	"time"
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	providersessionsinternal "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
@@ -22,7 +23,7 @@ var safeProviderSessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 var codexTimestampPrefixedSessionPattern = regexp.MustCompile(`^rollout-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})-([A-Za-z0-9_-]+)\.jsonl$`)
 
 // DefaultSessionsRoot returns the conventional Codex session storage root.
-func DefaultSessionsRoot(resolveHome providersessions.ResolveHomeDirectory) (string, error) {
+func DefaultSessionsRoot(resolveHome providersessionsinternal.ResolveHomeDirectory) (string, error) {
 	home, err := resolveHome()
 	if err != nil {
 		return "", fmt.Errorf("home directory: %w", err)
@@ -34,11 +35,11 @@ func DefaultSessionsRoot(resolveHome providersessions.ResolveHomeDirectory) (str
 }
 
 // LoadDetails resolves and parses one Codex session from the configured root.
-func LoadDetails(files providersessions.FileSystem, walkDirectory providersessions.CodexWalkDirectory, resolveSymlinks providersessions.CodexResolveSymlinks, root, id string) (providersessions.Detail, error) {
+func LoadDetails(files providersessionsinternal.FileSystem, walkDirectory providersessionsinternal.CodexWalkDirectory, resolveSymlinks providersessionsinternal.CodexResolveSymlinks, root, id string) (providersessions.Detail, error) {
 	return loadDetails(context.Background(), files, walkDirectory, resolveSymlinks, root, id)
 }
 
-func loadDetails(ctx context.Context, files providersessions.FileSystem, walkDirectory providersessions.CodexWalkDirectory, resolveSymlinks providersessions.CodexResolveSymlinks, root, id string) (providersessions.Detail, error) {
+func loadDetails(ctx context.Context, files providersessionsinternal.FileSystem, walkDirectory providersessionsinternal.CodexWalkDirectory, resolveSymlinks providersessionsinternal.CodexResolveSymlinks, root, id string) (providersessions.Detail, error) {
 	if err := ctx.Err(); err != nil {
 		return providersessions.Detail{}, err
 	}
@@ -103,7 +104,7 @@ const (
 	codexSessionFileLayoutTimestampPrefixed
 )
 
-func resolveCodexSessionFile(ctx context.Context, files providersessions.FileSystem, walkDirectory providersessions.CodexWalkDirectory, resolveSymlinks providersessions.CodexResolveSymlinks, root, id string) (resolvedCodexSessionFile, error) {
+func resolveCodexSessionFile(ctx context.Context, files providersessionsinternal.FileSystem, walkDirectory providersessionsinternal.CodexWalkDirectory, resolveSymlinks providersessionsinternal.CodexResolveSymlinks, root, id string) (resolvedCodexSessionFile, error) {
 	if walkDirectory == nil {
 		return resolvedCodexSessionFile{}, fmt.Errorf("codex session directory walker is required")
 	}
@@ -131,7 +132,7 @@ func resolveCodexSessionFile(ctx context.Context, files providersessions.FileSys
 }
 
 // Resolve locates one Codex rollout without opening or parsing it.
-func Resolve(files providersessions.FileSystem, walkDirectory providersessions.CodexWalkDirectory, resolveSymlinks providersessions.CodexResolveSymlinks, root, id string) (providersessions.SourceMetadata, error) {
+func Resolve(files providersessionsinternal.FileSystem, walkDirectory providersessionsinternal.CodexWalkDirectory, resolveSymlinks providersessionsinternal.CodexResolveSymlinks, root, id string) (providersessions.SourceMetadata, error) {
 	resolved, err := resolveCodexSessionFile(context.Background(), files, walkDirectory, resolveSymlinks, root, id)
 	if err != nil {
 		return providersessions.SourceMetadata{}, err
@@ -143,7 +144,7 @@ func Resolve(files providersessions.FileSystem, walkDirectory providersessions.C
 	}, nil
 }
 
-func resolveCodexSessionsRoot(ctx context.Context, files providersessions.FileSystem, resolveSymlinks providersessions.CodexResolveSymlinks, root string) (string, string, error) {
+func resolveCodexSessionsRoot(ctx context.Context, files providersessionsinternal.FileSystem, resolveSymlinks providersessionsinternal.CodexResolveSymlinks, root string) (string, string, error) {
 	if strings.TrimSpace(root) == "" {
 		return "", "", providersessions.ErrSessionStorageUnavailable
 	}
@@ -177,7 +178,7 @@ func resolveCodexSessionsRoot(ctx context.Context, files providersessions.FileSy
 	return cleanRoot, resolvedRoot, nil
 }
 
-func collectCodexSessionMatches(ctx context.Context, walkDirectory providersessions.CodexWalkDirectory, cleanRoot, id, targetName string) ([]string, error) {
+func collectCodexSessionMatches(ctx context.Context, walkDirectory providersessionsinternal.CodexWalkDirectory, cleanRoot, id, targetName string) ([]string, error) {
 	matches := make([]string, 0, 1)
 	err := walkDirectory(cleanRoot, func(path string, entry fs.DirEntry, walkErr error) error {
 		if err := ctx.Err(); err != nil {
@@ -218,7 +219,7 @@ func collectCodexSessionMatches(ctx context.Context, walkDirectory providersessi
 
 var errCodexWalkCandidateLimit = errors.New("codex session walk candidate limit reached")
 
-func buildResolvedCodexSessionCandidates(ctx context.Context, files providersessions.FileSystem, resolveSymlinks providersessions.CodexResolveSymlinks, cleanRoot, resolvedRoot string, matches []string, targetName string) (resolvedCodexSessionFile, error) {
+func buildResolvedCodexSessionCandidates(ctx context.Context, files providersessionsinternal.FileSystem, resolveSymlinks providersessionsinternal.CodexResolveSymlinks, cleanRoot, resolvedRoot string, matches []string, targetName string) (resolvedCodexSessionFile, error) {
 	candidates := make([]resolvedCodexSessionFile, 0, len(matches))
 	for _, match := range matches {
 		if err := ctx.Err(); err != nil {
@@ -236,7 +237,7 @@ func buildResolvedCodexSessionCandidates(ctx context.Context, files providersess
 	return selectResolvedCodexSessionFile(candidates)
 }
 
-func resolvedCodexSessionCandidate(ctx context.Context, files providersessions.FileSystem, resolveSymlinks providersessions.CodexResolveSymlinks, cleanRoot, resolvedRoot, match, targetName string) (resolvedCodexSessionFile, error) {
+func resolvedCodexSessionCandidate(ctx context.Context, files providersessionsinternal.FileSystem, resolveSymlinks providersessionsinternal.CodexResolveSymlinks, cleanRoot, resolvedRoot, match, targetName string) (resolvedCodexSessionFile, error) {
 	resolvedMatch, err := resolveSymlinks(match)
 	if err != nil {
 		return resolvedCodexSessionFile{}, providersessions.ErrSessionStorageUnavailable

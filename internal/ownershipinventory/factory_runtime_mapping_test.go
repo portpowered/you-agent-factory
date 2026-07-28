@@ -37,17 +37,6 @@ func TestMapPackageFactoryRuntimeMoveDestinations(t *testing.T) {
 			retainOwner: "factory_runtime",
 		},
 		{
-			path: "pkg/services/factory_runtime/service",
-			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_runtime/service",
-				Disposition:       ownershipinventory.DispositionMove,
-				Destination:       "factory_runtime",
-				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/factory_runtime/internal",
-				DeletionCondition: "delete transitional service/ package after owner wire retargets to internal implementation and DEL cutover proof completes",
-			},
-		},
-		{
 			path:        "pkg/services/factory_runtime/internal/services/instance_host/build",
 			wantRetain:  true,
 			retainOwner: "factory_runtime",

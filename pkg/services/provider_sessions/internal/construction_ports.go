@@ -1,4 +1,4 @@
-package providersessions
+package internal
 
 import (
 	"database/sql"

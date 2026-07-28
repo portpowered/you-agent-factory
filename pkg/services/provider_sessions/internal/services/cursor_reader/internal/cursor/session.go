@@ -7,6 +7,7 @@ import (
 	"time"
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	providersessionsinternal "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal"
 )
 
 // SessionData is parsed cursor-agent CLI storage for one session store.db file.
@@ -31,7 +32,7 @@ type SessionParseStats struct {
 }
 
 // LoadSessionData opens a resolved store.db and parses bubbles, composers, and contexts in-process.
-func LoadSessionData(ins *inspection, files providersessions.FileSystem, openSQLDatabase providersessions.CursorOpenSQLDatabase, resolved ResolvedStoreDB) (*SessionData, error) {
+func LoadSessionData(ins *inspection, files providersessionsinternal.FileSystem, openSQLDatabase providersessionsinternal.CursorOpenSQLDatabase, resolved ResolvedStoreDB) (*SessionData, error) {
 	if resolved.AbsolutePath == "" {
 		return nil, fmt.Errorf("cursor session path is empty")
 	}
@@ -113,7 +114,7 @@ func (s *SessionData) OrderedBubbles() []*RawBubble {
 	return ordered
 }
 
-func loadSessionFromStoreDBWithStats(ins *inspection, files providersessions.FileSystem, openSQLDatabase providersessions.CursorOpenSQLDatabase, dbPath string) (map[string]*RawBubble, []*RawComposer, map[string][]*MessageContext, SessionParseStats, SessionTokenUsage, error) {
+func loadSessionFromStoreDBWithStats(ins *inspection, files providersessionsinternal.FileSystem, openSQLDatabase providersessionsinternal.CursorOpenSQLDatabase, dbPath string) (map[string]*RawBubble, []*RawComposer, map[string][]*MessageContext, SessionParseStats, SessionTokenUsage, error) {
 	db, err := OpenDatabase(files, openSQLDatabase, dbPath)
 	if err != nil {
 		return nil, nil, nil, SessionParseStats{}, SessionTokenUsage{}, err

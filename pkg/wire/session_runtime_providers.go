@@ -198,27 +198,27 @@ func provideProviderSessions(edges serviceedges.Edges) (providersessions.Service
 	}
 	codexWalkDirectory := edges.ProviderSessionCodexWalkDirectory
 	if codexWalkDirectory == nil {
-		codexWalkDirectory = providersessions.CodexWalkDirectory(filepath.WalkDir)
+		codexWalkDirectory = providersessionswire.CodexWalkDirectory(filepath.WalkDir)
 	}
 	codexResolveSymlinks := edges.ProviderSessionCodexResolveSymlinks
 	if codexResolveSymlinks == nil {
-		codexResolveSymlinks = providersessions.CodexResolveSymlinks(filepath.EvalSymlinks)
+		codexResolveSymlinks = providersessionswire.CodexResolveSymlinks(filepath.EvalSymlinks)
 	}
 	cursorWalkDirectory := edges.ProviderSessionCursorWalkDirectory
 	if cursorWalkDirectory == nil {
-		cursorWalkDirectory = providersessions.CursorWalkDirectory(filepath.WalkDir)
+		cursorWalkDirectory = providersessionswire.CursorWalkDirectory(filepath.WalkDir)
 	}
 	cursorResolveSymlinks := edges.ProviderSessionCursorResolveSymlinks
 	if cursorResolveSymlinks == nil {
-		cursorResolveSymlinks = providersessions.CursorResolveSymlinks(filepath.EvalSymlinks)
+		cursorResolveSymlinks = providersessionswire.CursorResolveSymlinks(filepath.EvalSymlinks)
 	}
 	cursorOpenDatabase := edges.ProviderSessionCursorOpenDatabase
 	if cursorOpenDatabase == nil {
-		cursorOpenDatabase = providersessions.CursorOpenSQLDatabase(sql.Open)
+		cursorOpenDatabase = providersessionswire.CursorOpenSQLDatabase(sql.Open)
 	}
 	operatingSystem := edges.ProviderSessionOperatingSystem
 	if operatingSystem == "" {
-		operatingSystem = providersessions.OperatingSystem(runtime.GOOS)
+		operatingSystem = providersessionswire.OperatingSystem(runtime.GOOS)
 	}
 	return providersessionswire.NewService(
 		files,

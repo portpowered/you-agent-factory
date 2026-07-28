@@ -11,11 +11,12 @@
 //     ErrSessionStorageUnavailable, LookupError)
 //
 // Construction/process-edge ports (FileSystem, home/OS resolution, Codex/Cursor
-// walk/symlink/SQL helpers) exist so Wire and owner constructors can assemble a
-// production Service. They are not the peer-facing source of truth for
-// detached-ref validation/inspection or normalized transcript/detail
-// projection: cross-service callers invoke Service methods without supplying
-// those ports or private Codex/Cursor reader types.
+// walk/symlink/SQL helpers) live under provider_sessions/internal so Wire and
+// owner constructors can assemble a production Service without expanding the
+// peer root. They are not the peer-facing source of truth for detached-ref
+// validation/inspection or normalized transcript/detail projection: cross-service
+// callers invoke Service methods without supplying those ports or private
+// Codex/Cursor reader types.
 //
 // Nested IMP-PSES reader cuts, CTR-PROV/IMP-PROV, Standardized Providers
 // conductor/migration, CLI-manifest, workers construction, and OpenAPI

@@ -10,10 +10,11 @@ import (
 	"time"
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	providersessionsinternal "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal"
 )
 
 // LoadDetails resolves a Cursor session_id from server-configured cursor-agent storage.
-func LoadDetails(ctx context.Context, files providersessions.FileSystem, walkDirectory providersessions.CursorWalkDirectory, resolveSymlinks providersessions.CursorResolveSymlinks, openSQLDatabase providersessions.CursorOpenSQLDatabase, root AgentStorageRoot, id string) (providersessions.Detail, error) {
+func LoadDetails(ctx context.Context, files providersessionsinternal.FileSystem, walkDirectory providersessionsinternal.CursorWalkDirectory, resolveSymlinks providersessionsinternal.CursorResolveSymlinks, openSQLDatabase providersessionsinternal.CursorOpenSQLDatabase, root AgentStorageRoot, id string) (providersessions.Detail, error) {
 	ins := newInspection(ctx)
 	if err := ins.checkCanceled(); err != nil {
 		return providersessions.Detail{}, providersessions.ErrOperationCanceled

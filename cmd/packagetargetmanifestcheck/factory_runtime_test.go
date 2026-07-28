@@ -47,14 +47,6 @@ func TestMapCommittedOwnerPackageFactoryRuntimeMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/service",
-			want: PackageMapping{
-				PackagePath: "pkg/services/factory_runtime/service",
-				Disposition: DispositionMove,
-				Destination: "factory_runtime/internal",
-			},
-		},
-		{
 			path: "pkg/services/factory_runtime/internal/services/instance_host/build",
 			want: PackageMapping{
 				PackagePath: "pkg/services/factory_runtime/internal/services/instance_host/build",
@@ -287,17 +279,6 @@ func TestFactoryRuntimeTopLevelUnexpectedCoveredByMoveRules(t *testing.T) {
 	spec := productOwnerTopLevelSpecs["factory_runtime"]
 	for _, child := range spec.unexpected {
 		rest := child
-		if child == "service" {
-			got, ok := mapLegacyServiceImplementationPackage("factory_runtime", "pkg/services/factory_runtime/"+child, rest)
-			if !ok {
-				t.Fatalf("mapLegacyServiceImplementationPackage() ok = false for %q", child)
-			}
-			if got.Disposition != DispositionMove || got.Destination != "factory_runtime/internal" {
-				t.Fatalf("service move mapping = %#v, want move→factory_runtime/internal", got)
-			}
-			continue
-		}
-
 		destination, ok := nestedOwnerMoveDestination("factory_runtime", rest)
 		if !ok {
 			t.Fatalf("nestedOwnerMoveDestination(factory_runtime, %q) ok = false", rest)
@@ -340,26 +321,5 @@ func TestFactoryRuntimeInventoryRejectsRetainToOwnerRoot(t *testing.T) {
 		if got.Disposition != DispositionMove {
 			t.Fatalf("inventory path %q disposition = %q, want move", packagePath, got.Disposition)
 		}
-	}
-}
-
-func factoryRuntimeCanonicalRetainRest(rest string) bool {
-	switch {
-	case rest == "wire" || strings.HasPrefix(rest, "wire/"):
-		return true
-	case rest == "transports" || strings.HasPrefix(rest, "transports/"):
-		return true
-	case rest == "internal" || strings.HasPrefix(rest, "internal/host"):
-		return true
-	case strings.HasPrefix(rest, "internal/services/orchestration"):
-		return true
-	case strings.HasPrefix(rest, "internal/services/instance_host"):
-		return true
-	case strings.HasPrefix(rest, "internal/services/dispatch_planning"):
-		return true
-	case strings.HasPrefix(rest, "internal/services/checkpoint_recovery"):
-		return true
-	default:
-		return false
 	}
 }
