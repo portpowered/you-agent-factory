@@ -19,6 +19,7 @@ import (
 // Handler owns the generated HTTP operation implementations for Factory
 // Sessions and their session-scoped Factory and Work resources.
 type Adapter struct {
+	sessionsRoot       factorysessions.Service
 	runtime            apisurface.RuntimeAPI
 	factoryStatus      apisurface.FactoryStatusAPI
 	sessions           apisurface.LiveSessionAPI
@@ -44,6 +45,7 @@ type Adapter struct {
 // Dependencies are the exact injected roles used by the Factory Sessions HTTP
 // adapter. They are supplied by the already-opened runtime composition.
 type Dependencies struct {
+	SessionsRoot       factorysessions.Service
 	Runtime            apisurface.RuntimeAPI
 	FactoryStatus      apisurface.FactoryStatusAPI
 	Sessions           apisurface.LiveSessionAPI
@@ -82,6 +84,7 @@ func NewHandler(deps Dependencies, logger *zap.Logger) *Adapter {
 		logger = zap.NewNop()
 	}
 	return &Adapter{
+		sessionsRoot: deps.SessionsRoot,
 		runtime: deps.Runtime, factoryStatus: deps.FactoryStatus,
 		sessions: deps.Sessions, work: deps.Work, workRead: deps.WorkRead,
 		invocation:         deps.Invocation,

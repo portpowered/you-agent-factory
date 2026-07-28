@@ -61,13 +61,6 @@ type cliOperatorDefaultsOptions struct {
 
 type SubmitWorkOperation func(submitcli.SubmitConfig) error
 type SubmitBatchOperation func(submitcli.BatchConfig) error
-type ListSessionsOperation func(sessioncli.ListConfig) error
-type ShowSessionOperation func(sessioncli.ShowConfig) error
-type PauseSessionOperation func(sessioncli.LifecycleControlConfig) error
-type ResumeSessionOperation func(sessioncli.LifecycleControlConfig) error
-type ListSessionDispatchesOperation func(sessioncli.DispatchesConfig) error
-type CreateSessionOperation func(sessioncli.CreateConfig) error
-type DeleteSessionOperation func(sessioncli.DeleteConfig) error
 type OwnedExecutionService interface {
 	factorysessions.ExecutionService
 	Close() error
@@ -113,15 +106,9 @@ type CommandOperations struct {
 	LoadOperatorConfig                operatorconfig.ConfigLoader
 	BuildExecution                    ExecutionServiceBuilder
 	ModelsCLI                         modelscli.Service
+	SessionsCLI                       sessioncli.Service
 	SubmitWork                        SubmitWorkOperation
 	SubmitBatch                       SubmitBatchOperation
-	ListSessions                      ListSessionsOperation
-	ShowSession                       ShowSessionOperation
-	PauseSession                      PauseSessionOperation
-	ResumeSession                     ResumeSessionOperation
-	ListSessionDispatches             ListSessionDispatchesOperation
-	CreateSession                     CreateSessionOperation
-	DeleteSession                     DeleteSessionOperation
 	FlattenFactoryConfig              FlattenFactoryConfigOperation
 	ExpandFactoryConfig               ExpandFactoryConfigOperation
 	InitFactory                       interfaces.ScaffoldInitializer
@@ -215,7 +202,7 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		loadOperatorConfig:                operations.LoadOperatorConfig,
 		SubmitWork:                        operations.SubmitWork,
 		SubmitBatch:                       operations.SubmitBatch,
-		SessionsCLI:                       assembleSessionsCLI(operations),
+		SessionsCLI:                       operations.SessionsCLI,
 		BuildExecution:                    operations.BuildExecution,
 		ModelsCLI:                         operations.ModelsCLI,
 		FlattenFactoryConfig:              operations.FlattenFactoryConfig,
@@ -236,27 +223,6 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		VisualizeWork:                     operations.VisualizeWork,
 		openRunSelection:                  operations.OpenRunSelection,
 	}
-}
-
-func assembleSessionsCLI(operations CommandOperations) sessioncli.Service {
-	if operations.ListSessions == nil &&
-		operations.ShowSession == nil &&
-		operations.PauseSession == nil &&
-		operations.ResumeSession == nil &&
-		operations.ListSessionDispatches == nil &&
-		operations.CreateSession == nil &&
-		operations.DeleteSession == nil {
-		return nil
-	}
-	return sessioncli.Bind(sessioncli.Operations{
-		List:           operations.ListSessions,
-		Show:           operations.ShowSession,
-		Pause:          operations.PauseSession,
-		Resume:         operations.ResumeSession,
-		ListDispatches: operations.ListSessionDispatches,
-		Create:         operations.CreateSession,
-		Delete:         operations.DeleteSession,
-	})
 }
 
 // NewCommand constructs one fresh command tree from invocation-local process

@@ -841,7 +841,11 @@ response-stream output.
   their handler or lifecycle opens. Wire adapts
   `pkg/services/system_initialization.Service` to that role; fresh homes create
   operator config and materialize packaged/default Factories, while reruns
-  validate and preserve customer-owned files. Bare root/help, invalid commands,
+  validate and preserve customer-owned files. Bootstrap workflow ownership stays
+  in `pkg/services/system_initialization/internal/workflow` and must not import
+  `pkg/initializer`, transports, `pkg/wire`, or Settings/Definitions store
+  surfaces such as `factory_definitions/packagedinstallation`; boundary proof
+  lives in `internal/workflow/boundary_test.go` and `wire/boundary_test.go`. Bare root/help, invalid commands,
   and `you init` do not activate system initialization: `you init` owns only the
   atomic provider/model settings update. The retired `you config init` command,
   its CLI renderer, and installer invocation must remain absent. Root-built

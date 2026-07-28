@@ -1,0 +1,4 @@
+package http
+
+var SessionsRootErrorResponseForTest = sessionsRootErrorResponse
+var SessionsRequestContextErrorResponseForTest = sessionsRequestContextErrorResponse

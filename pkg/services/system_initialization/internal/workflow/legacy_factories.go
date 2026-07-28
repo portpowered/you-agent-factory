@@ -1,4 +1,4 @@
-package systeminitialization
+package workflow
 
 import (
 	"errors"
@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	systeminitialization "github.com/portpowered/infinite-you/pkg/services/system_initialization"
 )
 
 type legacyFactoryMigration struct {
@@ -16,7 +17,7 @@ type legacyFactoryMigration struct {
 	targetDir string
 }
 
-func migrateLegacyNamedFactories(homeDir, canonicalRoot string, files LegacyFactoryMigrationFileSystem) error {
+func migrateLegacyNamedFactories(homeDir, canonicalRoot string, files systeminitialization.LegacyFactoryMigrationFileSystem) error {
 	legacyRoot := factorydefinitions.LegacyNamedFactoriesRoot(homeDir)
 	info, err := files.Stat(legacyRoot)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -53,7 +54,7 @@ func migrateLegacyNamedFactories(homeDir, canonicalRoot string, files LegacyFact
 	return nil
 }
 
-func inventoryLegacyFactoryMigrations(legacyRoot, canonicalRoot string, files LegacyFactoryMigrationFileSystem) ([]legacyFactoryMigration, error) {
+func inventoryLegacyFactoryMigrations(legacyRoot, canonicalRoot string, files systeminitialization.LegacyFactoryMigrationFileSystem) ([]legacyFactoryMigration, error) {
 	pointerPath := filepath.Join(legacyRoot, factorydefinitions.CurrentFactoryPointerFile)
 	pointer, err := files.ReadFile(pointerPath)
 	if err == nil {

@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -44,6 +45,85 @@ func (s *staticResponseEventSubscription) Next(context.Context) ([]apisurface.Fa
 }
 
 func (s *staticResponseEventSubscription) Detach() {}
+
+func TestGetFactoryResponseEventsBySessionId_CanceledStreamCompletesWithoutHang(t *testing.T) {
+	t.Parallel()
+
+	handler := NewHandler(Dependencies{
+		DurableProjection: durableResponseEventsProjectionFake{
+			subscribe: func(ctx context.Context, request factorysessions.ResponseEventSubscriptionRequest) (apisurface.FactoryResponseEventSubscription, error) {
+				return &blockingResponseEventSubscription{}, nil
+			},
+		},
+	}, zap.NewNop())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/dur-sess-1/response-events", nil).WithContext(ctx)
+	recorder := httptest.NewRecorder()
+
+	done := make(chan struct{})
+	go func() {
+		handler.GetFactoryResponseEventsBySessionId(recorder, req, "dur-sess-1", factoryapi.GetFactoryResponseEventsBySessionIdParams{})
+		close(done)
+	}()
+
+	time.Sleep(20 * time.Millisecond)
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("GetFactoryResponseEventsBySessionId hung after request cancellation")
+	}
+	if body := recorder.Body.String(); body != "" {
+		t.Fatalf("response body = %q, want empty cancel-oriented stream outcome", body)
+	}
+}
+
+func TestGetFactoryResponseEventsBySessionId_DeadlineExceededStreamCompletesWithoutHang(t *testing.T) {
+	t.Parallel()
+
+	handler := NewHandler(Dependencies{
+		DurableProjection: durableResponseEventsProjectionFake{
+			subscribe: func(ctx context.Context, request factorysessions.ResponseEventSubscriptionRequest) (apisurface.FactoryResponseEventSubscription, error) {
+				return &blockingResponseEventSubscription{}, nil
+			},
+		},
+	}, zap.NewNop())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
+	defer cancel()
+
+	recorder := httptest.NewRecorder()
+	done := make(chan struct{})
+	go func() {
+		handler.GetFactoryResponseEventsBySessionId(
+			recorder,
+			httptest.NewRequest(http.MethodGet, "/factory-sessions/dur-sess-1/response-events", nil).WithContext(ctx),
+			"dur-sess-1",
+			factoryapi.GetFactoryResponseEventsBySessionIdParams{},
+		)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("GetFactoryResponseEventsBySessionId hung after request deadline")
+	}
+	if body := recorder.Body.String(); body != "" {
+		t.Fatalf("response body = %q, want empty timeout-oriented stream outcome", body)
+	}
+}
+
+type blockingResponseEventSubscription struct{}
+
+func (blockingResponseEventSubscription) Next(ctx context.Context) ([]apisurface.FactoryResponseEventRecord, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+func (blockingResponseEventSubscription) Detach() {}
 
 func TestGetFactoryResponseEventsBySessionId_DurableSessionStreamsSSE(t *testing.T) {
 	t.Parallel()

@@ -1,6 +1,7 @@
 package bootstrap_portability
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -21,6 +22,8 @@ func TestFactoryValidation_RejectsWorkstationWithNonexistentWorker(t *testing.T)
 	support.SetWorkingDirectory(t, dir)
 
 	fakeEnv := support.FakeInputs(t.Context(), []string{"you", "run", "--factory", "./factory.json"})
+	homeDir := t.TempDir()
+	fakeEnv.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 
 	// Act
 

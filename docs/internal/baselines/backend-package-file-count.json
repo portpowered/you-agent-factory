@@ -14,7 +14,7 @@
     { "packagePath": "pkg/services/factory_sessions/internal/execution", "fileCount": 21, "owner": "factory-session-maintainers", "removalReason": "Separate execution coordination from invocation policy." },
     { "packagePath": "pkg/services/factory_sessions/internal/runtimeopening", "fileCount": 19, "owner": "factory-session-maintainers", "removalReason": "Partition runtime opening composition, model binding, and runtime construction by responsibility." },
     { "packagePath": "pkg/services/factory_sessions/internal/sessionservice", "fileCount": 28, "owner": "factory-session-maintainers", "removalReason": "Partition session service behavior by lifecycle responsibility." },
-    { "packagePath": "pkg/services/factory_sessions/transports/cli/session", "fileCount": 17, "owner": "factory-session-maintainers", "removalReason": "Separate session command lifecycle and rendering behavior." },
+    { "packagePath": "pkg/services/factory_sessions/transports/cli/session", "fileCount": 19, "owner": "factory-session-maintainers", "removalReason": "Separate session command lifecycle and rendering behavior." },
     { "packagePath": "pkg/services/factory_sessions/transports/mcp", "fileCount": 17, "owner": "factory-session-maintainers", "removalReason": "Separate Factory Session MCP tools by lifecycle responsibility." },
     { "packagePath": "pkg/services/models/internal/local", "fileCount": 17, "owner": "model-runtime-maintainers", "removalReason": "Split local model lifecycle and invocation responsibilities." },
     { "packagePath": "pkg/services/models/internal/service", "fileCount": 16, "owner": "model-runtime-maintainers", "removalReason": "Separate model runtime scope, catalog, host lease, and local execution responsibilities." },
