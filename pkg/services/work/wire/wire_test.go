@@ -241,8 +241,8 @@ func TestNewServiceServesPublishedPeerBehavior(t *testing.T) {
 	if err == nil {
 		t.Fatal("ListWork() error = nil, want unresolved runtime failure")
 	}
-	if err.Error() != "Work state access session adapter is unavailable" {
-		t.Fatalf("ListWork() error = %v, want unavailable session adapter", err)
+	if err.Error() != "Work state access recordings adapter is required" {
+		t.Fatalf("ListWork() error = %v, want recordings adapter required", err)
 	}
 
 	_, err = root.MoveWorkForSession(ctx, "session-unresolved", "work-1", "done", "req-1")

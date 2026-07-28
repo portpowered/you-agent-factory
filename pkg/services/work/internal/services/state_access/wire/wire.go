@@ -10,10 +10,13 @@ import (
 )
 
 // NewService constructs the private Work state_access subservice from a
-// session resolver. The resolver adapts Factory Sessions into the parent-private
-// Session adapter port.
-func NewService(sessions stateaccess.SessionResolver) stateaccess.Service {
-	return internalservice.New(sessions)
+// session resolver and optional Recordings adapter. The resolver adapts Factory
+// Sessions into the parent-private Session adapter port.
+func NewService(
+	sessions stateaccess.SessionResolver,
+	recordings stateaccess.RecordingsAdapter,
+) stateaccess.Service {
+	return internalservice.New(sessions, recordings)
 }
 
 type runtimeSessionResolver struct {

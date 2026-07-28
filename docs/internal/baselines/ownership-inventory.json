@@ -4554,6 +4554,12 @@
       "deletionCondition": "delete transitional service/ package after owner wire retargets to internal implementation and DEL cutover proof completes"
     },
     {
+      "packagePath": "pkg/services/work/stateaccessrecordings",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/work/transports/cli",
       "disposition": "retain",
       "destination": "work",
