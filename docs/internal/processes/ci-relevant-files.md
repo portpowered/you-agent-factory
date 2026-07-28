@@ -658,6 +658,11 @@ Wave 0 functional-tests-expansion planning authority lives under
   introduced by parallel closeout work (duplicate provider harness entries) and
   add inventory/checklist cells for any new live scenarios landing from `main`
   before pushing.
+  Held destination-cleared smoke batches `smoke-delete-03-factory-definitions` and
+  `smoke-delete-06-factory-packaged-cross` follow the same release pattern after
+  stories 001–003 migrate/delete: add destination-owned rows (including
+  `defaults_loaded_config_long_test.go` checklist cell), remove stale smoke source
+  rows, and mark both batches `released`.
   `tests/functional/factory/definitions/init_test.go` owns public Factory-init
   functional coverage through `session create --init-new-factory` against
   `support.StartFunctionalAPIServer`, with seeded Work run via

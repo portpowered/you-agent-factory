@@ -2094,9 +2094,7 @@ response-stream output.
   and primary-result equivalence on the real bootstrap path.
 - CLI/API invocation parity for packaged `@you/goal` is owned by
   `tests/functional/factory/packaged/cross/package_cli_api_test.go`
-  (`TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree`). The legacy smoke
-  catch-all `tests/functional/smoke/cli_named_goal_invocation_parity_smoke_test.go`
-  remains only until `smoke-delete-06-factory-packaged-cross` retires it.
+  (`TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree`).
 - Packaged `@you/goal` CLI-started run inspectability through the public API
   lives in `tests/functional/factory/packaged/cross/package_cli_api_test.go`
   (`TestPackagedFactoryInvokedByCLICanBeInspectedByAPI`). Drive the built CLI

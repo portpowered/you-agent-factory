@@ -590,7 +590,7 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | tests/functional/sessionparity/normalize_test.go | you-agent-factory/tests/functional/sessionparity | TestNormalizers_PreserveDistinctLargeIntegerResultValues | short | wrong-layer: package-integration — sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go. | none | none | n/a |
 | tests/functional/sessionparity/normalize_test.go | you-agent-factory/tests/functional/sessionparity | TestNormalizers_RejectEveryMissingRequiredScalarFact | short | wrong-layer: package-integration — sessionparity normalizer/compare contract without root.BuildProcess live REST/CLI/MCP captures. Replacement evidence owner: tests/functional/internal/support/session_parity_contract_test.go. | none | none | n/a |
 
-#### `smoke` (41 scenarios, catch_all=`smoke`)
+#### `smoke` (32 scenarios, catch_all=`smoke`)
 
 | source_path | package | scenario | lane | destination | catch_all | specialty_targets | deletion_only_batch |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -609,12 +609,6 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | tests/functional/orchestration/javascript/loading/typescript_test.go | you-agent-factory/tests/functional/orchestration/javascript/loading | TestTypeScriptFactoryTranspilesAndRuns | short | tests/functional/orchestration/javascript/loading/typescript_test.go | none | none | n/a |
 | tests/functional/orchestration/javascript/loading/typescript_test.go | you-agent-factory/tests/functional/orchestration/javascript/loading | TestTypeScriptTypeOrSyntaxFailureReturnsCustomerDiagnostic | short | tests/functional/orchestration/javascript/loading/typescript_test.go | none | none | n/a |
 | tests/functional/orchestration/javascript/loading/typescript_test.go | you-agent-factory/tests/functional/orchestration/javascript/loading | TestTypeScriptSourceMapReportsAuthoredLocation | short | tests/functional/orchestration/javascript/loading/typescript_test.go | none | none | n/a |
-| tests/functional/smoke/cli_named_goal_invocation_parity_smoke_test.go | you-agent-factory/tests/functional/smoke | TestNamedGoalInvocationParity_EmptyInputRejectedWithStableCode | short | tests/functional/factory/packaged/cross/package_cli_api_test.go | smoke | none | smoke-delete-06-factory-packaged-cross |
-| tests/functional/smoke/cli_named_goal_invocation_parity_smoke_test.go | you-agent-factory/tests/functional/smoke | TestNamedGoalInvocationParity_NamedFactoryCLIAndAPIShareSuccessOutcome | short | tests/functional/factory/packaged/cross/package_cli_api_test.go | smoke | none | smoke-delete-06-factory-packaged-cross |
-| tests/functional/smoke/cli_named_goal_invocation_parity_smoke_test.go | you-agent-factory/tests/functional/smoke | TestNamedGoalInvocationParity_PositionalCLIAndAPIShareSuccessOutcome | short | tests/functional/factory/packaged/cross/package_cli_api_test.go | smoke | none | smoke-delete-06-factory-packaged-cross |
-| tests/functional/smoke/cli_named_goal_invocation_parity_smoke_test.go | you-agent-factory/tests/functional/smoke | TestNamedGoalInvocationParity_SourceConflictRejectedBeforeInvocation | short | tests/functional/factory/packaged/cross/package_cli_api_test.go | smoke | none | smoke-delete-06-factory-packaged-cross |
-| tests/functional/smoke/cli_named_goal_invocation_parity_smoke_test.go | you-agent-factory/tests/functional/smoke | TestNamedGoalInvocationParity_StdinCLIAndAPITextShareSuccessOutcome | short | tests/functional/factory/packaged/cross/package_cli_api_test.go | smoke | none | smoke-delete-06-factory-packaged-cross |
-| tests/functional/smoke/cli_named_goal_invocation_parity_smoke_test.go | you-agent-factory/tests/functional/smoke | TestNamedGoalInvocationParity_UnresolvedPrimaryResultReportsStableFailure | short | tests/functional/factory/packaged/cross/package_cli_api_test.go | smoke | none | smoke-delete-06-factory-packaged-cross |
 | tests/functional/transport/cli/output/text_stream_test.go | you-agent-factory/tests/functional/transport/cli/output | TestCLITextStreamDoesNotPrintStructuredEnvelopeNoise | short | tests/functional/transport/cli/output/text_stream_test.go | none | none | n/a |
 | tests/functional/transport/cli/output/text_stream_test.go | you-agent-factory/tests/functional/transport/cli/output | TestCLITextStreamInterruptedRunDoesNotClaimCompletion | short | tests/functional/transport/cli/output/text_stream_test.go | none | none | n/a |
 | tests/functional/transport/cli/output/text_stream_test.go | you-agent-factory/tests/functional/transport/cli/output | TestCLITextStreamOperatorContinuousRunReportsStartupOutputWithoutQuiet | short | tests/functional/transport/cli/output/text_stream_test.go | none | none | n/a |
@@ -635,8 +629,6 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | tests/functional/transport/cli/commands/work_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLIWorkMoveChangesState | short | tests/functional/transport/cli/commands/work_wiring_test.go | none | none | n/a |
 | tests/functional/transport/cli/commands/work_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLIWorkShowMissingReturnsNotFound | short | tests/functional/transport/cli/commands/work_wiring_test.go | none | none | n/a |
 | tests/functional/transport/cli/commands/work_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLIWorkVisualizeProducesDeterministicGraph | short | tests/functional/transport/cli/commands/work_wiring_test.go | none | none | n/a |
-| tests/functional/smoke/config_driven_execution_test.go | you-agent-factory/tests/functional/smoke | TestConfigDrivenExecution_AddWorkType | short | tests/functional/factory/definitions/validation_test.go | smoke | none | smoke-delete-03-factory-definitions |
-| tests/functional/smoke/config_driven_execution_test.go | you-agent-factory/tests/functional/smoke | TestConfigDrivenExecution_GlobalConfigDrivesDefaultsAndWorkerPreset | short | tests/functional/factory/definitions/defaults_test.go | smoke | none | smoke-delete-03-factory-definitions |
 | tests/functional/smoke/guarded_loop_breaker_long_test.go | you-agent-factory/tests/functional/smoke | TestIntegrationSmoke_GuardedLoopBreakerRoutesOverLimitExampleWorkToFailed | functionallong | tests/functional/guards/global_test.go | smoke | none | smoke-delete-09-guards |
 | tests/functional/smoke/guarded_loop_breaker_test.go | you-agent-factory/tests/functional/smoke | TestIntegrationSmoke_GuardedLoopBreakerExampleRejectsRetiredExhaustionRulesAtBoundary | short | tests/functional/guards/global_test.go | smoke | none | smoke-delete-09-guards |
 | tests/functional/smoke/service_lifecycle_smoke_long_test.go | you-agent-factory/tests/functional/smoke | TestServiceLifecycle_CopyFixtureDirParallelCopiesStayIsolated | functionallong | tests/functional/resilience/process/repeated_start_stop_test.go | smoke | none | smoke-delete-11-resilience-process |
@@ -669,7 +661,6 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | tests/functional/workstations/repeater/reject_accept_test.go | you-agent-factory/tests/functional/workstations/repeater | TestRalphLoop_ConvergesOnReviewerAccept | short | tests/functional/workstations/repeater/reject_accept_test.go | none | none | n/a |
 | tests/functional/workstations/repeater/reject_accept_test.go | you-agent-factory/tests/functional/workstations/repeater | TestRepeater_ResourceReleaseBetweenIterations | short | tests/functional/workstations/repeater/reject_accept_test.go | none | none | n/a |
 | tests/functional/workstations/repeater/reject_accept_test.go | you-agent-factory/tests/functional/workstations/repeater | TestRepeater_YieldsBetweenIterations | short | tests/functional/workstations/repeater/reject_accept_test.go | none | none | n/a |
-| tests/functional/smoke/stateless_loaded_config_smoke_long_test.go | you-agent-factory/tests/functional/smoke | TestStatelessExecutionSmoke_LoadedConfigDrivesExecution | functionallong | tests/functional/factory/definitions/defaults_test.go | smoke | none | smoke-delete-03-factory-definitions |
 
 
 #### `work` (1 scenarios, catch_all=`none`)
@@ -951,10 +942,10 @@ can execute independently until package ownership reaches zero.
 | batch_id | catch-all | scenarios | primary destination domains | specialty Make bindings preserved |
 | --- | --- | ---: | --- | --- |
 | `smoke-delete-02-workstations-execution` | smoke | 4 | workstations/execution | released |
-| `smoke-delete-03-factory-definitions` | smoke | 3 | factory/definitions | none |
+| `smoke-delete-03-factory-definitions` | smoke | 3 | factory/definitions | released |
 | `smoke-delete-04-transport-cli` | smoke | 10 | transport/cli | released |
 | `smoke-delete-05-factory-packaged` | smoke | 12 | factory/packaged, work/routing | released |
-| `smoke-delete-06-factory-packaged-cross` | smoke | 6 | factory/packaged/cross | none |
+| `smoke-delete-06-factory-packaged-cross` | smoke | 6 | factory/packaged/cross | released |
 | `smoke-delete-07-sessions-controls` | smoke | 4 | sessions/controls | released |
 | `smoke-delete-09-guards` | smoke | 2 | guards | none |
 | `smoke-delete-10-workers-mock` | smoke | 2 | workers/mock | released |
@@ -1033,12 +1024,6 @@ Batch execution guidance for later move work:
 | tests/functional/orchestration/javascript/loading/typescript_test.go | you-agent-factory/tests/functional/orchestration/javascript/loading | TestTypeScriptFactoryTranspilesAndRuns | short | tests/functional/orchestration/javascript/loading/typescript_test.go | none | none | n/a |
 | tests/functional/orchestration/javascript/loading/typescript_test.go | you-agent-factory/tests/functional/orchestration/javascript/loading | TestTypeScriptTypeOrSyntaxFailureReturnsCustomerDiagnostic | short | tests/functional/orchestration/javascript/loading/typescript_test.go | none | none | n/a |
 | tests/functional/orchestration/javascript/loading/typescript_test.go | you-agent-factory/tests/functional/orchestration/javascript/loading | TestTypeScriptSourceMapReportsAuthoredLocation | short | tests/functional/orchestration/javascript/loading/typescript_test.go | none | none | n/a |
-| tests/functional/smoke/cli_named_goal_invocation_parity_smoke_test.go | you-agent-factory/tests/functional/smoke | TestNamedGoalInvocationParity_EmptyInputRejectedWithStableCode | short | tests/functional/factory/packaged/cross/package_cli_api_test.go | smoke | none | smoke-delete-06-factory-packaged-cross |
-| tests/functional/smoke/cli_named_goal_invocation_parity_smoke_test.go | you-agent-factory/tests/functional/smoke | TestNamedGoalInvocationParity_NamedFactoryCLIAndAPIShareSuccessOutcome | short | tests/functional/factory/packaged/cross/package_cli_api_test.go | smoke | none | smoke-delete-06-factory-packaged-cross |
-| tests/functional/smoke/cli_named_goal_invocation_parity_smoke_test.go | you-agent-factory/tests/functional/smoke | TestNamedGoalInvocationParity_PositionalCLIAndAPIShareSuccessOutcome | short | tests/functional/factory/packaged/cross/package_cli_api_test.go | smoke | none | smoke-delete-06-factory-packaged-cross |
-| tests/functional/smoke/cli_named_goal_invocation_parity_smoke_test.go | you-agent-factory/tests/functional/smoke | TestNamedGoalInvocationParity_SourceConflictRejectedBeforeInvocation | short | tests/functional/factory/packaged/cross/package_cli_api_test.go | smoke | none | smoke-delete-06-factory-packaged-cross |
-| tests/functional/smoke/cli_named_goal_invocation_parity_smoke_test.go | you-agent-factory/tests/functional/smoke | TestNamedGoalInvocationParity_StdinCLIAndAPITextShareSuccessOutcome | short | tests/functional/factory/packaged/cross/package_cli_api_test.go | smoke | none | smoke-delete-06-factory-packaged-cross |
-| tests/functional/smoke/cli_named_goal_invocation_parity_smoke_test.go | you-agent-factory/tests/functional/smoke | TestNamedGoalInvocationParity_UnresolvedPrimaryResultReportsStableFailure | short | tests/functional/factory/packaged/cross/package_cli_api_test.go | smoke | none | smoke-delete-06-factory-packaged-cross |
 | tests/functional/transport/cli/output/text_stream_test.go | you-agent-factory/tests/functional/transport/cli/output | TestCLITextStreamDoesNotPrintStructuredEnvelopeNoise | short | tests/functional/transport/cli/output/text_stream_test.go | none | none | n/a |
 | tests/functional/transport/cli/output/text_stream_test.go | you-agent-factory/tests/functional/transport/cli/output | TestCLITextStreamInterruptedRunDoesNotClaimCompletion | short | tests/functional/transport/cli/output/text_stream_test.go | none | none | n/a |
 | tests/functional/transport/cli/output/text_stream_test.go | you-agent-factory/tests/functional/transport/cli/output | TestCLITextStreamOperatorContinuousRunReportsStartupOutputWithoutQuiet | short | tests/functional/transport/cli/output/text_stream_test.go | none | none | n/a |
@@ -1059,8 +1044,6 @@ Batch execution guidance for later move work:
 | tests/functional/transport/cli/commands/work_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLIWorkMoveChangesState | short | tests/functional/transport/cli/commands/work_wiring_test.go | none | none | n/a |
 | tests/functional/transport/cli/commands/work_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLIWorkShowMissingReturnsNotFound | short | tests/functional/transport/cli/commands/work_wiring_test.go | none | none | n/a |
 | tests/functional/transport/cli/commands/work_wiring_test.go | you-agent-factory/tests/functional/transport/cli/commands | TestCLIWorkVisualizeProducesDeterministicGraph | short | tests/functional/transport/cli/commands/work_wiring_test.go | none | none | n/a |
-| tests/functional/smoke/config_driven_execution_test.go | you-agent-factory/tests/functional/smoke | TestConfigDrivenExecution_AddWorkType | short | tests/functional/factory/definitions/validation_test.go | smoke | none | smoke-delete-03-factory-definitions |
-| tests/functional/smoke/config_driven_execution_test.go | you-agent-factory/tests/functional/smoke | TestConfigDrivenExecution_GlobalConfigDrivesDefaultsAndWorkerPreset | short | tests/functional/factory/definitions/defaults_test.go | smoke | none | smoke-delete-03-factory-definitions |
 | tests/functional/smoke/guarded_loop_breaker_long_test.go | you-agent-factory/tests/functional/smoke | TestIntegrationSmoke_GuardedLoopBreakerRoutesOverLimitExampleWorkToFailed | functionallong | tests/functional/guards/global_test.go | smoke | none | smoke-delete-09-guards |
 | tests/functional/smoke/guarded_loop_breaker_test.go | you-agent-factory/tests/functional/smoke | TestIntegrationSmoke_GuardedLoopBreakerExampleRejectsRetiredExhaustionRulesAtBoundary | short | tests/functional/guards/global_test.go | smoke | none | smoke-delete-09-guards |
 | tests/functional/smoke/service_lifecycle_smoke_long_test.go | you-agent-factory/tests/functional/smoke | TestServiceLifecycle_CopyFixtureDirParallelCopiesStayIsolated | functionallong | tests/functional/resilience/process/repeated_start_stop_test.go | smoke | none | smoke-delete-11-resilience-process |
@@ -1080,7 +1063,6 @@ Batch execution guidance for later move work:
 | tests/functional/workstations/execution/basic_test.go | you-agent-factory/tests/functional/workstations/execution | TestExecutionWorkstationFailureProjectsPublicFailedState | functionallong | tests/functional/workstations/execution/basic_test.go | none | none | n/a |
 | tests/functional/workstations/execution/contention_test.go | you-agent-factory/tests/functional/workstations/execution | TestEligibleWorkstationContentionChoosesOneDispatchOnly | functionallong | tests/functional/workstations/execution/contention_test.go | none | none | n/a |
 | tests/functional/workstations/execution/contention_test.go | you-agent-factory/tests/functional/workstations/execution | TestContentionMakesProgressAcrossRepeatedWork | functionallong | tests/functional/workstations/execution/contention_test.go | none | none | n/a |
-| tests/functional/smoke/stateless_loaded_config_smoke_long_test.go | you-agent-factory/tests/functional/smoke | TestStatelessExecutionSmoke_LoadedConfigDrivesExecution | functionallong | tests/functional/factory/definitions/defaults_test.go | smoke | none | smoke-delete-03-factory-definitions |
 | tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go | you-agent-factory/tests/functional/orchestration/petri/dispatch | TestPetriIndependentWorkDispatchesConcurrently | short | tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go | none | none | n/a |
 | tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go | you-agent-factory/tests/functional/orchestration/petri/dispatch | TestPetriConcurrentResultsCorrelateToOriginalWork | short | tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go | none | none | n/a |
 | tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go | you-agent-factory/tests/functional/orchestration/petri/dispatch | TestPetriConcurrentFailureDoesNotDuplicateDispatch | short | tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go | none | none | n/a |
@@ -1646,10 +1628,10 @@ without inventing destinations. Prefer independent, reviewable batch sizes.
 | `runtime_api-delete-10-observability-product` | runtime_api | 4 | observability/metrics, product/dashboard, orchestration/petri, transport/http/status | planned |
 | `runtime_api-delete-11-wrong-layer` | runtime_api | 2 | approved wrong-layer (unit / contract-smoke-outside-functional) | planned |
 | `smoke-delete-02-workstations-execution` | smoke | 4 | workstations/execution | released |
-| `smoke-delete-03-factory-definitions` | smoke | 3 | factory/definitions | planned |
+| `smoke-delete-03-factory-definitions` | smoke | 3 | factory/definitions | released |
 | `smoke-delete-04-transport-cli` | smoke | 10 | transport/cli | released |
 | `smoke-delete-05-factory-packaged` | smoke | 12 | factory/packaged, work/routing | released |
-| `smoke-delete-06-factory-packaged-cross` | smoke | 6 | factory/packaged/cross | planned |
+| `smoke-delete-06-factory-packaged-cross` | smoke | 6 | factory/packaged/cross | released |
 | `smoke-delete-07-sessions-controls` | smoke | 4 | sessions/controls | released |
 | `smoke-delete-09-guards` | smoke | 2 | guards | planned |
 | `smoke-delete-10-workers-mock` | smoke | 2 | workers/mock | released |

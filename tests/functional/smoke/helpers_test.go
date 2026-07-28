@@ -15,8 +15,6 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const packagedGoalMockWorkerAcceptedSummary = "mock worker accepted"
-
 func stringPointerValue(value *string) string {
 	if value == nil {
 		return ""

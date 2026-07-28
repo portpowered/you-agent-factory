@@ -741,6 +741,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestFactoryInitFailureRoutingProducesFailedWork`.
 
 - [x] `tests/functional/factory/definitions/validation_test.go`
+  - `TestFactoryValidationAcceptsMultiWorkTypeExecutableTopology`.
   - `TestFactoryValidationRejectsMissingWorkerWorkstationAndRoute`.
   - `TestFactoryValidationReportsAllActionableDefinitionErrors`.
   - `TestAPIValidateFactoryAcceptsValidAndRejectsInvalidDefinitions`.
@@ -750,7 +751,11 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 - [x] `tests/functional/factory/definitions/defaults_test.go`
   - `TestGlobalConfigSuppliesDefaultProviderAndModel`.
   - `TestExplicitFactoryConfigOverridesGlobalDefaults`.
+  - `TestOperatorGlobalDefaultsAndWorkerPresetResolveAtProviderEdge`.
   - `TestSingleDiscoveredProviderIsUsedWhenNoDefaultExists`.
+
+- [x] `tests/functional/factory/definitions/defaults_loaded_config_long_test.go`
+  - `TestLoadedFactoryConfigDrivesProviderEdgePromptAndStopToken`.
 
 - [x] `tests/functional/factory_definitions/transports/cli/named_lifecycle/named_lifecycle_test.go`
   - `TestCLIFactoryNamedCreateListUpdateDelete` verifies create, list, update, and
