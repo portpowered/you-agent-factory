@@ -7319,6 +7319,36 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/factory/packaged/fusion/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/fusion",
+      "scenario": "TestPackagedFusionRequiredInputCompletes",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/fusion/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/fusion/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/fusion",
+      "scenario": "TestPackagedFusionOptionalInputsReachWorkers",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/fusion/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/fusion/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/fusion",
+      "scenario": "TestPackagedFusionPartialWorkerFailureUsesDocumentedOutcome",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/fusion/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/factory/packaged/goal/invocation_test.go",
       "package": "you-agent-factory/tests/functional/factory/packaged/goal",
       "scenario": "TestPackagedGoalAcceptCompletesWithSummary",
@@ -7524,7 +7554,7 @@
     "by_catch_all": {
       "bootstrap_portability": 22,
       "guards_batch": 23,
-      "none": 463,
+      "none": 466,
       "replay_contracts": 23,
       "runtime_api": 96,
       "smoke": 62,
@@ -7535,7 +7565,7 @@
       "automations": 7,
       "bootstrap_portability": 21,
       "cli": 59,
-      "factory": 12,
+      "factory": 15,
       "guards_batch": 23,
       "models": 5,
       "observability": 9,
