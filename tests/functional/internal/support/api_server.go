@@ -272,11 +272,113 @@ func GetFactoryEventsAfterAt(
 	return readFactoryEventsFromURL(t, factoryEventsURLWithCursor(baseURL, cursor))
 }
 
+// FactoryEventsInvalidCursorError is the typed 400 payload for an invalid
+// Factory Event reconnect cursor together with the raw response body.
+type FactoryEventsInvalidCursorError struct {
+	Response factoryapi.ErrorResponse
+	Body     string
+}
+
+// GetFactoryEventsInvalidCursorErrorAt requests retained Factory Event history
+// with an invalid reconnect cursor and returns the typed 400 error payload.
+func GetFactoryEventsInvalidCursorErrorAt(
+	t testing.TB,
+	baseURL string,
+	cursor FactoryEventReadCursor,
+) FactoryEventsInvalidCursorError {
+	t.Helper()
+	return readFactoryEventsInvalidCursorErrorFromURL(t, factoryEventsURLWithCursor(baseURL, cursor))
+}
+
+// ProbeFactoryEventStreamRecoveryAt issues the JSON reconnect probe for an
+// invalid or valid Factory Event cursor through the public session events
+// endpoint.
+func ProbeFactoryEventStreamRecoveryAt(
+	t testing.TB,
+	baseURL string,
+	cursor FactoryEventReadCursor,
+) factoryapi.FactorySessionEventStreamRecovery {
+	t.Helper()
+	return readFactoryEventStreamRecoveryFromURL(t, factoryEventsURLWithCursor(baseURL, cursor))
+}
+
 // GetFactoryEventsAt reads retained Factory Event history from a public
 // session endpoint without requiring the FunctionalAPIServer wrapper.
 func GetFactoryEventsAt(t testing.TB, baseURL string) []factoryapi.FactoryEvent {
 	t.Helper()
 	return readFactoryEventsFromURL(t, DefaultSessionEventsURL(baseURL))
+}
+
+func readFactoryEventsInvalidCursorErrorFromURL(t testing.TB, endpoint string) FactoryEventsInvalidCursorError {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), functionalServerReadyTimeout)
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		t.Fatalf("build factory events invalid cursor request: %v", err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("GET factory events invalid cursor: %v", err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("read factory events invalid cursor response: %v", err)
+	}
+	bodyText := strings.TrimSpace(string(body))
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf(
+			"GET factory events invalid cursor status = %d url = %q body = %s, want 400",
+			response.StatusCode,
+			endpoint,
+			bodyText,
+		)
+	}
+	if strings.Contains(response.Header.Get("Content-Type"), "text/event-stream") {
+		t.Fatalf("invalid cursor Content-Type = %q, want typed error response instead of SSE stream", response.Header.Get("Content-Type"))
+	}
+	var errResp factoryapi.ErrorResponse
+	if err := json.Unmarshal(body, &errResp); err != nil {
+		t.Fatalf("decode factory events invalid cursor error: %v: %s", err, bodyText)
+	}
+	return FactoryEventsInvalidCursorError{
+		Response: errResp,
+		Body:     bodyText,
+	}
+}
+
+func readFactoryEventStreamRecoveryFromURL(t testing.TB, endpoint string) factoryapi.FactorySessionEventStreamRecovery {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), functionalServerReadyTimeout)
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		t.Fatalf("build factory events recovery probe request: %v", err)
+	}
+	request.Header.Set("Accept", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("GET factory events recovery probe: %v", err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("read factory events recovery probe response: %v", err)
+	}
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf(
+			"GET factory events recovery probe status = %d url = %q body = %s, want 200",
+			response.StatusCode,
+			endpoint,
+			strings.TrimSpace(string(body)),
+		)
+	}
+	var recovery factoryapi.FactorySessionEventStreamRecovery
+	if err := json.Unmarshal(body, &recovery); err != nil {
+		t.Fatalf("decode factory events recovery probe: %v: %s", err, strings.TrimSpace(string(body)))
+	}
+	return recovery
 }
 
 func readFactoryEventsFromURL(t testing.TB, endpoint string) []factoryapi.FactoryEvent {

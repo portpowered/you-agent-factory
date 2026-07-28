@@ -1,6 +1,7 @@
 package factory_events
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -8,6 +9,8 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+const factoryEventsUnknownCursorEventID = "factory-events-invalid-cursor-unknown-event"
 
 // TestAPIGetFactoryEventsReturnsOrderedDurableHistory proves retained Factory
 // Event history is returned in durable ascending order through the public
@@ -89,6 +92,103 @@ func TestAPIEventCursorReturnsOnlyNewerEvents(t *testing.T) {
 		AfterSequence: &reconnectSequence,
 	})
 	assertFactoryEventsCursorAfterResult(t, cursorEvent, wantAfter, afterSequenceRead)
+}
+
+// TestAPIInvalidEventCursorReturnsTypedError proves invalid reconnect cursors
+// through the public Factory Events API return typed invalid-cursor handling
+// instead of silently skipping events, and that a valid retained-history read
+// still works for the same session when cursors are omitted.
+func TestAPIInvalidEventCursorReturnsTypedError(t *testing.T) {
+	dir := support.ScaffoldSingleStepFactory(t, "invalid-event-cursor")
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		UseMockWorkers:            true,
+		WaitForServiceModeRuntime: true,
+	})
+	t.Cleanup(func() { server.Stop(t) })
+
+	name := "invalid-event-cursor-work"
+	support.SubmitDefaultSessionWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+		Name:         &name,
+		WorkTypeName: "task",
+		Payload: map[string]string{
+			"title": "prove invalid cursor returns typed error",
+		},
+	})
+	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+
+	retained := server.GetFactoryEvents(t)
+	if len(retained) < 4 {
+		t.Fatalf("retained Factory Event count = %d, want at least 4 events after work completion", len(retained))
+	}
+
+	unknownEventIDCursor := support.FactoryEventReadCursor{
+		AfterEventID: factoryEventsUnknownCursorEventID,
+	}
+	unknownEventIDError := support.GetFactoryEventsInvalidCursorErrorAt(t, server.URL(), unknownEventIDCursor)
+	assertFactoryEventsInvalidCursorError(t, unknownEventIDError.Response)
+	assertFactoryEventsInvalidCursorBodyDoesNotReplayHistory(t, unknownEventIDError.Body, retained)
+
+	unknownSequence := 999999
+	unknownSequenceCursor := support.FactoryEventReadCursor{
+		AfterSequence: &unknownSequence,
+	}
+	unknownSequenceError := support.GetFactoryEventsInvalidCursorErrorAt(t, server.URL(), unknownSequenceCursor)
+	assertFactoryEventsInvalidCursorError(t, unknownSequenceError.Response)
+	assertFactoryEventsInvalidCursorBodyDoesNotReplayHistory(t, unknownSequenceError.Body, retained)
+
+	recovery := support.ProbeFactoryEventStreamRecoveryAt(t, server.URL(), unknownEventIDCursor)
+	if recovery.Outcome != factoryapi.FactorySessionEventStreamRecoveryOutcomeCURSORSTALE {
+		t.Fatalf("recovery outcome = %q, want CURSOR_STALE", recovery.Outcome)
+	}
+	if recovery.FactorySessionId != factorysessions.DefaultSessionID {
+		t.Fatalf(
+			"recovery factorySessionId = %q, want %q",
+			recovery.FactorySessionId,
+			factorysessions.DefaultSessionID,
+		)
+	}
+	if !recovery.Retry.OmitAfterEventId || !recovery.Retry.OmitAfterSequence {
+		t.Fatalf("recovery retry = %#v, want both omit flags true for stale cursor", recovery.Retry)
+	}
+
+	validRead := server.GetFactoryEvents(t)
+	if len(validRead) != len(retained) {
+		t.Fatalf(
+			"valid retained-history read count = %d, want %d when cursors are omitted",
+			len(validRead),
+			len(retained),
+		)
+	}
+	assertFactoryEventsSameRelativeOrder(t, retained, validRead)
+}
+
+func assertFactoryEventsInvalidCursorError(t *testing.T, errResp factoryapi.ErrorResponse) {
+	t.Helper()
+
+	if errResp.Code != factoryapi.ErrorResponseCodeBADREQUEST {
+		t.Fatalf("invalid cursor code = %q, want BAD_REQUEST", errResp.Code)
+	}
+	if !strings.Contains(errResp.Message, "invalid event reconnect cursor") {
+		t.Fatalf("invalid cursor message = %q, want invalid event reconnect cursor guidance", errResp.Message)
+	}
+}
+
+func assertFactoryEventsInvalidCursorBodyDoesNotReplayHistory(
+	t *testing.T,
+	bodyText string,
+	retained []factoryapi.FactoryEvent,
+) {
+	t.Helper()
+
+	for _, event := range retained {
+		if strings.Contains(bodyText, event.Id) {
+			t.Fatalf("invalid cursor response replayed retained event id %q", event.Id)
+		}
+	}
+	if strings.Contains(bodyText, "data: ") {
+		t.Fatal("invalid cursor response contained SSE data frames")
+	}
 }
 
 func pickSessionScopedCursorEvent(
