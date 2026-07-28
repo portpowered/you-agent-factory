@@ -17,9 +17,8 @@ type prestartGateManifest struct {
 			MergedPR        int  `json:"merged_pr"`
 		} `json:"DEL-RUN-SERVICE"`
 		ClnRunFoldEnginePipeline struct {
-			FactoryComplete bool   `json:"factory_complete"`
-			OpenPR          int    `json:"open_pr"`
-			HoldReason      string `json:"hold_reason"`
+			FactoryComplete bool `json:"factory_complete"`
+			MergedPR        int  `json:"merged_pr"`
 		} `json:"CLN-RUN-FOLD-ENGINE-PIPELINE"`
 	} `json:"gates"`
 }
@@ -50,35 +49,28 @@ func TestEnginePipelinePreStartGate_DelRunServiceFactoryComplete(t *testing.T) {
 	}
 }
 
-func TestEnginePipelinePreStartGate_ClnFoldBlocksDeletionUntilFactoryComplete(t *testing.T) {
+func TestEnginePipelinePreStartGate_ClnFoldCompleteDeletionHoldCleared(t *testing.T) {
 	t.Parallel()
 
 	manifest := loadPrestartGateManifest(t)
-	if manifest.Gates.ClnRunFoldEnginePipeline.FactoryComplete {
-		t.Fatal("CLN-RUN-FOLD-ENGINE-PIPELINE gate is complete; flip deletion_hold_active and begin story 002")
+	if !manifest.Gates.ClnRunFoldEnginePipeline.FactoryComplete {
+		t.Fatal("CLN-RUN-FOLD-ENGINE-PIPELINE gate must be Factory-complete before pipeline deletion begins")
 	}
-	if manifest.Gates.ClnRunFoldEnginePipeline.OpenPR <= 0 {
-		t.Fatal("CLN-RUN-FOLD-ENGINE-PIPELINE gate must record the open PR number while incomplete")
+	if manifest.Gates.ClnRunFoldEnginePipeline.MergedPR <= 0 {
+		t.Fatal("CLN-RUN-FOLD-ENGINE-PIPELINE gate must record the merged PR number")
 	}
-	if manifest.Gates.ClnRunFoldEnginePipeline.HoldReason == "" {
-		t.Fatal("CLN-RUN-FOLD-ENGINE-PIPELINE gate must document the hold reason while incomplete")
-	}
-	if !manifest.DeletionHoldActive {
-		t.Fatal("deletion_hold_active must remain true while CLN-RUN-FOLD-ENGINE-PIPELINE is incomplete")
+	if manifest.DeletionHoldActive {
+		t.Fatal("deletion_hold_active must be false once CLN-RUN-FOLD-ENGINE-PIPELINE is Factory-complete")
 	}
 
 	root := serviceDeletionRepoRoot(t)
 	runtimeRoot := filepath.Join(root, "pkg", "services", "factory_runtime")
-	for _, name := range []string{
-		"build", "engine", "javascript", "runtime", "scheduler", "state", "subsystems", "token",
-	} {
+	for _, name := range deletedEnginePipelinePublicTopLevelChildren() {
 		path := filepath.Join(runtimeRoot, name)
-		info, err := os.Stat(path)
-		if err != nil {
-			t.Fatalf("pre-start hold: transitional pipeline public package %q missing unexpectedly: %v", name, err)
-		}
-		if !info.IsDir() {
-			t.Fatalf("pre-start hold: transitional pipeline public package %q is not a directory", name)
+		if _, err := os.Stat(path); err == nil {
+			t.Fatalf("fold complete: deleted pipeline public package %q still exists at %s", name, path)
+		} else if !os.IsNotExist(err) {
+			t.Fatalf("stat %s: %v", path, err)
 		}
 	}
 }

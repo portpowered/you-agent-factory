@@ -1110,12 +1110,11 @@ burn-down until both prerequisite packets are Factory-complete:
 | Gate | Branch | Status artifact |
 | --- | --- | --- |
 | `DEL-RUN-SERVICE` | `pss-del-run-service` | merged PR #1596; `factory_runtime/service` absent; `wire/service_deletion_proof_test.go` |
-| `CLN-RUN-FOLD-ENGINE-PIPELINE` | `pss-cln-run-fold-engine-pipeline` | merged PR required before story 002; while incomplete, transitional public pipeline packages remain and `deletion_hold_active` stays true |
+| `CLN-RUN-FOLD-ENGINE-PIPELINE` | `pss-cln-run-fold-engine-pipeline` | merged PR #1602; fold moved implementation under `internal/services/orchestration` and `instance_host`; story 002 proves public pipeline dirs are gone via `wire/engine_pipeline_deletion_proof_test.go` |
 
 Record the operational gate snapshot in
 `docs/internal/processes/del-run-engine-pipeline-prestart-gates.json` and lock
 the confirmation with
 `pkg/services/factory_runtime/wire/engine_pipeline_prestart_gate_test.go`.
-When `CLN-RUN-FOLD-ENGINE-PIPELINE` merges, flip
-`gates.CLN-RUN-FOLD-ENGINE-PIPELINE.factory_complete` to `true`, clear
-`deletion_hold_active`, and begin story 002 deletion work.
+After both gates are Factory-complete, `deletion_hold_active` is `false` and
+story 002+ deletion or baseline burn-down may proceed.

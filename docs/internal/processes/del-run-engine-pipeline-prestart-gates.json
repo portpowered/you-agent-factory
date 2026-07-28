@@ -1,8 +1,8 @@
 {
   "packet_id": "DEL-RUN-ENGINE-PIPELINE",
   "branch_name": "pss-del-run-engine-pipeline",
-  "recorded_at_utc": "2026-07-28T11:45:00Z",
-  "deletion_hold_active": true,
+  "recorded_at_utc": "2026-07-28T13:17:00Z",
+  "deletion_hold_active": false,
   "gates": {
     "DEL-RUN-SERVICE": {
       "branch_name": "pss-del-run-service",
@@ -16,11 +16,13 @@
     },
     "CLN-RUN-FOLD-ENGINE-PIPELINE": {
       "branch_name": "pss-cln-run-fold-engine-pipeline",
-      "open_pr": 1602,
-      "factory_complete": false,
-      "hold_reason": "PR #1602 is open and not merged; required CI still reports Backend Unit Coverage, Backend Functional Coverage, and Verification Policy failures on the reviewed head.",
+      "merged_pr": 1602,
+      "merged_at_utc": "2026-07-28T13:11:17Z",
+      "factory_complete": true,
       "observable_proof": [
-        "transitional public pipeline packages remain under pkg/services/factory_runtime until this DEL packet begins after the fold merges"
+        "folded engine-pipeline implementation lives under pkg/services/factory_runtime/internal/services/orchestration and instance_host",
+        "pkg/services/factory_runtime/packaged_root_shape_test.go",
+        "pkg/services/factory_runtime/wire/engine_pipeline_deletion_proof_test.go"
       ]
     }
   }
