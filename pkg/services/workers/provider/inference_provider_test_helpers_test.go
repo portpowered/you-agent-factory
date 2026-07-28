@@ -20,10 +20,8 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 )
 
@@ -39,7 +37,7 @@ func testProviderExecRunner(t testing.TB) CommandRunner {
 func newScriptWrapProviderForTest(t *testing.T, runner CommandRunner, _ string) *ScriptWrapProvider {
 	t.Helper()
 	return NewScriptWrapProviderWithDependencies(
-		false, nil, runner, nil, nil, nil, "", nil, nil,
+		false, nil, runner, nil, nil, nil, nil,
 	)
 }
 
@@ -440,7 +438,7 @@ func TestScriptWrapProvider_Infer_CodexImageContentEmitsOrderedImageArgs(t *test
 
 	fakeExec := &recordingProviderExec{result: CommandResult{Stdout: []byte("codex output")}}
 	provider := NewScriptWrapProviderWithDependencies(
-		false, nil, fakeExec, nil, nil, nil, "", nil,
+		false, nil, fakeExec, nil, nil, nil,
 		work.ContentMaterializeFunc(func(_ context.Context, rawURL string) (string, work.ContentCleanup, error) {
 			switch {
 			case strings.HasSuffix(rawURL, "/fixtures/one.png"):
@@ -495,7 +493,7 @@ func TestScriptWrapProvider_Infer_CodexTextOnlyContentDoesNotEmitImageArgs(t *te
 	t.Parallel()
 	fakeExec := &recordingProviderExec{result: CommandResult{Stdout: []byte("codex output")}}
 	provider := NewScriptWrapProviderWithDependencies(
-		false, nil, fakeExec, nil, nil, nil, "", nil, nil,
+		false, nil, fakeExec, nil, nil, nil, nil,
 	)
 
 	_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
@@ -524,7 +522,7 @@ func TestScriptWrapProvider_Infer_CodexMissingImageFailsBeforeRunner(t *testing.
 	t.Parallel()
 	fakeExec := &recordingProviderExec{result: CommandResult{Stdout: []byte("codex output")}}
 	provider := NewScriptWrapProviderWithDependencies(
-		false, nil, fakeExec, nil, nil, nil, "", nil,
+		false, nil, fakeExec, nil, nil, nil,
 		work.ContentMaterializeFunc(func(_ context.Context, rawURL string) (string, work.ContentCleanup, error) {
 			return "", func() {}, fmt.Errorf("media url not readable: %s", rawURL)
 		}),
@@ -584,7 +582,7 @@ func TestScriptWrapProvider_Infer_CodexRemoteImageMaterializesToTempPath(t *test
 		wantBody:              body,
 	}
 	provider := NewScriptWrapProviderWithDependencies(false, nil,
-		fakeExec, nil, nil, nil, "", nil,
+		fakeExec, nil, nil, nil,
 		work.ContentMaterializeFunc(func(_ context.Context, rawURL string) (string, work.ContentCleanup, error) {
 			if rawURL != remoteURL {
 				return "", func() {}, fmt.Errorf("unexpected content URL %q", rawURL)
@@ -643,7 +641,7 @@ func TestScriptWrapProvider_Infer_CodexInaccessibleRemoteImageFailsBeforeRunner(
 
 	fakeExec := &recordingProviderExec{result: CommandResult{Stdout: []byte("codex output")}}
 	provider := NewScriptWrapProviderWithDependencies(false, nil,
-		fakeExec, nil, nil, nil, "", nil,
+		fakeExec, nil, nil, nil,
 		work.ContentMaterializeFunc(func(_ context.Context, rawURL string) (string, work.ContentCleanup, error) {
 			return "", func() {}, fmt.Errorf("media url inaccessible: %s", rawURL)
 		}))
@@ -707,7 +705,7 @@ func TestScriptWrapProvider_Infer_CodexBatchLocalAndRemoteImageURLs(t *testing.T
 		wantRemoteBody:        remoteBody,
 	}
 	provider := NewScriptWrapProviderWithDependencies(false, nil,
-		fakeExec, nil, nil, nil, "", nil,
+		fakeExec, nil, nil, nil,
 		work.ContentMaterializeFunc(func(_ context.Context, rawURL string) (string, work.ContentCleanup, error) {
 			switch rawURL {
 			case localURL:
@@ -860,41 +858,3 @@ func TestInferenceProgressPublishingCommandRunner_WithoutPublisherPreservesExecB
 	}
 }
 
-func agyTimeoutPartialDraftPublished(published []InferenceProgressFragment) bool {
-	for _, fragment := range published {
-		draft, ok := fragment.CanonicalDraft.(factorysessions.ResponseEventDraft)
-		if !ok || draft.Kind != factorysessions.ResponseEventKindMessage || draft.Phase != factorysessions.ResponseEventPhaseCompleted {
-			continue
-		}
-		var payload factorysessions.ResponseEventMessage
-		if err := json.Unmarshal(draft.Payload, &payload); err != nil || !payload.Partial {
-			continue
-		}
-		if len(payload.ContentBlocks) == 1 && payload.ContentBlocks[0].Text == "partial answer before timeout" {
-			return true
-		}
-	}
-	return false
-}
-
-type agyInferenceStubSession struct {
-	launch agypty.ProcessLaunch
-	result agypty.SessionResult
-}
-
-func (s *agyInferenceStubSession) Run(context.Context) (agypty.SessionResult, error) {
-	return s.result, nil
-}
-
-func (s *agyInferenceStubSession) Close() error { return nil }
-
-type agyInferenceStubAllocator struct {
-	sessions []*agyInferenceStubSession
-	result   agypty.SessionResult
-}
-
-func (a *agyInferenceStubAllocator) Allocate(_ context.Context, launch agypty.ProcessLaunch, _ agypty.SessionConfig) (agypty.PTYSession, error) {
-	session := &agyInferenceStubSession{launch: launch, result: a.result}
-	a.sessions = append(a.sessions, session)
-	return session, nil
-}

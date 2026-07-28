@@ -4,10 +4,12 @@ import (
 	"context"
 	"testing"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
 	executionservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
 )
 
 type recordingWorkersRunner struct {
@@ -42,6 +44,9 @@ func TestBuiltInDependenciesFromWorkersRunnerConstructsCodexClaudeCursorGeminiKi
 	if deps.Codex == nil || deps.Claude == nil || deps.Cursor == nil || deps.Gemini == nil || deps.Kiro == nil || deps.OpenCode == nil || deps.Pi == nil {
 		t.Fatalf("built-in dependencies = %#v, want codex, claude, cursor, gemini, kiro, opencode, and pi effects", deps)
 	}
+	if deps.Agy != nil {
+		t.Fatalf("built-in Agy effect = %#v, want nil without PTY platform dependencies", deps.Agy)
+	}
 }
 
 func TestBuiltInDependenciesFromRunnerAdaptsPlatformRunner(t *testing.T) {
@@ -51,6 +56,25 @@ func TestBuiltInDependenciesFromRunnerAdaptsPlatformRunner(t *testing.T) {
 	deps := BuiltInDependenciesFromRunner(runner)
 	if deps.Codex == nil || deps.Claude == nil || deps.Cursor == nil || deps.Gemini == nil || deps.Kiro == nil || deps.OpenCode == nil || deps.Pi == nil {
 		t.Fatalf("built-in dependencies = %#v, want codex, claude, cursor, gemini, kiro, opencode, and pi effects", deps)
+	}
+	if deps.Agy != nil {
+		t.Fatalf("built-in Agy effect = %#v, want nil without PTY platform dependencies", deps.Agy)
+	}
+}
+
+func TestBuiltInDependenciesFromWorkersRunnerConstructsAgyPTYEffectWithAllocator(t *testing.T) {
+	t.Parallel()
+
+	runner := &recordingWorkersRunner{}
+	deps := BuiltInDependenciesFromWorkersRunner(runner, BuiltInRunnerPlatformDependencies{
+		AgyPTY: AgyPTYPlatformDependencies{
+			Allocator: &agypty.MockAllocator{},
+			Locator:   platformprocess.HostExecutableLocator{},
+			Inspector: platformfilesystem.Local{},
+		},
+	})
+	if deps.Agy == nil {
+		t.Fatalf("built-in Agy effect = nil, want PTY effect when allocator is configured")
 	}
 }
 

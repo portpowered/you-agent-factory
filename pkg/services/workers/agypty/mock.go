@@ -59,6 +59,7 @@ func LoadWorkspaceFixtures() ([]workspaceFixture, error) {
 // hermetic unit tests without ConPTY, POSIX PTY, or an installed Agy binary.
 type MockAllocator struct {
 	Sessions []*MockSession
+	Result   SessionResult
 	Err      error
 }
 
@@ -70,6 +71,7 @@ func (m *MockAllocator) Allocate(_ context.Context, launch ProcessLaunch, cfg Se
 	session := &MockSession{
 		Launch: launch,
 		Config: cfg,
+		Result: m.Result,
 	}
 	m.Sessions = append(m.Sessions, session)
 	return session, nil

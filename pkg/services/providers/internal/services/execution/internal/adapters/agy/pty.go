@@ -195,13 +195,17 @@ func resolveExecutable(
 }
 
 func resolveWorkDir(factoryRoot, rawPath string) (string, error) {
-	factoryRoot = strings.TrimSpace(factoryRoot)
-	if factoryRoot == "" {
-		return "", fmt.Errorf("agy: factory root is required")
-	}
 	rawPath = strings.TrimSpace(rawPath)
 	if rawPath == "" {
 		rawPath = "."
+	}
+	factoryRoot = strings.TrimSpace(factoryRoot)
+	if factoryRoot == "" {
+		normalized := filepath.Clean(filepath.FromSlash(rawPath))
+		if filepath.IsAbs(normalized) {
+			return normalized, nil
+		}
+		return "", fmt.Errorf("agy: factory root is required")
 	}
 	return agypty.ResolveWorkspaceDir(factoryRoot, rawPath)
 }
