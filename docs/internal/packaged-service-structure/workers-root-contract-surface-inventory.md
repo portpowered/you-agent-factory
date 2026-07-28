@@ -16,6 +16,10 @@ or delete any root-level `.go` files.
 
 **After workers/internal fold (story 004):** **29** root-level `.go` files (29 keep; move targets complete).
 
+**After import retarget (story 005):** **32** root-level `.go` files (30 keep + 1 temporary documented keep impl + 1 impl test).
+
+**After cutover delivery proof (story 006):** **33** root-level `.go` files (31 keep + 1 temporary documented keep impl + 1 delivery seal test). Pre-cutover baseline remains **41**.
+
 Companion directory inventory:
 [`workers-top-level-inventory.md`](workers-top-level-inventory.md).
 
@@ -74,7 +78,8 @@ fold or delete them.
 | `safe_diagnostics.go` | keep | Canonical safe diagnostics types for history, replay, and projections. |
 | `safe_diagnostics_codec.go` | *(folded)* | Codec moved to `internal/diagnostics/codec.go`; root `safe_diagnostics_forward.go` forwards during story 004. |
 | `safe_diagnostics_forward.go` | keep | Thin root forwarders for safe diagnostics projection and event codec entrypoints. |
-| `service_import_boundary_test.go` | keep | Post-inventory import-boundary proof sealing production packages against transitional `workers/service` imports. |
+| `service_import_boundary_test.go` | keep | Post-inventory import-boundary proof sealing production packages against transitional `workers/service` imports and moved `workers/internal` helpers. |
+| `service_root_contract_seal_test.go` | keep | Post-cutover delivery seal proving thin-root inventory closure, pre→post file-count reduction, and peer-shaped `Service` compile-time surface. |
 | `sessions_consumer_boundary_test.go` | keep | Post-inventory boundary test proving Factory Sessions can name Workers root contracts without importing internal packages. |
 | `sessions_consumer_contracts.go` | keep | Sessions-facing `PTYAllocator`/`ProviderRegistry` type aliases and interfaces so peers name the Workers root instead of `agypty` or `provider/registry`. |
 | `template_fields.go` | keep | `TemplateFieldResolver` contract without exposing prompting implementation packages. |
@@ -91,6 +96,18 @@ fold or delete them.
 | `workstation_pool_boundary.go` | *(folded)* | Moved to `internal/services/workstations/poolboundary` during story 003; peers use published root contracts after story 005 retarget. |
 | `workstation_pool_boundary_test.go` | *(folded)* | Moved to internal poolboundary during story 003. |
 | `workstation_result_contract_test.go` | keep | Root-contract characterization test for `WorkstationResult` round-trip through published Workers root types. |
+
+## Keep vs move summary (after story 006 cutover seal)
+
+| Classification | Count | Target after CLN-WRK-CONTRACT-ROOTS |
+| --- | ---: | --- |
+| **keep** | 31 | Remain at `pkg/services/workers/` as thin root contracts |
+| **move-to-runners** | 0 | Folded under `pkg/services/workers/internal/services/runners/runner` (story 002) |
+| **move-to-workstations** | 0 | Folded under `pkg/services/workers/internal/services/workstations` (story 003) |
+| **move-to-runtime_assembly** | 0 | — |
+| **move-to-workers/internal** | 0 | Folded under `pkg/services/workers/internal` (story 004) |
+| **temporary documented keep** | 1 | `workstation_pool_boundary_impl.go` until DEL-WRK cycle-free relocation |
+| **Total** | **33** | 31 keep + 1 temporary documented keep + 1 delivery seal test |
 
 ## Keep vs move summary (after story 005)
 

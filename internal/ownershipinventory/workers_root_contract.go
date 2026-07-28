@@ -34,6 +34,7 @@ var WorkersThinRootContractFiles = []string{
 	"runner_policy_contracts.go",
 	"safe_diagnostics.go",
 	"safe_diagnostics_forward.go",
+	"service_root_contract_seal_test.go",
 	"sessions_consumer_boundary_test.go",
 	"sessions_consumer_contracts.go",
 	"service_import_boundary_test.go",
@@ -127,6 +128,11 @@ func IsWorkersPrivateRootContractMoveDestination(destination string) bool {
 	return strings.HasPrefix(destination, workersPackagePrefix+"/internal/")
 }
 
+// WorkersRootContractPreCutoverFileCount is the inventoried root .go file count
+// before CLN-WRK-CONTRACT-ROOTS moves begin (INV-WRK-TOPLEVEL baseline plus
+// post-inventory additions).
+const WorkersRootContractPreCutoverFileCount = 41
+
 // WorkersRootContractBaselineFileCount is the inventoried root .go file count
-// before CLN-WRK-CONTRACT-ROOTS moves begin.
-const WorkersRootContractBaselineFileCount = 32
+// after CLN-WRK-CONTRACT-ROOTS cutover completes.
+const WorkersRootContractBaselineFileCount = 33

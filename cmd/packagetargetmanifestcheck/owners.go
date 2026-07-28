@@ -311,6 +311,9 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 		{exact: "token_transformer", prefix: "token_transformer/", dest: "factory_runtime/internal/services/orchestration"},
 	},
 	"work": {
+		{exact: "internal/contenturl", prefix: "internal/contenturl/", dest: "work/internal"},
+		{exact: "internal/invocationreturnpolicy", prefix: "internal/invocationreturnpolicy/", dest: "work/internal"},
+		{exact: "internal/requestadmission", prefix: "internal/requestadmission/", dest: "work/internal/services/admission"},
 		{exact: "internal/service", prefix: "internal/service/", dest: "work/internal"},
 		{exact: "materialize", prefix: "materialize/", dest: "work/internal/services/content_materialization"},
 		{exact: "stateaccessrecordings", prefix: "stateaccessrecordings/", dest: "work/internal/services/state_access"},
@@ -331,6 +334,7 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 		{exact: "internal", dest: "workers/internal"},
 		{exact: "internal/diagnostics", prefix: "internal/diagnostics/", dest: "workers/internal"},
 		{exact: "internal/interface", prefix: "internal/interface/", dest: "workers/internal"},
+		{exact: "internal/testhelpers", prefix: "internal/testhelpers/", dest: "workers/internal"},
 		{exact: "construction", prefix: "construction/", dest: "workers/internal/services/runtime_assembly"},
 		{exact: "prompting", prefix: "prompting/", dest: "workers/internal/services/workstations"},
 		{exact: "worktree", prefix: "worktree/", dest: "workers/internal/services/workstations"},

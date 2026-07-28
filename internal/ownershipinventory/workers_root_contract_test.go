@@ -50,6 +50,7 @@ func TestWorkersThinRootContractFiles(t *testing.T) {
 		"runner_policy_contracts.go",
 		"safe_diagnostics.go",
 		"safe_diagnostics_forward.go",
+		"service_root_contract_seal_test.go",
 		"sessions_consumer_boundary_test.go",
 		"sessions_consumer_contracts.go",
 		"service_import_boundary_test.go",
