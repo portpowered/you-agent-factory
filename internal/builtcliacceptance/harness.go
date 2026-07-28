@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -172,15 +173,20 @@ func (s *Session) ProcessEnvWith(extra ...string) []string {
 
 // Run executes the built you binary with the session's hermetic environment.
 func (s *Session) Run(ctx context.Context, args ...string) (RunResult, error) {
-	return s.run(ctx, s.ProcessEnv(), args...)
+	return s.run(ctx, s.ProcessEnv(), nil, args...)
+}
+
+// RunWithStdin executes the built you binary with piped stdin content.
+func (s *Session) RunWithStdin(ctx context.Context, stdin string, args ...string) (RunResult, error) {
+	return s.run(ctx, s.ProcessEnv(), strings.NewReader(stdin), args...)
 }
 
 // RunWithEnv executes the built you binary with extra environment variables.
 func (s *Session) RunWithEnv(ctx context.Context, extraEnv []string, args ...string) (RunResult, error) {
-	return s.run(ctx, s.ProcessEnvWith(extraEnv...), args...)
+	return s.run(ctx, s.ProcessEnvWith(extraEnv...), nil, args...)
 }
 
-func (s *Session) run(ctx context.Context, env []string, args ...string) (RunResult, error) {
+func (s *Session) run(ctx context.Context, env []string, stdin io.Reader, args ...string) (RunResult, error) {
 	if s.harness == nil {
 		return RunResult{}, errors.New("session harness is nil")
 	}
@@ -191,6 +197,9 @@ func (s *Session) run(ctx context.Context, env []string, args ...string) (RunRes
 	cmd := exec.CommandContext(ctx, s.harness.BinaryPath, args...)
 	cmd.Dir = s.WorkDir
 	cmd.Env = env
+	if stdin != nil {
+		cmd.Stdin = stdin
+	}
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

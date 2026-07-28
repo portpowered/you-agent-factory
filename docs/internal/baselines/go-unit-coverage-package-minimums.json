@@ -411,6 +411,10 @@
       "minimum": 79.67
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/mcp",
+      "minimum": 73.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/ttsobservability",
       "minimum": 73.33
     },
@@ -991,6 +995,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/response_event_presentation/wire",
       "minimum": 100.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http",
+      "minimum": 78.83
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire",

@@ -126,6 +126,7 @@
     "pkg/services/factory_definitions/snapshotcapture",
     "pkg/services/factory_definitions/transports/cli",
     "pkg/services/factory_definitions/transports/http",
+    "pkg/services/factory_definitions/transports/mcp",
     "pkg/services/factory_definitions/ttsobservability",
     "pkg/services/factory_definitions/validation",
     "pkg/services/factory_definitions/wire",
@@ -253,6 +254,7 @@
     "pkg/services/factory_visualization/internal/services/response_event_presentation",
     "pkg/services/factory_visualization/internal/services/response_event_presentation/internal/service",
     "pkg/services/factory_visualization/internal/services/response_event_presentation/wire",
+    "pkg/services/factory_visualization/transports/http",
     "pkg/services/factory_visualization/wire",
     "pkg/services/models",
     "pkg/services/models/internal/artifacts",
@@ -913,6 +915,11 @@
       "destination": "factory_definitions"
     },
     {
+      "packagePath": "pkg/services/factory_definitions/transports/mcp",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
       "packagePath": "pkg/services/factory_definitions/ttsobservability",
       "disposition": "retain",
       "destination": "factory_definitions"
@@ -1546,6 +1553,11 @@
       "packagePath": "pkg/services/factory_visualization/internal/services/response_event_presentation/wire",
       "disposition": "retain",
       "destination": "factory_visualization/internal/services/response_event_presentation"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/transports/http",
+      "disposition": "retain",
+      "destination": "factory_visualization"
     },
     {
       "packagePath": "pkg/services/factory_visualization/wire",
