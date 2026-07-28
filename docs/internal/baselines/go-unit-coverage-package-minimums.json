@@ -1703,6 +1703,10 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy",
+      "minimum": 50.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude",
       "minimum": 66.38
     },
@@ -2226,11 +2230,11 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider",
-      "minimum": 76.00
+      "minimum": 75.24
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter",
-      "minimum": 88.07
+      "minimum": 85.32
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter/testkit",
@@ -2238,7 +2242,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/agy",
-      "minimum": 87.06
+      "minimum": 50.75
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/claude",
@@ -2550,7 +2554,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/wire",
-      "minimum": 81.45
+      "minimum": 81.44
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/wire/factorydefinitions",

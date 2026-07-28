@@ -15,11 +15,9 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
-	provideradapter "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter"
-	agyadapter "github.com/portpowered/infinite-you/pkg/services/workers/provider/agy"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/commandenv"
+	provideradapter "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter"
 	providercontract "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	opencodepkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/opencode"
 
@@ -98,9 +96,6 @@ type ScriptWrapProvider struct {
 	progressPublisher         InferenceProgressPublisher
 	responseStreamExecutor    ResponseStreamExecutor
 	operatingSystem           string
-	agyFactoryRoot            string
-	agyAllocator              agypty.PTYAllocator
-	agyExecutableDependencies agyadapter.ExecutableDependencies
 	clock                     workerprocess.Clock
 	temporaryFiles            platformfilesystem.TemporaryFileSystem
 }
@@ -121,8 +116,6 @@ func NewScriptWrapProviderWithDependencies(
 	_ interface{},
 	progressPublisher InferenceProgressPublisher,
 	responseStreamExecutor ResponseStreamExecutor,
-	agyFactoryRoot string,
-	agyAllocator agypty.PTYAllocator,
 	contentMaterializer work.ContentMaterializer,
 	clocks ...workerprocess.Clock,
 ) *ScriptWrapProvider {
@@ -136,8 +129,6 @@ func NewScriptWrapProviderWithDependencies(
 		exec:                   commandRunner,
 		progressPublisher:      progressPublisher,
 		responseStreamExecutor: responseStreamExecutor,
-		agyFactoryRoot:         agyFactoryRoot,
-		agyAllocator:           agyAllocator,
 	}
 	if len(clocks) > 0 {
 		provider.clock = clocks[0]
@@ -158,9 +149,6 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req workerexecution.Ru
 
 	logger.Info("inferencer: request starting",
 		providerLogFields(req, "model", req.Model)...)
-	if strings.EqualFold(strings.TrimSpace(req.ModelProvider), string(modelprovider.ProviderAgy)) {
-		return p.executeAgy(ctx, req, logger)
-	}
 	if isConductorRoutedProvider(req.ModelProvider) {
 		response, err := providerRequestValidationFailure(
 			req,
@@ -237,7 +225,8 @@ func isConductorRoutedProvider(provider string) bool {
 		string(modelprovider.ProviderCursor),
 		"cursor",
 		string(modelprovider.ProviderOpenCode),
-		string(modelprovider.ProviderPi):
+		string(modelprovider.ProviderPi),
+		string(modelprovider.ProviderAgy):
 		return true
 	default:
 		return false

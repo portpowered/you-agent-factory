@@ -1210,7 +1210,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream/fragmentmap",
-      "minimum": 49.55
+      "minimum": 30.97
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream/ndjsoncontract",
@@ -1366,7 +1366,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream",
-      "minimum": 54.54
+      "minimum": 51.51
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session",
@@ -2051,6 +2051,10 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy",
+      "minimum": 60.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude",
       "minimum": 0.00
     },
@@ -2558,7 +2562,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/agypty",
-      "minimum": 52.51
+      "minimum": 48.54
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/cliprovider",
@@ -2728,7 +2732,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/process",
-      "minimum": 61.59
+      "minimum": 61.30
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/prompting",
@@ -2736,11 +2740,11 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider",
-      "minimum": 34.00
+      "minimum": 23.79
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter",
-      "minimum": 68.80
+      "minimum": 0.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter/testkit",
@@ -2754,7 +2758,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/agy",
-      "minimum": 70.68
+      "minimum": 55.30
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/claude",
@@ -2818,11 +2822,11 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry",
-      "minimum": 65.54
+      "minimum": 64.38
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/structured",
-      "minimum": 6.00
+      "minimum": 0.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/runner",

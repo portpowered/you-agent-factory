@@ -19,7 +19,6 @@ import (
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
-	agyadapter "github.com/portpowered/infinite-you/pkg/services/workers/provider/agy"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
@@ -98,7 +97,6 @@ func (f *Factory) New(
 	logger logging.Logger,
 	progressPublisher InferenceProgressPublisher,
 	responseStreamExecutor ResponseStreamExecutor,
-	agyFactoryRoot string,
 ) (*ScriptWrapProvider, error) {
 	if f == nil {
 		return nil, errors.New("construct provider-backed worker: factory is required")
@@ -113,16 +111,11 @@ func (f *Factory) New(
 		nil,
 		progressPublisher,
 		responseStreamExecutor,
-		agyFactoryRoot,
-		f.agyPTYAllocator,
 		f.contentMaterializer,
 		f.commandClock,
 	)
 	provider.operatingSystem = string(f.operatingSystem)
 	provider.temporaryFiles = f.temporaryFiles
-	provider.agyExecutableDependencies = agyadapter.ExecutableDependencies{
-		Locator: f.executableLocator, Inspector: f.executableInspector,
-	}
 	return provider, nil
 }
 
