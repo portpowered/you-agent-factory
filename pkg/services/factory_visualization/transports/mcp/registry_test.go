@@ -130,20 +130,20 @@ func TestToolByName_UnknownToolReturnsFalse(t *testing.T) {
 	}
 }
 
-func TestIsCanonicalToolHandlerRegistered_LifecycleToolsAreRegistered(t *testing.T) {
+func TestIsCanonicalToolHandlerRegistered_LifecycleAndObserveToolsAreRegistered(t *testing.T) {
 	t.Parallel()
 
 	for _, name := range []string{
 		mcpfactoryvisualization.ToolActivate,
 		mcpfactoryvisualization.ToolJoin,
 		mcpfactoryvisualization.ToolStopDrain,
+		mcpfactoryvisualization.ToolObserve,
 	} {
 		if !mcpfactoryvisualization.IsCanonicalToolHandlerRegistered(name) {
 			t.Fatalf("handler for %q should be registered", name)
 		}
 	}
 	for _, name := range []string{
-		mcpfactoryvisualization.ToolObserve,
 		mcpfactoryvisualization.ToolOpenPresentation,
 		mcpfactoryvisualization.ToolPresentProgress,
 		mcpfactoryvisualization.ToolFinalizePresentation,

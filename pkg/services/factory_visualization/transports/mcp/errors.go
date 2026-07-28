@@ -116,6 +116,17 @@ func mapRootError(err error) ToolErrorEnvelope {
 			},
 		}
 	}
+	var projErr *factoryvisualization.ProjectionError
+	if errors.As(err, &projErr) {
+		return ToolErrorEnvelope{
+			Code:      "factory_visualization.projection." + strings.ToLower(string(projErr.Kind)),
+			Message:   projErr.Error(),
+			Retryable: false,
+			Details: map[string]any{
+				"kind": string(projErr.Kind),
+			},
+		}
+	}
 	return ToolErrorEnvelope{
 		Code:      errorCodeBadRequest,
 		Message:   strings.TrimSpace(err.Error()),

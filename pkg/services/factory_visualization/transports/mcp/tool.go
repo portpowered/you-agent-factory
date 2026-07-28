@@ -123,3 +123,53 @@ func StopDrain(
 	}
 	return ToolResponse[factoryvisualization.StopDrainResult]{Result: &result}
 }
+
+// ObserveReconnectInput is the MCP reconnect cursor for you.factory_visualization.observe.
+type ObserveReconnectInput struct {
+	AfterEventID  string `json:"afterEventId,omitempty"`
+	AfterSequence *int   `json:"afterSequence,omitempty"`
+}
+
+// ObserveInput is the MCP request shape for you.factory_visualization.observe.
+type ObserveInput struct {
+	Mode      string                 `json:"mode"`
+	Reconnect *ObserveReconnectInput `json:"reconnect,omitempty"`
+}
+
+// Observe runs the Visualization root Observe contract for the observe MCP tool.
+func Observe(
+	ctx context.Context,
+	root factoryvisualization.Root,
+	input ObserveInput,
+) ToolResponse[factoryvisualization.ObserveResult] {
+	if ctx == nil {
+		envelope := missingContextErrorEnvelope()
+		return ToolResponse[factoryvisualization.ObserveResult]{Error: &envelope}
+	}
+	if response, done := requestContextErrorResponse[factoryvisualization.ObserveResult](ctx); done {
+		return response
+	}
+	if root == nil {
+		envelope := serviceUnavailableErrorEnvelope()
+		return ToolResponse[factoryvisualization.ObserveResult]{Error: &envelope}
+	}
+	if input.Mode == "" {
+		envelope := requestValidationErrorEnvelope("observe Factory visualization: required request parameters are missing")
+		return ToolResponse[factoryvisualization.ObserveResult]{Error: &envelope}
+	}
+	request := factoryvisualization.ObserveRequest{
+		Mode: factoryvisualization.ObserveMode(input.Mode),
+	}
+	if input.Reconnect != nil {
+		request.Reconnect = &factoryvisualization.ObserveReconnectCursor{
+			AfterEventID:  input.Reconnect.AfterEventID,
+			AfterSequence: input.Reconnect.AfterSequence,
+		}
+	}
+	result, err := root.Observe(ctx, request)
+	if err != nil {
+		envelope := mapRootError(err)
+		return ToolResponse[factoryvisualization.ObserveResult]{Error: &envelope}
+	}
+	return ToolResponse[factoryvisualization.ObserveResult]{Result: &result}
+}

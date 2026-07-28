@@ -56,6 +56,11 @@ var canonicalToolHandlers = map[string]canonicalToolHandler{
 			return StopDrain(ctx, root, request)
 		})
 	},
+	ToolObserve: func(ctx context.Context, root factoryvisualization.Root, input json.RawMessage) (json.RawMessage, error) {
+		return callToolJSON(input, "decode observe input", func(request ObserveInput) ToolResponse[factoryvisualization.ObserveResult] {
+			return Observe(ctx, root, request)
+		})
+	},
 }
 
 // IsCanonicalToolHandlerRegistered reports whether the live CallTool path
