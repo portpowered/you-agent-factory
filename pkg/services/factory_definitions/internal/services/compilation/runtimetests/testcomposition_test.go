@@ -9,7 +9,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitiontestcomposition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/testcomposition"
-	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
+	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	authoredmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/authored"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
@@ -48,7 +48,7 @@ var factorydefinitioncomposition = func() factorydefinitiontestcomposition.Compo
 }()
 
 func mustRequiredToolChecker() factorydefinitions.RequiredToolChecker {
-	checker, err := factoryloading.NewPathRequiredToolChecker(
+	checker, err := compilationloading.NewPathRequiredToolChecker(
 		exec.LookPath,
 		func(path string, args ...string) ([]byte, error) {
 			return exec.Command(path, args...).CombinedOutput()

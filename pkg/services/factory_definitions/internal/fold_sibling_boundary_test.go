@@ -17,6 +17,7 @@ var foldedPublicSiblingSuffixes = []string{
 	"/portableconfig",
 	"/loading",
 	"/loadedsource",
+	"/runtimeconfig",
 	"/snapshotcapture",
 	"/packagedinstallation",
 	"/packages/packageassets",

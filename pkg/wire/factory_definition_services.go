@@ -19,7 +19,6 @@ import (
 	factoryinvocationinterpolation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/invocationinterpolation"
 	factoryinvocationoutput "github.com/portpowered/infinite-you/pkg/services/factory_definitions/invocationoutput"
 	factoryinvocationworktype "github.com/portpowered/infinite-you/pkg/services/factory_definitions/invocationworktype"
-	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
 	factoryquorumpolicy "github.com/portpowered/infinite-you/pkg/services/factory_definitions/quorumpolicy"
 	factoryttsobservability "github.com/portpowered/infinite-you/pkg/services/factory_definitions/ttsobservability"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
@@ -185,7 +184,7 @@ func provideFactoryDefinitionRequiredToolChecker(
 	lookPath factorydefinitions.RequiredToolPathLookup,
 	versionProbe factorydefinitions.RequiredToolVersionProbe,
 ) (factorydefinitions.RequiredToolChecker, error) {
-	return factoryloading.NewPathRequiredToolChecker(lookPath, versionProbe)
+	return factorydefinitionswire.NewPathRequiredToolChecker(lookPath, versionProbe)
 }
 
 func provideFactoryDefinitionPersistenceFileSystem(
@@ -314,7 +313,7 @@ func provideFactoryDefinitionLoader(
 	sourceResolver factorydefinitions.PortableBundledFileSourceResolver,
 	inspectSource factorydefinitions.PortableBundledFileInspection,
 	requiredToolChecker factorydefinitions.RequiredToolChecker,
-) *factoryloading.Loader {
+) *factorydefinitionswire.Loader {
 	return wirefactorydefinitions.Loader(
 		applySupportedFiles,
 		applyStarterWork,
@@ -335,7 +334,7 @@ func provideAuthoredFactorySourceLoader(
 }
 
 func provideLoadedFactoryLoader(
-	loader *factoryloading.Loader,
+	loader *factorydefinitionswire.Loader,
 ) factorydefinitions.LoadedFactoryLoader {
 	return func(factoryDir string, workstationLoader factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 		return loader.LoadSourceFromFactoryDir(factoryDir, workstationLoader)
