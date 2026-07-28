@@ -1,11 +1,11 @@
-package factorydefinitions
+package wire
 
 import (
 	"context"
 
 	contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/authoredlayout"
-	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
+	factoryauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout"
+	authoringlayoutprepare "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/prepare"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	authoredmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/authored"
 )
@@ -16,7 +16,7 @@ import (
 func Persistence(
 	validator contracts.Validator,
 	mapInput contracts.FactoryLayoutPayloadMapper,
-	loader *factorydefinitionswire.Loader,
+	loader *Loader,
 	pruneRemovedDocs contracts.PortableBundledDocsPruner,
 	materializeFiles contracts.PortableBundledFilesMaterializer,
 	validateWrites contracts.PortableBundledFileWritesValidator,
@@ -38,7 +38,7 @@ func Persistence(
 		fileSystem,
 		ensureInbox,
 	)
-	return factorydefinitionswire.NewPersistence(
+	return NewPersistence(
 		validator,
 		mapInput,
 		func(
@@ -47,7 +47,7 @@ func Persistence(
 			payload []byte,
 			validator contracts.Validator,
 		) (*contracts.PreparedFactoryLayoutPayload, error) {
-			return factoryauthoredlayout.Prepare(
+			return authoringlayoutprepare.FactoryLayout(
 				ctx,
 				segment,
 				payload,
@@ -77,7 +77,7 @@ func Persistence(
 				validateWrites,
 			)
 		},
-		FactoryLayoutFlattener(loader),
+		loader.FlattenFactoryConfig,
 		func(path string) (string, contracts.LayoutExpansionReport, error) {
 			targetDir, sourceDir, sourcePath, factoryConfig, canonical, err :=
 				loader.PrepareFactoryLayoutExpansion(path)

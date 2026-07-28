@@ -98,7 +98,7 @@ func TestOwnerTopLevelInventoryCoversPacketGaps(t *testing.T) {
 			"testdata",
 		},
 		"factory_definitions": {
-			"authoredlayout", "definition", "loading", "validation",
+			"definition", "validation",
 		},
 	}
 

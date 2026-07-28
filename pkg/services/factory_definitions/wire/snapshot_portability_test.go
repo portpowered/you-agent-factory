@@ -1,4 +1,4 @@
-package factorydefinitions_test
+package wire_test
 
 import (
 	"encoding/json"
@@ -8,7 +8,6 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
-	wirefactorydefinitions "github.com/portpowered/infinite-you/pkg/wire/factorydefinitions"
 )
 
 func TestWireSnapshotHelpersCapturePrepareMaterializeAndReplay(t *testing.T) {
@@ -31,7 +30,7 @@ func TestWireSnapshotHelpersCapturePrepareMaterializeAndReplay(t *testing.T) {
 		t.Fatalf("GeneratedFactoryFromOpenAPIJSON() error = %v", err)
 	}
 
-	prepared, err := wirefactorydefinitions.PortableFactoryConfigPreparer(
+	prepared, err := factorydefinitionswire.PortableFactoryConfigPreparer(
 		applySupportedFiles,
 		applyStarterWork,
 	)("/factories/alpha", factoryConfig, false)
@@ -42,7 +41,7 @@ func TestWireSnapshotHelpersCapturePrepareMaterializeAndReplay(t *testing.T) {
 		t.Fatalf("PortableFactoryConfigPreparer() = %#v, want alpha config", prepared)
 	}
 
-	capture := wirefactorydefinitions.FactorySnapshotCapturer()
+	capture := factorydefinitionswire.FactorySnapshotCapturer()
 	snapshot, err := capture("/factories/alpha", prepared, nil, "", nil)
 	if err != nil {
 		t.Fatalf("FactorySnapshotCapturer() error = %v", err)
@@ -69,7 +68,7 @@ func TestWireSnapshotHelpersCapturePrepareMaterializeAndReplay(t *testing.T) {
 		t.Fatalf("Materializer() error = %v", err)
 	}
 
-	replayConfig, err := wirefactorydefinitions.ReplayRuntimeConfigDecoder()(snapshot)
+	replayConfig, err := factorydefinitionswire.ReplayRuntimeConfigDecoder()(snapshot)
 	if err != nil {
 		t.Fatalf("ReplayRuntimeConfigDecoder() error = %v", err)
 	}

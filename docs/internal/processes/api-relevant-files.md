@@ -185,6 +185,59 @@ Use this map when changing the public REST contract.
   `pkg/services/factory_definitions/non_owner_service_import_boundary_test.go`,
   with `pkg/services/factory_definitions/service` registered in
   `cmd/pkgboundarycheck` converged service subpackage roots.
+  DEL-DEF story 001 (`pss-del-def-001`) confirms prerequisite packets are
+  Factory-complete before leased deletion begins. Observable gate proofs live in
+  `pkg/services/factory_definitions/del_def_prerequisite_gate_test.go` (tree
+  invariants from CLN-DEF-CONTRACTS, IMP-DEF repair subservices, CUT-DEF-SES,
+  INV-DEF-TOPLEVEL canonical roots, and CLN-DEF-FOLD-TOPLEVEL transitional
+  packages still present for deletion). CUT-DEF-RUN import sealing is proved by
+  `runtime_import_boundary_test.go`; BOOT-DEF Definitions-root bootstrap proofs
+  live in
+  `pkg/services/system_initialization/initialize_definitions_root_boundary_test.go`.
+  Do not delete transitional top-level packages or lower baselines until story
+  001 passes.
+  DEL-DEF story 002 (`pss-del-def-002`) deletes emptied transitional DEF
+  top-level packages (`authoredlayout`, `portableconfig`, `loading`,
+  `runtimeconfig`, `namedfactories`) and retargets owner imports to
+  `internal/services/*` destinations. The `service/` compile shim remains under
+  the Automations-leased `pkg/wire` hold. Import-clearing proof is
+  `pkg/services/factory_definitions/del_def_transitional_deletion_test.go`;
+  deletion/absence proofs are in `del_def_prerequisite_gate_test.go`. Root
+  `pkg/wire` composition ports moved to public exports under
+  `pkg/services/factory_definitions/wire/root_wire_*.go` so root wire does not
+  import `internal/**` illegally.
+  DEL-DEF story 003 (`pss-del-def-003`) lowers structure/ownership/package-target
+  baselines for the deleted transitional DEF packages only: remove stale rows from
+  `docs/internal/baselines/package-structure-baseline.json`,
+  `docs/internal/baselines/ownership-inventory.json` (regenerate with
+  `go run ./cmd/ownershipinventoryfreeze`), and
+  `docs/internal/packaged-service-structure/package-target-manifest.json`
+  (regenerate inventory/owner rows with
+  `go run ./cmd/packagetargetmanifestcheck -write-inventory -write-owner-packages -write-residual-packages`).
+  Also drop deleted top-level children from both
+  `internal/ownershipinventory/owner_top_level.go` and
+  `cmd/packagetargetmanifestcheck/owner_top_level.go` unexpected inventories.
+  DEL-DEF story 004 (`pss-del-def-004`) removes unit and functional coverage
+  baseline rows for the deleted transitional DEF import paths only
+  (`authoredlayout`, `portableconfig`, `loading`, `runtimeconfig`,
+  `namedfactories`) from
+  `docs/internal/baselines/go-unit-coverage-package-minimums.json` and
+  `docs/internal/baselines/go-functional-coverage-package-minimums.json`.
+  Leave `service/` coverage rows while the Automations-leased compile shim
+  remains; internal `internal/services/*` destination packages keep their own
+  coverage floors.
+  DEL-DEF story 005 (`pss-del-def-005`) proves emptied transitional packages are
+  gone, remaining children trend toward `wire/` + `internal/` + `transports/`,
+  parent-private `internal/services/*` subservices remain, and
+  `factory_definitions/wire` constructs the published Service root without
+  deleted transitional imports. Observable completion proofs live in
+  `pkg/services/factory_definitions/del_def_root_shape_test.go`; deeper
+  catalog/authoring/validate/snapshot/distribute behavioral proofs live in
+  `pkg/services/factory_definitions/wire/fold_behavior_preservation_test.go`.
+  After story 002 fold destinations land under internal subservices, add any new
+  `service-root-unexpected-directory` rows for those internal paths only in
+  `docs/internal/baselines/package-structure-baseline.json` (not the deleted
+  top-level transitional paths).
   CUT-DEF-RUN seals Factory Definitions production imports of Factory Runtime to
   the service root only (`pkg/services/factory_runtime`) for orchestration
   semantic-validation edges; the lease-wide guard is

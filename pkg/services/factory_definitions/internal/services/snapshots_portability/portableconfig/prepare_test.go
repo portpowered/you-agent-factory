@@ -7,13 +7,13 @@ import (
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig"
+	snapshotsportabilityprepare "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/prepare"
 )
 
 func TestNewPreparerClonesAndAppliesPortableContentInOrder(t *testing.T) {
 	original := &factorydefinitions.FactoryConfig{Name: "authored"}
 	var calls []string
-	prepare := portableconfig.NewPreparer(
+	prepare := snapshotsportabilityprepare.NewPreparer(
 		func(factory *factorydefinitions.FactoryConfig) (*factorydefinitions.FactoryConfig, error) {
 			calls = append(calls, "clone")
 			return &factorydefinitions.FactoryConfig{Name: factory.Name + "-clone"}, nil
@@ -84,7 +84,7 @@ func TestPrepareRequiresEveryInjectedOperation(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := portableconfig.Prepare(
+			_, err := snapshotsportabilityprepare.PrepareConfig(
 				"/factory",
 				&factorydefinitions.FactoryConfig{},
 				false,
@@ -102,7 +102,7 @@ func TestPrepareRequiresEveryInjectedOperation(t *testing.T) {
 func TestPrepareStopsAfterOperationFailure(t *testing.T) {
 	sentinel := errors.New("portable files failed")
 	starterCalled := false
-	_, err := portableconfig.Prepare(
+	_, err := snapshotsportabilityprepare.PrepareConfig(
 		"/factory",
 		&factorydefinitions.FactoryConfig{},
 		false,

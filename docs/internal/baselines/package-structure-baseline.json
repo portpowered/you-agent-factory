@@ -1448,6 +1448,41 @@
       "target": "factory_definitions"
     },
     {
+      "rule": "functional-test-missing-subsection",
+      "filePath": "tests/functional/factory_runtime/doc.go",
+      "target": "factory_runtime"
+    },
+    {
+      "rule": "functional-test-missing-subsection",
+      "filePath": "tests/functional/factory_runtime/peer_import_boundary_test.go",
+      "target": "factory_runtime"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/factory_runtime/root_composition/build_process_inert_test.go",
+      "target": "factory_runtime"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/factory_runtime/root_composition/doc.go",
+      "target": "factory_runtime"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/factory_runtime/root_composition/lifecycle_activation_test.go",
+      "target": "factory_runtime"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/factory_runtime/root_composition/packaged_root_shape_test.go",
+      "target": "factory_runtime"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/factory_runtime/root_composition/workflow_orchestration_activation_test.go",
+      "target": "factory_runtime"
+    },
+    {
       "rule": "functional-test-unclassified-domain",
       "filePath": "tests/functional/factory_runtime/orchestrators/petri/guards/doc.go",
       "target": "factory_runtime"
@@ -2839,11 +2874,6 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_definitions/authoredlayout",
-      "target": "pkg/services/factory_definitions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_definitions/clonetests",
       "target": "pkg/services/factory_definitions"
     },
@@ -3079,16 +3109,6 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_definitions/loading",
-      "target": "pkg/services/factory_definitions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_definitions/namedfactories",
-      "target": "pkg/services/factory_definitions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_definitions/namedpaths",
       "target": "pkg/services/factory_definitions"
     },
@@ -3114,11 +3134,6 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_definitions/portableconfig",
-      "target": "pkg/services/factory_definitions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_definitions/quorumpolicy",
       "target": "pkg/services/factory_definitions"
     },
@@ -3130,11 +3145,6 @@
     {
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_definitions/resource",
-      "target": "pkg/services/factory_definitions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_definitions/runtimeconfig",
       "target": "pkg/services/factory_definitions"
     },
     {
