@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/service/host"
+	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 

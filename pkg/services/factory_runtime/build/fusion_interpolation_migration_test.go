@@ -7,7 +7,7 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	runtimebuild "github.com/portpowered/infinite-you/pkg/services/factory_runtime/build"
-	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/service/host"
+	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	"go.uber.org/zap"
 )
 
