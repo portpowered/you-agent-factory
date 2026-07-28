@@ -3,6 +3,7 @@ package mcp_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -10,6 +11,8 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryrunmcp "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/mcp"
 )
+
+const internalLeakProbePath = "pkg/services/factory_runtime/internal/services/instance_host"
 
 func TestBind_ControlPauseSuccessResultParity(t *testing.T) {
 	t.Parallel()
@@ -378,9 +381,148 @@ func TestBind_AcceptDispatchResultValidationFailureReturnsBadRequestWithoutInvok
 	}
 }
 
+func TestBind_ControlPauseNotRunningReturnsTypedErrorEnvelope(t *testing.T) {
+	t.Parallel()
+
+	fake := fakeRuntimeRoot{
+		controlPause: func(_ context.Context, _ factoryruntime.PauseRequest) (factoryruntime.PauseResult, error) {
+			return factoryruntime.PauseResult{}, factoryruntime.ErrNotRunning
+		},
+	}
+	operation := factoryrunmcp.Bind(factoryrunmcp.RootDependencies{Runtime: fake})
+	raw, err := operation(context.Background(), factoryrunmcp.ToolControlPause, json.RawMessage(`{}`))
+	if err != nil {
+		t.Fatalf("CallTool(control_pause) transport error = %v, want typed tool response", err)
+	}
+	envelope := assertTypedToolErrorEnvelope(
+		t,
+		raw,
+		"factory_runtime.runtime.not_running",
+		true,
+	)
+	if envelope.Message != "factory runtime is not running" {
+		t.Fatalf("error.message = %q, want %q; envelope = %#v", envelope.Message, "factory runtime is not running", envelope)
+	}
+	if envelope.Details == nil || envelope.Details["reason"] != "NOT_RUNNING" {
+		t.Fatalf("error.details = %#v, want reason=NOT_RUNNING", envelope.Details)
+	}
+}
+
+func TestBind_PlanDispatchNotFoundReturnsTypedErrorEnvelope(t *testing.T) {
+	t.Parallel()
+
+	fake := fakeRuntimeRoot{
+		planDispatch: func(_ context.Context, _ factoryruntime.PlanDispatchRequest) (factoryruntime.PlanDispatchResult, error) {
+			return factoryruntime.PlanDispatchResult{}, factoryruntime.ErrNotFound
+		},
+	}
+	operation := factoryrunmcp.Bind(factoryrunmcp.RootDependencies{Runtime: fake})
+	raw, err := operation(
+		context.Background(),
+		factoryrunmcp.ToolPlanDispatch,
+		json.RawMessage(`{
+			"dispatchId":"dispatch-1",
+			"correlationId":"corr-1",
+			"workIds":["work-1"],
+			"workstationName":"ws-alpha",
+			"workerType":"coder",
+			"replayKey":"replay-1"
+		}`),
+	)
+	if err != nil {
+		t.Fatalf("CallTool(plan_dispatch) transport error = %v, want typed tool response", err)
+	}
+	envelope := assertTypedToolErrorEnvelope(
+		t,
+		raw,
+		"factory_runtime.target.not_found",
+		false,
+	)
+	if envelope.Message != "factory runtime target not found" {
+		t.Fatalf("error.message = %q, want %q; envelope = %#v", envelope.Message, "factory runtime target not found", envelope)
+	}
+	if envelope.Details == nil || envelope.Details["reason"] != "NOT_FOUND" {
+		t.Fatalf("error.details = %#v, want reason=NOT_FOUND", envelope.Details)
+	}
+}
+
+func TestBind_ObserveInvalidObservationScopeFromRootReturnsTypedErrorEnvelope(t *testing.T) {
+	t.Parallel()
+
+	fake := fakeRuntimeRoot{
+		observe: func(_ context.Context, request factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {
+			if request.Scope != factoryruntime.ObservationScopeProgress {
+				t.Fatalf("scope = %q, want PROGRESS", request.Scope)
+			}
+			return factoryruntime.ObserveResult{}, factoryruntime.ErrInvalidObservationScope
+		},
+	}
+	operation := factoryrunmcp.Bind(factoryrunmcp.RootDependencies{Runtime: fake})
+	raw, err := operation(
+		context.Background(),
+		factoryrunmcp.ToolObserve,
+		json.RawMessage(`{"scope":"PROGRESS"}`),
+	)
+	if err != nil {
+		t.Fatalf("CallTool(observe) transport error = %v, want typed tool response", err)
+	}
+	envelope := assertTypedToolErrorEnvelope(
+		t,
+		raw,
+		"factory_runtime.observation.invalid_scope",
+		false,
+	)
+	if envelope.Message != "factory runtime invalid observation scope" {
+		t.Fatalf(
+			"error.message = %q, want %q; envelope = %#v",
+			envelope.Message,
+			"factory runtime invalid observation scope",
+			envelope,
+		)
+	}
+	if envelope.Details == nil || envelope.Details["reason"] != "INVALID_OBSERVATION_SCOPE" {
+		t.Fatalf("error.details = %#v, want reason=INVALID_OBSERVATION_SCOPE", envelope.Details)
+	}
+}
+
+func TestBind_UnmappedRootErrorDoesNotLeakInternalPackagePaths(t *testing.T) {
+	t.Parallel()
+
+	fake := fakeRuntimeRoot{
+		controlPause: func(_ context.Context, _ factoryruntime.PauseRequest) (factoryruntime.PauseResult, error) {
+			return factoryruntime.PauseResult{}, fmt.Errorf(
+				"%s: connection reset\ngoroutine 1 [running]:\nmain.main()",
+				internalLeakProbePath,
+			)
+		},
+	}
+	operation := factoryrunmcp.Bind(factoryrunmcp.RootDependencies{Runtime: fake})
+	raw, err := operation(context.Background(), factoryrunmcp.ToolControlPause, json.RawMessage(`{}`))
+	if err != nil {
+		t.Fatalf("CallTool(control_pause) transport error = %v, want typed tool response", err)
+	}
+	assertEnvelopeDoesNotLeakInternalPaths(t, raw)
+	envelope := assertTypedToolErrorEnvelope(
+		t,
+		raw,
+		"factory_runtime.execution.internal",
+		false,
+	)
+	if envelope.Message != "factory runtime execution failed" {
+		t.Fatalf("error.message = %q, want sanitized internal message; envelope = %#v", envelope.Message, envelope)
+	}
+}
+
 func assertBadRequestToolResponse(t *testing.T, raw json.RawMessage) {
 	t.Helper()
 	assertTypedToolErrorEnvelope(t, raw, "BAD_REQUEST", false)
+}
+
+func assertEnvelopeDoesNotLeakInternalPaths(t *testing.T, raw json.RawMessage) {
+	t.Helper()
+	if strings.Contains(string(raw), internalLeakProbePath) {
+		t.Fatalf("tool response leaks internal package path: %s", raw)
+	}
 }
 
 func assertTypedToolErrorEnvelope(
