@@ -104,18 +104,14 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 			want: "packaged Factory installer is required",
 		},
 		{
-			name: "required tool checker",
-			mutate: func(ports *constructionPorts) {
-				ports.requiredToolChecker = nil
-			},
-			want: "required tool checker is required",
+			name:   "required tool checker",
+			mutate: func(ports *constructionPorts) { ports.requiredToolChecker = nil },
+			want:   "required tool checker is required",
 		},
 		{
-			name: "orchestrator definition validator",
-			mutate: func(ports *constructionPorts) {
-				ports.orchestratorValidator = nil
-			},
-			want: "orchestrator definition validator is required",
+			name:   "orchestrator definition validator",
+			mutate: func(ports *constructionPorts) { ports.orchestratorValidator = nil },
+			want:   "orchestrator definition validator is required",
 		},
 	}
 	for _, test := range tests {
@@ -513,8 +509,6 @@ func (stubSessionHost) AttachFactoryDefinitions(
 	return definitions
 }
 
-type stubValidator struct{}
-
 type stubRequiredToolChecker struct{}
 
 func (stubRequiredToolChecker) Check(
@@ -532,6 +526,8 @@ func (stubOrchestratorValidator) ValidateJavaScriptFactoryDefinition(
 ) []factorycontracts.ValidationTarget {
 	return nil
 }
+
+type stubValidator struct{}
 
 func (stubValidator) Validate(
 	context.Context,
