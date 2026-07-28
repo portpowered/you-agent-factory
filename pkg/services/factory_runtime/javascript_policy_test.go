@@ -6,7 +6,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factoryruntimeservice "github.com/portpowered/infinite-you/pkg/services/factory_runtime/service"
+	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -218,7 +218,7 @@ func TestOrchestratorTargets_RejectsInvalidDefaultPolicy(t *testing.T) {
 			},
 		},
 	}
-	targets := factoryruntimeservice.NewOrchestratorDefinitionValidator(testJavaScriptWorkflows()).
+	targets := factoryruntimewire.NewOrchestratorDefinitionValidator(testJavaScriptWorkflows()).
 		ValidateJavaScriptFactoryDefinition(
 			t.Context(),
 			cfg.Orchestrator.JavaScript,

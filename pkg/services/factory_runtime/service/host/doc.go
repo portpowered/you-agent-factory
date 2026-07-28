@@ -1,6 +1,4 @@
-// Package host owns inert Factory Runtime instances and their generic
-// start, readiness, replacement, stop, and artifact-finalization lifecycle.
-//
-// Factory Sessions may coordinate these public host values, while runtime
-// construction remains owned by factory_runtime/service.
+// Package host is a transitional compile shim that re-exports Factory Runtime
+// hosted-instance lifecycle types from pkg/services/factory_runtime/internal/host.
+// Baseline deletion of this path is owned by DEL-RUN.
 package host

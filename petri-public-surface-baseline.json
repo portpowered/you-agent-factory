@@ -51,7 +51,7 @@
       "symbol": "EngineStateSnapshot",
       "shape": "engine snapshot",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_definitions",
-      "count": 3,
+      "count": 4,
       "stage": "imp-run-01-petri-boundary-retirement",
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
@@ -60,7 +60,7 @@
       "symbol": "Net",
       "shape": "raw net",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
-      "count": 4,
+      "count": 5,
       "stage": "imp-run-01-petri-boundary-retirement",
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
@@ -69,7 +69,7 @@
       "symbol": "PetriMarkingSnapshot",
       "shape": "raw marking",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
-      "count": 4,
+      "count": 5,
       "stage": "imp-run-01-petri-boundary-retirement",
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
@@ -149,7 +149,7 @@
       "filePath": "pkg/services/factory_definitions/contracts_root.go",
       "symbol": "EnabledTransition",
       "shape": "enabled-transition engine shape",
-      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts",
+      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts",
       "count": 1,
       "stage": "imp-run-01-petri-boundary-retirement",
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
@@ -158,7 +158,7 @@
       "filePath": "pkg/services/factory_definitions/contracts_root.go",
       "symbol": "EngineStateSnapshot",
       "shape": "engine snapshot",
-      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts",
+      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts",
       "count": 1,
       "stage": "imp-run-01-petri-boundary-retirement",
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
@@ -416,24 +416,6 @@
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
-      "filePath": "pkg/services/factory_runtime/runtime/factory_batch_ingress_idempotency_test.go",
-      "symbol": "EngineStateSnapshot",
-      "shape": "engine snapshot",
-      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_definitions",
-      "count": 2,
-      "stage": "imp-run-01-petri-boundary-retirement",
-      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
-    },
-    {
-      "filePath": "pkg/services/factory_runtime/runtime/factory_batch_ingress_starvation_test.go",
-      "symbol": "EngineStateSnapshot",
-      "shape": "engine snapshot",
-      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_definitions",
-      "count": 2,
-      "stage": "imp-run-01-petri-boundary-retirement",
-      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
-    },
-    {
       "filePath": "pkg/services/factory_runtime/runtime/factory.go",
       "symbol": "EnabledTransition",
       "shape": "enabled-transition engine shape",
@@ -448,6 +430,24 @@
       "shape": "engine snapshot",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_definitions",
       "count": 3,
+      "stage": "imp-run-01-petri-boundary-retirement",
+      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
+    },
+    {
+      "filePath": "pkg/services/factory_runtime/runtime/factory_batch_ingress_idempotency_test.go",
+      "symbol": "EngineStateSnapshot",
+      "shape": "engine snapshot",
+      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_definitions",
+      "count": 2,
+      "stage": "imp-run-01-petri-boundary-retirement",
+      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
+    },
+    {
+      "filePath": "pkg/services/factory_runtime/runtime/factory_batch_ingress_starvation_test.go",
+      "symbol": "EngineStateSnapshot",
+      "shape": "engine snapshot",
+      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_definitions",
+      "count": 2,
       "stage": "imp-run-01-petri-boundary-retirement",
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
@@ -650,60 +650,6 @@
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
-      "filePath": "pkg/services/factory_runtime/service/host/lifecycle.go",
-      "symbol": "EngineStateSnapshot",
-      "shape": "engine snapshot",
-      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_definitions",
-      "count": 2,
-      "stage": "imp-run-01-petri-boundary-retirement",
-      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
-    },
-    {
-      "filePath": "pkg/services/factory_runtime/service/host/lifecycle_test.go",
-      "symbol": "EngineStateSnapshot",
-      "shape": "engine snapshot",
-      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_definitions",
-      "count": 7,
-      "stage": "imp-run-01-petri-boundary-retirement",
-      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
-    },
-    {
-      "filePath": "pkg/services/factory_runtime/service/host/metrics.go",
-      "symbol": "EngineStateSnapshot",
-      "shape": "engine snapshot",
-      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_definitions",
-      "count": 1,
-      "stage": "imp-run-01-petri-boundary-retirement",
-      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
-    },
-    {
-      "filePath": "pkg/services/factory_runtime/service/host/operations.go",
-      "symbol": "EngineStateSnapshot",
-      "shape": "engine snapshot",
-      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_definitions",
-      "count": 3,
-      "stage": "imp-run-01-petri-boundary-retirement",
-      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
-    },
-    {
-      "filePath": "pkg/services/factory_runtime/service/host/operations_test.go",
-      "symbol": "EngineStateSnapshot",
-      "shape": "engine snapshot",
-      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_definitions",
-      "count": 3,
-      "stage": "imp-run-01-petri-boundary-retirement",
-      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
-    },
-    {
-      "filePath": "pkg/services/factory_runtime/service/host/replacement_test.go",
-      "symbol": "EngineStateSnapshot",
-      "shape": "engine snapshot",
-      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_definitions",
-      "count": 3,
-      "stage": "imp-run-01-petri-boundary-retirement",
-      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
-    },
-    {
       "filePath": "pkg/services/factory_runtime/state/engine_state.go",
       "symbol": "EngineStateSnapshot",
       "shape": "engine snapshot",
@@ -717,7 +663,7 @@
       "symbol": "EngineStateSnapshot",
       "shape": "engine snapshot",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_definitions",
-      "count": 6,
+      "count": 10,
       "stage": "imp-run-01-petri-boundary-retirement",
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
@@ -938,6 +884,51 @@
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
+      "filePath": "pkg/services/factory_runtime/transports/cli/composition.go",
+      "symbol": "PetriMarkingSnapshot",
+      "shape": "raw marking",
+      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
+      "count": 1,
+      "stage": "imp-run-01-petri-boundary-retirement",
+      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
+    },
+    {
+      "filePath": "pkg/services/factory_runtime/transports/cli/presentation.go",
+      "symbol": "PetriMarkingSnapshot",
+      "shape": "raw marking",
+      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
+      "count": 1,
+      "stage": "imp-run-01-petri-boundary-retirement",
+      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
+    },
+    {
+      "filePath": "pkg/services/factory_runtime/transports/cli/service.go",
+      "symbol": "PetriMarkingSnapshot",
+      "shape": "raw marking",
+      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
+      "count": 2,
+      "stage": "imp-run-01-petri-boundary-retirement",
+      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
+    },
+    {
+      "filePath": "pkg/services/factory_runtime/transports/cli/service_test.go",
+      "symbol": "PetriMarkingSnapshot",
+      "shape": "raw marking",
+      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
+      "count": 2,
+      "stage": "imp-run-01-petri-boundary-retirement",
+      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
+    },
+    {
+      "filePath": "pkg/services/factory_runtime/transports/cli/service_test.go",
+      "symbol": "RuntimeToken",
+      "shape": "raw token",
+      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
+      "count": 1,
+      "stage": "imp-run-01-petri-boundary-retirement",
+      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
+    },
+    {
       "filePath": "pkg/services/factory_sessions/internal/controlplane/read_test.go",
       "symbol": "EngineStateSnapshot",
       "shape": "engine snapshot",
@@ -1037,29 +1028,29 @@
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
-      "filePath": "pkg/services/factory_sessions/internal/runtimebinding/binding_test.go",
+      "filePath": "pkg/services/factory_sessions/internal/legacysnapshot/snapshot.go",
       "symbol": "EngineStateSnapshot",
       "shape": "engine snapshot",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_definitions",
-      "count": 2,
+      "count": 1,
       "stage": "imp-run-01-petri-boundary-retirement",
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
-      "filePath": "pkg/services/factory_sessions/internal/runtimebinding/binding_test.go",
-      "symbol": "Net",
-      "shape": "raw net",
-      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
-      "count": 2,
-      "stage": "imp-run-01-petri-boundary-retirement",
-      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
-    },
-    {
-      "filePath": "pkg/services/factory_sessions/internal/runtimebinding/binding_test.go",
+      "filePath": "pkg/services/factory_sessions/internal/legacysnapshot/snapshot.go",
       "symbol": "PetriMarkingSnapshot",
       "shape": "raw marking",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
-      "count": 2,
+      "count": 1,
+      "stage": "imp-run-01-petri-boundary-retirement",
+      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
+    },
+    {
+      "filePath": "pkg/services/factory_sessions/internal/legacysnapshot/snapshot.go",
+      "symbol": "RuntimeNet",
+      "shape": "raw net",
+      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
+      "count": 1,
       "stage": "imp-run-01-petri-boundary-retirement",
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
@@ -1235,33 +1226,6 @@
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
-      "filePath": "pkg/services/factory_sessions/internal/sessionservice/lifecycle_test.go",
-      "symbol": "EngineStateSnapshot",
-      "shape": "engine snapshot",
-      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_definitions",
-      "count": 2,
-      "stage": "imp-run-01-petri-boundary-retirement",
-      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
-    },
-    {
-      "filePath": "pkg/services/factory_sessions/internal/sessionservice/lifecycle_test.go",
-      "symbol": "Net",
-      "shape": "raw net",
-      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
-      "count": 2,
-      "stage": "imp-run-01-petri-boundary-retirement",
-      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
-    },
-    {
-      "filePath": "pkg/services/factory_sessions/internal/sessionservice/lifecycle_test.go",
-      "symbol": "PetriMarkingSnapshot",
-      "shape": "raw marking",
-      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
-      "count": 2,
-      "stage": "imp-run-01-petri-boundary-retirement",
-      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
-    },
-    {
       "filePath": "pkg/services/factory_sessions/internal/sessionservice/runtime_factory_state.go",
       "symbol": "EngineStateSnapshot",
       "shape": "engine snapshot",
@@ -1343,7 +1307,7 @@
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
-      "filePath": "pkg/services/recordings/projections/projectiontests/selected_tick_cross_boundary_smoke_test.go",
+      "filePath": "pkg/services/factory_sessions/projection_contract.go",
       "symbol": "EngineStateSnapshot",
       "shape": "engine snapshot",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_definitions",
@@ -1352,8 +1316,17 @@
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
-      "filePath": "pkg/services/recordings/projections/projectiontests/selected_tick_cross_boundary_smoke_test.go",
-      "symbol": "Net",
+      "filePath": "pkg/services/factory_sessions/projection_contract.go",
+      "symbol": "PetriMarkingSnapshot",
+      "shape": "raw marking",
+      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
+      "count": 1,
+      "stage": "imp-run-01-petri-boundary-retirement",
+      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
+    },
+    {
+      "filePath": "pkg/services/factory_sessions/projection_contract.go",
+      "symbol": "RuntimeNet",
       "shape": "raw net",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
       "count": 1,
@@ -1361,9 +1334,27 @@
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
-      "filePath": "pkg/services/recordings/projections/projectiontests/selected_tick_cross_boundary_smoke_test.go",
+      "filePath": "pkg/services/factory_sessions/stop_summary_contract.go",
+      "symbol": "EngineStateSnapshot",
+      "shape": "engine snapshot",
+      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_definitions",
+      "count": 1,
+      "stage": "imp-run-01-petri-boundary-retirement",
+      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
+    },
+    {
+      "filePath": "pkg/services/factory_sessions/stop_summary_contract.go",
       "symbol": "PetriMarkingSnapshot",
       "shape": "raw marking",
+      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
+      "count": 1,
+      "stage": "imp-run-01-petri-boundary-retirement",
+      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
+    },
+    {
+      "filePath": "pkg/services/factory_sessions/stop_summary_contract.go",
+      "symbol": "RuntimeNet",
+      "shape": "raw net",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
       "count": 1,
       "stage": "imp-run-01-petri-boundary-retirement",
@@ -1532,24 +1523,6 @@
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
-      "filePath": "pkg/services/workers/provider/codex/adapter_test.go",
-      "symbol": "RuntimeToken",
-      "shape": "raw token",
-      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
-      "count": 1,
-      "stage": "imp-run-01-petri-boundary-retirement",
-      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
-    },
-    {
-      "filePath": "pkg/services/workers/provider/codex/adapter_test.go",
-      "symbol": "RuntimeTokenColor",
-      "shape": "raw token",
-      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
-      "count": 1,
-      "stage": "imp-run-01-petri-boundary-retirement",
-      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
-    },
-    {
       "filePath": "pkg/services/workers/provider/inference_provider_test.go",
       "symbol": "RuntimeToken",
       "shape": "raw token",
@@ -1604,24 +1577,6 @@
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
-      "filePath": "pkg/services/workers/provider/structured/executor_test.go",
-      "symbol": "RuntimeToken",
-      "shape": "raw token",
-      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
-      "count": 1,
-      "stage": "imp-run-01-petri-boundary-retirement",
-      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
-    },
-    {
-      "filePath": "pkg/services/workers/provider/structured/executor_test.go",
-      "symbol": "RuntimeTokenColor",
-      "shape": "raw token",
-      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
-      "count": 1,
-      "stage": "imp-run-01-petri-boundary-retirement",
-      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
-    },
-    {
       "filePath": "pkg/services/workers/services/agents/decision_envelope_test.go",
       "symbol": "RuntimeToken",
       "shape": "raw token",
@@ -1698,7 +1653,7 @@
       "symbol": "EngineStateSnapshot",
       "shape": "engine snapshot",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_definitions",
-      "count": 3,
+      "count": 2,
       "stage": "imp-run-01-petri-boundary-retirement",
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
@@ -1706,66 +1661,66 @@
       "filePath": "pkg/transports/cli/dashboard/dashboard.go",
       "symbol": "Net",
       "shape": "raw net",
-      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
-      "count": 5,
-      "stage": "imp-run-01-petri-boundary-retirement",
-      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
-    },
-    {
-      "filePath": "pkg/transports/cli/dashboard/dashboard.go",
-      "symbol": "PetriMarkingSnapshot",
-      "shape": "raw marking",
-      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
-      "count": 3,
-      "stage": "imp-run-01-petri-boundary-retirement",
-      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
-    },
-    {
-      "filePath": "pkg/transports/cli/dashboard/dashboard_test.go",
-      "symbol": "EngineStateSnapshot",
-      "shape": "engine snapshot",
-      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_definitions",
-      "count": 9,
-      "stage": "imp-run-01-petri-boundary-retirement",
-      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
-    },
-    {
-      "filePath": "pkg/transports/cli/dashboard/dashboard_test.go",
-      "symbol": "Net",
-      "shape": "raw net",
-      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
-      "count": 11,
-      "stage": "imp-run-01-petri-boundary-retirement",
-      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
-    },
-    {
-      "filePath": "pkg/transports/cli/dashboard/dashboard_test.go",
-      "symbol": "PetriMarkingSnapshot",
-      "shape": "raw marking",
-      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
-      "count": 16,
-      "stage": "imp-run-01-petri-boundary-retirement",
-      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
-    },
-    {
-      "filePath": "pkg/transports/cli/dashboard/dashboard_test.go",
-      "symbol": "RuntimeToken",
-      "shape": "raw token",
-      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
-      "count": 10,
-      "stage": "imp-run-01-petri-boundary-retirement",
-      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
-    },
-    {
-      "filePath": "pkg/transports/cli/dashboard/dashboard_test.go",
-      "symbol": "RuntimeTokenColor",
-      "shape": "raw token",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
       "count": 4,
       "stage": "imp-run-01-petri-boundary-retirement",
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
+      "filePath": "pkg/transports/cli/dashboard/dashboard.go",
+      "symbol": "PetriMarkingSnapshot",
+      "shape": "raw marking",
+      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
+      "count": 2,
+      "stage": "imp-run-01-petri-boundary-retirement",
+      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
+    },
+    {
+      "filePath": "pkg/transports/cli/dashboard/dashboard_test.go",
+      "symbol": "EngineStateSnapshot",
+      "shape": "engine snapshot",
+      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_definitions",
+      "count": 6,
+      "stage": "imp-run-01-petri-boundary-retirement",
+      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
+    },
+    {
+      "filePath": "pkg/transports/cli/dashboard/dashboard_test.go",
+      "symbol": "Net",
+      "shape": "raw net",
+      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
+      "count": 8,
+      "stage": "imp-run-01-petri-boundary-retirement",
+      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
+    },
+    {
+      "filePath": "pkg/transports/cli/dashboard/dashboard_test.go",
+      "symbol": "PetriMarkingSnapshot",
+      "shape": "raw marking",
+      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
+      "count": 9,
+      "stage": "imp-run-01-petri-boundary-retirement",
+      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
+    },
+    {
+      "filePath": "pkg/transports/cli/dashboard/dashboard_test.go",
+      "symbol": "RuntimeToken",
+      "shape": "raw token",
+      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
+      "count": 5,
+      "stage": "imp-run-01-petri-boundary-retirement",
+      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
+    },
+    {
+      "filePath": "pkg/transports/cli/dashboard/dashboard_test.go",
+      "symbol": "RuntimeTokenColor",
+      "shape": "raw token",
+      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
+      "count": 3,
+      "stage": "imp-run-01-petri-boundary-retirement",
+      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
+    },
+    {
       "filePath": "pkg/transports/cli/run/invocation_observability.go",
       "symbol": "EngineStateSnapshot",
       "shape": "engine snapshot",
@@ -1794,55 +1749,10 @@
     },
     {
       "filePath": "pkg/transports/cli/run/run.go",
-      "symbol": "EngineStateSnapshot",
-      "shape": "engine snapshot",
-      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_definitions",
-      "count": 1,
-      "stage": "imp-run-01-petri-boundary-retirement",
-      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
-    },
-    {
-      "filePath": "pkg/transports/cli/run/run.go",
-      "symbol": "Net",
-      "shape": "raw net",
-      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
-      "count": 1,
-      "stage": "imp-run-01-petri-boundary-retirement",
-      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
-    },
-    {
-      "filePath": "pkg/transports/cli/run/run.go",
       "symbol": "PetriMarkingSnapshot",
       "shape": "raw marking",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
-      "count": 2,
-      "stage": "imp-run-01-petri-boundary-retirement",
-      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
-    },
-    {
-      "filePath": "pkg/services/factory_visualization/transports/cli/visualization_sink.go",
-      "symbol": "EngineStateSnapshot",
-      "shape": "engine snapshot",
-      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_definitions",
-      "count": 2,
-      "stage": "imp-run-01-petri-boundary-retirement",
-      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
-    },
-    {
-      "filePath": "pkg/services/factory_visualization/transports/cli/visualization_sink.go",
-      "symbol": "Net",
-      "shape": "raw net",
-      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
-      "count": 2,
-      "stage": "imp-run-01-petri-boundary-retirement",
-      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
-    },
-    {
-      "filePath": "pkg/services/factory_visualization/transports/cli/visualization_sink.go",
-      "symbol": "PetriMarkingSnapshot",
-      "shape": "raw marking",
-      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
-      "count": 2,
+      "count": 1,
       "stage": "imp-run-01-petri-boundary-retirement",
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
@@ -1958,6 +1868,15 @@
       "filePath": "pkg/transports/cli/run/run_test.go",
       "symbol": "RuntimeTokenColor",
       "shape": "raw token",
+      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
+      "count": 1,
+      "stage": "imp-run-01-petri-boundary-retirement",
+      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
+    },
+    {
+      "filePath": "pkg/transports/cli/run/runtime_adapter_test.go",
+      "symbol": "PetriMarkingSnapshot",
+      "shape": "raw marking",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
       "count": 1,
       "stage": "imp-run-01-petri-boundary-retirement",

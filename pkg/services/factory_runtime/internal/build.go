@@ -1,4 +1,4 @@
-package service
+package internal
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/definitionmapping"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/scheduler"
-	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/service/host"
+	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/state"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"

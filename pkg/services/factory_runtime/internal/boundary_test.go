@@ -1,4 +1,4 @@
-package service_test
+package internal_test
 
 import (
 	"os/exec"
@@ -15,7 +15,7 @@ func TestPackageBoundary_DoesNotImportRootServiceOrStatefulFactorySessions(t *te
 		"-deps",
 		"-f",
 		"{{if not .Standard}}{{.ImportPath}}{{end}}",
-		"github.com/portpowered/infinite-you/pkg/services/factory_runtime/service",
+		"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal",
 	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {

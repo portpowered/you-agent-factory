@@ -29,7 +29,7 @@ import (
 	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	factoryruntimejavascript "github.com/portpowered/infinite-you/pkg/services/factory_runtime/javascript"
 	factoryruntimeorchestrationowner "github.com/portpowered/infinite-you/pkg/services/factory_runtime/orchestrationowner"
-	factoryruntimeservice "github.com/portpowered/infinite-you/pkg/services/factory_runtime/service"
+	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/models"
@@ -307,7 +307,7 @@ func provideWorkflowPreviewOperation(
 func provideOrchestratorDefinitionValidator(
 	workflows factoryruntime.JavaScriptWorkflows,
 ) factorydefinitions.OrchestratorDefinitionValidator {
-	return factoryruntimeservice.NewOrchestratorDefinitionValidator(workflows)
+	return factoryruntimewire.NewOrchestratorDefinitionValidator(workflows)
 }
 
 func provideFactoryDefinitionValidationService(

@@ -7,10 +7,6 @@ import (
 
 	"github.com/jonboulle/clockwork"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	dispatchplanningwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/wire"
-	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
-	instancehostwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/wire"
-	orchestrationwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -76,17 +72,19 @@ func (d *checkpointDelegate) RestoreCheckpoint(_ context.Context, req factoryrun
 func TestRootCaptureCheckpointDelegatesToActiveRuntime(t *testing.T) {
 	t.Parallel()
 
-	instanceHost, err := instancehostwire.New(instancehost.Dependencies{Clock: clockwork.NewFakeClock()})
-	if err != nil {
-		t.Fatalf("instance host wire: %v", err)
-	}
 	delegate := &checkpointDelegate{}
-	root := &Root{
-		orchestration: orchestrationwire.New(func() string { return "id" }, nil, nil),
-		instanceHost:  instanceHost,
-		dispatchPlan:  dispatchplanningwire.New(nil, nil),
-		active:        delegate,
+	root, err := NewRoot(
+		func() string { return "id" },
+		nil,
+		nil,
+		clockwork.NewFakeClock(),
+		func(context.Context, workers.WorkstationDispatchRequest) error { return nil },
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewRoot() error = %v", err)
 	}
+	root.BindActiveService(delegate)
 
 	result, err := root.CaptureCheckpoint(context.Background(), factoryruntime.CaptureCheckpointRequest{
 		CheckpointID: "checkpoint-1",
@@ -108,17 +106,19 @@ func TestRootCaptureCheckpointDelegatesToActiveRuntime(t *testing.T) {
 func TestRootLoadCheckpointDelegatesToActiveRuntime(t *testing.T) {
 	t.Parallel()
 
-	instanceHost, err := instancehostwire.New(instancehost.Dependencies{Clock: clockwork.NewFakeClock()})
-	if err != nil {
-		t.Fatalf("instance host wire: %v", err)
-	}
 	delegate := &checkpointDelegate{}
-	root := &Root{
-		orchestration: orchestrationwire.New(func() string { return "id" }, nil, nil),
-		instanceHost:  instanceHost,
-		dispatchPlan:  dispatchplanningwire.New(nil, nil),
-		active:        delegate,
+	root, err := NewRoot(
+		func() string { return "id" },
+		nil,
+		nil,
+		clockwork.NewFakeClock(),
+		func(context.Context, workers.WorkstationDispatchRequest) error { return nil },
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewRoot() error = %v", err)
 	}
+	root.BindActiveService(delegate)
 
 	result, err := root.LoadCheckpoint(context.Background(), factoryruntime.LoadCheckpointRequest{
 		CheckpointID:          "checkpoint-1",
@@ -224,17 +224,19 @@ func TestRootCaptureCheckpointWithoutActiveRuntimeReportsUnavailable(t *testing.
 func TestRootRestoreCheckpointDelegatesToActiveRuntime(t *testing.T) {
 	t.Parallel()
 
-	instanceHost, err := instancehostwire.New(instancehost.Dependencies{Clock: clockwork.NewFakeClock()})
-	if err != nil {
-		t.Fatalf("instance host wire: %v", err)
-	}
 	delegate := &checkpointDelegate{}
-	root := &Root{
-		orchestration: orchestrationwire.New(func() string { return "id" }, nil, nil),
-		instanceHost:  instanceHost,
-		dispatchPlan:  dispatchplanningwire.New(nil, nil),
-		active:        delegate,
+	root, err := NewRoot(
+		func() string { return "id" },
+		nil,
+		nil,
+		clockwork.NewFakeClock(),
+		func(context.Context, workers.WorkstationDispatchRequest) error { return nil },
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewRoot() error = %v", err)
 	}
+	root.BindActiveService(delegate)
 
 	result, err := root.RestoreCheckpoint(context.Background(), factoryruntime.RestoreCheckpointRequest{
 		Checkpoint: factoryruntime.Checkpoint{
