@@ -201,6 +201,9 @@
     "pkg/services/factory_runtime/internal/services/orchestration/state",
     "pkg/services/factory_runtime/internal/services/orchestration/state/validation",
     "pkg/services/factory_runtime/internal/services/orchestration/subsystems",
+    "pkg/services/factory_runtime/internal/services/orchestration/throttle",
+    "pkg/services/factory_runtime/internal/services/orchestration/token",
+    "pkg/services/factory_runtime/internal/services/orchestration/token_transformer",
     "pkg/services/factory_runtime/internal/services/orchestration/wire",
     "pkg/services/factory_runtime/javascript",
     "pkg/services/factory_runtime/metrics",
@@ -211,9 +214,6 @@
     "pkg/services/factory_runtime/service",
     "pkg/services/factory_runtime/service/host",
     "pkg/services/factory_runtime/testkit",
-    "pkg/services/factory_runtime/throttle",
-    "pkg/services/factory_runtime/token",
-    "pkg/services/factory_runtime/token_transformer",
     "pkg/services/factory_runtime/tooling/javascript/callbehavior",
     "pkg/services/factory_runtime/tooling/javascript/catalog",
     "pkg/services/factory_runtime/tooling/javascript/symbolidentity",
@@ -1360,6 +1360,21 @@
       "destination": "factory_runtime/internal/services/orchestration"
     },
     {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/throttle",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/token",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/token_transformer",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
       "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/wire",
       "disposition": "retain",
       "destination": "factory_runtime/internal/services/orchestration"
@@ -1408,21 +1423,6 @@
       "packagePath": "pkg/services/factory_runtime/testkit",
       "disposition": "move",
       "destination": "factory_runtime/internal"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/throttle",
-      "disposition": "move",
-      "destination": "factory_runtime/internal/services/orchestration"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/token",
-      "disposition": "move",
-      "destination": "factory_runtime/internal/services/orchestration"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/token_transformer",
-      "disposition": "move",
-      "destination": "factory_runtime/internal/services/orchestration"
     },
     {
       "packagePath": "pkg/services/factory_runtime/tooling/javascript/callbehavior",

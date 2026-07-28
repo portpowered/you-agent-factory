@@ -9,7 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/subsystems"
-	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/token"
+	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 )
 
 func TestTerminationCheck_TerminatesWhenNoWorkIsInTheSystem(t *testing.T) {

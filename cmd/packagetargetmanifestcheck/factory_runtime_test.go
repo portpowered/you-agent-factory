@@ -159,10 +159,10 @@ func TestMapCommittedOwnerPackageFactoryRuntimeMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/token",
+			path: "pkg/services/factory_runtime/internal/services/orchestration/token",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_runtime/token",
-				Disposition: DispositionMove,
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/token",
+				Disposition: DispositionRetain,
 				Destination: "factory_runtime/internal/services/orchestration",
 			},
 		},
@@ -223,18 +223,18 @@ func TestMapCommittedOwnerPackageFactoryRuntimeMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/throttle",
+			path: "pkg/services/factory_runtime/internal/services/orchestration/throttle",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_runtime/throttle",
-				Disposition: DispositionMove,
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/throttle",
+				Disposition: DispositionRetain,
 				Destination: "factory_runtime/internal/services/orchestration",
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/token_transformer",
+			path: "pkg/services/factory_runtime/internal/services/orchestration/token_transformer",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_runtime/token_transformer",
-				Disposition: DispositionMove,
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/token_transformer",
+				Disposition: DispositionRetain,
 				Destination: "factory_runtime/internal/services/orchestration",
 			},
 		},

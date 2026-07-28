@@ -159,7 +159,7 @@ pkg/services/factory_runtime/service/service.go: unreachable func: PreseedRuntim
 pkg/services/factory_runtime/service/service.go: unreachable func: RuntimeWorkflowContext
 pkg/services/factory_runtime/service/service.go: unreachable func: ValidateRecordReplayPaths
 pkg/services/factory_runtime/testkit/runtime.go: unreachable func: NewPetriMarking
-pkg/services/factory_runtime/token/lineage.go: unreachable func: CurrentChainingTraceIDFromColors
+pkg/services/factory_runtime/internal/services/orchestration/token/lineage.go: unreachable func: CurrentChainingTraceIDFromColors
 pkg/services/factory_runtime/transports/mcp/client.go: unreachable func: BindRuntime
 pkg/services/factory_sessions/internal/cursors/observer.go: unreachable func: RecordPreflight
 pkg/services/factory_sessions/internal/execution/fake_service_runtime_test.go: unreachable func: newResumeCoverageBlockingProvider

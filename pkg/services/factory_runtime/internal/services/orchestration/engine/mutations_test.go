@@ -6,7 +6,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
-	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/token"
+	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 )
 
 func testPlaces() map[string]*petri.Place {

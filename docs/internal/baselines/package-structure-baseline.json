@@ -2914,18 +2914,18 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/throttle",
-      "target": "pkg/services/factory_runtime"
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/throttle",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration"
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/token",
-      "target": "pkg/services/factory_runtime"
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/token",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration"
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/token_transformer",
-      "target": "pkg/services/factory_runtime"
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/token_transformer",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration"
     },
     {
       "rule": "service-root-unexpected-directory",

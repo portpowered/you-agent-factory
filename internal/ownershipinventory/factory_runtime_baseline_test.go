@@ -101,9 +101,6 @@ func TestFactoryRuntimeEnginePipelineMoveDestinationsLocked(t *testing.T) {
 		{path: "pkg/services/factory_runtime/orchestratorcontract", wantSuccessor: orchestrationSuccessor, wantDestination: "factory_runtime"},
 		{path: "pkg/services/factory_runtime/replayhooks", wantSuccessor: orchestrationSuccessor, wantDestination: "factory_runtime"},
 		{path: "pkg/services/factory_runtime/runtimecontract", wantSuccessor: orchestrationSuccessor, wantDestination: "factory_runtime"},
-		{path: "pkg/services/factory_runtime/throttle", wantSuccessor: orchestrationSuccessor, wantDestination: "factory_runtime"},
-		{path: "pkg/services/factory_runtime/token", wantSuccessor: orchestrationSuccessor, wantDestination: "factory_runtime"},
-		{path: "pkg/services/factory_runtime/token_transformer", wantSuccessor: orchestrationSuccessor, wantDestination: "factory_runtime"},
 		{path: "pkg/services/factory_runtime/tooling/javascript/catalog", wantSuccessor: orchestrationSuccessor, wantDestination: "factory_runtime"},
 	}
 

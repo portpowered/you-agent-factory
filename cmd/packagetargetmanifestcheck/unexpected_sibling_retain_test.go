@@ -41,7 +41,7 @@ func TestDeliberateRetainToOwnerMappingRejectedByInventorySweepGuard(t *testing.
 		owner string
 		child string
 	}{
-		{owner: "factory_runtime", child: "token"},
+		{owner: "factory_runtime", child: "context"},
 		{owner: "workers", child: "execution"},
 		{owner: "operator_settings", child: "identityinventory"},
 		{owner: "work", child: "stateaccessrecordings"},

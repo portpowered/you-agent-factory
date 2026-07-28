@@ -107,26 +107,19 @@ func TestMapPackageFactoryRuntimeMoveDestinations(t *testing.T) {
 			retainOwner: "factory_runtime",
 		},
 		{
-			path: "pkg/services/factory_runtime/throttle",
-			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_runtime/throttle",
-				Disposition:       ownershipinventory.DispositionMove,
-				Destination:       "factory_runtime",
-				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/factory_runtime/internal/services/orchestration",
-				DeletionCondition: "delete public package after IMP-RUN-orchestration private subservice cutover proof",
-			},
+			path:        "pkg/services/factory_runtime/internal/services/orchestration/throttle",
+			wantRetain:  true,
+			retainOwner: "factory_runtime",
 		},
 		{
-			path: "pkg/services/factory_runtime/token_transformer",
-			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_runtime/token_transformer",
-				Disposition:       ownershipinventory.DispositionMove,
-				Destination:       "factory_runtime",
-				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/factory_runtime/internal/services/orchestration",
-				DeletionCondition: "delete public package after IMP-RUN-orchestration private subservice cutover proof",
-			},
+			path:        "pkg/services/factory_runtime/internal/services/orchestration/token",
+			wantRetain:  true,
+			retainOwner: "factory_runtime",
+		},
+		{
+			path:        "pkg/services/factory_runtime/internal/services/orchestration/token_transformer",
+			wantRetain:  true,
+			retainOwner: "factory_runtime",
 		},
 		{
 			path: "pkg/services/factory_runtime/testdata",

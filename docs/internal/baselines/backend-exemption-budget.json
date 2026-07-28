@@ -525,7 +525,7 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_runtime/token/clone_test.go#TestCloneToken_PreserveNilAndEmptyValues",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration/token/clone_test.go#TestCloneToken_PreserveNilAndEmptyValues",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
     },

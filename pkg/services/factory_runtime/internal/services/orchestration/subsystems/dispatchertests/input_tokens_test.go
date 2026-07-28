@@ -1,7 +1,7 @@
 package subsystems_test
 
 import (
-	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/token"
+	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 )
 
 func firstInputToken(rawTokens []any) factorytoken.Token {

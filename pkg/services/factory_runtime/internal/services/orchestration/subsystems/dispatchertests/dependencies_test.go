@@ -7,7 +7,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/token_transformer"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token_transformer"
 )
 
 var dispatchIDSequence atomic.Int64

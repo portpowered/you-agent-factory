@@ -817,15 +817,15 @@
       "minimum": 75.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/throttle",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/throttle",
       "minimum": 82.05
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/token",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token",
       "minimum": 98.18
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/token_transformer",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token_transformer",
       "minimum": 88.39
     },
     {
