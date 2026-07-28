@@ -16,6 +16,15 @@ func TestCheckPassesOnRepositoryLedger(t *testing.T) {
 	}
 }
 
+func TestCheckPackagedFactoryInvocationMatrixPassesOnRepositoryLedger(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := findRepoRoot(t)
+	if err := CheckPackagedFactoryInvocationMatrix(repoRoot, DefaultChecklistPath); err != nil {
+		t.Fatalf("CheckPackagedFactoryInvocationMatrix() error = %v", err)
+	}
+}
+
 func TestLoadChecklistPathsFindsDestinationCells(t *testing.T) {
 	t.Parallel()
 

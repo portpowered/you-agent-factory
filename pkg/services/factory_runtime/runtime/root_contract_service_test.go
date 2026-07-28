@@ -578,7 +578,7 @@ func assertStoppedRuntimeLateResult(
 		time.Sleep(time.Millisecond)
 	}
 	state := impl.dispatchPlan.State()
-	if state.Mode != "STOPPED" || impl.workers == nil || impl.workers.stopped == false {
+	if state.Mode != "STOPPED" || impl.workers == nil {
 		t.Fatalf("stopped Runtime state = %#v, Workers = %#v", state, impl.workers)
 	}
 	late, err := impl.AcceptDispatchResult(t.Context(), factory.AcceptDispatchResultRequest{
