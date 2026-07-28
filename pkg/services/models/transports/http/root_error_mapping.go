@@ -125,3 +125,18 @@ func badRequestErrorResponseWithCode(message, code string) (int, factoryapi.Erro
 		Code:    factoryapi.ErrorResponseCode(code),
 	}, true
 }
+
+func modelsErrorMessageLeaksInternalDetail(message string) bool {
+	trimmed := strings.TrimSpace(message)
+	if trimmed == "" {
+		return true
+	}
+	lower := strings.ToLower(trimmed)
+	if strings.Contains(trimmed, "/internal/") ||
+		strings.Contains(trimmed, "pkg/services/models/internal") ||
+		strings.Contains(trimmed, ".go:") ||
+		strings.Contains(lower, "stack trace") {
+		return true
+	}
+	return false
+}
