@@ -26,6 +26,13 @@ func (invocationPolicyService) SubmitWorkRequestForSession(
 	return WorkRequestSubmitResult{}, fmt.Errorf("Work invocation policy service does not support admission")
 }
 
+func (invocationPolicyService) PrepareWorkRequest(
+	context.Context,
+	WorkRequestPreparation,
+) (WorkRequest, error) {
+	return WorkRequest{}, fmt.Errorf("Work invocation policy service does not support admission prep")
+}
+
 func (invocationPolicyService) MoveWorkForSession(
 	context.Context,
 	string,

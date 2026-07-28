@@ -802,6 +802,16 @@ response-stream output.
   `invocationservice.Dependencies.Work`. Use `work.NewInvocationPolicyService()`
   when only the published invocation/return-policy slice is needed; prove the
   sealed edge with `pkg/services/factory_sessions/work_invocation_boundary_test.go`.
+- Factory Sessions Work admission, content staging, and materialization call
+  sites route through `work.Service` (`StageContent`, `PrepareContent`,
+  `PrepareWorkRequest`, `MaterializeContentURL`) rather than injecting
+  `work.ContentStagingService`, `work.RequestPreparationService`, or
+  `work.ContentMaterializer` as peer dependencies. Compose focused roles onto
+  the Work root at wire/transport edges with `work.AdmissionContentService` and
+  `work.MaterializationService`; adapt to Workers-only `ContentMaterializer`
+  boundaries with `work.ContentMaterializeFunc(workService.MaterializeContentURL)`.
+  Prove the HTTP admission/content edge in
+  `pkg/services/factory_sessions/transports/http/work_admission_content_boundary_test.go`.
 - Work owner-local Wire at `pkg/services/work/wire` must stay registered under
   destination `work` in
   `docs/internal/packaged-service-structure/package-target-manifest.json`,
