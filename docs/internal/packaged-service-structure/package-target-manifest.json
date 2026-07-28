@@ -340,6 +340,7 @@
     "pkg/services/recordings/service",
     "pkg/services/recordings/transports/cli",
     "pkg/services/recordings/transports/http",
+    "pkg/services/recordings/transports/mcp",
     "pkg/services/recordings/wire",
     "pkg/services/system_initialization",
     "pkg/services/system_initialization/internal/workflow",
@@ -1981,6 +1982,11 @@
     },
     {
       "packagePath": "pkg/services/recordings/transports/http",
+      "disposition": "retain",
+      "destination": "recordings"
+    },
+    {
+      "packagePath": "pkg/services/recordings/transports/mcp",
       "disposition": "retain",
       "destination": "recordings"
     },
