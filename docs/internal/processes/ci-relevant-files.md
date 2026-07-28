@@ -496,6 +496,15 @@ Wave 0 functional-tests-expansion planning authority lives under
   `edges.WorkersExecutableLocator`, asserting resolved selection via
   `support.NewShapedProviderCommandRunner` call records; catalog metadata
   infers domain `factory/definitions`.
+  `tests/functional/factory_definitions/transports/cli/named_lifecycle/named_lifecycle_test.go`
+  owns named Factory create/list/update/delete, list membership after
+  create/delete, and actionable delete-missing failure through
+  `support.BuildProcess` + `support.FakeInputs` with isolated `--dir`
+  catalog roots, asserting public CLI success/failure output and persisted
+  `factory.json` presence or absence; catalog metadata infers domain
+  `factory_definitions` and subsection `transports/cli/named_lifecycle`.
+  Every top-level `Test*` needs a customer-readable Go doc so
+  `functionaltestmetadata` stays viz-compatible.
   `make pkg-structure` enforces the domain-mirrored functional layout
   `tests/functional/<domain>/<subsection>/...`: new shallow, catch-all, or
   unclassified scenario packages are blocking, while existing nonconforming
