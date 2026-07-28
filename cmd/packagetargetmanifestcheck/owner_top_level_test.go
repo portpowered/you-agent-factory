@@ -100,9 +100,6 @@ func TestOwnerTopLevelInventoryCoversPacketGaps(t *testing.T) {
 		"factory_definitions": {
 			"authoredlayout", "definition", "loading", "validation",
 		},
-		"recordings": {
-			"artifacts", "events", "projections", "replay", "service",
-		},
 	}
 
 	for owner, required := range mustUnexpected {

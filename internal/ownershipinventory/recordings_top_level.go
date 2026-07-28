@@ -22,14 +22,9 @@ var RecordingsTopLevelExpectedRetain = []string{
 
 // RecordingsTopLevelUnexpected lists transitional public top-level siblings
 // that INV-REC-TOPLEVEL classifies as move targets rather than durable retain
-// debt at the Recordings owner root.
-var RecordingsTopLevelUnexpected = []string{
-	"artifacts",
-	"events",
-	"projections",
-	"replay",
-	"service",
-}
+// debt at the Recordings owner root. DEL-REC deleted the last transitional
+// siblings; the slice stays for closed-inventory helpers and historical tests.
+var RecordingsTopLevelUnexpected = []string{}
 
 // ListRecordingsTopLevelChildren returns every live directory name immediately
 // under pkg/services/recordings/.

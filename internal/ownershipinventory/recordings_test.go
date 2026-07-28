@@ -45,19 +45,8 @@ func TestRecordingsTopLevelExpectedRetainChildren(t *testing.T) {
 func TestRecordingsTopLevelUnexpectedChildren(t *testing.T) {
 	t.Parallel()
 
-	want := []string{"artifacts", "events", "projections", "replay", "service"}
-	if !slices.Equal(ownershipinventory.RecordingsTopLevelUnexpected, want) {
-		t.Fatalf("RecordingsTopLevelUnexpected = %v, want %v", ownershipinventory.RecordingsTopLevelUnexpected, want)
-	}
-
-	for _, name := range ownershipinventory.RecordingsTopLevelUnexpected {
-		kind, ok := ownershipinventory.ClassifyRecordingsTopLevelChild(name)
-		if !ok {
-			t.Fatalf("ClassifyRecordingsTopLevelChild(%q) ok = false", name)
-		}
-		if kind != "unexpected_move" {
-			t.Fatalf("ClassifyRecordingsTopLevelChild(%q) = %q, want unexpected_move", name, kind)
-		}
+	if len(ownershipinventory.RecordingsTopLevelUnexpected) != 0 {
+		t.Fatalf("RecordingsTopLevelUnexpected = %v, want empty after DEL-REC deletion", ownershipinventory.RecordingsTopLevelUnexpected)
 	}
 }
 
@@ -93,11 +82,11 @@ func TestIsRecordingsUnexpectedTopLevelRest(t *testing.T) {
 		rest string
 		want bool
 	}{
-		{rest: "artifacts", want: true},
-		{rest: "events/kinds", want: true},
-		{rest: "projections/dashboard", want: true},
-		{rest: "replay/clocktests", want: true},
-		{rest: "service", want: true},
+		{rest: "artifacts", want: false},
+		{rest: "events/kinds", want: false},
+		{rest: "projections/dashboard", want: false},
+		{rest: "replay/clocktests", want: false},
+		{rest: "service", want: false},
 		{rest: "wire", want: false},
 		{rest: "internal/services/replay", want: false},
 	}

@@ -1485,7 +1485,7 @@
       "fromOwner": "recordings",
       "toOwner": "factory_definitions",
       "class": "query",
-      "evidence": "pkg/services/recordings/artifacts -\u003e pkg/services/factory_definitions"
+      "evidence": "pkg/services/recordings -\u003e pkg/services/factory_definitions"
     },
     {
       "fromOwner": "recordings",
@@ -4780,38 +4780,6 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/recordings/artifacts",
-      "disposition": "move",
-      "destination": "recordings",
-      "destinationKind": "owner",
-      "successor": "pkg/services/recordings/internal/services/artifacts_export",
-      "deletionCondition": "delete public package after IMP-REC-artifacts_export private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/recordings/events",
-      "disposition": "move",
-      "destination": "recordings",
-      "destinationKind": "owner",
-      "successor": "pkg/services/recordings/internal/services/canonical_ledger",
-      "deletionCondition": "delete public package after IMP-REC-canonical_ledger private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/recordings/events/kinds",
-      "disposition": "move",
-      "destination": "recordings",
-      "destinationKind": "owner",
-      "successor": "pkg/services/recordings/internal/services/canonical_ledger",
-      "deletionCondition": "delete public package after IMP-REC-canonical_ledger private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/recordings/events/snapshot",
-      "disposition": "move",
-      "destination": "recordings",
-      "destinationKind": "owner",
-      "successor": "pkg/services/recordings/internal/services/canonical_ledger",
-      "deletionCondition": "delete public package after IMP-REC-canonical_ledger private subservice cutover proof"
-    },
-    {
       "packagePath": "pkg/services/recordings/internal",
       "disposition": "retain",
       "destination": "recordings",
@@ -4984,38 +4952,6 @@
       "disposition": "retain",
       "destination": "recordings",
       "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/recordings/projections",
-      "disposition": "move",
-      "destination": "recordings",
-      "destinationKind": "owner",
-      "successor": "pkg/services/recordings/internal/services/projection_query",
-      "deletionCondition": "delete public package after IMP-REC-projection_query private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/recordings/projections/dashboard",
-      "disposition": "move",
-      "destination": "recordings",
-      "destinationKind": "owner",
-      "successor": "pkg/services/recordings/internal/services/projection_query",
-      "deletionCondition": "delete public package after IMP-REC-projection_query private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/recordings/replay",
-      "disposition": "move",
-      "destination": "recordings",
-      "destinationKind": "owner",
-      "successor": "pkg/services/recordings/internal/services/replay",
-      "deletionCondition": "delete public package after IMP-REC-replay private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/recordings/service",
-      "disposition": "move",
-      "destination": "recordings",
-      "destinationKind": "owner",
-      "successor": "pkg/services/recordings/internal",
-      "deletionCondition": "delete transitional service/ package after owner wire retargets to internal implementation and DEL cutover proof completes"
     },
     {
       "packagePath": "pkg/services/recordings/transports/cli",
