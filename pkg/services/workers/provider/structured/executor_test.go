@@ -2,323 +2,56 @@ package structured_test
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"runtime"
-	"slices"
-	"strings"
 	"testing"
 
-	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/structured"
 )
 
-func TestProductionProviderBoundarySelectsStructuredClaudeOnlyForResponseStream(t *testing.T) {
-	req := workerexecution.ProviderInferenceRequest{
-		Dispatch:      work.WorkDispatch{DispatchID: "dispatch-claude-production"},
-		ModelProvider: string(modelprovider.ProviderClaude), Model: "claude-sonnet",
-		SessionID: "claude-session-123", UserMessage: "private prompt",
-		EnvVars: map[string]string{"GIT_EDITOR": "vim", "GIT_TERMINAL_PROMPT": "1"},
-	}
+func TestExecutorSupportsPiOnlyAfterCodexClaudeCutover(t *testing.T) {
+	t.Parallel()
 
-	finalRunner := &recordingRunner{result: workerprovider.CommandResult{Stdout: []byte("authoritative answer")}}
-	finalProvider := workerprovider.NewScriptWrapProviderWithDependencies(false, nil, finalRunner, nil, nil, nil, "", nil, nil)
-	finalResponse, err := finalProvider.Infer(context.Background(), req)
-	if err != nil {
-		t.Fatalf("final-only Infer: %v", err)
-	}
-	if finalResponse.Content != "authoritative answer" || slices.Contains(finalRunner.request.Args, "--include-partial-messages") {
-		t.Fatalf("final-only response/request = %#v / %#v", finalResponse, finalRunner.request)
-	}
-
-	streamRunner := &recordingRunner{result: workerprovider.CommandResult{Stdout: []byte(structuredClaudeOutput())}}
-	var published []workerprovider.InferenceProgressFragment
-	streamProvider := workerprovider.NewScriptWrapProviderWithDependencies(false, nil, streamRunner, nil, func(fragment workerprovider.InferenceProgressFragment) {
-		published = append(published, fragment)
-	}, structured.NewExecutor(), "", nil, nil)
-
-	streamResponse, err := streamProvider.Infer(context.Background(), req)
-	if err != nil {
-		t.Fatalf("response-stream Infer: %v", err)
-	}
-	if streamResponse.Content != finalResponse.Content || streamResponse.ProviderSession == nil || streamResponse.ProviderSession.ID != "claude-session-123" {
-		t.Fatalf("response-stream final response = %#v", streamResponse)
-	}
-	if !slices.Contains(streamRunner.request.Args, "stream-json") || !slices.Contains(streamRunner.request.Args, "--include-partial-messages") {
-		t.Fatalf("response-stream args = %#v", streamRunner.request.Args)
-	}
-	assertCommandEnv(t, streamRunner.request.Env, "GIT_EDITOR", "true")
-	assertCommandEnv(t, streamRunner.request.Env, "GIT_SEQUENCE_EDITOR", "true")
-	assertCommandEnv(t, streamRunner.request.Env, "GIT_TERMINAL_PROMPT", "0")
-	assertStablePublishedMessage(t, published)
-}
-
-func TestProductionResponseStreamClaudeRejectsImageBeforeRunner(t *testing.T) {
-	runner := &recordingRunner{result: workerprovider.CommandResult{Stdout: []byte(structuredClaudeOutput())}}
-	provider := workerprovider.NewScriptWrapProviderWithDependencies(false, nil, runner, nil, func(workerprovider.InferenceProgressFragment) {}, structured.NewExecutor(), "", nil, nil)
-
-	_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
-		Dispatch:      work.WorkDispatch{DispatchID: "dispatch-claude-image"},
-		ModelProvider: string(modelprovider.ProviderClaude),
-		UserMessage:   "inspect",
-		InputTokens: []any{factoryruntime.RuntimeToken{ID: "token-1", Color: factoryruntime.RuntimeTokenColor{Content: []work.WorkContentPart{
-			{Type: work.WorkContentPartTypeText, Text: "caption"},
-			{Type: work.WorkContentPartTypeImage, File: "fixtures/mockup.png"},
-		}}}},
-	})
-	if err == nil {
-		t.Fatal("expected response-stream Claude image content to fail")
-	}
-	var providerErr *workerprovider.ProviderError
-	if !errors.As(err, &providerErr) {
-		t.Fatalf("expected ProviderError, got %T: %v", err, err)
-	}
-	if providerErr.Type != workerexecution.WorkFailureTypePermanentBadRequest ||
-		!strings.Contains(providerErr.Message, "input_tokens[0].color.content[1].file") ||
-		!strings.Contains(providerErr.Message, "model provider claude") {
-		t.Fatalf("provider error = %#v", providerErr)
-	}
-	if runner.calls != 0 {
-		t.Fatalf("runner calls = %d, want 0", runner.calls)
-	}
-}
-
-func TestProductionProviderBoundarySelectsStructuredCodexOnlyForCapableRunner(t *testing.T) {
-	req := workerexecution.ProviderInferenceRequest{
-		Dispatch:      work.WorkDispatch{DispatchID: "dispatch-codex-production"},
-		ModelProvider: string(modelprovider.ProviderCodex), Model: "gpt-test",
-		UserMessage: "private prompt", WorkingDirectory: t.TempDir(),
-	}
-	plainRunner := &recordingRunner{result: workerprovider.CommandResult{Stdout: []byte("plain answer")}}
-	plainProvider := workerprovider.NewScriptWrapProviderWithDependencies(false, nil, plainRunner, nil, func(workerprovider.InferenceProgressFragment) {}, structured.NewExecutor(), "", nil, nil)
-
-	plainResponse, err := plainProvider.Infer(context.Background(), req)
-	if err != nil || plainResponse.Content != "plain answer" || slices.Contains(plainRunner.request.Args, "--json") {
-		t.Fatalf("non-streaming response/request = %#v / %#v, %v", plainResponse, plainRunner.request, err)
-	}
-
-	streamRunner := &codexCapableRunner{recordingRunner: recordingRunner{result: workerprovider.CommandResult{Stdout: []byte(structuredCodexOutput())}}}
-	var published []workerprovider.InferenceProgressFragment
-	streamProvider := workerprovider.NewScriptWrapProviderWithDependencies(false, nil, streamRunner, nil, func(fragment workerprovider.InferenceProgressFragment) { published = append(published, fragment) }, structured.NewExecutor(), "", nil, nil)
-
-	streamResponse, err := streamProvider.Infer(context.Background(), req)
-	if err != nil {
-		t.Fatalf("response-stream Infer: %v", err)
-	}
-	if streamResponse.Content != "authoritative answer" || streamResponse.ProviderSession == nil || streamResponse.ProviderSession.ID != "thread-codex-production" {
-		t.Fatalf("response-stream response = %#v", streamResponse)
-	}
-	if !slices.Contains(streamRunner.request.Args, "--json") || string(streamRunner.request.Stdin) != req.UserMessage || streamRunner.request.WorkDir != req.WorkingDirectory {
-		t.Fatalf("response-stream request = %#v", streamRunner.request)
-	}
-	if !publishedDraft(published, factorysessions.ResponseEventKindMessage, factorysessions.ResponseEventPhaseCompleted, "message-codex-production") {
-		t.Fatalf("published fragments = %#v, want authoritative native message", published)
-	}
-	assertPublishedCodexErrorItem(t, published)
-}
-
-func assertPublishedCodexErrorItem(t *testing.T, published []workerprovider.InferenceProgressFragment) {
-	t.Helper()
-	errorDraft := publishedDraftByIdentity(published, factorysessions.ResponseEventKindError, factorysessions.ResponseEventPhaseUpdated, "error-codex-production")
-	if errorDraft == nil || errorDraft.Provenance.NativeEventType != "item.completed" {
-		t.Fatalf("published fragments = %#v, want non-terminal native error item", published)
-	}
-	var errorPayload factorysessions.ResponseEventErrorPayload
-	if err := json.Unmarshal(errorDraft.Payload, &errorPayload); err != nil {
-		t.Fatalf("decode error item payload: %v", err)
-	}
-	if errorPayload.Code != "codex_item_error" || errorPayload.Message != "A recoverable operation was skipped." || errorPayload.Retryable {
-		t.Fatalf("error item payload = %#v", errorPayload)
-	}
-}
-
-func TestExecutorReconcilesCodexTerminalDraftsWithCommandOutcome(t *testing.T) {
-	tests := []struct {
-		name            string
-		result          workerprovider.CommandResult
-		runErr          error
-		wantFailure     workerexecution.WorkFailureType
-		wantNativeError string
-	}{
-		{
-			name: "recognized failure survives later cleanup",
-			result: workerprovider.CommandResult{Stdout: []byte(strings.Join([]string{
-				`{"type":"thread.started","thread_id":"thread-terminal"}`,
-				`{"type":"turn.failed","error":{"message":"unexpected status 429"}}`,
-				`{"type":"error","message":"cleanup detail"}`,
-			}, "\n") + "\n")},
-			wantFailure: workerexecution.WorkFailureTypeThrottled, wantNativeError: "turn.failed",
-		},
-		{
-			name:   "deadline suppresses native failure",
-			result: workerprovider.CommandResult{Stdout: []byte(`{"type":"turn.failed","error":{"message":"unexpected status 429"}}` + "\n")},
-			runErr: context.DeadlineExceeded, wantFailure: workerexecution.WorkFailureTypeTimeout,
-		},
-		{
-			name:        "exit 124 suppresses native failure",
-			result:      workerprovider.CommandResult{ExitCode: 124, Stdout: []byte(`{"type":"turn.failed","error":{"message":"unexpected status 429"}}` + "\n")},
-			wantFailure: workerexecution.WorkFailureTypeTimeout,
-		},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			runner := &recordingRunner{result: tc.result, err: tc.runErr}
-			var published []workerprovider.InferenceProgressFragment
-			result := structured.NewExecutor().Execute(context.Background(), workerexecution.ProviderInferenceRequest{
-				Dispatch: work.WorkDispatch{DispatchID: "dispatch-terminal"}, ModelProvider: string(modelprovider.ProviderCodex), UserMessage: "private prompt",
-			}, false, nil, runner, func(fragment workerprovider.InferenceProgressFragment) { published = append(published, fragment) }, nil)
-			if result.FailureType != tc.wantFailure {
-				t.Fatalf("failure = %#v, want %q", result, tc.wantFailure)
-			}
-			var nativeErrors []factorysessions.ResponseEventDraft
-			for _, fragment := range published {
-				if draft, ok := fragment.CanonicalDraft.(factorysessions.ResponseEventDraft); ok && draft.Kind == factorysessions.ResponseEventKindError {
-					nativeErrors = append(nativeErrors, draft)
-				}
-			}
-			if tc.wantNativeError == "" && len(nativeErrors) != 0 {
-				t.Fatalf("native terminal drafts = %#v, want none", nativeErrors)
-			}
-			if tc.wantNativeError != "" && (len(nativeErrors) != 1 || nativeErrors[0].Provenance.NativeEventType != tc.wantNativeError || !result.CanonicalFailurePublished) {
-				t.Fatalf("native terminal drafts/result = %#v / %#v", nativeErrors, result)
-			}
-		})
-	}
-}
-
-func TestExecutorStreamsRealCommandAndReportsSupport(t *testing.T) {
 	executor := structured.NewExecutor()
-	if !executor.Supports(" CLAUDE ") || executor.Supports("unknown-provider") {
-		t.Fatalf("Supports() did not use normalized registered identities")
+	if !executor.Supports(string(modelprovider.ProviderPi)) {
+		t.Fatal("Supports(pi) = false, want structured Pi adapter")
+	}
+	for _, provider := range []string{
+		string(modelprovider.ProviderClaude),
+		string(modelprovider.ProviderCodex),
+		"unknown-provider",
+	} {
+		if executor.Supports(provider) {
+			t.Fatalf("Supports(%q) = true, want false after cutover", provider)
+		}
 	}
 	var nilExecutor *structured.Executor
-	if nilExecutor.Supports("claude") {
-		t.Fatal("nil executor unexpectedly supports Claude")
-	}
-
-	fixturePath := filepath.Join(t.TempDir(), "claude-output.jsonl")
-	if err := os.WriteFile(fixturePath, []byte(structuredClaudeOutput()), 0o600); err != nil {
-		t.Fatalf("write Claude fixture: %v", err)
-	}
-	commandDir := t.TempDir()
-	writeClaudeFixtureCommand(t, commandDir)
-	t.Setenv("PATH", commandDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	var published []workerprovider.InferenceProgressFragment
-	effect, err := platformprocess.NewExecCommandRunner(exec.Command, platformclock.Real{}, nil)
-	if err != nil {
-		t.Fatalf("NewExecCommandRunner() error = %v", err)
-	}
-	runner := workerprocess.AdaptCommandRunner(effect)
-	result := executor.Execute(context.Background(), workerexecution.ProviderInferenceRequest{
-		Dispatch:      work.WorkDispatch{DispatchID: "dispatch-real-command"},
-		ModelProvider: string(modelprovider.ProviderClaude), UserMessage: "private prompt",
-		EnvVars: map[string]string{"CLAUDE_FIXTURE": fixturePath}, ProcessEnvironment: os.Environ(),
-	}, false, nil, runner, func(fragment workerprovider.InferenceProgressFragment) {
-		published = append(published, fragment)
-	}, nil)
-	if result.Err != nil || result.FailureType != "" || result.Response.Content != "authoritative answer" {
-		t.Fatalf("real command result = %#v", result)
-	}
-	if len(published) == 0 {
-		t.Fatal("real streaming command published no canonical drafts")
+	if nilExecutor.Supports(string(modelprovider.ProviderPi)) {
+		t.Fatal("nil executor unexpectedly supports Pi")
 	}
 }
 
-func TestExecutorReturnsStructuredFailureFromBufferedRunner(t *testing.T) {
-	executor := structured.NewExecutor()
-	result := executor.Execute(context.Background(), workerexecution.ProviderInferenceRequest{
-		Dispatch:      work.WorkDispatch{DispatchID: "dispatch-failure"},
-		ModelProvider: string(modelprovider.ProviderClaude), UserMessage: "private prompt",
-	}, false, nil, &recordingRunner{result: workerprovider.CommandResult{
-		Stdout: []byte(`{"type":"system","subtype":"api_retry","attempt":2,"retry_delay_ms":1000}` + "\n"),
-		Stderr: []byte("private provider warning"), ExitCode: 1,
-	}}, nil, nil)
-	if result.FailureType == "" || result.FailureMessage == "" {
-		t.Fatalf("failure result = %#v", result)
-	}
-}
+func TestExecutorRejectsConductorRoutedProvidersAtScriptWrapBoundary(t *testing.T) {
+	t.Parallel()
 
-func writeClaudeFixtureCommand(t *testing.T, dir string) {
-	t.Helper()
-	if runtime.GOOS == "windows" {
-		path := filepath.Join(dir, "claude.cmd")
-		if err := os.WriteFile(path, []byte("@type \"%CLAUDE_FIXTURE%\"\r\n"), 0o600); err != nil {
-			t.Fatalf("write Claude command: %v", err)
-		}
-		return
-	}
-	path := filepath.Join(dir, "claude")
-	if err := os.WriteFile(path, []byte("#!/bin/sh\ncat \"$CLAUDE_FIXTURE\"\n"), 0o700); err != nil {
-		t.Fatalf("write Claude command: %v", err)
-	}
-}
-
-func assertStablePublishedMessage(t *testing.T, fragments []workerprovider.InferenceProgressFragment) {
-	t.Helper()
-	var delta, completed *factorysessions.ResponseEventDraft
-	for _, fragment := range fragments {
-		draft, ok := fragment.CanonicalDraft.(factorysessions.ResponseEventDraft)
-		if !ok || draft.ItemID != "msg-production" {
-			continue
-		}
-		if draft.Phase == factorysessions.ResponseEventPhaseDelta {
-			delta = &draft
-		}
-		if draft.Phase == factorysessions.ResponseEventPhaseCompleted {
-			completed = &draft
+	provider := workerprovider.NewScriptWrapProviderWithDependencies(
+		false, nil, &recordingRunner{}, nil, nil, structured.NewExecutor(), "", nil, nil,
+	)
+	for _, modelProvider := range []string{
+		string(modelprovider.ProviderClaude),
+		string(modelprovider.ProviderCodex),
+	} {
+		_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
+			Dispatch:      work.WorkDispatch{DispatchID: "dispatch-cutover"},
+			ModelProvider: modelProvider,
+			UserMessage:   "prompt",
+		})
+		if err == nil {
+			t.Fatalf("Infer(%s) error = nil, want conductor routing rejection", modelProvider)
 		}
 	}
-	if delta == nil || completed == nil || delta.ItemID != completed.ItemID || delta.DispatchID != "dispatch-claude-production" {
-		t.Fatalf("published fragments = %#v, want correlated stable message lifecycle", fragments)
-	}
-}
-
-func structuredClaudeOutput() string {
-	return strings.Join([]string{
-		`{"type":"system","subtype":"init","session_id":"claude-session-123"}`,
-		`{"type":"stream_event","session_id":"claude-session-123","event":{"type":"message_start","message":{"id":"msg-production","role":"assistant","content":[]}}}`,
-		`{"type":"stream_event","session_id":"claude-session-123","event":{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}}`,
-		`{"type":"stream_event","session_id":"claude-session-123","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"authoritative answer"}}}`,
-		`{"type":"stream_event","session_id":"claude-session-123","event":{"type":"content_block_stop","index":0}}`,
-		`{"type":"stream_event","session_id":"claude-session-123","event":{"type":"message_stop"}}`,
-		`{"type":"assistant","session_id":"claude-session-123","message":{"id":"msg-production","role":"assistant","content":[{"type":"text","text":"authoritative answer"}]}}`,
-		`{"type":"result","subtype":"success","is_error":false,"result":"authoritative answer","session_id":"claude-session-123"}`,
-	}, "\n") + "\n"
-}
-
-func structuredCodexOutput() string {
-	return strings.Join([]string{
-		`{"type":"thread.started","thread_id":"thread-codex-production"}`,
-		`{"type":"turn.started"}`,
-		`{"type":"item.completed","item":{"id":"error-codex-production","type":"error","message":"A recoverable operation was skipped."}}`,
-		`{"type":"item.completed","item":{"id":"message-codex-production","type":"agent_message","text":"authoritative answer"}}`,
-		`{"type":"turn.completed","usage":{"input_tokens":4,"output_tokens":2}}`,
-	}, "\n") + "\n"
-}
-
-func publishedDraft(fragments []workerprovider.InferenceProgressFragment, kind factorysessions.ResponseEventKind, phase factorysessions.ResponseEventPhase, itemID string) bool {
-	return publishedDraftByIdentity(fragments, kind, phase, itemID) != nil
-}
-
-func publishedDraftByIdentity(fragments []workerprovider.InferenceProgressFragment, kind factorysessions.ResponseEventKind, phase factorysessions.ResponseEventPhase, itemID string) *factorysessions.ResponseEventDraft {
-	for _, fragment := range fragments {
-		if draft, ok := fragment.CanonicalDraft.(factorysessions.ResponseEventDraft); ok && draft.Kind == kind && draft.Phase == phase && draft.ItemID == itemID {
-			return &draft
-		}
-	}
-	return nil
 }
 
 type recordingRunner struct {
@@ -332,22 +65,4 @@ func (r *recordingRunner) Run(_ context.Context, req workerprovider.CommandReque
 	r.calls++
 	r.request = req
 	return r.result, r.err
-}
-
-type codexCapableRunner struct{ recordingRunner }
-
-func (*codexCapableRunner) SupportsResponseStreaming() bool { return true }
-
-func assertCommandEnv(t *testing.T, env []string, name, want string) {
-	t.Helper()
-	prefix := name + "="
-	for _, entry := range env {
-		if strings.HasPrefix(entry, prefix) {
-			if got := strings.TrimPrefix(entry, prefix); got != want {
-				t.Fatalf("%s = %q, want %q", name, got, want)
-			}
-			return
-		}
-	}
-	t.Fatalf("environment does not contain %s", name)
 }

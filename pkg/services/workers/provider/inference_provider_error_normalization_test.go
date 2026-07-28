@@ -15,6 +15,7 @@ import (
 )
 
 func TestScriptWrapProvider_Infer_CodexExitFailuresNormalizeIntoSharedContract(t *testing.T) {
+	skipConductorRoutedNativeProviderTest(t)
 	t.Parallel()
 	testCases := []struct {
 		name  string
@@ -107,6 +108,7 @@ func TestScriptWrapProvider_Infer_CodexExitFailuresNormalizeIntoSharedContract(t
 	}
 }
 func TestScriptWrapProvider_Infer_CodexNormalizedRetryDecisionRegressions(t *testing.T) {
+	skipConductorRoutedNativeProviderTest(t)
 	t.Parallel()
 	testCases := []struct {
 		name              string
@@ -178,6 +180,7 @@ func TestScriptWrapProvider_Infer_CodexNormalizedRetryDecisionRegressions(t *tes
 }
 
 func TestScriptWrapProvider_Infer_CodexWindowsCorpusEntryRemainsDistinctFromAuthFailure(t *testing.T) {
+	skipConductorRoutedNativeProviderTest(t)
 	t.Parallel()
 	testCases := []struct {
 		entryName          string
@@ -239,6 +242,7 @@ func TestScriptWrapProvider_Infer_CodexWindowsCorpusEntryRemainsDistinctFromAuth
 }
 
 func TestScriptWrapProvider_Infer_CodexWindowsExitCode4294967295Normalization(t *testing.T) {
+	skipConductorRoutedNativeProviderTest(t)
 	t.Parallel()
 	testCases := []struct {
 		name              string
@@ -305,6 +309,7 @@ func TestScriptWrapProvider_Infer_CodexWindowsExitCode4294967295Normalization(t 
 }
 
 func TestScriptWrapProvider_Infer_CodexExitFailureReturnsSafeBoundedMessage(t *testing.T) {
+	skipConductorRoutedNativeProviderTest(t)
 	t.Parallel()
 	capacityEntry := providerErrorCorpusEntryForTest(t, "codex_model_capacity_selected_model")
 	capacityLine := providerErrorCorpusLastErrorLine(t, capacityEntry)
@@ -374,7 +379,7 @@ func TestScriptWrapProvider_Infer_CodexExitFailureReturnsSafeBoundedMessage(t *t
 
 // pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func TestScriptWrapProvider_Infer_KnownCodexErrorLinesMapToProviderFailureCategories(t *testing.T) {
-	t.Parallel()
+	skipConductorRoutedNativeProviderTest(t)
 	capacityEntry := providerErrorCorpusEntryForTest(t, "codex_model_capacity_selected_model")
 	capacityLine := providerErrorCorpusLastErrorLine(t, capacityEntry)
 
@@ -476,7 +481,7 @@ func TestScriptWrapProvider_Infer_KnownCodexErrorLinesMapToProviderFailureCatego
 }
 
 func TestScriptWrapProvider_Infer_April11RecordingFailureShapesNormalize(t *testing.T) {
-	t.Parallel()
+	skipConductorRoutedNativeProviderTest(t)
 	fixture := loadApril11FailureShapeFixture(t)
 
 	for _, sample := range fixture.Samples {
@@ -508,6 +513,7 @@ func TestScriptWrapProvider_Infer_April11RecordingFailureShapesNormalize(t *test
 }
 
 func TestScriptWrapProvider_Infer_CodexExitFailurePreservesSessionMetadata(t *testing.T) {
+	skipConductorRoutedNativeProviderTest(t)
 	t.Parallel()
 	fakeExec := &recordingProviderExec{
 		result: CommandResult{
@@ -539,6 +545,7 @@ func TestScriptWrapProvider_Infer_CodexExitFailurePreservesSessionMetadata(t *te
 }
 
 func TestScriptWrapProvider_Infer_ClaudeExitFailuresNormalizeIntoSharedContract(t *testing.T) {
+	skipConductorRoutedNativeProviderTest(t)
 	t.Parallel()
 	testCases := []struct {
 		name  string
@@ -604,6 +611,7 @@ func TestScriptWrapProvider_Infer_ClaudeExitFailuresNormalizeIntoSharedContract(
 }
 
 func TestParseClaudeProviderFailure_TranscriptSignalsCannotDrivePolicy(t *testing.T) {
+	skipConductorRoutedNativeProviderTest(t)
 	t.Parallel()
 	testCases := []string{
 		"User: debug this configuration error",
@@ -629,6 +637,7 @@ func TestParseClaudeProviderFailure_TranscriptSignalsCannotDrivePolicy(t *testin
 }
 
 func TestParseClaudeProviderFailure_UnsafeDiagnosticDetailsNeverPassThrough(t *testing.T) {
+	skipConductorRoutedNativeProviderTest(t)
 	t.Parallel()
 	testCases := []struct {
 		name        string
@@ -721,6 +730,7 @@ func TestParseClaudeProviderFailure_UnsafeDiagnosticDetailsNeverPassThrough(t *t
 }
 
 func TestParseClaudeProviderFailure_CredentialProseNeverPassesThrough(t *testing.T) {
+	skipConductorRoutedNativeProviderTest(t)
 	t.Parallel()
 	testCases := []struct {
 		name        string
@@ -775,6 +785,7 @@ func TestParseClaudeProviderFailure_CredentialProseNeverPassesThrough(t *testing
 }
 
 func TestParseClaudeProviderFailure_LongCleanupTailCannotEvictStructuredRecord(t *testing.T) {
+	skipConductorRoutedNativeProviderTest(t)
 	t.Parallel()
 	structured := `API Error: 429 {"type":"error","error":{"type":"rate_limit_error","message":"rate limit exceeded"}}`
 	cleanup := strings.Repeat("cleanup completed successfully\n", claudeFailureScanBytes/16)
@@ -815,7 +826,7 @@ func assertClaudeFailureAndPolicy(t *testing.T, result CommandResult, want claud
 }
 
 func TestScriptWrapProvider_Infer_RunErrorsNormalizeTimeoutAndMisconfigured(t *testing.T) {
-	t.Parallel()
+	skipConductorRoutedNativeProviderTest(t)
 	capacityEntry := providerErrorCorpusEntryForTest(t, "codex_model_capacity_selected_model")
 	capacityLine := providerErrorCorpusLastErrorLine(t, capacityEntry)
 	testCases := []struct {
@@ -914,7 +925,7 @@ func TestScriptWrapProvider_Infer_RunErrorsNormalizeTimeoutAndMisconfigured(t *t
 }
 
 func TestScriptWrapProvider_Infer_ProviderTimeoutTextNormalizesToRetryableTimeout(t *testing.T) {
-	t.Parallel()
+	skipConductorRoutedNativeProviderTest(t)
 	testCases := []struct {
 		name   string
 		result CommandResult

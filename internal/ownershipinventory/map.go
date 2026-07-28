@@ -19,7 +19,11 @@ func MapPackage(packagePath string) (PackageRow, error) {
 	case packagePath == ProcessEdgesPackagePath || strings.HasPrefix(packagePath, ProcessEdgesPackagePath+"/"):
 		return retainRow(packagePath, DestinationEdges, DestinationKindArchitectureException), nil
 	case strings.HasPrefix(packagePath, "pkg/services/factory_definitions"):
-		return retainRow(packagePath, "factory_definitions", DestinationKindOwner), nil
+		row, ok := factoryDefinitionsMapping(packagePath)
+		if !ok {
+			return PackageRow{}, fmt.Errorf("no committed destination for %s", packagePath)
+		}
+		return row, nil
 	case strings.HasPrefix(packagePath, "pkg/services/factory_sessions"):
 		return retainRow(packagePath, "factory_sessions", DestinationKindOwner), nil
 	case strings.HasPrefix(packagePath, "pkg/services/factory_runtime"):

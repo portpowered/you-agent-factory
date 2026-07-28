@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
+	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 	"go.uber.org/zap"
 )
 
@@ -61,8 +62,15 @@ type FactorySessionExecutionFactory = func(
 	factoryruntime.Clock,
 	map[string]struct{},
 	factoryruntime.JavaScriptWorkerSettings,
-	bool,
+	*workers.MockWorkersConfig,
 ) (factorysessions.ExecutionService, error)
+
+type ConductorInvocationWithProgressFactory = func(
+	*providerregistry.Registry,
+	workers.CommandRunner,
+	agypty.PTYAllocator,
+	workers.ProgressPublisher,
+) (workers.InvocationExecutor, error)
 
 type RecordingsProjectionFactory = func() recordings.ProjectionService
 
@@ -103,6 +111,7 @@ type DurableExecutionFactory func(
 	RuntimeRoot,
 	factoryruntime.Clock,
 	workerprovider.Provider,
+	*workers.MockWorkersConfig,
 	FactorySessionExecutionFactory,
 	factorysessions.ProviderIdentityResolver,
 ) (factorysessions.ExecutionService, error)

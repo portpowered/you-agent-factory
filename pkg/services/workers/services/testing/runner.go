@@ -44,7 +44,7 @@ func (r *MockWorkerCommandRunner) Run(ctx context.Context, req workerprocess.Com
 	case MockWorkerRunTypeAccept:
 		return r.acceptResult(req), nil
 	case MockWorkerRunTypeReject:
-		return rejectResult(entry.RejectConfig), nil
+		return mockRejectResult(req.Command, entry.RejectConfig), nil
 	case MockWorkerRunTypeScript:
 		return r.runScript(ctx, req, entry.ScriptConfig)
 	default:
@@ -112,7 +112,7 @@ func (r *MockWorkerCommandRunner) acceptResult(req workerprocess.CommandRequest)
 			output += "\n" + def.StopToken
 		}
 	}
-	return workerprocess.CommandResult{Stdout: []byte(output)}
+	return workerprocess.CommandResult{Stdout: []byte(mockAcceptStdout(req.Command, output))}
 }
 
 func rejectResult(cfg *MockWorkerRejectConfig) workerprocess.CommandResult {
