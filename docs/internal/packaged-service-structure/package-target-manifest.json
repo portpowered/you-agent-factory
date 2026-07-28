@@ -400,6 +400,7 @@
     "pkg/services/system_initialization/transports/cli",
     "pkg/services/system_initialization/wire",
     "pkg/services/work",
+    "pkg/services/work/internal/service",
     "pkg/services/work/internal/services/content_materialization",
     "pkg/services/work/internal/services/content_materialization/internal/service",
     "pkg/services/work/internal/services/content_materialization/wire",
@@ -2338,6 +2339,11 @@
       "packagePath": "pkg/services/work",
       "disposition": "retain",
       "destination": "work"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/service",
+      "disposition": "move",
+      "destination": "work/internal"
     },
     {
       "packagePath": "pkg/services/work/internal/services/content_materialization",

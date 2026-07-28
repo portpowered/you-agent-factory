@@ -1707,19 +1707,19 @@
       "fromOwner": "work",
       "toOwner": "factory_definitions",
       "class": "query",
-      "evidence": "pkg/services/work/internal/services/state_access/wire -\u003e pkg/services/factory_definitions"
+      "evidence": "pkg/services/work/internal/service -\u003e pkg/services/factory_definitions"
     },
     {
       "fromOwner": "work",
       "toOwner": "factory_runtime",
       "class": "command",
-      "evidence": "pkg/services/work/service -\u003e pkg/services/factory_runtime"
+      "evidence": "pkg/services/work/internal/service -\u003e pkg/services/factory_runtime"
     },
     {
       "fromOwner": "work",
       "toOwner": "factory_sessions",
       "class": "command",
-      "evidence": "pkg/services/work/service -\u003e pkg/services/factory_sessions"
+      "evidence": "pkg/services/work/internal/service -\u003e pkg/services/factory_sessions"
     },
     {
       "fromOwner": "work",
@@ -3262,18 +3262,6 @@
       "deletionCondition": "delete transitional top-level package after CLN-RUN-FOLD-TOPLEVEL cutover proof"
     },
     {
-      "packagePath": "pkg/services/factory_runtime/internal/factorystatus",
-      "disposition": "retain",
-      "destination": "factory_runtime",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/internal/legacysnapshot",
-      "disposition": "retain",
-      "destination": "factory_runtime",
-      "destinationKind": "owner"
-    },
-    {
       "packagePath": "pkg/services/factory_runtime/internal/orchestrators/javascript/preview",
       "disposition": "move",
       "destination": "factory_runtime",
@@ -4800,6 +4788,14 @@
       "disposition": "retain",
       "destination": "work",
       "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/service",
+      "disposition": "move",
+      "destination": "work",
+      "destinationKind": "owner",
+      "successor": "pkg/services/work/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-WORK-FOLD-TOPLEVEL cutover proof"
     },
     {
       "packagePath": "pkg/services/work/internal/services/content_materialization",
