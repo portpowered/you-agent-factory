@@ -533,11 +533,11 @@ func TestRecordingProvider_Infer_MissingInnerProviderEmitsMisconfiguredFailureEv
 	if requestMetadata["worker_type"] != "worker-a" {
 		t.Fatalf("request metadata = %#v, want worker_type", requestMetadata)
 	}
-	if _, ok := requestMetadata["working_directory"]; ok {
-		t.Fatalf("request metadata = %#v, want working_directory redacted", requestMetadata)
+	if requestMetadata["working_directory"] != `C:\repo` {
+		t.Fatalf("request metadata = %#v, want portable working_directory preserved", requestMetadata)
 	}
-	if _, ok := requestMetadata["worktree"]; ok {
-		t.Fatalf("request metadata = %#v, want worktree redacted", requestMetadata)
+	if requestMetadata["worktree"] != "feature-worktree" {
+		t.Fatalf("request metadata = %#v, want portable worktree preserved", requestMetadata)
 	}
 }
 

@@ -307,10 +307,6 @@
       "name": "TestRun_NamedSubagentHermeticInvocationSucceedsWithoutListeningServer"
     },
     {
-      "file": "cli/root_discovery/root_discovery_test.go",
-      "name": "TestBareRootPrintsConciseHelpWithoutProductEffects"
-    },
-    {
       "file": "cli/session_resume/resume_non_regression_test.go",
       "name": "TestCLIResumeSmokeLane_NonResumeTerminalSessionShowPreservesShippedCLIReadSemantics"
     },

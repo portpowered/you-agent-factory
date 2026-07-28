@@ -25,7 +25,9 @@ import (
 
 // AgentExecutor implements WorkstationRequestExecutor for MODEL_WORKER types.
 // It reads prompt/output inputs resolved by WorkstationExecutor, calls the
-// configured Provider for inference, and maps the response to a WorkResult.
+// configured Runner for one inference attempt, and maps the response to a
+// WorkResult. The Runner performs one attempt per call; the executor may retry
+// retryable provider outcomes with caller-owned backoff before returning.
 type AgentExecutor struct {
 	providerExecutor  workerexecution.InvocationExecutor
 	runtimeConfig     interfaces.RuntimeDefinitionLookup
@@ -43,16 +45,14 @@ func NewAgentExecutor(
 	provider providercontract.Provider,
 	logger logging.Logger,
 	clock func() time.Time,
-	retryRandom platformrandom.Source,
 	decisionEnvelopes ...interfaces.DecisionEnvelopeService,
 ) *AgentExecutor {
-	return newAgentExecutor(
+	return NewAgentExecutorWithRunner(
 		runtimeConfig,
-		workerinvocation.NewExecutor(provider),
+		RunnerFromProvider(provider),
 		logger,
 		clock,
-		retryRandom,
-		firstDecisionEnvelopeService(decisionEnvelopes),
+		decisionEnvelopes...,
 	)
 }
 
@@ -63,7 +63,6 @@ func NewAgentExecutorWithRunner(
 	runner workerexecution.Runner,
 	logger logging.Logger,
 	clock func() time.Time,
-	retryRandom platformrandom.Source,
 	decisionEnvelopes ...interfaces.DecisionEnvelopeService,
 ) *AgentExecutor {
 	return newAgentExecutor(
@@ -73,7 +72,6 @@ func NewAgentExecutorWithRunner(
 		),
 		logger,
 		clock,
-		retryRandom,
 		firstDecisionEnvelopeService(decisionEnvelopes),
 	)
 }
@@ -83,18 +81,16 @@ func newAgentExecutor(
 	executor workerexecution.InvocationExecutor,
 	logger logging.Logger,
 	clock func() time.Time,
-	retryRandom platformrandom.Source,
 	decisionEnvelopes interfaces.DecisionEnvelopeService,
 ) *AgentExecutor {
-	ae := &AgentExecutor{
+	return &AgentExecutor{
 		providerExecutor:  executor,
 		runtimeConfig:     runtimeConfig,
 		decisionEnvelopes: decisionEnvelopes,
 		logger:            logging.EnsureLogger(logger),
-		retryConfig:       newProviderRetryConfig(retryRandom),
+		retryConfig:       newProviderRetryConfig(platformrandom.CryptoSource{}),
 		clock:             clock,
 	}
-	return ae
 }
 
 // Execute calls the Provider with one rendered workstation request, parses the
@@ -450,31 +446,10 @@ func formatAgentProviderError(err error) string {
 	return "provider error: " + err.Error()
 }
 
-const (
-	defaultProviderMaxRetries     = 2
-	defaultProviderInitialBackoff = 100 * time.Millisecond
-)
-
-type retrySleepFunc func(context.Context, time.Duration) error
-type retryJitterFunc func(time.Duration) (time.Duration, error)
-
-type providerRetryConfig struct {
-	maxRetries     int
-	initialBackoff time.Duration
-	sleep          retrySleepFunc
-	jitter         retryJitterFunc
-}
-
-func newProviderRetryConfig(random platformrandom.Source) providerRetryConfig {
-	return providerRetryConfig{
-		maxRetries:     defaultProviderMaxRetries,
-		initialBackoff: defaultProviderInitialBackoff,
-		sleep:          sleepWithContext,
-		jitter:         retryJitter(random),
-	}
-}
-
-func (ae *AgentExecutor) inferWithRetry(ctx context.Context, req workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, int, error) {
+func (ae *AgentExecutor) inferWithRetry(
+	ctx context.Context,
+	req workerexecution.ProviderInferenceRequest,
+) (workerexecution.InferenceResponse, int, error) {
 	logger := logging.EnsureLogger(ae.logger)
 	retryCount := 0
 	if ae.providerExecutor == nil {
@@ -503,7 +478,11 @@ func (ae *AgentExecutor) inferWithRetry(ctx context.Context, req workerexecution
 		if !decision.Retryable || retryCount >= ae.retryConfig.maxRetries {
 			return workerexecution.InferenceResponse{}, retryCount, providerErr
 		}
-		if session := providerErr.ProviderSession; session != nil && strings.TrimSpace(session.ID) != "" {
+		session := providerErr.ProviderSession
+		if session == nil {
+			session = result.ProviderSession
+		}
+		if session != nil && strings.TrimSpace(session.ID) != "" {
 			req.SessionID = strings.TrimSpace(session.ID)
 			req.RequiredOptionalCapabilities = appendRunnerCapabilityIfMissing(
 				req.RequiredOptionalCapabilities,
@@ -544,6 +523,84 @@ func appendRunnerCapabilityIfMissing(
 		}
 	}
 	return append(capabilities, capability)
+}
+
+const (
+	defaultProviderMaxRetries     = 2
+	defaultProviderInitialBackoff = 100 * time.Millisecond
+)
+
+type retrySleepFunc func(context.Context, time.Duration) error
+type retryJitterFunc func(time.Duration) (time.Duration, error)
+
+type providerRetryConfig struct {
+	maxRetries     int
+	initialBackoff time.Duration
+	sleep          retrySleepFunc
+	jitter         retryJitterFunc
+}
+
+func newProviderRetryConfig(random platformrandom.Source) providerRetryConfig {
+	return providerRetryConfig{
+		maxRetries:     defaultProviderMaxRetries,
+		initialBackoff: defaultProviderInitialBackoff,
+		sleep:          sleepWithContext,
+		jitter:         retryJitter(random),
+	}
+}
+
+func sleepWithContext(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+
+	select {
+	case <-timer.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func retryJitter(random platformrandom.Source) retryJitterFunc {
+	return func(baseDelay time.Duration) (time.Duration, error) {
+		if baseDelay <= 0 {
+			return 0, nil
+		}
+
+		maxJitter := baseDelay / 2
+		if maxJitter <= 0 {
+			return 0, nil
+		}
+		if random == nil {
+			return 0, fmt.Errorf("provider retry random source is required")
+		}
+		value, err := random.Int63n(int64(maxJitter) + 1)
+		if err != nil {
+			return 0, err
+		}
+		return time.Duration(value), nil
+	}
+}
+
+func (ae *AgentExecutor) inferOnce(
+	ctx context.Context,
+	req workerexecution.ProviderInferenceRequest,
+) (workerexecution.InferenceResponse, int, error) {
+	if ae.providerExecutor == nil {
+		return workerexecution.InferenceResponse{}, 0, workerprovider.NewProviderError(
+			workerexecution.WorkFailureTypeMisconfigured,
+			"provider execution requires a provider",
+			nil,
+		)
+	}
+	result, err := ae.providerExecutor.Execute(ctx, workerexecution.InvocationInput{
+		Request: req,
+		Attempt: 1,
+	})
+	if err != nil {
+		return workerexecution.InferenceResponse{}, 0, err
+	}
+	return result.Response, 0, nil
 }
 
 type providerRunnerAdapter struct {
@@ -658,39 +715,6 @@ func parseOutputAgainstSchema(content string, _ []byte) ([]workerexecution.Color
 	}
 
 	return []workerexecution.Color{color}, nil
-}
-
-func sleepWithContext(ctx context.Context, delay time.Duration) error {
-	timer := time.NewTimer(delay)
-	defer timer.Stop()
-
-	select {
-	case <-timer.C:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-}
-
-func retryJitter(random platformrandom.Source) retryJitterFunc {
-	return func(baseDelay time.Duration) (time.Duration, error) {
-		if baseDelay <= 0 {
-			return 0, nil
-		}
-
-		maxJitter := baseDelay / 2
-		if maxJitter <= 0 {
-			return 0, nil
-		}
-		if random == nil {
-			return 0, fmt.Errorf("provider retry random source is required")
-		}
-		value, err := random.Int63n(int64(maxJitter) + 1)
-		if err != nil {
-			return 0, err
-		}
-		return time.Duration(value), nil
-	}
 }
 
 // Compile-time check.

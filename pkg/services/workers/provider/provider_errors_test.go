@@ -1004,6 +1004,11 @@ func TestParseProviderExitFailure_RoutesOwnedProviderPackages(t *testing.T) {
 			want:     workerexecution.WorkFailureTypeThrottled,
 		},
 		{
+			provider: string(modelprovider.ProviderKiro),
+			result:   CommandResult{ExitCode: 124},
+			want:     workerexecution.WorkFailureTypeTimeout,
+		},
+		{
 			provider: "unknown-provider",
 			result:   CommandResult{ExitCode: 9, Stderr: []byte("cleanup noise")},
 			want:     workerexecution.WorkFailureTypeUnknown,
@@ -1017,6 +1022,21 @@ func TestParseProviderExitFailure_RoutesOwnedProviderPackages(t *testing.T) {
 				t.Fatalf("parseProviderExitFailure() = %#v, want reason %q", got.failure, tc.want)
 			}
 		})
+	}
+}
+
+func TestNormalizeProviderExecutionError_UsesExitFailureParserForNonZeroExitCode(t *testing.T) {
+	t.Parallel()
+
+	providerErr := normalizeProviderExecutionError(
+		string(modelprovider.ProviderKiro),
+		CommandResult{ExitCode: 124},
+		errors.New("command failed"),
+		nil,
+		nil,
+	)
+	if providerErr.Type != workerexecution.WorkFailureTypeTimeout {
+		t.Fatalf("normalizeProviderExecutionError() = %#v, want timeout", providerErr)
 	}
 }
 
