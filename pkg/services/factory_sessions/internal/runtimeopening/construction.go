@@ -261,7 +261,7 @@ func NewWorkerExecution(
 	state roles.CurrentRuntimeResolver,
 	modelService models.Service,
 	modelsScope models.RuntimeScopeRef,
-	contentMaterializer work.ContentMaterializer,
+	workService work.Service,
 	factory WorkersRuntimeFactory,
 ) (workers.RuntimeService, error) {
 	if factory == nil {
@@ -269,6 +269,9 @@ func NewWorkerExecution(
 	}
 	if clock == nil {
 		return nil, fmt.Errorf("Factory Runtime clock is required")
+	}
+	if workService == nil {
+		return nil, fmt.Errorf("Work service is required")
 	}
 	now := clock.Now
 	return factory(
@@ -284,7 +287,7 @@ func NewWorkerExecution(
 		workerRequest.InvocationSkipPermissionsOverride,
 		providerOverride,
 		now,
-		contentMaterializer,
+		work.ContentMaterializeFunc(workService.MaterializeContentURL),
 	)
 }
 

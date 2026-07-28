@@ -50,7 +50,7 @@ type Factory struct {
 	editableFactoryValidator        factorysessions.EditableFactoryValidator
 	initialFactorySnapshotFactory   factorydefinitions.InitialFactorySnapshotFactory
 	factoryRuntimeAssembler         FactoryRuntimeAssembler
-	contentMaterializer             work.ContentMaterializer
+	workService                     work.Service
 	providerSessions                providersessions.Service
 	factoryDefinitionValidator      factorydefinitions.Validator
 	namedPaths                      factorydefinitions.NamedPathResolver
@@ -104,7 +104,7 @@ func NewFactory(
 	editableFactoryValidator factorysessions.EditableFactoryValidator,
 	initialFactorySnapshotFactory factorydefinitions.InitialFactorySnapshotFactory,
 	factoryRuntimeAssembler FactoryRuntimeAssembler,
-	contentMaterializer work.ContentMaterializer,
+	workService work.Service,
 	loadFactory factorydefinitions.LoadedFactoryLoader,
 	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
 	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
@@ -181,7 +181,7 @@ func NewFactory(
 		editableFactoryValidator:        editableFactoryValidator,
 		initialFactorySnapshotFactory:   initialFactorySnapshotFactory,
 		factoryRuntimeAssembler:         factoryRuntimeAssembler,
-		contentMaterializer:             contentMaterializer,
+		workService:                     workService,
 		providerSessions:                providerSessions,
 		factoryDefinitionValidator:      factoryDefinitionValidator,
 		namedPaths:                      namedPaths,
@@ -236,7 +236,7 @@ func (f *Factory) openRuntime(
 		f.editableFactoryValidator,
 		f.initialFactorySnapshotFactory,
 		f.factoryRuntimeAssembler,
-		f.contentMaterializer,
+		f.workService,
 		f.providerSessions,
 		f.factoryDefinitionValidator,
 		f.namedPaths,

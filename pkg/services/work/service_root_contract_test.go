@@ -35,6 +35,8 @@ type rootServiceFake struct {
 
 	prepareInvocationResult work.PreparedInvocationInput
 	prepareInvocationErr    error
+	prepareRequestResult    work.WorkRequest
+	prepareRequestErr       error
 	primaryResult           work.PrimaryResultSelection
 	primaryResultErr        error
 
@@ -48,6 +50,7 @@ type rootServiceFake struct {
 	lastPrepareItems   []work.StagedSubmissionItem
 	lastStagedRef      string
 	lastContentURL     string
+	lastPrepareRequest work.WorkRequestPreparation
 	lastInvocationReq  work.InvocationInputPreparationRequest
 	lastPrimaryInput   work.PrimaryResultSelectionInput
 	cleanupCalled      bool
@@ -62,6 +65,14 @@ func (f *rootServiceFake) SubmitWorkRequestForSession(
 	f.lastSessionID = sessionID
 	f.lastRequest = request
 	return f.submitResult, f.submitErr
+}
+
+func (f *rootServiceFake) PrepareWorkRequest(
+	_ context.Context,
+	input work.WorkRequestPreparation,
+) (work.WorkRequest, error) {
+	f.lastPrepareRequest = input
+	return f.prepareRequestResult, f.prepareRequestErr
 }
 
 func (f *rootServiceFake) MoveWorkForSession(

@@ -346,3 +346,26 @@ func TestNewServiceContentSliceRequiresInjectedDependencies(t *testing.T) {
 		t.Fatalf("MaterializeContentURL error = %v, want materializer required", err)
 	}
 }
+
+func TestNewServiceDelegatesPrepareWorkRequest(t *testing.T) {
+	service := workservice.NewService(workRuntimeResolver{runtime: &recordingFactory{}}, os.ReadFile, nil, nil)
+	ctx := context.Background()
+
+	prepared, err := service.PrepareWorkRequest(ctx, work.WorkRequestPreparation{
+		Request: work.WorkRequest{
+			RequestID: "request-service-1",
+			Type:      work.WorkRequestTypeFactoryRequestBatch,
+			Works: []work.Work{{
+				Name:       "draft",
+				WorkTypeID: "task",
+				Content:    []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "hello"}},
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("PrepareWorkRequest: %v", err)
+	}
+	if prepared.RequestID != "request-service-1" || len(prepared.Works) != 1 || prepared.Works[0].Name != "draft" {
+		t.Fatalf("prepared = %#v, want normalized draft work request", prepared)
+	}
+}
