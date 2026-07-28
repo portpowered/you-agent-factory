@@ -595,6 +595,17 @@
   Factory Session server. Catalog metadata infers domain `transport` and
   subsection `cli/commands` from the path; every top-level `Test*` needs a
   customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
+  CLI factory portable-config / FatFactory wiring functional coverage belongs in
+  `tests/functional/transport/cli/commands/factory_config_portability_test.go`:
+  prove expand→flatten semantic preservation, split-layout and inline-script
+  flatten-then-standalone execution, and inline-definition load/execute paths
+  through `support.BuildProcess` + `support.FakeInputs` for `you factory config`
+  expand/flatten and `support.RunFactoryToCompletionWithEdgesAndWork` for
+  dispatch proofs; assert `ProviderCommandRunner` zero calls on expand/flatten
+  and `ScriptCommandRunner` capture for script-backed standalone execution;
+  do not reintroduce `factory_config_portability_long_test.go` under
+  bootstrap_portability. Catalog metadata infers domain `transport` and subsection
+  `cli/commands` from the path.
   CLI human text-stream output functional coverage belongs in
   `tests/functional/transport/cli/output/text_stream_test.go`: prove human
   response-stream runs surface incremental lifecycle output before terminal
