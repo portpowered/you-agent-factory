@@ -37,6 +37,14 @@ func NewAdapter(
 	return &Adapter{models: service, scope: scope, invoker: invoker, content: content}
 }
 
+// Root returns the accepted Models root consumed by adapter-owned operations.
+func (a *Adapter) Root() models.Service {
+	if a == nil {
+		return nil
+	}
+	return a.models
+}
+
 func (a *Adapter) ListModels(ctx context.Context) (factoryapi.ListModelsResponse, error) {
 	if a == nil || a.models == nil {
 		return factoryapi.ListModelsResponse{}, errors.New("Models service is required")
