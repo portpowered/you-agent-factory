@@ -2220,12 +2220,12 @@
       "destination": "work"
     },
     {
-      "packagePath": "pkg/services/work/transports/mcp",
+      "packagePath": "pkg/services/work/transports/http",
       "disposition": "retain",
       "destination": "work"
     },
     {
-      "packagePath": "pkg/services/work/transports/http",
+      "packagePath": "pkg/services/work/transports/mcp",
       "disposition": "retain",
       "destination": "work"
     },
