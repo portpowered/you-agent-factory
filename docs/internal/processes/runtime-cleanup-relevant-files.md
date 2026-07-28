@@ -854,8 +854,9 @@ for `pkg/wire` and in-owner callers until peer imports retire in later stories.
 Factory Definitions `wire/wire.go` composes the lifecycle host through
 `factory_definitions/internal` (`NewWithAuthoringLayout` → `internal/lifecycle`)
 and must not import public `definition/` or transitional `service/` shims;
-`wire/boundary_test.go` and `wire/wire_lifecycle_compose_test.go` lock that
-construction path. `non_owner_definition_import_boundary_test.go` seals zero
+`wire/boundary_test.go`, `wire/wire_lifecycle_compose_test.go`, and
+`wire/wire_lifecycle_behavior_test.go` lock that construction path and prove
+Activate/Save/GetCurrent*/version behavior on the published `Service` root. `non_owner_definition_import_boundary_test.go` seals zero
 production peer imports of public `definition/` (including peer integration
 tests); peers use `factory_definitions` root or `factory_definitions/wire`.
 `wire/wire.go` also composes the compilation subservice from the
