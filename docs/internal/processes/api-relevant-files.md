@@ -138,6 +138,15 @@ Use this map when changing the public REST contract.
   `pkg/transports/http` server composes injected service-owned adapters; HTTP-DEF
   proves fake-root parity at the adapter edge without importing Definitions
   internals.
+  CUT-DEF-RUN seals Factory Definitions production imports of Factory Runtime to
+  the service root only (`pkg/services/factory_runtime`) for orchestration
+  semantic-validation edges; the lease-wide guard is
+  `pkg/services/factory_definitions/runtime_import_boundary_test.go` and fails
+  closed on nested `factory_runtime/**`, legacy `pkg/factory/**`, and Petri
+  orchestrator implementation paths. Orchestration-specific semantic validation stays on the
+  injected `OrchestratorDefinitionValidator` port; the nested validation
+  subservice additionally forbids direct Runtime imports in
+  `internal/services/validation/boundary_test.go`.
 - Factory Visualization HTTP decoding, root contract mapping, typed error
   translation, and cancel/timeout handling live in
   `pkg/services/factory_visualization/transports/http`. HTTP-VIS proves
