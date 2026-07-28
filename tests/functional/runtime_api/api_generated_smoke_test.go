@@ -11,9 +11,20 @@ import (
 	"testing"
 	"time"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+func commandPrompt(request platformprocess.CommandRequest) string {
+	if len(request.Stdin) > 0 {
+		return string(request.Stdin)
+	}
+	if len(request.Args) > 0 {
+		return request.Args[len(request.Args)-1]
+	}
+	return ""
+}
 
 func assertGeneratedEventsStreamHasCanonicalHistory(t *testing.T, baseURL string) {
 	t.Helper()

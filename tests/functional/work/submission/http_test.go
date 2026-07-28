@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
 const (
@@ -124,6 +125,7 @@ func TestAPIBatchUpsertAcceptsWorksContent(t *testing.T) {
 	if firstPart.Text != "Batch canonical content." || secondPart.Text != "Second batch part." {
 		t.Fatalf("GET /work batch content = %#v, want ordered batch text parts", content)
 	}
+	functionalevidence.Covers(t, "rest/upsertWorkRequestBySessionId")
 }
 
 // TestCLIWorkTypeNameReachesLiveAPIHandler proves CLI submit with an explicit
