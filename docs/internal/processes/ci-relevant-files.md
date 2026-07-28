@@ -861,7 +861,11 @@ Wave 0 functional-tests-expansion planning authority lives under
   open an explicit session through `support.OpenFactorySessionAt`, then issue
   `you --server <url> run --factory ...` (no `--with-server`) and correlate the
   unchanged default session identity through public `session show` / session GET
-  reads. Catalog metadata infers domain `workers` and subsection
+  reads. For clean-invocation failure, use
+  `support.NewShapedProviderCommandRunner` with a deterministic non-zero exit
+  and stderr payload, assert empty stdout without false-success primary result,
+  and decode exactly one stderr `ErrorResponse` with actionable code/message.
+  Catalog metadata infers domain `workers` and subsection
   `transports/cli/run/lifecycle` from the path; every top-level `Test*` needs a
   customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
 - Packaged `@you/tts` invocation functional coverage belongs in

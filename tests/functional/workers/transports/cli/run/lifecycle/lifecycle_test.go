@@ -2,10 +2,12 @@ package lifecycle_test
 
 import (
 	"encoding/json"
+	"io"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -15,8 +17,10 @@ import (
 )
 
 const (
-	wantCleanInvocationPrimaryResult        = "deterministic workers lifecycle primary COMPLETE"
+	wantCleanInvocationPrimaryResult          = "deterministic workers lifecycle primary COMPLETE"
 	wantServerAttachedInvocationPrimaryResult = "deterministic workers lifecycle server-attached COMPLETE"
+	deterministicProviderFailureExit          = 7
+	deterministicProviderFailureStderr        = "deterministic provider rejection"
 )
 
 var cleanInvocationForbiddenOperatorChatter = []string{
@@ -155,6 +159,52 @@ func TestCLIRunServerAttachedInvocationTargetsExistingFactorySession(t *testing.
 	}
 }
 
+// TestCLIRunCleanInvocationFailurePreservesPublicError proves a failed
+// clean/prompt-style public you run invocation exits unsuccessfully, writes the
+// documented public error contract to stderr, and does not emit a false-success
+// primary result on stdout.
+func TestCLIRunCleanInvocationFailurePreservesPublicError(t *testing.T) {
+	t.Parallel()
+
+	factoryDir := scaffoldProviderBackedFactory(t)
+	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+
+	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+		ExitCode: deterministicProviderFailureExit,
+		Stderr:   []byte(deterministicProviderFailureStderr),
+	})
+	edges := serviceedges.Edges{}
+	support.ConfigureWorkerCommands(t, &edges, runner, nil)
+
+	args := []string{
+		"you", "run",
+		"--factory", factoryPath,
+		"--no-record",
+		"prove workers-owned clean invocation failure lifecycle",
+	}
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Input.WorkingDirectory = factoryDir
+	if err := support.BuildProcess(t, edges).Execute(inputs.Input); err == nil {
+		t.Fatal("Process.Execute error = nil, want terminal clean invocation failure")
+	}
+
+	stdout := strings.TrimSpace(inputs.Stdout())
+	if stdout != "" {
+		t.Fatalf("stdout = %q, want empty clean failure stdout without false primary result", stdout)
+	}
+	if strings.Contains(stdout, wantCleanInvocationPrimaryResult) {
+		t.Fatalf("stdout contains false-success primary result %q", wantCleanInvocationPrimaryResult)
+	}
+
+	errorResponse := decodeSingleErrorResponse(t, inputs.Stderr())
+	if errorResponse.Code == "" || strings.TrimSpace(errorResponse.Message) == "" {
+		t.Fatalf("ErrorResponse = %#v, want actionable code and message", errorResponse)
+	}
+	if errorResponse.Family != factoryapi.ErrorFamilyInternalServerError {
+		t.Fatalf("ErrorResponse family = %q, want %q", errorResponse.Family, factoryapi.ErrorFamilyInternalServerError)
+	}
+}
+
 func scaffoldProviderBackedFactory(t *testing.T) string {
 	t.Helper()
 
@@ -205,6 +255,20 @@ func getFactorySessionAt(t *testing.T, baseURL, sessionID string) factoryapi.Fac
 		t.Fatalf("Factory Session %q response = %#v, want public session id", sessionID, session)
 	}
 	return session
+}
+
+func decodeSingleErrorResponse(t *testing.T, stderr string) factoryapi.ErrorResponse {
+	t.Helper()
+
+	decoder := json.NewDecoder(strings.NewReader(stderr))
+	var response factoryapi.ErrorResponse
+	if err := decoder.Decode(&response); err != nil {
+		t.Fatalf("decode ErrorResponse: %v\nstderr:\n%s", err, stderr)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		t.Fatalf("stderr contains data after ErrorResponse: %v\nstderr:\n%s", err, stderr)
+	}
+	return response
 }
 
 func executeSessionShowCLI(
