@@ -1,4 +1,4 @@
-package service
+package internal
 
 import (
 	"os/exec"
@@ -13,7 +13,7 @@ import (
 const (
 	modulePrefix       = "github.com/portpowered/infinite-you/"
 	factoryRuntimeRoot = modulePrefix + "pkg/services/factory_runtime"
-	lifecycleRecorder  = modulePrefix + "pkg/services/recordings/service"
+	lifecycleRecorder  = modulePrefix + "pkg/services/recordings/internal"
 )
 
 // TestLifecycleRuntimeRecorderImportsRuntimeRootOnly seals CUT-REC-RUN story 002:

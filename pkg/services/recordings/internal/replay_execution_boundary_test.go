@@ -1,4 +1,4 @@
-package service
+package internal
 
 import (
 	"context"
@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	replayExecutionService = modulePrefix + "pkg/services/recordings/service"
+	replayExecutionService = modulePrefix + "pkg/services/recordings/internal"
 	replayExecutionPackage = modulePrefix + "pkg/services/recordings/replay"
 )
 
