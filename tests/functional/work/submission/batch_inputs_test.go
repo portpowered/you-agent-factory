@@ -51,10 +51,6 @@ const (
 // provided inline, via a filesystem path, or via stdin, and that each ingress
 // path yields customer-visible accept outcomes for the submitted works.
 func TestWorkBatchAcceptsInlineFileAndStdinShapes(t *testing.T) {
-	if testing.Short() {
-		t.Skip("slow work batch input shape sweep")
-	}
-
 	factoryDir := support.ScaffoldFactory(t, batchInputsFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:     factoryDir,
@@ -119,10 +115,6 @@ func TestWorkBatchAcceptsInlineFileAndStdinShapes(t *testing.T) {
 // batch ingress materializes the Factory default work type when a batch work
 // entry omits workTypeName and honors an explicit workTypeName when provided.
 func TestWorkBatchSelectsDefaultAndExplicitWorkTypes(t *testing.T) {
-	if testing.Short() {
-		t.Skip("slow work batch work-type selection sweep")
-	}
-
 	factoryDir := support.ScaffoldFactory(t, batchWorkTypeSelectionFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:     factoryDir,
@@ -181,10 +173,6 @@ func TestWorkBatchSelectsDefaultAndExplicitWorkTypes(t *testing.T) {
 // batch ingress rejects batches that name an unknown work type with a
 // customer-visible failure and leaves durable Work unchanged for that request.
 func TestWorkBatchRejectsUnknownTypeWithoutPartialMutation(t *testing.T) {
-	if testing.Short() {
-		t.Skip("slow work batch unknown-type rejection sweep")
-	}
-
 	factoryDir := support.ScaffoldFactory(t, batchWorkTypeSelectionFactoryConfig())
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:     factoryDir,
@@ -409,11 +397,6 @@ func findListedWorkByNameAndID(listed factoryapi.ListWorkResponse, workName, wor
 		}
 	}
 	return factoryapi.Work{}, false
-}
-
-func listedWorkContainsNameAndID(listed factoryapi.ListWorkResponse, workName, workID string) bool {
-	_, ok := findListedWorkByNameAndID(listed, workName, workID)
-	return ok
 }
 
 func assertBatchSubmitRejected(t *testing.T, output []byte, err error, requestID string) {
