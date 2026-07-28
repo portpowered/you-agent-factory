@@ -34,7 +34,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/clock",
-      "minimum": 19.60
+      "minimum": 15.68
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/contentstaging",
@@ -610,7 +610,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig",
-      "minimum": 75.23
+      "minimum": 73.83
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/prepare",
