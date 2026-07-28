@@ -8479,14 +8479,14 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/workflow/code_review_loop_long_test.go",
-      "package": "you-agent-factory/tests/functional/workflow",
+      "source_path": "tests/functional/factory/packaged/review/invocation_long_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/review",
       "scenario": "TestCodeReviewLoop",
       "lane": "functionallong",
-      "destination": "tests/functional/factory/packaged/review/invocation_test.go",
-      "catch_all": "workflow",
+      "destination": "tests/functional/factory/packaged/review/invocation_long_test.go",
+      "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "workflow-delete-01-orchestration-dispatch"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/workflow/config_driven_retry_loop_breaker_test.go",
@@ -8908,7 +8908,7 @@
       "replay_contracts": 23,
       "runtime_api": 96,
       "smoke": 62,
-      "workflow": 6
+      "workflow": 5
     },
     "by_top_level_package": {
       "acceptance": 12,
@@ -8916,7 +8916,7 @@
       "bootstrap_portability": 21,
       "cli": 59,
       "events": 5,
-      "factory": 51,
+      "factory": 52,
       "factory_visualization": 6,
       "guards_batch": 23,
       "models": 25,
@@ -8934,7 +8934,7 @@
       "transport": 106,
       "work": 29,
       "workers": 77,
-      "workflow": 6,
+      "workflow": 5,
       "workstations": 34
     },
     "customer_top_level_Test_scenarios": 870,
@@ -8962,7 +8962,7 @@
       "you-agent-factory/tests/functional/factory/packaged/fusion": 3,
       "you-agent-factory/tests/functional/factory/packaged/goal": 4,
       "you-agent-factory/tests/functional/factory/packaged/quorum": 3,
-      "you-agent-factory/tests/functional/factory/packaged/review": 3,
+      "you-agent-factory/tests/functional/factory/packaged/review": 4,
       "you-agent-factory/tests/functional/factory/packaged/subagent": 3,
       "you-agent-factory/tests/functional/factory/packaged/tts": 3,
       "you-agent-factory/tests/functional/factory_visualization": 6,
@@ -9037,7 +9037,7 @@
       "you-agent-factory/tests/functional/workers/inference/pi": 3,
       "you-agent-factory/tests/functional/workers/mock": 3,
       "you-agent-factory/tests/functional/workers/script": 13,
-      "you-agent-factory/tests/functional/workflow": 21,
+      "you-agent-factory/tests/functional/workflow": 20,
       "you-agent-factory/tests/functional/workstations/cron": 4,
       "you-agent-factory/tests/functional/workstations/execution": 4,
       "you-agent-factory/tests/functional/workstations/poller": 4,

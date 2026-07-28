@@ -108,7 +108,6 @@ var ExpectedDeletionOnlyBatches = []string{
 	"smoke-delete-11-resilience-process",
 	"smoke-delete-12-product-docs",
 	"smoke-delete-13-wrong-layer",
-	"workflow-delete-01-orchestration-dispatch",
 	"workflow-delete-08-guards",
 	"workflow-delete-09-orchestration-javascript",
 	"guards_batch-delete-01-work-relationships",

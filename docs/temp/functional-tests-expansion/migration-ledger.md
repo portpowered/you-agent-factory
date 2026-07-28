@@ -742,7 +742,6 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | tests/functional/orchestration/petri/dispatch/simple_run_test.go | you-agent-factory/tests/functional/orchestration/petri/dispatch | TestPetriSingleWorkerRunCompletesAtQuiescence | short | tests/functional/orchestration/petri/dispatch/simple_run_test.go | none | none | n/a |
 | tests/functional/orchestration/petri/dispatch/simple_run_test.go | you-agent-factory/tests/functional/orchestration/petri/dispatch | TestPetriWorkerErrorReturnsFailedTerminalOutcome | short | tests/functional/orchestration/petri/dispatch/simple_run_test.go | none | none | n/a |
 | tests/functional/orchestration/petri/dispatch/simple_run_test.go | you-agent-factory/tests/functional/orchestration/petri/dispatch | TestPetriInvocationInputAndOutputMapping | short | tests/functional/orchestration/petri/dispatch/simple_run_test.go | none | none | n/a |
-| tests/functional/workflow/code_review_loop_long_test.go | you-agent-factory/tests/functional/workflow | TestCodeReviewLoop | functionallong | tests/functional/factory/packaged/review/invocation_test.go | workflow | none | workflow-delete-01-orchestration-dispatch |
 | tests/functional/workflow/config_driven_retry_loop_breaker_test.go | you-agent-factory/tests/functional/workflow | TestConfigDrivenRetryLoopBreaker_SucceedsBeforeLimit | short | tests/functional/guards/global_test.go | workflow | none | workflow-delete-08-guards |
 | tests/functional/workflow/config_driven_retry_loop_breaker_test.go | you-agent-factory/tests/functional/workflow | TestConfigDrivenRetryLoopBreaker_TerminatesAfterMaxRetries | short | tests/functional/guards/global_test.go | workflow | none | workflow-delete-08-guards |
 | tests/functional/workflow/review_retry_exhaustion_long_test.go | you-agent-factory/tests/functional/workflow | TestReviewRetryLoopBreaker_FeedbackPropagated | functionallong | tests/functional/guards/global_test.go | workflow | none | workflow-delete-08-guards |
@@ -989,7 +988,7 @@ can execute independently until package ownership reaches zero.
 | `smoke-delete-11-resilience-process` | smoke | 6 | resilience/process | none |
 | `smoke-delete-12-product-docs` | smoke | 2 | product/docs | docs-reference-smoke |
 | `smoke-delete-13-wrong-layer` | smoke | 22 | approved wrong-layer (contract-smoke-outside-functional) | none |
-| `workflow-delete-01-orchestration-dispatch` | workflow | 1 | orchestration/petri, factory/packaged/review | none |
+| `workflow-delete-01-orchestration-dispatch` | workflow | 1 | orchestration/petri, factory/packaged/review | released |
 | `workflow-delete-02-work-routing` | workflow | 7 | work/routing | released |
 | `workflow-delete-03-work-relationships` | workflow | 8 | work/relationships | released |
 | `workflow-delete-04-work-routing-logical` | workflow | 2 | work/routing | released |
@@ -1158,7 +1157,6 @@ Batch execution guidance for later move work:
 | tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go | you-agent-factory/tests/functional/orchestration/petri/dispatch | TestPetriIndependentWorkDispatchesConcurrently | short | tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go | none | none | n/a |
 | tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go | you-agent-factory/tests/functional/orchestration/petri/dispatch | TestPetriConcurrentResultsCorrelateToOriginalWork | short | tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go | none | none | n/a |
 | tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go | you-agent-factory/tests/functional/orchestration/petri/dispatch | TestPetriConcurrentFailureDoesNotDuplicateDispatch | short | tests/functional/orchestration/petri/dispatch/concurrent_workers_test.go | none | none | n/a |
-| tests/functional/workflow/code_review_loop_long_test.go | you-agent-factory/tests/functional/workflow | TestCodeReviewLoop | functionallong | tests/functional/factory/packaged/review/invocation_test.go | workflow | none | workflow-delete-01-orchestration-dispatch |
 | tests/functional/workflow/config_driven_retry_loop_breaker_test.go | you-agent-factory/tests/functional/workflow | TestConfigDrivenRetryLoopBreaker_SucceedsBeforeLimit | short | tests/functional/guards/global_test.go | workflow | none | workflow-delete-08-guards |
 | tests/functional/workflow/config_driven_retry_loop_breaker_test.go | you-agent-factory/tests/functional/workflow | TestConfigDrivenRetryLoopBreaker_TerminatesAfterMaxRetries | short | tests/functional/guards/global_test.go | workflow | none | workflow-delete-08-guards |
 | tests/functional/workflow/review_retry_exhaustion_long_test.go | you-agent-factory/tests/functional/workflow | TestReviewRetryLoopBreaker_FeedbackPropagated | functionallong | tests/functional/guards/global_test.go | workflow | none | workflow-delete-08-guards |
@@ -1710,7 +1708,7 @@ without inventing destinations. Prefer independent, reviewable batch sizes.
 | `smoke-delete-11-resilience-process` | smoke | 6 | resilience/process | planned |
 | `smoke-delete-12-product-docs` | smoke | 2 | product/docs | planned |
 | `smoke-delete-13-wrong-layer` | smoke | 22 | approved wrong-layer (contract-smoke-outside-functional) | planned |
-| `workflow-delete-01-orchestration-dispatch` | workflow | 1 | orchestration/petri, factory/packaged/review | planned |
+| `workflow-delete-01-orchestration-dispatch` | workflow | 1 | orchestration/petri, factory/packaged/review | released |
 | `workflow-delete-02-work-routing` | workflow | 7 | work/routing | released |
 | `workflow-delete-03-work-relationships` | workflow | 8 | work/relationships | released |
 | `workflow-delete-04-work-routing-logical` | workflow | 2 | work/routing | released |
