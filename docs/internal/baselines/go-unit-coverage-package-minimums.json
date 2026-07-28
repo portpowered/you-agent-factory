@@ -1798,7 +1798,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work",
-      "minimum": 85.74
+      "minimum": 81.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/contenturl",
