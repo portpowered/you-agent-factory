@@ -1643,6 +1643,10 @@
       "minimum": 26.12
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http",
+      "minimum": 77.80
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/wire",
       "exception": {
         "kind": "measurement",
@@ -1651,10 +1655,6 @@
         "deadline": "2027-07-15",
         "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
       }
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/transports/http",
-      "minimum": 77.80
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/system_initialization",
