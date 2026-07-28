@@ -150,6 +150,17 @@ Use this map when changing the public REST contract.
   `pkg/services/factory_definitions/non_owner_service_import_boundary_test.go`,
   with `pkg/services/factory_definitions/service` registered in
   `cmd/pkgboundarycheck` converged service subpackage roots.
+  DEL-DEF story 001 (`pss-del-def-001`) confirms prerequisite packets are
+  Factory-complete before leased deletion begins. Observable gate proofs live in
+  `pkg/services/factory_definitions/del_def_prerequisite_gate_test.go` (tree
+  invariants from CLN-DEF-CONTRACTS, IMP-DEF repair subservices, CUT-DEF-SES,
+  INV-DEF-TOPLEVEL canonical roots, and CLN-DEF-FOLD-TOPLEVEL transitional
+  packages still present for deletion). CUT-DEF-RUN import sealing is proved by
+  `runtime_import_boundary_test.go`; BOOT-DEF Definitions-root bootstrap proofs
+  live in
+  `pkg/services/system_initialization/initialize_definitions_root_boundary_test.go`.
+  Do not delete transitional top-level packages or lower baselines until story
+  001 passes.
   CUT-DEF-RUN seals Factory Definitions production imports of Factory Runtime to
   the service root only (`pkg/services/factory_runtime`) for orchestration
   semantic-validation edges; the lease-wide guard is
