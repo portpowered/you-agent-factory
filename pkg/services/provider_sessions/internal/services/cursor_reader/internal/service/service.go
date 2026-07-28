@@ -7,16 +7,17 @@ import (
 	"strings"
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	providersessionsinternal "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal"
 	"github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor"
 	cursorreader "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/cursor_reader"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
 type reader struct {
-	files           providersessions.FileSystem
-	walkDirectory   providersessions.CursorWalkDirectory
-	resolveSymlinks providersessions.CursorResolveSymlinks
-	openDatabase    providersessions.CursorOpenSQLDatabase
+	files           providersessionsinternal.FileSystem
+	walkDirectory   providersessionsinternal.CursorWalkDirectory
+	resolveSymlinks providersessionsinternal.CursorResolveSymlinks
+	openDatabase    providersessionsinternal.CursorOpenSQLDatabase
 	root            cursor.AgentStorageRoot
 }
 
@@ -24,10 +25,10 @@ var _ cursorreader.Service = (*reader)(nil)
 
 // New constructs an inert Cursor reader from the exact storage effects it uses.
 func New(
-	files providersessions.FileSystem,
-	walkDirectory providersessions.CursorWalkDirectory,
-	resolveSymlinks providersessions.CursorResolveSymlinks,
-	openDatabase providersessions.CursorOpenSQLDatabase,
+	files providersessionsinternal.FileSystem,
+	walkDirectory providersessionsinternal.CursorWalkDirectory,
+	resolveSymlinks providersessionsinternal.CursorResolveSymlinks,
+	openDatabase providersessionsinternal.CursorOpenSQLDatabase,
 	root string,
 ) (cursorreader.Service, error) {
 	switch {
@@ -52,9 +53,9 @@ func New(
 // DefaultStorageRoot returns the configured platform's Cursor storage root
 // without exposing Cursor-native root types to the Provider Sessions root.
 func DefaultStorageRoot(
-	resolveHome providersessions.ResolveHomeDirectory,
-	files providersessions.FileSystem,
-	operatingSystem providersessions.OperatingSystem,
+	resolveHome providersessionsinternal.ResolveHomeDirectory,
+	files providersessionsinternal.FileSystem,
+	operatingSystem providersessionsinternal.OperatingSystem,
 ) (string, error) {
 	root, err := cursor.DefaultAgentStorageRoot(resolveHome, files, operatingSystem)
 	return string(root), err

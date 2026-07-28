@@ -14,6 +14,7 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	providersessionsinternal "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal"
 )
 
 func TestParseDetailsTruncatedJSONLReportsBoundedDiagnostic(t *testing.T) {
@@ -250,7 +251,7 @@ func (r errorReader) Read([]byte) (int, error) {
 }
 
 type errorOpenFileSystem struct {
-	base      providersessions.FileSystem
+	base      providersessionsinternal.FileSystem
 	openError error
 }
 

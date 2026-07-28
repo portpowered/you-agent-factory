@@ -1803,7 +1803,7 @@
       "package": "you-agent-factory/tests/functional/factory_visualization",
       "scenario": "TestVisualizationActivatesThroughPublicRootAfterLifecycle",
       "lane": "short",
-      "destination": "tests/functional/factory_visualization/activation_lifecycle_test.go",
+      "destination": "wrong-layer: factory visualization root composition not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/factory_visualization/activation_lifecycle_test.go.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -1813,7 +1813,7 @@
       "package": "you-agent-factory/tests/functional/factory_visualization",
       "scenario": "TestVisualizationRemainsInertThroughRootBuildProcessConstruction",
       "lane": "short",
-      "destination": "tests/functional/factory_visualization/inert_construction_test.go",
+      "destination": "wrong-layer: factory visualization root composition not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/factory_visualization/inert_construction_test.go.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -1823,7 +1823,7 @@
       "package": "you-agent-factory/tests/functional/factory_visualization",
       "scenario": "TestVisualizationObserveThroughPublicRootAfterLifecycle",
       "lane": "short",
-      "destination": "tests/functional/factory_visualization/observe_live_view_test.go",
+      "destination": "wrong-layer: factory visualization root composition not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/factory_visualization/observe_live_view_test.go.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -1833,7 +1833,7 @@
       "package": "you-agent-factory/tests/functional/factory_visualization",
       "scenario": "TestFunctionalProofsImportOnlyPublishedVisualizationSurfaces",
       "lane": "short",
-      "destination": "tests/functional/factory_visualization/peer_import_boundary_test.go",
+      "destination": "wrong-layer: factory visualization root composition not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/factory_visualization/peer_import_boundary_test.go.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -1843,7 +1843,7 @@
       "package": "you-agent-factory/tests/functional/factory_visualization",
       "scenario": "TestProductionPeersReachVisualizationThroughPublishedSurfacesOnly",
       "lane": "short",
-      "destination": "tests/functional/factory_visualization/peer_import_boundary_test.go",
+      "destination": "wrong-layer: factory visualization root composition not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/factory_visualization/peer_import_boundary_test.go.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -1853,7 +1853,7 @@
       "package": "you-agent-factory/tests/functional/factory_visualization",
       "scenario": "TestVisualizationResponsePresentationThroughPublicRootAfterLifecycle",
       "lane": "short",
-      "destination": "tests/functional/factory_visualization/response_presentation_test.go",
+      "destination": "wrong-layer: factory visualization root composition not yet catalogued in test-file-checklist. Replacement evidence owner: tests/functional/factory_visualization/response_presentation_test.go.",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -3224,6 +3224,36 @@
       "scenario": "TestCodexProviderSessionMissingTranscriptReturnsNotFound",
       "lane": "short",
       "destination": "tests/functional/provider_sessions/details/codex_details_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/provider_sessions/details/cursor_details_test.go",
+      "package": "you-agent-factory/tests/functional/provider_sessions/details",
+      "scenario": "TestCursorProviderSessionDetailsLoadFromGoldenMetadata",
+      "lane": "short",
+      "destination": "tests/functional/provider_sessions/details/cursor_details_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/provider_sessions/details/cursor_details_test.go",
+      "package": "you-agent-factory/tests/functional/provider_sessions/details",
+      "scenario": "TestCursorProviderSessionMissingIDReturnsNotFound",
+      "lane": "short",
+      "destination": "tests/functional/provider_sessions/details/cursor_details_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/provider_sessions/details/cursor_details_test.go",
+      "package": "you-agent-factory/tests/functional/provider_sessions/details",
+      "scenario": "TestCursorProviderSessionUnavailableContentRemainsInspectable",
+      "lane": "short",
+      "destination": "tests/functional/provider_sessions/details/cursor_details_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -9059,10 +9089,10 @@
       "deletion_only_batch": "n/a"
     }
   ],
-  "scanned_at_utc": "2026-07-28T18:20:00Z",
+  "scanned_at_utc": "2026-07-28T18:35:00Z",
   "summary": {
     "by_catch_all": {
-      "none": 630,
+      "none": 633,
       "bootstrap_portability": 22,
       "guards_batch": 23,
       "replay_contracts": 23,
@@ -9084,7 +9114,7 @@
       "operator_settings": 10,
       "orchestration": 48,
       "product": 13,
-      "provider_sessions": 9,
+      "provider_sessions": 12,
       "providers": 64,
       "replay_contracts": 23,
       "runtime_api": 105,
@@ -9097,9 +9127,9 @@
       "workflow": 30,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 886,
+    "customer_top_level_Test_scenarios": 889,
     "lane_functionallong": 95,
-    "lane_short": 791,
+    "lane_short": 794,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 14,
@@ -9145,7 +9175,7 @@
       "you-agent-factory/tests/functional/product/packaged_factory_guard_failure": 1,
       "you-agent-factory/tests/functional/product/packaged_factory_portability": 1,
       "you-agent-factory/tests/functional/provider_sessions/association": 6,
-      "you-agent-factory/tests/functional/provider_sessions/details": 3,
+      "you-agent-factory/tests/functional/provider_sessions/details": 6,
       "you-agent-factory/tests/functional/providers": 36,
       "you-agent-factory/tests/functional/providers/codex": 7,
       "you-agent-factory/tests/functional/providers/cursor": 8,

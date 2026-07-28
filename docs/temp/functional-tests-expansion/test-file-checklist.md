@@ -855,7 +855,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCodexProviderSessionMissingTranscriptReturnsNotFound` covers absence.
   - `TestCodexProviderSessionCorruptTranscriptReturnsSafeDiagnostic`.
 
-- [ ] `tests/functional/provider_sessions/details/cursor_details_test.go`
+- [x] `tests/functional/provider_sessions/details/cursor_details_test.go`
   - `TestCursorProviderSessionDetailsLoadFromGoldenMetadata` covers readable
     transcript data.
   - `TestCursorProviderSessionUnavailableContentRemainsInspectable` covers

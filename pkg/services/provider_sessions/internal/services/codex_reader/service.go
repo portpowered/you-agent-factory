@@ -6,6 +6,7 @@ import (
 	"context"
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	providersessionsinternal "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
@@ -19,8 +20,8 @@ type Service interface {
 // Dependencies are fixed when Provider Sessions is composed. They never cross
 // the peer-facing Provider Sessions invocation boundary.
 type Dependencies struct {
-	Files           providersessions.FileSystem
-	WalkDirectory   providersessions.CodexWalkDirectory
-	ResolveSymlinks providersessions.CodexResolveSymlinks
+	Files           providersessionsinternal.FileSystem
+	WalkDirectory   providersessionsinternal.CodexWalkDirectory
+	ResolveSymlinks providersessionsinternal.CodexResolveSymlinks
 	SessionsRoot    string
 }
