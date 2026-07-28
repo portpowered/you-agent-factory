@@ -2,6 +2,9 @@ package wire_test
 
 import (
 	"context"
+	"errors"
+	"runtime"
+	"sync"
 	"testing"
 	"time"
 
@@ -87,6 +90,46 @@ type stubCommandRunner struct{}
 
 func (stubCommandRunner) Run(context.Context, workers.CommandRequest) (workers.CommandResult, error) {
 	return workers.CommandResult{}, nil
+}
+
+type recordingCommandRunner struct {
+	calls *int
+}
+
+func (runner recordingCommandRunner) Run(context.Context, workers.CommandRequest) (workers.CommandResult, error) {
+	*runner.calls++
+	panic("command runner invoked during inert construction")
+}
+
+type recordingHostedPollers struct {
+	startCalls    *int
+	validateCalls *int
+}
+
+func (pollers recordingHostedPollers) StartLinearPoller(
+	context.Context,
+	*sync.WaitGroup,
+	factorydefinitions.RuntimeConfigLookup,
+	factorydefinitions.FactoryWorkstationConfig,
+	*factorydefinitions.FactoryWorkerConfig,
+	automations.HostedWorkSubmitter,
+) error {
+	*pollers.startCalls++
+	panic("hosted linear poller started during inert construction")
+}
+
+func (pollers recordingHostedPollers) ValidateLinearPoller(
+	factorydefinitions.RuntimeConfigLookup,
+	factorydefinitions.FactoryWorkstationConfig,
+	*factorydefinitions.FactoryWorkerConfig,
+	automations.HostedWorkSubmitter,
+) error {
+	*pollers.validateCalls++
+	panic("hosted linear poller validated during inert construction")
+}
+
+type rootPeer interface {
+	Root() automations.Root
 }
 
 func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
@@ -175,5 +218,118 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	var root automations.Service = service
 	if root == nil {
 		t.Fatal("constructed service is not assignable to automations.Service")
+	}
+}
+
+func TestNewServiceConstructsInertRoot(t *testing.T) {
+	t.Parallel()
+
+	commandRunnerCalls := 0
+	templateCalls := 0
+	hostedFactoryCalls := 0
+	startLinearPollerCalls := 0
+	validateLinearPollerCalls := 0
+
+	ports := validConstructionPorts(t)
+	ports.commandRunner = recordingCommandRunner{calls: &commandRunnerCalls}
+	ports.hostedSources = func(
+		*zap.Logger,
+		workers.HostedPollerClock,
+		workers.HostedPollerHTTPDoer,
+		workers.HostedPollerSecretResolver,
+		string,
+	) automations.HostedPollers {
+		hostedFactoryCalls++
+		return recordingHostedPollers{
+			startCalls:    &startLinearPollerCalls,
+			validateCalls: &validateLinearPollerCalls,
+		}
+	}
+	ports.resolveTemplates = func(
+		string,
+		map[string]string,
+		[]workers.Token,
+		*workers.Context,
+		string,
+	) (*workers.ResolvedTemplateFields, error) {
+		templateCalls++
+		panic("template resolver invoked during inert construction")
+	}
+
+	runtime.GC()
+	time.Sleep(20 * time.Millisecond)
+	baseline := runtime.NumGoroutine()
+
+	service, err := automationswire.NewService(
+		ports.logger,
+		ports.clock,
+		ports.commandRunner,
+		"automations-wire-inert",
+		"",
+		ports.hostedSources,
+		nil,
+		ports.hostedClock,
+		nil,
+		nil,
+		"",
+		ports.resolveTemplates,
+		ports.executionPolicy,
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	if service == nil {
+		t.Fatal("NewService() returned nil service")
+	}
+	var published automations.Service = service
+	if published == nil {
+		t.Fatal("constructed service is not assignable to automations.Service")
+	}
+
+	if commandRunnerCalls != 0 || templateCalls != 0 {
+		t.Fatalf(
+			"construction invoked effect stubs (command runner=%d template resolver=%d), want inert construction",
+			commandRunnerCalls,
+			templateCalls,
+		)
+	}
+	if startLinearPollerCalls != 0 || validateLinearPollerCalls != 0 {
+		t.Fatalf(
+			"construction invoked hosted poller lifecycle (start=%d validate=%d), want inert construction",
+			startLinearPollerCalls,
+			validateLinearPollerCalls,
+		)
+	}
+	if hostedFactoryCalls != 1 {
+		t.Fatalf("hosted-sources factory calls = %d, want exactly one composition call", hostedFactoryCalls)
+	}
+
+	runtime.GC()
+	time.Sleep(20 * time.Millisecond)
+	if leaked := runtime.NumGoroutine() - baseline; leaked > 4 {
+		t.Fatalf(
+			"goroutine leak after construction: baseline=%d current=%d delta=%d",
+			baseline,
+			runtime.NumGoroutine(),
+			leaked,
+		)
+	}
+
+	peer, ok := service.(rootPeer)
+	if !ok {
+		t.Fatal("constructed service does not expose Root() for published peer inspection")
+	}
+	_, err = peer.Root().SourceStatus(context.Background(), automations.SourceStatusRequest{
+		Identity: automations.SourceIdentity{
+			AutomationID: "automations-wire-inert",
+			SourceID:     "missing-source",
+		},
+	})
+	var automationsErr *automations.Error
+	if !errors.As(err, &automationsErr) || automationsErr.Code != automations.ErrorCodeNotFound {
+		t.Fatalf("SourceStatus() = %v, want typed not-found lifecycle state after inert construction", err)
+	}
+	if !errors.Is(err, automations.ErrNotFound) {
+		t.Fatalf("SourceStatus() = %v, want ErrNotFound after inert construction", err)
 	}
 }
