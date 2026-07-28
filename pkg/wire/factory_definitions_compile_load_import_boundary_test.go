@@ -13,7 +13,7 @@ const (
 
 var transitionalCompileLoadImportRoots = []string{
 	modulePrefix + "pkg/services/factory_definitions/loading",
-	modulePrefix + "pkg/services/factory_definitions/internal/services/compilation/loadedsource",
+	modulePrefix + "pkg/services/factory_definitions/loadedsource",
 	modulePrefix + "pkg/services/factory_definitions/runtimeconfig",
 }
 
