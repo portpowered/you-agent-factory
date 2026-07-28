@@ -1408,6 +1408,12 @@
       "evidence": "pkg/services/provider_sessions -\u003e pkg/services/providers"
     },
     {
+      "fromOwner": "provider_sessions",
+      "toOwner": "transports",
+      "class": "command",
+      "evidence": "pkg/services/provider_sessions/transports/http -\u003e pkg/transports/http/generated"
+    },
+    {
       "fromOwner": "providers",
       "toOwner": "models",
       "class": "command",
@@ -3859,6 +3865,12 @@
     },
     {
       "packagePath": "pkg/services/provider_sessions/service",
+      "disposition": "retain",
+      "destination": "provider_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/transports/http",
       "disposition": "retain",
       "destination": "provider_sessions",
       "destinationKind": "owner"
