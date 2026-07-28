@@ -51,34 +51,6 @@
       "name": "TestBuildProcessRemainsFilesystemWatcherInertBeforeRuntimeLifecycle"
     },
     {
-      "file": "bootstrap_portability/agent_factory_export_import_fixture_test.go",
-      "name": "TestAgentFactoryExportImportFixture_AuthoredLayoutInterpolatesProjectSpecificPromptContent"
-    },
-    {
-      "file": "bootstrap_portability/agent_factory_export_import_fixture_test.go",
-      "name": "TestAgentFactoryExportImportFixture_FlattenedPayloadKeepsCanonicalArrayRoutes"
-    },
-    {
-      "file": "bootstrap_portability/api_export_import_e2e_smoke_test.go",
-      "name": "TestExportImportSmoke_ExportedFactoryCanBeReimportedThroughCustomerPath"
-    },
-    {
-      "file": "bootstrap_portability/api_export_import_e2e_smoke_test.go",
-      "name": "TestExportImportSmoke_ImportedFactoryPersistsThinSplitRuntimeLayout"
-    },
-    {
-      "file": "bootstrap_portability/api_export_import_e2e_smoke_test.go",
-      "name": "TestExportImportSmoke_PreservesBatchInboxGitkeepAfterImport"
-    },
-    {
-      "file": "bootstrap_portability/api_export_import_e2e_smoke_test.go",
-      "name": "TestExportImportSmoke_PreservesPortableLayoutThroughExportImportAndActivation"
-    },
-    {
-      "file": "bootstrap_portability/api_export_import_e2e_smoke_test.go",
-      "name": "TestExportImportSmoke_PublicShareImportSurfaceCarriesDetachedStarterWork"
-    },
-    {
       "file": "bootstrap_portability/automat_portability_fixture_test.go",
       "name": "TestAutomatPortabilityFixture_ExpandRestoresPortableRuntimeLayout"
     },
@@ -97,18 +69,6 @@
     {
       "file": "bootstrap_portability/automat_portability_integration_test.go",
       "name": "TestAutomatPortabilityFixture_IntegrationSmoke_CoversFlattenExpandAndBoundedReadiness"
-    },
-    {
-      "file": "bootstrap_portability/export_import_fixture_test.go",
-      "name": "TestExportImportFixture_BuildsCanonicalExportAndImportContractsFromAuthoredFixture"
-    },
-    {
-      "file": "bootstrap_portability/export_import_fixture_test.go",
-      "name": "TestExportImportFixture_PersistedFactoryExposesReusableCurrentFactorySignals"
-    },
-    {
-      "file": "bootstrap_portability/export_import_nested_docs_test.go",
-      "name": "TestExportImportSmoke_PreservesNestedFactoryDocsThroughExportImport"
     },
     {
       "file": "cli/factory_run/output/failure_test.go",
