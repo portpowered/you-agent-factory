@@ -982,10 +982,14 @@ after the domain call returns.
 Cross-service Factory Runtime consumers depend on the singular root `Service`
 in `pkg/services/factory_runtime` (`interfaces.go`) plus root typed errors in
 `composition_contracts.go`. Factory Sessions production packages must import only
-`pkg/services/factory_runtime` (not `factory_runtime/javascript`, `service`,
-`engine`, or other nested Runtime paths); lock this with
+`pkg/services/factory_runtime` (not `factory_runtime/javascript`, deleted
+`factory_runtime/service`, `engine`, or other nested Runtime paths); lock this with
 `pkg/services/factory_sessions/runtime_consumer_import_boundary_test.go` and
-`cmd/pkgboundarycheck` peer-subpackage rules. Lock live control and observation
+`cmd/pkgboundarycheck` peer-subpackage rules. After DEL-RUN-SERVICE deletes the
+transitional `factory_runtime/service` tree, lock the deletion with
+`pkg/services/factory_runtime/wire/service_deletion_proof_test.go` (filesystem,
+module import scan, ownership-inventory absence, wire construction, and pipeline
+package retention proofs). Lock live control and observation
 through `pkg/services/factory_sessions/runtime_control_observation_boundary_test.go`
 (import scan plus root peer characterization),
 `pkg/services/factory_sessions/internal/services/live_runtime/control_observation_boundary_test.go`,

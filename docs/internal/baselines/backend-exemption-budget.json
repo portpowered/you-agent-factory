@@ -279,36 +279,6 @@
     },
     {
       "rule": "backendsizecheck:ignore-function",
-      "target": "pkg/services/factory_runtime/service/assembly.go#Assembly.Assemble",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
-    },
-    {
-      "rule": "backendsizecheck:ignore-function",
-      "target": "pkg/services/factory_runtime/service/build.go#RuntimeFactory.Build",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
-    },
-    {
-      "rule": "backendsizecheck:ignore-function",
-      "target": "pkg/services/factory_runtime/service/build.go#assembleRuntimeBundle",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
-    },
-    {
-      "rule": "backendsizecheck:ignore-function",
-      "target": "pkg/services/factory_runtime/service/runtime_build.go#NewRuntimeBuild",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
-    },
-    {
-      "rule": "backendsizecheck:ignore-function",
-      "target": "pkg/services/factory_runtime/service/runtime_build.go#buildBundle",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
-    },
-    {
-      "rule": "backendsizecheck:ignore-function",
       "target": "pkg/services/factory_sessions/internal/execution/control.go#JavaScriptRuntimeService.applyRuntimeExtendedLifecycleControl",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
@@ -510,12 +480,6 @@
       "target": "pkg/services/factory_runtime/runtime/factory_runtime_test_helpers_test.go#assertSafeBoundaryRequestView",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_runtime/service/build.go#RuntimeFactory.Build",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
@@ -1396,36 +1360,6 @@
     {
       "rule": "pkgmaintcheck:ignore-function-lines",
       "target": "pkg/services/factory_runtime/runtime/factory.go#New",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-function-lines",
-      "target": "pkg/services/factory_runtime/service/assembly.go#Assembly.Assemble",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-function-lines",
-      "target": "pkg/services/factory_runtime/service/build.go#RuntimeFactory.Build",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-function-lines",
-      "target": "pkg/services/factory_runtime/service/build.go#assembleRuntimeBundle",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-function-lines",
-      "target": "pkg/services/factory_runtime/service/runtime_build.go#NewRuntimeBuild",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-function-lines",
-      "target": "pkg/services/factory_runtime/service/runtime_build.go#buildBundle",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
     },

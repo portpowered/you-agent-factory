@@ -84,15 +84,15 @@ func TestRunRequiresExactDeletionOnlyReusableSupportBaseline(t *testing.T) {
 	repoRoot := t.TempDir()
 	makeDir(t, repoRoot, "pkg/root")
 	const filePath = "internal/testutil/runtime.go"
-	const importPath = "github.com/portpowered/infinite-you/pkg/services/factory_runtime/service"
+	const importPath = "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
 	writeGoImportFile(t, repoRoot, filePath, "testutil", importPath)
 	writeSupportServiceBaseline(t, repoRoot, supportServiceImportBaseline{
 		Version: 1,
 		Entries: []supportServiceImportBaselineEntry{{
-			Owner:        "factory_runtime",
+			Owner:        "factory_definitions",
 			ImportPath:   importPath,
 			FilePath:     filePath,
-			TargetRoot:   "pkg/services/factory_runtime",
+			TargetRoot:   "pkg/services/factory_definitions",
 			Stage:        supportServiceImportBaselineStage,
 			DeletionGate: supportServiceImportDeletionGate,
 		}},
@@ -107,7 +107,7 @@ func TestRunRequiresExactDeletionOnlyReusableSupportBaseline(t *testing.T) {
 		repoRoot,
 		filePath,
 		"testutil",
-		"github.com/portpowered/infinite-you/pkg/services/factory_runtime",
+		"github.com/portpowered/infinite-you/pkg/services/factory_definitions",
 	)
 	stderr := &bytes.Buffer{}
 	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
@@ -166,7 +166,7 @@ func TestReusableSupportScanDoesNotConflateTestFiles(t *testing.T) {
 		repoRoot,
 		"internal/testutil/runtime_test.go",
 		"testutil",
-		"github.com/portpowered/infinite-you/pkg/services/factory_runtime/service",
+		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/service",
 	)
 	findings, err := scanSupportServiceSubpackageImports(repoRoot)
 	if err != nil {
@@ -186,7 +186,7 @@ func TestCreateReusableSupportBaselineRefusesOverwrite(t *testing.T) {
 		repoRoot,
 		"internal/testutil/runtime.go",
 		"testutil",
-		"github.com/portpowered/infinite-you/pkg/services/factory_runtime/service",
+		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/service",
 	)
 	if err := createSupportServiceImportBaseline(config{root: repoRoot}); err != nil {
 		t.Fatalf("createSupportServiceImportBaseline() error = %v", err)

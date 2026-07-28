@@ -789,14 +789,14 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCodexProviderSessionMissingTranscriptReturnsNotFound` covers absence.
   - `TestCodexProviderSessionCorruptTranscriptReturnsSafeDiagnostic`.
 
-- [ ] `tests/functional/provider_sessions/details/cursor_details_test.go`
+- [x] `tests/functional/provider_sessions/details/cursor_details_test.go`
   - `TestCursorProviderSessionDetailsLoadFromGoldenMetadata` covers readable
     transcript data.
   - `TestCursorProviderSessionUnavailableContentRemainsInspectable` covers
     partial data.
   - `TestCursorProviderSessionMissingIDReturnsNotFound`.
 
-- [ ] `tests/functional/provider_sessions/details/http_test.go`
+- [x] `tests/functional/provider_sessions/details/http_test.go`
   - `TestAPIProviderSessionDetailsUseGoldenExpectedMetadata`.
   - `TestAPIProviderSessionRejectsRawFilesystemPathInput`.
   - `TestAPIUnsupportedProviderSessionKindReturnsTypedError`.
