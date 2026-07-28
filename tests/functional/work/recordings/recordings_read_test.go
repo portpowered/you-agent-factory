@@ -57,6 +57,107 @@ func TestRecordingsBackedWorkReadsUseRecordingsRootContract(t *testing.T) {
 	}
 }
 
+func TestGetWorkFromRecordingsRootUsesRecordingsServiceRoot(t *testing.T) {
+	t.Parallel()
+
+	scope := recordings.CanonicalEventScope{FactorySessionID: "session-recordings-functional"}
+	events := []recordings.CanonicalEvent{
+		{
+			ID:          "event-1",
+			Sequence:    0,
+			FactoryTick: 1,
+			Scope:       scope,
+			Kind:        recordings.CanonicalEventKind(interfaces.FactoryEventTypeWorkRequest),
+		},
+		{
+			ID:          "event-2",
+			Sequence:    1,
+			FactoryTick: 5,
+			Scope:       scope,
+			Kind:        recordings.CanonicalEventKind(interfaces.FactoryEventTypeWorkRequest),
+		},
+	}
+	fake := &functionalRecordingsRootFake{
+		events: events,
+		worldState: recordings.WorldStateView{
+			SchemaVersion: recordings.WorldStateViewSchemaV1,
+			Scope:         scope,
+			SelectedTick:  5,
+			Payload:       recordingsBackedRichWorldPayload(t),
+		},
+	}
+
+	got, err := stateaccessrecordings.GetWorkFromRecordingsRoot(
+		context.Background(),
+		"session-recordings-functional",
+		"work-active",
+		fake,
+	)
+	if err != nil {
+		t.Fatalf("GetWorkFromRecordingsRoot: %v", err)
+	}
+	if got.WorkID != "work-active" || got.State == nil || got.State.Type != work.StateTypeProcessing {
+		t.Fatalf("GetWorkFromRecordingsRoot = %#v, want active processing work item", got)
+	}
+	if len(fake.reconstructRequests) != 1 || fake.reconstructRequests[0].SelectedTick != 5 {
+		t.Fatalf("reconstruct requests = %#v, want highest tick 5", fake.reconstructRequests)
+	}
+}
+
+func TestRecordingsBackedWorkReadsMapRichWorldState(t *testing.T) {
+	t.Parallel()
+
+	scope := recordings.CanonicalEventScope{FactorySessionID: "session-recordings-functional"}
+	fake := &functionalRecordingsRootFake{
+		events: []recordings.CanonicalEvent{{
+			ID:          "event-1",
+			FactoryTick: 2,
+			Scope:       scope,
+		}},
+		worldState: recordings.WorldStateView{
+			SchemaVersion: recordings.WorldStateViewSchemaV1,
+			Payload:       recordingsBackedRichWorldPayload(t),
+		},
+	}
+
+	list, err := stateaccessrecordings.ListWorkFromRecordingsRoot(
+		context.Background(),
+		"session-recordings-functional",
+		fake,
+		work.ListOptions{WorkTypeName: "story", MaxResults: 2},
+	)
+	if err != nil {
+		t.Fatalf("ListWorkFromRecordingsRoot: %v", err)
+	}
+	if len(list.Results) != 2 || list.NextToken == "" {
+		t.Fatalf("ListWorkFromRecordingsRoot = %#v, want paginated story items", list)
+	}
+
+	byID := make(map[string]work.ReadModel, len(list.Results))
+	for _, item := range list.Results {
+		byID[item.WorkID] = item
+	}
+	if byID["work-active"].State == nil || byID["work-active"].State.Type != work.StateTypeProcessing {
+		t.Fatalf("active work state = %#v, want processing", byID["work-active"].State)
+	}
+	if len(byID["work-active"].Relations) != 1 || byID["work-active"].Relations[0].TargetWorkName != "Terminal story" {
+		t.Fatalf("relations = %#v, want one depends_on relation", byID["work-active"].Relations)
+	}
+
+	failed, err := stateaccessrecordings.GetWorkFromRecordingsRoot(
+		context.Background(),
+		"session-recordings-functional",
+		"work-failed",
+		fake,
+	)
+	if err != nil {
+		t.Fatalf("GetWorkFromRecordingsRoot(failed): %v", err)
+	}
+	if failed.State == nil || failed.State.Type != work.StateTypeFailed {
+		t.Fatalf("failed work state = %#v, want failed", failed.State)
+	}
+}
+
 func TestRecordingsBackedWorkReadsSurfaceTypedProjectionFailures(t *testing.T) {
 	t.Parallel()
 
@@ -251,6 +352,81 @@ func (fake *functionalRecordingsRootFake) ReadPortableArtifact(
 	recordings.ReadPortableArtifactRequest,
 ) (recordings.ReadPortableArtifactResult, error) {
 	return recordings.ReadPortableArtifactResult{}, recordings.ErrMissingRecordingTarget
+}
+
+func recordingsBackedRichWorldPayload(t *testing.T) string {
+	t.Helper()
+	state := interfaces.FactoryWorldState{
+		Topology: interfaces.InitialStructurePayload{
+			WorkTypes: []interfaces.FactoryWorkType{{
+				ID: "story",
+				States: []interfaces.FactoryStateDefinition{
+					{Value: "init", Category: work.StateTypeInitial},
+					{Value: "review", Category: work.StateTypeProcessing},
+					{Value: "done", Category: work.StateTypeTerminal},
+				},
+			}},
+		},
+		WorkItemsByID: map[string]work.FactoryWorkItem{
+			interfaces.SystemTimeWorkTypeID: {
+				ID:         interfaces.SystemTimeWorkTypeID,
+				WorkTypeID: interfaces.SystemTimeWorkTypeID,
+				State:      "pending",
+			},
+			"work-active": {
+				ID:          "work-active",
+				WorkTypeID:  "story",
+				DisplayName: "Active story",
+				State:       "review",
+			},
+			"work-failed": {
+				ID:         "work-failed",
+				WorkTypeID: "story",
+				State:      "review",
+			},
+			"work-terminal": {
+				ID:         "work-terminal",
+				WorkTypeID: "story",
+				State:      "init",
+			},
+		},
+		ActiveWorkItemsByID: map[string]work.FactoryWorkItem{
+			"work-active": {
+				ID:         "work-active",
+				WorkTypeID: "story",
+				State:      "review",
+			},
+		},
+		FailedWorkItemsByID: map[string]work.FactoryWorkItem{
+			"work-failed": {
+				ID:         "work-failed",
+				WorkTypeID: "story",
+				State:      "review",
+			},
+		},
+		TerminalWorkByID: map[string]interfaces.FactoryTerminalWork{
+			"work-terminal": {
+				WorkItem: work.FactoryWorkItem{
+					ID:         "work-terminal",
+					WorkTypeID: "story",
+					State:      "done",
+				},
+			},
+		},
+		RelationsByWorkID: map[string][]work.FactoryRelation{
+			"work-active": {{
+				Type:           "depends_on",
+				TargetWorkID:   "work-terminal",
+				TargetWorkName: "Terminal story",
+				RequiredState:  "done",
+			}},
+		},
+	}
+	payload, err := json.Marshal(state)
+	if err != nil {
+		t.Fatalf("marshal world state: %v", err)
+	}
+	return string(payload)
 }
 
 func recordingsBackedWorldPayload(

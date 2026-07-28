@@ -11,6 +11,36 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work/stateaccessrecordings"
 )
 
+func TestGetWorkFromRecordingsRootUsesRecordingsServiceRoot(t *testing.T) {
+	t.Parallel()
+
+	scope := recordings.CanonicalEventScope{FactorySessionID: "session-recordings-unit"}
+	fake := &recordingsRootFake{
+		events: []recordings.CanonicalEvent{{
+			ID:          "event-1",
+			FactoryTick: 5,
+			Scope:       scope,
+		}},
+		worldState: recordings.WorldStateView{
+			SchemaVersion: recordings.WorldStateViewSchemaV1,
+			Payload:       recordingsBackedWorldPayload(t, "work-story", "story", "review"),
+		},
+	}
+
+	got, err := stateaccessrecordings.GetWorkFromRecordingsRoot(
+		context.Background(),
+		"session-recordings-unit",
+		"work-story",
+		fake,
+	)
+	if err != nil {
+		t.Fatalf("GetWorkFromRecordingsRoot: %v", err)
+	}
+	if got.WorkID != "work-story" {
+		t.Fatalf("GetWorkFromRecordingsRoot = %#v, want work-story", got)
+	}
+}
+
 func TestListWorkFromRecordingsRootUsesRecordingsServiceRoot(t *testing.T) {
 	t.Parallel()
 
