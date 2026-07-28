@@ -69,7 +69,7 @@ func publicFactoryEnumNormalizerProviderCases() []publicFactoryEnumNormalizerCas
 		{
 			name:       "worker provider",
 			alias:      "SCRIPT_WRAP",
-			unknown:    "custom-executor",
+			unknown:    "CUSTOM_EXECUTOR",
 			want:       "SCRIPT_WRAP",
 			permissive: interfaces.PermissivePublicFactoryWorkerProvider,
 			strict:     interfaces.StrictPublicFactoryWorkerProvider,
@@ -122,6 +122,22 @@ func TestStrictPublicFactoryWorkerModelProviderAcceptsCanonicalExtensionIdentity
 	} {
 		if got := interfaces.StrictPublicFactoryWorkerModelProvider(malformed); got != "" {
 			t.Errorf("StrictPublicFactoryWorkerModelProvider(%q) = %q, want rejection", malformed, got)
+		}
+	}
+}
+
+func TestStrictPublicFactoryWorkerProviderAcceptsCanonicalProvidersIdentity(t *testing.T) {
+	t.Parallel()
+
+	const identity = "cursor-acp"
+	if got := interfaces.StrictPublicFactoryWorkerProvider(identity); got != identity {
+		t.Fatalf("StrictPublicFactoryWorkerProvider(%q) = %q, want preserved identity", identity, got)
+	}
+	for _, malformed := range []string{
+		"", " cursor-acp", "CURSOR-ACP", "cursor_acp", "cursor..acp", "cursor-",
+	} {
+		if got := interfaces.StrictPublicFactoryWorkerProvider(malformed); got != "" {
+			t.Errorf("StrictPublicFactoryWorkerProvider(%q) = %q, want rejection", malformed, got)
 		}
 	}
 }

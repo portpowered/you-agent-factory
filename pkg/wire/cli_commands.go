@@ -16,8 +16,10 @@ import (
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
+	acpcli "github.com/portpowered/infinite-you/pkg/transports/cli/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cobracompletion"
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
@@ -135,6 +137,14 @@ func provideConfigureInitOperation(
 			return platformstdio.NewContextLineReader(input, maxLines)
 		},
 	)
+}
+
+func provideACPCLIService(
+	settings operatorsettings.ConfigDocumentService,
+	providersFactory providers.Factory,
+	generateID operatorsettings.IDGenerator,
+) acpcli.Service {
+	return acpcli.Service{Settings: settings, ProvidersFactory: providersFactory, GenerateID: generateID}
 }
 
 func provideQueryFactoryOperation(transport standardCLIHTTPProtocol) cli.QueryFactoryOperation {

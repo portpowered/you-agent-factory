@@ -4,8 +4,8 @@ import (
 	"strings"
 
 	catalogresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/resource"
-	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
 	workertaxonomy "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/taxonomy"
+	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -496,9 +496,21 @@ func PublicWorkerProviderFromInternalRuntime(value string) string {
 	return normalizePublicFactoryEnumValue(value, internalFactoryWorkerProviderAliases, true)
 }
 
-// StrictPublicFactoryWorkerProvider canonicalizes supported public worker providers and rejects unknown values.
+// StrictPublicFactoryWorkerProvider canonicalizes built-in aliases and
+// preserves extension identities that use the Providers catalog's canonical
+// syntax. Registry membership is deliberately outside this authored boundary.
 func StrictPublicFactoryWorkerProvider(value string) string {
-	return normalizePublicFactoryEnumValue(value, publicFactoryWorkerProviderAliases, false)
+	trimmed := strings.TrimSpace(value)
+	if canonical := normalizePublicFactoryEnumValue(trimmed, publicFactoryWorkerProviderAliases, false); canonical != "" {
+		return canonical
+	}
+	if trimmed != value {
+		return ""
+	}
+	if err := workers.ProviderIdentity(value).Validate(); err != nil {
+		return ""
+	}
+	return value
 }
 
 // PermissivePublicFactoryHostedWorkerProvider canonicalizes supported hosted worker providers and preserves unknown values.

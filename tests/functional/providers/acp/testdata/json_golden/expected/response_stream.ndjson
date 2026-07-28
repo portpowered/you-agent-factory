@@ -1,0 +1,15 @@
+{"kind":"RUN","phase":"STARTED","provider":"cursor-acp","nativeType":"session/prompt","itemId":""}
+{"kind":"MESSAGE","phase":"STARTED","provider":"cursor-acp","nativeType":"acp/synthetic_start","itemId":"assistant-message"}
+{"kind":"MESSAGE","phase":"DELTA","provider":"cursor-acp","nativeType":"agent_message_chunk","itemId":"assistant-message"}
+{"kind":"REASONING","phase":"STARTED","provider":"cursor-acp","nativeType":"acp/synthetic_start","itemId":"assistant-reasoning"}
+{"kind":"REASONING","phase":"DELTA","provider":"cursor-acp","nativeType":"agent_thought_chunk","itemId":"assistant-reasoning"}
+{"kind":"PLAN","phase":"UPDATED","provider":"cursor-acp","nativeType":"plan","itemId":"plan"}
+{"kind":"TOOL","phase":"STARTED","provider":"cursor-acp","nativeType":"tool_call","itemId":"call_003"}
+{"kind":"USAGE","phase":"UPDATED","provider":"cursor-acp","nativeType":"usage_update","itemId":"usage"}
+{"kind":"SESSION","phase":"STARTED","provider":"cursor-acp","nativeType":"session_info_update","itemId":"session"}
+{"kind":"MESSAGE","phase":"DELTA","provider":"cursor-acp","nativeType":"agent_message_chunk","itemId":"assistant-message"}
+{"kind":"REASONING","phase":"COMPLETED","provider":"cursor-acp","nativeType":"session/prompt","itemId":"assistant-reasoning"}
+{"kind":"TOOL","phase":"COMPLETED","provider":"cursor-acp","nativeType":"session/prompt","itemId":"call_003"}
+{"kind":"SESSION","phase":"COMPLETED","provider":"cursor-acp","nativeType":"session/prompt","itemId":"session"}
+{"kind":"MESSAGE","phase":"COMPLETED","provider":"cursor-acp","nativeType":"session/prompt","itemId":"assistant-message"}
+{"kind":"RUN","phase":"COMPLETED","provider":"cursor-acp","nativeType":"session/prompt","itemId":""}

@@ -204,9 +204,9 @@ func WriteSeedMarkdownFile(t *testing.T, dir, workType, name string, content []b
 }
 
 // WriteSeedRequest marshals a one-item FACTORY_REQUEST_BATCH as a seed file.
-// Use this instead of WriteSeedFile when the test needs to preserve TraceID,
-// Tags, state placement, or internal execution fields through the file watcher
-// pipeline.
+// Use this instead of WriteSeedFile when the test needs to preserve canonical
+// Content, TraceID, Tags, state placement, or internal execution fields through
+// the file watcher pipeline.
 func WriteSeedRequest(t *testing.T, dir string, req work.SubmitRequest) {
 	t.Helper()
 	data, err := json.Marshal(seedWorkRequestFromSubmitRequest(req))
@@ -248,15 +248,16 @@ type seedWorkRequest struct {
 }
 
 type seedWork struct {
-	Name             string            `json:"name"`
-	WorkID           string            `json:"workId,omitempty"`
-	WorkTypeID       string            `json:"workTypeName"`
-	State            string            `json:"state,omitempty"`
-	TraceID          string            `json:"traceId,omitempty"`
-	Payload          any               `json:"payload,omitempty"`
-	Tags             map[string]string `json:"tags,omitempty"`
-	ExecutionID      string            `json:"execution_id,omitempty"`
-	RuntimeRelations []work.Relation   `json:"runtime_relations,omitempty"`
+	Name             string                 `json:"name"`
+	WorkID           string                 `json:"workId,omitempty"`
+	WorkTypeID       string                 `json:"workTypeName"`
+	State            string                 `json:"state,omitempty"`
+	TraceID          string                 `json:"traceId,omitempty"`
+	Content          []work.WorkContentPart `json:"content,omitempty"`
+	Payload          any                    `json:"payload,omitempty"`
+	Tags             map[string]string      `json:"tags,omitempty"`
+	ExecutionID      string                 `json:"execution_id,omitempty"`
+	RuntimeRelations []work.Relation        `json:"runtime_relations,omitempty"`
 }
 
 func seedWorkRequestFromSubmitRequest(req work.SubmitRequest) seedWorkRequest {
@@ -269,6 +270,7 @@ func seedWorkRequestFromSubmitRequest(req work.SubmitRequest) seedWorkRequest {
 			WorkTypeID:       req.WorkTypeID,
 			State:            req.TargetState,
 			TraceID:          req.TraceID,
+			Content:          work.CloneWorkContentParts(req.Content),
 			Payload:          seedPayload(req.Payload),
 			Tags:             req.Tags,
 			ExecutionID:      req.ExecutionID,

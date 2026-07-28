@@ -8,12 +8,12 @@ import (
 	"strings"
 	"testing"
 
-	modelproviders "github.com/portpowered/infinite-you/packages/model-providers"
 	"github.com/portpowered/infinite-you/internal/testutil"
+	modelproviders "github.com/portpowered/infinite-you/packages/model-providers"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
 	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
@@ -286,6 +286,35 @@ func TestConductorCollectingDestinationPublishesCanonicalResponseDrafts(t *testi
 		if !ok || draft.DispatchID != "dispatch-conductor-progress" {
 			t.Fatalf("published[%d] = %#v, want correlated canonical draft", index, fragment)
 		}
+	}
+}
+
+func TestConductorFailureDiagnosticsPreserveACPWorkFailureClassification(t *testing.T) {
+	t.Parallel()
+
+	for _, want := range []workers.WorkFailureType{
+		workers.WorkFailureTypeMissingExecutable,
+		workers.WorkFailureTypeMisconfigured,
+	} {
+		want := want
+		t.Run(string(want), func(t *testing.T) {
+			t.Parallel()
+			failure := inference.NewFailure(inference.FailureInput{
+				Kind:        inference.FailureDependency,
+				Message:     "ACP provider unavailable",
+				Diagnostics: map[string]string{"work-failure-type": string(want)},
+			})
+			var providerErr *workerprovider.ProviderError
+			if err := providerErrorFromConductorFailure(failure); !errors.As(err, &providerErr) {
+				t.Fatalf("providerErrorFromConductorFailure() = %T, want ProviderError", err)
+			}
+			if providerErr.Type != want {
+				t.Fatalf("Type = %q, want %q", providerErr.Type, want)
+			}
+			if providerErr.Diagnostics == nil || providerErr.Diagnostics.Metadata["work-failure-type"] != string(want) {
+				t.Fatalf("Diagnostics = %#v, want preserved classification", providerErr.Diagnostics)
+			}
+		})
 	}
 }
 

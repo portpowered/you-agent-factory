@@ -1,4 +1,5 @@
 type: string
-description: Concrete worker-provider wrappers supported by the public factory-config contract.
-enum:
-    - SCRIPT_WRAP
+description: Built-in worker-provider compatibility values. Authored executorProvider fields also accept extensible lowercase Providers catalog identities.
+minLength: 1
+maxLength: 128
+pattern: '^(?:SCRIPT_WRAP|\$\{[A-Za-z0-9_.-]+\}|[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*)$'

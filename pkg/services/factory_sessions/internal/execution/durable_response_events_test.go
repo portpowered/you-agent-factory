@@ -159,6 +159,20 @@ func TestJavaScriptRuntimeService_LiveChildExecutor_UsesProgressPublisher(t *tes
 	}
 }
 
+func TestJavaScriptRuntimeService_LiveChildExecutor_UsesConductorBeforeSessionRegistration(t *testing.T) {
+	t.Parallel()
+
+	service := newDurableResponseEventsService(t)
+	executor := service.liveChildExecutor("dur-sess-starting", nil)
+	child, ok := executor.(*progressCapturingChildExecutor)
+	if !ok {
+		t.Fatalf("executor = %#v, want live child executor", executor)
+	}
+	if child.publisher != nil {
+		t.Fatalf("publisher = %#v, want nil before durable session registration", child.publisher)
+	}
+}
+
 func TestJavaScriptRuntimeService_SessionProgressPublisher_IgnoresNonDraftFragments(t *testing.T) {
 	t.Parallel()
 

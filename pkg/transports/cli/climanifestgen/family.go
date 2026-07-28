@@ -68,6 +68,16 @@ var WorkFamilyCommandIDs = []string{
 	"you.work.visualize",
 }
 
+// WorkersFamilyCommandIDs are the stable command IDs for customer-facing
+// worker integration management.
+var WorkersFamilyCommandIDs = []string{
+	"you.workers",
+	"you.workers.acp",
+	"you.workers.acp.list",
+	"you.workers.acp.add",
+	"you.workers.acp.delete",
+}
+
 // RunSubmitFamilyCommandIDs are the only stable command IDs the generator may
 // emit for the run and submit invocation family.
 var RunSubmitFamilyCommandIDs = []string{

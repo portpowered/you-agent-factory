@@ -81,10 +81,11 @@ func (s *JavaScriptRuntimeService) liveChildExecutor(
 	state *runtimeSessionState,
 ) workers.InvocationExecutor {
 	if s.liveChildInvocation != nil {
-		if state == nil {
-			return s.providerExecutor
+		var publisher workers.ProgressPublisher
+		if state != nil {
+			publisher = s.sessionProgressPublisher(sessionID, state)
 		}
-		executor, err := s.liveChildInvocation(s.sessionProgressPublisher(sessionID, state))
+		executor, err := s.liveChildInvocation(publisher)
 		if err == nil && executor != nil {
 			return executor
 		}

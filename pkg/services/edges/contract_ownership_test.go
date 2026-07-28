@@ -91,6 +91,7 @@ func TestEdgesAggregateExactOwnerTypes(t *testing.T) {
 		"CLIObserver":                                     {typeName: "platformprocess.CLIObserver", effect: "observe the detached customer CLI contract and parser result"},
 		"PlatformProcessClock":                            {typeName: "platformprocess.Clock", effect: "measure subprocess cleanup deadlines and diagnostic durations"},
 		"PlatformProcessCommandFactory":                   {typeName: "platformprocess.CommandFactory", effect: "create inert host subprocess commands"},
+		"ProvidersExecutableLocator":                      {typeName: "platformprocess.ExecutableLocator", effect: "locate provider executables for catalog availability and execution preflight"},
 		"ProviderCommandRunner":                           {typeName: "platformprocess.CommandRunner", effect: "launch external provider CLI processes"},
 		"AgyPTYHost":                                      {typeName: "platformpty.Host", effect: "open native PTY handles and supervise an attached subprocess"},
 		"AgyPTYClock":                                     {typeName: "platformclock.Source", effect: "measure Agy PTY session deadlines and activity"},

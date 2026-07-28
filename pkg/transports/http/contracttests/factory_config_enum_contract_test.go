@@ -248,7 +248,7 @@ func assertCanonicalFactoryWorkerEnums(t *testing.T, factory generated.Factory) 
 	if worker.ModelProvider == nil || *worker.ModelProvider != generated.WorkerModelProviderClaude {
 		t.Fatalf("canonical worker modelProvider = %#v, want CLAUDE", worker.ModelProvider)
 	}
-	if worker.ExecutorProvider == nil || *worker.ExecutorProvider != generated.WorkerProviderScriptWrap {
+	if worker.ExecutorProvider == nil || *worker.ExecutorProvider != generated.WorkerProvider("SCRIPT_WRAP") {
 		t.Fatalf("canonical worker executorProvider = %#v, want SCRIPT_WRAP", worker.ExecutorProvider)
 	}
 }

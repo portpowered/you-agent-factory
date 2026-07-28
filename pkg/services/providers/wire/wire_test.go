@@ -96,6 +96,34 @@ func TestNewServiceBuildsUsableRoot(t *testing.T) {
 	}
 }
 
+func TestACPWireOptionsComposeConfiguredCatalogAndValidateCommands(t *testing.T) {
+	t.Parallel()
+
+	integration := providers.ACPIntegration{ID: "custom-acp", Name: "custom-acp", Transport: "stdio", Command: "custom-agent --acp"}
+	root, err := NewService(
+		WithACPIntegrations(integration),
+		WithCommandFactory(nil),
+		WithExecutableLocator(nil),
+	)
+	if err != nil {
+		t.Fatalf("NewService(ACP) = %v", err)
+	}
+	got, err := root.GetProvider(context.Background(), providers.GetProviderRequest{ID: integration.Name})
+	if err != nil || got.Provider.ID != integration.Name {
+		t.Fatalf("GetProvider(custom-acp) = (%#v, %v)", got, err)
+	}
+
+	replaced := effectiveACPIntegrations([]providers.ACPIntegration{{ID: "replacement", Name: "cursor-acp", Transport: "stdio", Command: "replacement acp"}})
+	if len(replaced) != 3 || replaced[0].ID != "replacement" {
+		t.Fatalf("effectiveACPIntegrations(replacement) = %#v", replaced)
+	}
+
+	factory := NewFactory(nil)
+	if _, err := factory([]providers.ACPIntegration{{ID: "bad", Name: "bad-acp", Transport: "stdio", Command: "'"}}); err == nil {
+		t.Fatal("factory(invalid command) error = nil")
+	}
+}
+
 func TestNewServiceConstructsInertRoot(t *testing.T) {
 	t.Parallel()
 
@@ -454,6 +482,9 @@ func TestNewServiceRejectsMissingRequiredConstructionPorts(t *testing.T) {
 					nil,
 					CursorPlatformDependencies{},
 					AgyPTYPlatformDependencies{},
+					nil,
+					nil,
+					nil,
 				)
 			},
 			want: "construct Providers: catalog is required",

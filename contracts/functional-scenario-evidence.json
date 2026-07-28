@@ -2,6 +2,14 @@
   "formatVersion": 1,
   "declarations": [
     {
+      "test": "tests/functional/providers/acp/catalog_cli_test.go::TestRootBuiltACPCommandsAddListDeleteOneSettingsBackedCatalogEntry",
+      "stableIds": [
+        "cli/you.workers.acp.add",
+        "cli/you.workers.acp.delete",
+        "cli/you.workers.acp.list"
+      ]
+    },
+    {
       "test": "tests/functional/sessions/execution/results_dispatches_test.go::TestAPIDispatchListAndDetailExposePublicCorrelation",
       "stableIds": [
         "rest/getFactorySessionDispatch",

@@ -4500,7 +4500,7 @@
               "$ref": "#/$defs/WorkerProvider"
             }
           ],
-          "description": "Canonical executor adapter identifier used to select the worker execution provider or wrapper. The current public built-in value is `SCRIPT_WRAP`."
+          "description": "Canonical Providers catalog identity used to select worker execution, an exact invocation-parameter placeholder, or the retained `SCRIPT_WRAP` compatibility value. ACP-backed identities use names such as `cursor-acp`; the Providers catalog determines their private execution kind."
         },
         "id": {
           "description": "Optional durable public identifier for this worker. When present, graph and layout references should use this id instead of the mutable name.",
@@ -4603,10 +4603,10 @@
       "type": "string"
     },
     "WorkerProvider": {
-      "description": "Concrete worker-provider wrappers supported by the public factory-config contract.",
-      "enum": [
-        "SCRIPT_WRAP"
-      ],
+      "description": "Built-in worker-provider compatibility values. Authored executorProvider fields also accept extensible lowercase Providers catalog identities.",
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^(?:SCRIPT_WRAP|\\$\\{[A-Za-z0-9_.-]+\\}|[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*)$",
       "type": "string"
     },
     "WorkerType": {

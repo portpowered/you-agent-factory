@@ -160,7 +160,7 @@ func (ae *AgentExecutor) Execute(ctx context.Context, request workerexecution.Wo
 }
 
 func effectiveWorkerDefinition(request workerexecution.WorkstationExecutionRequest, workerDef *interfaces.FactoryWorkerConfig) *interfaces.FactoryWorkerConfig {
-	if workerDef == nil || (request.Model == "" && request.ModelProvider == "") {
+	if workerDef == nil || (request.Model == "" && request.ModelProvider == "" && request.ExecutorProvider == "") {
 		return workerDef
 	}
 	effective := *workerDef
@@ -169,6 +169,9 @@ func effectiveWorkerDefinition(request workerexecution.WorkstationExecutionReque
 	}
 	if request.ModelProvider != "" {
 		effective.ModelProvider = request.ModelProvider
+	}
+	if request.ExecutorProvider != "" {
+		effective.ExecutorProvider = request.ExecutorProvider
 	}
 	return &effective
 }
@@ -328,6 +331,7 @@ func inferenceRequestForExecutionRequest(request workerexecution.WorkstationExec
 		WorkerType:                   request.WorkerType,
 		WorkstationType:              inferenceWorkstationType(request),
 		RunnerID:                     request.RunnerID,
+		ExecutorProvider:             request.ExecutorProvider,
 		ProjectID:                    request.ProjectID,
 		InputTokens:                  cloneRawInputTokens(request.InputTokens),
 		ModelOperation:               request.ModelOperation,
@@ -343,6 +347,12 @@ func inferenceRequestForExecutionRequest(request workerexecution.WorkstationExec
 		WorkingDirectory:             request.WorkingDirectory,
 	}
 	if workerDef != nil {
+		if executorProvider := strings.TrimSpace(workerDef.ExecutorProvider); executorProvider != "" {
+			req.ExecutorProvider = executorProvider
+			if !strings.EqualFold(executorProvider, "SCRIPT_WRAP") {
+				req.RunnerID = executorProvider
+			}
+		}
 		req.Model = workerDef.Model
 		req.ModelProvider = modelProviderForExecution(workerDef.ModelProvider, workerexecution.ResolvedRunnerSelection{
 			RunnerID: request.RunnerID,

@@ -174,6 +174,7 @@ func knownFailureKind(kind providers.ExecuteFailureKind) bool {
 		providers.ExecuteFailureKindTimeout,
 		providers.ExecuteFailureKindAuthentication,
 		providers.ExecuteFailureKindInvalidRequest,
+		providers.ExecuteFailureKindMisconfigured,
 		providers.ExecuteFailureKindThrottled,
 		providers.ExecuteFailureKindDependency,
 		providers.ExecuteFailureKindUnknown:
@@ -193,6 +194,8 @@ func defaultFailureMessage(kind providers.ExecuteFailureKind) string {
 		return "provider authentication failed"
 	case providers.ExecuteFailureKindInvalidRequest:
 		return "provider execution request is invalid"
+	case providers.ExecuteFailureKindMisconfigured:
+		return "provider execution is misconfigured"
 	case providers.ExecuteFailureKindThrottled:
 		return "provider execution was throttled"
 	case providers.ExecuteFailureKindDependency:

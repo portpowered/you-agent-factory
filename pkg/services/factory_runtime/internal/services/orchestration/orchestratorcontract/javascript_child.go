@@ -8,18 +8,20 @@ import (
 )
 
 const (
-	FieldPrompt          = "prompt"
-	FieldLabel           = "label"
-	FieldPreset          = "preset"
-	FieldModelProvider   = "modelProvider"
-	FieldModel           = "model"
-	FieldReasoningEffort = "reasoningEffort"
+	FieldPrompt           = "prompt"
+	FieldLabel            = "label"
+	FieldPreset           = "preset"
+	FieldExecutorProvider = "executorProvider"
+	FieldModelProvider    = "modelProvider"
+	FieldModel            = "model"
+	FieldReasoningEffort  = "reasoningEffort"
 )
 
 var supportedFields = []string{
 	FieldPrompt,
 	FieldLabel,
 	FieldPreset,
+	FieldExecutorProvider,
 	FieldModelProvider,
 	FieldModel,
 	FieldReasoningEffort,
@@ -35,12 +37,13 @@ var supportedFieldSet = func() map[string]struct{} {
 
 // Spec is the normalized supported argument set for one agent.run call.
 type JavaScriptChildSpec struct {
-	Prompt          string
-	Label           string
-	Preset          string
-	ModelProvider   string
-	Model           string
-	ReasoningEffort string
+	Prompt           string
+	Label            string
+	Preset           string
+	ExecutorProvider string
+	ModelProvider    string
+	Model            string
+	ReasoningEffort  string
 }
 
 // SupportedFields returns the canonical beta agent.run field names.
@@ -79,12 +82,13 @@ func NormalizeJavaScriptChild(value map[string]any) (JavaScriptChildSpec, error)
 		}
 	}
 	return JavaScriptChildSpec{
-		Prompt:          prompt,
-		Label:           optional[FieldLabel],
-		Preset:          optional[FieldPreset],
-		ModelProvider:   optional[FieldModelProvider],
-		Model:           optional[FieldModel],
-		ReasoningEffort: optional[FieldReasoningEffort],
+		Prompt:           prompt,
+		Label:            optional[FieldLabel],
+		Preset:           optional[FieldPreset],
+		ExecutorProvider: optional[FieldExecutorProvider],
+		ModelProvider:    optional[FieldModelProvider],
+		Model:            optional[FieldModel],
+		ReasoningEffort:  optional[FieldReasoningEffort],
 	}, nil
 }
 

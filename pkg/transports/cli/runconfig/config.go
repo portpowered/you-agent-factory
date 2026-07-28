@@ -46,6 +46,7 @@ type Config struct {
 	PreparedInvocationInput       *work.PreparedInvocationInput
 	RunnerID                      string
 	OperatorDefaults              operatorconfig.ResolvedDefaults
+	ACPIntegrations               []operatorconfig.ACPIntegration
 	ExecutionBaseDir              string
 	Bootstrap                     bool
 	FactoryScaffoldInitializer    factorydefinitions.ScaffoldInitializer

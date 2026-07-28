@@ -470,7 +470,7 @@ func (s *stubChildExecutor) executionRequests() []factory.JavaScriptChildExecuti
 
 func TestRun_AgentRunDynamicObjectCarriesCanonicalFieldsToExecutor(t *testing.T) {
 	stub := &stubChildExecutor{mode: stubChildExecutionMode}
-	source := `const child = { prompt: " review ", label: " reviewer ", preset: " careful ", modelProvider: " codex ", model: " gpt-test ", reasoningEffort: " high " }; agent.run(child); return { ok: true };`
+	source := `const child = { prompt: " review ", label: " reviewer ", preset: " careful ", executorProvider: " cursor-acp ", modelProvider: " codex ", model: " gpt-test ", reasoningEffort: " high " }; agent.run(child); return { ok: true };`
 	outcome, err := runtimeWorkflows.Run(context.Background(), factory.JavaScriptRuntimeRequest{
 		Source: source, SourceRef: "inline", SessionID: "canonical-child-fields",
 		Policy: workflowpolicy.DefaultEffectivePolicy(),
@@ -488,7 +488,7 @@ func TestRun_AgentRunDynamicObjectCarriesCanonicalFieldsToExecutor(t *testing.T)
 		t.Fatalf("executor request count = %d, want 1", len(requests))
 	}
 	got := requests[0]
-	if got.Prompt != "review" || got.Label != "reviewer" || got.Preset != "careful" || got.ModelProvider != "codex" || got.Model != "gpt-test" || got.ReasoningEffort != "high" {
+	if got.Prompt != "review" || got.Label != "reviewer" || got.Preset != "careful" || got.ExecutorProvider != "cursor-acp" || got.ModelProvider != "codex" || got.Model != "gpt-test" || got.ReasoningEffort != "high" {
 		t.Fatalf("executor request = %#v, want normalized canonical fields", got)
 	}
 }

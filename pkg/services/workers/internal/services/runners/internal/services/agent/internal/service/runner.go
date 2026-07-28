@@ -244,6 +244,14 @@ func normalizeProviderFailure(
 		return errors.Join(interruption, cause)
 	}
 	failureType := failureTypeForProviderKind(failure.Kind)
+	if failure.Diagnostics != nil {
+		switch failure.Diagnostics.Metadata["work-failure-type"] {
+		case string(workers.WorkFailureTypeMissingExecutable):
+			failureType = workers.WorkFailureTypeMissingExecutable
+		case string(workers.WorkFailureTypeMisconfigured):
+			failureType = workers.WorkFailureTypeMisconfigured
+		}
+	}
 	if errors.Is(interruption, context.DeadlineExceeded) {
 		failureType = workers.WorkFailureTypeTimeout
 	}
@@ -278,6 +286,8 @@ func failureTypeForProviderKind(
 		return workers.WorkFailureTypeAuthFailure
 	case providers.ExecuteFailureKindInvalidRequest:
 		return workers.WorkFailureTypePermanentBadRequest
+	case providers.ExecuteFailureKindMisconfigured:
+		return workers.WorkFailureTypeMisconfigured
 	case providers.ExecuteFailureKindThrottled:
 		return workers.WorkFailureTypeThrottled
 	case providers.ExecuteFailureKindDependency:

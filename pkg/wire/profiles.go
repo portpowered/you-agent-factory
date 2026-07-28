@@ -22,7 +22,6 @@ import (
 	platformbrowser "github.com/portpowered/infinite-you/pkg/platform/browser"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformcontentstaging "github.com/portpowered/infinite-you/pkg/platform/contentstaging"
-	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -49,6 +48,7 @@ import (
 	systeminitialization "github.com/portpowered/infinite-you/pkg/services/system_initialization"
 	systeminitializationwire "github.com/portpowered/infinite-you/pkg/services/system_initialization/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
@@ -393,7 +393,7 @@ func provideDurableExecutionFactory(loadOperatorConfig operatorsettings.ConfigLo
 		mockWorkersConfig *workers.MockWorkersConfig,
 		factory factorysessionwire.FactorySessionExecutionFactory,
 		providerIdentities factorysessions.ProviderIdentityResolver,
-	) (factorysessions.ExecutionService, error) {
+	) (factorysessionwire.DurableExecution, error) {
 		return factorysessionwire.NewDurableExecutionRuntime(
 			loadOperatorConfig,
 			definition,

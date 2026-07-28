@@ -45,6 +45,7 @@ var apiSet = wire.NewSet(
 
 var servicesSet = wire.NewSet(
 	provideProvidersService,
+	provideProvidersFactory,
 	provideProviderRegistry,
 	provideProviderRegistryRebinder,
 	wire.Bind(new(initializerapplication.ProviderRegistry), new(*providerregistry.Registry)),
@@ -266,6 +267,7 @@ var cliCommandOperationsSet = wire.NewSet(
 	provideFlattenFactoryConfigOperation,
 	provideExpandFactoryConfigOperation,
 	provideConfigureInitOperation,
+	provideACPCLIService,
 	provideInstallPackagedFactoryOperation,
 	provideInstallPackagedFactoryCLI,
 	provideQueryFactoryOperation,

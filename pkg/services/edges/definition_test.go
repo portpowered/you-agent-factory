@@ -109,6 +109,7 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 			return path, nil
 		},
 		WorkersExecutableLocator:           platformprocess.HostExecutableLocator{},
+		ProvidersExecutableLocator:         platformprocess.HostExecutableLocator{},
 		WorkersExecutableFileReader:        platformfilesystem.Local{},
 		WorkersOperatingSystem:             "replacement-os",
 		WorkersWorktreeFileSystem:          platformfilesystem.Local{},
@@ -220,6 +221,9 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 	}
 	if _, ok := merged.WorkersExecutableLocator.(platformprocess.HostExecutableLocator); !ok {
 		t.Fatalf("WorkersExecutableLocator = %T, want explicit replacement", merged.WorkersExecutableLocator)
+	}
+	if _, ok := merged.ProvidersExecutableLocator.(platformprocess.HostExecutableLocator); !ok {
+		t.Fatalf("ProvidersExecutableLocator = %T, want explicit replacement", merged.ProvidersExecutableLocator)
 	}
 	if _, ok := merged.WorkersExecutableFileReader.(platformfilesystem.Local); !ok {
 		t.Fatalf("WorkersExecutableFileReader = %T, want explicit replacement", merged.WorkersExecutableFileReader)

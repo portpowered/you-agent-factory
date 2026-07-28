@@ -32,6 +32,9 @@ const (
 	// WorkFamilyJSONPath is the generated work-family metadata artifact.
 	WorkFamilyJSONPath = "pkg/transports/cli/generated/work_family.json"
 
+	// WorkersFamilyJSONPath is generated worker-integration command metadata.
+	WorkersFamilyJSONPath = "pkg/transports/cli/generated/workers_family.json"
+
 	// RunSubmitFamilyJSONPath is the generated run/submit-family metadata artifact.
 	RunSubmitFamilyJSONPath = "pkg/transports/cli/generated/run_submit_family.json"
 
@@ -94,6 +97,20 @@ func WorkArtifact(store generatedartifacts.SourceStore, repositoryRoot string) (
 		return nil, err
 	}
 	family, err := ExtractWorkFamily(manifest)
+	if err != nil {
+		return nil, err
+	}
+	return contractjoiner.MarshalCanonicalJSON(family)
+}
+
+// WorkersArtifact returns deterministic worker-integration family metadata.
+func WorkersArtifact(store generatedartifacts.SourceStore, repositoryRoot string) ([]byte, error) {
+	manifestPath := filepath.Join(repositoryRoot, filepath.FromSlash(ProductionManifestPath))
+	manifest, err := climanifest.LoadProduction(store, manifestPath)
+	if err != nil {
+		return nil, err
+	}
+	family, err := ExtractWorkersFamily(manifest)
 	if err != nil {
 		return nil, err
 	}
@@ -165,6 +182,7 @@ func Artifacts(store generatedartifacts.SourceStore, repositoryRoot string) ([]g
 	}{
 		{RepresentativeFamilyJSONPath, RepresentativeFamilyArtifact},
 		{WorkFamilyJSONPath, WorkArtifact},
+		{WorkersFamilyJSONPath, WorkersArtifact},
 		{SessionFamilyJSONPath, SessionFamilyArtifact},
 		{RunSubmitFamilyJSONPath, RunSubmitArtifact},
 		{FactoryConfigInitFamilyJSONPath, FactoryConfigInitFamilyArtifact},
@@ -188,6 +206,7 @@ func Artifacts(store generatedartifacts.SourceStore, repositoryRoot string) ([]g
 	return []generatedartifacts.Artifact{
 		{Path: RepresentativeFamilyJSONPath, Absent: true},
 		{Path: WorkFamilyJSONPath, Absent: true},
+		{Path: WorkersFamilyJSONPath, Absent: true},
 		{Path: SessionFamilyJSONPath, Absent: true},
 		{Path: SessionFamilyCommandIDsPath, Payload: sessionCommandIDsSource()},
 		{Path: RepresentativeFamilyCommandIDsPath, Payload: representativeAndWorkCommandIDsSource()},
@@ -211,6 +230,7 @@ func runtimeFamilyManifestsSource(payloads map[string][]byte) ([]byte, error) {
 		{functionName: "representativeFamilyManifestValue", path: RepresentativeFamilyJSONPath},
 		{functionName: "sessionFamilyManifestValue", path: SessionFamilyJSONPath},
 		{functionName: "workFamilyManifestValue", path: WorkFamilyJSONPath},
+		{functionName: "workersFamilyManifestValue", path: WorkersFamilyJSONPath},
 		{functionName: "factoryConfigInitFamilyManifestValue", path: FactoryConfigInitFamilyJSONPath},
 		{functionName: "modelsDocsFamilyManifestValue", path: ModelsDocsFamilyJSONPath},
 		{functionName: "runSubmitFamilyManifestValue", path: RunSubmitFamilyJSONPath},

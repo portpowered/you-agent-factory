@@ -19,6 +19,7 @@ type ChildExecutionRequest struct {
 	Label            string
 	AgentID          string
 	Preset           string
+	ExecutorProvider string
 	ModelProvider    string
 	Model            string
 	ReasoningEffort  string
@@ -252,14 +253,15 @@ func childExecutionRequestFromSpec(spec map[string]any, workflowName, argsSubjec
 		return ChildExecutionRequest{}, err
 	}
 	return ChildExecutionRequest{
-		Prompt:          normalized.Prompt,
-		Label:           normalized.Label,
-		Preset:          normalized.Preset,
-		ModelProvider:   normalized.ModelProvider,
-		Model:           normalized.Model,
-		ReasoningEffort: normalized.ReasoningEffort,
-		WorkflowName:    workflowName,
-		ArgsSubject:     argsSubject,
+		Prompt:           normalized.Prompt,
+		Label:            normalized.Label,
+		Preset:           normalized.Preset,
+		ExecutorProvider: normalized.ExecutorProvider,
+		ModelProvider:    normalized.ModelProvider,
+		Model:            normalized.Model,
+		ReasoningEffort:  normalized.ReasoningEffort,
+		WorkflowName:     workflowName,
+		ArgsSubject:      argsSubject,
 	}, nil
 }
 

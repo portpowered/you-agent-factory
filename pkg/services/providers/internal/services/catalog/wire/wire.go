@@ -12,6 +12,9 @@ type Option = catalogservice.Option
 // WithProbeQuery configures request-time readiness probing for catalog list/get.
 var WithProbeQuery = catalogservice.WithProbeQuery
 
+// WithDescriptors contributes customer-configured provider descriptors.
+var WithDescriptors = catalogservice.WithDescriptors
+
 // NewService constructs an inert catalog over the accepted standardized
 // provider catalog publication.
 func NewService(options ...Option) (catalog.Service, error) {

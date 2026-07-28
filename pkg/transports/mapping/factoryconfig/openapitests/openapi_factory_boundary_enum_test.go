@@ -694,7 +694,7 @@ func assertGeneratedCanonicalUppercaseWorkerEnums(t *testing.T, generated factor
 	if worker.ModelLocality == nil || *worker.ModelLocality != factoryapi.WorkerModelLocalityLocal {
 		t.Fatalf("expected generated worker modelLocality LOCAL, got %#v", worker.ModelLocality)
 	}
-	if worker.ExecutorProvider == nil || *worker.ExecutorProvider != factoryapi.WorkerProviderScriptWrap {
+	if worker.ExecutorProvider == nil || *worker.ExecutorProvider != factoryapi.WorkerProvider("SCRIPT_WRAP") {
 		t.Fatalf("expected generated worker executorProvider SCRIPT_WRAP, got %#v", worker.ExecutorProvider)
 	}
 	if worker.Operations == nil || len(*worker.Operations) != 1 {
@@ -724,14 +724,14 @@ func assertRuntimeCanonicalUppercaseWorkerEnums(t *testing.T, cfg interfaces.Fac
 	}
 }
 
-func TestGeneratedFactoryFromOpenAPIJSON_RejectsUnsupportedExecutorProviderAtBoundary(t *testing.T) {
+func TestGeneratedFactoryFromOpenAPIJSON_RejectsMalformedExecutorProviderAtBoundary(t *testing.T) {
 	cfgJSON := []byte(`{
 		"name":"unsupported-executor-provider-factory",
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
 		"workers": [{
 			"name":"executor",
 			"type":"MODEL_WORKER",
-			"executorProvider":"custom-executor"
+			"executorProvider":"CUSTOM_EXECUTOR"
 		}],
 		"workstations": [{
 			"name":"execute-story",
@@ -744,7 +744,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_RejectsUnsupportedExecutorProviderAtBou
 
 	_, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
 	if err == nil {
-		t.Fatal("expected unsupported executorProvider to fail at generated boundary")
+		t.Fatal("expected malformed executorProvider to fail at generated boundary")
 	}
 	if !strings.Contains(err.Error(), generatedFactoryBoundaryErrorPrefix) {
 		t.Fatalf("expected generated boundary context, got %v", err)
@@ -752,7 +752,28 @@ func TestGeneratedFactoryFromOpenAPIJSON_RejectsUnsupportedExecutorProviderAtBou
 	if !strings.Contains(err.Error(), "workers[0].executorProvider") {
 		t.Fatalf("expected executorProvider field path in error, got %v", err)
 	}
-	if !strings.Contains(err.Error(), `unsupported value "custom-executor"`) {
-		t.Fatalf("expected unsupported executorProvider value in error, got %v", err)
+	if !strings.Contains(err.Error(), `unsupported value "CUSTOM_EXECUTOR"`) {
+		t.Fatalf("expected malformed executorProvider value in error, got %v", err)
+	}
+}
+
+func TestGeneratedFactoryFromOpenAPIJSON_AcceptsACPExecutorProviderIdentity(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"acp-executor-provider-factory",
+		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
+		"workers": [{"name":"executor","type":"MODEL_WORKER","executorProvider":"cursor-acp"}],
+		"workstations": [{
+			"name":"execute-story","worker":"executor","type":"MODEL_WORKSTATION",
+			"inputs":[{"workType":"story","state":"init"}],
+			"outputs":[{"workType":"story","state":"complete"}]
+		}]
+	}`)
+
+	cfg, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
+	if err != nil {
+		t.Fatalf("GeneratedFactoryFromOpenAPIJSON() error = %v", err)
+	}
+	if cfg.Workers == nil || len(*cfg.Workers) != 1 || (*cfg.Workers)[0].ExecutorProvider == nil || *(*cfg.Workers)[0].ExecutorProvider != "cursor-acp" {
+		t.Fatalf("generated executorProvider = %#v, want cursor-acp", cfg.Workers)
 	}
 }

@@ -312,6 +312,7 @@ func productionRootSubcommands(
 		b12.Server,
 		b12.Submit,
 		productionWorkCommand(globals, diagnostics, options),
+		productionWorkersCommand(options),
 	}
 }
 

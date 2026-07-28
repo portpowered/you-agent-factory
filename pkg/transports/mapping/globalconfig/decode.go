@@ -78,6 +78,15 @@ func mapConfig(generated factoryapi.GlobalConfig) (operatorsettings.Config, erro
 			return operatorsettings.Config{}, err
 		}
 	}
+	if generated.Workers != nil && generated.Workers.Acp != nil && generated.Workers.Acp.Integrations != nil {
+		config.Workers.ACP.Integrations = make([]operatorsettings.ACPIntegration, len(*generated.Workers.Acp.Integrations))
+		for index, integration := range *generated.Workers.Acp.Integrations {
+			config.Workers.ACP.Integrations[index] = operatorsettings.ACPIntegration{
+				ID: integration.Id, Name: integration.Name,
+				Transport: string(integration.Transport), Command: integration.Command,
+			}
+		}
+	}
 	if generated.WorkerPresets == nil {
 		return config, nil
 	}
@@ -163,6 +172,18 @@ func Encode(config operatorsettings.Config) ([]byte, error) {
 	generated.Runtime = &factoryapi.GlobalConfigRuntime{
 		Logging: mapRuntimeArtifactSettingsToAPI(config.Runtime.Logging),
 		Metrics: mapRuntimeArtifactSettingsToAPI(config.Runtime.Metrics),
+	}
+	if config.Workers.ACP.Integrations != nil {
+		integrations := make([]factoryapi.GlobalConfigACPIntegration, len(config.Workers.ACP.Integrations))
+		for index, integration := range config.Workers.ACP.Integrations {
+			integrations[index] = factoryapi.GlobalConfigACPIntegration{
+				Id: integration.ID, Name: integration.Name, Command: integration.Command,
+				Transport: factoryapi.GlobalConfigACPIntegrationTransport(integration.Transport),
+			}
+		}
+		generated.Workers = &factoryapi.GlobalConfigWorkers{
+			Acp: &factoryapi.GlobalConfigACPSettings{Integrations: &integrations},
+		}
 	}
 	if config.WorkerPresets != nil {
 		presets := make([]factoryapi.GlobalConfigWorkerPreset, len(config.WorkerPresets))

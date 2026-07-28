@@ -28,6 +28,19 @@ func TestExecuteFailureKindFromConductor_TerminalUnknownStaysUnknown(t *testing.
 	}
 }
 
+func TestExecuteFailureFromConductorPreservesDiagnosticsWithoutSession(t *testing.T) {
+	failure := inference.NewFailure(inference.FailureInput{
+		Kind:        inference.FailureDependency,
+		Message:     "provider configuration is incompatible",
+		Diagnostics: map[string]string{"work-failure-type": "misconfigured"},
+	})
+
+	got := executeFailureFromConductor(failure)
+	if got.Diagnostics == nil || got.Diagnostics.Metadata["work-failure-type"] != "misconfigured" {
+		t.Fatalf("diagnostics = %#v, want preserved terminal classification", got.Diagnostics)
+	}
+}
+
 func TestInvocationRequestFromExecute_ForwardsEnvAndSkipPermissions(t *testing.T) {
 	request := providers.ExecuteRequest{
 		Provider:           providers.IDCursor,
