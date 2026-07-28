@@ -1199,12 +1199,6 @@
     },
     {
       "fromOwner": "factory_runtime",
-      "toOwner": "providers",
-      "class": "command",
-      "evidence": "pkg/services/factory_runtime/build -\u003e pkg/services/workers/provider/inferencecontract"
-    },
-    {
-      "fromOwner": "factory_runtime",
       "toOwner": "recordings",
       "class": "event",
       "evidence": "pkg/services/factory_runtime -\u003e pkg/services/recordings"
@@ -1426,6 +1420,12 @@
       "evidence": "pkg/services/operator_settings/internal/services/resolution/internal/service -\u003e pkg/services/providers"
     },
     {
+      "fromOwner": "operator_settings",
+      "toOwner": "transports",
+      "class": "command",
+      "evidence": "pkg/services/operator_settings/transports/http -\u003e pkg/transports/http/generated"
+    },
+    {
       "fromOwner": "platform",
       "toOwner": "work",
       "class": "command",
@@ -1472,6 +1472,12 @@
       "toOwner": "factory_definitions",
       "class": "query",
       "evidence": "pkg/services/recordings/artifacts -\u003e pkg/services/factory_definitions"
+    },
+    {
+      "fromOwner": "recordings",
+      "toOwner": "factory_runtime",
+      "class": "command",
+      "evidence": "pkg/services/recordings/service -\u003e pkg/services/factory_runtime"
     },
     {
       "fromOwner": "recordings",
@@ -4076,6 +4082,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/operator_settings/transports/http",
+      "disposition": "retain",
+      "destination": "operator_settings",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/operator_settings/transports/mcp",
       "disposition": "retain",
       "destination": "operator_settings",
@@ -4527,6 +4539,12 @@
     },
     {
       "packagePath": "pkg/services/work/transports/cli",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/work/transports/http",
       "disposition": "retain",
       "destination": "work",
       "destinationKind": "owner"

@@ -304,6 +304,7 @@
     "pkg/services/operator_settings/servicewire",
     "pkg/services/operator_settings/testlink",
     "pkg/services/operator_settings/transports/cli",
+    "pkg/services/operator_settings/transports/http",
     "pkg/services/operator_settings/transports/mcp",
     "pkg/services/operator_settings/wire",
     "pkg/services/provider_sessions",
@@ -375,6 +376,7 @@
     "pkg/services/work/internal/services/state_access/wire",
     "pkg/services/work/service",
     "pkg/services/work/transports/cli",
+    "pkg/services/work/transports/http",
     "pkg/services/work/transports/mcp",
     "pkg/services/work/wire",
     "pkg/services/workers",
@@ -1822,6 +1824,11 @@
       "destination": "operator_settings"
     },
     {
+      "packagePath": "pkg/services/operator_settings/transports/http",
+      "disposition": "retain",
+      "destination": "operator_settings"
+    },
+    {
       "packagePath": "pkg/services/operator_settings/transports/mcp",
       "disposition": "retain",
       "destination": "operator_settings"
@@ -2173,6 +2180,11 @@
     },
     {
       "packagePath": "pkg/services/work/transports/cli",
+      "disposition": "retain",
+      "destination": "work"
+    },
+    {
+      "packagePath": "pkg/services/work/transports/http",
       "disposition": "retain",
       "destination": "work"
     },

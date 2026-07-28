@@ -3,7 +3,6 @@ package factory
 import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	"go.uber.org/zap"
 )
 
@@ -34,7 +33,7 @@ type SessionBuildSpec struct {
 	Clock                 Clock
 	RecordPath            string
 	WorkflowID            string
-	ProviderOverride      workerprovider.Provider
+	ProviderOverride      workers.Provider
 	ProviderCommandRunner workers.CommandRunner
 	CommandRunnerOverride workers.CommandRunner
 	SubmissionHooks       []SubmissionHook
