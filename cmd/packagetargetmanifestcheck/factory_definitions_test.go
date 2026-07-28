@@ -68,22 +68,6 @@ func TestMapCommittedOwnerPackageFactoryDefinitionsMoveDestinations(t *testing.T
 			},
 		},
 		{
-			path: "pkg/services/factory_definitions/authoredlayout",
-			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/authoredlayout",
-				Disposition: DispositionMove,
-				Destination: "factory_definitions/internal/services/authoring_layout",
-			},
-		},
-		{
-			path: "pkg/services/factory_definitions/namedfactories",
-			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/namedfactories",
-				Disposition: DispositionMove,
-				Destination: "factory_definitions/internal/services/catalog",
-			},
-		},
-		{
 			path: "pkg/services/factory_definitions/internal/services/catalog/namedfactories",
 			want: PackageMapping{
 				PackagePath: "pkg/services/factory_definitions/internal/services/catalog/namedfactories",
@@ -92,27 +76,11 @@ func TestMapCommittedOwnerPackageFactoryDefinitionsMoveDestinations(t *testing.T
 			},
 		},
 		{
-			path: "pkg/services/factory_definitions/loading",
-			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/loading",
-				Disposition: DispositionMove,
-				Destination: "factory_definitions/internal/services/compilation",
-			},
-		},
-		{
 			path: "pkg/services/factory_definitions/validation",
 			want: PackageMapping{
 				PackagePath: "pkg/services/factory_definitions/validation",
 				Disposition: DispositionMove,
 				Destination: "factory_definitions/internal/services/validation",
-			},
-		},
-		{
-			path: "pkg/services/factory_definitions/portableconfig",
-			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/portableconfig",
-				Disposition: DispositionMove,
-				Destination: "factory_definitions/internal/services/snapshots_portability",
 			},
 		},
 		{

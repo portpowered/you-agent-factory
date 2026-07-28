@@ -171,6 +171,18 @@ Use this map when changing the public REST contract.
   `pkg/wire` composition ports moved to public exports under
   `pkg/services/factory_definitions/wire/root_wire_*.go` so root wire does not
   import `internal/**` illegally.
+  DEL-DEF story 003 (`pss-del-def-003`) lowers structure/ownership/package-target
+  baselines for the deleted transitional DEF packages only: remove stale rows from
+  `docs/internal/baselines/package-structure-baseline.json`,
+  `docs/internal/baselines/ownership-inventory.json` (regenerate with
+  `go run ./cmd/ownershipinventoryfreeze`), and
+  `docs/internal/packaged-service-structure/package-target-manifest.json`
+  (regenerate inventory/owner rows with
+  `go run ./cmd/packagetargetmanifestcheck -write-inventory -write-owner-packages -write-residual-packages`).
+  Also drop deleted top-level children from both
+  `internal/ownershipinventory/owner_top_level.go` and
+  `cmd/packagetargetmanifestcheck/owner_top_level.go` unexpected inventories.
+  Coverage baseline burn-down for deleted import paths is story 004.
   CUT-DEF-RUN seals Factory Definitions production imports of Factory Runtime to
   the service root only (`pkg/services/factory_runtime`) for orchestration
   semantic-validation edges; the lease-wide guard is

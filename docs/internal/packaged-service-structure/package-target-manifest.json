@@ -85,7 +85,6 @@
     "pkg/services/automations/wire",
     "pkg/services/edges",
     "pkg/services/factory_definitions",
-    "pkg/services/factory_definitions/authoredlayout",
     "pkg/services/factory_definitions/decisionenvelope",
     "pkg/services/factory_definitions/definition",
     "pkg/services/factory_definitions/editable",
@@ -135,8 +134,6 @@
     "pkg/services/factory_definitions/invocationoutput",
     "pkg/services/factory_definitions/invocationworktype",
     "pkg/services/factory_definitions/loadedsource",
-    "pkg/services/factory_definitions/loading",
-    "pkg/services/factory_definitions/namedfactories",
     "pkg/services/factory_definitions/namedpaths",
     "pkg/services/factory_definitions/namevalue",
     "pkg/services/factory_definitions/packagedinstallation",
@@ -147,11 +144,9 @@
     "pkg/services/factory_definitions/packages/subagent",
     "pkg/services/factory_definitions/packages/tts",
     "pkg/services/factory_definitions/persistence",
-    "pkg/services/factory_definitions/portableconfig",
     "pkg/services/factory_definitions/quorumpolicy",
     "pkg/services/factory_definitions/replayconfig",
     "pkg/services/factory_definitions/resource",
-    "pkg/services/factory_definitions/runtimeconfig",
     "pkg/services/factory_definitions/service",
     "pkg/services/factory_definitions/snapshotcapture",
     "pkg/services/factory_definitions/transports/cli",
@@ -545,8 +540,7 @@
     "pkg/transports/mcp/generated",
     "pkg/transports/mcp/server",
     "pkg/transports/mcp/stdio",
-    "pkg/wire",
-    "pkg/wire/factorydefinitions"
+    "pkg/wire"
   ],
   "packages": [
     {
@@ -778,11 +772,6 @@
       "packagePath": "pkg/services/factory_definitions",
       "disposition": "retain",
       "destination": "factory_definitions"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/authoredlayout",
-      "disposition": "move",
-      "destination": "factory_definitions/internal/services/authoring_layout"
     },
     {
       "packagePath": "pkg/services/factory_definitions/decisionenvelope",
@@ -1030,16 +1019,6 @@
       "destination": "factory_definitions/internal/services/compilation"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/loading",
-      "disposition": "move",
-      "destination": "factory_definitions/internal/services/compilation"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/namedfactories",
-      "disposition": "move",
-      "destination": "factory_definitions/internal/services/catalog"
-    },
-    {
       "packagePath": "pkg/services/factory_definitions/namedpaths",
       "disposition": "move",
       "destination": "factory_definitions/internal/services/catalog"
@@ -1090,11 +1069,6 @@
       "destination": "factory_definitions/internal/services/catalog"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/portableconfig",
-      "disposition": "move",
-      "destination": "factory_definitions/internal/services/snapshots_portability"
-    },
-    {
       "packagePath": "pkg/services/factory_definitions/quorumpolicy",
       "disposition": "move",
       "destination": "factory_definitions/internal/services/invocation_policy"
@@ -1108,11 +1082,6 @@
       "packagePath": "pkg/services/factory_definitions/resource",
       "disposition": "move",
       "destination": "factory_definitions/internal/services/validation"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/runtimeconfig",
-      "disposition": "move",
-      "destination": "factory_definitions/internal"
     },
     {
       "packagePath": "pkg/services/factory_definitions/service",
@@ -3081,11 +3050,6 @@
     },
     {
       "packagePath": "pkg/wire",
-      "disposition": "retain",
-      "destination": "wire"
-    },
-    {
-      "packagePath": "pkg/wire/factorydefinitions",
       "disposition": "retain",
       "destination": "wire"
     }
