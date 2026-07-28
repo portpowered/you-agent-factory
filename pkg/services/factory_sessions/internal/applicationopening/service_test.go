@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
@@ -148,6 +147,7 @@ func TestOpenApplicationResolvesThenOpensAndBindsExactInputs(t *testing.T) {
 }
 
 func TestOpenApplicationPrefersEdgeInjectedVisualizationSink(t *testing.T) {
+
 	t.Parallel()
 
 	type markerSink struct {

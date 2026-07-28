@@ -90,10 +90,6 @@ type Config struct {
 	JSONOutput                    bool
 	InvocationOutputMode          string
 	InvocationMetricsRecorder     InvocationMetricsRecorder
-	// HostedSessionInvokerSink receives the live-session invoker opened by a
-	// run-scoped API server so hosted one-shot invocations execute on that
-	// session instead of opening a separate ephemeral invocation runtime.
-	HostedSessionInvokerSink *factorysessions.SessionInvoker
 
 	InvocationSkipPermissionsOverride *bool
 	Logger                            *zap.Logger

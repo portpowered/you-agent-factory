@@ -132,18 +132,6 @@ func (s stubInvocationService) InvokeFactorySession(ctx context.Context, session
 	return s.invoke(ctx, sessionID, request)
 }
 
-type hostedSessionInvokerStub struct {
-	invoke func(context.Context, string, factorysessions.InvocationRequest) (interfaces.FactoryInvocationResult, error)
-}
-
-func (s hostedSessionInvokerStub) InvokeFactorySession(
-	ctx context.Context,
-	sessionID string,
-	request factorysessions.InvocationRequest,
-) (interfaces.FactoryInvocationResult, error) {
-	return s.invoke(ctx, sessionID, request)
-}
-
 func (s stubInvocationService) CloseFactorySession(ctx context.Context, sessionID string) error {
 	if s.close != nil {
 		return s.close(ctx, sessionID)
@@ -399,7 +387,6 @@ func TestRunFactoryInvocationCarriesPreparedCanonicalInputWithoutPlainArgs(t *te
 		*apiRequest,
 		operation,
 		testResponsePresentation(),
-		nil,
 	)
 	if err != nil {
 		t.Fatalf("runFactoryInvocation: %v", err)
@@ -417,112 +404,6 @@ func TestRunFactoryInvocationCarriesPreparedCanonicalInputWithoutPlainArgs(t *te
 	prepared.NormalizedArguments.Arguments["input"] = work.NormalizedArgument{Values: []string{"mutated"}}
 	if got := captured.PreparedInvocationInput.NormalizedArguments.Arguments["input"].Values[0]; got != "draft" {
 		t.Fatalf("captured canonical input aliased caller mutation: %q", got)
-	}
-}
-
-func TestRunFactoryInvocationUsesHostedSessionInvokerWhenProvided(t *testing.T) {
-	t.Parallel()
-
-	var invokeFactoryCalls int
-	operation := testInvocationOperation{invokeFactory: func(
-		context.Context,
-		factorysessions.InvocationTarget,
-		factorysessions.InvocationRequest,
-		factorysessions.FactoryEventConsumer,
-	) (factorysessions.FactoryInvocationOutcome, error) {
-		invokeFactoryCalls++
-		return factorysessions.FactoryInvocationOutcome{}, errors.New("ephemeral invocation should stay uncalled")
-	}}
-	var sessionCalls int
-	var capturedSessionID string
-	hosted := hostedSessionInvokerStub{
-		invoke: func(_ context.Context, sessionID string, _ factorysessions.InvocationRequest) (interfaces.FactoryInvocationResult, error) {
-			sessionCalls++
-			capturedSessionID = sessionID
-			return interfaces.FactoryInvocationResult{
-				Status: interfaces.InvocationTerminalStatusCompleted,
-				PrimaryResult: []work.WorkContentPart{{
-					Type: work.WorkContentPartTypeText, Text: "hosted result",
-				}},
-			}, nil
-		},
-	}
-	var output bytes.Buffer
-	err := runFactoryInvocation(
-		context.Background(),
-		RunConfig{Output: &output},
-		factorysessions.InvocationTarget{},
-		factoryapi.InvocationRequest{},
-		operation,
-		testResponsePresentation(),
-		hosted,
-	)
-	if err != nil {
-		t.Fatalf("runFactoryInvocation: %v", err)
-	}
-	if invokeFactoryCalls != 0 {
-		t.Fatalf("InvokeFactory calls = %d, want 0 when hosted invoker is wired", invokeFactoryCalls)
-	}
-	if sessionCalls != 1 {
-		t.Fatalf("InvokeFactorySession calls = %d, want 1", sessionCalls)
-	}
-	if capturedSessionID != factorysessions.DefaultSessionID {
-		t.Fatalf("session id = %q, want %q", capturedSessionID, factorysessions.DefaultSessionID)
-	}
-	if !strings.Contains(output.String(), "hosted result") {
-		t.Fatalf("output = %q, want hosted primary result text", output.String())
-	}
-}
-
-func TestRunFactoryInvocationHostedSessionInvokerFailure(t *testing.T) {
-	t.Parallel()
-
-	hosted := hostedSessionInvokerStub{
-		invoke: func(context.Context, string, factorysessions.InvocationRequest) (interfaces.FactoryInvocationResult, error) {
-			return interfaces.FactoryInvocationResult{}, errors.New("session invoke failed")
-		},
-	}
-	err := runFactoryInvocation(
-		context.Background(),
-		RunConfig{Output: io.Discard},
-		factorysessions.InvocationTarget{},
-		factoryapi.InvocationRequest{},
-		testInvocationOperation{},
-		testResponsePresentation(),
-		hosted,
-	)
-	if err == nil {
-		t.Fatal("runFactoryInvocation() error = nil, want hosted session invoke failure")
-	}
-}
-
-func TestRunFactoryInvocationHostedSessionInvokerTerminalFailure(t *testing.T) {
-	t.Parallel()
-
-	hosted := hostedSessionInvokerStub{
-		invoke: func(context.Context, string, factorysessions.InvocationRequest) (interfaces.FactoryInvocationResult, error) {
-			return interfaces.FactoryInvocationResult{
-				Status:    interfaces.InvocationTerminalStatusFailed,
-				ErrorCode: "INVOCATION_RUNTIME_FAILURE",
-				Message:   "hosted failed",
-			}, nil
-		},
-	}
-	var output bytes.Buffer
-	err := runFactoryInvocation(
-		context.Background(),
-		RunConfig{Output: &output},
-		factorysessions.InvocationTarget{},
-		factoryapi.InvocationRequest{},
-		testInvocationOperation{},
-		testResponsePresentation(),
-		hosted,
-	)
-	if err == nil {
-		t.Fatal("runFactoryInvocation() error = nil, want hosted terminal failure")
-	}
-	if !strings.Contains(err.Error(), "INVOCATION_RUNTIME_FAILURE") {
-		t.Fatalf("error = %v, want hosted failure code", err)
 	}
 }
 
@@ -552,7 +433,6 @@ func TestRunFactoryInvocationCarriesPreparedCompatibilityInputWithoutAPIContent(
 		*apiRequest,
 		operation,
 		testResponsePresentation(),
-		nil,
 	)
 	if err != nil {
 		t.Fatalf("runFactoryInvocation: %v", err)

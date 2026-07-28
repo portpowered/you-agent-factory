@@ -268,7 +268,6 @@ func runFactoryInvocation(
 	request factoryapi.InvocationRequest,
 	invocation InvocationOperation,
 	presentation factoryvisualization.ResponsePresentation,
-	hostedInvoker factorysessions.SessionInvoker,
 ) error {
 	if invocation == nil {
 		return fmt.Errorf("run factory invocation: operation is required")
@@ -303,20 +302,6 @@ func runFactoryInvocation(
 		invocationRequest.Content = nil
 		invocationRequest.ContentProvided = false
 		invocationRequest.PreparedInvocationInput = cfg.PreparedInvocationInput.Clone()
-	}
-	if hostedInvoker != nil {
-		result, err := hostedInvoker.InvokeFactorySession(
-			invokeCtx,
-			factorysessions.DefaultSessionID,
-			invocationRequest,
-		)
-		if err != nil {
-			return MapInvocationFailure(err)
-		}
-		if result.Status != interfaces.InvocationTerminalStatusCompleted {
-			return writeInvocationFailure(invocationCfg, result, streamRenderer)
-		}
-		return writeInvocationSuccess(invocationCfg, result, streamRenderer)
 	}
 	outcome, err := invocation.InvokeFactory(invokeCtx, target, invocationRequest, consume)
 	if err != nil {

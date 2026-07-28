@@ -112,7 +112,6 @@ func provideRuntimeOpeningRequestFactory() runcli.RuntimeOpeningRequestFactory {
 			Ports: factorysessionwire.ApplicationOpeningPorts{
 				InvocationMetricsRecorder: cfg.InvocationMetricsRecorder,
 				RuntimeHostObserver:       observer,
-				SessionInvokerSink:        cfg.HostedSessionInvokerSink,
 			},
 		}
 	}
