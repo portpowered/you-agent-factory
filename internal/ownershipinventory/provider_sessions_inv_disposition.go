@@ -73,12 +73,6 @@ func verifyProviderSessionsZeroExtraBeyondServiceDisposition(inventory ProviderS
 		return fmt.Errorf("provider sessions zero-extra INV disposition still lists unexpected public siblings beyond service/: %v", beyondService)
 	}
 	for _, child := range inventory.Children {
-		if child.Directory == "service" {
-			if child.Classification != ProviderSessionsTopLevelUnexpectedPublicSibling {
-				return fmt.Errorf("provider sessions top-level inventory child service must remain %q for CLN-PSES-FOLD-SERVICE ownership, got %q", ProviderSessionsTopLevelUnexpectedPublicSibling, child.Classification)
-			}
-			continue
-		}
 		if child.Classification != ProviderSessionsTopLevelCanonicalRetain {
 			return fmt.Errorf("provider sessions zero-extra path child %q classification = %q, want %q", child.Directory, child.Classification, ProviderSessionsTopLevelCanonicalRetain)
 		}

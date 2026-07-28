@@ -87,17 +87,6 @@ func TestDelPsesPrerequisiteGate_AllFoldPacketsFactoryComplete(t *testing.T) {
 		}
 	})
 
-	t.Run("CLN-PSES-LEGACY-PACKAGES_transitional_service_retained_for_DEL", func(t *testing.T) {
-		t.Parallel()
-		info, err := os.Stat(filepath.Join(serviceRoot, "service"))
-		if err != nil {
-			t.Fatalf("transitional service/ must remain until DEL-PSES deletes it; stat = %v", err)
-		}
-		if !info.IsDir() {
-			t.Fatal("transitional service/ must remain a directory until DEL-PSES")
-		}
-	})
-
 	t.Run("CLN-PSES-CONTRACT-ROOTS_thin_root_contract_sealed", func(t *testing.T) {
 		t.Parallel()
 		inventory, err := ownershipinventory.LoadProviderSessionsRootGoInventory(root)
@@ -135,7 +124,7 @@ func TestDelPsesPrerequisiteGate_AllFoldPacketsFactoryComplete(t *testing.T) {
 
 	t.Run("CLN-PSES-CONTRACT-ROOTS_canonical_root_directories", func(t *testing.T) {
 		t.Parallel()
-		wantRootDirs := []string{"internal", "service", "transports", "wire"}
+		wantRootDirs := []string{"internal", "transports", "wire"}
 		entries, err := os.ReadDir(serviceRoot)
 		if err != nil {
 			t.Fatalf("ReadDir(%q) = %v", serviceRoot, err)

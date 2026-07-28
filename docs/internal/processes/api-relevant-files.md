@@ -354,10 +354,11 @@ Use this map when changing the public REST contract.
   Factory-complete before leased deletion begins. Observable gate proofs live in
   `pkg/services/provider_sessions/del_pses_prerequisite_gate_test.go` (tree
   invariants from CLN-PSES-FOLD-SERVICE internal fold, CLN-PSES-LEGACY-PACKAGES
-  zero-extra sibling lock and reader subservices, CLN-PSES-CONTRACT-ROOTS thin
-  root contract seal, and transitional `service/` retained for deletion). Fold
-  behavioral proofs live in sibling boundary tests under
-  `pkg/services/provider_sessions/`.
+  zero-extra sibling lock and reader subservices, and CLN-PSES-CONTRACT-ROOTS thin
+  root contract seal). DEL-PSES story 002 (`pss-del-pses-002`) deletes the
+  emptied transitional `service/` compile shim and clears imports; proofs live in
+  `pkg/services/provider_sessions/del_pses_deletion_gate_test.go`. Fold behavioral
+  proofs live in sibling boundary tests under `pkg/services/provider_sessions/`.
 - Provider Session HTTP decoding, generated-contract mapping, service
   invocation, typed root error mapping (`error_mapping.go`), cancel/timeout edge
   mapping, and response encoding for owned Provider Sessions operations live in
