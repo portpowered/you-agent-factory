@@ -41,7 +41,11 @@ and `cmd/packagetargetmanifestcheck/owner_top_level.go` mirror this inventory:
 
 Move destinations align with `workMoveRules` / `nestedOwnerMoveRules` for `work`:
 `service` and `testdata` → `work/internal`; `stateaccessrecordings` →
-`work/internal/services/state_access`.
+`work/internal/services/state_access`. Mapping rules are confirmed in
+`internal/ownershipinventory/work_mapping.go`, `cmd/packagetargetmanifestcheck/owners.go`
+(`nestedOwnerMoveRules["work"]`), and locked by
+`TestWorkTopLevelUnexpectedMoveDestinationsMatchInventory` /
+`TestWorkTopLevelUnexpectedCoveredByMoveRules`.
 
 ## Related inventory
 
@@ -49,6 +53,5 @@ Move destinations align with `workMoveRules` / `nestedOwnerMoveRules` for `work`
   [`work-root-contract-surface-inventory.md`](work-root-contract-surface-inventory.md).
 
 ## Out of scope for this note
-- `packagetargetmanifestcheck` / `ownershipinventory` remap confirmation and JSON
-  baseline regeneration (stories 003–006).
+- Excess root `.go` contract fold encoding and baseline regeneration (stories 004–006).
 - Production package moves, folds, deletes, or `pkg/wire` edits.

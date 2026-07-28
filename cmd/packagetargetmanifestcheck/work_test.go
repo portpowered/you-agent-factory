@@ -101,15 +101,28 @@ func TestWorkTopLevelUnexpectedCoveredByMoveRules(t *testing.T) {
 	t.Parallel()
 
 	spec := productOwnerTopLevelSpecs["work"]
+	wantDestination := map[string]string{
+		"service":               "work/internal",
+		"stateaccessrecordings": "work/internal/services/state_access",
+		"testdata":              "work/internal",
+	}
+	if len(spec.unexpected) != len(wantDestination) {
+		t.Fatalf("unexpected inventory drift: got %v, want keys %v", spec.unexpected, wantDestination)
+	}
+
 	for _, child := range spec.unexpected {
 		rest := child
+		want, ok := wantDestination[child]
+		if !ok {
+			t.Fatalf("unexpected sibling %q missing from confirmed inventory destinations", child)
+		}
 		if child == "service" {
 			got, ok := mapLegacyServiceImplementationPackage("work", "pkg/services/work/"+child, rest)
 			if !ok {
 				t.Fatalf("mapLegacyServiceImplementationPackage() ok = false for %q", child)
 			}
-			if got.Disposition != DispositionMove || got.Destination != "work/internal" {
-				t.Fatalf("service move mapping = %#v, want move→work/internal", got)
+			if got.Disposition != DispositionMove || got.Destination != want {
+				t.Fatalf("service move mapping = %#v, want move→%s", got, want)
 			}
 			continue
 		}
@@ -118,8 +131,8 @@ func TestWorkTopLevelUnexpectedCoveredByMoveRules(t *testing.T) {
 		if !ok {
 			t.Fatalf("nestedOwnerMoveDestination(work, %q) ok = false", rest)
 		}
-		if destination == "work" {
-			t.Fatalf("unexpected top-level child %q maps to owner root retain destination", child)
+		if destination != want {
+			t.Fatalf("unexpected top-level child %q destination = %q, want %q", child, destination, want)
 		}
 	}
 }

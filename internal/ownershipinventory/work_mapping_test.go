@@ -99,6 +99,49 @@ func TestMapPackageWorkMoveDestinations(t *testing.T) {
 	}
 }
 
+func TestWorkTopLevelUnexpectedMoveDestinationsMatchInventory(t *testing.T) {
+	t.Parallel()
+
+	spec, ok := ownershipinventory.OwnerTopLevelSpecFor("work")
+	if !ok {
+		t.Fatal("OwnerTopLevelSpecFor(work) missing")
+	}
+
+	wantSuccessor := map[string]string{
+		"service":               "pkg/services/work/internal",
+		"stateaccessrecordings": "pkg/services/work/internal/services/state_access",
+		"testdata":              "pkg/services/work/internal",
+	}
+	if len(spec.Unexpected) != len(wantSuccessor) {
+		t.Fatalf("unexpected inventory drift: got %v, want keys %v", spec.Unexpected, wantSuccessor)
+	}
+
+	for _, child := range spec.Unexpected {
+		child := child
+		t.Run(child, func(t *testing.T) {
+			t.Parallel()
+
+			want, ok := wantSuccessor[child]
+			if !ok {
+				t.Fatalf("unexpected sibling %q missing from confirmed inventory destinations", child)
+			}
+			got, err := ownershipinventory.MapPackage("pkg/services/work/" + child)
+			if err != nil {
+				t.Fatalf("MapPackage() error = %v", err)
+			}
+			if got.Disposition != ownershipinventory.DispositionMove {
+				t.Fatalf("disposition = %q, want move", got.Disposition)
+			}
+			if got.Successor != want {
+				t.Fatalf("successor = %q, want %q", got.Successor, want)
+			}
+			if got.DeletionCondition == "" {
+				t.Fatal("expected deletion condition on move row")
+			}
+		})
+	}
+}
+
 func TestWorkInventoryRejectsRetainToOwnerRoot(t *testing.T) {
 	t.Parallel()
 
