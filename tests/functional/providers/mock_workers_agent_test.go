@@ -112,7 +112,7 @@ func assertMockAgentRejected(t *testing.T, server *support.FunctionalAPIServer) 
 			payload.ProviderFailure.Type == nil ||
 			string(*payload.ProviderFailure.Type) != string(workerexecution.WorkFailureTypeUnknown) ||
 			payload.Error == nil ||
-			!strings.Contains(*payload.Error, "provider error: unknown: Codex reported a terminal error.") {
+			!strings.Contains(*payload.Error, "provider error: unknown: Codex reported a terminal error") {
 			t.Fatalf("dispatch response = %#v, want stable unknown provider failure", payload)
 		}
 		return

@@ -173,9 +173,9 @@ func TestHumanFactoryEventRenderer_WritesTerminalSuccessAndFailureLast(t *testin
 
 	t.Run("success after lifecycle", func(t *testing.T) {
 		var output bytes.Buffer
-		renderer := newHumanFactoryEventRenderer(&output, testResponsePresentation())
+		renderer := openTestHumanFactoryEventRenderer(t, &output, testResponsePresentation())
 		renderer.PresentFactoryEvents(canonicalJavaScriptFactoryEvents()[:1])
-		if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
+		if err := renderer.WriteFinalInvocationResult(apisurface.FactoryInvocationResult{
 			Status: interfaces.InvocationTerminalStatusCompleted,
 			PrimaryResult: []work.WorkContentPart{{
 				Type: work.WorkContentPartTypeText, Text: "complete",
@@ -190,8 +190,8 @@ func TestHumanFactoryEventRenderer_WritesTerminalSuccessAndFailureLast(t *testin
 
 	t.Run("failure includes public terminal context", func(t *testing.T) {
 		var output bytes.Buffer
-		renderer := newHumanFactoryEventRenderer(&output, testResponsePresentation())
-		if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
+		renderer := openTestHumanFactoryEventRenderer(t, &output, testResponsePresentation())
+		if err := renderer.WriteFinalInvocationResult(apisurface.FactoryInvocationResult{
 			Status:    interfaces.InvocationTerminalStatusFailed,
 			ErrorCode: "WORK_FAILED", Message: "worker stopped",
 			SessionID: "session-1", WorkID: "work-1", WorkName: "research", WorkState: "FAILED",
@@ -205,39 +205,27 @@ func TestHumanFactoryEventRenderer_WritesTerminalSuccessAndFailureLast(t *testin
 			t.Fatalf("failure output = %q, want %q", got, want)
 		}
 	})
-
-	var nilRenderer *humanFactoryEventRenderer
-	if err := nilRenderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{}); err == nil {
-		t.Fatal("nil renderer terminal write succeeded")
-	}
 }
 
 func TestJSONFactoryEventRenderer_FinalizesTerminalRecordOnce(t *testing.T) {
 	t.Parallel()
 	var output bytes.Buffer
-	renderer := newJSONFactoryEventRenderer(&output, testResponsePresentation())
+	renderer := openTestJSONFactoryEventRenderer(t, &output, testResponsePresentation())
 	result := apisurface.FactoryInvocationResult{
 		Status: interfaces.InvocationTerminalStatusCompleted,
 		PrimaryResult: []work.WorkContentPart{{
 			Type: work.WorkContentPartTypeText, Text: "complete",
 		}},
 	}
-	if err := renderer.writeFinalInvocationResult(result); err != nil {
+	if err := renderer.WriteFinalInvocationResult(result); err != nil {
 		t.Fatalf("write terminal record: %v", err)
 	}
-	if err := renderer.writeFinalInvocationResult(result); err == nil {
+	if err := renderer.WriteFinalInvocationResult(result); err == nil {
 		t.Fatal("duplicate terminal record write succeeded")
 	}
 	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
 	if len(lines) != 1 || !strings.Contains(lines[0], `"recordType":"invocation_result"`) {
 		t.Fatalf("terminal output = %q, want one invocation_result record", output.String())
-	}
-
-	var nilRenderer *jsonFactoryEventRenderer
-	nilRenderer.PresentFactoryEvents(canonicalJavaScriptFactoryEvents())
-	nilRenderer.stopProgressRendering()
-	if err := nilRenderer.writeFinalInvocationResult(result); err == nil {
-		t.Fatal("nil renderer terminal write succeeded")
 	}
 }
 
@@ -246,20 +234,44 @@ func TestFactoryEventRenderers_RejectMissingPresentationEdges(t *testing.T) {
 
 	for _, test := range []struct {
 		name string
-		open func()
+		open func() error
 	}{
-		{name: "human output", open: func() { newHumanFactoryEventRenderer(nil, testResponsePresentation()) }},
-		{name: "human presentation", open: func() { newHumanFactoryEventRenderer(&bytes.Buffer{}, nil) }},
-		{name: "json output", open: func() { newJSONFactoryEventRenderer(nil, testResponsePresentation()) }},
-		{name: "json presentation", open: func() { newJSONFactoryEventRenderer(&bytes.Buffer{}, nil) }},
+		{
+			name: "human output",
+			open: func() error {
+				_, err := invocationFactoryEventRenderer(RunConfig{
+					InvocationOutputMode: InvocationOutputResponseStream,
+					Output:               nil,
+				}, testResponsePresentation())
+				return err
+			},
+		},
+		{
+			name: "human presentation",
+			open: func() error {
+				_, err := invocationFactoryEventRenderer(RunConfig{
+					InvocationOutputMode: InvocationOutputResponseStream,
+					Output:               &bytes.Buffer{},
+				}, nil)
+				return err
+			},
+		},
+		{
+			name: "json output",
+			open: func() error {
+				_, err := invocationFactoryEventRenderer(RunConfig{
+					InvocationOutputMode: InvocationOutputResponseStream,
+					JSONOutput:           true,
+					Output:               nil,
+				}, testResponsePresentation())
+				return err
+			},
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			defer func() {
-				if recover() == nil {
-					t.Fatal("constructor did not panic")
-				}
-			}()
-			test.open()
+			if err := test.open(); err == nil {
+				t.Fatal("constructor did not return error")
+			}
 		})
 	}
 }
@@ -380,9 +392,9 @@ func TestHumanFactoryEventRenderer_FailuresAreUnderstandable(t *testing.T) {
 		}),
 	}
 	var output strings.Builder
-	renderer := newHumanFactoryEventRenderer(&output, testResponsePresentation())
+	renderer := openTestHumanFactoryEventRenderer(t, &output, testResponsePresentation())
 	renderer.PresentFactoryEvents(events)
-	renderer.stopProgressRendering()
+	renderer.StopProgressRendering()
 	want := "[1] inference failed (attempt 2) — model request timed out\n" +
 		"[2] workstation failed: release review — worker timed out\n"
 	if got := output.String(); got != want {
@@ -396,13 +408,16 @@ func TestInvocationFactoryEventRenderer_HumanModeDoesNotDependOnStdoutTTY(t *tes
 	outputs := make([]string, 0, 2)
 	for _, outputIsTTY := range []bool{true, false} {
 		var output strings.Builder
-		renderer := invocationFactoryEventRenderer(RunConfig{
+		renderer, err := invocationFactoryEventRenderer(RunConfig{
 			InvocationOutputMode: InvocationOutputResponseStream,
 			OutputIsTTY:          outputIsTTY,
 			Output:               &output,
 		}, testResponsePresentation())
+		if err != nil {
+			t.Fatalf("invocationFactoryEventRenderer(outputIsTTY=%t): %v", outputIsTTY, err)
+		}
 		renderer.PresentFactoryEvents(canonicalJavaScriptFactoryEvents())
-		if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
+		if err := renderer.WriteFinalInvocationResult(apisurface.FactoryInvocationResult{
 			Status:        interfaces.InvocationTerminalStatusCompleted,
 			PrimaryResult: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "complete"}},
 		}); err != nil {
