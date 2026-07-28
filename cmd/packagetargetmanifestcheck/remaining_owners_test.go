@@ -7,7 +7,7 @@ import (
 func TestServiceFacadeOwnersTopLevelUnexpectedCoveredByMoveRules(t *testing.T) {
 	t.Parallel()
 
-	for _, owner := range []string{"automations", "provider_sessions"} {
+	for _, owner := range []string{"provider_sessions"} {
 		spec := productOwnerTopLevelSpecs[owner]
 		for _, child := range spec.unexpected {
 			if child != "service" {

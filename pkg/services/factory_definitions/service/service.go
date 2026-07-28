@@ -36,6 +36,7 @@ func New(
 	packagedInstaller factoryroot.PackagedFactoryInstallationOperations,
 	requiredToolChecker factoryroot.RequiredToolChecker,
 	orchestratorValidator factoryroot.OrchestratorDefinitionValidator,
+	options ...CompositionOption,
 ) factoryroot.Service {
 	return NewWithAuthoringLayout(
 		sessionHost,
@@ -58,6 +59,7 @@ func New(
 		requiredToolChecker,
 		orchestratorValidator,
 		nil,
+		options...,
 	)
 }
 
@@ -85,6 +87,7 @@ func NewWithAuthoringLayout(
 	requiredToolChecker factoryroot.RequiredToolChecker,
 	orchestratorValidator factoryroot.OrchestratorDefinitionValidator,
 	authoringLayout authoringlayout.Service,
+	options ...CompositionOption,
 ) factoryroot.Service {
 	if sessionHost == nil || clock == nil || versionFileSystem == nil ||
 		namedPaths == nil || namedFactoryCatalogFileSystem == nil ||
@@ -137,17 +140,26 @@ func NewWithAuthoringLayout(
 	validationService, _ := validationwire.NewService(validationservice.Dependencies{
 		Operations:            operations,
 		Effective:             effective,
-		LoadCanonical:       loadCanonical,
+		LoadCanonical:         loadCanonical,
 		RequiredToolChecker:   requiredToolChecker,
 		OrchestratorValidator: orchestratorValidator,
 	})
-	definitions := factorydefinition.NewWithCatalogPackagesValidationInstallationAndAuthoring(
+	composition := applyCompositionOptions(options)
+	distributionService := factorydefinition.ComposeDistributionService(
+		packagedCatalog,
+		packagedInstaller,
+		composition.scaffoldInitializer,
+		composition.scaffoldFactoryNameResolver,
+	)
+	if distributionService == nil {
+		return nil
+	}
+	definitions := factorydefinition.NewWithCatalogPackagesValidationDistributionAndAuthoring(
 		host,
 		catalogService,
 		validationService,
 		authoringLayout,
-		packagedCatalog,
-		packagedInstaller,
+		distributionService,
 		versionFileSystem,
 	)
 	sessionHost.AttachFactoryDefinitions(definitions)

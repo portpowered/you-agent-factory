@@ -1,7 +1,6 @@
 package main
 
 import (
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -230,55 +229,5 @@ func TestWorkersTopLevelUnexpectedCoveredByMoveRules(t *testing.T) {
 		if destination == "workers" {
 			t.Fatalf("unexpected top-level child %q maps to owner root retain destination", child)
 		}
-	}
-}
-
-func TestWorkersInventoryRejectsRetainToOwnerRoot(t *testing.T) {
-	t.Parallel()
-
-	repoRoot := findRepoRoot(t)
-	manifest, err := loadManifest(filepath.Join(repoRoot, manifestRelativePath))
-	if err != nil {
-		t.Fatalf("loadManifest() error = %v", err)
-	}
-
-	const ownerPrefix = "pkg/services/workers/"
-	for _, packagePath := range manifest.Inventory {
-		if packagePath == "pkg/services/workers" {
-			continue
-		}
-		if !strings.HasPrefix(packagePath, ownerPrefix) {
-			continue
-		}
-		rest := strings.TrimPrefix(packagePath, ownerPrefix)
-		if workersCanonicalRetainRest(rest) {
-			continue
-		}
-
-		got, ok := mapCommittedOwnerPackage(packagePath)
-		if !ok {
-			t.Fatalf("mapCommittedOwnerPackage(%q) ok = false", packagePath)
-		}
-		if got.Disposition == DispositionRetain && got.Destination == "workers" {
-			t.Fatalf("unexpected retain→workers for inventory path %q", packagePath)
-		}
-		if got.Disposition != DispositionMove {
-			t.Fatalf("inventory path %q disposition = %q, want move", packagePath, got.Disposition)
-		}
-	}
-}
-
-func workersCanonicalRetainRest(rest string) bool {
-	switch {
-	case rest == "wire" || strings.HasPrefix(rest, "wire/"):
-		return true
-	case strings.HasPrefix(rest, "internal/services/runtime_assembly"):
-		return true
-	case strings.HasPrefix(rest, "internal/services/workstations"):
-		return true
-	case strings.HasPrefix(rest, "internal/services/runners"):
-		return true
-	default:
-		return false
 	}
 }

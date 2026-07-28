@@ -1671,7 +1671,7 @@
       "fromOwner": "wire",
       "toOwner": "providers",
       "class": "construction",
-      "evidence": "pkg/wire -\u003e pkg/services/workers/provider/inferencecontract"
+      "evidence": "pkg/wire -\u003e pkg/services/providers"
     },
     {
       "fromOwner": "wire",
@@ -2490,14 +2490,6 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/automations/service",
-      "disposition": "move",
-      "destination": "automations",
-      "destinationKind": "owner",
-      "successor": "pkg/services/automations/internal",
-      "deletionCondition": "delete transitional service/ package after owner wire retargets to internal implementation and DEL cutover proof completes"
-    },
-    {
       "packagePath": "pkg/services/automations/transports/http",
       "disposition": "retain",
       "destination": "automations",
@@ -2697,6 +2689,42 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/compilation/wire",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/internal/service",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/packagedcatalog",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/packagedinstallation",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/scaffoldfacts",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/wire",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
@@ -4295,6 +4323,14 @@
     },
     {
       "packagePath": "pkg/services/operator_settings/testlink",
+      "disposition": "move",
+      "destination": "operator_settings",
+      "destinationKind": "owner",
+      "successor": "pkg/services/operator_settings/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-OPS-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/testproviders",
       "disposition": "move",
       "destination": "operator_settings",
       "destinationKind": "owner",

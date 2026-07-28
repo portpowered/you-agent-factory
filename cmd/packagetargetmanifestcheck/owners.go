@@ -291,6 +291,7 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 		{exact: "identityinventory", prefix: "identityinventory/", dest: "operator_settings/internal/services/document"},
 		{exact: "servicewire", prefix: "servicewire/", dest: "operator_settings/internal"},
 		{exact: "testlink", prefix: "testlink/", dest: "operator_settings/internal"},
+		{exact: "testproviders", prefix: "testproviders/", dest: "operator_settings/internal"},
 		{exact: "testdata", prefix: "testdata/", dest: "operator_settings/internal"},
 		{exact: "internal/service", prefix: "internal/service/", dest: "operator_settings/internal"},
 	},

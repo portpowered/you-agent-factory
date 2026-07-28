@@ -98,8 +98,8 @@ func activeRawEngineSnapshotForDashboardTest(now time.Time, topology *factoryrun
 
 func dashboardHeaderFromEngineSnapshot(
 	es interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net],
-) factoryruntime.RuntimeEngineStateSnapshot {
-	return factoryruntime.RuntimeEngineStateSnapshot{
+) SimpleDashboardHeader {
+	return SimpleDashboardHeader{
 		FactoryState:  es.FactoryState,
 		RuntimeStatus: es.RuntimeStatus,
 		TickCount:     es.TickCount,
@@ -160,7 +160,7 @@ func TestFormatSimpleDashboardWithRenderData_MapsSystemTimeCompatibilityAtCliBou
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.Local)
 
 	output := FormatSimpleDashboardWithRenderData(
-		factoryruntime.RuntimeEngineStateSnapshot{
+		SimpleDashboardHeader{
 			FactoryState:  "RUNNING",
 			RuntimeStatus: interfaces.RuntimeStatusIdle,
 			Uptime:        2 * time.Minute,
@@ -213,7 +213,7 @@ func TestFormatSimpleDashboardWithRenderData_RendersUnavailableTimes(t *testing.
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 
 	output := FormatSimpleDashboardWithRenderData(
-		factoryruntime.RuntimeEngineStateSnapshot{
+		SimpleDashboardHeader{
 			FactoryState:  "RUNNING",
 			RuntimeStatus: interfaces.RuntimeStatusActive,
 		},
@@ -263,7 +263,7 @@ func TestDashboardSessionViewFromRenderData_FallsBackToDispatchHistoryWorkItems(
 	assertDispatchHistoryFallbackView(t, view)
 
 	output := FormatSimpleDashboardWithRenderData(
-		factoryruntime.RuntimeEngineStateSnapshot{
+		SimpleDashboardHeader{
 			FactoryState:  "RUNNING",
 			RuntimeStatus: interfaces.RuntimeStatusIdle,
 			Uptime:        5 * time.Minute,
@@ -276,10 +276,10 @@ func TestDashboardSessionViewFromRenderData_FallsBackToDispatchHistoryWorkItems(
 }
 
 func buildTerminalProviderRenderFixture(now time.Time) (
-	factoryruntime.RuntimeEngineStateSnapshot,
+	SimpleDashboardHeader,
 	recordings.SimpleDashboardRenderData,
 ) {
-	return factoryruntime.RuntimeEngineStateSnapshot{
+	return SimpleDashboardHeader{
 			FactoryState:  "RUNNING",
 			RuntimeStatus: interfaces.RuntimeStatusIdle,
 			Uptime:        20 * time.Minute,
@@ -529,7 +529,7 @@ func TestFormatSimpleDashboardWithRenderData_RendersWorkTypeCountBreakdown(t *te
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.Local)
 
 	output := FormatSimpleDashboardWithRenderData(
-		factoryruntime.RuntimeEngineStateSnapshot{
+		SimpleDashboardHeader{
 			FactoryState:  "RUNNING",
 			RuntimeStatus: interfaces.RuntimeStatusIdle,
 			Uptime:        time.Minute,

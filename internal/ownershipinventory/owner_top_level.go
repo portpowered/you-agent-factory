@@ -32,7 +32,6 @@ var productOwnerTopLevelSpecs = map[string]OwnerTopLevelSpec{
 	"automations": {
 		Owner:          "automations",
 		ExpectedRetain: []string{"internal", "transports", "wire"},
-		Unexpected:     []string{"service"},
 	},
 	"factory_definitions": {
 		Owner:          "factory_definitions",
@@ -113,7 +112,7 @@ var productOwnerTopLevelSpecs = map[string]OwnerTopLevelSpec{
 	"operator_settings": {
 		Owner:          "operator_settings",
 		ExpectedRetain: []string{"internal", "transports", "wire"},
-		Unexpected:     []string{"identityinventory", "servicewire", "testdata", "testlink"},
+		Unexpected:     []string{"identityinventory", "servicewire", "testdata", "testlink", "testproviders"},
 	},
 	"provider_sessions": {
 		Owner:          "provider_sessions",

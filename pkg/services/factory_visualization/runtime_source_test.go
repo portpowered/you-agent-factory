@@ -176,9 +176,11 @@ func (s sessionRuntimeReaderStub) WithRuntimeRead(
 
 type sessionBoundRuntimeFactory struct {
 	factoryruntime.Service
-	subscribeHook func()
-	stream        *factorydefinitions.FactoryEventStream
-	observation   factoryruntime.Observation
+	subscribeHook   func()
+	stream          *factorydefinitions.FactoryEventStream
+	observation     factoryruntime.Observation
+	observeRequests []factoryruntime.ObserveRequest
+	observeErr      error
 }
 
 func (f *sessionBoundRuntimeFactory) SubmitWorkRequest(
@@ -200,8 +202,12 @@ func (f *sessionBoundRuntimeFactory) SubscribeFactoryEvents(
 }
 
 func (f *sessionBoundRuntimeFactory) Observe(
-	context.Context,
-	factoryruntime.ObserveRequest,
+	_ context.Context,
+	req factoryruntime.ObserveRequest,
 ) (factoryruntime.ObserveResult, error) {
+	f.observeRequests = append(f.observeRequests, req)
+	if f.observeErr != nil {
+		return factoryruntime.ObserveResult{}, f.observeErr
+	}
 	return factoryruntime.ObserveResult{Observation: f.observation}, nil
 }

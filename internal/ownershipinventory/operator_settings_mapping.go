@@ -19,6 +19,7 @@ var operatorSettingsMoveRules = []operatorSettingsMoveRule{
 	{exact: "identityinventory", prefix: "identityinventory/", subservice: "document"},
 	{exact: "servicewire", prefix: "servicewire/", subservice: ""},
 	{exact: "testlink", prefix: "testlink/", subservice: ""},
+	{exact: "testproviders", prefix: "testproviders/", subservice: ""},
 	{exact: "testdata", prefix: "testdata/", subservice: ""},
 	{exact: "internal/service", prefix: "internal/service/", subservice: ""},
 }
