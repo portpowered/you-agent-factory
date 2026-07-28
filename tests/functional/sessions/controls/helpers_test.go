@@ -230,3 +230,68 @@ func dispatchObservationForWorkAtWorkstation(
 	}
 	return support.DispatchEventObservation{}, false
 }
+
+func filterSessionLifecycleControlEvents(events []factoryapi.FactoryEvent) []factoryapi.FactoryEvent {
+	var lifecycleControls []factoryapi.FactoryEvent
+	for _, event := range events {
+		if event.Type == factoryapi.FactoryEventTypeSessionLifecycleControl {
+			lifecycleControls = append(lifecycleControls, event)
+		}
+	}
+	return lifecycleControls
+}
+
+func assertPauseResumeLifecycleControlEvents(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+) {
+	t.Helper()
+
+	lifecycleControls := filterSessionLifecycleControlEvents(events)
+	if len(lifecycleControls) < 2 {
+		t.Fatalf(
+			"SESSION_LIFECYCLE_CONTROL events = %d, want at least pause and resume",
+			len(lifecycleControls),
+		)
+	}
+
+	pauseEvent := lifecycleControls[len(lifecycleControls)-2]
+	resumeEvent := lifecycleControls[len(lifecycleControls)-1]
+	if pauseEvent.Type != factoryapi.FactoryEventTypeSessionLifecycleControl {
+		t.Fatalf("pause event type = %q, want SESSION_LIFECYCLE_CONTROL", pauseEvent.Type)
+	}
+	if resumeEvent.Type != factoryapi.FactoryEventTypeSessionLifecycleControl {
+		t.Fatalf("resume event type = %q, want SESSION_LIFECYCLE_CONTROL", resumeEvent.Type)
+	}
+
+	pausePayload, err := pauseEvent.Payload.AsSessionLifecycleControlEventPayload()
+	if err != nil {
+		t.Fatalf("decode pause lifecycle-control payload: %v", err)
+	}
+	if pausePayload.Operation != factoryapi.FactorySessionLifecycleControlKindPause {
+		t.Fatalf("pause payload operation = %q, want PAUSE", pausePayload.Operation)
+	}
+	if pausePayload.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("pause payload outcome = %q, want ACCEPTED", pausePayload.Outcome)
+	}
+
+	resumePayload, err := resumeEvent.Payload.AsSessionLifecycleControlEventPayload()
+	if err != nil {
+		t.Fatalf("decode resume lifecycle-control payload: %v", err)
+	}
+	if resumePayload.Operation != factoryapi.FactorySessionLifecycleControlKindResume {
+		t.Fatalf("resume payload operation = %q, want RESUME", resumePayload.Operation)
+	}
+	if resumePayload.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("resume payload outcome = %q, want ACCEPTED", resumePayload.Outcome)
+	}
+
+	if !pausePayload.OccurredAt.Before(resumePayload.OccurredAt) &&
+		!pausePayload.OccurredAt.Equal(resumePayload.OccurredAt) {
+		t.Fatalf(
+			"lifecycle-control event order = pause@%s resume@%s, want pause before resume",
+			pausePayload.OccurredAt.UTC(),
+			resumePayload.OccurredAt.UTC(),
+		)
+	}
+}

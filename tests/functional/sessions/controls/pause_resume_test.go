@@ -130,3 +130,60 @@ func TestResumedFactorySessionDrainsBufferedWorkInOrder(t *testing.T) {
 
 	assertBufferedWorkDrainedInSubmissionOrder(t, server, firstID, secondID)
 }
+
+// TestPauseResumeEmitsDurableLifecycleEvents proves pause and resume through
+// the public session-control boundary leave durable SESSION_LIFECYCLE_CONTROL
+// Factory Events in chronological order with public control operation kinds.
+func TestPauseResumeEmitsDurableLifecycleEvents(t *testing.T) {
+	factoryDir := support.ScaffoldFactory(t, pauseResumeControlsFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:     factoryDir,
+		UseMockWorkers: true,
+	})
+	defer server.Stop(t)
+
+	baseURL := server.URL()
+	sessionID := factorysessions.DefaultSessionID
+
+	pause := postSessionLifecycleControl(
+		t,
+		baseURL,
+		sessionID,
+		factoryapi.FactorySessionLifecycleControlKindPause,
+	)
+	if pause.Operation != factoryapi.FactorySessionLifecycleControlKindPause ||
+		pause.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("pause response = %#v, want accepted pause", pause)
+	}
+
+	submitted := support.SubmitDefaultSessionWork(t, baseURL, factoryapi.SubmitWorkRequest{
+		Name:         stringPointer("lifecycle-event-buffered-task"),
+		WorkTypeName: "task",
+		Payload:      map[string]string{"title": "Submitted between pause and resume"},
+	})
+	workID := stringPointerValue(submitted.WorkId)
+	if workID == "" {
+		t.Fatalf("submit while paused missing work id: %#v", submitted)
+	}
+
+	resume := postSessionLifecycleControl(
+		t,
+		baseURL,
+		sessionID,
+		factoryapi.FactorySessionLifecycleControlKindResume,
+	)
+	if resume.Operation != factoryapi.FactorySessionLifecycleControlKindResume ||
+		resume.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("resume response = %#v, want accepted resume", resume)
+	}
+
+	waitForSessionWorkIDsAtCustomerState(
+		t,
+		baseURL,
+		[]string{workID},
+		support.WorkCustomerLocation("task", "complete"),
+		pauseResumeDrainWaitTimeout,
+	)
+
+	assertPauseResumeLifecycleControlEvents(t, server.GetFactoryEvents(t))
+}
