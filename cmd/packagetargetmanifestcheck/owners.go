@@ -163,7 +163,9 @@ func mapProvidersExtraction(packagePath string) (PackageMapping, bool) {
 	case packagePath == "pkg/services/workers/agypty",
 		packagePath == "pkg/services/workers/cliprovider",
 		packagePath == "pkg/services/workers/provider",
-		strings.HasPrefix(packagePath, "pkg/services/workers/provider/"):
+		strings.HasPrefix(packagePath, "pkg/services/workers/provider/"),
+		packagePath == "pkg/services/workers/provider_test",
+		strings.HasPrefix(packagePath, "pkg/services/workers/provider_test/"):
 		destination := "providers/internal/services/execution"
 		if packagePath == "pkg/services/workers/provider/registry" {
 			destination = "providers/internal/services/catalog"
@@ -282,9 +284,22 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 		{exact: "materialize", prefix: "materialize/", dest: "work/internal/services/content_materialization"},
 	},
 	"workers": {
+		{exact: "construction", prefix: "construction/", dest: "workers/internal/services/runtime_assembly"},
+		{exact: "prompting", prefix: "prompting/", dest: "workers/internal/services/workstations"},
+		{exact: "worktree", prefix: "worktree/", dest: "workers/internal/services/workstations"},
+		{exact: "skippermissions", prefix: "skippermissions/", dest: "workers/internal/services/workstations"},
+		{exact: "diagnostics", prefix: "diagnostics/", dest: "workers/internal/services/runners"},
+		{exact: "execution", prefix: "execution/", dest: "workers/internal/services/runners"},
+		{exact: "executor", prefix: "executor/", dest: "workers/internal/services/runners"},
+		{exact: "invocation", prefix: "invocation/", dest: "workers/internal/services/runners"},
+		{exact: "process", prefix: "process/", dest: "workers/internal/services/runners"},
+		{exact: "runner", prefix: "runner/", dest: "workers/internal/services/runners"},
+		{exact: "interface", prefix: "interface/", dest: "workers/internal/services/runners"},
+		{exact: "services", prefix: "services/", dest: "workers/internal/services/runners"},
 		{exact: "services/hosted_logic", prefix: "services/hosted_logic/", dest: "workers/internal/services/runners"},
 		{exact: "services/inference", prefix: "services/inference/", dest: "workers/internal/services/runners"},
 		{exact: "services/testing", prefix: "services/testing/", dest: "workers/internal/services/runners"},
+		{prefix: "services/", dest: "workers/internal/services/runners"},
 	},
 	"provider_sessions": {
 		{exact: "codex", prefix: "codex/", dest: "provider_sessions/internal/services/codex_reader"},
