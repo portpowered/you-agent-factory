@@ -257,6 +257,7 @@ func projectRuntimeOpeningExternalEffects(edges serviceedges.Edges) factorysessi
 		SubmissionRecorder:        edges.SubmissionRecorder,
 		DispatchRecorder:          edges.DispatchRecorder,
 		RuntimeHostObserver:       edges.RuntimeHostObserver,
+		FactoryVisualizationSink:  edges.FactoryVisualizationSink,
 		HostedClock:               edges.HostedClock,
 		HostedHTTPClient:          edges.HostedHTTPClient,
 		HostedSecretResolver:      edges.HostedSecretResolver,

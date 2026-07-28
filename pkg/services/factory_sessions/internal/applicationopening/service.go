@@ -103,7 +103,11 @@ func (service *Service) OpenApplication(
 	if err != nil {
 		return roles.OpenedProcessApplication{}, fmt.Errorf("open Factory Session application runtime: %w", err)
 	}
-	components, err := service.adaptRuntime(opened, inputs.Effects, visualizationSink)
+	effectiveSink := visualizationSink
+	if inputs.Effects.FactoryVisualizationSink != nil {
+		effectiveSink = inputs.Effects.FactoryVisualizationSink
+	}
+	components, err := service.adaptRuntime(opened, inputs.Effects, effectiveSink)
 	if err != nil {
 		err = closeOpenedRuntime(opened, err)
 		return roles.OpenedProcessApplication{}, fmt.Errorf("bind Factory Session application: %w", err)

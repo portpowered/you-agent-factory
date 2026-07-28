@@ -21,6 +21,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
@@ -134,6 +135,7 @@ type Edges struct {
 	BrowserOpener             platformbrowser.Opener
 	InvocationMetricsRecorder factorysessions.InvocationMetricsRecorder
 	RuntimeHostObserver       factorysessions.RuntimeHostObserver
+	FactoryVisualizationSink  factoryvisualization.Sink
 	ModelPullMetricsRecorder  models.PullMetricsRecorder
 	ProviderOverride          providercontract.Provider
 	providercontract.ProviderRegistrations
@@ -469,6 +471,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.RuntimeHostObserver != nil {
 		defaults.RuntimeHostObserver = replacements.RuntimeHostObserver
+	}
+	if replacements.FactoryVisualizationSink != nil {
+		defaults.FactoryVisualizationSink = replacements.FactoryVisualizationSink
 	}
 	if replacements.ModelPullMetricsRecorder != nil {
 		defaults.ModelPullMetricsRecorder = replacements.ModelPullMetricsRecorder
