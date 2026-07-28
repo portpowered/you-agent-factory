@@ -251,6 +251,44 @@ func textInvocationRequest(t *testing.T, text string, timeoutMillis *int64) fact
 	}
 }
 
+func postInvocationExpectStatus(
+	t *testing.T,
+	serverURL string,
+	request factoryapi.InvocationRequest,
+	wantStatus int,
+) factoryapi.ErrorResponse {
+	t.Helper()
+
+	body, err := json.Marshal(request)
+	if err != nil {
+		t.Fatalf("marshal invocation request: %v", err)
+	}
+	response, err := http.Post(
+		strings.TrimSuffix(serverURL, "/")+"/factory-sessions/"+factorysessions.DefaultSessionID+"/invocations",
+		"application/json",
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		t.Fatalf("POST /factory-sessions/~default/invocations: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != wantStatus {
+		payload, _ := io.ReadAll(response.Body)
+		t.Fatalf(
+			"POST /factory-sessions/~default/invocations status = %d, want %d: %s",
+			response.StatusCode,
+			wantStatus,
+			strings.TrimSpace(string(payload)),
+		)
+	}
+
+	var decoded factoryapi.ErrorResponse
+	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
+		t.Fatalf("decode invocation error response: %v", err)
+	}
+	return decoded
+}
+
 func postInvocation(t *testing.T, serverURL string, request factoryapi.InvocationRequest) factoryapi.InvocationResponse {
 	t.Helper()
 

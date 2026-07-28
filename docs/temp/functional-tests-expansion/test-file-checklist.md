@@ -590,7 +590,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPIPauseResumeCancelAndTerminateFactorySession`.
   - `TestAPIInvalidLifecycleTransitionReturnsConflict`.
 
-- [ ] `tests/functional/sessions/execution/results_dispatches_test.go`
+- [x] `tests/functional/sessions/execution/results_dispatches_test.go`
   - `TestAPIResultAndResultsExposeTerminalInvocationData`.
   - `TestAPIDispatchListAndDetailExposePublicCorrelation`.
   - `TestAPIPartialResultIsAvailableBeforeTerminalCompletion`.

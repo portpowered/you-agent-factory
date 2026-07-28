@@ -1,11 +1,17 @@
 package execution_test
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
@@ -13,7 +19,9 @@ import (
 
 // TestAPIResultAndResultsExposeTerminalInvocationData proves terminal invocation
 // and durable session result reads expose success primary-result content plus
-// typed non-success terminal statuses through the public Factory Session API.
+// typed non-success terminal statuses, invalid invocation inputs are rejected
+// with typed public errors, and canceled request context stops in-flight
+// invocations without fabricating terminal success results.
 func TestAPIResultAndResultsExposeTerminalInvocationData(t *testing.T) {
 	t.Run("successfulInvocationExposesPrimaryResultOnInvocationAndWorkReads", func(t *testing.T) {
 		dir := scaffoldInvocationFactory(t, nil)
@@ -85,6 +93,117 @@ func TestAPIResultAndResultsExposeTerminalInvocationData(t *testing.T) {
 			t.Fatalf("invocation primaryResult = %#v, want nil on timeout", response.PrimaryResult)
 		}
 		waitForBlockingInvocationStart(t, blocking)
+	})
+
+	t.Run("rejectsWhitespaceOnlyTextWithTypedPublicError", func(t *testing.T) {
+		dir := scaffoldInvocationFactory(t, nil)
+		server := startInvocationServer(
+			t,
+			dir,
+			support.NewStaticSuccessCommandRunner(terminalSuccessPrimaryResult),
+			nil,
+		)
+
+		response := postInvocationExpectStatus(
+			t,
+			server.URL(),
+			textInvocationRequest(t, "   ", nil),
+			http.StatusBadRequest,
+		)
+		if string(response.Code) != "INVOCATION_INPUT_EMPTY" {
+			t.Fatalf("invocation error code = %q, want INVOCATION_INPUT_EMPTY", response.Code)
+		}
+	})
+
+	t.Run("rejectsArgsWithoutActiveSignatureWithTypedPublicError", func(t *testing.T) {
+		dir := scaffoldInvocationFactory(t, nil)
+		server := startInvocationServer(
+			t,
+			dir,
+			support.NewStaticSuccessCommandRunner(terminalSuccessPrimaryResult),
+			nil,
+		)
+
+		response := postInvocationExpectStatus(
+			t,
+			server.URL(),
+			factoryapi.InvocationRequest{
+				Args: &map[string]any{"input": "hello"},
+			},
+			http.StatusBadRequest,
+		)
+		if string(response.Code) != "INVOCATION_ARGUMENT_INVALID_ACTIVE_SIGNATURE" {
+			t.Fatalf(
+				"invocation error code = %q, want INVOCATION_ARGUMENT_INVALID_ACTIVE_SIGNATURE",
+				response.Code,
+			)
+		}
+	})
+
+	t.Run("rejectsInvalidStructuredArgValueShapeWithTypedPublicError", func(t *testing.T) {
+		dir := scaffoldInvocationFactory(t, nil)
+		server := startInvocationServer(
+			t,
+			dir,
+			support.NewStaticSuccessCommandRunner(terminalSuccessPrimaryResult),
+			nil,
+		)
+
+		response := postInvocationExpectStatus(
+			t,
+			server.URL(),
+			factoryapi.InvocationRequest{
+				Args: &map[string]any{"input": 7},
+			},
+			http.StatusBadRequest,
+		)
+		if string(response.Code) != "BAD_REQUEST" {
+			t.Fatalf("invocation error code = %q, want BAD_REQUEST", response.Code)
+		}
+	})
+
+	t.Run("canceledRequestContextStopsInFlightInvocation", func(t *testing.T) {
+		dir := scaffoldInvocationFactory(t, nil)
+		blocking := newBlockingInvocationRunner()
+		server := startInvocationServer(t, dir, blocking, nil)
+
+		body, err := json.Marshal(textInvocationRequest(t, "invoke this", nil))
+		if err != nil {
+			t.Fatalf("marshal invocation request: %v", err)
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		request, err := http.NewRequestWithContext(
+			ctx,
+			http.MethodPost,
+			server.URL()+"/factory-sessions/"+factorysessions.DefaultSessionID+"/invocations",
+			bytes.NewReader(body),
+		)
+		if err != nil {
+			cancel()
+			t.Fatalf("build invocation request: %v", err)
+		}
+		request.Header.Set("Content-Type", "application/json")
+		errCh := make(chan error, 1)
+		go func() {
+			response, requestErr := http.DefaultClient.Do(request)
+			if response != nil {
+				_ = response.Body.Close()
+			}
+			errCh <- requestErr
+		}()
+
+		<-blocking.started
+		cancel()
+
+		select {
+		case err := <-errCh:
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("canceled invocation request error = %v, want context.Canceled", err)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("canceled invocation request did not return")
+		}
 	})
 
 	t.Run("durableResultsReadExposesFinalPrimaryResult", func(t *testing.T) {
