@@ -216,6 +216,83 @@ func TestMapPackageFactoryDefinitionsMoveDestinations(t *testing.T) {
 			},
 		},
 		{
+			path: "pkg/services/factory_definitions/invocationinterpolation",
+			wantMove: &ownershipinventory.PackageRow{
+				PackagePath:       "pkg/services/factory_definitions/invocationinterpolation",
+				Disposition:       ownershipinventory.DispositionMove,
+				Destination:       "factory_definitions",
+				DestinationKind:   ownershipinventory.DestinationKindOwner,
+				Successor:         "pkg/services/factory_definitions/internal/services/invocation_policy",
+				DeletionCondition: "delete public package after IMP-DEF-invocation_policy private subservice cutover proof",
+			},
+		},
+		{
+			path: "pkg/services/factory_definitions/invocationoutput",
+			wantMove: &ownershipinventory.PackageRow{
+				PackagePath:       "pkg/services/factory_definitions/invocationoutput",
+				Disposition:       ownershipinventory.DispositionMove,
+				Destination:       "factory_definitions",
+				DestinationKind:   ownershipinventory.DestinationKindOwner,
+				Successor:         "pkg/services/factory_definitions/internal/services/invocation_policy",
+				DeletionCondition: "delete public package after IMP-DEF-invocation_policy private subservice cutover proof",
+			},
+		},
+		{
+			path: "pkg/services/factory_definitions/invocationworktype",
+			wantMove: &ownershipinventory.PackageRow{
+				PackagePath:       "pkg/services/factory_definitions/invocationworktype",
+				Disposition:       ownershipinventory.DispositionMove,
+				Destination:       "factory_definitions",
+				DestinationKind:   ownershipinventory.DestinationKindOwner,
+				Successor:         "pkg/services/factory_definitions/internal/services/invocation_policy",
+				DeletionCondition: "delete public package after IMP-DEF-invocation_policy private subservice cutover proof",
+			},
+		},
+		{
+			path: "pkg/services/factory_definitions/quorumpolicy",
+			wantMove: &ownershipinventory.PackageRow{
+				PackagePath:       "pkg/services/factory_definitions/quorumpolicy",
+				Disposition:       ownershipinventory.DispositionMove,
+				Destination:       "factory_definitions",
+				DestinationKind:   ownershipinventory.DestinationKindOwner,
+				Successor:         "pkg/services/factory_definitions/internal/services/invocation_policy",
+				DeletionCondition: "delete public package after IMP-DEF-invocation_policy private subservice cutover proof",
+			},
+		},
+		{
+			path: "pkg/services/factory_definitions/workpropagation",
+			wantMove: &ownershipinventory.PackageRow{
+				PackagePath:       "pkg/services/factory_definitions/workpropagation",
+				Disposition:       ownershipinventory.DispositionMove,
+				Destination:       "factory_definitions",
+				DestinationKind:   ownershipinventory.DestinationKindOwner,
+				Successor:         "pkg/services/factory_definitions/internal/services/invocation_policy",
+				DeletionCondition: "delete public package after IMP-DEF-invocation_policy private subservice cutover proof",
+			},
+		},
+		{
+			path: "pkg/services/factory_definitions/workstationexecution",
+			wantMove: &ownershipinventory.PackageRow{
+				PackagePath:       "pkg/services/factory_definitions/workstationexecution",
+				Disposition:       ownershipinventory.DispositionMove,
+				Destination:       "factory_definitions",
+				DestinationKind:   ownershipinventory.DestinationKindOwner,
+				Successor:         "pkg/services/factory_definitions/internal/services/invocation_policy",
+				DeletionCondition: "delete public package after IMP-DEF-invocation_policy private subservice cutover proof",
+			},
+		},
+		{
+			path: "pkg/services/factory_definitions/ttsobservability",
+			wantMove: &ownershipinventory.PackageRow{
+				PackagePath:       "pkg/services/factory_definitions/ttsobservability",
+				Disposition:       ownershipinventory.DispositionMove,
+				Destination:       "factory_definitions",
+				DestinationKind:   ownershipinventory.DestinationKindOwner,
+				Successor:         "pkg/services/factory_definitions/internal/services/invocation_policy",
+				DeletionCondition: "delete public package after IMP-DEF-invocation_policy private subservice cutover proof",
+			},
+		},
+		{
 			path: "pkg/services/factory_definitions/internal/testcomposition",
 			wantMove: &ownershipinventory.PackageRow{
 				PackagePath:       "pkg/services/factory_definitions/internal/testcomposition",

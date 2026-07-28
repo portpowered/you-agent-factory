@@ -619,6 +619,13 @@ Wave 0 functional-tests-expansion planning authority lives under
   `internal/ownershipinventory/unexpected_sibling_retain_test.go` (plus
   `internal/ownershipinventory/remaining_owners_test.go`); they sweep inventoried
   unexpected siblings and fail on deliberate retain→owner-root mappings.
+  Factory Definitions invocation-policy inventory locks live in
+  `internal/ownershipinventory/factory_definitions_invocation_policy_lock_test.go`
+  and mirrored residual-destination cases in
+  `cmd/packagetargetmanifestcheck/factory_definitions_test.go`; they assert the
+  nested `factory_definitions/invocation_policy` rationale card, dual-ledger move
+  targets for residual policy packages, snapshots_portability retain rows, and
+  absence of inventory deletes for the packet.
   `make ownership-inventory-check` runs `VerifyFreeze` against
   `docs/internal/baselines/ownership-inventory.json` and
   `docs/internal/projects/packaged-service-structure/ownership-path-lease-freeze.json`,
