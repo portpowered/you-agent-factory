@@ -9,12 +9,16 @@ import (
 	"strings"
 	"testing"
 
+	"bytes"
+
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	distributionservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution"
 	distributionpackagedcatalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedcatalog"
+	distributionscaffoldfacts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/scaffoldfacts"
 	distributionwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/wire"
+	factorydefaultscaffold "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/defaultscaffold"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packagedinstallation"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 )
@@ -52,7 +56,8 @@ func TestDistributionListsAndResolvesBuiltInPackagedFactories(t *testing.T) {
 				return factorydefinitions.PackagedFactoryInstallResult{}, nil
 			},
 		},
-		ScaffoldInitializer: func(factorydefinitions.ScaffoldConfig) error { return nil },
+		ScaffoldInitializer:         func(factorydefinitions.ScaffoldConfig) error { return nil },
+		ScaffoldFactoryNameResolver: scaffoldNameResolver("factory"),
 	})
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
@@ -112,7 +117,8 @@ func TestDistributionResolveUnknownOrBlankNameFailsClosed(t *testing.T) {
 				return factorydefinitions.PackagedFactoryInstallResult{}, nil
 			},
 		},
-		ScaffoldInitializer: func(factorydefinitions.ScaffoldConfig) error { return nil },
+		ScaffoldInitializer:         func(factorydefinitions.ScaffoldConfig) error { return nil },
+		ScaffoldFactoryNameResolver: scaffoldNameResolver("factory"),
 	})
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
@@ -416,20 +422,229 @@ func TestDistributionInstallPackagedFactoryThroughInjectedPorts(t *testing.T) {
 	}
 }
 
+func TestDistributionCreateFactoryScaffoldReturnsDistributedFacts(t *testing.T) {
+	t.Parallel()
+
+	var scaffoldDir string
+	svc := newDistributionServiceWithScaffold(
+		t,
+		goalPackagedCatalog(t),
+		factorydefinitions.PackagedFactoryInstallationOperations{
+			Install: func(
+				context.Context,
+				factorydefinitions.PackagedFactoryInstallParams,
+			) (factorydefinitions.PackagedFactoryInstallResult, error) {
+				return factorydefinitions.PackagedFactoryInstallResult{}, nil
+			},
+		},
+		func(cfg factorydefinitions.ScaffoldConfig) error {
+			scaffoldDir = cfg.Dir
+			return nil
+		},
+		scaffoldNameResolver("alpha"),
+	)
+
+	targetDir := "/customer/factories/alpha"
+	result, err := svc.CreateFactoryScaffold(
+		t.Context(),
+		factorydefinitions.CreateFactoryScaffoldRequest{
+			TargetDir: targetDir,
+			Type:      factorydefinitions.DefaultScaffoldType,
+			Executor:  "codex",
+		},
+	)
+	if err != nil {
+		t.Fatalf("CreateFactoryScaffold: %v", err)
+	}
+	if scaffoldDir != targetDir {
+		t.Fatalf("scaffold dir = %q, want %q", scaffoldDir, targetDir)
+	}
+	if result.Definition.Name != "alpha" ||
+		result.Definition.FactoryDir != targetDir ||
+		result.ScaffoldType != factorydefinitions.DefaultScaffoldType {
+		t.Fatalf("CreateFactoryScaffold() = %#v", result)
+	}
+}
+
+func TestDistributionCreateFactoryScaffoldRejectsBlankTargetDir(t *testing.T) {
+	t.Parallel()
+
+	scaffoldCalls := 0
+	svc := newDistributionServiceWithScaffold(
+		t,
+		goalPackagedCatalog(t),
+		factorydefinitions.PackagedFactoryInstallationOperations{
+			Install: func(
+				context.Context,
+				factorydefinitions.PackagedFactoryInstallParams,
+			) (factorydefinitions.PackagedFactoryInstallResult, error) {
+				return factorydefinitions.PackagedFactoryInstallResult{}, nil
+			},
+		},
+		func(factorydefinitions.ScaffoldConfig) error {
+			scaffoldCalls++
+			return nil
+		},
+		scaffoldNameResolver("factory"),
+	)
+
+	_, err := svc.CreateFactoryScaffold(
+		t.Context(),
+		factorydefinitions.CreateFactoryScaffoldRequest{TargetDir: "  "},
+	)
+	if !errors.Is(err, factorydefinitions.ErrFactoryDistributeFailed) {
+		t.Fatalf("CreateFactoryScaffold(blank) error = %v", err)
+	}
+	if scaffoldCalls != 0 {
+		t.Fatalf("scaffold calls = %d, want 0 before validation rejection", scaffoldCalls)
+	}
+}
+
+func TestDistributionCreateFactoryScaffoldRejectsUnsupportedType(t *testing.T) {
+	t.Parallel()
+
+	scaffoldCalls := 0
+	svc := newDistributionServiceWithScaffold(
+		t,
+		goalPackagedCatalog(t),
+		factorydefinitions.PackagedFactoryInstallationOperations{
+			Install: func(
+				context.Context,
+				factorydefinitions.PackagedFactoryInstallParams,
+			) (factorydefinitions.PackagedFactoryInstallResult, error) {
+				return factorydefinitions.PackagedFactoryInstallResult{}, nil
+			},
+		},
+		func(factorydefinitions.ScaffoldConfig) error {
+			scaffoldCalls++
+			return nil
+		},
+		scaffoldNameResolver("factory"),
+	)
+
+	_, err := svc.CreateFactoryScaffold(
+		t.Context(),
+		factorydefinitions.CreateFactoryScaffoldRequest{
+			TargetDir: "/customer/factories/alpha",
+			Type:      "unsupported",
+		},
+	)
+	if !errors.Is(err, factorydefinitions.ErrFactoryDistributeFailed) {
+		t.Fatalf("CreateFactoryScaffold(unsupported) error = %v", err)
+	}
+	if scaffoldCalls != 0 {
+		t.Fatalf("scaffold calls = %d, want 0 before unsupported-type rejection", scaffoldCalls)
+	}
+}
+
+func TestDistributionCreateFactoryScaffoldWrapsInitializerFailure(t *testing.T) {
+	t.Parallel()
+
+	initErr := fmt.Errorf("disk full")
+	svc := newDistributionServiceWithScaffold(
+		t,
+		goalPackagedCatalog(t),
+		factorydefinitions.PackagedFactoryInstallationOperations{
+			Install: func(
+				context.Context,
+				factorydefinitions.PackagedFactoryInstallParams,
+			) (factorydefinitions.PackagedFactoryInstallResult, error) {
+				return factorydefinitions.PackagedFactoryInstallResult{}, nil
+			},
+		},
+		func(factorydefinitions.ScaffoldConfig) error {
+			return initErr
+		},
+		scaffoldNameResolver("factory"),
+	)
+
+	_, err := svc.CreateFactoryScaffold(
+		t.Context(),
+		factorydefinitions.CreateFactoryScaffoldRequest{
+			TargetDir: "/customer/factories/alpha",
+		},
+	)
+	if !errors.Is(err, factorydefinitions.ErrFactoryDistributeFailed) {
+		t.Fatalf("CreateFactoryScaffold() error = %v, want ErrFactoryDistributeFailed", err)
+	}
+}
+
+func TestDistributionCreateFactoryScaffoldThroughInjectedPorts(t *testing.T) {
+	t.Parallel()
+
+	fileSystem := platformfilesystem.Local{}
+	output := &bytes.Buffer{}
+	initialize, err := factorydefaultscaffold.NewScaffoldInitializer(fileSystem, output)
+	if err != nil {
+		t.Fatalf("NewScaffoldInitializer: %v", err)
+	}
+	svc := newDistributionServiceWithScaffold(
+		t,
+		goalPackagedCatalog(t),
+		factorydefinitions.PackagedFactoryInstallationOperations{
+			Install: func(
+				context.Context,
+				factorydefinitions.PackagedFactoryInstallParams,
+			) (factorydefinitions.PackagedFactoryInstallResult, error) {
+				return factorydefinitions.PackagedFactoryInstallResult{}, nil
+			},
+		},
+		initialize,
+		distributionscaffoldfacts.LocalFactoryNameResolver(),
+	)
+
+	targetDir := t.TempDir()
+	result, err := svc.CreateFactoryScaffold(
+		t.Context(),
+		factorydefinitions.CreateFactoryScaffoldRequest{TargetDir: targetDir},
+	)
+	if err != nil {
+		t.Fatalf("CreateFactoryScaffold: %v", err)
+	}
+	if result.Definition.Name != "factory" ||
+		result.Definition.FactoryDir != targetDir ||
+		result.ScaffoldType != factorydefinitions.DefaultScaffoldType {
+		t.Fatalf("CreateFactoryScaffold() = %#v", result)
+	}
+}
+
 func newDistributionService(
 	t *testing.T,
 	catalog factorydefinitions.PackagedFactoryCatalogOperations,
 	installer factorydefinitions.PackagedFactoryInstallationOperations,
 ) distributionservice.Service {
+	return newDistributionServiceWithScaffold(
+		t,
+		catalog,
+		installer,
+		func(factorydefinitions.ScaffoldConfig) error { return nil },
+		scaffoldNameResolver("factory"),
+	)
+}
+
+func newDistributionServiceWithScaffold(
+	t *testing.T,
+	catalog factorydefinitions.PackagedFactoryCatalogOperations,
+	installer factorydefinitions.PackagedFactoryInstallationOperations,
+	scaffoldInitializer factorydefinitions.ScaffoldInitializer,
+	scaffoldFactoryNameResolver distributionservice.ScaffoldFactoryNameResolver,
+) distributionservice.Service {
 	svc, err := distributionwire.NewService(distributionservice.Dependencies{
-		PackagedCatalog:     catalog,
-		PackagedInstaller:   installer,
-		ScaffoldInitializer: func(factorydefinitions.ScaffoldConfig) error { return nil },
+		PackagedCatalog:             catalog,
+		PackagedInstaller:           installer,
+		ScaffoldInitializer:         scaffoldInitializer,
+		ScaffoldFactoryNameResolver: scaffoldFactoryNameResolver,
 	})
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
 	return svc
+}
+
+func scaffoldNameResolver(name string) distributionservice.ScaffoldFactoryNameResolver {
+	return func(string) (string, error) {
+		return name, nil
+	}
 }
 
 func goalPackagedCatalog(t *testing.T) factorydefinitions.PackagedFactoryCatalogOperations {

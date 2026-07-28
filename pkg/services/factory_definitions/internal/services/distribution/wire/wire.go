@@ -26,10 +26,14 @@ func NewService(deps distributionservice.Dependencies) (distributionservice.Serv
 	if deps.ScaffoldInitializer == nil {
 		return nil, fmt.Errorf("construct Factory Definitions distribution: scaffold initializer is required")
 	}
+	if deps.ScaffoldFactoryNameResolver == nil {
+		return nil, fmt.Errorf("construct Factory Definitions distribution: scaffold factory name resolver is required")
+	}
 	service := distributionserviceimpl.New(
 		deps.PackagedCatalog,
 		deps.PackagedInstaller,
 		deps.ScaffoldInitializer,
+		deps.ScaffoldFactoryNameResolver,
 	)
 	if service == nil {
 		return nil, fmt.Errorf("construct Factory Definitions distribution: implementation rejected its dependencies")

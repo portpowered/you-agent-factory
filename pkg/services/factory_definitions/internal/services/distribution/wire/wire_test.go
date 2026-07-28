@@ -36,14 +36,16 @@ func TestNewService_RequiresExactInjectedPorts(t *testing.T) {
 		},
 	}
 	scaffold := func(factorydefinitions.ScaffoldConfig) error { return nil }
+	resolver := func(string) (string, error) { return "factory", nil }
 
 	if svc, err := distributionwire.NewService(distributionservice.Dependencies{
 		PackagedCatalog: factorydefinitions.PackagedFactoryCatalogOperations{
 			List:    nil,
 			Resolve: catalog.Resolve,
 		},
-		PackagedInstaller:   installer,
-		ScaffoldInitializer: scaffold,
+		PackagedInstaller:           installer,
+		ScaffoldInitializer:         scaffold,
+		ScaffoldFactoryNameResolver:   resolver,
 	}); err == nil || svc != nil || !strings.Contains(err.Error(), "list operation is required") {
 		t.Fatalf("NewService(nil list) = %#v, %v; want list operation required error", svc, err)
 	}
@@ -52,30 +54,42 @@ func TestNewService_RequiresExactInjectedPorts(t *testing.T) {
 			List:    catalog.List,
 			Resolve: nil,
 		},
-		PackagedInstaller:   installer,
-		ScaffoldInitializer: scaffold,
+		PackagedInstaller:           installer,
+		ScaffoldInitializer:         scaffold,
+		ScaffoldFactoryNameResolver: resolver,
 	}); err == nil || svc != nil || !strings.Contains(err.Error(), "resolve operation is required") {
 		t.Fatalf("NewService(nil resolve) = %#v, %v; want resolve operation required error", svc, err)
 	}
 	if svc, err := distributionwire.NewService(distributionservice.Dependencies{
 		PackagedCatalog:     catalog,
-		PackagedInstaller:   factorydefinitions.PackagedFactoryInstallationOperations{},
-		ScaffoldInitializer: scaffold,
+		PackagedInstaller:           factorydefinitions.PackagedFactoryInstallationOperations{},
+		ScaffoldInitializer:         scaffold,
+		ScaffoldFactoryNameResolver: resolver,
 	}); err == nil || svc != nil || !strings.Contains(err.Error(), "installer is required") {
 		t.Fatalf("NewService(nil installer) = %#v, %v; want installer required error", svc, err)
 	}
 	if svc, err := distributionwire.NewService(distributionservice.Dependencies{
-		PackagedCatalog:     catalog,
-		PackagedInstaller:   installer,
-		ScaffoldInitializer: nil,
+		PackagedCatalog:             catalog,
+		PackagedInstaller:           installer,
+		ScaffoldInitializer:         nil,
+		ScaffoldFactoryNameResolver: resolver,
 	}); err == nil || svc != nil || !strings.Contains(err.Error(), "scaffold initializer is required") {
 		t.Fatalf("NewService(nil scaffold) = %#v, %v; want scaffold initializer required error", svc, err)
 	}
+	if svc, err := distributionwire.NewService(distributionservice.Dependencies{
+		PackagedCatalog:             catalog,
+		PackagedInstaller:           installer,
+		ScaffoldInitializer:         scaffold,
+		ScaffoldFactoryNameResolver: nil,
+	}); err == nil || svc != nil || !strings.Contains(err.Error(), "scaffold factory name resolver is required") {
+		t.Fatalf("NewService(nil resolver) = %#v, %v; want scaffold factory name resolver required error", svc, err)
+	}
 
 	svc, err := distributionwire.NewService(distributionservice.Dependencies{
-		PackagedCatalog:     catalog,
-		PackagedInstaller:   installer,
-		ScaffoldInitializer: scaffold,
+		PackagedCatalog:             catalog,
+		PackagedInstaller:           installer,
+		ScaffoldInitializer:         scaffold,
+		ScaffoldFactoryNameResolver: resolver,
 	})
 	if err != nil {
 		t.Fatalf("NewService with exact injected ports: %v", err)
@@ -123,11 +137,13 @@ func TestNewService_ConstructsInertOwnerWithoutLifecycle(t *testing.T) {
 		scaffoldCalls++
 		return nil
 	}
+	resolver := func(string) (string, error) { return "factory", nil }
 
 	svc, err := distributionwire.NewService(distributionservice.Dependencies{
-		PackagedCatalog:     catalog,
-		PackagedInstaller:   installer,
-		ScaffoldInitializer: scaffold,
+		PackagedCatalog:             catalog,
+		PackagedInstaller:           installer,
+		ScaffoldInitializer:         scaffold,
+		ScaffoldFactoryNameResolver: resolver,
 	})
 	if err != nil {
 		t.Fatalf("NewService: %v", err)

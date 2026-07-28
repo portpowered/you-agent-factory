@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	distributionservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution"
@@ -11,9 +12,10 @@ import (
 // Service is the private nested distribution implementation behind the CTR-DEF
 // root distribute slice.
 type Service struct {
-	packagedCatalog     factorydefinitions.PackagedFactoryCatalogOperations
-	packagedInstaller   factorydefinitions.PackagedFactoryInstallationOperations
-	scaffoldInitializer factorydefinitions.ScaffoldInitializer
+	packagedCatalog             factorydefinitions.PackagedFactoryCatalogOperations
+	packagedInstaller           factorydefinitions.PackagedFactoryInstallationOperations
+	scaffoldInitializer         factorydefinitions.ScaffoldInitializer
+	scaffoldFactoryNameResolver distributionservice.ScaffoldFactoryNameResolver
 }
 
 var _ distributionservice.Service = (*Service)(nil)
@@ -23,17 +25,20 @@ func New(
 	packagedCatalog factorydefinitions.PackagedFactoryCatalogOperations,
 	packagedInstaller factorydefinitions.PackagedFactoryInstallationOperations,
 	scaffoldInitializer factorydefinitions.ScaffoldInitializer,
+	scaffoldFactoryNameResolver distributionservice.ScaffoldFactoryNameResolver,
 ) *Service {
 	if packagedCatalog.List == nil ||
 		packagedCatalog.Resolve == nil ||
 		packagedInstaller.Install == nil ||
-		scaffoldInitializer == nil {
+		scaffoldInitializer == nil ||
+		scaffoldFactoryNameResolver == nil {
 		return nil
 	}
 	return &Service{
-		packagedCatalog:     packagedCatalog,
-		packagedInstaller:   packagedInstaller,
-		scaffoldInitializer: scaffoldInitializer,
+		packagedCatalog:             packagedCatalog,
+		packagedInstaller:           packagedInstaller,
+		scaffoldInitializer:         scaffoldInitializer,
+		scaffoldFactoryNameResolver: scaffoldFactoryNameResolver,
 	}
 }
 
@@ -101,13 +106,43 @@ func (s *Service) InstallPackagedFactory(
 }
 
 func (s *Service) CreateFactoryScaffold(
-	_ context.Context,
-	_ factorydefinitions.CreateFactoryScaffoldRequest,
+	ctx context.Context,
+	request factorydefinitions.CreateFactoryScaffoldRequest,
 ) (factorydefinitions.CreateFactoryScaffoldResult, error) {
 	if err := s.requirePorts(); err != nil {
 		return factorydefinitions.CreateFactoryScaffoldResult{}, err
 	}
-	return factorydefinitions.CreateFactoryScaffoldResult{}, factorydefinitions.ErrFactoryDistributeFailed
+	if err := ctx.Err(); err != nil {
+		return factorydefinitions.CreateFactoryScaffoldResult{}, err
+	}
+	if err := factorydefinitions.ValidateCreateFactoryScaffoldRequest(request); err != nil {
+		return factorydefinitions.CreateFactoryScaffoldResult{}, err
+	}
+	targetDir := strings.TrimSpace(request.TargetDir)
+	if err := s.scaffoldInitializer(factorydefinitions.ScaffoldConfig{Dir: targetDir}); err != nil {
+		return factorydefinitions.CreateFactoryScaffoldResult{},
+			fmt.Errorf("%w: %w", factorydefinitions.ErrFactoryDistributeFailed, err)
+	}
+	name, err := s.scaffoldFactoryNameResolver(targetDir)
+	if err != nil {
+		return factorydefinitions.CreateFactoryScaffoldResult{},
+			fmt.Errorf("%w: %w", factorydefinitions.ErrFactoryDistributeFailed, err)
+	}
+	if strings.TrimSpace(name) == "" {
+		return factorydefinitions.CreateFactoryScaffoldResult{},
+			factorydefinitions.ErrFactoryDistributeFailed
+	}
+	scaffoldType := strings.TrimSpace(request.Type)
+	if scaffoldType == "" {
+		scaffoldType = factorydefinitions.DefaultScaffoldType
+	}
+	return factorydefinitions.CreateFactoryScaffoldResult{
+		Definition: factorydefinitions.DistributedFactoryDefinitionFacts{
+			Name:       name,
+			FactoryDir: targetDir,
+		},
+		ScaffoldType: scaffoldType,
+	}, nil
 }
 
 func (s *Service) requirePorts() error {
@@ -115,7 +150,8 @@ func (s *Service) requirePorts() error {
 		s.packagedCatalog.List == nil ||
 		s.packagedCatalog.Resolve == nil ||
 		s.packagedInstaller.Install == nil ||
-		s.scaffoldInitializer == nil {
+		s.scaffoldInitializer == nil ||
+		s.scaffoldFactoryNameResolver == nil {
 		return fmt.Errorf("Factory Definition distribution collaborator is required")
 	}
 	return nil
