@@ -44,11 +44,6 @@
     },
     {
       "rule": "deprecated-runtime-api-file",
-      "filePath": "tests/functional/runtime_api/api_generated_rest_client_smoke_test.go",
-      "target": "tests/functional/runtime_api"
-    },
-    {
-      "rule": "deprecated-runtime-api-file",
       "filePath": "tests/functional/runtime_api/api_generated_smoke_test.go",
       "target": "tests/functional/runtime_api"
     },
@@ -299,21 +294,6 @@
     },
     {
       "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_generated_rest_client_smoke_test.go",
-      "target": "TestGeneratedRESTClientSmoke_BoundsCancellationAndDeadline"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_generated_rest_client_smoke_test.go",
-      "target": "TestGeneratedRESTClientSmoke_ConfiguresCallerOwnedDependencies"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_generated_rest_client_smoke_test.go",
-      "target": "TestGeneratedRESTClientSmoke_RoundTripsTypedSuccessAndAPIFailure"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
       "filePath": "tests/functional/runtime_api/api_generated_smoke_test.go",
       "target": "TestGeneratedAPIIntegrationSmoke_BatchUpsertAcceptsWorksContent"
     },
@@ -321,11 +301,6 @@
       "rule": "deprecated-runtime-api-test",
       "filePath": "tests/functional/runtime_api/api_generated_smoke_test.go",
       "target": "TestGeneratedAPIIntegrationSmoke_CLIWorkTypeNameReachesLiveAPIHandler"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_generated_smoke_test.go",
-      "target": "TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAligned"
     },
     {
       "rule": "deprecated-runtime-api-test",
@@ -780,6 +755,11 @@
     {
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/automations/cron_root_composition_test.go",
+      "target": "automations"
+    },
+    {
+      "rule": "functional-test-missing-subsection",
+      "filePath": "tests/functional/automations/filesystem_watcher_root_composition_test.go",
       "target": "automations"
     },
     {
@@ -1619,6 +1599,16 @@
     },
     {
       "rule": "service-root-exported-function",
+      "filePath": "pkg/services/models/internal/services/runtime_host/internal/services/leases/service.go",
+      "target": "BindCoordinator"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/operator_settings/document_contract.go",
+      "target": "EmptyDocument"
+    },
+    {
+      "rule": "service-root-exported-function",
       "filePath": "pkg/services/operator_settings/environment_resolution.go",
       "target": "ResolveFromHomeWithEnvironment"
     },
@@ -1691,11 +1681,6 @@
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/recordings/workstation_requests.go",
       "target": "BuildFactoryWorldWorkstationRequestProjectionSlice"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/system_initialization/initializer.go",
-      "target": "New"
     },
     {
       "rule": "service-root-exported-function",
@@ -2260,7 +2245,12 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/automations",
-      "target": "pkg/services/automations/contracts.go:HostedPollers,pkg/services/automations/contracts.go:Service"
+      "target": "pkg/services/automations/contracts.go:FilesystemInputReader,pkg/services/automations/contracts.go:FilesystemWatcher,pkg/services/automations/contracts.go:FilesystemWatcherFactory,pkg/services/automations/contracts.go:HostedPollers,pkg/services/automations/contracts.go:Service"
+    },
+    {
+      "rule": "service-root-interface-count",
+      "filePath": "pkg/services/automations/internal/services/filesystem_watchers",
+      "target": "pkg/services/automations/internal/services/filesystem_watchers/service.go:HandledIdentities,pkg/services/automations/internal/services/filesystem_watchers/service.go:InputFileSystem,pkg/services/automations/internal/services/filesystem_watchers/service.go:Service,pkg/services/automations/internal/services/filesystem_watchers/service.go:Watcher"
     },
     {
       "rule": "service-root-interface-count",
@@ -2294,8 +2284,13 @@
     },
     {
       "rule": "service-root-interface-count",
+      "filePath": "pkg/services/models/internal/services/runtime_host/internal/services/leases",
+      "target": "pkg/services/models/internal/services/runtime_host/internal/services/leases/service.go:CoordinatorBindable,pkg/services/models/internal/services/runtime_host/internal/services/leases/service.go:Service,pkg/services/models/internal/services/runtime_host/internal/services/leases/service.go:SlotCapacityCoordinator,pkg/services/models/internal/services/runtime_host/internal/services/leases/service.go:SlotFactsProvider"
+    },
+    {
+      "rule": "service-root-interface-count",
       "filePath": "pkg/services/operator_settings",
-      "target": "pkg/services/operator_settings/dependencies.go:FileSystem,pkg/services/operator_settings/dependencies.go:TemporaryFile"
+      "target": "pkg/services/operator_settings/dependencies.go:FileSystem,pkg/services/operator_settings/dependencies.go:TemporaryFile,pkg/services/operator_settings/service_contract.go:Service"
     },
     {
       "rule": "service-root-interface-count",
@@ -2316,6 +2311,11 @@
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/work",
       "target": "pkg/services/work/content_contract.go:ContentHTTPDoer,pkg/services/work/content_contract.go:ContentMaterializer,pkg/services/work/content_contract.go:ContentTemporaryFile,pkg/services/work/content_staging.go:ContentStagingClock,pkg/services/work/content_staging.go:ContentStagingFileSystem,pkg/services/work/content_staging.go:ContentStagingRandom,pkg/services/work/content_staging.go:ContentStagingService,pkg/services/work/contracts.go:InvocationWorldStateProvider,pkg/services/work/file_inputs.go:FileSource,pkg/services/work/invocation_input_preparation.go:InvocationInputPreparation,pkg/services/work/query_list.go:ListRequestPreparation,pkg/services/work/request_codec.go:FactoryRequestBatchPreparation,pkg/services/work/request_preparation.go:ContentPreparation,pkg/services/work/request_preparation.go:RequestPreparationService,pkg/services/work/service_contract.go:FileSubmissionService,pkg/services/work/service_contract.go:Runtime,pkg/services/work/service_contract.go:RuntimeResolver,pkg/services/work/service_contract.go:Service,pkg/services/work/visualization.go:VisualizationFileSystem"
+    },
+    {
+      "rule": "service-root-interface-count",
+      "filePath": "pkg/services/work/internal/services/state_access",
+      "target": "pkg/services/work/internal/services/state_access/service.go:RecordingsAdapter,pkg/services/work/internal/services/state_access/service.go:Service,pkg/services/work/internal/services/state_access/service.go:SessionAdapter,pkg/services/work/internal/services/state_access/service.go:SessionResolver"
     },
     {
       "rule": "service-root-interface-count",
@@ -2656,11 +2656,6 @@
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/recordings/service",
       "target": "pkg/services/recordings"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/work/materialize",
-      "target": "pkg/services/work"
     },
     {
       "rule": "service-root-unexpected-directory",

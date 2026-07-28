@@ -13,6 +13,7 @@ import (
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
+	modelinference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
 	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	"go.uber.org/zap"
@@ -32,6 +33,7 @@ type Root struct {
 	runtimeScopes   runtimescopes.Service
 	assets          scopedassets.Service
 	runtimeHost     runtimehost.Service
+	inference       modelinference.Service
 	runtimeMu       sync.RWMutex
 	runtimeByScope  map[models.RuntimeScopeRef]models.Service
 	catalog         modelcatalog.Service
@@ -54,6 +56,7 @@ func NewRoot(
 	catalogService modelcatalog.Service,
 	assetService scopedassets.Service,
 	runtimeHostService runtimehost.Service,
+	inferenceService modelinference.Service,
 	processDependencies ...models.ProcessDependencies,
 ) (*Root, error) {
 	if processLauncher == nil {
@@ -92,6 +95,9 @@ func NewRoot(
 	if runtimeHostService == nil {
 		return nil, missingDependencyError("Models Runtime Host service")
 	}
+	if inferenceService == nil {
+		return nil, missingDependencyError("Models Inference service")
+	}
 	process := models.ProcessDependencies{}
 	if len(processDependencies) > 0 {
 		process = processDependencies[0]
@@ -107,7 +113,7 @@ func NewRoot(
 		runtimeRunner: runtimeRunner, runtimeHTTP: runtimeHTTP,
 		runtimeInspect: runtimeInspect, runtimeTempDir: runtimeTempDir, runtimeTempFile: runtimeTempFile,
 		runtimeScopes: runtimeScopes, catalog: catalogService, assets: assetService,
-		runtimeHost: runtimeHostService,
+		runtimeHost: runtimeHostService, inference: inferenceService,
 		runtimeByScope: make(map[models.RuntimeScopeRef]models.Service),
 		process:        process,
 	}, nil
@@ -360,17 +366,23 @@ func (o *Root) ReleaseModelLease(
 }
 
 func (o *Root) InvokeModelWithLease(
-	context.Context,
-	models.InvokeModelRequest,
+	ctx context.Context,
+	request models.InvokeModelRequest,
 ) (models.InvokeModelResult, error) {
-	return models.InvokeModelResult{}, models.ErrUnsupportedOperation
+	if o == nil || o.inference == nil {
+		return models.InvokeModelResult{}, models.ErrUnsupportedOperation
+	}
+	return o.inference.InvokeModelWithLease(ctx, request)
 }
 
 func (o *Root) CancelInvocation(
-	context.Context,
-	models.CancelInvocationRequest,
+	ctx context.Context,
+	request models.CancelInvocationRequest,
 ) (models.CancelInvocationResult, error) {
-	return models.CancelInvocationResult{}, models.ErrUnsupportedOperation
+	if o == nil || o.inference == nil {
+		return models.CancelInvocationResult{}, models.ErrUnsupportedOperation
+	}
+	return o.inference.CancelInvocation(ctx, request)
 }
 
 func (o *Root) ListModels(context.Context) (models.List, error) {

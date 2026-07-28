@@ -2,12 +2,13 @@
 // contract for cross-service peers. Peers depend on the one named Service
 // interface and Bootstrap-owned request, result, value, and typed-error
 // contracts for initialize intent, customer-visible created/skipped outcomes,
-// and partial-failure rollback facts. Concrete Initializer construction,
-// filesystem collaborator ports (InspectPath, LegacyFactoryMigrationFileSystem),
-// and Operator Settings adapter helpers (OperatorSettings,
-// OperatorSettingsFunctions) are workflow/collaborator surfaces for the
-// canonical implementer; they are not additional peer-facing Bootstrap
-// authority interfaces for the published initialize or rollback slices.
+// and partial-failure rollback facts. Concrete initialize/rollback workflow
+// ownership lives under pkg/services/system_initialization/internal/workflow
+// behind the service-local wire constructor. Filesystem collaborator ports
+// (InspectPath, LegacyFactoryMigrationFileSystem) and Operator Settings adapter
+// helpers (OperatorSettings, OperatorSettingsFunctions) are workflow/collaborator
+// surfaces for the canonical implementer; they are not additional peer-facing
+// Bootstrap authority interfaces for the published initialize or rollback slices.
 package systeminitialization
 
 import (

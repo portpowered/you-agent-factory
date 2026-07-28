@@ -446,9 +446,9 @@ func (s *Service) OpenPresentation(
 	var output Output
 	switch req.Mode {
 	case PresentationDeliveryBestEffort:
-		output = newBestEffortOutput(writer)
+		output = s.openBestEffortOutput(writer)
 	case PresentationDeliveryLossless:
-		output = newLosslessOutput(writer)
+		output = s.openLosslessOutput(writer)
 	default:
 		return OpenPresentationResult{}, &PresentationError{
 			Kind:    PresentationErrorInvalidInput,
@@ -556,7 +556,7 @@ func (s *Service) FinalizePresentation(
 		session.closed = true
 		return FinalizePresentationResult{}, err
 	}
-	if _, err := session.writer.Write(appendLine(req.Terminal.Payload)); err != nil {
+	if _, err := session.writer.Write(appendPresentationLine(req.Terminal.Payload)); err != nil {
 		session.finalized = true
 		session.closed = true
 		return FinalizePresentationResult{}, err
@@ -634,10 +634,3 @@ func requirePresentationContext(ctx context.Context) error {
 	return nil
 }
 
-func isPresentationClosedErr(err error) bool {
-	return errors.Is(err, errPresentationOutputClosed)
-}
-
-func isPresentationBackpressureErr(err error) bool {
-	return errors.Is(err, errPresentationBacklogFull)
-}

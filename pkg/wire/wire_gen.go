@@ -367,6 +367,8 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	}
 	invocationOperation := provideModelsCLIInvocationOperation(v56)
 	cliService := provideModelsCLIService(wireStandardCLIHTTPProtocol, invocationOperation)
+	v57 := wire.NewRequestPreparation()
+	sessionService := provideSessionsCLIService(wireStandardCLIHTTPProtocol, v57)
 	payloadFileReader := provideSubmitPayloadReader()
 	wireExtendedCLIHTTPProtocol, err := provideExtendedCLIHTTPProtocol()
 	if err != nil {
@@ -375,14 +377,6 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	submitWorkOperation := provideSubmitWorkOperation(payloadFileReader, wireExtendedCLIHTTPProtocol)
 	factoryRequestBatchPreparation := work.NewFactoryRequestBatchPreparation()
 	submitBatchOperation := provideSubmitBatchOperation(wireExtendedCLIHTTPProtocol, factoryRequestBatchPreparation)
-	v57 := wire.NewRequestPreparation()
-	listSessionsOperation := provideListSessionsOperation(wireStandardCLIHTTPProtocol, v57)
-	showSessionOperation := provideShowSessionOperation(wireStandardCLIHTTPProtocol)
-	pauseSessionOperation := providePauseSessionOperation(wireStandardCLIHTTPProtocol)
-	resumeSessionOperation := provideResumeSessionOperation(wireStandardCLIHTTPProtocol)
-	listSessionDispatchesOperation := provideListSessionDispatchesOperation(wireStandardCLIHTTPProtocol)
-	createSessionOperation := provideCreateSessionOperation(wireStandardCLIHTTPProtocol)
-	deleteSessionOperation := provideDeleteSessionOperation(wireStandardCLIHTTPProtocol)
 	flattenFactoryConfigOperation := provideFlattenFactoryConfigOperation(v40)
 	expandFactoryConfigOperation := provideExpandFactoryConfigOperation(v40)
 	providerCatalog := provideOperatorSettingsProviderCatalog(registry)
@@ -487,15 +481,9 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		LoadOperatorConfig:                configLoader,
 		BuildExecution:                    executionServiceBuilder,
 		ModelsCLI:                         cliService,
+		SessionsCLI:                       sessionService,
 		SubmitWork:                        submitWorkOperation,
 		SubmitBatch:                       submitBatchOperation,
-		ListSessions:                      listSessionsOperation,
-		ShowSession:                       showSessionOperation,
-		PauseSession:                      pauseSessionOperation,
-		ResumeSession:                     resumeSessionOperation,
-		ListSessionDispatches:             listSessionDispatchesOperation,
-		CreateSession:                     createSessionOperation,
-		DeleteSession:                     deleteSessionOperation,
 		FlattenFactoryConfig:              flattenFactoryConfigOperation,
 		ExpandFactoryConfig:               expandFactoryConfigOperation,
 		InitFactory:                       v42,
@@ -742,13 +730,7 @@ var cliCommandOperationsSet = wire2.NewSet(
 	provideExtendedCLIHTTPProtocol,
 	provideSubmitWorkOperation,
 	provideSubmitBatchOperation,
-	provideListSessionsOperation,
-	provideShowSessionOperation,
-	providePauseSessionOperation,
-	provideResumeSessionOperation,
-	provideListSessionDispatchesOperation,
-	provideCreateSessionOperation,
-	provideDeleteSessionOperation,
+	provideSessionsCLIService,
 	provideModelsCLIService,
 	provideFlattenFactoryConfigOperation,
 	provideExpandFactoryConfigOperation,

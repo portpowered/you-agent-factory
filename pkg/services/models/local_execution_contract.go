@@ -29,6 +29,9 @@ const (
 var ErrUnsupportedResponseMode = errors.New("model invocation response mode is not supported")
 
 var (
+	// ErrInvalidInferenceDependencies classifies Models Inference construction
+	// failures.
+	ErrInvalidInferenceDependencies = errors.New("model inference dependencies are invalid")
 	// ErrInferenceCancelled reports that model inference was cancelled through
 	// its context or the explicit cancellation operation.
 	ErrInferenceCancelled = errors.New("model inference cancelled")
