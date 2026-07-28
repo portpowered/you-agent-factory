@@ -83,6 +83,32 @@ func writePackagedGoalBuiltinMockWorkersConfig(t *testing.T) string {
 	return path
 }
 
+func writePackagedGoalFailingMockWorkersConfig(t *testing.T) string {
+	t.Helper()
+
+	cfg := workers.MockWorkersConfig{
+		MockWorkers: []workers.MockWorkerConfig{
+			{
+				WorkerName:      "goal-executor",
+				WorkstationName: packagedGoalExecuteWorkstationName,
+				RunType:         workers.MockWorkerRunTypeReject,
+				RejectConfig: &workers.MockWorkerRejectConfig{
+					Stderr: "mock provider failure",
+				},
+			},
+		},
+	}
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal packaged goal failing mock-workers config: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "mock-workers-packaged-goal-failing.json")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("write packaged goal failing mock-workers config: %v", err)
+	}
+	return path
+}
+
 func writePackagedGoalRejectThenAcceptMockWorkersConfig(t *testing.T) (string, string) {
 	t.Helper()
 	return writePackagedGoalSequencedExecutorMockWorkersConfig(
@@ -260,6 +286,26 @@ func invocationTextContentPtr(goalText string) *factoryapi.WorkContent {
 	}
 	content := factoryapi.WorkContent{part}
 	return &content
+}
+
+func assertPackagedGoalInvocationFailedWithRuntimeDetails(t *testing.T, response factoryapi.InvocationResponse) {
+	t.Helper()
+
+	if response.Status != factoryapi.InvocationTerminalStatusFailed {
+		t.Fatalf("invocation status = %q, want FAILED; response = %#v", response.Status, response)
+	}
+	if response.ErrorCode == nil || *response.ErrorCode != factoryapi.InvocationResponseErrorCode("INVOCATION_RUNTIME_FAILURE") {
+		t.Fatalf("invocation errorCode = %#v, want INVOCATION_RUNTIME_FAILURE", response.ErrorCode)
+	}
+	if response.Message == nil || !strings.Contains(*response.Message, "invocation failed") || !strings.Contains(*response.Message, `state "goal:failed"`) {
+		t.Fatalf("invocation message = %#v, want failed goal explanation", response.Message)
+	}
+	if response.WorkState == nil || *response.WorkState != "goal:failed" {
+		t.Fatalf("invocation workState = %#v, want goal:failed", response.WorkState)
+	}
+	if response.PrimaryResult != nil {
+		t.Fatalf("invocation primaryResult = %#v, want nil on failed output", response.PrimaryResult)
+	}
 }
 
 func assertPackagedGoalCompletedWithSummary(

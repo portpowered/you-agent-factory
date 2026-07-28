@@ -35,3 +35,15 @@ func TestPackagedGoalRejectRepeatsThenCompletes(t *testing.T) {
 		t.Fatalf("executor invocation count = %d, want at least 2 after reject-then-complete", executorInvocations)
 	}
 }
+
+// TestPackagedGoalUnknownDecisionFails proves packaged @you/goal invocation through
+// the public session invocation API fails with stable runtime-failure details and no
+// success primary result when mock workers surface an invalid worker outcome on the
+// built-in execute-goal topology.
+func TestPackagedGoalUnknownDecisionFails(t *testing.T) {
+	dir := scaffoldPackagedGoalBuiltInFactory(t)
+	mockWorkersPath := writePackagedGoalFailingMockWorkersConfig(t)
+
+	response := postPackagedGoalInvocation(t, dir, mockWorkersPath, "invoke packaged goal with failing worker")
+	assertPackagedGoalInvocationFailedWithRuntimeDetails(t, response)
+}
