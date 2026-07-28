@@ -103,6 +103,20 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 			},
 			want: "packaged Factory installer is required",
 		},
+		{
+			name: "required tool checker",
+			mutate: func(ports *constructionPorts) {
+				ports.requiredToolChecker = nil
+			},
+			want: "required tool checker is required",
+		},
+		{
+			name: "orchestrator definition validator",
+			mutate: func(ports *constructionPorts) {
+				ports.orchestratorValidator = nil
+			},
+			want: "orchestrator definition validator is required",
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -122,6 +136,8 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 				ports.listEffective,
 				ports.packagedCatalog,
 				ports.packagedInstaller,
+				ports.requiredToolChecker,
+				ports.orchestratorValidator,
 			)
 			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("NewService() error = %v, want %q", err, test.want)
@@ -181,6 +197,8 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 				return factorydefinitions.PackagedFactoryInstallResult{}, nil
 			},
 		},
+		stubRequiredToolChecker{},
+		stubOrchestratorValidator{},
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -266,6 +284,8 @@ func TestNewServiceServesPublishedPackagedCatalogPeerBehavior(t *testing.T) {
 		ports.listEffective,
 		ports.packagedCatalog,
 		ports.packagedInstaller,
+		ports.requiredToolChecker,
+		ports.orchestratorValidator,
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -345,6 +365,8 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 		ports.listEffective,
 		ports.packagedCatalog,
 		ports.packagedInstaller,
+		ports.requiredToolChecker,
+		ports.orchestratorValidator,
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -372,6 +394,8 @@ type constructionPorts struct {
 	listEffective                 factorydefinitions.EffectiveFactoryCatalogOperation
 	packagedCatalog               factorydefinitions.PackagedFactoryCatalogOperations
 	packagedInstaller             factorydefinitions.PackagedFactoryInstallationOperations
+	requiredToolChecker           factorydefinitions.RequiredToolChecker
+	orchestratorValidator         factorydefinitions.OrchestratorDefinitionValidator
 }
 
 func validConstructionPorts(t *testing.T) constructionPorts {
@@ -415,6 +439,8 @@ func validConstructionPorts(t *testing.T) constructionPorts {
 				return factorydefinitions.PackagedFactoryInstallResult{}, nil
 			},
 		},
+		requiredToolChecker:   stubRequiredToolChecker{},
+		orchestratorValidator: stubOrchestratorValidator{},
 	}
 }
 
@@ -488,6 +514,24 @@ func (stubSessionHost) AttachFactoryDefinitions(
 }
 
 type stubValidator struct{}
+
+type stubRequiredToolChecker struct{}
+
+func (stubRequiredToolChecker) Check(
+	factorycontracts.RequiredToolConfig,
+) factorycontracts.RequiredToolCheckResult {
+	return factorycontracts.RequiredToolCheckResult{}
+}
+
+type stubOrchestratorValidator struct{}
+
+func (stubOrchestratorValidator) ValidateJavaScriptFactoryDefinition(
+	context.Context,
+	*factorycontracts.FactoryOrchestratorJavaScriptConfig,
+	factorycontracts.WorkflowSourceReader,
+) []factorycontracts.ValidationTarget {
+	return nil
+}
 
 func (stubValidator) Validate(
 	context.Context,
