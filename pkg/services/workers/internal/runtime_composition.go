@@ -25,7 +25,7 @@ import (
 	providerconductor "github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
-	mockworker "github.com/portpowered/infinite-you/pkg/services/workers/services/testing"
+	runnermockworker "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/testing"
 	"go.uber.org/zap"
 )
 
@@ -316,7 +316,7 @@ func NewMockCommandRunner(
 	runtimeConfig factorydefinitions.RuntimeDefinitionLookup,
 	next workers.CommandRunner,
 ) workers.CommandRunner {
-	return &mockworker.MockWorkerCommandRunner{
+	return &runnermockworker.MockWorkerCommandRunner{
 		Config:        config,
 		RuntimeConfig: runtimeConfig,
 		Next:          next,

@@ -2209,11 +2209,11 @@
       "minimum": 14.28
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/services/inference",
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/inference",
       "minimum": 82.83
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/services/testing",
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/testing",
       "minimum": 90.44
     },
     {

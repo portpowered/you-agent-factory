@@ -20,7 +20,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
-	workerinference "github.com/portpowered/infinite-you/pkg/services/workers/services/inference"
+	runnerinference "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/inference"
 )
 
 // AgentExecutor implements WorkstationRequestExecutor for MODEL_WORKER types.
@@ -190,14 +190,14 @@ func (ae *AgentExecutor) canonicalInferenceOutput(raw string, workerDef *interfa
 	if !ok {
 		return raw, nil
 	}
-	parts, err := workerinference.WorkContentFromInferenceOutput(raw, operation)
+	parts, err := runnerinference.WorkContentFromInferenceOutput(raw, operation)
 	if err != nil {
 		return "", fmt.Errorf("inference output shaping failed: %w", err)
 	}
 	if len(parts) == 0 {
 		return raw, nil
 	}
-	return workerinference.MarshalWorkContentOutput(parts)
+	return runnerinference.MarshalWorkContentOutput(parts)
 }
 
 func decisionEnvelopeWorkResult(

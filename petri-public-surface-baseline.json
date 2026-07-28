@@ -1577,7 +1577,25 @@
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
-      "filePath": "pkg/services/workers/services/agents/decision_envelope_test.go",
+      "filePath": "pkg/services/workers/provider/structured/executor_test.go",
+      "symbol": "RuntimeToken",
+      "shape": "raw token",
+      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
+      "count": 1,
+      "stage": "imp-run-01-petri-boundary-retirement",
+      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
+    },
+    {
+      "filePath": "pkg/services/workers/provider/structured/executor_test.go",
+      "symbol": "RuntimeTokenColor",
+      "shape": "raw token",
+      "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
+      "count": 1,
+      "stage": "imp-run-01-petri-boundary-retirement",
+      "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
+    },
+    {
+      "filePath": "pkg/services/workers/internal/services/runners/agents/decision_envelope_test.go",
       "symbol": "RuntimeToken",
       "shape": "raw token",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
@@ -1586,7 +1604,7 @@
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
-      "filePath": "pkg/services/workers/services/agents/decision_envelope_test.go",
+      "filePath": "pkg/services/workers/internal/services/runners/agents/decision_envelope_test.go",
       "symbol": "RuntimeTokenColor",
       "shape": "raw token",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
@@ -1595,7 +1613,7 @@
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
-      "filePath": "pkg/services/workers/services/inference/inference_test.go",
+      "filePath": "pkg/services/workers/internal/services/runners/inference/inference_test.go",
       "symbol": "RuntimeToken",
       "shape": "raw token",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
@@ -1604,7 +1622,7 @@
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
-      "filePath": "pkg/services/workers/services/inference/inference_test.go",
+      "filePath": "pkg/services/workers/internal/services/runners/inference/inference_test.go",
       "symbol": "RuntimeTokenColor",
       "shape": "raw token",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
@@ -1613,7 +1631,7 @@
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
-      "filePath": "pkg/services/workers/services/testing/runner_test.go",
+      "filePath": "pkg/services/workers/internal/services/runners/testing/runner_test.go",
       "symbol": "RuntimeToken",
       "shape": "raw token",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
@@ -1622,7 +1640,7 @@
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
-      "filePath": "pkg/services/workers/services/testing/runner_test.go",
+      "filePath": "pkg/services/workers/internal/services/runners/testing/runner_test.go",
       "symbol": "RuntimeTokenColor",
       "shape": "raw token",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",

@@ -202,8 +202,8 @@ pkg/services/workers/prompting/prompt.go: unreachable func: NewDefaultPromptRend
 pkg/services/workers/prompting/prompt_contract.go: unreachable func: NewService
 pkg/services/workers/prompting/prompt_contract.go: unreachable func: Service.BuildPromptTemplateContract
 pkg/services/workers/prompting/prompt_contract.go: unreachable func: Service.ValidatePromptTemplate
-pkg/services/workers/services/testing/runner_test.go: unreachable func: shellArgsForTest
-pkg/services/workers/services/testing/runner_test.go: unreachable func: shellCommandForTest
+pkg/services/workers/internal/services/runners/testing/runner_test.go: unreachable func: shellArgsForTest
+pkg/services/workers/internal/services/runners/testing/runner_test.go: unreachable func: shellCommandForTest
 pkg/transports/cli/baseline/command_tree.go: unreachable func: SerializeCommandTree
 pkg/transports/cli/baseline/help_output.go: unreachable func: CaptureHelpOutput
 pkg/transports/cli/baseline/run_flags.go: unreachable func: SerializeRunFlags
