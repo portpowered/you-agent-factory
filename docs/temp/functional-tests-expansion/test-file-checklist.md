@@ -745,7 +745,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPISaveCurrentFactoryValidatesBeforePersistence`.
   - `TestAPICurrentFactoriesRemainSessionScoped`.
 
-- [ ] `tests/functional/factory/current/prompt_template_test.go`
+- [x] `tests/functional/factory/current/prompt_template_test.go`
   - `TestAPIPromptTemplateContractAndValidationRoundTrip`.
   - `TestAPIInvalidPromptTemplateNamesMissingVariables`.
   - `TestAPITemplateValidationDoesNotMutateCurrentFactory`.
