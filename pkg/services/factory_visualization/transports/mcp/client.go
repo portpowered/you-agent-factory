@@ -46,6 +46,16 @@ var canonicalToolHandlers = map[string]canonicalToolHandler{
 			return Activate(ctx, root, request)
 		})
 	},
+	ToolJoin: func(ctx context.Context, root factoryvisualization.Root, input json.RawMessage) (json.RawMessage, error) {
+		return callToolJSON(input, "decode join input", func(request JoinInput) ToolResponse[factoryvisualization.JoinResult] {
+			return Join(ctx, root, request)
+		})
+	},
+	ToolStopDrain: func(ctx context.Context, root factoryvisualization.Root, input json.RawMessage) (json.RawMessage, error) {
+		return callToolJSON(input, "decode stop_drain input", func(request StopDrainInput) ToolResponse[factoryvisualization.StopDrainResult] {
+			return StopDrain(ctx, root, request)
+		})
+	},
 }
 
 // IsCanonicalToolHandlerRegistered reports whether the live CallTool path

@@ -67,3 +67,59 @@ func Activate(
 	}
 	return ToolResponse[factoryvisualization.ActivateResult]{Result: &result}
 }
+
+// JoinInput is the MCP request shape for you.factory_visualization.join.
+type JoinInput struct{}
+
+// Join runs the Visualization root Join contract for the join MCP tool.
+func Join(
+	ctx context.Context,
+	root factoryvisualization.Root,
+	input JoinInput,
+) ToolResponse[factoryvisualization.JoinResult] {
+	if ctx == nil {
+		envelope := missingContextErrorEnvelope()
+		return ToolResponse[factoryvisualization.JoinResult]{Error: &envelope}
+	}
+	if response, done := requestContextErrorResponse[factoryvisualization.JoinResult](ctx); done {
+		return response
+	}
+	if root == nil {
+		envelope := serviceUnavailableErrorEnvelope()
+		return ToolResponse[factoryvisualization.JoinResult]{Error: &envelope}
+	}
+	result, err := root.Join(ctx, factoryvisualization.JoinRequest{})
+	if err != nil {
+		envelope := mapRootError(err)
+		return ToolResponse[factoryvisualization.JoinResult]{Error: &envelope}
+	}
+	return ToolResponse[factoryvisualization.JoinResult]{Result: &result}
+}
+
+// StopDrainInput is the MCP request shape for you.factory_visualization.stop_drain.
+type StopDrainInput struct{}
+
+// StopDrain runs the Visualization root StopDrain contract for the stop_drain MCP tool.
+func StopDrain(
+	ctx context.Context,
+	root factoryvisualization.Root,
+	input StopDrainInput,
+) ToolResponse[factoryvisualization.StopDrainResult] {
+	if ctx == nil {
+		envelope := missingContextErrorEnvelope()
+		return ToolResponse[factoryvisualization.StopDrainResult]{Error: &envelope}
+	}
+	if response, done := requestContextErrorResponse[factoryvisualization.StopDrainResult](ctx); done {
+		return response
+	}
+	if root == nil {
+		envelope := serviceUnavailableErrorEnvelope()
+		return ToolResponse[factoryvisualization.StopDrainResult]{Error: &envelope}
+	}
+	result, err := root.StopDrain(ctx, factoryvisualization.StopDrainRequest{})
+	if err != nil {
+		envelope := mapRootError(err)
+		return ToolResponse[factoryvisualization.StopDrainResult]{Error: &envelope}
+	}
+	return ToolResponse[factoryvisualization.StopDrainResult]{Result: &result}
+}
