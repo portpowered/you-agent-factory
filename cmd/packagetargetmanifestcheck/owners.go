@@ -17,6 +17,7 @@ var committedNestedSubservices = map[string][]string{
 		"validation",
 		"snapshots_portability",
 		"distribution",
+		"invocation_policy",
 	},
 	"factory_sessions": {
 		"identity",
@@ -99,13 +100,6 @@ func isCommittedNestedSubservice(owner, subservice string) bool {
 		return false
 	}
 	return slices.Contains(allowed, subservice)
-}
-
-// isTransitionalMoveNestedSubservice marks committed nested subservices that
-// still live under transitional public paths and must stay move→owner/internal
-// until their IMP cutover proof lands (ownership inventory uses the same rule).
-func isTransitionalMoveNestedSubservice(owner, subservice string) bool {
-	return owner == "factory_definitions" && subservice == "snapshots_portability"
 }
 
 // mapCommittedOwnerPackage maps one inventory path that belongs to a committed
@@ -199,9 +193,6 @@ func mapKnownNestedOwnerPackage(owner, packagePath, rest string) (PackageMapping
 		sub := strings.TrimPrefix(rest, "internal/services/")
 		subservice, _, _ := strings.Cut(sub, "/")
 		if subservice != "" && isCommittedNestedSubservice(owner, subservice) {
-			if isTransitionalMoveNestedSubservice(owner, subservice) {
-				return moveOrRetainMapping(packagePath, owner+"/internal", DispositionMove), true
-			}
 			return moveOrRetainMapping(packagePath, owner+"/internal/services/"+subservice, DispositionRetain), true
 		}
 	}
@@ -264,7 +255,9 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 		{exact: "checkpointstore", prefix: "checkpointstore/", dest: "factory_runtime/internal/services/checkpoint_recovery"},
 		{exact: "checkpointsummary", prefix: "checkpointsummary/", dest: "factory_runtime/internal/services/checkpoint_recovery"},
 		{exact: "build", prefix: "build/", dest: "factory_runtime/internal/services/instance_host"},
+		{exact: "internal", dest: "factory_runtime/internal"},
 		{exact: "internal/factorystatus", prefix: "internal/factorystatus/", dest: "factory_runtime/internal"},
+		{exact: "internal/host", prefix: "internal/host/", dest: "factory_runtime/internal"},
 		{exact: "internal/legacysnapshot", prefix: "internal/legacysnapshot/", dest: "factory_runtime/internal"},
 		{exact: "internal/rootobservation", prefix: "internal/rootobservation/", dest: "factory_runtime/internal"},
 		{exact: "internal/service", prefix: "internal/service/", dest: "factory_runtime/internal"},
@@ -299,9 +292,11 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 		{exact: "testlink", prefix: "testlink/", dest: "operator_settings/internal"},
 		{exact: "testproviders", prefix: "testproviders/", dest: "operator_settings/internal"},
 		{exact: "testdata", prefix: "testdata/", dest: "operator_settings/internal"},
+		{exact: "internal/construct", prefix: "internal/construct/", dest: "operator_settings/internal"},
 		{exact: "internal/service", prefix: "internal/service/", dest: "operator_settings/internal"},
 	},
 	"workers": {
+		{exact: "internal", dest: "workers/internal"},
 		{exact: "construction", prefix: "construction/", dest: "workers/internal/services/runtime_assembly"},
 		{exact: "prompting", prefix: "prompting/", dest: "workers/internal/services/workstations"},
 		{exact: "worktree", prefix: "worktree/", dest: "workers/internal/services/workstations"},
@@ -343,8 +338,8 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 		{exact: "namedfactories", prefix: "namedfactories/", dest: "factory_definitions/internal/services/catalog"},
 		{exact: "namedpaths", prefix: "namedpaths/", dest: "factory_definitions/internal/services/catalog"},
 		{exact: "persistence", prefix: "persistence/", dest: "factory_definitions/internal/services/catalog"},
-		{exact: "resource", prefix: "resource/", dest: "factory_definitions/internal/services/catalog"},
-		{exact: "definition", prefix: "definition/", dest: "factory_definitions/internal/services/compilation"},
+		{exact: "resource", prefix: "resource/", dest: "factory_definitions/internal/services/validation"},
+		{exact: "definition", prefix: "definition/", dest: "factory_definitions/internal"},
 		{exact: "loading", prefix: "loading/", dest: "factory_definitions/internal/services/compilation"},
 		{exact: "loadedsource", prefix: "loadedsource/", dest: "factory_definitions/internal/services/compilation"},
 		{exact: "validation", prefix: "validation/", dest: "factory_definitions/internal/services/validation"},
@@ -352,18 +347,20 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 		{exact: "portableconfig", prefix: "portableconfig/", dest: "factory_definitions/internal/services/snapshots_portability"},
 		{exact: "editable", prefix: "editable/", dest: "factory_definitions/internal/services/snapshots_portability"},
 		{exact: "packagedinstallation", prefix: "packagedinstallation/", dest: "factory_definitions/internal/services/distribution"},
+		{exact: "packages/goal", prefix: "packages/goal/", dest: "factory_definitions/internal/services/invocation_policy"},
 		{exact: "packages", prefix: "packages/", dest: "factory_definitions/internal/services/distribution"},
-		{exact: "decisionenvelope", prefix: "decisionenvelope/", dest: "factory_definitions/internal"},
-		{exact: "invocationinterpolation", prefix: "invocationinterpolation/", dest: "factory_definitions/internal"},
-		{exact: "invocationoutput", prefix: "invocationoutput/", dest: "factory_definitions/internal"},
-		{exact: "invocationworktype", prefix: "invocationworktype/", dest: "factory_definitions/internal"},
-		{exact: "quorumpolicy", prefix: "quorumpolicy/", dest: "factory_definitions/internal"},
-		{exact: "workpropagation", prefix: "workpropagation/", dest: "factory_definitions/internal"},
-		{exact: "workstationexecution", prefix: "workstationexecution/", dest: "factory_definitions/internal"},
-		{exact: "ttsobservability", prefix: "ttsobservability/", dest: "factory_definitions/internal"},
+		{exact: "decisionenvelope", prefix: "decisionenvelope/", dest: "factory_definitions/internal/services/invocation_policy"},
+		{exact: "invocationinterpolation", prefix: "invocationinterpolation/", dest: "factory_definitions/internal/services/invocation_policy"},
+		{exact: "invocationoutput", prefix: "invocationoutput/", dest: "factory_definitions/internal/services/invocation_policy"},
+		{exact: "invocationworktype", prefix: "invocationworktype/", dest: "factory_definitions/internal/services/invocation_policy"},
+		{exact: "quorumpolicy", prefix: "quorumpolicy/", dest: "factory_definitions/internal/services/invocation_policy"},
+		{exact: "workpropagation", prefix: "workpropagation/", dest: "factory_definitions/internal/services/invocation_policy"},
+		{exact: "workstationexecution", prefix: "workstationexecution/", dest: "factory_definitions/internal/services/invocation_policy"},
+		{exact: "ttsobservability", prefix: "ttsobservability/", dest: "factory_definitions/internal/services/invocation_policy"},
 		{exact: "runtimeconfig", prefix: "runtimeconfig/", dest: "factory_definitions/internal"},
-		{exact: "replayconfig", prefix: "replayconfig/", dest: "factory_definitions/internal"},
-		{exact: "workers", prefix: "workers/", dest: "factory_definitions/internal"},
+		{exact: "replayconfig", prefix: "replayconfig/", dest: "factory_definitions/internal/services/snapshots_portability"},
+		{exact: "namevalue", prefix: "namevalue/", dest: "factory_definitions/internal/services/validation"},
+		{exact: "workers", prefix: "workers/", dest: "factory_definitions/internal/services/validation"},
 		{exact: "clonetests", prefix: "clonetests/", dest: "factory_definitions/internal"},
 		{exact: "systeminitializationtests", prefix: "systeminitializationtests/", dest: "factory_definitions/internal"},
 		{prefix: "internal/testcomposition", dest: "factory_definitions/internal"},

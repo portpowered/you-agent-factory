@@ -129,6 +129,7 @@ func TestBuildInventoryIncludesCommittedRationaleCards(t *testing.T) {
 	}
 	for _, serviceID := range []string{
 		"factory_definitions/catalog",
+		"factory_definitions/invocation_policy",
 		"factory_sessions/identity",
 		"factory_runtime/orchestration",
 		"work/admission",

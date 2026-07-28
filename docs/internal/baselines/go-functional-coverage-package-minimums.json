@@ -907,26 +907,6 @@
       "minimum": 74.20
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/service",
-      "exception": {
-        "kind": "measurement",
-        "justification": "The active functional coverage profile contains no measurable statements for this transitional DEL-RUN shim package after wire retargeted construction to internal.",
-        "owner": "backend-quality",
-        "deadline": "2027-07-15",
-        "removalGate": "The functional coverage profile reports at least one measurable statement for this package or DEL-RUN deletes the shim."
-      }
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/service/host",
-      "exception": {
-        "kind": "measurement",
-        "justification": "The active functional coverage profile contains no measurable statements for this transitional DEL-RUN shim package after host implementation relocated to internal/host.",
-        "owner": "backend-quality",
-        "deadline": "2027-07-15",
-        "removalGate": "The functional coverage profile reports at least one measurable statement for this package or DEL-RUN deletes the shim."
-      }
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/state",
       "minimum": 81.00
     },
