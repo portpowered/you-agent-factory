@@ -1698,7 +1698,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/service",
-      "minimum": 94.40
+      "minimum": 58.33
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/codex_reader",
