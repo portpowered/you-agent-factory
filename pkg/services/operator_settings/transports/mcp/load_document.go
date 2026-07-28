@@ -36,7 +36,7 @@ func LoadDocument(
 		RequireExisting: input.RequireExisting,
 	})
 	if err != nil {
-		envelope := executionErrorEnvelope(err)
+		envelope := loadDocumentErrorEnvelope(input.Path, err)
 		return ToolResponse[operatorsettings.LoadDocumentResult]{Error: &envelope}
 	}
 	return ToolResponse[operatorsettings.LoadDocumentResult]{Result: &result}

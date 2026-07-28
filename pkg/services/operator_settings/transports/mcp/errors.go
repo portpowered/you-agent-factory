@@ -3,16 +3,22 @@ package operatorsettingsmcp
 import (
 	"context"
 	"errors"
-	"fmt"
+	"strings"
+
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 )
 
 const (
-	errorCodeBadRequest          = "BAD_REQUEST"
-	errorCodeServiceUnavailable  = "operator_settings.service.unavailable"
-	errorCodeInternalExecution   = "operator_settings.execution.internal"
-	errorCodeRequestCanceled     = "operator_settings.request.canceled"
-	errorCodeRequestTimedOut     = "operator_settings.request.timed_out"
+	errorCodeBadRequest            = "BAD_REQUEST"
+	errorCodeServiceUnavailable    = "operator_settings.service.unavailable"
+	errorCodeDocumentMalformed     = "operator_settings.document.malformed"
+	errorCodeDocumentNotFound      = "operator_settings.document.not_found"
+	errorCodeInternalExecution     = "operator_settings.execution.internal"
+	errorCodeRequestCanceled       = "operator_settings.request.canceled"
+	errorCodeRequestTimedOut       = "operator_settings.request.timed_out"
 	errorMessageServiceUnavailable = "operator settings service is unavailable"
+	errorMessageDocumentMalformed  = "operator document is malformed"
+	errorMessageDocumentNotFound   = "operator document not found"
 	errorMessageRequestCanceled    = "operator settings request was canceled"
 	errorMessageRequestTimedOut    = "operator settings request timed out"
 	errorMessageInternalExecution  = "operator settings execution failed"
@@ -61,10 +67,19 @@ func contextDeadlineExceededErrorEnvelope() ToolErrorEnvelope {
 }
 
 func decodeInputErrorEnvelope(operation string, err error) ToolErrorEnvelope {
+	message := operation
+	details := map[string]any{}
+	if err != nil {
+		if trimmed := strings.TrimSpace(err.Error()); trimmed != "" {
+			message = operation + ": " + trimmed
+		}
+		details["reason"] = err.Error()
+	}
 	return ToolErrorEnvelope{
 		Code:      errorCodeBadRequest,
-		Message:   fmt.Sprintf("%s: %v", operation, err),
+		Message:   message,
 		Retryable: false,
+		Details:   details,
 	}
 }
 
@@ -74,6 +89,60 @@ func unavailableServiceErrorEnvelope() ToolErrorEnvelope {
 		Message:   errorMessageServiceUnavailable,
 		Retryable: false,
 	}
+}
+
+func loadDocumentErrorEnvelope(path string, err error) ToolErrorEnvelope {
+	var failure operatorsettings.DocumentFailure
+	if errors.As(err, &failure) {
+		switch failure.Kind {
+		case operatorsettings.DocumentFailureKindMalformed:
+			return documentMalformedErrorEnvelope(documentFailurePath(path, failure), err)
+		case operatorsettings.DocumentFailureKindNotFound:
+			return documentNotFoundErrorEnvelope(documentFailurePath(path, failure), err)
+		}
+	}
+	if errors.Is(err, operatorsettings.ErrDocumentMalformed) {
+		return documentMalformedErrorEnvelope(path, err)
+	}
+	if errors.Is(err, operatorsettings.ErrDocumentNotFound) {
+		return documentNotFoundErrorEnvelope(path, err)
+	}
+	return executionErrorEnvelope(err)
+}
+
+func documentFailurePath(requestPath string, failure operatorsettings.DocumentFailure) string {
+	if trimmed := strings.TrimSpace(failure.Path); trimmed != "" {
+		return trimmed
+	}
+	return strings.TrimSpace(requestPath)
+}
+
+func documentMalformedErrorEnvelope(path string, err error) ToolErrorEnvelope {
+	return ToolErrorEnvelope{
+		Code:      errorCodeDocumentMalformed,
+		Message:   errorMessageDocumentMalformed,
+		Retryable: false,
+		Details:   documentFailureDetails(path, err),
+	}
+}
+
+func documentNotFoundErrorEnvelope(path string, err error) ToolErrorEnvelope {
+	return ToolErrorEnvelope{
+		Code:      errorCodeDocumentNotFound,
+		Message:   errorMessageDocumentNotFound,
+		Retryable: false,
+		Details:   documentFailureDetails(path, err),
+	}
+}
+
+func documentFailureDetails(path string, err error) map[string]any {
+	details := map[string]any{
+		"reason": err.Error(),
+	}
+	if trimmed := strings.TrimSpace(path); trimmed != "" {
+		details["path"] = trimmed
+	}
+	return details
 }
 
 func executionErrorEnvelope(err error) ToolErrorEnvelope {
