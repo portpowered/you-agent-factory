@@ -811,6 +811,18 @@ Wave 0 functional-tests-expansion planning authority lives under
   metadata infers domain `workers` and subsection `inference` from the path;
   every top-level `Test*` needs a customer-readable Go doc so
   `functionaltestmetadata` stays viz-compatible.
+- Workers-owned CLI run output-mode functional coverage belongs in
+  `tests/functional/workers/transports/cli/run/modes/output_modes_test.go`:
+  drive public `you run` through `support.BuildProcess` + `support.FakeInputs`
+  with `serviceedges.Edges` populated via `support.ConfigureWorkerCommands` and
+  `support.NewStaticSuccessCommandRunner` (preferred over `--with-mock-workers`);
+  scaffold a minimal model-worker factory with `support.ScaffoldFactory` and
+  `support.BuildModelWorkerConfig`; prove quiet text, single-JSON, and NDJSON
+  (`--json --output response-stream`) primary-result fidelity on stdout only.
+  Place `--quiet` and `--output` on the `run` subcommand, not as global flags.
+  Catalog metadata infers domain `workers` and subsection
+  `transports/cli/run/modes` from the path; every top-level `Test*` needs a
+  customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
 - Packaged `@you/tts` invocation functional coverage belongs in
   `tests/functional/factory/packaged/tts/invocation_test.go`: prove required-text
   audio artifact metadata, optional voice/format reachability on fake provider
