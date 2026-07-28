@@ -14,6 +14,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/portablefiles"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
+	compilationcanonical "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/canonical"
+	compilationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
+	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
 	snapshotsportability "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability"
 	snapshotsportabilitycapture "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/capture"
 	snapshotsportabilitymaterialize "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/materialize"
@@ -87,6 +90,18 @@ func NewService(
 		return nil, err
 	}
 
+	compilation, err := compilationwire.NewService(compilationservice.Dependencies{
+		LoadCanonical:      loader.LoadSourceFromCanonicalJSON,
+		LoadFromFactoryDir: loader.LoadSourceFromFactoryDir,
+		EncodeFactory:      compilationcanonical.EncodeFactoryPort(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("construct Factory Definitions compilation: %w", err)
+	}
+	if compilation == nil {
+		return nil, fmt.Errorf("construct Factory Definitions: compilation subservice rejected its dependencies")
+	}
+
 	definitions := factorydefinitionsservice.New(
 		sessionHost,
 		clock,
@@ -138,7 +153,7 @@ func NewService(
 	if withSnapshots == nil {
 		return nil, fmt.Errorf("construct Factory Definitions: snapshots portability attachment rejected its dependencies")
 	}
-	return withSnapshots, nil
+	return attachCompilation(withSnapshots, compilation), nil
 }
 
 func validateDependencies(
@@ -241,3 +256,28 @@ func StaticClock(instant time.Time) factorydefinitions.Clock {
 type staticClock struct{ instant time.Time }
 
 func (c staticClock) Now() time.Time { return c.instant }
+
+type compilationAttachedService struct {
+	factorydefinitions.Service
+	compilation compilationservice.Service
+}
+
+func attachCompilation(
+	service factorydefinitions.Service,
+	compilation compilationservice.Service,
+) factorydefinitions.Service {
+	if service == nil || compilation == nil {
+		return service
+	}
+	return compilationAttachedService{
+		Service:     service,
+		compilation: compilation,
+	}
+}
+
+func (s compilationAttachedService) CompileEffectiveFactorySource(
+	ctx context.Context,
+	request factorydefinitions.CompileEffectiveFactorySourceRequest,
+) (factorydefinitions.CompileEffectiveFactorySourceResult, error) {
+	return s.compilation.CompileEffectiveFactorySource(ctx, request)
+}

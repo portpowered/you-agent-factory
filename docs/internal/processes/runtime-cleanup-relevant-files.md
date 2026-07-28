@@ -743,7 +743,13 @@ helpers that accept only `factoryroot.Service`, shared cross-path fixtures
 (`CrossPathValidAlphaFactoryJSON` / `CrossPathInvalidFactoryJSON`), distinct
 `ErrInvalidFactoryDefinitionPayload` vs `FactoryDefinitionValidationFailure`
 with CTR-DEF characterization codes, and effective success via alpha fixture
-plus required DEFAULT handling work type. Authoring slices similarly stay on the
+plus required DEFAULT handling work type. `definition/compile_equivalence_test.go`:
+owner-local `newRootCompileServiceForPeer` construction,
+`peerExerciseRootCompileSuccess` / `peerExerciseRootCompileTypedFailures`
+helpers that accept only `factoryroot.Service`, authored-directory vs canonical
+equivalence with merged worker/workstation facts, and distinct
+`ErrInvalidAuthoredFactorySource` vs `ErrUnresolvedDefinitionReference`.
+Authoring slices similarly stay on the
 singular `Service` with prepare/flatten/expand/create/replace request
 shapes that omit filesystem effects and mapping codecs; publish
 `ErrMalformedFactoryLayoutPayload` and `AtomicFactoryWriteFailure`
@@ -766,6 +772,28 @@ vocabulary and contracts injected ports, direct imports avoid Wire/Runtime/
 Petri/peer/sibling-lease paths, and `wire/wire.go` constructs from injected
 ports without selecting Runtime/Petri implementations or sibling catalog/
 authoring_layout/compilation/snapshots_portability/distribution leases.
+The parent-private nested compilation subservice locks its public surface in
+`internal/services/compilation/boundary_test.go`: `service.go` exports only
+`Service` and `Dependencies` with factory_definitions root compile
+request/result vocabulary and contracts injected load/encode ports, direct
+imports avoid Wire/Runtime/Petri/peer/sibling-lease paths and public
+loading/loadedsource/runtimeconfig packages, and `wire/wire.go` constructs from
+injected ports without selecting Runtime/Petri implementations or sibling
+catalog/authoring_layout/validation/snapshots_portability/distribution leases.
+Compilation-owned loading/loadedsource/runtimeconfig implementation lives under
+`internal/services/compilation/{loading,loadedsource,runtimeconfig}`; public
+`loading/`, `loadedsource/`, and `runtimeconfig/` remain transitional re-exports
+for `pkg/wire` and in-owner callers until peer imports retire in later stories.
+Factory Definitions `wire/wire.go` composes the compilation subservice from the
+nested loader ports and delegates `CompileEffectiveFactorySource` on the returned
+root `Service`. Bind compilation canonical encode through
+`internal/services/compilation/canonical` so owner wire does not import
+transport-mapping `factoryconfig` for content identity; authored/canonical decode
+and normalize remain on injected loader ports composed from process wire.
+Register new compilation production packages with
+`go run ./cmd/packagetargetmanifestcheck -write-inventory -write-owner-packages`,
+matching retain rows in `docs/internal/baselines/ownership-inventory.json`, and
+unit/functional coverage minimums for each nested package path.
 Snapshot
 slices stay on the singular `Service` via `CaptureFactorySnapshot`,
 `PrepareFactorySnapshotImport`, and `MaterializeFactorySnapshot` returning

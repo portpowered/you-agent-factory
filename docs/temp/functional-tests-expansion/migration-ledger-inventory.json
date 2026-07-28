@@ -929,36 +929,6 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/cli/mcp_resume/resume_non_regression_test.go",
-      "package": "you-agent-factory/tests/functional/cli/mcp_resume",
-      "scenario": "TestMCPResumeSmokeLane_ResumeControlStaysOnCanonicalFactorySessionTools",
-      "lane": "short",
-      "destination": "tests/functional/sessions/mcp/controls_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/cli/mcp_resume/resume_non_regression_test.go",
-      "package": "you-agent-factory/tests/functional/cli/mcp_resume",
-      "scenario": "TestMCPResumeSmokeLane_ResumeReadModelsUseSharedFactorySessionVocabulary",
-      "lane": "short",
-      "destination": "tests/functional/sessions/mcp/controls_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/cli/mcp_resume/resume_non_regression_test.go",
-      "package": "you-agent-factory/tests/functional/cli/mcp_resume",
-      "scenario": "TestMCPResumeSmokeLane_RuntimeBackedAsyncServeRegression",
-      "lane": "short",
-      "destination": "tests/functional/sessions/mcp/controls_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
       "source_path": "tests/functional/cli/mcp_resume/serve_runtime_resume_smoke_test.go",
       "package": "you-agent-factory/tests/functional/cli/mcp_resume",
       "scenario": "TestRunServe_RuntimeResumeSmoke_DispatchContinuityPreservesCompletedChildDispatchesWithoutReplay",
@@ -1244,6 +1214,36 @@
       "scenario": "TestFactoryListReportsCatalogDiscoveryFailuresAtomically",
       "lane": "short",
       "destination": "tests/functional/factory/packaged/catalog/discovery_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/definitions/init_test.go",
+      "package": "you-agent-factory/tests/functional/factory/definitions",
+      "scenario": "TestFactoryInitCreatesRunnablePortableScaffold",
+      "lane": "short",
+      "destination": "tests/functional/factory/definitions/init_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/definitions/init_test.go",
+      "package": "you-agent-factory/tests/functional/factory/definitions",
+      "scenario": "TestFactoryInitFailureRoutingProducesFailedWork",
+      "lane": "short",
+      "destination": "tests/functional/factory/definitions/init_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/definitions/init_test.go",
+      "package": "you-agent-factory/tests/functional/factory/definitions",
+      "scenario": "TestFactoryInitIsIdempotent",
+      "lane": "short",
+      "destination": "tests/functional/factory/definitions/init_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -2136,7 +2136,7 @@
       "destination": "tests/functional/factory/definitions/init_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "bootstrap_portability-delete-01-factory-definitions-init"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/product/init_setup/init_setup_test.go",
@@ -5671,9 +5671,9 @@
     {
       "source_path": "tests/functional/work/visualization/dependency_graph_test.go",
       "package": "you-agent-factory/tests/functional/work/visualization",
-      "scenario": "TestDependencyGraphVisualization_RendersCompleteEscapedFlowchart",
+      "scenario": "TestWorkVisualizeProducesDeterministicGraph",
       "lane": "short",
-      "destination": "wrong-layer: unit \u2014 calls pkg/services/work graph helpers directly without root.BuildProcess or CLI visualize command. Replacement evidence owner: pkg/services/work unit tests.",
+      "destination": "tests/functional/work/visualization/dependency_graph_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -5744,6 +5744,46 @@
       "scenario": "TestClaudeGoldenToolLifecycleAndSessionIdentity",
       "lane": "functionallong",
       "destination": "tests/functional/workers/inference/claude/golden_success_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/claude/conductor_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/claude",
+      "scenario": "TestClaudeCommandCancellationThroughRootBuildProcessIsCanonical",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/claude/conductor_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/claude/conductor_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/claude",
+      "scenario": "TestClaudeConductorSuccessThroughRootBuildProcess",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/claude/conductor_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/codex/conductor_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/codex",
+      "scenario": "TestCodexCommandCancellationThroughRootBuildProcessIsCanonical",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/codex/conductor_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/inference/codex/conductor_test.go",
+      "package": "you-agent-factory/tests/functional/workers/inference/codex",
+      "scenario": "TestCodexConductorSuccessThroughRootBuildProcess",
+      "lane": "short",
+      "destination": "tests/functional/workers/inference/codex/conductor_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -7279,32 +7319,182 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/workers/inference/claude/conductor_test.go",
-      "package": "you-agent-factory/tests/functional/workers/inference/claude",
-      "scenario": "TestClaudeConductorSuccessThroughRootBuildProcess",
+      "source_path": "tests/functional/factory/packaged/goal/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/goal",
+      "scenario": "TestPackagedGoalAcceptCompletesWithSummary",
       "lane": "short",
-      "destination": "wrong-layer: package-integration \u2014 root.BuildProcess and Providers wire composition smoke without proving a customer product scenario. Replacement evidence owner: pkg/root and pkg/services/providers/wire package-integration tests.",
+      "destination": "tests/functional/factory/packaged/goal/invocation_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/workers/inference/codex/conductor_test.go",
-      "package": "you-agent-factory/tests/functional/workers/inference/codex",
-      "scenario": "TestCodexConductorSuccessThroughRootBuildProcess",
+      "source_path": "tests/functional/factory/packaged/goal/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/goal",
+      "scenario": "TestPackagedGoalRejectRepeatsThenCompletes",
       "lane": "short",
-      "destination": "wrong-layer: package-integration \u2014 root.BuildProcess and Providers wire composition smoke without proving a customer product scenario. Replacement evidence owner: pkg/root and pkg/services/providers/wire package-integration tests.",
+      "destination": "tests/functional/factory/packaged/goal/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/goal/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/goal",
+      "scenario": "TestPackagedGoalUnknownDecisionFails",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/goal/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/goal/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/goal",
+      "scenario": "TestPackagedGoalPausedSubmissionResumes",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/goal/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/fusion/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/fusion",
+      "scenario": "TestPackagedFusionRequiredInputCompletes",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/fusion/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/fusion/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/fusion",
+      "scenario": "TestPackagedFusionOptionalInputsReachWorkers",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/fusion/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/fusion/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/fusion",
+      "scenario": "TestPackagedFusionPartialWorkerFailureUsesDocumentedOutcome",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/fusion/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/subagent/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/subagent",
+      "scenario": "TestPackagedSubagentReturnsChildResult",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/subagent/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/subagent/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/subagent",
+      "scenario": "TestPackagedSubagentStreamsChildResponseEvents",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/subagent/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/subagent/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/subagent",
+      "scenario": "TestPackagedSubagentChildFailureReturnsStableFailure",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/subagent/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/mcp/controls_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/mcp",
+      "scenario": "TestMCPPauseResumeAndCancelTargetCanonicalFactorySession",
+      "lane": "short",
+      "destination": "tests/functional/sessions/mcp/controls_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/mcp/controls_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/mcp",
+      "scenario": "TestMCPControlledSessionIsReadableThroughAPI",
+      "lane": "short",
+      "destination": "tests/functional/sessions/mcp/controls_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/mcp/controls_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/mcp",
+      "scenario": "TestMCPSynchronousFactorySessionReturnsTerminalResult",
+      "lane": "short",
+      "destination": "tests/functional/sessions/mcp/controls_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/mcp/controls_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/mcp",
+      "scenario": "TestMCPSynchronousFailureReturnsStructuredFailure",
+      "lane": "short",
+      "destination": "tests/functional/sessions/mcp/controls_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/mcp/controls_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/mcp",
+      "scenario": "TestMCPAsyncFactorySessionCanBePolledToSuccess",
+      "lane": "short",
+      "destination": "tests/functional/sessions/mcp/controls_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/mcp/controls_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/mcp",
+      "scenario": "TestMCPAsyncFactorySessionCanBePolledToFailure",
+      "lane": "short",
+      "destination": "tests/functional/sessions/mcp/controls_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/sessions/mcp/controls_test.go",
+      "package": "you-agent-factory/tests/functional/sessions/mcp",
+      "scenario": "TestMCPAsyncCancellationIsVisibleThroughAPI",
+      "lane": "short",
+      "destination": "tests/functional/sessions/mcp/controls_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
     }
   ],
-  "scanned_at_utc": "2026-07-28T03:45:00Z",
+  "scanned_at_utc": "2026-07-28T05:00:00Z",
   "summary": {
     "by_catch_all": {
       "bootstrap_portability": 22,
       "guards_batch": 23,
-      "none": 444,
+      "none": 460,
       "replay_contracts": 23,
       "runtime_api": 96,
       "smoke": 62,
@@ -7314,8 +7504,8 @@
       "acceptance": 12,
       "automations": 7,
       "bootstrap_portability": 21,
-      "cli": 62,
-      "factory": 7,
+      "cli": 59,
+      "factory": 12,
       "guards_batch": 23,
       "models": 5,
       "observability": 9,
@@ -7326,17 +7516,17 @@
       "replay_contracts": 23,
       "runtime_api": 95,
       "sessionparity": 13,
-      "sessions": 6,
+      "sessions": 13,
       "smoke": 62,
       "transport": 104,
       "work": 2,
-      "workers": 70,
+      "workers": 74,
       "workflow": 30,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 710,
+    "customer_top_level_Test_scenarios": 729,
     "lane_functionallong": 95,
-    "lane_short": 615,
+    "lane_short": 634,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 7,
@@ -7345,12 +7535,17 @@
       "you-agent-factory/tests/functional/cli/factory_run/output": 2,
       "you-agent-factory/tests/functional/cli/factory_run/yaml_io_parity": 6,
       "you-agent-factory/tests/functional/cli/input_contract": 25,
-      "you-agent-factory/tests/functional/cli/mcp_resume": 8,
+      "you-agent-factory/tests/functional/cli/mcp_resume": 5,
       "you-agent-factory/tests/functional/cli/named_invocation": 6,
       "you-agent-factory/tests/functional/cli/root_discovery": 9,
       "you-agent-factory/tests/functional/cli/session_resume": 6,
+      "you-agent-factory/tests/functional/factory/catalog": 3,
+      "you-agent-factory/tests/functional/factory/definitions": 3,
       "you-agent-factory/tests/functional/factory/packaged/catalog": 7,
       "you-agent-factory/tests/functional/factory/packaged/deep_research": 3,
+      "you-agent-factory/tests/functional/factory/packaged/fusion": 3,
+      "you-agent-factory/tests/functional/factory/packaged/goal": 4,
+      "you-agent-factory/tests/functional/factory/packaged/subagent": 3,
       "you-agent-factory/tests/functional/factory/runtime_lifecycle": 1,
       "you-agent-factory/tests/functional/guards_batch": 23,
       "you-agent-factory/tests/functional/models/model_invoke": 3,
@@ -7398,8 +7593,8 @@
       "you-agent-factory/tests/functional/workers/agent": 1,
       "you-agent-factory/tests/functional/workers/inference": 16,
       "you-agent-factory/tests/functional/workers/inference/agy": 3,
-      "you-agent-factory/tests/functional/workers/inference/claude": 5,
-      "you-agent-factory/tests/functional/workers/inference/codex": 6,
+      "you-agent-factory/tests/functional/workers/inference/claude": 6,
+      "you-agent-factory/tests/functional/workers/inference/codex": 7,
       "you-agent-factory/tests/functional/workers/inference/cursor": 4,
       "you-agent-factory/tests/functional/workers/inference/gemini": 12,
       "you-agent-factory/tests/functional/workers/inference/kiro": 3,
@@ -7412,7 +7607,8 @@
       "you-agent-factory/tests/functional/workstations/execution": 4,
       "you-agent-factory/tests/functional/workstations/poller": 4,
       "you-agent-factory/tests/functional/workstations/repeater": 13,
-      "you-agent-factory/tests/functional/workstations/watcher": 9
+      "you-agent-factory/tests/functional/workstations/watcher": 9,
+      "you-agent-factory/tests/functional/sessions/mcp": 7
     },
     "files_with_customer_Test": 235,
     "functional_test_go_files": 251,
@@ -7490,18 +7686,18 @@
     }
   },
   "completeness_audit": {
-    "audited_at_utc": "2026-07-27T23:58:26Z",
-    "story": "ft-wave1-http-generated-client-004",
-    "live_customer_scenarios": 687,
-    "ledger_rows": 687,
+    "audited_at_utc": "2026-07-28T04:10:00Z",
+    "story": "ft-wave2-factory-definitions-init-mergeability",
+    "live_customer_scenarios": 712,
+    "ledger_rows": 712,
     "unmapped_scenarios": 0,
     "checklist_destinations": 435,
     "wrong_layer_destinations": 69,
     "invalid_destinations": 0,
-    "lane_short": 592,
+    "lane_short": 617,
     "lane_functionallong": 95,
     "specialty_targets_documented": 11,
-    "deletion_only_batches": 52,
+    "deletion_only_batches": 51,
     "validator": "go run ./cmd/migrationledgercheck"
   }
 }

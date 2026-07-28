@@ -120,7 +120,6 @@ var ExpectedDeletionOnlyBatches = []string{
 	"guards_batch-delete-04-resources-concurrency",
 	"guards_batch-delete-05-resources-fairness",
 	"guards_batch-delete-06-resilience-batch",
-	"bootstrap_portability-delete-01-factory-definitions-init",
 	"bootstrap_portability-delete-02-factory-definitions-validation",
 	"bootstrap_portability-delete-03-factory-definitions-import-export",
 	"bootstrap_portability-delete-04-portable-config",
