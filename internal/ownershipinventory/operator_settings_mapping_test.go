@@ -37,39 +37,6 @@ func TestMapPackageOperatorSettingsMoveDestinations(t *testing.T) {
 			retainOwner: "operator_settings",
 		},
 		{
-			path: "pkg/services/operator_settings/identityinventory",
-			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/operator_settings/identityinventory",
-				Disposition:       ownershipinventory.DispositionMove,
-				Destination:       "operator_settings",
-				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/operator_settings/internal/services/document",
-				DeletionCondition: "delete public package after IMP-OPS-document private subservice cutover proof",
-			},
-		},
-		{
-			path: "pkg/services/operator_settings/servicewire",
-			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/operator_settings/servicewire",
-				Disposition:       ownershipinventory.DispositionMove,
-				Destination:       "operator_settings",
-				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/operator_settings/internal",
-				DeletionCondition: "delete transitional top-level package after CLN-OPS-FOLD-TOPLEVEL cutover proof",
-			},
-		},
-		{
-			path: "pkg/services/operator_settings/testlink",
-			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/operator_settings/testlink",
-				Disposition:       ownershipinventory.DispositionMove,
-				Destination:       "operator_settings",
-				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/operator_settings/internal",
-				DeletionCondition: "delete transitional top-level package after CLN-OPS-FOLD-TOPLEVEL cutover proof",
-			},
-		},
-		{
 			path: "pkg/services/operator_settings/testdata/fixtures/valid",
 			wantMove: &ownershipinventory.PackageRow{
 				PackagePath:       "pkg/services/operator_settings/testdata/fixtures/valid",

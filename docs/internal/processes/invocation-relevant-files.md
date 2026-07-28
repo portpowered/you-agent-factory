@@ -970,10 +970,10 @@ response-stream output.
   is the sole public construction bridge returning published peer surfaces; root
   `pkg/wire` constructs ConfigDocument through `operator_settings/wire` only.
   `pkg/transports/cli/initsetup` constructs configure roots through
-  `operator_settings/wire` only. `servicewire` retains thin delegation entry
-  points until DEL-SET deletes the path; `wire/servicewire_import_boundary_test.go`
-  fails if production packages outside the owner reintroduce servicewire imports.
-  Fold-preservation behavioral proofs live in `wire/behavioral_preservation_test.go`
+  `operator_settings/wire` only. Transitional public siblings (`servicewire`,
+  `identityinventory`, `testlink`, `testproviders`) were deleted in DEL-SET;
+  `wire/servicewire_import_boundary_test.go` fails if production packages outside
+  the owner reintroduce those import paths. Fold-preservation behavioral proofs
   and `wire/legacy_packages_behavior_preservation_test.go`; they construct
   exclusively through `operator_settings/wire` for document load/update,
   identity scope preservation, resolve-effective, and defaults-resolution-from-home.
@@ -1057,6 +1057,11 @@ response-stream output.
   exclusively through `operator_settings/wire`; inventory mirrors list the file
   as a thin_root_contract_test keeper alongside
   `service_root_contract_invariants_test.go`.
+- DEL-SET story 005 (`pss-del-set-005`) proves root shape, structure/ownership debt
+  reduction, and repository structure verification after transitional public package
+  deletion; proofs live in `pkg/services/operator_settings/packaged_root_shape_test.go`
+  and `pkg/services/operator_settings/del_set_proof_gate_test.go`. Wire behavioral
+  construction proofs remain in `root_wire_behavioral_boundary_test.go`.
 - When global named-factory guidance changes, update its authored
   `contracts/cli/commands.json` records and the task-oriented guidance in
   `docs/reference/authoring-factories.md` plus `config.md`; do not restore
