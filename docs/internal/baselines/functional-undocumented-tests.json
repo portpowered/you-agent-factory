@@ -1319,22 +1319,6 @@
       "name": "TestConfigDrivenRetryLoopBreaker_TerminatesAfterMaxRetries"
     },
     {
-      "file": "workflow/name_propagation_long_test.go",
-      "name": "TestNamePropagation_InPromptTemplate"
-    },
-    {
-      "file": "workflow/name_propagation_long_test.go",
-      "name": "TestNamePropagation_MarkdownFile"
-    },
-    {
-      "file": "workflow/repeater_parameterized_test.go",
-      "name": "TestParameterizedFields_UnresolvedTemplateRoutesToFailure"
-    },
-    {
-      "file": "workflow/repeater_parameterized_test.go",
-      "name": "TestParameterizedFields_WorkingDirectoryResolvesFromTags"
-    },
-    {
       "file": "workflow/review_retry_exhaustion_long_test.go",
       "name": "TestReviewRetryLoopBreaker_FeedbackPropagated"
     },

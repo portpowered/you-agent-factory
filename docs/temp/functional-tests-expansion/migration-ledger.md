@@ -745,16 +745,9 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | tests/functional/workflow/code_review_loop_long_test.go | you-agent-factory/tests/functional/workflow | TestCodeReviewLoop | functionallong | tests/functional/factory/packaged/review/invocation_test.go | workflow | none | workflow-delete-01-orchestration-dispatch |
 | tests/functional/workflow/config_driven_retry_loop_breaker_test.go | you-agent-factory/tests/functional/workflow | TestConfigDrivenRetryLoopBreaker_SucceedsBeforeLimit | short | tests/functional/guards/global_test.go | workflow | none | workflow-delete-08-guards |
 | tests/functional/workflow/config_driven_retry_loop_breaker_test.go | you-agent-factory/tests/functional/workflow | TestConfigDrivenRetryLoopBreaker_TerminatesAfterMaxRetries | short | tests/functional/guards/global_test.go | workflow | none | workflow-delete-08-guards |
-| tests/functional/workflow/name_propagation_long_test.go | you-agent-factory/tests/functional/workflow | TestNamePropagation_InPromptTemplate | functionallong | tests/functional/factory/current/prompt_template_test.go | workflow | none | workflow-delete-07-factory-current |
-| tests/functional/workflow/name_propagation_long_test.go | you-agent-factory/tests/functional/workflow | TestNamePropagation_MarkdownFile | functionallong | tests/functional/factory/current/prompt_template_test.go | workflow | none | workflow-delete-07-factory-current |
-| tests/functional/workflow/repeater_parameterized_test.go | you-agent-factory/tests/functional/workflow | TestParameterizedFields_UnresolvedTemplateRoutesToFailure | short | tests/functional/factory/current/prompt_template_test.go | workflow | none | workflow-delete-07-factory-current |
-| tests/functional/workflow/repeater_parameterized_test.go | you-agent-factory/tests/functional/workflow | TestParameterizedFields_WorkingDirectoryResolvesFromTags | short | tests/functional/factory/current/prompt_template_test.go | workflow | none | workflow-delete-07-factory-current |
 | tests/functional/workflow/review_retry_exhaustion_long_test.go | you-agent-factory/tests/functional/workflow | TestReviewRetryLoopBreaker_FeedbackPropagated | functionallong | tests/functional/guards/global_test.go | workflow | none | workflow-delete-08-guards |
 | tests/functional/workflow/review_retry_exhaustion_long_test.go | you-agent-factory/tests/functional/workflow | TestReviewRetryLoopBreaker_SucceedsBeforeLimit | functionallong | tests/functional/guards/global_test.go | workflow | none | workflow-delete-08-guards |
 | tests/functional/workflow/review_retry_exhaustion_long_test.go | you-agent-factory/tests/functional/workflow | TestReviewRetryLoopBreaker_TerminatesAfterMaxRetries | functionallong | tests/functional/guards/global_test.go | workflow | none | workflow-delete-08-guards |
-| tests/functional/workflow/workflow_modification_long_test.go | you-agent-factory/tests/functional/workflow | TestWorkflowModificationAndReload | functionallong | tests/functional/factory/current/read_save_test.go | workflow | none | workflow-delete-07-factory-current |
-| tests/functional/workflow/workflow_modification_long_test.go | you-agent-factory/tests/functional/workflow | TestWorkflowModificationPreservesIndependentWorkflows | functionallong | tests/functional/factory/current/read_save_test.go | workflow | none | workflow-delete-07-factory-current |
-| tests/functional/workflow/workflow_modification_long_test.go | you-agent-factory/tests/functional/workflow | TestWorkflowModificationRejectionLoop | functionallong | tests/functional/factory/current/read_save_test.go | workflow | none | workflow-delete-07-factory-current |
 
 
 ### Non-customer harness exclusions
@@ -1002,7 +995,7 @@ can execute independently until package ownership reaches zero.
 | `workflow-delete-04-work-routing-logical` | workflow | 2 | work/routing | released |
 | `workflow-delete-05-workstations-repeater` | workflow | 13 | workstations/repeater | none |
 | `workflow-delete-06-workstations-watcher` | workflow | 7 | workstations/watcher | consumed |
-| `workflow-delete-07-factory-current` | workflow | 7 | factory/current | none |
+| `workflow-delete-07-factory-current` | workflow | 7 | factory/current | released |
 | `workflow-delete-08-guards` | workflow | 5 | guards | none |
 | `workflow-delete-09-orchestration-javascript` | workflow | 1 | orchestration/javascript | none |
 
@@ -1168,16 +1161,9 @@ Batch execution guidance for later move work:
 | tests/functional/workflow/code_review_loop_long_test.go | you-agent-factory/tests/functional/workflow | TestCodeReviewLoop | functionallong | tests/functional/factory/packaged/review/invocation_test.go | workflow | none | workflow-delete-01-orchestration-dispatch |
 | tests/functional/workflow/config_driven_retry_loop_breaker_test.go | you-agent-factory/tests/functional/workflow | TestConfigDrivenRetryLoopBreaker_SucceedsBeforeLimit | short | tests/functional/guards/global_test.go | workflow | none | workflow-delete-08-guards |
 | tests/functional/workflow/config_driven_retry_loop_breaker_test.go | you-agent-factory/tests/functional/workflow | TestConfigDrivenRetryLoopBreaker_TerminatesAfterMaxRetries | short | tests/functional/guards/global_test.go | workflow | none | workflow-delete-08-guards |
-| tests/functional/workflow/name_propagation_long_test.go | you-agent-factory/tests/functional/workflow | TestNamePropagation_InPromptTemplate | functionallong | tests/functional/factory/current/prompt_template_test.go | workflow | none | workflow-delete-07-factory-current |
-| tests/functional/workflow/name_propagation_long_test.go | you-agent-factory/tests/functional/workflow | TestNamePropagation_MarkdownFile | functionallong | tests/functional/factory/current/prompt_template_test.go | workflow | none | workflow-delete-07-factory-current |
-| tests/functional/workflow/repeater_parameterized_test.go | you-agent-factory/tests/functional/workflow | TestParameterizedFields_UnresolvedTemplateRoutesToFailure | short | tests/functional/factory/current/prompt_template_test.go | workflow | none | workflow-delete-07-factory-current |
-| tests/functional/workflow/repeater_parameterized_test.go | you-agent-factory/tests/functional/workflow | TestParameterizedFields_WorkingDirectoryResolvesFromTags | short | tests/functional/factory/current/prompt_template_test.go | workflow | none | workflow-delete-07-factory-current |
 | tests/functional/workflow/review_retry_exhaustion_long_test.go | you-agent-factory/tests/functional/workflow | TestReviewRetryLoopBreaker_FeedbackPropagated | functionallong | tests/functional/guards/global_test.go | workflow | none | workflow-delete-08-guards |
 | tests/functional/workflow/review_retry_exhaustion_long_test.go | you-agent-factory/tests/functional/workflow | TestReviewRetryLoopBreaker_SucceedsBeforeLimit | functionallong | tests/functional/guards/global_test.go | workflow | none | workflow-delete-08-guards |
 | tests/functional/workflow/review_retry_exhaustion_long_test.go | you-agent-factory/tests/functional/workflow | TestReviewRetryLoopBreaker_TerminatesAfterMaxRetries | functionallong | tests/functional/guards/global_test.go | workflow | none | workflow-delete-08-guards |
-| tests/functional/workflow/workflow_modification_long_test.go | you-agent-factory/tests/functional/workflow | TestWorkflowModificationAndReload | functionallong | tests/functional/factory/current/read_save_test.go | workflow | none | workflow-delete-07-factory-current |
-| tests/functional/workflow/workflow_modification_long_test.go | you-agent-factory/tests/functional/workflow | TestWorkflowModificationPreservesIndependentWorkflows | functionallong | tests/functional/factory/current/read_save_test.go | workflow | none | workflow-delete-07-factory-current |
-| tests/functional/workflow/workflow_modification_long_test.go | you-agent-factory/tests/functional/workflow | TestWorkflowModificationRejectionLoop | functionallong | tests/functional/factory/current/read_save_test.go | workflow | none | workflow-delete-07-factory-current |
 
 ### Wrong-layer approvals (smoke)
 
@@ -1730,7 +1716,7 @@ without inventing destinations. Prefer independent, reviewable batch sizes.
 | `workflow-delete-04-work-routing-logical` | workflow | 2 | work/routing | released |
 | `workflow-delete-05-workstations-repeater` | workflow | 13 | workstations/repeater | planned |
 | `workflow-delete-06-workstations-watcher` | workflow | 7 | workstations/watcher | consumed |
-| `workflow-delete-07-factory-current` | workflow | 7 | factory/current | planned |
+| `workflow-delete-07-factory-current` | workflow | 7 | factory/current | released |
 | `workflow-delete-08-guards` | workflow | 5 | guards | planned |
 | `workflow-delete-09-orchestration-javascript` | workflow | 1 | orchestration/javascript | planned |
 | `guards_batch-delete-01-work-relationships` | guards_batch | 8 | work/relationships | planned |
