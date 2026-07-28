@@ -3,11 +3,11 @@ package factorysessionexecution
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -36,9 +36,12 @@ func (s *JavaScriptRuntimeService) ensureSessionResponseEvents(sessionID string,
 	if s.generateResponseEventID == nil {
 		return errors.New("durable response-event ID generator is required")
 	}
-	store := responseeventstore.NewSessionResponseEventStore(sessionID, s.clock, s.generateResponseEventID)
-	if store == nil {
-		return errors.New("create durable response-event store")
+	if s.responseStreams == nil {
+		return errors.New("durable response-event stream service is required")
+	}
+	store, err := s.responseStreams.NewEventStore(sessionID, s.clock)
+	if err != nil {
+		return fmt.Errorf("create durable response-event store: %w", err)
 	}
 	state.responseEvents = store
 	return nil

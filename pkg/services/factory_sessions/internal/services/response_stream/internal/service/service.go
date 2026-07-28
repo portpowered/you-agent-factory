@@ -35,8 +35,9 @@ func New(
 	service := &ResponseStream{eventIDs: eventIDs}
 	if limits != nil {
 		service.retentionLimits = &responseeventstore.RetentionLimits{
-			MaxEvents: limits.MaxEvents,
-			MaxBytes:  limits.MaxBytes,
+			MaxEvents:                limits.MaxEvents,
+			MaxBytes:                 limits.MaxBytes,
+			CompletedRetentionWindow: limits.CompletedRetentionWindow,
 		}
 	}
 	return service, nil

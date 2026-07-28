@@ -1,12 +1,18 @@
 package response_events
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -16,9 +22,103 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const codexPartialStreamGoldenCase = "success"
+const (
+	codexPartialStreamGoldenCase = "success"
+
+	functionalResponseEventCompletedRetentionWindow = time.Millisecond
+	functionalResponseEventMissingSessionID           = "session-missing-response-events"
+
+	sessionExpiryChildSessionID       = "cursor-js-session-expiry"
+	sessionExpiryChildWorkflowFile    = "session-expiry-child-progress.workflow.js"
+	sessionExpiryChildWorkflowSource  = `return (async function () {
+  const child = await agent.run({
+    prompt: "summarize session expiry",
+    label: "session-expiry-child",
+    modelProvider: "cursor",
+    model: "cursor-test-model",
+  });
+  return { label: "session-expiry", child: child };
+})();`
+)
 
 const functionalResponseEventRetentionByteLimit = 16 * 1024 * 1024
+
+// TestAPIResponseEventSessionExpiryReturnsTypedGone proves the public Response
+// Event SSE API returns typed Gone (410 / RESPONSE_EVENT_STREAM_EXPIRED) before
+// the stream opens when retained response-event history has expired for the
+// targeted session, without falling back to the default session or conflating
+// the outcome with unknown-session or invalid-cursor errors.
+func TestAPIResponseEventSessionExpiryReturnsTypedGone(t *testing.T) {
+	start := time.Date(2026, 7, 28, 14, 0, 0, 0, time.UTC)
+	fakeClock := clockwork.NewFakeClockAt(start)
+	dir := scaffoldSessionExpiryWorkflow(t)
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: sessionExpiryChildProgressStream(sessionExpiryChildSessionID, "Child summary COMPLETE"),
+	})
+
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		ResponseEventRetentionLimits: &factorysessions.ResponseEventRetentionLimits{
+			MaxEvents:                10_000,
+			MaxBytes:                 functionalResponseEventRetentionByteLimit,
+			CompletedRetentionWindow: functionalResponseEventCompletedRetentionWindow,
+		},
+		Edges: serviceedges.Edges{
+			Clock:                 fakeClock,
+			ProviderCommandRunner: runner,
+		},
+	})
+	t.Cleanup(func() { server.Stop(t) })
+
+	started := startSessionExpiryWorkflow(t, server.URL(), dir)
+	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
+	}
+	sessionID := started.SessionId
+	if sessionID == "" {
+		t.Fatal("completed durable session id is empty")
+	}
+	if sessionID == factorysessions.DefaultSessionID {
+		t.Fatalf("session id = %q, want explicit durable session id", sessionID)
+	}
+	if runner.CallCount() != 1 {
+		t.Fatalf("provider command runner calls = %d, want 1 child invocation", runner.CallCount())
+	}
+
+	beforeExpiry := support.GetFactoryResponseEventsAt(t, server.URL(), sessionID)
+	if len(beforeExpiry) == 0 {
+		t.Fatal("completed session retained zero Response Events before expiry window elapsed")
+	}
+
+	fakeClock.Advance(functionalResponseEventCompletedRetentionWindow)
+
+	expired := support.GetFactoryResponseEventStreamHTTPErrorAt(
+		t,
+		support.SessionResponseEventsURL(server.URL(), sessionID),
+	)
+	assertResponseEventStreamExpiredError(t, expired)
+	if strings.Contains(expired.Body, factorysessions.DefaultSessionID) {
+		t.Fatalf(
+			"expired stream error body references default session %q, want explicit session only: %s",
+			factorysessions.DefaultSessionID,
+			expired.Body,
+		)
+	}
+
+	missing := support.GetFactoryResponseEventStreamHTTPErrorAt(
+		t,
+		support.SessionResponseEventsURL(server.URL(), functionalResponseEventMissingSessionID),
+	)
+	assertResponseEventSessionNotFoundError(t, missing)
+
+	invalidCursor := support.GetFactoryResponseEventStreamHTTPErrorAt(
+		t,
+		support.SessionResponseEventsURL(server.URL(), factorysessions.DefaultSessionID)+
+			"?after_sequence=-1",
+	)
+	assertResponseEventInvalidCursorError(t, invalidCursor)
+}
 
 // TestAPIResponseEventCursorGapEmitsStreamGap proves the public Response Event
 // SSE API emits STREAM_GAP with explicit lost-range bounds when after_sequence
@@ -546,5 +646,135 @@ func assertResponseEventFramesSSEIDMatchesSequence(
 				frame.Event.Sequence,
 			)
 		}
+	}
+}
+
+func scaffoldSessionExpiryWorkflow(t *testing.T) string {
+	t.Helper()
+
+	dir := support.ScaffoldFactory(t, map[string]any{"name": "response-events-session-expiry"})
+	if err := os.WriteFile(
+		filepath.Join(dir, sessionExpiryChildWorkflowFile),
+		[]byte(sessionExpiryChildWorkflowSource),
+		0o600,
+	); err != nil {
+		t.Fatalf("write session expiry child workflow: %v", err)
+	}
+	return dir
+}
+
+func startSessionExpiryWorkflow(
+	t *testing.T,
+	serverURL, dir string,
+) factoryapi.FactorySessionSyncExecutionResponse {
+	t.Helper()
+
+	workflowPath := filepath.Join(dir, sessionExpiryChildWorkflowFile)
+	payload, err := json.Marshal(factoryapi.FactorySessionExecutionRequest{
+		RequestId: "response-events-session-expiry",
+		Source: factoryapi.FactorySessionExecutionSource{
+			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowFile,
+			WorkflowFile: &workflowPath,
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal session expiry workflow request: %v", err)
+	}
+	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-sessions/sync"
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("build session expiry workflow request: %v", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("start session expiry workflow: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		var body bytes.Buffer
+		_, _ = body.ReadFrom(response.Body)
+		t.Fatalf("start session expiry workflow status = %d: %s", response.StatusCode, body.String())
+	}
+	var started factoryapi.FactorySessionSyncExecutionResponse
+	if err := json.NewDecoder(response.Body).Decode(&started); err != nil {
+		t.Fatalf("decode session expiry workflow response: %v", err)
+	}
+	return started
+}
+
+func sessionExpiryChildProgressStream(sessionID, result string) []byte {
+	records := []string{
+		`{"type":"system","subtype":"init","session_id":"` + sessionID + `"}`,
+		`{"type":"assistant","timestamp_ms":1,"message":{"role":"assistant","content":[{"type":"text","text":"working"}]},"session_id":"` + sessionID + `"}`,
+		`{"type":"tool_call","subtype":"started","call_id":"call-1","tool_call":{"readToolCall":{"args":{"path":"README.md"}}},"session_id":"` + sessionID + `"}`,
+		`{"type":"tool_call","subtype":"completed","call_id":"call-1","tool_call":{"readToolCall":{"result":{"success":{}}}},"session_id":"` + sessionID + `"}`,
+		string(sessionExpiryChildTerminalRecord(sessionID, result)),
+	}
+	return []byte(strings.Join(records, "\n"))
+}
+
+func sessionExpiryChildTerminalRecord(sessionID, result string) []byte {
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		panic(err)
+	}
+	return []byte(
+		`{"type":"result","subtype":"success","is_error":false,"result":` +
+			string(encoded) + `,"session_id":` + strconv.Quote(sessionID) + `}`,
+	)
+}
+
+func assertResponseEventStreamExpiredError(
+	t *testing.T,
+	got support.FactoryResponseEventStreamHTTPError,
+) {
+	t.Helper()
+
+	if got.StatusCode != http.StatusGone {
+		t.Fatalf("expired stream status = %d, want 410 Gone", got.StatusCode)
+	}
+	if got.Response.Family != factoryapi.ErrorFamilyGone {
+		t.Fatalf("expired stream family = %q, want GONE", got.Response.Family)
+	}
+	if got.Response.Code != factoryapi.ErrorResponseCodeRESPONSEEVENTSTREAMEXPIRED {
+		t.Fatalf(
+			"expired stream code = %q, want RESPONSE_EVENT_STREAM_EXPIRED",
+			got.Response.Code,
+		)
+	}
+}
+
+func assertResponseEventSessionNotFoundError(
+	t *testing.T,
+	got support.FactoryResponseEventStreamHTTPError,
+) {
+	t.Helper()
+
+	if got.StatusCode != http.StatusNotFound {
+		t.Fatalf("missing session stream status = %d, want 404 Not Found", got.StatusCode)
+	}
+	if got.Response.Code != factoryapi.ErrorResponseCodeRESPONSEEVENTSESSIONNOTFOUND {
+		t.Fatalf(
+			"missing session stream code = %q, want RESPONSE_EVENT_SESSION_NOT_FOUND",
+			got.Response.Code,
+		)
+	}
+}
+
+func assertResponseEventInvalidCursorError(
+	t *testing.T,
+	got support.FactoryResponseEventStreamHTTPError,
+) {
+	t.Helper()
+
+	if got.StatusCode != http.StatusBadRequest {
+		t.Fatalf("invalid cursor stream status = %d, want 400 Bad Request", got.StatusCode)
+	}
+	if got.Response.Code != factoryapi.ErrorResponseCodeINVALIDRESPONSEEVENTCURSOR {
+		t.Fatalf(
+			"invalid cursor stream code = %q, want INVALID_RESPONSE_EVENT_CURSOR",
+			got.Response.Code,
+		)
 	}
 }

@@ -2,6 +2,8 @@ package factorysessions
 
 import (
 	"errors"
+	"time"
+
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
 )
 
@@ -110,6 +112,10 @@ var (
 type ResponseEventRetentionLimits struct {
 	MaxEvents int
 	MaxBytes  int
+	// CompletedRetentionWindow overrides the late-subscription window for
+	// completed response-event stores when positive. Functional proofs use this
+	// to advance a controllable clock without waiting on wall-clock retention.
+	CompletedRetentionWindow time.Duration
 }
 
 // --- merged from response_stream_contract.go ---
