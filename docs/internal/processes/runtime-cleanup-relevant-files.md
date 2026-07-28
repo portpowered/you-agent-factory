@@ -995,7 +995,11 @@ in `pkg/services/factory_runtime` (`interfaces.go`) plus root typed errors in
 `cmd/pkgboundarycheck` peer-subpackage rules. CUT-RUN-REC seals Factory Runtime
 production Recordings imports to the service root only via
 `pkg/services/factory_runtime/recordings_import_boundary_test.go`
-(`TestProductionPackagesImportRecordingsRootOnly`); mirror
+(`TestProductionPackagesImportRecordingsRootOnly`) and behavioral construction
+proof in `pkg/services/factory_runtime/recordings_request_boundary_test.go`
+(`TestRuntimeConstructsRecordingsCapabilitiesThroughRoot`) plus
+`pkg/services/factory_runtime/internal/build_test.go`
+(`TestBuild_ConstructsRecordingsRootLedgerAndHostingCapabilities`); mirror
 `pkg/services/work/recordings_import_boundary_test.go` and
 `pkg/services/recordings/runtime_import_boundary_test.go` for the reverse edge.
 After DEL-RUN-SERVICE deletes the
