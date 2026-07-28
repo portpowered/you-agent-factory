@@ -107,6 +107,114 @@ func TestCLIContextCancellationStopsExternalWork(t *testing.T) {
 	}
 }
 
+// TestCLIContextCancellationEmitsNoSuccessResult proves cancelling the CLI process
+// context during an in-flight invocation yields an interrupted terminal public outcome
+// without emitting a completed success primary result attributable to the cancelled run.
+func TestCLIContextCancellationEmitsNoSuccessResult(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("blocking /bin/sh external-work fixture is unavailable on Windows")
+	}
+
+	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
+	session := harness.NewSession(t).WithNoExternalServer(t)
+
+	providerPIDFile := filepath.Join(t.TempDir(), "provider.pid")
+	factoryPath := writeContextCancellationGoalFactory(t, session.WorkDir)
+	mockWorkersPath := writeBlockingGoalExecutorMockWorkers(t, providerPIDFile)
+	prompt := fmt.Sprintf("context-cancellation-no-success-%d", time.Now().UnixNano())
+
+	args := append([]string{}, session.RuntimeLogDirFlags()...)
+	args = append(args, session.ServerFlags()...)
+	args = append(args,
+		"run",
+		"--factory", factoryPath,
+		"--with-mock-workers",
+		"--no-record",
+		"--quiet",
+		mockWorkersPath,
+		prompt,
+	)
+
+	command := exec.Command(harness.BinaryPath, args...)
+	command.Dir = session.WorkDir
+	command.Env = session.ProcessEnv()
+
+	var stdout, stderr bytes.Buffer
+	command.Stdout = &stdout
+	command.Stderr = &stderr
+
+	if err := command.Start(); err != nil {
+		t.Fatalf("start built CLI: %v", err)
+	}
+
+	waitResult := make(chan error, 1)
+	go func() {
+		waitResult <- command.Wait()
+	}()
+
+	providerPID := waitForContextCancellationProviderPID(t, providerPIDFile, 45*time.Second)
+	t.Cleanup(func() {
+		terminateContextCancellationProcess(providerPID)
+	})
+
+	if err := command.Process.Signal(os.Interrupt); err != nil {
+		t.Fatalf("interrupt built CLI process context: %v", err)
+	}
+
+	var waitErr error
+	select {
+	case waitErr = <-waitResult:
+	case <-time.After(contextCancellationScenarioTimeout):
+		_ = command.Process.Kill()
+		<-waitResult
+		t.Fatalf(
+			"timed out waiting for built CLI to exit after context cancellation\nstdout:\n%s\nstderr:\n%s",
+			stdout.String(),
+			stderr.String(),
+		)
+	}
+
+	if waitErr == nil {
+		t.Fatalf(
+			"cancelled built CLI returned success; want interrupted terminal outcome\nstdout:\n%s\nstderr:\n%s",
+			stdout.String(),
+			stderr.String(),
+		)
+	}
+	exitErr, ok := waitErr.(*exec.ExitError)
+	if !ok || exitErr.ExitCode() == 0 {
+		t.Fatalf(
+			"cancelled built CLI exit = %v, want non-success interrupted outcome\nstdout:\n%s\nstderr:\n%s",
+			waitErr,
+			stdout.String(),
+			stderr.String(),
+		)
+	}
+	cancellationDiagnostic := stderr.String() + "\n" + waitErr.Error()
+	if !strings.Contains(cancellationDiagnostic, "INVOCATION_CANCELED") {
+		t.Fatalf(
+			"cancelled built CLI diagnostic missing INVOCATION_CANCELED:\nstdout:\n%s\nstderr:\n%s",
+			stdout.String(),
+			stderr.String(),
+		)
+	}
+
+	if trimmed := strings.TrimSpace(stdout.String()); trimmed != "" {
+		t.Fatalf(
+			"stdout = %q, want empty (no completed success primary result after cancellation)",
+			stdout.String(),
+		)
+	}
+	if stdout.String() == successStdoutPrimaryResult ||
+		strings.Contains(stdout.String(), successStdoutPrimaryResult) {
+		t.Fatalf(
+			"stdout = %q, want no success primary-result payload %q after cancellation",
+			stdout.String(),
+			successStdoutPrimaryResult,
+		)
+	}
+}
+
 func writeContextCancellationGoalFactory(t *testing.T, workDir string) string {
 	t.Helper()
 
