@@ -1671,7 +1671,7 @@
       "fromOwner": "wire",
       "toOwner": "providers",
       "class": "construction",
-      "evidence": "pkg/wire -\u003e pkg/services/workers/provider/inferencecontract"
+      "evidence": "pkg/wire -\u003e pkg/services/providers"
     },
     {
       "fromOwner": "wire",
@@ -3230,6 +3230,18 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_runtime/internal/factorystatus",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/legacysnapshot",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_runtime/internal/orchestrators/javascript/preview",
       "disposition": "retain",
       "destination": "factory_runtime",
@@ -3601,6 +3613,12 @@
     },
     {
       "packagePath": "pkg/services/factory_sessions/internal/invocation/runtimeadapter",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/legacysnapshot",
       "disposition": "retain",
       "destination": "factory_sessions",
       "destinationKind": "owner"
@@ -4255,6 +4273,12 @@
     },
     {
       "packagePath": "pkg/services/provider_sessions",
+      "disposition": "retain",
+      "destination": "provider_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/provider_sessions/internal/service",
       "disposition": "retain",
       "destination": "provider_sessions",
       "destinationKind": "owner"
