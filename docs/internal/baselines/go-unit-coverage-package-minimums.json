@@ -1569,6 +1569,10 @@
       "minimum": 74.24
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal",
+      "minimum": 81.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical",
       "minimum": 88.52
     },

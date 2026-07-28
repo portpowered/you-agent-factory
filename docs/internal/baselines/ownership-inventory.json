@@ -1465,7 +1465,7 @@
       "fromOwner": "recordings",
       "toOwner": "factory_runtime",
       "class": "command",
-      "evidence": "pkg/services/recordings/service -\u003e pkg/services/factory_runtime"
+      "evidence": "pkg/services/recordings/internal -\u003e pkg/services/factory_runtime"
     },
     {
       "fromOwner": "recordings",
@@ -1671,7 +1671,7 @@
       "fromOwner": "wire",
       "toOwner": "providers",
       "class": "construction",
-      "evidence": "pkg/wire -\u003e pkg/services/workers/provider/inferencecontract"
+      "evidence": "pkg/wire -\u003e pkg/services/providers"
     },
     {
       "fromOwner": "wire",
@@ -2734,48 +2734,48 @@
       "disposition": "move",
       "destination": "factory_definitions",
       "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal",
-      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
+      "successor": "pkg/services/factory_definitions/internal/services/distribution",
+      "deletionCondition": "delete public package after IMP-DEF-distribution private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/distribution/internal/service",
       "disposition": "move",
       "destination": "factory_definitions",
       "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal",
-      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
+      "successor": "pkg/services/factory_definitions/internal/services/distribution",
+      "deletionCondition": "delete public package after IMP-DEF-distribution private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/distribution/packagedcatalog",
       "disposition": "move",
       "destination": "factory_definitions",
       "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal",
-      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
+      "successor": "pkg/services/factory_definitions/internal/services/distribution",
+      "deletionCondition": "delete public package after IMP-DEF-distribution private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/distribution/packagedinstallation",
       "disposition": "move",
       "destination": "factory_definitions",
       "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal",
-      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
+      "successor": "pkg/services/factory_definitions/internal/services/distribution",
+      "deletionCondition": "delete public package after IMP-DEF-distribution private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/distribution/scaffoldfacts",
       "disposition": "move",
       "destination": "factory_definitions",
       "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal",
-      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
+      "successor": "pkg/services/factory_definitions/internal/services/distribution",
+      "deletionCondition": "delete public package after IMP-DEF-distribution private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/distribution/wire",
       "disposition": "move",
       "destination": "factory_definitions",
       "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal",
-      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
+      "successor": "pkg/services/factory_definitions/internal/services/distribution",
+      "deletionCondition": "delete public package after IMP-DEF-distribution private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability",
@@ -3278,6 +3278,18 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_runtime/internal/factorystatus",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/legacysnapshot",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_runtime/internal/orchestrators/javascript/preview",
       "disposition": "retain",
       "destination": "factory_runtime",
@@ -3649,6 +3661,12 @@
     },
     {
       "packagePath": "pkg/services/factory_sessions/internal/invocation/runtimeadapter",
+      "disposition": "retain",
+      "destination": "factory_sessions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/legacysnapshot",
       "disposition": "retain",
       "destination": "factory_sessions",
       "destinationKind": "owner"
@@ -4484,6 +4502,12 @@
       "destinationKind": "owner",
       "successor": "pkg/services/recordings/internal/services/canonical_ledger",
       "deletionCondition": "delete public package after IMP-REC-canonical_ledger private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
     },
     {
       "packagePath": "pkg/services/recordings/internal/canonical",

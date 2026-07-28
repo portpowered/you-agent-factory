@@ -109,6 +109,12 @@
     "pkg/services/factory_definitions/internal/services/compilation/loading",
     "pkg/services/factory_definitions/internal/services/compilation/runtimeconfig",
     "pkg/services/factory_definitions/internal/services/compilation/wire",
+    "pkg/services/factory_definitions/internal/services/distribution",
+    "pkg/services/factory_definitions/internal/services/distribution/internal/service",
+    "pkg/services/factory_definitions/internal/services/distribution/packagedcatalog",
+    "pkg/services/factory_definitions/internal/services/distribution/packagedinstallation",
+    "pkg/services/factory_definitions/internal/services/distribution/scaffoldfacts",
+    "pkg/services/factory_definitions/internal/services/distribution/wire",
     "pkg/services/factory_definitions/internal/services/snapshots_portability",
     "pkg/services/factory_definitions/internal/services/snapshots_portability/capture",
     "pkg/services/factory_definitions/internal/services/snapshots_portability/internal/service",
@@ -164,6 +170,8 @@
     "pkg/services/factory_runtime/context",
     "pkg/services/factory_runtime/definitionmapping",
     "pkg/services/factory_runtime/engine",
+    "pkg/services/factory_runtime/internal/factorystatus",
+    "pkg/services/factory_runtime/internal/legacysnapshot",
     "pkg/services/factory_runtime/internal/orchestrators/javascript/preview",
     "pkg/services/factory_runtime/internal/orchestrators/javascript/runtime",
     "pkg/services/factory_runtime/internal/orchestrators/javascript/source",
@@ -222,6 +230,7 @@
     "pkg/services/factory_sessions/internal/invocation",
     "pkg/services/factory_sessions/internal/invocation/packagedtts",
     "pkg/services/factory_sessions/internal/invocation/runtimeadapter",
+    "pkg/services/factory_sessions/internal/legacysnapshot",
     "pkg/services/factory_sessions/internal/livesession",
     "pkg/services/factory_sessions/internal/logicaltarget",
     "pkg/services/factory_sessions/internal/processlifecycle",
@@ -358,6 +367,7 @@
     "pkg/services/recordings/events",
     "pkg/services/recordings/events/kinds",
     "pkg/services/recordings/events/snapshot",
+    "pkg/services/recordings/internal",
     "pkg/services/recordings/internal/canonical",
     "pkg/services/recordings/internal/services/artifacts_export",
     "pkg/services/recordings/internal/services/artifacts_export/internal/service",
@@ -872,6 +882,36 @@
       "destination": "factory_definitions/internal/services/compilation"
     },
     {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution",
+      "disposition": "move",
+      "destination": "factory_definitions/internal/services/distribution"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/internal/service",
+      "disposition": "move",
+      "destination": "factory_definitions/internal/services/distribution"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/packagedcatalog",
+      "disposition": "move",
+      "destination": "factory_definitions/internal/services/distribution"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/packagedinstallation",
+      "disposition": "move",
+      "destination": "factory_definitions/internal/services/distribution"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/scaffoldfacts",
+      "disposition": "move",
+      "destination": "factory_definitions/internal/services/distribution"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/wire",
+      "disposition": "move",
+      "destination": "factory_definitions/internal/services/distribution"
+    },
+    {
       "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability",
       "disposition": "move",
       "destination": "factory_definitions/internal"
@@ -1143,6 +1183,16 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/engine",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/factorystatus",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/legacysnapshot",
       "disposition": "retain",
       "destination": "factory_runtime"
     },
@@ -1433,6 +1483,11 @@
     },
     {
       "packagePath": "pkg/services/factory_sessions/internal/invocation/runtimeadapter",
+      "disposition": "retain",
+      "destination": "factory_sessions"
+    },
+    {
+      "packagePath": "pkg/services/factory_sessions/internal/legacysnapshot",
       "disposition": "retain",
       "destination": "factory_sessions"
     },
@@ -2115,6 +2170,11 @@
       "packagePath": "pkg/services/recordings/events/snapshot",
       "disposition": "move",
       "destination": "recordings/internal/services/canonical_ledger"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal",
+      "disposition": "retain",
+      "destination": "recordings"
     },
     {
       "packagePath": "pkg/services/recordings/internal/canonical",
