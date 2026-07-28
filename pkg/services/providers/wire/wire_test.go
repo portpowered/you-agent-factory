@@ -11,6 +11,68 @@ import (
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
 )
 
+func TestNewServiceConstructsPublishedRoot(t *testing.T) {
+	t.Parallel()
+
+	service, err := NewService()
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	if service == nil {
+		t.Fatal("NewService() returned nil service")
+	}
+	var root providers.Service = service
+	if root == nil {
+		t.Fatal("constructed root is not assignable to providers.Service")
+	}
+
+	result, err := root.ListProviders(context.Background(), providers.ListProvidersRequest{})
+	if err != nil {
+		t.Fatalf("ListProviders() = %v", err)
+	}
+	if len(result.Providers) == 0 {
+		t.Fatalf("ListProviders() = %#v, want non-empty migrated catalog", result)
+	}
+}
+
+func TestNewServiceComposesCatalogAndExecutionWithSharedCatalogAuthority(t *testing.T) {
+	t.Parallel()
+
+	root, err := NewService()
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	got, err := root.GetProvider(context.Background(), providers.GetProviderRequest{
+		ID: providers.IDCodex,
+	})
+	if err != nil {
+		t.Fatalf("GetProvider(codex) = %v", err)
+	}
+	if got.Provider.ID != providers.IDCodex {
+		t.Fatalf("GetProvider(codex).Provider.ID = %q", got.Provider.ID)
+	}
+
+	_, executeErr := root.Execute(context.Background(), providers.ExecuteRequest{
+		Provider:  providers.IDCodex,
+		AttemptID: "shared-catalog-authority",
+	})
+	if errors.Is(executeErr, providers.ErrUnknownProvider) {
+		t.Fatalf(
+			"Execute(codex) = %v, want execution bound through shared catalog authority",
+			executeErr,
+		)
+	}
+	var failure providers.ExecuteFailure
+	if !errors.As(executeErr, &failure) ||
+		failure.Kind != providers.ExecuteFailureKindDependency {
+		t.Fatalf(
+			"Execute(codex) = %#v, want dependency failure from bound adapter without effects",
+			executeErr,
+		)
+	}
+}
+
 func TestNewServiceBuildsUsableRoot(t *testing.T) {
 	root, err := NewService()
 	if err != nil {

@@ -1,5 +1,9 @@
-// Package wire constructs the published Providers root Service from the
-// parent-private catalog subservice.
+// Package wire is the Providers service composition boundary.
+//
+// Wire performs construction only, returns the singular providers.Service root
+// interface, and starts no lifecycle components. Parent-private Catalog and
+// Execution owner wiring stays inside the owner service assembly path; peers
+// depend on Service rather than owner internals or construction ports.
 package wire
 
 import (
