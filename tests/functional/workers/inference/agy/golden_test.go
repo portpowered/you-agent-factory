@@ -18,6 +18,7 @@ import (
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	agypkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/agy"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -104,11 +105,13 @@ func TestAgyGoldenFinalOnlySuccess(t *testing.T) {
 	if inferencePayload.Outcome != factoryapi.InferenceOutcomeSucceeded {
 		t.Fatalf("inference outcome = %q, want SUCCEEDED", inferencePayload.Outcome)
 	}
-	if inferencePayload.ProviderSession == nil || inferencePayload.ProviderSession.Provider == nil {
-		t.Fatal("inference response missing provider session metadata")
-	}
-	if got := support.StringPointerValue(inferencePayload.ProviderSession.Provider); got != string(modelprovider.ProviderAgy) {
-		t.Fatalf("provider session provider = %q, want %q", got, modelprovider.ProviderAgy)
+	if inferencePayload.ProviderSession != nil &&
+		inferencePayload.ProviderSession.Id != nil &&
+		strings.TrimSpace(support.StringPointerValue(inferencePayload.ProviderSession.Id)) != "" {
+		t.Fatalf(
+			"success-path inference unexpectedly retained provider session id %q",
+			support.StringPointerValue(inferencePayload.ProviderSession.Id),
+		)
 	}
 	if inferencePayload.Response == nil || *inferencePayload.Response != dispatchOutput {
 		t.Fatalf("inference response text = %#v, want dispatch output %q", inferencePayload.Response, dispatchOutput)
@@ -153,14 +156,70 @@ func TestAgyGoldenStructuredFailure(t *testing.T) {
 // structured auth failure or silent success.
 // golden: docs/temp/functional/provider-sessions/agy/timeout/manifest.json
 func TestAgyGoldenTimeout(t *testing.T) {
-	runAgyFailureGoldenCase(
+	loaded, request := loadAgyGoldenCase(
 		t,
 		agyTimeoutGoldenCase,
 		"agy-timeout",
 		support.ProviderSessionFidelityFinalOnly,
-		factoryapi.WorkFailureTypeTimeout,
-		factoryapi.WorkFailureTypeAuthFailure,
 	)
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	support.WriteAgentConfig(t, dir, "worker", strings.Replace(
+		support.BuildModelWorkerConfig(modelprovider.ProviderAgy, request.Model),
+		"stopToken: COMPLETE",
+		"skipPermissions: true\nstopToken: COMPLETE",
+		1,
+	))
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"agy golden timeout"}`))
+
+	exitCode := 124
+	if loaded.Process.ExitCode != nil {
+		exitCode = *loaded.Process.ExitCode
+	}
+	executablePath := writeAgyFixtureExecutable(t)
+	ptyHost := newAgyGoldenFixturePTYHost(loaded.Stdout.Raw, exitCode)
+	clock := platformclock.NewDeterministic(time.Date(2026, time.July, 27, 0, 0, 0, 0, time.UTC), time.Millisecond)
+
+	_, listed, events, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(
+		t,
+		dir,
+		serviceedges.Edges{
+			AgyPTYHost:               ptyHost,
+			AgyPTYClock:              clock,
+			WorkersExecutableLocator: fixedExecutableLocator{path: executablePath},
+			WorkersResolveSymlinks:   identityResolveSymlinks,
+		},
+		30*time.Second,
+	)
+
+	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 0 {
+		t.Fatalf("completed work = %d, want 0; listed=%#v", got, listed)
+	}
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
+		t.Fatalf("failed work = %d, want 1; listed=%#v", got, listed)
+	}
+	if ptyHost.callCount() < 1 {
+		t.Fatalf("agy PTY host starts = %d, want at least one invocation", ptyHost.callCount())
+	}
+
+	inferencePayload := agyGoldenFailedInferenceObservation(t, events)
+	if inferencePayload.FailureDetail == nil {
+		t.Fatal("inference response missing failure detail")
+	}
+	if inferencePayload.FailureDetail.Reason != factoryapi.WorkFailureTypeTimeout {
+		t.Fatalf("failure reason = %q, want TIMEOUT", inferencePayload.FailureDetail.Reason)
+	}
+	if inferencePayload.FailureDetail.Reason == factoryapi.WorkFailureTypeAuthFailure {
+		t.Fatalf("failure reason = %q, must remain distinct from AUTH_FAILURE", inferencePayload.FailureDetail.Reason)
+	}
+	if inferencePayload.ProviderSession == nil || inferencePayload.ProviderSession.Provider == nil {
+		t.Fatal("inference response missing provider session metadata")
+	}
+	if got := support.StringPointerValue(inferencePayload.ProviderSession.Provider); got != string(modelprovider.ProviderAgy) {
+		t.Fatalf("provider session provider = %q, want %q", got, modelprovider.ProviderAgy)
+	}
+	assertAgyFailureDoesNotLeakSensitiveOutput(t, events, responseEvents)
+	assertAgyGoldenTimeoutResponseStream(t, responseEvents)
 }
 
 func runAgyFailureGoldenCase(
@@ -307,6 +366,51 @@ func assertAgyFailureDoesNotLeakSensitiveOutput(
 	for _, needle := range forbidden {
 		if strings.Contains(payload, needle) {
 			t.Fatalf("public observation leaked sensitive Agy output containing %q", needle)
+		}
+	}
+}
+
+func assertAgyGoldenTimeoutResponseStream(
+	t *testing.T,
+	responseEvents []factoryapi.FactoryResponseEvent,
+) {
+	t.Helper()
+
+	if len(responseEvents) == 0 {
+		t.Fatal("response stream missing events; want closed terminal stream")
+	}
+	last := responseEvents[len(responseEvents)-1]
+	if last.Phase != factoryapi.FactoryResponseEventPhaseFailed {
+		t.Fatalf("terminal response event phase = %q, want FAILED", last.Phase)
+	}
+	if last.Kind == factoryapi.FactoryResponseEventKindError {
+		payload, err := last.Payload.AsFactoryResponseEventErrorPayload()
+		if err != nil {
+			t.Fatalf("decode terminal ERROR response event: %v", err)
+		}
+		if payload.Code != "" && payload.Code != "timeout" {
+			t.Fatalf("terminal response error code = %q, want timeout", payload.Code)
+		}
+		if payload.Message != agypkg.TimeoutFailureMessage {
+			t.Fatalf(
+				"terminal response error message = %q, want %q",
+				payload.Message,
+				agypkg.TimeoutFailureMessage,
+			)
+		}
+	}
+	for _, event := range responseEvents {
+		if event.Phase != factoryapi.FactoryResponseEventPhaseCompleted {
+			continue
+		}
+		if event.Kind == factoryapi.FactoryResponseEventKindRun {
+			payload, err := event.Payload.AsFactoryResponseEventRunPayload()
+			if err != nil {
+				t.Fatalf("decode RUN response event: %v", err)
+			}
+			if payload.Status != nil && *payload.Status == "completed" {
+				t.Fatalf("response stream invented successful run completion: %#v", event)
+			}
 		}
 	}
 }

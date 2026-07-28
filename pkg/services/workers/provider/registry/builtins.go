@@ -9,6 +9,7 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
+	"github.com/portpowered/infinite-you/pkg/services/workers/provider/agy"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/claude"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/codex"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/cursor"
@@ -156,6 +157,13 @@ func migratedBuiltInIntegration(
 			return pi.NewIntegration()
 		}
 		return pi.NewIntegration(pi.IntegrationDependencies{
+			ProvidersService: dependencies.ProvidersService,
+		})
+	case "agy":
+		if dependencies.ProvidersService == nil {
+			return agy.NewIntegration()
+		}
+		return agy.NewIntegration(agy.IntegrationDependencies{
 			ProvidersService: dependencies.ProvidersService,
 		})
 	default:

@@ -12,12 +12,19 @@ import (
 const factoryDefinitionsModule = "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 
 var foldedPublicSiblingSuffixes = []string{
+	"/definition",
 	"/authoredlayout",
 	"/portableconfig",
 	"/loading",
 	"/loadedsource",
 	"/snapshotcapture",
 	"/packagedinstallation",
+	"/packages/packageassets",
+	"/packages/promptassets",
+	"/packages/goal",
+	"/packages/review",
+	"/packages/subagent",
+	"/packages/tts",
 	"/namedfactories",
 }
 

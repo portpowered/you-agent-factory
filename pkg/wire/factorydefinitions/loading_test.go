@@ -11,7 +11,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
 	factorynamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	wirefactorydefinitions "github.com/portpowered/infinite-you/pkg/wire/factorydefinitions"
 )
 
@@ -93,11 +93,11 @@ func newTestLoader(
 ) *factoryloading.Loader {
 	t.Helper()
 
-	applySupportedFiles, err := portableconfig.NewPortableBundledFilesApplier(fileSystem)
+	applySupportedFiles, err := factorydefinitionswire.NewPortableBundledFilesApplier(fileSystem)
 	if err != nil {
 		t.Fatalf("construct bundled-files applier: %v", err)
 	}
-	applyStarterWork, err := portableconfig.NewFactoryStarterWorkApplier(fileSystem)
+	applyStarterWork, err := factorydefinitionswire.NewFactoryStarterWorkApplier(fileSystem)
 	if err != nil {
 		t.Fatalf("construct starter-Work applier: %v", err)
 	}
@@ -105,8 +105,7 @@ func newTestLoader(
 		targetDir string,
 		config *factorydefinitions.FactoryConfig,
 	) ([]factorydefinitions.PortableBundledFileReplacement, error) {
-		return portableconfig.MaterializeFiles(
-			fileSystem,
+		return factorydefinitionswire.NewPortableBundledFilesMaterializer(fileSystem)(
 			targetDir,
 			config,
 		)
@@ -130,7 +129,7 @@ func newTestLoader(
 
 func mustSourceResolver(t *testing.T, fileSystem platformfilesystem.Local) factorydefinitions.PortableBundledFileSourceResolver {
 	t.Helper()
-	resolver, err := portableconfig.NewSupportedSourceResolver(fileSystem)
+	resolver, err := factorydefinitionswire.NewPortableBundledFileSourceResolver(fileSystem)
 	if err != nil {
 		t.Fatalf("construct portable source resolver: %v", err)
 	}

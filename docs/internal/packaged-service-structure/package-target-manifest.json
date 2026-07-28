@@ -91,6 +91,7 @@
     "pkg/services/factory_definitions/editable",
     "pkg/services/factory_definitions/internal",
     "pkg/services/factory_definitions/internal/contracts",
+    "pkg/services/factory_definitions/internal/lifecycle",
     "pkg/services/factory_definitions/internal/services/authoring_layout",
     "pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout",
     "pkg/services/factory_definitions/internal/services/authoring_layout/expand",
@@ -111,17 +112,25 @@
     "pkg/services/factory_definitions/internal/services/compilation/runtimeconfig",
     "pkg/services/factory_definitions/internal/services/compilation/wire",
     "pkg/services/factory_definitions/internal/services/distribution",
+    "pkg/services/factory_definitions/internal/services/distribution/goal",
     "pkg/services/factory_definitions/internal/services/distribution/internal/service",
+    "pkg/services/factory_definitions/internal/services/distribution/packageassets",
     "pkg/services/factory_definitions/internal/services/distribution/packagedcatalog",
     "pkg/services/factory_definitions/internal/services/distribution/packagedinstallation",
+    "pkg/services/factory_definitions/internal/services/distribution/promptassets",
+    "pkg/services/factory_definitions/internal/services/distribution/review",
     "pkg/services/factory_definitions/internal/services/distribution/scaffoldfacts",
+    "pkg/services/factory_definitions/internal/services/distribution/subagent",
+    "pkg/services/factory_definitions/internal/services/distribution/tts",
     "pkg/services/factory_definitions/internal/services/distribution/wire",
     "pkg/services/factory_definitions/internal/services/snapshots_portability",
     "pkg/services/factory_definitions/internal/services/snapshots_portability/capture",
+    "pkg/services/factory_definitions/internal/services/snapshots_portability/editable",
     "pkg/services/factory_definitions/internal/services/snapshots_portability/internal/service",
     "pkg/services/factory_definitions/internal/services/snapshots_portability/materialize",
     "pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig",
     "pkg/services/factory_definitions/internal/services/snapshots_portability/prepare",
+    "pkg/services/factory_definitions/internal/services/snapshots_portability/replayconfig",
     "pkg/services/factory_definitions/internal/services/snapshots_portability/wire",
     "pkg/services/factory_definitions/internal/services/validation",
     "pkg/services/factory_definitions/internal/services/validation/internal/orchestrator",
@@ -369,6 +378,7 @@
     "pkg/services/providers/internal/services/catalog/internal/service",
     "pkg/services/providers/internal/services/catalog/wire",
     "pkg/services/providers/internal/services/execution",
+    "pkg/services/providers/internal/services/execution/internal/adapters/agy",
     "pkg/services/providers/internal/services/execution/internal/adapters/claude",
     "pkg/services/providers/internal/services/execution/internal/adapters/codex",
     "pkg/services/providers/internal/services/execution/internal/adapters/commanddispatch",
@@ -836,6 +846,11 @@
       "destination": "factory_definitions"
     },
     {
+      "packagePath": "pkg/services/factory_definitions/internal/lifecycle",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal"
+    },
+    {
       "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/authoring_layout"
@@ -936,7 +951,17 @@
       "destination": "factory_definitions/internal/services/distribution"
     },
     {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/goal",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/distribution"
+    },
+    {
       "packagePath": "pkg/services/factory_definitions/internal/services/distribution/internal/service",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/distribution"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/packageassets",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/distribution"
     },
@@ -951,7 +976,27 @@
       "destination": "factory_definitions/internal/services/distribution"
     },
     {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/promptassets",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/distribution"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/review",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/distribution"
+    },
+    {
       "packagePath": "pkg/services/factory_definitions/internal/services/distribution/scaffoldfacts",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/distribution"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/subagent",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/distribution"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/tts",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/distribution"
     },
@@ -967,6 +1012,11 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/capture",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/snapshots_portability"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/editable",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/snapshots_portability"
     },
@@ -987,6 +1037,11 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/prepare",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/snapshots_portability"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/replayconfig",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/snapshots_portability"
     },
@@ -2222,6 +2277,11 @@
     },
     {
       "packagePath": "pkg/services/providers/internal/services/execution",
+      "disposition": "retain",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/agy",
       "disposition": "retain",
       "destination": "providers/internal/services/execution"
     },

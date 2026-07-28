@@ -21,7 +21,7 @@ import (
 	factoryinvocationworktype "github.com/portpowered/infinite-you/pkg/services/factory_definitions/invocationworktype"
 	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
 	factorynamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryquorumpolicy "github.com/portpowered/infinite-you/pkg/services/factory_definitions/quorumpolicy"
 	factoryttsobservability "github.com/portpowered/infinite-you/pkg/services/factory_definitions/ttsobservability"
 	factorydefaultscaffold "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/defaultscaffold"
@@ -290,19 +290,19 @@ func provideFactoryDefinitionInputInboxSentinelEnsurer(
 }
 
 func providePortableBundledFilesMaterializer(fileSystem portablefiles.FileSystem) factorydefinitions.PortableBundledFilesMaterializer {
-	return portableconfig.NewMaterializer(fileSystem)
+	return factorydefinitionswire.NewPortableBundledFilesMaterializer(fileSystem)
 }
 
 func providePortableBundledFileWritesValidator(fileSystem portablefiles.FileSystem) factorydefinitions.PortableBundledFileWritesValidator {
-	return portableconfig.NewWritesValidator(fileSystem)
+	return factorydefinitionswire.NewPortableBundledFileWritesValidator(fileSystem)
 }
 
 func providePortableBundledFilesCopier(fileSystem portablefiles.FileSystem) factorydefinitions.PortableBundledFilesCopier {
-	return portableconfig.NewFilesCopier(fileSystem)
+	return factorydefinitionswire.NewPortableBundledFilesCopier(fileSystem)
 }
 
 func providePortableBundledFileSourceResolver(fileSystem portablefiles.FileSystem) (factorydefinitions.PortableBundledFileSourceResolver, error) {
-	return portableconfig.NewSupportedSourceResolver(fileSystem)
+	return factorydefinitionswire.NewPortableBundledFileSourceResolver(fileSystem)
 }
 
 func provideFactoryDefinitionLoader(
