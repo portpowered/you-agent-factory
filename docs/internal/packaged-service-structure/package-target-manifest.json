@@ -158,8 +158,6 @@
     "pkg/services/factory_definitions/workstationexecution",
     "pkg/services/factory_runtime",
     "pkg/services/factory_runtime/build",
-    "pkg/services/factory_runtime/checkpointstore",
-    "pkg/services/factory_runtime/checkpointsummary",
     "pkg/services/factory_runtime/context",
     "pkg/services/factory_runtime/definitionmapping",
     "pkg/services/factory_runtime/engine",
@@ -172,6 +170,12 @@
     "pkg/services/factory_runtime/internal/orchestrators/petri",
     "pkg/services/factory_runtime/internal/rootobservation",
     "pkg/services/factory_runtime/internal/service",
+    "pkg/services/factory_runtime/internal/services/checkpoint_recovery",
+    "pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptstore",
+    "pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptsummary",
+    "pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/processlocal",
+    "pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/service",
+    "pkg/services/factory_runtime/internal/services/checkpoint_recovery/wire",
     "pkg/services/factory_runtime/internal/services/dispatch_planning",
     "pkg/services/factory_runtime/internal/services/dispatch_planning/internal/service",
     "pkg/services/factory_runtime/internal/services/dispatch_planning/wire",
@@ -1119,16 +1123,6 @@
       "destination": "factory_runtime"
     },
     {
-      "packagePath": "pkg/services/factory_runtime/checkpointstore",
-      "disposition": "retain",
-      "destination": "factory_runtime"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/checkpointsummary",
-      "disposition": "retain",
-      "destination": "factory_runtime"
-    },
-    {
       "packagePath": "pkg/services/factory_runtime/context",
       "disposition": "retain",
       "destination": "factory_runtime"
@@ -1187,6 +1181,36 @@
       "packagePath": "pkg/services/factory_runtime/internal/service",
       "disposition": "retain",
       "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/checkpoint_recovery",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/checkpoint_recovery"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptstore",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/checkpoint_recovery"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptsummary",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/checkpoint_recovery"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/processlocal",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/checkpoint_recovery"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/service",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/checkpoint_recovery"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/checkpoint_recovery/wire",
+      "disposition": "retain",
+      "destination": "factory_runtime/internal/services/checkpoint_recovery"
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/services/dispatch_planning",
