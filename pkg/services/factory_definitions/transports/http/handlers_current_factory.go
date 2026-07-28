@@ -22,6 +22,9 @@ func (s *Server) GetCurrentFactoryBySessionId(
 	if !ok {
 		return
 	}
+	if s.guardDefinitionsRequestContext(w, r) {
+		return
+	}
 
 	factory, err := factorydefinition.GetCurrentFactoryForSession(r.Context(), root, string(sessionID))
 	if err != nil {
@@ -72,6 +75,9 @@ func (s *Server) SaveCurrentFactoryBySessionId(
 	mode := factoryapi.FactorySaveModeReplaceCurrent
 	if req.Mode != nil {
 		mode = *req.Mode
+	}
+	if s.guardDefinitionsRequestContext(w, r) {
+		return
 	}
 
 	saved, err := factorydefinition.New(root).Save(r.Context(), string(sessionID), mode, req.Factory)

@@ -26,6 +26,9 @@ func (s *Server) ValidateFactory(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if s.guardDefinitionsRequestContext(w, r) {
+		return
+	}
 
 	result, err := validationentry.ValidateFactoryAPI(r.Context(), req, validation)
 	if err != nil {

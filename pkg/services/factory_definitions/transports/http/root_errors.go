@@ -23,6 +23,10 @@ func definitionsRootErrorResponse(err error) (int, any, bool) {
 		return 0, nil, false
 	}
 
+	if status, response, ok := definitionsRequestContextErrorResponse(err); ok {
+		return status, response, true
+	}
+
 	if status, response, ok := definitionsInvalidFactoryDefinitionPayloadErrorResponse(err); ok {
 		return status, response, true
 	}
@@ -138,6 +142,9 @@ func validationTargetsPtr(targets []factoryapi.FactoryValidationTarget) *[]facto
 
 func (s *Server) writeDefinitionsRootError(w http.ResponseWriter, err error) bool {
 	if status, response, ok := definitionsRootErrorResponse(err); ok {
+		if response == nil {
+			return true
+		}
 		s.writeJSON(w, status, response)
 		return true
 	}
