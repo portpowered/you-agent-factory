@@ -140,6 +140,11 @@
   `functional-boundary-check` stays unavoidable through the nested
   `test-functional-coverage` call, and the lane uploads Markdown, coverage
   JSON, profile, and command log on success and failure.
+  When reconciling `main` into long-lived migration branches, Backend
+  Functional Coverage may fail on a package floor regression from newly merged
+  factory_runtime orchestration code; align
+  `docs/internal/baselines/go-functional-coverage-package-minimums.json` to the
+  measured `gocoveragecheck` actual for that package before re-requesting CI.
   Verify-tier Make and CI script wiring (verify-fast, verify-pr, verify-extended,
   long-tests, verify-pr-inference, backend/UI coverage aliases, and CI wrapper
   scripts) is wrong-layer contract evidence owned under
