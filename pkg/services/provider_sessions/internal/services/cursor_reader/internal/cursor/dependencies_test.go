@@ -5,12 +5,12 @@ import (
 	"path/filepath"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	providersessionsinternal "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal"
 )
 
 var (
 	testFiles           platformfilesystem.Local
-	testWalkDirectory   = providersessions.CursorWalkDirectory(filepath.WalkDir)
-	testResolveSymlinks = providersessions.CursorResolveSymlinks(filepath.EvalSymlinks)
-	testOpenSQLDatabase = providersessions.CursorOpenSQLDatabase(sql.Open)
+	testWalkDirectory   = providersessionsinternal.CursorWalkDirectory(filepath.WalkDir)
+	testResolveSymlinks = providersessionsinternal.CursorResolveSymlinks(filepath.EvalSymlinks)
+	testOpenSQLDatabase = providersessionsinternal.CursorOpenSQLDatabase(sql.Open)
 )

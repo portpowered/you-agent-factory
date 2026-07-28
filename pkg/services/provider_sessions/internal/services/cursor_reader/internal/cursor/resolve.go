@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	providersessionsinternal "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal"
 )
 
 var safeSessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
@@ -37,7 +37,7 @@ type ResolvedStoreDB struct {
 }
 
 // ResolveStoreDB locates {root}/{hash}/{sessionID}/store.db without accepting client filesystem paths.
-func ResolveStoreDB(ins *inspection, files providersessions.FileSystem, walkDirectory providersessions.CursorWalkDirectory, resolveSymlinks providersessions.CursorResolveSymlinks, root AgentStorageRoot, sessionID string) (ResolvedStoreDB, error) {
+func ResolveStoreDB(ins *inspection, files providersessionsinternal.FileSystem, walkDirectory providersessionsinternal.CursorWalkDirectory, resolveSymlinks providersessionsinternal.CursorResolveSymlinks, root AgentStorageRoot, sessionID string) (ResolvedStoreDB, error) {
 	if walkDirectory == nil {
 		return ResolvedStoreDB{}, fmt.Errorf("cursor session directory walker is required")
 	}
@@ -86,7 +86,7 @@ func ResolveStoreDB(ins *inspection, files providersessions.FileSystem, walkDire
 	return ResolvedStoreDB{}, ErrSessionNotFound
 }
 
-func resolveAgentStorageRoot(files providersessions.FileSystem, resolveSymlinks providersessions.CursorResolveSymlinks, root string) (string, string, error) {
+func resolveAgentStorageRoot(files providersessionsinternal.FileSystem, resolveSymlinks providersessionsinternal.CursorResolveSymlinks, root string) (string, string, error) {
 	cleanRoot, err := filepath.Abs(filepath.Clean(root))
 	if err != nil {
 		return "", "", fmt.Errorf("resolve cursor storage root: %w", err)
@@ -108,7 +108,7 @@ func resolveAgentStorageRoot(files providersessions.FileSystem, resolveSymlinks 
 	return cleanRoot, resolvedRoot, nil
 }
 
-func collectStoreDBMatches(ins *inspection, walkDirectory providersessions.CursorWalkDirectory, cleanRoot, sessionID, targetName string) ([]string, error) {
+func collectStoreDBMatches(ins *inspection, walkDirectory providersessionsinternal.CursorWalkDirectory, cleanRoot, sessionID, targetName string) ([]string, error) {
 	matches := make([]string, 0, 1)
 	err := walkDirectory(cleanRoot, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -135,7 +135,7 @@ func collectStoreDBMatches(ins *inspection, walkDirectory providersessions.Curso
 	return matches, nil
 }
 
-func resolvedStoreDBCandidate(resolveSymlinks providersessions.CursorResolveSymlinks, cleanRoot, resolvedRoot, match, sessionID string) (ResolvedStoreDB, error) {
+func resolvedStoreDBCandidate(resolveSymlinks providersessionsinternal.CursorResolveSymlinks, cleanRoot, resolvedRoot, match, sessionID string) (ResolvedStoreDB, error) {
 	resolvedMatch, err := resolveSymlinks(match)
 	if err != nil {
 		return ResolvedStoreDB{}, fmt.Errorf("resolve cursor session symlink: %w", err)
