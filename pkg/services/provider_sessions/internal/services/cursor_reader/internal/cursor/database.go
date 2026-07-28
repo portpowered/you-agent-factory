@@ -4,13 +4,13 @@ import (
 	"database/sql"
 	"fmt"
 
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	providersessionsinternal "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal"
 
 	_ "modernc.org/sqlite"
 )
 
 // OpenDatabase opens a SQLite database in read-only mode
-func OpenDatabase(files providersessions.FileSystem, openSQLDatabase providersessions.CursorOpenSQLDatabase, path string) (*sql.DB, error) {
+func OpenDatabase(files providersessionsinternal.FileSystem, openSQLDatabase providersessionsinternal.CursorOpenSQLDatabase, path string) (*sql.DB, error) {
 	if openSQLDatabase == nil {
 		return nil, fmt.Errorf("cursor SQL database opener is required")
 	}

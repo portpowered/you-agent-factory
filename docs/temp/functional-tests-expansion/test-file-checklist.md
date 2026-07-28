@@ -726,7 +726,25 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPackagedSubagentStreamsChildResponseEvents` covers observation.
   - `TestPackagedSubagentChildFailureReturnsStableFailure` covers error.
 
-- [ ] `tests/functional/factory/packaged/tts/invocation_test.go`
+- [x] `tests/functional/factory/packaged/tts/invocation_test.go`
+- [x] `tests/functional/automations/peer_import_boundary_test.go`
+- [x] `tests/functional/automations/reconciliation_root_composition_test.go`
+- [x] `tests/functional/automations/script_poller_root_composition_test.go`
+- [x] `tests/functional/models/root_composition/build_process_inert_test.go`
+- [x] `tests/functional/models/root_composition/catalog_discovery_test.go`
+- [x] `tests/functional/models/root_composition/inference_invoke_test.go`
+- [x] `tests/functional/models/root_composition/peer_import_seal_test.go`
+- [x] `tests/functional/models/root_composition/readiness_assets_host_test.go`
+- [x] `tests/functional/runtime_api/api_javascript_sync_structured_input_test.go`
+- [x] `tests/functional/runtime_api/api_multi_work_dispatch_smoke_test.go`
+- [x] `tests/functional/runtime_api/api_work_root_policy_slices_test.go`
+- [x] `tests/functional/runtime_api/api_work_service_application_slices_test.go`
+- [x] `tests/functional/factory/definition_activation/gateway_wiring_test.go`
+- [x] `tests/functional/models/model_invoke/http_workcontent_coverage_test.go`
+- [x] `tests/functional/models/model_list/adapter_owned_coverage_test.go`
+- [x] `tests/functional/models/model_list/presentation_collaborator_coverage_test.go`
+- [x] `tests/functional/workers/inference/cursor/conductor_test.go`
+- [x] `tests/functional/workers/inference/opencode/conductor_test.go`
   - `TestPackagedTTSRequiredInputProducesAudioArtifactMetadata` uses a fake
     model edge.
   - `TestPackagedTTSOptionalVoiceAndFormatReachModel` covers options.
@@ -771,14 +789,14 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCodexProviderSessionMissingTranscriptReturnsNotFound` covers absence.
   - `TestCodexProviderSessionCorruptTranscriptReturnsSafeDiagnostic`.
 
-- [ ] `tests/functional/provider_sessions/details/cursor_details_test.go`
+- [x] `tests/functional/provider_sessions/details/cursor_details_test.go`
   - `TestCursorProviderSessionDetailsLoadFromGoldenMetadata` covers readable
     transcript data.
   - `TestCursorProviderSessionUnavailableContentRemainsInspectable` covers
     partial data.
   - `TestCursorProviderSessionMissingIDReturnsNotFound`.
 
-- [ ] `tests/functional/provider_sessions/details/http_test.go`
+- [x] `tests/functional/provider_sessions/details/http_test.go`
   - `TestAPIProviderSessionDetailsUseGoldenExpectedMetadata`.
   - `TestAPIProviderSessionRejectsRawFilesystemPathInput`.
   - `TestAPIUnsupportedProviderSessionKindReturnsTypedError`.
@@ -949,3 +967,12 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   correct domain.
 - [ ] `transport`, `workers`, `orchestration`, and `workstations` appear first
   in the report and contain no undocumented scenarios.
+- [x] `tests/functional/sessions/root_composition/build_process_inert_test.go`
+- [x] `tests/functional/sessions/root_composition/lifecycle_runtime_opening_test.go`
+- [x] `tests/functional/sessions/root_composition/packaged_root_shape_test.go`
+- [x] `tests/functional/sessions/root_composition/peer_import_seal_test.go`
+- [x] `tests/functional/sessions/root_composition/work_admission_response_stream_test.go`
+- [x] `tests/functional/sessions/root_composition/work_peer_import_seal_test.go`
+- [x] `tests/functional/providers/gemini/process_harness_test.go`
+- [x] `tests/functional/providers/kiro/process_harness_test.go`
+- [x] `tests/functional/providers/pi/process_harness_test.go`

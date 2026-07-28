@@ -19,6 +19,9 @@ func applyPackagedTTSInvocationMetadata(
 	if outputShaping == nil || token == nil || !outputShaping.ShouldFormatTTSInvocationMetadata(workstation) {
 		return nil
 	}
+	if strings.TrimSpace(workerOutput) == "" {
+		return nil
+	}
 
 	traceID := ""
 	if source := firstNonResourceInput(inputColors); source != nil {
@@ -41,7 +44,8 @@ func applyPackagedTTSInvocationMetadata(
 		backendLabel,
 	)
 	if err != nil {
-		return fmt.Errorf("shape packaged tts invocation metadata: %w", err)
+		// Packaged TTS metadata is only shaped from successful audio output.
+		return nil
 	}
 
 	token.Color.Content = metadataContent

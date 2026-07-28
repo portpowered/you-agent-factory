@@ -47,14 +47,6 @@ func TestMapCommittedOwnerPackageFactoryRuntimeMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/service",
-			want: PackageMapping{
-				PackagePath: "pkg/services/factory_runtime/service",
-				Disposition: DispositionMove,
-				Destination: "factory_runtime/internal",
-			},
-		},
-		{
 			path: "pkg/services/factory_runtime/build",
 			want: PackageMapping{
 				PackagePath: "pkg/services/factory_runtime/build",
@@ -215,17 +207,6 @@ func TestFactoryRuntimeTopLevelUnexpectedCoveredByMoveRules(t *testing.T) {
 	spec := productOwnerTopLevelSpecs["factory_runtime"]
 	for _, child := range spec.unexpected {
 		rest := child
-		if child == "service" {
-			got, ok := mapLegacyServiceImplementationPackage("factory_runtime", "pkg/services/factory_runtime/"+child, rest)
-			if !ok {
-				t.Fatalf("mapLegacyServiceImplementationPackage() ok = false for %q", child)
-			}
-			if got.Disposition != DispositionMove || got.Destination != "factory_runtime/internal" {
-				t.Fatalf("service move mapping = %#v, want move→factory_runtime/internal", got)
-			}
-			continue
-		}
-
 		destination, ok := nestedOwnerMoveDestination("factory_runtime", rest)
 		if !ok {
 			t.Fatalf("nestedOwnerMoveDestination(factory_runtime, %q) ok = false", rest)

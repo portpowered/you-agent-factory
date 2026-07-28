@@ -2530,7 +2530,7 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/provider_sessions",
-      "target": "pkg/services/provider_sessions/construction_ports.go:FileSystem,pkg/services/provider_sessions/contracts.go:Service"
+      "target": "pkg/services/provider_sessions/contracts.go:Service"
     },
     {
       "rule": "service-root-interface-count",
@@ -2875,11 +2875,6 @@
     {
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_runtime/scheduler",
-      "target": "pkg/services/factory_runtime"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/service",
       "target": "pkg/services/factory_runtime"
     },
     {

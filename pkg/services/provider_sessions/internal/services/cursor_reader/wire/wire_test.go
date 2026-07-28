@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	providersessionsinternal "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal"
 )
 
 func TestNewServiceConstructsInertReader(t *testing.T) {
@@ -31,10 +31,10 @@ func TestNewServiceRejectsMissingDependencies(t *testing.T) {
 	root := t.TempDir()
 	tests := []struct {
 		name    string
-		files   providersessions.FileSystem
-		walk    providersessions.CursorWalkDirectory
-		resolve providersessions.CursorResolveSymlinks
-		open    providersessions.CursorOpenSQLDatabase
+		files   providersessionsinternal.FileSystem
+		walk    providersessionsinternal.CursorWalkDirectory
+		resolve providersessionsinternal.CursorResolveSymlinks
+		open    providersessionsinternal.CursorOpenSQLDatabase
 	}{
 		{name: "filesystem", walk: filepath.WalkDir, resolve: filepath.EvalSymlinks, open: sql.Open},
 		{name: "directory walker", files: platformfilesystem.Local{}, resolve: filepath.EvalSymlinks, open: sql.Open},
