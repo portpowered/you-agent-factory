@@ -331,25 +331,6 @@ func (s *Service) GetCurrentFactoryForSession(_ context.Context, sessionID strin
 	return EditableFactory{Name: factoryName, Snapshot: snapshot, Version: &version}, nil
 }
 
-// CurrentFactorySnapshotForSession reads one editable session definition
-// without requiring a Definition service to refer back to itself through its
-// host adapter.
-func CurrentFactorySnapshotForSession(
-	ctx context.Context,
-	host Host,
-	activationGateway factoryroot.DefinitionActivationGateway,
-	sessionID string,
-) (*interfaces.FactorySnapshot, error) {
-	current, err := New(host, activationGateway).GetCurrentFactoryForSession(ctx, sessionID)
-	if err != nil {
-		return nil, err
-	}
-	if current.Snapshot == nil {
-		return nil, fmt.Errorf("current factory snapshot is unavailable")
-	}
-	return current.Snapshot, nil
-}
-
 // CurrentFactoryDefinitionVersionAtRoot returns optimistic-concurrency metadata.
 func (s *Service) CurrentFactoryDefinitionVersionAtRoot(rootDir, name string) (interfaces.FactoryVersion, error) {
 	if s == nil {

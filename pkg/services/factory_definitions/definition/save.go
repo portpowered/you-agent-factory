@@ -94,9 +94,6 @@ func (s *Service) replaceCurrentFactoryLayoutLocked(
 	activateFactoryDir string,
 	sanitized *interfaces.FactorySnapshot,
 ) (*interfaces.FactorySnapshot, error) {
-	if s.activationGateway == nil {
-		return nil, fmt.Errorf("factory definition service is required")
-	}
 	currentName, err := factorySnapshotName(sanitized)
 	if err != nil {
 		return nil, fmt.Errorf("read editable factory snapshot identity: %w", err)

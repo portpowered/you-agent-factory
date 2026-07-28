@@ -374,12 +374,8 @@ func openRuntime(
 	if factoryDefinitionOwner == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Definitions factory returned nil service")
 	}
-	if installer, ok := sessionRuntime.(interface {
-		AttachFactoryDefinitionService(factorydefinitions.Service) factorydefinitions.Service
-	}); ok {
-		installer.AttachFactoryDefinitionService(factoryDefinitionOwner)
-	} else {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: session runtime does not accept Factory Definitions binding")
+	if err := attachFactoryDefinitionServiceToRuntime(sessionRuntime, factoryDefinitionOwner); err != nil {
+		return runtimeProducts{}, err
 	}
 	if workFactory == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Work factory is required")
