@@ -158,6 +158,59 @@ func TestWorkRootPolicyServicePrepareInvocationInputRejectsWhitespaceOnlyText(t 
 	}
 }
 
+func TestWorkRootPolicyServicePrepareInvocationInputAcceptsDirectArgs(t *testing.T) {
+	t.Parallel()
+
+	prepared, err := work.NewInvocationPolicyService().PrepareInvocationInput(context.Background(), work.InvocationInputPreparationRequest{
+		Signature: &work.InvocationSignatureConfig{
+			Parameters: []work.InvocationParameterConfig{{
+				Name:     "input",
+				Bindings: []work.InvocationParameterBindingConfig{{Kind: "POSITIONAL", Position: 1}},
+			}},
+		},
+		DirectArgs: []work.NamedArgumentInput{{Key: "input", Values: []string{"structured-draft"}}},
+	})
+	if err != nil {
+		t.Fatalf("PrepareInvocationInput: %v", err)
+	}
+	if prepared.NormalizedArguments == nil ||
+		prepared.NormalizedArguments.Arguments["input"].Values[0] != "structured-draft" {
+		t.Fatalf("prepared = %#v, want direct args normalization", prepared)
+	}
+}
+
+func TestWorkRootPolicyServiceResolvePrimaryResultSubmittedTerminalSuccess(t *testing.T) {
+	t.Parallel()
+
+	rootInitial := work.FactoryWorkItem{
+		ID: "work-root", WorkTypeID: "task", State: "init", DisplayName: "root", TraceID: "trace-1", PlaceID: "task:init",
+	}
+	rootTerminal := work.FactoryWorkItem{
+		ID: "work-root", WorkTypeID: "task", State: "complete", DisplayName: "root", TraceID: "trace-1", PlaceID: "task:complete",
+		Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "terminal output"}},
+	}
+	state := work.InvocationWorldState{
+		WorkRequestsByID: map[string]work.InvocationWorkRequest{
+			"request-1": {WorkItems: []work.FactoryWorkItem{rootInitial}},
+		},
+		TerminalWorkByID: map[string]work.InvocationTerminalWork{
+			rootTerminal.ID: {WorkItem: rootTerminal, Status: "TERMINAL"},
+		},
+	}
+
+	selection, err := work.NewInvocationPolicyService().ResolvePrimaryResult(context.Background(), work.PrimaryResultSelectionInput{
+		RequestID:  "request-1",
+		WorldState: state,
+	})
+	if err != nil {
+		t.Fatalf("ResolvePrimaryResult: %v", err)
+	}
+	if selection.WorkID != rootTerminal.ID || len(selection.PrimaryResult) != 1 ||
+		selection.PrimaryResult[0].Text != "terminal output" {
+		t.Fatalf("selection = %#v, want submitted-terminal primary output", selection)
+	}
+}
+
 type functionalPeerContentStaging struct{}
 
 func (functionalPeerContentStaging) StageContent(
