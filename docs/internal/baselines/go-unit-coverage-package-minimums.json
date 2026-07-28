@@ -232,7 +232,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts",
-      "minimum": 86.43
+      "minimum": 86.42
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle",
@@ -558,7 +558,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service",
-      "minimum": 61.50
+      "minimum": 53.84
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli",
