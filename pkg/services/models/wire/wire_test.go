@@ -123,6 +123,113 @@ func TestNewServiceReturnsPublishedRootInterface(t *testing.T) {
 	}
 }
 
+func TestNewServiceConstructsInertRoot(t *testing.T) {
+	t.Parallel()
+
+	assetHTTP := &recordingHTTPDoer{name: "asset HTTP"}
+	hostHTTP := &recordingHTTPDoer{name: "host HTTP"}
+	runtimeHTTP := &recordingHTTPDoer{name: "runtime HTTP"}
+	processLauncher := &recordingProcessLauncher{}
+	hostClock := &recordingHostClock{}
+	runtimeRunner := &recordingCommandRunner{}
+	assetMkdirAll := &recordingAssetMkdirAll{}
+	assetStat := &recordingAssetStat{}
+	assetHome := &recordingAssetHome{}
+	assetWriteFile := &recordingAssetWriteFile{}
+	assetRename := &recordingAssetRename{}
+	assetRemove := &recordingAssetRemove{}
+	assetReadFile := &recordingAssetReadFile{}
+	assetReadDir := &recordingAssetReadDir{}
+	assetCreate := &recordingAssetCreate{}
+	assetOpen := &recordingAssetOpen{}
+	runtimeInspect := &recordingRuntimeInspect{}
+	runtimeTempDir := &recordingRuntimeTempDir{}
+	runtimeTempFile := &recordingRuntimeTempFile{}
+	processClock := &recordingProcessClock{}
+
+	runtime.GC()
+	time.Sleep(20 * time.Millisecond)
+	baseline := runtime.NumGoroutine()
+
+	service, err := NewService(
+		models.AssetHostPlatform{OperatingSystem: runtime.GOOS, Architecture: runtime.GOARCH},
+		assetHTTP,
+		models.RuntimeAssetEndpoints{},
+		assetMkdirAll.mkdirAll,
+		assetStat.stat,
+		assetHome.home,
+		assetWriteFile.write,
+		assetRename.rename,
+		assetRemove.remove,
+		assetReadFile.read,
+		assetReadDir.readDir,
+		assetCreate.create,
+		assetOpen.open,
+		processLauncher,
+		hostHTTP,
+		hostClock,
+		runtimeRunner,
+		runtimeHTTP,
+		runtimeInspect.inspect,
+		runtimeTempDir.tempDir,
+		runtimeTempFile.create,
+		zap.NewNop(),
+		processClock.now,
+		platformrandom.CryptoSource{},
+		nil,
+		nil,
+		nil,
+		models.LocalRuntimeHooks{},
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	if service == nil {
+		t.Fatal("NewService() returned nil service")
+	}
+	var peer models.Service = service
+	if peer == nil {
+		t.Fatal("constructed value is not assignable to models.Service")
+	}
+
+	assertInertConstruction(t, "asset HTTP", assetHTTP.calls)
+	assertInertConstruction(t, "host HTTP", hostHTTP.calls)
+	assertInertConstruction(t, "runtime HTTP", runtimeHTTP.calls)
+	assertInertConstruction(t, "process launcher", processLauncher.starts)
+	assertInertConstruction(t, "host clock", hostClock.nowCalls+hostClock.timerCalls)
+	assertInertConstruction(t, "runtime command runner", runtimeRunner.calls)
+	assertInertConstruction(t, "asset mkdir", assetMkdirAll.calls)
+	assertInertConstruction(t, "asset stat", assetStat.calls)
+	assertInertConstruction(t, "asset home", assetHome.calls)
+	assertInertConstruction(t, "asset write", assetWriteFile.calls)
+	assertInertConstruction(t, "asset rename", assetRename.calls)
+	assertInertConstruction(t, "asset remove", assetRemove.calls)
+	assertInertConstruction(t, "asset read file", assetReadFile.calls)
+	assertInertConstruction(t, "asset read dir", assetReadDir.calls)
+	assertInertConstruction(t, "asset create", assetCreate.calls)
+	assertInertConstruction(t, "asset open", assetOpen.calls)
+	assertInertConstruction(t, "runtime inspect", runtimeInspect.calls)
+	assertInertConstruction(t, "runtime temp dir", runtimeTempDir.calls)
+	assertInertConstruction(t, "runtime temp file", runtimeTempFile.calls)
+	assertInertConstruction(t, "process clock", processClock.calls)
+
+	runtime.GC()
+	time.Sleep(20 * time.Millisecond)
+	if leaked := runtime.NumGoroutine() - baseline; leaked > 4 {
+		t.Fatalf(
+			"goroutine leak after construction: baseline=%d current=%d delta=%d, want no lifecycle goroutines",
+			baseline, runtime.NumGoroutine(), leaked,
+		)
+	}
+}
+
+func assertInertConstruction(t *testing.T, effect string, calls int) {
+	t.Helper()
+	if calls != 0 {
+		t.Fatalf("construction invoked %s %d times, want inert construction", effect, calls)
+	}
+}
+
 type constructionEdges struct {
 	assetPlatform   models.AssetHostPlatform
 	assetHTTP       models.AssetHTTPDoer
@@ -777,4 +884,147 @@ func (inertCommandRunner) Run(
 	platformprocess.CommandRequest,
 ) (platformprocess.CommandResult, error) {
 	panic("runtime command called during readiness inspection")
+}
+
+type recordingHTTPDoer struct {
+	name  string
+	calls int
+}
+
+func (doer *recordingHTTPDoer) Do(*http.Request) (*http.Response, error) {
+	doer.calls++
+	panic(doer.name + " client invoked during inert construction")
+}
+
+type recordingProcessLauncher struct{ starts int }
+
+func (launcher *recordingProcessLauncher) Start(
+	context.Context,
+	models.HostProcessStartSpec,
+) (models.HostManagedProcess, error) {
+	launcher.starts++
+	panic("process launcher invoked during inert construction")
+}
+
+type recordingHostClock struct {
+	nowCalls   int
+	timerCalls int
+}
+
+func (clock *recordingHostClock) Now() time.Time {
+	clock.nowCalls++
+	panic("host clock invoked during inert construction")
+}
+
+func (clock *recordingHostClock) NewTimer(time.Duration) models.HostTimer {
+	clock.timerCalls++
+	panic("host timer created during inert construction")
+}
+
+type recordingCommandRunner struct{ calls int }
+
+func (runner *recordingCommandRunner) Run(
+	context.Context,
+	platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	runner.calls++
+	panic("runtime command runner invoked during inert construction")
+}
+
+type recordingAssetMkdirAll struct{ calls int }
+
+func (effect *recordingAssetMkdirAll) mkdirAll(string, os.FileMode) error {
+	effect.calls++
+	panic("asset mkdir invoked during inert construction")
+}
+
+type recordingAssetStat struct{ calls int }
+
+func (effect *recordingAssetStat) stat(string) (os.FileInfo, error) {
+	effect.calls++
+	panic("asset stat invoked during inert construction")
+}
+
+type recordingAssetHome struct{ calls int }
+
+func (effect *recordingAssetHome) home() (string, error) {
+	effect.calls++
+	panic("asset home invoked during inert construction")
+}
+
+type recordingAssetWriteFile struct{ calls int }
+
+func (effect *recordingAssetWriteFile) write(string, []byte, os.FileMode) error {
+	effect.calls++
+	panic("asset write invoked during inert construction")
+}
+
+type recordingAssetRename struct{ calls int }
+
+func (effect *recordingAssetRename) rename(string, string) error {
+	effect.calls++
+	panic("asset rename invoked during inert construction")
+}
+
+type recordingAssetRemove struct{ calls int }
+
+func (effect *recordingAssetRemove) remove(string) error {
+	effect.calls++
+	panic("asset remove invoked during inert construction")
+}
+
+type recordingAssetReadFile struct{ calls int }
+
+func (effect *recordingAssetReadFile) read(string) ([]byte, error) {
+	effect.calls++
+	panic("asset read file invoked during inert construction")
+}
+
+type recordingAssetReadDir struct{ calls int }
+
+func (effect *recordingAssetReadDir) readDir(string) ([]os.DirEntry, error) {
+	effect.calls++
+	panic("asset read dir invoked during inert construction")
+}
+
+type recordingAssetCreate struct{ calls int }
+
+func (effect *recordingAssetCreate) create(string) (io.WriteCloser, error) {
+	effect.calls++
+	panic("asset create invoked during inert construction")
+}
+
+type recordingAssetOpen struct{ calls int }
+
+func (effect *recordingAssetOpen) open(string) (io.ReadCloser, error) {
+	effect.calls++
+	panic("asset open invoked during inert construction")
+}
+
+type recordingRuntimeInspect struct{ calls int }
+
+func (effect *recordingRuntimeInspect) inspect(string) (os.FileInfo, error) {
+	effect.calls++
+	panic("runtime inspect invoked during inert construction")
+}
+
+type recordingRuntimeTempDir struct{ calls int }
+
+func (effect *recordingRuntimeTempDir) tempDir() string {
+	effect.calls++
+	panic("runtime temp dir invoked during inert construction")
+}
+
+type recordingRuntimeTempFile struct{ calls int }
+
+func (effect *recordingRuntimeTempFile) create(string, string) (models.RuntimeTempFile, error) {
+	effect.calls++
+	panic("runtime temp file invoked during inert construction")
+}
+
+type recordingProcessClock struct{ calls int }
+
+func (clock *recordingProcessClock) now() time.Time {
+	clock.calls++
+	panic("process clock invoked during inert construction")
 }
