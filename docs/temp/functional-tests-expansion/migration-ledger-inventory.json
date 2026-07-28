@@ -9262,7 +9262,8 @@
       "you-agent-factory/tests/functional/workstations/execution": 4,
       "you-agent-factory/tests/functional/workstations/poller": 4,
       "you-agent-factory/tests/functional/workstations/repeater": 13,
-      "you-agent-factory/tests/functional/workstations/watcher": 9
+      "you-agent-factory/tests/functional/workstations/watcher": 9,
+      "you-agent-factory/tests/functional/factory/packaged/cross": 0
     },
     "files_with_customer_Test": 254,
     "functional_test_go_files": 253,
@@ -9340,21 +9341,21 @@
     }
   },
   "completeness_audit": {
-    "audited_at_utc": "2026-07-28T10:50:00Z",
-    "story": "ft-wave2-work-relationships-parent-child-003",
-    "live_customer_scenarios": 854,
-    "ledger_rows": 854,
+    "audited_at_utc": "2026-07-28T11:25:00Z",
+    "story": "ft-wave2-factory-cross-package-cli-api-003",
+    "live_customer_scenarios": 878,
+    "ledger_rows": 878,
     "unmapped_scenarios": 0,
     "checklist_destinations": 436,
     "wrong_layer_destinations": 69,
     "invalid_destinations": 0,
-    "lane_short": 759,
+    "lane_short": 783,
     "lane_functionallong": 95,
     "specialty_targets_documented": 11,
     "deletion_only_batches": 51,
     "validator": "go run ./cmd/migrationledgercheck",
-    "row_count": 854,
-    "short_lane_rows": 759,
+    "row_count": 878,
+    "short_lane_rows": 783,
     "functionallong_lane_rows": 95
   }
 }

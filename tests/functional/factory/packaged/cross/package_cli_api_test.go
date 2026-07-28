@@ -1,6 +1,7 @@
 package cross
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -79,12 +80,18 @@ func TestPackagedFactoryInvokedByCLICanBeInspectedByAPI(t *testing.T) {
 	}()
 
 	baseURL := server.WaitForURL(t)
-	inspection := pollPackagedGoalAPIInspectionDuringCLIInvocation(ctx, t, baseURL)
+	eventCollector := startPackagedGoalFactoryEventCollector(ctx, t, baseURL)
+	inspection, execErr := pollPackagedGoalAPIInspectionUntilCLICompletes(ctx, t, baseURL, execDone)
+	eventCollector.stop()
+	events := eventCollector.snapshot()
+	if refreshed, refreshErr := fetchPackagedGoalAPIInspectionSnapshot(baseURL); refreshErr == nil {
+		inspection = preferStrongerPackagedGoalAPIInspection(inspection, refreshed)
+	}
 
-	if err := <-execDone; err != nil {
+	if execErr != nil {
 		t.Fatalf(
 			"CLI packaged-factory invocation: %v\nstdout:\n%s\nstderr:\n%s",
-			err,
+			execErr,
 			inputs.Stdout(),
 			inputs.Stderr(),
 		)
@@ -95,16 +102,15 @@ func TestPackagedFactoryInvokedByCLICanBeInspectedByAPI(t *testing.T) {
 		t.Fatalf("decode CLI invocation JSON: %v\nstdout:\n%s", err, inputs.Stdout())
 	}
 
-	if !inspection.ok {
+	if !inspection.live {
 		t.Fatalf("API inspection never observed a live session/status while CLI invocation ran")
 	}
 
 	assertPackagedGoalCLIInvocationInspectableByAPI(
 		t,
 		cliResponse,
-		inspection.session,
-		inspection.status,
-		inspection.listed,
+		inspection,
+		events,
 		wantPackagedGoalPrimaryResult,
 	)
 }
@@ -327,17 +333,110 @@ func TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree(t *testing.T) {
 }
 
 type packagedGoalAPIInspection struct {
-	session factoryapi.FactorySession
-	status  factoryapi.StatusResponse
-	listed  factoryapi.ListWorkResponse
-	ok      bool
+	session          factoryapi.FactorySession
+	status           factoryapi.StatusResponse
+	listed           factoryapi.ListWorkResponse
+	live             bool
+	maxProcessing    int
+	maxTerminal      int
+	maxTotalTokens   int
+	sawFactoryActive bool
 }
 
-func pollPackagedGoalAPIInspectionDuringCLIInvocation(
+type packagedGoalFactoryEventCollector struct {
+	cancel context.CancelFunc
+	done   chan struct{}
+	events []factoryapi.FactoryEvent
+}
+
+func startPackagedGoalFactoryEventCollector(
 	ctx context.Context,
 	t *testing.T,
 	baseURL string,
-) packagedGoalAPIInspection {
+) *packagedGoalFactoryEventCollector {
+	t.Helper()
+
+	streamCtx, cancel := context.WithCancel(ctx)
+	collector := &packagedGoalFactoryEventCollector{
+		cancel: cancel,
+		done:   make(chan struct{}),
+	}
+	request, err := http.NewRequestWithContext(
+		streamCtx,
+		http.MethodGet,
+		support.DefaultSessionEventsURL(baseURL),
+		nil,
+	)
+	if err != nil {
+		cancel()
+		t.Fatalf("build factory event stream request: %v", err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		cancel()
+		t.Fatalf("GET factory event stream: %v", err)
+	}
+	if response.StatusCode != http.StatusOK {
+		payload, _ := io.ReadAll(response.Body)
+		response.Body.Close()
+		cancel()
+		t.Fatalf(
+			"GET factory event stream status = %d, want 200: %s",
+			response.StatusCode,
+			string(payload),
+		)
+	}
+
+	go func() {
+		defer close(collector.done)
+		defer response.Body.Close()
+		scanner := bufio.NewScanner(response.Body)
+		var dataLines []string
+		flush := func() {
+			if len(dataLines) == 0 {
+				return
+			}
+			var event factoryapi.FactoryEvent
+			if err := json.Unmarshal([]byte(strings.Join(dataLines, "\n")), &event); err == nil {
+				collector.events = append(collector.events, event)
+			}
+			dataLines = nil
+		}
+		for scanner.Scan() {
+			line := scanner.Text()
+			if line == "" {
+				flush()
+				continue
+			}
+			if strings.HasPrefix(line, "data:") {
+				dataLines = append(dataLines, strings.TrimSpace(strings.TrimPrefix(line, "data:")))
+			}
+		}
+	}()
+	return collector
+}
+
+func (collector *packagedGoalFactoryEventCollector) stop() {
+	if collector == nil || collector.cancel == nil {
+		return
+	}
+	collector.cancel()
+	<-collector.done
+}
+
+func (collector *packagedGoalFactoryEventCollector) snapshot() []factoryapi.FactoryEvent {
+	if collector == nil {
+		return nil
+	}
+	return append([]factoryapi.FactoryEvent(nil), collector.events...)
+}
+
+func pollPackagedGoalAPIInspectionUntilCLICompletes(
+	ctx context.Context,
+	t *testing.T,
+	baseURL string,
+	execDone <-chan error,
+) (packagedGoalAPIInspection, error) {
 	t.Helper()
 
 	var snapshot packagedGoalAPIInspection
@@ -345,34 +444,126 @@ func pollPackagedGoalAPIInspectionDuringCLIInvocation(
 		t.Fatalf("wait for CLI-hosted API server: %v", err)
 	}
 
-	deadline := time.Now().Add(45 * time.Second)
-	for time.Now().Before(deadline) {
+	for {
 		select {
 		case <-ctx.Done():
-			return snapshot
+			return snapshot, ctx.Err()
 		default:
 		}
 
-		session, sessionErr := tryGetDefaultSession(baseURL)
-		status, statusErr := tryGetStatus(baseURL)
-		if sessionErr == nil && statusErr == nil &&
-			strings.TrimSpace(session.Id) != "" &&
-			strings.TrimSpace(status.RuntimeStatus) != "" {
-			snapshot.session = session
-			snapshot.status = status
-			snapshot.listed, _ = tryListDefaultSessionWork(baseURL)
-			snapshot.ok = true
-			return snapshot
+		if candidate, err := fetchPackagedGoalAPIInspectionSnapshot(baseURL); err == nil {
+			snapshot = preferStrongerPackagedGoalAPIInspection(snapshot, candidate)
 		}
 
 		select {
+		case execErr := <-execDone:
+			if candidate, err := fetchPackagedGoalAPIInspectionSnapshot(baseURL); err == nil {
+				snapshot = preferStrongerPackagedGoalAPIInspection(snapshot, candidate)
+			}
+			return snapshot, execErr
 		case <-ctx.Done():
-			return snapshot
-		case <-time.After(25 * time.Millisecond):
+			return snapshot, ctx.Err()
+		case <-time.After(10 * time.Millisecond):
 		}
 	}
+}
 
-	return snapshot
+func fetchPackagedGoalAPIInspectionSnapshot(baseURL string) (packagedGoalAPIInspection, error) {
+	session, sessionErr := tryGetDefaultSession(baseURL)
+	status, statusErr := tryGetStatus(baseURL)
+	listed, listErr := tryListDefaultSessionWork(baseURL)
+	if sessionErr != nil {
+		return packagedGoalAPIInspection{}, sessionErr
+	}
+	if statusErr != nil {
+		return packagedGoalAPIInspection{}, statusErr
+	}
+	if listErr != nil {
+		return packagedGoalAPIInspection{}, listErr
+	}
+	if strings.TrimSpace(session.Id) == "" || strings.TrimSpace(status.RuntimeStatus) == "" {
+		return packagedGoalAPIInspection{}, fmt.Errorf("session/status not ready")
+	}
+
+	return packagedGoalAPIInspection{
+		session: session,
+		status:  status,
+		listed:  listed,
+		live:    true,
+		maxProcessing: status.Categories.Processing,
+		maxTerminal:   status.Categories.Terminal,
+		maxTotalTokens: status.TotalTokens,
+		sawFactoryActive: status.FactoryState == "RUNNING" && status.RuntimeStatus != "",
+	}, nil
+}
+
+func mergePackagedGoalAPIInspectionMetrics(
+	current packagedGoalAPIInspection,
+	candidate packagedGoalAPIInspection,
+) packagedGoalAPIInspection {
+	if candidate.maxProcessing > current.maxProcessing {
+		current.maxProcessing = candidate.maxProcessing
+	}
+	if candidate.maxTerminal > current.maxTerminal {
+		current.maxTerminal = candidate.maxTerminal
+	}
+	if candidate.maxTotalTokens > current.maxTotalTokens {
+		current.maxTotalTokens = candidate.maxTotalTokens
+	}
+	if candidate.sawFactoryActive {
+		current.sawFactoryActive = true
+	}
+	return current
+}
+
+func preferStrongerPackagedGoalAPIInspection(
+	current packagedGoalAPIInspection,
+	candidate packagedGoalAPIInspection,
+) packagedGoalAPIInspection {
+	if !candidate.live {
+		return current
+	}
+	if !current.live {
+		return candidate
+	}
+	merged := mergePackagedGoalAPIInspectionMetrics(current, candidate)
+	if hasPackagedGoalAPIInspectabilityEvidence(candidate) &&
+		!hasPackagedGoalAPIInspectabilityEvidence(current) {
+		merged.session = candidate.session
+		merged.status = candidate.status
+		merged.listed = candidate.listed
+		return merged
+	}
+	if len(candidate.listed.Results) > len(current.listed.Results) {
+		merged.session = candidate.session
+		merged.status = candidate.status
+		merged.listed = candidate.listed
+	}
+	return merged
+}
+
+func hasPackagedGoalAPIInspectabilityEvidence(snapshot packagedGoalAPIInspection) bool {
+	for _, work := range snapshot.listed.Results {
+		if work.WorkTypeName == nil || *work.WorkTypeName != "goal" {
+			continue
+		}
+		if support.HasWorkAtCustomerState(snapshot.listed, stringValue(work.WorkId), "goal:complete") {
+			return true
+		}
+	}
+	return false
+}
+
+func packagedGoalListedGoalWorkAtComplete(listed factoryapi.ListWorkResponse) bool {
+	for _, work := range listed.Results {
+		if work.WorkTypeName == nil || *work.WorkTypeName != "goal" {
+			continue
+		}
+		if support.HasWorkAtCustomerState(listed, stringValue(work.WorkId), "goal:complete") {
+			return true
+		}
+	}
+	return false
 }
 
 func tryGetDefaultSession(baseURL string) (factoryapi.FactorySession, error) {
@@ -428,12 +619,15 @@ func tryListDefaultSessionWork(baseURL string) (factoryapi.ListWorkResponse, err
 func assertPackagedGoalCLIInvocationInspectableByAPI(
 	t *testing.T,
 	cliResponse factoryapi.InvocationResponse,
-	session factoryapi.FactorySession,
-	status factoryapi.StatusResponse,
-	listed factoryapi.ListWorkResponse,
+	inspection packagedGoalAPIInspection,
+	events []factoryapi.FactoryEvent,
 	wantPrimaryResult string,
 ) {
 	t.Helper()
+
+	session := inspection.session
+	status := inspection.status
+	listed := inspection.listed
 
 	if cliResponse.Status != factoryapi.InvocationTerminalStatusCompleted {
 		t.Fatalf("CLI status = %q, want COMPLETED", cliResponse.Status)
@@ -456,17 +650,115 @@ func assertPackagedGoalCLIInvocationInspectableByAPI(
 	if status.RuntimeStatus == "" {
 		t.Fatal("GET /status returned empty runtimeStatus")
 	}
+	if cliResponse.SessionId != nil && strings.TrimSpace(*cliResponse.SessionId) != "" &&
+		session.Id != strings.TrimSpace(*cliResponse.SessionId) {
+		t.Fatalf(
+			"API session id = %q, want CLI sessionId %q",
+			session.Id,
+			strings.TrimSpace(*cliResponse.SessionId),
+		)
+	}
+
+	correlatedWork, correlated := findPackagedGoalWorkCorrelatedWithCLIInvocation(listed, cliResponse)
+	if correlated {
+		if correlatedWork.RequestId != nil &&
+			strings.TrimSpace(*correlatedWork.RequestId) != "" &&
+			*correlatedWork.RequestId != cliResponse.RequestId {
+			t.Fatalf(
+				"correlated API work requestId = %q, want CLI requestId %q",
+				*correlatedWork.RequestId,
+				cliResponse.RequestId,
+			)
+		}
+		if traceID := packagedGoalWorkTraceID(correlatedWork); traceID != "" && traceID != cliResponse.TraceId {
+			t.Fatalf(
+				"correlated API work trace = %q, want CLI traceId %q",
+				traceID,
+				cliResponse.TraceId,
+			)
+		}
+	}
+
+	hasGoalComplete := packagedGoalListedGoalWorkAtComplete(listed)
+	hasCorrelatedGoalComplete := correlated &&
+		support.HasWorkAtCustomerState(
+			listed,
+			stringValue(correlatedWork.WorkId),
+			"goal:complete",
+		)
+	hasCLIIdentityCorrelatedEvents := packagedGoalFactoryEventsCorrelateWithCLIInvocation(events, cliResponse)
+	if !hasGoalComplete && !hasCorrelatedGoalComplete && !hasCLIIdentityCorrelatedEvents {
+		t.Fatalf(
+			"API inspectability evidence missing for CLI-started run: need goal:complete work and/or factory events correlated to CLI requestId/traceId; requestId=%q traceId=%q events=%d listed=%#v status=%#v inspection=%#v",
+			cliResponse.RequestId,
+			cliResponse.TraceId,
+			len(events),
+			listed.Results,
+			status,
+			inspection,
+		)
+	}
+}
+
+func packagedGoalFactoryEventsCorrelateWithCLIInvocation(
+	events []factoryapi.FactoryEvent,
+	cliResponse factoryapi.InvocationResponse,
+) bool {
+	for _, event := range events {
+		if event.Context.RequestId != nil &&
+			*event.Context.RequestId == cliResponse.RequestId {
+			return true
+		}
+		if event.Context.CurrentChainingTraceId != nil &&
+			*event.Context.CurrentChainingTraceId == cliResponse.TraceId {
+			return true
+		}
+	}
+	return false
+}
+
+func findPackagedGoalWorkCorrelatedWithCLIInvocation(
+	listed factoryapi.ListWorkResponse,
+	cliResponse factoryapi.InvocationResponse,
+) (factoryapi.Work, bool) {
 	for _, work := range listed.Results {
 		if work.WorkTypeName == nil || *work.WorkTypeName != "goal" {
 			continue
 		}
-		if support.HasWorkAtCustomerState(listed, stringValue(work.WorkId), "goal:complete") {
-			return
+		if packagedGoalWorkCorrelatesWithCLIInvocation(work, cliResponse) {
+			return work, true
 		}
 	}
-	if status.Categories.Terminal > 0 {
-		return
+	return factoryapi.Work{}, false
+}
+
+func packagedGoalWorkCorrelatesWithCLIInvocation(
+	work factoryapi.Work,
+	cliResponse factoryapi.InvocationResponse,
+) bool {
+	if cliResponse.WorkId != nil && work.WorkId != nil &&
+		strings.TrimSpace(*cliResponse.WorkId) == strings.TrimSpace(*work.WorkId) {
+		return true
 	}
+	if work.RequestId != nil &&
+		strings.TrimSpace(*work.RequestId) != "" &&
+		*work.RequestId == cliResponse.RequestId {
+		return true
+	}
+	if traceID := packagedGoalWorkTraceID(work); traceID != "" && traceID == cliResponse.TraceId {
+		return true
+	}
+	return false
+}
+
+func packagedGoalWorkTraceID(work factoryapi.Work) string {
+	if work.CurrentChainingTraceId != nil && strings.TrimSpace(*work.CurrentChainingTraceId) != "" {
+		return strings.TrimSpace(*work.CurrentChainingTraceId)
+	}
+	if work.TraceId != nil {
+		return strings.TrimSpace(*work.TraceId)
+	}
+	return ""
 }
 
 func invocationPrimaryResultText(t *testing.T, response factoryapi.InvocationResponse) string {

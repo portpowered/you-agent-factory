@@ -2011,13 +2011,11 @@ response-stream output.
   (`TestNoServerNamedInvocationIntegrationAndEquivalenceProof`), combining
   hermetic `@you/goal` success without a TCP listener with shared input-resolution
   and primary-result equivalence on the real bootstrap path.
-- CLI/API invocation parity for packaged `@you/goal` lives in
-  `tests/functional/smoke/cli_named_goal_invocation_parity_smoke_test.go`,
-  comparing live session invocation API responses with real CLI `--json` output
-  for positional, stdin, and named-factory success paths plus representative
-  empty-input and unresolved-primary-result failures. Reuse
-  `scaffoldPackagedGoalInvocationFactoryForSmoke`, `buildYouCLIBinary`, and
-  `support.StartFunctionalAPIServer` when extending parity coverage.
+- CLI/API invocation parity for packaged `@you/goal` is owned by
+  `tests/functional/factory/packaged/cross/package_cli_api_test.go`
+  (`TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree`). The legacy smoke
+  catch-all `tests/functional/smoke/cli_named_goal_invocation_parity_smoke_test.go`
+  remains only until `smoke-delete-06-factory-packaged-cross` retires it.
 - Packaged `@you/goal` CLI-started run inspectability through the public API
   lives in `tests/functional/factory/packaged/cross/package_cli_api_test.go`
   (`TestPackagedFactoryInvokedByCLICanBeInspectedByAPI`). Drive the built CLI
