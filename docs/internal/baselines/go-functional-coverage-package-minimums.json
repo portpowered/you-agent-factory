@@ -536,7 +536,13 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loadedsource",
-      "minimum": 0.00
+      "exception": {
+        "kind": "migration",
+        "justification": "DEL-DEF folded loaded-source behavior under internal compilation services; the functional profile no longer exercises the transitional public loadedsource package.",
+        "owner": "factory-definition-maintainers",
+        "deadline": "2026-12-31",
+        "removalGate": "Functional coverage for loaded-source behavior is restored through internal compilation owner tests or the public package is deleted."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths",
@@ -632,7 +638,13 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/snapshotcapture",
-      "minimum": 0.00
+      "exception": {
+        "kind": "migration",
+        "justification": "DEL-DEF folded snapshot capture behavior under internal snapshots_portability services; the functional profile no longer exercises the transitional public snapshotcapture package.",
+        "owner": "factory-definition-maintainers",
+        "deadline": "2026-12-31",
+        "removalGate": "Functional coverage for snapshot capture is restored through internal snapshots_portability owner tests or the public package is deleted."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli",
