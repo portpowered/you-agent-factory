@@ -1903,6 +1903,16 @@
       "minimum": 7.37
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/transports/http",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "reviewBy": "2026-12-31"
+      },
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/wire",
       "minimum": 8.82
     },

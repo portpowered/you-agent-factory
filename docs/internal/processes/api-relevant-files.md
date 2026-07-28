@@ -38,6 +38,19 @@ Use this map when changing the public REST contract.
   `docs/internal/baselines/go-unit-coverage-package-minimums.json` and
   `docs/internal/baselines/go-functional-coverage-package-minimums.json` when
   introducing new adapter packages.
+- Work HTTP decoding, generated-contract mapping, Work root invocation, typed
+  error mapping, and cancel/timeout handling live in
+  `pkg/services/work/transports/http`. The adapter consumes the accepted
+  `work.Service` root only; fake-root tests inject a focused root fake without
+  constructing state-access, content-staging, or materialization graphs.
+  Package-boundary tests must prove the adapter does not import
+  `pkg/services/work/internal/**`. Register the package in
+  `docs/internal/packaged-service-structure/package-target-manifest.json`,
+  refresh `docs/internal/baselines/ownership-inventory.json` with
+  `go run ./cmd/ownershipinventoryfreeze`, and add coverage floors in
+  `docs/internal/baselines/go-unit-coverage-package-minimums.json` and
+  `docs/internal/baselines/go-functional-coverage-package-minimums.json` when
+  introducing new adapter packages.
 - Factory Definitions HTTP decoding, generated-contract mapping, service
   invocation, typed error mapping, and cancel/timeout handling live in
   `pkg/services/factory_definitions/transports/http`. The top-level
