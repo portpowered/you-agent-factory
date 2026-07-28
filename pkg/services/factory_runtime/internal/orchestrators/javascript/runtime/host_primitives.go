@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/dop251/goja"
-	workflowpolicy "github.com/portpowered/infinite-you/pkg/services/factory_runtime/orchestratorcontract"
-	workflowresult "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtimecontract"
+	workflowpolicy "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract"
+	workflowresult "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtimecontract"
 )
 
 func (g *runtimeGlobals) bindHostPrimitives() error {

@@ -124,7 +124,7 @@ func provideWorkPreparation() { _ = work.NewRequestPreparationService() }
 
 import work "github.com/portpowered/infinite-you/pkg/services/work"
 
-func selectValue() { _, _ = work.NewSelection(nil, work.SelectionOptions{}) }
+func selectValue() { _ = work.ListOptions{WorkTypeName: "story"} }
 `)
 
 	stderr := &bytes.Buffer{}
@@ -278,7 +278,7 @@ func build() { _ = work.NewRequestPreparationService() }
 
 import work "github.com/portpowered/infinite-you/pkg/services/work"
 
-func build() { _ = work.NewSelection }
+func build() { _ = work.NormalizeList }
 `)
 	stderr := &bytes.Buffer{}
 	err = run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
@@ -349,8 +349,8 @@ func TestRunAllowsPlatformObservabilityAndRejectsRetiredImports(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
-	writeGoImportFile(t, repoRoot, "pkg/services/factory_runtime/runtime/canonical.go", "runtime", "github.com/portpowered/infinite-you/pkg/platform/logging")
-	writeGoImportFile(t, repoRoot, "pkg/services/factory_runtime/runtime/metrics.go", "runtime", "github.com/portpowered/infinite-you/pkg/services/factory_runtime/metrics")
+	writeGoImportFile(t, repoRoot, "pkg/services/factory_runtime/internal/services/orchestration/runtime/canonical.go", "runtime", "github.com/portpowered/infinite-you/pkg/platform/logging")
+	writeGoImportFile(t, repoRoot, "pkg/services/factory_runtime/internal/services/orchestration/runtime/metrics.go", "runtime", "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/metrics")
 	writeGoImportFile(t, repoRoot, "pkg/wire/metrics.go", "wire", "github.com/portpowered/infinite-you/pkg/platform/metrics")
 
 	stderr := &bytes.Buffer{}
@@ -358,7 +358,7 @@ func TestRunAllowsPlatformObservabilityAndRejectsRetiredImports(t *testing.T) {
 		t.Fatalf("run() error = %v, want canonical platform logging import allowed; stderr=%q", err, stderr.String())
 	}
 
-	writeGoImportFile(t, repoRoot, "pkg/services/factory_runtime/runtime/retired.go", "runtime", "github.com/portpowered/infinite-you/pkg/logging")
+	writeGoImportFile(t, repoRoot, "pkg/services/factory_runtime/internal/services/orchestration/runtime/retired.go", "runtime", "github.com/portpowered/infinite-you/pkg/logging")
 	stderr.Reset()
 	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
 	if err == nil {
@@ -373,7 +373,7 @@ func TestRunAllowsPlatformObservabilityAndRejectsRetiredImports(t *testing.T) {
 		}
 	}
 
-	writeGoImportFile(t, repoRoot, "pkg/services/factory_runtime/runtime/retired_metrics.go", "runtime", "github.com/portpowered/infinite-you/pkg/internal/metrics")
+	writeGoImportFile(t, repoRoot, "pkg/services/factory_runtime/internal/services/orchestration/runtime/retired_metrics.go", "runtime", "github.com/portpowered/infinite-you/pkg/internal/metrics")
 	stderr.Reset()
 	err = run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
 	if err == nil {
@@ -381,7 +381,7 @@ func TestRunAllowsPlatformObservabilityAndRejectsRetiredImports(t *testing.T) {
 	}
 	for _, want := range []string{
 		"prohibited retired package import: github.com/portpowered/infinite-you/pkg/internal/metrics",
-		"canonical owner: pkg/services/factory_runtime/metrics for domain contracts and pkg/platform/metrics for file-backed recording",
+		"canonical owner: pkg/services/factory_runtime/internal/services/orchestration/metrics for domain contracts and pkg/platform/metrics for file-backed recording",
 	} {
 		if !strings.Contains(stderr.String(), want) {
 			t.Fatalf("run() stderr = %q, want %q", stderr.String(), want)
@@ -398,11 +398,11 @@ func TestRunRejectsRetiredTransportImports(t *testing.T) {
 		retiredPath    string
 		canonicalOwner string
 	}{
-		{"pkg/services/factory_runtime/runtime/api.go", "github.com/portpowered/infinite-you/pkg/api", "pkg/transports/http"},
-		{"pkg/services/factory_runtime/runtime/mapping.go", "github.com/portpowered/infinite-you/pkg/apisurface/factorysession", "pkg/transports/mapping"},
+		{"pkg/services/factory_runtime/internal/services/orchestration/runtime/api.go", "github.com/portpowered/infinite-you/pkg/api", "pkg/transports/http"},
+		{"pkg/services/factory_runtime/internal/services/orchestration/runtime/mapping.go", "github.com/portpowered/infinite-you/pkg/apisurface/factorysession", "pkg/transports/mapping"},
 		{"pkg/root/cli.go", "github.com/portpowered/infinite-you/pkg/cli", "pkg/transports/cli"},
 		{"pkg/root/mcp.go", "github.com/portpowered/infinite-you/pkg/mcp/server", "pkg/transports/mcp"},
-		{"pkg/services/factory_runtime/runtime/client.go", "github.com/portpowered/infinite-you/pkg/generatedclient", "pkg/transports/http/client"},
+		{"pkg/services/factory_runtime/internal/services/orchestration/runtime/client.go", "github.com/portpowered/infinite-you/pkg/generatedclient", "pkg/transports/http/client"},
 	}
 	for _, fixture := range imports {
 		writeGoImportFile(t, repoRoot, fixture.filePath, filepath.Base(filepath.Dir(fixture.filePath)), fixture.retiredPath)
@@ -431,7 +431,7 @@ func TestRunRejectsDomainPackageImportOfApplicationGraph(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
-	writeGoImportFile(t, repoRoot, "pkg/services/factory_runtime/runtime/composition.go", "runtime", applicationGraphImportPath)
+	writeGoImportFile(t, repoRoot, "pkg/services/factory_runtime/internal/services/orchestration/runtime/composition.go", "runtime", applicationGraphImportPath)
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
@@ -445,7 +445,7 @@ func TestRunRejectsDomainPackageImportOfApplicationGraph(t *testing.T) {
 
 	got := stderr.String()
 	for _, want := range []string{
-		"[agent-factory:pkg-boundary] prohibited application composition import: pkg/services/factory_runtime/runtime (pkg/services/factory_runtime/runtime/composition.go)",
+		"[agent-factory:pkg-boundary] prohibited application composition import: pkg/services/factory_runtime/internal/services/orchestration/runtime (pkg/services/factory_runtime/internal/services/orchestration/runtime/composition.go)",
 		"pkg/wire is the outward application composition root and must not be imported by domain or transport packages",
 		"depend on a narrow domain-owned contract and inject the collaborator through pkg/root or pkg/initializer",
 	} {
@@ -720,8 +720,8 @@ func TestRunRejectsExternalImportsOfConvergedServiceSubpackages(t *testing.T) {
 		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/workstationexecution",
 		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/workpropagation",
 		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation",
-		"github.com/portpowered/infinite-you/pkg/services/factory_runtime/definitionmapping",
-		"github.com/portpowered/infinite-you/pkg/services/factory_runtime/replayhooks",
+		"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/definitionmapping",
+		"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/replayhooks",
 		"github.com/portpowered/infinite-you/pkg/services/recordings/projections/dashboard",
 		"github.com/portpowered/infinite-you/pkg/services/recordings/replay",
 		"github.com/portpowered/infinite-you/pkg/services/recordings/service",
@@ -838,7 +838,7 @@ func TestRunRejectsTransportImportsOfServiceImplementations(t *testing.T) {
 		repoRoot,
 		"pkg/transports/http/runtime_state.go",
 		"http",
-		"github.com/portpowered/infinite-you/pkg/services/factory_runtime/state",
+		"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state",
 	)
 
 	stderr := &bytes.Buffer{}
@@ -847,7 +847,7 @@ func TestRunRejectsTransportImportsOfServiceImplementations(t *testing.T) {
 		t.Fatal("run() error = nil, want transport implementation import rejected")
 	}
 	for _, want := range []string{
-		"prohibited transport service implementation import: github.com/portpowered/infinite-you/pkg/services/factory_runtime/state",
+		"prohibited transport service implementation import: github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state",
 		"pkg/transports/http/runtime_state.go",
 		"transports may consume only service root contracts or explicitly public service subservices",
 	} {

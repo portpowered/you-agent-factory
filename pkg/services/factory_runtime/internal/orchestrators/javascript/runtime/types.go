@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	workflowpolicy "github.com/portpowered/infinite-you/pkg/services/factory_runtime/orchestratorcontract"
-	workflowresult "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtimecontract"
+	workflowpolicy "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract"
+	workflowresult "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtimecontract"
 )
 
 const (

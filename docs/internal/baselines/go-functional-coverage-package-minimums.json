@@ -355,6 +355,24 @@
       "minimum": 37.50
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths",
+      "minimum": 69.41
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/persistence",
+      "minimum": 64.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/resource",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire",
       "minimum": 62.50
     },
@@ -390,15 +408,15 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loadedsource",
-      "minimum": 0.00
+      "minimum": 74.13
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading",
-      "minimum": 0.00
+      "minimum": 45.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/runtimeconfig",
-      "minimum": 0.00
+      "minimum": 83.62
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire",
@@ -559,6 +577,18 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/namevalue",
+      "minimum": 72.22
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/taxonomy",
+      "minimum": 54.34
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl",
+      "minimum": 54.47
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/orchestrator",
       "minimum": 0.00
     },
@@ -606,23 +636,53 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loadedsource",
-      "minimum": 74.13
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this transitional public shim after compile/load behavior moved to compilation-owned packages.",
+        "owner": "factory-definition-maintainers",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package or the transitional public package is deleted."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading",
-      "minimum": 45.00
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this transitional public shim after compile/load behavior moved to compilation-owned packages.",
+        "owner": "factory-definition-maintainers",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package or the transitional public package is deleted."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedfactories",
-      "minimum": 66.66
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this transitional compile shim.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "DEL-DEF removes the public namedfactories shim or the functional coverage profile reports measurable statements for this package."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths",
-      "minimum": 69.41
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this transitional compile shim.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "DEL-DEF removes the public namedpaths shim or the functional coverage profile reports measurable statements for this package."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namevalue",
-      "minimum": 72.22
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this transitional DEL-DEF shim package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packagedinstallation",
@@ -696,7 +756,13 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/persistence",
-      "minimum": 64.00
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this transitional compile shim.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "DEL-DEF removes the public persistence shim or the functional coverage profile reports measurable statements for this package."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig",
@@ -734,7 +800,13 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/runtimeconfig",
-      "minimum": 83.62
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this transitional public shim after compile/load behavior moved to compilation-owned packages.",
+        "owner": "factory-definition-maintainers",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package or the transitional public package is deleted."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service",
@@ -786,7 +858,13 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation",
-      "minimum": 54.47
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this transitional DEL-DEF shim package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire",
@@ -803,12 +881,22 @@
       "minimum": 66.66
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/validation",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers",
       "minimum": 66.12
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers/taxonomy",
-      "minimum": 54.34
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this transitional DEL-DEF shim package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workpropagation",
@@ -820,23 +908,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
-      "minimum": 43.87
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/build",
-      "minimum": 74.72
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/context",
-      "minimum": 5.55
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/definitionmapping",
-      "minimum": 61.62
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/engine",
-      "minimum": 73.32
+      "minimum": 43.40
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal",
@@ -947,6 +1019,10 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/build",
+      "minimum": 74.72
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/internal/service",
       "minimum": 0.00
     },
@@ -965,60 +1041,96 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/context",
+      "minimum": 5.55
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/definitionmapping",
+      "minimum": 61.62
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/engine",
+      "minimum": 73.32
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/internal/service",
+      "minimum": 0.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/javascript",
+      "minimum": 42.85
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/metrics",
+      "minimum": 100.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestrationowner",
+      "minimum": 0.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract",
+      "minimum": 48.38
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/replayhooks",
+      "minimum": 87.50
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime",
+      "minimum": 60.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers",
+      "minimum": 55.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtimecontract",
+      "minimum": 45.60
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler",
+      "minimum": 74.20
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state",
+      "minimum": 81.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state/validation",
+      "minimum": 31.86
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/subsystems",
+      "minimum": 62.42
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/throttle",
+      "minimum": 0.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token",
+      "minimum": 87.27
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token_transformer",
+      "minimum": 80.80
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/callbehavior",
+      "minimum": 0.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/catalog",
+      "minimum": 0.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/symbolidentity",
       "minimum": 0.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/wire",
       "minimum": 0.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/javascript",
-      "minimum": 42.85
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/metrics",
-      "minimum": 100.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/orchestrationowner",
-      "minimum": 0.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/orchestratorcontract",
-      "minimum": 48.38
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/replayhooks",
-      "minimum": 87.50
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime",
-      "minimum": 60.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime/buffers",
-      "minimum": 55.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtimecontract",
-      "minimum": 45.60
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/scheduler",
-      "minimum": 74.20
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/state",
-      "minimum": 81.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/state/validation",
-      "minimum": 31.86
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/subsystems",
-      "minimum": 62.42
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/testkit",
@@ -1029,30 +1141,6 @@
         "deadline": "2027-07-15",
         "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
       }
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/throttle",
-      "minimum": 0.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/token",
-      "minimum": 87.27
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/token_transformer",
-      "minimum": 80.80
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/tooling/javascript/callbehavior",
-      "minimum": 0.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/tooling/javascript/catalog",
-      "minimum": 0.00
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/tooling/javascript/symbolidentity",
-      "minimum": 0.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/cli",
@@ -1961,16 +2049,6 @@
       "minimum": 0.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/service",
-      "exception": {
-        "kind": "measurement",
-        "justification": "The active functional coverage profile contains no measurable statements for this package.",
-        "owner": "backend-quality",
-        "deadline": "2027-07-15",
-        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
-      }
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/transports/http",
       "exception": {
         "kind": "measurement",
@@ -2451,6 +2529,18 @@
       "minimum": 61.06
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/contenturl",
+      "minimum": 0.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/invocationreturnpolicy",
+      "minimum": 0.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/requestadmission",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/service",
       "minimum": 0.00
     },
@@ -2502,7 +2592,15 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/internal/service",
-      "minimum": 73.50
+      "minimum": 72.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/lineagegraph",
+      "minimum": 0.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/stateaccessquery",
+      "minimum": 0.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/wire",

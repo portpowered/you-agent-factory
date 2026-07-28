@@ -18,11 +18,15 @@ var workThinRootContractFiles = []string{
 	"content_contract.go",
 	"content_materialization_public_seam_test.go",
 	"content_materialize_contract.go",
+	"content_staging_contract.go",
 	"content_staging_public_seam_test.go",
 	"contracts.go",
 	"input.go",
 	"input_test.go",
 	"invocation_return_policy_contract.go",
+	"invocation_return_policy_convert.go",
+	"invocation_policy_service_test.go",
+	"lineage_contract.go",
 	"read_contract.go",
 	"recordings_import_boundary_test.go",
 	"recordings_request_boundary_test.go",
@@ -32,6 +36,8 @@ var workThinRootContractFiles = []string{
 	"service_peer_bindings_test.go",
 	"service_root_contract_seal_test.go",
 	"service_root_contract_test.go",
+	"primary_result_test.go",
+	"primary_result_regression_test.go",
 	"wire_behavioral_proof_test.go",
 	"legacy_packages_disposition_test.go",
 }
@@ -44,76 +50,7 @@ type workRootContractFoldTarget struct {
 
 // workExcessRootContractFolds mirrors internal/ownershipinventory
 // WorkExcessRootContractFolds for package-target manifest checks.
-var workExcessRootContractFolds = []workRootContractFoldTarget{
-	{
-		cluster: "request_admission",
-		files: []string{
-			"file_inputs.go",
-			"file_inputs_test.go",
-			"request_codec.go",
-			"request_normalize.go",
-			"request_normalize_test.go",
-			"request_preparation.go",
-			"request_preparation_test.go",
-			"request_submit_test.go",
-		},
-		destination: "pkg/services/work/internal",
-	},
-	{
-		cluster: "invocation_return_policy",
-		files: []string{
-			"arguments.go",
-			"arguments_test.go",
-			"invocation_input_preparation.go",
-			"invocation_input_preparation_test.go",
-			"invocation_policy_service.go",
-			"invocation_policy_service_test.go",
-			"primary_result.go",
-			"primary_result_test.go",
-			"primary_result_regression_test.go",
-		},
-		destination: "pkg/services/work/internal",
-	},
-	{
-		cluster: "lineage_graph_modules",
-		files: []string{
-			"dependency_graph.go",
-			"dependency_graph_test.go",
-			"dependency_graph_markdown.go",
-			"dependency_graph_markdown_test.go",
-			"dependency_graph_mermaid.go",
-			"dependency_graph_mermaid_test.go",
-			"lineage.go",
-			"visualization.go",
-			"visualization_test.go",
-		},
-		destination: "pkg/services/work/internal/services/state_access",
-	},
-	{
-		cluster: "state_access_query",
-		files: []string{
-			"query_list.go",
-			"query_list_test.go",
-			"query_select.go",
-			"query_select_test.go",
-		},
-		destination: "pkg/services/work/internal/services/state_access",
-	},
-	{
-		cluster: "content_staging_impl",
-		files: []string{
-			"content_staging.go",
-		},
-		destination: "pkg/services/work/internal/services/content_staging",
-	},
-	{
-		cluster: "content_materialization_impl",
-		files: []string{
-			"content_url.go",
-		},
-		destination: "pkg/services/work/internal/services/content_materialization",
-	},
-}
+var workExcessRootContractFolds = []workRootContractFoldTarget{}
 
 func listWorkRootGoFiles(root string) ([]string, error) {
 	workRoot := filepath.Join(root, filepath.FromSlash(workRootRelative))

@@ -3,7 +3,7 @@ package workerconfig
 import (
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/namevalue"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/namevalue"
 )
 
 func TestCloneDetachesLocalizedDescription(t *testing.T) {

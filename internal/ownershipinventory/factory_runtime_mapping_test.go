@@ -37,37 +37,89 @@ func TestMapPackageFactoryRuntimeMoveDestinations(t *testing.T) {
 			retainOwner: "factory_runtime",
 		},
 		{
-			path: "pkg/services/factory_runtime/build",
-			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_runtime/build",
-				Disposition:       ownershipinventory.DispositionMove,
-				Destination:       "factory_runtime",
-				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/factory_runtime/internal/services/instance_host",
-				DeletionCondition: "delete public package after IMP-RUN-instance_host private subservice cutover proof",
-			},
+			path:        "pkg/services/factory_runtime/internal/services/instance_host/build",
+			wantRetain:  true,
+			retainOwner: "factory_runtime",
 		},
 		{
-			path: "pkg/services/factory_runtime/engine",
-			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_runtime/engine",
-				Disposition:       ownershipinventory.DispositionMove,
-				Destination:       "factory_runtime",
-				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/factory_runtime/internal/services/orchestration",
-				DeletionCondition: "delete public package after IMP-RUN-orchestration private subservice cutover proof",
-			},
+			path:        "pkg/services/factory_runtime/internal/services/orchestration/engine",
+			wantRetain:  true,
+			retainOwner: "factory_runtime",
 		},
 		{
-			path: "pkg/services/factory_runtime/checkpointstore",
-			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_runtime/checkpointstore",
-				Disposition:       ownershipinventory.DispositionMove,
-				Destination:       "factory_runtime",
-				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/factory_runtime/internal/services/checkpoint_recovery",
-				DeletionCondition: "delete public package after IMP-RUN-checkpoint_recovery private subservice cutover proof",
-			},
+			path:        "pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptstore",
+			wantRetain:  true,
+			retainOwner: "factory_runtime",
+		},
+		{
+			path:        "pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptsummary",
+			wantRetain:  true,
+			retainOwner: "factory_runtime",
+		},
+		{
+			path:        "pkg/services/factory_runtime/internal/services/orchestration/context",
+			wantRetain:  true,
+			retainOwner: "factory_runtime",
+		},
+		{
+			path:        "pkg/services/factory_runtime/internal/services/orchestration/javascript",
+			wantRetain:  true,
+			retainOwner: "factory_runtime",
+		},
+		{
+			path:        "pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers",
+			wantRetain:  true,
+			retainOwner: "factory_runtime",
+		},
+		{
+			path:        "pkg/services/factory_runtime/internal/services/orchestration/state/validation",
+			wantRetain:  true,
+			retainOwner: "factory_runtime",
+		},
+		{
+			path:        "pkg/services/factory_runtime/internal/services/orchestration/throttle",
+			wantRetain:  true,
+			retainOwner: "factory_runtime",
+		},
+		{
+			path:        "pkg/services/factory_runtime/internal/services/orchestration/token",
+			wantRetain:  true,
+			retainOwner: "factory_runtime",
+		},
+		{
+			path:        "pkg/services/factory_runtime/internal/services/orchestration/token_transformer",
+			wantRetain:  true,
+			retainOwner: "factory_runtime",
+		},
+		{
+			path:        "pkg/services/factory_runtime/internal/services/orchestration/definitionmapping",
+			wantRetain:  true,
+			retainOwner: "factory_runtime",
+		},
+		{
+			path:        "pkg/services/factory_runtime/internal/services/orchestration/metrics",
+			wantRetain:  true,
+			retainOwner: "factory_runtime",
+		},
+		{
+			path:        "pkg/services/factory_runtime/internal/services/orchestration/orchestrationowner",
+			wantRetain:  true,
+			retainOwner: "factory_runtime",
+		},
+		{
+			path:        "pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract",
+			wantRetain:  true,
+			retainOwner: "factory_runtime",
+		},
+		{
+			path:        "pkg/services/factory_runtime/internal/services/orchestration/replayhooks",
+			wantRetain:  true,
+			retainOwner: "factory_runtime",
+		},
+		{
+			path:        "pkg/services/factory_runtime/internal/services/orchestration/runtimecontract",
+			wantRetain:  true,
+			retainOwner: "factory_runtime",
 		},
 		{
 			path: "pkg/services/factory_runtime/testdata",
@@ -142,6 +194,8 @@ func factoryRuntimeCanonicalRetainRest(rest string) bool {
 	case rest == "wire" || strings.HasPrefix(rest, "wire/"):
 		return true
 	case rest == "transports" || strings.HasPrefix(rest, "transports/"):
+		return true
+	case rest == "internal" || strings.HasPrefix(rest, "internal/host"):
 		return true
 	case strings.HasPrefix(rest, "internal/services/orchestration"):
 		return true

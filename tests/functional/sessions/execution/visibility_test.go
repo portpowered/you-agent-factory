@@ -40,6 +40,22 @@ func TestCLIInvocationIsVisibleThroughAPISessionAndWorkReads(t *testing.T) {
 	inputs.WorkingDirectory = dir
 
 	command := support.StartProcessCommand(t, process, inputs.Input)
+
+	workReady := make(chan error, 1)
+	go func() {
+		baseURL, err := api.WaitForBaseURL(5 * time.Second)
+		if err != nil {
+			workReady <- err
+			return
+		}
+		workReady <- tryWaitForTerminalWorkPrimaryTextDuringInvocation(
+			baseURL,
+			terminalSuccessPrimaryResult,
+			15*time.Second,
+			command.Done(),
+		)
+	}()
+
 	baseURL := api.WaitForURL(t)
 
 	sessionDuring := support.GetDefaultSession(t, baseURL)
@@ -50,7 +66,9 @@ func TestCLIInvocationIsVisibleThroughAPISessionAndWorkReads(t *testing.T) {
 		t.Fatalf("session runtime status during CLI invocation = %#v, want observable lifecycle status", sessionDuring.Runtime)
 	}
 
-	waitForTerminalWorkPrimaryText(t, baseURL, terminalSuccessPrimaryResult, 15*time.Second)
+	if workErr := <-workReady; workErr != nil {
+		t.Fatal(workErr)
+	}
 
 	<-command.Done()
 	if err := command.Err(); err != nil {

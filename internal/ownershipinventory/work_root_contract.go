@@ -19,11 +19,15 @@ var WorkThinRootContractFiles = []string{
 	"content_contract.go",
 	"content_materialization_public_seam_test.go",
 	"content_materialize_contract.go",
+	"content_staging_contract.go",
 	"content_staging_public_seam_test.go",
 	"contracts.go",
 	"input.go",
 	"input_test.go",
 	"invocation_return_policy_contract.go",
+	"invocation_return_policy_convert.go",
+	"invocation_policy_service_test.go",
+	"lineage_contract.go",
 	"read_contract.go",
 	"recordings_import_boundary_test.go",
 	"recordings_request_boundary_test.go",
@@ -33,6 +37,8 @@ var WorkThinRootContractFiles = []string{
 	"service_peer_bindings_test.go",
 	"service_root_contract_seal_test.go",
 	"service_root_contract_test.go",
+	"primary_result_test.go",
+	"primary_result_regression_test.go",
 	"wire_behavioral_proof_test.go",
 	"legacy_packages_disposition_test.go",
 }
@@ -47,76 +53,7 @@ type WorkRootContractFoldTarget struct {
 
 // WorkExcessRootContractFolds inventories excess root contract/helper clusters
 // beyond the thin Work service root contract.
-var WorkExcessRootContractFolds = []WorkRootContractFoldTarget{
-	{
-		Cluster: "request_admission",
-		Files: []string{
-			"file_inputs.go",
-			"file_inputs_test.go",
-			"request_codec.go",
-			"request_normalize.go",
-			"request_normalize_test.go",
-			"request_preparation.go",
-			"request_preparation_test.go",
-			"request_submit_test.go",
-		},
-		Destination: workPackagePrefix + "/internal",
-	},
-	{
-		Cluster: "invocation_return_policy",
-		Files: []string{
-			"arguments.go",
-			"arguments_test.go",
-			"invocation_input_preparation.go",
-			"invocation_input_preparation_test.go",
-			"invocation_policy_service.go",
-			"invocation_policy_service_test.go",
-			"primary_result.go",
-			"primary_result_test.go",
-			"primary_result_regression_test.go",
-		},
-		Destination: workPackagePrefix + "/internal",
-	},
-	{
-		Cluster: "lineage_graph_modules",
-		Files: []string{
-			"dependency_graph.go",
-			"dependency_graph_test.go",
-			"dependency_graph_markdown.go",
-			"dependency_graph_markdown_test.go",
-			"dependency_graph_mermaid.go",
-			"dependency_graph_mermaid_test.go",
-			"lineage.go",
-			"visualization.go",
-			"visualization_test.go",
-		},
-		Destination: workPackagePrefix + "/internal/services/state_access",
-	},
-	{
-		Cluster: "state_access_query",
-		Files: []string{
-			"query_list.go",
-			"query_list_test.go",
-			"query_select.go",
-			"query_select_test.go",
-		},
-		Destination: workPackagePrefix + "/internal/services/state_access",
-	},
-	{
-		Cluster: "content_staging_impl",
-		Files: []string{
-			"content_staging.go",
-		},
-		Destination: workPackagePrefix + "/internal/services/content_staging",
-	},
-	{
-		Cluster: "content_materialization_impl",
-		Files: []string{
-			"content_url.go",
-		},
-		Destination: workPackagePrefix + "/internal/services/content_materialization",
-	},
-}
+var WorkExcessRootContractFolds = []WorkRootContractFoldTarget{}
 
 // ListWorkRootGoFiles returns every live root-level .go file name under
 // pkg/services/work/.

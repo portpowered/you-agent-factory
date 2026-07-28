@@ -6,7 +6,7 @@ import (
 	"reflect"
 
 	"github.com/dop251/goja"
-	workflowresult "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtimecontract"
+	workflowresult "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtimecontract"
 )
 
 func typedValueFromGoja(vm *goja.Runtime, value goja.Value) (workflowresult.TypedValue, error) {

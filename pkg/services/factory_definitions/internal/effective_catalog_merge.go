@@ -6,7 +6,7 @@ import (
 	"sort"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorynamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
+	catalognamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
 )
 
 type catalogSource struct {
@@ -107,12 +107,12 @@ func canonicalCandidates(
 		if err := ctx.Err(); err != nil {
 			return nil, nil, err
 		}
-		segments, err := factorynamedpaths.PathSegments(candidate.Name)
+		segments, err := catalognamedpaths.PathSegments(candidate.Name)
 		if err != nil {
 			diagnostics = append(diagnostics, invalidNameDiagnostic(source.kind))
 			continue
 		}
-		name, err := factorynamedpaths.NameFromPathSegments(segments)
+		name, err := catalognamedpaths.NameFromPathSegments(segments)
 		if err != nil {
 			diagnostics = append(diagnostics, invalidNameDiagnostic(source.kind))
 			continue

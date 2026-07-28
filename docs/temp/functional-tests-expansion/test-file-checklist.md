@@ -712,7 +712,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestFactoryInitIsIdempotent`.
   - `TestFactoryInitFailureRoutingProducesFailedWork`.
 
-- [ ] `tests/functional/factory/definitions/validation_test.go`
+- [x] `tests/functional/factory/definitions/validation_test.go`
   - `TestFactoryValidationRejectsMissingWorkerWorkstationAndRoute`.
   - `TestFactoryValidationReportsAllActionableDefinitionErrors`.
   - `TestAPIValidateFactoryAcceptsValidAndRejectsInvalidDefinitions`.
@@ -746,6 +746,13 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 - [x] `tests/functional/factory_visualization/response_presentation_test.go`
   - `TestVisualizationResponsePresentationThroughPublicRootAfterLifecycle`.
+
+### Factory runtime (service-mirrored Petri depth)
+
+- [x] `tests/functional/factory_runtime/orchestrators/petri/routing/multi_transition_test.go`
+  - `TestPetriMultiStagePipelineCompletesAtPublicTerminals`.
+  - `TestPetriFailureRoutesToDocumentedFailedPlace`.
+  - `TestPetriMultiTransitionPreservesWorkCorrelation`.
 
 ### Packaged factories
 
@@ -843,6 +850,11 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ## Wave 2 — provider sessions
 
+- [x] `tests/functional/providers/agy/process_harness_test.go`
+  - `TestAgyConductorSuccessThroughRootBuildProcess`.
+  - `TestAgyNativeFailureThroughRootBuildProcessIsSafe`.
+  - `TestAgyTimeoutFailureThroughRootBuildProcess`.
+  - `TestAgyCommandCancellationThroughRootBuildProcessIsCanonical`.
 - [x] `tests/functional/providers/codex/process_harness_test.go`
   - `TestCodexHistoricalInspectionSuccessThroughRootBuildProcess`.
   - `TestCodexHistoricalInspectionDetachedRepeatedRunsThroughRootBuildProcess`.
@@ -1065,3 +1077,19 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 - [x] `tests/functional/providers/gemini/process_harness_test.go`
 - [x] `tests/functional/providers/kiro/process_harness_test.go`
 - [x] `tests/functional/providers/pi/process_harness_test.go`
+
+- [x] `tests/functional/factory_definitions/transports/cli/named_lifecycle/named_lifecycle_test.go`
+
+- [x] `tests/functional/factory_definitions/transports/cli/validate_persist/validate_persist_test.go`
+
+- [x] `tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go`
+
+- [x] `tests/functional/provider_sessions/build_process_inert_test.go`
+
+- [x] `tests/functional/provider_sessions/peer_import_boundary_test.go`
+
+- [x] `tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go`
+
+- [x] `tests/functional/workers/transports/cli/run/help/invocation_help_test.go`
+
+- [x] `tests/functional/workers/transports/cli/run/modes/output_modes_test.go`

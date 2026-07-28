@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
-	orchestratorcontract "github.com/portpowered/infinite-you/pkg/services/factory_runtime/orchestratorcontract"
+	orchestratorcontract "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract"
 	"github.com/tdewolff/parse/v2/js"
 )
 

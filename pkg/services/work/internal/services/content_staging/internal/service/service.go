@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/work/internal/contenturl"
 	contentstaging "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_staging"
 )
 
@@ -90,7 +91,7 @@ func (s *Service) StageContent(
 		_ = s.filesystem.RemoveAll(stageDir)
 		return work.StageContentResult{}, err
 	}
-	contentURL, err := work.FilesystemPathToContentURL(targetPath)
+	contentURL, err := contenturl.FilesystemPathToURL(targetPath)
 	if err != nil {
 		_ = s.filesystem.RemoveAll(stageDir)
 		return work.StageContentResult{}, fmt.Errorf("build staged content URL: %w", err)
@@ -197,7 +198,7 @@ func (s *Service) ResolveContent(
 			Cause:   work.ErrStagedContentNotFound,
 		}
 	}
-	contentURL, err := work.FilesystemPathToContentURL(payload.Path)
+	contentURL, err := contenturl.FilesystemPathToURL(payload.Path)
 	if err != nil {
 		return work.ResolvedStagedContent{}, fmt.Errorf("build staged content URL: %w", err)
 	}

@@ -608,8 +608,8 @@ func TestProviderSessionsThinRootContractSetSealed(t *testing.T) {
 	}
 
 	transitionalServicePath := filepath.Join(root, "pkg", "services", "provider_sessions", "service")
-	if _, err := os.Stat(transitionalServicePath); err != nil {
-		t.Fatalf("transitional service/ package missing (DEL-PSES still owns it): %v", err)
+	if _, err := os.Stat(transitionalServicePath); !os.IsNotExist(err) {
+		t.Fatalf("transitional service/ package must be deleted after DEL-PSES story 002; stat = %v", err)
 	}
 
 	var peerSurface providersessions.Service = &rootServiceFake{}

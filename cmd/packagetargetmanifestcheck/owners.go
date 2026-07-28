@@ -200,11 +200,36 @@ func mapKnownNestedOwnerPackage(owner, packagePath, rest string) (PackageMapping
 		}
 	}
 
+	if owner == "factory_runtime" && factoryRuntimeCanonicalRetainRest(rest) {
+		return moveOrRetainMapping(packagePath, owner, DispositionRetain), true
+	}
+
 	destination, ok := nestedOwnerMoveDestination(owner, rest)
 	if !ok {
 		return PackageMapping{}, false
 	}
 	return moveOrRetainMapping(packagePath, destination, DispositionMove), true
+}
+
+func factoryRuntimeCanonicalRetainRest(rest string) bool {
+	switch {
+	case rest == "wire" || strings.HasPrefix(rest, "wire/"):
+		return true
+	case rest == "transports" || strings.HasPrefix(rest, "transports/"):
+		return true
+	case rest == "internal" || strings.HasPrefix(rest, "internal/host"):
+		return true
+	case strings.HasPrefix(rest, "internal/services/orchestration"):
+		return true
+	case strings.HasPrefix(rest, "internal/services/instance_host"):
+		return true
+	case strings.HasPrefix(rest, "internal/services/dispatch_planning"):
+		return true
+	case strings.HasPrefix(rest, "internal/services/checkpoint_recovery"):
+		return true
+	default:
+		return false
+	}
 }
 
 func moveOrRetainMapping(packagePath, destination, disposition string) PackageMapping {

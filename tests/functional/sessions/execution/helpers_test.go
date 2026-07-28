@@ -754,6 +754,81 @@ func assertTerminalWorkPrimaryText(
 	}
 }
 
+// tryWaitForTerminalWorkPrimaryTextDuringInvocation polls /work until terminal
+// primary text is visible or the hosted CLI invocation completes. When the
+// invocation finishes first, one final read is attempted so callers fail fast
+// instead of waiting on a torn-down one-shot server.
+func tryWaitForTerminalWorkPrimaryTextDuringInvocation(
+	serverURL, wantText string,
+	timeout time.Duration,
+	invocationDone <-chan struct{},
+) error {
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+
+	var lastDiagnostic string
+	for {
+		ok, diagnostic := tryReadTerminalWorkPrimaryText(serverURL, wantText)
+		if ok {
+			return nil
+		}
+		lastDiagnostic = diagnostic
+
+		select {
+		case <-invocationDone:
+			ok, finalDiagnostic := tryReadTerminalWorkPrimaryText(serverURL, wantText)
+			if ok {
+				return nil
+			}
+			return fmt.Errorf(
+				"CLI invocation completed before terminal work with text %q was visible at %s: %s",
+				wantText,
+				serverURL,
+				finalDiagnostic,
+			)
+		default:
+		}
+
+		select {
+		case <-ticker.C:
+		case <-invocationDone:
+			ok, finalDiagnostic := tryReadTerminalWorkPrimaryText(serverURL, wantText)
+			if ok {
+				return nil
+			}
+			return fmt.Errorf(
+				"CLI invocation completed before terminal work with text %q was visible at %s: %s",
+				wantText,
+				serverURL,
+				finalDiagnostic,
+			)
+		case <-deadline.C:
+			return fmt.Errorf(
+				"timed out waiting for terminal work with text %q at %s: %s",
+				wantText,
+				serverURL,
+				lastDiagnostic,
+			)
+		}
+	}
+}
+
+// waitForTerminalWorkPrimaryTextDuringInvocation polls /work until terminal
+// primary text is visible or the hosted CLI invocation completes.
+func waitForTerminalWorkPrimaryTextDuringInvocation(
+	t *testing.T,
+	serverURL, wantText string,
+	timeout time.Duration,
+	invocationDone <-chan struct{},
+) {
+	t.Helper()
+	if err := tryWaitForTerminalWorkPrimaryTextDuringInvocation(serverURL, wantText, timeout, invocationDone); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // waitForTerminalWorkPrimaryText polls the public /work surface until one
 // terminal work item exposes the expected primary text, or times out. Hosted
 // CLI invocations complete asynchronously relative to the first successful

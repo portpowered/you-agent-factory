@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	namedfactorypath "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
+	namedfactorypath "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
