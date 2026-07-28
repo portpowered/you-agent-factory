@@ -307,7 +307,7 @@ The PR lane runs `TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduce
 - Streamed invocation returns `audio/wav` bytes.
 - Factory `MODEL_INVOKE` through submitted work reaches `speech:complete` and emits recorded audio in factory events.
 
-Required Go tests also include `TestRuntimeAPI_CompilesWithFunctionalLongTag`, which guards the `functionallong` compile surface without running OMNIVOICE.
+The `functionallong` compile surface for `tests/functional/runtime_api` is still exercised when `pr-inference-approval` compiles the package with `-tags=functionallong` before running the OMNIVOICE regression.
 
 **Environment and runtime prerequisites**
 

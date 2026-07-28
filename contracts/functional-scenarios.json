@@ -981,7 +981,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/runtime_api/api_generated_smoke_test.go::TestGeneratedAPIIntegrationSmoke_BatchUpsertAcceptsWorksContent",
+          "test": "tests/functional/work/submission/http_test.go::TestAPIBatchUpsertAcceptsWorksContent",
           "boundary": "rest"
         }
       ]

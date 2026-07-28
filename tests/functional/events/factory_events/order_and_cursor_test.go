@@ -169,6 +169,90 @@ func TestAPIInvalidEventCursorReturnsTypedError(t *testing.T) {
 	assertFactoryEventsSameRelativeOrder(t, retained, validRead)
 }
 
+// TestAPISubmitWorkEmitsCanonicalTraceAwareBatchEvent proves explicit trace and
+// chaining trace identities on submit are preserved in the emitted WORK_REQUEST
+// batch event and the public Work projection.
+func TestAPISubmitWorkEmitsCanonicalTraceAwareBatchEvent(t *testing.T) {
+	dir := support.ScaffoldSingleStepFactory(t, "trace-aware-submit")
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:     dir,
+		UseMockWorkers: true,
+	})
+	defer server.Stop(t)
+
+	const traceID = "trace-request"
+	name := "trace-aware-submit"
+	submitted := support.SubmitDefaultSessionWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+		Name:                   &name,
+		WorkTypeName:           "task",
+		CurrentChainingTraceId: stringPtr(traceID),
+		TraceId:                stringPtr(traceID),
+		Payload:                map[string]string{"title": "explicit current"},
+	})
+
+	event := waitForWorkRequestEvent(t, server, submitted.RequestId, 5*time.Second)
+	if got := support.StringPointerValue(event.Context.RequestId); got != submitted.RequestId {
+		t.Fatalf("WORK_REQUEST context request ID = %q, want %q", got, submitted.RequestId)
+	}
+
+	payload, err := event.Payload.AsWorkRequestEventPayload()
+	if err != nil {
+		t.Fatalf("decode WORK_REQUEST payload: %v", err)
+	}
+	if payload.Type != factoryapi.WorkRequestTypeFactoryRequestBatch {
+		t.Fatalf("WORK_REQUEST payload type = %q, want FACTORY_REQUEST_BATCH", payload.Type)
+	}
+
+	works := support.FactoryWorksValue(payload.Works)
+	if len(works) != 1 {
+		t.Fatalf("WORK_REQUEST payload work count = %d, want 1", len(works))
+	}
+	if works[0].Name != name {
+		t.Fatalf("work name = %q, want %s", works[0].Name, name)
+	}
+	if got := support.StringPointerValue(works[0].CurrentChainingTraceId); got != traceID {
+		t.Fatalf("work current chaining trace ID = %q, want %s", got, traceID)
+	}
+	if got := support.StringPointerValue(works[0].TraceId); got != traceID {
+		t.Fatalf("work trace ID = %q, want %s", got, traceID)
+	}
+
+	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	listed := support.ListDefaultSessionWork(t, server.URL())
+	if len(listed.Results) != 1 ||
+		support.StringPointerValue(listed.Results[0].CurrentChainingTraceId) != traceID {
+		t.Fatalf("public work projection = %#v, want chaining trace identity", listed.Results)
+	}
+}
+
+func stringPtr(value string) *string {
+	return &value
+}
+
+func waitForWorkRequestEvent(
+	t *testing.T,
+	server *support.FunctionalAPIServer,
+	requestID string,
+	timeout time.Duration,
+) factoryapi.FactoryEvent {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		events := server.GetFactoryEvents(t)
+		for _, event := range events {
+			if event.Type == factoryapi.FactoryEventTypeWorkRequest &&
+				support.StringPointerValue(event.Context.RequestId) == requestID {
+				return event
+			}
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	t.Fatalf("timed out waiting for WORK_REQUEST event for %q", requestID)
+	return factoryapi.FactoryEvent{}
+}
+
 // TestFactoryEventStreamIsOrderedAndClosesAtSessionTermination proves a live
 // Factory Event SSE stream delivers events in ascending order while the Factory
 // Session is active and closes when the session terminates through the public

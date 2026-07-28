@@ -4,11 +4,6 @@
   "entries": [
     {
       "rule": "deprecated-runtime-api-file",
-      "filePath": "tests/functional/runtime_api/api_batch_ingress_starvation_regression_test.go",
-      "target": "tests/functional/runtime_api"
-    },
-    {
-      "rule": "deprecated-runtime-api-file",
       "filePath": "tests/functional/runtime_api/api_batch_submission_boundary_smoke_long_test.go",
       "target": "tests/functional/runtime_api"
     },
@@ -34,17 +29,7 @@
     },
     {
       "rule": "deprecated-runtime-api-file",
-      "filePath": "tests/functional/runtime_api/api_factory_event_mapping_test.go",
-      "target": "tests/functional/runtime_api"
-    },
-    {
-      "rule": "deprecated-runtime-api-file",
       "filePath": "tests/functional/runtime_api/api_functional_server_override_regression_test.go",
-      "target": "tests/functional/runtime_api"
-    },
-    {
-      "rule": "deprecated-runtime-api-file",
-      "filePath": "tests/functional/runtime_api/api_functionallong_compile_smoke_test.go",
       "target": "tests/functional/runtime_api"
     },
     {
@@ -90,26 +75,6 @@
     {
       "rule": "deprecated-runtime-api-file",
       "filePath": "tests/functional/runtime_api/api_multi_work_dispatch_smoke_test.go",
-      "target": "tests/functional/runtime_api"
-    },
-    {
-      "rule": "deprecated-runtime-api-file",
-      "filePath": "tests/functional/runtime_api/api_packaged_deep_research_invocation_test.go",
-      "target": "tests/functional/runtime_api"
-    },
-    {
-      "rule": "deprecated-runtime-api-file",
-      "filePath": "tests/functional/runtime_api/api_packaged_goal_invocation_test.go",
-      "target": "tests/functional/runtime_api"
-    },
-    {
-      "rule": "deprecated-runtime-api-file",
-      "filePath": "tests/functional/runtime_api/api_packaged_quorum_invocation_test.go",
-      "target": "tests/functional/runtime_api"
-    },
-    {
-      "rule": "deprecated-runtime-api-file",
-      "filePath": "tests/functional/runtime_api/api_packaged_review_invocation_test.go",
       "target": "tests/functional/runtime_api"
     },
     {
@@ -284,23 +249,8 @@
     },
     {
       "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_batch_ingress_starvation_regression_test.go",
-      "target": "TestBlockedDispatchConcurrentBatchIngressRegression"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_batch_submission_boundary_smoke_long_test.go",
-      "target": "TestFactoryRequestBatch_PublicBatchShapeStaysAlignedAcrossWatchedFileAndHTTP"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
       "filePath": "tests/functional/runtime_api/api_cleanup_smoke_test.go",
       "target": "TestCleanupSmoke_BackendDashboardAndCanonicalEventsExposeOnlyCleanedFactorySurfaces"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_config_driven_submit_query_smoke_test.go",
-      "target": "TestConfigDriven_RESTAPISubmitAndQuery"
     },
     {
       "rule": "deprecated-runtime-api-test",
@@ -309,63 +259,8 @@
     },
     {
       "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_factory_event_mapping_test.go",
-      "target": "TestFactoryEventTransportMappingRejectsMalformedCanonicalPayload"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
       "filePath": "tests/functional/runtime_api/api_functional_server_override_regression_test.go",
       "target": "TestFunctionalServerOverrideCompatibilityRegression_MockWorkersAndProviderOverride"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_functionallong_compile_smoke_test.go",
-      "target": "TestRuntimeAPI_CompilesWithFunctionalLongTag"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_generated_smoke_test.go",
-      "target": "TestGeneratedAPIIntegrationSmoke_BatchUpsertAcceptsWorksContent"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_generated_smoke_test.go",
-      "target": "TestGeneratedAPIIntegrationSmoke_CLIWorkTypeNameReachesLiveAPIHandler"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_generated_smoke_test.go",
-      "target": "TestGeneratedAPIIntegrationSmoke_SubmitWorkContentAcceptsCanonicalParts"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_generated_smoke_test.go",
-      "target": "TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptHeaderOnlyStructuredSubmission"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_generated_smoke_test.go",
-      "target": "TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptMixedTextAndImageSubmissionOnSupportedRunner"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_generated_smoke_test.go",
-      "target": "TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptOrderedTextSubmission"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_generated_smoke_test.go",
-      "target": "TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectEmptyStructuredSubmission"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_generated_smoke_test.go",
-      "target": "TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectForgedStructuredFileReference"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_generated_smoke_test.go",
-      "target": "TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectMixedTextAndImageSubmissionOnUnsupportedRunner"
     },
     {
       "rule": "deprecated-runtime-api-test",
@@ -394,16 +289,6 @@
     },
     {
       "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_legacy_unary_retirement_smoke_test.go",
-      "target": "TestLegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_manual_work_recovery_test.go",
-      "target": "TestManualWorkRecovery_CascadeFailureThenAPIMovesResumeProgress"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
       "filePath": "tests/functional/runtime_api/api_model_local_inference_long_test.go",
       "target": "TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio"
     },
@@ -424,68 +309,8 @@
     },
     {
       "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_packaged_deep_research_invocation_test.go",
-      "target": "TestSessionInvocationAPI_PackagedDeepResearchUsesMaterializedFactorySource"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_packaged_goal_invocation_test.go",
-      "target": "TestPackagedGoalBuiltInTopology_SubmitWhilePausedResumesThroughSessionControl"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_packaged_goal_invocation_test.go",
-      "target": "TestSessionInvocationAPI_PackagedGoalContinueRepeatsBeforeCompletion"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_packaged_goal_invocation_test.go",
-      "target": "TestSessionInvocationAPI_PackagedGoalRejectRepeatsBeforeCompletion"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_packaged_goal_invocation_test.go",
-      "target": "TestSessionInvocationAPI_PackagedGoalReturnsExplicitSummaryPrimaryResult"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_packaged_goal_invocation_test.go",
-      "target": "TestSessionInvocationAPI_PackagedGoalWorkerFailureReturnsFailedStatusDetails"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_packaged_quorum_invocation_test.go",
-      "target": "TestSessionInvocationAPI_PackagedQuorumAppliesRoleArguments"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_packaged_quorum_invocation_test.go",
-      "target": "TestSessionInvocationAPI_PackagedQuorumGatesMergeUntilBothBranchesComplete"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_packaged_review_invocation_test.go",
-      "target": "TestSessionInvocationAPI_PackagedReviewRejectsThenApprovesRevision"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_packaged_review_invocation_test.go",
-      "target": "TestSessionInvocationAPI_PackagedReviewReturnsApprovedCandidate"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_packaged_review_invocation_test.go",
-      "target": "TestSessionInvocationAPI_PackagedReviewWorkerFailureReturnsFailedStatus"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
       "filePath": "tests/functional/runtime_api/api_provider_throttle_pause_observability_test.go",
       "target": "TestProviderErrorSmoke_ThrottleFailureIsolatesOtherLaneThroughPublicSession"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_request_batch_boundary_smoke_test.go",
-      "target": "TestGeneratedAPIIntegrationSmoke_BatchWorkTypeNameNormalizesRuntimeWork"
     },
     {
       "rule": "deprecated-runtime-api-test",
@@ -521,51 +346,6 @@
       "rule": "deprecated-runtime-api-test",
       "filePath": "tests/functional/runtime_api/api_session_invocation_test.go",
       "target": "TestSessionInvocationAPI_AcceptsStructuredArgsWithActiveSignature"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_session_invocation_test.go",
-      "target": "TestSessionInvocationAPI_CanceledRequestContextStopsRequest"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_session_invocation_test.go",
-      "target": "TestSessionInvocationAPI_PausedSessionReturnsPausedStatus"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_session_invocation_test.go",
-      "target": "TestSessionInvocationAPI_RejectsArgsWithoutActiveSignature"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_session_invocation_test.go",
-      "target": "TestSessionInvocationAPI_RejectsInvalidStructuredArgValueShape"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_session_invocation_test.go",
-      "target": "TestSessionInvocationAPI_RejectsWhitespaceOnlyText"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_session_invocation_test.go",
-      "target": "TestSessionInvocationAPI_ReturnsPrimaryResult"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_session_invocation_test.go",
-      "target": "TestSessionInvocationAPI_TimeoutReturnsTimedOutStatus"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_session_invocation_test.go",
-      "target": "TestSessionInvocationAPI_UnresolvedPrimaryResultReturnsFailedStatus"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_submit_runtime_work_trace_shaping_smoke_test.go",
-      "target": "TestSubmitRuntimeWork_EmitsCanonicalTraceAwareBatchEvent"
     },
     {
       "rule": "deprecated-runtime-api-test",
