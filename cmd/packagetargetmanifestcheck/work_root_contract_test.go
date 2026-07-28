@@ -134,7 +134,6 @@ func TestWorkExcessRootContractFoldClustersMatchInventoryNote(t *testing.T) {
 	slices.Sort(gotClusters)
 	wantClusters := []string{
 		"invocation_return_policy",
-		"request_admission",
 	}
 	if !slices.Equal(gotClusters, wantClusters) {
 		t.Fatalf("fold clusters = %v, want %v", gotClusters, wantClusters)

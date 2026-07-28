@@ -51,20 +51,6 @@ type WorkRootContractFoldTarget struct {
 // beyond the thin Work service root contract.
 var WorkExcessRootContractFolds = []WorkRootContractFoldTarget{
 	{
-		Cluster: "request_admission",
-		Files: []string{
-			"file_inputs.go",
-			"file_inputs_test.go",
-			"request_codec.go",
-			"request_normalize.go",
-			"request_normalize_test.go",
-			"request_preparation.go",
-			"request_preparation_test.go",
-			"request_submit_test.go",
-		},
-		Destination: workPackagePrefix + "/internal",
-	},
-	{
 		Cluster: "invocation_return_policy",
 		Files: []string{
 			"arguments.go",

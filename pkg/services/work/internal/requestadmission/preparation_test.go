@@ -1,4 +1,4 @@
-package work
+package requestadmission
 
 import (
 	"context"
@@ -10,16 +10,16 @@ import (
 
 func TestPrepareWorkRequestOwnsLineageContentAndMutationDetachment(t *testing.T) {
 	service := mustRequestPreparationService(t)
-	original := WorkRequest{
+	original := Request{
 		RequestID: "request-1",
-		Type:      WorkRequestTypeFactoryRequestBatch,
+		Type:      RequestTypeFactoryRequestBatch,
 		Works: []Work{
 			{
 				Name:       "  draft  ",
 				WorkTypeID: "task",
-				Content: []WorkContentPart{
+				Content: []ContentPart{
 					{
-						Type: WorkContentPartTypeImage,
+						Type: ContentPartTypeImage,
 						File: "fixtures/ui.png",
 						Metadata: map[string]any{
 							"source": "customer",
@@ -34,8 +34,8 @@ func TestPrepareWorkRequestOwnsLineageContentAndMutationDetachment(t *testing.T)
 				WorkTypeID:               "review",
 				CurrentChainingTraceID:   "chain-review",
 				PreviousChainingTraceIDs: []string{"chain-parent"},
-				Content: []WorkContentPart{
-					{Type: WorkContentPartTypeText, Text: "Review"},
+				Content: []ContentPart{
+					{Type: ContentPartTypeText, Text: "Review"},
 				},
 			},
 		},
@@ -80,9 +80,9 @@ func TestPrepareWorkRequestOwnsLineageContentAndMutationDetachment(t *testing.T)
 func TestPrepareWorkRequestUsesStableRequestLineageFallback(t *testing.T) {
 	service := mustRequestPreparationService(t)
 	prepared, err := service.PrepareWorkRequest(context.Background(), WorkRequestPreparation{
-		Request: WorkRequest{
+		Request: Request{
 			RequestID: "request-stable",
-			Type:      WorkRequestTypeFactoryRequestBatch,
+			Type:      RequestTypeFactoryRequestBatch,
 			Works:     []Work{{Name: "draft", WorkTypeID: "task"}},
 		},
 	})
@@ -99,9 +99,9 @@ func TestPrepareWorkRequestUsesStableRequestLineageFallback(t *testing.T) {
 func TestPrepareWorkRequestFillsMissingBatchWorkTypeFromDefault(t *testing.T) {
 	service := mustRequestPreparationService(t)
 	prepared, err := service.PrepareWorkRequest(context.Background(), WorkRequestPreparation{
-		Request: WorkRequest{
+		Request: Request{
 			RequestID: "request-default-type",
-			Type:      WorkRequestTypeFactoryRequestBatch,
+			Type:      RequestTypeFactoryRequestBatch,
 			Works:     []Work{{Name: "draft", Payload: map[string]string{"title": "Draft"}}},
 		},
 		DefaultWorkTypeID: "task",
@@ -115,12 +115,12 @@ func TestPrepareWorkRequestFillsMissingBatchWorkTypeFromDefault(t *testing.T) {
 }
 
 func TestPrepareWorkRequestOwnsPublicContentAliasNormalization(t *testing.T) {
-	original := WorkRequest{
+	original := Request{
 		RequestID: "request-aliases",
-		Type:      WorkRequestTypeFactoryRequestBatch,
+		Type:      RequestTypeFactoryRequestBatch,
 		Works: []Work{{
 			Name: "draft", WorkTypeID: "task",
-			Content: []WorkContentPart{
+			Content: []ContentPart{
 				{Type: "TEXT", Text: "Draft"},
 				{Type: "IMAGE", URL: "file://fixtures/draft.png"},
 			},
@@ -134,8 +134,8 @@ func TestPrepareWorkRequestOwnsPublicContentAliasNormalization(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PrepareWorkRequest: %v", err)
 	}
-	if prepared.Works[0].Content[0].Type != WorkContentPartTypeText ||
-		prepared.Works[0].Content[1].Type != WorkContentPartTypeImage {
+	if prepared.Works[0].Content[0].Type != ContentPartTypeText ||
+		prepared.Works[0].Content[1].Type != ContentPartTypeImage {
 		t.Fatalf("prepared aliases = %#v, want canonical text and image", prepared.Works[0].Content)
 	}
 	if original.Works[0].Content[0].Type != "TEXT" || original.Works[0].Content[1].Type != "IMAGE" {
@@ -144,7 +144,7 @@ func TestPrepareWorkRequestOwnsPublicContentAliasNormalization(t *testing.T) {
 }
 
 func TestPrepareWorkContentOwnsAdmissionAndReturnsDetachedCanonicalValues(t *testing.T) {
-	original := []WorkContentPart{{
+	original := []ContentPart{{
 		Type: "IMAGE", File: "fixtures/draft.png",
 		Metadata: map[string]any{"source": "customer"},
 	}}
@@ -152,7 +152,7 @@ func TestPrepareWorkContentOwnsAdmissionAndReturnsDetachedCanonicalValues(t *tes
 	if err != nil {
 		t.Fatalf("PrepareWorkContent: %v", err)
 	}
-	if len(prepared) != 1 || prepared[0].Type != WorkContentPartTypeImage ||
+	if len(prepared) != 1 || prepared[0].Type != ContentPartTypeImage ||
 		prepared[0].URL != "file://fixtures/draft.png" || prepared[0].File != "" {
 		t.Fatalf("prepared content = %#v, want canonical image URL", prepared)
 	}
@@ -216,20 +216,20 @@ func TestPrepareWorkRequestOwnsCanonicalAliasAndSubmissionConflicts(t *testing.T
 func TestPrepareWorkRequestOwnsContentURLMediaAndMeaningfulnessPolicy(t *testing.T) {
 	tests := []struct {
 		name    string
-		content []WorkContentPart
+		content []ContentPart
 		message string
 	}{
 		{
 			name: "unsupported URL",
-			content: []WorkContentPart{{
-				Type: WorkContentPartTypeImage, URL: "ftp://example.com/ui.png",
+			content: []ContentPart{{
+				Type: ContentPartTypeImage, URL: "ftp://example.com/ui.png",
 			}},
 			message: "url scheme must be one of file, http, https, or data",
 		},
 		{
 			name: "URL and legacy file conflict",
-			content: []WorkContentPart{{
-				Type: WorkContentPartTypeImage,
+			content: []ContentPart{{
+				Type: ContentPartTypeImage,
 				URL:  "file://fixtures/ui.png",
 				File: "fixtures/ui.png",
 			}},
@@ -237,37 +237,37 @@ func TestPrepareWorkRequestOwnsContentURLMediaAndMeaningfulnessPolicy(t *testing
 		},
 		{
 			name: "image media mismatch",
-			content: []WorkContentPart{{
-				Type: WorkContentPartTypeImage, URL: "file://fixtures/ui.png",
+			content: []ContentPart{{
+				Type: ContentPartTypeImage, URL: "file://fixtures/ui.png",
 				ContentType: "audio/wav",
 			}},
 			message: "contentType must start with image/",
 		},
 		{
 			name: "audio media mismatch",
-			content: []WorkContentPart{{
-				Type: WorkContentPartTypeAudio, URL: "file://fixtures/audio.wav",
+			content: []ContentPart{{
+				Type: ContentPartTypeAudio, URL: "file://fixtures/audio.wav",
 				ContentType: "image/png",
 			}},
 			message: "contentType must start with audio/",
 		},
 		{
 			name: "blank only content",
-			content: []WorkContentPart{{
-				Type: WorkContentPartTypeText, Text: " \t ",
+			content: []ContentPart{{
+				Type: ContentPartTypeText, Text: " \t ",
 			}},
 			message: "content must contain at least one non-empty part",
 		},
 		{
 			name: "invalid JSON content",
-			content: []WorkContentPart{{
-				Type: WorkContentPartTypeJSON, JSON: json.RawMessage(`{`),
+			content: []ContentPart{{
+				Type: ContentPartTypeJSON, JSON: json.RawMessage(`{`),
 			}},
 			message: "json must contain valid JSON",
 		},
 		{
 			name: "unsupported content type",
-			content: []WorkContentPart{{
+			content: []ContentPart{{
 				Type: "VIDEO", URL: "file://fixtures/video.mp4",
 			}},
 			message: "type must be one of",
@@ -277,9 +277,9 @@ func TestPrepareWorkRequestOwnsContentURLMediaAndMeaningfulnessPolicy(t *testing
 		t.Run(test.name, func(t *testing.T) {
 			_, err := mustRequestPreparationService(t).PrepareWorkRequest(
 				context.Background(),
-				WorkRequestPreparation{Request: WorkRequest{
+				WorkRequestPreparation{Request: Request{
 					RequestID: "request-content",
-					Type:      WorkRequestTypeFactoryRequestBatch,
+					Type:      RequestTypeFactoryRequestBatch,
 					Works: []Work{{
 						Name: "draft", WorkTypeID: "task", Content: test.content,
 					}},
@@ -296,12 +296,12 @@ func TestPrepareWorkRequestRejectsInvalidIdentityAndContext(t *testing.T) {
 	}
 	service := mustRequestPreparationService(t)
 	_, err := service.PrepareWorkRequest(context.Background(), WorkRequestPreparation{
-		Request: WorkRequest{Works: []Work{{WorkTypeID: "task"}}},
+		Request: Request{Works: []Work{{WorkTypeID: "task"}}},
 	})
 	assertRequestPreparationErrorContains(t, err, "name is required")
 
 	_, err = service.PrepareWorkRequest(context.Background(), WorkRequestPreparation{
-		Request: WorkRequest{Works: []Work{{Name: "draft"}}},
+		Request: Request{Works: []Work{{Name: "draft"}}},
 	})
 	assertRequestPreparationErrorContains(t, err, "workTypeName is required")
 

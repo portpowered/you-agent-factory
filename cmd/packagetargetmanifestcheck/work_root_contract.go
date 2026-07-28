@@ -48,20 +48,6 @@ type workRootContractFoldTarget struct {
 // WorkExcessRootContractFolds for package-target manifest checks.
 var workExcessRootContractFolds = []workRootContractFoldTarget{
 	{
-		cluster: "request_admission",
-		files: []string{
-			"file_inputs.go",
-			"file_inputs_test.go",
-			"request_codec.go",
-			"request_normalize.go",
-			"request_normalize_test.go",
-			"request_preparation.go",
-			"request_preparation_test.go",
-			"request_submit_test.go",
-		},
-		destination: "pkg/services/work/internal",
-	},
-	{
 		cluster: "invocation_return_policy",
 		files: []string{
 			"arguments.go",

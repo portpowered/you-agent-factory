@@ -1,6 +1,6 @@
 // backendsizecheck:ignore-file service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption.
 // pkgmaintcheck:ignore-file-lines service-ownership migration preserves this consolidated file; split responsibilities and remove this exemption.
-package work
+package requestadmission
 
 import (
 	"encoding/json"
@@ -65,9 +65,9 @@ func TestSingleWorkTargetPreparationOwnsNormalization(t *testing.T) {
 	t.Parallel()
 
 	prepare := NewSingleWorkTargetPreparation()
-	target, err := prepare(WorkRequest{
+	target, err := prepare(Request{
 		RequestID: "request-1",
-		Type:      WorkRequestTypeFactoryRequestBatch,
+		Type:      RequestTypeFactoryRequestBatch,
 		Works: []Work{{
 			WorkID:     "work-1",
 			Name:       "draft",
@@ -86,9 +86,9 @@ func TestSingleWorkTargetPreparationOwnsNormalization(t *testing.T) {
 func TestSingleWorkTargetPreparationRejectsMultipleWorkItems(t *testing.T) {
 	t.Parallel()
 
-	_, err := NewSingleWorkTargetPreparation()(WorkRequest{
+	_, err := NewSingleWorkTargetPreparation()(Request{
 		RequestID: "request-1",
-		Type:      WorkRequestTypeFactoryRequestBatch,
+		Type:      RequestTypeFactoryRequestBatch,
 		Works: []Work{
 			{WorkID: "work-1", Name: "first", WorkTypeID: "chapter", Payload: "one"},
 			{WorkID: "work-2", Name: "second", WorkTypeID: "chapter", Payload: "two"},
@@ -102,8 +102,8 @@ func TestSingleWorkTargetPreparationRejectsMultipleWorkItems(t *testing.T) {
 func TestSingleWorkTargetPreparationRejectsIdentityReconstruction(t *testing.T) {
 	t.Parallel()
 
-	_, err := NewSingleWorkTargetPreparation()(WorkRequest{
-		Type: WorkRequestTypeFactoryRequestBatch,
+	_, err := NewSingleWorkTargetPreparation()(Request{
+		Type: RequestTypeFactoryRequestBatch,
 		Works: []Work{{
 			Name:       "draft",
 			WorkTypeID: "chapter",
@@ -115,17 +115,17 @@ func TestSingleWorkTargetPreparationRejectsIdentityReconstruction(t *testing.T) 
 }
 
 func TestNormalizeWorkRequest_IndependentWorkItemsShareRequestAndTrace(t *testing.T) {
-	request := WorkRequest{
+	request := Request{
 		RequestID:              "request-1",
 		CurrentChainingTraceID: "chain-request-1",
-		Type:                   WorkRequestTypeFactoryRequestBatch,
+		Type:                   RequestTypeFactoryRequestBatch,
 		Works: []Work{
 			{Name: "first", WorkTypeID: "task", Payload: map[string]any{"title": "first"}},
 			{Name: "second", WorkTypeID: "task", Payload: map[string]any{"title": "second"}},
 		},
 	}
 
-	normalized, err := NormalizeWorkRequest(request, WorkRequestNormalizeOptions{
+	normalized, err := NormalizeWorkRequest(request, NormalizeOptions{
 		ValidWorkTypes: map[string]bool{"task": true},
 	})
 	if err != nil {
@@ -190,16 +190,16 @@ func TestSubmitResultFromNormalized_PopulatesPerWorkIdentifiers(t *testing.T) {
 }
 
 func TestNormalizeWorkRequest_LegacyTraceIDPropagatesStableCurrentChainingTrace(t *testing.T) {
-	request := WorkRequest{
+	request := Request{
 		RequestID: "request-legacy-trace",
-		Type:      WorkRequestTypeFactoryRequestBatch,
+		Type:      RequestTypeFactoryRequestBatch,
 		Works: []Work{
 			{Name: "first", WorkTypeID: "task", TraceID: "trace-legacy"},
 			{Name: "second", WorkTypeID: "task"},
 		},
 	}
 
-	normalized, err := NormalizeWorkRequest(request, WorkRequestNormalizeOptions{
+	normalized, err := NormalizeWorkRequest(request, NormalizeOptions{
 		ValidWorkTypes: map[string]bool{"task": true},
 	})
 	if err != nil {
@@ -217,9 +217,9 @@ func TestNormalizeWorkRequest_LegacyTraceIDPropagatesStableCurrentChainingTrace(
 }
 
 func TestNormalizeWorkRequest_DependsOnRelationTargetsRequiredState(t *testing.T) {
-	request := WorkRequest{
+	request := Request{
 		RequestID: "request-1",
-		Type:      WorkRequestTypeFactoryRequestBatch,
+		Type:      RequestTypeFactoryRequestBatch,
 		Works: []Work{
 			{Name: "build", WorkTypeID: "task", WorkID: "work-build", TraceID: "trace-batch"},
 			{Name: "test", WorkTypeID: "task", WorkID: "work-test"},
@@ -232,7 +232,7 @@ func TestNormalizeWorkRequest_DependsOnRelationTargetsRequiredState(t *testing.T
 		}},
 	}
 
-	normalized, err := NormalizeWorkRequest(request, WorkRequestNormalizeOptions{
+	normalized, err := NormalizeWorkRequest(request, NormalizeOptions{
 		ValidWorkTypes: map[string]bool{"task": true},
 	})
 	if err != nil {
@@ -253,9 +253,9 @@ func TestNormalizeWorkRequest_DependsOnRelationTargetsRequiredState(t *testing.T
 }
 
 func TestNormalizeWorkRequest_ParentChildRelationTargetsParentAndCoexistsWithDependsOn(t *testing.T) {
-	request := WorkRequest{
+	request := Request{
 		RequestID: "request-parent-child-1",
-		Type:      WorkRequestTypeFactoryRequestBatch,
+		Type:      RequestTypeFactoryRequestBatch,
 		Works: []Work{
 			{Name: "parent", WorkTypeID: "task", WorkID: "work-parent", TraceID: "trace-parent-child"},
 			{Name: "prerequisite", WorkTypeID: "task", WorkID: "work-prerequisite"},
@@ -275,7 +275,7 @@ func TestNormalizeWorkRequest_ParentChildRelationTargetsParentAndCoexistsWithDep
 		},
 	}
 
-	normalized, err := NormalizeWorkRequest(request, WorkRequestNormalizeOptions{
+	normalized, err := NormalizeWorkRequest(request, NormalizeOptions{
 		ValidWorkTypes: map[string]bool{"task": true},
 	})
 	if err != nil {
@@ -320,9 +320,9 @@ func TestNormalizeWorkRequest_ParentChildRelationTargetsParentAndCoexistsWithDep
 }
 
 func TestNormalizeWorkRequest_RejectsMultipleParentChildParentsForOneChild(t *testing.T) {
-	_, err := NormalizeWorkRequest(WorkRequest{
+	_, err := NormalizeWorkRequest(Request{
 		RequestID: "request-parent-child-conflict",
-		Type:      WorkRequestTypeFactoryRequestBatch,
+		Type:      RequestTypeFactoryRequestBatch,
 		Works: []Work{
 			{Name: "parent-a", WorkTypeID: "story-set"},
 			{Name: "parent-b", WorkTypeID: "story-set"},
@@ -332,7 +332,7 @@ func TestNormalizeWorkRequest_RejectsMultipleParentChildParentsForOneChild(t *te
 			{Type: WorkRelationParentChild, SourceWorkName: "story-a", TargetWorkName: "parent-a"},
 			{Type: WorkRelationParentChild, SourceWorkName: "story-a", TargetWorkName: "parent-b"},
 		},
-	}, WorkRequestNormalizeOptions{
+	}, NormalizeOptions{
 		ValidWorkTypes: map[string]bool{"story-set": true, "story": true},
 	})
 	wantErr := `work_request: relations[1] assigns multiple PARENT_CHILD parents to "story-a" ("parent-a" and "parent-b")`
@@ -342,9 +342,9 @@ func TestNormalizeWorkRequest_RejectsMultipleParentChildParentsForOneChild(t *te
 }
 
 func TestNormalizeWorkRequest_RejectsDuplicateDependsOnRelationWithNormalizedRequiredState(t *testing.T) {
-	_, err := NormalizeWorkRequest(WorkRequest{
+	_, err := NormalizeWorkRequest(Request{
 		RequestID: "request-duplicate-depends-on",
-		Type:      WorkRequestTypeFactoryRequestBatch,
+		Type:      RequestTypeFactoryRequestBatch,
 		Works: []Work{
 			{Name: "build", WorkTypeID: "task"},
 			{Name: "review", WorkTypeID: "task"},
@@ -363,7 +363,7 @@ func TestNormalizeWorkRequest_RejectsDuplicateDependsOnRelationWithNormalizedReq
 				RequiredState:  "reviewed",
 			},
 		},
-	}, WorkRequestNormalizeOptions{
+	}, NormalizeOptions{
 		ValidWorkTypes:    map[string]bool{"task": true},
 		ValidStatesByType: map[string]map[string]bool{"task": {"reviewed": true, "complete": true}},
 	})
@@ -374,9 +374,9 @@ func TestNormalizeWorkRequest_RejectsDuplicateDependsOnRelationWithNormalizedReq
 }
 
 func TestNormalizeWorkRequest_RejectsDuplicateParentChildRelationWithoutRequiredStateSuffix(t *testing.T) {
-	_, err := NormalizeWorkRequest(WorkRequest{
+	_, err := NormalizeWorkRequest(Request{
 		RequestID: "request-duplicate-parent-child",
-		Type:      WorkRequestTypeFactoryRequestBatch,
+		Type:      RequestTypeFactoryRequestBatch,
 		Works: []Work{
 			{Name: "parent", WorkTypeID: "task"},
 			{Name: "child", WorkTypeID: "task"},
@@ -385,7 +385,7 @@ func TestNormalizeWorkRequest_RejectsDuplicateParentChildRelationWithoutRequired
 			{Type: WorkRelationParentChild, SourceWorkName: "child", TargetWorkName: "parent"},
 			{Type: WorkRelationParentChild, SourceWorkName: "child", TargetWorkName: "parent"},
 		},
-	}, WorkRequestNormalizeOptions{
+	}, NormalizeOptions{
 		ValidWorkTypes: map[string]bool{"task": true},
 	})
 	wantErr := `work_request: relations[1] duplicates relations[0] ("PARENT_CHILD" "child" -> "parent")`
@@ -395,11 +395,11 @@ func TestNormalizeWorkRequest_RejectsDuplicateParentChildRelationWithoutRequired
 }
 
 func TestNormalizeWorkRequest_FillsMissingWorkTypeFromContext(t *testing.T) {
-	normalized, err := NormalizeWorkRequest(WorkRequest{
+	normalized, err := NormalizeWorkRequest(Request{
 		RequestID: "request-1",
-		Type:      WorkRequestTypeFactoryRequestBatch,
+		Type:      RequestTypeFactoryRequestBatch,
 		Works:     []Work{{Name: "inferred"}},
-	}, WorkRequestNormalizeOptions{
+	}, NormalizeOptions{
 		DefaultWorkTypeID: "task",
 		ValidWorkTypes:    map[string]bool{"task": true},
 	})
@@ -412,15 +412,15 @@ func TestNormalizeWorkRequest_FillsMissingWorkTypeFromContext(t *testing.T) {
 }
 
 func TestNormalizeWorkRequest_ForwardsExplicitPublicState(t *testing.T) {
-	normalized, err := NormalizeWorkRequest(WorkRequest{
+	normalized, err := NormalizeWorkRequest(Request{
 		RequestID: "request-state",
-		Type:      WorkRequestTypeFactoryRequestBatch,
+		Type:      RequestTypeFactoryRequestBatch,
 		Works: []Work{{
 			Name:       "draft",
 			WorkTypeID: "task",
 			State:      "queued",
 		}},
-	}, WorkRequestNormalizeOptions{
+	}, NormalizeOptions{
 		ValidWorkTypes:    map[string]bool{"task": true},
 		ValidStatesByType: map[string]map[string]bool{"task": {"queued": true, "complete": true}},
 	})
@@ -433,11 +433,11 @@ func TestNormalizeWorkRequest_ForwardsExplicitPublicState(t *testing.T) {
 }
 
 func TestNormalizeWorkRequest_RejectsWorkTypeConflict(t *testing.T) {
-	_, err := NormalizeWorkRequest(WorkRequest{
+	_, err := NormalizeWorkRequest(Request{
 		RequestID: "request-1",
-		Type:      WorkRequestTypeFactoryRequestBatch,
+		Type:      RequestTypeFactoryRequestBatch,
 		Works:     []Work{{Name: "conflict", WorkTypeID: "other"}},
-	}, WorkRequestNormalizeOptions{
+	}, NormalizeOptions{
 		DefaultWorkTypeID: "task",
 		ValidWorkTypes:    map[string]bool{"task": true, "other": true},
 	})
@@ -447,15 +447,15 @@ func TestNormalizeWorkRequest_RejectsWorkTypeConflict(t *testing.T) {
 }
 
 func TestNormalizeWorkRequest_RejectsUnknownExplicitState(t *testing.T) {
-	_, err := NormalizeWorkRequest(WorkRequest{
+	_, err := NormalizeWorkRequest(Request{
 		RequestID: "request-invalid-state",
-		Type:      WorkRequestTypeFactoryRequestBatch,
+		Type:      RequestTypeFactoryRequestBatch,
 		Works: []Work{{
 			Name:       "draft",
 			WorkTypeID: "task",
 			State:      "queued",
 		}},
-	}, WorkRequestNormalizeOptions{
+	}, NormalizeOptions{
 		ValidWorkTypes:    map[string]bool{"task": true},
 		ValidStatesByType: map[string]map[string]bool{"task": {"init": true, "complete": true}},
 	})
@@ -465,9 +465,9 @@ func TestNormalizeWorkRequest_RejectsUnknownExplicitState(t *testing.T) {
 }
 
 func TestNormalizeWorkRequest_RejectsUnknownDependencyRequiredState(t *testing.T) {
-	_, err := NormalizeWorkRequest(WorkRequest{
+	_, err := NormalizeWorkRequest(Request{
 		RequestID: "request-invalid-required-state",
-		Type:      WorkRequestTypeFactoryRequestBatch,
+		Type:      RequestTypeFactoryRequestBatch,
 		Works: []Work{
 			{Name: "draft", WorkTypeID: "task"},
 			{Name: "review", WorkTypeID: "task"},
@@ -478,7 +478,7 @@ func TestNormalizeWorkRequest_RejectsUnknownDependencyRequiredState(t *testing.T
 			TargetWorkName: "draft",
 			RequiredState:  "queued",
 		}},
-	}, WorkRequestNormalizeOptions{
+	}, NormalizeOptions{
 		ValidWorkTypes:    map[string]bool{"task": true},
 		ValidStatesByType: map[string]map[string]bool{"task": {"init": true, "complete": true}},
 	})
@@ -488,9 +488,9 @@ func TestNormalizeWorkRequest_RejectsUnknownDependencyRequiredState(t *testing.T
 }
 
 func TestNormalizeWorkRequest_RejectsDependencyCycle(t *testing.T) {
-	_, err := NormalizeWorkRequest(WorkRequest{
+	_, err := NormalizeWorkRequest(Request{
 		RequestID: "request-1",
-		Type:      WorkRequestTypeFactoryRequestBatch,
+		Type:      RequestTypeFactoryRequestBatch,
 		Works: []Work{
 			{Name: "first", WorkTypeID: "task"},
 			{Name: "second", WorkTypeID: "task"},
@@ -499,7 +499,7 @@ func TestNormalizeWorkRequest_RejectsDependencyCycle(t *testing.T) {
 			{Type: WorkRelationDependsOn, SourceWorkName: "first", TargetWorkName: "second"},
 			{Type: WorkRelationDependsOn, SourceWorkName: "second", TargetWorkName: "first"},
 		},
-	}, WorkRequestNormalizeOptions{ValidWorkTypes: map[string]bool{"task": true}})
+	}, NormalizeOptions{ValidWorkTypes: map[string]bool{"task": true}})
 	if err == nil || !strings.Contains(err.Error(), "dependency cycle") {
 		t.Fatalf("expected dependency cycle error, got %v", err)
 	}
@@ -509,23 +509,23 @@ func TestNormalizeWorkRequest_RejectsValidationFailures_WorkArrayAndEndpoints(t 
 	runNormalizeWorkRequestValidationTests(t, []normalizeValidationTestCase{
 		{
 			name:    "empty work list",
-			request: WorkRequest{RequestID: "request-1", Type: WorkRequestTypeFactoryRequestBatch},
+			request: Request{RequestID: "request-1", Type: RequestTypeFactoryRequestBatch},
 			wantErr: "works array must contain at least one item",
 		},
 		{
 			name: "duplicate work names",
-			request: WorkRequest{
+			request: Request{
 				RequestID: "request-1",
-				Type:      WorkRequestTypeFactoryRequestBatch,
+				Type:      RequestTypeFactoryRequestBatch,
 				Works:     []Work{{Name: "same", WorkTypeID: "task"}, {Name: "same", WorkTypeID: "task"}},
 			},
 			wantErr: "duplicate name",
 		},
 		{
 			name: "missing source endpoint",
-			request: WorkRequest{
+			request: Request{
 				RequestID: "request-1",
-				Type:      WorkRequestTypeFactoryRequestBatch,
+				Type:      RequestTypeFactoryRequestBatch,
 				Works:     []Work{{Name: "first", WorkTypeID: "task"}},
 				Relations: []WorkRelation{{Type: WorkRelationDependsOn, TargetWorkName: "first"}},
 			},
@@ -533,9 +533,9 @@ func TestNormalizeWorkRequest_RejectsValidationFailures_WorkArrayAndEndpoints(t 
 		},
 		{
 			name: "blank source endpoint",
-			request: WorkRequest{
+			request: Request{
 				RequestID: "request-1",
-				Type:      WorkRequestTypeFactoryRequestBatch,
+				Type:      RequestTypeFactoryRequestBatch,
 				Works:     []Work{{Name: "first", WorkTypeID: "task"}},
 				Relations: []WorkRelation{{Type: WorkRelationDependsOn, SourceWorkName: "   ", TargetWorkName: "first"}},
 			},
@@ -543,9 +543,9 @@ func TestNormalizeWorkRequest_RejectsValidationFailures_WorkArrayAndEndpoints(t 
 		},
 		{
 			name: "missing target endpoint",
-			request: WorkRequest{
+			request: Request{
 				RequestID: "request-1",
-				Type:      WorkRequestTypeFactoryRequestBatch,
+				Type:      RequestTypeFactoryRequestBatch,
 				Works:     []Work{{Name: "first", WorkTypeID: "task"}},
 				Relations: []WorkRelation{{Type: WorkRelationDependsOn, SourceWorkName: "first"}},
 			},
@@ -553,9 +553,9 @@ func TestNormalizeWorkRequest_RejectsValidationFailures_WorkArrayAndEndpoints(t 
 		},
 		{
 			name: "unknown source endpoint",
-			request: WorkRequest{
+			request: Request{
 				RequestID: "request-1",
-				Type:      WorkRequestTypeFactoryRequestBatch,
+				Type:      RequestTypeFactoryRequestBatch,
 				Works:     []Work{{Name: "first", WorkTypeID: "task"}},
 				Relations: []WorkRelation{{Type: WorkRelationDependsOn, SourceWorkName: "missing", TargetWorkName: "first"}},
 			},
@@ -563,9 +563,9 @@ func TestNormalizeWorkRequest_RejectsValidationFailures_WorkArrayAndEndpoints(t 
 		},
 		{
 			name: "unknown target endpoint",
-			request: WorkRequest{
+			request: Request{
 				RequestID: "request-1",
-				Type:      WorkRequestTypeFactoryRequestBatch,
+				Type:      RequestTypeFactoryRequestBatch,
 				Works:     []Work{{Name: "first", WorkTypeID: "task"}},
 				Relations: []WorkRelation{{Type: WorkRelationDependsOn, SourceWorkName: "first", TargetWorkName: "missing"}},
 			},
@@ -578,9 +578,9 @@ func TestNormalizeWorkRequest_RejectsValidationFailures_RelationSemantics(t *tes
 	runNormalizeWorkRequestValidationTests(t, []normalizeValidationTestCase{
 		{
 			name: "unknown relation type",
-			request: WorkRequest{
+			request: Request{
 				RequestID: "request-1",
-				Type:      WorkRequestTypeFactoryRequestBatch,
+				Type:      RequestTypeFactoryRequestBatch,
 				Works:     []Work{{Name: "first", WorkTypeID: "task"}, {Name: "second", WorkTypeID: "task"}},
 				Relations: []WorkRelation{{
 					Type:           WorkRelationType("INVALID"),
@@ -592,9 +592,9 @@ func TestNormalizeWorkRequest_RejectsValidationFailures_RelationSemantics(t *tes
 		},
 		{
 			name: "self dependency",
-			request: WorkRequest{
+			request: Request{
 				RequestID: "request-1",
-				Type:      WorkRequestTypeFactoryRequestBatch,
+				Type:      RequestTypeFactoryRequestBatch,
 				Works:     []Work{{Name: "first", WorkTypeID: "task"}},
 				Relations: []WorkRelation{{Type: WorkRelationDependsOn, SourceWorkName: "first", TargetWorkName: "first"}},
 			},
@@ -602,9 +602,9 @@ func TestNormalizeWorkRequest_RejectsValidationFailures_RelationSemantics(t *tes
 		},
 		{
 			name: "self parenting",
-			request: WorkRequest{
+			request: Request{
 				RequestID: "request-1",
-				Type:      WorkRequestTypeFactoryRequestBatch,
+				Type:      RequestTypeFactoryRequestBatch,
 				Works:     []Work{{Name: "first", WorkTypeID: "task"}},
 				Relations: []WorkRelation{{Type: WorkRelationParentChild, SourceWorkName: "first", TargetWorkName: "first"}},
 			},
@@ -612,9 +612,9 @@ func TestNormalizeWorkRequest_RejectsValidationFailures_RelationSemantics(t *tes
 		},
 		{
 			name: "duplicate parent child relation",
-			request: WorkRequest{
+			request: Request{
 				RequestID: "request-1",
-				Type:      WorkRequestTypeFactoryRequestBatch,
+				Type:      RequestTypeFactoryRequestBatch,
 				Works:     []Work{{Name: "parent", WorkTypeID: "task"}, {Name: "child", WorkTypeID: "task"}},
 				Relations: []WorkRelation{
 					{Type: WorkRelationParentChild, SourceWorkName: "child", TargetWorkName: "parent"},
@@ -625,9 +625,9 @@ func TestNormalizeWorkRequest_RejectsValidationFailures_RelationSemantics(t *tes
 		},
 		{
 			name: "parent child required state",
-			request: WorkRequest{
+			request: Request{
 				RequestID: "request-1",
-				Type:      WorkRequestTypeFactoryRequestBatch,
+				Type:      RequestTypeFactoryRequestBatch,
 				Works:     []Work{{Name: "parent", WorkTypeID: "task"}, {Name: "child", WorkTypeID: "task"}},
 				Relations: []WorkRelation{{
 					Type:           WorkRelationParentChild,
@@ -645,9 +645,9 @@ func TestNormalizeWorkRequest_RejectsValidationFailures_WorkTypeValidation(t *te
 	runNormalizeWorkRequestValidationTests(t, []normalizeValidationTestCase{
 		{
 			name: "unknown work type",
-			request: WorkRequest{
+			request: Request{
 				RequestID: "request-1",
-				Type:      WorkRequestTypeFactoryRequestBatch,
+				Type:      RequestTypeFactoryRequestBatch,
 				Works:     []Work{{Name: "first", WorkTypeID: "missing"}},
 			},
 			wantErr: "unknown work type",
@@ -657,7 +657,7 @@ func TestNormalizeWorkRequest_RejectsValidationFailures_WorkTypeValidation(t *te
 
 type normalizeValidationTestCase struct {
 	name    string
-	request WorkRequest
+	request Request
 	wantErr string
 }
 
@@ -666,7 +666,7 @@ func runNormalizeWorkRequestValidationTests(t *testing.T, tests []normalizeValid
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := NormalizeWorkRequest(tc.request, WorkRequestNormalizeOptions{
+			_, err := NormalizeWorkRequest(tc.request, NormalizeOptions{
 				ValidWorkTypes: map[string]bool{"task": true},
 			})
 			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
@@ -678,11 +678,11 @@ func runNormalizeWorkRequestValidationTests(t *testing.T, tests []normalizeValid
 
 func TestNormalizeWorkRequest_AcceptsRawJSONPayload(t *testing.T) {
 	raw := json.RawMessage(`{"key":"value"}`)
-	normalized, err := NormalizeWorkRequest(WorkRequest{
+	normalized, err := NormalizeWorkRequest(Request{
 		RequestID: "request-1",
-		Type:      WorkRequestTypeFactoryRequestBatch,
+		Type:      RequestTypeFactoryRequestBatch,
 		Works:     []Work{{Name: "raw", WorkTypeID: "task", Payload: raw}},
-	}, WorkRequestNormalizeOptions{ValidWorkTypes: map[string]bool{"task": true}})
+	}, NormalizeOptions{ValidWorkTypes: map[string]bool{"task": true}})
 	if err != nil {
 		t.Fatalf("NormalizeWorkRequest: %v", err)
 	}
@@ -692,15 +692,15 @@ func TestNormalizeWorkRequest_AcceptsRawJSONPayload(t *testing.T) {
 }
 
 func TestNormalizeWorkRequest_ExecutionIDTagPropagatesToSubmitRequest(t *testing.T) {
-	normalized, err := NormalizeWorkRequest(WorkRequest{
+	normalized, err := NormalizeWorkRequest(Request{
 		RequestID: "request-exec-id",
-		Type:      WorkRequestTypeFactoryRequestBatch,
+		Type:      RequestTypeFactoryRequestBatch,
 		Works: []Work{{
 			Name:        "chapter",
 			WorkTypeID:  "chapter",
 			ExecutionID: "exec-guard-propagation",
 		}},
-	}, WorkRequestNormalizeOptions{ValidWorkTypes: map[string]bool{"chapter": true}})
+	}, NormalizeOptions{ValidWorkTypes: map[string]bool{"chapter": true}})
 	if err != nil {
 		t.Fatalf("NormalizeWorkRequest: %v", err)
 	}
@@ -713,11 +713,11 @@ func TestNormalizeWorkRequest_ExecutionIDTagPropagatesToSubmitRequest(t *testing
 }
 
 func TestNormalizeWorkRequest_AcceptsStringPayloadAsRawText(t *testing.T) {
-	normalized, err := NormalizeWorkRequest(WorkRequest{
+	normalized, err := NormalizeWorkRequest(Request{
 		RequestID: "request-string-payload",
-		Type:      WorkRequestTypeFactoryRequestBatch,
+		Type:      RequestTypeFactoryRequestBatch,
 		Works:     []Work{{Name: "raw", WorkTypeID: "task", Payload: "plain text"}},
-	}, WorkRequestNormalizeOptions{ValidWorkTypes: map[string]bool{"task": true}})
+	}, NormalizeOptions{ValidWorkTypes: map[string]bool{"task": true}})
 	if err != nil {
 		t.Fatalf("NormalizeWorkRequest: %v", err)
 	}
@@ -727,25 +727,25 @@ func TestNormalizeWorkRequest_AcceptsStringPayloadAsRawText(t *testing.T) {
 	if len(normalized[0].Content) != 1 {
 		t.Fatalf("content count = %d, want 1", len(normalized[0].Content))
 	}
-	if normalized[0].Content[0].Type != WorkContentPartTypeText || normalized[0].Content[0].Text != "plain text" {
+	if normalized[0].Content[0].Type != ContentPartTypeText || normalized[0].Content[0].Text != "plain text" {
 		t.Fatalf("content = %#v, want canonical text part", normalized[0].Content)
 	}
 }
 
 func TestNormalizeWorkRequest_PrefersExplicitContentForLegacyTextPayload(t *testing.T) {
-	normalized, err := NormalizeWorkRequest(WorkRequest{
+	normalized, err := NormalizeWorkRequest(Request{
 		RequestID: "request-explicit-content",
-		Type:      WorkRequestTypeFactoryRequestBatch,
+		Type:      RequestTypeFactoryRequestBatch,
 		Works: []Work{{
 			Name:       "raw",
 			WorkTypeID: "task",
-			Content: []WorkContentPart{
-				{Type: WorkContentPartTypeText, Text: "plain "},
-				{Type: WorkContentPartTypeText, Text: "text"},
+			Content: []ContentPart{
+				{Type: ContentPartTypeText, Text: "plain "},
+				{Type: ContentPartTypeText, Text: "text"},
 			},
 			Payload: "plain text",
 		}},
-	}, WorkRequestNormalizeOptions{ValidWorkTypes: map[string]bool{"task": true}})
+	}, NormalizeOptions{ValidWorkTypes: map[string]bool{"task": true}})
 	if err != nil {
 		t.Fatalf("NormalizeWorkRequest: %v", err)
 	}
@@ -758,18 +758,18 @@ func TestNormalizeWorkRequest_PrefersExplicitContentForLegacyTextPayload(t *test
 }
 
 func TestNormalizeWorkRequest_DerivesLegacyPayloadFromExplicitTextContent(t *testing.T) {
-	normalized, err := NormalizeWorkRequest(WorkRequest{
+	normalized, err := NormalizeWorkRequest(Request{
 		RequestID: "request-content-only",
-		Type:      WorkRequestTypeFactoryRequestBatch,
+		Type:      RequestTypeFactoryRequestBatch,
 		Works: []Work{{
 			Name:       "raw",
 			WorkTypeID: "task",
-			Content: []WorkContentPart{
-				{Type: WorkContentPartTypeText, Text: "alpha"},
-				{Type: WorkContentPartTypeText, Text: "\nbeta"},
+			Content: []ContentPart{
+				{Type: ContentPartTypeText, Text: "alpha"},
+				{Type: ContentPartTypeText, Text: "\nbeta"},
 			},
 		}},
-	}, WorkRequestNormalizeOptions{ValidWorkTypes: map[string]bool{"task": true}})
+	}, NormalizeOptions{ValidWorkTypes: map[string]bool{"task": true}})
 	if err != nil {
 		t.Fatalf("NormalizeWorkRequest: %v", err)
 	}
@@ -779,55 +779,55 @@ func TestNormalizeWorkRequest_DerivesLegacyPayloadFromExplicitTextContent(t *tes
 }
 
 func TestNormalizeWorkRequest_RejectsConflictingExplicitContentAndPayload(t *testing.T) {
-	_, err := NormalizeWorkRequest(WorkRequest{
+	_, err := NormalizeWorkRequest(Request{
 		RequestID: "request-content-conflict",
-		Type:      WorkRequestTypeFactoryRequestBatch,
+		Type:      RequestTypeFactoryRequestBatch,
 		Works: []Work{{
 			Name:       "raw",
 			WorkTypeID: "task",
-			Content: []WorkContentPart{
-				{Type: WorkContentPartTypeText, Text: "plain text"},
+			Content: []ContentPart{
+				{Type: ContentPartTypeText, Text: "plain text"},
 			},
 			Payload: "different text",
 		}},
-	}, WorkRequestNormalizeOptions{ValidWorkTypes: map[string]bool{"task": true}})
+	}, NormalizeOptions{ValidWorkTypes: map[string]bool{"task": true}})
 	if err == nil || !strings.Contains(err.Error(), "payload conflicts with explicit content") {
 		t.Fatalf("expected content conflict error, got %v", err)
 	}
 }
 
 func TestNormalizeWorkRequest_RejectsPayloadAlongsideImageContent(t *testing.T) {
-	_, err := NormalizeWorkRequest(WorkRequest{
+	_, err := NormalizeWorkRequest(Request{
 		RequestID: "request-image-conflict",
-		Type:      WorkRequestTypeFactoryRequestBatch,
+		Type:      RequestTypeFactoryRequestBatch,
 		Works: []Work{{
 			Name:       "raw",
 			WorkTypeID: "task",
-			Content: []WorkContentPart{
-				{Type: WorkContentPartTypeImage, File: "fixtures/example.png"},
+			Content: []ContentPart{
+				{Type: ContentPartTypeImage, File: "fixtures/example.png"},
 			},
 			Payload: "caption",
 		}},
-	}, WorkRequestNormalizeOptions{ValidWorkTypes: map[string]bool{"task": true}})
+	}, NormalizeOptions{ValidWorkTypes: map[string]bool{"task": true}})
 	if err == nil || !strings.Contains(err.Error(), "payload cannot be combined with image-only canonical content") {
 		t.Fatalf("expected image/payload conflict error, got %v", err)
 	}
 }
 
 func TestNormalizeWorkRequest_ExtendedContentKeepsLegacyTextProjection(t *testing.T) {
-	normalized, err := NormalizeWorkRequest(WorkRequest{
+	normalized, err := NormalizeWorkRequest(Request{
 		RequestID: "request-model-content",
-		Type:      WorkRequestTypeFactoryRequestBatch,
+		Type:      RequestTypeFactoryRequestBatch,
 		Works: []Work{{
 			Name:       "tts",
 			WorkTypeID: "task",
-			Content: []WorkContentPart{
-				{Type: WorkContentPartTypeText, Text: "Synthesize"},
-				{Type: WorkContentPartTypeAudio, File: "artifacts/output.wav"},
-				{Type: WorkContentPartTypeJSON, JSON: json.RawMessage(`{"voice":"alloy"}`)},
+			Content: []ContentPart{
+				{Type: ContentPartTypeText, Text: "Synthesize"},
+				{Type: ContentPartTypeAudio, File: "artifacts/output.wav"},
+				{Type: ContentPartTypeJSON, JSON: json.RawMessage(`{"voice":"alloy"}`)},
 			},
 		}},
-	}, WorkRequestNormalizeOptions{ValidWorkTypes: map[string]bool{"task": true}})
+	}, NormalizeOptions{ValidWorkTypes: map[string]bool{"task": true}})
 	if err != nil {
 		t.Fatalf("NormalizeWorkRequest: %v", err)
 	}
@@ -837,7 +837,7 @@ func TestNormalizeWorkRequest_ExtendedContentKeepsLegacyTextProjection(t *testin
 	if string(normalized[0].Payload) != "Synthesize" {
 		t.Fatalf("payload = %q, want text-only legacy projection", normalized[0].Payload)
 	}
-	if len(normalized[0].Content) != 3 || normalized[0].Content[1].Type != WorkContentPartTypeAudio || normalized[0].Content[2].Type != WorkContentPartTypeJSON {
+	if len(normalized[0].Content) != 3 || normalized[0].Content[1].Type != ContentPartTypeAudio || normalized[0].Content[2].Type != ContentPartTypeJSON {
 		t.Fatalf("content = %#v, want preserved extended content", normalized[0].Content)
 	}
 	if normalized[0].Content[1].URL != "file://artifacts/output.wav" {
@@ -849,17 +849,17 @@ func TestNormalizeWorkRequest_ExtendedContentKeepsLegacyTextProjection(t *testin
 }
 
 func TestNormalizeWorkRequest_NormalizesLegacyFileOnlyImageContent(t *testing.T) {
-	normalized, err := NormalizeWorkRequest(WorkRequest{
+	normalized, err := NormalizeWorkRequest(Request{
 		RequestID: "request-legacy-file",
-		Type:      WorkRequestTypeFactoryRequestBatch,
+		Type:      RequestTypeFactoryRequestBatch,
 		Works: []Work{{
 			Name:       "raw",
 			WorkTypeID: "task",
-			Content: []WorkContentPart{
-				{Type: WorkContentPartTypeImage, File: "fixtures/example.png"},
+			Content: []ContentPart{
+				{Type: ContentPartTypeImage, File: "fixtures/example.png"},
 			},
 		}},
-	}, WorkRequestNormalizeOptions{ValidWorkTypes: map[string]bool{"task": true}})
+	}, NormalizeOptions{ValidWorkTypes: map[string]bool{"task": true}})
 	if err != nil {
 		t.Fatalf("NormalizeWorkRequest: %v", err)
 	}
@@ -876,10 +876,10 @@ func TestNormalizeWorkRequest_NormalizesLegacyFileOnlyImageContent(t *testing.T)
 
 func TestNormalizeWorkRequest_UsesInjectedOpaqueIdentityForMissingRequestID(t *testing.T) {
 	generated := 0
-	normalized, err := NormalizeWorkRequest(WorkRequest{
-		Type:  WorkRequestTypeFactoryRequestBatch,
+	normalized, err := NormalizeWorkRequest(Request{
+		Type:  RequestTypeFactoryRequestBatch,
 		Works: []Work{{Name: "work", WorkTypeID: "task"}},
-	}, WorkRequestNormalizeOptions{
+	}, NormalizeOptions{
 		ValidWorkTypes: map[string]bool{"task": true},
 		IDGenerator: func() string {
 			generated++
@@ -898,21 +898,21 @@ func TestNormalizeWorkRequest_UsesInjectedOpaqueIdentityForMissingRequestID(t *t
 }
 
 func TestNormalizeWorkRequest_FailsClosedWithoutRequiredIDGenerator(t *testing.T) {
-	_, err := NormalizeWorkRequest(WorkRequest{
-		Type:  WorkRequestTypeFactoryRequestBatch,
+	_, err := NormalizeWorkRequest(Request{
+		Type:  RequestTypeFactoryRequestBatch,
 		Works: []Work{{Name: "work", WorkTypeID: "task"}},
-	}, WorkRequestNormalizeOptions{ValidWorkTypes: map[string]bool{"task": true}})
+	}, NormalizeOptions{ValidWorkTypes: map[string]bool{"task": true}})
 	if err == nil || !strings.Contains(err.Error(), "ID generator is required") {
 		t.Fatalf("error = %v, want missing ID generator failure", err)
 	}
 }
 
 func TestNormalizeWorkRequest_DoesNotGenerateWhenRequestIdentityIsSupplied(t *testing.T) {
-	normalized, err := NormalizeWorkRequest(WorkRequest{
+	normalized, err := NormalizeWorkRequest(Request{
 		RequestID: "request-customer",
-		Type:      WorkRequestTypeFactoryRequestBatch,
+		Type:      RequestTypeFactoryRequestBatch,
 		Works:     []Work{{Name: "work", WorkTypeID: "task"}},
-	}, WorkRequestNormalizeOptions{
+	}, NormalizeOptions{
 		ValidWorkTypes: map[string]bool{"task": true},
 		IDGenerator: func() string {
 			t.Fatal("ID generator called for an identified request")
@@ -971,18 +971,18 @@ func TestFactoryRequestBatch_InvalidJSONRejected(t *testing.T) {
 
 func TestFactoryRequestBatch_BatchSubmissionAtomic(t *testing.T) {
 	validWorkTypes := map[string]bool{"task": true}
-	invalid := WorkRequest{
-		RequestID: "request-atomic-invalid", Type: WorkRequestTypeFactoryRequestBatch,
+	invalid := Request{
+		RequestID: "request-atomic-invalid", Type: RequestTypeFactoryRequestBatch,
 		Works: []Work{{WorkTypeID: "task", Name: "valid-item"}, {WorkTypeID: "task"}},
 	}
-	if _, err := NormalizeWorkRequest(invalid, WorkRequestNormalizeOptions{ValidWorkTypes: validWorkTypes}); err == nil {
+	if _, err := NormalizeWorkRequest(invalid, NormalizeOptions{ValidWorkTypes: validWorkTypes}); err == nil {
 		t.Fatal("expected validation error for batch with invalid item, got nil")
 	}
-	valid := WorkRequest{
-		RequestID: "request-atomic-1", Type: WorkRequestTypeFactoryRequestBatch,
+	valid := Request{
+		RequestID: "request-atomic-1", Type: RequestTypeFactoryRequestBatch,
 		Works: []Work{{WorkTypeID: "task", Name: "item-1"}, {WorkTypeID: "task", Name: "item-2"}, {WorkTypeID: "task", Name: "item-3"}},
 	}
-	expanded, err := NormalizeWorkRequest(valid, WorkRequestNormalizeOptions{ValidWorkTypes: validWorkTypes})
+	expanded, err := NormalizeWorkRequest(valid, NormalizeOptions{ValidWorkTypes: validWorkTypes})
 	if err != nil {
 		t.Fatalf("NormalizeWorkRequest failed: %v", err)
 	}
@@ -998,10 +998,10 @@ func TestFactoryRequestBatch_BatchSubmissionAtomic(t *testing.T) {
 
 func assertInvalidFactoryRequestBatchPayload(t *testing.T, payload, wantErr string) {
 	t.Helper()
-	var request WorkRequest
+	var request Request
 	err := json.Unmarshal([]byte(payload), &request)
 	if err == nil {
-		_, err = NormalizeWorkRequest(request, WorkRequestNormalizeOptions{
+		_, err = NormalizeWorkRequest(request, NormalizeOptions{
 			ValidWorkTypes: map[string]bool{"task": true},
 			ValidStatesByType: map[string]map[string]bool{
 				"task": {"init": true, "complete": true},

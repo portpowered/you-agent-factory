@@ -1,4 +1,4 @@
-package work
+package requestadmission
 
 import (
 	"context"
@@ -131,11 +131,11 @@ func TestWorkRequestFromSubmitRequests_PreservesCanonicalBatchContract(t *testin
 	}
 }
 
-func assertCanonicalBatchEnvelope(t *testing.T, workRequest WorkRequest) {
+func assertCanonicalBatchEnvelope(t *testing.T, workRequest Request) {
 	t.Helper()
 
-	if workRequest.Type != WorkRequestTypeFactoryRequestBatch {
-		t.Fatalf("work request type = %q, want %q", workRequest.Type, WorkRequestTypeFactoryRequestBatch)
+	if workRequest.Type != RequestTypeFactoryRequestBatch {
+		t.Fatalf("work request type = %q, want %q", workRequest.Type, RequestTypeFactoryRequestBatch)
 	}
 	if workRequest.RequestID != "request-shared" {
 		t.Fatalf("work request ID = %q, want request-shared", workRequest.RequestID)
@@ -249,8 +249,8 @@ func TestWorkRequestFromSubmitRequests_LegacyTraceFallbackAndRequestIDInheritanc
 
 func TestWorkRequestFromSubmitRequests_EmptyBatchReturnsCanonicalEnvelope(t *testing.T) {
 	workRequest := WorkRequestFromSubmitRequests(nil)
-	if workRequest.Type != WorkRequestTypeFactoryRequestBatch {
-		t.Fatalf("work request type = %q, want %q", workRequest.Type, WorkRequestTypeFactoryRequestBatch)
+	if workRequest.Type != RequestTypeFactoryRequestBatch {
+		t.Fatalf("work request type = %q, want %q", workRequest.Type, RequestTypeFactoryRequestBatch)
 	}
 	if workRequest.RequestID != "" {
 		t.Fatalf("work request ID = %q, want empty", workRequest.RequestID)
@@ -291,8 +291,8 @@ func TestWorkRequestFromSubmitRequests_EmptyMutableInputsNormalizeToNil(t *testi
 	}
 }
 
-func TestWorkRequestJSONUsesWorkTypeNameContract(t *testing.T) {
-	var request WorkRequest
+func TestRequestJSONUsesWorkTypeNameContract(t *testing.T) {
+	var request Request
 	if err := json.Unmarshal([]byte(`{
 		"requestId": "request-json",
 		"type": "FACTORY_REQUEST_BATCH",
@@ -300,7 +300,7 @@ func TestWorkRequestJSONUsesWorkTypeNameContract(t *testing.T) {
 			{"name": "draft", "workTypeName": "task", "state": "queued", "payload": {"title": "Draft"}}
 		]
 	}`), &request); err != nil {
-		t.Fatalf("Unmarshal WorkRequest: %v", err)
+		t.Fatalf("Unmarshal Request: %v", err)
 	}
 	if request.Works[0].WorkTypeID != "task" {
 		t.Fatalf("WorkTypeID = %q, want task", request.Works[0].WorkTypeID)
@@ -313,11 +313,11 @@ func TestWorkRequestJSONUsesWorkTypeNameContract(t *testing.T) {
 
 	data, err := json.Marshal(request)
 	if err != nil {
-		t.Fatalf("Marshal WorkRequest: %v", err)
+		t.Fatalf("Marshal Request: %v", err)
 	}
 	var raw map[string]any
 	if err := json.Unmarshal(data, &raw); err != nil {
-		t.Fatalf("Unmarshal marshaled WorkRequest: %v", err)
+		t.Fatalf("Unmarshal marshaled Request: %v", err)
 	}
 	works := raw["works"].([]any)
 	work := works[0].(map[string]any)
@@ -334,10 +334,10 @@ func TestWorkRequestJSONUsesWorkTypeNameContract(t *testing.T) {
 		t.Fatalf("work currentChainingTraceId = %#v, want chain-work-json in %s", got, data)
 	}
 	if _, ok := work["work_type_id"]; ok {
-		t.Fatalf("marshaled WorkRequest must not expose work_type_id: %s", data)
+		t.Fatalf("marshaled Request must not expose work_type_id: %s", data)
 	}
 	if _, ok := work["target_state"]; ok {
-		t.Fatalf("marshaled WorkRequest must not expose target_state: %s", data)
+		t.Fatalf("marshaled Request must not expose target_state: %s", data)
 	}
 }
 

@@ -1,4 +1,4 @@
-package work
+package requestadmission
 
 import "fmt"
 
@@ -6,21 +6,21 @@ type FileSource interface {
 	ReadFile(string) ([]byte, error)
 }
 
-type RequestFileLoader func(string) (WorkRequest, error)
+type RequestFileLoader func(string) (Request, error)
 type PayloadFileReader func(string) ([]byte, error)
 
 func NewRequestFileLoader(source FileSource) RequestFileLoader {
-	return func(path string) (WorkRequest, error) {
+	return func(path string) (Request, error) {
 		if source == nil {
-			return WorkRequest{}, fmt.Errorf("Work request file source is required")
+			return Request{}, fmt.Errorf("Work request file source is required")
 		}
 		data, err := source.ReadFile(path)
 		if err != nil {
-			return WorkRequest{}, fmt.Errorf("read %s: %w", path, err)
+			return Request{}, fmt.Errorf("read %s: %w", path, err)
 		}
 		request, err := ParseCanonicalWorkRequestJSON(data)
 		if err != nil {
-			return WorkRequest{}, fmt.Errorf("parse %s: %w", path, err)
+			return Request{}, fmt.Errorf("parse %s: %w", path, err)
 		}
 		return request, nil
 	}

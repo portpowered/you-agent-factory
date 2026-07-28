@@ -1,4 +1,4 @@
-package work
+package requestadmission
 
 import (
 	"context"
@@ -12,24 +12,12 @@ import (
 // trace identities on one Work request.
 var ErrConflictingWorkRequestTraceFields = errors.New("currentChainingTraceId and traceId must match when both are provided")
 
-// PreparedFactoryRequestBatch is a detached, validated canonical batch and
-// its original representation bytes. The byte slice is copied before it is
-// returned so transports cannot mutate Work-owned preparation state.
-type PreparedFactoryRequestBatch struct {
-	Request       WorkRequest
-	CanonicalJSON []byte
-}
-
-// FactoryRequestBatchPreparation is the exact Work-owned decode and admission
-// role consumed by batch transports.
 type FactoryRequestBatchPreparation interface {
 	PrepareFactoryRequestBatch(context.Context, []byte) (PreparedFactoryRequestBatch, error)
 }
 
 type factoryRequestBatchPreparation struct{}
 
-// NewFactoryRequestBatchPreparation constructs the pure canonical batch
-// preparation role. Wire injects it at transport composition.
 func NewFactoryRequestBatchPreparation() FactoryRequestBatchPreparation {
 	return factoryRequestBatchPreparation{}
 }
@@ -48,8 +36,8 @@ func (factoryRequestBatchPreparation) PrepareFactoryRequestBatch(
 	if err != nil {
 		return PreparedFactoryRequestBatch{}, err
 	}
-	if request.Type != WorkRequestTypeFactoryRequestBatch {
-		return PreparedFactoryRequestBatch{}, fmt.Errorf("batch type must be %q", WorkRequestTypeFactoryRequestBatch)
+	if request.Type != RequestTypeFactoryRequestBatch {
+		return PreparedFactoryRequestBatch{}, fmt.Errorf("batch type must be %q", RequestTypeFactoryRequestBatch)
 	}
 	if strings.TrimSpace(request.RequestID) == "" {
 		return PreparedFactoryRequestBatch{}, errors.New("batch requestId is required")
@@ -82,21 +70,17 @@ type canonicalWorkRequestEntry struct {
 	LegacyTraceID          json.RawMessage `json:"trace_id"`
 }
 
-// ParseCanonicalWorkRequestJSON parses the public Work request contract and
-// rejects retired field aliases at the Work service boundary.
-func ParseCanonicalWorkRequestJSON(data []byte) (WorkRequest, error) {
+func ParseCanonicalWorkRequestJSON(data []byte) (Request, error) {
 	if err := ValidateCanonicalWorkRequestJSON(data); err != nil {
-		return WorkRequest{}, err
+		return Request{}, err
 	}
-	var request WorkRequest
+	var request Request
 	if err := json.Unmarshal(data, &request); err != nil {
-		return WorkRequest{}, err
+		return Request{}, err
 	}
 	return request, nil
 }
 
-// ValidateCanonicalWorkRequestJSON validates public Work request field names
-// and trace aliases without constructing runtime state.
 func ValidateCanonicalWorkRequestJSON(data []byte) error {
 	var raw canonicalWorkRequestJSON
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -108,8 +92,6 @@ func ValidateCanonicalWorkRequestJSON(data []byte) error {
 	return validateConflictingWorkRequestTraceFields(raw)
 }
 
-// ResolveWorkRequestCurrentChainingTraceID returns the effective chaining
-// trace, preferring the current field while preserving traceId fallback.
 func ResolveWorkRequestCurrentChainingTraceID(current, legacy string) string {
 	if current != "" {
 		return current
@@ -117,8 +99,6 @@ func ResolveWorkRequestCurrentChainingTraceID(current, legacy string) string {
 	return legacy
 }
 
-// ValidateWorkRequestTraceFields rejects conflicting current and legacy trace
-// values when both are populated.
 func ValidateWorkRequestTraceFields(current, legacy string) error {
 	if current != "" && legacy != "" && current != legacy {
 		return ErrConflictingWorkRequestTraceFields
@@ -126,8 +106,6 @@ func ValidateWorkRequestTraceFields(current, legacy string) error {
 	return nil
 }
 
-// ValidateWorkRequestTraceFieldAliases validates the public and retired JSON
-// spellings before the request is decoded.
 func ValidateWorkRequestTraceFieldAliases(currentRaw, legacyCurrentRaw, traceRaw, legacyTraceRaw json.RawMessage) error {
 	if currentRaw == nil {
 		currentRaw = legacyCurrentRaw
@@ -149,11 +127,9 @@ func ValidateWorkRequestTraceFieldAliases(currentRaw, legacyCurrentRaw, traceRaw
 	return ValidateWorkRequestTraceFields(current, legacy)
 }
 
-// WorkRequestFromSubmitRequests projects normalized submissions into the
-// canonical FACTORY_REQUEST_BATCH contract.
-func WorkRequestFromSubmitRequests(requests []SubmitRequest) WorkRequest {
+func WorkRequestFromSubmitRequests(requests []SubmitRequest) Request {
 	if len(requests) == 0 {
-		return WorkRequest{Type: WorkRequestTypeFactoryRequestBatch}
+		return Request{Type: RequestTypeFactoryRequestBatch}
 	}
 
 	requestID := sharedSubmitRequestID(requests)
@@ -174,20 +150,45 @@ func WorkRequestFromSubmitRequests(requests []SubmitRequest) WorkRequest {
 			CurrentChainingTraceID:   ResolveWorkRequestCurrentChainingTraceID(request.CurrentChainingTraceID, request.TraceID),
 			PreviousChainingTraceIDs: append([]string(nil), request.PreviousChainingTraceIDs...),
 			TraceID:                  request.TraceID,
-			Content:                  CloneWorkContentParts(request.Content),
-			Payload:                  ClonePayload(request.Payload),
+			Content:                  cloneContentParts(request.Content),
+			Payload:                  clonePayload(request.Payload),
 			Tags:                     cloneNonEmptyTags(request.Tags),
 			ExecutionID:              request.ExecutionID,
 			RuntimeRelations:         cloneNonEmptyRelations(request.Relations),
-			InvocationArguments:      CloneInvocationArguments(request.InvocationArguments),
+			InvocationArguments:      cloneInvocationArguments(request.InvocationArguments),
 		})
 	}
-	return WorkRequest{
+	return Request{
 		RequestID:              requestID,
 		CurrentChainingTraceID: ResolveWorkRequestCurrentChainingTraceID(requests[0].CurrentChainingTraceID, requests[0].TraceID),
-		Type:                   WorkRequestTypeFactoryRequestBatch,
+		Type:                   RequestTypeFactoryRequestBatch,
 		Works:                  works,
 	}
+}
+
+func WorkRequestSubmitResultFromNormalized(requestID string, work []SubmitRequest, accepted bool) SubmitResult {
+	result := SubmitResult{
+		RequestID: requestID,
+		Accepted:  accepted,
+	}
+	if len(work) == 0 {
+		return result
+	}
+	primary := work[0]
+	result.TraceID = primary.TraceID
+	result.WorkID = primary.WorkID
+	result.Name = primary.Name
+	result.WorkTypeName = primary.WorkTypeID
+	works := make([]SubmittedWork, 0, len(work))
+	for _, req := range work {
+		works = append(works, SubmittedWork{
+			Name:         SubmitWorkName(req),
+			WorkTypeName: req.WorkTypeID,
+			WorkID:       req.WorkID,
+		})
+	}
+	result.Works = works
+	return result
 }
 
 func validateRetiredWorkRequestFieldAliases(raw canonicalWorkRequestJSON) error {
@@ -261,40 +262,12 @@ func cloneNonEmptyTags(tags map[string]string) map[string]string {
 	if len(tags) == 0 {
 		return nil
 	}
-	return CloneTags(tags)
+	return cloneTags(tags)
 }
 
 func cloneNonEmptyRelations(relations []Relation) []Relation {
 	if len(relations) == 0 {
 		return nil
 	}
-	return CloneRelations(relations)
-}
-
-// WorkRequestSubmitResultFromNormalized builds accepted-request metadata from
-// normalized submit requests, including per-work identifiers for batch upserts
-// and primary-work fields for unary submit responses.
-func WorkRequestSubmitResultFromNormalized(requestID string, work []SubmitRequest, accepted bool) WorkRequestSubmitResult {
-	result := WorkRequestSubmitResult{
-		RequestID: requestID,
-		Accepted:  accepted,
-	}
-	if len(work) == 0 {
-		return result
-	}
-	primary := work[0]
-	result.TraceID = primary.TraceID
-	result.WorkID = primary.WorkID
-	result.Name = primary.Name
-	result.WorkTypeName = primary.WorkTypeID
-	works := make([]WorkRequestSubmittedWork, 0, len(work))
-	for _, req := range work {
-		works = append(works, WorkRequestSubmittedWork{
-			Name:         SubmitWorkName(req),
-			WorkTypeName: req.WorkTypeID,
-			WorkID:       req.WorkID,
-		})
-	}
-	result.Works = works
-	return result
+	return cloneRelations(relations)
 }

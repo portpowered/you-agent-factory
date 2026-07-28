@@ -26,7 +26,7 @@ fold or delete them.
 
 | File | Classification | Later target / rationale |
 | --- | --- | --- |
-| `admission_contract.go` | Thin committed root contract (keep) | Admission slice typed failures (`ErrInvalidWorkRequest`, `ErrWorkRequestConflict`, `ErrWorkRequestRejected`) peers branch on via `errors.Is`. |
+| `admission_contract.go` | Thin committed root contract (keep) | Admission slice typed failures, request preparation interfaces, and thin delegators to `work/internal/requestadmission`. |
 | `content_contract.go` | Thin committed root contract (keep) | Content materialization effect ports, `ContentMaterializer` narrow role, and published content URL vocabulary delegators for peers. |
 | `content_materialization_public_seam_test.go` | Thin committed root contract (keep) | Root-contract characterization test for the published content materialization slice on `Service`. |
 | `content_materialize_contract.go` | Thin committed root contract (keep) | Materialization slice typed failures (`ErrUnsafeContentURL`, `ErrContentURLInaccessible`). |
@@ -55,8 +55,8 @@ fold or delete them.
 | `dependency_graph_mermaid.go` | Excess fold/consolidation debt | **Folded** with `dependency_graph.go` to `work/internal/lineagegraph`. |
 | `dependency_graph_mermaid_test.go` | Excess fold/consolidation debt | **Folded** with `dependency_graph.go` to `work/internal/lineagegraph`. |
 | `dependency_graph_test.go` | Excess fold/consolidation debt | **Folded** with `dependency_graph.go` to `work/internal/lineagegraph`. |
-| `file_inputs.go` | Excess fold/consolidation debt | `work/internal` — path-backed request and payload file loaders for transport edges. |
-| `file_inputs_test.go` | Excess fold/consolidation debt | Co-located tests for `file_inputs.go`. |
+| `file_inputs.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 005 to `work/internal/requestadmission`; thin file-loader delegators stay on `admission_contract.go`. |
+| `file_inputs_test.go` | Excess fold/consolidation debt | **Folded** with `file_inputs.go` to `work/internal/requestadmission`. |
 | `invocation_input_preparation.go` | Excess fold/consolidation debt | `work/internal` — `PrepareInvocationInput` implementation and argv/stdin normalization policy. |
 | `invocation_input_preparation_test.go` | Excess fold/consolidation debt | Co-located tests for `invocation_input_preparation.go`. |
 | `invocation_policy_service.go` | Excess fold/consolidation debt | `work/internal` — `NewInvocationPolicyService` invocation/return-policy slice constructor and inert `Service` implementation body (`invocation_return_policy` cluster). |
@@ -70,16 +70,16 @@ fold or delete them.
 | `query_list_test.go` | Excess fold/consolidation debt | **Folded** with `query_list.go` to `work/internal/stateaccessquery`. |
 | `query_select.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 003 to `work/internal/stateaccessquery`; selection policy is private to state_access reads. |
 | `query_select_test.go` | Excess fold/consolidation debt | **Folded** with `query_select.go` to `work/internal/stateaccessquery`. |
-| `request_codec.go` | Excess fold/consolidation debt | `work/internal` — canonical Work Request JSON decode/preparation roles for batch transports. |
-| `request_normalize.go` | Excess fold/consolidation debt | `work/internal` — `NormalizeWorkRequest`, single-target preparation, and admission normalization policy. |
-| `request_normalize_test.go` | Excess fold/consolidation debt | Co-located tests for `request_normalize.go`. |
-| `request_preparation.go` | Excess fold/consolidation debt | `work/internal` — `RequestPreparationService` admission policy before Factory Session submit. |
-| `request_preparation_test.go` | Excess fold/consolidation debt | Co-located tests for `request_preparation.go`. |
-| `request_submit_test.go` | Excess fold/consolidation debt | Admission submit integration tests that exercise request preparation through the root package; relocate with request fold. |
+| `request_codec.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 005 to `work/internal/requestadmission`; canonical JSON decode/preparation delegators stay on `admission_contract.go`. |
+| `request_normalize.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 005 to `work/internal/requestadmission`; `NormalizeWorkRequest` and related delegators stay on `admission_contract.go`. |
+| `request_normalize_test.go` | Excess fold/consolidation debt | **Folded** with `request_normalize.go` to `work/internal/requestadmission`. |
+| `request_preparation.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 005 to `work/internal/requestadmission`; `RequestPreparationService` delegators stay on `admission_contract.go`. |
+| `request_preparation_test.go` | Excess fold/consolidation debt | **Folded** with `request_preparation.go` to `work/internal/requestadmission`. |
+| `request_submit_test.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 005 to `work/internal/requestadmission`. |
 | `visualization.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 004 to `work/internal/lineagegraph`; `NewVisualizationOperation` stays on `lineage_contract.go` as a thin delegator. |
 | `visualization_test.go` | Excess fold/consolidation debt | **Folded** with `visualization.go` to `work/internal/lineagegraph`. |
 
-**Totals:** 39 root-level `.go` files — 22 thin committed root contract (keep), 17
+**Totals:** 31 root-level `.go` files — 22 thin committed root contract (keep), 9
 excess fold/consolidation debt.
 
 `content_staging_impl` and `content_materialization_impl` folded in
@@ -98,11 +98,14 @@ lineage/graph/visualization implementation lives under
 `work/internal/lineagegraph`, and thin published vocabulary plus delegators stay
 on `lineage_contract.go`.
 
+`request_admission` folded in CLN-WORK-CONTRACT-ROOTS story 005:
+request admission implementation lives under `work/internal/requestadmission`, and
+thin admission vocabulary plus delegators stay on `admission_contract.go`.
+
 ## Excess fold clusters
 
 | Cluster | Destination | Root files |
 | --- | --- | --- |
-| `request_admission` | `work/internal` | `file_inputs.go`, `file_inputs_test.go`, `request_codec.go`, `request_normalize.go`, `request_normalize_test.go`, `request_preparation.go`, `request_preparation_test.go`, `request_submit_test.go` |
 | `invocation_return_policy` | `work/internal` | `arguments.go`, `arguments_test.go`, `invocation_input_preparation.go`, `invocation_input_preparation_test.go`, `invocation_policy_service.go`, `invocation_policy_service_test.go`, `primary_result.go`, `primary_result_test.go`, `primary_result_regression_test.go` |
 
 ## Generator mirror

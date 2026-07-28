@@ -1,4 +1,4 @@
-package work
+package requestadmission
 
 import (
 	"encoding/json"
@@ -6,27 +6,15 @@ import (
 	"maps"
 	"sort"
 	"strings"
+
+	"github.com/portpowered/infinite-you/pkg/services/work/internal/lineagegraph"
 )
 
-// SingleWorkTarget is the stable identity of the sole Work item in a Work
-// Request. It lets application edges identify a result without reproducing
-// Work Request normalization policy.
-type SingleWorkTarget struct {
-	WorkID     string
-	WorkTypeID string
-}
+type SingleWorkTargetPreparation func(Request) (SingleWorkTarget, error)
 
-// SingleWorkTargetPreparation is the Work-owned operation for validating a
-// request and selecting its sole Work target. Transports map or load a request
-// and invoke this operation; they do not normalize Work Requests themselves.
-type SingleWorkTargetPreparation func(WorkRequest) (SingleWorkTarget, error)
-
-// NewSingleWorkTargetPreparation constructs strict target preparation. A
-// result observer cannot safely recreate identities generated during an
-// earlier submission, so the target must already carry canonical identity.
 func NewSingleWorkTargetPreparation() SingleWorkTargetPreparation {
-	return func(request WorkRequest) (SingleWorkTarget, error) {
-		if request.Type != WorkRequestTypeFactoryRequestBatch {
+	return func(request Request) (SingleWorkTarget, error) {
+		if request.Type != RequestTypeFactoryRequestBatch {
 			return SingleWorkTarget{}, fmt.Errorf("work_request: unsupported type %q", request.Type)
 		}
 		if len(request.Works) != 1 {
@@ -46,9 +34,8 @@ func NewSingleWorkTargetPreparation() SingleWorkTargetPreparation {
 	}
 }
 
-// NormalizeWorkRequest validates a FACTORY_REQUEST_BATCH and converts it into runtime submit requests.
-func NormalizeWorkRequest(req WorkRequest, opts WorkRequestNormalizeOptions) ([]SubmitRequest, error) {
-	if req.Type != WorkRequestTypeFactoryRequestBatch {
+func NormalizeWorkRequest(req Request, opts NormalizeOptions) ([]SubmitRequest, error) {
+	if req.Type != RequestTypeFactoryRequestBatch {
 		return nil, fmt.Errorf("work_request: unsupported type %q", req.Type)
 	}
 	if len(req.Works) == 0 {
@@ -113,7 +100,7 @@ func NormalizeWorkRequest(req WorkRequest, opts WorkRequestNormalizeOptions) ([]
 			WorkTypeID:               workTypeID,
 			ChainingTraceDepth:       normalizeSubmitChainingTraceDepth(work.ChainingTraceDepth, itemCurrentChainingTraceID, itemTraceID),
 			CurrentChainingTraceID:   itemCurrentChainingTraceID,
-			PreviousChainingTraceIDs: CanonicalChainingTraceIDs(work.PreviousChainingTraceIDs),
+			PreviousChainingTraceIDs: lineagegraph.CanonicalChainingTraceIDs(work.PreviousChainingTraceIDs),
 			TraceID:                  itemTraceID,
 			Content:                  content,
 			Payload:                  payload,
@@ -121,23 +108,20 @@ func NormalizeWorkRequest(req WorkRequest, opts WorkRequestNormalizeOptions) ([]
 			TargetState:              work.State,
 			ExecutionID:              work.ExecutionID,
 			Relations: appendUniquePetriRelations(
-				CloneRelations(relIndex[work.Name]),
+				cloneRelations(relIndex[work.Name]),
 				work.RuntimeRelations,
 			),
-			InvocationArguments: CloneInvocationArguments(work.InvocationArguments),
+			InvocationArguments: cloneInvocationArguments(work.InvocationArguments),
 		})
 	}
 	return normalized, nil
 }
 
-// SubmitResultFromNormalized builds accepted batch metadata from normalized submit requests.
-func SubmitResultFromNormalized(requestID string, normalized []SubmitRequest) WorkRequestSubmitResult {
+func SubmitResultFromNormalized(requestID string, normalized []SubmitRequest) SubmitResult {
 	return WorkRequestSubmitResultFromNormalized(requestID, normalized, true)
 }
 
-// NormalizeGeneratedSubmissionBatch validates the canonical generated request
-// and merges optional runtime submission fields onto the matching work items.
-func NormalizeGeneratedSubmissionBatch(batch GeneratedSubmissionBatch, opts WorkRequestNormalizeOptions) ([]SubmitRequest, error) {
+func NormalizeGeneratedSubmissionBatch(batch GeneratedSubmissionBatch, opts NormalizeOptions) ([]SubmitRequest, error) {
 	normalized, err := NormalizeWorkRequest(batch.Request, opts)
 	if err != nil {
 		return nil, err
@@ -160,6 +144,71 @@ func NormalizeGeneratedSubmissionBatch(batch GeneratedSubmissionBatch, opts Work
 	}
 
 	return normalized, nil
+}
+
+func WorkRequestRecordFromSubmitRequests(requestID string, source string, requests []SubmitRequest) RequestRecord {
+	workItems := make([]FactoryWorkItem, 0, len(requests))
+	workNamesByID := make(map[string]string, len(requests))
+	traceID := ""
+	for _, req := range requests {
+		if traceID == "" {
+			traceID = req.TraceID
+		}
+		name := SubmitWorkName(req)
+		workNamesByID[req.WorkID] = name
+		workItems = append(workItems, FactoryWorkItem{
+			ID:                       req.WorkID,
+			WorkTypeID:               req.WorkTypeID,
+			State:                    req.TargetState,
+			DisplayName:              name,
+			ChainingTraceDepth:       req.ChainingTraceDepth,
+			CurrentChainingTraceID:   ResolveWorkRequestCurrentChainingTraceID(req.CurrentChainingTraceID, req.TraceID),
+			PreviousChainingTraceIDs: lineagegraph.CanonicalChainingTraceIDs(req.PreviousChainingTraceIDs),
+			TraceID:                  req.TraceID,
+			Content:                  append([]ContentPart(nil), req.Content...),
+			Tags:                     maps.Clone(req.Tags),
+		})
+	}
+
+	var relations []FactoryRelation
+	for _, req := range requests {
+		for _, relation := range req.Relations {
+			relations = append(relations, FactoryRelation{
+				Type:           string(relation.Type),
+				SourceWorkID:   req.WorkID,
+				SourceWorkName: SubmitWorkName(req),
+				TargetWorkID:   relation.TargetWorkID,
+				TargetWorkName: workNamesByID[relation.TargetWorkID],
+				RequiredState:  relation.RequiredState,
+				RequestID:      requestID,
+				TraceID:        req.TraceID,
+			})
+		}
+	}
+
+	return RequestRecord{
+		RequestID: requestID,
+		Type:      RequestTypeFactoryRequestBatch,
+		TraceID:   traceID,
+		Source:    source,
+		WorkItems: workItems,
+		Relations: relations,
+	}
+}
+
+func SubmitWorkName(req SubmitRequest) string {
+	if req.Name != "" {
+		return req.Name
+	}
+	if req.Tags != nil && req.Tags["_work_name"] != "" {
+		return req.Tags["_work_name"]
+	}
+	return req.WorkID
+}
+
+type normalizedBatchWork struct {
+	id         string
+	workTypeID string
 }
 
 func normalizedSubmissionMatch(
@@ -217,83 +266,15 @@ func applyGeneratedSubmissionOverrides(next SubmitRequest, submitted SubmitReque
 		maps.Copy(next.Tags, submitted.Tags)
 	}
 	if len(submitted.Relations) > 0 {
-		next.Relations = appendUniquePetriRelations(CloneRelations(submitted.Relations), next.Relations)
+		next.Relations = appendUniquePetriRelations(cloneRelations(submitted.Relations), next.Relations)
 	}
 	if len(submitted.PreviousChainingTraceIDs) > 0 {
-		next.PreviousChainingTraceIDs = CanonicalChainingTraceIDs(submitted.PreviousChainingTraceIDs)
+		next.PreviousChainingTraceIDs = lineagegraph.CanonicalChainingTraceIDs(submitted.PreviousChainingTraceIDs)
 	}
 	return next
 }
 
-// WorkRequestRecordFromSubmitRequests builds the canonical request-history
-// record for a normalized batch submission.
-func WorkRequestRecordFromSubmitRequests(requestID string, source string, requests []SubmitRequest) WorkRequestRecord {
-	workItems := make([]FactoryWorkItem, 0, len(requests))
-	workNamesByID := make(map[string]string, len(requests))
-	traceID := ""
-	for _, req := range requests {
-		if traceID == "" {
-			traceID = req.TraceID
-		}
-		name := SubmitWorkName(req)
-		workNamesByID[req.WorkID] = name
-		workItems = append(workItems, FactoryWorkItem{
-			ID:                       req.WorkID,
-			WorkTypeID:               req.WorkTypeID,
-			State:                    req.TargetState,
-			DisplayName:              name,
-			ChainingTraceDepth:       req.ChainingTraceDepth,
-			CurrentChainingTraceID:   ResolveWorkRequestCurrentChainingTraceID(req.CurrentChainingTraceID, req.TraceID),
-			PreviousChainingTraceIDs: CanonicalChainingTraceIDs(req.PreviousChainingTraceIDs),
-			TraceID:                  req.TraceID,
-			Content:                  append([]WorkContentPart(nil), req.Content...),
-			Tags:                     maps.Clone(req.Tags),
-		})
-	}
-
-	var relations []FactoryRelation
-	for _, req := range requests {
-		for _, relation := range req.Relations {
-			relations = append(relations, FactoryRelation{
-				Type:           string(relation.Type),
-				SourceWorkID:   req.WorkID,
-				SourceWorkName: SubmitWorkName(req),
-				TargetWorkID:   relation.TargetWorkID,
-				TargetWorkName: workNamesByID[relation.TargetWorkID],
-				RequiredState:  relation.RequiredState,
-				RequestID:      requestID,
-				TraceID:        req.TraceID,
-			})
-		}
-	}
-
-	return WorkRequestRecord{
-		RequestID: requestID,
-		Type:      WorkRequestTypeFactoryRequestBatch,
-		TraceID:   traceID,
-		Source:    source,
-		WorkItems: workItems,
-		Relations: relations,
-	}
-}
-
-// SubmitWorkName returns the canonical display name for a submit request.
-func SubmitWorkName(req SubmitRequest) string {
-	if req.Name != "" {
-		return req.Name
-	}
-	if req.Tags != nil && req.Tags["_work_name"] != "" {
-		return req.Tags["_work_name"]
-	}
-	return req.WorkID
-}
-
-type normalizedBatchWork struct {
-	id         string
-	workTypeID string
-}
-
-func validateBatchWork(req WorkRequest, opts WorkRequestNormalizeOptions) (map[string]normalizedBatchWork, error) {
+func validateBatchWork(req Request, opts NormalizeOptions) (map[string]normalizedBatchWork, error) {
 	workNames := make(map[string]bool, len(req.Works))
 	workIndex := make(map[string]normalizedBatchWork, len(req.Works))
 	for i, work := range req.Works {
@@ -334,7 +315,7 @@ func validateBatchWork(req WorkRequest, opts WorkRequestNormalizeOptions) (map[s
 	return workIndex, nil
 }
 
-func validateAndIndexBatchRelations(req WorkRequest, workIndex map[string]normalizedBatchWork, opts WorkRequestNormalizeOptions) (map[string][]Relation, error) {
+func validateAndIndexBatchRelations(req Request, workIndex map[string]normalizedBatchWork, opts NormalizeOptions) (map[string][]Relation, error) {
 	relIndex := make(map[string][]Relation)
 	seen := map[string]int{}
 	parentTargets := make(map[string]string)
@@ -403,7 +384,7 @@ func validateBatchRelationEndpoints(i int, rel WorkRelation, workIndex map[strin
 	return targetWork, nil
 }
 
-func normalizeBatchRelation(i int, rel WorkRelation, targetWork normalizedBatchWork, opts WorkRequestNormalizeOptions) (Relation, string, error) {
+func normalizeBatchRelation(i int, rel WorkRelation, targetWork normalizedBatchWork, opts NormalizeOptions) (Relation, string, error) {
 	switch rel.Type {
 	case WorkRelationDependsOn:
 		return normalizeDependsOnRelation(i, rel, targetWork, opts)
@@ -414,7 +395,7 @@ func normalizeBatchRelation(i int, rel WorkRelation, targetWork normalizedBatchW
 	}
 }
 
-func normalizeDependsOnRelation(i int, rel WorkRelation, targetWork normalizedBatchWork, opts WorkRequestNormalizeOptions) (Relation, string, error) {
+func normalizeDependsOnRelation(i int, rel WorkRelation, targetWork normalizedBatchWork, opts NormalizeOptions) (Relation, string, error) {
 	if rel.SourceWorkName == rel.TargetWorkName {
 		return Relation{}, "", fmt.Errorf("work_request: relations[%d] has self-dependency on %q", i, rel.SourceWorkName)
 	}
@@ -499,12 +480,11 @@ func rejectDependencyCycles(relations []WorkRelation) error {
 	return nil
 }
 
-func batchTraceID(req WorkRequest) string {
+func batchTraceID(req Request) string {
 	if req.CurrentChainingTraceID != "" {
 		return req.CurrentChainingTraceID
 	}
-	works := req.Works
-	for _, work := range works {
+	for _, work := range req.Works {
 		if work.CurrentChainingTraceID != "" {
 			return work.CurrentChainingTraceID
 		}
@@ -515,7 +495,7 @@ func batchTraceID(req WorkRequest) string {
 	return "trace-" + req.RequestID
 }
 
-func generatedWorkIdentity(prefix string, generateID RequestIDGenerator) (string, error) {
+func generatedWorkIdentity(prefix string, generateID IDGenerator) (string, error) {
 	if generateID == nil {
 		return "", fmt.Errorf("work_request: ID generator is required")
 	}
@@ -541,7 +521,7 @@ func rawWorkPayload(payload any) ([]byte, error) {
 	}
 }
 
-func normalizeWorkContent(content []WorkContentPart, payload any) ([]WorkContentPart, []byte, error) {
+func normalizeWorkContent(content []ContentPart, payload any) ([]ContentPart, []byte, error) {
 	rawPayload, err := rawWorkPayload(payload)
 	if err != nil {
 		return nil, nil, err
@@ -551,7 +531,7 @@ func normalizeWorkContent(content []WorkContentPart, payload any) ([]WorkContent
 		return canonicalContentFromLegacyPayload(rawPayload), rawPayload, nil
 	}
 
-	canonical, err := NormalizeFileBackedContent(content)
+	canonical, err := normalizeFileBackedContent(content)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -579,26 +559,26 @@ func normalizeWorkContent(content []WorkContentPart, payload any) ([]WorkContent
 	return canonical, []byte(legacyText), nil
 }
 
-func canonicalContentFromLegacyPayload(rawPayload []byte) []WorkContentPart {
+func canonicalContentFromLegacyPayload(rawPayload []byte) []ContentPart {
 	payloadText, ok := legacyPayloadAsText(rawPayload)
 	if !ok {
 		return nil
 	}
-	return []WorkContentPart{{
-		Type: WorkContentPartTypeText,
+	return []ContentPart{{
+		Type: ContentPartTypeText,
 		Text: payloadText,
 	}}
 }
 
-func legacyTextPayloadFromCanonicalContent(content []WorkContentPart) (string, bool, error) {
+func legacyTextPayloadFromCanonicalContent(content []ContentPart) (string, bool, error) {
 	var builder strings.Builder
 	hasText := false
 	for _, part := range content {
 		switch part.Type.Normalized() {
-		case WorkContentPartTypeText:
+		case ContentPartTypeText:
 			hasText = true
 			builder.WriteString(part.Text)
-		case WorkContentPartTypeImage:
+		case ContentPartTypeImage:
 			continue
 		default:
 			continue
