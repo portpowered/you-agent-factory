@@ -278,6 +278,10 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCodexGoldenStructuredFailure` replays a non-zero structured failure.
   - `TestCodexGoldenTimeoutHasNoFalseTerminalMessage` covers timeout.
 
+- [x] `tests/functional/workers/inference/codex/conductor_test.go`
+  - `TestCodexConductorSuccessThroughRootBuildProcess` proves successful Codex execution through the product graph.
+  - `TestCodexCommandCancellationThroughRootBuildProcessIsCanonical` proves cancellation through the canonical conductor path.
+
 - [x] `tests/functional/workers/inference/claude/golden_success_test.go`
   - `TestClaudeGoldenFullStreamTextSuccess` covers deltas and final snapshot.
   - `TestClaudeGoldenToolLifecycleAndSessionIdentity` covers tools/session.
@@ -285,6 +289,10 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 - [x] `tests/functional/workers/inference/claude/golden_failure_test.go`
   - `TestClaudeGoldenStructuredFailure` covers normalized error metadata.
   - `TestClaudeGoldenTimeoutClosesResponseStream` covers terminal closure.
+
+- [x] `tests/functional/workers/inference/claude/conductor_test.go`
+  - `TestClaudeConductorSuccessThroughRootBuildProcess` proves successful Claude execution through the product graph.
+  - `TestClaudeCommandCancellationThroughRootBuildProcessIsCanonical` proves cancellation through the canonical conductor path.
 
 - [x] `tests/functional/workers/inference/cursor/golden_success_test.go`
   - `TestCursorGoldenTextSuccessAndSessionIdentity` covers public metadata.
@@ -596,7 +604,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestFactorySessionResumeDoesNotRepeatCompletedDispatch`.
   - `TestFactorySessionHistoryRemainsReadableAfterRestart`.
 
-- [ ] `tests/functional/sessions/mcp/controls_test.go`
+- [x] `tests/functional/sessions/mcp/controls_test.go`
   - `TestMCPPauseResumeAndCancelTargetCanonicalFactorySession`.
   - `TestMCPControlledSessionIsReadableThroughAPI`.
   - `TestMCPSynchronousFactorySessionReturnsTerminalResult`.
