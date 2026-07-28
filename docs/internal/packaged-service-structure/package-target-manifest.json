@@ -374,6 +374,7 @@
     "pkg/services/recordings/events",
     "pkg/services/recordings/events/kinds",
     "pkg/services/recordings/events/snapshot",
+    "pkg/services/recordings/internal",
     "pkg/services/recordings/internal/canonical",
     "pkg/services/recordings/internal/services/artifacts_export",
     "pkg/services/recordings/internal/services/artifacts_export/internal/service",
@@ -2212,6 +2213,11 @@
       "packagePath": "pkg/services/recordings/events/snapshot",
       "disposition": "move",
       "destination": "recordings/internal/services/canonical_ledger"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal",
+      "disposition": "retain",
+      "destination": "recordings"
     },
     {
       "packagePath": "pkg/services/recordings/internal/canonical",
