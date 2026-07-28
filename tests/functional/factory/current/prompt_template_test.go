@@ -1,6 +1,7 @@
 package current
 
 import (
+	"reflect"
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -103,5 +104,50 @@ func TestAPIInvalidPromptTemplateNamesMissingVariables(t *testing.T) {
 			invalidResult.Diagnostics,
 			factoryapi.INVALIDVARIABLE,
 		)
+	}
+}
+
+// TestAPITemplateValidationDoesNotMutateCurrentFactory proves that prompt-template
+// validation leaves the Current Factory definition unchanged within the same
+// Factory Session when validating both valid and invalid workstation prompt drafts.
+func TestAPITemplateValidationDoesNotMutateCurrentFactory(t *testing.T) {
+	rootDir := t.TempDir()
+	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
+
+	server := startCurrentFactoryServer(t, rootDir)
+	defer server.Stop(t)
+
+	const sessionID = "~default"
+	before := getCurrentFactoryForSession(t, server.URL(), sessionID)
+	if before.Version == nil {
+		t.Fatal("current factory version = nil, want version metadata")
+	}
+	assertFactoryWorkType(t, before, "alpha-task", "current factory before validation")
+
+	validResult := validatePromptTemplateForSession(
+		t,
+		server.URL(),
+		sessionID,
+		defaultFunctionalWorkstationName,
+		`you submit --session {{ .Context.SessionID }} --work {{ (index .Inputs 0).Payload }}`,
+	)
+	if !validResult.Valid {
+		t.Fatalf("valid prompt validation valid = false, diagnostics = %#v", validResult.Diagnostics)
+	}
+
+	invalidResult := validatePromptTemplateForSession(
+		t,
+		server.URL(),
+		sessionID,
+		defaultFunctionalWorkstationName,
+		`{{ (index .Inputs 1).Payload }}`,
+	)
+	if invalidResult.Valid {
+		t.Fatalf("invalid prompt validation valid = true, diagnostics = %#v", invalidResult.Diagnostics)
+	}
+
+	after := getCurrentFactoryForSession(t, server.URL(), sessionID)
+	if !reflect.DeepEqual(before, after) {
+		t.Fatalf("current factory after validation = %#v, want unchanged %#v", after, before)
 	}
 }
