@@ -35,7 +35,7 @@ type combinedService struct {
 	canonicalLedger   canonicalledger.Service
 
 	lifecycleMu sync.Mutex
-	replayByKey map[string]*factorydefinitions.ReplayArtifact
+	replayByKey map[string]*recordings.ReplayArtifact
 }
 
 var _ recordings.Service = (*combinedService)(nil)
@@ -83,14 +83,14 @@ func (service *combinedService) QueryWorkstationRequests(
 	}, nil
 }
 
-func decodeWorldStateView(view recordings.WorldStateView) (factorydefinitions.FactoryWorldState, error) {
+func decodeWorldStateView(view recordings.WorldStateView) (recordings.FactoryWorldState, error) {
 	if view.SchemaVersion != recordings.WorldStateViewSchemaV1 ||
 		strings.TrimSpace(view.Payload) == "" {
-		return factorydefinitions.FactoryWorldState{}, recordings.ErrUnsupportedProjectionView
+		return recordings.FactoryWorldState{}, recordings.ErrUnsupportedProjectionView
 	}
-	var state factorydefinitions.FactoryWorldState
+	var state recordings.FactoryWorldState
 	if err := json.Unmarshal([]byte(view.Payload), &state); err != nil {
-		return factorydefinitions.FactoryWorldState{}, recordings.ErrInvalidProjectionInput
+		return recordings.FactoryWorldState{}, recordings.ErrInvalidProjectionInput
 	}
 	return state, nil
 }
@@ -253,7 +253,7 @@ func NewServiceWithLifecycleEffects(
 		artifactsExport:   artifactsexportwire.NewService(lifecycle, publication),
 		replayService:     replaywire.NewService(lifecycle, projection),
 		canonicalLedger:   canonicalledgerwire.NewService(ledger),
-		replayByKey:       make(map[string]*factorydefinitions.ReplayArtifact),
+		replayByKey:       make(map[string]*recordings.ReplayArtifact),
 	}
 }
 

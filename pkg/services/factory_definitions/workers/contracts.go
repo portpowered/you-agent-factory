@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts/namevalue"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/namevalue"
 	factoryresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/resource"
 )
 

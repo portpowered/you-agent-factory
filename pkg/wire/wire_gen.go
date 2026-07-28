@@ -145,7 +145,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	v14 := provideWorkFactory(submittedFileReader, contentStagingService, contentMaterializer)
-	v15 := provideAutomationFactory()
+	v15 := provideAutomationFactory(edges2)
 	sessionResultProjectionOperation := factory.NewSessionResultProjectionOperation()
 	invocationInterpolationService := provideInvocationInterpolationService()
 	invocationWorkTypeService := provideInvocationWorkTypeService()

@@ -115,6 +115,10 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal",
+      "minimum": 85.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron",
       "exception": {
         "kind": "measurement",
@@ -204,7 +208,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/automations/service",
-      "minimum": 83.73
+      "minimum": 0.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/automations/transports/http",
@@ -227,14 +231,6 @@
       "minimum": 54.26
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts",
-      "minimum": 88.23
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts/namevalue",
-      "minimum": 92.59
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/decisionenvelope",
       "minimum": 84.84
     },
@@ -245,6 +241,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/editable",
       "minimum": 68.75
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts",
+      "minimum": 88.23
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/namedfactories",
@@ -397,6 +397,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths",
       "minimum": 80.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namevalue",
+      "minimum": 92.59
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packagedinstallation",

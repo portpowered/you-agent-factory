@@ -14,7 +14,7 @@ import (
 	factorydefinitioncomposition "github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
-	automationservice "github.com/portpowered/infinite-you/pkg/services/automations/service"
+	automationinternal "github.com/portpowered/infinite-you/pkg/services/automations/internal"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -42,8 +42,8 @@ func scriptPollerBoundaryExecutionPolicy() interfaces.WorkstationExecutionPolicy
 	}
 }
 
-func newScriptPollerBoundaryAutomationService(runner workers.CommandRunner) *automationservice.Service {
-	return automationservice.New(
+func newScriptPollerBoundaryAutomationService(runner workers.CommandRunner) *automationinternal.Service {
+	return automationinternal.New(
 		zap.NewNop(),
 		clockwork.NewFakeClock(),
 		runner,
@@ -138,7 +138,7 @@ func TestParseScriptPollerOutput_ProducesWorkRootRequestFromCanonicalStdout(t *t
 		]
 	}`)
 
-	request, hasOutput, err := automationservice.ParseScriptPollerOutput(stdout)
+	request, hasOutput, err := automationinternal.ParseScriptPollerOutput(stdout)
 	if err != nil {
 		t.Fatalf("ParseScriptPollerOutput: %v", err)
 	}
@@ -184,7 +184,7 @@ func TestParseScriptPollerOutput_ProducesWorkRootRequestFromSubmissionsEnvelope(
 		]
 	}`)
 
-	request, hasOutput, err := automationservice.ParseScriptPollerOutput(stdout)
+	request, hasOutput, err := automationinternal.ParseScriptPollerOutput(stdout)
 	if err != nil {
 		t.Fatalf("ParseScriptPollerOutput: %v", err)
 	}
@@ -300,7 +300,7 @@ func TestParseScriptPollerOutput_RejectsMalformedAndEmptyStdout(t *testing.T) {
 
 	t.Run("empty stdout is not output", func(t *testing.T) {
 		t.Parallel()
-		_, hasOutput, err := automationservice.ParseScriptPollerOutput(nil)
+		_, hasOutput, err := automationinternal.ParseScriptPollerOutput(nil)
 		if hasOutput || err != nil {
 			t.Fatalf("empty stdout = hasOutput %v err %v, want no output", hasOutput, err)
 		}
@@ -308,7 +308,7 @@ func TestParseScriptPollerOutput_RejectsMalformedAndEmptyStdout(t *testing.T) {
 
 	t.Run("malformed stdout", func(t *testing.T) {
 		t.Parallel()
-		_, hasOutput, err := automationservice.ParseScriptPollerOutput([]byte("submitted work\n"))
+		_, hasOutput, err := automationinternal.ParseScriptPollerOutput([]byte("submitted work\n"))
 		if !hasOutput {
 			t.Fatal("expected non-empty stdout to count as poller output")
 		}
@@ -319,7 +319,7 @@ func TestParseScriptPollerOutput_RejectsMalformedAndEmptyStdout(t *testing.T) {
 
 	t.Run("empty submissions array", func(t *testing.T) {
 		t.Parallel()
-		_, hasOutput, err := automationservice.ParseScriptPollerOutput([]byte(`{"submissions":[]}`))
+		_, hasOutput, err := automationinternal.ParseScriptPollerOutput([]byte(`{"submissions":[]}`))
 		if !hasOutput {
 			t.Fatal("expected submissions envelope to count as poller output")
 		}

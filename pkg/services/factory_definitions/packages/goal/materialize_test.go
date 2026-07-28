@@ -10,8 +10,8 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	packagedfactories "github.com/portpowered/infinite-you/packages/packaged-factories"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func TestMaterializePackagedGoalFactory_WritesEditableSplitLayout(t *testing.T) {
@@ -103,7 +103,7 @@ func materializePackagedGoalFactory(t *testing.T, globalRoot string) string {
 
 func assertMaterializedSplitLayout(t *testing.T, factoryDir string) {
 	t.Helper()
-	for _, dirName := range []string{interfaces.WorkersDir, interfaces.WorkstationsDir} {
+	for _, dirName := range []string{factorydefinitions.WorkersDir, factorydefinitions.WorkstationsDir} {
 		info, err := os.Stat(filepath.Join(factoryDir, dirName))
 		if err != nil {
 			t.Fatalf("stat %s: %v", dirName, err)
@@ -113,9 +113,9 @@ func assertMaterializedSplitLayout(t *testing.T, factoryDir string) {
 		}
 	}
 	for _, path := range []string{
-		filepath.Join(factoryDir, interfaces.FactoryConfigFile),
-		filepath.Join(factoryDir, interfaces.WorkersDir, "goal-executor", interfaces.FactoryAgentsFileName),
-		filepath.Join(factoryDir, interfaces.WorkstationsDir, PackagedExecuteWorkstationName, interfaces.FactoryAgentsFileName),
+		filepath.Join(factoryDir, factorydefinitions.FactoryConfigFile),
+		filepath.Join(factoryDir, factorydefinitions.WorkersDir, "goal-executor", factorydefinitions.FactoryAgentsFileName),
+		filepath.Join(factoryDir, factorydefinitions.WorkstationsDir, PackagedExecuteWorkstationName, factorydefinitions.FactoryAgentsFileName),
 	} {
 		if _, err := os.Stat(path); err != nil {
 			t.Fatalf("expected materialized path %s: %v", path, err)
@@ -132,7 +132,7 @@ func assertMaterializedSplitLayout(t *testing.T, factoryDir string) {
 func assertPersistedPackagedGoalFactoryJSONOmitsInlinePromptBodies(t *testing.T, factoryDir string) {
 	t.Helper()
 
-	factoryJSON, err := os.ReadFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile))
+	factoryJSON, err := os.ReadFile(filepath.Join(factoryDir, factorydefinitions.FactoryConfigFile))
 	if err != nil {
 		t.Fatalf("ReadFile(factory.json): %v", err)
 	}

@@ -278,10 +278,10 @@
   from the path.
   Script-poller packaged-owner evidence belongs to
   `pkg/services/automations/internal/services/script_pollers` and is reached
-  only through `pkg/services/automations/service`. Unit evidence covers submit,
-  timeout/restart, malformed rejection, and cursor persistence in the packaged
-  owner tests; Automations-root composition evidence belongs in
-  `pkg/services/automations/service/service_internal_test.go`
+  through the composed Automations root in `pkg/services/automations/internal`.
+  Unit evidence covers submit, timeout/restart, malformed rejection, and cursor
+  persistence in the packaged owner tests; Automations-root composition evidence
+  belongs in `pkg/services/automations/internal/service_internal_test.go`
   (`TestProductionRootScriptPollerCursorThroughCompositionPath`). Root
   `BuildProcess` functional evidence belongs in
   `tests/functional/workstations/poller/poller_test.go` and

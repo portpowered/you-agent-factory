@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 // Service implements the public Factory Definition validation boundary.

@@ -288,6 +288,25 @@ type WorkMetricsEventPayload struct {
 	RetryCount     *int     `json:"retryCount,omitempty"`
 }
 
+// WorkstationResult describes the business result of one workstation execution
+// carried by Factory event payloads and world-state projections.
+type WorkstationResult struct {
+	Outcome                     string               `json:"outcome"`
+	Output                      string               `json:"output,omitempty"`
+	Error                       string               `json:"error,omitempty"`
+	Feedback                    string               `json:"feedback,omitempty"`
+	SelectedClassificationLabel string               `json:"selected_classification_label,omitempty"`
+	FailureDetail               *FailureDetail       `json:"failureDetail,omitempty"`
+	FailureMetadata             *WorkFailureMetadata `json:"failure_metadata,omitempty"`
+}
+
+func CloneWorkstationResult(result WorkstationResult) WorkstationResult {
+	clone := result
+	clone.FailureDetail = CloneFailureDetail(result.FailureDetail)
+	clone.FailureMetadata = CloneWorkFailureMetadata(result.FailureMetadata)
+	return clone
+}
+
 // WorkResult is returned by a worker after processing.
 // The Outcome determines which arc set is used to route the resulting tokens.
 type WorkResult struct {

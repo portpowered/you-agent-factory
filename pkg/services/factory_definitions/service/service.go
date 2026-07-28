@@ -7,7 +7,6 @@ import (
 	"context"
 
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	factorydefinition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
@@ -20,22 +19,22 @@ func New(
 	sessionHost factoryroot.SessionHost,
 	clock factoryroot.Clock,
 	versionFileSystem factoryroot.VersionFileSystem,
-	validator factorydefinitions.Validator,
-	loadCanonical factorydefinitions.CanonicalFactoryJSONLoader,
-	loadFactory factorydefinitions.LoadedFactoryLoader,
-	readCurrentFactoryPointer factorydefinitions.CurrentFactoryPointerReader,
-	prepareFactoryLayoutPayload factorydefinitions.FactoryLayoutPayloadPreparer,
-	persistNamedFactory factorydefinitions.NamedFactoryPersister,
-	writeCurrentFactoryPointer factorydefinitions.CurrentFactoryPointerWriter,
-	preparePortableFactoryConfig factorydefinitions.PortableFactoryConfigPreparer,
-	captureFactorySnapshot factorydefinitions.FactorySnapshotCapturer,
-	replaceFactoryLayout factorydefinitions.FactoryLayoutReplacer,
+	validator factoryroot.Validator,
+	loadCanonical factoryroot.CanonicalFactoryJSONLoader,
+	loadFactory factoryroot.LoadedFactoryLoader,
+	readCurrentFactoryPointer factoryroot.CurrentFactoryPointerReader,
+	prepareFactoryLayoutPayload factoryroot.FactoryLayoutPayloadPreparer,
+	persistNamedFactory factoryroot.NamedFactoryPersister,
+	writeCurrentFactoryPointer factoryroot.CurrentFactoryPointerWriter,
+	preparePortableFactoryConfig factoryroot.PortableFactoryConfigPreparer,
+	captureFactorySnapshot factoryroot.FactorySnapshotCapturer,
+	replaceFactoryLayout factoryroot.FactoryLayoutReplacer,
 	namedPaths factoryroot.NamedPathResolver,
 	namedFactoryCatalogFileSystem factoryroot.NamedFactoryCatalogFileSystem,
 	packagedCatalog factoryroot.PackagedFactoryCatalogOperations,
 	packagedInstaller factoryroot.PackagedFactoryInstallationOperations,
-	requiredToolChecker factorydefinitions.RequiredToolChecker,
-	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
+	requiredToolChecker factoryroot.RequiredToolChecker,
+	orchestratorValidator factoryroot.OrchestratorDefinitionValidator,
 	options ...CompositionOption,
 ) factoryroot.Service {
 	if sessionHost == nil || clock == nil || versionFileSystem == nil ||
@@ -51,7 +50,7 @@ func New(
 		func(
 			segment string,
 			payload []byte,
-		) (*factorydefinitions.PreparedFactoryLayoutPayload, error) {
+		) (*factoryroot.PreparedFactoryLayoutPayload, error) {
 			return prepareFactoryLayoutPayload(
 				context.Background(),
 				segment,
@@ -84,8 +83,8 @@ func New(
 		Paths:      namedPaths,
 		FileSystem: namedFactoryCatalogFileSystem,
 	})
-	operations, _ := validator.(factorydefinitions.DefinitionValidationOperation)
-	effective, _ := validator.(factorydefinitions.EffectiveDefinitionValidationOperation)
+	operations, _ := validator.(factoryroot.DefinitionValidationOperation)
+	effective, _ := validator.(factoryroot.EffectiveDefinitionValidationOperation)
 	validationService, _ := validationwire.NewService(validationservice.Dependencies{
 		Operations:            operations,
 		Effective:             effective,

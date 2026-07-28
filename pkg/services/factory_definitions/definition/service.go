@@ -9,8 +9,6 @@ import (
 	"strings"
 
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
 	compilationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
 	distributionservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution"
@@ -21,11 +19,11 @@ import (
 
 // ErrCurrentFactoryNotFound reports that no durable current-factory pointer
 // could be resolved for canonical current-factory reads.
-var ErrCurrentFactoryNotFound = interfaces.ErrCurrentFactoryNotFound
+var ErrCurrentFactoryNotFound = factoryroot.ErrCurrentFactoryNotFound
 
 const (
-	SaveModeReplaceCurrent         = factorydefinitions.SaveModeReplaceCurrent
-	SaveModeUpsertNamedAndActivate = factorydefinitions.SaveModeUpsertNamedAndActivate
+	SaveModeReplaceCurrent         = factoryroot.SaveModeReplaceCurrent
+	SaveModeUpsertNamedAndActivate = factoryroot.SaveModeUpsertNamedAndActivate
 )
 
 // Service owns current and named factory definition reads, persistence, and
@@ -289,7 +287,7 @@ func (s *Service) CreateFactoryScaffold(
 
 // Save coordinates the session-scoped definition submission pipeline for the
 // requested persistence and activation policy.
-func (s *Service) Save(ctx context.Context, sessionID string, mode factorydefinitions.SaveMode, request EditableFactory) (EditableFactory, error) {
+func (s *Service) Save(ctx context.Context, sessionID string, mode factoryroot.SaveMode, request EditableFactory) (EditableFactory, error) {
 	if s == nil || s.host == nil {
 		return EditableFactory{}, fmt.Errorf("factory definition service is required")
 	}
@@ -305,7 +303,7 @@ func (s *Service) Save(ctx context.Context, sessionID string, mode factorydefini
 
 // GetCurrentNamedFactory returns the durable current named-factory snapshot
 // resolved from the persisted pointer and canonical on-disk layout.
-func (s *Service) GetCurrentNamedFactory(context.Context) (*interfaces.FactorySnapshot, error) {
+func (s *Service) GetCurrentNamedFactory(context.Context) (*factoryroot.FactorySnapshot, error) {
 	if s == nil || s.host == nil {
 		return nil, fmt.Errorf("factory definition service is required")
 	}
@@ -315,7 +313,7 @@ func (s *Service) GetCurrentNamedFactory(context.Context) (*interfaces.FactorySn
 		if errors.Is(err, os.ErrNotExist) {
 			currentRuntime := s.host.CurrentRuntimeConfig()
 			if currentRuntime != nil && sameFactoryDir(currentRuntime.FactoryDir(), rootDir) {
-				return s.serializeNamedFactory(interfaces.DefaultCurrentFactoryName, currentRuntime, true)
+				return s.serializeNamedFactory(factoryroot.DefaultCurrentFactoryName, currentRuntime, true)
 			}
 			return nil, ErrCurrentFactoryNotFound
 		}
@@ -377,7 +375,7 @@ func CurrentFactorySnapshotForSession(
 	ctx context.Context,
 	host Host,
 	sessionID string,
-) (*interfaces.FactorySnapshot, error) {
+) (*factoryroot.FactorySnapshot, error) {
 	current, err := New(host).GetCurrentFactoryForSession(ctx, sessionID)
 	if err != nil {
 		return nil, err
@@ -389,15 +387,15 @@ func CurrentFactorySnapshotForSession(
 }
 
 // CurrentFactoryDefinitionVersionAtRoot returns optimistic-concurrency metadata.
-func (s *Service) CurrentFactoryDefinitionVersionAtRoot(rootDir, name string) (interfaces.FactoryVersion, error) {
+func (s *Service) CurrentFactoryDefinitionVersionAtRoot(rootDir, name string) (factoryroot.FactoryVersion, error) {
 	if s == nil {
-		return interfaces.FactoryVersion{}, fmt.Errorf("factory definition service is required")
+		return factoryroot.FactoryVersion{}, fmt.Errorf("factory definition service is required")
 	}
 	return s.currentFactoryDefinitionVersionAtRoot(rootDir, name)
 }
 
 // SerializeNamedFactory returns the canonical editable Factory snapshot.
-func (s *Service) SerializeNamedFactory(name string, current factorydefinitions.LoadedFactorySource, inlineBundledFiles bool) (*interfaces.FactorySnapshot, error) {
+func (s *Service) SerializeNamedFactory(name string, current factoryroot.LoadedFactorySource, inlineBundledFiles bool) (*factoryroot.FactorySnapshot, error) {
 	if s == nil {
 		return nil, fmt.Errorf("factory definition service is required")
 	}
@@ -413,7 +411,7 @@ func sameFactoryDir(left, right string) bool {
 
 func sessionFactoryRootDir(
 	serviceRootDir string,
-	session *factorydefinitions.DefinitionSession,
+	session *factoryroot.DefinitionSession,
 ) string {
 	if session == nil {
 		return ""
@@ -434,15 +432,15 @@ func sessionFactoryRootDir(
 
 func factoryName(
 	rootDir string,
-	runtimeCfg factorydefinitions.RuntimeConfigLookup,
+	runtimeCfg factoryroot.RuntimeConfigLookup,
 ) string {
 	if runtimeCfg == nil {
-		return interfaces.DefaultCurrentFactoryName
+		return factoryroot.DefaultCurrentFactoryName
 	}
 	factoryDir := runtimeCfg.FactoryDir()
 	cleanRoot := filepath.Clean(rootDir)
 	if sameFactoryDir(factoryDir, cleanRoot) {
-		return interfaces.DefaultCurrentFactoryName
+		return factoryroot.DefaultCurrentFactoryName
 	}
 	if rootDir != "" && filepath.Dir(factoryDir) == cleanRoot {
 		name := filepath.Base(factoryDir)
@@ -463,7 +461,7 @@ func factoryName(
 }
 
 // SessionFactoryPersistRoot resolves the on-disk factory root for session-scoped definition persistence.
-func SessionFactoryPersistRoot(serviceRootDir string, session *factorydefinitions.DefinitionSession) string {
+func SessionFactoryPersistRoot(serviceRootDir string, session *factoryroot.DefinitionSession) string {
 	if session != nil && !session.IsDefault && strings.TrimSpace(session.FolderPath) != "" {
 		return session.FolderPath
 	}

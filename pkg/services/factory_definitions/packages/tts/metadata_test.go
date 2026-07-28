@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func TestMetadataContentFromWorkerOutput_ReturnsTextMetadataWithoutRawAudio(t *testing.T) {
@@ -43,10 +43,10 @@ func TestMetadataContentFromWorkerOutput_ReturnsTextMetadataWithoutRawAudio(t *t
 
 func TestShouldFormatInvocationMetadata_MatchesPackagedInvokeWorkstation(t *testing.T) {
 	for _, workstationType := range []string{
-		interfaces.WorkstationTypeInvoke,
-		interfaces.WorkstationTypeInference,
+		factorydefinitions.WorkstationTypeInvoke,
+		factorydefinitions.WorkstationTypeInference,
 	} {
-		workstation := &interfaces.FactoryWorkstationConfig{
+		workstation := &factorydefinitions.FactoryWorkstationConfig{
 			Name:      PackagedInvokeWorkstationName,
 			Type:      workstationType,
 			Operation: "TTS",
