@@ -30,6 +30,9 @@ func (service *rootService) Invoke(cfg InvokeConfig) error {
 	if text == "" {
 		return fmt.Errorf("--text is required")
 	}
+	if !cfg.JSON && strings.TrimSpace(cfg.OutputPath) == "" {
+		return fmt.Errorf("--output is required unless --json is set")
+	}
 	if strings.TrimSpace(cfg.Server) != "" {
 		return fmt.Errorf("remote models invoke requires the composition-stable HTTP service")
 	}
@@ -80,9 +83,6 @@ func (service *rootService) Invoke(cfg InvokeConfig) error {
 		return json.NewEncoder(cfg.Output).Encode(response)
 	}
 	outputPath := strings.TrimSpace(cfg.OutputPath)
-	if outputPath == "" {
-		return fmt.Errorf("--output is required unless --json is set")
-	}
 	streamFile, err := inferenceArtifactSourcePath(result)
 	if err != nil {
 		return mapModelsRootError(err)
