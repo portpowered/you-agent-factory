@@ -4,7 +4,7 @@ package testlink
 
 import (
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	operatorsettingsservicewire "github.com/portpowered/infinite-you/pkg/services/operator_settings/servicewire"
+	settingsconstruct "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/construct"
 	"github.com/portpowered/infinite-you/pkg/services/operator_settings/testproviders"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
@@ -12,7 +12,7 @@ import (
 // RegisterDocumentOwner wires the nested document owner into Operator Settings
 // unit tests.
 func RegisterDocumentOwner() {
-	operatorsettings.ConfigureDocumentOwnerConstructor(operatorsettingsservicewire.NewDocumentOwner)
+	operatorsettings.ConfigureDocumentOwnerConstructor(settingsconstruct.NewDocumentOwner)
 }
 
 // RegisterProvidersRoot wires the Providers root constructor used by transitional

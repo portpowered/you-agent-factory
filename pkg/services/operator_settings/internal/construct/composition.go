@@ -1,12 +1,30 @@
-package operatorsettingsservicewire
+package construct
 
 import (
 	"fmt"
 
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	operatorservice "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/service"
+	settingsdocument "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document"
 	resolution "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution"
-	resolutionwire "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution/wire"
 )
+
+func newServiceRoot(
+	document operatorsettings.DocumentOwner,
+	resolutionService resolution.Service,
+) (operatorsettings.Service, error) {
+	if document == nil {
+		return nil, fmt.Errorf("operator settings document owner is required")
+	}
+	if resolutionService == nil {
+		return nil, fmt.Errorf("operator settings resolution service is required")
+	}
+	documentService, ok := document.(settingsdocument.Service)
+	if !ok {
+		return newCompositionRoot(document, resolutionService)
+	}
+	return operatorservice.New(documentService, resolutionService)
+}
 
 type compositionRoot struct {
 	document   operatorsettings.DocumentOwner
@@ -47,27 +65,4 @@ func newCompositionRoot(
 		document:   document,
 		resolution: resolutionService,
 	}, nil
-}
-
-func newResolutionService() (resolution.Service, error) {
-	return constructResolutionService()
-}
-
-var constructResolutionService = defaultResolutionService
-
-var (
-	constructProvidersRoot  = operatorsettings.ConstructProvidersRoot
-	constructResolutionWire = resolutionwire.NewService
-)
-
-func defaultResolutionService() (resolution.Service, error) {
-	providersRoot, err := constructProvidersRoot()
-	if err != nil {
-		return nil, fmt.Errorf("construct providers root: %w", err)
-	}
-	resolutionService, err := constructResolutionWire(providersRoot)
-	if err != nil {
-		return nil, fmt.Errorf("construct resolution service: %w", err)
-	}
-	return resolutionService, nil
 }

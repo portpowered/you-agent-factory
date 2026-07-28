@@ -952,6 +952,10 @@ response-stream output.
   `go-*-coverage-package-minimums.json` baselines; prove registration with
   `wire/manifest_registration_test.go` rather than re-editing manifests when
   IMP-SET already landed the rows.
+- Operator Settings transitional construction (ConfigDocument assembly,
+  home-port defaults resolution, and resolution-service wiring) lives in
+  `pkg/services/operator_settings/internal/construct`; `servicewire` retains
+  thin delegation entry points until DEL-SET deletes the path.
 - Operator Settings top-level directory inventory for INV-SET-TOPLEVEL lives in
   `docs/internal/projects/packaged-service-structure/operator-settings-top-level-inventory.json`
   with drift verification in `internal/ownershipinventory/operator_settings_top_level.go`;
