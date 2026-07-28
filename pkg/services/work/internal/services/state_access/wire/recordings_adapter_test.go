@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -66,6 +67,184 @@ func TestNewRecordingsAdapterTypedProjectionFailures(t *testing.T) {
 	}
 }
 
+func TestNewRecordingsAdapterNilRootReturnsNil(t *testing.T) {
+	t.Parallel()
+
+	if adapter := NewRecordingsAdapter(nil); adapter != nil {
+		t.Fatalf("NewRecordingsAdapter(nil) = %#v, want nil", adapter)
+	}
+}
+
+func TestReadWorkSnapshotValidatesContextAndSession(t *testing.T) {
+	t.Parallel()
+
+	adapter := NewRecordingsAdapter(&recordingsRootFake{})
+
+	_, err := adapter.ReadWorkSnapshot(nil, "session-1")
+	if err == nil || err.Error() != "Work state access context is required" {
+		t.Fatalf("ReadWorkSnapshot(nil ctx) error = %v", err)
+	}
+
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err = adapter.ReadWorkSnapshot(canceled, "session-1")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("ReadWorkSnapshot(canceled ctx) error = %v, want context.Canceled", err)
+	}
+
+	_, err = adapter.ReadWorkSnapshot(context.Background(), "  ")
+	if !errors.Is(err, recordings.ErrInvalidProjectionScope) {
+		t.Fatalf("ReadWorkSnapshot(empty session) error = %v, want ErrInvalidProjectionScope", err)
+	}
+}
+
+func TestReadWorkSnapshotSubscribeAndSubscriptionFailures(t *testing.T) {
+	t.Parallel()
+
+	t.Run("subscribe error", func(t *testing.T) {
+		t.Parallel()
+		adapter := NewRecordingsAdapter(&recordingsRootFake{subscribeErr: errors.New("subscribe failed")})
+		_, err := adapter.ReadWorkSnapshot(context.Background(), "session-1")
+		if err == nil || !strings.Contains(err.Error(), "subscribe Recordings canonical facts") {
+			t.Fatalf("ReadWorkSnapshot error = %v, want wrapped subscribe failure", err)
+		}
+	})
+
+	t.Run("subscription gap", func(t *testing.T) {
+		t.Parallel()
+		adapter := NewRecordingsAdapter(&recordingsRootFake{
+			subscription: func(context.Context) recordings.SubscriptionOutcome {
+				return recordings.SubscriptionOutcome{
+					Kind: recordings.SubscriptionGap,
+					Gap:  &recordings.SubscriptionGapFacts{ExpectedSequence: 42},
+				}
+			},
+		})
+		_, err := adapter.ReadWorkSnapshot(context.Background(), "session-1")
+		if err == nil || !strings.Contains(err.Error(), "recordings subscription gap at sequence 42") {
+			t.Fatalf("ReadWorkSnapshot error = %v, want subscription gap", err)
+		}
+	})
+
+	t.Run("subscription gap without detail", func(t *testing.T) {
+		t.Parallel()
+		adapter := NewRecordingsAdapter(&recordingsRootFake{
+			subscription: func(context.Context) recordings.SubscriptionOutcome {
+				return recordings.SubscriptionOutcome{Kind: recordings.SubscriptionGap}
+			},
+		})
+		_, err := adapter.ReadWorkSnapshot(context.Background(), "session-1")
+		if err == nil || err.Error() != "recordings subscription gap" {
+			t.Fatalf("ReadWorkSnapshot error = %v, want generic subscription gap", err)
+		}
+	})
+
+	t.Run("nil subscription", func(t *testing.T) {
+		t.Parallel()
+		adapter := NewRecordingsAdapter(&recordingsRootFake{
+			subscription: nil,
+			worldState: recordings.WorldStateView{
+				SchemaVersion: recordings.WorldStateViewSchemaV1,
+				Payload:       recordingsBackedWorldPayload(t, "work-story", "story", "review"),
+			},
+		})
+		snapshot, err := adapter.ReadWorkSnapshot(context.Background(), "session-1")
+		if err != nil {
+			t.Fatalf("ReadWorkSnapshot: %v", err)
+		}
+		if len(snapshot.Items) != 1 || snapshot.Items[0].WorkID != "work-story" {
+			t.Fatalf("snapshot = %#v, want one recorded work item", snapshot)
+		}
+	})
+
+	t.Run("unknown subscription outcome after event", func(t *testing.T) {
+		t.Parallel()
+		index := 0
+		adapter := NewRecordingsAdapter(&recordingsRootFake{
+			subscription: func(context.Context) recordings.SubscriptionOutcome {
+				if index == 0 {
+					index++
+					return recordings.SubscriptionOutcome{
+						Kind:  recordings.SubscriptionEvent,
+						Event: recordings.CanonicalEvent{ID: "event-1", FactoryTick: 1},
+					}
+				}
+				return recordings.SubscriptionOutcome{Kind: recordings.SubscriptionOutcomeKind("unknown")}
+			},
+			worldState: recordings.WorldStateView{
+				SchemaVersion: recordings.WorldStateViewSchemaV1,
+				Payload:       recordingsBackedWorldPayload(t, "work-story", "story", "review"),
+			},
+		})
+		snapshot, err := adapter.ReadWorkSnapshot(context.Background(), "session-1")
+		if err != nil {
+			t.Fatalf("ReadWorkSnapshot: %v", err)
+		}
+		if len(snapshot.Items) != 1 || snapshot.Items[0].WorkID != "work-story" {
+			t.Fatalf("snapshot = %#v, want one recorded work item", snapshot)
+		}
+	})
+}
+
+func TestCanonicalEventsFromSubscriptionReturnsNilForNilSubscription(t *testing.T) {
+	t.Parallel()
+
+	got, err := canonicalEventsFromSubscription(context.Background(), nil)
+	if err != nil || got != nil {
+		t.Fatalf("canonicalEventsFromSubscription(nil) = (%#v, %v), want (nil, nil)", got, err)
+	}
+}
+
+func TestCanonicalEventsFromSubscriptionCollectsMultipleEvents(t *testing.T) {
+	t.Parallel()
+
+	index := 0
+	events := []recordings.CanonicalEvent{
+		{ID: "event-1", FactoryTick: 1},
+		{ID: "event-2", FactoryTick: 2},
+	}
+	subscription := recordings.EventSubscription(func(context.Context) recordings.SubscriptionOutcome {
+		if index >= len(events) {
+			return recordings.SubscriptionOutcome{Kind: recordings.SubscriptionClosed}
+		}
+		outcome := recordings.SubscriptionOutcome{Kind: recordings.SubscriptionEvent, Event: events[index]}
+		index++
+		return outcome
+	})
+
+	got, err := canonicalEventsFromSubscription(context.Background(), subscription)
+	if err != nil {
+		t.Fatalf("canonicalEventsFromSubscription: %v", err)
+	}
+	if len(got) != 2 || got[1].FactoryTick != 2 {
+		t.Fatalf("events = %#v, want two collected events", got)
+	}
+}
+
+func TestCanonicalEventsFromSubscriptionReturnsPartialEventsOnUnknownOutcome(t *testing.T) {
+	t.Parallel()
+
+	index := 0
+	subscription := recordings.EventSubscription(func(context.Context) recordings.SubscriptionOutcome {
+		if index == 0 {
+			index++
+			return recordings.SubscriptionOutcome{
+				Kind:  recordings.SubscriptionEvent,
+				Event: recordings.CanonicalEvent{ID: "event-1"},
+			}
+		}
+		return recordings.SubscriptionOutcome{Kind: recordings.SubscriptionOutcomeKind("unknown")}
+	})
+
+	got, err := canonicalEventsFromSubscription(context.Background(), subscription)
+	if err != nil {
+		t.Fatalf("canonicalEventsFromSubscription: %v", err)
+	}
+	if len(got) != 1 || got[0].ID != "event-1" {
+		t.Fatalf("events = %#v, want partial collected events", got)
+	}
+}
+
 func TestReadSnapshotFromWorldStateDetachesWorkFields(t *testing.T) {
 	t.Parallel()
 
@@ -95,6 +274,8 @@ func TestReadSnapshotFromWorldStateDetachesWorkFields(t *testing.T) {
 type recordingsRootFake struct {
 	events              []recordings.CanonicalEvent
 	worldState          recordings.WorldStateView
+	subscribeErr        error
+	subscription        recordings.EventSubscription
 	reconstructErr      error
 	reconstructRequests []recordings.ReconstructWorldStateRequest
 }
@@ -109,6 +290,12 @@ func (fake *recordingsRootFake) SubscribeFrom(
 	_ context.Context,
 	request recordings.SubscribeRequest,
 ) (recordings.SubscribeResult, error) {
+	if fake.subscribeErr != nil {
+		return recordings.SubscribeResult{}, fake.subscribeErr
+	}
+	if fake.subscription != nil {
+		return recordings.SubscribeResult{Subscription: fake.subscription}, nil
+	}
 	events := make([]recordings.CanonicalEvent, 0, len(fake.events))
 	for _, event := range fake.events {
 		if event.Scope == request.Scope {
