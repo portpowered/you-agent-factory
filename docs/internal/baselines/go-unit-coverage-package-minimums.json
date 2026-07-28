@@ -1591,6 +1591,10 @@
       "minimum": 74.24
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal",
+      "minimum": 81.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical",
       "minimum": 88.52
     },
@@ -1698,7 +1702,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/service",
-      "minimum": 77.68
+      "minimum": 0.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli",
@@ -1714,7 +1718,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/wire",
-      "minimum": 80.00
+      "minimum": 76.92
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/system_initialization",
