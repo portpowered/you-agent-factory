@@ -10,11 +10,13 @@ import (
 	"strings"
 
 	state "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/invocationworktype"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workdomain "github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 	"go.uber.org/zap"
 )
@@ -354,7 +356,7 @@ func (s *Server) submitWorkCore(
 		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
 		return
 	}
-	workRequest, err = s.prepareWorkRequest(r.Context(), workRequest, canonicalJSON)
+	workRequest, err = s.prepareWorkRequest(r.Context(), string(sessionID), workRequest, canonicalJSON)
 	if err != nil {
 		s.writeWorkRequestPreparationError(w, err)
 		return
@@ -433,7 +435,7 @@ func (s *Server) upsertWorkRequestCore(
 		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
 		return
 	}
-	workRequest, err = s.prepareWorkRequest(r.Context(), workRequest, canonicalJSON)
+	workRequest, err = s.prepareWorkRequest(r.Context(), string(sessionID), workRequest, canonicalJSON)
 	if err != nil {
 		s.writeWorkRequestPreparationError(w, err)
 		return
@@ -654,15 +656,44 @@ func normalizeWorkRequestStateJSON(data []byte) ([]byte, error) {
 
 func (s *Server) prepareWorkRequest(
 	ctx context.Context,
+	sessionID string,
 	request workdomain.WorkRequest,
 	canonicalJSON []byte,
 ) (workdomain.WorkRequest, error) {
 	if s.requestPreparation == nil {
 		return workdomain.WorkRequest{}, errors.New("Work Request preparation service is unavailable")
 	}
+	defaultWorkTypeID, err := s.defaultWorkTypeIDForSession(ctx, sessionID)
+	if err != nil {
+		return workdomain.WorkRequest{}, err
+	}
 	return s.requestPreparation.PrepareWorkRequest(ctx, work.WorkRequestPreparation{
-		Request: request, CanonicalJSON: canonicalJSON,
+		Request:           request,
+		CanonicalJSON:     canonicalJSON,
+		DefaultWorkTypeID: defaultWorkTypeID,
 	})
+}
+
+func (s *Server) defaultWorkTypeIDForSession(ctx context.Context, sessionID string) (string, error) {
+	if s == nil || s.factoryDefinitions == nil {
+		return "", nil
+	}
+	namedFactory, err := s.factoryDefinitions.GetCurrentFactoryForSession(ctx, sessionID)
+	if err != nil {
+		if errors.Is(err, apisurface.ErrFactorySessionNotFound) || errors.Is(err, apisurface.ErrCurrentFactoryNotFound) {
+			return "", nil
+		}
+		return "", err
+	}
+	factoryConfig, err := factorymapping.FactoryConfigFromOpenAPI(namedFactory)
+	if err != nil {
+		return "", err
+	}
+	defaultWorkTypeID, err := invocationworktype.NewService().DefaultWorkType(&factoryConfig)
+	if err != nil {
+		return "", nil
+	}
+	return defaultWorkTypeID, nil
 }
 
 func (s *Server) writeWorkRequestPreparationError(w http.ResponseWriter, err error) {
