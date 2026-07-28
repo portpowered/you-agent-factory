@@ -1,6 +1,7 @@
 package routing
 
 import (
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -90,6 +91,73 @@ func TestClassifierRoutesEveryKnownDecision(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestClassifierMultiOutputPreservesPayload proves that when one classifier route
+// fans out to multiple authored outputs, every expected branch retains the same
+// customer payload on every expected branch at the next observable public Work read
+// surface.
+func TestClassifierMultiOutputPreservesPayload(t *testing.T) {
+	const wantPayload = "classifier-multi-output-payload"
+	wantBranches := []string{
+		support.WorkCustomerLocation("task", "done"),
+		support.WorkCustomerLocation("branch-a", "done"),
+		support.WorkCustomerLocation("branch-b", "done"),
+	}
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "classifier_multi_output_dir"))
+	testutil.WriteSeedFile(t, dir, "task", []byte(wantPayload))
+
+	runner := testutil.NewProviderCommandRunner(
+		platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("fanout")},
+		platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("COMPLETE")},
+		platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("COMPLETE")},
+	)
+	listed, events, workByID := runClassifierRoutingFactoryWithWorkReads(
+		t,
+		dir,
+		serviceedges.Edges{ProviderCommandRunner: runner},
+	)
+
+	for _, location := range wantBranches {
+		if got := support.CountWorkAtCustomerState(listed, location); got != 1 {
+			t.Fatalf("%s work count = %d, want 1; listed=%#v", location, got, listed)
+		}
+	}
+	for _, state := range []string{"init", "failed"} {
+		location := support.WorkCustomerLocation("task", state)
+		if got := support.CountWorkAtCustomerState(listed, location); got != 0 {
+			t.Fatalf("%s work count = %d, want 0 after classifier fan-out; listed=%#v", location, got, listed)
+		}
+	}
+	dispatches := support.ObserveDispatchEvents(t, events)
+	if len(dispatches) == 0 {
+		t.Fatal("no dispatch events observed")
+	}
+	assertClassifierRoutingPrimaryBranchWorkPayload(
+		t,
+		listed,
+		workByID,
+		support.WorkCustomerLocation("task", "done"),
+		wantPayload,
+	)
+	assertClassifierRoutingBranchProviderPayloads(t, runner, wantPayload, 2)
+	assertClassifierRoutingOutputWorkBranches(
+		t,
+		dispatches,
+		[]string{
+			support.WorkCustomerLocation("task", "done"),
+			support.WorkCustomerLocation("branch-a", "init"),
+			support.WorkCustomerLocation("branch-b", "init"),
+		},
+	)
+	assertClassifierRoutingWorkstationDispatches(
+		t,
+		dispatches,
+		classifierRoutingWorkstation,
+		1,
+		[]string{"fanout"},
+	)
 }
 
 // TestClassifierUnknownAndMalformedDecisionFailDistinctly proves unknown classifier
@@ -357,6 +425,175 @@ func classifierRoutingDispatchErrorText(response *factoryapi.DispatchResponseEve
 		return response.FailureDetail.Message
 	}
 	return ""
+}
+
+func runClassifierRoutingFactoryWithWorkReads(
+	t *testing.T,
+	dir string,
+	overrides serviceedges.Edges,
+) (factoryapi.ListWorkResponse, []factoryapi.FactoryEvent, map[string]factoryapi.Work) {
+	t.Helper()
+
+	server := support.NewProcessAPIServer()
+	overrides.APIServerStarter = server.Start
+	process := support.BuildProcess(t, overrides)
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run",
+		"--dir", dir,
+		"--continuously",
+		"--with-server",
+		"--server", "http://127.0.0.1:1",
+		"--quiet",
+		"--no-record",
+	})
+	homeDir := t.TempDir()
+	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.WorkingDirectory = dir
+	t.Cleanup(func() {
+		if !t.Failed() {
+			return
+		}
+		if stderr := strings.TrimSpace(inputs.Stderr()); stderr != "" {
+			t.Logf("daemon stderr:\n%s", stderr)
+		}
+		if stdout := strings.TrimSpace(inputs.Stdout()); stdout != "" {
+			t.Logf("daemon stdout:\n%s", stdout)
+		}
+	})
+	daemon := support.StartProcessCommand(t, process, inputs.Input)
+	baseURL := server.WaitForURL(t)
+	support.WaitForTerminalStatus(t, baseURL, 20*time.Second)
+
+	listed := support.ListDefaultSessionWork(t, baseURL)
+	events := support.GetFactoryEventsAt(t, baseURL)
+	workByID := make(map[string]factoryapi.Work, len(listed.Results))
+	for _, item := range listed.Results {
+		workID := support.StringPointerValue(item.WorkId)
+		if workID == "" {
+			continue
+		}
+		workByID[workID] = support.GetDefaultSessionWorkByID(t, baseURL, workID)
+	}
+	daemon.Stop(t)
+	return listed, events, workByID
+}
+
+func assertClassifierRoutingPrimaryBranchWorkPayload(
+	t *testing.T,
+	listed factoryapi.ListWorkResponse,
+	workByID map[string]factoryapi.Work,
+	location string,
+	want string,
+) {
+	t.Helper()
+
+	for _, item := range listed.Results {
+		if support.WorkItemCustomerLocation(item) != location {
+			continue
+		}
+		workID := support.StringPointerValue(item.WorkId)
+		detail, ok := workByID[workID]
+		if !ok {
+			t.Fatalf("missing GET /work/%s detail for branch %s", workID, location)
+		}
+		if got := classifierRoutingPublicWorkText(detail); got != want {
+			t.Fatalf(
+				"%s payload = %q, want %q preserved across classifier fan-out",
+				location,
+				got,
+				want,
+			)
+		}
+		return
+	}
+	t.Fatalf("listed Work missing branch %s", location)
+}
+
+func assertClassifierRoutingBranchProviderPayloads(
+	t *testing.T,
+	runner *testutil.ProviderCommandRunner,
+	want string,
+	wantBranchCalls int,
+) {
+	t.Helper()
+
+	requests := runner.Requests()
+	if len(requests) < 1+wantBranchCalls {
+		t.Fatalf("provider command count = %d, want at least %d", len(requests), 1+wantBranchCalls)
+	}
+	branchRequests := requests[len(requests)-wantBranchCalls:]
+	for index, request := range branchRequests {
+		if !classifierRoutingProviderRequestIncludesPayload(request, want) {
+			t.Fatalf(
+				"branch provider request %d missing payload %q; args=%#v stdin=%q workDir=%q",
+				index,
+				want,
+				request.Args,
+				string(request.Stdin),
+				request.WorkDir,
+			)
+		}
+	}
+}
+
+func classifierRoutingProviderRequestIncludesPayload(
+	request platformprocess.CommandRequest,
+	want string,
+) bool {
+	if strings.Contains(string(request.Stdin), want) {
+		return true
+	}
+	for _, arg := range request.Args {
+		if strings.Contains(arg, want) {
+			return true
+		}
+	}
+	return false
+}
+
+func assertClassifierRoutingOutputWorkBranches(
+	t *testing.T,
+	dispatches []support.DispatchEventObservation,
+	wantBranches []string,
+) {
+	t.Helper()
+
+	classifierDispatches := filterWorkstationDispatches(dispatches, classifierRoutingWorkstation)
+	if len(classifierDispatches) != 1 {
+		t.Fatalf("classifier dispatch count = %d, want 1", len(classifierDispatches))
+	}
+	response := classifierDispatches[0].Response
+	if response == nil || response.OutputWork == nil {
+		t.Fatalf("classifier dispatch missing outputWork branches: response=%#v", response)
+	}
+	seen := make(map[string]bool, len(wantBranches))
+	for _, item := range *response.OutputWork {
+		location := support.WorkItemCustomerLocation(item)
+		if location != "" {
+			seen[location] = true
+		}
+	}
+	for _, location := range wantBranches {
+		if !seen[location] {
+			t.Fatalf("classifier outputWork missing branch %s; seen=%#v", location, seen)
+		}
+	}
+}
+
+func classifierRoutingPublicWorkText(item factoryapi.Work) string {
+	if item.Content != nil && len(*item.Content) > 0 {
+		if part, err := (*item.Content)[0].AsWorkTextContentPart(); err == nil {
+			return part.Text
+		}
+	}
+	switch payload := item.Payload.(type) {
+	case string:
+		return payload
+	case []byte:
+		return string(payload)
+	default:
+		return ""
+	}
 }
 
 func classifierRoutingFailureSignature(dispatch support.DispatchEventObservation) string {
