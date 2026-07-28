@@ -852,8 +852,10 @@ Wave 0 functional-tests-expansion planning authority lives under
   `functionaltestmetadata` stays viz-compatible.
 
 - `tests/functional/provider_sessions/association/association_test.go` owns
-  Provider Session ref correlation on public Factory Session dispatch projections.
-  Drive proofs through `support.StartFunctionalAPIServer` with a JavaScript
+  Provider Session ref correlation on public Factory Session dispatch projections
+  after runtime lifecycle starts (FUN post-lifecycle association activation).
+  Drive proofs through `support.StartFunctionalAPIServer` (`root.BuildProcess` +
+  `edges.Edges` only) with a JavaScript
   `agent.run` fake-child workflow (no live provider runner calls), then assert on
   `GET /factory-sessions/{session_id}/dispatches` and
   `GET /factory-sessions/{session_id}/dispatches/{dispatch_id}` only:
