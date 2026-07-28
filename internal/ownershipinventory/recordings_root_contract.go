@@ -38,17 +38,6 @@ type RecordingsRootContractFoldTarget struct {
 // clusters beyond the thin Recordings service root contract.
 var RecordingsExcessRootContractFolds = []RecordingsRootContractFoldTarget{
 	{
-		Cluster: "event",
-		Files: []string{
-			"canonical_event_contract_test.go",
-			"event_contract.go",
-			"event_contract_test.go",
-			"event_vocabulary_boundary_test.go",
-			"events_import_boundary_test.go",
-		},
-		Destination: recordingsPackagePrefix + "/internal/services/canonical_ledger",
-	},
-	{
 		Cluster: "world_state",
 		Files: []string{
 			"world_state_contract.go",

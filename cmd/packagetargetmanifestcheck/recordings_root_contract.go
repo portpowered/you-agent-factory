@@ -36,17 +36,6 @@ type recordingsRootContractFoldTarget struct {
 // RecordingsExcessRootContractFolds for package-target manifest checks.
 var recordingsExcessRootContractFolds = []recordingsRootContractFoldTarget{
 	{
-		cluster: "event",
-		files: []string{
-			"canonical_event_contract_test.go",
-			"event_contract.go",
-			"event_contract_test.go",
-			"event_vocabulary_boundary_test.go",
-			"events_import_boundary_test.go",
-		},
-		destination: "pkg/services/recordings/internal/services/canonical_ledger",
-	},
-	{
 		cluster: "world_state",
 		files: []string{
 			"world_state_contract.go",

@@ -1,4 +1,4 @@
-package recordings_test
+package canonicalledger_test
 
 import (
 	"os/exec"
@@ -7,24 +7,24 @@ import (
 )
 
 const (
-	recordingsRootImport          = "github.com/portpowered/infinite-you/pkg/services/recordings"
-	factoryDefinitionsRootImport  = "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryDefinitionsContractsImport = "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+	modulePrefix                      = "github.com/portpowered/infinite-you/"
+	recordingsRootImport              = modulePrefix + "pkg/services/recordings"
+	factoryDefinitionsRootImport      = modulePrefix + "pkg/services/factory_definitions"
+	factoryDefinitionsContractsImport = modulePrefix + "pkg/services/factory_definitions/contracts"
+	factoryRuntimeRootImport          = modulePrefix + "pkg/services/factory_runtime"
 )
 
 var eventVocabularyConsumerPackages = []string{
-	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/events/kinds",
+	modulePrefix + "pkg/services/recordings/internal/services/canonical_ledger/events/kinds",
 }
 
 var worldStateVocabularyConsumerPackages = []string{
-	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/internal/service",
+	modulePrefix + "pkg/services/recordings/internal/services/projection_query/internal/service",
 }
 
 var replayVocabularyConsumerPackages = []string{
-	"github.com/portpowered/infinite-you/pkg/services/recordings/internal",
+	modulePrefix + "pkg/services/recordings/internal",
 }
-
-const factoryRuntimeRootImport = "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 
 func TestEventVocabularyConsumers_UseRecordingsRootNotDefinitionsContracts(t *testing.T) {
 	t.Parallel()

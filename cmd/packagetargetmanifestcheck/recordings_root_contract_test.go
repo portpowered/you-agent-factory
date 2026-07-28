@@ -26,7 +26,6 @@ func TestRecordingsExcessRootContractFoldDestinations(t *testing.T) {
 
 	want := map[string]string{
 		"artifacts":             "pkg/services/recordings/internal/services/artifacts_export",
-		"event":                 "pkg/services/recordings/internal/services/canonical_ledger",
 		"world_state":           "pkg/services/recordings/internal/services/projection_query",
 		"replay":                "pkg/services/recordings/internal/services/replay",
 		"dispatch":              "pkg/services/recordings/internal/services/projection_query",

@@ -11,7 +11,7 @@
 //     and the owned aliases at the top of contracts_root.go.
 //
 // Foreign event envelope vocabulary is owned by pkg/services/recordings
-// (event_contract.go). World-state, dispatch, and replay vocabulary is owned
+// (canonical_ledger/event_contract.go with peer aliases in contracts.go). World-state, dispatch, and replay vocabulary is owned
 // by pkg/services/recordings and pkg/services/factory_runtime (world_state_contract.go,
 // dispatch_contract.go, replay_contract.go). Worker execution vocabulary is
 // owned by pkg/services/workers (worker_vocabulary_contract.go,

@@ -210,6 +210,79 @@ func (subscription EventSubscription) Next(ctx context.Context) SubscriptionOutc
 	return subscription(ctx)
 }
 
+// Factory Event envelope vocabulary is owned by canonical_ledger; peers import
+// these aliases from the Recordings root package.
+type (
+	ArtifactCreatedEventPayload           = interfaces.ArtifactCreatedEventPayload
+	DispatchInterruptedEventPayload       = interfaces.DispatchInterruptedEventPayload
+	DispatchQueuedEventPayload            = interfaces.DispatchQueuedEventPayload
+	DispatchReconciledEventPayload        = interfaces.DispatchReconciledEventPayload
+	DispatchRequestEventPayload           = interfaces.DispatchRequestEventPayload
+	FactoryChangeEventPayload             = interfaces.FactoryChangeEventPayload
+	FactoryEvent                          = interfaces.FactoryEvent
+	FactoryEventContext                   = interfaces.FactoryEventContext
+	FactoryEventReconnectCursor           = interfaces.FactoryEventReconnectCursor
+	FactoryEventReconnectScope            = interfaces.FactoryEventReconnectScope
+	FactoryEventStream                    = interfaces.FactoryEventStream
+	FactoryEventType                      = interfaces.FactoryEventType
+	FactorySessionCompletedEventPayload   = interfaces.FactorySessionCompletedEventPayload
+	FactorySessionLifecycleControlEventPayload = interfaces.FactorySessionLifecycleControlEventPayload
+	FactorySessionLogicalResolveHint      = interfaces.FactorySessionLogicalResolveHint
+	FactorySessionPausedEventPayload      = interfaces.FactorySessionPausedEventPayload
+	FactorySessionResultUpdatedEventPayload = interfaces.FactorySessionResultUpdatedEventPayload
+	FactorySessionResumedEventPayload     = interfaces.FactorySessionResumedEventPayload
+	FactorySessionStartedEventPayload     = interfaces.FactorySessionStartedEventPayload
+	FactorySessionSyncPreflightOptions    = interfaces.FactorySessionSyncPreflightOptions
+	FactoryStateResponseEventPayload      = interfaces.FactoryStateResponseEventPayload
+	InitialStructureRequestEventPayload   = interfaces.InitialStructureRequestEventPayload
+	JavaScriptCheckpointRefEventPayload   = interfaces.JavaScriptCheckpointRefEventPayload
+	JavaScriptPhaseChangeEventPayload     = interfaces.JavaScriptPhaseChangeEventPayload
+	OrchestratorCheckpointWrittenEventPayload = interfaces.OrchestratorCheckpointWrittenEventPayload
+	OrchestratorPhaseChangedEventPayload  = interfaces.OrchestratorPhaseChangedEventPayload
+	RunEventWallClock                     = interfaces.RunEventWallClock
+	RunRequestEventPayload                = interfaces.RunRequestEventPayload
+	RunResponseEventPayload               = interfaces.RunResponseEventPayload
+	WorkStateChangeEventPayload           = interfaces.WorkStateChangeEventPayload
+)
+
+const (
+	FactoryEventSchemaVersionV1 = interfaces.FactoryEventSchemaVersionV1
+
+	FactoryEventTypeAgentRunResponse              = interfaces.FactoryEventTypeAgentRunResponse
+	FactoryEventTypeArtifactCreated               = interfaces.FactoryEventTypeArtifactCreated
+	FactoryEventTypeDispatchInterrupted           = interfaces.FactoryEventTypeDispatchInterrupted
+	FactoryEventTypeDispatchQueued                = interfaces.FactoryEventTypeDispatchQueued
+	FactoryEventTypeDispatchReconciled            = interfaces.FactoryEventTypeDispatchReconciled
+	FactoryEventTypeDispatchRequest               = interfaces.FactoryEventTypeDispatchRequest
+	FactoryEventTypeDispatchResponse              = interfaces.FactoryEventTypeDispatchResponse
+	FactoryEventTypeFactoryChange                 = interfaces.FactoryEventTypeFactoryChange
+	FactoryEventTypeFactoryStateResponse          = interfaces.FactoryEventTypeFactoryStateResponse
+	FactoryEventTypeInferenceRequest              = interfaces.FactoryEventTypeInferenceRequest
+	FactoryEventTypeInferenceResponse             = interfaces.FactoryEventTypeInferenceResponse
+	FactoryEventTypeInitialStructureRequest       = interfaces.FactoryEventTypeInitialStructureRequest
+	FactoryEventTypeJavaScriptCheckpointRef       = interfaces.FactoryEventTypeJavaScriptCheckpointRef
+	FactoryEventTypeJavaScriptPhaseChange         = interfaces.FactoryEventTypeJavaScriptPhaseChange
+	FactoryEventTypeModelRequest                  = interfaces.FactoryEventTypeModelRequest
+	FactoryEventTypeModelResponse                 = interfaces.FactoryEventTypeModelResponse
+	FactoryEventTypeOrchestratorCheckpointWritten = interfaces.FactoryEventTypeOrchestratorCheckpointWritten
+	FactoryEventTypeOrchestratorPhaseChanged      = interfaces.FactoryEventTypeOrchestratorPhaseChanged
+	FactoryEventTypeRelationshipChangeRequest     = interfaces.FactoryEventTypeRelationshipChangeRequest
+	FactoryEventTypeRunRequest                    = interfaces.FactoryEventTypeRunRequest
+	FactoryEventTypeRunResponse                   = interfaces.FactoryEventTypeRunResponse
+	FactoryEventTypeScriptRequest                 = interfaces.FactoryEventTypeScriptRequest
+	FactoryEventTypeScriptResponse                = interfaces.FactoryEventTypeScriptResponse
+	FactoryEventTypeSessionCompleted              = interfaces.FactoryEventTypeSessionCompleted
+	FactoryEventTypeSessionLifecycleControl       = interfaces.FactoryEventTypeSessionLifecycleControl
+	FactoryEventTypeSessionPaused                 = interfaces.FactoryEventTypeSessionPaused
+	FactoryEventTypeSessionResultUpdated          = interfaces.FactoryEventTypeSessionResultUpdated
+	FactoryEventTypeSessionResumed                = interfaces.FactoryEventTypeSessionResumed
+	FactoryEventTypeSessionStarted                = interfaces.FactoryEventTypeSessionStarted
+	FactoryEventTypeWorkRequest                   = interfaces.FactoryEventTypeWorkRequest
+	FactoryEventTypeWorkStateChange               = interfaces.FactoryEventTypeWorkStateChange
+)
+
+var NewFactoryEvent = interfaces.NewFactoryEvent
+
 // EventReconnectCursor retains the legacy projection-validation cursor shape.
 // New subscriptions use CanonicalEventCursor.
 type EventReconnectCursor = FactoryEventReconnectCursor
