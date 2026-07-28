@@ -188,6 +188,11 @@ func createNamedFactoryFromBody(t *testing.T, serverURL, body string) factoryapi
 	return created
 }
 
+func upsertNamedFactoryFromBody(t *testing.T, serverURL, factoryBody string) factoryapi.Factory {
+	t.Helper()
+	return createNamedFactoryFromBody(t, serverURL, factoryBody)
+}
+
 func createNamedFactoryExpectStatus(t *testing.T, serverURL, body string, wantStatus int) *http.Response {
 	t.Helper()
 	requestBody := fmt.Sprintf(`{"mode":"UPSERT_NAMED_AND_ACTIVATE","factory":%s}`, body)

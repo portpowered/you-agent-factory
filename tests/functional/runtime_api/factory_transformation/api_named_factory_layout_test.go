@@ -171,3 +171,39 @@ func assertNamedFactoryPortableLayoutResponse(t *testing.T, layout *factoryapi.F
 		t.Fatalf("layout preferences = %#v, want RIGHT", layout.Preferences)
 	}
 }
+
+func assertPortableLayoutPayload(t *testing.T, value any) {
+	t.Helper()
+
+	layout, ok := value.(map[string]any)
+	if !ok {
+		t.Fatalf("persisted layout = %#v, want object", value)
+	}
+	if got := layout["schemaVersion"]; got != float64(1) {
+		t.Fatalf("persisted layout schemaVersion = %#v, want 1", got)
+	}
+	nodes, ok := layout["nodes"].([]any)
+	if !ok || len(nodes) != 1 {
+		t.Fatalf("persisted layout nodes = %#v, want one node", layout["nodes"])
+	}
+	node, ok := nodes[0].(map[string]any)
+	if !ok || node["id"] != "workstation:plan-task" {
+		t.Fatalf("persisted layout node = %#v, want workstation:plan-task", nodes[0])
+	}
+	edges, ok := layout["edges"].([]any)
+	if !ok || len(edges) != 1 {
+		t.Fatalf("persisted layout edges = %#v, want one edge", layout["edges"])
+	}
+	groups, ok := layout["groups"].([]any)
+	if !ok || len(groups) != 1 {
+		t.Fatalf("persisted layout groups = %#v, want one group", layout["groups"])
+	}
+	viewport, ok := layout["viewport"].(map[string]any)
+	if !ok || viewport["zoom"] != 0.85 {
+		t.Fatalf("persisted layout viewport = %#v, want zoom 0.85", layout["viewport"])
+	}
+	preferences, ok := layout["preferences"].(map[string]any)
+	if !ok || preferences["direction"] != "RIGHT" {
+		t.Fatalf("persisted layout preferences = %#v, want RIGHT", layout["preferences"])
+	}
+}
