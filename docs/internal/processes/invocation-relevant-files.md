@@ -2016,6 +2016,14 @@ response-stream output.
   Verify delegated runs through the durable session ID returned by invocation and
   `GET /factory-sessions/{session_id}/dispatches`, rather than inferring child
   activity from the final synthesis alone.
+- Packaged `@you/tts` invocation functional coverage belongs in
+  `tests/functional/factory/packaged/tts/invocation_test.go`: install the packaged
+  factory, replace inline topology with a provider-fake scaffold, and prove
+  required-text audio artifact metadata, optional voice/format reachability on
+  fake `ProviderInferenceRequest.ModelBindings`, and model-failure terminal
+  outcomes with no false success-shaped artifact metadata through
+  `POST /factory-sessions/~default/invocations` and `serviceedges.Edges{
+  ProviderOverride: ... }`.
 - `pkg/factory/subsystems/subsystem_transitioner.go` applies packaged TTS
   invocation metadata to terminal token `Content` for the `execute-tts` TTS
   MODEL_INVOKE workstation so primary-result selection returns JSON metadata

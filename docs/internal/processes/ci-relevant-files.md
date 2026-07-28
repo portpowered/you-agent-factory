@@ -727,6 +727,15 @@ Wave 0 functional-tests-expansion planning authority lives under
   metadata infers domain `workers` and subsection `inference` from the path;
   every top-level `Test*` needs a customer-readable Go doc so
   `functionaltestmetadata` stays viz-compatible.
+- Packaged `@you/tts` invocation functional coverage belongs in
+  `tests/functional/factory/packaged/tts/invocation_test.go`: prove required-text
+  audio artifact metadata, optional voice/format reachability on fake provider
+  bindings, and model-failure no-false-artifact contracts through the public API
+  invocation boundary with `support.InstallPackagedFactory`,
+  `ProviderOverride`, and scaffold inline topology that removes split worker
+  sidecars. Catalog metadata infers domain `factory` and subsection
+  `packaged/tts` from the path; every top-level `Test*` needs a customer-readable
+  Go doc so `functionaltestmetadata` stays viz-compatible.
 - Workers inference provider command-flag functional coverage belongs in
   `tests/functional/workers/inference/flags_test.go`: prove skip-permissions
   policy, resolved worktree names, and explicit model values map onto the
