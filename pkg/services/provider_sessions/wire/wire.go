@@ -8,7 +8,7 @@ package wire
 
 import (
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
-	providersessionsservice "github.com/portpowered/infinite-you/pkg/services/provider_sessions/service"
+	internalservice "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/service"
 )
 
 // NewService constructs an inert Provider Sessions root from construction and
@@ -25,7 +25,7 @@ func NewService(
 	cursorOpenDatabase providersessions.CursorOpenSQLDatabase,
 	cursorOperatingSystem providersessions.OperatingSystem,
 ) (providersessions.Service, error) {
-	return providersessionsservice.New(
+	return internalservice.New(
 		files,
 		resolveHome,
 		codexWalkDirectory,
@@ -49,7 +49,7 @@ func NewForRoots(
 	cursorOpenDatabase providersessions.CursorOpenSQLDatabase,
 	codexRoot, cursorRoot string,
 ) (providersessions.Service, error) {
-	return providersessionsservice.NewForRoots(
+	return internalservice.NewForRoots(
 		files,
 		codexWalkDirectory,
 		codexResolveSymlinks,
