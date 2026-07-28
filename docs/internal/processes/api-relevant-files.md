@@ -84,6 +84,17 @@ Use this map when changing the public REST contract.
   `pkg/wire`, `pkg/root`, `pkg/initializer`, top-level CLI composition, shared
   MCP host/composition fan-in, or other services' MCP adapters when reconciling
   manifest churn.
+- The Runtime MCP adapter package must stay registered in the allowed shared
+  manifests only: retain `pkg/services/factory_runtime/transports/mcp` under
+  destination `factory_runtime` in
+  `docs/internal/packaged-service-structure/package-target-manifest.json` and
+  `docs/internal/baselines/ownership-inventory.json`, and keep measured floors in
+  both `docs/internal/baselines/go-unit-coverage-package-minimums.json` and
+  `docs/internal/baselines/go-functional-coverage-package-minimums.json`.
+  Prove registration with `manifest_registration_test.go`; do not edit
+  `pkg/wire`, `pkg/root`, `pkg/initializer`, top-level CLI composition, shared
+  MCP host/composition fan-in, or other services' MCP adapters when reconciling
+  manifest churn.
 - Provider Session HTTP decoding, generated-contract mapping, service
   invocation, typed root error mapping (`error_mapping.go`), cancel/timeout edge
   mapping, and response encoding for owned Provider Sessions operations live in
