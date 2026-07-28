@@ -10,15 +10,27 @@ import (
 	"github.com/portpowered/infinite-you/internal/ownershipinventory"
 )
 
-// DEL-RUN-ENGINE-PIPELINE story 004 lowers structure, ownership, and
-// package-target baselines for deleted public engine/pipeline packages. Each
-// subtest proves one ledger no longer lists a deleted path as retain or move debt.
+// DEL-RUN-ENGINE-PIPELINE stories 004 and 005 lower structure, ownership,
+// package-target, and coverage baselines for deleted public engine/pipeline
+// packages. Each subtest proves one ledger no longer lists a deleted path as
+// retain or move debt.
+
+const factoryRuntimeModuleImportPrefix = "github.com/portpowered/infinite-you/pkg/services/factory_runtime/"
 
 func deletedEnginePipelinePublicPackagePaths() []string {
 	children := deletedEnginePipelinePublicTopLevelChildren()
 	paths := make([]string, len(children))
 	for i, name := range children {
 		paths[i] = "pkg/services/factory_runtime/" + name
+	}
+	return paths
+}
+
+func deletedEnginePipelinePublicImportPaths() []string {
+	children := deletedEnginePipelinePublicTopLevelChildren()
+	paths := make([]string, len(children))
+	for i, name := range children {
+		paths[i] = factoryRuntimeModuleImportPrefix + name
 	}
 	return paths
 }
@@ -87,6 +99,47 @@ func TestEnginePipelineBaselineGate_DeletedPublicPipelineBaselinesRemoved(t *tes
 			}
 		}
 	})
+
+	t.Run("unit_coverage_minimums_omit_deleted_public_pipeline_packages", func(t *testing.T) {
+		t.Parallel()
+		assertCoverageMinimumsOmitDeletedPublicPipelinePackages(t, root, "go-unit-coverage-package-minimums.json")
+	})
+
+	t.Run("functional_coverage_minimums_omit_deleted_public_pipeline_packages", func(t *testing.T) {
+		t.Parallel()
+		assertCoverageMinimumsOmitDeletedPublicPipelinePackages(t, root, "go-functional-coverage-package-minimums.json")
+	})
+}
+
+func assertCoverageMinimumsOmitDeletedPublicPipelinePackages(t *testing.T, root, fileName string) {
+	t.Helper()
+
+	path := filepath.Join(root, "docs", "internal", "baselines", fileName)
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%q) error = %v", path, err)
+	}
+	var baseline struct {
+		Packages []struct {
+			Package string `json:"package"`
+		} `json:"packages"`
+	}
+	if err := json.Unmarshal(payload, &baseline); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	deletedImportPaths := deletedEnginePipelinePublicImportPaths()
+	for _, row := range baseline.Packages {
+		if strings.HasPrefix(row.Package, factoryRuntimeModuleImportPrefix+"internal/") {
+			continue
+		}
+		suffix := strings.TrimPrefix(row.Package, factoryRuntimeModuleImportPrefix)
+		for _, deleted := range deletedImportPaths {
+			deletedSuffix := strings.TrimPrefix(deleted, factoryRuntimeModuleImportPrefix)
+			if suffix == deletedSuffix || strings.HasPrefix(suffix, deletedSuffix+"/") {
+				t.Fatalf("%s still lists deleted public pipeline package %q", fileName, row.Package)
+			}
+		}
+	}
 }
 
 type packageTargetManifestBaseline struct {

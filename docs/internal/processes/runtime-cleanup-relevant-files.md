@@ -1150,3 +1150,19 @@ implementation under `internal/services/orchestration` and
 `internal/services/instance_host` remains canonical retain debt and is not
 removed by this packet. Coverage minimum burn-down for deleted import paths is
 owned by story 005.
+
+## DEL-RUN-ENGINE-PIPELINE coverage baseline burn-down
+
+Story 005 removes unit and functional coverage minimum rows for deleted public
+engine/pipeline import paths and locks the burn-down with coverage subtests in
+`pkg/services/factory_runtime/wire/engine_pipeline_baseline_gate_test.go`:
+
+| Ledger | Deleted public import paths (examples) | Proof |
+| --- | --- | --- |
+| `docs/internal/baselines/go-unit-coverage-package-minimums.json` | `github.com/portpowered/infinite-you/pkg/services/factory_runtime/{build,engine,javascript,runtime,...}` | baseline gate coverage subtests |
+| `docs/internal/baselines/go-functional-coverage-package-minimums.json` | same deleted public import paths, including measurement exceptions | baseline gate coverage subtests |
+
+The fold merge retargeted surviving pipeline implementation to
+`internal/services/orchestration` and `internal/services/instance_host`;
+story 003 retargeted `testkit` to `internal/testkit`. Those internal import
+paths remain canonical coverage debt and are not removed by this packet.
