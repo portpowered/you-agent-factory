@@ -11,6 +11,9 @@ type DefaultsResolver func(homeDir string, environment Defaults, flags FlagOverr
 // the supplied environment and flag layers. Callers at a process boundary can
 // use this form without changing or reading the process environment.
 func ResolveFromHomeWithEnvironment(files FileSystem, decode ConfigDecoder, homeDir string, environment Defaults, flags FlagOverrides) (ResolvedDefaults, error) {
+	if defaultsResolutionFromHome != nil {
+		return defaultsResolutionFromHome(files, decode, homeDir, environment, flags)
+	}
 	configPath := DefaultConfigPath(homeDir)
 	fileDefaults, err := LoadFileDefaults(files, decode, configPath)
 	if err != nil {

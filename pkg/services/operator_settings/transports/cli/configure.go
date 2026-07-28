@@ -38,6 +38,9 @@ type ConfigureConfig struct {
 // Service and surfaces typed results, validation failures, and cancel outcomes
 // for CLI consumption.
 func Configure(cfg ConfigureConfig, root operatorsettings.Service) error {
+	if err := ValidateConfigureBoundary(cfg); err != nil {
+		return err
+	}
 	adapter := New(root)
 	if adapter == nil {
 		return fmt.Errorf("operator settings service is required")
@@ -45,7 +48,8 @@ func Configure(cfg ConfigureConfig, root operatorsettings.Service) error {
 	return adapter.Configure(cfg)
 }
 
-func (service *service) Configure(cfg ConfigureConfig) error {
+// ValidateConfigureBoundary rejects configure inputs before Settings root access.
+func ValidateConfigureBoundary(cfg ConfigureConfig) error {
 	if cfg.Context == nil {
 		return fmt.Errorf("init context is required")
 	}
@@ -64,14 +68,26 @@ func (service *service) Configure(cfg ConfigureConfig) error {
 		if cfg.Input == nil {
 			return fmt.Errorf("interactive init input is required")
 		}
+		return nil
+	}
+	if cfg.Model != nil && strings.TrimSpace(*cfg.Model) == "" {
+		return fmt.Errorf("model must be non-empty when supplied")
+	}
+	return nil
+}
+
+func (service *service) Configure(cfg ConfigureConfig) error {
+	if err := ValidateConfigureBoundary(cfg); err != nil {
+		return err
+	}
+	homeDir := strings.TrimSpace(cfg.HomeDir)
+	provider := strings.TrimSpace(cfg.Provider)
+	if provider == "" {
 		return service.configurePrompted(cfg, homeDir)
 	}
 	var model *string
 	if cfg.Model != nil {
 		value := strings.TrimSpace(*cfg.Model)
-		if value == "" {
-			return fmt.Errorf("model must be non-empty when supplied")
-		}
 		model = &value
 	}
 
@@ -103,9 +119,10 @@ func (service *service) configurePrompted(cfg ConfigureConfig, homeDir string) e
 	}
 	update, err := service.acquireProviderModelPrompt(cfg, loaded.Document.Defaults)
 	if err != nil {
-		if errors.Is(err, operatorsettings.ErrProviderModelInputCanceled) ||
+		if errors.Is(err, io.EOF) ||
+			errors.Is(err, operatorsettings.ErrProviderModelInputCanceled) ||
 			errors.Is(err, context.Canceled) {
-			return fmt.Errorf("configure provider/model defaults: setup canceled: %w", err)
+			return fmt.Errorf("configure provider/model defaults: setup canceled: %w", operatorsettings.ErrProviderModelInputCanceled)
 		}
 		return fmt.Errorf("configure provider/model defaults: %w", err)
 	}
