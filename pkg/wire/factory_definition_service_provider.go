@@ -4,7 +4,7 @@ import (
 	"context"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
@@ -13,7 +13,7 @@ import (
 
 func provideFactoryDefinitionsFactory(
 	persistence factorydefinitions.Persistence,
-	loader *factoryloading.Loader,
+	loader *factorydefinitionswire.Loader,
 	applySupportedFiles factorydefinitions.PortableBundledFilesApplier,
 	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
 	namedPaths factorydefinitions.NamedPathResolver,

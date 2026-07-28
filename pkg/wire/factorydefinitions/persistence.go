@@ -5,7 +5,6 @@ import (
 
 	contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/authoredlayout"
-	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	authoredmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/authored"
@@ -17,7 +16,7 @@ import (
 func Persistence(
 	validator contracts.Validator,
 	mapInput contracts.FactoryLayoutPayloadMapper,
-	loader *factoryloading.Loader,
+	loader *factorydefinitionswire.Loader,
 	pruneRemovedDocs contracts.PortableBundledDocsPruner,
 	materializeFiles contracts.PortableBundledFilesMaterializer,
 	validateWrites contracts.PortableBundledFileWritesValidator,

@@ -54,10 +54,12 @@ const (
 })();`
 )
 
-// TestProviderSessionRefAssociatesWithOwningDispatchAndFactorySession proves that
-// after a Factory Session produces a provider-backed child dispatch, the public
-// dispatch listing and dispatch detail surfaces expose providerSessionRefs that
-// join to the owning dispatch identifier and the same Factory Session identifier.
+// TestProviderSessionRefAssociatesWithOwningDispatchAndFactorySession proves
+// Provider Session association activates through public surfaces after runtime
+// lifecycle starts on a process composed only via support.StartFunctionalAPIServer
+// (root.BuildProcess + edges.Edges). After a provider-backed fake child dispatch
+// completes, public dispatch listing and detail expose providerSessionRefs that
+// join the owning dispatch identifier and the same Factory Session sessionId.
 func TestProviderSessionRefAssociatesWithOwningDispatchAndFactorySession(t *testing.T) {
 	t.Parallel()
 
@@ -106,6 +108,12 @@ func TestProviderSessionRefAssociatesWithOwningDispatchAndFactorySession(t *test
 	}
 
 	providerRef := requireProviderSessionRefOnDispatchSummary(t, summary)
+	assertProviderSessionRefJoinsDispatchAndSession(
+		t,
+		executed.SessionId,
+		summary.Id,
+		providerRef,
+	)
 	if providerRef.Id != "fake-provider-session-1" {
 		t.Fatalf(
 			"providerSessionRef id = %q, want runtime-produced fake-provider-session-1",
@@ -132,6 +140,12 @@ func TestProviderSessionRefAssociatesWithOwningDispatchAndFactorySession(t *test
 		)
 	}
 	detailRef := requireProviderSessionRefOnDispatchDetail(t, detail)
+	assertProviderSessionRefJoinsDispatchAndSession(
+		t,
+		executed.SessionId,
+		detail.Id,
+		detailRef,
+	)
 	if detailRef.Id != providerRef.Id {
 		t.Fatalf(
 			"dispatch detail providerSessionRef id = %q, want same ref %q from listing",
@@ -479,6 +493,26 @@ func assertProviderSessionRefKind(t *testing.T, ref factoryapi.LoadableProviderS
 	if ref.Kind != factoryapi.LoadableProviderSessionKindSessionID {
 		t.Fatalf("providerSessionRef kind = %q, want session_id", ref.Kind)
 	}
+}
+
+func assertProviderSessionRefJoinsDispatchAndSession(
+	t *testing.T,
+	factorySessionID string,
+	dispatchID string,
+	ref factoryapi.LoadableProviderSessionRef,
+) {
+	t.Helper()
+
+	if strings.TrimSpace(factorySessionID) == "" {
+		t.Fatal("factory session id unexpectedly empty while asserting providerSessionRef join")
+	}
+	if strings.TrimSpace(dispatchID) == "" {
+		t.Fatal("dispatch id unexpectedly empty while asserting providerSessionRef join")
+	}
+	if strings.TrimSpace(ref.Id) == "" {
+		t.Fatalf("providerSessionRef = %#v, want non-empty public session identity", ref)
+	}
+	assertProviderSessionRefKind(t, ref)
 }
 
 func assertDispatchOwnsProviderSessionRef(

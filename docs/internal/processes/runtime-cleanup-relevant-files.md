@@ -848,9 +848,16 @@ loading/loadedsource/runtimeconfig packages, and `wire/wire.go` constructs from
 injected ports without selecting Runtime/Petri implementations or sibling
 catalog/authoring_layout/validation/snapshots_portability/distribution leases.
 Compilation-owned loading/loadedsource/runtimeconfig implementation lives under
-`internal/services/compilation/{loading,loadedsource,runtimeconfig}`; public
+`internal/services/compilation/{loading,loadedsource,runtimeconfig}`; runtime
+load/merge characterization coverage lives under
+`internal/services/compilation/runtimetests` (not public `loading/runtimetests`);
+public
 `loading/`, `loadedsource/`, and `runtimeconfig/` remain transitional re-exports
-for `pkg/wire` and in-owner callers until peer imports retire in later stories.
+for `pkg/wire` and in-owner callers until DEL-DEF deletes the emptied public
+packages; `definition/` stays on the CLN-DEF-FOLD-COMPOSITION lease and must not
+change in CLN-DEF-FOLD-COMPILATION. `compile_load_lease_hold_test.go` locks those
+residual directories in place, proves `definition/` has no branch diff, and seals
+compilation subpackages from importing the lifecycle host.
 Factory Definitions `wire/wire.go` composes the lifecycle host through
 `factory_definitions/internal` (`NewWithAuthoringLayout` → `internal/lifecycle`)
 and must not import public `definition/` or transitional `service/` shims;

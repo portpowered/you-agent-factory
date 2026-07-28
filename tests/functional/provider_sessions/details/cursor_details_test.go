@@ -27,9 +27,12 @@ const (
 	cursorMissingSessionID                        = "cursor-fixture-missing-session"
 )
 
-// TestCursorProviderSessionDetailsLoadFromGoldenMetadata loads a sanitized Cursor
-// success store through the public Provider Session detail surface and proves
-// the response structurally matches checked-in expected Provider Session metadata.
+// TestCursorProviderSessionDetailsLoadFromGoldenMetadata proves Cursor Provider
+// Session detail activates through the public GET /provider-sessions/detail surface
+// after runtime lifecycle starts on a process composed only via
+// support.StartFunctionalAPIServer (root.BuildProcess + edges.Edges). It loads a
+// sanitized Cursor success store and proves identity/provider/kind plus readable
+// transcript structurally match checked-in expected Provider Session metadata.
 //golden: docs/temp/functional/provider-sessions/cursor/success/manifest.json
 func TestCursorProviderSessionDetailsLoadFromGoldenMetadata(t *testing.T) {
 	repoRoot := testutil.MustRepoRoot(t)
@@ -63,15 +66,13 @@ func TestCursorProviderSessionDetailsLoadFromGoldenMetadata(t *testing.T) {
 		t,
 		cursorProviderSessionDetailURL(server.URL(), request.SessionID),
 	)
-	if detail.ProviderSession.Id != request.SessionID {
-		t.Fatalf("detail provider session id = %q, want %q", detail.ProviderSession.Id, request.SessionID)
-	}
-	if detail.ProviderSession.Provider != factoryapi.Cursor {
-		t.Fatalf("detail provider = %q, want cursor", detail.ProviderSession.Provider)
-	}
-	if detail.ProviderSession.Kind != factoryapi.LoadableProviderSessionKindSessionID {
-		t.Fatalf("detail kind = %q, want session_id", detail.ProviderSession.Kind)
-	}
+	assertProviderSessionDetailIdentity(
+		t,
+		detail,
+		request.SessionID,
+		factoryapi.Cursor,
+		factoryapi.LoadableProviderSessionKindSessionID,
+	)
 	if len(detail.Transcript) == 0 {
 		t.Fatal("provider session detail transcript is empty, want readable success-session content")
 	}
@@ -111,15 +112,13 @@ func TestCursorProviderSessionUnavailableContentRemainsInspectable(t *testing.T)
 		t,
 		cursorProviderSessionDetailURL(server.URL(), cursorUnavailableContentSessionID),
 	)
-	if detail.ProviderSession.Id != cursorUnavailableContentSessionID {
-		t.Fatalf("detail provider session id = %q, want %q", detail.ProviderSession.Id, cursorUnavailableContentSessionID)
-	}
-	if detail.ProviderSession.Provider != factoryapi.Cursor {
-		t.Fatalf("detail provider = %q, want cursor", detail.ProviderSession.Provider)
-	}
-	if detail.ProviderSession.Kind != factoryapi.LoadableProviderSessionKindSessionID {
-		t.Fatalf("detail kind = %q, want session_id", detail.ProviderSession.Kind)
-	}
+	assertProviderSessionDetailIdentity(
+		t,
+		detail,
+		cursorUnavailableContentSessionID,
+		factoryapi.Cursor,
+		factoryapi.LoadableProviderSessionKindSessionID,
+	)
 	if detail.Parse.UnknownEventCount == 0 && len(detail.Parse.UnknownEvents) == 0 {
 		t.Fatalf("parse summary = %#v, want unavailable unknown-event diagnostics", detail.Parse)
 	}

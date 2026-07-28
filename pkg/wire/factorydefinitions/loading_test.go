@@ -9,7 +9,6 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	wirefactorydefinitions "github.com/portpowered/infinite-you/pkg/wire/factorydefinitions"
 )
@@ -46,6 +45,15 @@ func TestLoaderLoadsDirectoryAndCanonicalRepresentations(t *testing.T) {
 	}
 	if _, ok := canonicalSource.Workstation("process"); !ok {
 		t.Fatal("canonical Factory workstation process not loaded")
+	}
+}
+
+func TestAuthoredFactorySourceLoaderConstructsResolver(t *testing.T) {
+	t.Parallel()
+
+	loader := wirefactorydefinitions.AuthoredFactorySourceLoader(platformfilesystem.Local{})
+	if loader == nil {
+		t.Fatal("expected non-nil authored Factory source loader")
 	}
 }
 
@@ -89,7 +97,7 @@ func TestLoaderUsesSameYAMLRootSelectionForRuntimeAndReadOnlyValidation(t *testi
 func newTestLoader(
 	t *testing.T,
 	fileSystem platformfilesystem.Local,
-) *factoryloading.Loader {
+) *factorydefinitionswire.Loader {
 	t.Helper()
 
 	applySupportedFiles, err := factorydefinitionswire.NewPortableBundledFilesApplier(fileSystem)

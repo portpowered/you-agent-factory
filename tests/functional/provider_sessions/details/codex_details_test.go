@@ -27,9 +27,12 @@ const (
 	codexMissingTranscriptSessionID              = "session_fixture_codex_missing_transcript"
 )
 
-// TestCodexProviderSessionDetailsLoadFromGoldenMetadata loads a sanitized Codex
-// success rollout through the public Provider Session detail surface and proves
-// the response structurally matches checked-in expected Provider Session metadata.
+// TestCodexProviderSessionDetailsLoadFromGoldenMetadata proves Codex Provider
+// Session detail activates through the public GET /provider-sessions/detail surface
+// after runtime lifecycle starts on a process composed only via
+// support.StartFunctionalAPIServer (root.BuildProcess + edges.Edges). It loads a
+// sanitized Codex success rollout and proves identity/provider/kind plus readable
+// transcript structurally match checked-in expected Provider Session metadata.
 //golden: docs/temp/functional/provider-sessions/codex/success/manifest.json
 func TestCodexProviderSessionDetailsLoadFromGoldenMetadata(t *testing.T) {
 	repoRoot := testutil.MustRepoRoot(t)
@@ -69,15 +72,13 @@ func TestCodexProviderSessionDetailsLoadFromGoldenMetadata(t *testing.T) {
 		t,
 		codexProviderSessionDetailURL(server.URL(), request.SessionID),
 	)
-	if detail.ProviderSession.Id != request.SessionID {
-		t.Fatalf("detail provider session id = %q, want %q", detail.ProviderSession.Id, request.SessionID)
-	}
-	if detail.ProviderSession.Provider != factoryapi.Codex {
-		t.Fatalf("detail provider = %q, want codex", detail.ProviderSession.Provider)
-	}
-	if detail.ProviderSession.Kind != factoryapi.LoadableProviderSessionKindSessionID {
-		t.Fatalf("detail kind = %q, want session_id", detail.ProviderSession.Kind)
-	}
+	assertProviderSessionDetailIdentity(
+		t,
+		detail,
+		request.SessionID,
+		factoryapi.Codex,
+		factoryapi.LoadableProviderSessionKindSessionID,
+	)
 	if len(detail.Transcript) == 0 {
 		t.Fatal("provider session detail transcript is empty, want readable success-session content")
 	}
@@ -157,12 +158,13 @@ func TestCodexProviderSessionCorruptTranscriptReturnsSafeDiagnostic(t *testing.T
 		t,
 		codexProviderSessionDetailURL(server.URL(), codexCorruptTranscriptSessionID),
 	)
-	if detail.ProviderSession.Id != codexCorruptTranscriptSessionID {
-		t.Fatalf("detail provider session id = %q, want %q", detail.ProviderSession.Id, codexCorruptTranscriptSessionID)
-	}
-	if detail.ProviderSession.Provider != factoryapi.Codex {
-		t.Fatalf("detail provider = %q, want codex", detail.ProviderSession.Provider)
-	}
+	assertProviderSessionDetailIdentity(
+		t,
+		detail,
+		codexCorruptTranscriptSessionID,
+		factoryapi.Codex,
+		factoryapi.LoadableProviderSessionKindSessionID,
+	)
 	if detail.Parse.MalformedLineCount == 0 && len(detail.Parse.ParseErrors) == 0 {
 		t.Fatalf("parse summary = %#v, want malformed-line or parse-error diagnostics", detail.Parse)
 	}

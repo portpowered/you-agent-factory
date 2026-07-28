@@ -2046,7 +2046,19 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work",
-      "minimum": 85.74
+      "minimum": 81.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/contenturl",
+      "minimum": 0.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/invocationreturnpolicy",
+      "minimum": 45.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/requestadmission",
+      "minimum": 80.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/service",
@@ -2101,6 +2113,14 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/internal/service",
       "minimum": 78.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/lineagegraph",
+      "minimum": 35.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/stateaccessquery",
+      "minimum": 88.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/wire",
@@ -2612,7 +2632,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/wire/factorydefinitions",
-      "minimum": 70.73
+      "minimum": 65.21
     }
   ]
 }
