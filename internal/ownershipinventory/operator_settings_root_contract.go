@@ -11,9 +11,11 @@ import (
 // Confirmed against docs/internal/projects/packaged-service-structure/operator-settings-root-go-inventory.json
 // (INV-SET-TOPLEVEL).
 var OperatorSettingsThinRootContractFiles = []string{
+	"backend_scope.go",
 	"config_document.go",
 	"doc.go",
 	"document_contract.go",
+	"input_inventory_contract.go",
 	"resolution_contract.go",
 	"service_contract.go",
 	"root_contract_legacy_preservation_test.go",
@@ -31,21 +33,6 @@ type OperatorSettingsRootContractFoldTarget struct {
 // OperatorSettingsExcessRootContractFolds inventories excess root contract/helper
 // clusters beyond the thin Operator Settings service root contract.
 var OperatorSettingsExcessRootContractFolds = []OperatorSettingsRootContractFoldTarget{
-	{
-		Cluster: "identity_input_index_inventory",
-		Files: []string{
-			"identity.go",
-			"identity_persist_test.go",
-			"identity_test.go",
-			"input_index.go",
-			"input_index_load_cases.go",
-			"input_index_parse_cases.go",
-			"input_index_resolve_cases.go",
-			"input_inventory_test.go",
-			"inventory.go",
-		},
-		Destination: OperatorSettingsOwnerPackagePath + "/internal",
-	},
 	{
 		Cluster: "resolution_composition",
 		Files: []string{

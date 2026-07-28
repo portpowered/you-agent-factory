@@ -4,21 +4,6 @@
   "sortKey": "file name ascending byte order",
   "clusters": [
     {
-      "cluster": "identity_input_index_inventory",
-      "destination": "pkg/services/operator_settings/internal",
-      "files": [
-        "identity.go",
-        "identity_persist_test.go",
-        "identity_test.go",
-        "input_index.go",
-        "input_index_load_cases.go",
-        "input_index_parse_cases.go",
-        "input_index_resolve_cases.go",
-        "input_inventory_test.go",
-        "inventory.go"
-      ]
-    },
-    {
       "cluster": "resolution_composition",
       "destination": "pkg/services/operator_settings/internal/services/resolution",
       "files": [
@@ -64,6 +49,11 @@
       "note": "Atomic defaults/config characterization folds with private resolution implementation."
     },
     {
+      "file": "backend_scope.go",
+      "classification": "thin_root_contract",
+      "note": "Peer-facing backend-scope identity types and EnsureLocalBackendScope thin surface delegating to private implementation."
+    },
+    {
       "file": "config_document.go",
       "classification": "thin_root_contract",
       "note": "Peer-facing ConfigDocument and ConfigDocumentService thin surface delegating to the private document subservice."
@@ -100,67 +90,9 @@
       "note": "Environment-aware defaults resolution helper folds into private resolution subservice."
     },
     {
-      "file": "identity.go",
-      "classification": "fold_target_identity",
-      "foldDestination": "pkg/services/operator_settings/internal",
-      "cluster": "identity_input_index_inventory",
-      "note": "Backend scope identity load/generate/persist helpers fold into private implementation."
-    },
-    {
-      "file": "identity_persist_test.go",
-      "classification": "fold_target_implementation_test",
-      "foldDestination": "pkg/services/operator_settings/internal",
-      "cluster": "identity_input_index_inventory",
-      "note": "Identity persistence characterization folds with private implementation."
-    },
-    {
-      "file": "identity_test.go",
-      "classification": "fold_target_implementation_test",
-      "foldDestination": "pkg/services/operator_settings/internal",
-      "cluster": "identity_input_index_inventory",
-      "note": "Identity helper characterization folds with private implementation."
-    },
-    {
-      "file": "input_index.go",
-      "classification": "fold_target_identity",
-      "foldDestination": "pkg/services/operator_settings/internal",
-      "cluster": "identity_input_index_inventory",
-      "note": "Operator-config input inventory projection folds into private implementation."
-    },
-    {
-      "file": "input_index_load_cases.go",
-      "classification": "fold_target_identity",
-      "foldDestination": "pkg/services/operator_settings/internal",
-      "cluster": "identity_input_index_inventory",
-      "note": "Input-index load cases fold with private input-index inventory helpers."
-    },
-    {
-      "file": "input_index_parse_cases.go",
-      "classification": "fold_target_identity",
-      "foldDestination": "pkg/services/operator_settings/internal",
-      "cluster": "identity_input_index_inventory",
-      "note": "Input-index parse cases fold with private input-index inventory helpers."
-    },
-    {
-      "file": "input_index_resolve_cases.go",
-      "classification": "fold_target_identity",
-      "foldDestination": "pkg/services/operator_settings/internal",
-      "cluster": "identity_input_index_inventory",
-      "note": "Input-index resolve cases fold with private input-index inventory helpers."
-    },
-    {
-      "file": "input_inventory_test.go",
-      "classification": "fold_target_implementation_test",
-      "foldDestination": "pkg/services/operator_settings/internal",
-      "cluster": "identity_input_index_inventory",
-      "note": "Input inventory characterization folds with private implementation."
-    },
-    {
-      "file": "inventory.go",
-      "classification": "fold_target_identity",
-      "foldDestination": "pkg/services/operator_settings/internal",
-      "cluster": "identity_input_index_inventory",
-      "note": "Input inventory types and projection helpers fold into private implementation."
+      "file": "input_inventory_contract.go",
+      "classification": "thin_root_contract",
+      "note": "Peer-facing operator-config input inventory types and ProjectInputInventory thin surface delegating to private implementation."
     },
     {
       "file": "operator_config.go",

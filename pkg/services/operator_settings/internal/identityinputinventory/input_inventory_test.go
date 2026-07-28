@@ -1,4 +1,4 @@
-package operatorsettings_test
+package identityinputinventory_test
 
 import (
 	"os"
@@ -10,10 +10,18 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	internaltestlink "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testlink"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
+
+	_ "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/identityinputinventory"
 )
 
 const fixturesRelativeDir = "pkg/services/operator_settings/testdata/fixtures"
+
+func TestMain(m *testing.M) {
+	internaltestlink.RegisterComposition()
+	m.Run()
+}
 
 func TestIndexedInputCases_MatchProductionLoaders(t *testing.T) {
 	inventory := operatorconfig.ProjectInputInventory()

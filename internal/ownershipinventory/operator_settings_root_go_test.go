@@ -116,9 +116,11 @@ func TestOperatorSettingsRootGoInventoryClassifiesThinRootContractSurfaces(t *te
 	}
 
 	wantThin := []string{
+		"backend_scope.go",
 		"config_document.go",
 		"doc.go",
 		"document_contract.go",
+		"input_inventory_contract.go",
 		"resolution_contract.go",
 		"service_contract.go",
 	}
@@ -144,7 +146,6 @@ func TestOperatorSettingsRootGoInventoryNamesExcessFoldClusters(t *testing.T) {
 	}
 
 	want := map[string]string{
-		"identity_input_index_inventory":        "pkg/services/operator_settings/internal",
 		"resolution_composition":                "pkg/services/operator_settings/internal/services/resolution",
 		"providers_root_construction":           "pkg/services/operator_settings/internal",
 		"construction_ports":                    "pkg/services/operator_settings/internal",
@@ -175,7 +176,6 @@ func TestOperatorSettingsRootGoInventoryNamesExcessFoldClusters(t *testing.T) {
 	wantClusters := []string{
 		"construction_ports",
 		"defaults_resolution_implementation",
-		"identity_input_index_inventory",
 		"providers_root_construction",
 		"resolution_composition",
 	}
@@ -200,9 +200,6 @@ func TestOperatorSettingsRootGoInventoryDistinguishesThinContractTestsFromImplem
 	wantFoldTests := []string{
 		"atomic_config_test.go",
 		"dependencies_test.go",
-		"identity_persist_test.go",
-		"identity_test.go",
-		"input_inventory_test.go",
 		"operator_config_test.go",
 		"resolution_characterization_test.go",
 		"service_characterization_test.go",

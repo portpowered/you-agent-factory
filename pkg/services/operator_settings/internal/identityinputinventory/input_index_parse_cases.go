@@ -1,7 +1,9 @@
-package operatorsettings
+package identityinputinventory
 
-func parseValidInputCases() []InputCase {
-	return []InputCase{
+import operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+
+func parseValidInputCases() []operatorsettings.InputCase {
+	return []operatorsettings.InputCase{
 		{
 			ID:          "valid-defaults-only",
 			Category:    categoryParseDefaults,
@@ -9,8 +11,8 @@ func parseValidInputCases() []InputCase {
 			Outcome:     outcomeAccept,
 			Fixture:     "valid/defaults-only.json",
 			Description: "defaults.workerModelProvider and defaults.workerModel parse from file",
-			ExpectedConfig: &ConfigExpectation{
-				Defaults: DefaultsSnapshot{
+			ExpectedConfig: &operatorsettings.ConfigExpectation{
+				Defaults: operatorsettings.DefaultsSnapshot{
 					WorkerModelProvider: "codex",
 					WorkerModel:         "gpt-5-codex",
 				},
@@ -23,9 +25,9 @@ func parseValidInputCases() []InputCase {
 			Outcome:     outcomeAccept,
 			Fixture:     "valid/backend-scope-sibling.json",
 			Description: "generated global config decode returns backendScopeID with normalized defaults",
-			ExpectedConfig: &ConfigExpectation{
+			ExpectedConfig: &operatorsettings.ConfigExpectation{
 				BackendScopeID: "local-11111111-1111-4111-8111-111111111111",
-				Defaults: DefaultsSnapshot{
+				Defaults: operatorsettings.DefaultsSnapshot{
 					WorkerModelProvider: "claude",
 					WorkerModel:         "claude-sonnet",
 				},
@@ -38,8 +40,8 @@ func parseValidInputCases() []InputCase {
 			Outcome:     outcomeAccept,
 			Fixture:     "valid/worker-presets-canonicalized.json",
 			Description: "workerPresets ids, providers, models, and reasoningEffort are trimmed and canonicalized",
-			ExpectedConfig: &ConfigExpectation{
-				WorkerPresets: []WorkerPreset{{
+			ExpectedConfig: &operatorsettings.ConfigExpectation{
+				WorkerPresets: []operatorsettings.WorkerPreset{{
 					ID:              "research",
 					ModelProvider:   "CODEX",
 					Model:           "gpt-5.4",
@@ -54,15 +56,15 @@ func parseValidInputCases() []InputCase {
 			Outcome:     outcomeAccept,
 			Fixture:     "valid/worker-presets-missing.json",
 			Description: "missing workerPresets array is backward compatible",
-			ExpectedConfig: &ConfigExpectation{
-				Defaults: DefaultsSnapshot{WorkerModel: "existing-model"},
+			ExpectedConfig: &operatorsettings.ConfigExpectation{
+				Defaults: operatorsettings.DefaultsSnapshot{WorkerModel: "existing-model"},
 			},
 		},
 	}
 }
 
-func parseInvalidDefaultsInputCases() []InputCase {
-	return []InputCase{
+func parseInvalidDefaultsInputCases() []operatorsettings.InputCase {
+	return []operatorsettings.InputCase{
 		{
 			ID:          "invalid-malformed-json",
 			Category:    categoryParseDefaults,
@@ -110,8 +112,8 @@ func parseInvalidDefaultsInputCases() []InputCase {
 	}
 }
 
-func parseInvalidWorkerPresetInputCases() []InputCase {
-	return []InputCase{
+func parseInvalidWorkerPresetInputCases() []operatorsettings.InputCase {
+	return []operatorsettings.InputCase{
 		{
 			ID:          "invalid-preset-empty-id",
 			Category:    categoryParseWorkerPreset,

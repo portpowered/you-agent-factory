@@ -1016,6 +1016,13 @@ response-stream output.
   wired through `ConfigureConfigDocumentOperations` to avoid root↔subservice
   import cycles; wire/construct/servicewire/testlink blank-import the document
   subservice so registration runs before `ConfigureDocumentOwnerConstructor`.
+- CLN-SET-CONTRACT-ROOTS story-003 folds `identity_input_index_inventory` into
+  `pkg/services/operator_settings/internal/identityinputinventory` (`identity.go`,
+  `input_index.go`, case tables, `register.go`); the peer root keeps
+  `backend_scope.go` and `input_inventory_contract.go` as thin surfaces wired
+  through `ConfigureIdentityInputInventoryOperations`; wire/construct/servicewire/testlink
+  blank-import the private package so registration runs before backend-scope and
+  input-inventory callers execute.
 - When global named-factory guidance changes, update its authored
   `contracts/cli/commands.json` records and the task-oriented guidance in
   `docs/reference/authoring-factories.md` plus `config.md`; do not restore

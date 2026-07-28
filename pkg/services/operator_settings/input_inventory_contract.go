@@ -1,6 +1,3 @@
-// Package operatorconfig loads optional operator-level default worker model
-// settings from ~/.you-agent-factory/config.json, environment variables, and
-// CLI flag overrides.
 package operatorsettings
 
 // InputInventoryFormatVersion identifies the operator config input inventory shape.
@@ -8,22 +5,6 @@ const InputInventoryFormatVersion = "operator-config-input/v1"
 
 // InputIndexBaselineRelativePath is the committed operator config input index fixture.
 const InputIndexBaselineRelativePath = "pkg/services/operator_settings/testdata/baseline/operator-config-input-index.json"
-
-const (
-	outcomeAccept = "accept"
-	outcomeReject = "reject"
-
-	entrypointDecodeGlobalConfig = "DecodeGlobalConfig"
-	entrypointLoadFileConfig     = "LoadFileConfig"
-	entrypointResolve            = "Resolve"
-
-	categoryParseDefaults     = "parse-defaults"
-	categoryParseWorkerPreset = "parse-worker-presets"
-	categoryParseUnknownField = "parse-unknown-field"
-	categoryLoadFile          = "load-file"
-	categoryResolvePrecedence = "resolve-precedence"
-	categoryResolveSymbolic   = "resolve-symbolic-default"
-)
 
 // InputInventory indexes deterministic operator-config inputs and expected loader outcomes.
 type InputInventory struct {
@@ -86,4 +67,13 @@ type PrecedenceWinners struct {
 type ResolvedExpectation struct {
 	WorkerModelProvider string `json:"workerModelProvider,omitempty"`
 	WorkerModel         string `json:"workerModel,omitempty"`
+}
+
+// ProjectInputInventory builds the deterministic operator-config input inventory
+// from committed fixtures and documented loader outcomes.
+func ProjectInputInventory() InputInventory {
+	if identityInputInventoryOperations.ProjectInputInventory == nil {
+		panic("operator settings identity input inventory operations are required")
+	}
+	return identityInputInventoryOperations.ProjectInputInventory()
 }

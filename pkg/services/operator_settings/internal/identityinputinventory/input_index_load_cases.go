@@ -1,14 +1,16 @@
-package operatorsettings
+package identityinputinventory
 
-func loadInputCases() []InputCase {
-	return []InputCase{
+import operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+
+func loadInputCases() []operatorsettings.InputCase {
+	return []operatorsettings.InputCase{
 		{
 			ID:             "valid-missing-file",
 			Category:       categoryLoadFile,
 			Entrypoint:     entrypointLoadFileConfig,
 			Outcome:        outcomeAccept,
 			Description:    "missing config file returns empty Config without error",
-			ExpectedConfig: &ConfigExpectation{},
+			ExpectedConfig: &operatorsettings.ConfigExpectation{},
 		},
 		{
 			ID:          "valid-load-defaults",
@@ -17,8 +19,8 @@ func loadInputCases() []InputCase {
 			Outcome:     outcomeAccept,
 			Fixture:     "valid/load-defaults.json",
 			Description: "LoadFileConfig reads and validates defaults from disk",
-			ExpectedConfig: &ConfigExpectation{
-				Defaults: DefaultsSnapshot{
+			ExpectedConfig: &operatorsettings.ConfigExpectation{
+				Defaults: operatorsettings.DefaultsSnapshot{
 					WorkerModelProvider: "claude",
 					WorkerModel:         "claude-sonnet",
 				},

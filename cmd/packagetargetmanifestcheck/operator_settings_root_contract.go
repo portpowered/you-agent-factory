@@ -14,9 +14,11 @@ const operatorSettingsRootRelative = "pkg/services/operator_settings"
 // that remain at pkg/services/operator_settings/ during CLN-SET-CONTRACT-ROOTS.
 // Mirrors internal/ownershipinventory OperatorSettingsThinRootContractFiles.
 var operatorSettingsThinRootContractFiles = []string{
+	"backend_scope.go",
 	"config_document.go",
 	"doc.go",
 	"document_contract.go",
+	"input_inventory_contract.go",
 	"resolution_contract.go",
 	"service_contract.go",
 	"root_contract_legacy_preservation_test.go",
@@ -32,21 +34,6 @@ type operatorSettingsRootContractFoldTarget struct {
 // operatorSettingsExcessRootContractFolds mirrors internal/ownershipinventory
 // OperatorSettingsExcessRootContractFolds for package-target manifest checks.
 var operatorSettingsExcessRootContractFolds = []operatorSettingsRootContractFoldTarget{
-	{
-		cluster: "identity_input_index_inventory",
-		files: []string{
-			"identity.go",
-			"identity_persist_test.go",
-			"identity_test.go",
-			"input_index.go",
-			"input_index_load_cases.go",
-			"input_index_parse_cases.go",
-			"input_index_resolve_cases.go",
-			"input_inventory_test.go",
-			"inventory.go",
-		},
-		destination: "pkg/services/operator_settings/internal",
-	},
 	{
 		cluster: "resolution_composition",
 		files: []string{

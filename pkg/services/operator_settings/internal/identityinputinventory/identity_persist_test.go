@@ -1,8 +1,10 @@
-package operatorsettings
+package identityinputinventory
 
 import (
 	"strings"
 	"testing"
+
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 )
 
 func TestIndexedPersistScopeCases_MatchProductionLoader(t *testing.T) {
@@ -26,8 +28,8 @@ func TestIndexedPersistScopeCases_MatchProductionLoader(t *testing.T) {
 func runPersistScopeCase(t *testing.T, scopeID string, wantErrorParts []string) {
 	t.Helper()
 
-	configPath := DefaultConfigPath(t.TempDir())
-	err := persistBackendScopeID(testFiles, testCreateTemp, encodeTestConfig, configPath, Config{BackendScopeID: scopeID})
+	configPath := operatorsettings.DefaultConfigPath(t.TempDir())
+	err := persistBackendScopeID(testFiles, testCreateTemp, encodeTestConfig, configPath, operatorsettings.Config{BackendScopeID: scopeID})
 	if len(wantErrorParts) == 0 {
 		if err != nil {
 			t.Fatalf("persistBackendScopeID() error = %v, want accept", err)
