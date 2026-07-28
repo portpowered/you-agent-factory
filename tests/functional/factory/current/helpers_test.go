@@ -353,3 +353,15 @@ func promptTemplateContractHasVariablePath(contract factoryapi.PromptTemplateCon
 	}
 	return false
 }
+
+func promptTemplateValidationHasDiagnosticKind(
+	result factoryapi.PromptTemplateValidationResult,
+	want factoryapi.PromptTemplateDiagnosticKind,
+) bool {
+	for _, diagnostic := range result.Diagnostics {
+		if diagnostic.Kind == want {
+			return true
+		}
+	}
+	return false
+}
