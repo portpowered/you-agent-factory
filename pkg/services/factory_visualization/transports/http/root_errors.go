@@ -19,6 +19,10 @@ func visualizationRootErrorResponse(err error) (int, any, bool) {
 		return 0, nil, false
 	}
 
+	if status, response, ok := visualizationRequestContextErrorResponse(err); ok {
+		return status, response, true
+	}
+
 	var lifeErr *factoryvisualization.LifecycleError
 	if errors.As(err, &lifeErr) {
 		return lifecycleErrorResponse(lifeErr)

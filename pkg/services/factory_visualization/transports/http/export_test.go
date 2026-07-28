@@ -1,3 +1,6 @@
 package http
 
-var VisualizationRootErrorResponseForTest = visualizationRootErrorResponse
+var (
+	VisualizationRootErrorResponseForTest         = visualizationRootErrorResponse
+	VisualizationRequestContextErrorResponseForTest = visualizationRequestContextErrorResponse
+)

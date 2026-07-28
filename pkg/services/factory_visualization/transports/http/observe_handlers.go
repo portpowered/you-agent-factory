@@ -16,6 +16,9 @@ func (a *Adapter) ObserveHTTP(
 	if err != nil {
 		return ObserveHTTPResponse{}, err
 	}
+	if err := visualizationContextBeforeRoot(ctx); err != nil {
+		return ObserveHTTPResponse{}, err
+	}
 	result, err := a.Observe(ctx, req)
 	if err != nil {
 		return ObserveHTTPResponse{}, err

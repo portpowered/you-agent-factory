@@ -16,6 +16,9 @@ func (a *Adapter) OpenPresentationHTTP(
 	if err != nil {
 		return OpenPresentationHTTPResponse{}, err
 	}
+	if err := visualizationContextBeforeRoot(ctx); err != nil {
+		return OpenPresentationHTTPResponse{}, err
+	}
 	result, err := a.OpenPresentation(ctx, req)
 	if err != nil {
 		return OpenPresentationHTTPResponse{}, err
@@ -32,6 +35,9 @@ func (a *Adapter) PresentProgressHTTP(
 ) (PresentProgressHTTPResponse, error) {
 	req, err := decodePresentProgressHTTPRequest(body)
 	if err != nil {
+		return PresentProgressHTTPResponse{}, err
+	}
+	if err := visualizationContextBeforeRoot(ctx); err != nil {
 		return PresentProgressHTTPResponse{}, err
 	}
 	result, err := a.PresentProgress(ctx, req)
@@ -52,6 +58,9 @@ func (a *Adapter) FinalizePresentationHTTP(
 	if err != nil {
 		return FinalizePresentationHTTPResponse{}, err
 	}
+	if err := visualizationContextBeforeRoot(ctx); err != nil {
+		return FinalizePresentationHTTPResponse{}, err
+	}
 	result, err := a.FinalizePresentation(ctx, req)
 	if err != nil {
 		return FinalizePresentationHTTPResponse{}, err
@@ -68,6 +77,9 @@ func (a *Adapter) ClosePresentationHTTP(
 ) (ClosePresentationHTTPResponse, error) {
 	req, err := decodeClosePresentationHTTPRequest(body)
 	if err != nil {
+		return ClosePresentationHTTPResponse{}, err
+	}
+	if err := visualizationContextBeforeRoot(ctx); err != nil {
 		return ClosePresentationHTTPResponse{}, err
 	}
 	result, err := a.ClosePresentation(ctx, req)

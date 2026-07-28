@@ -16,6 +16,9 @@ func (a *Adapter) ActivateLifecycleHTTP(
 	if err != nil {
 		return LifecycleHTTPResponse{}, err
 	}
+	if err := visualizationContextBeforeRoot(ctx); err != nil {
+		return LifecycleHTTPResponse{}, err
+	}
 	result, err := a.Activate(ctx, req)
 	if err != nil {
 		return LifecycleHTTPResponse{}, err
@@ -33,6 +36,9 @@ func (a *Adapter) JoinLifecycleHTTP(
 	if err != nil {
 		return LifecycleHTTPResponse{}, err
 	}
+	if err := visualizationContextBeforeRoot(ctx); err != nil {
+		return LifecycleHTTPResponse{}, err
+	}
 	result, err := a.Join(ctx, req)
 	if err != nil {
 		return LifecycleHTTPResponse{}, err
@@ -48,6 +54,9 @@ func (a *Adapter) StopDrainLifecycleHTTP(
 ) (LifecycleHTTPResponse, error) {
 	req, err := decodeStopDrainHTTPRequest(body)
 	if err != nil {
+		return LifecycleHTTPResponse{}, err
+	}
+	if err := visualizationContextBeforeRoot(ctx); err != nil {
 		return LifecycleHTTPResponse{}, err
 	}
 	result, err := a.StopDrain(ctx, req)
