@@ -17,7 +17,7 @@ func progressEvent(runID string, progress providers.ExecuteProgress) (inference.
 	}
 	switch {
 	case phase == "result.completed":
-		return runEvent(runID, workerexecution.PhaseCompleted)
+		return inference.EventDraft{}, false
 	case strings.HasPrefix(phase, "message."):
 		return messageEvent(runID, progress, phase)
 	case strings.HasPrefix(phase, "tool."):
@@ -81,13 +81,39 @@ func messageEvent(
 	} else if strings.HasSuffix(phase, ".started") {
 		workerPhase = workerexecution.PhaseStarted
 	}
-	payload, err := json.Marshal(workerexecution.MessagePayload{
-		Role: "assistant",
-		ContentBlocks: []workerexecution.ContentBlock{{
+	var payload []byte
+	var err error
+	representation := workerexecution.RepresentationSnapshot
+	fidelity := workerexecution.FidelityNormalized
+	switch workerPhase {
+	case workerexecution.PhaseDelta:
+		payload, err = json.Marshal(workerexecution.MessageDeltaPayload{
+			ContentBlockIndex: 0,
+			ContentBlockKind:  workerexecution.ContentBlockText,
+			TextDelta:         strings.Clone(progress.Detail),
+		})
+		representation = workerexecution.RepresentationDelta
+	case workerexecution.PhaseStarted:
+		contentBlocks := []workerexecution.ContentBlock{{
 			Kind: workerexecution.ContentBlockText,
-			Text: strings.Clone(progress.Detail),
-		}},
-	})
+		}}
+		if detail := strings.TrimSpace(progress.Detail); detail != "" {
+			contentBlocks[0].Text = detail
+		}
+		payload, err = json.Marshal(workerexecution.MessagePayload{
+			Role:          "assistant",
+			ContentBlocks: contentBlocks,
+		})
+		fidelity = workerexecution.FidelityLifecycleOnly
+	default:
+		payload, err = json.Marshal(workerexecution.MessagePayload{
+			Role: "assistant",
+			ContentBlocks: []workerexecution.ContentBlock{{
+				Kind: workerexecution.ContentBlockText,
+				Text: strings.Clone(progress.Detail),
+			}},
+		})
+	}
 	if err != nil {
 		return inference.EventDraft{}, false
 	}
@@ -100,8 +126,8 @@ func messageEvent(
 		Provenance: workerexecution.Provenance{
 			Provider:        "cursor",
 			Delivery:        workerexecution.DeliveryNativeStream,
-			Representation:  workerexecution.RepresentationSnapshot,
-			Fidelity:        workerexecution.FidelityNormalized,
+			Representation:  representation,
+			Fidelity:        fidelity,
 			NativeEventType: phase,
 		},
 	})
@@ -219,8 +245,17 @@ func writeProgressEvents(
 	diagnostics *providers.ExecuteDiagnostics,
 	content string,
 ) error {
+	if started, ok := runEvent(runID, workerexecution.PhaseStarted); ok {
+		if err := writer.WriteEvent(ctx, started); err != nil {
+			return err
+		}
+	}
 	if diagnostics != nil {
 		for _, progress := range diagnostics.Progress {
+			phase := strings.TrimSpace(progress.Phase)
+			if phase == "run.started" || phase == "run.completed" || phase == "result.completed" {
+				continue
+			}
 			event, ok := progressEvent(runID, progress)
 			if !ok {
 				continue
@@ -239,6 +274,39 @@ func writeProgressEvents(
 			return err
 		}
 	}
+	if completed, ok := runEvent(runID, workerexecution.PhaseCompleted); ok {
+		if err := writer.WriteEvent(ctx, completed); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func writeFailureDiagnosticsProgress(
+	ctx context.Context,
+	writer inference.ResponseWriter,
+	runID string,
+	diagnostics *providers.ExecuteDiagnostics,
+) error {
+	if diagnostics == nil {
+		return nil
+	}
+	for _, progress := range diagnostics.Progress {
+		event, ok := progressEvent(runID, progress)
+		if !ok {
+			continue
+		}
+		draft := event.Draft()
+		if draft.Kind == workerexecution.KindRun {
+			continue
+		}
+		if draft.Kind == workerexecution.KindMessage && draft.Phase == workerexecution.PhaseCompleted {
+			continue
+		}
+		if err := writer.WriteEvent(ctx, event); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -249,7 +317,7 @@ func writeFailureProgress(
 	failure inference.Failure,
 ) error {
 	payload, err := json.Marshal(workerexecution.ErrorPayload{
-		Code:      "stream_failed",
+		Code:      failureErrorCode(failure),
 		Message:   failure.Message(),
 		Retryable: failure.Retryable(),
 	})
@@ -285,4 +353,19 @@ func toolResultSummary(detail string) json.RawMessage {
 		return nil
 	}
 	return encoded
+}
+
+func failureErrorCode(failure inference.Failure) string {
+	switch failure.Kind() {
+	case inference.FailureAuthentication:
+		return "auth_failure"
+	case inference.FailureTimeout:
+		return "timeout"
+	case inference.FailureThrottled:
+		return "throttled"
+	case inference.FailureInvalidRequest, inference.FailureMalformedOutput:
+		return "permanent_bad_request"
+	default:
+		return "stream_failed"
+	}
 }

@@ -34,9 +34,11 @@ type decoder struct {
 	hasResult       bool
 	unsafeSuccessSession bool
 
-	progress        []providers.ExecuteProgress
-	declaredFailure *providers.ExecuteFailure
-	decodeErr       error
+	progress         []providers.ExecuteProgress
+	declaredFailure  *providers.ExecuteFailure
+	decodeErr        error
+	messageStarted   bool
+	runStarted       bool
 }
 
 type nativeEnvelope struct {
@@ -181,6 +183,7 @@ func (decoder *decoder) decodeRecord(raw []byte) {
 	switch envelope.Type {
 	case "system":
 		if strings.TrimSpace(envelope.Subtype) == "init" {
+			decoder.ensureRunStarted("session.init")
 			decoder.addProgress("session.started", "started", nil)
 		}
 	case "assistant":
@@ -214,12 +217,27 @@ func (decoder *decoder) decodeAssistant(envelope nativeEnvelope) {
 	if text == "" {
 		return
 	}
+	messageID := decoder.stableMessageID()
+	if !decoder.messageStarted {
+		decoder.messageStarted = true
+		decoder.addProgress("message.started", "", messageMetadata(messageID))
+	}
 	decoder.emittedResponse += text
 	decoder.addProgress(
 		"message.delta",
 		boundedDetail(text),
-		messageMetadata(decoder.stableMessageID()),
+		messageMetadata(messageID),
 	)
+}
+
+func (decoder *decoder) ensureRunStarted(nativeType string) {
+	if decoder.runStarted {
+		return
+	}
+	decoder.runStarted = true
+	decoder.addProgress("run.started", "started", map[string]string{
+		"native_type": nativeType,
+	})
 }
 
 func (decoder *decoder) decodeToolCall(envelope nativeEnvelope) {

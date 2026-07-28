@@ -282,7 +282,7 @@ func runOpenCodeFailureGoldenCase(
 		t.Fatalf("provider command runner calls = %d, want at least 1 through conductor path", runner.CallCount())
 	}
 
-	inferencePayload := openCodeGoldenFailedInferenceObservation(t, events)
+	inferencePayload := openCodeGoldenFailedInferenceObservation(t, events, wantReason)
 	if inferencePayload.FailureDetail == nil {
 		t.Fatal("inference response missing failure detail")
 	}
@@ -300,10 +300,18 @@ func runOpenCodeFailureGoldenCase(
 	}
 	assertOpenCodeFailureDoesNotLeakSensitiveOutput(t, events, responseEvents)
 
+	filteredResponseEvents := filterOpenCodeFailureResponseEvents(
+		responseEvents,
+		openCodeGoldenFailureErrorCode(wantReason),
+	)
+
 	observed := support.ProviderSessionObservedGoldens{
 		ProviderSession:  observeOpenCodeProviderSessionGolden(inferencePayload, loaded.Manifest),
-		ResponseEvents:   observeOpenCodeResponseEventGoldens(responseEvents),
-		InvocationResult: observeOpenCodeFailedInvocationResultGolden(inferencePayload),
+		ResponseEvents:   observeOpenCodeResponseEventGoldens(filteredResponseEvents),
+		InvocationResult: observeOpenCodeFailedInvocationResultGolden(
+			inferencePayload,
+			filteredResponseEvents,
+		),
 	}
 	if err := support.CompareOrUpdateProviderSessionGoldens(loaded, observed); err != nil {
 		var updated *support.ProviderSessionGoldensUpdatedError
@@ -427,6 +435,44 @@ func writeOpenCodeFixtureExecutable(t *testing.T) string {
 	return path
 }
 
+func openCodeGoldenFailureErrorCode(reason factoryapi.WorkFailureType) string {
+	switch reason {
+	case factoryapi.WorkFailureTypeAuthFailure:
+		return "auth_failure"
+	case factoryapi.WorkFailureTypeTimeout:
+		return "timeout"
+	case factoryapi.WorkFailureTypePermanentBadRequest:
+		return "permanent_bad_request"
+	default:
+		return ""
+	}
+}
+
+func filterOpenCodeFailureResponseEvents(
+	events []factoryapi.FactoryResponseEvent,
+	wantCode string,
+) []factoryapi.FactoryResponseEvent {
+	if strings.TrimSpace(wantCode) == "" {
+		return events
+	}
+	filtered := make([]factoryapi.FactoryResponseEvent, 0, len(events))
+	for _, event := range events {
+		if event.Kind != factoryapi.FactoryResponseEventKindError ||
+			event.Phase != factoryapi.FactoryResponseEventPhaseFailed {
+			continue
+		}
+		errorPayload, err := event.Payload.AsFactoryResponseEventErrorPayload()
+		if err != nil {
+			continue
+		}
+		if errorPayload.Code != wantCode {
+			continue
+		}
+		filtered = append(filtered, event)
+	}
+	return filtered
+}
+
 func openCodeGoldenInferenceObservation(
 	t *testing.T,
 	events []factoryapi.FactoryEvent,
@@ -472,12 +518,17 @@ func openCodeGoldenInferenceObservation(
 func openCodeGoldenFailedInferenceObservation(
 	t *testing.T,
 	events []factoryapi.FactoryEvent,
+	wantReason factoryapi.WorkFailureType,
 ) factoryapi.InferenceResponseEventPayload {
 	t.Helper()
 
 	var (
-		inferencePayload factoryapi.InferenceResponseEventPayload
-		foundInference   bool
+		firstPayload   factoryapi.InferenceResponseEventPayload
+		foundFirst     bool
+		reasonPayload  factoryapi.InferenceResponseEventPayload
+		foundReason    bool
+		sessionPayload factoryapi.InferenceResponseEventPayload
+		foundSession   bool
 	)
 	for _, event := range events {
 		if event.Type != factoryapi.FactoryEventTypeInferenceResponse {
@@ -490,13 +541,35 @@ func openCodeGoldenFailedInferenceObservation(
 		if payload.Outcome != factoryapi.InferenceOutcomeFailed {
 			continue
 		}
-		inferencePayload = payload
-		foundInference = true
+		if !foundFirst {
+			firstPayload = payload
+			foundFirst = true
+		}
+		if wantReason != "" && payload.FailureDetail != nil && payload.FailureDetail.Reason == wantReason {
+			if !foundReason {
+				reasonPayload = payload
+				foundReason = true
+			}
+		}
+		if payload.ProviderSession != nil && payload.ProviderSession.Id != nil &&
+			strings.TrimSpace(*payload.ProviderSession.Id) != "" {
+			if !foundSession {
+				sessionPayload = payload
+				foundSession = true
+			}
+		}
 	}
-	if !foundInference {
-		t.Fatal("missing failed INFERENCE_RESPONSE in factory events")
+	if foundReason {
+		return reasonPayload
 	}
-	return inferencePayload
+	if foundSession {
+		return sessionPayload
+	}
+	if foundFirst {
+		return firstPayload
+	}
+	t.Fatal("missing failed INFERENCE_RESPONSE in factory events")
+	return firstPayload
 }
 
 func observeOpenCodeProviderSessionGolden(
@@ -631,13 +704,27 @@ func observeOpenCodeInvocationResultGolden(
 
 func observeOpenCodeFailedInvocationResultGolden(
 	payload factoryapi.InferenceResponseEventPayload,
+	responseEvents []factoryapi.FactoryResponseEvent,
 ) json.RawMessage {
 	record := map[string]any{
 		"ok": false,
 	}
 	if payload.FailureDetail != nil {
 		record["failureReason"] = payload.FailureDetail.Reason
-		record["message"] = payload.FailureDetail.Message
+		message := payload.FailureDetail.Message
+		for _, event := range responseEvents {
+			if event.Kind != factoryapi.FactoryResponseEventKindError ||
+				event.Phase != factoryapi.FactoryResponseEventPhaseFailed {
+				continue
+			}
+			errorPayload, err := event.Payload.AsFactoryResponseEventErrorPayload()
+			if err != nil || strings.TrimSpace(errorPayload.Message) == "" {
+				continue
+			}
+			message = errorPayload.Message
+			break
+		}
+		record["message"] = message
 	}
 	return mustMarshalJSON(record)
 }

@@ -74,7 +74,9 @@ func TestCursorRootPreservesPartialStreamCorrelationFacts(t *testing.T) {
 		t.Fatalf("SessionRef = %#v", result.SessionRef)
 	}
 	wantPhases := []string{
+		"run.started",
 		"session.started",
+		"message.started",
 		"message.delta",
 		"tool.started",
 		"tool.completed",
@@ -87,12 +89,12 @@ func TestCursorRootPreservesPartialStreamCorrelationFacts(t *testing.T) {
 	if strings.Join(gotPhases, ",") != strings.Join(wantPhases, ",") {
 		t.Fatalf("progress phases = %#v, want %#v", gotPhases, wantPhases)
 	}
-	for _, index := range []int{1, 4} {
+	for _, index := range []int{3, 6} {
 		if result.Diagnostics.Progress[index].Metadata["message_id"] != "cursor-session-partial" {
 			t.Fatalf("message correlation[%d] = %#v", index, result.Diagnostics.Progress[index])
 		}
 	}
-	for _, index := range []int{2, 3} {
+	for _, index := range []int{4, 5} {
 		if result.Diagnostics.Progress[index].Metadata["correlation_id"] != "call-partial-1" {
 			t.Fatalf("tool correlation[%d] = %#v", index, result.Diagnostics.Progress[index])
 		}

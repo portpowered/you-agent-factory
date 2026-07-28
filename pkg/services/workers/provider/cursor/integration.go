@@ -79,6 +79,18 @@ func (i *Integration) Invoke(
 	}
 	if err != nil {
 		failure := failureFromExecuteError(request, err)
+		if executeFailure, ok := providersExecuteFailure(err); ok &&
+			executeFailure.Diagnostics != nil &&
+			len(executeFailure.Diagnostics.Progress) > 0 {
+			if writeErr := writeFailureDiagnosticsProgress(
+				ctx,
+				writer,
+				request.InvocationID(),
+				executeFailure.Diagnostics,
+			); writeErr != nil {
+				return writeErr
+			}
+		}
 		if writeErr := writeFailureProgress(ctx, writer, request.InvocationID(), failure); writeErr != nil {
 			return writeErr
 		}
@@ -234,6 +246,14 @@ func cloneStringMap(values map[string]string) map[string]string {
 		cloned[key] = value
 	}
 	return cloned
+}
+
+func providersExecuteFailure(err error) (providers.ExecuteFailure, bool) {
+	var failure providers.ExecuteFailure
+	if errors.As(err, &failure) {
+		return failure, true
+	}
+	return providers.ExecuteFailure{}, false
 }
 
 var _ inference.Integration = (*Integration)(nil)

@@ -2,14 +2,53 @@ package cursor_test
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/cursor"
 	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 )
+
+func TestIntegrationGoldenStdoutReplay(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := testutil.MustRepoRoot(t)
+	stdoutPath := repoRoot + "/docs/temp/functional/provider-sessions/cursor/success/stdout.jsonl"
+	stdout, err := os.ReadFile(stdoutPath)
+	if err != nil {
+		t.Fatalf("read stdout: %v", err)
+	}
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: stdout})
+	providersService, err := providerswire.NewService(providerswire.WithCommandRunner(runner))
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	integration := cursor.NewIntegration(cursor.IntegrationDependencies{
+		ProvidersService: providersService,
+	})
+	request := inference.NewInvocationRequest(inference.InvocationInput{
+		InvocationID: "cursor-golden-replay",
+		Model:        "cursor-test-model",
+		UserMessage:  "hello cursor",
+		Execution: workers.ProviderInferenceRequest{
+			SkipPermissions: true,
+		},
+	})
+	destination := &orderedWriter{}
+	if err := inference.ExecuteInvocation(context.Background(), integration, request, destination); err != nil {
+		t.Fatalf("ExecuteInvocation: %v", err)
+	}
+	if destination.completion == nil || destination.completion.Response() == nil {
+		t.Fatalf("completion = %#v, want success; order=%v", destination.completion, destination.order)
+	}
+	if got := destination.completion.Response().Content(); got != "Cursor fixture answer COMPLETE" {
+		t.Fatalf("terminal content = %q", got)
+	}
+}
 
 func TestIntegrationRoutesThroughProvidersRoot(t *testing.T) {
 	t.Parallel()

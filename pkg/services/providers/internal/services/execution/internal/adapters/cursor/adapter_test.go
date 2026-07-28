@@ -135,7 +135,9 @@ func assertRepeatedCursorResultDetached(
 func assertProgress(t *testing.T, progress []providers.ExecuteProgress) {
 	t.Helper()
 	wantPhases := []string{
+		"run.started",
 		"session.started",
+		"message.started",
 		"message.delta",
 		"message.delta",
 		"tool.started",
@@ -149,12 +151,12 @@ func assertProgress(t *testing.T, progress []providers.ExecuteProgress) {
 	if !reflect.DeepEqual(gotPhases, wantPhases) {
 		t.Fatalf("progress phases = %#v, want %#v", gotPhases, wantPhases)
 	}
-	for _, index := range []int{1, 2, 5} {
+	for _, index := range []int{3, 4, 7} {
 		if progress[index].Metadata["message_id"] != "cursor-session-42" {
 			t.Fatalf("message correlation[%d] = %#v", index, progress[index])
 		}
 	}
-	for _, index := range []int{3, 4} {
+	for _, index := range []int{5, 6} {
 		if progress[index].Metadata["correlation_id"] != "call-read-1" {
 			t.Fatalf("tool correlation[%d] = %#v", index, progress[index])
 		}

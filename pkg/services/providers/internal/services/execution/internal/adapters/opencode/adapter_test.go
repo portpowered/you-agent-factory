@@ -154,6 +154,7 @@ func assertStructuredProgress(t *testing.T, progress []providers.ExecuteProgress
 	wantPhases := []string{
 		"run.started",
 		"message.completed",
+		"tool.started",
 		"tool.completed",
 		"run.completed",
 	}
@@ -169,6 +170,9 @@ func assertStructuredProgress(t *testing.T, progress []providers.ExecuteProgress
 	}
 	if progress[2].Metadata["correlation_id"] != "call-9" {
 		t.Fatalf("tool correlation = %#v", progress[2])
+	}
+	if progress[3].Metadata["correlation_id"] != "call-9" {
+		t.Fatalf("tool completed correlation = %#v", progress[3])
 	}
 }
 

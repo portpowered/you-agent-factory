@@ -77,6 +77,18 @@ func (i *Integration) Invoke(
 	}
 	if err != nil {
 		failure := failureFromExecuteError(request, err)
+		if executeFailure, ok := providersExecuteFailure(err); ok &&
+			executeFailure.Diagnostics != nil &&
+			len(executeFailure.Diagnostics.Progress) > 0 {
+			if writeErr := writeFailureDiagnosticsProgress(
+				ctx,
+				writer,
+				request.InvocationID(),
+				executeFailure.Diagnostics,
+			); writeErr != nil {
+				return writeErr
+			}
+		}
 		if writeErr := writeFailureProgress(ctx, writer, request.InvocationID(), failure); writeErr != nil {
 			return writeErr
 		}
@@ -163,9 +175,29 @@ func requestedSession(request inference.InvocationRequest) *providers.SessionRef
 func failureFromExecuteError(request inference.InvocationRequest, err error) inference.Failure {
 	var failure providers.ExecuteFailure
 	if errors.As(err, &failure) {
+		kind := executeFailureKind(failure.Kind)
+		message := strings.TrimSpace(failure.Message)
+		retryable := false
+		switch kind {
+		case inference.FailureTimeout:
+			message = TimeoutFailureMessage
+			retryable = true
+		case inference.FailureThrottled:
+			message = ThrottleFailureMessage
+			retryable = true
+		case inference.FailureAuthentication:
+			if message == "" {
+				message = authFailureMessage
+			}
+		case inference.FailureInvalidRequest:
+			if message == "" {
+				message = BadRequestFailureMessage
+			}
+		}
 		return inference.NewFailure(inference.FailureInput{
-			Kind:            executeFailureKind(failure.Kind),
-			Message:         failure.Message,
+			Kind:            kind,
+			Message:         message,
+			Retryable:       retryable,
 			ProviderSession: failureSessionForInvocation(request, failure.SessionRef),
 		})
 	}
@@ -177,8 +209,9 @@ func failureFromExecuteError(request inference.InvocationRequest, err error) inf
 	}
 	if errors.Is(err, providers.ErrExecuteTimeout) {
 		return inference.NewFailure(inference.FailureInput{
-			Kind:    inference.FailureTimeout,
-			Message: "provider execution timed out",
+			Kind:      inference.FailureTimeout,
+			Message:   TimeoutFailureMessage,
+			Retryable: true,
 		})
 	}
 	return inference.NewFailure(inference.FailureInput{
@@ -238,6 +271,14 @@ func cloneStringMap(values map[string]string) map[string]string {
 		cloned[key] = value
 	}
 	return cloned
+}
+
+func providersExecuteFailure(err error) (providers.ExecuteFailure, bool) {
+	var failure providers.ExecuteFailure
+	if errors.As(err, &failure) {
+		return failure, true
+	}
+	return providers.ExecuteFailure{}, false
 }
 
 var _ inference.Integration = (*Integration)(nil)

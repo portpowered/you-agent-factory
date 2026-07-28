@@ -36,13 +36,8 @@ func (outcome attemptOutcome) terminalFailure() (execution.AttemptFailure, bool)
 func (outcome attemptOutcome) successResult(diagnostic *providers.ExecuteProgress) (providers.ExecuteResult, error) {
 	if failure, failed := outcome.terminalFailure(); failed {
 		sessionRef := outcome.decoder.failureSessionRef()
-		if sessionRef != nil {
-			if failure.Declared != nil {
-				declared := failure.Declared.Clone()
-				declared.SessionRef = sessionRef
-				failure.Declared = &declared
-			}
-		}
+		progress := outcome.decoder.progressFacts()
+		failure = attachFailureObservation(failure, sessionRef, progress)
 		return providers.ExecuteResult{SessionRef: sessionRef}, failure
 	}
 	content, session, finalErr := outcome.decoder.final()
@@ -194,4 +189,37 @@ func safeVersionContext(version string) string {
 		}
 	}
 	return "unknown"
+}
+
+const failureStageDecode = "decode"
+
+func attachFailureObservation(
+	failure execution.AttemptFailure,
+	sessionRef *providers.SessionRef,
+	progress []providers.ExecuteProgress,
+) execution.AttemptFailure {
+	if sessionRef == nil && len(progress) == 0 {
+		return failure
+	}
+	declared := providers.ExecuteFailure{Kind: providers.ExecuteFailureKindUnknown}
+	if failure.Declared != nil {
+		declared = failure.Declared.Clone()
+	} else if failure.DecodeError != nil {
+		declared.Kind = providers.ExecuteFailureKindInvalidRequest
+		declared.Diagnostics = &providers.ExecuteDiagnostics{
+			Metadata: map[string]string{"failure_stage": failureStageDecode},
+		}
+	}
+	if sessionRef != nil {
+		declared.SessionRef = sessionRef
+	}
+	if len(progress) > 0 {
+		if declared.Diagnostics == nil {
+			declared.Diagnostics = &providers.ExecuteDiagnostics{Progress: progress}
+		} else {
+			declared.Diagnostics.Progress = progress
+		}
+	}
+	failure.Declared = &declared
+	return failure
 }

@@ -160,6 +160,7 @@ func collectFailure(
 			failure.Declared.Kind == providers.ExecuteFailureKindUnknown {
 			failure.Declared = &declared
 		}
+		failure.NativeError = nil
 		failed = true
 	}
 	if decoder.decodeErr != nil {

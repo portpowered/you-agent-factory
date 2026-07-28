@@ -3,6 +3,7 @@ package opencode
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"strings"
 
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
@@ -27,6 +28,8 @@ func progressEvent(runID string, progress providers.ExecuteProgress) (inference.
 		return toolEvent(runID, progress, phase)
 	case strings.HasPrefix(phase, "reasoning."):
 		return reasoningEvent(runID, progress, phase)
+	case phase == "usage.updated":
+		return usageEvent(runID, progress)
 	default:
 		return inference.EventDraft{}, false
 	}
@@ -86,13 +89,39 @@ func messageEvent(
 	} else if strings.HasSuffix(phase, ".started") {
 		workerPhase = workerexecution.PhaseStarted
 	}
-	payload, err := json.Marshal(workerexecution.MessagePayload{
-		Role: "assistant",
-		ContentBlocks: []workerexecution.ContentBlock{{
+	var payload []byte
+	var err error
+	representation := workerexecution.RepresentationSnapshot
+	fidelity := workerexecution.FidelityNormalized
+	switch workerPhase {
+	case workerexecution.PhaseDelta:
+		payload, err = json.Marshal(workerexecution.MessageDeltaPayload{
+			ContentBlockIndex: 0,
+			ContentBlockKind:  workerexecution.ContentBlockText,
+			TextDelta:         strings.Clone(progress.Detail),
+		})
+		representation = workerexecution.RepresentationDelta
+	case workerexecution.PhaseStarted:
+		contentBlocks := []workerexecution.ContentBlock{{
 			Kind: workerexecution.ContentBlockText,
-			Text: strings.Clone(progress.Detail),
-		}},
-	})
+		}}
+		if detail := strings.TrimSpace(progress.Detail); detail != "" {
+			contentBlocks[0].Text = detail
+		}
+		payload, err = json.Marshal(workerexecution.MessagePayload{
+			Role:          "assistant",
+			ContentBlocks: contentBlocks,
+		})
+		fidelity = workerexecution.FidelityLifecycleOnly
+	default:
+		payload, err = json.Marshal(workerexecution.MessagePayload{
+			Role: "assistant",
+			ContentBlocks: []workerexecution.ContentBlock{{
+				Kind: workerexecution.ContentBlockText,
+				Text: strings.Clone(progress.Detail),
+			}},
+		})
+	}
 	if err != nil {
 		return inference.EventDraft{}, false
 	}
@@ -105,8 +134,8 @@ func messageEvent(
 		Provenance: workerexecution.Provenance{
 			Provider:        string(modelprovider.ProviderOpenCode),
 			Delivery:        workerexecution.DeliveryNativeStream,
-			Representation:  workerexecution.RepresentationSnapshot,
-			Fidelity:        workerexecution.FidelityNormalized,
+			Representation:  representation,
+			Fidelity:        fidelity,
 			NativeEventType: phase,
 		},
 	})
@@ -130,14 +159,27 @@ func reasoningEvent(
 		workerPhase = workerexecution.PhaseCompleted
 	} else if strings.HasSuffix(phase, ".delta") {
 		workerPhase = workerexecution.PhaseDelta
+	} else if strings.HasSuffix(phase, ".started") {
+		workerPhase = workerexecution.PhaseStarted
 	}
-	payload, err := json.Marshal(workerexecution.MessagePayload{
-		Role: "assistant",
-		ContentBlocks: []workerexecution.ContentBlock{{
-			Kind: workerexecution.ContentBlockText,
-			Text: strings.Clone(progress.Detail),
-		}},
-	})
+	var payload []byte
+	var err error
+	representation := workerexecution.RepresentationSnapshot
+	switch workerPhase {
+	case workerexecution.PhaseDelta:
+		payload, err = json.Marshal(workerexecution.ReasoningPayload{
+			SummaryDelta: strings.Clone(progress.Detail),
+		})
+		representation = workerexecution.RepresentationDelta
+	case workerexecution.PhaseStarted:
+		payload, err = json.Marshal(workerexecution.ReasoningPayload{
+			Summary: strings.Clone(progress.Detail),
+		})
+	default:
+		payload, err = json.Marshal(workerexecution.ReasoningPayload{
+			Summary: strings.Clone(progress.Detail),
+		})
+	}
 	if err != nil {
 		return inference.EventDraft{}, false
 	}
@@ -150,9 +192,52 @@ func reasoningEvent(
 		Provenance: workerexecution.Provenance{
 			Provider:        string(modelprovider.ProviderOpenCode),
 			Delivery:        workerexecution.DeliveryNativeStream,
-			Representation:  workerexecution.RepresentationSnapshot,
+			Representation:  representation,
 			Fidelity:        workerexecution.FidelityNormalized,
 			NativeEventType: phase,
+		},
+	})
+	if err != nil {
+		return inference.EventDraft{}, false
+	}
+	return event, true
+}
+
+func usageEvent(
+	runID string,
+	progress providers.ExecuteProgress,
+) (inference.EventDraft, bool) {
+	payload := workerexecution.UsagePayload{}
+	if raw := strings.TrimSpace(progress.Metadata["input_tokens"]); raw != "" {
+		if parsed, err := strconv.ParseInt(raw, 10, 64); err == nil {
+			payload.InputTokens = parsed
+		}
+	}
+	if raw := strings.TrimSpace(progress.Metadata["output_tokens"]); raw != "" {
+		if parsed, err := strconv.ParseInt(raw, 10, 64); err == nil {
+			payload.OutputTokens = parsed
+		}
+	}
+	if raw := strings.TrimSpace(progress.Metadata["reasoning_tokens"]); raw != "" {
+		if parsed, err := strconv.ParseInt(raw, 10, 64); err == nil {
+			payload.ReasoningOutputTokens = parsed
+		}
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return inference.EventDraft{}, false
+	}
+	event, err := inference.NewEventDraft(inference.EventDraftInput{
+		RunID:   runID,
+		Kind:    workerexecution.KindUsage,
+		Phase:   workerexecution.PhaseUpdated,
+		Payload: encoded,
+		Provenance: workerexecution.Provenance{
+			Provider:        string(modelprovider.ProviderOpenCode),
+			Delivery:        workerexecution.DeliveryNativeStream,
+			Representation:  workerexecution.RepresentationNotification,
+			Fidelity:        workerexecution.FidelityLifecycleOnly,
+			NativeEventType: "usage.updated",
 		},
 	})
 	if err != nil {
@@ -269,8 +354,22 @@ func writeProgressEvents(
 	diagnostics *providers.ExecuteDiagnostics,
 	content string,
 ) error {
+	if started, ok := runEvent(runID, workerexecution.PhaseStarted); ok {
+		if err := writer.WriteEvent(ctx, started); err != nil {
+			return err
+		}
+	}
+	if event, ok := authoritativeMessageCompletedEvent(runID, content, messageIDFromDiagnostics(diagnostics)); ok {
+		if err := writer.WriteEvent(ctx, event); err != nil {
+			return err
+		}
+	}
 	if diagnostics != nil {
 		for _, progress := range diagnostics.Progress {
+			phase := strings.TrimSpace(progress.Phase)
+			if phase == "run.started" || phase == "run.completed" {
+				continue
+			}
 			event, ok := progressEvent(runID, progress)
 			if !ok {
 				continue
@@ -284,7 +383,35 @@ func writeProgressEvents(
 			}
 		}
 	}
-	if event, ok := authoritativeMessageCompletedEvent(runID, content, messageIDFromDiagnostics(diagnostics)); ok {
+	if completed, ok := runEvent(runID, workerexecution.PhaseCompleted); ok {
+		if err := writer.WriteEvent(ctx, completed); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func writeFailureDiagnosticsProgress(
+	ctx context.Context,
+	writer inference.ResponseWriter,
+	runID string,
+	diagnostics *providers.ExecuteDiagnostics,
+) error {
+	if diagnostics == nil {
+		return nil
+	}
+	for _, progress := range diagnostics.Progress {
+		event, ok := progressEvent(runID, progress)
+		if !ok {
+			continue
+		}
+		draft := event.Draft()
+		if draft.Kind == workerexecution.KindRun {
+			continue
+		}
+		if draft.Kind == workerexecution.KindMessage && draft.Phase == workerexecution.PhaseCompleted {
+			continue
+		}
 		if err := writer.WriteEvent(ctx, event); err != nil {
 			return err
 		}
@@ -299,7 +426,7 @@ func writeFailureProgress(
 	failure inference.Failure,
 ) error {
 	payload, err := json.Marshal(workerexecution.ErrorPayload{
-		Code:      "stream_failed",
+		Code:      failureErrorCode(failure),
 		Message:   failure.Message(),
 		Retryable: failure.Retryable(),
 	})
@@ -335,4 +462,19 @@ func toolResultSummary(detail string) json.RawMessage {
 		return nil
 	}
 	return encoded
+}
+
+func failureErrorCode(failure inference.Failure) string {
+	switch failure.Kind() {
+	case inference.FailureAuthentication:
+		return "auth_failure"
+	case inference.FailureTimeout:
+		return "timeout"
+	case inference.FailureThrottled:
+		return "throttled"
+	case inference.FailureInvalidRequest, inference.FailureMalformedOutput:
+		return "permanent_bad_request"
+	default:
+		return "stream_failed"
+	}
 }

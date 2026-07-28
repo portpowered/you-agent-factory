@@ -42,7 +42,15 @@ func declaredFailureFromCommandOutput(stdout, stderr []byte) (providers.ExecuteF
 		if message == "" {
 			message = openCodeDeclaredFailureMessage(kind)
 		}
-		return providers.ExecuteFailure{Kind: kind, Message: message}, true
+		failure := providers.ExecuteFailure{Kind: kind, Message: message}
+		if sessionID := recordSessionID(record); validCorrelation(sessionID) {
+			failure.SessionRef = &providers.SessionRef{
+				Provider: providers.IDOpenCode,
+				Kind:     providers.SessionIDKind,
+				ID:       sessionID,
+			}
+		}
+		return failure, true
 	}
 	return providers.ExecuteFailure{}, false
 }

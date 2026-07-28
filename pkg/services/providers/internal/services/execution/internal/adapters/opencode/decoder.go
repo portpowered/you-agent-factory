@@ -267,25 +267,25 @@ func (decoder *decoder) decodeTool(record structuredRecord) {
 		return
 	}
 	status := strings.ToLower(strings.TrimSpace(record.Part.State.Status))
-	phase := "tool.started"
-	switch status {
-	case "completed":
-		phase = "tool.completed"
-	case "error", "failed":
-		phase = "tool.failed"
-	case "pending", "running", "":
-		status = "running"
-	default:
-		decoder.addDiagnostic("invalid_tool_status")
-		return
-	}
+	detail := fmt.Sprintf("%s %s", boundedName(record.Part.Tool), status)
 	metadata := toolMetadata(record.Part.CallID, boundedName(record.Part.Tool))
 	metadata["item_id"] = record.Part.ID
 	if validCorrelation(record.Part.MessageID) {
 		metadata["parent_item_id"] = record.Part.MessageID
 	}
 	decoder.ensureRunStarted("tool_use")
-	decoder.addProgress(phase, fmt.Sprintf("%s %s", boundedName(record.Part.Tool), status), metadata)
+	switch status {
+	case "completed":
+		decoder.addProgress("tool.started", detail, metadata)
+		decoder.addProgress("tool.completed", detail, metadata)
+	case "error", "failed":
+		decoder.addProgress("tool.started", detail, metadata)
+		decoder.addProgress("tool.failed", detail, metadata)
+	case "pending", "running", "":
+		decoder.addProgress("tool.started", detail, metadata)
+	default:
+		decoder.addDiagnostic("invalid_tool_status")
+	}
 }
 
 func (decoder *decoder) decodeUsage(record structuredRecord) {
@@ -295,8 +295,9 @@ func (decoder *decoder) decodeUsage(record structuredRecord) {
 		return
 	}
 	metadata := map[string]string{
-		"input_tokens":  fmt.Sprintf("%d", usage.Input),
-		"output_tokens": fmt.Sprintf("%d", usage.Output),
+		"input_tokens":    fmt.Sprintf("%d", usage.Input),
+		"output_tokens":   fmt.Sprintf("%d", usage.Output),
+		"reasoning_tokens": fmt.Sprintf("%d", usage.Reasoning),
 	}
 	if validCorrelation(record.Part.ID) {
 		metadata["item_id"] = record.Part.ID

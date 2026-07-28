@@ -59,13 +59,8 @@ func newAttempt(effect Effect) execution.Attempt {
 		flushErr := decoder.flush()
 		if failure, failed := collectFailure(decoder, effectErr, flushErr); failed {
 			sessionRef := decoder.failureSessionRef()
-			if sessionRef != nil {
-				if failure.Declared != nil {
-					declared := failure.Declared.Clone()
-					declared.SessionRef = sessionRef
-					failure.Declared = &declared
-				}
-			}
+			progress := decoder.progressFacts()
+			failure = attachFailureObservation(failure, sessionRef, progress)
 			return providers.ExecuteResult{SessionRef: sessionRef}, failure
 		}
 		content, session, finalErr := decoder.final()
@@ -99,6 +94,7 @@ func collectFailure(
 			failure.Declared.Kind == providers.ExecuteFailureKindUnknown {
 			failure.Declared = &declared
 		}
+		failure.NativeError = nil
 		failed = true
 	}
 	if decoder.decodeErr != nil {
@@ -145,6 +141,40 @@ func unavailableAttempt(
 		Kind:    providers.ExecuteFailureKindDependency,
 		Message: "Cursor native execution is unavailable",
 	}
+}
+
+const failureStageDecode = "decode"
+
+func attachFailureObservation(
+	failure execution.AttemptFailure,
+	sessionRef *providers.SessionRef,
+	progress []providers.ExecuteProgress,
+) execution.AttemptFailure {
+	if sessionRef == nil && len(progress) == 0 {
+		return failure
+	}
+	declared := providers.ExecuteFailure{Kind: providers.ExecuteFailureKindUnknown}
+	if failure.Declared != nil {
+		declared = failure.Declared.Clone()
+	} else if failure.DecodeError != nil {
+		declared.Kind = providers.ExecuteFailureKindInvalidRequest
+		declared.Message = cursorDeclaredFailureMessage(providers.ExecuteFailureKindUnknown)
+		declared.Diagnostics = &providers.ExecuteDiagnostics{
+			Metadata: map[string]string{"failure_stage": failureStageDecode},
+		}
+	}
+	if sessionRef != nil {
+		declared.SessionRef = sessionRef
+	}
+	if len(progress) > 0 {
+		if declared.Diagnostics == nil {
+			declared.Diagnostics = &providers.ExecuteDiagnostics{Progress: progress}
+		} else {
+			declared.Diagnostics.Progress = progress
+		}
+	}
+	failure.Declared = &declared
+	return failure
 }
 
 func cloneMetadata(metadata map[string]string) map[string]string {
