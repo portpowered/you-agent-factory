@@ -1219,6 +1219,36 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/factory/packaged/catalog/override_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/catalog",
+      "scenario": "TestInvalidLocalOverrideDoesNotFallBackSilently",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/catalog/override_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/catalog/override_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/catalog",
+      "scenario": "TestLocalFactoryOverridesPackagedFactoryWithSameName",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/catalog/override_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/catalog/override_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/catalog",
+      "scenario": "TestUnrelatedLocalFactoryDoesNotHidePackagedFactories",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/catalog/override_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/factory/definitions/init_test.go",
       "package": "you-agent-factory/tests/functional/factory/definitions",
       "scenario": "TestFactoryInitCreatesRunnablePortableScaffold",
@@ -8233,7 +8263,7 @@
       "you-agent-factory/tests/functional/cli/session_resume": 6,
       "you-agent-factory/tests/functional/factory/current": 6,
       "you-agent-factory/tests/functional/factory/definitions": 6,
-      "you-agent-factory/tests/functional/factory/packaged/catalog": 7,
+      "you-agent-factory/tests/functional/factory/packaged/catalog": 10,
       "you-agent-factory/tests/functional/factory/packaged/deep_research": 3,
       "you-agent-factory/tests/functional/factory/packaged/fusion": 3,
       "you-agent-factory/tests/functional/factory/packaged/goal": 4,
