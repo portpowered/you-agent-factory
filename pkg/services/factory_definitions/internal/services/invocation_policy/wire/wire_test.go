@@ -2,12 +2,13 @@ package wire_test
 
 import (
 	"testing"
+	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	invocationpolicyservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy"
 	invocationpolicywire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/wire"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestNewService_ConstructsPublishedRootPolicyContracts(t *testing.T) {
@@ -218,4 +219,171 @@ func TestNewService_InvocationWorkTypeThroughNestedOwner(t *testing.T) {
 	if workType != "story" {
 		t.Fatalf("DefaultWorkType = %q, want story", workType)
 	}
+}
+
+func TestNewService_QuorumPolicyThroughNestedOwner(t *testing.T) {
+	t.Parallel()
+
+	svc, err := invocationpolicywire.NewService(invocationpolicyservice.Dependencies{})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	quorum := svc.QuorumPolicy()
+	if !quorum.IsPackagedQuorumFactory(&factorydefinitions.FactoryConfig{
+		Name: factorydefinitions.PackagedQuorumFactoryName,
+	}) {
+		t.Fatal("IsPackagedQuorumFactory() = false, want true for packaged quorum factory")
+	}
+
+	relations := quorum.WorkRelations(
+		factorydefinitions.PackagedQuorumSplitWorkstationName,
+		"task-1",
+		"quorum-branch-a",
+		nil,
+	)
+	if len(relations) != 1 || relations[0].Type != work.RelationParentChild || relations[0].TargetWorkID != "task-1" {
+		t.Fatalf("split WorkRelations = %#v, want parent-child to task-1", relations)
+	}
+
+	branches := []factorydefinitions.QuorumLineageInput{
+		{WorkID: "branch-a", WorkTypeID: "quorum-branch-a"},
+		{WorkID: "branch-b", WorkTypeID: "quorum-branch-b"},
+	}
+	mergeRelations := quorum.WorkRelations(
+		factorydefinitions.PackagedQuorumMergeWorkstationName,
+		"",
+		"quorum-merge",
+		branches,
+	)
+	if len(mergeRelations) != 2 {
+		t.Fatalf("merge WorkRelations = %#v, want two branch dependencies", mergeRelations)
+	}
+}
+
+func TestNewService_WorkPropagationThroughNestedOwner(t *testing.T) {
+	t.Parallel()
+
+	svc, err := invocationpolicywire.NewService(invocationpolicyservice.Dependencies{})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	propagation := svc.WorkPropagation()
+	if got := propagation.Mode(nil); got != factorydefinitions.WorkPropagationModeOutputAsPayload {
+		t.Fatalf("Mode(nil) = %q, want output_as_payload default", got)
+	}
+
+	workstation := &factorydefinitions.FactoryWorkstationConfig{
+		WorkPropagation: &factorydefinitions.WorkPropagationConfig{
+			Mode: factorydefinitions.WorkPropagationModePreserveInput,
+		},
+	}
+	if got := propagation.Mode(workstation); got != factorydefinitions.WorkPropagationModePreserveInput {
+		t.Fatalf("Mode() = %q, want preserve_input", got)
+	}
+}
+
+func TestNewService_WorkstationExecutionThroughNestedOwner(t *testing.T) {
+	t.Parallel()
+
+	svc, err := invocationpolicywire.NewService(invocationpolicyservice.Dependencies{})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	execution := svc.WorkstationExecution()
+	cfg := &factorydefinitions.FactoryWorkstationConfig{
+		Limits: factorydefinitions.WorkstationLimits{MaxExecutionTime: "30s"},
+	}
+	timeout, err := execution.ExecutionTimeout(cfg)
+	if err != nil {
+		t.Fatalf("ExecutionTimeout: %v", err)
+	}
+	if timeout != 30*time.Second {
+		t.Fatalf("ExecutionTimeout = %v, want 30s", timeout)
+	}
+
+	_, err = execution.ExecutionTimeout(&factorydefinitions.FactoryWorkstationConfig{
+		Limits: factorydefinitions.WorkstationLimits{MaxExecutionTime: "not-a-duration"},
+	})
+	if err == nil {
+		t.Fatal("ExecutionTimeout error = nil, want invalid duration parse failure")
+	}
+}
+
+func TestNewService_TTSObservabilityThroughNestedOwner(t *testing.T) {
+	t.Parallel()
+
+	svc, err := invocationpolicywire.NewService(invocationpolicyservice.Dependencies{})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	tts := svc.TTSObservability()
+	if !tts.IsPackagedTTSFactory(&factorydefinitions.FactoryConfig{
+		Name: factorydefinitions.PackagedTTSFactoryName,
+	}) {
+		t.Fatal("IsPackagedTTSFactory() = false, want true for packaged TTS factory")
+	}
+
+	wantLabel := factorydefinitions.DefaultTTSModelName + "/" + factorydefinitions.DefaultTTSBackendName
+	if got := tts.TTSBackendRuntimeLabel(); got != wantLabel {
+		t.Fatalf("TTSBackendRuntimeLabel() = %q, want %q", got, wantLabel)
+	}
+
+	outcome, failure := tts.ClassifyTTSInvocationWait(factorydefinitions.FactoryWorldState{}, "req-1", true)
+	if outcome != factorydefinitions.TTSInvocationWaitOutcomeLoading {
+		t.Fatalf("ClassifyTTSInvocationWait loading outcome = %q, want loading", outcome)
+	}
+	if failure != nil {
+		t.Fatalf("ClassifyTTSInvocationWait loading failure = %#v, want nil", failure)
+	}
+
+	state := packagedTTSFailureWorldState(
+		"req-tts",
+		"work-tts",
+		"model not available: required assets missing in managed cache",
+	)
+	outcome, failure = tts.ClassifyTTSInvocationWait(state, "req-tts", false)
+	if outcome != factorydefinitions.TTSInvocationWaitOutcomeModelNotReady {
+		t.Fatalf("ClassifyTTSInvocationWait outcome = %q, want model_not_ready", outcome)
+	}
+	if failure == nil || failure.ErrorCode != factorydefinitions.TTSInvocationErrorCodeModelNotReady {
+		t.Fatalf("ClassifyTTSInvocationWait failure = %#v, want model-not-ready code", failure)
+	}
+
+	if !tts.IsTTSModelNotReadyFailure("model not available: required assets missing") {
+		t.Fatal("IsTTSModelNotReadyFailure() = false, want true for model-not-ready evidence")
+	}
+}
+
+func packagedTTSFailureWorldState(requestID, workID, failureMessage string) factorydefinitions.FactoryWorldState {
+	submitted := work.FactoryWorkItem{
+		ID:         workID,
+		WorkTypeID: "task",
+		State:      "init",
+		TraceID:    requestID,
+	}
+	failed := submitted
+	failed.State = "failed"
+	failed.PlaceID = "task:failed"
+
+	state := factorydefinitions.FactoryWorldState{
+		WorkRequestsByID:       make(map[string]factorydefinitions.WorkRequestPayload),
+		FailedWorkItemsByID:    make(map[string]work.FactoryWorkItem),
+		FailureDetailsByWorkID: make(map[string]factorydefinitions.FactoryWorldFailureDetail),
+	}
+	state.WorkRequestsByID[requestID] = factorydefinitions.WorkRequestPayload{
+		RequestID: requestID,
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		WorkItems: []work.FactoryWorkItem{submitted},
+	}
+	state.FailedWorkItemsByID[workID] = failed
+	state.FailureDetailsByWorkID[workID] = factorydefinitions.FactoryWorldFailureDetail{
+		WorkstationName: factorydefinitions.PackagedTTSInvokeWorkstationName,
+		WorkItem:        failed,
+		FailureDetail:   &workerexecution.FailureDetail{Reason: workerexecution.WorkFailureTypeUnknown, Message: failureMessage},
+	}
+	return state
 }

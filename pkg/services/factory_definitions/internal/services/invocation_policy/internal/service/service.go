@@ -5,12 +5,12 @@ import (
 	invocationpolicydecisionenvelope "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope"
 	invocationpolicyinterpolation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/invocationinterpolation"
 	invocationpolicyoutput "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/invocationoutput"
+	invocationpolicyquorum "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/quorumpolicy"
+	invocationpolicytts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/ttsobservability"
+	invocationpolicyworkpropagation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/workpropagation"
+	invocationpolicyworkstationexecution "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution"
 	invocationpolicyworktype "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/invocationworktype"
 	invocationpolicyservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy"
-	factoryquorumpolicy "github.com/portpowered/infinite-you/pkg/services/factory_definitions/quorumpolicy"
-	factoryttsobservability "github.com/portpowered/infinite-you/pkg/services/factory_definitions/ttsobservability"
-	factoryworkpropagation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workpropagation"
-	factoryworkstationexecution "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workstationexecution"
 )
 
 // Service is the private nested invocation_policy implementation behind the
@@ -37,10 +37,10 @@ func New() *Service {
 		invocationInterpolation: invocationpolicyinterpolation.NewService(),
 		invocationOutput:        invocationpolicyoutput.NewService(),
 		invocationWorkType:      invocationpolicyworktype.NewService(),
-		quorumPolicy:            factoryquorumpolicy.NewService(),
-		workPropagation:         factoryworkpropagation.NewService(),
-		workstationExecution:    factoryworkstationexecution.NewService(),
-		ttsObservability:        factoryttsobservability.NewService(),
+		quorumPolicy:            invocationpolicyquorum.NewService(),
+		workPropagation:         invocationpolicyworkpropagation.NewService(),
+		workstationExecution:    invocationpolicyworkstationexecution.NewService(),
+		ttsObservability:        invocationpolicytts.NewService(),
 	}
 }
 

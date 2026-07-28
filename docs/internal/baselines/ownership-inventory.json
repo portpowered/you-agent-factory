@@ -2802,7 +2802,31 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/quorumpolicy",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/ttsobservability",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/wire",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/workpropagation",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"

@@ -1,82 +1,18 @@
+// Package quorumpolicy is a transitional re-export surface for packaged Quorum
+// identity and lineage policy. Implementation is owned by nested
+// internal/services/invocation_policy/quorumpolicy; deletion is deferred to DEL packets.
 package quorumpolicy
 
 import (
-	"strings"
-
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/work"
+	invocationpolicyquorum "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/quorumpolicy"
 )
 
-// Service implements the fixed packaged Quorum identity and lineage policy.
-type Service struct{}
-
-var _ factorydefinitions.QuorumPolicyService = Service{}
-
-// NewService returns the canonical packaged Quorum policy.
 func NewService() factorydefinitions.QuorumPolicyService {
-	return Service{}
+	return invocationpolicyquorum.NewService()
 }
 
-func (Service) IsPackagedQuorumFactory(cfg *factorydefinitions.FactoryConfig) bool {
-	return IsPackagedQuorumFactory(cfg)
-}
-
-func (Service) WorkRelations(
-	workstationName string,
-	outputParentID string,
-	outputWorkTypeID string,
-	inputs []factorydefinitions.QuorumLineageInput,
-) []work.Relation {
-	return WorkRelations(workstationName, outputParentID, outputWorkTypeID, inputs)
-}
-
-func IsPackagedQuorumFactory(cfg *factorydefinitions.FactoryConfig) bool {
-	if cfg == nil {
-		return false
-	}
-	return strings.TrimSpace(cfg.Name) == factorydefinitions.PackagedQuorumFactoryName ||
-		strings.TrimSpace(cfg.Project) == factorydefinitions.PackagedQuorumFactoryProject
-}
-
-func WorkRelations(
-	workstationName string,
-	outputParentID string,
-	outputWorkTypeID string,
-	inputs []factorydefinitions.QuorumLineageInput,
-) []work.Relation {
-	switch workstationName {
-	case factorydefinitions.PackagedQuorumSplitWorkstationName:
-		if outputParentID == "" || outputWorkTypeID == "task" {
-			return nil
-		}
-		return []work.Relation{{
-			Type:         work.RelationParentChild,
-			TargetWorkID: outputParentID,
-		}}
-	case factorydefinitions.PackagedQuorumMergeWorkstationName:
-		if outputWorkTypeID != "quorum-merge" {
-			return nil
-		}
-		return dependenciesForBranchInputs(inputs)
-	default:
-		return nil
-	}
-}
-
-func dependenciesForBranchInputs(inputs []factorydefinitions.QuorumLineageInput) []work.Relation {
-	relations := make([]work.Relation, 0, 2)
-	for _, input := range inputs {
-		if input.WorkID == "" {
-			continue
-		}
-		switch input.WorkTypeID {
-		case "quorum-branch-a", "quorum-branch-b":
-			relations = append(relations, work.Relation{
-				Type:          work.RelationDependsOn,
-				TargetWorkID:  input.WorkID,
-				RequiredState: "complete",
-			})
-		}
-	}
-	return relations
-}
+var (
+	IsPackagedQuorumFactory = invocationpolicyquorum.IsPackagedQuorumFactory
+	WorkRelations           = invocationpolicyquorum.WorkRelations
+)
