@@ -411,6 +411,42 @@
       "name": "TestOperatorConfigCore_PromptedAndPresuppliedUpdatesShareAtomicBehavior"
     },
     {
+      "file": "operator_settings/servicewire/servicewire_composition_test.go",
+      "name": "TestRegisterDefaultsResolutionFromHomeRestoresAdapterOwnership"
+    },
+    {
+      "file": "operator_settings/servicewire/servicewire_composition_test.go",
+      "name": "TestResolveFromHomeFallbackPreservesAcceptedSemantics"
+    },
+    {
+      "file": "operator_settings/servicewire/servicewire_composition_test.go",
+      "name": "TestResolveFromHomeRejectsMissingFilesystemPorts"
+    },
+    {
+      "file": "operator_settings/servicewire/servicewire_composition_test.go",
+      "name": "TestResolveFromHomeUsesSettingsAdapterOwnershipPath"
+    },
+    {
+      "file": "operator_settings/servicewire/servicewire_composition_test.go",
+      "name": "TestServiceFromConfigDocumentConstructsFromDocumentPorts"
+    },
+    {
+      "file": "operator_settings/servicewire/servicewire_composition_test.go",
+      "name": "TestServiceFromConfigDocumentRejectsMissingDocumentPorts"
+    },
+    {
+      "file": "operator_settings/servicewire/servicewire_composition_test.go",
+      "name": "TestServiceFromHomePortsConstructsSettingsRoot"
+    },
+    {
+      "file": "operator_settings/servicewire/servicewire_composition_test.go",
+      "name": "TestServiceFromHomePortsRejectsMissingPorts"
+    },
+    {
+      "file": "operator_settings/servicewire/servicewire_composition_test.go",
+      "name": "TestServiceWireCompositionRootServesDocumentAndResolutionOperations"
+    },
+    {
       "file": "providers/cli_script_executor_test.go",
       "name": "TestScriptExecutor_ArgTemplating"
     },
@@ -1261,6 +1297,18 @@
     {
       "file": "smoke/verify_fast_command_smoke_test.go",
       "name": "TestVerifyPRInferenceCommandSmoke_StaysOutsideRequiredPRAndExtendedTiers"
+    },
+    {
+      "file": "work/recordings/recordings_read_test.go",
+      "name": "TestGetWorkFromRecordingsRootUsesRecordingsServiceRoot"
+    },
+    {
+      "file": "work/recordings/recordings_read_test.go",
+      "name": "TestRecordingsBackedWorkReadsMapRichWorldState"
+    },
+    {
+      "file": "work/recordings/recordings_read_test.go",
+      "name": "TestRecordingsBackedWorkReadsSurfaceTypedProjectionFailures"
     },
     {
       "file": "workflow/code_review_loop_long_test.go",
