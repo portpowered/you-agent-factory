@@ -1217,6 +1217,12 @@
     },
     {
       "fromOwner": "factory_runtime",
+      "toOwner": "transports",
+      "class": "command",
+      "evidence": "pkg/services/factory_runtime/transports/http -\u003e pkg/transports/http/generated"
+    },
+    {
+      "fromOwner": "factory_runtime",
       "toOwner": "work",
       "class": "command",
       "evidence": "pkg/services/factory_runtime/engine -\u003e pkg/services/work"
@@ -3222,6 +3228,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_runtime/transports/http",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_runtime/transports/mcp",
       "disposition": "retain",
       "destination": "factory_runtime",
@@ -3871,6 +3883,12 @@
     },
     {
       "packagePath": "pkg/services/models/transports/http",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/transports/mcp",
       "disposition": "retain",
       "destination": "models",
       "destinationKind": "owner"

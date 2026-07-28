@@ -70,6 +70,48 @@ Use this map when changing the public REST contract.
   deadline exhaustion end without mapping to INTERNAL_ERROR; canceled requests
   terminate without an ErrorResponse body and deadline exhaustion returns 504
   (`request_context.go`).
+- Factory Runtime HTTP decoding, generated-contract mapping, Runtime root
+  invocation, typed error mapping, and cancel/timeout handling live in
+  `pkg/services/factory_runtime/transports/http`. The adapter consumes the
+  accepted `factory_runtime.Service` root only; fake-root tests inject a focused
+  root fake without constructing hosting, Petri, JavaScript, or Wire graphs.
+  Declare owned generated operationIds in `owned_surface.go` and prove adapter
+  production sources do not directly import
+  `pkg/services/factory_runtime/internal/**` (source scan, not transitive deps
+  through the accepted root package). Status reads (`handlers_status.go`) map
+  `getStatus` / `getStatusBySessionId` through `Observe` with
+  `ObservationScopeFull`, project success via `FactoryStatusFromObservation` +
+  `apisurface.FactoryStatusToAPI`, and route session-scoped reads through an
+  injected `SessionObserver` peer binding rather than Runtime datastores.
+  Published Runtime root sentinel failures map through centralized
+  `error_mapping.go` (`RootErrorResponse`) into public `ErrorResponse` bodies
+  with stable status, family, and code; unmapped failures use sanitized
+  internal messages via `writeRootOrInternalError`. Runtime control
+  (`handlers_control.go`) maps pause, resume, and terminate through
+  `ControlPause`, `ControlResume`, and `ControlTerminate` with published
+  `ControlOutcome` success vocabulary; operator move-work maps
+  `moveWorkBySessionId` through `ControlMoveWork` in `move_work_mapping.go`.
+  Dispatch-plan adaptation (`handlers_dispatch_plan.go`) maps plan-dispatch and
+  accept-dispatch-result through `PlanDispatch` and `AcceptDispatchResult` with
+  published `DispatchPlanOutcome` success vocabulary in
+  `dispatch_plan_mapping.go`. Checkpoint adaptation (`handlers_checkpoint.go`)
+  maps capture/load/restore through `CaptureCheckpoint`, `LoadCheckpoint`, and
+  `RestoreCheckpoint` with published `CheckpointOutcome` success vocabulary in
+  `checkpoint_mapping.go`. Request-context cancellation and deadline exhaustion
+  end without mapping to ordinary business `INTERNAL_ERROR` outcomes: canceled
+  requests terminate without an error body and deadline failures return 504 via
+  `request_context.go`, with guards before root invocation and centralized
+  handling in `writeRootOrInternalError`.
+- The Factory Runtime HTTP adapter package must stay registered in the allowed
+  shared manifests only: retain `pkg/services/factory_runtime/transports/http`
+  under destination `factory_runtime` in
+  `docs/internal/packaged-service-structure/package-target-manifest.json` and
+  `docs/internal/baselines/ownership-inventory.json`, and keep measured floors
+  in both `docs/internal/baselines/go-unit-coverage-package-minimums.json` and
+  `docs/internal/baselines/go-functional-coverage-package-minimums.json`.
+  Prove registration with `manifest_registration_test.go`; do not edit
+  `pkg/wire`, `pkg/root`, `pkg/initializer`, top-level CLI composition, or
+  other services' HTTP adapters when reconciling manifest churn.
 - Factory Definitions HTTP decoding, generated-contract mapping, service
   invocation, typed error mapping, and cancel/timeout handling live in
   `pkg/services/factory_definitions/transports/http`. The top-level

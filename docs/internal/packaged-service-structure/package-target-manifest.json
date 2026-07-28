@@ -181,6 +181,7 @@
     "pkg/services/factory_runtime/tooling/javascript/catalog",
     "pkg/services/factory_runtime/tooling/javascript/symbolidentity",
     "pkg/services/factory_runtime/transports/cli",
+    "pkg/services/factory_runtime/transports/http",
     "pkg/services/factory_runtime/transports/mcp",
     "pkg/services/factory_runtime/wire",
     "pkg/services/factory_sessions",
@@ -289,6 +290,7 @@
     "pkg/services/models/internal/services/runtime_scopes/wire",
     "pkg/services/models/transports/cli",
     "pkg/services/models/transports/http",
+    "pkg/services/models/transports/mcp",
     "pkg/services/models/wire",
     "pkg/services/operator_settings",
     "pkg/services/operator_settings/identityinventory",
@@ -1203,6 +1205,11 @@
       "destination": "factory_runtime"
     },
     {
+      "packagePath": "pkg/services/factory_runtime/transports/http",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
       "packagePath": "pkg/services/factory_runtime/transports/mcp",
       "disposition": "retain",
       "destination": "factory_runtime"
@@ -1739,6 +1746,11 @@
     },
     {
       "packagePath": "pkg/services/models/transports/http",
+      "disposition": "retain",
+      "destination": "models"
+    },
+    {
+      "packagePath": "pkg/services/models/transports/mcp",
       "disposition": "retain",
       "destination": "models"
     },

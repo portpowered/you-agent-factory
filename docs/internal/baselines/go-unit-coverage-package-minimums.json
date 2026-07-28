@@ -649,6 +649,10 @@
       "minimum": 86.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http",
+      "minimum": 82.30
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/mcp",
       "minimum": 81.48
     },
@@ -1183,6 +1187,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/models/transports/http",
       "minimum": 76.42
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/transports/mcp",
+      "minimum": 75.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/models/wire",
