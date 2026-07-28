@@ -61,6 +61,7 @@ type canonicalToolHandler func(
 
 var canonicalToolHandlers = map[string]canonicalToolHandler{
 	ToolQueryStatus: handleQueryStatus,
+	ToolAppendEvent: handleAppendEvent,
 }
 
 func handleQueryStatus(
@@ -70,6 +71,16 @@ func handleQueryStatus(
 ) (json.RawMessage, error) {
 	return callToolJSON(input, "decode query status input", func(request QueryStatusInput) ToolResponse[recordings.RecordingStatusResult] {
 		return QueryStatus(ctx, service, request)
+	})
+}
+
+func handleAppendEvent(
+	ctx context.Context,
+	service recordings.Service,
+	input json.RawMessage,
+) (json.RawMessage, error) {
+	return callToolJSON(input, "decode append event input", func(request AppendEventInput) ToolResponse[recordings.AppendRecordedEventResult] {
+		return AppendEvent(ctx, service, request)
 	})
 }
 

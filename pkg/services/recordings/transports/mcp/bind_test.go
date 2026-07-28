@@ -97,6 +97,7 @@ type fakeRecordingsRoot struct {
 	recordings.Service
 	invoked     *bool
 	queryStatus func(recordings.RecordingStatusRequest) (recordings.RecordingStatusResult, error)
+	appendEvent func(recordings.AppendRecordedEventRequest) (recordings.AppendRecordedEventResult, error)
 }
 
 func (fake fakeRecordingsRoot) markInvoked() {
@@ -113,6 +114,16 @@ func (fake fakeRecordingsRoot) QueryRecordingStatus(
 		panic("unexpected QueryRecordingStatus on fake recordings root")
 	}
 	return fake.queryStatus(request)
+}
+
+func (fake fakeRecordingsRoot) Append(
+	request recordings.AppendRecordedEventRequest,
+) (recordings.AppendRecordedEventResult, error) {
+	fake.markInvoked()
+	if fake.appendEvent == nil {
+		panic("unexpected Append on fake recordings root")
+	}
+	return fake.appendEvent(request)
 }
 
 func assertPackageDirectImportsForbidden(t *testing.T, packagePath string, forbiddenRoots []string) {

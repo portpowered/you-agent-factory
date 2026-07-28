@@ -115,14 +115,18 @@ func TestToolByName_ReturnsCatalogEntryForKnownTools(t *testing.T) {
 	}
 }
 
-func TestIsCanonicalToolHandlerRegistered_ReportsQueryStatusOnly(t *testing.T) {
+func TestIsCanonicalToolHandlerRegistered_ReportsQueryStatusAndAppendEvent(t *testing.T) {
 	t.Parallel()
 
-	if !mcprecording.IsCanonicalToolHandlerRegistered(mcprecording.ToolQueryStatus) {
-		t.Fatal("query_status handler should be registered")
+	for _, name := range []string{
+		mcprecording.ToolQueryStatus,
+		mcprecording.ToolAppendEvent,
+	} {
+		if !mcprecording.IsCanonicalToolHandlerRegistered(name) {
+			t.Fatalf("handler for %q should be registered", name)
+		}
 	}
 	for _, name := range []string{
-		mcprecording.ToolAppendEvent,
 		mcprecording.ToolLoadReplay,
 		mcprecording.ToolReadPortableArtifact,
 	} {

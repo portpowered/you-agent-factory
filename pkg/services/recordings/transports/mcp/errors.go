@@ -12,10 +12,12 @@ const (
 	errorCodeBadRequest         = "BAD_REQUEST"
 	errorCodeServiceUnavailable = "recording.service.unavailable"
 	errorCodeMissingTarget      = "recording.target.missing"
+	errorCodeInvalidAppend      = "recording.append.invalid"
 	errorCodeInternalExecution  = "recording.execution.internal"
 
 	errorMessageServiceUnavailable = "recordings service is unavailable"
 	errorMessageMissingTarget      = "recording target not found"
+	errorMessageInvalidAppend      = "invalid canonical event append"
 	errorMessageInternalExecution  = "recording execution failed"
 )
 
@@ -84,6 +86,21 @@ func unavailableServiceErrorEnvelope() ToolErrorEnvelope {
 		Message:   errorMessageServiceUnavailable,
 		Retryable: false,
 	}
+}
+
+func appendEventErrorEnvelope(event recordings.CanonicalEvent, err error) ToolErrorEnvelope {
+	if errors.Is(err, recordings.ErrInvalidAppendEvent) {
+		return ToolErrorEnvelope{
+			Code:      errorCodeInvalidAppend,
+			Message:   errorMessageInvalidAppend,
+			Retryable: false,
+			Details: map[string]any{
+				"reason": err.Error(),
+				"eventId": string(event.ID),
+			},
+		}
+	}
+	return executionErrorEnvelope("", err)
 }
 
 func statusQueryErrorEnvelope(recordingID string, err error) ToolErrorEnvelope {
