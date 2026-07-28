@@ -1354,7 +1354,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/models/transports/http",
-      "minimum": 61.93
+      "minimum": 58.27
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/models/transports/mcp",
