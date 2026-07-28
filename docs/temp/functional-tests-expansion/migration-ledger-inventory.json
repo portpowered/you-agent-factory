@@ -1449,6 +1449,36 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/factory/packaged/review/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/review",
+      "scenario": "TestPackagedReviewApprovalCompletes",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/review/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/review/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/review",
+      "scenario": "TestPackagedReviewRejectionCarriesFeedback",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/review/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/review/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/review",
+      "scenario": "TestPackagedReviewRetryExhaustionFails",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/review/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/factory/packaged/subagent/invocation_test.go",
       "package": "you-agent-factory/tests/functional/factory/packaged/subagent",
       "scenario": "TestPackagedSubagentChildFailureReturnsStableFailure",
@@ -7995,9 +8025,9 @@
       "workflow": 30,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 770,
+    "customer_top_level_Test_scenarios": 779,
     "lane_functionallong": 95,
-    "lane_short": 675,
+    "lane_short": 684,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 7,
