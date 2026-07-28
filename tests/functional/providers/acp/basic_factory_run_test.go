@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -203,7 +204,7 @@ func (p *legacyProvider) Infer(context.Context, workers.ProviderInferenceRequest
 
 func TestACPAgentHelperProcess(t *testing.T) {
 	mode := os.Getenv(acpHelperEnvironment)
-	if mode != "1" && mode != "fail" && mode != "auth" && mode != "model" && mode != "resource" && mode != "version" && mode != "init-fail" && mode != "malformed" && mode != "eof" {
+	if mode != "1" && mode != "fail" && mode != "auth" && mode != "model" && mode != "resource" && mode != "version" && mode != "init-fail" && mode != "malformed" && mode != "eof" && mode != "block" && mode != "isolate" && mode != "unsupported" {
 		return
 	}
 	if mode == "malformed" {
@@ -218,6 +219,7 @@ func TestACPAgentHelperProcess(t *testing.T) {
 	agent := &functionalAgent{
 		failPrompt: mode == "fail", requireAuth: mode == "auth", requireModel: mode == "model",
 		requireResource: mode == "resource", incompatibleVersion: mode == "version", failInitialize: mode == "init-fail",
+		blockPrompt: mode == "block", sessionID: os.Getenv("YOU_TEST_ACP_SESSION_ID"), unsupportedClientMethods: mode == "unsupported",
 	}
 	connection := acpsdk.NewAgentSideConnection(agent, os.Stdout, os.Stdin)
 	agent.connection = connection
@@ -225,14 +227,17 @@ func TestACPAgentHelperProcess(t *testing.T) {
 }
 
 type functionalAgent struct {
-	connection          *acpsdk.AgentSideConnection
-	failPrompt          bool
-	requireAuth         bool
-	requireModel        bool
-	requireResource     bool
-	model               string
-	incompatibleVersion bool
-	failInitialize      bool
+	connection               *acpsdk.AgentSideConnection
+	failPrompt               bool
+	requireAuth              bool
+	requireModel             bool
+	requireResource          bool
+	model                    string
+	incompatibleVersion      bool
+	failInitialize           bool
+	blockPrompt              bool
+	sessionID                string
+	unsupportedClientMethods bool
 }
 
 func (a *functionalAgent) Initialize(context.Context, acpsdk.InitializeRequest) (acpsdk.InitializeResponse, error) {
@@ -258,7 +263,11 @@ func (a *functionalAgent) NewSession(context.Context, acpsdk.NewSessionRequest) 
 	if a.requireAuth {
 		return acpsdk.NewSessionResponse{}, acpsdk.NewAuthRequired(nil)
 	}
-	response := acpsdk.NewSessionResponse{SessionId: "acp-session-functional-1"}
+	sessionID := a.sessionID
+	if sessionID == "" {
+		sessionID = "acp-session-functional-1"
+	}
+	response := acpsdk.NewSessionResponse{SessionId: acpsdk.SessionId(sessionID)}
 	if a.requireModel {
 		category := acpsdk.SessionConfigOptionCategoryModel
 		options := acpsdk.SessionConfigSelectOptionsUngrouped{{Name: "Test model", Value: "test-model"}}
@@ -271,6 +280,53 @@ func (a *functionalAgent) NewSession(context.Context, acpsdk.NewSessionRequest) 
 }
 
 func (a *functionalAgent) Prompt(ctx context.Context, request acpsdk.PromptRequest) (acpsdk.PromptResponse, error) {
+	if a.blockPrompt {
+		if signal := os.Getenv("YOU_TEST_ACP_PROMPT_SIGNAL"); signal != "" {
+			_ = os.WriteFile(signal, []byte("prompt-started"), 0o600)
+		}
+		<-ctx.Done()
+		return acpsdk.PromptResponse{}, context.Cause(ctx)
+	}
+	if a.unsupportedClientMethods {
+		calls := []struct {
+			name string
+			call func() error
+		}{
+			{name: "fs/read_text_file", call: func() error {
+				_, err := a.connection.ReadTextFile(ctx, acpsdk.ReadTextFileRequest{SessionId: request.SessionId, Path: "/fixture/read.txt"})
+				return err
+			}},
+			{name: "fs/write_text_file", call: func() error {
+				_, err := a.connection.WriteTextFile(ctx, acpsdk.WriteTextFileRequest{SessionId: request.SessionId, Path: "/fixture/write.txt", Content: "fixture"})
+				return err
+			}},
+			{name: "terminal/create", call: func() error {
+				_, err := a.connection.CreateTerminal(ctx, acpsdk.CreateTerminalRequest{SessionId: request.SessionId, Command: "echo"})
+				return err
+			}},
+			{name: "terminal/kill", call: func() error {
+				_, err := a.connection.KillTerminal(ctx, acpsdk.KillTerminalRequest{SessionId: request.SessionId, TerminalId: "terminal-1"})
+				return err
+			}},
+			{name: "terminal/output", call: func() error {
+				_, err := a.connection.TerminalOutput(ctx, acpsdk.TerminalOutputRequest{SessionId: request.SessionId, TerminalId: "terminal-1"})
+				return err
+			}},
+			{name: "terminal/release", call: func() error {
+				_, err := a.connection.ReleaseTerminal(ctx, acpsdk.ReleaseTerminalRequest{SessionId: request.SessionId, TerminalId: "terminal-1"})
+				return err
+			}},
+			{name: "terminal/wait_for_exit", call: func() error {
+				_, err := a.connection.WaitForTerminalExit(ctx, acpsdk.WaitForTerminalExitRequest{SessionId: request.SessionId, TerminalId: "terminal-1"})
+				return err
+			}},
+		}
+		for _, call := range calls {
+			if err := call.call(); err == nil || !strings.Contains(err.Error(), "not supported") {
+				return acpsdk.PromptResponse{}, fmt.Errorf("%s error = %v, want unsupported capability", call.name, err)
+			}
+		}
+	}
 	if a.requireResource {
 		found := false
 		for _, block := range request.Prompt {

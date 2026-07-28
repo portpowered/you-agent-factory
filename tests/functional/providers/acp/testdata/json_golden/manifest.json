@@ -1,0 +1,34 @@
+{
+  "module": "github.com/coder/acp-go-sdk",
+  "version": "v0.13.5",
+  "commit": "0845a3bb9eddda5bfc22a94dd3598c90cb842451",
+  "license": "Apache-2.0",
+  "files": [
+    "initialize_request.json",
+    "initialize_response.json",
+    "new_session_request.json",
+    "new_session_response.json",
+    "prompt_request.json",
+    "request_permission_request.json",
+    "request_permission_response_selected.json",
+    "session_update_agent_message_chunk.json",
+    "session_update_agent_thought_chunk.json",
+    "session_update_plan.json",
+    "session_update_tool_call_edit.json",
+    "session_update_tool_call_update_more_fields.json"
+  ],
+  "sha256": {
+    "initialize_request.json": "e40990ddb228cbbf2f2b2585dab9e7a3bef7b9d95fd5882b9828b80e514f690f",
+    "initialize_response.json": "c3446a6a0a1731ad5a1988bd0cab7302728b0aafb40f69f88bc7e5c452a51bbe",
+    "new_session_request.json": "25f144d9a676036db6a88447f9dce76653639db57e91d9182d2bcf52e2a5e0c0",
+    "new_session_response.json": "5514421c0f6225b34db45f954bad5d732634809df8c9f51fdffbe4bde8b17abe",
+    "prompt_request.json": "e5a14f378faa910b6e29b890e015b64293b49f5520332a136a2927aebda73f3d",
+    "request_permission_request.json": "2f9f3eab3fac481eae4d6713ce0945e157b2d7d8874d70e59612ae35bccd2761",
+    "request_permission_response_selected.json": "ebfe1c26f99775a2ce2aeeaffe83b9bafe810e3a552dfd8ce2a81137ebd05021",
+    "session_update_agent_message_chunk.json": "a921fae49a8593b7032d9142285b4ca8134e82e3f306ea80575202e267e3ea1e",
+    "session_update_agent_thought_chunk.json": "234e68e111df17139c3628bfddc34228e243864f34a294629977afeff8e751fc",
+    "session_update_plan.json": "5af56d26cc1bd86d1405b8c35f526c1ec282739d6851a3b0c448b36c7550c283",
+    "session_update_tool_call_edit.json": "a78bd4e1262a5f71ebc25740ea7cf371afef3426ddea3ea14c739f6ca40fe84a",
+    "session_update_tool_call_update_more_fields.json": "2011e55f416be451799c1a6eb0399b9bd195a9b950c0ae47cc791a48de420b28"
+  }
+}
