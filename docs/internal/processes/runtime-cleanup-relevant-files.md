@@ -1259,3 +1259,22 @@ burn-down with coverage subtests in
 
 Internal `internal/services/*` import paths remain canonical coverage debt and
 are not removed by this packet.
+
+## DEL-DEF-RESIDUAL root shape and wire proofs
+
+Story 005 locks the post-deletion packaged-service root shape, wire import
+hygiene, published Service construction, and invocation_policy contract reachability
+after residual transitional public packages are removed:
+
+| Proof | Artifact |
+| --- | --- |
+| Deleted residual and DEL-DEF transitional top-level packages absent | `deleted_residual_transitional_top_level_packages_absent` and `deleted_del_def_transitional_top_level_packages_absent` subtests |
+| Canonical retain children (`internal`, `transports`, `wire`) plus committed move debt only | `canonical_root_directories_present`, `unexpected_children_remain_move_debt_only` |
+| Parent-private `internal/services/*` subservices remain | `internal_services_subservices_remain` |
+| `factory_definitions/wire` avoids deleted transitional imports | `TestDelDefResidualRootShape_WireDoesNotImportDeletedTransitionalPackages` |
+| Published catalog/compile/validate/snapshot surfaces construct through wire | `TestDelDefResidualRootShape_WireConstructsPublishedServiceSurfaces` |
+| Invocation policy contracts reachable through Definitions wire | `TestDelDefResidualRootShape_InvocationPolicyContractThroughDefinitionsWire` |
+
+Deeper fold-behavior preservation across catalog, authoring, validate,
+snapshot/portability, and distribute slices remains in
+`pkg/services/factory_definitions/wire/fold_behavior_preservation_test.go`.
