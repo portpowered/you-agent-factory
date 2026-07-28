@@ -11,7 +11,7 @@ import (
 	"fmt"
 
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingsservice "github.com/portpowered/infinite-you/pkg/services/recordings/service"
+	recordingsinternal "github.com/portpowered/infinite-you/pkg/services/recordings/internal"
 )
 
 // NewService constructs an inert Recordings root from the runtime ledger seam
@@ -30,15 +30,15 @@ func NewService(
 	if writeFile == nil {
 		return nil, fmt.Errorf("construct Recordings: snapshot write function is required")
 	}
-	writer := recordingsservice.NewReplayRecordingSnapshotWriter(writeFile)
-	tickers := recordingsservice.NewRecordingFlushTickerFactory()
-	publication, err := recordingsservice.NewPortableArtifactPublication()
+	writer := recordingsinternal.NewReplayRecordingSnapshotWriter(writeFile)
+	tickers := recordingsinternal.NewRecordingFlushTickerFactory()
+	publication, err := recordingsinternal.NewPortableArtifactPublication()
 	if err != nil {
 		return nil, err
 	}
-	service := recordingsservice.NewServiceWithLifecycleEffects(
+	service := recordingsinternal.NewServiceWithLifecycleEffects(
 		ledger,
-		recordingsservice.NewProjectionService(),
+		recordingsinternal.NewProjectionService(),
 		targets,
 		writer,
 		tickers,
