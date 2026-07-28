@@ -54,6 +54,43 @@ func TestIntegrationAuthoritativeMessageMatchesSanitizedProgress(t *testing.T) {
 	}
 }
 
+func TestIntegrationAuthoritativeMessageCompletesStartedMessageLifecycle(t *testing.T) {
+	t.Parallel()
+
+	stdout := []byte(
+		`{"type":"stream_event","session_id":"session-worktree","event":{"type":"message_start","message":{"id":"msg-worktree","role":"assistant","content":[]}}}` + "\n" +
+			`{"type":"stream_event","session_id":"session-worktree","event":{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}}` + "\n" +
+			`{"type":"stream_event","session_id":"session-worktree","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Done. COMPLETE"}}}` + "\n" +
+			`{"type":"stream_event","session_id":"session-worktree","event":{"type":"content_block_stop","index":0}}` + "\n" +
+			`{"type":"stream_event","session_id":"session-worktree","event":{"type":"message_stop"}}` + "\n" +
+			`{"type":"assistant","session_id":"session-worktree","message":{"id":"msg-worktree","role":"assistant","content":[{"type":"text","text":"Done. COMPLETE"}]}}` + "\n" +
+			`{"type":"result","subtype":"success","is_error":false,"result":"Done. COMPLETE","session_id":"session-worktree"}` + "\n",
+	)
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: stdout})
+	providersService, err := providerswire.NewService(providerswire.WithCommandRunner(runner))
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	integration := claude.NewIntegration(claude.IntegrationDependencies{
+		ProvidersService: providersService,
+	})
+	request := inference.NewInvocationRequest(inference.InvocationInput{
+		InvocationID: "claude-stream-lifecycle",
+		Model:        "claude-sonnet-4-20250514",
+		UserMessage:  "Process the task.",
+	})
+	destination := &orderedWriter{}
+	if err := inference.ExecuteInvocation(context.Background(), integration, request, destination); err != nil {
+		t.Fatalf("ExecuteInvocation: %v", err)
+	}
+	if destination.completion == nil || destination.completion.Response() == nil {
+		t.Fatalf("completion = %#v, want success", destination.completion)
+	}
+	if got := destination.completion.Response().Content(); got != "Done. COMPLETE" {
+		t.Fatalf("terminal content = %q, want Done. COMPLETE", got)
+	}
+}
+
 type orderedWriter struct {
 	order      []string
 	completion *inference.Completion

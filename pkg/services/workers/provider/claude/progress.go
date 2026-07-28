@@ -202,13 +202,29 @@ func toolEvent(
 	return event, true
 }
 
+func messageIDFromDiagnostics(diagnostics *providers.ExecuteDiagnostics) string {
+	if diagnostics == nil {
+		return ""
+	}
+	for index := len(diagnostics.Progress) - 1; index >= 0; index-- {
+		if messageID := strings.TrimSpace(diagnostics.Progress[index].Metadata["message_id"]); messageID != "" {
+			return messageID
+		}
+	}
+	return ""
+}
+
 func authoritativeMessageCompletedEvent(
 	runID string,
 	content string,
+	messageID string,
 ) (inference.EventDraft, bool) {
 	content = strings.TrimSpace(content)
 	if content == "" {
 		return inference.EventDraft{}, false
+	}
+	if strings.TrimSpace(messageID) == "" {
+		messageID = "claude-message"
 	}
 	payload, err := json.Marshal(workerexecution.MessagePayload{
 		Role: "assistant",
@@ -224,7 +240,7 @@ func authoritativeMessageCompletedEvent(
 		RunID:   runID,
 		Kind:    workerexecution.KindMessage,
 		Phase:   workerexecution.PhaseCompleted,
-		ItemID:  "claude-message",
+		ItemID:  messageID,
 		Payload: payload,
 		Provenance: workerexecution.Provenance{
 			Provider:        string(providers.IDClaude),

@@ -434,7 +434,10 @@ primary-result behavior.
   `ExecuteResult.Content`, not sanitized `ExecuteDiagnostics.Progress`
   message facts, because Providers root redacts request prompt substrings from
   diagnostic progress and the inference protocol requires completed-message
-  content to agree with the terminal response. Fake custom Integration E2E
+  content to agree with the terminal response. When skipping diagnostic
+  `message.completed` facts, reuse the native `message_id` correlation on the
+  authoritative snapshot so earlier `message.started` lifecycles still
+  terminate. Fake custom Integration E2E
   proof belongs in `tests/functional/workers/inference/` (approved
   domain/subsection under `make pkg-structure`; leave legacy
   `tests/functional/providers/contract/doc.go` as the required package

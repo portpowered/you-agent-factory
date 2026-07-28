@@ -259,7 +259,7 @@ func writeProgressEvents(
 			}
 		}
 	}
-	if event, ok := authoritativeMessageCompletedEvent(runID, content); ok {
+	if event, ok := authoritativeMessageCompletedEvent(runID, content, messageIDFromDiagnostics(diagnostics)); ok {
 		if err := writer.WriteEvent(ctx, event); err != nil {
 			return err
 		}
