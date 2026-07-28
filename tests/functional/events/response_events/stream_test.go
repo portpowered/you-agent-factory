@@ -43,6 +43,86 @@ const (
 
 const functionalResponseEventRetentionByteLimit = 16 * 1024 * 1024
 
+// TestAPIResponseEventStreamClosesAtDocumentedBoundary proves the public
+// Response Event SSE API closes after retained catch-up when a completed durable
+// Factory Session reaches the documented response-event session boundary, rather
+// than leaving the SSE connection open indefinitely past that terminal boundary.
+func TestAPIResponseEventStreamClosesAtDocumentedBoundary(t *testing.T) {
+	start := time.Date(2026, 7, 28, 15, 0, 0, 0, time.UTC)
+	fakeClock := clockwork.NewFakeClockAt(start)
+	dir := scaffoldSessionExpiryWorkflow(t)
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: sessionExpiryChildProgressStream(sessionExpiryChildSessionID, "Child summary COMPLETE"),
+	})
+
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		ResponseEventRetentionLimits: &factorysessions.ResponseEventRetentionLimits{
+			MaxEvents:                10_000,
+			MaxBytes:                 functionalResponseEventRetentionByteLimit,
+			CompletedRetentionWindow: functionalResponseEventCompletedRetentionWindow,
+		},
+		Edges: serviceedges.Edges{
+			Clock:                 fakeClock,
+			ProviderCommandRunner: runner,
+		},
+	})
+	t.Cleanup(func() { server.Stop(t) })
+
+	started := startSessionExpiryWorkflow(t, server.URL(), dir)
+	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
+	}
+	sessionID := started.SessionId
+	if sessionID == "" {
+		t.Fatal("completed durable session id is empty")
+	}
+
+	retained := retainedFactoryResponseEventsWithoutGaps(
+		support.GetFactoryResponseEventsAt(t, server.URL(), sessionID),
+	)
+	if len(retained) == 0 {
+		t.Fatal("completed session retained zero Response Events before stream open")
+	}
+	assertResponseEventsAscendingSequence(t, retained)
+
+	stream := support.OpenFactoryResponseEventStreamAt(
+		t,
+		support.SessionResponseEventsURL(server.URL(), sessionID),
+	)
+	drained := collectResponseEventStreamUntilRetainedCount(
+		t,
+		stream,
+		len(retained),
+		10*time.Second,
+	)
+	assertResponseEventFramesMatchRetainedCatchUp(t, retained, drained)
+	stream.WaitClosed(5 * time.Second)
+	if frame, ok := stream.TryNextFrame(500 * time.Millisecond); ok {
+		t.Fatalf(
+			"stream delivered unexpected frame after documented boundary close: event %q sequence %d",
+			frame.Event.EventId,
+			frame.Event.Sequence,
+		)
+	}
+	stream.Close()
+
+	lateStream := support.OpenFactoryResponseEventStreamAt(
+		t,
+		support.SessionResponseEventsURL(server.URL(), sessionID),
+	)
+	lateDrained := collectResponseEventStreamUntilRetainedCount(
+		t,
+		lateStream,
+		len(retained),
+		10*time.Second,
+	)
+	assertResponseEventFramesMatchRetainedCatchUp(t, retained, lateDrained)
+	lateStream.WaitClosed(5 * time.Second)
+	lateStream.Close()
+}
+
 // TestAPIResponseEventSessionExpiryReturnsTypedGone proves the public Response
 // Event SSE API returns typed Gone (410 / RESPONSE_EVENT_STREAM_EXPIRED) before
 // the stream opens when retained response-event history has expired for the
