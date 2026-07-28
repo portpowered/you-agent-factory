@@ -812,6 +812,14 @@ response-stream output.
   boundaries with `work.ContentMaterializeFunc(workService.MaterializeContentURL)`.
   Prove the HTTP admission/content edge in
   `pkg/services/factory_sessions/transports/http/work_admission_content_boundary_test.go`.
+- Factory Sessions Work request construction and admission submit proofs live in
+  `pkg/services/factory_sessions/transports/http/work_request_boundary_test.go`
+  (HTTP `PrepareWorkRequest` + `SubmitWorkRequestForSession` through a recording
+  `work.Service`) and `pkg/services/factory_sessions/work_request_boundary_test.go`
+  (session-owned invocation submit constructing detached `work.WorkRequest` with
+  observable acceptance or typed `work.ErrInvalidWorkRequest` failures). Assert
+  behavioral submit result fields and typed error codes/messages, not import
+  inventory alone.
 - Work owner-local Wire at `pkg/services/work/wire` must stay registered under
   destination `work` in
   `docs/internal/packaged-service-structure/package-target-manifest.json`,

@@ -17,16 +17,32 @@ type recordingAdmissionWorkService struct {
 	stageCalls   int
 	prepareCalls int
 	prepCalls    int
+	submitCalls  int
 	lastStage    work.StageContentRequest
 	lastItems    []work.StagedSubmissionItem
 	lastPrep     work.WorkRequestPreparation
+	lastSubmitSession string
+	lastSubmitRequest work.WorkRequest
+
+	prepareRequestErr error
+	submitResult      work.WorkRequestSubmitResult
+	submitErr         error
 }
 
 func (f *recordingAdmissionWorkService) SubmitWorkRequestForSession(
-	context.Context,
-	string,
-	work.WorkRequest,
+	_ context.Context,
+	sessionID string,
+	request work.WorkRequest,
 ) (work.WorkRequestSubmitResult, error) {
+	f.submitCalls++
+	f.lastSubmitSession = sessionID
+	f.lastSubmitRequest = request
+	if f.submitErr != nil {
+		return work.WorkRequestSubmitResult{}, f.submitErr
+	}
+	if f.submitResult.RequestID != "" || f.submitResult.TraceID != "" || f.submitResult.Accepted {
+		return f.submitResult, nil
+	}
 	return work.WorkRequestSubmitResult{}, errUnsupportedAdmissionWorkServiceMethod
 }
 
@@ -36,6 +52,9 @@ func (f *recordingAdmissionWorkService) PrepareWorkRequest(
 ) (work.WorkRequest, error) {
 	f.prepCalls++
 	f.lastPrep = input
+	if f.prepareRequestErr != nil {
+		return work.WorkRequest{}, f.prepareRequestErr
+	}
 	request := input.Request
 	request.Works = append([]work.Work(nil), request.Works...)
 	return request, nil
