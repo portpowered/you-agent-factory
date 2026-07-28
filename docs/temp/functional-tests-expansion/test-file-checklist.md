@@ -552,7 +552,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestRecordingsBackedWorkReadsMapRichWorldState`.
   - `TestRecordingsBackedWorkReadsSurfaceTypedProjectionFailures`.
 
-- [ ] `tests/functional/work/submission/http_test.go`
+- [x] `tests/functional/work/submission/http_test.go`
   - `TestAPISubmitBatchThenListAndGetWork`.
   - `TestAPIUpsertWorkRequestUsesCanonicalIdentity`.
   - `TestAPIUnknownWorkReturnsTypedNotFound`.

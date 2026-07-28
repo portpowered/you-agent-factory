@@ -1,19 +1,21 @@
+// Package service is a transitional compile shim that re-exports the composed
+// Recordings root from pkg/services/recordings/internal. Peers should
+// construct through recordings/wire; baseline deletion of this path is owned
+// by DEL-REC.
 package service
 
 import (
-	"fmt"
+	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
-	"github.com/portpowered/infinite-you/pkg/services/recordings/replay"
+	recordingsinternal "github.com/portpowered/infinite-you/pkg/services/recordings/internal"
+	artifactsexport "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func NewReplayClock(artifact *recordings.ReplayArtifact) recordings.Clock {
-	if artifact == nil {
-		return nil
-	}
-	return replay.NewArtifactClock(artifact)
+	return recordingsinternal.NewReplayClock(artifact)
 }
 
 func NewReplayExecution(
@@ -27,44 +29,86 @@ func NewReplayExecution(
 	recordings.CompletionDeliveryPlanner,
 	error,
 ) {
-	if artifact == nil {
-		return nil, nil, nil, nil, nil
-	}
-	sideEffects, err := replay.NewSideEffects(
+	return recordingsinternal.NewReplayExecution(
+		artifact,
 		decodeFactorySnapshot,
 		decodeRuntimeConfig,
-		artifact,
 	)
-	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("build replay side effects: %w", err)
-	}
-	submissionHook, err := replay.NewSubmissionHook(
-		decodeFactorySnapshot,
-		decodeRuntimeConfig,
-		artifact,
+}
+
+func NewProjectionService() recordings.ProjectionService {
+	return recordingsinternal.NewProjectionService()
+}
+
+func NewService(
+	ledger recordings.Ledger,
+	projection recordings.ProjectionService,
+	targets ...recordings.LiveRecordingTargetPlanner,
+) recordings.Service {
+	return recordingsinternal.NewService(ledger, projection, targets...)
+}
+
+func NewServiceWithLifecycleEffects(
+	ledger recordings.Ledger,
+	projection recordings.ProjectionService,
+	targetPlanner recordings.LiveRecordingTargetPlanner,
+	writer recordings.RecordingSnapshotWriter,
+	tickers recordings.RecordingFlushTickerFactory,
+	publication artifactsexport.PortableArtifactPublication,
+	clocks ...recordings.RecordingClock,
+) recordings.Service {
+	return recordingsinternal.NewServiceWithLifecycleEffects(
+		ledger,
+		projection,
+		targetPlanner,
+		writer,
+		tickers,
+		publication,
+		clocks...,
 	)
-	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("build replay submission hook: %w", err)
-	}
-	workStateChangeHook, err := replay.NewWorkStateChangeHook(
-		decodeFactorySnapshot,
-		decodeRuntimeConfig,
-		artifact,
+}
+
+func NewRuntimeLedger(
+	topology recordings.InitialStructureSource,
+	now func() time.Time,
+	streamGenerationID string,
+	definitions factorydefinitions.RuntimeDefinitionLookup,
+) recordings.RuntimeEventLedger {
+	return recordingsinternal.NewRuntimeLedger(topology, now, streamGenerationID, definitions)
+}
+
+func NewRecordingSnapshotWriter(
+	write func(string, []byte) error,
+) recordings.RecordingSnapshotWriter {
+	return recordingsinternal.NewRecordingSnapshotWriter(write)
+}
+
+func NewReplayRecordingSnapshotWriter(
+	write func(string, []byte) error,
+) recordings.RecordingSnapshotWriter {
+	return recordingsinternal.NewReplayRecordingSnapshotWriter(write)
+}
+
+func NewRecordingFlushTickerFactory() recordings.RecordingFlushTickerFactory {
+	return recordingsinternal.NewRecordingFlushTickerFactory()
+}
+
+func NewPortableArtifactPublication() (artifactsexport.PortableArtifactPublication, error) {
+	return recordingsinternal.NewPortableArtifactPublication()
+}
+
+func NewLifecycleRuntimeRecorder(
+	flushInterval time.Duration,
+	loaded factorydefinitions.LoadedFactorySource,
+	now func() time.Time,
+	recordPath string,
+	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
+) (recordings.RuntimeRecorder, error) {
+	return recordingsinternal.NewLifecycleRuntimeRecorder(
+		flushInterval,
+		loaded,
+		now,
+		recordPath,
+		captureLoadedFactorySnapshot,
 	)
-	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("build replay work state change hook: %w", err)
-	}
-	deliveryPlan, err := replay.NewCompletionDeliveryPlan(
-		decodeFactorySnapshot,
-		decodeRuntimeConfig,
-		artifact,
-	)
-	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("build replay completion delivery plan: %w", err)
-	}
-	return sideEffects,
-		sideEffects,
-		[]recordings.ReplayHook{submissionHook, workStateChangeHook},
-		deliveryPlan,
-		nil
 }

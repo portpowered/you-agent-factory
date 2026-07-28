@@ -2,12 +2,14 @@ package wire
 
 import (
 	"errors"
+	"path/filepath"
 	"testing"
 	"time"
 
+	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingsservice "github.com/portpowered/infinite-you/pkg/services/recordings/service"
+	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 )
 
 type inertRecordingsLedger struct {
@@ -24,31 +26,59 @@ func TestInjectBundleComposesRecordingsArtifactExportThroughWireFactory(t *testi
 		t.Fatalf("InjectBundle() error = %v", err)
 	}
 
-	planner := recordings.LiveRecordingTargetPlannerFunc(
-		func(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
-			return recordings.LiveRecordingTarget{}, nil
-		},
+	factory := provideRecordingsFactory(
+		provideLiveRecordingTargetPlanner(),
+		platformreplay.Local{},
 	)
-	publication, err := recordingsservice.NewPortableArtifactPublication()
-	if err != nil {
-		t.Fatalf("NewPortableArtifactPublication: %v", err)
-	}
-	rootService := recordingsservice.NewServiceWithLifecycleEffects(
+	rootService := factory(
 		&inertRecordingsLedger{},
-		recordingsservice.NewProjectionService(),
-		planner,
-		nil,
-		nil,
-		publication,
+		recordingswire.NewProjectionService(),
 	)
+	if rootService == nil {
+		t.Fatal("provideRecordingsFactory() returned nil service")
+	}
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-build-process"}
+	artifactPath := filepath.Join(t.TempDir(), "build-process.json")
 	bound, err := rootService.BindRecording(recordings.BindRecordingRequest{
 		RecordingID: "recording-build-process",
-		Artifact:    "artifact:build-process",
+		Artifact:    recordings.RecordingArtifactReference(artifactPath),
 		Scope:       scope,
 	})
 	if err != nil {
 		t.Fatalf("BindRecording: %v", err)
+	}
+	runRequest, err := wireCompositionRunRequestEvent(
+		"build-process-run-request",
+		0,
+		scope,
+		time.Unix(1_700_000_000, 0).UTC(),
+		"generation-build-process",
+	)
+	if err != nil {
+		t.Fatalf("wireCompositionRunRequestEvent: %v", err)
+	}
+	if _, err := rootService.RecordRecordingEvent(recordings.RecordRecordingEventRequest{
+		RecordingID: bound.Status.RecordingID,
+		Event:       runRequest,
+	}); err != nil {
+		t.Fatalf("RecordRecordingEvent run request: %v", err)
+	}
+	if _, err := rootService.RecordRecordingEvent(recordings.RecordRecordingEventRequest{
+		RecordingID: bound.Status.RecordingID,
+		Event: recordings.CanonicalEvent{
+			ID:         "artifact-export-event",
+			Kind:       "WORK_REQUEST",
+			Sequence:   1,
+			Scope:      scope,
+			RecordedAt: time.Unix(1_700_000_001, 0).UTC(),
+			Payload:    "{}",
+			Cursor: recordings.CanonicalEventCursor{
+				StreamGenerationID: "generation-build-process",
+				Sequence:           1,
+			},
+		},
+	}); err != nil {
+		t.Fatalf("RecordRecordingEvent: %v", err)
 	}
 	if _, err := rootService.FinishRecording(recordings.FinishRecordingRequest{
 		RecordingID: bound.Status.RecordingID,

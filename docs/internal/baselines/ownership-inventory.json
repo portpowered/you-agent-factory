@@ -1465,7 +1465,7 @@
       "fromOwner": "recordings",
       "toOwner": "factory_runtime",
       "class": "command",
-      "evidence": "pkg/services/recordings/service -\u003e pkg/services/factory_runtime"
+      "evidence": "pkg/services/recordings/internal -\u003e pkg/services/factory_runtime"
     },
     {
       "fromOwner": "recordings",
@@ -4574,6 +4574,12 @@
       "destinationKind": "owner",
       "successor": "pkg/services/recordings/internal/services/canonical_ledger",
       "deletionCondition": "delete public package after IMP-REC-canonical_ledger private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
     },
     {
       "packagePath": "pkg/services/recordings/internal/canonical",
