@@ -1,11 +1,16 @@
 package definitions
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"net/http"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -92,6 +97,86 @@ func TestFactoryValidationReportsAllActionableDefinitionErrors(t *testing.T) {
 
 	if runner.CallCount() != 0 {
 		t.Fatalf("provider command runner calls = %d, want 0 before validation fails", runner.CallCount())
+	}
+}
+
+// TestAPIValidateFactoryAcceptsValidAndRejectsInvalidDefinitions proves the public
+// Validate API accepts structurally valid Factory definitions with an empty target
+// list and returns actionable validation targets for invalid definitions without
+// persisting or activating runtime work.
+func TestAPIValidateFactoryAcceptsValidAndRejectsInvalidDefinitions(t *testing.T) {
+	runner := support.NewRecordingCommandRunner("runtime must not execute")
+	edges := serviceedges.Edges{ProviderCommandRunner: runner}
+
+	hostDir := support.ScaffoldFactory(t, validAPIValidationFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                hostDir,
+		UseMockWorkers:            true,
+		WaitForServiceModeRuntime: true,
+		Edges:                     edges,
+	})
+	defer server.Stop(t)
+
+	currentBefore := getDefaultSessionFactory(t, server.URL())
+	sessionsBefore := support.GetJSON[factoryapi.ListFactorySessionsResponse](
+		t,
+		server.URL()+"/factory-sessions",
+	)
+
+	validFactory, err := support.LoadedFactory(t, filepath.Join(hostDir, "factory.json"))
+	if err != nil {
+		t.Fatalf("load valid factory definition: %v", err)
+	}
+	validResult, validStatus := postValidateFactory(t, server.URL(), validFactory)
+	if validStatus != http.StatusOK {
+		t.Fatalf("POST /factory-validations valid status = %d, want 200", validStatus)
+	}
+	if len(validResult.Targets) != 0 {
+		t.Fatalf("valid factory validation targets = %#v, want empty acceptance outcome", validResult.Targets)
+	}
+
+	invalidFactory, err := factoryDefinitionFromConfig(multipleActionableDefectsFactoryConfig())
+	if err != nil {
+		t.Fatalf("marshal invalid factory definition: %v", err)
+	}
+	invalidResult, invalidStatus := postValidateFactory(t, server.URL(), invalidFactory)
+	if invalidStatus != http.StatusOK {
+		t.Fatalf("POST /factory-validations invalid status = %d, want 200 with validation targets", invalidStatus)
+	}
+	if len(invalidResult.Targets) < 3 {
+		t.Fatalf("invalid factory validation targets = %d, want multiple actionable defects", len(invalidResult.Targets))
+	}
+	for _, code := range []string{
+		validationCodeDuplicateIdentifier,
+		validationCodeDanglingWorkerReference,
+		validationCodeDanglingPlaceReference,
+	} {
+		if !hasValidationTargetCode(invalidResult.Targets, code) {
+			t.Fatalf("invalid factory validation targets = %#v, want code %q", invalidResult.Targets, code)
+		}
+	}
+
+	currentAfter := getDefaultSessionFactory(t, server.URL())
+	if currentAfter.Name != currentBefore.Name {
+		t.Fatalf(
+			"current factory name after validate = %q, want unchanged %q",
+			currentAfter.Name,
+			currentBefore.Name,
+		)
+	}
+	sessionsAfter := support.GetJSON[factoryapi.ListFactorySessionsResponse](
+		t,
+		server.URL()+"/factory-sessions",
+	)
+	if len(sessionsAfter.Sessions) != len(sessionsBefore.Sessions) {
+		t.Fatalf(
+			"factory sessions after validate = %d, want unchanged count %d",
+			len(sessionsAfter.Sessions),
+			len(sessionsBefore.Sessions),
+		)
+	}
+	if runner.CallCount() != 0 {
+		t.Fatalf("provider command runner calls = %d, want 0 during validate-only API calls", runner.CallCount())
 	}
 }
 
@@ -236,6 +321,96 @@ func missingRouteFactoryConfig() map[string]any {
 			},
 		},
 	}
+}
+
+func validAPIValidationFactoryConfig() map[string]any {
+	return map[string]any{
+		"name": "api-validation-host",
+		"workTypes": []map[string]any{
+			{
+				"name": "task",
+				"states": []map[string]string{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "complete", "type": "TERMINAL"},
+					{"name": "failed", "type": "FAILED"},
+				},
+			},
+		},
+		"workers": []map[string]string{
+			{"name": "worker-a"},
+		},
+		"workstations": []map[string]any{
+			{
+				"name":   "process",
+				"worker": "worker-a",
+				"inputs": []map[string]string{
+					{"workType": "task", "state": "init"},
+				},
+				"outputs": []map[string]string{
+					{"workType": "task", "state": "complete"},
+				},
+				"onFailure": []map[string]string{
+					{"workType": "task", "state": "failed"},
+				},
+			},
+		},
+	}
+}
+
+func factoryDefinitionFromConfig(cfg map[string]any) (factoryapi.Factory, error) {
+	payload, err := json.Marshal(cfg)
+	if err != nil {
+		return factoryapi.Factory{}, err
+	}
+	return support.DecodeFactoryDefinition(payload)
+}
+
+func postValidateFactory(
+	t *testing.T,
+	serverURL string,
+	factory factoryapi.Factory,
+) (factoryapi.FactoryValidationResult, int) {
+	t.Helper()
+
+	payload, err := json.Marshal(factory)
+	if err != nil {
+		t.Fatalf("marshal validate factory request: %v", err)
+	}
+	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-validations"
+	response, err := http.Post(endpoint, "application/json", bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("POST %s: %v", endpoint, err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("read POST %s response: %v", endpoint, err)
+	}
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("POST %s status = %d body = %s, want 200", endpoint, response.StatusCode, strings.TrimSpace(string(body)))
+	}
+	var result factoryapi.FactoryValidationResult
+	if err := json.Unmarshal(body, &result); err != nil {
+		t.Fatalf("decode POST %s response: %v: %s", endpoint, err, strings.TrimSpace(string(body)))
+	}
+	return result, response.StatusCode
+}
+
+func getDefaultSessionFactory(t *testing.T, serverURL string) factoryapi.Factory {
+	t.Helper()
+	return support.GetJSON[factoryapi.Factory](
+		t,
+		strings.TrimSuffix(serverURL, "/")+"/factory-sessions/~default/factory",
+	)
+}
+
+func hasValidationTargetCode(targets []factoryapi.FactoryValidationTarget, code string) bool {
+	for _, target := range targets {
+		if target.Code == code {
+			return true
+		}
+	}
+	return false
 }
 
 func assertFactoryValidationRejects(
