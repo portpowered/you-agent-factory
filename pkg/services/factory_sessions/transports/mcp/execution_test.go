@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
@@ -961,6 +963,137 @@ func TestBind_UnmappedRootErrorDoesNotLeakInternalPackagePaths(t *testing.T) {
 	}
 }
 
+func TestBind_GetSessionContextCanceledBeforeRootReturnsDocumentedEnvelope(t *testing.T) {
+	t.Parallel()
+
+	var invoked bool
+	operation := mcpfactorysession.Bind(mcpfactorysession.RootDependencies{
+		Execution: fakeExecutionRoot{invoked: &invoked},
+		Prepare:   canonicalMCPRequestPreparation,
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	raw, err := operation(
+		ctx,
+		mcpfactorysession.ToolGetSession,
+		json.RawMessage(`{"sessionId":"`+runningSessionID+`"}`),
+	)
+	if err != nil {
+		t.Fatalf("CallTool(get_session) transport error = %v, want typed tool response", err)
+	}
+	if invoked {
+		t.Fatal("fake execution root was invoked for pre-canceled context")
+	}
+	envelope := assertTypedToolErrorEnvelope(
+		t,
+		raw,
+		"factory_session.request.canceled",
+		false,
+		"",
+	)
+	if envelope.Message != "factory session request was canceled" {
+		t.Fatalf("error.message = %q, want canceled request message; envelope = %#v", envelope.Message, envelope)
+	}
+}
+
+func TestBind_GetSessionContextCanceledDuringRootReturnsDocumentedEnvelope(t *testing.T) {
+	t.Parallel()
+
+	entered := make(chan struct{})
+	var enteredOnce sync.Once
+	fake := fakeExecutionRoot{
+		getSession: func(ctx context.Context, sessionID string) (factorysessions.SessionReadResult, error) {
+			enteredOnce.Do(func() { close(entered) })
+			<-ctx.Done()
+			return factorysessions.SessionReadResult{}, ctx.Err()
+		},
+	}
+	operation := mcpfactorysession.Bind(mcpfactorysession.RootDependencies{
+		Execution: fake,
+		Prepare:   canonicalMCPRequestPreparation,
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	var raw json.RawMessage
+	var callErr error
+	go func() {
+		defer close(done)
+		raw, callErr = operation(
+			ctx,
+			mcpfactorysession.ToolGetSession,
+			json.RawMessage(`{"sessionId":"`+runningSessionID+`"}`),
+		)
+	}()
+	select {
+	case <-entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("fake execution root did not start before cancellation")
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("CallTool(get_session) hung after cancellation")
+	}
+	if callErr != nil {
+		t.Fatalf("CallTool(get_session) transport error = %v, want typed tool response", callErr)
+	}
+	envelope := assertTypedToolErrorEnvelope(
+		t,
+		raw,
+		"factory_session.request.canceled",
+		false,
+		"",
+	)
+	if envelope.Message != "factory session request was canceled" {
+		t.Fatalf("error.message = %q, want canceled request message; envelope = %#v", envelope.Message, envelope)
+	}
+}
+
+func TestBind_StartAsyncContextDeadlineExceededDuringRootReturnsDocumentedEnvelope(t *testing.T) {
+	t.Parallel()
+
+	fake := fakeExecutionRoot{
+		startAsync: func(ctx context.Context, _ factorysessions.StartRequest) (factorysessions.AsyncStartResult, error) {
+			<-ctx.Done()
+			return factorysessions.AsyncStartResult{}, ctx.Err()
+		},
+	}
+	operation := mcpfactorysession.Bind(mcpfactorysession.RootDependencies{
+		Execution: fake,
+		Prepare:   canonicalMCPRequestPreparation,
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
+	defer cancel()
+	raw, err := operation(
+		ctx,
+		mcpfactorysession.ToolStartAsync,
+		mustStartAsyncJSON(t),
+	)
+	if err != nil {
+		t.Fatalf("CallTool(start_async) transport error = %v, want typed tool response", err)
+	}
+	envelope := assertTypedToolErrorEnvelope(
+		t,
+		raw,
+		"factory_session.request.timed_out",
+		true,
+		"",
+	)
+	if envelope.Message != "factory session request timed out" {
+		t.Fatalf("error.message = %q, want timed out request message; envelope = %#v", envelope.Message, envelope)
+	}
+}
+
+func mustStartAsyncJSON(t *testing.T) json.RawMessage {
+	t.Helper()
+	payload, err := json.Marshal(asyncRunningExecutionRequest())
+	if err != nil {
+		t.Fatalf("marshal start async input: %v", err)
+	}
+	return payload
+}
+
 func TestToolOperationPropagatesCallerContextAndCancellation(t *testing.T) {
 	type markerKey struct{}
 	const markerValue = "mcp-request-context"
@@ -969,14 +1102,10 @@ func TestToolOperationPropagatesCallerContextAndCancellation(t *testing.T) {
 			if got := ctx.Value(markerKey{}); got != markerValue {
 				t.Fatalf("ListSessions context marker = %v, want %q", got, markerValue)
 			}
-			if !errors.Is(ctx.Err(), context.Canceled) {
-				t.Fatalf("ListSessions context error = %v, want context.Canceled", ctx.Err())
-			}
 			return factorysessions.ListSessionsResult{}, nil
 		},
 	}
-	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), markerKey{}, markerValue))
-	cancel()
+	ctx := context.WithValue(context.Background(), markerKey{}, markerValue)
 	response, err := clientWithScript(service).ListSessions(ctx, mcpfactorysession.ListSessionsInput{})
 	if err != nil || response.Error != nil {
 		t.Fatalf("ListSessions() = %#v, %v", response, err)

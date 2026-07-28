@@ -1,6 +1,7 @@
 package factorysession
 
 import (
+	"context"
 	"errors"
 	"strings"
 
@@ -20,13 +21,59 @@ const (
 	errorCodeResultNotReady             = "factory_session.result.not_ready"
 	errorCodeReconnectCursorNotFound    = "factory_session.events.reconnect_cursor_not_found"
 	errorCodeInternalExecution          = "factory_session.execution.internal"
+	errorCodeRequestCanceled            = "factory_session.request.canceled"
+	errorCodeRequestTimedOut            = "factory_session.request.timed_out"
 	errorMessageServiceUnavailable      = "factory session execution service is unavailable"
 	errorMessageInternalExecution       = "factory session execution failed"
 	errorMessageStartRequestIDConflict  = "execution request id was reused with a different start tuple"
 	errorMessageSessionNotFound         = "factory session not found"
 	errorMessageResultNotReady          = "factory session result is not ready"
 	errorMessageReconnectCursorNotFound = "event reconnect cursor not found in session history"
+	errorMessageRequestCanceled         = "factory session request was canceled"
+	errorMessageRequestTimedOut         = "factory session request timed out"
 )
+
+func requestContextErrorResponse[T any](ctx context.Context) (ToolResponse[T], bool) {
+	if envelope, ok := contextRequestErrorEnvelope(ctx.Err()); ok {
+		return ToolResponse[T]{Error: &envelope}, true
+	}
+	return ToolResponse[T]{}, false
+}
+
+func contextRequestErrorEnvelope(err error) (ToolErrorEnvelope, bool) {
+	if err == nil {
+		return ToolErrorEnvelope{}, false
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return contextDeadlineExceededErrorEnvelope(), true
+	}
+	if errors.Is(err, context.Canceled) {
+		return contextCanceledErrorEnvelope(), true
+	}
+	return ToolErrorEnvelope{}, false
+}
+
+func contextCanceledErrorEnvelope() ToolErrorEnvelope {
+	return ToolErrorEnvelope{
+		Code:      errorCodeRequestCanceled,
+		Message:   errorMessageRequestCanceled,
+		Retryable: false,
+		Details: map[string]any{
+			"reason": "CANCELED",
+		},
+	}
+}
+
+func contextDeadlineExceededErrorEnvelope() ToolErrorEnvelope {
+	return ToolErrorEnvelope{
+		Code:      errorCodeRequestTimedOut,
+		Message:   errorMessageRequestTimedOut,
+		Retryable: true,
+		Details: map[string]any{
+			"reason": "TIMED_OUT",
+		},
+	}
+}
 
 func decodeInputErrorEnvelope(context string, err error) ToolErrorEnvelope {
 	message := context
@@ -171,6 +218,9 @@ func controlErrorEnvelope(sessionID string, err error) ToolErrorEnvelope {
 }
 
 func executionErrorEnvelope(err error) ToolErrorEnvelope {
+	if envelope, ok := contextRequestErrorEnvelope(err); ok {
+		return envelope
+	}
 	var validationErr *factorysessionexecution.ExecutionValidationError
 	if errors.As(err, &validationErr) {
 		code := errorCodeBadRequest

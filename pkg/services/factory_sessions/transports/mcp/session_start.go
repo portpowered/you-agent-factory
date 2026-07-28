@@ -15,6 +15,9 @@ func StartAsync(ctx context.Context, service factorysessionexecution.ExecutionSe
 		envelope := executionErrorEnvelope(errMissingRequestContext)
 		return ToolResponse[factoryapi.FactorySessionExecutionResponse]{Error: &envelope}
 	}
+	if response, done := requestContextErrorResponse[factoryapi.FactorySessionExecutionResponse](ctx); done {
+		return response
+	}
 	if service == nil {
 		envelope := unavailableServiceErrorEnvelope()
 		return ToolResponse[factoryapi.FactorySessionExecutionResponse]{Error: &envelope}
@@ -45,6 +48,9 @@ func StartSync(ctx context.Context, service factorysessionexecution.ExecutionSer
 	if ctx == nil {
 		envelope := executionErrorEnvelope(errMissingRequestContext)
 		return ToolResponse[factoryapi.FactorySessionSyncExecutionResponse]{Error: &envelope}
+	}
+	if response, done := requestContextErrorResponse[factoryapi.FactorySessionSyncExecutionResponse](ctx); done {
+		return response
 	}
 	if service == nil {
 		envelope := unavailableServiceErrorEnvelope()

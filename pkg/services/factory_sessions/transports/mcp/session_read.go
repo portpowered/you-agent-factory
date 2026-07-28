@@ -20,6 +20,9 @@ func ListSessions(ctx context.Context, service factorysessionexecution.Execution
 		envelope := executionErrorEnvelope(errMissingRequestContext)
 		return ToolResponse[factoryapi.ListFactorySessionsResponse]{Error: &envelope}
 	}
+	if response, done := requestContextErrorResponse[factoryapi.ListFactorySessionsResponse](ctx); done {
+		return response
+	}
 	if service == nil {
 		envelope := unavailableServiceErrorEnvelope()
 		return ToolResponse[factoryapi.ListFactorySessionsResponse]{Error: &envelope}
@@ -58,6 +61,9 @@ func GetSession(ctx context.Context, service factorysessionexecution.ExecutionSe
 		envelope := executionErrorEnvelope(errMissingRequestContext)
 		return ToolResponse[factoryapi.FactorySessionDurableReadModel]{Error: &envelope}
 	}
+	if response, done := requestContextErrorResponse[factoryapi.FactorySessionDurableReadModel](ctx); done {
+		return response
+	}
 	if service == nil {
 		envelope := unavailableServiceErrorEnvelope()
 		return ToolResponse[factoryapi.FactorySessionDurableReadModel]{Error: &envelope}
@@ -87,6 +93,9 @@ func GetResult(ctx context.Context, service factorysessionexecution.ExecutionSer
 	if ctx == nil {
 		envelope := executionErrorEnvelope(errMissingRequestContext)
 		return ToolResponse[factoryapi.FactorySessionResult]{Error: &envelope}
+	}
+	if response, done := requestContextErrorResponse[factoryapi.FactorySessionResult](ctx); done {
+		return response
 	}
 	if service == nil {
 		envelope := unavailableServiceErrorEnvelope()

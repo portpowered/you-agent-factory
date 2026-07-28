@@ -74,6 +74,13 @@ func ValidateSource(
 	workflows factoryruntime.WorkflowPreviewOperation,
 	input factoryapi.FactoryPreviewRequest,
 ) ToolResponse[factoryapi.FactoryPreviewResult] {
+	if ctx == nil {
+		envelope := executionErrorEnvelope(errMissingRequestContext)
+		return ToolResponse[factoryapi.FactoryPreviewResult]{Error: &envelope}
+	}
+	if response, done := requestContextErrorResponse[factoryapi.FactoryPreviewResult](ctx); done {
+		return response
+	}
 	previewInput, err := apisurface.FactoryPreviewInputFromAPI(input)
 	if err != nil {
 		envelope := requestValidationErrorEnvelope(err)
@@ -86,6 +93,9 @@ func ValidateSource(
 	}
 	workflowPreview, err := workflows.PreviewWorkflow(ctx, previewInput)
 	if err != nil {
+		if envelope, ok := contextRequestErrorEnvelope(err); ok {
+			return ToolResponse[factoryapi.FactoryPreviewResult]{Error: &envelope}
+		}
 		envelope := requestValidationErrorEnvelope(err)
 		return ToolResponse[factoryapi.FactoryPreviewResult]{Error: &envelope}
 	}
