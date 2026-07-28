@@ -2265,7 +2265,7 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/factory_sessions",
-      "target": "pkg/services/factory_sessions/execution_contract.go:ExecutionService,pkg/services/factory_sessions/service_contracts.go:Service"
+      "target": "pkg/services/factory_sessions/activation_contract.go:DefinitionActivationGateway,pkg/services/factory_sessions/execution_contract.go:ExecutionService,pkg/services/factory_sessions/service_contracts.go:Service"
     },
     {
       "rule": "service-root-interface-count",
