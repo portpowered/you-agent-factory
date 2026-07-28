@@ -3,8 +3,6 @@
 package submission_test
 
 import (
-	"context"
-	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -25,7 +23,7 @@ const (
 
 // TestLegacyUnaryRetirementReplaySubmitsCanonicalBatchWorkRequests proves
 // recorded canonical FACTORY_REQUEST_BATCH submissions replay with stable public
-// Work Request and Work identities through the customer CLI batch ingress path.
+// Work Request and Work identities through the public HTTP batch ingress path.
 func TestLegacyUnaryRetirementReplaySubmitsCanonicalBatchWorkRequests(t *testing.T) {
 	support.SkipLongFunctional(t, "slow legacy unary retirement batch replay smoke")
 
@@ -45,27 +43,26 @@ func TestLegacyUnaryRetirementReplaySubmitsCanonicalBatchWorkRequests(t *testing
 		},
 	})
 
-	binaryPath := buildYouCLIBinary(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-
-	batchJSON := fmt.Sprintf(
-		`{"requestId":%q,"type":"FACTORY_REQUEST_BATCH","works":[{"name":%q,"workId":%q,"workTypeName":%q,"payload":{"title":"record replay canonical submit"}}]}`,
-		legacyUnaryRetirementRequestID,
-		legacyUnaryRetirementWorkName,
-		legacyUnaryRetirementWorkID,
-		batchInputsWorkType,
-	)
-	output, err := runYouSubmitBatch(ctx, binaryPath, dir, server.URL(), batchJSON, nil)
-	if err != nil {
-		t.Fatalf("you submit batch: %v\noutput:\n%s", err, output)
+	workTypeName := batchInputsWorkType
+	submitted := support.UpsertDefaultSessionWorkRequest(t, server.URL(), factoryapi.WorkRequest{
+		RequestId: legacyUnaryRetirementRequestID,
+		Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
+		Works: &[]factoryapi.Work{{
+			Name:         legacyUnaryRetirementWorkName,
+			WorkId:       stringPtr(legacyUnaryRetirementWorkID),
+			WorkTypeName: &workTypeName,
+			Payload:      map[string]string{"title": "record replay canonical submit"},
+		}},
+	})
+	if submitted.RequestId != legacyUnaryRetirementRequestID {
+		t.Fatalf("PUT /work-requests requestId = %q, want %q", submitted.RequestId, legacyUnaryRetirementRequestID)
 	}
-	submitted := decodeBatchSubmitJSON(t, output)
-	if submitted.RequestID != legacyUnaryRetirementRequestID {
-		t.Fatalf("submit batch requestId = %q, want %q", submitted.RequestID, legacyUnaryRetirementRequestID)
-	}
-	if submitted.Works[0].WorkID != legacyUnaryRetirementWorkID {
-		t.Fatalf("submit batch workId = %q, want %q", submitted.Works[0].WorkID, legacyUnaryRetirementWorkID)
+	if len(submitted.Works) != 1 || submitted.Works[0].WorkId != legacyUnaryRetirementWorkID {
+		t.Fatalf(
+			"PUT /work-requests works = %#v, want one work with id %q",
+			submitted.Works,
+			legacyUnaryRetirementWorkID,
+		)
 	}
 
 	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
