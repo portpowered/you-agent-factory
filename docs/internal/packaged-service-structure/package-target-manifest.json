@@ -374,6 +374,7 @@
     "pkg/services/work/internal/services/state_access/wire",
     "pkg/services/work/service",
     "pkg/services/work/transports/cli",
+    "pkg/services/work/transports/http",
     "pkg/services/work/transports/mcp",
     "pkg/services/work/wire",
     "pkg/services/workers",
@@ -2172,6 +2173,11 @@
     },
     {
       "packagePath": "pkg/services/work/transports/mcp",
+      "disposition": "retain",
+      "destination": "work"
+    },
+    {
+      "packagePath": "pkg/services/work/transports/http",
       "disposition": "retain",
       "destination": "work"
     },

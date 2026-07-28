@@ -58,6 +58,38 @@ Use this map when changing the public REST contract.
   `docs/internal/baselines/go-unit-coverage-package-minimums.json` and
   `docs/internal/baselines/go-functional-coverage-package-minimums.json` when
   introducing new adapter packages.
+- Work HTTP decoding, generated-contract mapping, Work root invocation, typed
+  error mapping, and cancel/timeout handling live in
+  `pkg/services/work/transports/http`. The adapter consumes the accepted
+  `work.Service` root only; fake-root tests inject a focused root fake without
+  constructing state-access, content-staging, or materialization graphs.
+  Package-boundary tests must prove the adapter does not import
+  `pkg/services/work/internal/**`. Register the package in
+  `docs/internal/packaged-service-structure/package-target-manifest.json`,
+  refresh `docs/internal/baselines/ownership-inventory.json` with
+  `go run ./cmd/ownershipinventoryfreeze`, and add coverage floors in
+  `docs/internal/baselines/go-unit-coverage-package-minimums.json` and
+  `docs/internal/baselines/go-functional-coverage-package-minimums.json` when
+  introducing new adapter packages. Work list/get decode and JSON encoding live
+  in `read_mapping.go` and `handlers_read.go`; map query params through
+  `ListOptionsFromAPI` + `work.NormalizeList`, invoke `ListWork` / `GetWork` on
+  the accepted root, and encode detached `work.ReadModel` values through
+  `WorkReadModelToAPI` / `ListWorkResponseToAPI`. Work stage/submit/upsert
+  decode and JSON encoding live in `admission_mapping.go` and
+  `handlers_admission.go`; decode bodies through adapter-owned validation,
+  invoke `StageContent` / `PrepareContent` / `SubmitWorkRequestForSession` on
+  the accepted root, and encode detached admission results through
+  `StageSubmitWorkFileResponseToAPI` / `SubmitWorkResponseToAPI` /
+  `UpsertWorkResponseToAPI`. Work move decode and JSON encoding live in
+  `move_mapping.go` and `handlers_move.go`; decode bodies through
+  adapter-owned validation, invoke `MoveWorkAndRead` on the accepted root, and
+  encode detached post-move `work.ReadModel` values through `WorkReadModelToAPI`.
+  Typed Work root failures map through `error_mapping.go` via `RootErrorResponse`
+  and `writeRootOrInternalError`; unmapped failures sanitize to INTERNAL_ERROR
+  without leaking internal package paths. Request-context cancellation and
+  deadline exhaustion end without mapping to INTERNAL_ERROR; canceled requests
+  terminate without an ErrorResponse body and deadline exhaustion returns 504
+  (`request_context.go`).
 - Factory Runtime HTTP decoding, generated-contract mapping, Runtime root
   invocation, typed error mapping, and cancel/timeout handling live in
   `pkg/services/factory_runtime/transports/http`. The adapter consumes the
