@@ -572,7 +572,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestRecordingsBackedWorkReadsMapRichWorldState`.
   - `TestRecordingsBackedWorkReadsSurfaceTypedProjectionFailures`.
 
-- [ ] `tests/functional/work/relationships/parent_child_test.go`
+- [x] `tests/functional/work/relationships/parent_child_test.go`
   - `TestParentChildLineageSurvivesDispatchAndReplay`.
   - `TestChildFailureProjectsToDocumentedParentView`.
 
