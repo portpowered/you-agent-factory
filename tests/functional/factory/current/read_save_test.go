@@ -88,3 +88,45 @@ func TestAPISaveCurrentFactoryValidatesBeforePersistence(t *testing.T) {
 	}
 	assertFactoryWorkType(t, reloaded, "alpha-task", "current factory after rejected save")
 }
+
+// TestAPICurrentFactoriesRemainSessionScoped proves that Current Factory saves stay
+// isolated across Factory Sessions so a valid save in one session updates that
+// session's readback while another session's Current Factory remains unchanged.
+func TestAPICurrentFactoriesRemainSessionScoped(t *testing.T) {
+	rootDir := t.TempDir()
+	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
+	createNamedFactoryFixture(
+		t,
+		rootDir,
+		"beta",
+		functionalNamedFactoryPayloadWithWorkType(t, "beta", "beta-task"),
+	)
+
+	server := startCurrentFactoryServer(t, rootDir)
+	defer server.Stop(t)
+
+	betaSessionID := openNamedFactorySession(t, server.URL(), rootDir, "beta")
+
+	sessionCurrent := getCurrentFactoryForSession(t, server.URL(), betaSessionID)
+	if sessionCurrent.Name != factoryapi.FactoryName("beta") {
+		t.Fatalf("session current factory name = %q, want beta", sessionCurrent.Name)
+	}
+	assertFactoryWorkType(t, sessionCurrent, "beta-task", "beta session current factory before save")
+
+	saved := saveCurrentFactoryForSession(
+		t,
+		server.URL(),
+		betaSessionID,
+		functionalNamedFactoryBody("beta", "story", advancedFactoryVersion(t, sessionCurrent.Version)),
+	)
+	assertFactoryWorkType(t, saved, "story", "beta session save response")
+
+	reloaded := getCurrentFactoryForSession(t, server.URL(), betaSessionID)
+	assertFactoryWorkType(t, reloaded, "story", "beta session current factory after save")
+
+	defaultCurrent := getCurrentFactory(t, server.URL())
+	if defaultCurrent.Name != factoryapi.FactoryName("alpha") {
+		t.Fatalf("default current factory name = %q, want alpha", defaultCurrent.Name)
+	}
+	assertFactoryWorkType(t, defaultCurrent, "alpha-task", "default session current factory after beta session save")
+}
