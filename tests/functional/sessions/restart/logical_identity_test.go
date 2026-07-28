@@ -1,6 +1,7 @@
 package restart_test
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -210,6 +211,123 @@ func TestFactorySessionResumeDoesNotRepeatCompletedDispatch(t *testing.T) {
 	}
 }
 
+// TestFactorySessionHistoryRemainsReadableAfterRestart proves that durable Factory
+// Session history captured before a simulated backend restart remains readable on
+// public session-show and Factory Event surfaces after restart: interrupted
+// lifecycle marks, completed progress, and ordered Factory Events from before
+// restart are still exposed for the same durable session identity rather than a
+// blank session with no recoverable history.
+func TestFactorySessionHistoryRemainsReadableAfterRestart(t *testing.T) {
+	const workflowName = "resumable-two-step-fake-children"
+	factoryDir := setupResumableTwoStepWorkflowFixture(t, workflowName)
+	home := t.TempDir()
+	env := functionalHomeEnvironment(home)
+	provider := newLogicalIdentityResumeBlockingProvider(workflowName)
+
+	beforeRestart := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: factoryDir,
+		Edges:      serviceedges.Edges{ProviderOverride: provider},
+		Env:        env,
+	})
+	beforeURL := strings.TrimSuffix(beforeRestart.URL(), "/")
+
+	sessionID := startInterruptedResumableSession(t, beforeURL, provider, workflowName)
+
+	beforeShow := readDurableFactorySession(t, beforeURL, sessionID)
+	assertDurableProgressCounts(t, beforeShow.Progress, 1, 2, 0)
+	if beforeShow.Status != factoryapi.FactorySessionDurableLifecycleStatusInterrupted {
+		t.Fatalf("pre-restart status = %q, want INTERRUPTED", beforeShow.Status)
+	}
+	if beforeShow.Lifecycle == nil || beforeShow.Lifecycle.InterruptedAt == nil {
+		t.Fatalf("pre-restart lifecycle = %#v, want interruptedAt", beforeShow.Lifecycle)
+	}
+
+	beforeDispatches := listFactorySessionDispatches(t, beforeURL, sessionID)
+	dispatchOneBefore := requireDispatchSummary(
+		t,
+		beforeDispatches,
+		"dispatch-1",
+		factoryapi.FactoryDispatchStatusCOMPLETED,
+	)
+	requireDispatchSummary(
+		t,
+		beforeDispatches,
+		"dispatch-2",
+		factoryapi.FactoryDispatchStatusINTERRUPTED,
+		factoryapi.FactoryDispatchStatusRUNNING,
+	)
+
+	beforeEvents := listFactorySessionEvents(t, beforeURL, sessionID)
+	if len(beforeEvents) == 0 {
+		t.Fatal("pre-restart factory events unexpectedly empty")
+	}
+
+	defaultBefore := support.GetDefaultSession(t, beforeURL)
+	staleIdentity := requireLiveStreamIdentity(t, defaultBefore)
+
+	beforeRestart.Stop(t)
+
+	afterRestart := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: factoryDir,
+		Edges:      serviceedges.Edges{ProviderOverride: provider},
+		Env:        env,
+	})
+	afterURL := strings.TrimSuffix(afterRestart.URL(), "/")
+
+	preflight := getFactorySessionSyncPreflight(
+		t,
+		afterURL,
+		staleIdentity.FactorySessionID,
+		staleIdentity.BackendScopeID,
+		staleIdentity.LogicalSessionKeyID,
+	)
+	if preflight.ReasonCode != factoryapi.LogicalSessionRemap {
+		t.Fatalf("sync-preflight reasonCode = %q, want %q", preflight.ReasonCode, factoryapi.LogicalSessionRemap)
+	}
+
+	afterShow := readDurableFactorySession(t, afterURL, sessionID)
+	assertDurableProgressCounts(t, afterShow.Progress, 1, 2, 0)
+	if afterShow.Status != factoryapi.FactorySessionDurableLifecycleStatusInterrupted {
+		t.Fatalf("post-restart status = %q, want INTERRUPTED", afterShow.Status)
+	}
+	if afterShow.Lifecycle == nil || afterShow.Lifecycle.InterruptedAt == nil {
+		t.Fatalf("post-restart lifecycle = %#v, want interruptedAt continuity", afterShow.Lifecycle)
+	}
+	if !afterShow.Lifecycle.InterruptedAt.Equal(*beforeShow.Lifecycle.InterruptedAt) {
+		t.Fatalf(
+			"interruptedAt changed across restart: before=%s after=%s",
+			beforeShow.Lifecycle.InterruptedAt,
+			afterShow.Lifecycle.InterruptedAt,
+		)
+	}
+
+	afterDispatches := listFactorySessionDispatches(t, afterURL, sessionID)
+	dispatchOneAfter := requireDispatchSummary(
+		t,
+		afterDispatches,
+		"dispatch-1",
+		factoryapi.FactoryDispatchStatusCOMPLETED,
+	)
+	assertDispatchSummaryParity(t, dispatchOneBefore, dispatchOneAfter)
+	requireDispatchSummary(
+		t,
+		afterDispatches,
+		"dispatch-2",
+		factoryapi.FactoryDispatchStatusINTERRUPTED,
+		factoryapi.FactoryDispatchStatusRUNNING,
+	)
+
+	afterEvents := listFactorySessionEvents(t, afterURL, sessionID)
+	if len(afterEvents) < len(beforeEvents) {
+		t.Fatalf(
+			"post-restart factory event count = %d, want at least pre-restart count %d",
+			len(afterEvents),
+			len(beforeEvents),
+		)
+	}
+	assertFactoryEventHistoryContinuity(t, beforeEvents, afterEvents)
+}
+
 func startLogicalIdentityRestartServer(
 	t *testing.T,
 	factoryDir string,
@@ -392,6 +510,80 @@ func resumeFactorySession(
 		baseURL+"/factory-sessions/"+sessionID+"/resume",
 		factoryapi.FactorySessionLifecycleControlRequest{},
 	)
+}
+
+func listFactorySessionEvents(
+	t *testing.T,
+	baseURL string,
+	sessionID string,
+) []factoryapi.FactoryEvent {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	defer cancel()
+	endpoint := strings.TrimSuffix(baseURL, "/") +
+		"/factory-sessions/" + url.PathEscape(sessionID) + "/events"
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		t.Fatalf("build factory session events request: %v", err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("GET factory session events: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("GET factory session events status = %d: %s", response.StatusCode, body)
+	}
+
+	var collected []factoryapi.FactoryEvent
+	scanner := bufio.NewScanner(response.Body)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		var event factoryapi.FactoryEvent
+		if err := json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(line, "data:"))), &event); err != nil {
+			t.Fatalf("decode factory session event: %v", err)
+		}
+		collected = append(collected, event)
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatalf("read factory session events: %v", err)
+	}
+	return collected
+}
+
+func assertFactoryEventHistoryContinuity(
+	t *testing.T,
+	before, after []factoryapi.FactoryEvent,
+) {
+	t.Helper()
+
+	for index, prior := range before {
+		if index >= len(after) {
+			t.Fatalf("post-restart events shorter than pre-restart prefix at index %d", index)
+		}
+		current := after[index]
+		if prior.Id != current.Id {
+			t.Fatalf(
+				"event[%d] id changed across restart: before=%q after=%q",
+				index,
+				prior.Id,
+				current.Id,
+			)
+		}
+		if prior.Type != current.Type {
+			t.Fatalf(
+				"event[%d] type changed across restart: before=%q after=%q",
+				index,
+				prior.Type,
+				current.Type,
+			)
+		}
+	}
 }
 
 func listFactorySessionDispatches(
