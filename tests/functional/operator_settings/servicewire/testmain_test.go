@@ -1,4 +1,4 @@
-package operatorsettings_test
+package servicewire
 
 import (
 	"testing"

@@ -6,7 +6,6 @@ import (
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	resolution "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution"
 	resolutionwire "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution/wire"
-	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 )
 
 type compositionRoot struct {
@@ -57,7 +56,7 @@ func newResolutionService() (resolution.Service, error) {
 var constructResolutionService = defaultResolutionService
 
 var (
-	constructProvidersRoot  = providerswire.NewService
+	constructProvidersRoot  = operatorsettings.ConstructProvidersRoot
 	constructResolutionWire = resolutionwire.NewService
 )
 
