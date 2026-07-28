@@ -778,7 +778,10 @@ Wave 0 functional-tests-expansion planning authority lives under
   `GET /factory-sessions/{session_id}/dispatches` and
   `GET /factory-sessions/{session_id}/dispatches/{dispatch_id}` only:
   `providerSessionRefs`, owning dispatch `id`, and list/detail `sessionId`
-  correlation. Do not invent provider metadata or widen into `details/*` or
+  correlation. Use a successful fake child for present-ref association and a
+  deterministic `fail:` fake-child prompt for absent-ref non-fabrication (nil or
+  empty `providerSessionRefs` on list/detail, not `fake-provider-session-1`).
+  Do not invent provider metadata or widen into `details/*` or
   `response_exec_metadata_test.go`. Catalog metadata infers domain
   `provider_sessions` and subsection `association`; every top-level `Test*`
   needs a customer-readable Go doc so `functionaltestmetadata` stays

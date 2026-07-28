@@ -26,6 +26,16 @@ const (
   });
   return { child };
 })();`
+
+	absentProviderSessionChildLabel  = "association-no-provider-child"
+	absentProviderSessionChildPrompt = "fail:association-absent-provider-session"
+	absentProviderSessionWorkflow    = `return (async function () {
+  const child = await agent.run({
+    prompt: "` + absentProviderSessionChildPrompt + `",
+    label: "` + absentProviderSessionChildLabel + `",
+  });
+  return { child };
+})();`
 )
 
 // TestProviderSessionRefAssociatesWithOwningDispatchAndFactorySession proves that
@@ -111,6 +121,155 @@ func TestProviderSessionRefAssociatesWithOwningDispatchAndFactorySession(t *test
 			"dispatch detail providerSessionRef id = %q, want same ref %q from listing",
 			detailRef.Id,
 			providerRef.Id,
+		)
+	}
+}
+
+// TestAbsentProviderSessionIsNotFabricated proves that when a Factory Session
+// dispatch completes without establishing a Provider Session, the public dispatch
+// listing and dispatch detail surfaces omit fabricated providerSessionRefs rather
+// than inventing a synthetic session identity customers could treat as real.
+func TestAbsentProviderSessionIsNotFabricated(t *testing.T) {
+	t.Parallel()
+
+	dir := scaffoldAbsentProviderSessionWorkflow(t)
+	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		UseMockWorkers:            true,
+		Edges:                     serviceedges.Edges{ProviderCommandRunner: runner},
+	})
+	t.Cleanup(func() { server.Stop(t) })
+
+	executed := startAbsentProviderSessionWorkflow(t, server.URL(), dir)
+	if executed.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
+		t.Fatalf("session status = %q, want FAILED", executed.Status)
+	}
+	if strings.TrimSpace(executed.SessionId) == "" {
+		t.Fatal("sessionId unexpectedly empty")
+	}
+	if runner.CallCount() != 0 {
+		t.Fatalf("provider command runner call count = %d, want 0 for fake child failure edge", runner.CallCount())
+	}
+
+	listed := listAssociationDispatches(t, server.URL(), executed.SessionId)
+	if listed.SessionId != executed.SessionId {
+		t.Fatalf(
+			"dispatch list sessionId = %q, want owning Factory Session %q",
+			listed.SessionId,
+			executed.SessionId,
+		)
+	}
+	if len(listed.Dispatches) != 1 {
+		t.Fatalf("dispatch count = %d, want exactly one child dispatch without a Provider Session", len(listed.Dispatches))
+	}
+
+	summary := listed.Dispatches[0]
+	if strings.TrimSpace(summary.Id) == "" {
+		t.Fatal("dispatch id unexpectedly empty on public dispatch summary")
+	}
+	if summary.Status != factoryapi.FactoryDispatchStatusFAILED {
+		t.Fatalf("dispatch status = %q, want FAILED", summary.Status)
+	}
+	if summary.Label == nil || *summary.Label != absentProviderSessionChildLabel {
+		t.Fatalf("dispatch label = %#v, want %q", summary.Label, absentProviderSessionChildLabel)
+	}
+	assertAbsentProviderSessionRefsOnDispatchSummary(t, summary)
+
+	detail := getAssociationDispatchDetail(t, server.URL(), executed.SessionId, summary.Id)
+	if detail.SessionId != executed.SessionId {
+		t.Fatalf(
+			"dispatch detail sessionId = %q, want owning Factory Session %q",
+			detail.SessionId,
+			executed.SessionId,
+		)
+	}
+	if detail.Id != summary.Id {
+		t.Fatalf(
+			"dispatch detail id = %q, want same owning dispatch %q from listing",
+			detail.Id,
+			summary.Id,
+		)
+	}
+	assertAbsentProviderSessionRefsOnDispatchDetail(t, detail)
+}
+
+func scaffoldAbsentProviderSessionWorkflow(t *testing.T) string {
+	t.Helper()
+
+	dir := support.ScaffoldFactory(t, map[string]any{"name": "provider-session-association-absent"})
+	if err := os.WriteFile(filepath.Join(dir, "workflow.js"), []byte(absentProviderSessionWorkflow), 0o600); err != nil {
+		t.Fatalf("write absent provider session workflow: %v", err)
+	}
+	return dir
+}
+
+func startAbsentProviderSessionWorkflow(
+	t *testing.T,
+	serverURL string,
+	dir string,
+) factoryapi.FactorySessionSyncExecutionResponse {
+	t.Helper()
+
+	workflowPath := filepath.Join(dir, "workflow.js")
+	payload, err := json.Marshal(factoryapi.FactorySessionExecutionRequest{
+		RequestId: "provider-session-association-absent",
+		Source: factoryapi.FactorySessionExecutionSource{
+			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowFile,
+			WorkflowFile: &workflowPath,
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal absent provider session workflow request: %v", err)
+	}
+	endpoint := strings.TrimSuffix(serverURL, "/") + "/factory-sessions/sync"
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("build absent provider session workflow request: %v", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("start absent provider session workflow: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		var body bytes.Buffer
+		_, _ = body.ReadFrom(response.Body)
+		t.Fatalf("start absent provider session workflow status = %d: %s", response.StatusCode, body.String())
+	}
+	var executed factoryapi.FactorySessionSyncExecutionResponse
+	if err := json.NewDecoder(response.Body).Decode(&executed); err != nil {
+		t.Fatalf("decode absent provider session workflow response: %v", err)
+	}
+	return executed
+}
+
+func assertAbsentProviderSessionRefsOnDispatchSummary(
+	t *testing.T,
+	summary factoryapi.FactorySessionDispatchSummary,
+) {
+	t.Helper()
+
+	if summary.ProviderSessionRefs != nil && len(*summary.ProviderSessionRefs) > 0 {
+		t.Fatalf(
+			"providerSessionRefs = %#v, want absent public refs without fabricated session identity",
+			summary.ProviderSessionRefs,
+		)
+	}
+}
+
+func assertAbsentProviderSessionRefsOnDispatchDetail(
+	t *testing.T,
+	detail factoryapi.FactoryDispatch,
+) {
+	t.Helper()
+
+	if detail.ProviderSessionRefs != nil && len(*detail.ProviderSessionRefs) > 0 {
+		t.Fatalf(
+			"providerSessionRefs = %#v, want absent public refs without fabricated session identity",
+			detail.ProviderSessionRefs,
 		)
 	}
 }
