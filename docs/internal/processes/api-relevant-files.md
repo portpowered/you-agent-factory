@@ -17,6 +17,13 @@ Use this map when changing the public REST contract.
   `event_subscribe_mapping.go` and `handlers_events.go`; map reconnect query
   params into `recordings.SubscribeRequest` before `SubscribeFrom`, and encode
   detached `recordings.CanonicalEvent` values through `FactoryEventToAPI`.
+  Artifact list/get decode and JSON encoding live in
+  `artifact_read_mapping.go` and `handlers_artifacts.go`; map session ids into
+  `recordings.RecordingStatusRequest` / `recordings.ReadPortableArtifactRequest`,
+  derive detached artifact projections through
+  `BuildPortableArtifact` + `ReconstructWorldState`, and encode
+  `interfaces.FactorySessionArtifactState` values into the public artifact
+  response shapes.
   Package-boundary tests must prove the adapter does not import
   `pkg/services/recordings/internal/**`.
 - Factory Session CLI request construction, rendering, diagnostics, and

@@ -44,3 +44,30 @@ func (a *Adapter) invokeSubscribeFrom(
 	}
 	return a.root.SubscribeFrom(ctx, request)
 }
+
+func (a *Adapter) invokeQueryRecordingStatus(
+	request recordings.RecordingStatusRequest,
+) (recordings.RecordingStatusResult, error) {
+	if a == nil || a.root == nil {
+		return recordings.RecordingStatusResult{}, errors.New("recordings service is required")
+	}
+	return a.root.QueryRecordingStatus(request)
+}
+
+func (a *Adapter) invokeBuildPortableArtifact(
+	request recordings.BuildPortableArtifactRequest,
+) (recordings.BuildPortableArtifactResult, error) {
+	if a == nil || a.root == nil {
+		return recordings.BuildPortableArtifactResult{}, errors.New("recordings service is required")
+	}
+	return a.root.BuildPortableArtifact(request)
+}
+
+func (a *Adapter) invokeReconstructWorldState(
+	request recordings.ReconstructWorldStateRequest,
+) (recordings.ReconstructWorldStateResult, error) {
+	if a == nil || a.root == nil {
+		return recordings.ReconstructWorldStateResult{}, errors.New("recordings service is required")
+	}
+	return a.root.ReconstructWorldState(request)
+}
