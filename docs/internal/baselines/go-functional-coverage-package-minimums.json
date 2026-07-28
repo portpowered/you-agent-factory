@@ -261,6 +261,10 @@
       "minimum": 64.70
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal",
+      "minimum": 40.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout",
       "exception": {
         "kind": "measurement",
