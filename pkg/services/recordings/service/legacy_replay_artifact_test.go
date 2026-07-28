@@ -4,7 +4,6 @@ import (
 	"errors"
 	"testing"
 
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
@@ -21,9 +20,9 @@ func TestLoadReplayArtifactTypedFailuresAndSuccess(t *testing.T) {
 		t.Fatalf("unknown artifact = %v, want ErrInvalidReplayArtifact", err)
 	}
 
-	artifact := &factorydefinitions.ReplayArtifact{SchemaVersion: "replay.v1"}
+	artifact := &recordings.ReplayArtifact{SchemaVersion: "replay.v1"}
 	svc.lifecycleMu.Lock()
-	svc.replayByKey = map[string]*factorydefinitions.ReplayArtifact{
+	svc.replayByKey = map[string]*recordings.ReplayArtifact{
 		"artifact:legacy": artifact,
 	}
 	svc.lifecycleMu.Unlock()
@@ -50,7 +49,7 @@ func TestBindReplayExecutionPublishedSuccessShape(t *testing.T) {
 		t.Fatalf("missing artifact = %v, want ErrUnsupportedReplayBinding", err)
 	}
 	result, err := svc.BindReplayExecution(recordings.BindReplayExecutionRequest{
-		Artifact: &factorydefinitions.ReplayArtifact{SchemaVersion: "replay.v1"},
+		Artifact: &recordings.ReplayArtifact{SchemaVersion: "replay.v1"},
 	})
 	if err != nil {
 		t.Fatalf("BindReplayExecution: %v", err)

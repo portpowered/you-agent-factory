@@ -11,10 +11,14 @@
 //     aliases at the top of contracts_root.go.
 //
 // Foreign event envelope vocabulary is owned by pkg/services/recordings
-// (event_contract.go). Deletion-only aliases remain in
-// event_recording_deletion_aliases.go until peers finish cutover.
+// (event_contract.go). World-state, dispatch, and replay vocabulary is owned
+// by pkg/services/recordings and pkg/services/factory_runtime (world_state_contract.go,
+// dispatch_contract.go, replay_contract.go). Deletion-only aliases remain in
+// event_recording_deletion_aliases.go, world_state_recording_deletion_aliases.go,
+// dispatch_runtime_deletion_aliases.go, and replay_recording_deletion_aliases.go
+// until peers finish cutover.
 //
-// Foreign world-state, dispatch, replay, and worker vocabulary below
-// the foreign-vocabulary marker in contracts_root.go are temporary
-// deletion-only aliases until CLN-DEF stories 004-005 rehome them.
+// Foreign worker vocabulary below the foreign-vocabulary marker in
+// contracts_root.go is temporary deletion-only aliases until CLN-DEF story 005
+// rehomes them.
 package factorydefinitions

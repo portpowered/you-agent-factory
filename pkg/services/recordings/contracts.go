@@ -497,14 +497,14 @@ type LoadReplayArtifactRequest struct {
 //
 // Deprecated: peers should use LoadReplayRecordingResult through Service.
 type LoadReplayArtifactResult struct {
-	Artifact *interfaces.ReplayArtifact
+	Artifact *ReplayArtifact
 }
 
 // BindReplayExecutionRequest is retained for internal runtime compatibility.
 //
 // Deprecated: it is not part of the peer-facing Service replay slice.
 type BindReplayExecutionRequest struct {
-	Artifact *interfaces.ReplayArtifact
+	Artifact *ReplayArtifact
 }
 
 // BindReplayExecutionResult is retained for internal runtime compatibility.
@@ -777,14 +777,14 @@ type ProjectionService interface {
 	ReconstructFactoryWorldState(
 		[]FactoryEvent,
 		int,
-	) (interfaces.FactoryWorldState, error)
-	SimpleDashboardRenderData(interfaces.FactoryWorldState) SimpleDashboardRenderData
+	) (FactoryWorldState, error)
+	SimpleDashboardRenderData(FactoryWorldState) SimpleDashboardRenderData
 	ProjectActiveThrottlePauses(
-		interfaces.InitialStructurePayload,
-		[]interfaces.ActiveThrottlePause,
-	) []interfaces.FactoryWorldThrottlePause
+		InitialStructurePayload,
+		[]ActiveThrottlePause,
+	) []FactoryWorldThrottlePause
 	ProjectWorkstationRequests(
-		interfaces.FactoryWorldState,
+		FactoryWorldState,
 	) WorkstationFactoryWorldWorkstationRequestProjectionSlice
 	ValidateReconnectReplay(
 		[]FactoryEvent,
@@ -798,7 +798,7 @@ type ProjectionService interface {
 // service.
 type WorkstationRequestProjector interface {
 	ProjectWorkstationRequests(
-		interfaces.FactoryWorldState,
+		FactoryWorldState,
 	) WorkstationFactoryWorldWorkstationRequestProjectionSlice
 }
 
@@ -807,19 +807,19 @@ type WorkstationRequestProjector interface {
 type WorldStateReconstructor func(
 	[]FactoryEvent,
 	int,
-) (interfaces.FactoryWorldState, error)
+) (FactoryWorldState, error)
 
 // ReplayArtifactLoader loads one canonical Factory-event replay artifact for
 // existing Runtime opening callers. It is not the peer-facing replay seam;
 // peers use LoadReplayRecording on Service.
-type ReplayArtifactLoader func(string) (*interfaces.ReplayArtifact, error)
+type ReplayArtifactLoader func(string) (*ReplayArtifact, error)
 
 // InitialStructureSource is the only topology capability Recordings consumes.
 // Factory Runtime implements it without exposing its concrete graph.
 type InitialStructureSource interface {
 	RecordingInitialStructure(
 		...interfaces.RuntimeDefinitionLookup,
-	) interfaces.InitialStructurePayload
+	) InitialStructurePayload
 }
 
 // Clock is the minimal replay time source exposed by Recordings.
@@ -833,7 +833,7 @@ type SubmissionRecorder func(work.FactorySubmissionRecord)
 
 // DispatchRecorder observes one canonical Factory dispatch at the recordings
 // boundary.
-type DispatchRecorder func(interfaces.FactoryDispatchRecord)
+type DispatchRecorder func(FactoryDispatchRecord)
 
 // ReplaySnapshot contains only the runtime facts a replay hook needs. Runtime
 // implementations adapt their concrete engine snapshot at the service edge.
@@ -907,7 +907,7 @@ type RuntimeRecorderFactory func(
 // callers. It is not the peer-facing replay seam; peers use neutral plans and
 // observations on Service.
 type ReplayExecutionFactory func(
-	*interfaces.ReplayArtifact,
+	*ReplayArtifact,
 ) (
 	workerexecution.Provider,
 	workerexecution.CommandRunner,
@@ -938,14 +938,14 @@ type RuntimeLedger interface {
 	RecordInitialStructure()
 	RecordWorkRequest(int, work.WorkRequestRecord, time.Time)
 	RecordWorkInput(int, work.SubmitRequest, workerexecution.Token, time.Time)
-	RecordWorkstationRequest(int, interfaces.FactoryDispatchRecord, time.Time)
-	RecordWorkstationResponse(int, workerexecution.WorkResult, interfaces.CompletedDispatch)
-	RecordRunResponse(int, interfaces.FactoryState, string, time.Time)
+	RecordWorkstationRequest(int, FactoryDispatchRecord, time.Time)
+	RecordWorkstationResponse(int, workerexecution.WorkResult, CompletedDispatch)
+	RecordRunResponse(int, FactoryState, string, time.Time)
 	RecordWorkStateChange(int, work.WorkStateChangeRecord, time.Time)
-	RecordFactoryStateChange(int, interfaces.FactoryState, interfaces.FactoryState, string, time.Time)
+	RecordFactoryStateChange(int, FactoryState, FactoryState, string, time.Time)
 	RecordFactoryChange(int, interfaces.FactoryChangeEventPayload, time.Time)
 	RecordSessionLifecycleFromFactoryConfig(string, *interfaces.FactoryConfig, int, time.Time)
-	RecordSessionLifecycleCompletion(string, *interfaces.FactoryConfig, int, interfaces.FactoryState, string, time.Time)
+	RecordSessionLifecycleCompletion(string, *interfaces.FactoryConfig, int, FactoryState, string, time.Time)
 	RecordSessionPaused(SessionLifecycleControlInput, time.Time)
 	RecordSessionResumed(SessionLifecycleControlInput, time.Time)
 	RecordSessionLifecycleControl(SessionLifecycleControlInput, time.Time)
@@ -965,10 +965,10 @@ type RuntimeEventLedger interface {
 type SimpleDashboardRenderData struct {
 	InFlightDispatchCount            int
 	ActiveExecutionsByDispatchID     map[string]SimpleDashboardActiveExecution
-	ActiveThrottlePauses             []interfaces.FactoryWorldThrottlePause
+	ActiveThrottlePauses             []FactoryWorldThrottlePause
 	PlaceTokenCounts                 map[string]int
-	CurrentWorkItemsByPlaceID        map[string][]interfaces.FactoryWorldWorkItemRef
-	PlaceOccupancyWorkItemsByPlaceID map[string][]interfaces.FactoryWorldWorkItemRef
+	CurrentWorkItemsByPlaceID        map[string][]FactoryWorldWorkItemRef
+	PlaceOccupancyWorkItemsByPlaceID map[string][]FactoryWorldWorkItemRef
 	WorkstationActivityByNodeID      map[string]SimpleDashboardWorkstationActivity
 	PlaceCategoriesByID              map[string]string
 	Session                          SimpleDashboardSessionData
@@ -980,14 +980,14 @@ type SimpleDashboardActiveExecution struct {
 	WorkstationName string
 	StartedAt       time.Time
 	WorkTypeIDs     []string
-	WorkItems       []interfaces.FactoryWorldWorkItemRef
+	WorkItems       []FactoryWorldWorkItemRef
 }
 
 type SimpleDashboardWorkstationActivity struct {
 	NodeID            string
 	WorkstationName   string
 	ActiveDispatchIDs []string
-	ActiveWorkItems   []interfaces.FactoryWorldWorkItemRef
+	ActiveWorkItems   []FactoryWorldWorkItemRef
 	TraceIDs          []string
 }
 
@@ -999,8 +999,8 @@ type SimpleDashboardSessionData struct {
 	DispatchedByWorkType map[string]int
 	CompletedByWorkType  map[string]int
 	FailedByWorkType     map[string]int
-	DispatchHistory      []interfaces.FactoryWorldDispatchCompletion
-	ProviderSessions     []interfaces.FactoryWorldProviderSessionRecord
+	DispatchHistory      []FactoryWorldDispatchCompletion
+	ProviderSessions     []FactoryWorldProviderSessionRecord
 }
 
 // Portable recording aliases remain only for compatibility with existing

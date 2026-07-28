@@ -1,6 +1,10 @@
 package recordings
 
-import "errors"
+import (
+	"errors"
+
+	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+)
 
 var (
 	// ErrReplayRecordingNotFound reports that a replay load could not select a
@@ -114,3 +118,17 @@ type ObserveReplayRequest struct {
 type ObserveReplayResult struct {
 	Observation ReplayObservation
 }
+
+// Recordings-owned legacy replay artifact vocabulary. Peers import these
+// aliases from pkg/services/recordings rather than treating the vocabulary as
+// Factory Definitions-owned peer contract surface.
+type (
+	CheckpointResumabilityStatus = factorycontracts.CheckpointResumabilityStatus
+	ReplayArtifact               = factorycontracts.ReplayArtifact
+	ReplayDiagnostics            = factorycontracts.ReplayDiagnostics
+	ReplayWallClockMetadata      = factorycontracts.ReplayWallClockMetadata
+)
+
+const (
+	CheckpointResumabilityStatusResumable = factorycontracts.CheckpointResumabilityStatusResumable
+)

@@ -776,7 +776,16 @@ story 003 publishes Factory Event envelope and type vocabulary at
 Recordings root instead of `factory_definitions/contracts`. Temporary
 deletion-only event aliases remain in
 `factory_definitions/event_recording_deletion_aliases.go` until downstream
-peers finish cutover. The
+peers finish cutover. CLN-DEF-CONTRACTS story 004 publishes world-state and
+replay vocabulary at `pkg/services/recordings/world_state_contract.go` and
+`replay_contract.go`, dispatch vocabulary at
+`pkg/services/factory_runtime/dispatch_contract.go`, and
+`recordings/internal/services/projection_query/internal/service` plus
+`recordings/service` import Recordings root contracts instead of
+`factory_definitions/contracts` for those surfaces. Temporary deletion-only
+aliases remain in `world_state_recording_deletion_aliases.go`,
+`dispatch_runtime_deletion_aliases.go`, and `replay_recording_deletion_aliases.go`.
+The
 parent-private nested validation subservice locks its public surface in
 `internal/services/validation/boundary_test.go`: `service.go` exports only
 `Service` and `Dependencies` with factory_definitions root request/result
