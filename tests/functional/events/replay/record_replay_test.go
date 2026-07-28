@@ -30,6 +30,10 @@ const (
 	recordReplayTimeoutTraceID  = "record-replay-timeout-trace"
 	recordReplayTimeoutArtifact = "record-replay-timeout.replay.json"
 
+	recordReplayDeterministicWorkID   = "record-replay-deterministic-work"
+	recordReplayDeterministicTraceID  = "record-replay-deterministic-trace"
+	recordReplayDeterministicArtifact = "record-replay-deterministic.replay.json"
+
 	deterministicProviderFailureExit   = 7
 	deterministicProviderFailureStderr = "deterministic provider rejection"
 )
@@ -71,7 +75,7 @@ func TestRecordReplayReproducesSuccessfulPublicOutcome(t *testing.T) {
 		},
 	})
 	live := observeRecordReplayPublicOutcome(t, recordServer, recordReplaySuccessWorkID)
-	assertSuccessfulRecordReplayPublicOutcome(t, live)
+	assertSuccessfulRecordReplayPublicOutcome(t, live, recordReplaySuccessWorkID)
 	if got := recordRunner.CallCount(); got != 2 {
 		t.Fatalf("record provider command runner calls = %d, want 2 live dispatches", got)
 	}
@@ -102,7 +106,7 @@ func TestRecordReplayReproducesSuccessfulPublicOutcome(t *testing.T) {
 		},
 	})
 	replayed := observeRecordReplayPublicOutcome(t, replayServer, recordReplaySuccessWorkID)
-	assertSuccessfulRecordReplayPublicOutcome(t, replayed)
+	assertSuccessfulRecordReplayPublicOutcome(t, replayed, recordReplaySuccessWorkID)
 	assertRecordReplayPublicOutcomesMatch(t, live, replayed)
 	assertReplayDispatchHistoryMatchesArtifact(t, recordedEvents, replayed.events)
 	assertFactoryArtifactSummariesMatch(t, recordedArtifacts, replayed.artifacts)
@@ -243,6 +247,77 @@ Do the work.
 	})
 }
 
+// TestReplayOfSameArtifactIsDeterministic proves two public CLI --replay
+// invocations of the same recorded artifact reconstruct identical public
+// observations — Factory Session lifecycle status, ordered Factory Event and
+// Factory Artifact summaries, and Work result availability — with no drift
+// across repeated invocations.
+func TestReplayOfSameArtifactIsDeterministic(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
+	artifactPath := filepath.Join(t.TempDir(), recordReplayDeterministicArtifact)
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		WorkTypeID: "task",
+		WorkID:     recordReplayDeterministicWorkID,
+		TraceID:    recordReplayDeterministicTraceID,
+		Payload:    []byte(`{"title":"record replay same-artifact determinism"}`),
+	})
+
+	recordRunner := support.NewShapedProviderCommandRunner(
+		platformprocess.CommandResult{Stdout: []byte("step one COMPLETE")},
+		platformprocess.CommandResult{Stdout: []byte("step two COMPLETE")},
+	)
+	recordServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Args:                      []string{"--record", artifactPath},
+		Edges: serviceedges.Edges{
+			ProviderCommandRunner: recordRunner,
+		},
+	})
+	recordOutcome := observeRecordReplayPublicOutcome(t, recordServer, recordReplayDeterministicWorkID)
+	assertSuccessfulRecordReplayPublicOutcome(t, recordOutcome, recordReplayDeterministicWorkID)
+	if got := recordRunner.CallCount(); got != 2 {
+		t.Fatalf("record provider command runner calls = %d, want 2 live dispatches", got)
+	}
+	recordServer.Stop(t)
+
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatalf("remove original fixture dir: %v", err)
+	}
+
+	firstReplay := replayArtifactPublicOutcome(t, artifactPath, recordReplayDeterministicWorkID)
+	secondReplay := replayArtifactPublicOutcome(t, artifactPath, recordReplayDeterministicWorkID)
+
+	assertSuccessfulRecordReplayPublicOutcome(t, firstReplay, recordReplayDeterministicWorkID)
+	assertSuccessfulRecordReplayPublicOutcome(t, secondReplay, recordReplayDeterministicWorkID)
+	assertDeterministicReplayPublicOutcomesMatch(t, firstReplay, secondReplay)
+}
+
+func replayArtifactPublicOutcome(
+	t *testing.T,
+	artifactPath string,
+	workID string,
+) recordReplayPublicOutcome {
+	t.Helper()
+
+	replayRunner := testutil.NewProviderCommandRunner(
+		platformprocess.CommandResult{Stdout: []byte("replay must not invoke providers")},
+	)
+	replayServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: t.TempDir(),
+		Args:       []string{"--replay", artifactPath, "--no-record"},
+		Edges: serviceedges.Edges{
+			ProviderCommandRunner: replayRunner,
+		},
+	})
+	t.Cleanup(func() { replayServer.Stop(t) })
+	outcome := observeRecordReplayPublicOutcome(t, replayServer, workID)
+	if got := replayRunner.CallCount(); got != 0 {
+		t.Fatalf("replay provider command runner calls = %d, want 0 without live worker dispatch", got)
+	}
+	return outcome
+}
+
 func observeRecordReplayPublicOutcome(
 	t *testing.T,
 	server *support.FunctionalAPIServer,
@@ -270,7 +345,11 @@ func observeRecordReplayPublicOutcome(
 	}
 }
 
-func assertSuccessfulRecordReplayPublicOutcome(t *testing.T, outcome recordReplayPublicOutcome) {
+func assertSuccessfulRecordReplayPublicOutcome(
+	t *testing.T,
+	outcome recordReplayPublicOutcome,
+	workID string,
+) {
 	t.Helper()
 
 	if outcome.status.Categories.Terminal == 0 {
@@ -289,8 +368,8 @@ func assertSuccessfulRecordReplayPublicOutcome(t *testing.T, outcome recordRepla
 	if got := support.CountWorkAtCustomerState(outcome.work, "task:failed"); got != 0 {
 		t.Fatalf("task:failed token count = %d, want 0", got)
 	}
-	if stringPointerValue(outcome.workByID.WorkId) != recordReplaySuccessWorkID {
-		t.Fatalf("work detail id = %q, want %q", stringPointerValue(outcome.workByID.WorkId), recordReplaySuccessWorkID)
+	if stringPointerValue(outcome.workByID.WorkId) != workID {
+		t.Fatalf("work detail id = %q, want %q", stringPointerValue(outcome.workByID.WorkId), workID)
 	}
 	if len(outcome.events) == 0 {
 		t.Fatal("retained Factory Event history is empty")
@@ -299,6 +378,74 @@ func assertSuccessfulRecordReplayPublicOutcome(t *testing.T, outcome recordRepla
 	if got := countFactoryEventTypes(outcome.events, factoryapi.FactoryEventTypeDispatchResponse); got == 0 {
 		t.Fatal("retained Factory Event history missing dispatch completions")
 	}
+}
+
+func assertDeterministicReplayPublicOutcomesMatch(
+	t *testing.T,
+	first, second recordReplayPublicOutcome,
+) {
+	t.Helper()
+
+	assertRecordReplayPublicOutcomesMatch(t, first, second)
+	assertFactoryArtifactSummariesMatch(t, first.artifacts, second.artifacts)
+	assertReplayFactoryEventHistoriesMatch(t, first.events, second.events)
+}
+
+func assertReplayFactoryEventHistoriesMatch(
+	t *testing.T,
+	first, second []factoryapi.FactoryEvent,
+) {
+	t.Helper()
+
+	if len(first) != len(second) {
+		t.Fatalf(
+			"Factory Event count = first:%d second:%d, want identical retained history",
+			len(first),
+			len(second),
+		)
+	}
+	for index := range first {
+		firstEvent := first[index]
+		secondEvent := second[index]
+		if firstEvent.Type != secondEvent.Type {
+			t.Fatalf(
+				"Factory Event[%d] type = first:%s second:%s, want matching public event kind",
+				index,
+				firstEvent.Type,
+				secondEvent.Type,
+			)
+		}
+		if firstEvent.Context.Sequence != secondEvent.Context.Sequence {
+			t.Fatalf(
+				"Factory Event[%d] sequence = first:%d second:%d, want matching append-only ordering",
+				index,
+				firstEvent.Context.Sequence,
+				secondEvent.Context.Sequence,
+			)
+		}
+	}
+	for _, eventType := range []factoryapi.FactoryEventType{
+		factoryapi.FactoryEventTypeDispatchRequest,
+		factoryapi.FactoryEventTypeDispatchResponse,
+		factoryapi.FactoryEventTypeInferenceRequest,
+		factoryapi.FactoryEventTypeInferenceResponse,
+		factoryapi.FactoryEventTypeArtifactCreated,
+	} {
+		firstCount := countFactoryEvents(first, eventType)
+		if firstCount == 0 {
+			continue
+		}
+		if secondCount := countFactoryEvents(second, eventType); secondCount != firstCount {
+			t.Fatalf(
+				"%s count = first:%d second:%d, want matching public dispatch and artifact history",
+				eventType,
+				firstCount,
+				secondCount,
+			)
+		}
+	}
+	assertFactoryEventsAscendingOrder(t, first)
+	assertFactoryEventsAscendingOrder(t, second)
 }
 
 func assertRecordReplayPublicOutcomesMatch(t *testing.T, live, replayed recordReplayPublicOutcome) {
