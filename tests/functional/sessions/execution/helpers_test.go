@@ -748,27 +748,91 @@ func assertTerminalWorkPrimaryText(
 ) {
 	t.Helper()
 
-	listed := support.GetJSON[factoryapi.ListWorkResponse](
-		t,
-		support.DefaultSessionWorkURL(serverURL, "/work"),
-	)
+	ok, diagnostic := tryReadTerminalWorkPrimaryText(serverURL, wantText)
+	if !ok {
+		t.Fatal(diagnostic)
+	}
+}
+
+// waitForTerminalWorkPrimaryText polls the public /work surface until one
+// terminal work item exposes the expected primary text, or times out. Hosted
+// CLI invocations complete asynchronously relative to the first successful
+// API read, so visibility proofs must wait for terminal projection instead of
+// asserting on the first PROCESSING snapshot.
+func waitForTerminalWorkPrimaryText(
+	t *testing.T,
+	serverURL, wantText string,
+	timeout time.Duration,
+) {
+	t.Helper()
+
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+
+	var lastDiagnostic string
+	for {
+		ok, diagnostic := tryReadTerminalWorkPrimaryText(serverURL, wantText)
+		if ok {
+			return
+		}
+		lastDiagnostic = diagnostic
+		select {
+		case <-ticker.C:
+		case <-deadline.C:
+			t.Fatalf(
+				"timed out waiting for terminal work with text %q at %s: %s",
+				wantText,
+				serverURL,
+				lastDiagnostic,
+			)
+		}
+	}
+}
+
+func tryReadTerminalWorkPrimaryText(serverURL, wantText string) (bool, string) {
+	endpoint := support.DefaultSessionWorkURL(serverURL, "/work")
+	response, err := http.Get(endpoint)
+	if err != nil {
+		return false, fmt.Sprintf("GET %s: %v", endpoint, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		payload, _ := io.ReadAll(response.Body)
+		return false, fmt.Sprintf(
+			"GET %s status = %d: %s",
+			endpoint,
+			response.StatusCode,
+			strings.TrimSpace(string(payload)),
+		)
+	}
+	var listed factoryapi.ListWorkResponse
+	if err := json.NewDecoder(response.Body).Decode(&listed); err != nil {
+		return false, fmt.Sprintf("decode GET %s: %v", endpoint, err)
+	}
 	if len(listed.Results) != 1 {
-		t.Fatalf("listed work count = %d, want 1; listed=%#v", len(listed.Results), listed.Results)
+		return false, fmt.Sprintf(
+			"listed work count = %d, want 1; listed=%#v",
+			len(listed.Results),
+			listed.Results,
+		)
 	}
 	item := listed.Results[0]
 	if item.State == nil || generatedWorkStateType(item.State) != factoryapi.WorkStateTypeTERMINAL {
-		t.Fatalf("work state = %#v, want TERMINAL", item.State)
+		return false, fmt.Sprintf("work state = %#v, want TERMINAL", item.State)
 	}
 	if item.Content == nil || len(*item.Content) != 1 {
-		t.Fatalf("work content = %#v, want one text part", item.Content)
+		return false, fmt.Sprintf("work content = %#v, want one text part", item.Content)
 	}
 	part, err := (*item.Content)[0].AsWorkTextContentPart()
 	if err != nil {
-		t.Fatalf("work content[0] as text part: %v", err)
+		return false, fmt.Sprintf("work content[0] as text part: %v", err)
 	}
 	if part.Text != wantText {
-		t.Fatalf("work content text = %q, want %q", part.Text, wantText)
+		return false, fmt.Sprintf("work content text = %q, want %q", part.Text, wantText)
 	}
+	return true, ""
 }
 
 func generatedWorkStateType(state *factoryapi.WorkState) factoryapi.WorkStateType {

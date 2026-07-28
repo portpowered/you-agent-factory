@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -49,7 +50,7 @@ func TestCLIInvocationIsVisibleThroughAPISessionAndWorkReads(t *testing.T) {
 		t.Fatalf("session runtime status during CLI invocation = %#v, want observable lifecycle status", sessionDuring.Runtime)
 	}
 
-	assertTerminalWorkPrimaryText(t, baseURL, terminalSuccessPrimaryResult)
+	waitForTerminalWorkPrimaryText(t, baseURL, terminalSuccessPrimaryResult, 5*time.Second)
 
 	<-command.Done()
 	if err := command.Err(); err != nil {
