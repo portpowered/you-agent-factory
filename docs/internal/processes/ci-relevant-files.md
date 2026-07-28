@@ -1069,6 +1069,17 @@ Wave 0 functional-tests-expansion planning authority lives under
   top-level `Test*` needs a customer-readable Go doc so `functionaltestmetadata`
   stays viz-compatible.
 
+- `tests/functional/work/peer_import_boundary_test.go` owns Work FUN functional
+  import seal (pss-fun-work-005): every package under `tests/functional/work/...`
+  must not import `pkg/services/work/internal`, deleted transitional Work packages
+  (`service/`, `stateaccessrecordings/`), or legacy `pkg/work*` consumer edges.
+  Named production peers must reach Work only through `pkg/services/work` or
+  `pkg/services/work/transports/*`. Use exact `isWorkServiceImport` matching
+  (`work` root or `work/` subpath) so `pkg/services/workers` is not mistaken for
+  Work. Complements `tests/functional/work/root_composition/*` behavioral proofs;
+  recordings-root contract proofs under `tests/functional/work/recordings` may
+  still import `pkg/services/work/wire`.
+
 - `tests/functional/provider_sessions/build_process_inert_test.go` owns
   Provider Sessions inert-construction proof through `support.BuildProcess` /
   `root.BuildProcess`. Replace `serviceedges.Edges` Provider Session ports
