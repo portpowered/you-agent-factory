@@ -2289,36 +2289,6 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go",
-      "package": "you-agent-factory/tests/functional/factory_runtime/orchestrators/petri/guards",
-      "scenario": "TestPetriAuthoredEligibilityGuardBlocksDispatchUntilSatisfied",
-      "lane": "short",
-      "destination": "tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go",
-      "package": "you-agent-factory/tests/functional/factory_runtime/orchestrators/petri/guards",
-      "scenario": "TestPetriParentOrSameNameGuardReleasesExpectedWork",
-      "lane": "short",
-      "destination": "tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go",
-      "package": "you-agent-factory/tests/functional/factory_runtime/orchestrators/petri/guards",
-      "scenario": "TestPetriVisitOrMatchGuardFailureIsVisibleInPublicWorkState",
-      "lane": "short",
-      "destination": "tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
       "source_path": "tests/functional/guards_batch/concurrency_limit_long_test.go",
       "package": "you-agent-factory/tests/functional/guards_batch",
       "scenario": "TestConcurrencyLimit_BlocksExcessDispatches",
@@ -3809,16 +3779,6 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/provider_sessions/build_process_inert_test.go",
-      "package": "you-agent-factory/tests/functional/provider_sessions",
-      "scenario": "TestProviderSessionsRemainInertThroughRootBuildProcessConstruction",
-      "lane": "short",
-      "destination": "tests/functional/provider_sessions/build_process_inert_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
       "source_path": "tests/functional/provider_sessions/details/codex_details_test.go",
       "package": "you-agent-factory/tests/functional/provider_sessions/details",
       "scenario": "TestCodexProviderSessionCorruptTranscriptReturnsSafeDiagnostic",
@@ -3904,16 +3864,6 @@
       "scenario": "TestAPIUnsupportedProviderSessionKindReturnsTypedError",
       "lane": "short",
       "destination": "tests/functional/provider_sessions/details/http_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/provider_sessions/peer_import_boundary_test.go",
-      "package": "you-agent-factory/tests/functional/provider_sessions",
-      "scenario": "TestFunctionalProviderSessionsPackageUsesPublicProcessImportsOnly",
-      "lane": "short",
-      "destination": "tests/functional/provider_sessions/peer_import_boundary_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
