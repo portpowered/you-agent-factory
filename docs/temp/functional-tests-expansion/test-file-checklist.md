@@ -862,7 +862,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
     partial data.
   - `TestCursorProviderSessionMissingIDReturnsNotFound`.
 
-- [ ] `tests/functional/provider_sessions/details/http_test.go`
+- [x] `tests/functional/provider_sessions/details/http_test.go`
   - `TestAPIProviderSessionDetailsUseGoldenExpectedMetadata`.
   - `TestAPIProviderSessionRejectsRawFilesystemPathInput`.
   - `TestAPIUnsupportedProviderSessionKindReturnsTypedError`.
