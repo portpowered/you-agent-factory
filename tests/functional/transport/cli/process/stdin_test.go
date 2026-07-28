@@ -112,3 +112,55 @@ func TestSubmitBatchReadsJSONFromStdin(t *testing.T) {
 	_ = command.Process.Kill()
 	_ = command.Wait()
 }
+
+// TestCLIEmptyRequiredStdinFailsWithoutDispatch proves you run - rejects EOF or
+// empty required stdin through the public built you CLI process boundary before
+// any worker-bound primary result or other external worker effect attributable
+// to the invocation.
+func TestCLIEmptyRequiredStdinFailsWithoutDispatch(t *testing.T) {
+	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
+	session := harness.NewSession(t).WithNoExternalServer(t)
+
+	factoryPath := writeStdinRunFactory(t, session.WorkDir)
+	mockWorkersPath := writeStdinRunDefaultMockWorkers(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+
+	args := append([]string{}, session.RuntimeLogDirFlags()...)
+	args = append(args, session.ServerFlags()...)
+	args = append(args,
+		"run",
+		"--factory", factoryPath,
+		"--with-mock-workers", mockWorkersPath,
+		"--no-record",
+		"--quiet",
+		"-",
+	)
+
+	result, err := session.RunWithStdin(ctx, "", args...)
+	if err == nil {
+		t.Fatalf(
+			"you run - with empty stdin succeeded; want pre-dispatch rejection\nstdout:\n%s\nstderr:\n%s",
+			result.Stdout,
+			result.Stderr,
+		)
+	}
+	if result.ExitCode != 1 {
+		t.Fatalf("exit code = %d, want documented validation-failure exit 1", result.ExitCode)
+	}
+	if strings.TrimSpace(result.Stdout) != "" {
+		t.Fatalf(
+			"stdout = %q, want empty (no worker-bound primary result before stdin rejection)",
+			result.Stdout,
+		)
+	}
+	diagnostic := result.Stderr + "\n" + err.Error()
+	if !strings.Contains(diagnostic, "INVOCATION_INPUT_EMPTY") {
+		t.Fatalf(
+			"empty stdin diagnostic missing INVOCATION_INPUT_EMPTY:\nstdout:\n%s\nstderr:\n%s",
+			result.Stdout,
+			result.Stderr,
+		)
+	}
+}
