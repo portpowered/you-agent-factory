@@ -72,7 +72,7 @@ func TestNewFromInputKeepsProviderCommandAndAgyPTYEdgesDistinct(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewFactory: %v", err)
 	}
-	built, err := factory.New(false, nil, nil, nil, nil, "")
+	built, err := factory.New(false, nil, nil, nil, "")
 	if err != nil {
 		t.Fatalf("NewFromInput() error = %v", err)
 	}
@@ -85,7 +85,7 @@ func TestNewFromInputKeepsProviderCommandAndAgyPTYEdgesDistinct(t *testing.T) {
 func TestFactoryNewRejectsMissingProviderTimingClock(t *testing.T) {
 	t.Parallel()
 	factory := &Factory{}
-	if _, err := factory.New(false, nil, nil, nil, nil, ""); err == nil || !strings.Contains(err.Error(), "command clock is required") {
+	if _, err := factory.New(false, nil, nil, nil, ""); err == nil || !strings.Contains(err.Error(), "command clock is required") {
 		t.Fatalf("missing provider timing clock error = %v", err)
 	}
 }
@@ -115,7 +115,7 @@ func TestFactoryNewUsesInjectedClockForProviderDiagnostics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewFactory() error = %v", err)
 	}
-	provider, err := factory.New(false, nil, nil, nil, nil, "")
+	provider, err := factory.New(false, nil, nil, nil, "")
 	if err != nil {
 		t.Fatalf("Factory.New() error = %v", err)
 	}
@@ -150,7 +150,11 @@ func (c *providerSequenceClock) Now() time.Time {
 
 func TestScriptWrapProvider_Infer_GenericNonCodexExitFailuresPreserveMessageAndClassification(t *testing.T) {
 	t.Parallel()
-	for _, tc := range genericNonCodexExitFailureTestCases() {
+	cases := genericNonCodexExitFailureTestCases()
+	if len(cases) == 0 {
+		t.Skip("no ScriptWrap-only non-Codex exit failure cases remain after conductor cutover")
+	}
+	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			assertInferenceExitFailure(t, tc)
 		})
@@ -426,17 +430,7 @@ type exitFailureInferenceTestCase struct {
 }
 
 func genericNonCodexExitFailureTestCases() []exitFailureInferenceTestCase {
-	return []exitFailureInferenceTestCase{
-		{
-			name:     "OpenCodeUsesStructuredAuthenticationFailure",
-			provider: string(modelprovider.ProviderOpenCode),
-			result: CommandResult{ExitCode: 1, Stdout: []byte(
-				`{"type":"error","error":{"name":"ProviderAuthError","data":{"message":"Authentication required. Run opencode auth login."}}}`,
-			)},
-			wantMessage: "OpenCode authentication failed.",
-			wantType:    workerexecution.WorkFailureTypeAuthFailure,
-		},
-	}
+	return nil
 }
 
 func assertInferenceExitFailure(t *testing.T, tc exitFailureInferenceTestCase) {

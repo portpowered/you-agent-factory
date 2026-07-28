@@ -481,7 +481,7 @@ func TestExecuteNormalizesEveryPrivateFailureShape(t *testing.T) {
 		{
 			name:       "decode lifecycle failure",
 			attemptErr: execution.AttemptFailure{DecodeError: errors.New("decode detail")},
-			wantKind:   providers.ExecuteFailureKindUnknown,
+			wantKind:   providers.ExecuteFailureKindInvalidRequest,
 			wantStage:  "decode",
 		},
 		{

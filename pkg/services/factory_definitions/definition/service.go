@@ -37,6 +37,7 @@ type Service struct {
 	authoringLayoutService   authoringlayout.Service
 	compilationService       compilationservice.Service
 	host                     Host
+	activationGateway        factoryroot.DefinitionActivationGateway
 	versionFileSystem        factoryroot.VersionFileSystem
 	distributionService      distributionservice.Service
 }
@@ -61,7 +62,11 @@ type nonCatalogDefaults interface {
 }
 
 // New constructs a factory-definition read collaborator with explicit dependencies.
-func New(host Host, versionFileSystems ...factoryroot.VersionFileSystem) *Service {
+func New(
+	host Host,
+	activationGateway factoryroot.DefinitionActivationGateway,
+	versionFileSystems ...factoryroot.VersionFileSystem,
+) *Service {
 	var versionFileSystem factoryroot.VersionFileSystem
 	if len(versionFileSystems) > 0 {
 		versionFileSystem = versionFileSystems[0]
@@ -70,6 +75,7 @@ func New(host Host, versionFileSystems ...factoryroot.VersionFileSystem) *Servic
 		nonCatalogDefaults: factoryroot.UnimplementedService{},
 		Service:            factoryroot.UnimplementedService{},
 		host:               host,
+		activationGateway:  activationGateway,
 		versionFileSystem:  versionFileSystem,
 	}
 }
@@ -78,10 +84,11 @@ func New(host Host, versionFileSystems ...factoryroot.VersionFileSystem) *Servic
 // catalog ownership for the CTR-DEF catalog slice.
 func NewWithCatalog(
 	host Host,
+	activationGateway factoryroot.DefinitionActivationGateway,
 	catalogService catalog.Service,
 	versionFileSystems ...factoryroot.VersionFileSystem,
 ) *Service {
-	service := New(host, versionFileSystems...)
+	service := New(host, activationGateway, versionFileSystems...)
 	service.Service = catalogService
 	return service
 }
@@ -90,11 +97,12 @@ func NewWithCatalog(
 // both persisted and embedded catalog operations routed through Distribution.
 func NewWithCatalogAndPackages(
 	host Host,
+	activationGateway factoryroot.DefinitionActivationGateway,
 	catalogService catalog.Service,
 	packagedCatalog factoryroot.PackagedFactoryCatalogOperations,
 	versionFileSystems ...factoryroot.VersionFileSystem,
 ) *Service {
-	service := NewWithCatalog(host, catalogService, versionFileSystems...)
+	service := NewWithCatalog(host, activationGateway, catalogService, versionFileSystems...)
 	service.distributionService = ComposeDistributionService(
 		packagedCatalog,
 		factoryroot.PackagedFactoryInstallationOperations{},
@@ -108,12 +116,13 @@ func NewWithCatalogAndPackages(
 // root collaborator for catalog selection and canonical packaged installation.
 func NewWithCatalogPackagesAndInstallation(
 	host Host,
+	activationGateway factoryroot.DefinitionActivationGateway,
 	catalogService catalog.Service,
 	packagedCatalog factoryroot.PackagedFactoryCatalogOperations,
 	packagedInstaller factoryroot.PackagedFactoryInstallationOperations,
 	versionFileSystems ...factoryroot.VersionFileSystem,
 ) *Service {
-	service := NewWithCatalog(host, catalogService, versionFileSystems...)
+	service := NewWithCatalog(host, activationGateway, catalogService, versionFileSystems...)
 	service.distributionService = ComposeDistributionService(
 		packagedCatalog,
 		packagedInstaller,
@@ -130,7 +139,7 @@ func NewWithCompilation(
 	compilationService compilationservice.Service,
 	versionFileSystems ...factoryroot.VersionFileSystem,
 ) *Service {
-	service := New(host, versionFileSystems...)
+	service := New(host, StubActivationGateway(), versionFileSystems...)
 	service.compilationService = compilationService
 	return service
 }
@@ -139,11 +148,12 @@ func NewWithCompilation(
 // validation ownership for the CTR-DEF validate slice.
 func NewWithValidation(
 	host Host,
+	activationGateway factoryroot.DefinitionActivationGateway,
 	catalogService catalog.Service,
 	validationService validationservice.Service,
 	versionFileSystems ...factoryroot.VersionFileSystem,
 ) *Service {
-	service := NewWithCatalog(host, catalogService, versionFileSystems...)
+	service := NewWithCatalog(host, activationGateway, catalogService, versionFileSystems...)
 	service.validationService = validationService
 	return service
 }
@@ -153,6 +163,7 @@ func NewWithValidation(
 // installation ownership routed through Distribution.
 func NewWithCatalogPackagesValidationAndInstallation(
 	host Host,
+	activationGateway factoryroot.DefinitionActivationGateway,
 	catalogService catalog.Service,
 	validationService validationservice.Service,
 	packagedCatalog factoryroot.PackagedFactoryCatalogOperations,
@@ -161,6 +172,7 @@ func NewWithCatalogPackagesValidationAndInstallation(
 ) *Service {
 	return NewWithCatalogPackagesValidationInstallationAndAuthoring(
 		host,
+		activationGateway,
 		catalogService,
 		validationService,
 		nil,
@@ -175,6 +187,7 @@ func NewWithCatalogPackagesValidationAndInstallation(
 // installation, and private authoring_layout ownership.
 func NewWithCatalogPackagesValidationInstallationAndAuthoring(
 	host Host,
+	activationGateway factoryroot.DefinitionActivationGateway,
 	catalogService catalog.Service,
 	validationService validationservice.Service,
 	authoringLayoutService authoringlayout.Service,
@@ -184,6 +197,7 @@ func NewWithCatalogPackagesValidationInstallationAndAuthoring(
 ) *Service {
 	service := NewWithCatalogPackagesAndInstallation(
 		host,
+		activationGateway,
 		catalogService,
 		packagedCatalog,
 		packagedInstaller,
@@ -199,12 +213,13 @@ func NewWithCatalogPackagesValidationInstallationAndAuthoring(
 // Distribution ownership for the CTR-DEF distribute slice.
 func NewWithCatalogPackagesValidationAndDistribution(
 	host Host,
+	activationGateway factoryroot.DefinitionActivationGateway,
 	catalogService catalog.Service,
 	validationService validationservice.Service,
 	distributionService distributionservice.Service,
 	versionFileSystems ...factoryroot.VersionFileSystem,
 ) *Service {
-	service := NewWithValidation(host, catalogService, validationService, versionFileSystems...)
+	service := NewWithValidation(host, activationGateway, catalogService, validationService, versionFileSystems...)
 	service.distributionService = distributionService
 	return service
 }
@@ -214,6 +229,7 @@ func NewWithCatalogPackagesValidationAndDistribution(
 // Distribution ownership, and authoring_layout ownership.
 func NewWithCatalogPackagesValidationDistributionAndAuthoring(
 	host Host,
+	activationGateway factoryroot.DefinitionActivationGateway,
 	catalogService catalog.Service,
 	validationService validationservice.Service,
 	authoringLayoutService authoringlayout.Service,
@@ -222,6 +238,7 @@ func NewWithCatalogPackagesValidationDistributionAndAuthoring(
 ) *Service {
 	service := NewWithCatalogPackagesValidationAndDistribution(
 		host,
+		activationGateway,
 		catalogService,
 		validationService,
 		distributionService,
@@ -474,7 +491,7 @@ func CurrentFactorySnapshotForSession(
 	host Host,
 	sessionID string,
 ) (*factoryroot.FactorySnapshot, error) {
-	current, err := New(host).GetCurrentFactoryForSession(ctx, sessionID)
+	current, err := New(host, StubActivationGateway()).GetCurrentFactoryForSession(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}

@@ -13,13 +13,14 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/validationassert"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+
 	factoryeditable "github.com/portpowered/infinite-you/pkg/services/factory_definitions/editable"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func TestValidateEditableFactoryTopology_MatchesValidateFactoryAPIPrePersist(t *testing.T) {
@@ -30,7 +31,7 @@ func TestValidateEditableFactoryTopology_MatchesValidateFactoryAPIPrePersist(t *
 		t.Fatalf("DecodeCrossPathInvalidFactory: %v", err)
 	}
 
-	svc := New(stubDefinitionHost{})
+	svc := newTestService(stubDefinitionHost{})
 	saveErr := svc.ValidateEditableFactoryTopology(context.Background(), mustFactorySnapshot(factory))
 	var topologyErr *factorydefinitions.ValidationTopologyError
 	if !errors.As(saveErr, &topologyErr) {
@@ -61,7 +62,7 @@ func TestSaveReplaceCurrentForSession_RejectsStaleBaseVersion(t *testing.T) {
 			Version: &currentVersion,
 		},
 	}
-	svc := New(host)
+	svc := newTestService(host, host.activationGateway())
 
 	staleVersion := factoryapi.HybridLogicalTimestamp{
 		Logical:  4,
@@ -136,7 +137,7 @@ func TestSaveReplaceCurrentForSession_PersistsSplitLayout(t *testing.T) {
 			},
 		},
 	}
-	svc := New(host)
+	svc := newTestService(host, host.activationGateway())
 
 	replacement := factoryapi.Factory{
 		Name: apisurface.DefaultCurrentFactoryName,
@@ -225,7 +226,7 @@ func TestSaveReplaceCurrentForSession_ReplacesNamedCurrentFactoryLayout(t *testi
 			},
 		},
 	}
-	svc := New(host)
+	svc := newTestService(host, host.activationGateway())
 	replacement := factoryapi.Factory{
 		Name: "alpha",
 		Id:   saveStringPointer("alpha"),
@@ -291,7 +292,7 @@ func TestSaveReplaceCurrentForSession_RestoresLayoutWhenActivationFails(t *testi
 			},
 		},
 	}
-	svc := New(host)
+	svc := newTestService(host, host.activationGateway())
 	replacement := factoryapi.Factory{
 		Name: apisurface.DefaultCurrentFactoryName,
 		Id:   saveStringPointer("root-runtime"),
@@ -378,7 +379,7 @@ func TestService_NilReceiverReturnsRequiredErrors(t *testing.T) {
 func TestValidateUpsertNamedFactoryRequest_RejectsInvalidFactoryName(t *testing.T) {
 	t.Parallel()
 
-	err := New(stubDefinitionHost{}).ValidateUpsertNamedFactoryRequest(context.Background(), "bad/name", nil)
+	err := newTestService(stubDefinitionHost{}).ValidateUpsertNamedFactoryRequest(context.Background(), "bad/name", nil)
 	if !errors.Is(err, apisurface.ErrInvalidNamedFactoryName) {
 		t.Fatalf("ValidateUpsertNamedFactoryRequest error = %v, want invalid named factory name", err)
 	}
@@ -414,7 +415,7 @@ func TestService_SerializeNamedFactoryUpsertResponse_ReturnsThinBundledFiles(t *
 		t.Fatalf("LoadRuntimeConfig: %v", err)
 	}
 
-	got, err := New(stubDefinitionHost{workflowID: "workflow-1"}).SerializeNamedFactoryUpsertResponse("alpha", runtimeCfg)
+	got, err := newTestService(stubDefinitionHost{workflowID: "workflow-1"}).SerializeNamedFactoryUpsertResponse("alpha", runtimeCfg)
 	if err != nil {
 		t.Fatalf("SerializeNamedFactoryUpsertResponse: %v", err)
 	}
@@ -438,7 +439,7 @@ func TestSaveReplaceCurrentForSession_RejectsInvalidWritableCurrentName(t *testi
 			Name: "bad/name",
 		},
 	}
-	_, err := New(host).SaveReplaceCurrentSnapshotForSession(context.Background(), factorysessions.DefaultSessionID, mustEditableFactoryForTest(t, factoryapi.Factory{}))
+	_, err := newTestService(host, host.activationGateway()).SaveReplaceCurrentSnapshotForSession(context.Background(), factorysessions.DefaultSessionID, mustEditableFactoryForTest(t, factoryapi.Factory{}))
 	if !errors.Is(err, apisurface.ErrInvalidNamedFactoryName) {
 		t.Fatalf("SaveReplaceCurrentForSession error = %v, want invalid named factory name", err)
 	}
@@ -451,6 +452,14 @@ type splitLayoutSaveHost struct {
 	replaceCalled  bool
 	restoreCalled  bool
 	discardCalled  bool
+}
+
+func (h *splitLayoutSaveHost) activationGateway() *trackingActivationGateway {
+	return &trackingActivationGateway{
+		saveNow:      time.Date(2026, 5, 31, 12, 0, 1, 0, time.UTC),
+		runSessionID: factorysessions.DefaultSessionID,
+		activateErr:  h.activateErr,
+	}
 }
 
 func (h *splitLayoutSaveHost) PersistRootDir() string { return h.sessionRootDir }
@@ -516,16 +525,6 @@ func (h *splitLayoutSaveHost) GetCurrentFactorySnapshotForSession(context.Contex
 	return mustFactorySnapshot(h.current), nil
 }
 
-func (h *splitLayoutSaveHost) WithActivationLock(fn func() error) error { return fn() }
-
-func (h *splitLayoutSaveHost) RequireIdleRuntimeForSession(context.Context, string) error {
-	return nil
-}
-
-func (h *splitLayoutSaveHost) ActivateSessionEditableFactory(context.Context, *factorydefinitions.DefinitionSession, string, string, string, string, string) error {
-	return h.activateErr
-}
-
 func (h *splitLayoutSaveHost) ReplaceFactoryLayoutAtDir(
 	targetDir string,
 	prepared *factorydefinitions.PreparedFactoryLayoutPayload,
@@ -556,28 +555,6 @@ func (h *splitLayoutSaveHost) ReplaceFactoryLayoutAtDir(
 			result.DiscardBackup()
 		},
 	}, nil
-}
-
-func (h *splitLayoutSaveHost) SaveNow() time.Time {
-	return time.Date(2026, 5, 31, 12, 0, 1, 0, time.UTC)
-}
-
-func (h *splitLayoutSaveHost) RunSessionID() string { return factorysessions.DefaultSessionID }
-
-func (h *splitLayoutSaveHost) SessionForActivation(string) *factorydefinitions.DefinitionSession {
-	return nil
-}
-
-func (h *splitLayoutSaveHost) NamedFactoryActivationPaths(*factorydefinitions.DefinitionSession) (string, string) {
-	return "", ""
-}
-
-func (h *splitLayoutSaveHost) RequireIdleBeforeNamedFactoryActivation(context.Context, string, *factorydefinitions.DefinitionSession) error {
-	return nil
-}
-
-func (h *splitLayoutSaveHost) SwapPersistedNamedFactoryRuntime(context.Context, string, *factorydefinitions.DefinitionSession, string, string, string, string) error {
-	return nil
 }
 
 func saveWorkerTypeModel() *factoryapi.WorkerType {

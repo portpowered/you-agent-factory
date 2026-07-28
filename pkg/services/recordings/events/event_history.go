@@ -52,6 +52,24 @@ func (subscription *eventHistorySubscription) signalOverflow() {
 	})
 }
 
+// CloseLiveSubscriptions ends active live subscriptions without appending new
+// canonical events. Callers invoke this after terminal lifecycle events are
+// recorded so SSE clients observe the final timeline and then a closed stream.
+func (h *FactoryEventHistory) CloseLiveSubscriptions() {
+	if h == nil {
+		return
+	}
+	h.mu.Lock()
+	streams := make([]*eventHistorySubscription, 0, len(h.streams))
+	for _, subscription := range h.streams {
+		streams = append(streams, subscription)
+	}
+	h.mu.Unlock()
+	for _, subscription := range streams {
+		subscription.signalOverflow()
+	}
+}
+
 // FactoryEventHistory stores the current-process canonical event history.
 // It is intentionally in-memory and unbounded for the event-stream MVP.
 type FactoryEventHistory struct {
