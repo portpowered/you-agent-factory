@@ -8,10 +8,10 @@ import (
 	"testing"
 	"testing/fstest"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/promptassets"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 const (
@@ -70,9 +70,9 @@ func assembleMaterializationFixture(t *testing.T) []byte {
 }
 
 type loadedPromptFixture interface {
-	FactoryConfig() *interfaces.FactoryConfig
+	FactoryConfig() *factorydefinitions.FactoryConfig
 	Worker(string) (*workerconfig.Config, bool)
-	Workstation(string) (*interfaces.FactoryWorkstationConfig, bool)
+	Workstation(string) (*factorydefinitions.FactoryWorkstationConfig, bool)
 }
 
 func loadAssembledFixture(t *testing.T, assembled []byte) loadedPromptFixture {
@@ -109,11 +109,11 @@ func loadMaterializedFixture(t *testing.T, factoryDir string) loadedPromptFixtur
 
 func assertMaterializedPromptFiles(t *testing.T, factoryDir string) {
 	t.Helper()
-	assertFileContent(t, filepath.Join(factoryDir, interfaces.WorkersDir, "author", interfaces.FactoryAgentsFileName), materializedWorkerPrompt)
-	if _, err := os.Stat(filepath.Join(factoryDir, interfaces.WorkstationsDir, "draft", interfaces.FactoryAgentsFileName)); err != nil {
+	assertFileContent(t, filepath.Join(factoryDir, factorydefinitions.WorkersDir, "author", factorydefinitions.FactoryAgentsFileName), materializedWorkerPrompt)
+	if _, err := os.Stat(filepath.Join(factoryDir, factorydefinitions.WorkstationsDir, "draft", factorydefinitions.FactoryAgentsFileName)); err != nil {
 		t.Fatalf("expected editable workstation AGENTS.md: %v", err)
 	}
-	assertFileContent(t, filepath.Join(factoryDir, interfaces.WorkstationsDir, "draft", "prompts", "workstation.md"), materializedWorkstationPrompt)
+	assertFileContent(t, filepath.Join(factoryDir, factorydefinitions.WorkstationsDir, "draft", "prompts", "workstation.md"), materializedWorkstationPrompt)
 }
 
 func assertFileContent(t *testing.T, path, want string) {
@@ -129,7 +129,7 @@ func assertFileContent(t *testing.T, path, want string) {
 
 func assertThinManifestOmitsPromptBodies(t *testing.T, factoryDir string) {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile))
+	data, err := os.ReadFile(filepath.Join(factoryDir, factorydefinitions.FactoryConfigFile))
 	if err != nil {
 		t.Fatalf("ReadFile(factory.json): %v", err)
 	}

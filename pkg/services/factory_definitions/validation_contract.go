@@ -1,6 +1,6 @@
 package factorydefinitions
 
-import contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+import contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
 
 // OrchestratorDefinitionValidator validates runtime-owned orchestrator
 // semantics while returning Factory Definition-owned targets.

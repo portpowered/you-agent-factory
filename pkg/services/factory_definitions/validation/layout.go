@@ -5,12 +5,12 @@ import (
 	"math"
 	"strings"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 // ValidateLayout reports recoverable layout defects against pending graph topology
 // indexes. Callers must build topology indexes before invoking this function.
-func ValidateLayout(cfg *interfaces.FactoryConfig, topology interfaces.PendingFactoryGraphTopology) Result {
+func ValidateLayout(cfg *factorydefinitions.FactoryConfig, topology factorydefinitions.PendingFactoryGraphTopology) Result {
 	if cfg == nil || cfg.Layout == nil {
 		return Result{}
 	}
@@ -33,7 +33,7 @@ func ValidateLayout(cfg *interfaces.FactoryConfig, topology interfaces.PendingFa
 }
 
 func unsupportedLayoutSchemaVersionTarget(schemaVersion int) []Target {
-	if schemaVersion == interfaces.SupportedFactoryLayoutSchemaVersion {
+	if schemaVersion == factorydefinitions.SupportedFactoryLayoutSchemaVersion {
 		return nil
 	}
 	return []Target{{
@@ -42,7 +42,7 @@ func unsupportedLayoutSchemaVersionTarget(schemaVersion int) []Target {
 		Message: fmt.Sprintf(
 			"layout schemaVersion %d is not supported; supported schemaVersion is %d.",
 			schemaVersion,
-			interfaces.SupportedFactoryLayoutSchemaVersion,
+			factorydefinitions.SupportedFactoryLayoutSchemaVersion,
 		),
 		Subject: Subject{
 			Type:     SubjectTypeFactory,
@@ -53,7 +53,7 @@ func unsupportedLayoutSchemaVersionTarget(schemaVersion int) []Target {
 	}}
 }
 
-func layoutNodeTargets(layout *interfaces.FactoryLayoutConfig, topology interfaces.PendingFactoryGraphTopology) []Target {
+func layoutNodeTargets(layout *factorydefinitions.FactoryLayoutConfig, topology factorydefinitions.PendingFactoryGraphTopology) []Target {
 	var targets []Target
 	for index, node := range layout.Nodes {
 		path := fmt.Sprintf("factory.layout.nodes[%d]", index)
@@ -106,7 +106,7 @@ func layoutNodeTargets(layout *interfaces.FactoryLayoutConfig, topology interfac
 	return targets
 }
 
-func layoutEdgeTargets(layout *interfaces.FactoryLayoutConfig, topology interfaces.PendingFactoryGraphTopology) []Target {
+func layoutEdgeTargets(layout *factorydefinitions.FactoryLayoutConfig, topology factorydefinitions.PendingFactoryGraphTopology) []Target {
 	var targets []Target
 	for index, edge := range layout.Edges {
 		path := fmt.Sprintf("factory.layout.edges[%d]", index)
@@ -142,7 +142,7 @@ func layoutEdgeTargets(layout *interfaces.FactoryLayoutConfig, topology interfac
 	return targets
 }
 
-func layoutGroupTargets(layout *interfaces.FactoryLayoutConfig, topology interfaces.PendingFactoryGraphTopology) []Target {
+func layoutGroupTargets(layout *factorydefinitions.FactoryLayoutConfig, topology factorydefinitions.PendingFactoryGraphTopology) []Target {
 	var targets []Target
 	for index, group := range layout.Groups {
 		path := fmt.Sprintf("factory.layout.groups[%d]", index)
@@ -191,7 +191,7 @@ func layoutReferenceTarget(code, message, subjectID, path string, severity Sever
 }
 
 func layoutUnknownNodeReferenceSeverity(nodeID string) Severity {
-	if interfaces.IsBundledFileGraphNodeID(nodeID) {
+	if factorydefinitions.IsBundledFileGraphNodeID(nodeID) {
 		return SeverityError
 	}
 	return SeverityWarning
@@ -238,7 +238,7 @@ func IsLayoutTargetCode(code string) bool {
 // recoverable validation warnings (such as unsupported schemaVersion) that
 // pruning does not report. Prune outcomes take precedence when both phases
 // target the same code/path pair.
-func LayoutSaveOutcomes(cfg *interfaces.FactoryConfig, topology interfaces.PendingFactoryGraphTopology) Result {
+func LayoutSaveOutcomes(cfg *factorydefinitions.FactoryConfig, topology factorydefinitions.PendingFactoryGraphTopology) Result {
 	pruneResult := PruneLayout(cfg, topology)
 	validateResult := ValidateLayout(cfg, topology)
 	return Result{Targets: MergeLayoutSaveOutcomes(pruneResult.Targets, validateResult.Targets)}
@@ -277,7 +277,7 @@ func layoutSaveOutcomeKey(target Target) string {
 // PruneLayout removes stale layout references and rejects non-finite geometry
 // against pending graph topology indexes. Callers must build topology indexes
 // before invoking this function.
-func PruneLayout(cfg *interfaces.FactoryConfig, topology interfaces.PendingFactoryGraphTopology) Result {
+func PruneLayout(cfg *factorydefinitions.FactoryConfig, topology factorydefinitions.PendingFactoryGraphTopology) Result {
 	if cfg == nil || cfg.Layout == nil {
 		return Result{}
 	}
@@ -307,14 +307,14 @@ func PruneLayout(cfg *interfaces.FactoryConfig, topology interfaces.PendingFacto
 }
 
 func pruneLayoutNodes(
-	nodes []interfaces.FactoryLayoutNodeConfig,
-	topology interfaces.PendingFactoryGraphTopology,
-) ([]interfaces.FactoryLayoutNodeConfig, []Target) {
+	nodes []factorydefinitions.FactoryLayoutNodeConfig,
+	topology factorydefinitions.PendingFactoryGraphTopology,
+) ([]factorydefinitions.FactoryLayoutNodeConfig, []Target) {
 	if len(nodes) == 0 {
 		return nil, nil
 	}
 
-	pruned := make([]interfaces.FactoryLayoutNodeConfig, 0, len(nodes))
+	pruned := make([]factorydefinitions.FactoryLayoutNodeConfig, 0, len(nodes))
 	var targets []Target
 	for index, node := range nodes {
 		path := fmt.Sprintf("factory.layout.nodes[%d]", index)
@@ -373,14 +373,14 @@ func pruneLayoutNodes(
 }
 
 func pruneLayoutEdges(
-	edges []interfaces.FactoryLayoutEdgeConfig,
-	topology interfaces.PendingFactoryGraphTopology,
-) ([]interfaces.FactoryLayoutEdgeConfig, []Target) {
+	edges []factorydefinitions.FactoryLayoutEdgeConfig,
+	topology factorydefinitions.PendingFactoryGraphTopology,
+) ([]factorydefinitions.FactoryLayoutEdgeConfig, []Target) {
 	if len(edges) == 0 {
 		return nil, nil
 	}
 
-	pruned := make([]interfaces.FactoryLayoutEdgeConfig, 0, len(edges))
+	pruned := make([]factorydefinitions.FactoryLayoutEdgeConfig, 0, len(edges))
 	var targets []Target
 	for index, edge := range edges {
 		path := fmt.Sprintf("factory.layout.edges[%d]", index)
@@ -429,14 +429,14 @@ func pruneLayoutEdges(
 }
 
 func pruneLayoutGroups(
-	groups []interfaces.FactoryLayoutGroupConfig,
-	topology interfaces.PendingFactoryGraphTopology,
-) ([]interfaces.FactoryLayoutGroupConfig, []Target) {
+	groups []factorydefinitions.FactoryLayoutGroupConfig,
+	topology factorydefinitions.PendingFactoryGraphTopology,
+) ([]factorydefinitions.FactoryLayoutGroupConfig, []Target) {
 	if len(groups) == 0 {
 		return nil, nil
 	}
 
-	pruned := make([]interfaces.FactoryLayoutGroupConfig, 0, len(groups))
+	pruned := make([]factorydefinitions.FactoryLayoutGroupConfig, 0, len(groups))
 	var targets []Target
 	for index, group := range groups {
 		path := fmt.Sprintf("factory.layout.groups[%d]", index)
@@ -478,7 +478,7 @@ func pruneLayoutGroups(
 	return pruned, targets
 }
 
-func pruneLayoutViewport(layout *interfaces.FactoryLayoutConfig) []Target {
+func pruneLayoutViewport(layout *factorydefinitions.FactoryLayoutConfig) []Target {
 	if layout == nil || layout.Viewport == nil {
 		return nil
 	}

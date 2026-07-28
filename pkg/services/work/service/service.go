@@ -40,6 +40,7 @@ func New(sessions RuntimeResolver) *Service {
 		sessions: sessions,
 		stateAccess: stateaccesswire.NewService(
 			stateaccesswire.NewRuntimeSessionResolver(liveSessionRuntimeResolver{sessions: sessions}),
+			nil,
 		),
 	}
 }
@@ -60,6 +61,7 @@ func NewService(
 		contentMaterializer: contentMaterializer,
 		stateAccess: stateaccesswire.NewService(
 			stateaccesswire.NewRuntimeSessionResolver(runtimes),
+			nil,
 		),
 	}
 }

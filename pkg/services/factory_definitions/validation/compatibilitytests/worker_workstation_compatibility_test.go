@@ -6,20 +6,20 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil/validationassert"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
-func taxonomyValidationBaseConfig() *interfaces.FactoryConfig {
-	return &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{{
+func taxonomyValidationBaseConfig() *factorydefinitions.FactoryConfig {
+	return &factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{{
 			Name: "story",
-			States: []interfaces.StateConfig{
-				{Name: "init", Type: interfaces.StateTypeInitial},
-				{Name: "complete", Type: interfaces.StateTypeTerminal},
-				{Name: "failed", Type: interfaces.StateTypeFailed},
+			States: []factorydefinitions.StateConfig{
+				{Name: "init", Type: factorydefinitions.StateTypeInitial},
+				{Name: "complete", Type: factorydefinitions.StateTypeTerminal},
+				{Name: "failed", Type: factorydefinitions.StateTypeFailed},
 			},
 		}},
 	}
@@ -32,15 +32,15 @@ func TestValidate_WorkerWorkstationCompatibility_AcceptsCompatiblePairings(t *te
 		name            string
 		workerType      string
 		workstationType string
-		workstationKind interfaces.WorkstationKind
+		workstationKind factorydefinitions.WorkstationKind
 	}{
-		{name: "inference taxonomy", workerType: interfaces.WorkerTypeInference, workstationType: interfaces.WorkstationTypeInference},
-		{name: "agent taxonomy", workerType: interfaces.WorkerTypeAgent, workstationType: interfaces.WorkstationTypeAgent},
-		{name: "script taxonomy", workerType: interfaces.WorkerTypeScript, workstationType: interfaces.WorkstationTypeScript},
-		{name: "poller taxonomy", workerType: interfaces.WorkerTypePoller, workstationType: interfaces.WorkstationTypePoller, workstationKind: interfaces.WorkstationKindPoller},
-		{name: "legacy invoke pairing", workerType: interfaces.WorkerTypeModel, workstationType: interfaces.WorkstationTypeInvoke},
-		{name: "legacy agent pairing", workerType: interfaces.WorkerTypeModel, workstationType: interfaces.WorkstationTypeModel},
-		{name: "legacy poller pairing", workerType: interfaces.WorkerTypeHosted, workstationKind: interfaces.WorkstationKindPoller},
+		{name: "inference taxonomy", workerType: factorydefinitions.WorkerTypeInference, workstationType: factorydefinitions.WorkstationTypeInference},
+		{name: "agent taxonomy", workerType: factorydefinitions.WorkerTypeAgent, workstationType: factorydefinitions.WorkstationTypeAgent},
+		{name: "script taxonomy", workerType: factorydefinitions.WorkerTypeScript, workstationType: factorydefinitions.WorkstationTypeScript},
+		{name: "poller taxonomy", workerType: factorydefinitions.WorkerTypePoller, workstationType: factorydefinitions.WorkstationTypePoller, workstationKind: factorydefinitions.WorkstationKindPoller},
+		{name: "legacy invoke pairing", workerType: factorydefinitions.WorkerTypeModel, workstationType: factorydefinitions.WorkstationTypeInvoke},
+		{name: "legacy agent pairing", workerType: factorydefinitions.WorkerTypeModel, workstationType: factorydefinitions.WorkstationTypeModel},
+		{name: "legacy poller pairing", workerType: factorydefinitions.WorkerTypeHosted, workstationKind: factorydefinitions.WorkstationKindPoller},
 	}
 
 	for _, tt := range tests {
@@ -50,14 +50,14 @@ func TestValidate_WorkerWorkstationCompatibility_AcceptsCompatiblePairings(t *te
 
 			cfg := taxonomyValidationBaseConfig()
 			cfg.Workers = []workerconfig.Config{{Name: "executor", Type: tt.workerType}}
-			cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+			cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 				Name:           "execute-story",
 				Type:           tt.workstationType,
 				Kind:           tt.workstationKind,
 				WorkerTypeName: "executor",
-				Inputs:         []interfaces.IOConfig{{WorkTypeName: "story", StateName: "init"}},
-				Outputs:        []interfaces.IOConfig{{WorkTypeName: "story", StateName: "complete"}},
-				OnFailure:      []interfaces.IOConfig{{WorkTypeName: "story", StateName: "failed"}},
+				Inputs:         []factorydefinitions.IOConfig{{WorkTypeName: "story", StateName: "init"}},
+				Outputs:        []factorydefinitions.IOConfig{{WorkTypeName: "story", StateName: "complete"}},
+				OnFailure:      []factorydefinitions.IOConfig{{WorkTypeName: "story", StateName: "failed"}},
 			}}
 
 			result := factoryvalidation.Validate(cfg)
@@ -77,38 +77,38 @@ func TestValidate_WorkerWorkstationCompatibility_RejectsIncompatiblePairings(t *
 		name            string
 		workerType      string
 		workstationType string
-		workstationKind interfaces.WorkstationKind
+		workstationKind factorydefinitions.WorkstationKind
 		wantWorkerLabel string
 		wantRunLabel    string
 	}{
 		{
 			name:            "agent run with inference worker",
-			workerType:      interfaces.WorkerTypeInference,
-			workstationType: interfaces.WorkstationTypeAgent,
-			wantWorkerLabel: interfaces.WorkerTypeInference,
-			wantRunLabel:    interfaces.WorkstationTypeAgent,
+			workerType:      factorydefinitions.WorkerTypeInference,
+			workstationType: factorydefinitions.WorkstationTypeAgent,
+			wantWorkerLabel: factorydefinitions.WorkerTypeInference,
+			wantRunLabel:    factorydefinitions.WorkstationTypeAgent,
 		},
 		{
 			name:            "inference run with agent worker",
-			workerType:      interfaces.WorkerTypeAgent,
-			workstationType: interfaces.WorkstationTypeInference,
-			wantWorkerLabel: interfaces.WorkerTypeAgent,
-			wantRunLabel:    interfaces.WorkstationTypeInference,
+			workerType:      factorydefinitions.WorkerTypeAgent,
+			workstationType: factorydefinitions.WorkstationTypeInference,
+			wantWorkerLabel: factorydefinitions.WorkerTypeAgent,
+			wantRunLabel:    factorydefinitions.WorkstationTypeInference,
 		},
 		{
 			name:            "poller run with inference worker",
-			workerType:      interfaces.WorkerTypeInference,
-			workstationType: interfaces.WorkstationTypePoller,
-			workstationKind: interfaces.WorkstationKindPoller,
-			wantWorkerLabel: interfaces.WorkerTypeInference,
-			wantRunLabel:    interfaces.WorkstationTypePoller,
+			workerType:      factorydefinitions.WorkerTypeInference,
+			workstationType: factorydefinitions.WorkstationTypePoller,
+			workstationKind: factorydefinitions.WorkstationKindPoller,
+			wantWorkerLabel: factorydefinitions.WorkerTypeInference,
+			wantRunLabel:    factorydefinitions.WorkstationTypePoller,
 		},
 		{
 			name:            "legacy agent run alias with model worker",
-			workerType:      interfaces.WorkerTypeModel,
-			workstationType: interfaces.WorkstationTypeAgent,
-			wantWorkerLabel: interfaces.WorkerTypeModel,
-			wantRunLabel:    interfaces.WorkstationTypeAgent,
+			workerType:      factorydefinitions.WorkerTypeModel,
+			workstationType: factorydefinitions.WorkstationTypeAgent,
+			wantWorkerLabel: factorydefinitions.WorkerTypeModel,
+			wantRunLabel:    factorydefinitions.WorkstationTypeAgent,
 		},
 	}
 
@@ -119,14 +119,14 @@ func TestValidate_WorkerWorkstationCompatibility_RejectsIncompatiblePairings(t *
 
 			cfg := taxonomyValidationBaseConfig()
 			cfg.Workers = []workerconfig.Config{{Name: "executor", Type: tt.workerType}}
-			cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+			cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 				Name:           "execute-story",
 				Type:           tt.workstationType,
 				Kind:           tt.workstationKind,
 				WorkerTypeName: "executor",
-				Inputs:         []interfaces.IOConfig{{WorkTypeName: "story", StateName: "init"}},
-				Outputs:        []interfaces.IOConfig{{WorkTypeName: "story", StateName: "complete"}},
-				OnFailure:      []interfaces.IOConfig{{WorkTypeName: "story", StateName: "failed"}},
+				Inputs:         []factorydefinitions.IOConfig{{WorkTypeName: "story", StateName: "init"}},
+				Outputs:        []factorydefinitions.IOConfig{{WorkTypeName: "story", StateName: "complete"}},
+				OnFailure:      []factorydefinitions.IOConfig{{WorkTypeName: "story", StateName: "failed"}},
 			}}
 
 			result := factoryvalidation.Validate(cfg)
@@ -184,8 +184,8 @@ func TestValidateFactoryAPI_PreservesMixedLegacyModelWorkerAcrossAgentAndInferen
 		t.Fatalf("generated workers = %#v, want one worker", generated.Workers)
 	}
 	worker := (*generated.Workers)[0]
-	if worker.Type == nil || string(*worker.Type) != interfaces.WorkerTypeModel {
-		t.Fatalf("generated worker type = %#v, want %s", worker.Type, interfaces.WorkerTypeModel)
+	if worker.Type == nil || string(*worker.Type) != factorydefinitions.WorkerTypeModel {
+		t.Fatalf("generated worker type = %#v, want %s", worker.Type, factorydefinitions.WorkerTypeModel)
 	}
 
 	result, err := validationentry.ValidateFactoryAPI(t.Context(), generated, testFactoryDefinitionValidator())

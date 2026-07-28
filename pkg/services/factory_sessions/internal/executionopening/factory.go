@@ -14,7 +14,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
 	"go.uber.org/zap"
 )
 
@@ -32,12 +31,12 @@ type StandaloneSessionExecutionFactory = func(
 
 type WorkerInvocationFactory = func(
 	workers.CommandRunner,
-	agypty.PTYAllocator,
+	workers.PTYAllocator,
 ) (workers.InvocationExecutor, error)
 
 type WorkerInvocationWithProgressFactory = func(
 	workers.CommandRunner,
-	agypty.PTYAllocator,
+	workers.PTYAllocator,
 	workers.ProgressPublisher,
 ) (workers.InvocationExecutor, error)
 
@@ -46,7 +45,7 @@ type Factory struct {
 	runtimes       *runtimeopening.Factory
 	runtimeEffects runtimeopening.ExternalEffects
 	commandRunner  workers.CommandRunner
-	allocator      agypty.PTYAllocator
+	allocator      workers.PTYAllocator
 	standalone     StandaloneSessionExecutionFactory
 	invocation     WorkerInvocationFactory
 	resolveClock   factory.ClockResolver
@@ -62,7 +61,7 @@ func NewFactory(
 	runtimes *runtimeopening.Factory,
 	runtimeEffects runtimeopening.ExternalEffects,
 	commandRunner workers.CommandRunner,
-	allocator agypty.PTYAllocator,
+	allocator workers.PTYAllocator,
 	build StandaloneSessionExecutionFactory,
 	invocation WorkerInvocationFactory,
 	resolveClock factory.ClockResolver,

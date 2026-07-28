@@ -7,7 +7,7 @@ import (
 
 	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
-	automationservice "github.com/portpowered/infinite-you/pkg/services/automations/service"
+	automationinternal "github.com/portpowered/infinite-you/pkg/services/automations/internal"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
 )
@@ -15,7 +15,7 @@ import (
 func TestAutomationsServiceConstructsFilesystemWatcherOwnerInertly(t *testing.T) {
 	t.Parallel()
 
-	service := automationservice.NewService(
+	service := automationinternal.NewService(
 		zap.NewNop(),
 		clockwork.NewFakeClock(),
 		nil,

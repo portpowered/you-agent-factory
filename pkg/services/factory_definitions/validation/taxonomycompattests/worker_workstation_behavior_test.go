@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil/validationassert"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func TestPollerRunWorkstationKindTargets_RejectsConflictingBehavior(t *testing.T) {
@@ -16,16 +16,16 @@ func TestPollerRunWorkstationKindTargets_RejectsConflictingBehavior(t *testing.T
 	cfg := taxonomyCompatibilityBaseConfig()
 	cfg.Workers = []workerconfig.Config{{
 		Name:    "script-poller",
-		Type:    interfaces.WorkerTypeScript,
+		Type:    factorydefinitions.WorkerTypeScript,
 		Command: "factory/scripts/poll.sh",
 	}}
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:           "poll-tasks",
-		Type:           interfaces.WorkstationTypePoller,
-		Kind:           interfaces.WorkstationKindCron,
+		Type:           factorydefinitions.WorkstationTypePoller,
+		Kind:           factorydefinitions.WorkstationKindCron,
 		WorkerTypeName: "script-poller",
-		Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-		Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+		Inputs:         []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		Outputs:        []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "done"}},
 	}}
 
 	targets := factoryvalidation.PollerRunWorkstationKindTargets(cfg)
@@ -40,16 +40,16 @@ func TestWorkerWorkstationBehaviorCompatibilityTargets_RejectsIncompatiblePairin
 
 	cfg := taxonomyCompatibilityBaseConfig()
 	cfg.Workers = []workerconfig.Config{
-		{Name: "infer", Type: interfaces.WorkerTypeInference, Operations: taxonomyInferenceOperationFixture()},
-		{Name: "agent", Type: interfaces.WorkerTypeAgent},
+		{Name: "infer", Type: factorydefinitions.WorkerTypeInference, Operations: taxonomyInferenceOperationFixture()},
+		{Name: "agent", Type: factorydefinitions.WorkerTypeAgent},
 	}
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{
 		{
 			Name:           "agent-with-infer",
-			Type:           interfaces.WorkstationTypeAgent,
+			Type:           factorydefinitions.WorkstationTypeAgent,
 			WorkerTypeName: "infer",
-			Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-			Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+			Inputs:         []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+			Outputs:        []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "done"}},
 		},
 	}
 
@@ -64,27 +64,27 @@ func TestValidate_IncludesWorkerWorkstationBehaviorCompatibilityTargets(t *testi
 	t.Parallel()
 
 	cfg := taxonomyCompatibilityBaseConfig()
-	cfg.Workers = []workerconfig.Config{{Name: "infer", Type: interfaces.WorkerTypeInference, Operations: taxonomyInferenceOperationFixture()}}
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workers = []workerconfig.Config{{Name: "infer", Type: factorydefinitions.WorkerTypeInference, Operations: taxonomyInferenceOperationFixture()}}
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:           "agent-with-infer",
-		Type:           interfaces.WorkstationTypeAgent,
+		Type:           factorydefinitions.WorkstationTypeAgent,
 		WorkerTypeName: "infer",
-		Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-		Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+		Inputs:         []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		Outputs:        []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "done"}},
 	}}
 
 	result := factoryvalidation.Validate(cfg)
 	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeWorkerWorkstationBehaviorCompatibility)
 }
 
-func taxonomyCompatibilityBaseConfig() *interfaces.FactoryConfig {
-	return &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{{
+func taxonomyCompatibilityBaseConfig() *factorydefinitions.FactoryConfig {
+	return &factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{{
 			Name: "task",
-			States: []interfaces.StateConfig{
-				{Name: "init", Type: interfaces.StateTypeInitial},
-				{Name: "done", Type: interfaces.StateTypeTerminal},
-				{Name: "failed", Type: interfaces.StateTypeFailed},
+			States: []factorydefinitions.StateConfig{
+				{Name: "init", Type: factorydefinitions.StateTypeInitial},
+				{Name: "done", Type: factorydefinitions.StateTypeTerminal},
+				{Name: "failed", Type: factorydefinitions.StateTypeFailed},
 			},
 		}},
 	}

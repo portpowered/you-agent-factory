@@ -18,7 +18,6 @@ import (
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
 func TestSessionInvocationAPI_ReturnsPrimaryResult(t *testing.T) {
@@ -46,7 +45,6 @@ func TestSessionInvocationAPI_ReturnsPrimaryResult(t *testing.T) {
 	recorder.assertContainsMetric(t, "invocation.fallback_policy_used", map[string]string{"input_source": "COMPATIBILITY_CONTENT"})
 	recorder.assertContainsMetric(t, "invocation.success", map[string]string{"input_source": "COMPATIBILITY_CONTENT"})
 	recorder.assertContainsMetric(t, "invocation.result_type", map[string]string{"input_source": "COMPATIBILITY_CONTENT", "result_type": "text"})
-	functionalevidence.Covers(t, "rest/invokeFactorySessionBySessionId")
 }
 
 func TestSessionInvocationAPI_RejectsWhitespaceOnlyText(t *testing.T) {

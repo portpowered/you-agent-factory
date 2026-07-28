@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func TestDeleteNamedFactory_RemovesNamedDirectory(t *testing.T) {
@@ -44,7 +44,7 @@ func TestDeleteNamedFactory_RejectsCurrentFactory(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected delete current factory to fail")
 	}
-	if !errors.Is(err, interfaces.ErrNamedFactoryIsCurrent) {
+	if !errors.Is(err, factorydefinitions.ErrNamedFactoryIsCurrent) {
 		t.Fatalf("error = %v, want ErrNamedFactoryIsCurrent", err)
 	}
 	if !strings.Contains(err.Error(), ".current-factory") {
@@ -68,7 +68,7 @@ func TestDeleteNamedFactory_RejectsCurrentScopedFactory(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected delete current scoped factory to fail")
 	}
-	if !errors.Is(err, interfaces.ErrNamedFactoryIsCurrent) {
+	if !errors.Is(err, factorydefinitions.ErrNamedFactoryIsCurrent) {
 		t.Fatalf("error = %v, want ErrNamedFactoryIsCurrent", err)
 	}
 	if _, statErr := os.Stat(filepath.Join(rootDir, "@you", "tts")); statErr != nil {
@@ -111,7 +111,7 @@ func TestDeleteNamedFactory_PreservesCurrentPointerFile(t *testing.T) {
 	if current != "alpha" {
 		t.Fatalf("current = %q, want alpha", current)
 	}
-	if _, err := os.Stat(filepath.Join(rootDir, interfaces.CurrentFactoryPointerFile)); err != nil {
+	if _, err := os.Stat(filepath.Join(rootDir, factorydefinitions.CurrentFactoryPointerFile)); err != nil {
 		t.Fatalf("current pointer file missing: %v", err)
 	}
 }

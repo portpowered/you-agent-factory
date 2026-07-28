@@ -4,15 +4,14 @@ import (
 	"fmt"
 	"path/filepath"
 
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func (s *Service) serializeNamedFactory(
 	name string,
 	current factorydefinitions.LoadedFactorySource,
 	inlineBundledFiles bool,
-) (*interfaces.FactorySnapshot, error) {
+) (*factorydefinitions.FactorySnapshot, error) {
 	factoryCfg := current.FactoryConfig()
 	if inlineBundledFiles && factoryCfg != nil {
 		portableFactoryConfig, err := preparePortableFactoryConfigFromHost(
@@ -43,12 +42,12 @@ func (s *Service) serializeNamedFactory(
 	return namedSnapshot, nil
 }
 
-func (s *Service) currentFactoryDefinitionVersionAtRoot(rootDir string, name string) (interfaces.FactoryVersion, error) {
+func (s *Service) currentFactoryDefinitionVersionAtRoot(rootDir string, name string) (factorydefinitions.FactoryVersion, error) {
 	factoryDir := rootDir
-	if name != interfaces.DefaultCurrentFactoryName {
+	if name != factorydefinitions.DefaultCurrentFactoryName {
 		resolved, err := resolveExistingFactoryDirFromHost(s.host, rootDir, name)
 		if err != nil {
-			return interfaces.FactoryVersion{}, err
+			return factorydefinitions.FactoryVersion{}, err
 		}
 		factoryDir = resolved
 	}
@@ -58,29 +57,29 @@ func (s *Service) currentFactoryDefinitionVersionAtRoot(rootDir string, name str
 	}
 	current, err := loadFactoryFromHost(s.host, factoryDir, workstationLoader)
 	if err != nil {
-		return interfaces.FactoryVersion{}, fmt.Errorf("load current factory definition: %w", err)
+		return factorydefinitions.FactoryVersion{}, fmt.Errorf("load current factory definition: %w", err)
 	}
 	if current.FactoryConfig().Version != nil {
 		version := current.FactoryConfig().Version
-		return interfaces.FactoryVersion{
+		return factorydefinitions.FactoryVersion{
 			Logical:  version.Logical,
 			Physical: version.Physical.UTC(),
 		}, nil
 	}
 
 	if s.versionFileSystem == nil {
-		return interfaces.FactoryVersion{}, fmt.Errorf("Factory Definition version filesystem is required")
+		return factorydefinitions.FactoryVersion{}, fmt.Errorf("Factory Definition version filesystem is required")
 	}
-	info, err := s.versionFileSystem.Stat(filepath.Join(factoryDir, interfaces.FactoryConfigFile))
+	info, err := s.versionFileSystem.Stat(filepath.Join(factoryDir, factorydefinitions.FactoryConfigFile))
 	if err != nil {
-		return interfaces.FactoryVersion{}, fmt.Errorf("stat current factory definition: %w", err)
+		return factorydefinitions.FactoryVersion{}, fmt.Errorf("stat current factory definition: %w", err)
 	}
 	modified := info.ModTime().UTC()
 	logical := modified.UnixNano()
 	if logical < 0 {
 		logical = 0
 	}
-	return interfaces.FactoryVersion{
+	return factorydefinitions.FactoryVersion{
 		Logical:  logical,
 		Physical: modified,
 	}, nil
@@ -91,7 +90,7 @@ func (s *Service) currentFactoryDefinitionVersionAtRoot(rootDir string, name str
 func (s *Service) SerializeNamedFactoryUpsertResponse(
 	name string,
 	current factorydefinitions.LoadedFactorySource,
-) (*interfaces.FactorySnapshot, error) {
+) (*factorydefinitions.FactorySnapshot, error) {
 	if s == nil {
 		return nil, fmt.Errorf("factory definition service is required")
 	}

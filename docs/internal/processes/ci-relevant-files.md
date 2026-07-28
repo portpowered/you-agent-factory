@@ -278,10 +278,10 @@
   from the path.
   Script-poller packaged-owner evidence belongs to
   `pkg/services/automations/internal/services/script_pollers` and is reached
-  only through `pkg/services/automations/service`. Unit evidence covers submit,
-  timeout/restart, malformed rejection, and cursor persistence in the packaged
-  owner tests; Automations-root composition evidence belongs in
-  `pkg/services/automations/service/service_internal_test.go`
+  through the composed Automations root in `pkg/services/automations/internal`.
+  Unit evidence covers submit, timeout/restart, malformed rejection, and cursor
+  persistence in the packaged owner tests; Automations-root composition evidence
+  belongs in `pkg/services/automations/internal/service_internal_test.go`
   (`TestProductionRootScriptPollerCursorThroughCompositionPath`). Root
   `BuildProcess` functional evidence belongs in
   `tests/functional/workstations/poller/poller_test.go` and
@@ -306,6 +306,17 @@
   Catalog metadata infers domain `workers` and subsection `mock` from the path;
   every top-level `Test*` needs a customer-readable Go doc so
   `functionaltestmetadata` stays viz-compatible.
+  Packaged `@you/subagent` invocation functional coverage belongs in
+  `tests/functional/factory/packaged/subagent/invocation_test.go`: prove child
+  primary-result return through public CLI JSON and hermetic no-server named
+  invocation, child Factory Response Event streaming on
+  `GET /factory-sessions/~default/response-events`, and stable child failure
+  through CLI JSON plus API invocation with rejecting mock workers. Drive proofs
+  through `support.InstallPackagedFactory`, `support.WriteMockWorkersConfig`,
+  `support.BuildProcess`, and `support.StartFunctionalAPIServer` without
+  service-internal Petri imports. Catalog metadata infers domain `factory` and
+  subsection `packaged/subagent` from the path; every top-level `Test*` needs a
+  customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
   CLI single-JSON result functional coverage belongs in
   `tests/functional/transport/cli/output/json_result_test.go`: invoke
   `support.BuildProcess(t, serviceedges.Edges{}).Execute` with global `--json`
@@ -472,6 +483,12 @@ Wave 0 functional-tests-expansion planning authority lives under
   `migration-ledger-inventory.json`, retarget any specialty Make bindings, and
   refresh `test-file-checklist.md` plus narrowly coupled baselines
   (`package-structure-baseline.json`, `functional-undocumented-tests.json`).
+  `tests/functional/factory/definitions/init_test.go` owns public Factory-init
+  functional coverage through `session create --init-new-factory` against
+  `support.StartFunctionalAPIServer`, with seeded Work run via
+  `support.RunFactoryToCompletionWithEdgesAndWork` and terminal assertions via
+  `support.CountWorkAtCustomerState`; catalog metadata infers domain
+  `factory/definitions`.
   `make pkg-structure` enforces the domain-mirrored functional layout
   `tests/functional/<domain>/<subsection>/...`: new shallow, catch-all, or
   unclassified scenario packages are blocking, while existing nonconforming
@@ -753,6 +770,25 @@ Wave 0 functional-tests-expansion planning authority lives under
   metadata infers domain `workers` and subsection `inference` from the path;
   every top-level `Test*` needs a customer-readable Go doc so
   `functionaltestmetadata` stays viz-compatible.
+
+- `tests/functional/provider_sessions/association/association_test.go` owns
+  Provider Session ref correlation on public Factory Session dispatch projections.
+  Drive proofs through `support.StartFunctionalAPIServer` with a JavaScript
+  `agent.run` fake-child workflow (no live provider runner calls), then assert on
+  `GET /factory-sessions/{session_id}/dispatches` and
+  `GET /factory-sessions/{session_id}/dispatches/{dispatch_id}` only:
+  `providerSessionRefs`, owning dispatch `id`, and list/detail `sessionId`
+  correlation.   Use a successful fake child for present-ref association and a
+  deterministic `fail:` fake-child prompt for absent-ref non-fabrication (nil or
+  empty `providerSessionRefs` on list/detail, not `fake-provider-session-1`).
+  For distinct multi-dispatch refs, run two successful `agent.run` children in
+  one workflow and assert `fake-provider-session-1` / `fake-provider-session-2`
+  join to their owning dispatch ids without collision. Do not invent provider
+  metadata or widen into `details/*` or
+  `response_exec_metadata_test.go`. Catalog metadata infers domain
+  `provider_sessions` and subsection `association`; every top-level `Test*`
+  needs a customer-readable Go doc so `functionaltestmetadata` stays
+  viz-compatible.
 
 - `tests/functional/automations/` owns root.BuildProcess evidence for packaged
   Automations cron scheduling and filesystem watcher preseed. Keep cron workstation
