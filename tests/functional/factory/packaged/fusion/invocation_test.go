@@ -12,6 +12,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -181,6 +182,99 @@ func TestPackagedFusionOptionalInputsReachWorkers(t *testing.T) {
 			"refiner agent-run system summary = %q, want secondEffort override",
 			effortByDispatch[dispatches[1].DispatchID],
 		)
+	}
+}
+
+// TestPackagedFusionPartialWorkerFailureUsesDocumentedOutcome proves that a
+// configured mock-worker rejection during one fusion stage returns a failed
+// public terminal invocation outcome without a completed success primary
+// result attributable to the failing run.
+func TestPackagedFusionPartialWorkerFailureUsesDocumentedOutcome(t *testing.T) {
+	input := fmt.Sprintf(
+		"functional packaged fusion partial worker failure %d",
+		time.Now().UnixNano(),
+	)
+
+	factoryDir := support.InstallPackagedFactory(
+		t,
+		t.TempDir(),
+		factorydefinitions.PackagedFusionFactoryName,
+	)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                factoryDir,
+		UseMockWorkers:            true,
+		MockWorkersConfig:         packagedFusionRejectingDrafterMockWorkersConfig(),
+		WaitForServiceModeRuntime: true,
+	})
+
+	response := startPackagedFusionInvocation(
+		t,
+		server,
+		"packaged-fusion-partial-worker-failure",
+		map[string]any{"input": input},
+	)
+	if response.Status != factoryapi.InvocationTerminalStatusFailed {
+		t.Fatalf("invocation status = %q, want FAILED; response = %#v", response.Status, response)
+	}
+	if response.PrimaryResult != nil {
+		t.Fatalf(
+			"primary result = %#v, want no completed success primary result after worker failure",
+			response.PrimaryResult,
+		)
+	}
+	if response.WorkState == nil || *response.WorkState != "task:failed" {
+		t.Fatalf("invocation workState = %#v, want task:failed", response.WorkState)
+	}
+
+	dispatches := support.ObserveDispatchEvents(t, server.GetFactoryEvents(t))
+	if len(dispatches) == 0 {
+		t.Fatal("dispatch observations missing, want at least one draft-fusion failure")
+	}
+	var failedDraftDispatches int
+	for _, dispatch := range dispatches {
+		if dispatch.Request.TransitionId == "refine-fusion" {
+			t.Fatalf(
+				"dispatch transition = %q, want no refiner dispatch after draft-stage failure",
+				dispatch.Request.TransitionId,
+			)
+		}
+		if dispatch.Request.TransitionId != "draft-fusion" {
+			t.Fatalf(
+				"dispatch transition = %q, want only draft-fusion dispatches",
+				dispatch.Request.TransitionId,
+			)
+		}
+		if dispatch.Response == nil {
+			t.Fatalf("draft-fusion dispatch response missing: %#v", dispatch)
+		}
+		if dispatch.Response.Outcome != factoryapi.WorkOutcomeFailed {
+			t.Fatalf(
+				"draft-fusion outcome = %q, want FAILED",
+				dispatch.Response.Outcome,
+			)
+		}
+		if dispatch.Response.Error == nil || strings.TrimSpace(*dispatch.Response.Error) == "" {
+			t.Fatalf("dispatch error = %#v, want stable public failure record", dispatch.Response.Error)
+		}
+		failedDraftDispatches++
+	}
+	if failedDraftDispatches == 0 {
+		t.Fatal("failed draft-fusion dispatch count = 0, want at least one")
+	}
+}
+
+func packagedFusionRejectingDrafterMockWorkersConfig() *workers.MockWorkersConfig {
+	exitCode := 7
+	return &workers.MockWorkersConfig{
+		MockWorkers: []workers.MockWorkerConfig{{
+			WorkerName:      "fusion-drafter",
+			WorkstationName: "draft-fusion",
+			RunType:         workers.MockWorkerRunTypeReject,
+			RejectConfig: &workers.MockWorkerRejectConfig{
+				Stderr:   "packaged fusion mock worker failure",
+				ExitCode: &exitCode,
+			},
+		}},
 	}
 }
 
