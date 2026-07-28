@@ -3,6 +3,7 @@ package wire
 import (
 	"context"
 	"errors"
+	"runtime"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -196,6 +197,117 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 				t.Fatalf("NewService() = %#v, want nil service", service)
 			}
 		})
+	}
+}
+
+func TestNewServiceConstructsInertRoot(t *testing.T) {
+	t.Parallel()
+
+	providers := &wireProvidersFake{}
+	models := &wireInferenceInvoker{}
+	command := &recordingWireCommandRunner{}
+	agentPublishCalls := 0
+	scriptPublishCalls := 0
+	scriptRecordCalls := 0
+	factoryDocsCalls := 0
+	clockCalls := 0
+	inputs := validNewServiceInputs()
+	inputs.agentDependencies.Providers = providers
+	inputs.agentDependencies.Publish = func(workers.ProgressFragment) {
+		agentPublishCalls++
+		panic("agent progress published during inert construction")
+	}
+	inputs.scriptDependencies.CommandRunner = command
+	inputs.scriptDependencies.FactoryDocs = func(string) (map[string]string, error) {
+		factoryDocsCalls++
+		panic("Factory docs loaded during inert construction")
+	}
+	inputs.scriptDependencies.Now = func() time.Time {
+		clockCalls++
+		panic("script clock read during inert construction")
+	}
+	inputs.scriptDependencies.Publish = func(workers.ProgressFragment) {
+		scriptPublishCalls++
+		panic("script progress published during inert construction")
+	}
+	inputs.scriptDependencies.Record = func(workers.ScriptEvent) {
+		scriptRecordCalls++
+		panic("script event recorded during inert construction")
+	}
+	inputs.inferenceDependencies.Models = models
+
+	runtime.GC()
+	time.Sleep(20 * time.Millisecond)
+	baseline := runtime.NumGoroutine()
+
+	service, err := inputs.callNewService()
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	if service == nil {
+		t.Fatal("NewService() returned nil service")
+	}
+	var root workers.Service = service
+	if root == nil {
+		t.Fatal("constructed root is nil")
+	}
+	if providers.calls.Load() != 0 {
+		t.Fatalf("Providers.Execute calls = %d, want no construction activity", providers.calls.Load())
+	}
+	if command.calls.Load() != 0 {
+		t.Fatalf("command runner calls = %d, want no construction activity", command.calls.Load())
+	}
+	if models.calls.Load() != 0 {
+		t.Fatalf("Models.InvokeLocal calls = %d, want no construction activity", models.calls.Load())
+	}
+	if agentPublishCalls != 0 || scriptPublishCalls != 0 || scriptRecordCalls != 0 ||
+		factoryDocsCalls != 0 || clockCalls != 0 {
+		t.Fatalf(
+			"construction invoked process edges (agent publish=%d script publish=%d record=%d docs=%d clock=%d), want inert construction",
+			agentPublishCalls, scriptPublishCalls, scriptRecordCalls, factoryDocsCalls, clockCalls,
+		)
+	}
+
+	runtime.GC()
+	time.Sleep(20 * time.Millisecond)
+	if leaked := runtime.NumGoroutine() - baseline; leaked > 4 {
+		t.Fatalf(
+			"goroutine leak after construction: baseline=%d current=%d delta=%d",
+			baseline, runtime.NumGoroutine(), leaked,
+		)
+	}
+
+	ctx := context.Background()
+	if _, err := service.WorkstationRoute(
+		ctx,
+		workers.WorkstationRouteRequest{WorkstationName: "review"},
+	); !errors.Is(err, workers.ErrWorkstationPoolUnavailable) {
+		t.Fatalf(
+			"WorkstationRoute() after construction error = %v, want ErrWorkstationPoolUnavailable",
+			err,
+		)
+	}
+
+	started, err := service.StartWorkstationPool(ctx, workers.WorkstationPoolStartRequest{
+		Bindings: []workers.AssembledRuntimeBinding{
+			{RoleName: "review", RoleKind: workers.RuntimeBuildRoleKindWorkstation},
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartWorkstationPool() error = %v", err)
+	}
+	if started.Outcome != workers.WorkstationPoolLifecycleOutcomeStarted {
+		t.Fatalf("StartWorkstationPool() outcome = %q, want STARTED", started.Outcome)
+	}
+	route, err := service.WorkstationRoute(
+		ctx,
+		workers.WorkstationRouteRequest{WorkstationName: "review"},
+	)
+	if err != nil {
+		t.Fatalf("WorkstationRoute() after start error = %v", err)
+	}
+	if !route.Available || route.WorkstationName != "review" {
+		t.Fatalf("WorkstationRoute() after start = %#v", route)
 	}
 }
 
