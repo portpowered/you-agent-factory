@@ -247,12 +247,14 @@ func TestMapCommittedOwnerPackageFactoryRuntimeMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/testkit",
+			path: "pkg/services/factory_runtime/internal/testkit",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_runtime/testkit",
-				Disposition: DispositionMove,
-				Destination: "factory_runtime/internal",
+				PackagePath: "pkg/services/factory_runtime/internal/testkit",
+				Disposition: DispositionRetain,
+				Destination: "factory_runtime",
 			},
+			wantRetain:  true,
+			retainOwner: "factory_runtime",
 		},
 	}
 

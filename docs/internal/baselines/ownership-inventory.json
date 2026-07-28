@@ -3380,15 +3380,13 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/factory_runtime/exhaustiontests",
-      "disposition": "move",
+      "packagePath": "pkg/services/factory_runtime/internal",
+      "disposition": "retain",
       "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
-      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
+      "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/factory_runtime/internal",
+      "packagePath": "pkg/services/factory_runtime/internal/exhaustiontests",
       "disposition": "retain",
       "destination": "factory_runtime",
       "destinationKind": "owner"
@@ -3724,12 +3722,10 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/factory_runtime/testkit",
-      "disposition": "move",
+      "packagePath": "pkg/services/factory_runtime/internal/testkit",
+      "disposition": "retain",
       "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal",
-      "deletionCondition": "delete transitional top-level package after CLN-RUN-FOLD-TOPLEVEL cutover proof"
+      "destinationKind": "owner"
     },
     {
       "packagePath": "pkg/services/factory_runtime/transports/cli",
@@ -5042,6 +5038,24 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/work/internal/contenturl",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/invocationreturnpolicy",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/requestadmission",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/work/internal/service",
       "disposition": "move",
       "destination": "work",
@@ -5093,6 +5107,18 @@
     },
     {
       "packagePath": "pkg/services/work/internal/services/state_access/internal/service",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/services/state_access/lineagegraph",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/services/state_access/stateaccessquery",
       "disposition": "retain",
       "destination": "work",
       "destinationKind": "owner"

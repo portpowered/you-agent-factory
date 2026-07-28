@@ -3074,11 +3074,6 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/exhaustiontests",
-      "target": "pkg/services/factory_runtime"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_runtime/internal/services/orchestration/javascript",
       "target": "pkg/services/factory_runtime/internal/services/orchestration"
     },
@@ -3110,11 +3105,6 @@
     {
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_runtime/testdata",
-      "target": "pkg/services/factory_runtime"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/testkit",
       "target": "pkg/services/factory_runtime"
     },
     {
