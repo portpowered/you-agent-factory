@@ -45,6 +45,7 @@ var productOwnerTopLevelSpecs = map[string]OwnerTopLevelSpec{
 			"invocationoutput",
 			"invocationworktype",
 			"loadedsource",
+			"namevalue",
 			"namedpaths",
 			"packagedinstallation",
 			"packages",
