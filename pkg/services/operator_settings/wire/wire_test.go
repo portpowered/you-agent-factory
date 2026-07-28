@@ -2,6 +2,7 @@ package wire_test
 
 import (
 	"context"
+	"errors"
 	"io/fs"
 	"runtime"
 	"testing"
@@ -39,6 +40,72 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	var root operatorsettings.Service = service
 	if root == nil {
 		t.Fatal("constructed value is not assignable to operatorsettings.Service")
+	}
+}
+
+func TestNewServiceServesPublishedPeerBehavior(t *testing.T) {
+	t.Parallel()
+
+	providersRoot, err := providerswire.NewService()
+	if err != nil {
+		t.Fatalf("providerswire.NewService() = %v", err)
+	}
+
+	service, err := settingswire.NewService(
+		&stubFileSystem{},
+		stubCreateTemporaryFile,
+		stubConfigDecoder,
+		stubConfigEncoder,
+		stubProviderCatalog,
+		providersRoot,
+	)
+	if err != nil {
+		t.Fatalf("NewService() = %v", err)
+	}
+	if service == nil {
+		t.Fatal("NewService() returned nil service")
+	}
+
+	var root operatorsettings.Service = service
+	if root == nil {
+		t.Fatal("constructed root is nil")
+	}
+
+	configPath := "/home/operator/.you-agent-factory/config.json"
+	baseline := operatorsettings.DocumentDefaults{
+		WorkerModelProvider: "codex",
+		WorkerModel:         "gpt-5",
+	}
+	resolved, err := root.ResolveEffective(operatorsettings.ResolveEffectiveRequest{
+		DocumentBaseline: baseline,
+		InvocationOverrides: operatorsettings.EffectiveOverrideFacts{
+			WorkerModelProvider: "gemini",
+			WorkerModel:         "flag-model",
+		},
+		ConfigPath: configPath,
+	})
+	if err != nil {
+		t.Fatalf("ResolveEffective() = %v", err)
+	}
+	if resolved.Selection.WorkerModelProvider != "GEMINI" ||
+		resolved.Selection.WorkerModel != "flag-model" ||
+		resolved.Selection.ConfigPath != configPath {
+		t.Fatalf("ResolveEffective() = %#v", resolved.Selection)
+	}
+
+	_, err = root.ResolveEffective(operatorsettings.ResolveEffectiveRequest{
+		InvocationOverrides: operatorsettings.EffectiveOverrideFacts{
+			WorkerModelProvider: "unsupported-provider",
+		},
+		ConfigPath: configPath,
+	})
+	if !errors.Is(err, operatorsettings.ErrResolutionUnsupportedOverride) {
+		t.Fatalf("unsupported override error = %v, want ErrResolutionUnsupportedOverride", err)
+	}
+
+	_, err = root.LoadDocument(operatorsettings.LoadDocumentRequest{})
+	if !errors.Is(err, operatorsettings.ErrDocumentMalformed) {
+		t.Fatalf("empty load path error = %v, want ErrDocumentMalformed", err)
 	}
 }
 
