@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/platform/directoryreplace"
 	"github.com/portpowered/infinite-you/pkg/platform/inboxgitkeep"
 	"github.com/portpowered/infinite-you/pkg/platform/portablefiles"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -52,6 +51,7 @@ func NewService(
 	requiredToolChecker factorydefinitions.RequiredToolChecker,
 	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
 	portableFileSystem portablefiles.FileSystem,
+	directoryReplacementStore factorydefinitions.DirectoryReplacementStore,
 ) (factorydefinitions.Service, error) {
 	if err := validateDependencies(
 		sessionHost,
@@ -70,6 +70,7 @@ func NewService(
 		requiredToolChecker,
 		orchestratorValidator,
 		portableFileSystem,
+		directoryReplacementStore,
 	); err != nil {
 		return nil, err
 	}
@@ -128,7 +129,7 @@ func NewService(
 		EnsureInbox:        inboxgitkeep.NewLocal(portableFileSystem),
 		PersistenceFS:      authoringFS,
 		NamedPaths:         namedPaths,
-		Directories:        directoryreplace.Local{},
+		Directories:        directoryReplacementStore,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("construct Factory Definitions authoring layout: %w", err)
@@ -206,6 +207,7 @@ func validateDependencies(
 	requiredToolChecker factorydefinitions.RequiredToolChecker,
 	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
 	portableFileSystem portablefiles.FileSystem,
+	directoryReplacementStore factorydefinitions.DirectoryReplacementStore,
 ) error {
 	if sessionHost == nil {
 		return fmt.Errorf("construct Factory Definitions: session host is required")
@@ -257,6 +259,9 @@ func validateDependencies(
 	}
 	if portableFileSystem == nil {
 		return fmt.Errorf("construct Factory Definitions: portable filesystem is required")
+	}
+	if directoryReplacementStore == nil {
+		return fmt.Errorf("construct Factory Definitions: directory replacement store is required")
 	}
 	return nil
 }
