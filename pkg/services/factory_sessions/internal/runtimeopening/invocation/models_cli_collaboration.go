@@ -13,7 +13,26 @@ func (o *operation) ModelsPresentationRoot() models.Service {
 	if o == nil || o.openRuntime == nil {
 		return nil
 	}
-	return o.openRuntime.ModelsRoot()
+	o.presentationMu.Lock()
+	defer o.presentationMu.Unlock()
+	if o.presentationRoot != nil {
+		return o.presentationRoot
+	}
+	root := o.openRuntime.ModelsRoot()
+	if root == nil {
+		return nil
+	}
+	bound, err := root.ForRuntime(models.RuntimeBinding{
+		RuntimeConfig: func() *models.RuntimeConfig {
+			cfg := models.RuntimeConfig{}
+			return &cfg
+		},
+	})
+	if err != nil {
+		return root
+	}
+	o.presentationRoot = bound
+	return bound
 }
 
 func (o *operation) OpenModelsPresentationScope(

@@ -29,6 +29,8 @@ type operation struct {
 	modelTimeout      factorysessions.ModelInvocationTimeout
 	artifactRoots     factoryruntime.RuntimeArtifactRootResolver
 	generateSessionID factorysessions.SessionIDGenerator
+	presentationMu    sync.Mutex
+	presentationRoot  models.Service
 }
 
 // NewOperation binds the stable process graph used by all one-shot
