@@ -66,6 +66,25 @@ func TestMapPackageMovesProviderPackagesOutOfWorkers(t *testing.T) {
 	}
 }
 
+func TestMapPackageMovesLegacyServiceImplementationPackages(t *testing.T) {
+	row, err := ownershipinventory.MapPackage("pkg/services/automations/service")
+	if err != nil {
+		t.Fatalf("MapPackage() error = %v", err)
+	}
+	if row.Disposition != ownershipinventory.DispositionMove {
+		t.Fatalf("disposition = %q, want move", row.Disposition)
+	}
+	if row.Destination != "automations" {
+		t.Fatalf("destination = %q, want automations", row.Destination)
+	}
+	if row.Successor != "pkg/services/automations/internal" {
+		t.Fatalf("successor = %q, want pkg/services/automations/internal", row.Successor)
+	}
+	if row.DeletionCondition == "" {
+		t.Fatal("expected deletion condition on move row")
+	}
+}
+
 func TestInventoryArtifactExistsAtCanonicalPath(t *testing.T) {
 	root := repositoryRoot(t)
 	path := filepath.Join(root, ownershipinventory.InventoryRelativePath)

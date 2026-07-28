@@ -269,6 +269,12 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCodexGoldenDerivesProviderSessionAndResponseEvents` compares all public
     metadata goldens.
 
+- [x] `tests/functional/workers/inference/codex/conductor_test.go`
+  - `TestCodexConductorSuccessThroughRootBuildProcess` proves Codex execution through
+    the product graph via `root.BuildProcess`.
+  - `TestCodexCommandCancellationThroughRootBuildProcessIsCanonical` proves canonical
+    cancellation through the shared process boundary.
+
 - [x] `tests/functional/workers/inference/codex/worktree_workstation_test.go`
   - `TestCodexWorktreeWorkstationDispatch_MaterializesCheckoutAndOmitsCLIWorktreeFlag`
     proves named worktree checkout materialization and omits the CLI `--worktree`
@@ -281,6 +287,12 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 - [x] `tests/functional/workers/inference/claude/golden_success_test.go`
   - `TestClaudeGoldenFullStreamTextSuccess` covers deltas and final snapshot.
   - `TestClaudeGoldenToolLifecycleAndSessionIdentity` covers tools/session.
+
+- [x] `tests/functional/workers/inference/claude/conductor_test.go`
+  - `TestClaudeConductorSuccessThroughRootBuildProcess` proves Claude execution through
+    the product graph via `root.BuildProcess`.
+  - `TestClaudeCommandCancellationThroughRootBuildProcessIsCanonical` proves canonical
+    cancellation through the shared process boundary.
 
 - [x] `tests/functional/workers/inference/claude/golden_failure_test.go`
   - `TestClaudeGoldenStructuredFailure` covers normalized error metadata.
@@ -591,7 +603,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCLIInvocationIsVisibleThroughAPISessionAndWorkReads`.
   - `TestAPIInvocationResultMatchesCLICompatibleFacts`.
 
-- [ ] `tests/functional/sessions/restart/logical_identity_test.go`
+- [x] `tests/functional/sessions/restart/logical_identity_test.go`
   - `TestFactorySessionRestartRemapsLiveIDToLogicalIdentity`.
   - `TestFactorySessionResumeDoesNotRepeatCompletedDispatch`.
   - `TestFactorySessionHistoryRemainsReadableAfterRestart`.
@@ -648,7 +660,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPackagedFactoriesRejectMissingRequiredInputs` runs the package matrix.
   - `TestPackagedFactoriesNameMissingInputAndFactory` verifies diagnostics.
 
-- [ ] `tests/functional/factory/packaged/deep_research/invocation_test.go`
+- [x] `tests/functional/factory/packaged/deep_research/invocation_test.go`
   - `TestPackagedDeepResearchRequiredInputCompletes` verifies dispatch sequence
     and primary result with mock workers.
   - `TestPackagedDeepResearchOptionalInputsReachWorkers` covers overrides.

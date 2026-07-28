@@ -109,6 +109,20 @@ func (s *service) ResolveProviderID(id providers.ID) (providers.ID, error) {
 	return canonical, nil
 }
 
+func (s *service) RegistrationProvider(
+	id providers.ID,
+) (providers.Descriptor, error) {
+	canonical, err := s.ResolveProviderID(id)
+	if err != nil {
+		return providers.Descriptor{}, err
+	}
+	descriptor, ok := s.byID[canonical]
+	if !ok {
+		return providers.Descriptor{}, providers.ErrUnknownProvider
+	}
+	return descriptor.Clone(), nil
+}
+
 func (s *service) applyProbe(
 	ctx context.Context,
 	descriptor providers.Descriptor,

@@ -180,6 +180,71 @@ func TestDependentWorkDoesNotDispatchAfterPrerequisiteFailure(t *testing.T) {
 	}
 }
 
+// TestWorkWithoutDependsOnRelationsDispatchesNormally proves through public Work
+// listings and provider dispatch observations that work submitted without any
+// DEPENDS_ON relations is not blocked by dependency tracking and reaches its
+// terminal success state through the normal public work session path.
+func TestWorkWithoutDependsOnRelationsDispatchesNormally(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dependency_tracking_simple_dir"))
+	workID := "task-no-deps"
+
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		WorkTypeID: "task",
+		WorkID:     workID,
+		Payload:    []byte("no dependency relations"),
+	})
+
+	provider := testutil.NewMockProvider(
+		workerexecution.InferenceResponse{Content: "COMPLETE"},
+	)
+
+	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		t,
+		dir,
+		serviceedges.Edges{ProviderOverride: provider},
+		5*time.Second,
+	)
+
+	assertDependencyWorkLocations(t, listed, map[string]int{
+		support.WorkCustomerLocation("task", "init"):       0,
+		support.WorkCustomerLocation("task", "processing"): 0,
+		support.WorkCustomerLocation("task", "complete"):   1,
+	})
+	if !support.HasWorkAtCustomerState(listed, workID, support.WorkCustomerLocation("task", "complete")) {
+		t.Fatalf("work %q without DEPENDS_ON not at complete in public listing: %#v", workID, listed)
+	}
+
+	if got := len(support.ProviderCallsForWorker(provider, "processor")); got != 1 {
+		t.Fatalf("processor provider calls = %d, want 1 for no-deps pass-through", got)
+	}
+
+	dispatchSequence := -1
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeDispatchRequest {
+			continue
+		}
+		payload, err := event.Payload.AsDispatchRequestEventPayload()
+		if err != nil {
+			continue
+		}
+		if payload.TransitionId != "process" {
+			continue
+		}
+		if !dispatchRequestIncludesWork(payload, workID) {
+			continue
+		}
+		dispatchSequence = event.Context.Sequence
+		break
+	}
+	if dispatchSequence < 0 {
+		t.Fatalf("work %q without DEPENDS_ON never received public process dispatch", workID)
+	}
+
+	if session.Runtime.Progress.Categories.Terminal != 1 || session.Runtime.Progress.Categories.Failed != 0 {
+		t.Fatalf("session progress categories = %+v, want one terminal and zero failed", session.Runtime.Progress.Categories)
+	}
+}
+
 // TestFanInReleasesOnlyAfterEveryPrerequisite proves through public Work
 // listings and Factory Event dispatch observations that a DEPENDS_ON join stays
 // undispatched while only a proper subset of prerequisites has reached the

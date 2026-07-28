@@ -322,6 +322,7 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | tests/functional/work/relationships/dependencies_test.go | you-agent-factory/tests/functional/work/relationships | TestDependentWorkWaitsForPrerequisiteTargetState | short | tests/functional/work/relationships/dependencies_test.go | none | none | n/a |
 | tests/functional/work/relationships/dependencies_test.go | you-agent-factory/tests/functional/work/relationships | TestDependentWorkDoesNotDispatchAfterPrerequisiteFailure | short | tests/functional/work/relationships/dependencies_test.go | none | none | n/a |
 | tests/functional/work/relationships/dependencies_test.go | you-agent-factory/tests/functional/work/relationships | TestFanInReleasesOnlyAfterEveryPrerequisite | short | tests/functional/work/relationships/dependencies_test.go | none | none | n/a |
+| tests/functional/work/relationships/dependencies_test.go | you-agent-factory/tests/functional/work/relationships | TestWorkWithoutDependsOnRelationsDispatchesNormally | short | tests/functional/work/relationships/dependencies_test.go | none | none | n/a |
 | tests/functional/guards_batch/failed_immutability_long_test.go | you-agent-factory/tests/functional/guards_batch | TestFailedImmutability_CannotBeReDispatched | functionallong | tests/functional/guards/global_test.go | guards_batch | none | guards_batch-delete-02-guards-global |
 | tests/functional/guards_batch/failed_immutability_long_test.go | you-agent-factory/tests/functional/guards_batch | TestFailedImmutability_NoDuplicateTokens | functionallong | tests/functional/guards/global_test.go | guards_batch | none | guards_batch-delete-02-guards-global |
 | tests/functional/guards_batch/failed_immutability_long_test.go | you-agent-factory/tests/functional/guards_batch | TestFailedImmutability_ReviewerFailure | functionallong | tests/functional/guards/global_test.go | guards_batch | none | guards_batch-delete-02-guards-global |
@@ -1280,11 +1281,12 @@ ownership reaches zero.
 - **Destination cell consumption (`ft-wave2-work-dependencies`):**
   `work/relationships/dependencies_test.go` owns behavioral coverage for the
   five `dependency_tracking` / `dependency_terminal` ledger rows mapped to that
-  cell (`TestDependencyTracking_BlocksUntilSatisfied` →
+  cell (  `TestDependencyTracking_BlocksUntilSatisfied` →
   `TestDependentWorkWaitsForPrerequisiteTargetState`;
-  `TestDependencyTracking_NoDepsPassThrough` → pass-through without
-  `DEPENDS_ON` remains outside this cell; terminal blocked-until-archived and
-  both-complete proofs → wait-for-required-state and fan-in release scenarios).
+  `TestDependencyTracking_NoDepsPassThrough` →
+  `TestWorkWithoutDependsOnRelationsDispatchesNormally`; terminal
+  blocked-until-archived and both-complete proofs → wait-for-required-state and
+  fan-in release scenarios).
   Source `guards_batch` rows stay until `guards_batch-delete-01-work-relationships`
   executes after `parent_child_test.go` lands.
 - **Split across domains:** guards_batch spans guards, resources, work
@@ -1382,6 +1384,7 @@ Batch execution guidance for later move work:
 | tests/functional/work/relationships/dependencies_test.go | you-agent-factory/tests/functional/work/relationships | TestDependentWorkWaitsForPrerequisiteTargetState | short | tests/functional/work/relationships/dependencies_test.go | none | none | n/a |
 | tests/functional/work/relationships/dependencies_test.go | you-agent-factory/tests/functional/work/relationships | TestDependentWorkDoesNotDispatchAfterPrerequisiteFailure | short | tests/functional/work/relationships/dependencies_test.go | none | none | n/a |
 | tests/functional/work/relationships/dependencies_test.go | you-agent-factory/tests/functional/work/relationships | TestFanInReleasesOnlyAfterEveryPrerequisite | short | tests/functional/work/relationships/dependencies_test.go | none | none | n/a |
+| tests/functional/work/relationships/dependencies_test.go | you-agent-factory/tests/functional/work/relationships | TestWorkWithoutDependsOnRelationsDispatchesNormally | short | tests/functional/work/relationships/dependencies_test.go | none | none | n/a |
 | tests/functional/guards_batch/failed_immutability_long_test.go | you-agent-factory/tests/functional/guards_batch | TestFailedImmutability_CannotBeReDispatched | functionallong | tests/functional/guards/global_test.go | guards_batch | none | guards_batch-delete-02-guards-global |
 | tests/functional/guards_batch/failed_immutability_long_test.go | you-agent-factory/tests/functional/guards_batch | TestFailedImmutability_NoDuplicateTokens | functionallong | tests/functional/guards/global_test.go | guards_batch | none | guards_batch-delete-02-guards-global |
 | tests/functional/guards_batch/failed_immutability_long_test.go | you-agent-factory/tests/functional/guards_batch | TestFailedImmutability_ReviewerFailure | functionallong | tests/functional/guards/global_test.go | guards_batch | none | guards_batch-delete-02-guards-global |

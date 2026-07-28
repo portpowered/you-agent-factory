@@ -134,7 +134,7 @@ func (r *quorumGatedCommandRunner) Run(ctx context.Context, request platformproc
 }
 
 func quorumCommandResult(_ platformprocess.CommandRequest, result string) platformprocess.CommandResult {
-	return platformprocess.CommandResult{Stdout: []byte(result)}
+	return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout(result)}
 }
 
 func (r *quorumGatedCommandRunner) assertMergePrompt(t *testing.T, originalRequest string) {

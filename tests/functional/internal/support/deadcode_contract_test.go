@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
@@ -20,8 +21,8 @@ func TestAcceptedCommandResults_ReturnsRequestedCompleteResponses(t *testing.T) 
 		t.Fatalf("len(results) = %d, want 3", len(results))
 	}
 	for i, result := range results {
-		if got := string(result.Stdout); got != "Done. COMPLETE" {
-			t.Fatalf("results[%d].Stdout = %q, want %q", i, got, "Done. COMPLETE")
+		if len(result.Stdout) == 0 || !strings.Contains(string(result.Stdout), "COMPLETE") {
+			t.Fatalf("results[%d].Stdout = %q, want codex success JSONL containing COMPLETE", i, string(result.Stdout))
 		}
 	}
 }

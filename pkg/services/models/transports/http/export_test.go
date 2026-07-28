@@ -1,0 +1,3 @@
+package http
+
+var ModelsRequestContextErrorResponseForTest = modelsRequestContextErrorResponse

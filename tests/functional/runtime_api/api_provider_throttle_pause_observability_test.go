@@ -103,7 +103,7 @@ func newThrottlePauseObservabilityFixture(t *testing.T) throttlePauseObservabili
 		support.RepeatedProviderErrorCommandResults(t, "claude_rate_limit_error", 3)...,
 	)
 	pauseHarness.QueueProviderResults(
-		platformprocess.CommandResult{Stdout: []byte("codex lane completed while claude was paused. COMPLETE")},
+		platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("codex lane completed while claude was paused. COMPLETE")},
 	)
 
 	fixture := throttlePauseObservabilityFixture{

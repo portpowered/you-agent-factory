@@ -319,5 +319,4 @@ func contentNegotiationRepositoryRoot(t *testing.T) string {
 		}
 		repositoryRoot = parent
 	}
-	return ""
 }
