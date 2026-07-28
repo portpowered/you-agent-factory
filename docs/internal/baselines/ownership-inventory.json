@@ -2874,6 +2874,24 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation/authoredmodel/namevalue",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation/authoredmodel/taxonomy",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation/impl",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_definitions/internal/services/validation/internal/orchestrator",
       "disposition": "retain",
       "destination": "factory_definitions",
@@ -3231,6 +3249,12 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/wire/defaultscaffold",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/wire/validation",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
