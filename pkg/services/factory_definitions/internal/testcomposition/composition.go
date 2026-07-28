@@ -17,9 +17,9 @@ import (
 	compilationloadedsource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loadedsource"
 	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
 	internalportableconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig"
+	validationimpl "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
 	factorynamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
 	factorypersistence "github.com/portpowered/infinite-you/pkg/services/factory_definitions/persistence"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 )
 
 type Representation struct {
@@ -138,18 +138,18 @@ func (c Composition) Loader() *compilationloading.Loader {
 			return config, nil
 		},
 		func(factoryDir string, config *factorydefinitions.FactoryConfig) error {
-			return factoryvalidation.ValidatePortableResourceManifestOnPathWithSourceResolver(
+			return validationimpl.ValidatePortableResourceManifestOnPathWithSourceResolver(
 				factoryDir, config, mustSourceResolver(c.fileSystem),
 				c.fileSystem,
 				c.requiredTools,
 			)
 		},
 		func(factoryDir string, config *factorydefinitions.FactoryConfig) error {
-			return factoryvalidation.ValidatePortableBundledFilesForExpandOnPathWithSourceResolver(
+			return validationimpl.ValidatePortableBundledFilesForExpandOnPathWithSourceResolver(
 				factoryDir, config, mustSourceResolver(c.fileSystem), c.fileSystem,
 			)
 		},
-		factoryvalidation.ValidateBlockingLoad,
+		validationimpl.ValidateBlockingLoad,
 		applySupportedFiles,
 		applyStarterWork,
 		materializeFiles,
