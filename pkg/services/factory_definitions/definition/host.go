@@ -4,8 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 // Host supplies session and runtime collaborators required for definition reads
@@ -19,9 +18,9 @@ type Host interface {
 	RequireSession(sessionID string) (*factorydefinitions.DefinitionSession, error)
 	SessionRuntimeConfig(sessionID string) (factorydefinitions.LoadedFactorySource, error)
 	SessionFactoryPersistRoot(session *factorydefinitions.DefinitionSession) string
-	ValidateEditableFactorySnapshot(ctx context.Context, snapshot *factorycontracts.FactorySnapshot) error
+	ValidateEditableFactorySnapshot(ctx context.Context, snapshot *factorydefinitions.FactorySnapshot) error
 
-	GetCurrentFactorySnapshotForSession(ctx context.Context, sessionID string) (*factorycontracts.FactorySnapshot, error)
+	GetCurrentFactorySnapshotForSession(ctx context.Context, sessionID string) (*factorydefinitions.FactorySnapshot, error)
 	ReplaceFactoryLayoutAtDir(targetDir string, prepared *factorydefinitions.PreparedFactoryLayoutPayload) (*factorydefinitions.FactorySplitLayoutReplaceResult, error)
 }
 
@@ -158,24 +157,24 @@ func captureFactorySnapshotFromHost(
 }
 
 type dependencyHost struct {
-	persistRootDir                          func() string
-	workstationLoader                       func() factorydefinitions.WorkstationLoader
-	loadFactory                             factorydefinitions.LoadedFactoryLoader
-	readCurrentFactoryPointer               func(string) (string, error)
-	prepareFactoryLayoutPayload             func(string, []byte) (*factorydefinitions.PreparedFactoryLayoutPayload, error)
-	persistNamedFactoryWithPrepared         func(string, string, *factorydefinitions.PreparedFactoryLayoutPayload) (string, error)
-	writeCurrentFactoryPointer              func(string, string) error
-	preparePortableFactoryConfig            factorydefinitions.PortableFactoryConfigPreparer
-	captureFactorySnapshot                  factorydefinitions.FactorySnapshotCapturer
-	currentRuntimeConfig                    func() factorydefinitions.LoadedFactorySource
-	workflowID                              func() string
-	resolveExistingFactoryDir               func(string, string) (string, error)
-	requireSession                          func(string) (*factorydefinitions.DefinitionSession, error)
-	sessionRuntimeConfig                    func(string) (factorydefinitions.LoadedFactorySource, error)
-	sessionFactoryPersistRoot               func(*factorydefinitions.DefinitionSession) string
-	validateEditableFactorySnapshot         func(context.Context, *factorycontracts.FactorySnapshot) error
-	getCurrentFactorySnapshotForSession     func(context.Context, string) (*factorycontracts.FactorySnapshot, error)
-	replaceFactoryLayoutAtDir               func(string, *factorydefinitions.PreparedFactoryLayoutPayload) (*factorydefinitions.FactorySplitLayoutReplaceResult, error)
+	persistRootDir                      func() string
+	workstationLoader                   func() factorydefinitions.WorkstationLoader
+	loadFactory                         factorydefinitions.LoadedFactoryLoader
+	readCurrentFactoryPointer           func(string) (string, error)
+	prepareFactoryLayoutPayload         func(string, []byte) (*factorydefinitions.PreparedFactoryLayoutPayload, error)
+	persistNamedFactoryWithPrepared     func(string, string, *factorydefinitions.PreparedFactoryLayoutPayload) (string, error)
+	writeCurrentFactoryPointer          func(string, string) error
+	preparePortableFactoryConfig        factorydefinitions.PortableFactoryConfigPreparer
+	captureFactorySnapshot              factorydefinitions.FactorySnapshotCapturer
+	currentRuntimeConfig                func() factorydefinitions.LoadedFactorySource
+	workflowID                          func() string
+	resolveExistingFactoryDir           func(string, string) (string, error)
+	requireSession                      func(string) (*factorydefinitions.DefinitionSession, error)
+	sessionRuntimeConfig                func(string) (factorydefinitions.LoadedFactorySource, error)
+	sessionFactoryPersistRoot           func(*factorydefinitions.DefinitionSession) string
+	validateEditableFactorySnapshot     func(context.Context, *factorydefinitions.FactorySnapshot) error
+	getCurrentFactorySnapshotForSession func(context.Context, string) (*factorydefinitions.FactorySnapshot, error)
+	replaceFactoryLayoutAtDir           func(string, *factorydefinitions.PreparedFactoryLayoutPayload) (*factorydefinitions.FactorySplitLayoutReplaceResult, error)
 }
 
 // NewHost adapts flat process callbacks to the canonical Definition Host.
@@ -195,8 +194,8 @@ func NewHost(
 	requireSession func(string) (*factorydefinitions.DefinitionSession, error),
 	sessionRuntimeConfig func(string) (factorydefinitions.LoadedFactorySource, error),
 	sessionFactoryPersistRoot func(*factorydefinitions.DefinitionSession) string,
-	validateEditableFactorySnapshot func(context.Context, *factorycontracts.FactorySnapshot) error,
-	getCurrentFactorySnapshotForSession func(context.Context, string) (*factorycontracts.FactorySnapshot, error),
+	validateEditableFactorySnapshot func(context.Context, *factorydefinitions.FactorySnapshot) error,
+	getCurrentFactorySnapshotForSession func(context.Context, string) (*factorydefinitions.FactorySnapshot, error),
 	replaceFactoryLayoutAtDir func(string, *factorydefinitions.PreparedFactoryLayoutPayload) (*factorydefinitions.FactorySplitLayoutReplaceResult, error),
 ) (Host, error) {
 	return dependencyHost{
@@ -352,14 +351,14 @@ func (h dependencyHost) SessionFactoryPersistRoot(session *factorydefinitions.De
 	return h.sessionFactoryPersistRoot(session)
 }
 
-func (h dependencyHost) ValidateEditableFactorySnapshot(ctx context.Context, snapshot *factorycontracts.FactorySnapshot) error {
+func (h dependencyHost) ValidateEditableFactorySnapshot(ctx context.Context, snapshot *factorydefinitions.FactorySnapshot) error {
 	if h.validateEditableFactorySnapshot == nil {
 		return fmt.Errorf("factory service is required")
 	}
 	return h.validateEditableFactorySnapshot(ctx, snapshot)
 }
 
-func (h dependencyHost) GetCurrentFactorySnapshotForSession(ctx context.Context, sessionID string) (*factorycontracts.FactorySnapshot, error) {
+func (h dependencyHost) GetCurrentFactorySnapshotForSession(ctx context.Context, sessionID string) (*factorydefinitions.FactorySnapshot, error) {
 	if h.getCurrentFactorySnapshotForSession == nil {
 		return nil, fmt.Errorf("factory service is required")
 	}

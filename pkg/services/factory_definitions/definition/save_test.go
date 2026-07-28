@@ -13,8 +13,8 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/validationassert"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+
 	factoryeditable "github.com/portpowered/infinite-you/pkg/services/factory_definitions/editable"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -33,7 +33,7 @@ func TestValidateEditableFactoryTopology_MatchesValidateFactoryAPIPrePersist(t *
 
 	svc := newTestService(stubDefinitionHost{})
 	saveErr := svc.ValidateEditableFactoryTopology(context.Background(), mustFactorySnapshot(factory))
-	var topologyErr *interfaces.ValidationTopologyError
+	var topologyErr *factorydefinitions.ValidationTopologyError
 	if !errors.As(saveErr, &topologyErr) {
 		t.Fatalf("ValidateEditableFactoryTopology error = %v, want topology validation error", saveErr)
 	}
@@ -44,7 +44,7 @@ func TestSaveReplaceCurrentForSession_RejectsStaleBaseVersion(t *testing.T) {
 	t.Parallel()
 
 	rootDir := t.TempDir()
-	initialPath := filepath.Join(rootDir, interfaces.FactoryConfigFile)
+	initialPath := filepath.Join(rootDir, factorydefinitions.FactoryConfigFile)
 	currentVersion := factoryapi.HybridLogicalTimestamp{
 		Logical:  5,
 		Physical: time.Date(2026, 5, 31, 12, 0, 0, 0, time.UTC),
@@ -120,7 +120,7 @@ func TestSaveReplaceCurrentForSession_RejectsStaleBaseVersion(t *testing.T) {
 func TestSaveReplaceCurrentForSession_PersistsSplitLayout(t *testing.T) {
 	t.Parallel()
 	rootDir := t.TempDir()
-	initialPath := filepath.Join(rootDir, interfaces.FactoryConfigFile)
+	initialPath := filepath.Join(rootDir, factorydefinitions.FactoryConfigFile)
 	initial := []byte(`{"name":"root","id":"root-runtime","version":{"logical":"1","physical":"2026-05-31T12:00:00Z"},"workTypes":[{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],"workers":[{"name":"worker-a","type":"MODEL_WORKER","body":"initial worker"}],"workstations":[{"name":"process","worker":"worker-a","type":"MODEL_WORKSTATION","body":"initial workstation","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}]}]}`)
 	if err := os.WriteFile(initialPath, initial, 0o644); err != nil {
 		t.Fatalf("WriteFile(factory.json): %v", err)
@@ -274,7 +274,7 @@ func TestSaveReplaceCurrentForSession_RestoresLayoutWhenActivationFails(t *testi
 	t.Parallel()
 
 	rootDir := t.TempDir()
-	initialPath := filepath.Join(rootDir, interfaces.FactoryConfigFile)
+	initialPath := filepath.Join(rootDir, factorydefinitions.FactoryConfigFile)
 	initial := []byte(`{"name":"root","id":"root-runtime","version":{"logical":"1","physical":"2026-05-31T12:00:00Z"},"workTypes":[{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],"workers":[{"name":"worker-a","type":"MODEL_WORKER","body":"initial worker"}],"workstations":[{"name":"process","worker":"worker-a","type":"MODEL_WORKSTATION","body":"initial workstation","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}]}]}`)
 	if err := os.WriteFile(initialPath, initial, 0o644); err != nil {
 		t.Fatalf("WriteFile(factory.json): %v", err)
@@ -356,10 +356,10 @@ func TestService_NilReceiverReturnsRequiredErrors(t *testing.T) {
 	if _, err := svc.PrepareEditableFactoryPersistView("alpha", nil); err == nil {
 		t.Fatal("PrepareEditableFactoryPersistView: expected error for nil service")
 	}
-	if _, err := svc.PersistPayloadFromView(nil, interfaces.FactoryVersion{}); err == nil {
+	if _, err := svc.PersistPayloadFromView(nil, factorydefinitions.FactoryVersion{}); err == nil {
 		t.Fatal("PersistPayloadFromView: expected error for nil service")
 	}
-	if _, err := svc.PreparePersistedFactoryPayload("alpha", nil, interfaces.FactoryVersion{}); err == nil {
+	if _, err := svc.PreparePersistedFactoryPayload("alpha", nil, factorydefinitions.FactoryVersion{}); err == nil {
 		t.Fatal("PreparePersistedFactoryPayload: expected error for nil service")
 	}
 	if err := svc.ValidateEditableFactoryTopology(context.Background(), nil); err == nil {
@@ -387,21 +387,21 @@ func TestValidateUpsertNamedFactoryRequest_RejectsInvalidFactoryName(t *testing.
 
 func validateDefinitionSnapshotForTest(
 	ctx context.Context,
-	snapshot *interfaces.FactorySnapshot,
+	snapshot *factorydefinitions.FactorySnapshot,
 	loader factorydefinitions.WorkstationLoader,
 ) error {
 	return factoryeditable.ValidateSnapshot(
 		ctx,
 		snapshot,
 		loader,
-		func(snapshot *interfaces.FactorySnapshot, loader interfaces.WorkstationLoader) (interfaces.DefinitionValidationRequest, error) {
+		func(snapshot *factorydefinitions.FactorySnapshot, loader factorydefinitions.WorkstationLoader) (factorydefinitions.DefinitionValidationRequest, error) {
 			return validationentry.MapEditableFactorySnapshot(snapshot, loader, testCanonicalFactoryLoader)
 		},
 		testFactoryDefinitionValidator(),
 	)
 }
 
-func (h *splitLayoutSaveHost) ValidateEditableFactorySnapshot(ctx context.Context, snapshot *interfaces.FactorySnapshot) error {
+func (h *splitLayoutSaveHost) ValidateEditableFactorySnapshot(ctx context.Context, snapshot *factorydefinitions.FactorySnapshot) error {
 	return validateDefinitionSnapshotForTest(ctx, snapshot, h.WorkstationLoader())
 }
 
@@ -504,8 +504,8 @@ func (h *splitLayoutSaveHost) CurrentRuntimeConfig() loadedFactorySource {
 }
 func (h *splitLayoutSaveHost) WorkflowID() string { return "" }
 
-func (h *splitLayoutSaveHost) RequireSession(sessionID string) (*interfaces.DefinitionSession, error) {
-	return &interfaces.DefinitionSession{
+func (h *splitLayoutSaveHost) RequireSession(sessionID string) (*factorydefinitions.DefinitionSession, error) {
+	return &factorydefinitions.DefinitionSession{
 		ID:         sessionID,
 		FactoryDir: h.sessionRootDir,
 		FolderPath: h.sessionRootDir,
@@ -517,18 +517,18 @@ func (h *splitLayoutSaveHost) SessionRuntimeConfig(string) (loadedFactorySource,
 	return nil, errors.New("not implemented")
 }
 
-func (h *splitLayoutSaveHost) SessionFactoryPersistRoot(*interfaces.DefinitionSession) string {
+func (h *splitLayoutSaveHost) SessionFactoryPersistRoot(*factorydefinitions.DefinitionSession) string {
 	return h.sessionRootDir
 }
 
-func (h *splitLayoutSaveHost) GetCurrentFactorySnapshotForSession(context.Context, string) (*interfaces.FactorySnapshot, error) {
+func (h *splitLayoutSaveHost) GetCurrentFactorySnapshotForSession(context.Context, string) (*factorydefinitions.FactorySnapshot, error) {
 	return mustFactorySnapshot(h.current), nil
 }
 
 func (h *splitLayoutSaveHost) ReplaceFactoryLayoutAtDir(
 	targetDir string,
 	prepared *factorydefinitions.PreparedFactoryLayoutPayload,
-) (*interfaces.FactorySplitLayoutReplaceResult, error) {
+) (*factorydefinitions.FactorySplitLayoutReplaceResult, error) {
 	h.replaceCalled = true
 	expectedDir := h.sessionRootDir
 	if h.current.Name != apisurface.DefaultCurrentFactoryName {
@@ -545,7 +545,7 @@ func (h *splitLayoutSaveHost) ReplaceFactoryLayoutAtDir(
 	if err != nil {
 		return nil, err
 	}
-	return &interfaces.FactorySplitLayoutReplaceResult{
+	return &factorydefinitions.FactorySplitLayoutReplaceResult{
 		Restore: func() {
 			h.restoreCalled = true
 			result.Restore()

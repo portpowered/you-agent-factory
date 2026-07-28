@@ -5,8 +5,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 )
 
 // stubActivationGateway is the default no-op activation gateway for definition
@@ -15,17 +15,19 @@ type stubActivationGateway struct{}
 
 func (stubActivationGateway) RunSessionID() string { return "" }
 
-func (stubActivationGateway) SessionForActivation(string) *interfaces.DefinitionSession { return nil }
+func (stubActivationGateway) SessionForActivation(string) *factorydefinitions.DefinitionSession {
+	return nil
+}
 
-func (stubActivationGateway) RequireSession(string) (*interfaces.DefinitionSession, error) {
+func (stubActivationGateway) RequireSession(string) (*factorydefinitions.DefinitionSession, error) {
 	return nil, nil
 }
 
-func (stubActivationGateway) SessionFactoryPersistRoot(*interfaces.DefinitionSession) string {
+func (stubActivationGateway) SessionFactoryPersistRoot(*factorydefinitions.DefinitionSession) string {
 	return ""
 }
 
-func (stubActivationGateway) NamedFactoryActivationPaths(*interfaces.DefinitionSession) (string, string) {
+func (stubActivationGateway) NamedFactoryActivationPaths(*factorydefinitions.DefinitionSession) (string, string) {
 	return "", ""
 }
 
@@ -37,15 +39,15 @@ func (stubActivationGateway) RequireIdleRuntimeForSession(context.Context, strin
 	return nil
 }
 
-func (stubActivationGateway) RequireIdleBeforeNamedFactoryActivation(context.Context, string, *interfaces.DefinitionSession) error {
+func (stubActivationGateway) RequireIdleBeforeNamedFactoryActivation(context.Context, string, *factorydefinitions.DefinitionSession) error {
 	return nil
 }
 
-func (stubActivationGateway) ActivateSessionEditableFactory(context.Context, *interfaces.DefinitionSession, string, string, string, string, string) error {
+func (stubActivationGateway) ActivateSessionEditableFactory(context.Context, *factorydefinitions.DefinitionSession, string, string, string, string, string) error {
 	return nil
 }
 
-func (stubActivationGateway) SwapPersistedNamedFactoryRuntime(context.Context, string, *interfaces.DefinitionSession, string, string, string, string) error {
+func (stubActivationGateway) SwapPersistedNamedFactoryRuntime(context.Context, string, *factorydefinitions.DefinitionSession, string, string, string, string) error {
 	return nil
 }
 
@@ -66,20 +68,20 @@ func newTestService(host Host, gateway ...factoryroot.DefinitionActivationGatewa
 type trackingActivationGateway struct {
 	stubActivationGateway
 
-	runSessionID              string
-	sessionForActivation      *interfaces.DefinitionSession
-	persistRoot               string
-	folderPath                string
-	idleRuntimeErr            error
-	idleNamedErr              error
-	activateErr               error
-	swapErr                   error
-	saveNow                   time.Time
-	lockDepth                 atomic.Int32
-	activateCalls             atomic.Int32
-	swapCalls                 atomic.Int32
-	activatedName             string
-	swappedName               string
+	runSessionID         string
+	sessionForActivation *factorydefinitions.DefinitionSession
+	persistRoot          string
+	folderPath           string
+	idleRuntimeErr       error
+	idleNamedErr         error
+	activateErr          error
+	swapErr              error
+	saveNow              time.Time
+	lockDepth            atomic.Int32
+	activateCalls        atomic.Int32
+	swapCalls            atomic.Int32
+	activatedName        string
+	swappedName          string
 }
 
 func (g *trackingActivationGateway) RunSessionID() string {
@@ -89,11 +91,11 @@ func (g *trackingActivationGateway) RunSessionID() string {
 	return g.stubActivationGateway.RunSessionID()
 }
 
-func (g *trackingActivationGateway) SessionForActivation(string) *interfaces.DefinitionSession {
+func (g *trackingActivationGateway) SessionForActivation(string) *factorydefinitions.DefinitionSession {
 	return g.sessionForActivation
 }
 
-func (g *trackingActivationGateway) NamedFactoryActivationPaths(*interfaces.DefinitionSession) (string, string) {
+func (g *trackingActivationGateway) NamedFactoryActivationPaths(*factorydefinitions.DefinitionSession) (string, string) {
 	return g.persistRoot, g.folderPath
 }
 
@@ -117,13 +119,13 @@ func (g *trackingActivationGateway) RequireIdleRuntimeForSession(context.Context
 	return g.idleRuntimeErr
 }
 
-func (g *trackingActivationGateway) RequireIdleBeforeNamedFactoryActivation(context.Context, string, *interfaces.DefinitionSession) error {
+func (g *trackingActivationGateway) RequireIdleBeforeNamedFactoryActivation(context.Context, string, *factorydefinitions.DefinitionSession) error {
 	return g.idleNamedErr
 }
 
 func (g *trackingActivationGateway) ActivateSessionEditableFactory(
 	_ context.Context,
-	_ *interfaces.DefinitionSession,
+	_ *factorydefinitions.DefinitionSession,
 	_ string,
 	_ string,
 	_ string,
@@ -138,7 +140,7 @@ func (g *trackingActivationGateway) ActivateSessionEditableFactory(
 func (g *trackingActivationGateway) SwapPersistedNamedFactoryRuntime(
 	_ context.Context,
 	_ string,
-	_ *interfaces.DefinitionSession,
+	_ *factorydefinitions.DefinitionSession,
 	_ string,
 	_ string,
 	_ string,

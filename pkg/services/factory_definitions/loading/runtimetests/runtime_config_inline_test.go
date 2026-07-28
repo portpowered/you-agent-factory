@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntimeconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/runtimeconfig"
 )
 
@@ -430,8 +430,8 @@ func TestLoadRuntimeConfig_LoadsInlineRuntimeDefinitionsWithoutAgentsFiles(t *te
 	if !ok {
 		t.Fatal("expected inline executor worker definition")
 	}
-	if workerDef.Type != interfaces.WorkerTypeAgent {
-		t.Fatalf("expected worker type %s, got %q", interfaces.WorkerTypeAgent, workerDef.Type)
+	if workerDef.Type != factorydefinitions.WorkerTypeAgent {
+		t.Fatalf("expected worker type %s, got %q", factorydefinitions.WorkerTypeAgent, workerDef.Type)
 	}
 	if workerDef.ModelProvider != "claude" {
 		t.Fatalf("expected model provider claude, got %q", workerDef.ModelProvider)
@@ -644,7 +644,7 @@ func TestLoadRuntimeConfig_DerivesCanonicalWorkstationTypeFromWorkerAcrossInline
 	if !ok {
 		t.Fatal("expected split execute-story workstation")
 	}
-	if inlineWorkstation.Type != interfaces.WorkstationTypeModel || splitWorkstation.Type != interfaces.WorkstationTypeModel {
+	if inlineWorkstation.Type != factorydefinitions.WorkstationTypeModel || splitWorkstation.Type != factorydefinitions.WorkstationTypeModel {
 		t.Fatalf("expected canonical worker-backed model workstation type, got inline=%q split=%q", inlineWorkstation.Type, splitWorkstation.Type)
 	}
 	if !reflect.DeepEqual(inlineWorkstation, splitWorkstation) {
@@ -810,52 +810,52 @@ func TestRuntimeConfigMerge_MergesRuntimeDefinitionsOntoCanonicalConfig(t *testi
 }
 
 func TestRuntimeConfigMerge_PreservesCanonicalWorkstationKindForMapping(t *testing.T) {
-	cfg := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{{
+	cfg := &factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{{
 			Name: "story",
-			States: []interfaces.StateConfig{
-				{Name: "init", Type: interfaces.StateTypeInitial},
-				{Name: "ready", Type: interfaces.StateTypeProcessing},
-				{Name: "approved", Type: interfaces.StateTypeTerminal},
-				{Name: "failed", Type: interfaces.StateTypeFailed},
+			States: []factorydefinitions.StateConfig{
+				{Name: "init", Type: factorydefinitions.StateTypeInitial},
+				{Name: "ready", Type: factorydefinitions.StateTypeProcessing},
+				{Name: "approved", Type: factorydefinitions.StateTypeTerminal},
+				{Name: "failed", Type: factorydefinitions.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.FactoryWorkerConfig{{
+		Workers: []factorydefinitions.FactoryWorkerConfig{{
 			Name:  "executor",
-			Type:  interfaces.WorkerTypeModel,
+			Type:  factorydefinitions.WorkerTypeModel,
 			Model: "canonical-model",
 		}},
-		Workstations: []interfaces.FactoryWorkstationConfig{{
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{{
 			Name:           "review",
-			Kind:           interfaces.WorkstationKindRepeater,
-			Type:           interfaces.WorkstationTypeLogical,
+			Kind:           factorydefinitions.WorkstationKindRepeater,
+			Type:           factorydefinitions.WorkstationTypeLogical,
 			WorkerTypeName: "executor",
-			Inputs:         []interfaces.IOConfig{{WorkTypeName: "story", StateName: "init"}},
-			Outputs:        []interfaces.IOConfig{{WorkTypeName: "story", StateName: "approved"}},
+			Inputs:         []factorydefinitions.IOConfig{{WorkTypeName: "story", StateName: "init"}},
+			Outputs:        []factorydefinitions.IOConfig{{WorkTypeName: "story", StateName: "approved"}},
 		}},
 	}
 	runtimeDefs := testRuntimeDefinitionLookup{
-		workers:      map[string]*interfaces.FactoryWorkerConfig{},
-		workstations: map[string]*interfaces.FactoryWorkstationConfig{},
+		workers:      map[string]*factorydefinitions.FactoryWorkerConfig{},
+		workstations: map[string]*factorydefinitions.FactoryWorkstationConfig{},
 	}
-	runtimeDefs.workstations["review"] = &interfaces.FactoryWorkstationConfig{
-		Type:           interfaces.WorkstationTypeModel,
+	runtimeDefs.workstations["review"] = &factorydefinitions.FactoryWorkstationConfig{
+		Type:           factorydefinitions.WorkstationTypeModel,
 		WorkerTypeName: "executor",
-		Inputs:         []interfaces.IOConfig{{WorkTypeName: "story", StateName: "ready"}},
-		Outputs:        []interfaces.IOConfig{{WorkTypeName: "story", StateName: "approved"}},
-		Limits:         interfaces.WorkstationLimits{MaxRetries: 3},
+		Inputs:         []factorydefinitions.IOConfig{{WorkTypeName: "story", StateName: "ready"}},
+		Outputs:        []factorydefinitions.IOConfig{{WorkTypeName: "story", StateName: "approved"}},
+		Limits:         factorydefinitions.WorkstationLimits{MaxRetries: 3},
 	}
 
 	inlined, err := factoryruntimeconfig.Merge(cfg, runtimeDefs)
 	if err != nil {
 		t.Fatalf("runtimeconfig.Merge: %v", err)
 	}
-	if inlined.Workstations[0].Kind != interfaces.WorkstationKindRepeater {
+	if inlined.Workstations[0].Kind != factorydefinitions.WorkstationKindRepeater {
 		t.Fatalf("merged workstation kind = %q, want repeater", inlined.Workstations[0].Kind)
 	}
 
 	merged := inlined.Workstations[0]
-	if merged.Type != interfaces.WorkstationTypeModel {
+	if merged.Type != factorydefinitions.WorkstationTypeModel {
 		t.Fatalf("merged workstation type = %q, want model", merged.Type)
 	}
 	if len(merged.Inputs) != 1 ||
@@ -881,13 +881,13 @@ func TestNewLoadedFactoryConfig_UsesCanonicalDefinitionsWhenRuntimeDefinitionsAr
 		t.Fatalf("NewLoadedFactoryConfig: %v", err)
 	}
 
-	var lookup interfaces.RuntimeDefinitionLookup = loaded
+	var lookup factorydefinitions.RuntimeDefinitionLookup = loaded
 
 	worker, ok := lookup.Worker("executor")
 	if !ok {
 		t.Fatal("expected canonical worker")
 	}
-	if worker.Type != interfaces.WorkerTypeModel || worker.Model != "canonical-model" {
+	if worker.Type != factorydefinitions.WorkerTypeModel || worker.Model != "canonical-model" {
 		t.Fatalf("canonical worker fields were not preserved: %#v", worker)
 	}
 	assertCanonicalMergeWorkstation(t, lookup)
@@ -903,7 +903,7 @@ func TestNewLoadedFactoryConfig_LoadsCanonicalConfigWithoutRuntimeConfig(t *test
 		t.Fatalf("NewLoadedFactoryConfig: %v", err)
 	}
 
-	var lookup interfaces.RuntimeConfigLookup = loaded
+	var lookup factorydefinitions.RuntimeConfigLookup = loaded
 
 	assertCanonicalRuntimeConfigLookupFactoryDir(t, lookup, "factory-dir")
 	assertCanonicalRuntimeConfigLookupRuntimeBaseDir(t, lookup, "factory-dir")
@@ -922,7 +922,7 @@ func TestLoadedFactoryConfig_RuntimeBaseDirOverrideAndFallbackKeepsCanonicalLook
 		t.Fatalf("NewLoadedFactoryConfig: %v", err)
 	}
 
-	var lookup interfaces.RuntimeConfigLookup = loaded
+	var lookup factorydefinitions.RuntimeConfigLookup = loaded
 
 	assertCanonicalRuntimeConfigLookupFactoryDir(t, lookup, "factory-dir")
 	assertCanonicalRuntimeConfigLookupRuntimeBaseDir(t, lookup, "factory-dir")
@@ -940,7 +940,7 @@ func TestLoadedFactoryConfig_RuntimeBaseDirOverrideAndFallbackKeepsCanonicalLook
 
 func TestLoadedFactoryConfig_SetRuntimeBaseDirNilReceiverNoops(t *testing.T) {
 	var loaded *LoadedFactoryConfig
-	var lookup interfaces.RuntimeConfigLookup = loaded
+	var lookup factorydefinitions.RuntimeConfigLookup = loaded
 
 	loaded.SetRuntimeBaseDir("runtime-base")
 
@@ -950,7 +950,7 @@ func TestLoadedFactoryConfig_SetRuntimeBaseDirNilReceiverNoops(t *testing.T) {
 
 func TestLoadedFactoryConfig_RuntimeLookupNilReceiverReturnsMisses(t *testing.T) {
 	var loaded *LoadedFactoryConfig
-	var lookup interfaces.RuntimeDefinitionLookup = loaded
+	var lookup factorydefinitions.RuntimeDefinitionLookup = loaded
 
 	assertRuntimeDefinitionLookupMissesByName(t, lookup, "executor", "review")
 }

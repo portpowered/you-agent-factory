@@ -7,13 +7,13 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	generatedapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-func mustEditableFactorySnapshot(t testing.TB, factory generatedapi.Factory) *interfaces.FactorySnapshot {
+func mustEditableFactorySnapshot(t testing.TB, factory generatedapi.Factory) *factorydefinitions.FactorySnapshot {
 	t.Helper()
-	snapshot, err := interfaces.NewFactorySnapshot(factory)
+	snapshot, err := factorydefinitions.NewFactorySnapshot(factory)
 	if err != nil {
 		t.Fatalf("NewFactorySnapshot: %v", err)
 	}
@@ -42,7 +42,7 @@ func TestService_PreparePersistedFactoryPayload_NormalizesInlineBodiesOutOfCanon
 			Body: &body,
 		}},
 	}
-	version := interfaces.FactoryVersion{
+	version := factorydefinitions.FactoryVersion{
 		Logical:  3,
 		Physical: time.Date(2026, 5, 31, 14, 0, 0, 0, time.UTC),
 	}
@@ -74,7 +74,7 @@ func TestService_PreparePersistedFactoryPayload_NormalizesInlineBodiesOutOfCanon
 func TestService_PreparePersistedFactoryPayload_RejectsMissingSnapshot(t *testing.T) {
 	t.Parallel()
 
-	_, err := newTestService(stubDefinitionHost{}).PreparePersistedFactoryPayload("alpha", nil, interfaces.FactoryVersion{})
+	_, err := newTestService(stubDefinitionHost{}).PreparePersistedFactoryPayload("alpha", nil, factorydefinitions.FactoryVersion{})
 	if err == nil || !strings.Contains(err.Error(), "editable factory snapshot is required") {
 		t.Fatalf("PreparePersistedFactoryPayload() error = %v, want missing snapshot guidance", err)
 	}
@@ -129,7 +129,7 @@ func TestService_PreparePersistedFactoryPayload_PrunesStaleLayout(t *testing.T) 
 		t.Fatalf("DecodeCrossPathValidAlphaFactory: %v", err)
 	}
 	factory.Layout = &generatedapi.FactoryLayout{
-		SchemaVersion: interfaces.SupportedFactoryLayoutSchemaVersion,
+		SchemaVersion: factorydefinitions.SupportedFactoryLayoutSchemaVersion,
 		Nodes: &[]generatedapi.FactoryLayoutNode{{
 			Id:       "workstation:process",
 			Position: generatedapi.FactoryLayoutPoint{X: 10, Y: 20},
@@ -142,7 +142,7 @@ func TestService_PreparePersistedFactoryPayload_PrunesStaleLayout(t *testing.T) 
 		Viewport: &generatedapi.FactoryLayoutViewport{Zoom: 1},
 	}
 
-	prepared, err := newTestService(stubDefinitionHost{}).PreparePersistedFactoryPayload("alpha", mustEditableFactorySnapshot(t, factory), interfaces.FactoryVersion{
+	prepared, err := newTestService(stubDefinitionHost{}).PreparePersistedFactoryPayload("alpha", mustEditableFactorySnapshot(t, factory), factorydefinitions.FactoryVersion{
 		Logical:  2,
 		Physical: time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC),
 	})
@@ -174,7 +174,7 @@ func TestService_PreparePersistedFactoryPayload_PreservesUnsupportedSchemaVersio
 		Viewport: &generatedapi.FactoryLayoutViewport{Zoom: 1},
 	}
 
-	prepared, err := newTestService(stubDefinitionHost{}).PreparePersistedFactoryPayload("alpha", mustEditableFactorySnapshot(t, factory), interfaces.FactoryVersion{
+	prepared, err := newTestService(stubDefinitionHost{}).PreparePersistedFactoryPayload("alpha", mustEditableFactorySnapshot(t, factory), factorydefinitions.FactoryVersion{
 		Logical:  2,
 		Physical: time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC),
 	})
@@ -205,7 +205,7 @@ func TestService_PersistPayloadFromView_StampsVersionMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PrepareEditableFactoryPersistView: %v", err)
 	}
-	version := interfaces.FactoryVersion{
+	version := factorydefinitions.FactoryVersion{
 		Logical:  9,
 		Physical: time.Date(2026, 6, 8, 8, 0, 0, 0, time.UTC),
 	}
@@ -245,7 +245,7 @@ func TestService_SerializeNamedFactory_ReturnsLoadedRuntime(t *testing.T) {
 func TestService_PersistPayloadFromView_RejectsNilView(t *testing.T) {
 	t.Parallel()
 
-	_, err := newTestService(stubDefinitionHost{}).PersistPayloadFromView(nil, interfaces.FactoryVersion{
+	_, err := newTestService(stubDefinitionHost{}).PersistPayloadFromView(nil, factorydefinitions.FactoryVersion{
 		Logical:  1,
 		Physical: time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC),
 	})

@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+
 	factorydefinition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 )
@@ -42,27 +42,27 @@ func (h peerIntegrationDefinitionHost) CurrentRuntimeConfig() factorydefinitions
 	return nil
 }
 func (h peerIntegrationDefinitionHost) WorkflowID() string { return "" }
-func (h peerIntegrationDefinitionHost) RequireSession(string) (*interfaces.DefinitionSession, error) {
-	return &interfaces.DefinitionSession{ID: "session-alpha", FactoryDir: h.rootDir, FolderPath: h.rootDir}, nil
+func (h peerIntegrationDefinitionHost) RequireSession(string) (*factorydefinitions.DefinitionSession, error) {
+	return &factorydefinitions.DefinitionSession{ID: "session-alpha", FactoryDir: h.rootDir, FolderPath: h.rootDir}, nil
 }
 func (h peerIntegrationDefinitionHost) SessionRuntimeConfig(string) (factorydefinitions.LoadedFactorySource, error) {
 	return nil, nil
 }
-func (h peerIntegrationDefinitionHost) SessionFactoryPersistRoot(*interfaces.DefinitionSession) string {
+func (h peerIntegrationDefinitionHost) SessionFactoryPersistRoot(*factorydefinitions.DefinitionSession) string {
 	return h.rootDir
 }
-func (h peerIntegrationDefinitionHost) ValidateEditableFactorySnapshot(context.Context, *interfaces.FactorySnapshot) error {
+func (h peerIntegrationDefinitionHost) ValidateEditableFactorySnapshot(context.Context, *factorydefinitions.FactorySnapshot) error {
 	return nil
 }
-func (h peerIntegrationDefinitionHost) GetCurrentFactorySnapshotForSession(context.Context, string) (*interfaces.FactorySnapshot, error) {
+func (h peerIntegrationDefinitionHost) GetCurrentFactorySnapshotForSession(context.Context, string) (*factorydefinitions.FactorySnapshot, error) {
 	return nil, errors.New("not implemented")
 }
-func (h peerIntegrationDefinitionHost) ReplaceFactoryLayoutAtDir(string, *factorydefinitions.PreparedFactoryLayoutPayload) (*interfaces.FactorySplitLayoutReplaceResult, error) {
+func (h peerIntegrationDefinitionHost) ReplaceFactoryLayoutAtDir(string, *factorydefinitions.PreparedFactoryLayoutPayload) (*factorydefinitions.FactorySplitLayoutReplaceResult, error) {
 	return nil, nil
 }
 func (h peerIntegrationDefinitionHost) ResolveExistingFactoryDir(_ string, name string) (string, error) {
 	factoryDir := filepath.Join(h.rootDir, name)
-	if _, err := os.Stat(filepath.Join(factoryDir, interfaces.FactoryConfigFile)); err != nil {
+	if _, err := os.Stat(filepath.Join(factoryDir, factorydefinitions.FactoryConfigFile)); err != nil {
 		return "", factorydefinitions.ErrNamedFactoryNotFound
 	}
 	return factoryDir, nil
@@ -74,7 +74,7 @@ func persistPeerNamedFactory(t *testing.T, rootDir, name string, payload []byte)
 	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(%q): %v", factoryDir, err)
 	}
-	if err := os.WriteFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile), payload, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(factoryDir, factorydefinitions.FactoryConfigFile), payload, 0o644); err != nil {
 		t.Fatalf("WriteFile(factory.json): %v", err)
 	}
 }

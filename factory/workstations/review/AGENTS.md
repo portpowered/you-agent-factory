@@ -21,6 +21,12 @@ You are processing work item {{ (index .Inputs 0).WorkID }} of type {{ (index .I
    - treat hallucinated APIs, stale patterns, hidden side effects, and subtle edge cases in AI-authored code as high-risk review targets
    - request changes for correctness issues, security issues, missing required tests, prompt-rule violations, hidden side effects, dead code, or oversized unclear helpers
    - approve only when the change is correct, adequately tested, and within the defined expectations
+   - for PRs that change functional tests under `tests/functional/...`, apply the five construction preferences from [general-backend-standards.md §6](../../../docs/internal/standards/code/general-backend-standards.md#6-testing-strategy-and-test-pyramid) and request changes (`BLOCKING`) when any preference is violated without a documented, in-scope exception:
+     - functional tests **MUST** construct through `root.BuildProcess` + `Process.Execute` by default; a built `you` CLI **MAY** be used only when the cell must prove OS/process-boundary behavior that `BuildProcess` cannot express
+     - functional tests **MUST** prefer public CLI invocation over HTTP/API for ordinary customer flows; HTTP or API entry **MAY** be used only for API-owned contracts or explicit CLI+API parity cells
+     - external effects **MUST** be replaced only through `edges.Edges`; functional tests **MUST** prefer `ProviderCommandRunner` and other command-runner edge mocks over custom in-process provider fakes
+     - functional tests **MUST** prefer mocked Codex or another real inference-provider variant through the command-runner edge and sanitized goldens over `--with-mock-workers` / `MockWorkers`, except for cells under `tests/functional/workers/mock/...` that own the workers/mock feature
+     - functional tests **MUST NOT** add sleeps or timeout-padded wait helpers as the default synchronization strategy; any sleep, polling loop, or timeout-padded wait helper **MUST** include an in-code justification for why deterministic observation or edge mocking cannot substitute
 4. Run: gh pr diff $prNumber  — to see the full diff
 5. Read the changed files to understand the implementation in full
 6. Read surrounding codebase code (the code the PR touches) to check for pattern conformance

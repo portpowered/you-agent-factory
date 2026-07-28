@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -20,7 +20,7 @@ func TestEditableFactoryActivationUsesActivationGateway(t *testing.T) {
 	t.Parallel()
 
 	rootDir := t.TempDir()
-	initialPath := filepath.Join(rootDir, interfaces.FactoryConfigFile)
+	initialPath := filepath.Join(rootDir, factorydefinitions.FactoryConfigFile)
 	initial := []byte(`{"name":"root","id":"root-runtime","version":{"logical":"1","physical":"2026-05-31T12:00:00Z"},"workTypes":[{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],"workers":[{"name":"worker-a","type":"MODEL_WORKER","body":"initial worker"}],"workstations":[{"name":"process","worker":"worker-a","type":"MODEL_WORKSTATION","body":"initial workstation","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}]}]}`)
 	if err := os.WriteFile(initialPath, initial, 0o644); err != nil {
 		t.Fatalf("WriteFile(factory.json): %v", err)
@@ -61,8 +61,8 @@ func TestEditableFactoryActivationUsesActivationGateway(t *testing.T) {
 	if gateway.activateCalls.Load() != 1 {
 		t.Fatalf("ActivateSessionEditableFactory calls = %d, want 1", gateway.activateCalls.Load())
 	}
-	if gateway.activatedName != interfaces.DefaultCurrentFactoryName {
-		t.Fatalf("activated name = %q, want %q", gateway.activatedName, interfaces.DefaultCurrentFactoryName)
+	if gateway.activatedName != factorydefinitions.DefaultCurrentFactoryName {
+		t.Fatalf("activated name = %q, want %q", gateway.activatedName, factorydefinitions.DefaultCurrentFactoryName)
 	}
 }
 
@@ -79,7 +79,7 @@ func TestNamedFactorySwapUsesActivationGatewayAndRejectsIdle(t *testing.T) {
 		t.Fatalf("PersistNamedFactory(named-target): %v", err)
 	}
 
-	session := &interfaces.DefinitionSession{
+	session := &factorydefinitions.DefinitionSession{
 		ID:         "session-alpha",
 		FactoryDir: rootDir,
 		FolderPath: rootDir,

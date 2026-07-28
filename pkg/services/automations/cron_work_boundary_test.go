@@ -10,7 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/portpowered/infinite-you/pkg/services/automations"
-	automationservice "github.com/portpowered/infinite-you/pkg/services/automations/service"
+	automationinternal "github.com/portpowered/infinite-you/pkg/services/automations/internal"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
@@ -27,8 +27,8 @@ func cronWorkstationForBoundaryTest() interfaces.FactoryWorkstationConfig {
 	}
 }
 
-func newCronBoundaryAutomationService() *automationservice.Service {
-	return automationservice.New(
+func newCronBoundaryAutomationService() *automationinternal.Service {
+	return automationinternal.New(
 		zap.NewNop(),
 		clockwork.NewFakeClock(),
 		nil,

@@ -5,8 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 // SaveUpsertNamedSnapshotAndActivateForSession persists one named Factory
@@ -85,7 +84,7 @@ func (s *Service) upsertCurrentVersionAtSessionRoot(
 	sessionRootDir string,
 	request EditableFactory,
 	replaceExisting bool,
-) (*interfaces.FactoryVersion, error) {
+) (*factorydefinitions.FactoryVersion, error) {
 	if !replaceExisting {
 		return nil, nil
 	}

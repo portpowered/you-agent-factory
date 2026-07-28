@@ -298,7 +298,6 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 		{exact: "ttsobservability", prefix: "ttsobservability/", dest: "factory_definitions/internal"},
 		{exact: "runtimeconfig", prefix: "runtimeconfig/", dest: "factory_definitions/internal"},
 		{exact: "replayconfig", prefix: "replayconfig/", dest: "factory_definitions/internal"},
-		{exact: "contracts", prefix: "contracts/", dest: "factory_definitions/internal"},
 		{exact: "workers", prefix: "workers/", dest: "factory_definitions/internal"},
 		{prefix: "internal/testcomposition", dest: "factory_definitions/internal"},
 	},

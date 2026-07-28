@@ -682,6 +682,46 @@ func applyRuntimeSuccessProjection(
 	state.result = projected
 }
 
+func applyRuntimeCheckpointPartialProjection(
+	state *runtimeSessionState,
+	checkpoint *workflowresult.JavaScriptCheckpointRecord,
+) {
+	if state == nil || checkpoint == nil || IsTerminalLifecycleStatus(state.session.Status) {
+		return
+	}
+	if len(checkpoint.State) == 0 {
+		return
+	}
+	encoded, err := json.Marshal(checkpoint.State)
+	if err != nil || len(encoded) == 0 {
+		return
+	}
+	parts, validation := workflowresult.ProjectPrimaryResult(
+		state.session.SessionID,
+		workflowresult.TypedValue{JSON: encoded},
+		artifactStatesFromSummaries(state.artifacts),
+	)
+	if validation.HasIssues() || len(parts) == 0 {
+		return
+	}
+	primaryJSON := workContentJSONFromParts(parts)
+	if len(primaryJSON) == 0 {
+		return
+	}
+	state.session.ResultSummary = &ResultSummary{
+		ResultStatus: string(ResultStatusPartial),
+		Summary:      resultSummaryTextFromParts(parts),
+	}
+	state.result = ResultReadResult{
+		SessionID:     state.session.SessionID,
+		ResultStatus:  ResultStatusPartial,
+		SessionStatus: state.session.Status,
+		Mode:          ResultModePartial,
+		PrimaryResult: primaryJSON,
+		ArtifactIDs:   artifactIDsFromSummaries(state.artifacts),
+	}
+}
+
 func projectRuntimeSuccessResult(
 	sessionID string,
 	value workflowresult.TypedValue,

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -80,7 +80,7 @@ func TestSaveNamedCurrentFactoryForSession_PersistsSplitLayout(t *testing.T) {
 		t.Fatalf("ReplaceFactoryLayoutAtDir target = %q, want named factory dir %q", host.replaceTargetDir, factoryDir)
 	}
 
-	factoryJSONPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	factoryJSONPath := filepath.Join(factoryDir, factorydefinitions.FactoryConfigFile)
 	factoryJSON, err := os.ReadFile(factoryJSONPath)
 	if err != nil {
 		t.Fatalf("ReadFile(factory.json): %v", err)
@@ -89,7 +89,7 @@ func TestSaveNamedCurrentFactoryForSession_PersistsSplitLayout(t *testing.T) {
 		t.Fatalf("factory.json should omit inlined planner body after split save, got %s", factoryJSON)
 	}
 
-	workerAgents := filepath.Join(factoryDir, interfaces.WorkersDir, "planner", interfaces.FactoryAgentsFileName)
+	workerAgents := filepath.Join(factoryDir, factorydefinitions.WorkersDir, "planner", factorydefinitions.FactoryAgentsFileName)
 	workerBody, err := os.ReadFile(workerAgents)
 	if err != nil {
 		t.Fatalf("ReadFile(planner AGENTS.md): %v", err)
@@ -167,7 +167,7 @@ func TestSaveNamedCurrentFactoryForSession_CoercesDriftedPayloadName(t *testing.
 		t.Fatalf("saved factory name = %q, want alpha", saved.Name)
 	}
 
-	factoryJSONPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	factoryJSONPath := filepath.Join(factoryDir, factorydefinitions.FactoryConfigFile)
 	factoryJSON, err := os.ReadFile(factoryJSONPath)
 	if err != nil {
 		t.Fatalf("ReadFile(factory.json): %v", err)
@@ -188,8 +188,8 @@ type splitLayoutNamedSaveHost struct {
 	replaceTargetDir string
 }
 
-func (h *splitLayoutNamedSaveHost) RequireSession(sessionID string) (*interfaces.DefinitionSession, error) {
-	return &interfaces.DefinitionSession{
+func (h *splitLayoutNamedSaveHost) RequireSession(sessionID string) (*factorydefinitions.DefinitionSession, error) {
+	return &factorydefinitions.DefinitionSession{
 		ID:         sessionID,
 		FactoryDir: h.sessionRootDir,
 		FolderPath: h.sessionRootDir,
@@ -208,14 +208,14 @@ func (h *splitLayoutNamedSaveHost) RequireIdleRuntimeForSession(context.Context,
 	return nil
 }
 
-func (h *splitLayoutNamedSaveHost) ActivateSessionEditableFactory(context.Context, *interfaces.DefinitionSession, string, string, string, factoryapi.FactoryName, string) error {
+func (h *splitLayoutNamedSaveHost) ActivateSessionEditableFactory(context.Context, *factorydefinitions.DefinitionSession, string, string, string, factoryapi.FactoryName, string) error {
 	return nil
 }
 
 func (h *splitLayoutNamedSaveHost) ReplaceFactoryLayoutAtDir(
 	targetDir string,
-	prepared *interfaces.PreparedFactoryLayoutPayload,
-) (*interfaces.FactorySplitLayoutReplaceResult, error) {
+	prepared *factorydefinitions.PreparedFactoryLayoutPayload,
+) (*factorydefinitions.FactorySplitLayoutReplaceResult, error) {
 	h.replaceTargetDir = targetDir
 	return replacePreparedFactoryLayoutForTest(targetDir, prepared)
 }
@@ -258,7 +258,7 @@ func (h *splitLayoutNamedSaveHost) PreparePersistedFactoryPayload(
 	segment string,
 	factory factoryapi.Factory,
 	version factoryapi.HybridLogicalTimestamp,
-) (*interfaces.PreparedFactoryLayoutPayload, error) {
+) (*factorydefinitions.PreparedFactoryLayoutPayload, error) {
 	return preparePersistedFactoryPayload(segment, factory, version)
 }
 
@@ -337,7 +337,7 @@ func TestSaveUpsertNamedAndActivateForSession_PersistsChosenTargetName(t *testin
 	if err != nil {
 		t.Fatalf("ResolveNamedFactoryDir(imported-target): %v", err)
 	}
-	factoryJSONPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	factoryJSONPath := filepath.Join(factoryDir, factorydefinitions.FactoryConfigFile)
 	factoryJSON, err := os.ReadFile(factoryJSONPath)
 	if err != nil {
 		t.Fatalf("ReadFile(factory.json): %v", err)
@@ -354,8 +354,8 @@ type upsertNamedSaveHost struct {
 	activatedName  string
 }
 
-func (h *upsertNamedSaveHost) RequireSession(sessionID string) (*interfaces.DefinitionSession, error) {
-	return &interfaces.DefinitionSession{
+func (h *upsertNamedSaveHost) RequireSession(sessionID string) (*factorydefinitions.DefinitionSession, error) {
+	return &factorydefinitions.DefinitionSession{
 		ID:         sessionID,
 		FactoryDir: h.sessionRootDir,
 		FolderPath: h.sessionRootDir,
@@ -376,7 +376,7 @@ func (h *upsertNamedSaveHost) RequireIdleRuntimeForSession(context.Context, stri
 
 func (h *upsertNamedSaveHost) ActivateSessionEditableFactory(
 	_ context.Context,
-	_ *interfaces.DefinitionSession,
+	_ *factorydefinitions.DefinitionSession,
 	_ string,
 	_ string,
 	_ string,
@@ -392,8 +392,8 @@ func (h *upsertNamedSaveHost) ActivateSessionEditableFactory(
 
 func (h *upsertNamedSaveHost) ReplaceFactoryLayoutAtDir(
 	string,
-	*interfaces.PreparedFactoryLayoutPayload,
-) (*interfaces.FactorySplitLayoutReplaceResult, error) {
+	*factorydefinitions.PreparedFactoryLayoutPayload,
+) (*factorydefinitions.FactorySplitLayoutReplaceResult, error) {
 	return nil, nil
 }
 
@@ -441,7 +441,7 @@ func (h *upsertNamedSaveHost) PreparePersistedFactoryPayload(
 	segment string,
 	factory factoryapi.Factory,
 	version factoryapi.HybridLogicalTimestamp,
-) (*interfaces.PreparedFactoryLayoutPayload, error) {
+) (*factorydefinitions.PreparedFactoryLayoutPayload, error) {
 	return preparePersistedFactoryPayload(segment, factory, version)
 }
 

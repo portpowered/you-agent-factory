@@ -3,7 +3,7 @@
 package factoryeventprojection
 
 import (
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorycontracts "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )

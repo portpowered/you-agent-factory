@@ -885,6 +885,14 @@ response-stream output.
   current semantic defaults, maps EOF to an explicit cancellation outcome, and
   delegates successful input to the same context-aware load/merge/persist
   operation used by pre-supplied values.
+- The Operator Settings CLI adapter at
+  `pkg/services/operator_settings/transports/cli` must stay registered under
+  destination `operator_settings` in
+  `docs/internal/packaged-service-structure/package-target-manifest.json`,
+  `docs/internal/baselines/ownership-inventory.json`, and both
+  `go-*-coverage-package-minimums.json` baselines; prove registration with
+  `transports/cli/manifest_registration_test.go` rather than re-editing manifests
+  when CLI-SET already landed the rows.
 - Public provider/model setup enters through the manifest-derived `you init`
   handler in `pkg/transports/cli/commandregistry`, which translates stable
   `you.init.flag.provider` and `you.init.flag.model` inputs into the narrow
@@ -1758,7 +1766,14 @@ response-stream output.
 - `pkg/services/factory_definitions/packages/subagent/` retains only packaged
   subagent metadata and response-shaping behavior; shared catalog validation,
   installation tests, and public functional outcomes own definition evidence.
-- Hermetic no-server named `@you/subagent` package proof lives in
+- Packaged `@you/subagent` invocation functional coverage lives in
+  `tests/functional/factory/packaged/subagent/invocation_test.go` for child
+  primary-result return, child Factory Response Event streaming, and stable child
+  failure through public CLI/API boundaries with mock workers. The mapped
+  `test-built-cli-acceptance` specialty binding for
+  `TestSubagentInvocation_SuccessfulNamedRun_ReturnsAuthoritativePrimaryResultJSON`
+  remains in `tests/functional/acceptance/invoke_repeat_subagent_outcomes_test.go`.
+- Hermetic no-server named `@you/subagent` package proof also lives in
   `pkg/transports/cli/run/run_invocation_test.go`
   (`TestRun_NamedSubagentHermeticInvocationSucceedsWithoutListeningServer`,
   `TestRun_NamedSubagentNoServerBootstrap_TextPrimaryResultIsAgentResponse`,

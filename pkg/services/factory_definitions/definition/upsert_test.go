@@ -10,7 +10,7 @@ import (
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig"
 	factorysnapshotcapture "github.com/portpowered/infinite-you/pkg/services/factory_definitions/snapshotcapture"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
@@ -81,7 +81,7 @@ func TestSaveUpsertNamedAndActivateForSession_PersistsChosenTargetName(t *testin
 	if err != nil {
 		t.Fatalf("ResolveNamedFactoryDir(imported-target): %v", err)
 	}
-	factoryJSONPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	factoryJSONPath := filepath.Join(factoryDir, factorydefinitions.FactoryConfigFile)
 	factoryJSON, err := os.ReadFile(factoryJSONPath)
 	if err != nil {
 		t.Fatalf("ReadFile(factory.json): %v", err)
@@ -252,8 +252,8 @@ func (h *upsertDefinitionHost) CurrentRuntimeConfig() loadedFactorySource { retu
 
 func (h *upsertDefinitionHost) WorkflowID() string { return "" }
 
-func (h *upsertDefinitionHost) RequireSession(sessionID string) (*interfaces.DefinitionSession, error) {
-	return &interfaces.DefinitionSession{
+func (h *upsertDefinitionHost) RequireSession(sessionID string) (*factorydefinitions.DefinitionSession, error) {
+	return &factorydefinitions.DefinitionSession{
 		ID:         sessionID,
 		FactoryDir: h.sessionRootDir,
 		FolderPath: h.sessionRootDir,
@@ -268,22 +268,22 @@ func (h *upsertDefinitionHost) SessionRuntimeConfig(string) (loadedFactorySource
 	return factorydefinitioncomposition.LoadCurrent(factoryDir, nil)
 }
 
-func (h *upsertDefinitionHost) SessionFactoryPersistRoot(*interfaces.DefinitionSession) string {
+func (h *upsertDefinitionHost) SessionFactoryPersistRoot(*factorydefinitions.DefinitionSession) string {
 	return h.sessionRootDir
 }
 
-func (h *upsertDefinitionHost) ValidateEditableFactorySnapshot(ctx context.Context, snapshot *interfaces.FactorySnapshot) error {
+func (h *upsertDefinitionHost) ValidateEditableFactorySnapshot(ctx context.Context, snapshot *factorydefinitions.FactorySnapshot) error {
 	return validateDefinitionSnapshotForTest(ctx, snapshot, h.WorkstationLoader())
 }
 
-func (h *upsertDefinitionHost) GetCurrentFactorySnapshotForSession(context.Context, string) (*interfaces.FactorySnapshot, error) {
+func (h *upsertDefinitionHost) GetCurrentFactorySnapshotForSession(context.Context, string) (*factorydefinitions.FactorySnapshot, error) {
 	return mustFactorySnapshot(factoryapi.Factory{}), nil
 }
 
 func (h *upsertDefinitionHost) ReplaceFactoryLayoutAtDir(
 	string,
 	*factorydefinitions.PreparedFactoryLayoutPayload,
-) (*interfaces.FactorySplitLayoutReplaceResult, error) {
+) (*factorydefinitions.FactorySplitLayoutReplaceResult, error) {
 	return nil, nil
 }
 

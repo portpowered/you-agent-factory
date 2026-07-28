@@ -11,11 +11,18 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/portablefiles"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig"
+	compilationcanonical "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/canonical"
+	compilationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
+	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
+	snapshotsportability "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability"
+	snapshotsportabilitycapture "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/capture"
+	snapshotsportabilitymaterialize "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/materialize"
+	snapshotsportabilityprepare "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/prepare"
+	snapshotsportabilitywire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/wire"
 	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
-	factorysnapshotcapture "github.com/portpowered/infinite-you/pkg/services/factory_definitions/snapshotcapture"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
 )
@@ -41,6 +48,7 @@ func NewService(
 	packagedInstaller factorydefinitions.PackagedFactoryInstallationOperations,
 	requiredToolChecker factorydefinitions.RequiredToolChecker,
 	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
+	portableFileSystem portablefiles.FileSystem,
 ) (factorydefinitions.Service, error) {
 	if err := validateDependencies(
 		sessionHost,
@@ -59,18 +67,42 @@ func NewService(
 		packagedInstaller,
 		requiredToolChecker,
 		orchestratorValidator,
+		portableFileSystem,
 	); err != nil {
 		return nil, err
 	}
 
-	preparePortableFactoryConfig := portableconfig.NewPreparer(
+	preparePortableFactoryConfig := snapshotsportabilityprepare.NewPreparer(
 		factorydefinitions.CloneFactoryConfig,
 		applySupportedFiles,
 		applyStarterWork,
 	)
-	captureFactorySnapshot := factorysnapshotcapture.NewExplicit(
+	captureFactorySnapshot := snapshotsportabilitycapture.NewExplicit(
 		factorysnapshot.ObjectFromFactoryConfig,
 	)
+	snapshotsPortability, err := snapshotsportabilitywire.NewService(snapshotsportability.Dependencies{
+		LoadCanonical:             loader.LoadSourceFromCanonicalJSON,
+		CaptureLoaded:             snapshotsportabilitycapture.NewLoaded(factorysnapshot.ObjectFromFactoryConfig),
+		PreparePortable:           preparePortableFactoryConfig,
+		DecodeSnapshot:            snapshotsportabilitycapture.NewJSONDecoder(factorymapping.GeneratedFactoryFromOpenAPIJSON),
+		MaterializePortableFiles:  snapshotsportabilitymaterialize.NewMaterializer(portableFileSystem),
+		ValidateMaterializeWrites: snapshotsportabilitymaterialize.NewWritesValidator(portableFileSystem),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	compilation, err := compilationwire.NewService(compilationservice.Dependencies{
+		LoadCanonical:      loader.LoadSourceFromCanonicalJSON,
+		LoadFromFactoryDir: loader.LoadSourceFromFactoryDir,
+		EncodeFactory:      compilationcanonical.EncodeFactoryPort(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("construct Factory Definitions compilation: %w", err)
+	}
+	if compilation == nil {
+		return nil, fmt.Errorf("construct Factory Definitions: compilation subservice rejected its dependencies")
+	}
 
 	definitions := factorydefinitionsservice.New(
 		sessionHost,
@@ -117,7 +149,14 @@ func NewService(
 	if attached == nil {
 		return nil, fmt.Errorf("construct Factory Definitions: effective catalog attachment rejected its dependencies")
 	}
-	return attached, nil
+	withSnapshots, err := factorydefinitionsservice.AttachSnapshotsPortability(attached, snapshotsPortability)
+	if err != nil {
+		return nil, err
+	}
+	if withSnapshots == nil {
+		return nil, fmt.Errorf("construct Factory Definitions: snapshots portability attachment rejected its dependencies")
+	}
+	return attachCompilation(withSnapshots, compilation), nil
 }
 
 func validateDependencies(
@@ -137,6 +176,7 @@ func validateDependencies(
 	packagedInstaller factorydefinitions.PackagedFactoryInstallationOperations,
 	requiredToolChecker factorydefinitions.RequiredToolChecker,
 	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
+	portableFileSystem portablefiles.FileSystem,
 ) error {
 	if sessionHost == nil {
 		return fmt.Errorf("construct Factory Definitions: session host is required")
@@ -189,6 +229,9 @@ func validateDependencies(
 	if orchestratorValidator == nil {
 		return fmt.Errorf("construct Factory Definitions: orchestrator definition validator is required")
 	}
+	if portableFileSystem == nil {
+		return fmt.Errorf("construct Factory Definitions: portable filesystem is required")
+	}
 	return nil
 }
 
@@ -220,3 +263,28 @@ func StaticClock(instant time.Time) factorydefinitions.Clock {
 type staticClock struct{ instant time.Time }
 
 func (c staticClock) Now() time.Time { return c.instant }
+
+type compilationAttachedService struct {
+	factorydefinitions.Service
+	compilation compilationservice.Service
+}
+
+func attachCompilation(
+	service factorydefinitions.Service,
+	compilation compilationservice.Service,
+) factorydefinitions.Service {
+	if service == nil || compilation == nil {
+		return service
+	}
+	return compilationAttachedService{
+		Service:     service,
+		compilation: compilation,
+	}
+}
+
+func (s compilationAttachedService) CompileEffectiveFactorySource(
+	ctx context.Context,
+	request factorydefinitions.CompileEffectiveFactorySourceRequest,
+) (factorydefinitions.CompileEffectiveFactorySourceResult, error) {
+	return s.compilation.CompileEffectiveFactorySource(ctx, request)
+}

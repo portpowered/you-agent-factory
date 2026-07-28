@@ -13,7 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig"
 	factorysnapshotcapture "github.com/portpowered/infinite-you/pkg/services/factory_definitions/snapshotcapture"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
@@ -27,7 +27,7 @@ type stubDefinitionHost struct {
 	workstationLoader  factorydefinitions.WorkstationLoader
 	currentRuntime     loadedFactorySource
 	workflowID         string
-	session            *interfaces.DefinitionSession
+	session            *factorydefinitions.DefinitionSession
 	sessionRuntime     loadedFactorySource
 	sessionPersistRoot string
 	requireSessionErr  error
@@ -106,7 +106,7 @@ func (h stubDefinitionHost) CurrentRuntimeConfig() loadedFactorySource {
 	return h.currentRuntime
 }
 func (h stubDefinitionHost) WorkflowID() string { return h.workflowID }
-func (h stubDefinitionHost) RequireSession(string) (*interfaces.DefinitionSession, error) {
+func (h stubDefinitionHost) RequireSession(string) (*factorydefinitions.DefinitionSession, error) {
 	if h.requireSessionErr != nil {
 		return nil, h.requireSessionErr
 	}
@@ -118,26 +118,26 @@ func (h stubDefinitionHost) SessionRuntimeConfig(string) (loadedFactorySource, e
 	}
 	return h.sessionRuntime, nil
 }
-func (h stubDefinitionHost) SessionFactoryPersistRoot(*interfaces.DefinitionSession) string {
+func (h stubDefinitionHost) SessionFactoryPersistRoot(*factorydefinitions.DefinitionSession) string {
 	return h.sessionPersistRoot
 }
-func (h stubDefinitionHost) ValidateEditableFactorySnapshot(ctx context.Context, snapshot *interfaces.FactorySnapshot) error {
+func (h stubDefinitionHost) ValidateEditableFactorySnapshot(ctx context.Context, snapshot *factorydefinitions.FactorySnapshot) error {
 	return validateDefinitionSnapshotForTest(ctx, snapshot, h.WorkstationLoader())
 }
 
-func (h stubDefinitionHost) GetCurrentFactorySnapshotForSession(context.Context, string) (*interfaces.FactorySnapshot, error) {
+func (h stubDefinitionHost) GetCurrentFactorySnapshotForSession(context.Context, string) (*factorydefinitions.FactorySnapshot, error) {
 	return mustFactorySnapshot(factoryapi.Factory{}), nil
 }
 
 func (h stubDefinitionHost) ReplaceFactoryLayoutAtDir(
 	string,
 	*factorydefinitions.PreparedFactoryLayoutPayload,
-) (*interfaces.FactorySplitLayoutReplaceResult, error) {
+) (*factorydefinitions.FactorySplitLayoutReplaceResult, error) {
 	return nil, nil
 }
 
-func mustFactorySnapshot(factory factoryapi.Factory) *interfaces.FactorySnapshot {
-	snapshot, err := interfaces.NewFactorySnapshot(factory)
+func mustFactorySnapshot(factory factoryapi.Factory) *factorydefinitions.FactorySnapshot {
+	snapshot, err := factorydefinitions.NewFactorySnapshot(factory)
 	if err != nil {
 		panic(err)
 	}
@@ -313,7 +313,7 @@ func TestService_GetCurrentFactoryForSession_IncludesPersistedVersionForNamedPoi
 	const sessionID = "session-alpha"
 	host := stubDefinitionHost{
 		persistRootDir: rootDir,
-		session: &interfaces.DefinitionSession{
+		session: &factorydefinitions.DefinitionSession{
 			ID:         sessionID,
 			FactoryDir: rootDir,
 			FolderPath: rootDir,
@@ -340,7 +340,7 @@ func TestService_CurrentFactoryDefinitionVersionAtRoot_UsesFileModTimeForDefault
 	rootDir := t.TempDir()
 	factoryfixtures.WriteFactoryJSON(t, rootDir, factoryfixtures.MinimalFactoryConfig())
 	modTime := time.Date(2026, time.February, 3, 4, 5, 6, 0, time.UTC)
-	factoryPath := filepath.Join(rootDir, interfaces.FactoryConfigFile)
+	factoryPath := filepath.Join(rootDir, factorydefinitions.FactoryConfigFile)
 	if err := os.Chtimes(factoryPath, modTime, modTime); err != nil {
 		t.Fatalf("Chtimes: %v", err)
 	}
@@ -381,7 +381,7 @@ func TestService_ActivateNamedFactory_SwapsPersistedNamedFactory(t *testing.T) {
 	}
 
 	host := &activateTrackingHost{stubDefinitionHost: stubDefinitionHost{persistRootDir: rootDir}}
-	session := &interfaces.DefinitionSession{
+	session := &factorydefinitions.DefinitionSession{
 		ID:         "session-alpha",
 		FactoryDir: rootDir,
 		FolderPath: rootDir,
@@ -406,7 +406,7 @@ func TestService_ActivateNamedFactory_ReturnsResolveErrorForMissingFactory(t *te
 	host := &activateTrackingHost{stubDefinitionHost: stubDefinitionHost{persistRootDir: t.TempDir()}}
 	gateway := &trackingActivationGateway{
 		runSessionID:         "session-alpha",
-		sessionForActivation: &interfaces.DefinitionSession{ID: "session-alpha"},
+		sessionForActivation: &factorydefinitions.DefinitionSession{ID: "session-alpha"},
 		persistRoot:          host.persistRootDir,
 		folderPath:           host.persistRootDir,
 	}
@@ -434,7 +434,7 @@ func TestService_GetCurrentNamedFactory_PropagatesPointerReadError(t *testing.T)
 	t.Parallel()
 
 	rootDir := t.TempDir()
-	pointerPath := filepath.Join(rootDir, interfaces.CurrentFactoryPointerFile)
+	pointerPath := filepath.Join(rootDir, factorydefinitions.CurrentFactoryPointerFile)
 	if err := os.MkdirAll(rootDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}

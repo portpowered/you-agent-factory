@@ -4,8 +4,8 @@ import (
 	"errors"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func TestPackagedGoalInvocationPrimaryResult_ReturnsSummaryNotSubmittedInput(t *testing.T) {
@@ -35,12 +35,12 @@ func TestPackagedGoalInvocationPrimaryResult_ReturnsSummaryNotSubmittedInput(t *
 		Content:    summaryContent,
 	}
 
-	state := interfaces.FactoryWorldState{
+	state := factorydefinitions.FactoryWorldState{
 		PayloadLineage:   work.WorkPayloadLineageProjection{},
-		WorkRequestsByID: make(map[string]interfaces.WorkRequestPayload),
-		TerminalWorkByID: make(map[string]interfaces.FactoryTerminalWork),
+		WorkRequestsByID: make(map[string]factorydefinitions.WorkRequestPayload),
+		TerminalWorkByID: make(map[string]factorydefinitions.FactoryTerminalWork),
 	}
-	state.WorkRequestsByID[requestID] = interfaces.WorkRequestPayload{
+	state.WorkRequestsByID[requestID] = factorydefinitions.WorkRequestPayload{
 		RequestID: requestID,
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
 		WorkItems: []work.FactoryWorkItem{submitted},
@@ -48,11 +48,11 @@ func TestPackagedGoalInvocationPrimaryResult_ReturnsSummaryNotSubmittedInput(t *
 	state.PayloadLineage.RecordWorkRequestSnapshot(1, requestID, submitted)
 	state.PayloadLineage.RecordConsumedInputSnapshot("dispatch-goal", submitted)
 	state.PayloadLineage.RecordDispatchOutputSnapshot(2, "dispatch-goal", []work.FactoryWorkItem{submitted}, terminal, 0)
-	state.TerminalWorkByID[workID] = interfaces.FactoryTerminalWork{WorkItem: terminal, Status: "TERMINAL"}
+	state.TerminalWorkByID[workID] = factorydefinitions.FactoryTerminalWork{WorkItem: terminal, Status: "TERMINAL"}
 
 	selection, err := work.ResolvePrimaryResult(work.PrimaryResultSelectionInput{
 		RequestID: requestID,
-		InvocationReturn: &interfaces.InvocationReturnConfig{
+		InvocationReturn: &factorydefinitions.InvocationReturnConfig{
 			Policy:        "EXPLICIT",
 			WorkTypeName:  PackagedInvocationReturnWorkTypeName,
 			TerminalState: PackagedInvocationReturnTerminalState,
@@ -95,12 +95,12 @@ func TestPackagedGoalInvocationPrimaryResult_UnresolvedWhenConfiguredTerminalMis
 		Content:    submitted.Content,
 	}
 
-	state := interfaces.FactoryWorldState{
+	state := factorydefinitions.FactoryWorldState{
 		PayloadLineage:   work.WorkPayloadLineageProjection{},
-		WorkRequestsByID: make(map[string]interfaces.WorkRequestPayload),
-		TerminalWorkByID: make(map[string]interfaces.FactoryTerminalWork),
+		WorkRequestsByID: make(map[string]factorydefinitions.WorkRequestPayload),
+		TerminalWorkByID: make(map[string]factorydefinitions.FactoryTerminalWork),
 	}
-	state.WorkRequestsByID[requestID] = interfaces.WorkRequestPayload{
+	state.WorkRequestsByID[requestID] = factorydefinitions.WorkRequestPayload{
 		RequestID: requestID,
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
 		WorkItems: []work.FactoryWorkItem{submitted},
@@ -108,11 +108,11 @@ func TestPackagedGoalInvocationPrimaryResult_UnresolvedWhenConfiguredTerminalMis
 	state.PayloadLineage.RecordWorkRequestSnapshot(1, requestID, submitted)
 	state.PayloadLineage.RecordConsumedInputSnapshot("dispatch-goal", submitted)
 	state.PayloadLineage.RecordDispatchOutputSnapshot(2, "dispatch-goal", []work.FactoryWorkItem{submitted}, failedTerminal, 0)
-	state.TerminalWorkByID[workID] = interfaces.FactoryTerminalWork{WorkItem: failedTerminal, Status: "FAILED"}
+	state.TerminalWorkByID[workID] = factorydefinitions.FactoryTerminalWork{WorkItem: failedTerminal, Status: "FAILED"}
 
 	_, err := work.ResolvePrimaryResult(work.PrimaryResultSelectionInput{
 		RequestID: requestID,
-		InvocationReturn: &interfaces.InvocationReturnConfig{
+		InvocationReturn: &factorydefinitions.InvocationReturnConfig{
 			Policy:        "EXPLICIT",
 			WorkTypeName:  PackagedInvocationReturnWorkTypeName,
 			TerminalState: PackagedInvocationReturnTerminalState,

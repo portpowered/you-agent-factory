@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
 )
@@ -22,7 +22,7 @@ var validationPeerSurfacePackages = []string{
 
 var validationPeerSurfaceSourceFiles = []string{
 	"validation_contract.go",
-	filepath.Join("contracts", "validation.go"),
+	filepath.Join("internal", "contracts", "validation.go"),
 }
 
 // prohibitedValidationPeerPetriEngineSymbols maps raw Petri live-engine symbols
@@ -87,7 +87,7 @@ func TestValidationPeerSurface_ReturnsDefinitionsOwnedTargets(t *testing.T) {
 	t.Parallel()
 
 	cfg := peerSurfacePetriScopedFactoryConfig()
-	cfg.Workstations[0].Outputs = []factorycontracts.IOConfig{{
+	cfg.Workstations[0].Outputs = []factorydefinitions.IOConfig{{
 		WorkTypeName: "task",
 		StateName:    "missing-state",
 	}}
@@ -115,10 +115,10 @@ func TestValidationPeerSurface_ReturnsDefinitionsOwnedTargets(t *testing.T) {
 func TestValidationPeerSurface_PeerConsumesValidationContractsWithoutPetriImports(t *testing.T) {
 	t.Parallel()
 
-	var validator factorycontracts.Validator = factoryvalidation.New(nil)
-	cfg := &factorycontracts.FactoryConfig{
+	var validator factorydefinitions.Validator = factoryvalidation.New(nil)
+	cfg := &factorydefinitions.FactoryConfig{
 		Name: "unsupported-orchestrator",
-		Orchestrator: &factorycontracts.FactoryOrchestratorConfig{
+		Orchestrator: &factorydefinitions.FactoryOrchestratorConfig{
 			Kind: "LEGACY",
 		},
 	}
@@ -215,15 +215,15 @@ func validationPeerSurfaceFileDeclaresProhibitedPetriSymbol(file *ast.File) bool
 	return found
 }
 
-func assertValidationTargetUsesDefinitionsVocabulary(t *testing.T, target factorycontracts.ValidationTarget) {
+func assertValidationTargetUsesDefinitionsVocabulary(t *testing.T, target factorydefinitions.ValidationTarget) {
 	t.Helper()
 
 	if strings.TrimSpace(target.Code) == "" {
 		t.Fatalf("validation target must carry Definitions-owned code: %#v", target)
 	}
-	if target.Severity != factorycontracts.ValidationSeverityError &&
-		target.Severity != factorycontracts.ValidationSeverityWarning &&
-		target.Severity != factorycontracts.ValidationSeverityHint {
+	if target.Severity != factorydefinitions.ValidationSeverityError &&
+		target.Severity != factorydefinitions.ValidationSeverityWarning &&
+		target.Severity != factorydefinitions.ValidationSeverityHint {
 		t.Fatalf("validation target severity = %q, want Definitions-owned severity", target.Severity)
 	}
 	if strings.TrimSpace(string(target.Subject.Type)) == "" {
@@ -237,24 +237,24 @@ func assertValidationTargetUsesDefinitionsVocabulary(t *testing.T, target factor
 	}
 }
 
-func peerSurfacePetriScopedFactoryConfig() *factorycontracts.FactoryConfig {
-	return &factorycontracts.FactoryConfig{
+func peerSurfacePetriScopedFactoryConfig() *factorydefinitions.FactoryConfig {
+	return &factorydefinitions.FactoryConfig{
 		Name: "peer-surface-topology",
-		WorkTypes: []factorycontracts.WorkTypeConfig{{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{{
 			Name: "task",
-			States: []factorycontracts.StateConfig{
-				{Name: "init", Type: factorycontracts.StateTypeInitial},
-				{Name: "done", Type: factorycontracts.StateTypeTerminal},
-				{Name: "failed", Type: factorycontracts.StateTypeFailed},
+			States: []factorydefinitions.StateConfig{
+				{Name: "init", Type: factorydefinitions.StateTypeInitial},
+				{Name: "done", Type: factorydefinitions.StateTypeTerminal},
+				{Name: "failed", Type: factorydefinitions.StateTypeFailed},
 			},
 		}},
 		Workers: []workerconfig.Config{{Name: "worker-a"}},
-		Workstations: []factorycontracts.FactoryWorkstationConfig{{
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{{
 			Name:           "process",
 			WorkerTypeName: "worker-a",
-			Inputs:         []factorycontracts.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-			Outputs:        []factorycontracts.IOConfig{{WorkTypeName: "task", StateName: "done"}},
-			OnFailure:      []factorycontracts.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
+			Inputs:         []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+			Outputs:        []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+			OnFailure:      []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
 		}},
 	}
 }

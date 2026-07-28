@@ -1,6 +1,7 @@
 package validation
 
-import interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+import factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+
 
 var deferredBlockingLoadOutcomeCodes = map[string]struct{}{
 	CodeWorkstationMissingFailureRoute:   {},
@@ -10,7 +11,7 @@ var deferredBlockingLoadOutcomeCodes = map[string]struct{}{
 // ValidateBlockingLoad returns structural validation targets that should fail
 // factory load before runtime definition merge. Outcome-route invariants remain
 // on save and explicit validation paths until legacy fixtures migrate.
-func ValidateBlockingLoad(cfg *interfaces.FactoryConfig) Result {
+func ValidateBlockingLoad(cfg *factorydefinitions.FactoryConfig) Result {
 	result := ValidateStructural(cfg)
 	if len(result.Targets) == 0 {
 		return result

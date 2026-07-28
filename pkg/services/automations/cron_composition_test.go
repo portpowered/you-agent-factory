@@ -7,7 +7,7 @@ import (
 	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	automationservice "github.com/portpowered/infinite-you/pkg/services/automations/service"
+	automationinternal "github.com/portpowered/infinite-you/pkg/services/automations/internal"
 	"go.uber.org/zap"
 )
 
@@ -44,7 +44,7 @@ func TestAutomationsRootReExportsCronScheduling(t *testing.T) {
 func TestAutomationsServiceConstructsCronOwnerInertly(t *testing.T) {
 	t.Parallel()
 
-	service := automationservice.NewService(
+	service := automationinternal.NewService(
 		zap.NewNop(),
 		clockwork.NewFakeClock(),
 		nil,

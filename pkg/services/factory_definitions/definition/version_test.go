@@ -5,14 +5,14 @@ import (
 	"testing"
 	"time"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 func TestService_RequireFreshEditableFactoryVersion_RejectsMissingBaseVersion(t *testing.T) {
 	t.Parallel()
 
-	err := newTestService(stubDefinitionHost{}).RequireFreshEditableFactoryVersion(nil, interfaces.FactoryVersion{
+	err := newTestService(stubDefinitionHost{}).RequireFreshEditableFactoryVersion(nil, factorydefinitions.FactoryVersion{
 		Logical:  1,
 		Physical: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
 	})
@@ -24,11 +24,11 @@ func TestService_RequireFreshEditableFactoryVersion_RejectsMissingBaseVersion(t 
 func TestService_RequireFreshEditableFactoryVersion_RejectsStaleVersion(t *testing.T) {
 	t.Parallel()
 
-	current := interfaces.FactoryVersion{
+	current := factorydefinitions.FactoryVersion{
 		Logical:  5,
 		Physical: time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC),
 	}
-	stale := interfaces.FactoryVersion{
+	stale := factorydefinitions.FactoryVersion{
 		Logical:  4,
 		Physical: time.Date(2026, 3, 1, 12, 0, 1, 0, time.UTC),
 	}
@@ -41,11 +41,11 @@ func TestService_RequireFreshEditableFactoryVersion_RejectsStaleVersion(t *testi
 func TestService_RequireFreshEditableFactoryVersion_AcceptsAdvancedVersion(t *testing.T) {
 	t.Parallel()
 
-	current := interfaces.FactoryVersion{
+	current := factorydefinitions.FactoryVersion{
 		Logical:  5,
 		Physical: time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC),
 	}
-	advanced := interfaces.FactoryVersion{
+	advanced := factorydefinitions.FactoryVersion{
 		Logical:  6,
 		Physical: time.Date(2026, 3, 1, 12, 0, 1, 0, time.UTC),
 	}
@@ -57,7 +57,7 @@ func TestService_RequireFreshEditableFactoryVersion_AcceptsAdvancedVersion(t *te
 func TestService_NextEditableFactoryVersion_AdvancesLogicalAndPhysical(t *testing.T) {
 	t.Parallel()
 
-	current := interfaces.FactoryVersion{
+	current := factorydefinitions.FactoryVersion{
 		Logical:  7,
 		Physical: time.Date(2026, 4, 1, 8, 0, 0, 0, time.UTC),
 	}

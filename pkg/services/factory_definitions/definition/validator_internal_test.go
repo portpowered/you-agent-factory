@@ -2,7 +2,7 @@ package factorydefinition
 
 import (
 	factorydefinitionfixtures "github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )

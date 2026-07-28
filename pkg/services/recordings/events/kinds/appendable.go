@@ -1,12 +1,12 @@
 package factoryeventkinds
 
-import factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+import recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 
-var publicEmittableKindSet map[factorycontracts.FactoryEventType]struct{}
+var publicEmittableKindSet map[recordings.FactoryEventType]struct{}
 
 func init() {
 	kinds := PublicEmittableFactoryEventKinds()
-	publicEmittableKindSet = make(map[factorycontracts.FactoryEventType]struct{}, len(kinds))
+	publicEmittableKindSet = make(map[recordings.FactoryEventType]struct{}, len(kinds))
 	for _, entry := range kinds {
 		publicEmittableKindSet[entry.Kind] = struct{}{}
 	}
@@ -15,7 +15,7 @@ func init() {
 // IsPublicEmittableFactoryEventKind reports whether kind belongs to the
 // runtime public emittable inventory and may be appended as a canonical ledger
 // fact.
-func IsPublicEmittableFactoryEventKind(kind factorycontracts.FactoryEventType) bool {
+func IsPublicEmittableFactoryEventKind(kind recordings.FactoryEventType) bool {
 	_, ok := publicEmittableKindSet[kind]
 	return ok
 }

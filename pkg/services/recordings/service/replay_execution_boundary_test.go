@@ -11,6 +11,7 @@ import (
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings/replay"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
@@ -91,7 +92,7 @@ func TestReplayExecutionYieldsRuntimeRootHookAndPlanOutcomes(t *testing.T) {
 	}
 }
 
-func loadReplayExecutionBoundaryArtifact(t *testing.T) *factorydefinitions.ReplayArtifact {
+func loadReplayExecutionBoundaryArtifact(t *testing.T) *recordings.ReplayArtifact {
 	t.Helper()
 
 	storage := platformreplay.NewLocal(runtime.GOOS)

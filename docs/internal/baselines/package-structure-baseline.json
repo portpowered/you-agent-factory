@@ -1319,11 +1319,6 @@
     },
     {
       "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/cli/mcp_resume/resume_non_regression_test.go",
-      "target": "cli"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
       "filePath": "tests/functional/cli/mcp_resume/serve_runtime_resume_smoke_test.go",
       "target": "cli"
     },
