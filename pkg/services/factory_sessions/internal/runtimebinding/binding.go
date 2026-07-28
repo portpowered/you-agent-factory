@@ -379,12 +379,12 @@ func StreamGenerationID(session *livesession.LiveSession) string {
 			return generation
 		}
 		if runtime := instance.RuntimeService(); runtime != nil {
-			if observation, observationErr := LegacyObservationForService(runtime); observationErr == nil {
-				snapshot, err := observation.GetEngineStateSnapshot(context.Background())
-				if err == nil && snapshot != nil {
-					if generation := strings.TrimSpace(snapshot.StreamGenerationID); generation != "" {
-						return generation
-					}
+			observeResult, observeErr := runtime.Observe(context.Background(), factory.ObserveRequest{
+				Scope: factory.ObservationScopeHealth,
+			})
+			if observeErr == nil {
+				if generation := strings.TrimSpace(observeResult.Observation.Health.StreamGenerationID); generation != "" {
+					return generation
 				}
 			}
 		}

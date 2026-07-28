@@ -88,7 +88,11 @@ func (f *gatewayLifecycleFactory) ControlMoveWork(
 }
 
 func (f *gatewayLifecycleFactory) Observe(context.Context, factory.ObserveRequest) (factory.ObserveResult, error) {
-	return factory.ObserveResult{}, nil
+	return factory.ObserveResult{
+		Observation: factory.Observation{
+			Health: factory.ObservationHealth{FactoryState: f.factoryState},
+		},
+	}, nil
 }
 
 func (f *gatewayLifecycleFactory) PlanDispatch(_ context.Context, req factory.PlanDispatchRequest) (factory.PlanDispatchResult, error) {

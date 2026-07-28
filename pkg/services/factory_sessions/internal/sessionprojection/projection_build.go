@@ -33,11 +33,11 @@ func BuildProjectionContext(input ProjectionBuildInput) (ProjectionContext, erro
 	if interfaces.IsJavaScriptOrchestratorFactory(factoryCfg) && input.CheckpointStore != nil {
 		result.JavaScriptCheckpoints = input.CheckpointStore.List()
 	}
-	if input.Snapshot != nil && len(input.Events) > 0 {
+	if len(input.Events) > 0 {
 		if input.WorldStateProjector == nil {
 			return ProjectionContext{}, fmt.Errorf("Recordings world-state projector is required")
 		}
-		worldState, err := input.WorldStateProjector(input.Events, input.Snapshot.TickCount)
+		worldState, err := input.WorldStateProjector(input.Events, input.Observation.Progress.TickCount)
 		if err != nil {
 			return ProjectionContext{}, err
 		}

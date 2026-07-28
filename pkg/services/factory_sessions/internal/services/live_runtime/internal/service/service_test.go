@@ -3,6 +3,7 @@ package service_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -143,8 +144,8 @@ func TestServiceRejectsRootOnlyRuntimeForLegacySnapshotPaths(t *testing.T) {
 		factorysessions.LifecycleControlPause,
 		factorysessions.ControlRequest{},
 	)
-	if controlErr == nil || !strings.Contains(controlErr.Error(), "legacy Factory Runtime observation is unavailable") {
-		t.Fatalf("ApplyControl error = %v, want unavailable legacy observation", controlErr)
+	if controlErr == nil || !strings.Contains(controlErr.Error(), "Factory Runtime observation is unavailable") {
+		t.Fatalf("ApplyControl error = %v, want unavailable observation", controlErr)
 	}
 }
 
@@ -165,6 +166,10 @@ func testDependencies() liveruntime.Dependencies {
 }
 
 type rootOnlyRuntime struct{ factoryruntime.Service }
+
+func (rootOnlyRuntime) Observe(context.Context, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {
+	return factoryruntime.ObserveResult{}, fmt.Errorf("Factory Runtime observation is unavailable")
+}
 
 type testFactoryRuntime struct {
 	factoryruntime.Service
@@ -199,7 +204,11 @@ func (f *testFactoryRuntime) Terminate(context.Context, factoryruntime.Terminate
 	return factoryruntime.TerminateResult{Outcome: factoryruntime.ControlOutcomeAccepted}, nil
 }
 func (f *testFactoryRuntime) Observe(context.Context, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {
-	return factoryruntime.ObserveResult{}, nil
+	return factoryruntime.ObserveResult{
+		Observation: factoryruntime.Observation{
+			Health: factoryruntime.ObservationHealth{FactoryState: f.state},
+		},
+	}, nil
 }
 func (f *testFactoryRuntime) PlanDispatch(_ context.Context, req factoryruntime.PlanDispatchRequest) (factoryruntime.PlanDispatchResult, error) {
 	return factoryruntime.PlanDispatchResult{

@@ -121,15 +121,13 @@ func (s *service) ApplyControl(ctx context.Context, sessionID string, operation 
 		s.dependencies.ObserveControl(sessionID, operation, control, "", "", err)
 		return factorysessions.LifecycleControlResult{}, err
 	}
-	legacyObservation, err := runtimebinding.LegacyObservationForService(activeFactory)
+	observeResult, err := activeFactory.Observe(ctx, factoryruntime.ObserveRequest{
+		Scope: factoryruntime.ObservationScopeHealth,
+	})
 	if err != nil {
-		return factorysessions.LifecycleControlResult{}, err
+		return factorysessions.LifecycleControlResult{}, fmt.Errorf("observe live factory session: %w", err)
 	}
-	snapshot, err := legacyObservation.GetEngineStateSnapshot(ctx)
-	if err != nil {
-		return factorysessions.LifecycleControlResult{}, fmt.Errorf("get engine state snapshot: %w", err)
-	}
-	currentStatus := factorysessions.LifecycleStatusFromFactoryRuntimeState(snapshot.FactoryState)
+	currentStatus := factorysessions.LifecycleStatusFromFactoryRuntimeState(observeResult.Observation.Health.FactoryState)
 	outcome := factorysessions.EvaluateLifecycleControl(operation, currentStatus)
 	if outcome == factorysessions.LifecycleControlOutcomeInvalidState || outcome == factorysessions.LifecycleControlOutcomeTerminalSession {
 		controlErr := &factorysessions.ControlError{Operation: operation, Outcome: outcome, Status: currentStatus, Message: fmt.Sprintf("%s rejected for session %s in status %s", operation, sessionID, currentStatus), Links: factorysessions.LiveLifecycleControlLinksForSession(sessionID)}
