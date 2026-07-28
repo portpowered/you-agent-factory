@@ -9,21 +9,9 @@
       "note": "Peer Service interface plus Inspect/Project/Details request, result, value, and typed-error contracts."
     },
     {
-      "file": "details_providers_boundary_test.go",
-      "classification": "fold_target_implementation_test",
-      "foldDestination": "pkg/services/provider_sessions/internal",
-      "note": "Implementation integration test exercising Details through provider_sessions/wire construction; folds with private implementation, not thin root contract seal."
-    },
-    {
       "file": "doc.go",
       "classification": "thin_root_contract",
       "note": "Package documentation for the committed thin Provider Sessions root contract surface."
-    },
-    {
-      "file": "inspect_providers_boundary_test.go",
-      "classification": "fold_target_implementation_test",
-      "foldDestination": "pkg/services/provider_sessions/internal",
-      "note": "Implementation integration test exercising Inspect through provider_sessions/wire construction."
     },
     {
       "file": "legacy_packages_disposition_test.go",
@@ -31,21 +19,9 @@
       "note": "INV disposition, zero-extra absence lock, and import-closure guards proving unexpected public siblings beyond service/ stay inventoried and off production import paths for peer and owner public-surface packages including wire/."
     },
     {
-      "file": "project_providers_boundary_test.go",
-      "classification": "fold_target_implementation_test",
-      "foldDestination": "pkg/services/provider_sessions/internal",
-      "note": "Implementation integration test exercising Project through provider_sessions/wire construction."
-    },
-    {
       "file": "providers_import_boundary_test.go",
       "classification": "thin_root_contract_test",
       "note": "Import-closure guard proving production Provider Sessions packages do not re-import forbidden Providers/Workers transitional roots."
-    },
-    {
-      "file": "readers_providers_boundary_test.go",
-      "classification": "fold_target_implementation_test",
-      "foldDestination": "pkg/services/provider_sessions/internal",
-      "note": "Parent-private reader boundary characterization that reaches Codex/Cursor reader packages; folds with private implementation rather than thin root contract."
     },
     {
       "file": "root_contracts_providers_boundary_test.go",
@@ -61,18 +37,6 @@
       "file": "service_root_contract_test.go",
       "classification": "thin_root_contract_test",
       "note": "Peer-shaped Service characterization and seal tests using only published root contracts."
-    },
-    {
-      "file": "service_test.go",
-      "classification": "fold_target_implementation_test",
-      "foldDestination": "pkg/services/provider_sessions/internal",
-      "note": "Root-level implementation integration tests assembling production Service through provider_sessions/wire; fold target for CLN-PSES-CONTRACT-ROOTS."
-    },
-    {
-      "file": "wire_behavioral_proof_test.go",
-      "classification": "fold_target_implementation_test",
-      "foldDestination": "pkg/services/provider_sessions/internal",
-      "note": "Focused wire-constructed behavioral proof for Details, Inspect, and Project across Codex and Cursor reader fixtures on the published Service surface."
     }
   ]
 }

@@ -1,4 +1,4 @@
-package providersessions_test
+package internal_test
 
 import (
 	"database/sql"

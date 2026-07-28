@@ -1,16 +1,10 @@
-package providersessions_test
+package internal_test
 
 import (
-	"database/sql"
 	"errors"
-	"path/filepath"
 	"testing"
 
-	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
-	providersessionsinternal "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal"
-	providersessionswire "github.com/portpowered/infinite-you/pkg/services/provider_sessions/wire"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
@@ -21,7 +15,7 @@ import (
 func TestWireBehavioralProof_PublishedRootPreservesObservables(t *testing.T) {
 	t.Run("codex success", func(t *testing.T) {
 		root := writeCodexSessionFixture(t, "wire-behavioral-codex")
-		svc := wireServiceForRoots(t, root, "")
+		svc := newServiceForRoots(t, root, "")
 
 		ref := providers.SessionRef{
 			Provider: providers.IDCodex,
@@ -66,7 +60,7 @@ func TestWireBehavioralProof_PublishedRootPreservesObservables(t *testing.T) {
 
 	t.Run("cursor success", func(t *testing.T) {
 		root, sessionID := writeCursorSessionFixture(t)
-		svc := wireServiceForRoots(t, t.TempDir(), root)
+		svc := newServiceForRoots(t, t.TempDir(), root)
 
 		ref := providers.SessionRef{
 			Provider: providers.IDCursor,
@@ -107,7 +101,7 @@ func TestWireBehavioralProof_PublishedRootPreservesObservables(t *testing.T) {
 	t.Run("typed failures", func(t *testing.T) {
 		codexRoot := writeCodexSessionFixture(t, "wire-behavioral-typed-codex")
 		cursorRoot, cursorSessionID := writeCursorSessionFixture(t)
-		svc := wireServiceForRoots(t, codexRoot, cursorRoot)
+		svc := newServiceForRoots(t, codexRoot, cursorRoot)
 
 		codexRef := providers.SessionRef{
 			Provider: providers.IDCodex,
@@ -164,23 +158,4 @@ func TestWireBehavioralProof_PublishedRootPreservesObservables(t *testing.T) {
 			t.Fatalf("Project cursor success sanity = %v", err)
 		}
 	})
-}
-
-func wireServiceForRoots(t *testing.T, codexRoot, cursorRoot string) providersessions.Service {
-	t.Helper()
-	service, err := providersessionswire.NewForRoots(
-		platformfilesystem.Local{},
-		providersessionsinternal.CodexWalkDirectory(filepath.WalkDir),
-		providersessionsinternal.CodexResolveSymlinks(filepath.EvalSymlinks),
-		providersessionsinternal.CursorWalkDirectory(filepath.WalkDir),
-		providersessionsinternal.CursorResolveSymlinks(filepath.EvalSymlinks),
-		providersessionsinternal.CursorOpenSQLDatabase(sql.Open),
-		codexRoot,
-		cursorRoot,
-	)
-	if err != nil {
-		t.Fatalf("providersessionswire.NewForRoots: %v", err)
-	}
-	var root providersessions.Service = service
-	return root
 }
