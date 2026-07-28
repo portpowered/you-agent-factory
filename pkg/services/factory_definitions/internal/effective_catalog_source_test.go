@@ -1,4 +1,4 @@
-package service_test
+package internal_test
 
 import (
 	"fmt"
@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
+	factoryinternal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
 )
 
 type rootLister map[string][]factorydefinitions.NamedFactoryListEntry
@@ -31,7 +31,7 @@ func TestSourceDiscoversDiskAndPackagedCandidatesWithoutMaterialization(t *testi
 	t.Parallel()
 
 	factoryDir := filepath.Join("/project", "alpha")
-	discovery, err := factoryservice.NewEffectiveCatalogDiscovery(
+	discovery, err := factoryinternal.NewEffectiveCatalogDiscovery(
 		rootLister{
 			"/project": {{
 				Name:       "alpha",
@@ -74,7 +74,7 @@ func TestSourceIsolatesUnreadableCandidateAndContinues(t *testing.T) {
 
 	goodDir := filepath.Join("/project", "good")
 	badDir := filepath.Join("/project", "bad")
-	discovery, err := factoryservice.NewEffectiveCatalogDiscovery(
+	discovery, err := factoryinternal.NewEffectiveCatalogDiscovery(
 		rootLister{
 			"/project": {
 				{Name: "bad", FactoryDir: badDir},

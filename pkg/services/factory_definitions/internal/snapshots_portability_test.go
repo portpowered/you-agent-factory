@@ -1,11 +1,11 @@
-package service_test
+package internal_test
 
 import (
 	"context"
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
+	factoryinternal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
 )
 
 type snapshotPortabilityStub struct {
@@ -46,7 +46,7 @@ func TestAttachSnapshotsPortabilityDelegatesRootSnapshotSlice(t *testing.T) {
 	t.Parallel()
 
 	stub := &snapshotPortabilityStub{}
-	attached, err := factoryservice.AttachSnapshotsPortability(snapshotRootStub{}, stub)
+	attached, err := factoryinternal.AttachSnapshotsPortability(snapshotRootStub{}, stub)
 	if err != nil {
 		t.Fatalf("AttachSnapshotsPortability() error = %v", err)
 	}
@@ -69,10 +69,10 @@ func TestAttachSnapshotsPortabilityDelegatesRootSnapshotSlice(t *testing.T) {
 func TestAttachSnapshotsPortabilityRejectsMissingDependencies(t *testing.T) {
 	t.Parallel()
 
-	if _, err := factoryservice.AttachSnapshotsPortability(nil, &snapshotPortabilityStub{}); err == nil {
+	if _, err := factoryinternal.AttachSnapshotsPortability(nil, &snapshotPortabilityStub{}); err == nil {
 		t.Fatal("AttachSnapshotsPortability(nil service) expected error")
 	}
-	if _, err := factoryservice.AttachSnapshotsPortability(snapshotRootStub{}, nil); err == nil {
+	if _, err := factoryinternal.AttachSnapshotsPortability(snapshotRootStub{}, nil); err == nil {
 		t.Fatal("AttachSnapshotsPortability(nil snapshots) expected error")
 	}
 }

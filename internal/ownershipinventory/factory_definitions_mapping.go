@@ -85,6 +85,8 @@ func factoryDefinitionsMapping(packagePath string) (PackageRow, bool) {
 
 func isFactoryDefinitionsCanonicalRetain(rest string) bool {
 	switch {
+	case rest == "internal":
+		return true
 	case rest == "wire" || strings.HasPrefix(rest, "wire/"):
 		return true
 	case rest == "transports" || strings.HasPrefix(rest, "transports/"):

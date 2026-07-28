@@ -42,6 +42,11 @@ func TestMapPackageFactoryDefinitionsMoveDestinations(t *testing.T) {
 			retainOwner: "factory_definitions",
 		},
 		{
+			path:        "pkg/services/factory_definitions/internal",
+			wantRetain:  true,
+			retainOwner: "factory_definitions",
+		},
+		{
 			path: "pkg/services/factory_definitions/service",
 			wantMove: &ownershipinventory.PackageRow{
 				PackagePath:       "pkg/services/factory_definitions/service",

@@ -1,4 +1,4 @@
-package service_test
+package internal_test
 
 import (
 	"context"
@@ -8,11 +8,11 @@ import (
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
+	factorydefinitionsinternal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
 )
 
 func TestServiceListsAndResolvesDetachedDefinitionsInPublicNameOrder(t *testing.T) {
-	service, err := factorydefinitionsservice.NewPackagedFactoryCatalog([]factorydefinitions.PackagedDefinition{
+	service, err := factorydefinitionsinternal.NewPackagedFactoryCatalog([]factorydefinitions.PackagedDefinition{
 		{
 			Name: "@you/review", Project: "builtin-review",
 			JSON: []byte(`{"name":"review"}`), YAML: []byte("name: review\n"),
@@ -75,7 +75,7 @@ func TestServiceListsAndResolvesDetachedDefinitionsInPublicNameOrder(t *testing.
 }
 
 func TestServiceUnknownNameReportsStablePublicInventory(t *testing.T) {
-	service, err := factorydefinitionsservice.NewPackagedFactoryCatalog([]factorydefinitions.PackagedDefinition{
+	service, err := factorydefinitionsinternal.NewPackagedFactoryCatalog([]factorydefinitions.PackagedDefinition{
 		{Name: "@you/zeta", Formats: []factorydefinitions.PackagedFactoryFormat{factorydefinitions.PackagedFactoryFormatJSON}},
 		{Name: "@you/alpha", Formats: []factorydefinitions.PackagedFactoryFormat{factorydefinitions.PackagedFactoryFormatJSON}},
 	})
@@ -96,7 +96,7 @@ func TestServiceUnknownNameReportsStablePublicInventory(t *testing.T) {
 }
 
 func TestServiceHonorsCancellation(t *testing.T) {
-	service, err := factorydefinitionsservice.NewPackagedFactoryCatalog([]factorydefinitions.PackagedDefinition{{
+	service, err := factorydefinitionsinternal.NewPackagedFactoryCatalog([]factorydefinitions.PackagedDefinition{{
 		Name: "@you/goal",
 		Formats: []factorydefinitions.PackagedFactoryFormat{
 			factorydefinitions.PackagedFactoryFormatJSON,

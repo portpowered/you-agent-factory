@@ -108,6 +108,8 @@ func loadPackageTargetManifest(root string) (packageTargetManifestFile, error) {
 
 func factoryDefinitionsCanonicalRetainRest(rest string) bool {
 	switch {
+	case rest == "internal":
+		return true
 	case rest == "wire" || strings.HasPrefix(rest, "wire/"):
 		return true
 	case rest == "transports" || strings.HasPrefix(rest, "transports/"):

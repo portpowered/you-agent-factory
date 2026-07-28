@@ -189,6 +189,10 @@ func mapKnownNestedOwnerPackage(owner, packagePath, rest string) (PackageMapping
 		return mapping, true
 	}
 
+	if owner == "factory_definitions" && rest == "internal" {
+		return moveOrRetainMapping(packagePath, owner+"/internal", DispositionRetain), true
+	}
+
 	// Packages already under the committed private subservice container map to
 	// that nested destination. Workers retain at the nested plan path; factory
 	// definitions keeps catalog/validation canonical retain, marks transitional
