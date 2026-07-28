@@ -3992,6 +3992,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_visualization/internal/recordingsqueries",
+      "disposition": "retain",
+      "destination": "factory_visualization",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_visualization/internal/services/activation_lifecycle",
       "disposition": "retain",
       "destination": "factory_visualization",
@@ -4041,6 +4047,12 @@
     },
     {
       "packagePath": "pkg/services/factory_visualization/internal/services/response_event_presentation/wire",
+      "disposition": "retain",
+      "destination": "factory_visualization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/internal/testing/recordingsstub",
       "disposition": "retain",
       "destination": "factory_visualization",
       "destinationKind": "owner"
