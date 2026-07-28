@@ -1217,6 +1217,12 @@
     },
     {
       "fromOwner": "factory_runtime",
+      "toOwner": "transports",
+      "class": "command",
+      "evidence": "pkg/services/factory_runtime/transports/http -\u003e pkg/transports/http/generated"
+    },
+    {
+      "fromOwner": "factory_runtime",
       "toOwner": "work",
       "class": "command",
       "evidence": "pkg/services/factory_runtime/engine -\u003e pkg/services/work"
@@ -3217,6 +3223,12 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/transports/cli",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/transports/http",
       "disposition": "retain",
       "destination": "factory_runtime",
       "destinationKind": "owner"

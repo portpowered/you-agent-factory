@@ -181,6 +181,7 @@
     "pkg/services/factory_runtime/tooling/javascript/catalog",
     "pkg/services/factory_runtime/tooling/javascript/symbolidentity",
     "pkg/services/factory_runtime/transports/cli",
+    "pkg/services/factory_runtime/transports/http",
     "pkg/services/factory_runtime/transports/mcp",
     "pkg/services/factory_runtime/wire",
     "pkg/services/factory_sessions",
@@ -1198,6 +1199,11 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/transports/cli",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/transports/http",
       "disposition": "retain",
       "destination": "factory_runtime"
     },
