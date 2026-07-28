@@ -153,6 +153,141 @@ func TestFactorySessionCreateListShowDelete(t *testing.T) {
 	}
 }
 
+// TestFactorySessionListMultipleSessions proves the public CLI Factory Session
+// boundary lists every open session as a distinct entry: creating at least two
+// sessions and running session list returns both session IDs without collapsing
+// them into one row or omitting either expected identity.
+func TestFactorySessionListMultipleSessions(t *testing.T) {
+	primaryFactoryDir := support.ScaffoldFactory(t, sessionLifecycleCRUDFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:     primaryFactoryDir,
+		UseMockWorkers: true,
+	})
+	defer server.Stop(t)
+
+	baseURL := server.URL()
+	binaryPath := buildYouCLIBinary(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	firstFactoryDir := filepath.Join(t.TempDir(), "session-lifecycle-crud-factory-a")
+	if err := os.Mkdir(firstFactoryDir, 0o755); err != nil {
+		t.Fatalf("create first factory directory: %v", err)
+	}
+	firstSession := createSessionViaCLI(t, ctx, binaryPath, primaryFactoryDir, baseURL, firstFactoryDir)
+
+	secondFactoryDir := filepath.Join(t.TempDir(), "session-lifecycle-crud-factory-b")
+	if err := os.Mkdir(secondFactoryDir, 0o755); err != nil {
+		t.Fatalf("create second factory directory: %v", err)
+	}
+	secondSession := createSessionViaCLI(t, ctx, binaryPath, primaryFactoryDir, baseURL, secondFactoryDir)
+
+	if firstSession.id == secondSession.id {
+		t.Fatalf("session ids must be distinct: first=%q second=%q", firstSession.id, secondSession.id)
+	}
+
+	listOut, err := runYouCLI(ctx, binaryPath, primaryFactoryDir, baseURL, "session", "list")
+	if err != nil {
+		t.Fatalf("you session list: %v\noutput:\n%s", err, listOut)
+	}
+	listHuman := string(listOut)
+	for _, marker := range []string{
+		firstSession.id, firstFactoryDir,
+		secondSession.id, secondFactoryDir,
+	} {
+		if !strings.Contains(listHuman, marker) {
+			t.Fatalf("session list output missing %q:\n%s", marker, listHuman)
+		}
+	}
+
+	listJSONOut, err := runYouCLI(ctx, binaryPath, primaryFactoryDir, baseURL,
+		"--json",
+		"session", "list",
+	)
+	if err != nil {
+		t.Fatalf("you session list --json: %v\noutput:\n%s", err, listJSONOut)
+	}
+	var listed factoryapi.ListFactorySessionsResponse
+	if err := json.Unmarshal(bytesTrimSpace(listJSONOut), &listed); err != nil {
+		t.Fatalf("decode session list JSON: %v\noutput:\n%s", err, listJSONOut)
+	}
+	if !sessionListContains(listed.Sessions, firstSession.id, firstFactoryDir) {
+		t.Fatalf("session list JSON missing first session %q at %q: %#v", firstSession.id, firstFactoryDir, listed.Sessions)
+	}
+	if !sessionListContains(listed.Sessions, secondSession.id, secondFactoryDir) {
+		t.Fatalf("session list JSON missing second session %q at %q: %#v", secondSession.id, secondFactoryDir, listed.Sessions)
+	}
+	assertDistinctSessionListEntries(t, listed.Sessions, firstSession.id, secondSession.id)
+}
+
+type cliCreatedSession struct {
+	id         string
+	folderPath string
+}
+
+func createSessionViaCLI(
+	t *testing.T,
+	ctx context.Context,
+	binaryPath string,
+	workingDir string,
+	serverURL string,
+	factoryDir string,
+) cliCreatedSession {
+	t.Helper()
+
+	createOut, err := runYouCLI(ctx, binaryPath, workingDir, serverURL,
+		"--json",
+		"session", "create",
+		"--dir", factoryDir,
+		"--init-new-factory",
+	)
+	if err != nil {
+		t.Fatalf("you session create for %q: %v\noutput:\n%s", factoryDir, err, createOut)
+	}
+
+	var created factoryapi.OpenFactorySessionResponse
+	if err := json.Unmarshal(bytesTrimSpace(createOut), &created); err != nil {
+		t.Fatalf("decode session create JSON for %q: %v\noutput:\n%s", factoryDir, err, createOut)
+	}
+	if created.Session == nil || strings.TrimSpace(created.Session.Id) == "" {
+		t.Fatalf("session create response for %q missing session id: %#v", factoryDir, created)
+	}
+	if created.Session.FolderPath != factoryDir {
+		t.Fatalf("session folder path for %q = %q, want %q", factoryDir, created.Session.FolderPath, factoryDir)
+	}
+	return cliCreatedSession{
+		id:         created.Session.Id,
+		folderPath: factoryDir,
+	}
+}
+
+func assertDistinctSessionListEntries(
+	t *testing.T,
+	sessions []factoryapi.FactorySessionSummary,
+	firstSessionID string,
+	secondSessionID string,
+) {
+	t.Helper()
+
+	firstCount := 0
+	secondCount := 0
+	for _, session := range sessions {
+		switch session.Id {
+		case firstSessionID:
+			firstCount++
+		case secondSessionID:
+			secondCount++
+		}
+	}
+	if firstCount != 1 {
+		t.Fatalf("session list JSON has %d entries for first session %q, want exactly 1: %#v", firstCount, firstSessionID, sessions)
+	}
+	if secondCount != 1 {
+		t.Fatalf("session list JSON has %d entries for second session %q, want exactly 1: %#v", secondCount, secondSessionID, sessions)
+	}
+}
+
 func sessionLifecycleCRUDFactoryConfig() map[string]any {
 	return map[string]any{
 		"name": "session-lifecycle-crud",
