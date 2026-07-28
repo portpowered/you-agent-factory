@@ -14,9 +14,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/tooling/javascript/callbehavior"
-	jscatalog "github.com/portpowered/infinite-you/pkg/services/factory_runtime/tooling/javascript/catalog"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/tooling/javascript/symbolidentity"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 )
 
 const (
@@ -70,26 +68,26 @@ func Check(root string) ([]Diagnostic, error) {
 		return nil, fmt.Errorf("decode authored catalog %s: %w", AuthoredCatalogRelativePath, err)
 	}
 
-	identity := symbolidentity.ProjectInstalledBindings()
-	callInventory := callbehavior.ProjectInstalledCallBehavior()
+	identity := factoryruntime.JavaScriptProjectInstalledBindings()
+	callInventory := factoryruntime.JavaScriptProjectInstalledCallBehavior()
 
-	if err := symbolidentity.VerifyProjectedInstalledBindings(); err != nil {
+	if err := factoryruntime.JavaScriptVerifyProjectedInstalledBindings(); err != nil {
 		diagnostics = append(diagnostics, bindingDescriptorDiagnostic(err))
 	}
 
-	catalogPaths, err := jscatalog.CatalogSymbolPathsFromDocument(catalog)
+	catalogPaths, err := factoryruntime.JavaScriptCatalogSymbolPathsFromDocument(catalog)
 	if err != nil {
 		return nil, fmt.Errorf("extract catalog symbol paths: %w", err)
 	}
 	symbols, _ := catalog["symbols"].(map[string]any)
-	for _, issue := range jscatalog.CatalogForbiddenSymbolIssues(catalogPaths, symbols) {
+	for _, issue := range factoryruntime.JavaScriptCatalogForbiddenSymbolIssues(catalogPaths, symbols) {
 		diagnostics = append(diagnostics, forbiddenSymbolDiagnostic(issue))
 	}
-	for _, issue := range jscatalog.CatalogPathCompletenessIssues(catalogPaths, identity, callInventory) {
+	for _, issue := range factoryruntime.JavaScriptCatalogPathCompletenessIssues(catalogPaths, identity, callInventory) {
 		diagnostics = append(diagnostics, pathCompletenessDiagnostic(issue))
 	}
 
-	callIssues, err := jscatalog.CatalogCallBehaviorParityIssues(catalog, callInventory)
+	callIssues, err := factoryruntime.JavaScriptCatalogCallBehaviorParityIssues(catalog, callInventory)
 	if err != nil {
 		return nil, fmt.Errorf("compare catalog call-behavior parity: %w", err)
 	}
@@ -150,7 +148,7 @@ func bindingDescriptorDiagnostic(err error) Diagnostic {
 	}
 }
 
-func forbiddenSymbolDiagnostic(issue jscatalog.PathCompletenessIssue) Diagnostic {
+func forbiddenSymbolDiagnostic(issue factoryruntime.JavaScriptCatalogPathCompletenessIssue) Diagnostic {
 	path := issue.Path
 	if path == "" || path == "/symbols" {
 		path = AuthoredCatalogRelativePath
@@ -162,7 +160,7 @@ func forbiddenSymbolDiagnostic(issue jscatalog.PathCompletenessIssue) Diagnostic
 	}
 }
 
-func pathCompletenessDiagnostic(issue jscatalog.PathCompletenessIssue) Diagnostic {
+func pathCompletenessDiagnostic(issue factoryruntime.JavaScriptCatalogPathCompletenessIssue) Diagnostic {
 	path := issue.Path
 	if path == "" || path == "/symbols" {
 		path = AuthoredCatalogRelativePath
@@ -174,7 +172,7 @@ func pathCompletenessDiagnostic(issue jscatalog.PathCompletenessIssue) Diagnosti
 	}
 }
 
-func callBehaviorDiagnostic(issue jscatalog.CallBehaviorParityIssue) Diagnostic {
+func callBehaviorDiagnostic(issue factoryruntime.JavaScriptCatalogCallBehaviorParityIssue) Diagnostic {
 	path := issue.Path
 	if path == "" {
 		path = AuthoredCatalogRelativePath

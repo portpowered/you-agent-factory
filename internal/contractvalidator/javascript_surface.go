@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/tooling/javascript/symbolidentity"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 )
 
 func runtimeManifestSupportedSurfaceDiagnostics(document string, keys []string, pathByKey map[string]string, symbolKindByKey map[string]string) []Diagnostic {
@@ -18,22 +18,22 @@ func runtimeManifestSupportedSurfaceDiagnostics(document string, keys []string, 
 		symbolPath := "/symbols/" + escapeJSONPointerToken(key) + "/path"
 		kind := symbolKindByKey[key]
 
-		switch symbolidentity.ClassifySurface(path, kind) {
-		case symbolidentity.SurfaceForbiddenHostGlobal:
+		switch factoryruntime.JavaScriptClassifySurface(path, kind) {
+		case factoryruntime.JavaScriptSurfaceForbiddenHostGlobal:
 			diagnostics = append(diagnostics, newDiagnostic(
 				"javascript.surface.forbidden_global",
 				symbolPath,
 				fmt.Sprintf("symbol path %s documents a forbidden host-only global", strconv.Quote(path)),
 				document,
 			))
-		case symbolidentity.SurfaceComparisonProjectHelper:
+		case factoryruntime.JavaScriptSurfaceComparisonProjectHelper:
 			diagnostics = append(diagnostics, newDiagnostic(
 				"javascript.surface.unsupported_helper",
 				symbolPath,
 				fmt.Sprintf("symbol path %s documents a comparison-project-only helper that is not part of the installed supported surface", strconv.Quote(path)),
 				document,
 			))
-		case symbolidentity.SurfaceCallableAgentGlobal:
+		case factoryruntime.JavaScriptSurfaceCallableAgentGlobal:
 			diagnostics = append(diagnostics, newDiagnostic(
 				"javascript.surface.unsupported_helper",
 				symbolPath,

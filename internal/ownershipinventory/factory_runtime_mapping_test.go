@@ -80,15 +80,9 @@ func TestMapPackageFactoryRuntimeMoveDestinations(t *testing.T) {
 			retainOwner: "factory_runtime",
 		},
 		{
-			path: "pkg/services/factory_runtime/javascript",
-			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_runtime/javascript",
-				Disposition:       ownershipinventory.DispositionMove,
-				Destination:       "factory_runtime",
-				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/factory_runtime/internal/services/orchestration",
-				DeletionCondition: "delete public package after IMP-RUN-orchestration private subservice cutover proof",
-			},
+			path:        "pkg/services/factory_runtime/internal/services/orchestration/javascript",
+			wantRetain:  true,
+			retainOwner: "factory_runtime",
 		},
 		{
 			path:        "pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers",

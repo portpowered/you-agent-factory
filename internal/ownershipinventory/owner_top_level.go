@@ -75,11 +75,9 @@ var productOwnerTopLevelSpecs = map[string]OwnerTopLevelSpec{
 			"checkpointstore",
 			"checkpointsummary",
 			"exhaustiontests",
-			"javascript",
 			"service",
 			"testdata",
 			"testkit",
-			"tooling",
 		},
 	},
 	"factory_sessions": {

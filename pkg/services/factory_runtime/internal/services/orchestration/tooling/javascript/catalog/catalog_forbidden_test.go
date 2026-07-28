@@ -3,8 +3,8 @@ package catalog_test
 import (
 	"testing"
 
-	jscatalog "github.com/portpowered/infinite-you/pkg/services/factory_runtime/tooling/javascript/catalog"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/tooling/javascript/symbolidentity"
+	jscatalog "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/catalog"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/symbolidentity"
 )
 
 func TestCatalogForbiddenSymbolIssues_FailsForForbiddenRootGlobal(t *testing.T) {

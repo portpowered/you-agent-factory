@@ -6,7 +6,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/tooling/javascript/symbolidentity"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/symbolidentity"
 )
 
 func TestProjectInstalledBindings_CoversInstalledSurface(t *testing.T) {

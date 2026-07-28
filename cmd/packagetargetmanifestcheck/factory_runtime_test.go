@@ -79,10 +79,10 @@ func TestMapCommittedOwnerPackageFactoryRuntimeMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/javascript",
+			path: "pkg/services/factory_runtime/internal/services/orchestration/javascript",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_runtime/javascript",
-				Disposition: DispositionMove,
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/javascript",
+				Disposition: DispositionRetain,
 				Destination: "factory_runtime/internal/services/orchestration",
 			},
 		},
@@ -95,10 +95,10 @@ func TestMapCommittedOwnerPackageFactoryRuntimeMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/tooling/javascript/catalog",
+			path: "pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/catalog",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_runtime/tooling/javascript/catalog",
-				Disposition: DispositionMove,
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/catalog",
+				Disposition: DispositionRetain,
 				Destination: "factory_runtime/internal/services/orchestration",
 			},
 		},

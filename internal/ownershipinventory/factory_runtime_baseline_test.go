@@ -81,7 +81,6 @@ func TestFactoryRuntimeCommittedBaselinesAlignMoveDestinations(t *testing.T) {
 func TestFactoryRuntimeEnginePipelineMoveDestinationsLocked(t *testing.T) {
 	t.Parallel()
 
-	orchestrationSuccessor := "pkg/services/factory_runtime/internal/services/orchestration"
 	instanceHostSuccessor := "pkg/services/factory_runtime/internal/services/instance_host"
 	checkpointRecoverySuccessor := "pkg/services/factory_runtime/internal/services/checkpoint_recovery"
 
@@ -93,8 +92,6 @@ func TestFactoryRuntimeEnginePipelineMoveDestinationsLocked(t *testing.T) {
 		{path: "pkg/services/factory_runtime/build", wantSuccessor: instanceHostSuccessor, wantDestination: "factory_runtime"},
 		{path: "pkg/services/factory_runtime/checkpointstore", wantSuccessor: checkpointRecoverySuccessor, wantDestination: "factory_runtime"},
 		{path: "pkg/services/factory_runtime/checkpointsummary", wantSuccessor: checkpointRecoverySuccessor, wantDestination: "factory_runtime"},
-		{path: "pkg/services/factory_runtime/javascript", wantSuccessor: orchestrationSuccessor, wantDestination: "factory_runtime"},
-		{path: "pkg/services/factory_runtime/tooling/javascript/catalog", wantSuccessor: orchestrationSuccessor, wantDestination: "factory_runtime"},
 	}
 
 	for _, tc := range cases {

@@ -1,9 +1,7 @@
 package contractvalidator
 
 import (
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/tooling/javascript/callbehavior"
-	jscatalog "github.com/portpowered/infinite-you/pkg/services/factory_runtime/tooling/javascript/catalog"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/tooling/javascript/symbolidentity"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 )
 
 const authoredJavaScriptRuntimeCatalogPath = "contracts/javascript/runtime-api.json"
@@ -15,15 +13,15 @@ func JavaScriptRuntimeCatalogPathCompletenessDiagnostics(document string, value 
 		return nil
 	}
 
-	paths, err := jscatalog.CatalogSymbolPathsFromDocument(value)
+	paths, err := factoryruntime.JavaScriptCatalogSymbolPathsFromDocument(value)
 	if err != nil {
 		return []Diagnostic{newDiagnostic("catalog.path.parse", "/symbols", err.Error(), document)}
 	}
 
-	issues := jscatalog.CatalogPathCompletenessIssues(
+	issues := factoryruntime.JavaScriptCatalogPathCompletenessIssues(
 		paths,
-		symbolidentity.ProjectInstalledBindings(),
-		callbehavior.ProjectInstalledCallBehavior(),
+		factoryruntime.JavaScriptProjectInstalledBindings(),
+		factoryruntime.JavaScriptProjectInstalledCallBehavior(),
 	)
 	if len(issues) == 0 {
 		return nil

@@ -7,10 +7,10 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/tooling/javascript/symbolidentity"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/symbolidentity"
 )
 
-const javascriptRuntimeSymbolsBaselineFixture = "pkg/services/factory_runtime/tooling/javascript/javascript-runtime-symbols.json"
+const javascriptRuntimeSymbolsBaselineFixture = "pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/javascript-runtime-symbols.json"
 
 func TestProjectInstalledBindings_MatchesCommittedBaseline(t *testing.T) {
 	got, err := symbolidentity.MarshalInventory(symbolidentity.ProjectInstalledBindings())

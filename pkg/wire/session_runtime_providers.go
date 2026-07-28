@@ -287,7 +287,7 @@ func provideJavaScriptWorkflows(
 	resolveHome factoryruntime.WorkflowHomeResolver,
 	resolveSymlinks factoryruntime.WorkflowSourceResolveSymlinks,
 ) factoryruntime.JavaScriptWorkflows {
-	return factoryruntimejavascript.New(files, resolveHome, resolveSymlinks)
+	return factoryruntimewire.NewJavaScriptWorkflows(files, resolveHome, resolveSymlinks)
 }
 
 func provideJavaScriptWorkflowDefinitions(

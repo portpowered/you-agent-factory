@@ -9,10 +9,10 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/tooling/javascript/callbehavior"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/callbehavior"
 )
 
-const javascriptRuntimeCallBehaviorBaselineFixture = "pkg/services/factory_runtime/tooling/javascript/javascript-runtime-call-behavior.json"
+const javascriptRuntimeCallBehaviorBaselineFixture = "pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/javascript-runtime-call-behavior.json"
 
 func TestProjectInstalledCallBehavior_MatchesCommittedBaseline(t *testing.T) {
 	got, err := callbehavior.MarshalInventory(callbehavior.ProjectInstalledCallBehavior())

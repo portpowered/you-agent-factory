@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/tooling/javascript/symbolidentity"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/symbolidentity"
 )
 
 // CatalogForbiddenSymbolIssues reports catalog symbol paths that document

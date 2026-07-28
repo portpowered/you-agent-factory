@@ -3442,6 +3442,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/javascript",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/metrics",
       "disposition": "retain",
       "destination": "factory_runtime",
@@ -3550,18 +3556,28 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/wire",
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/callbehavior",
       "disposition": "retain",
       "destination": "factory_runtime",
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/factory_runtime/javascript",
-      "disposition": "move",
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/catalog",
+      "disposition": "retain",
       "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
-      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/symbolidentity",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/wire",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
     },
     {
       "packagePath": "pkg/services/factory_runtime/service",
@@ -3586,30 +3602,6 @@
       "destinationKind": "owner",
       "successor": "pkg/services/factory_runtime/internal",
       "deletionCondition": "delete transitional top-level package after CLN-RUN-FOLD-TOPLEVEL cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/tooling/javascript/callbehavior",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
-      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/tooling/javascript/catalog",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
-      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/tooling/javascript/symbolidentity",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
-      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/transports/cli",
