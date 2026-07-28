@@ -101,6 +101,13 @@ func isCommittedNestedSubservice(owner, subservice string) bool {
 	return slices.Contains(allowed, subservice)
 }
 
+// isTransitionalMoveNestedSubservice marks committed nested subservices that
+// still live under transitional public paths and must stay move→owner/internal
+// until their IMP cutover proof lands (ownership inventory uses the same rule).
+func isTransitionalMoveNestedSubservice(owner, subservice string) bool {
+	return owner == "factory_definitions" && subservice == "snapshots_portability"
+}
+
 // mapCommittedOwnerPackage maps one inventory path that belongs to a committed
 // product owner (including Providers extraction sources under workers) to its
 // plan-tree destination. Returns ok=false for non-owner residuals (edges,
@@ -181,11 +188,14 @@ func mapKnownNestedOwnerPackage(owner, packagePath, rest string) (PackageMapping
 	}
 
 	// Packages already under the committed private subservice container retain
-	// that nested destination.
+	// that nested destination unless the subservice is still transitional IMP debt.
 	if strings.HasPrefix(rest, "internal/services/") {
 		sub := strings.TrimPrefix(rest, "internal/services/")
 		subservice, _, _ := strings.Cut(sub, "/")
 		if subservice != "" && isCommittedNestedSubservice(owner, subservice) {
+			if isTransitionalMoveNestedSubservice(owner, subservice) {
+				return moveOrRetainMapping(packagePath, owner+"/internal", DispositionMove), true
+			}
 			return moveOrRetainMapping(packagePath, owner+"/internal/services/"+subservice, DispositionRetain), true
 		}
 	}
