@@ -611,8 +611,8 @@ func provideFactorySessionExecutionFactory(
 		executor := workerinvocation.NewExecutor(provider)
 		var liveChildInvocation factorysessionwire.LiveChildInvocationFactory
 		usesConfiguredACP := len(acpIntegrations) > 0
-		usesInjectedProviderRunner := allocator != nil && edges.ProviderCommandRunner != nil
-		if adaptRunner != nil && (usesConfiguredACP || usesInjectedProviderRunner) {
+		usesInjectedProviderRunner := edges.ProviderCommandRunner != nil
+		if adaptRunner != nil && allocator != nil && (usesConfiguredACP || usesInjectedProviderRunner) {
 			commandRunner, err := provideWorkersProviderCommandRunner(edges)
 			if err != nil {
 				return nil, fmt.Errorf("resolve provider runner for live child invocation: %w", err)
@@ -652,12 +652,13 @@ func provideFactorySessionExecutionFactory(
 				liveChildInvocation = func(publisher workers.ProgressPublisher) (workers.InvocationExecutor, error) {
 					return conductorInvocationWithProgress(reboundRegistry, runner, allocator, publisher)
 				}
-			} else if runtimeRegistry != nil &&
+			} else if mockWorkers == nil &&
+				runtimeRegistry != nil &&
 				conductorInvocationWithProgress != nil {
 				liveChildInvocation = func(publisher workers.ProgressPublisher) (workers.InvocationExecutor, error) {
 					return conductorInvocationWithProgress(runtimeRegistry, runner, allocator, publisher)
 				}
-			} else if invocationWithProgress != nil {
+			} else if mockWorkers == nil && invocationWithProgress != nil {
 				liveChildInvocation = func(publisher workers.ProgressPublisher) (workers.InvocationExecutor, error) {
 					return invocationWithProgress(runner, allocator, publisher)
 				}
