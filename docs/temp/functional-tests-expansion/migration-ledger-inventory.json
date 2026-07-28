@@ -8509,86 +8509,6 @@
       "deletion_only_batch": "workflow-delete-08-guards"
     },
     {
-      "source_path": "tests/functional/workflow/executor_context_long_test.go",
-      "package": "you-agent-factory/tests/functional/workflow",
-      "scenario": "TestExecutorContext_InputTokenColors",
-      "lane": "functionallong",
-      "destination": "tests/functional/work/relationships/parent_child_test.go",
-      "catch_all": "workflow",
-      "specialty_targets": "none",
-      "deletion_only_batch": "workflow-delete-03-work-relationships"
-    },
-    {
-      "source_path": "tests/functional/workflow/executor_context_long_test.go",
-      "package": "you-agent-factory/tests/functional/workflow",
-      "scenario": "TestExecutorContext_ParentLineage",
-      "lane": "functionallong",
-      "destination": "tests/functional/work/relationships/parent_child_test.go",
-      "catch_all": "workflow",
-      "specialty_targets": "none",
-      "deletion_only_batch": "workflow-delete-03-work-relationships"
-    },
-    {
-      "source_path": "tests/functional/workflow/executor_context_long_test.go",
-      "package": "you-agent-factory/tests/functional/workflow",
-      "scenario": "TestExecutorContext_RejectionFeedback",
-      "lane": "functionallong",
-      "destination": "tests/functional/work/relationships/parent_child_test.go",
-      "catch_all": "workflow",
-      "specialty_targets": "none",
-      "deletion_only_batch": "workflow-delete-03-work-relationships"
-    },
-    {
-      "source_path": "tests/functional/workflow/multi_output_color_propagation_long_test.go",
-      "package": "you-agent-factory/tests/functional/workflow",
-      "scenario": "TestMultiOutputColorPropagation",
-      "lane": "functionallong",
-      "destination": "tests/functional/work/relationships/parent_child_test.go",
-      "catch_all": "workflow",
-      "specialty_targets": "none",
-      "deletion_only_batch": "workflow-delete-03-work-relationships"
-    },
-    {
-      "source_path": "tests/functional/workflow/multi_output_color_propagation_long_test.go",
-      "package": "you-agent-factory/tests/functional/workflow",
-      "scenario": "TestMultiOutputColorPropagation_NameAvailableDownstream",
-      "lane": "functionallong",
-      "destination": "tests/functional/work/relationships/parent_child_test.go",
-      "catch_all": "workflow",
-      "specialty_targets": "none",
-      "deletion_only_batch": "workflow-delete-03-work-relationships"
-    },
-    {
-      "source_path": "tests/functional/workflow/multi_output_color_propagation_test.go",
-      "package": "you-agent-factory/tests/functional/workflow",
-      "scenario": "TestDocReviewerExamplePNGFanoutPreservesSharedNameDownstream",
-      "lane": "short",
-      "destination": "tests/functional/work/relationships/parent_child_test.go",
-      "catch_all": "workflow",
-      "specialty_targets": "none",
-      "deletion_only_batch": "workflow-delete-03-work-relationships"
-    },
-    {
-      "source_path": "tests/functional/workflow/multi_output_color_propagation_test.go",
-      "package": "you-agent-factory/tests/functional/workflow",
-      "scenario": "TestMultiOutputReviewerFanoutPreservesSharedNameDownstream",
-      "lane": "short",
-      "destination": "tests/functional/work/relationships/parent_child_test.go",
-      "catch_all": "workflow",
-      "specialty_targets": "none",
-      "deletion_only_batch": "workflow-delete-03-work-relationships"
-    },
-    {
-      "source_path": "tests/functional/workflow/multi_output_color_propagation_test.go",
-      "package": "you-agent-factory/tests/functional/workflow",
-      "scenario": "TestNtoN_TypeMatching",
-      "lane": "short",
-      "destination": "tests/functional/work/relationships/parent_child_test.go",
-      "catch_all": "workflow",
-      "specialty_targets": "none",
-      "deletion_only_batch": "workflow-delete-03-work-relationships"
-    },
-    {
       "source_path": "tests/functional/workflow/name_propagation_long_test.go",
       "package": "you-agent-factory/tests/functional/workflow",
       "scenario": "TestNamePropagation_InPromptTemplate",
@@ -9058,7 +8978,7 @@
       "replay_contracts": 23,
       "runtime_api": 96,
       "smoke": 62,
-      "workflow": 21
+      "workflow": 13
     },
     "by_top_level_package": {
       "acceptance": 12,
@@ -9084,12 +9004,12 @@
       "transport": 106,
       "work": 29,
       "workers": 77,
-      "workflow": 21,
+      "workflow": 13,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 885,
-    "lane_functionallong": 93,
-    "lane_short": 792,
+    "customer_top_level_Test_scenarios": 877,
+    "lane_functionallong": 88,
+    "lane_short": 789,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 14,

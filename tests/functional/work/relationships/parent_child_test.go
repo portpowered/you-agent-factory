@@ -1,6 +1,7 @@
 package relationships
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -225,6 +226,155 @@ func TestChildFailureProjectsToDocumentedParentView(t *testing.T) {
 
 	events := server.GetFactoryEvents(t)
 	assertParentChildFailureProjectionInFactoryEvents(t, events, parentChildFailureRequestID, parentChildFailureChildID)
+}
+
+// TestDispatchPreservesSubmittedWorkPayloadTagsAndType proves through provider
+// dispatch observations that the executor input preserves the submitted payload,
+// tags, and work type identity for dispatched Work.
+func TestDispatchPreservesSubmittedWorkPayloadTagsAndType(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
+
+	payload := []byte(`{"feature": "dark mode", "priority": "high"}`)
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		WorkTypeID: "code-change",
+		Payload:    payload,
+		Tags:       map[string]string{"team": "frontend", "sprint": "42"},
+	})
+
+	provider := testutil.NewMockProvider(
+		workerexecution.InferenceResponse{Content: "COMPLETE"},
+		workerexecution.InferenceResponse{Content: "COMPLETE"},
+	)
+	support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
+
+	sweCalls := support.ProviderCallsForWorker(provider, "swe")
+	if len(sweCalls) != 1 {
+		t.Fatalf("swe dispatch count = %d, want 1", len(sweCalls))
+	}
+
+	dispatch := sweCalls[0]
+	if !bytes.Equal(support.FirstInputPayload(dispatch.InputTokens), payload) {
+		t.Fatalf(
+			"dispatch payload = %q, want %q",
+			support.FirstInputPayload(dispatch.InputTokens),
+			payload,
+		)
+	}
+	tags := support.FirstInputTags(dispatch.InputTokens)
+	if tags["team"] != "frontend" {
+		t.Fatalf("dispatch tag team = %q, want frontend", tags["team"])
+	}
+	if tags["sprint"] != "42" {
+		t.Fatalf("dispatch tag sprint = %q, want 42", tags["sprint"])
+	}
+	if got := support.FirstInputWorkID(dispatch.InputTokens); got == "" {
+		t.Fatal("dispatch Work ID missing, want submitted work identity")
+	}
+}
+
+// TestRejectionFeedbackSurfacesOnExecutorRetry proves reviewer rejection feedback
+// is attached to the next executor dispatch payload while the first dispatch
+// remains free of rejection-feedback tags.
+func TestRejectionFeedbackSurfacesOnExecutorRetry(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
+
+	testutil.WriteSeedFile(t, dir, "code-change", []byte(`{"feature": "auth"}`))
+
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
+		"swe":      {support.AcceptedProviderResponse(), support.AcceptedProviderResponse()},
+		"reviewer": {{Content: "needs unit tests"}, support.AcceptedProviderResponse()},
+	})
+	support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
+
+	if got := provider.CallCount("swe"); got != 2 {
+		t.Fatalf("swe dispatch count = %d, want 2", got)
+	}
+
+	calls := provider.Calls("swe")
+	firstTags := support.FirstInputTags(calls[0].InputTokens)
+	if _, ok := firstTags["_rejection_feedback"]; ok {
+		t.Fatal("first swe dispatch should not include _rejection_feedback tag")
+	}
+
+	secondPayload := support.FirstInputPayload(calls[1].InputTokens)
+	if !bytes.Contains(secondPayload, []byte("needs unit tests")) {
+		t.Fatalf("retry dispatch payload = %q, want reviewer feedback", secondPayload)
+	}
+}
+
+// TestParentAndDependsOnLineageSurviveOnChildDispatch proves PARENT_CHILD and
+// DEPENDS_ON relations remain observable on the child dispatch token after both
+// prerequisite completion and child submission.
+func TestParentAndDependsOnLineageSurviveOnChildDispatch(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
+
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		WorkTypeID:  "code-change",
+		WorkID:      "prereq-work-99",
+		TargetState: "complete",
+		Payload:     []byte(`{"feature": "prerequisite"}`),
+	})
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		WorkTypeID: "code-change",
+		WorkID:     "child-work-1",
+		Payload:    []byte(`{"feature": "login page"}`),
+		Relations: []work.Relation{
+			{
+				Type:         work.RelationParentChild,
+				TargetWorkID: "parent-prd-42",
+			},
+			{
+				Type:          work.RelationDependsOn,
+				TargetWorkID:  "prereq-work-99",
+				RequiredState: "complete",
+			},
+		},
+	})
+
+	provider := testutil.NewMockProvider(
+		workerexecution.InferenceResponse{Content: "COMPLETE"},
+		workerexecution.InferenceResponse{Content: "COMPLETE"},
+	)
+	support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
+
+	sweCalls := support.ProviderCallsForWorker(provider, "swe")
+	if len(sweCalls) != 1 {
+		t.Fatalf("swe dispatch count = %d, want 1", len(sweCalls))
+	}
+
+	token := firstParentChildDispatchToken(sweCalls[0].InputTokens)
+	if token.Color.WorkID != "child-work-1" {
+		t.Fatalf("dispatch Work ID = %q, want child-work-1", token.Color.WorkID)
+	}
+	if len(token.Color.Relations) != 2 {
+		t.Fatalf("dispatch relation count = %d, want 2", len(token.Color.Relations))
+	}
+
+	foundParent := false
+	foundDependsOn := false
+	for _, rel := range token.Color.Relations {
+		switch rel.Type {
+		case work.RelationParentChild:
+			foundParent = true
+			if rel.TargetWorkID != "parent-prd-42" {
+				t.Fatalf("parent relation target = %q, want parent-prd-42", rel.TargetWorkID)
+			}
+		case work.RelationDependsOn:
+			foundDependsOn = true
+			if rel.TargetWorkID != "prereq-work-99" {
+				t.Fatalf("depends-on target = %q, want prereq-work-99", rel.TargetWorkID)
+			}
+			if rel.RequiredState != "complete" {
+				t.Fatalf("depends-on required state = %q, want complete", rel.RequiredState)
+			}
+		}
+	}
+	if !foundParent {
+		t.Fatal("PARENT_CHILD relation missing from child dispatch token")
+	}
+	if !foundDependsOn {
+		t.Fatal("DEPENDS_ON relation missing from child dispatch token")
+	}
 }
 
 func assertParentChildBatchSubmitAcknowledgment(t *testing.T, output []byte, requestID string) {

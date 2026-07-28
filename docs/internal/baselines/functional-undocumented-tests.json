@@ -1319,26 +1319,6 @@
       "name": "TestConfigDrivenRetryLoopBreaker_TerminatesAfterMaxRetries"
     },
     {
-      "file": "workflow/multi_output_color_propagation_long_test.go",
-      "name": "TestMultiOutputColorPropagation"
-    },
-    {
-      "file": "workflow/multi_output_color_propagation_long_test.go",
-      "name": "TestMultiOutputColorPropagation_NameAvailableDownstream"
-    },
-    {
-      "file": "workflow/multi_output_color_propagation_test.go",
-      "name": "TestDocReviewerExamplePNGFanoutPreservesSharedNameDownstream"
-    },
-    {
-      "file": "workflow/multi_output_color_propagation_test.go",
-      "name": "TestMultiOutputReviewerFanoutPreservesSharedNameDownstream"
-    },
-    {
-      "file": "workflow/multi_output_color_propagation_test.go",
-      "name": "TestNtoN_TypeMatching"
-    },
-    {
       "file": "workflow/name_propagation_long_test.go",
       "name": "TestNamePropagation_InPromptTemplate"
     },
