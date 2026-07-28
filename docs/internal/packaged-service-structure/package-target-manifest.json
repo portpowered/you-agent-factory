@@ -81,6 +81,7 @@
     "pkg/services/automations/internal/services/script_pollers/internal/service",
     "pkg/services/automations/internal/services/script_pollers/wire",
     "pkg/services/automations/service",
+    "pkg/services/automations/wire",
     "pkg/services/edges",
     "pkg/services/factory_definitions",
     "pkg/services/factory_definitions/authoredlayout",
@@ -146,6 +147,7 @@
     "pkg/services/factory_runtime/internal/orchestrators/javascript/validation",
     "pkg/services/factory_runtime/internal/orchestrators/petri",
     "pkg/services/factory_runtime/internal/rootobservation",
+    "pkg/services/factory_runtime/internal/service",
     "pkg/services/factory_runtime/internal/services/dispatch_planning",
     "pkg/services/factory_runtime/internal/services/dispatch_planning/internal/service",
     "pkg/services/factory_runtime/internal/services/dispatch_planning/wire",
@@ -176,6 +178,7 @@
     "pkg/services/factory_runtime/tooling/javascript/callbehavior",
     "pkg/services/factory_runtime/tooling/javascript/catalog",
     "pkg/services/factory_runtime/tooling/javascript/symbolidentity",
+    "pkg/services/factory_runtime/wire",
     "pkg/services/factory_sessions",
     "pkg/services/factory_sessions/internal/applicationopening",
     "pkg/services/factory_sessions/internal/artifactprojection",
@@ -333,6 +336,8 @@
     "pkg/services/recordings/projections/dashboard",
     "pkg/services/recordings/replay",
     "pkg/services/recordings/service",
+    "pkg/services/recordings/transports/cli",
+    "pkg/services/recordings/transports/http",
     "pkg/services/recordings/wire",
     "pkg/services/system_initialization",
     "pkg/services/system_initialization/internal/workflow",
@@ -363,6 +368,9 @@
     "pkg/services/workers/internal/services/runners/internal/inference",
     "pkg/services/workers/internal/services/runners/internal/script",
     "pkg/services/workers/internal/services/runners/internal/service",
+    "pkg/services/workers/internal/services/runners/internal/services/agent",
+    "pkg/services/workers/internal/services/runners/internal/services/agent/internal/service",
+    "pkg/services/workers/internal/services/runners/internal/services/agent/wire",
     "pkg/services/workers/internal/services/runners/internal/testkit",
     "pkg/services/workers/internal/services/runners/wire",
     "pkg/services/workers/internal/services/runtime_assembly",
@@ -393,6 +401,7 @@
     "pkg/services/workers/provider/inferencecontract/testkit",
     "pkg/services/workers/provider/kiro",
     "pkg/services/workers/provider/pi",
+    "pkg/services/workers/provider/providersroot",
     "pkg/services/workers/provider/registry",
     "pkg/services/workers/provider/structured",
     "pkg/services/workers/runner",
@@ -674,6 +683,11 @@
     },
     {
       "packagePath": "pkg/services/automations/service",
+      "disposition": "retain",
+      "destination": "automations"
+    },
+    {
+      "packagePath": "pkg/services/automations/wire",
       "disposition": "retain",
       "destination": "automations"
     },
@@ -1003,6 +1017,11 @@
       "destination": "factory_runtime"
     },
     {
+      "packagePath": "pkg/services/factory_runtime/internal/service",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
       "packagePath": "pkg/services/factory_runtime/internal/services/dispatch_planning",
       "disposition": "retain",
       "destination": "factory_runtime/internal/services/dispatch_planning"
@@ -1151,6 +1170,11 @@
       "packagePath": "pkg/services/factory_runtime/tooling/javascript/symbolidentity",
       "disposition": "move",
       "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/wire",
+      "disposition": "retain",
+      "destination": "factory_runtime"
     },
     {
       "packagePath": "pkg/services/factory_sessions",
@@ -1938,6 +1962,16 @@
       "destination": "recordings"
     },
     {
+      "packagePath": "pkg/services/recordings/transports/cli",
+      "disposition": "retain",
+      "destination": "recordings"
+    },
+    {
+      "packagePath": "pkg/services/recordings/transports/http",
+      "disposition": "retain",
+      "destination": "recordings"
+    },
+    {
       "packagePath": "pkg/services/recordings/wire",
       "disposition": "retain",
       "destination": "recordings"
@@ -2088,6 +2122,21 @@
       "destination": "workers/internal/services/runners"
     },
     {
+      "packagePath": "pkg/services/workers/internal/services/runners/internal/services/agent",
+      "disposition": "retain",
+      "destination": "workers/internal/services/runners"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/runners/internal/services/agent/internal/service",
+      "disposition": "retain",
+      "destination": "workers/internal/services/runners"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/runners/internal/services/agent/wire",
+      "disposition": "retain",
+      "destination": "workers/internal/services/runners"
+    },
+    {
       "packagePath": "pkg/services/workers/internal/services/runners/internal/testkit",
       "disposition": "retain",
       "destination": "workers/internal/services/runners"
@@ -2234,6 +2283,11 @@
     },
     {
       "packagePath": "pkg/services/workers/provider/pi",
+      "disposition": "move",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/providersroot",
       "disposition": "move",
       "destination": "providers/internal/services/execution"
     },

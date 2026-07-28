@@ -8,6 +8,36 @@ Use this map when changing the public REST contract.
   `pkg/transports/http` server only composes that injected adapter with other
   service-owned handlers and registers the generated routes; runtime binding
   occurs in `pkg/transports/http/application`.
+- Recordings HTTP decoding, generated-contract mapping, Recordings root
+  invocation, error mapping, and streaming policy live in
+  `pkg/services/recordings/transports/http`. The adapter consumes the accepted
+  `recordings.Service` root only; fake-root tests inject a focused root fake
+  without constructing ledger, lifecycle, replay, or artifact-export graphs.
+  Event subscribe/history decode and SSE encoding live in
+  `event_subscribe_mapping.go` and `handlers_events.go`; map reconnect query
+  params into `recordings.SubscribeRequest` before `SubscribeFrom`, and encode
+  detached `recordings.CanonicalEvent` values through `FactoryEventToAPI`.
+  Artifact list/get decode and JSON encoding live in
+  `artifact_read_mapping.go` and `handlers_artifacts.go`; map session ids into
+  `recordings.RecordingStatusRequest` / `recordings.ReadPortableArtifactRequest`,
+  derive detached artifact projections through
+  `BuildPortableArtifact` + `ReconstructWorldState`, and encode
+  `interfaces.FactorySessionArtifactState` values into the public artifact
+  response shapes. Typed Recordings root failures map through
+  `error_mapping.go` into public `ErrorResponse` bodies with stable status,
+  family, and code; unmapped failures use sanitized internal messages.
+  Request-context cancellation and deadline exhaustion end without mapping to
+  `INTERNAL_ERROR`: stream handlers return once SSE headers may be committed,
+  and non-stream handlers return without encoding a body when the context ends
+  before success encoding (`request_context.go`).
+  Package-boundary tests must prove the adapter does not import
+  `pkg/services/recordings/internal/**`. Register the package in
+  `docs/internal/packaged-service-structure/package-target-manifest.json`,
+  refresh `docs/internal/baselines/ownership-inventory.json` with
+  `go run ./cmd/ownershipinventoryfreeze`, and add coverage floors in
+  `docs/internal/baselines/go-unit-coverage-package-minimums.json` and
+  `docs/internal/baselines/go-functional-coverage-package-minimums.json` when
+  introducing new adapter packages.
 - Factory Definitions HTTP decoding, generated-contract mapping, service
   invocation, typed error mapping, and cancel/timeout handling live in
   `pkg/services/factory_definitions/transports/http`. The top-level

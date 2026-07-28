@@ -1451,6 +1451,12 @@
     },
     {
       "fromOwner": "recordings",
+      "toOwner": "transports",
+      "class": "command",
+      "evidence": "pkg/services/recordings/transports/http -\u003e pkg/transports/http/generated"
+    },
+    {
+      "fromOwner": "recordings",
       "toOwner": "work",
       "class": "command",
       "evidence": "pkg/services/recordings -\u003e pkg/services/work"
@@ -2442,6 +2448,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/automations/wire",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/edges",
       "disposition": "retain",
       "destination": "edges",
@@ -2940,6 +2952,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_runtime/internal/service",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_runtime/internal/services/dispatch_planning",
       "disposition": "retain",
       "destination": "factory_runtime",
@@ -3139,6 +3157,12 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/tooling/javascript/symbolidentity",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/wire",
       "disposition": "retain",
       "destination": "factory_runtime",
       "destinationKind": "owner"
@@ -4116,6 +4140,18 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/recordings/transports/cli",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/recordings/transports/http",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/recordings/wire",
       "disposition": "retain",
       "destination": "recordings",
@@ -4301,6 +4337,24 @@
     },
     {
       "packagePath": "pkg/services/workers/internal/services/runners/internal/service",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/runners/internal/services/agent",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/runners/internal/services/agent/internal/service",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/runners/internal/services/agent/wire",
       "disposition": "retain",
       "destination": "workers",
       "destinationKind": "owner"
@@ -4525,6 +4579,14 @@
     },
     {
       "packagePath": "pkg/services/workers/provider/pi",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/providersroot",
       "disposition": "move",
       "destination": "providers",
       "destinationKind": "owner",

@@ -21,6 +21,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -252,7 +253,7 @@ func TestOpenRunScopedServerAttachesInvocationCompletionAndKeepsOneShotResult(t 
 	invocationCalls := 0
 	operation, err := Open(
 		t.Context(),
-		RunConfig{
+		ensureTestRecordingsCLI(RunConfig{
 			Dir:                      "factory",
 			FactoryConfigPath:        "factory/factory.json",
 			InvocationPositionalText: &prompt,
@@ -260,7 +261,7 @@ func TestOpenRunScopedServerAttachesInvocationCompletionAndKeepsOneShotResult(t 
 			Port:                     7437,
 			DisableDefaultRecording:  true,
 			Output:                   &output,
-		},
+		}),
 		func(
 			_ context.Context,
 			request factorysessions.ApplicationOpeningRequest,
@@ -483,6 +484,7 @@ func runWithTestRuntimeRunnerAndMockWorkersLoader(
 	builder testRuntimeRunnerOpener,
 	loadMockWorkers workers.MockWorkersConfigLoader,
 ) error {
+	cfg = ensureTestRecordingsCLI(cfg)
 	if cfg.Clock == nil {
 		cfg.Clock = platformclock.Real{}
 	}
@@ -510,6 +512,13 @@ func runWithTestRuntimeRunnerAndMockWorkersLoader(
 
 func testMockWorkersConfigLoader(string) (*workers.MockWorkersConfig, error) {
 	return &workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{}}, nil
+}
+
+func ensureTestRecordingsCLI(cfg RunConfig) RunConfig {
+	if cfg.RecordingsCLI == nil {
+		cfg.RecordingsCLI = recordingscli.New()
+	}
+	return cfg
 }
 
 func prepareSingleWorkTargetForTest(request work.WorkRequest) (work.SingleWorkTarget, error) {

@@ -61,7 +61,7 @@ func TestAgentExecutor_StopTokenControlsOutcome(t *testing.T) {
 	}
 	executor := executorpkg.NewAgentExecutor(
 		runtimeCfg,
-		&agentMockProvider{response: workerexecution.InferenceResponse{Content: "Work done. COMPLETE"}}, nil, time.Now, deterministicRetryRandom)
+		&agentMockProvider{response: workerexecution.InferenceResponse{Content: "Work done. COMPLETE"}}, nil, time.Now)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
 		work.WorkDispatch{
@@ -80,7 +80,7 @@ func TestAgentExecutor_StopTokenControlsOutcome(t *testing.T) {
 
 	executor = executorpkg.NewAgentExecutor(
 		runtimeCfg,
-		&agentMockProvider{response: workerexecution.InferenceResponse{Content: "Still working"}}, nil, time.Now, deterministicRetryRandom)
+		&agentMockProvider{response: workerexecution.InferenceResponse{Content: "Still working"}}, nil, time.Now)
 
 	result, err = executor.Execute(context.Background(), testAgentRequest(
 		work.WorkDispatch{
@@ -99,7 +99,7 @@ func TestAgentExecutor_StopTokenControlsOutcome(t *testing.T) {
 
 	executor = executorpkg.NewAgentExecutor(
 		runtimeCfg,
-		&agentMockProvider{response: workerexecution.InferenceResponse{Content: "Still iterating\n<CONTINUE>"}}, nil, time.Now, deterministicRetryRandom)
+		&agentMockProvider{response: workerexecution.InferenceResponse{Content: "Still iterating\n<CONTINUE>"}}, nil, time.Now)
 
 	result, err = executor.Execute(context.Background(), testAgentRequest(
 		work.WorkDispatch{
@@ -123,7 +123,7 @@ func TestAgentExecutor_StopTokenComesFromRuntimeConfigWithoutDispatchState(t *te
 		Workers: map[string]*workerconfig.FactoryWorkerConfig{
 			"worker-a": {Model: "test-model", StopToken: "COMPLETE"},
 		},
-	}, provider, nil, time.Now, deterministicRetryRandom)
+	}, provider, nil, time.Now)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
 		work.WorkDispatch{
@@ -149,7 +149,7 @@ func TestAgentExecutor_RuntimeStopTokenChangesAffectSubsequentDispatches(t *test
 			"worker-a": workerDef,
 		},
 	}
-	executor := executorpkg.NewAgentExecutor(runtimeCfg, provider, nil, time.Now, deterministicRetryRandom)
+	executor := executorpkg.NewAgentExecutor(runtimeCfg, provider, nil, time.Now)
 
 	dispatch := work.WorkDispatch{
 		DispatchID:   "d-1",
@@ -191,7 +191,7 @@ func TestAgentExecutor_ResolvesWorkerConfigPerDispatch(t *testing.T) {
 			"worker-a": {Model: "model-a", ModelProvider: "claude"},
 			"worker-b": {Model: "model-b", ModelProvider: "codex"},
 		},
-	}, provider, nil, time.Now, deterministicRetryRandom)
+	}, provider, nil, time.Now)
 
 	first, err := executor.Execute(context.Background(), testAgentRequest(
 		work.WorkDispatch{
@@ -236,7 +236,7 @@ func TestAgentExecutor_OutputSchemaSuccess_KeepsRawOutput(t *testing.T) {
 		Workers: map[string]*workerconfig.FactoryWorkerConfig{
 			"worker-a": {Model: "test-model"},
 		},
-	}, provider, nil, time.Now, deterministicRetryRandom)
+	}, provider, nil, time.Now)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
 		work.WorkDispatch{
@@ -265,7 +265,7 @@ func TestAgentExecutor_OutputSchemaParseFailure_ReturnsFailedResult(t *testing.T
 		Workers: map[string]*workerconfig.FactoryWorkerConfig{
 			"worker-a": {Model: "test-model"},
 		},
-	}, provider, nil, time.Now, deterministicRetryRandom)
+	}, provider, nil, time.Now)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
 		work.WorkDispatch{

@@ -39,7 +39,7 @@ func TestAgentExecutor_CodexPreparedWorktree_OmitsWorktreeCapability(t *testing.
 		Workers: map[string]*workerconfig.FactoryWorkerConfig{
 			"worker-a": {Model: "gpt-5-codex", ModelProvider: string(modelprovider.ProviderCodex)},
 		},
-	}, provider, nil, time.Now, deterministicRetryRandom)
+	}, provider, nil, time.Now)
 
 	_, err := executor.Execute(context.Background(), testAgentRequest(
 		work.WorkDispatch{
