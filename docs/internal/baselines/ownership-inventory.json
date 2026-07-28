@@ -1217,6 +1217,12 @@
     },
     {
       "fromOwner": "factory_runtime",
+      "toOwner": "transports",
+      "class": "command",
+      "evidence": "pkg/services/factory_runtime/transports/http -\u003e pkg/transports/http/generated"
+    },
+    {
+      "fromOwner": "factory_runtime",
       "toOwner": "work",
       "class": "command",
       "evidence": "pkg/services/factory_runtime/engine -\u003e pkg/services/work"
@@ -1339,7 +1345,19 @@
       "fromOwner": "factory_visualization",
       "toOwner": "transports",
       "class": "command",
-      "evidence": "pkg/services/factory_visualization/transports/http -\u003e pkg/transports/http/generated"
+      "evidence": "pkg/services/factory_visualization/transports/cli -\u003e pkg/transports/mapping"
+    },
+    {
+      "fromOwner": "factory_visualization",
+      "toOwner": "work",
+      "class": "command",
+      "evidence": "pkg/services/factory_visualization/transports/cli -\u003e pkg/services/work"
+    },
+    {
+      "fromOwner": "factory_visualization",
+      "toOwner": "workers",
+      "class": "command",
+      "evidence": "pkg/services/factory_visualization/transports/cli -\u003e pkg/services/workers"
     },
     {
       "fromOwner": "factory_visualization",
@@ -3218,6 +3236,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_runtime/transports/http",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_runtime/transports/mcp",
       "disposition": "retain",
       "destination": "factory_runtime",
@@ -3674,6 +3698,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_visualization/transports/cli",
+      "disposition": "retain",
+      "destination": "factory_visualization",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_visualization/transports/http",
       "disposition": "retain",
       "destination": "factory_visualization",
@@ -3861,6 +3891,12 @@
     },
     {
       "packagePath": "pkg/services/models/transports/http",
+      "disposition": "retain",
+      "destination": "models",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/models/transports/mcp",
       "disposition": "retain",
       "destination": "models",
       "destinationKind": "owner"

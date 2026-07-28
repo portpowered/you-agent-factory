@@ -64,7 +64,7 @@ intentionally small enough to distribute across many agents.
   - `TestCLIInterruptedExitCode` covers cancellation/interruption.
   - `TestCLISuccessExitCode` covers normal quiescence.
 
-- [ ] `tests/functional/transport/cli/process/context_cancellation_test.go`
+- [x] `tests/functional/transport/cli/process/context_cancellation_test.go`
   - `TestCLIContextCancellationStopsExternalWork` verifies the injected
     provider process is cancelled.
   - `TestCLIContextCancellationEmitsNoSuccessResult` verifies the terminal
