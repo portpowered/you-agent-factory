@@ -19,6 +19,14 @@ primary-result behavior.
   through Catalog's side-effect-free canonical identity resolver, reject aliases
   and unknown IDs before publishing the root, and reserve request-time Catalog
   lookup for live readiness/selectability so construction remains inert.
+- Providers owner-local Wire at `pkg/services/providers/wire` must stay
+  registered under destination `providers` in
+  `docs/internal/packaged-service-structure/package-target-manifest.json`,
+  `docs/internal/baselines/ownership-inventory.json`, and both
+  `go-*-coverage-package-minimums.json` baselines; prove registration with
+  `wire/manifest_registration_test.go` rather than re-editing manifests when
+  IMP-PROV already landed the rows. This LWR packet does not introduce
+  `pkg/services/providers/transports/**` protocol adapters.
 - Parent-private Runner implementations that expose subprocess progress should
   consume an injected streaming command capability, serialize publication only
   within each invocation, and build terminal diagnostics from the command
