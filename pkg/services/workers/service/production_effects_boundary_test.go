@@ -26,7 +26,7 @@ func TestWorkersCompletedEffectInjectionsHaveNoOwnerFallbacks(t *testing.T) {
 		"provider/commandenv/environment.go":              {[]byte("os.Environ")},
 		"provider/agy/adapter.go":                         {[]byte("os.Stat("), []byte("exec.LookPath(")},
 		"internal/services/workstations/prompting/prompt_docs.go":                        {[]byte("os.Stat"), []byte("os.ReadFile"), []byte("filepath.WalkDir")},
-		"worktree/prepare.go":                             {[]byte("time.Since")},
+		"internal/services/workstations/worktree/prepare.go": {[]byte("time.Since")},
 	}
 
 	for relative, forbidden := range checks {

@@ -475,7 +475,9 @@
     "pkg/services/workers/internal/services/workstations/internal/service",
     "pkg/services/workers/internal/services/workstations/invocation",
     "pkg/services/workers/internal/services/workstations/prompting",
+    "pkg/services/workers/internal/services/workstations/skippermissions",
     "pkg/services/workers/internal/services/workstations/wire",
+    "pkg/services/workers/internal/services/workstations/worktree",
     "pkg/services/workers/invocation",
     "pkg/services/workers/process",
     "pkg/services/workers/prompting",
@@ -2752,7 +2754,17 @@
       "destination": "workers/internal/services/workstations"
     },
     {
+      "packagePath": "pkg/services/workers/internal/services/workstations/skippermissions",
+      "disposition": "retain",
+      "destination": "workers/internal/services/workstations"
+    },
+    {
       "packagePath": "pkg/services/workers/internal/services/workstations/wire",
+      "disposition": "retain",
+      "destination": "workers/internal/services/workstations"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/workstations/worktree",
       "disposition": "retain",
       "destination": "workers/internal/services/workstations"
     },

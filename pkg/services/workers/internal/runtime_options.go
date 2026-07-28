@@ -15,7 +15,7 @@ import (
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/runner"
-	"github.com/portpowered/infinite-you/pkg/services/workers/skippermissions"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/skippermissions"
 )
 
 // BuildRuntimeExecutors constructs every configured runtime worker through the

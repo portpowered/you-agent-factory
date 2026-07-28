@@ -25,7 +25,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/providersroot"
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 	providerstructured "github.com/portpowered/infinite-you/pkg/services/workers/provider/structured"
-	"github.com/portpowered/infinite-you/pkg/services/workers/skippermissions"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/skippermissions"
 )
 
 // Builder constructs one configured worker without owning runtime lifecycle.

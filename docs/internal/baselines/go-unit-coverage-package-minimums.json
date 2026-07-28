@@ -2217,7 +2217,7 @@
       "minimum": 90.44
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/skippermissions",
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/skippermissions",
       "minimum": 90.24
     },
     {
@@ -2225,7 +2225,7 @@
       "minimum": 82.14
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/worktree",
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/worktree",
       "minimum": 59.05
     },
     {

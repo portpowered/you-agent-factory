@@ -23,7 +23,7 @@ import (
 	providerconductor "github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
 	providercontract "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
-	"github.com/portpowered/infinite-you/pkg/services/workers/skippermissions"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/skippermissions"
 	"go.uber.org/zap"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
