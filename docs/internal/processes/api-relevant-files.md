@@ -46,7 +46,13 @@ Use this map when changing the public REST contract.
   Declare owned generated operationIds in `owned_surface.go` and prove adapter
   production sources do not directly import
   `pkg/services/factory_runtime/internal/**` (source scan, not transitive deps
-  through the accepted root package).
+  through the accepted root package). Status reads (`handlers_status.go`) map
+  `getStatus` / `getStatusBySessionId` through `Observe` with
+  `ObservationScopeFull`, project success via `FactoryStatusFromObservation` +
+  `apisurface.FactoryStatusToAPI`, and route session-scoped reads through an
+  injected `SessionObserver` peer binding rather than Runtime datastores.
+  Typed observation failures map through `error_mapping.go` before success
+  encoding.
 - Factory Definitions HTTP decoding, generated-contract mapping, service
   invocation, typed error mapping, and cancel/timeout handling live in
   `pkg/services/factory_definitions/transports/http`. The top-level

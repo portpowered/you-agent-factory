@@ -7,6 +7,7 @@
 package http
 
 import (
+	"context"
 	"errors"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -17,10 +18,17 @@ import (
 // internal packages.
 type RuntimeRoot = factoryruntime.Service
 
+// SessionObserver routes session-scoped Runtime observation requests through
+// the Factory Sessions peer surface without importing Sessions internals.
+type SessionObserver interface {
+	ObserveForSession(context.Context, string, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error)
+}
+
 // Adapter maps Factory Runtime HTTP operations through the accepted root
 // contract without importing Runtime internals or owning canonical state.
 type Adapter struct {
-	root RuntimeRoot
+	root     RuntimeRoot
+	sessions SessionObserver
 }
 
 // NewAdapter constructs the Factory Runtime HTTP adapter bound to the accepted
@@ -30,6 +38,13 @@ func NewAdapter(root RuntimeRoot) *Adapter {
 		return nil
 	}
 	return &Adapter{root: root}
+}
+
+// BindSessionObserver attaches the peer used for session-scoped status reads.
+func (a *Adapter) BindSessionObserver(sessions SessionObserver) {
+	if a != nil {
+		a.sessions = sessions
+	}
 }
 
 // Root returns the injected Factory Runtime root consumed by adapter-owned
