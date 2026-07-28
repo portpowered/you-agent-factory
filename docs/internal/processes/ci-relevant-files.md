@@ -669,6 +669,14 @@ Wave 0 functional-tests-expansion planning authority lives under
   consumption released `replay_contracts-delete-03-events-response-events` after
   retiring `replay_script_boundary_events_test.go` and the two stream-mapped
   `runtime_api` inference-event scenarios.
+  `tests/functional/events/replay/record_replay_test.go` owns public CLI
+  record/replay public-outcome contracts through `support.StartFunctionalAPIServer`
+  with `--record` / `--replay`, provider replacement via
+  `support.NewShapedProviderCommandRunner`, and public outcome observation via
+  `/status`, retained `GET /factory-sessions/~default/events`, `/work`, and
+  `/work/{id}`; Wave 2 consumption marks `replay_contracts-delete-01-events-replay`
+  consumed while preserving catch-all `replay_contracts` and `runtime_api` source
+  rows until a later deletion batch releases them.
   `tests/functional/factory/definitions/init_test.go` owns public Factory-init
   functional coverage through `session create --init-new-factory` against
   `support.StartFunctionalAPIServer`, with seeded Work run via

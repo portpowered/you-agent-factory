@@ -1269,6 +1269,36 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/events/replay/record_replay_test.go",
+      "package": "you-agent-factory/tests/functional/events/replay",
+      "scenario": "TestRecordReplayReproducesFailureAndLifecycleControls",
+      "lane": "short",
+      "destination": "tests/functional/events/replay/record_replay_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/events/replay/record_replay_test.go",
+      "package": "you-agent-factory/tests/functional/events/replay",
+      "scenario": "TestRecordReplayReproducesSuccessfulPublicOutcome",
+      "lane": "short",
+      "destination": "tests/functional/events/replay/record_replay_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/events/replay/record_replay_test.go",
+      "package": "you-agent-factory/tests/functional/events/replay",
+      "scenario": "TestReplayOfSameArtifactIsDeterministic",
+      "lane": "short",
+      "destination": "tests/functional/events/replay/record_replay_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/events/response_events/stream_test.go",
       "package": "you-agent-factory/tests/functional/events/response_events",
       "scenario": "TestAPIResponseEventCursorGapEmitsStreamGap",
@@ -9329,12 +9359,12 @@
       "deletion_only_batch": "n/a"
     }
   ],
-  "scanned_at_utc": "2026-07-28T16:02:22Z",
+  "scanned_at_utc": "2026-07-28T16:55:00Z",
   "summary": {
     "by_catch_all": {
       "bootstrap_portability": 22,
       "guards_batch": 15,
-      "none": 708,
+      "none": 711,
       "replay_contracts": 23,
       "runtime_api": 96,
       "smoke": 19,
@@ -9345,7 +9375,7 @@
       "automations": 14,
       "bootstrap_portability": 21,
       "cli": 59,
-      "events": 5,
+      "events": 8,
       "factory": 59,
       "factory_definitions": 6,
       "factory_runtime": 6,
@@ -9369,9 +9399,9 @@
       "workflow": 30,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 913,
+    "customer_top_level_Test_scenarios": 916,
     "lane_functionallong": 96,
-    "lane_short": 817,
+    "lane_short": 820,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 14,
@@ -9385,6 +9415,8 @@
       "you-agent-factory/tests/functional/cli/root_discovery": 9,
       "you-agent-factory/tests/functional/cli/session_resume": 6,
       "you-agent-factory/tests/functional/events/factory_events": 5,
+      "you-agent-factory/tests/functional/events/replay": 3,
+      "you-agent-factory/tests/functional/events/response_events": 4,
       "you-agent-factory/tests/functional/factory/current": 6,
       "you-agent-factory/tests/functional/factory/definition_activation": 3,
       "you-agent-factory/tests/functional/factory/definitions": 11,
@@ -9562,21 +9594,21 @@
     }
   },
   "completeness_audit": {
-    "audited_at_utc": "2026-07-28T16:02:22Z",
-    "story": "ft-wave2-events-response-events-stream-mergeability",
-    "live_customer_scenarios": 913,
-    "ledger_rows": 913,
+    "audited_at_utc": "2026-07-28T16:55:00Z",
+    "story": "ft-wave2-events-replay-record-replay-004",
+    "live_customer_scenarios": 916,
+    "ledger_rows": 916,
     "unmapped_scenarios": 0,
     "checklist_destinations": 441,
     "wrong_layer_destinations": 69,
     "invalid_destinations": 0,
-    "lane_short": 817,
+    "lane_short": 820,
     "lane_functionallong": 96,
     "specialty_targets_documented": 11,
     "deletion_only_batches": 51,
     "validator": "go run ./cmd/migrationledgercheck",
-    "row_count": 913,
-    "short_lane_rows": 817,
+    "row_count": 916,
+    "short_lane_rows": 820,
     "functionallong_lane_rows": 96
   }
 }

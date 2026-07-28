@@ -1136,7 +1136,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCLIAndAPIResponseEventsMatchForSubagentInvocation`.
   - `TestTerminalInvocationResultIsNotMisclassifiedAsResponseEvent`.
 
-- [ ] `tests/functional/events/replay/record_replay_test.go`
+- [x] `tests/functional/events/replay/record_replay_test.go`
   - `TestRecordReplayReproducesSuccessfulPublicOutcome`.
   - `TestRecordReplayReproducesFailureAndLifecycleControls`.
   - `TestReplayOfSameArtifactIsDeterministic`.
