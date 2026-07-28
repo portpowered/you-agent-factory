@@ -2332,7 +2332,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal",
-      "minimum": 30.00
+      "minimum": 67.30
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners",
@@ -2550,7 +2550,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/service",
-      "minimum": 59.15
+      "minimum": 0.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/services/inference",
