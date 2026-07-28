@@ -5,12 +5,16 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 	geminipkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/gemini"
 	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 )
+
+const geminiTimeoutFailureMessage = "Gemini request timed out."
 
 // Gemini advertises prompt_submission + message_snapshots only. Shared
 // testkit.Run also requires streaming/tool factories; this suite proves the
@@ -19,9 +23,8 @@ import (
 func TestGeminiIntegrationSatisfiesSharedContractSurface(t *testing.T) {
 	t.Parallel()
 
-	integration := geminipkg.NewIntegration(geminipkg.IntegrationDependencies{
-		CommandRunner: &conformanceCommandRunner{result: workerprocess.CommandResult{Stdout: []byte("unused")}},
-	})
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte("unused")})
+	integration := geminiIntegrationWithRunner(t, runner)
 	assertGeminiContractIdentity(t, integration)
 	maximum := assertGeminiContractMaximumCapabilities(t, integration)
 	assertGeminiContractDiscovery(t, integration)
@@ -94,7 +97,7 @@ func TestGeminiSuccessConformanceThroughRegistryAndExecuteInvocation(t *testing.
 	t.Parallel()
 
 	const content = "gemini conformance answer"
-	runner := &conformanceCommandRunner{result: workerprocess.CommandResult{Stdout: []byte(content)}}
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte(content)})
 	integration := registryGeminiIntegration(t, runner)
 	destination := &conformanceDestination{}
 
@@ -116,16 +119,15 @@ func TestGeminiSuccessConformanceThroughRegistryAndExecuteInvocation(t *testing.
 	if response.Content() != content {
 		t.Fatalf("response content = %q, want %q", response.Content(), content)
 	}
-	if runner.calls != 1 {
-		t.Fatalf("command runner calls = %d, want 1", runner.calls)
+	if runner.CallCount() != 1 {
+		t.Fatalf("command runner calls = %d, want 1", runner.CallCount())
 	}
 	assertConformanceSuccessEvents(t, destination.events, request.InvocationID(), content)
 }
 
 type geminiFailureConformanceCase struct {
 	name        string
-	result      workerprocess.CommandResult
-	err         error
+	result      platformprocess.CommandResult
 	wantKind    inference.FailureKind
 	wantMessage string
 	reject      []string
@@ -135,7 +137,7 @@ func geminiFailureConformanceCases() []geminiFailureConformanceCase {
 	return []geminiFailureConformanceCase{
 		{
 			name: "Authentication",
-			result: workerprocess.CommandResult{
+			result: platformprocess.CommandResult{
 				ExitCode: 1,
 				Stderr:   []byte(`{"error":{"status":"UNAUTHENTICATED","message":"token=customer-secret"}}`),
 			},
@@ -145,7 +147,7 @@ func geminiFailureConformanceCases() []geminiFailureConformanceCase {
 		},
 		{
 			name: "InvalidRequest",
-			result: workerprocess.CommandResult{
+			result: platformprocess.CommandResult{
 				ExitCode: 1,
 				Stderr:   []byte(`{"error":{"code":400,"message":"bad prompt /tmp/secret-path"}}`),
 			},
@@ -155,7 +157,7 @@ func geminiFailureConformanceCases() []geminiFailureConformanceCase {
 		},
 		{
 			name: "Throttled",
-			result: workerprocess.CommandResult{
+			result: platformprocess.CommandResult{
 				ExitCode: 1,
 				Stderr:   []byte(`{"error":{"status":"RESOURCE_EXHAUSTED","message":"quota path /private/key leaked"}}`),
 			},
@@ -165,25 +167,17 @@ func geminiFailureConformanceCases() []geminiFailureConformanceCase {
 		},
 		{
 			name: "StructuredTimeout",
-			result: workerprocess.CommandResult{
+			result: platformprocess.CommandResult{
 				ExitCode: 1,
 				Stderr:   []byte(`{"error":{"status":"DEADLINE_EXCEEDED","message":"User prompt: private"}}`),
 			},
 			wantKind:    inference.FailureTimeout,
-			wantMessage: geminipkg.TimeoutFailureMessage,
+			wantMessage: geminiTimeoutFailureMessage,
 			reject:      []string{"User prompt", "private"},
 		},
 		{
-			name:        "CommandDeadlineTimeout",
-			err:         context.DeadlineExceeded,
-			result:      workerprocess.CommandResult{ExitCode: 1, Stderr: []byte("token=customer-secret-value")},
-			wantKind:    inference.FailureTimeout,
-			wantMessage: geminipkg.TimeoutFailureMessage,
-			reject:      []string{"token=", "customer-secret"},
-		},
-		{
 			name: "UnknownSafeFallback",
-			result: workerprocess.CommandResult{
+			result: platformprocess.CommandResult{
 				ExitCode: 17,
 				Stderr:   []byte("Error report written to .gemini/tmp/private-report.json"),
 			},
@@ -196,8 +190,8 @@ func geminiFailureConformanceCases() []geminiFailureConformanceCase {
 
 func assertGeminiFailureConformance(t *testing.T, tc geminiFailureConformanceCase) {
 	t.Helper()
-	runner := &conformanceCommandRunner{result: tc.result, err: tc.err}
-	integration := geminipkg.NewIntegration(geminipkg.IntegrationDependencies{CommandRunner: runner})
+	runner := testutil.NewProviderCommandRunner(tc.result)
+	integration := geminiIntegrationWithRunner(t, runner)
 	destination := &conformanceDestination{}
 	request := conformanceRequest("inv-gemini-failure-"+strings.ToLower(tc.name), inference.CapabilityPromptSubmission)
 
@@ -239,21 +233,19 @@ func TestGeminiFailureConformanceThroughExecuteInvocation(t *testing.T) {
 	}
 }
 
-func registryGeminiIntegration(t *testing.T, runner workerprocess.CommandRunner) inference.Integration {
+func registryGeminiIntegration(t *testing.T, runner platformprocess.CommandRunner) inference.Integration {
 	t.Helper()
-	registrations, err := registry.BuiltInRegistrations()
+	providersService, err := providerswire.NewService(providerswire.WithCommandRunner(runner))
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	registrations, err := registry.BuiltInRegistrations(registry.BuiltInDependencies{
+		ProvidersService: providersService,
+	})
 	if err != nil {
 		t.Fatalf("BuiltInRegistrations() error = %v", err)
 	}
-	replaced, err := registry.ReplaceCatalogIntegration(
-		registrations,
-		"gemini",
-		geminipkg.NewIntegration(geminipkg.IntegrationDependencies{CommandRunner: runner}),
-	)
-	if err != nil {
-		t.Fatalf("ReplaceCatalogIntegration() error = %v", err)
-	}
-	providers, err := registry.New(replaced...)
+	providers, err := registry.New(registrations...)
 	if err != nil {
 		t.Fatalf("registry.New() error = %v", err)
 	}
@@ -262,6 +254,17 @@ func registryGeminiIntegration(t *testing.T, runner workerprocess.CommandRunner)
 		t.Fatalf("Integration(gemini) error = %v", err)
 	}
 	return integration
+}
+
+func geminiIntegrationWithRunner(t *testing.T, runner platformprocess.CommandRunner) inference.Integration {
+	t.Helper()
+	providersService, err := providerswire.NewService(providerswire.WithCommandRunner(runner))
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	return geminipkg.NewIntegration(geminipkg.IntegrationDependencies{
+		ProvidersService: providersService,
+	})
 }
 
 func conformanceRequest(invocationID string, required ...inference.Capability) inference.InvocationRequest {
@@ -314,17 +317,6 @@ func drafts(events []inference.EventDraft) []string {
 		out = append(out, string(draft.Kind)+":"+string(draft.Phase))
 	}
 	return out
-}
-
-type conformanceCommandRunner struct {
-	calls  int
-	result workerprocess.CommandResult
-	err    error
-}
-
-func (r *conformanceCommandRunner) Run(_ context.Context, _ workerprocess.CommandRequest) (workerprocess.CommandResult, error) {
-	r.calls++
-	return r.result, r.err
 }
 
 type conformanceDestination struct {

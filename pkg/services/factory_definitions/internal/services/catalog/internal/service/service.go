@@ -7,7 +7,7 @@ import (
 	"os"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	internalnamedfactories "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/namedfactories"
+	internalnamedfactories "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedfactories"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
 )
 

@@ -42,6 +42,11 @@ func TestMapPackageFactoryDefinitionsMoveDestinations(t *testing.T) {
 			retainOwner: "factory_definitions",
 		},
 		{
+			path:        "pkg/services/factory_definitions/internal",
+			wantRetain:  true,
+			retainOwner: "factory_definitions",
+		},
+		{
 			path: "pkg/services/factory_definitions/service",
 			wantMove: &ownershipinventory.PackageRow{
 				PackagePath:       "pkg/services/factory_definitions/service",
@@ -75,15 +80,9 @@ func TestMapPackageFactoryDefinitionsMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/factory_definitions/internal/namedfactories",
-			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_definitions/internal/namedfactories",
-				Disposition:       ownershipinventory.DispositionMove,
-				Destination:       "factory_definitions",
-				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/factory_definitions/internal/services/catalog",
-				DeletionCondition: "delete public package after IMP-DEF-catalog private subservice cutover proof",
-			},
+			path:        "pkg/services/factory_definitions/internal/services/catalog/namedfactories",
+			wantRetain:  true,
+			retainOwner: "factory_definitions",
 		},
 		{
 			path: "pkg/services/factory_definitions/loading",

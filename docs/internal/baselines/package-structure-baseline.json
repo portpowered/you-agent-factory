@@ -4,6 +4,11 @@
   "entries": [
     {
       "rule": "deprecated-runtime-api-file",
+      "filePath": "tests/functional/runtime_api/api_batch_ingress_starvation_regression_test.go",
+      "target": "tests/functional/runtime_api"
+    },
+    {
+      "rule": "deprecated-runtime-api-file",
       "filePath": "tests/functional/runtime_api/api_batch_submission_boundary_smoke_long_test.go",
       "target": "tests/functional/runtime_api"
     },
@@ -259,6 +264,11 @@
     },
     {
       "rule": "deprecated-runtime-api-test",
+      "filePath": "tests/functional/runtime_api/api_batch_ingress_starvation_regression_test.go",
+      "target": "TestBlockedDispatchConcurrentBatchIngressRegression"
+    },
+    {
+      "rule": "deprecated-runtime-api-test",
       "filePath": "tests/functional/runtime_api/api_batch_submission_boundary_smoke_long_test.go",
       "target": "TestFactoryRequestBatch_PublicBatchShapeStaysAlignedAcrossWatchedFileAndHTTP"
     },
@@ -370,12 +380,12 @@
     {
       "rule": "deprecated-runtime-api-test",
       "filePath": "tests/functional/runtime_api/api_model_transport_smoke_test.go",
-      "target": "TestModelTransportSmoke_ServiceModeStartupAndDirectModelRoutesStayAligned"
+      "target": "TestModelTransportSmoke_PullUsesConfiguredLegacyCacheWithoutNetwork"
     },
     {
       "rule": "deprecated-runtime-api-test",
       "filePath": "tests/functional/runtime_api/api_model_transport_smoke_test.go",
-      "target": "TestModelTransportSmoke_PullUsesConfiguredLegacyCacheWithoutNetwork"
+      "target": "TestModelTransportSmoke_ServiceModeStartupAndDirectModelRoutesStayAligned"
     },
     {
       "rule": "deprecated-runtime-api-test",
@@ -754,17 +764,17 @@
     },
     {
       "rule": "functional-test-missing-subsection",
+      "filePath": "tests/functional/automations/doc.go",
+      "target": "automations"
+    },
+    {
+      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/automations/filesystem_watcher_root_composition_test.go",
       "target": "automations"
     },
     {
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/automations/hosted_sources_root_composition_test.go",
-      "target": "automations"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/automations/doc.go",
       "target": "automations"
     },
     {
@@ -1099,6 +1109,11 @@
     },
     {
       "rule": "functional-test-missing-subsection",
+      "filePath": "tests/functional/sessions/live_runtime_build_process_test.go",
+      "target": "sessions"
+    },
+    {
+      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/smoke/cli_docs_smoke_test.go",
       "target": "smoke"
     },
@@ -1140,16 +1155,6 @@
     {
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/smoke/cli_named_review_invocation_smoke_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/cli_run_mode_compat_smoke_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/cli_work_move_smoke_test.go",
       "target": "smoke"
     },
     {
@@ -1373,9 +1378,14 @@
       "target": "operator_settings"
     },
     {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/edges/definition.go",
-      "target": "Merge"
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/operator_settings/servicewire/servicewire_composition_test.go",
+      "target": "operator_settings"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/operator_settings/servicewire/testmain_test.go",
+      "target": "operator_settings"
     },
     {
       "rule": "service-root-exported-function",
@@ -1449,6 +1459,11 @@
     },
     {
       "rule": "service-root-exported-function",
+      "filePath": "pkg/services/edges/definition.go",
+      "target": "Merge"
+    },
+    {
+      "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_definitions/config_file_operations.go",
       "target": "NewFactoryConfigFileLoader"
     },
@@ -1456,6 +1471,11 @@
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_definitions/config_file_operations.go",
       "target": "NewFactoryConfigRootResolver"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_definitions/current_factory_pointer.go",
+      "target": "ResolveCurrentFactoryDirectory"
     },
     {
       "rule": "service-root-exported-function",
@@ -1489,6 +1509,21 @@
     },
     {
       "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_definitions/distribute_validation.go",
+      "target": "ValidateCreateFactoryScaffoldRequest"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_definitions/distribute_validation.go",
+      "target": "ValidateInstallPackagedFactoryRequest"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_definitions/install_packaged_factory_operation.go",
+      "target": "NewInstallPackagedFactoryOperation"
+    },
+    {
+      "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_definitions/named_paths.go",
       "target": "MapDir"
     },
@@ -1514,13 +1549,68 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_runtime/hosting.go",
-      "target": "RequireIdleRuntime"
+      "filePath": "pkg/services/factory_runtime/factory_status_observation.go",
+      "target": "FactoryStatusFromObservation"
     },
     {
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_runtime/hosting.go",
       "target": "RuntimeModeOrDefault"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/hosting_observation.go",
+      "target": "ObservationHasActiveWork"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/hosting_observation.go",
+      "target": "RequireIdleRuntimeFromObservation"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/internal/services/checkpoint_recovery/capture.go",
+      "target": "EncodeRuntimeOpaquePayload"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/internal/services/checkpoint_recovery/capture.go",
+      "target": "EnvelopeFromRootCheckpoint"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/internal/services/checkpoint_recovery/capture.go",
+      "target": "RestoreRuntimeOpaquePayload"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/internal/services/checkpoint_recovery/capture.go",
+      "target": "RootCheckpointFromEnvelope"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/internal/services/checkpoint_recovery/load.go",
+      "target": "CompatibilityForSchema"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/internal/services/checkpoint_recovery/service.go",
+      "target": "ValidateEnvelope"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/binding.go",
+      "target": "NewJavaScriptBinding"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/binding.go",
+      "target": "NewPetriBinding"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/binding.go",
+      "target": "PetriNet"
     },
     {
       "rule": "service-root-exported-function",
@@ -1539,13 +1629,13 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_runtime/projection_contracts.go",
-      "target": "CategoryForState"
+      "filePath": "pkg/services/factory_runtime/observation_projection_contracts.go",
+      "target": "DashboardEngineStateSnapshot"
     },
     {
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_runtime/projection_contracts.go",
-      "target": "SnapshotHasActiveWork"
+      "target": "CategoryForState"
     },
     {
       "rule": "service-root-exported-function",
@@ -1561,6 +1651,11 @@
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_runtime/public_work_tokens.go",
       "target": "IsPublicWorkToken"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/recording_event_contracts.go",
+      "target": "RunFinishedFactoryEvent"
     },
     {
       "rule": "service-root-exported-function",
@@ -1584,6 +1679,21 @@
     },
     {
       "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/runtime_request_contracts.go",
+      "target": "ObservationScopeRequest"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/runtime_request_contracts.go",
+      "target": "PauseControlRequest"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_runtime/runtime_request_contracts.go",
+      "target": "PlanDispatchRequestFromIntent"
+    },
+    {
+      "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_runtime/source_paths.go",
       "target": "GlobalWorkflowRootForHome"
     },
@@ -1596,6 +1706,31 @@
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_runtime/workflow_source_reader.go",
       "target": "NewWorkflowSourceReader"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_visualization/assemble_root.go",
+      "target": "ActivationEventSource"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_visualization/assemble_root.go",
+      "target": "ActivationViewSink"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_visualization/assemble_root.go",
+      "target": "AssembleRoot"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_visualization/assemble_root.go",
+      "target": "ProjectionSink"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/factory_visualization/recordings_peer.go",
+      "target": "RecordingsPeerFromProjectionService"
     },
     {
       "rule": "service-root-exported-function",
@@ -1639,6 +1774,11 @@
     },
     {
       "rule": "service-root-exported-function",
+      "filePath": "pkg/services/models/internal/services/runtime_host/internal/services/leases/service.go",
+      "target": "BindCoordinator"
+    },
+    {
+      "rule": "service-root-exported-function",
       "filePath": "pkg/services/models/local_execution_contract.go",
       "target": "ValidateLocalInvocationRequest"
     },
@@ -1649,13 +1789,13 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/models/internal/services/runtime_host/internal/services/leases/service.go",
-      "target": "BindCoordinator"
+      "filePath": "pkg/services/operator_settings/document_contract.go",
+      "target": "EmptyDocument"
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/operator_settings/document_contract.go",
-      "target": "EmptyDocument"
+      "filePath": "pkg/services/operator_settings/document_owner_construct.go",
+      "target": "ConfigureDocumentOwnerConstructor"
     },
     {
       "rule": "service-root-exported-function",
@@ -1706,6 +1846,21 @@
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/operator_settings/provider_scope.go",
       "target": "DeriveProviderBackendScopeID"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/operator_settings/providers_root_construct.go",
+      "target": "ConfigureProvidersRootConstructor"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/operator_settings/providers_root_construct.go",
+      "target": "ConstructProvidersRoot"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/operator_settings/resolution_composition.go",
+      "target": "ConfigureDefaultsResolutionFromHome"
     },
     {
       "rule": "service-root-exported-function",
@@ -2070,6 +2225,11 @@
     {
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/workers/execution_contracts.go",
+      "target": "CloneWorkstationResult"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/workers/execution_contracts.go",
       "target": "FailureDecisionFromMetadata"
     },
     {
@@ -2293,6 +2453,11 @@
       "target": "PreviousChainingTraceIDsFromColors"
     },
     {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/workers/workstation_pool_boundary.go",
+      "target": "NewWorkstationPoolBoundary"
+    },
+    {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/automations",
       "target": "pkg/services/automations/contracts.go:Clock,pkg/services/automations/contracts.go:FilesystemInputReader,pkg/services/automations/contracts.go:FilesystemWatcher,pkg/services/automations/contracts.go:FilesystemWatcherFactory,pkg/services/automations/contracts.go:HostedPollers,pkg/services/automations/contracts.go:Service"
@@ -2310,7 +2475,7 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/edges",
-      "target": "<none>"
+      "target": "\u003cnone\u003e"
     },
     {
       "rule": "service-root-interface-count",
@@ -2320,22 +2485,47 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/factory_runtime",
-      "target": "pkg/services/factory_runtime/clock.go:Clock,pkg/services/factory_runtime/clock.go:LogicalClock,pkg/services/factory_runtime/execution_contracts.go:DispatchResultHook,pkg/services/factory_runtime/execution_contracts.go:DispatchResultHookWakeSignaler,pkg/services/factory_runtime/execution_contracts.go:SubmissionHook,pkg/services/factory_runtime/factory_status.go:FactoryStatusProjector,pkg/services/factory_runtime/filesystem.go:InputFileSystem,pkg/services/factory_runtime/filesystem.go:RuntimeDirectoryFileSystem,pkg/services/factory_runtime/filesystem.go:WorkflowSourceFileSystem,pkg/services/factory_runtime/hosting.go:HostedHandle,pkg/services/factory_runtime/hosting.go:HostedInstance,pkg/services/factory_runtime/hosting.go:HostedLedger,pkg/services/factory_runtime/hosting.go:Lifecycle,pkg/services/factory_runtime/hosting.go:ReplacementBuilder,pkg/services/factory_runtime/hosting.go:Sidecars,pkg/services/factory_runtime/interfaces.go:APIFactory,pkg/services/factory_runtime/interfaces.go:Factory,pkg/services/factory_runtime/interfaces.go:Service,pkg/services/factory_runtime/interfaces.go:WorkMover,pkg/services/factory_runtime/interfaces.go:WorkflowContextProvider,pkg/services/factory_runtime/javascript_checkpoint_contract.go:JavaScriptCheckpointStore,pkg/services/factory_runtime/javascript_checkpoint_contract.go:JavaScriptCheckpointSummaries,pkg/services/factory_runtime/javascript_service_contract.go:JavaScriptChildValues,pkg/services/factory_runtime/javascript_service_contract.go:JavaScriptWorkflowDefinitions,pkg/services/factory_runtime/javascript_service_contract.go:JavaScriptWorkflowRuntime,pkg/services/factory_runtime/javascript_service_contract.go:JavaScriptWorkflows,pkg/services/factory_runtime/logger.go:Logger,pkg/services/factory_runtime/metrics.go:MetricsEmitter,pkg/services/factory_runtime/result_types.go:SessionResultProjectionOperation,pkg/services/factory_runtime/runtime_log_sink.go:RuntimeLogSink,pkg/services/factory_runtime/runtime_metrics_sink.go:RuntimeMetricRecordWriter,pkg/services/factory_runtime/runtime_metrics_sink.go:RuntimeMetricsSink,pkg/services/factory_runtime/session_build_spec.go:LoadedConfig,pkg/services/factory_runtime/workflow_preview_operation.go:WorkflowPreviewOperation"
+      "target": "pkg/services/factory_runtime/clock.go:Clock,pkg/services/factory_runtime/clock.go:LogicalClock,pkg/services/factory_runtime/execution_contracts.go:DispatchResultHook,pkg/services/factory_runtime/execution_contracts.go:DispatchResultHookWakeSignaler,pkg/services/factory_runtime/execution_contracts.go:SubmissionHook,pkg/services/factory_runtime/factory_status.go:FactoryStatusProjector,pkg/services/factory_runtime/filesystem.go:InputFileSystem,pkg/services/factory_runtime/filesystem.go:RuntimeDirectoryFileSystem,pkg/services/factory_runtime/filesystem.go:WorkflowSourceFileSystem,pkg/services/factory_runtime/hosting.go:HostedHandle,pkg/services/factory_runtime/hosting.go:HostedInstance,pkg/services/factory_runtime/hosting.go:HostedLedger,pkg/services/factory_runtime/hosting.go:Lifecycle,pkg/services/factory_runtime/hosting.go:ReplacementBuilder,pkg/services/factory_runtime/hosting.go:Sidecars,pkg/services/factory_runtime/interfaces.go:APIFactory,pkg/services/factory_runtime/interfaces.go:Factory,pkg/services/factory_runtime/interfaces.go:Service,pkg/services/factory_runtime/interfaces.go:WorkMover,pkg/services/factory_runtime/interfaces.go:WorkflowContextProvider,pkg/services/factory_runtime/javascript_checkpoint_contract.go:JavaScriptCheckpointStore,pkg/services/factory_runtime/javascript_checkpoint_contract.go:JavaScriptCheckpointSummaries,pkg/services/factory_runtime/javascript_service_contract.go:JavaScriptChildValues,pkg/services/factory_runtime/javascript_service_contract.go:JavaScriptWorkflowDefinitions,pkg/services/factory_runtime/javascript_service_contract.go:JavaScriptWorkflowRuntime,pkg/services/factory_runtime/javascript_service_contract.go:JavaScriptWorkflows,pkg/services/factory_runtime/logger.go:Logger,pkg/services/factory_runtime/metrics.go:MetricsEmitter,pkg/services/factory_runtime/orchestration_contract.go:OrchestrationCompilation,pkg/services/factory_runtime/orchestration_contract.go:OrchestrationJavaScriptExecution,pkg/services/factory_runtime/result_types.go:SessionResultProjectionOperation,pkg/services/factory_runtime/runtime_log_sink.go:RuntimeLogSink,pkg/services/factory_runtime/runtime_metrics_sink.go:RuntimeMetricRecordWriter,pkg/services/factory_runtime/runtime_metrics_sink.go:RuntimeMetricsSink,pkg/services/factory_runtime/session_build_spec.go:LoadedConfig,pkg/services/factory_runtime/workflow_preview_operation.go:WorkflowPreviewOperation"
+    },
+    {
+      "rule": "service-root-interface-count",
+      "filePath": "pkg/services/factory_runtime/internal/services/checkpoint_recovery",
+      "target": "pkg/services/factory_runtime/internal/services/checkpoint_recovery/capture.go:Service,pkg/services/factory_runtime/internal/services/checkpoint_recovery/service.go:CheckpointStore"
+    },
+    {
+      "rule": "service-root-interface-count",
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration/service.go:Binding,pkg/services/factory_runtime/internal/services/orchestration/service.go:Service"
     },
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/factory_sessions",
-      "target": "pkg/services/factory_sessions/activation_contract.go:DefinitionActivationGateway,pkg/services/factory_sessions/execution_contract.go:ExecutionService,pkg/services/factory_sessions/service_contracts.go:Service"
+      "target": "pkg/services/factory_sessions/activation_contract.go:DefinitionActivationGatewayProvider,pkg/services/factory_sessions/execution_contract.go:ExecutionService,pkg/services/factory_sessions/models_cli_collaboration.go:ModelsCLIPresentationCollaborator,pkg/services/factory_sessions/service_contracts.go:Service"
     },
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/factory_visualization",
-      "target": "pkg/services/factory_visualization/response_presentation.go:Output,pkg/services/factory_visualization/response_presentation.go:ResponsePresentation,pkg/services/factory_visualization/root_contract.go:Root,pkg/services/factory_visualization/service.go:Clock,pkg/services/factory_visualization/service.go:Sink,pkg/services/factory_visualization/service.go:Source"
+      "target": "pkg/services/factory_visualization/response_presentation.go:ResponsePresentation,pkg/services/factory_visualization/response_presentation.go:responsePresentationOwner,pkg/services/factory_visualization/root_contract.go:Root,pkg/services/factory_visualization/service.go:Sink"
+    },
+    {
+      "rule": "service-root-interface-count",
+      "filePath": "pkg/services/factory_visualization/internal/services/activation_lifecycle",
+      "target": "pkg/services/factory_visualization/internal/services/activation_lifecycle/service.go:Clock,pkg/services/factory_visualization/internal/services/activation_lifecycle/service.go:EventSource,pkg/services/factory_visualization/internal/services/activation_lifecycle/service.go:Service,pkg/services/factory_visualization/internal/services/activation_lifecycle/service.go:ViewSink"
+    },
+    {
+      "rule": "service-root-interface-count",
+      "filePath": "pkg/services/factory_visualization/internal/services/live_view_projection",
+      "target": "pkg/services/factory_visualization/internal/services/live_view_projection/service.go:Clock,pkg/services/factory_visualization/internal/services/live_view_projection/service.go:Service,pkg/services/factory_visualization/internal/services/live_view_projection/service.go:Sink,pkg/services/factory_visualization/internal/services/live_view_projection/service.go:Source"
     },
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/models",
       "target": "pkg/services/models/host_diagnostics_contract.go:HostDiagnosticLogger,pkg/services/models/host_diagnostics_contract.go:HostMetricsRecorder,pkg/services/models/invocation_artifacts.go:InvocationArtifactExporter,pkg/services/models/invocation_artifacts.go:InvocationArtifactFileSystem,pkg/services/models/managed_runtime_contract.go:InvocationReadinessError,pkg/services/models/runtime_construction_contract.go:AssetHTTPDoer,pkg/services/models/runtime_construction_contract.go:HostClock,pkg/services/models/runtime_construction_contract.go:HostHTTPDoer,pkg/services/models/runtime_construction_contract.go:HostManagedProcess,pkg/services/models/runtime_construction_contract.go:HostProcessLauncher,pkg/services/models/runtime_construction_contract.go:HostTimer,pkg/services/models/runtime_construction_contract.go:RuntimeHTTPDoer,pkg/services/models/runtime_construction_contract.go:RuntimeTempFile,pkg/services/models/service_contract.go:PullMetricsRecorder,pkg/services/models/service_contract.go:Service"
+    },
+    {
+      "rule": "service-root-interface-count",
+      "filePath": "pkg/services/models/internal/services/inference",
+      "target": "pkg/services/models/internal/services/inference/service.go:InvocationRuntime,pkg/services/models/internal/services/inference/service.go:Service"
     },
     {
       "rule": "service-root-interface-count",
@@ -2345,7 +2535,7 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/operator_settings",
-      "target": "pkg/services/operator_settings/dependencies.go:FileSystem,pkg/services/operator_settings/dependencies.go:TemporaryFile,pkg/services/operator_settings/service_contract.go:Service"
+      "target": "pkg/services/operator_settings/dependencies.go:FileSystem,pkg/services/operator_settings/dependencies.go:TemporaryFile,pkg/services/operator_settings/document_contract.go:DocumentOwner,pkg/services/operator_settings/service_contract.go:Service"
     },
     {
       "rule": "service-root-interface-count",
@@ -2359,6 +2549,11 @@
     },
     {
       "rule": "service-root-interface-count",
+      "filePath": "pkg/services/recordings/internal/services/artifacts_export",
+      "target": "pkg/services/recordings/internal/services/artifacts_export/service.go:PortableArtifactPublication,pkg/services/recordings/internal/services/artifacts_export/service.go:Service,pkg/services/recordings/internal/services/artifacts_export/service.go:SnapshotSource"
+    },
+    {
+      "rule": "service-root-interface-count",
       "filePath": "pkg/services/system_initialization",
       "target": "pkg/services/system_initialization/service.go:LegacyFactoryMigrationFileSystem,pkg/services/system_initialization/service.go:OperatorSettings,pkg/services/system_initialization/service.go:Service"
     },
@@ -2369,28 +2564,33 @@
     },
     {
       "rule": "service-root-interface-count",
+      "filePath": "pkg/services/work/internal/services/content_staging",
+      "target": "pkg/services/work/internal/services/content_staging/service.go:Clock,pkg/services/work/internal/services/content_staging/service.go:FileSystem,pkg/services/work/internal/services/content_staging/service.go:Random,pkg/services/work/internal/services/content_staging/service.go:Service"
+    },
+    {
+      "rule": "service-root-interface-count",
       "filePath": "pkg/services/work/internal/services/state_access",
       "target": "pkg/services/work/internal/services/state_access/service.go:RecordingsAdapter,pkg/services/work/internal/services/state_access/service.go:Service,pkg/services/work/internal/services/state_access/service.go:SessionAdapter,pkg/services/work/internal/services/state_access/service.go:SessionResolver"
     },
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/workers",
-      "target": "pkg/services/workers/command.go:CommandRunner,pkg/services/workers/interfaces.go:AgentToolFileSystem,pkg/services/workers/interfaces.go:FactoryWorktreePreparer,pkg/services/workers/interfaces.go:HostedPollerClock,pkg/services/workers/interfaces.go:HostedPollerHTTPDoer,pkg/services/workers/interfaces.go:HostedRuntimePaths,pkg/services/workers/interfaces.go:InvocationExecutor,pkg/services/workers/interfaces.go:Runner,pkg/services/workers/interfaces.go:WorkerExecutor,pkg/services/workers/interfaces.go:WorkstationRequestExecutor,pkg/services/workers/interfaces.go:WorktreeFileSystem,pkg/services/workers/interfaces.go:WorktreeGitCommander,pkg/services/workers/mock_workers.go:MockWorkersConfigFileSystem,pkg/services/workers/model_invocation.go:ModelInvoker,pkg/services/workers/model_invocation.go:Service,pkg/services/workers/prompt_templates.go:PromptTemplates,pkg/services/workers/runtime_service.go:RuntimeService"
+      "target": "pkg/services/workers/command.go:CommandRunner,pkg/services/workers/interfaces.go:AgentToolFileSystem,pkg/services/workers/interfaces.go:FactoryWorktreePreparer,pkg/services/workers/interfaces.go:HostedPollerClock,pkg/services/workers/interfaces.go:HostedPollerHTTPDoer,pkg/services/workers/interfaces.go:HostedRuntimePaths,pkg/services/workers/interfaces.go:InvocationExecutor,pkg/services/workers/interfaces.go:Runner,pkg/services/workers/interfaces.go:WorkerExecutor,pkg/services/workers/interfaces.go:WorkstationRequestExecutor,pkg/services/workers/interfaces.go:WorktreeFileSystem,pkg/services/workers/interfaces.go:WorktreeGitCommander,pkg/services/workers/mock_workers.go:MockWorkersConfigFileSystem,pkg/services/workers/model_invocation.go:ModelInvoker,pkg/services/workers/model_invocation.go:Service,pkg/services/workers/prompt_templates.go:PromptTemplates,pkg/services/workers/provider_port.go:Provider,pkg/services/workers/runtime_service.go:RuntimeService,pkg/services/workers/sessions_consumer_contracts.go:ProviderRegistry,pkg/services/workers/workstation_pool_boundary.go:WorkstationExecutionService,pkg/services/workers/workstation_pool_boundary.go:WorkstationPoolBoundary"
     },
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/workers/services/agents",
-      "target": "<none>"
+      "target": "\u003cnone\u003e"
     },
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/workers/services/inference",
-      "target": "<none>"
+      "target": "\u003cnone\u003e"
     },
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/workers/services/testing",
-      "target": "<none>"
+      "target": "\u003cnone\u003e"
     },
     {
       "rule": "service-root-missing-internal",
@@ -2419,11 +2619,6 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_definitions/contracts",
-      "target": "pkg/services/factory_definitions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_definitions/decisionenvelope",
       "target": "pkg/services/factory_definitions"
     },
@@ -2436,6 +2631,76 @@
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_definitions/editable",
       "target": "pkg/services/factory_definitions"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/authoring_layout/expand",
+      "target": "pkg/services/factory_definitions/internal/services/authoring_layout"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/authoring_layout/flatten",
+      "target": "pkg/services/factory_definitions/internal/services/authoring_layout"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/authoring_layout/persist",
+      "target": "pkg/services/factory_definitions/internal/services/authoring_layout"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/authoring_layout/prepare",
+      "target": "pkg/services/factory_definitions/internal/services/authoring_layout"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/compilation/canonical",
+      "target": "pkg/services/factory_definitions/internal/services/compilation"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/compilation/loadedsource",
+      "target": "pkg/services/factory_definitions/internal/services/compilation"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/compilation/loading",
+      "target": "pkg/services/factory_definitions/internal/services/compilation"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/compilation/runtimeconfig",
+      "target": "pkg/services/factory_definitions/internal/services/compilation"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/distribution/packagedcatalog",
+      "target": "pkg/services/factory_definitions/internal/services/distribution"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/distribution/packagedinstallation",
+      "target": "pkg/services/factory_definitions/internal/services/distribution"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/distribution/scaffoldfacts",
+      "target": "pkg/services/factory_definitions/internal/services/distribution"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/capture",
+      "target": "pkg/services/factory_definitions/internal/services/snapshots_portability"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/materialize",
+      "target": "pkg/services/factory_definitions/internal/services/snapshots_portability"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/prepare",
+      "target": "pkg/services/factory_definitions/internal/services/snapshots_portability"
     },
     {
       "rule": "service-root-unexpected-directory",
@@ -2470,6 +2735,11 @@
     {
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_definitions/namedpaths",
+      "target": "pkg/services/factory_definitions"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_definitions/namevalue",
       "target": "pkg/services/factory_definitions"
     },
     {
@@ -2559,16 +2829,6 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/checkpointstore",
-      "target": "pkg/services/factory_runtime"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/checkpointsummary",
-      "target": "pkg/services/factory_runtime"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_runtime/context",
       "target": "pkg/services/factory_runtime"
     },
@@ -2595,6 +2855,11 @@
     {
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_runtime/metrics",
+      "target": "pkg/services/factory_runtime"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_runtime/orchestrationowner",
       "target": "pkg/services/factory_runtime"
     },
     {
@@ -2674,7 +2939,22 @@
     },
     {
       "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/operator_settings/servicewire",
+      "target": "pkg/services/operator_settings"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/operator_settings/testdata",
+      "target": "pkg/services/operator_settings"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/operator_settings/testlink",
+      "target": "pkg/services/operator_settings"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/operator_settings/testproviders",
       "target": "pkg/services/operator_settings"
     },
     {
@@ -2710,6 +2990,11 @@
     {
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/work/service",
+      "target": "pkg/services/work"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/work/stateaccessrecordings",
       "target": "pkg/services/work"
     },
     {
@@ -2801,43 +3086,6 @@
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/workers/worktree",
       "target": "pkg/services/workers"
-    },
-    {
-      "rule": "service-root-interface-count",
-      "filePath": "pkg/services/recordings/internal/services/artifacts_export",
-      "target": "pkg/services/recordings/internal/services/artifacts_export/service.go:PortableArtifactPublication,pkg/services/recordings/internal/services/artifacts_export/service.go:Service,pkg/services/recordings/internal/services/artifacts_export/service.go:SnapshotSource"
-    },
-    {
-      "rule": "deprecated-runtime-api-file",
-      "filePath": "tests/functional/runtime_api/api_batch_ingress_starvation_regression_test.go",
-      "target": "tests/functional/runtime_api"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_batch_ingress_starvation_regression_test.go",
-      "target": "TestBlockedDispatchConcurrentBatchIngressRegression"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/sessions/live_runtime_build_process_test.go",
-      "target": "sessions"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_definitions/distribute_validation.go",
-      "target": "ValidateInstallPackagedFactoryRequest"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_definitions/install_packaged_factory_operation.go",
-      "target": "NewInstallPackagedFactoryOperation"
-    }
-  ],
-  "violations": [
-    {
-      "rule": "service-root-interface-count",
-      "filePath": "pkg/services/workers/internal/services/runners",
-      "target": "pkg/services/workers/internal/services/runners/service.go:InferenceLocalInvoker,pkg/services/workers/internal/services/runners/service.go:Service"
     }
   ]
 }

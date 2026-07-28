@@ -18,6 +18,8 @@ import (
 	factory_context "github.com/portpowered/infinite-you/pkg/services/factory_runtime/context"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/engine"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
+	checkpointrecovery "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery"
+	checkpointrecoverywire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/wire"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
 	dispatchplanningwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/wire"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime/buffers"
@@ -52,6 +54,7 @@ type factoryImpl struct {
 	resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult]
 	dispatchFlow *dispatchPlanningResultHook
 	dispatchPlan dispatchplanning.Service
+	checkpointRecovery checkpointrecovery.Service
 	workers      workers.WorkstationPoolBoundary
 	eventHistory recordings.RuntimeLedger
 	state        interfaces.FactoryState
@@ -193,7 +196,7 @@ func New(
 	)
 	impl := newFactoryImpl(
 		cfg, nil, effectiveLogger, resultBuffer,
-		dispatchResultHook, dispatchPlan, workersBoundary, effectiveEventHistory,
+		dispatchResultHook, dispatchPlan, checkpointrecoverywire.New(), workersBoundary, effectiveEventHistory,
 	)
 	var recordPetriMutations func([]interfaces.TokenMutationRecord) error
 	if cfg.petriMutationRecorder != nil {
@@ -442,6 +445,7 @@ func newFactoryImpl(
 	resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult],
 	dispatchFlow *dispatchPlanningResultHook,
 	dispatchPlan dispatchplanning.Service,
+	checkpointRecovery checkpointrecovery.Service,
 	workersBoundary workers.WorkstationPoolBoundary,
 	eventHistory recordings.RuntimeLedger,
 ) *factoryImpl {
@@ -453,6 +457,7 @@ func newFactoryImpl(
 		resultBuffer:         resultBuffer,
 		dispatchFlow:         dispatchFlow,
 		dispatchPlan:         dispatchPlan,
+		checkpointRecovery:   checkpointRecovery,
 		workers:              workersBoundary,
 		eventHistory:         eventHistory,
 		state:                interfaces.FactoryStateIdle,

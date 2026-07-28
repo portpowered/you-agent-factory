@@ -15,9 +15,9 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/portablefiles"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
+	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
 	distributionscaffoldfacts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/scaffoldfacts"
-	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
+	factorydefinitionsinternal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factorydefaultscaffold "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/defaultscaffold"
 )
@@ -169,7 +169,7 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 	versionFileSystem := &recordingVersionFileSystem{}
 	clock := &recordingClock{}
 
-	packagedCatalog, err := factorydefinitionsservice.NewPackagedFactoryCatalog([]factorydefinitions.PackagedDefinition{{
+	packagedCatalog, err := factorydefinitionsinternal.NewPackagedFactoryCatalog([]factorydefinitions.PackagedDefinition{{
 		Name:    "@you/wire-inert",
 		Project: "wire-inert",
 		JSON:    []byte(`{"name":"wire-inert"}`),
@@ -183,7 +183,7 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 
 	service, err := factorydefinitionswire.NewService(sessionHost, wireStubActivationGateway{}, stubValidator{},
 		stubPersistence{},
-		&factoryloading.Loader{},
+		&compilationloading.Loader{},
 		func(string, *factorydefinitions.FactoryConfig, bool, bool) error { return nil },
 		func(string, *factorydefinitions.FactoryConfig) error { return nil },
 		namedPaths,
@@ -255,7 +255,7 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 func TestNewServiceServesPublishedPackagedCatalogPeerBehavior(t *testing.T) {
 	t.Parallel()
 
-	packagedCatalog, err := factorydefinitionsservice.NewPackagedFactoryCatalog([]factorydefinitions.PackagedDefinition{
+	packagedCatalog, err := factorydefinitionsinternal.NewPackagedFactoryCatalog([]factorydefinitions.PackagedDefinition{
 		{
 			Name: "@you/review", Project: "builtin-review",
 			JSON: []byte(`{"name":"review"}`),
@@ -520,7 +520,7 @@ type constructionPorts struct {
 	activationGateway             factorydefinitions.DefinitionActivationGateway
 	validator                     factorydefinitions.Validator
 	persistence                   factorydefinitions.Persistence
-	loader                        *factoryloading.Loader
+	loader                        *compilationloading.Loader
 	applySupportedFiles           factorydefinitions.PortableBundledFilesApplier
 	applyStarterWork              factorydefinitions.FactoryStarterWorkApplier
 	namedPaths                    factorydefinitions.NamedPathResolver
@@ -539,7 +539,7 @@ type constructionPorts struct {
 func validConstructionPorts(t *testing.T) constructionPorts {
 	t.Helper()
 
-	packagedCatalog, err := factorydefinitionsservice.NewPackagedFactoryCatalog([]factorydefinitions.PackagedDefinition{{
+	packagedCatalog, err := factorydefinitionsinternal.NewPackagedFactoryCatalog([]factorydefinitions.PackagedDefinition{{
 		Name:    "@you/wire-test",
 		Project: "wire-test",
 		JSON:    []byte(`{"name":"wire-test"}`),
@@ -557,7 +557,7 @@ func validConstructionPorts(t *testing.T) constructionPorts {
 		activationGateway:             wireStubActivationGateway{},
 		validator:                     stubValidator{},
 		persistence:                   stubPersistence{},
-		loader:                        &factoryloading.Loader{},
+		loader:                        &compilationloading.Loader{},
 		applySupportedFiles:           func(string, *factorydefinitions.FactoryConfig, bool, bool) error { return nil },
 		applyStarterWork:              func(string, *factorydefinitions.FactoryConfig) error { return nil },
 		namedPaths:                    stubNamedPathResolver{},
@@ -884,7 +884,7 @@ func TestNewServiceInstallAndScaffoldReturnMatchingDistributedFacts(t *testing.T
 	if err != nil {
 		t.Fatalf("marshal goal factory: %v", err)
 	}
-	packagedCatalog, err := factorydefinitionsservice.NewPackagedFactoryCatalog([]factorydefinitions.PackagedDefinition{{
+	packagedCatalog, err := factorydefinitionsinternal.NewPackagedFactoryCatalog([]factorydefinitions.PackagedDefinition{{
 		Name:    "@you/goal",
 		Project: "builtin-goal",
 		JSON:    goalJSON,
@@ -938,7 +938,7 @@ func TestNewServiceInstallAndScaffoldReturnMatchingDistributedFacts(t *testing.T
 		ports.orchestratorValidator,
 		ports.portableFileSystem,
 		ports.directoryReplacementStore,
-		factorydefinitionsservice.WithDistributionScaffold(
+		factorydefinitionswire.WithDistributionScaffold(
 			scaffoldInitializer,
 			distributionscaffoldfacts.LocalFactoryNameResolver(),
 		),

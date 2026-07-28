@@ -7,7 +7,7 @@ import (
 	"io"
 
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	operatorsettingsservicewire "github.com/portpowered/infinite-you/pkg/services/operator_settings/servicewire"
+	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	operatorsettingscli "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/cli"
 )
 
@@ -53,7 +53,7 @@ func NewConfigurer(
 		if err := operatorsettingscli.ValidateConfigureBoundary(adapterCfg); err != nil {
 			return err
 		}
-		root, err := operatorsettingsservicewire.NewServiceFromConfigDocument(service)
+		root, err := settingswire.NewServiceFromConfigDocument(service)
 		if err != nil {
 			return fmt.Errorf("configure operator settings: %w", err)
 		}

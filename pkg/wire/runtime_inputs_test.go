@@ -120,6 +120,34 @@ func TestWorkRequestEffectsUseExplicitEdgesOrProcessDefaults(t *testing.T) {
 	}
 }
 
+func TestProvideWorkFactoryConstructsThroughWorkWireBridge(t *testing.T) {
+	t.Parallel()
+
+	staging, err := provideWorkContentStagingService(serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("provideWorkContentStagingService() error = %v", err)
+	}
+	hostPlatform := provideWorkContentHostPlatform(serviceedges.Edges{})
+	materializer, err := provideContentMaterializer(hostPlatform, serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("provideContentMaterializer() error = %v", err)
+	}
+	readFile := provideWorkSubmittedFileReader(serviceedges.Edges{})
+
+	factory := provideWorkFactory(readFile, staging, materializer)
+	if factory == nil {
+		t.Fatal("provideWorkFactory() returned nil factory")
+	}
+	service := factory(nil)
+	if service == nil {
+		t.Fatal("Work factory returned nil service")
+	}
+	var root work.Service = service
+	if root == nil {
+		t.Fatal("constructed value is not assignable to work.Service")
+	}
+}
+
 func TestFactorySessionRuntimeIdentityUsesExplicitEdgeOrProcessDefault(t *testing.T) {
 	t.Parallel()
 	override := factorysessions.RuntimeInstanceIDGenerator(func() string { return "runtime-edge" })

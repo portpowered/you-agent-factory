@@ -2,41 +2,41 @@ package kiro
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 
-	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
-	"github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter"
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 )
 
-// IntegrationDependencies are the execution collaborators used by Kiro's
-// registry-backed integration.
+const (
+	// TimeoutFailureMessage is the canonical Kiro timeout outcome.
+	TimeoutFailureMessage = "Kiro request timed out."
+)
+
+// IntegrationDependencies are the Providers collaborators used by Kiro's
+// registry-backed integration on the neutral conductor path.
 type IntegrationDependencies struct {
-	CommandRunner workerprocess.CommandRunner
+	ProvidersService providers.Service
 }
 
-// Integration is Kiro's provider-owned neutral-conductor implementation.
+// Integration routes Kiro through the Providers root execution boundary.
 type Integration struct {
-	runner workerprocess.CommandRunner
+	providers providers.Service
 }
 
-// NewIntegration constructs Kiro's integration. A nil runner is reserved for
-// inert registry composition; invocation requires a composed command runner.
+// NewIntegration constructs Kiro's registry-backed integration.
 func NewIntegration(deps ...IntegrationDependencies) *Integration {
 	integration := &Integration{}
 	if len(deps) > 0 {
-		integration.runner = deps[0].CommandRunner
+		integration.providers = deps[0].ProvidersService
 	}
 	return integration
 }
 
 func (*Integration) Identity() inference.Identity {
-	return inference.Identity(providerIdentity)
+	return inference.Identity("kiro")
 }
 
 func (*Integration) MaximumCapabilities() inference.CapabilitySet {
@@ -58,240 +58,195 @@ func (i *Integration) Capabilities(
 	return i.MaximumCapabilities(), nil
 }
 
-// Invoke runs Kiro once, translates its final-only response, and closes the
-// response writer with exactly one authoritative completion.
+// Invoke executes Kiro through providers.Service and publishes final-only
+// progress before closing with exactly one terminal outcome.
 func (i *Integration) Invoke(
 	ctx context.Context,
 	request inference.InvocationRequest,
 	writer inference.ResponseWriter,
 ) error {
-	providerRequest := kiroRequestFromInvocation(request)
-	built, err := NewAdapter().BuildCommand(ctx, adapter.CommandContext{
-		Request:         providerRequest,
-		SkipPermissions: providerRequest.SkipPermissions,
-	})
-	if err != nil {
-		return writer.Close(ctx, inference.FailedCompletion(inference.NewFailure(inference.FailureInput{
-			Kind:    inference.FailureInvalidRequest,
-			Message: err.Error(),
-		})))
+	if i == nil || i.providers == nil {
+		failure := inference.NewFailure(inference.FailureInput{
+			Kind:    inference.FailureDependency,
+			Message: "Kiro Providers service is unavailable",
+		})
+		if err := writeFailureProgress(ctx, writer, request.InvocationID(), failure); err != nil {
+			return err
+		}
+		return writer.Close(ctx, inference.FailedCompletion(failure))
 	}
-
-	result, runErr := i.commandRunner().Run(ctx, built.Request)
-	if errors.Is(ctx.Err(), context.Canceled) {
+	result, err := i.providers.Execute(ctx, executeRequestFromInvocation(request))
+	if errors.Is(ctx.Err(), context.Canceled) && !errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		return ctx.Err()
 	}
-	if errors.Is(runErr, context.Canceled) {
-		return runErr
-	}
-	requestedSession := validRequestedSession(request.ProviderSession())
-	if requestedSession == nil {
-		// The product runner carries configured resume state in Execution while
-		// direct protocol callers can supply ProviderSession. Normalize both
-		// accepted entry paths before applying Kiro's emitted-session semantics.
-		requestedSession = newProviderSession(providerRequest.SessionID)
-	}
-	resultSession := responseFromOutput(
-		result.Stdout,
-		result.Stderr,
-		requestedSession,
-	).ProviderSession()
-	classified := NewAdapter().ClassifyFailure(ctx, adapter.FailureContext{
-		CommandResult: result,
-		CommandError:  runErr,
-	})
-	if classified.Failure != nil {
-		if err := writeKiroFailureProgress(ctx, writer, request.InvocationID(), *classified.Failure); err != nil {
-			return err
+	if err != nil {
+		failure := failureFromExecuteError(request, err)
+		if writeErr := writeFailureProgress(ctx, writer, request.InvocationID(), failure); writeErr != nil {
+			return writeErr
 		}
-		return writer.Close(ctx, inference.FailedCompletion(
-			failureFromKiroFacts(*classified.Failure, resultSession),
-		))
+		return writer.Close(ctx, inference.FailedCompletion(failure))
 	}
-	if runErr != nil {
-		facts := adapter.FailureFacts{
-			Type:    workerexecution.WorkFailureTypeUnknown,
-			Message: "Kiro invocation failed.",
-		}
-		if err := writeKiroFailureProgress(ctx, writer, request.InvocationID(), facts); err != nil {
-			return err
-		}
-		return writer.Close(ctx, inference.FailedCompletion(inference.NewFailure(inference.FailureInput{
-			Kind:    inference.FailureUnknown,
-			Message: facts.Message,
-		})))
-	}
-
-	response := responseFromOutput(result.Stdout, result.Stderr, requestedSession)
-	if err := writeFinalOnlyProgress(ctx, writer, request.InvocationID(), response.Content()); err != nil {
+	if err := writeFinalOnlyProgress(ctx, writer, request.InvocationID(), result.Content); err != nil {
 		return err
 	}
-	return writer.Close(ctx, inference.SuccessfulCompletion(response))
+	return writer.Close(ctx, inference.SuccessfulCompletion(inference.NewResponse(inference.ResponseInput{
+		Content:         result.Content,
+		ProviderSession: sessionRefToInference(result.SessionRef),
+	})))
 }
 
-func failureFromKiroFacts(
-	facts adapter.FailureFacts,
-	session *inference.ProviderSession,
-) inference.Failure {
+func executeRequestFromInvocation(request inference.InvocationRequest) providers.ExecuteRequest {
+	execution := request.Execution()
+	executeRequest := providers.ExecuteRequest{
+		Provider:           providers.IDKiro,
+		AttemptID:          request.InvocationID(),
+		Model:              request.Model(),
+		SkipPermissions:    execution.SkipPermissions,
+		SystemPrompt:       request.SystemPrompt(),
+		UserMessage:        request.UserMessage(),
+		OutputSchema:       request.OutputSchema(),
+		WorkingDirectory:   execution.WorkingDirectory,
+		Worktree:           execution.Worktree,
+		ProcessEnvironment: append([]string(nil), execution.ProcessEnvironment...),
+		EnvVars:            cloneStringMap(execution.EnvVars),
+		WorkerType:         workerNameFromExecution(execution),
+		WorkstationName:    workstationNameFromExecution(execution),
+	}
+	if session := requestedSession(request); session != nil {
+		executeRequest.ResumeSession = session
+	}
+	return executeRequest
+}
+
+func workerNameFromExecution(execution workers.ProviderInferenceRequest) string {
+	if execution.WorkerType != "" {
+		return execution.WorkerType
+	}
+	return execution.Dispatch.WorkerType
+}
+
+func workstationNameFromExecution(execution workers.ProviderInferenceRequest) string {
+	if execution.WorkstationType != "" {
+		return execution.WorkstationType
+	}
+	return execution.Dispatch.WorkstationName
+}
+
+func requestedSession(request inference.InvocationRequest) *providers.SessionRef {
+	if session := request.ProviderSession(); session != nil && isKiroProvider(session.Provider()) &&
+		strings.TrimSpace(session.Kind()) == providers.SessionIDKind {
+		return &providers.SessionRef{
+			Provider: providers.IDKiro,
+			Kind:     providers.SessionIDKind,
+			ID:       strings.TrimSpace(session.ID()),
+		}
+	}
+	if sessionID := strings.TrimSpace(request.Execution().SessionID); sessionID != "" {
+		return &providers.SessionRef{
+			Provider: providers.IDKiro,
+			Kind:     providers.SessionIDKind,
+			ID:       sessionID,
+		}
+	}
+	return nil
+}
+
+func isKiroProvider(provider string) bool {
+	provider = strings.TrimSpace(provider)
+	return strings.EqualFold(provider, "kiro") ||
+		strings.EqualFold(provider, string(providers.IDKiro))
+}
+
+func failureFromExecuteError(request inference.InvocationRequest, err error) inference.Failure {
+	var failure providers.ExecuteFailure
+	if errors.As(err, &failure) {
+		kind := executeFailureKind(failure.Kind)
+		message := strings.TrimSpace(failure.Message)
+		retryable := false
+		switch kind {
+		case inference.FailureTimeout:
+			message = TimeoutFailureMessage
+			retryable = true
+		case inference.FailureThrottled:
+			retryable = true
+		case inference.FailureAuthentication:
+			if message == "" {
+				message = "Kiro authentication failed. Sign in again and retry."
+			}
+		case inference.FailureInvalidRequest:
+			if message == "" {
+				message = "Kiro rejected the request as invalid."
+			}
+		}
+		return inference.NewFailure(inference.FailureInput{
+			Kind:            kind,
+			Message:         message,
+			Retryable:       retryable,
+			ProviderSession: failureSessionForInvocation(request, failure.SessionRef),
+		})
+	}
+	if errors.Is(err, providers.ErrExecuteCancelled) {
+		return inference.NewFailure(inference.FailureInput{
+			Kind:    inference.FailureCanceled,
+			Message: "provider invocation was canceled",
+		})
+	}
+	if errors.Is(err, providers.ErrExecuteTimeout) {
+		return inference.NewFailure(inference.FailureInput{
+			Kind:      inference.FailureTimeout,
+			Message:   TimeoutFailureMessage,
+			Retryable: true,
+		})
+	}
 	return inference.NewFailure(inference.FailureInput{
-		Kind:            kiroFailureKind(facts.Type),
-		Message:         facts.Message,
-		Retryable:       facts.Retry.Retryable,
-		ProviderSession: session,
+		Kind:    inference.FailureUnknown,
+		Message: "Kiro invocation failed.",
 	})
 }
 
-func kiroFailureKind(failureType workerexecution.WorkFailureType) inference.FailureKind {
-	switch failureType {
-	case workerexecution.WorkFailureTypeTimeout:
+func executeFailureKind(kind providers.ExecuteFailureKind) inference.FailureKind {
+	switch kind {
+	case providers.ExecuteFailureKindCanceled:
+		return inference.FailureCanceled
+	case providers.ExecuteFailureKindTimeout:
 		return inference.FailureTimeout
-	case workerexecution.WorkFailureTypeThrottled:
-		return inference.FailureThrottled
-	case workerexecution.WorkFailureTypeAuthFailure:
+	case providers.ExecuteFailureKindAuthentication:
 		return inference.FailureAuthentication
-	case workerexecution.WorkFailureTypePermanentBadRequest:
+	case providers.ExecuteFailureKindInvalidRequest:
 		return inference.FailureInvalidRequest
-	case workerexecution.WorkFailureTypeMisconfigured:
+	case providers.ExecuteFailureKindThrottled:
+		return inference.FailureThrottled
+	case providers.ExecuteFailureKindDependency:
 		return inference.FailureDependency
 	default:
 		return inference.FailureUnknown
 	}
 }
 
-func (i *Integration) commandRunner() workerprocess.CommandRunner {
-	if i != nil && i.runner != nil {
-		return i.runner
+func sessionRefToInference(ref *providers.SessionRef) *inference.ProviderSession {
+	if ref == nil || strings.TrimSpace(ref.ID) == "" {
+		return nil
 	}
-	return workerprocess.CommandRunnerWithLogging(nil, nil, nil)
+	session := inference.NewProviderSession("kiro", ref.Kind, ref.ID, nil)
+	return &session
 }
 
-func kiroRequestFromInvocation(request inference.InvocationRequest) workerexecution.ProviderInferenceRequest {
-	providerRequest := request.Execution()
-	if providerRequest.Dispatch.DispatchID == "" {
-		providerRequest.Dispatch.DispatchID = request.InvocationID()
-	}
-	providerRequest.ModelProvider = string(modelprovider.ProviderKiro)
-	providerRequest.Model = request.Model()
-	providerRequest.SystemPrompt = request.SystemPrompt()
-	providerRequest.UserMessage = request.UserMessage()
-	providerRequest.OutputSchema = request.OutputSchema()
-	if session := validRequestedSession(request.ProviderSession()); session != nil {
-		providerRequest.SessionID = session.ID()
-	}
-	return providerRequest
+func failureSessionForInvocation(
+	_ inference.InvocationRequest,
+	ref *providers.SessionRef,
+) *inference.ProviderSession {
+	return sessionRefToInference(ref)
 }
 
-func writeKiroFailureProgress(
-	ctx context.Context,
-	writer inference.ResponseWriter,
-	runID string,
-	facts adapter.FailureFacts,
-) error {
-	payload, err := json.Marshal(workerexecution.ErrorPayload{
-		Code:      string(facts.Type),
-		Message:   facts.Message,
-		Retryable: facts.Retry.Retryable,
-	})
-	if err != nil {
-		return fmt.Errorf("marshal Kiro failure payload: %w", err)
+func cloneStringMap(values map[string]string) map[string]string {
+	if values == nil {
+		return nil
 	}
-	event, err := inference.NewEventDraft(inference.EventDraftInput{
-		RunID:   runID,
-		Kind:    workerexecution.KindError,
-		Phase:   workerexecution.PhaseFailed,
-		Payload: payload,
-		Provenance: workerexecution.Provenance{
-			Delivery:        workerexecution.DeliverySynthesized,
-			Fidelity:        workerexecution.FidelityLifecycleOnly,
-			NativeEventType: "provider_failure",
-			Provider:        providerIdentity,
-			Representation:  workerexecution.RepresentationNotification,
-		},
-	})
-	if err != nil {
-		return err
+	cloned := make(map[string]string, len(values))
+	for key, value := range values {
+		cloned[key] = value
 	}
-	return writer.WriteEvent(ctx, event)
-}
-
-func writeFinalOnlyProgress(
-	ctx context.Context,
-	writer inference.ResponseWriter,
-	runID, content string,
-) error {
-	events, err := finalOnlyProgressEvents(runID, content)
-	if err != nil {
-		return err
-	}
-	for _, event := range events {
-		if err := writer.WriteEvent(ctx, event); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func finalOnlyProgressEvents(runID, content string) ([]inference.EventDraft, error) {
-	started, err := finalOnlyRunEvent(runID, workerexecution.PhaseStarted)
-	if err != nil {
-		return nil, err
-	}
-	message, err := finalOnlyMessageEvent(runID, content)
-	if err != nil {
-		return nil, err
-	}
-	completed, err := finalOnlyRunEvent(runID, workerexecution.PhaseCompleted)
-	if err != nil {
-		return nil, err
-	}
-	return []inference.EventDraft{started, message, completed}, nil
-}
-
-func finalOnlyRunEvent(runID string, phase workerexecution.Phase) (inference.EventDraft, error) {
-	payload, err := json.Marshal(workerexecution.RunPayload{Status: string(phase)})
-	if err != nil {
-		return inference.EventDraft{}, fmt.Errorf("marshal Kiro run payload: %w", err)
-	}
-	return inference.NewEventDraft(inference.EventDraftInput{
-		RunID:   runID,
-		Kind:    workerexecution.KindRun,
-		Phase:   phase,
-		Payload: payload,
-		Provenance: workerexecution.Provenance{
-			Delivery:        workerexecution.DeliverySynthesized,
-			Fidelity:        workerexecution.FidelityLifecycleOnly,
-			NativeEventType: "command_completion",
-			Provider:        providerIdentity,
-			Representation:  workerexecution.RepresentationNotification,
-		},
-	})
-}
-
-func finalOnlyMessageEvent(runID, content string) (inference.EventDraft, error) {
-	payload, err := json.Marshal(workerexecution.MessagePayload{
-		Role: "assistant",
-		ContentBlocks: []workerexecution.ContentBlock{{
-			Kind: workerexecution.ContentBlockText,
-			Text: strings.Clone(content),
-		}},
-	})
-	if err != nil {
-		return inference.EventDraft{}, fmt.Errorf("marshal Kiro message payload: %w", err)
-	}
-	return inference.NewEventDraft(inference.EventDraftInput{
-		RunID:   runID,
-		Kind:    workerexecution.KindMessage,
-		Phase:   workerexecution.PhaseCompleted,
-		ItemID:  "kiro-final",
-		Payload: payload,
-		Provenance: workerexecution.Provenance{
-			Delivery:        workerexecution.DeliveryNativeFinal,
-			Fidelity:        workerexecution.FidelityFinalOnly,
-			NativeEventType: "final_response",
-			Provider:        providerIdentity,
-			Representation:  workerexecution.RepresentationSnapshot,
-		},
-	})
+	return cloned
 }
 
 var _ inference.Integration = (*Integration)(nil)

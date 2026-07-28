@@ -213,6 +213,47 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	}
 }
 
+func TestNewRuntimeServiceConstructsPublishedRootFromWiredCollaborators(t *testing.T) {
+	t.Parallel()
+
+	inputs := validNewServiceInputs(t)
+	staging, err := workwire.NewContentStagingService(
+		inputs.filesystem,
+		inputs.random,
+		inputs.clock,
+		0,
+	)
+	if err != nil {
+		t.Fatalf("NewContentStagingService() error = %v", err)
+	}
+	materializer, err := workwire.NewContentMaterializationService(
+		inputs.hostPlatform,
+		inputs.httpDoer,
+		inputs.inspectPath,
+		inputs.createTempFile,
+		inputs.removePath,
+		inputs.writeFile,
+		inputs.openFile,
+	)
+	if err != nil {
+		t.Fatalf("NewContentMaterializationService() error = %v", err)
+	}
+
+	service := workwire.NewRuntimeService(
+		inputs.runtimes,
+		os.ReadFile,
+		staging,
+		materializer,
+	)
+	if service == nil {
+		t.Fatal("NewRuntimeService() returned nil service")
+	}
+	var root work.Service = service
+	if root == nil {
+		t.Fatal("constructed value is not assignable to work.Service")
+	}
+}
+
 func TestNewServiceServesPublishedPeerBehavior(t *testing.T) {
 	t.Parallel()
 
