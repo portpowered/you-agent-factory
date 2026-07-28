@@ -714,10 +714,15 @@ Wave 0 functional-tests-expansion planning authority lives under
   safety through `support.BuildProcess` + `support.FlattenFactoryConfig` /
   `support.CreateNamedFactory` CLI round-trips with `support.RunFactoryToCompletionWithEdgesAndWork`
   for terminal run proofs; sibling `agent_factory_export_import_fixture_test.go`,
-  `export_import_fixture_test.go`, and `export_import_nested_docs_test.go` own
-  delete-03 fixture/nested-docs drain proofs via `flattenFactoryConfigWithEdges`
-  (local `BuildProcess` + `ProviderCommandRunner` zero-call helper) and public
-  `factory create` / `factory list` Current Factory signals; catalog metadata
+  `export_import_fixture_test.go`, `export_import_nested_docs_test.go`, and
+  `api_export_import_e2e_smoke_test.go` own delete-03 fixture/nested-docs and
+  customer-path smoke drain proofs via `flattenFactoryConfigWithEdges`
+  (local `BuildProcess` + `ProviderCommandRunner` zero-call helper), public
+  `factory create` / `factory list` Current Factory signals, and
+  `support.StartFunctionalAPIServer` + `support.SubmitDefaultSessionWork` only
+  when proving imported-factory work acceptance; compare flatten readback with
+  JSON-normalized factory contracts because named identity lives in `factory list`
+  while authored `name` may remain on flatten payloads; catalog metadata
   infers domain `factory/definitions`.
   `tests/functional/factory/definitions/validation_test.go` and sibling
   `metadata_contract_test.go` own Factory definition validation rejection,
