@@ -1,0 +1,25 @@
+{
+  "formatVersion": "pss-provider-sessions-top-level-inventory/v1",
+  "ownerPackage": "pkg/services/provider_sessions",
+  "sortKey": "directory name ascending byte order",
+  "hasUnexpectedPublicSiblingsBeyondService": false,
+  "unexpectedPublicSiblingsBeyondService": [],
+  "children": [
+    {
+      "directory": "internal",
+      "classification": "canonical_retain"
+    },
+    {
+      "directory": "service",
+      "classification": "unexpected_public_sibling"
+    },
+    {
+      "directory": "transports",
+      "classification": "canonical_retain"
+    },
+    {
+      "directory": "wire",
+      "classification": "canonical_retain"
+    }
+  ]
+}

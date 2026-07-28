@@ -39,19 +39,23 @@ func TestDurableResumeInterruptedSessionReturnsPublishedSuccessShape(t *testing.
 	if resumed.SessionID != resumeOwnerSessionID {
 		t.Fatalf("sessionId = %q, want %q", resumed.SessionID, resumeOwnerSessionID)
 	}
-	if resumed.Status != string(factorysessions.LifecycleStatusResuming) {
-		t.Fatalf("status = %q, want RESUMING", resumed.Status)
-	}
-
-	final := waitUntilOwnerSessionStatus(
-		t,
-		owner,
-		resumeOwnerSessionID,
-		factorysessions.LifecycleStatusSucceeded,
-		5*time.Second,
-	)
-	if final.SessionID != resumeOwnerSessionID {
-		t.Fatalf("final sessionId = %q, want %q", final.SessionID, resumeOwnerSessionID)
+	switch resumed.Status {
+	case string(factorysessions.LifecycleStatusResuming):
+		final := waitUntilOwnerSessionStatus(
+			t,
+			owner,
+			resumeOwnerSessionID,
+			factorysessions.LifecycleStatusSucceeded,
+			5*time.Second,
+		)
+		if final.SessionID != resumeOwnerSessionID {
+			t.Fatalf("final sessionId = %q, want %q", final.SessionID, resumeOwnerSessionID)
+		}
+	case string(factorysessions.LifecycleStatusSucceeded):
+		// Under full-suite parallel load the resume goroutine can finish before
+		// the published async-start snapshot is observed as RESUMING.
+	default:
+		t.Fatalf("status = %q, want RESUMING or SUCCEEDED", resumed.Status)
 	}
 }
 

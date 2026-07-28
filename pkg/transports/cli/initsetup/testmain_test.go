@@ -1,4 +1,4 @@
-package operatorsettings_test
+package initsetup_test
 
 import (
 	"testing"
@@ -7,6 +7,6 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	testlink.RegisterComposition()
+	testlink.RegisterProvidersRoot()
 	m.Run()
 }
