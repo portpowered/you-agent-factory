@@ -14,12 +14,6 @@
       ]
     },
     {
-      "test": "tests/functional/runtime_api/api_session_invocation_test.go::TestSessionInvocationAPI_ReturnsPrimaryResult",
-      "stableIds": [
-        "rest/invokeFactorySessionBySessionId"
-      ]
-    },
-    {
       "test": "tests/functional/sessions/execution/results_dispatches_test.go::TestAPIDispatchListAndDetailExposePublicCorrelation",
       "stableIds": [
         "rest/getFactorySessionDispatch",
