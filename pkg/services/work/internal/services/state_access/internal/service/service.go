@@ -9,16 +9,21 @@ import (
 )
 
 // Service owns session-scoped submit and operator move through the private
-// Session adapter port.
+// Session adapter port and Recordings-backed reads through the private
+// Recordings adapter port.
 type Service struct {
-	sessions stateaccess.SessionResolver
+	sessions    stateaccess.SessionResolver
+	recordings  stateaccess.RecordingsAdapter
 }
 
 var _ stateaccess.Service = (*Service)(nil)
 
 // New constructs the private state_access implementation.
-func New(sessions stateaccess.SessionResolver) *Service {
-	return &Service{sessions: sessions}
+func New(
+	sessions stateaccess.SessionResolver,
+	recordings stateaccess.RecordingsAdapter,
+) *Service {
+	return &Service{sessions: sessions, recordings: recordings}
 }
 
 func (s *Service) SubmitWorkRequestForSession(
