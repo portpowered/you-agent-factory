@@ -741,6 +741,11 @@ paths consume the gateway directly; `SessionHost` no longer carries activation
 ports or `AttachFactoryDefinitions`. Runtime opening binds constructed Definitions
 into Sessions through `sessionservice.InstallFactoryDefinitions` after
 `FactoryDefinitionsFactory` returns, preserving a one-way Sessions-owned edge.
+Activation-adjacent tests should pass a dedicated `DefinitionActivationGateway`
+fake or the real Sessions gateway instead of embedding activation ports on
+`SessionHost`/`Host` test doubles; see `definition/activation_gateway_test.go`,
+`definition/activation_sealed_test.go`, and
+`sessionservice/definition_activation_peer_integration_test.go`.
 
 When publishing additive CTR-DEF catalog (or later) slices on that root
 `Service`, declare plain request/result value types beside the interface,

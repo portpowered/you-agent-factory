@@ -62,7 +62,7 @@ func TestSaveReplaceCurrentForSession_RejectsStaleBaseVersion(t *testing.T) {
 			Version: &currentVersion,
 		},
 	}
-	svc := newTestService(host, host)
+	svc := newTestService(host, host.activationGateway())
 
 	staleVersion := factoryapi.HybridLogicalTimestamp{
 		Logical:  4,
@@ -137,7 +137,7 @@ func TestSaveReplaceCurrentForSession_PersistsSplitLayout(t *testing.T) {
 			},
 		},
 	}
-	svc := newTestService(host, host)
+	svc := newTestService(host, host.activationGateway())
 
 	replacement := factoryapi.Factory{
 		Name: apisurface.DefaultCurrentFactoryName,
@@ -226,7 +226,7 @@ func TestSaveReplaceCurrentForSession_ReplacesNamedCurrentFactoryLayout(t *testi
 			},
 		},
 	}
-	svc := newTestService(host, host)
+	svc := newTestService(host, host.activationGateway())
 	replacement := factoryapi.Factory{
 		Name: "alpha",
 		Id:   saveStringPointer("alpha"),
@@ -292,7 +292,7 @@ func TestSaveReplaceCurrentForSession_RestoresLayoutWhenActivationFails(t *testi
 			},
 		},
 	}
-	svc := newTestService(host, host)
+	svc := newTestService(host, host.activationGateway())
 	replacement := factoryapi.Factory{
 		Name: apisurface.DefaultCurrentFactoryName,
 		Id:   saveStringPointer("root-runtime"),
@@ -439,7 +439,7 @@ func TestSaveReplaceCurrentForSession_RejectsInvalidWritableCurrentName(t *testi
 			Name: "bad/name",
 		},
 	}
-	_, err := newTestService(host, host).SaveReplaceCurrentSnapshotForSession(context.Background(), factorysessions.DefaultSessionID, mustEditableFactoryForTest(t, factoryapi.Factory{}))
+	_, err := newTestService(host, host.activationGateway()).SaveReplaceCurrentSnapshotForSession(context.Background(), factorysessions.DefaultSessionID, mustEditableFactoryForTest(t, factoryapi.Factory{}))
 	if !errors.Is(err, apisurface.ErrInvalidNamedFactoryName) {
 		t.Fatalf("SaveReplaceCurrentForSession error = %v, want invalid named factory name", err)
 	}
@@ -452,6 +452,14 @@ type splitLayoutSaveHost struct {
 	replaceCalled  bool
 	restoreCalled  bool
 	discardCalled  bool
+}
+
+func (h *splitLayoutSaveHost) activationGateway() *trackingActivationGateway {
+	return &trackingActivationGateway{
+		saveNow:      time.Date(2026, 5, 31, 12, 0, 1, 0, time.UTC),
+		runSessionID: factorysessions.DefaultSessionID,
+		activateErr:  h.activateErr,
+	}
 }
 
 func (h *splitLayoutSaveHost) PersistRootDir() string { return h.sessionRootDir }
@@ -517,16 +525,6 @@ func (h *splitLayoutSaveHost) GetCurrentFactorySnapshotForSession(context.Contex
 	return mustFactorySnapshot(h.current), nil
 }
 
-func (h *splitLayoutSaveHost) WithActivationLock(fn func() error) error { return fn() }
-
-func (h *splitLayoutSaveHost) RequireIdleRuntimeForSession(context.Context, string) error {
-	return nil
-}
-
-func (h *splitLayoutSaveHost) ActivateSessionEditableFactory(context.Context, *interfaces.DefinitionSession, string, string, string, string, string) error {
-	return h.activateErr
-}
-
 func (h *splitLayoutSaveHost) ReplaceFactoryLayoutAtDir(
 	targetDir string,
 	prepared *factorydefinitions.PreparedFactoryLayoutPayload,
@@ -557,28 +555,6 @@ func (h *splitLayoutSaveHost) ReplaceFactoryLayoutAtDir(
 			result.DiscardBackup()
 		},
 	}, nil
-}
-
-func (h *splitLayoutSaveHost) SaveNow() time.Time {
-	return time.Date(2026, 5, 31, 12, 0, 1, 0, time.UTC)
-}
-
-func (h *splitLayoutSaveHost) RunSessionID() string { return factorysessions.DefaultSessionID }
-
-func (h *splitLayoutSaveHost) SessionForActivation(string) *interfaces.DefinitionSession {
-	return nil
-}
-
-func (h *splitLayoutSaveHost) NamedFactoryActivationPaths(*interfaces.DefinitionSession) (string, string) {
-	return "", ""
-}
-
-func (h *splitLayoutSaveHost) RequireIdleBeforeNamedFactoryActivation(context.Context, string, *interfaces.DefinitionSession) error {
-	return nil
-}
-
-func (h *splitLayoutSaveHost) SwapPersistedNamedFactoryRuntime(context.Context, string, *interfaces.DefinitionSession, string, string, string, string) error {
-	return nil
 }
 
 func saveWorkerTypeModel() *factoryapi.WorkerType {

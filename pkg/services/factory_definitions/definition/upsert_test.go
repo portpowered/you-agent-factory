@@ -32,7 +32,8 @@ func TestSaveUpsertNamedAndActivateForSession_PersistsChosenTargetName(t *testin
 			},
 		},
 	}
-	svc := newTestService(host, host)
+	gateway := host.activationGateway()
+	svc := newTestService(host, gateway)
 
 	imported := factoryapi.Factory{
 		Name: "imported-target",
@@ -72,8 +73,8 @@ func TestSaveUpsertNamedAndActivateForSession_PersistsChosenTargetName(t *testin
 	if saved.Name != "imported-target" {
 		t.Fatalf("saved factory name = %q, want imported-target", saved.Name)
 	}
-	if host.activatedName != "imported-target" {
-		t.Fatalf("activated factory name = %q, want imported-target", host.activatedName)
+	if gateway.activatedName != "imported-target" {
+		t.Fatalf("activated factory name = %q, want imported-target", gateway.activatedName)
 	}
 
 	factoryDir, err := definitionTestNamedPaths.ResolveExistingDir(sessionRoot, "imported-target")
@@ -113,7 +114,8 @@ func TestSaveUpsertNamedAndActivateForSession_ReplacesExistingNamedFactory(t *te
 	}
 
 	host := &upsertDefinitionHost{sessionRootDir: sessionRoot}
-	svc := newTestService(host, host)
+	gateway := host.activationGateway()
+	svc := newTestService(host, gateway)
 	replacement := factoryapi.Factory{
 		Name: "imported-target",
 		Id:   upsertStringPointer("embedded-runtime"),
@@ -156,15 +158,20 @@ func TestSaveUpsertNamedAndActivateForSession_ReplacesExistingNamedFactory(t *te
 	if saved.Name != "imported-target" {
 		t.Fatalf("saved factory name = %q, want imported-target", saved.Name)
 	}
-	if host.activatedName != "imported-target" {
-		t.Fatalf("activated factory name = %q, want imported-target", host.activatedName)
+	if gateway.activatedName != "imported-target" {
+		t.Fatalf("activated factory name = %q, want imported-target", gateway.activatedName)
 	}
 }
 
 type upsertDefinitionHost struct {
 	sessionRootDir string
 	serialized     factoryapi.Factory
-	activatedName  string
+}
+
+func (h *upsertDefinitionHost) activationGateway() *trackingActivationGateway {
+	return &trackingActivationGateway{
+		saveNow: time.Date(2026, 5, 31, 12, 0, 1, 0, time.UTC),
+	}
 }
 
 func (h *upsertDefinitionHost) PersistRootDir() string { return h.sessionRootDir }
@@ -273,53 +280,11 @@ func (h *upsertDefinitionHost) GetCurrentFactorySnapshotForSession(context.Conte
 	return mustFactorySnapshot(factoryapi.Factory{}), nil
 }
 
-func (h *upsertDefinitionHost) WithActivationLock(fn func() error) error { return fn() }
-
-func (h *upsertDefinitionHost) RequireIdleRuntimeForSession(context.Context, string) error {
-	return nil
-}
-
-func (h *upsertDefinitionHost) ActivateSessionEditableFactory(
-	_ context.Context,
-	_ *interfaces.DefinitionSession,
-	_ string,
-	_ string,
-	_ string,
-	name string,
-	runtimeName string,
-) error {
-	h.activatedName = name
-	if runtimeName != name {
-		return nil
-	}
-	return nil
-}
-
 func (h *upsertDefinitionHost) ReplaceFactoryLayoutAtDir(
 	string,
 	*factorydefinitions.PreparedFactoryLayoutPayload,
 ) (*interfaces.FactorySplitLayoutReplaceResult, error) {
 	return nil, nil
-}
-
-func (h *upsertDefinitionHost) SaveNow() time.Time {
-	return time.Date(2026, 5, 31, 12, 0, 1, 0, time.UTC)
-}
-
-func (h *upsertDefinitionHost) RunSessionID() string { return "" }
-
-func (h *upsertDefinitionHost) SessionForActivation(string) *interfaces.DefinitionSession { return nil }
-
-func (h *upsertDefinitionHost) NamedFactoryActivationPaths(*interfaces.DefinitionSession) (string, string) {
-	return "", ""
-}
-
-func (h *upsertDefinitionHost) RequireIdleBeforeNamedFactoryActivation(context.Context, string, *interfaces.DefinitionSession) error {
-	return nil
-}
-
-func (h *upsertDefinitionHost) SwapPersistedNamedFactoryRuntime(context.Context, string, *interfaces.DefinitionSession, string, string, string, string) error {
-	return nil
 }
 
 func upsertWorkerTypeModel() *factoryapi.WorkerType {

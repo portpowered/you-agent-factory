@@ -37,7 +37,7 @@ func TestEditableFactoryActivationUsesActivationGateway(t *testing.T) {
 			},
 		},
 	}
-	gateway := &trackingActivationGateway{saveNow: host.SaveNow()}
+	gateway := host.activationGateway()
 	svc := newTestService(host, gateway)
 
 	factory, err := factoryfixtures.DecodeCrossPathValidAlphaFactory()

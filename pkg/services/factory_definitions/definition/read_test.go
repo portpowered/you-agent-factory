@@ -129,16 +129,11 @@ func (h stubDefinitionHost) GetCurrentFactorySnapshotForSession(context.Context,
 	return mustFactorySnapshot(factoryapi.Factory{}), nil
 }
 
-func (h stubDefinitionHost) WithActivationLock(fn func() error) error {
-	return fn()
-}
-
-func (h stubDefinitionHost) RequireIdleRuntimeForSession(context.Context, string) error {
-	return nil
-}
-
-func (h stubDefinitionHost) ActivateSessionEditableFactory(context.Context, *interfaces.DefinitionSession, string, string, string, string, string) error {
-	return nil
+func (h stubDefinitionHost) ReplaceFactoryLayoutAtDir(
+	string,
+	*factorydefinitions.PreparedFactoryLayoutPayload,
+) (*interfaces.FactorySplitLayoutReplaceResult, error) {
+	return nil, nil
 }
 
 func mustFactorySnapshot(factory factoryapi.Factory) *interfaces.FactorySnapshot {
@@ -147,35 +142,6 @@ func mustFactorySnapshot(factory factoryapi.Factory) *interfaces.FactorySnapshot
 		panic(err)
 	}
 	return snapshot
-}
-
-func (h stubDefinitionHost) ReplaceFactoryLayoutAtDir(
-	string,
-	*factorydefinitions.PreparedFactoryLayoutPayload,
-) (*interfaces.FactorySplitLayoutReplaceResult, error) {
-	return nil, nil
-}
-
-func (h stubDefinitionHost) SaveNow() time.Time {
-	return time.Time{}
-}
-
-func (h stubDefinitionHost) RunSessionID() string { return "" }
-
-func (h stubDefinitionHost) SessionForActivation(string) *interfaces.DefinitionSession {
-	return nil
-}
-
-func (h stubDefinitionHost) NamedFactoryActivationPaths(*interfaces.DefinitionSession) (string, string) {
-	return "", ""
-}
-
-func (h stubDefinitionHost) RequireIdleBeforeNamedFactoryActivation(context.Context, string, *interfaces.DefinitionSession) error {
-	return nil
-}
-
-func (h stubDefinitionHost) SwapPersistedNamedFactoryRuntime(context.Context, string, *interfaces.DefinitionSession, string, string, string, string) error {
-	return nil
 }
 
 func namedFactoryPayload(t *testing.T, project string) []byte {
