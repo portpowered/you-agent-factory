@@ -1899,6 +1899,96 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/factory_definitions/transports/cli/named_lifecycle/named_lifecycle_test.go",
+      "package": "you-agent-factory/tests/functional/factory_definitions/transports/cli/named_lifecycle",
+      "scenario": "TestCLIFactoryDeleteMissingReturnsActionableFailure",
+      "lane": "short",
+      "destination": "tests/functional/factory_definitions/transports/cli/named_lifecycle/named_lifecycle_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory_definitions/transports/cli/named_lifecycle/named_lifecycle_test.go",
+      "package": "you-agent-factory/tests/functional/factory_definitions/transports/cli/named_lifecycle",
+      "scenario": "TestCLIFactoryListReflectsCreateAndDelete",
+      "lane": "short",
+      "destination": "tests/functional/factory_definitions/transports/cli/named_lifecycle/named_lifecycle_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory_definitions/transports/cli/named_lifecycle/named_lifecycle_test.go",
+      "package": "you-agent-factory/tests/functional/factory_definitions/transports/cli/named_lifecycle",
+      "scenario": "TestCLIFactoryNamedCreateListUpdateDelete",
+      "lane": "short",
+      "destination": "tests/functional/factory_definitions/transports/cli/named_lifecycle/named_lifecycle_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory_definitions/transports/cli/validate_persist/validate_persist_test.go",
+      "package": "you-agent-factory/tests/functional/factory_definitions/transports/cli/validate_persist",
+      "scenario": "TestCLIFactoryPersistFromFileThenRunSucceeds",
+      "lane": "short",
+      "destination": "tests/functional/factory_definitions/transports/cli/validate_persist/validate_persist_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory_definitions/transports/cli/validate_persist/validate_persist_test.go",
+      "package": "you-agent-factory/tests/functional/factory_definitions/transports/cli/validate_persist",
+      "scenario": "TestCLIFactoryValidateDoesNotMutateOnFailure",
+      "lane": "short",
+      "destination": "tests/functional/factory_definitions/transports/cli/validate_persist/validate_persist_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory_definitions/transports/cli/validate_persist/validate_persist_test.go",
+      "package": "you-agent-factory/tests/functional/factory_definitions/transports/cli/validate_persist",
+      "scenario": "TestCLIFactoryValidateRejectsInvalidDefinitionActionably",
+      "lane": "short",
+      "destination": "tests/functional/factory_definitions/transports/cli/validate_persist/validate_persist_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go",
+      "package": "you-agent-factory/tests/functional/factory_runtime/orchestrators/petri/guards",
+      "scenario": "TestPetriAuthoredEligibilityGuardBlocksDispatchUntilSatisfied",
+      "lane": "short",
+      "destination": "tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go",
+      "package": "you-agent-factory/tests/functional/factory_runtime/orchestrators/petri/guards",
+      "scenario": "TestPetriParentOrSameNameGuardReleasesExpectedWork",
+      "lane": "short",
+      "destination": "tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go",
+      "package": "you-agent-factory/tests/functional/factory_runtime/orchestrators/petri/guards",
+      "scenario": "TestPetriVisitOrMatchGuardFailureIsVisibleInPublicWorkState",
+      "lane": "short",
+      "destination": "tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/factory_runtime/orchestrators/petri/routing/multi_transition_test.go",
       "package": "you-agent-factory/tests/functional/factory_runtime/orchestrators/petri/routing",
       "scenario": "TestPetriFailureRoutesToDocumentedFailedPlace",
@@ -1989,36 +2079,6 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/guards_batch/cascading_failure_test.go",
-      "package": "you-agent-factory/tests/functional/guards_batch",
-      "scenario": "TestCascadingFailure_CompletedNotCascaded",
-      "lane": "short",
-      "destination": "tests/functional/work/relationships/parent_child_test.go",
-      "catch_all": "guards_batch",
-      "specialty_targets": "none",
-      "deletion_only_batch": "guards_batch-delete-01-work-relationships"
-    },
-    {
-      "source_path": "tests/functional/guards_batch/cascading_failure_test.go",
-      "package": "you-agent-factory/tests/functional/guards_batch",
-      "scenario": "TestCascadingFailure_DirectChild",
-      "lane": "short",
-      "destination": "tests/functional/work/relationships/parent_child_test.go",
-      "catch_all": "guards_batch",
-      "specialty_targets": "none",
-      "deletion_only_batch": "guards_batch-delete-01-work-relationships"
-    },
-    {
-      "source_path": "tests/functional/guards_batch/cascading_failure_test.go",
-      "package": "you-agent-factory/tests/functional/guards_batch",
-      "scenario": "TestCascadingFailure_Transitive",
-      "lane": "short",
-      "destination": "tests/functional/work/relationships/parent_child_test.go",
-      "catch_all": "guards_batch",
-      "specialty_targets": "none",
-      "deletion_only_batch": "guards_batch-delete-01-work-relationships"
-    },
-    {
       "source_path": "tests/functional/guards_batch/concurrency_limit_long_test.go",
       "package": "you-agent-factory/tests/functional/guards_batch",
       "scenario": "TestConcurrencyLimit_BlocksExcessDispatches",
@@ -2057,56 +2117,6 @@
       "catch_all": "guards_batch",
       "specialty_targets": "none",
       "deletion_only_batch": "guards_batch-delete-04-resources-concurrency"
-    },
-    {
-      "source_path": "tests/functional/guards_batch/dependency_terminal_test.go",
-      "package": "you-agent-factory/tests/functional/guards_batch",
-      "scenario": "TestDependencyTerminal_BlockedDuringProcessing",
-      "lane": "short",
-      "destination": "tests/functional/work/relationships/dependencies_test.go",
-      "catch_all": "guards_batch",
-      "specialty_targets": "none",
-      "deletion_only_batch": "guards_batch-delete-01-work-relationships"
-    },
-    {
-      "source_path": "tests/functional/guards_batch/dependency_terminal_test.go",
-      "package": "you-agent-factory/tests/functional/guards_batch",
-      "scenario": "TestDependencyTerminal_BlockedUntilArchived",
-      "lane": "short",
-      "destination": "tests/functional/work/relationships/dependencies_test.go",
-      "catch_all": "guards_batch",
-      "specialty_targets": "none",
-      "deletion_only_batch": "guards_batch-delete-01-work-relationships"
-    },
-    {
-      "source_path": "tests/functional/guards_batch/dependency_terminal_test.go",
-      "package": "you-agent-factory/tests/functional/guards_batch",
-      "scenario": "TestDependencyTerminal_BothComplete",
-      "lane": "short",
-      "destination": "tests/functional/work/relationships/dependencies_test.go",
-      "catch_all": "guards_batch",
-      "specialty_targets": "none",
-      "deletion_only_batch": "guards_batch-delete-01-work-relationships"
-    },
-    {
-      "source_path": "tests/functional/guards_batch/dependency_tracking_test.go",
-      "package": "you-agent-factory/tests/functional/guards_batch",
-      "scenario": "TestDependencyTracking_BlocksUntilSatisfied",
-      "lane": "short",
-      "destination": "tests/functional/work/relationships/dependencies_test.go",
-      "catch_all": "guards_batch",
-      "specialty_targets": "none",
-      "deletion_only_batch": "guards_batch-delete-01-work-relationships"
-    },
-    {
-      "source_path": "tests/functional/guards_batch/dependency_tracking_test.go",
-      "package": "you-agent-factory/tests/functional/guards_batch",
-      "scenario": "TestDependencyTracking_NoDepsPassThrough",
-      "lane": "short",
-      "destination": "tests/functional/work/relationships/dependencies_test.go",
-      "catch_all": "guards_batch",
-      "specialty_targets": "none",
-      "deletion_only_batch": "guards_batch-delete-01-work-relationships"
     },
     {
       "source_path": "tests/functional/guards_batch/failed_immutability_long_test.go",
@@ -3111,6 +3121,16 @@
     {
       "source_path": "tests/functional/orchestration/petri/dispatch/simple_run_test.go",
       "package": "you-agent-factory/tests/functional/orchestration/petri/dispatch",
+      "scenario": "TestPetriExecutorDispatchTerminalRouting",
+      "lane": "short",
+      "destination": "tests/functional/orchestration/petri/dispatch/simple_run_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/orchestration/petri/dispatch/simple_run_test.go",
+      "package": "you-agent-factory/tests/functional/orchestration/petri/dispatch",
       "scenario": "TestPetriInvocationInputAndOutputMapping",
       "lane": "short",
       "destination": "tests/functional/orchestration/petri/dispatch/simple_run_test.go",
@@ -3329,6 +3349,16 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/provider_sessions/build_process_inert_test.go",
+      "package": "you-agent-factory/tests/functional/provider_sessions",
+      "scenario": "TestProviderSessionsRemainInertThroughRootBuildProcessConstruction",
+      "lane": "short",
+      "destination": "tests/functional/provider_sessions/build_process_inert_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/provider_sessions/details/codex_details_test.go",
       "package": "you-agent-factory/tests/functional/provider_sessions/details",
       "scenario": "TestCodexProviderSessionCorruptTranscriptReturnsSafeDiagnostic",
@@ -3414,6 +3444,16 @@
       "scenario": "TestAPIUnsupportedProviderSessionKindReturnsTypedError",
       "lane": "short",
       "destination": "tests/functional/provider_sessions/details/http_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/provider_sessions/peer_import_boundary_test.go",
+      "package": "you-agent-factory/tests/functional/provider_sessions",
+      "scenario": "TestFunctionalProviderSessionsPackageUsesPublicProcessImportsOnly",
+      "lane": "short",
+      "destination": "tests/functional/provider_sessions/peer_import_boundary_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -7321,6 +7361,36 @@
     {
       "source_path": "tests/functional/work/relationships/dependencies_test.go",
       "package": "you-agent-factory/tests/functional/work/relationships",
+      "scenario": "TestDependentWorkAndPrerequisiteBothReachArchived",
+      "lane": "short",
+      "destination": "tests/functional/work/relationships/dependencies_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/work/relationships/dependencies_test.go",
+      "package": "you-agent-factory/tests/functional/work/relationships",
+      "scenario": "TestDependentWorkBlockedDuringPrerequisiteProcessing",
+      "lane": "short",
+      "destination": "tests/functional/work/relationships/dependencies_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/work/relationships/dependencies_test.go",
+      "package": "you-agent-factory/tests/functional/work/relationships",
+      "scenario": "TestDependentWorkBlockedUntilPrerequisiteArchived",
+      "lane": "short",
+      "destination": "tests/functional/work/relationships/dependencies_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/work/relationships/dependencies_test.go",
+      "package": "you-agent-factory/tests/functional/work/relationships",
       "scenario": "TestDependentWorkDoesNotDispatchAfterPrerequisiteFailure",
       "lane": "short",
       "destination": "tests/functional/work/relationships/dependencies_test.go",
@@ -7371,7 +7441,37 @@
     {
       "source_path": "tests/functional/work/relationships/parent_child_test.go",
       "package": "you-agent-factory/tests/functional/work/relationships",
+      "scenario": "TestCompletedPrerequisiteIsNotCascadedWhenDependentFails",
+      "lane": "short",
+      "destination": "tests/functional/work/relationships/parent_child_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/work/relationships/parent_child_test.go",
+      "package": "you-agent-factory/tests/functional/work/relationships",
+      "scenario": "TestDependentWorkFailsWhenDirectPrerequisiteFails",
+      "lane": "short",
+      "destination": "tests/functional/work/relationships/parent_child_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/work/relationships/parent_child_test.go",
+      "package": "you-agent-factory/tests/functional/work/relationships",
       "scenario": "TestParentChildLineageSurvivesDispatchAndReplay",
+      "lane": "short",
+      "destination": "tests/functional/work/relationships/parent_child_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/work/relationships/parent_child_test.go",
+      "package": "you-agent-factory/tests/functional/work/relationships",
+      "scenario": "TestTransitiveDependencyFailureCascadesToFailedTerminals",
       "lane": "short",
       "destination": "tests/functional/work/relationships/parent_child_test.go",
       "catch_all": "none",
@@ -7644,6 +7744,46 @@
       "scenario": "TestAPISubmitWorkRejectsMixedTextAndImageOnUnsupportedRunner",
       "lane": "short",
       "destination": "tests/functional/work/submission/structured_submission_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go",
+      "package": "you-agent-factory/tests/functional/work/transports/cli/submit/batch_contract",
+      "scenario": "TestCLISubmitBatchContractHarnessExecutesThroughRootBuildProcess",
+      "lane": "short",
+      "destination": "tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go",
+      "package": "you-agent-factory/tests/functional/work/transports/cli/submit/batch_contract",
+      "scenario": "TestCLISubmitBatchDryRunEmitsSummaryWithoutMutation",
+      "lane": "short",
+      "destination": "tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go",
+      "package": "you-agent-factory/tests/functional/work/transports/cli/submit/batch_contract",
+      "scenario": "TestCLISubmitBatchInvalidJSONFailsBeforeUpsert",
+      "lane": "short",
+      "destination": "tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go",
+      "package": "you-agent-factory/tests/functional/work/transports/cli/submit/batch_contract",
+      "scenario": "TestCLISubmitBatchSuccessHumanAndJSONShapes",
+      "lane": "short",
+      "destination": "tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -8429,6 +8569,56 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/workers/transports/cli/run/help/invocation_help_test.go",
+      "package": "you-agent-factory/tests/functional/workers/transports/cli/run/help",
+      "scenario": "TestCLIRunHelpDistinguishesRequiredAndOptionalParameters",
+      "lane": "short",
+      "destination": "tests/functional/workers/transports/cli/run/help/invocation_help_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/transports/cli/run/help/invocation_help_test.go",
+      "package": "you-agent-factory/tests/functional/workers/transports/cli/run/help",
+      "scenario": "TestCLIRunHelpDoesNotDispatchExternalWork",
+      "lane": "short",
+      "destination": "tests/functional/workers/transports/cli/run/help/invocation_help_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/transports/cli/run/help/invocation_help_test.go",
+      "package": "you-agent-factory/tests/functional/workers/transports/cli/run/help",
+      "scenario": "TestCLIRunHelpShowsInvocationSignatureForNamedFactory",
+      "lane": "short",
+      "destination": "tests/functional/workers/transports/cli/run/help/invocation_help_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/transports/cli/run/modes/output_modes_test.go",
+      "package": "you-agent-factory/tests/functional/workers/transports/cli/run/modes",
+      "scenario": "TestCLIRunFailureOmitsFalseSuccessPrimaryResult",
+      "lane": "short",
+      "destination": "tests/functional/workers/transports/cli/run/modes/output_modes_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/transports/cli/run/modes/output_modes_test.go",
+      "package": "you-agent-factory/tests/functional/workers/transports/cli/run/modes",
+      "scenario": "TestCLIRunSuccessPrimaryResultTextJSONAndNDJSON",
+      "lane": "short",
+      "destination": "tests/functional/workers/transports/cli/run/modes/output_modes_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/workflow/code_review_loop_long_test.go",
       "package": "you-agent-factory/tests/functional/workflow",
       "scenario": "TestCodeReviewLoop",
@@ -9067,213 +9257,13 @@
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/factory_definitions/transports/cli/named_lifecycle/named_lifecycle_test.go",
-      "package": "you-agent-factory/tests/functional/factory_definitions/transports/cli/named_lifecycle",
-      "scenario": "TestCLIFactoryDeleteMissingReturnsActionableFailure",
-      "lane": "short",
-      "destination": "tests/functional/factory_definitions/transports/cli/named_lifecycle/named_lifecycle_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/factory_definitions/transports/cli/named_lifecycle/named_lifecycle_test.go",
-      "package": "you-agent-factory/tests/functional/factory_definitions/transports/cli/named_lifecycle",
-      "scenario": "TestCLIFactoryListReflectsCreateAndDelete",
-      "lane": "short",
-      "destination": "tests/functional/factory_definitions/transports/cli/named_lifecycle/named_lifecycle_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/factory_definitions/transports/cli/named_lifecycle/named_lifecycle_test.go",
-      "package": "you-agent-factory/tests/functional/factory_definitions/transports/cli/named_lifecycle",
-      "scenario": "TestCLIFactoryNamedCreateListUpdateDelete",
-      "lane": "short",
-      "destination": "tests/functional/factory_definitions/transports/cli/named_lifecycle/named_lifecycle_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/factory_definitions/transports/cli/validate_persist/validate_persist_test.go",
-      "package": "you-agent-factory/tests/functional/factory_definitions/transports/cli/validate_persist",
-      "scenario": "TestCLIFactoryPersistFromFileThenRunSucceeds",
-      "lane": "short",
-      "destination": "tests/functional/factory_definitions/transports/cli/validate_persist/validate_persist_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/factory_definitions/transports/cli/validate_persist/validate_persist_test.go",
-      "package": "you-agent-factory/tests/functional/factory_definitions/transports/cli/validate_persist",
-      "scenario": "TestCLIFactoryValidateDoesNotMutateOnFailure",
-      "lane": "short",
-      "destination": "tests/functional/factory_definitions/transports/cli/validate_persist/validate_persist_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/factory_definitions/transports/cli/validate_persist/validate_persist_test.go",
-      "package": "you-agent-factory/tests/functional/factory_definitions/transports/cli/validate_persist",
-      "scenario": "TestCLIFactoryValidateRejectsInvalidDefinitionActionably",
-      "lane": "short",
-      "destination": "tests/functional/factory_definitions/transports/cli/validate_persist/validate_persist_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go",
-      "package": "you-agent-factory/tests/functional/factory_runtime/orchestrators/petri/guards",
-      "scenario": "TestPetriAuthoredEligibilityGuardBlocksDispatchUntilSatisfied",
-      "lane": "short",
-      "destination": "tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go",
-      "package": "you-agent-factory/tests/functional/factory_runtime/orchestrators/petri/guards",
-      "scenario": "TestPetriParentOrSameNameGuardReleasesExpectedWork",
-      "lane": "short",
-      "destination": "tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go",
-      "package": "you-agent-factory/tests/functional/factory_runtime/orchestrators/petri/guards",
-      "scenario": "TestPetriVisitOrMatchGuardFailureIsVisibleInPublicWorkState",
-      "lane": "short",
-      "destination": "tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/provider_sessions/build_process_inert_test.go",
-      "package": "you-agent-factory/tests/functional/provider_sessions",
-      "scenario": "TestProviderSessionsRemainInertThroughRootBuildProcessConstruction",
-      "lane": "short",
-      "destination": "tests/functional/provider_sessions/build_process_inert_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/provider_sessions/peer_import_boundary_test.go",
-      "package": "you-agent-factory/tests/functional/provider_sessions",
-      "scenario": "TestFunctionalProviderSessionsPackageUsesPublicProcessImportsOnly",
-      "lane": "short",
-      "destination": "tests/functional/provider_sessions/peer_import_boundary_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go",
-      "package": "you-agent-factory/tests/functional/work/transports/cli/submit/batch_contract",
-      "scenario": "TestCLISubmitBatchContractHarnessExecutesThroughRootBuildProcess",
-      "lane": "short",
-      "destination": "tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go",
-      "package": "you-agent-factory/tests/functional/work/transports/cli/submit/batch_contract",
-      "scenario": "TestCLISubmitBatchDryRunEmitsSummaryWithoutMutation",
-      "lane": "short",
-      "destination": "tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go",
-      "package": "you-agent-factory/tests/functional/work/transports/cli/submit/batch_contract",
-      "scenario": "TestCLISubmitBatchInvalidJSONFailsBeforeUpsert",
-      "lane": "short",
-      "destination": "tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go",
-      "package": "you-agent-factory/tests/functional/work/transports/cli/submit/batch_contract",
-      "scenario": "TestCLISubmitBatchSuccessHumanAndJSONShapes",
-      "lane": "short",
-      "destination": "tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/workers/transports/cli/run/help/invocation_help_test.go",
-      "package": "you-agent-factory/tests/functional/workers/transports/cli/run/help",
-      "scenario": "TestCLIRunHelpDistinguishesRequiredAndOptionalParameters",
-      "lane": "short",
-      "destination": "tests/functional/workers/transports/cli/run/help/invocation_help_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/workers/transports/cli/run/help/invocation_help_test.go",
-      "package": "you-agent-factory/tests/functional/workers/transports/cli/run/help",
-      "scenario": "TestCLIRunHelpDoesNotDispatchExternalWork",
-      "lane": "short",
-      "destination": "tests/functional/workers/transports/cli/run/help/invocation_help_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/workers/transports/cli/run/help/invocation_help_test.go",
-      "package": "you-agent-factory/tests/functional/workers/transports/cli/run/help",
-      "scenario": "TestCLIRunHelpShowsInvocationSignatureForNamedFactory",
-      "lane": "short",
-      "destination": "tests/functional/workers/transports/cli/run/help/invocation_help_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/workers/transports/cli/run/modes/output_modes_test.go",
-      "package": "you-agent-factory/tests/functional/workers/transports/cli/run/modes",
-      "scenario": "TestCLIRunFailureOmitsFalseSuccessPrimaryResult",
-      "lane": "short",
-      "destination": "tests/functional/workers/transports/cli/run/modes/output_modes_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/workers/transports/cli/run/modes/output_modes_test.go",
-      "package": "you-agent-factory/tests/functional/workers/transports/cli/run/modes",
-      "scenario": "TestCLIRunSuccessPrimaryResultTextJSONAndNDJSON",
-      "lane": "short",
-      "destination": "tests/functional/workers/transports/cli/run/modes/output_modes_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
     }
   ],
-  "scanned_at_utc": "2026-07-28T12:55:00Z",
+  "scanned_at_utc": "2026-07-28T13:26:14Z",
   "summary": {
     "by_catch_all": {
       "bootstrap_portability": 22,
-      "guards_batch": 23,
+      "guards_batch": 15,
       "none": 643,
       "replay_contracts": 23,
       "runtime_api": 96,
@@ -9289,11 +9279,11 @@
       "factory": 56,
       "factory_runtime": 3,
       "factory_visualization": 6,
-      "guards_batch": 23,
+      "guards_batch": 15,
       "models": 25,
       "observability": 9,
       "operator_settings": 10,
-      "orchestration": 48,
+      "orchestration": 49,
       "product": 13,
       "provider_sessions": 15,
       "providers": 68,
@@ -9303,14 +9293,14 @@
       "sessions": 40,
       "smoke": 62,
       "transport": 106,
-      "work": 29,
+      "work": 35,
       "workers": 77,
       "workflow": 30,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 907,
+    "customer_top_level_Test_scenarios": 906,
     "lane_functionallong": 95,
-    "lane_short": 812,
+    "lane_short": 811,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 14,
@@ -9451,18 +9441,15 @@
   "guards_bootstrap_replay_mapping": {
     "mapped_at_utc": "2026-07-24T02:29:50Z",
     "story": "fnd-007-migration-ledger-005",
-    "guards_batch_scenarios": 27,
+    "guards_batch_scenarios": 15,
     "bootstrap_portability_scenarios": 34,
     "replay_contracts_scenarios": 24,
     "wrong_layer_count": 2,
     "batch_ids": [
-      "guards_batch-delete-01-work-relationships",
       "guards_batch-delete-02-guards-global",
-      "guards_batch-delete-03-orchestration-dispatch",
       "guards_batch-delete-04-resources-concurrency",
       "guards_batch-delete-05-resources-fairness",
       "guards_batch-delete-06-resilience-batch",
-      "guards_batch-delete-07-workstations-watcher",
       "bootstrap_portability-delete-01-factory-definitions-init",
       "bootstrap_portability-delete-02-factory-definitions-validation",
       "bootstrap_portability-delete-03-factory-definitions-import-export",

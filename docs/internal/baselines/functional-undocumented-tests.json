@@ -311,18 +311,6 @@
       "name": "TestCLIResumeSmoke_TerminalSessionResumeReturnsTypedRejectionAndPreservesSessionRead"
     },
     {
-      "file": "guards_batch/cascading_failure_test.go",
-      "name": "TestCascadingFailure_CompletedNotCascaded"
-    },
-    {
-      "file": "guards_batch/cascading_failure_test.go",
-      "name": "TestCascadingFailure_DirectChild"
-    },
-    {
-      "file": "guards_batch/cascading_failure_test.go",
-      "name": "TestCascadingFailure_Transitive"
-    },
-    {
       "file": "guards_batch/concurrency_limit_long_test.go",
       "name": "TestConcurrencyLimit_BlocksExcessDispatches"
     },
@@ -337,26 +325,6 @@
     {
       "file": "guards_batch/concurrency_limit_long_test.go",
       "name": "TestConcurrencyLimit_ResourceTokensConsumedDuringProcessing"
-    },
-    {
-      "file": "guards_batch/dependency_terminal_test.go",
-      "name": "TestDependencyTerminal_BlockedDuringProcessing"
-    },
-    {
-      "file": "guards_batch/dependency_terminal_test.go",
-      "name": "TestDependencyTerminal_BlockedUntilArchived"
-    },
-    {
-      "file": "guards_batch/dependency_terminal_test.go",
-      "name": "TestDependencyTerminal_BothComplete"
-    },
-    {
-      "file": "guards_batch/dependency_tracking_test.go",
-      "name": "TestDependencyTracking_BlocksUntilSatisfied"
-    },
-    {
-      "file": "guards_batch/dependency_tracking_test.go",
-      "name": "TestDependencyTracking_NoDepsPassThrough"
     },
     {
       "file": "guards_batch/failed_immutability_long_test.go",
