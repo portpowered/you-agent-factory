@@ -4330,6 +4330,24 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/workers/internal/services/runners/internal/services/agent",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/runners/internal/services/agent/internal/service",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/runners/internal/services/agent/wire",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/workers/internal/services/runners/internal/testkit",
       "disposition": "retain",
       "destination": "workers",
@@ -4549,6 +4567,14 @@
     },
     {
       "packagePath": "pkg/services/workers/provider/pi",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/providersroot",
       "disposition": "move",
       "destination": "providers",
       "destinationKind": "owner",
