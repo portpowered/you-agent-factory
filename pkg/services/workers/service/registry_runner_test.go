@@ -538,6 +538,47 @@ func TestConductorInvocationRunnerPreservesKiroResumeSessionWithoutReplacement(t
 	}
 }
 
+func TestConductorInvocationRunnerRoutesMigratedPiThroughConductor(t *testing.T) {
+	t.Parallel()
+
+	stdout := []byte(
+		`{"type":"session","id":"pi-session-conductor"}` + "\n" +
+			`{"type":"message_start","message":{"id":"msg-pi","role":"assistant","content":[]}}` + "\n" +
+			`{"type":"message_end","message":{"id":"msg-pi","role":"assistant","content":[{"type":"text","text":"pi via conductor"}],"stopReason":"stop"}}` + "\n",
+	)
+	platformRunner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: stdout})
+	providers := cursorConductorRegistryWithRunner(t, platformRunner)
+	native := &conductorRouteRecordingRunner{}
+	runner := conductorInvocationRunner{
+		next:      native,
+		conductor: conductor.New(providers),
+		providers: providers,
+	}
+
+	result, err := runner.Execute(context.Background(), workers.RunnerExecutionRequest{
+		Dispatch:      work.WorkDispatch{DispatchID: "dispatch-pi-conductor"},
+		RunnerID:      workers.RunnerIDPi,
+		ModelProvider: workers.RunnerIDPi,
+		Model:         "pi-test-model",
+		UserMessage:   "hello pi",
+	})
+	if err != nil {
+		t.Fatalf("Execute(pi) error = %v", err)
+	}
+	if result.Content != "pi via conductor" {
+		t.Fatalf("Execute(pi) content = %q, want pi via conductor", result.Content)
+	}
+	if native.calls != 0 {
+		t.Fatalf("native runner calls = %d, want 0 for migrated Pi", native.calls)
+	}
+	if platformRunner.CallCount() != 1 || platformRunner.LastRequest().Command != "pi" {
+		t.Fatalf("Pi command calls = %d request = %#v", platformRunner.CallCount(), platformRunner.LastRequest())
+	}
+	if providers.UsesNativeRunner(workers.RunnerIDPi) {
+		t.Fatal("UsesNativeRunner(pi) = true, want conductor route")
+	}
+}
+
 func TestInvocationRequestFromRunnerPreservesExecutionContext(t *testing.T) {
 	t.Parallel()
 

@@ -16,6 +16,7 @@ import (
 	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/kiro"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/opencode"
+	"github.com/portpowered/infinite-you/pkg/services/workers/provider/pi"
 )
 
 const nativeRuntimePrerequisite = "provider-native-runtime"
@@ -148,6 +149,13 @@ func migratedBuiltInIntegration(
 			return kiro.NewIntegration()
 		}
 		return kiro.NewIntegration(kiro.IntegrationDependencies{
+			ProvidersService: dependencies.ProvidersService,
+		})
+	case "pi":
+		if dependencies.ProvidersService == nil {
+			return pi.NewIntegration()
+		}
+		return pi.NewIntegration(pi.IntegrationDependencies{
 			ProvidersService: dependencies.ProvidersService,
 		})
 	default:
