@@ -259,18 +259,8 @@
     },
     {
       "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_batch_submission_boundary_smoke_long_test.go",
-      "target": "TestFactoryRequestBatch_PublicBatchShapeStaysAlignedAcrossWatchedFileAndHTTP"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
       "filePath": "tests/functional/runtime_api/api_cleanup_smoke_test.go",
       "target": "TestCleanupSmoke_BackendDashboardAndCanonicalEventsExposeOnlyCleanedFactorySurfaces"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_config_driven_submit_query_smoke_test.go",
-      "target": "TestConfigDriven_RESTAPISubmitAndQuery"
     },
     {
       "rule": "deprecated-runtime-api-test",
@@ -281,51 +271,6 @@
       "rule": "deprecated-runtime-api-test",
       "filePath": "tests/functional/runtime_api/api_functional_server_override_regression_test.go",
       "target": "TestFunctionalServerOverrideCompatibilityRegression_MockWorkersAndProviderOverride"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_generated_smoke_test.go",
-      "target": "TestGeneratedAPIIntegrationSmoke_BatchUpsertAcceptsWorksContent"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_generated_smoke_test.go",
-      "target": "TestGeneratedAPIIntegrationSmoke_CLIWorkTypeNameReachesLiveAPIHandler"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_generated_smoke_test.go",
-      "target": "TestGeneratedAPIIntegrationSmoke_SubmitWorkContentAcceptsCanonicalParts"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_generated_smoke_test.go",
-      "target": "TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptHeaderOnlyStructuredSubmission"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_generated_smoke_test.go",
-      "target": "TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptMixedTextAndImageSubmissionOnSupportedRunner"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_generated_smoke_test.go",
-      "target": "TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptOrderedTextSubmission"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_generated_smoke_test.go",
-      "target": "TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectEmptyStructuredSubmission"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_generated_smoke_test.go",
-      "target": "TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectForgedStructuredFileReference"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_generated_smoke_test.go",
-      "target": "TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectMixedTextAndImageSubmissionOnUnsupportedRunner"
     },
     {
       "rule": "deprecated-runtime-api-test",
@@ -354,16 +299,6 @@
     },
     {
       "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_legacy_unary_retirement_smoke_test.go",
-      "target": "TestLegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_manual_work_recovery_test.go",
-      "target": "TestManualWorkRecovery_CascadeFailureThenAPIMovesResumeProgress"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
       "filePath": "tests/functional/runtime_api/api_model_local_inference_long_test.go",
       "target": "TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio"
     },
@@ -386,11 +321,6 @@
       "rule": "deprecated-runtime-api-test",
       "filePath": "tests/functional/runtime_api/api_provider_throttle_pause_observability_test.go",
       "target": "TestProviderErrorSmoke_ThrottleFailureIsolatesOtherLaneThroughPublicSession"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_request_batch_boundary_smoke_test.go",
-      "target": "TestGeneratedAPIIntegrationSmoke_BatchWorkTypeNameNormalizesRuntimeWork"
     },
     {
       "rule": "deprecated-runtime-api-test",
@@ -426,11 +356,6 @@
       "rule": "deprecated-runtime-api-test",
       "filePath": "tests/functional/runtime_api/api_session_invocation_test.go",
       "target": "TestSessionInvocationAPI_AcceptsStructuredArgsWithActiveSignature"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_submit_runtime_work_trace_shaping_smoke_test.go",
-      "target": "TestSubmitRuntimeWork_EmitsCanonicalTraceAwareBatchEvent"
     },
     {
       "rule": "deprecated-runtime-api-test",

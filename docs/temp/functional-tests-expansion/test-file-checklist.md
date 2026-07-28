@@ -555,6 +555,22 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestWorkBatchAcceptsInlineFileAndStdinShapes`.
   - `TestWorkBatchSelectsDefaultAndExplicitWorkTypes`.
   - `TestWorkBatchRejectsUnknownTypeWithoutPartialMutation`.
+  - `TestWorkBatchDependencyOrderingNormalizesRuntimeWork`.
+
+- [x] `tests/functional/work/submission/batch_boundary_test.go`
+  - `TestWorkBatchPublicShapeStaysAlignedAcrossWatchedFileAndHTTP`.
+
+- [x] `tests/functional/work/submission/structured_submission_test.go`
+  - `TestAPISubmitWorkAcceptsHeaderOnlyStructuredSubmission`.
+  - `TestAPISubmitWorkRejectsEmptyStructuredSubmission`.
+  - `TestAPISubmitWorkAcceptsOrderedTextSubmission`.
+  - `TestAPISubmitWorkAcceptsCanonicalContentParts`.
+  - `TestAPISubmitWorkAcceptsMixedTextAndImageOnSupportedRunner`.
+  - `TestAPISubmitWorkRejectsMixedTextAndImageOnUnsupportedRunner`.
+  - `TestAPISubmitWorkRejectsForgedStructuredFileReference`.
+
+- [x] `tests/functional/work/submission/legacy_unary_test.go`
+  - `TestLegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly`.
 
 - [x] `tests/functional/work/recordings/recordings_read_test.go`
   - `TestRecordingsBackedWorkReadsUseRecordingsRootContract`.
@@ -563,6 +579,9 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestRecordingsBackedWorkReadsSurfaceTypedProjectionFailures`.
 
 - [x] `tests/functional/work/submission/http_test.go`
+  - `TestAPIPOSTSubmitAndQueryWork`.
+  - `TestAPIBatchUpsertAcceptsWorksContent`.
+  - `TestCLIWorkTypeNameReachesLiveAPIHandler`.
   - `TestAPISubmitBatchThenListAndGetWork`.
   - `TestAPIUpsertWorkRequestUsesCanonicalIdentity`.
   - `TestAPIUnknownWorkReturnsTypedNotFound`.
@@ -901,6 +920,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPIGetFactoryEventsReturnsOrderedDurableHistory`.
   - `TestAPIEventCursorReturnsOnlyNewerEvents`.
   - `TestAPIInvalidEventCursorReturnsTypedError`.
+  - `TestAPISubmitWorkEmitsCanonicalTraceAwareBatchEvent`.
   - `TestFactoryEventStreamIsOrderedAndClosesAtSessionTermination`.
   - `TestFactoryEventStreamReconnectHasNoGapOrDuplicate`.
 
