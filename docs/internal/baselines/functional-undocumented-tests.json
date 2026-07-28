@@ -1083,22 +1083,6 @@
       "name": "TestNamedGoalInvocationParity_UnresolvedPrimaryResultReportsStableFailure"
     },
     {
-      "file": "smoke/cli_named_goal_operator_controls_smoke_test.go",
-      "name": "TestNamedGoalOperatorControls_ClIPauseResumeDrainsBufferedGoalsInOrder"
-    },
-    {
-      "file": "smoke/cli_named_goal_operator_controls_smoke_test.go",
-      "name": "TestNamedGoalOperatorControls_InterruptedGoalInspectSurfacesDispatchAndStopSummary"
-    },
-    {
-      "file": "smoke/cli_named_goal_operator_controls_smoke_test.go",
-      "name": "TestNamedGoalOperatorControls_PauseBuffersSubmitUntilResume"
-    },
-    {
-      "file": "smoke/cli_named_goal_operator_controls_smoke_test.go",
-      "name": "TestNamedGoalOperatorControls_PauseResumeRecordsLifecycleControlEventsForReplay"
-    },
-    {
       "file": "smoke/cli_named_goal_routing_smoke_test.go",
       "name": "TestNamedGoalRouting_AcceptedCompletesWithPrimaryResult"
     },

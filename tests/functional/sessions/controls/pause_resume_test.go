@@ -188,6 +188,65 @@ func TestPauseResumeEmitsDurableLifecycleEvents(t *testing.T) {
 	assertPauseResumeLifecycleControlEvents(t, server.GetFactoryEvents(t))
 }
 
+// TestInterruptedWorkInspectSurfacesDispatchAndStopSummary proves work stopped
+// on an interrupted customer state surfaces INTERRUPTED stop summaries with
+// dispatch context on public session and work read surfaces.
+func TestInterruptedWorkInspectSurfacesDispatchAndStopSummary(t *testing.T) {
+	factoryDir := scaffoldInterruptedInspectFactory(t)
+	mockWorkersPath := writeInterruptedInspectMockWorkers(t)
+	server := startInterruptedInspectAPIServer(t, factoryDir, mockWorkersPath)
+	defer server.Stop(t)
+
+	baseURL := server.URL()
+	submitted := support.SubmitDefaultSessionWork(t, baseURL, factoryapi.SubmitWorkRequest{
+		Name:         stringPointer("interrupted-operator-inspect"),
+		WorkTypeName: interruptedInspectWorkTypeName,
+		Payload:      map[string]string{"title": "Interrupted inspect probe"},
+	})
+	workID := stringPointerValue(submitted.WorkId)
+	if workID == "" {
+		t.Fatalf("submit interrupted inspect work missing work id: %#v", submitted)
+	}
+
+	interruptedLocation := support.WorkCustomerLocation(
+		interruptedInspectWorkTypeName,
+		"interrupted",
+	)
+	waitForSessionWorkIDsAtCustomerState(
+		t,
+		baseURL,
+		[]string{workID},
+		interruptedLocation,
+		pauseResumeDrainWaitTimeout,
+	)
+	support.WaitForRuntimeIdle(t, baseURL, pauseResumeDurableStatusTimeout)
+
+	work := support.GetDefaultSessionWorkByID(t, baseURL, workID)
+	if work.StopSummary == nil {
+		t.Fatalf("work show = %#v, want stopSummary on interrupted work", work)
+	}
+	assertInterruptedStopSummary(t, work.StopSummary, "work")
+
+	session := support.GetDefaultSession(t, baseURL)
+	if session.Runtime.StopSummary != nil {
+		assertInterruptedStopSummary(t, session.Runtime.StopSummary, "session")
+	}
+
+	listed := support.ListDefaultSessionWork(t, baseURL)
+	completeLocation := support.WorkCustomerLocation(interruptedInspectWorkTypeName, "complete")
+	if support.HasWorkAtCustomerState(listed, workID, completeLocation) {
+		t.Fatalf("interrupted work %q reached %s", workID, completeLocation)
+	}
+	if !support.HasWorkAtCustomerState(listed, workID, interruptedLocation) {
+		t.Fatalf(
+			"work listing missing %s for work %q: %#v",
+			interruptedLocation,
+			workID,
+			listed.Results,
+		)
+	}
+}
+
 // TestAPIPauseResumeCancelAndTerminateFactorySession proves public API pause,
 // resume, cancel, and terminate controls return typed lifecycle-control outcomes
 // and leave each Factory Session in the expected lifecycle state after control.

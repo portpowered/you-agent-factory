@@ -146,6 +146,18 @@
   `tests/functional/observability/verification/verify_tier_contract_test.go`
   with shared stubbed-Make helpers in the same package; do not re-home those
   proofs under `tests/functional/smoke`.
+  Factory Session pause/resume and lifecycle-control functional coverage belongs
+  in `tests/functional/sessions/controls/`: prove pause buffers submitted work
+  through public session-control and work-list boundaries; prove resume drains
+  buffered work in submission order via dispatch observation; prove interrupted
+  goal inspect surfaces INTERRUPTED stop summaries on session and work read
+  surfaces; and prove pause/resume emit durable `SESSION_LIFECYCLE_CONTROL`
+  Factory Events for replay. Drive proofs through
+  `support.StartFunctionalAPIServer` with `MockWorkersConfig` or packaged
+  `@you/goal` factories when routing interruption is required. Catalog metadata
+  infers domain `sessions` and subsection `controls` from the path; every
+  top-level `Test*` needs a customer-readable Go doc so `functionaltestmetadata`
+  stays viz-compatible.
   Inline JavaScript Factory loading functional coverage belongs in
   `tests/functional/orchestration/javascript/loading/inline_javascript_test.go`:
   drive sync Factory Session execution through `support.BuildProcess` +
