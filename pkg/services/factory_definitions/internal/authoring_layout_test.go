@@ -1,4 +1,4 @@
-package service_test
+package internal_test
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
 	factorydefinition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition"
-	factoryservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
+	factoryinternal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
 )
 
 type stubAuthoringLayout struct{}
@@ -63,7 +63,7 @@ func TestAttachAuthoringLayout_DelegatesCTRDEFAuthoringSlice(t *testing.T) {
 	t.Parallel()
 
 	base := factorydefinition.New(nil, factorydefinition.StubActivationGateway())
-	attached, err := factoryservice.AttachAuthoringLayout(base, stubAuthoringLayout{})
+	attached, err := factoryinternal.AttachAuthoringLayout(base, stubAuthoringLayout{})
 	if err != nil {
 		t.Fatalf("AttachAuthoringLayout: %v", err)
 	}
@@ -124,10 +124,10 @@ func TestAttachAuthoringLayout_DelegatesCTRDEFAuthoringSlice(t *testing.T) {
 func TestAttachAuthoringLayout_RejectsMissingDependencies(t *testing.T) {
 	t.Parallel()
 
-	if _, err := factoryservice.AttachAuthoringLayout(nil, stubAuthoringLayout{}); err == nil {
+	if _, err := factoryinternal.AttachAuthoringLayout(nil, stubAuthoringLayout{}); err == nil {
 		t.Fatal("AttachAuthoringLayout(nil service) expected error")
 	}
-	if _, err := factoryservice.AttachAuthoringLayout(
+	if _, err := factoryinternal.AttachAuthoringLayout(
 		factorydefinition.New(nil, factorydefinition.StubActivationGateway()),
 		nil,
 	); err == nil {

@@ -1,4 +1,4 @@
-package service_test
+package internal_test
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
+	factoryinternal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
 )
 
 type source struct {
@@ -97,7 +97,7 @@ func TestCatalogIncludesEveryPublishedPackagedFactoryWithoutLocation(t *testing.
 	if err != nil {
 		t.Fatalf("load published packaged definitions: %v", err)
 	}
-	discovery, err := factoryservice.NewEffectiveCatalogDiscovery(
+	discovery, err := factoryinternal.NewEffectiveCatalogDiscovery(
 		rootLister{}.ListNamedFactories,
 		definitionFiles{}.ReadFile,
 		published.All(),
@@ -163,7 +163,7 @@ func TestAttachPublishesEffectiveCatalogOnRootService(t *testing.T) {
 			"/global":  nil,
 		},
 	}.discovery())
-	service, err := factoryservice.AttachEffectiveCatalog(baseService{}, catalog)
+	service, err := factoryinternal.AttachEffectiveCatalog(baseService{}, catalog)
 	if err != nil {
 		t.Fatalf("attach effective catalog: %v", err)
 	}
@@ -188,7 +188,7 @@ func newCatalog(
 	discovery factorydefinitions.EffectiveFactoryCatalogDiscovery,
 ) factorydefinitions.EffectiveFactoryCatalogOperation {
 	t.Helper()
-	catalog, err := factoryservice.NewEffectiveCatalog(discovery, normalize)
+	catalog, err := factoryinternal.NewEffectiveCatalog(discovery, normalize)
 	if err != nil {
 		t.Fatalf("new effective catalog: %v", err)
 	}

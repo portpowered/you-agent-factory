@@ -16,12 +16,12 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/inboxgitkeep"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/authoredlayout"
+	factoryauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout"
 	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
 	authoringlayoutwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/wire"
 	factorydefinitiontestcomposition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/testcomposition"
-	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig"
+	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
+	internalportableconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
@@ -305,7 +305,7 @@ func newAuthoringLayoutTestComposition(t *testing.T) factorydefinitiontestcompos
 }
 
 func mustAuthoringLayoutRequiredToolChecker() factorydefinitions.RequiredToolChecker {
-	checker, err := factoryloading.NewPathRequiredToolChecker(
+	checker, err := compilationloading.NewPathRequiredToolChecker(
 		exec.LookPath,
 		func(path string, args ...string) ([]byte, error) {
 			return exec.Command(path, args...).CombinedOutput()
@@ -339,10 +339,10 @@ func newAuthoringLayoutServiceFromComposition(
 		inboxgitkeep.NewLocal(fileSystem),
 	)
 	materializeFiles := func(targetDir string, config *factorydefinitions.FactoryConfig) ([]factorydefinitions.PortableBundledFileReplacement, error) {
-		return portableconfig.MaterializeFiles(fileSystem, targetDir, config)
+		return internalportableconfig.MaterializeFiles(fileSystem, targetDir, config)
 	}
 	validateWrites := func(targetDir string, config *factorydefinitions.FactoryConfig) error {
-		return portableconfig.ValidateWrites(fileSystem, targetDir, config)
+		return internalportableconfig.ValidateWrites(fileSystem, targetDir, config)
 	}
 	svc, err := authoringlayoutwire.NewService(authoringlayout.Dependencies{
 		Validator:            validator,
@@ -585,10 +585,10 @@ func newAuthoringLayoutServiceWithCorruptingWrite(
 		inboxgitkeep.NewLocal(fileSystem),
 	)
 	materializeFiles := func(targetDir string, config *factorydefinitions.FactoryConfig) ([]factorydefinitions.PortableBundledFileReplacement, error) {
-		return portableconfig.MaterializeFiles(fileSystem, targetDir, config)
+		return internalportableconfig.MaterializeFiles(fileSystem, targetDir, config)
 	}
 	validateWrites := func(targetDir string, config *factorydefinitions.FactoryConfig) error {
-		return portableconfig.ValidateWrites(fileSystem, targetDir, config)
+		return internalportableconfig.ValidateWrites(fileSystem, targetDir, config)
 	}
 	writePrepared := func(targetDir string, prepared *factorydefinitions.PreparedFactoryLayoutPayload, sourcePath string) error {
 		if err := writer.WritePrepared(targetDir, prepared, sourcePath, materializeFiles, pruneRemovedDocs); err != nil {

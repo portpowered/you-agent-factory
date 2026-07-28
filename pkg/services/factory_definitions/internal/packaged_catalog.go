@@ -1,4 +1,4 @@
-package service
+package internal
 
 import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"

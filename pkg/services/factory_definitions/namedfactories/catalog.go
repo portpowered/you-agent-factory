@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	internalcatalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/namedfactories"
+	internalcatalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedfactories"
 )
 
 type catalog struct {

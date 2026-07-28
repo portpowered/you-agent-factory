@@ -417,7 +417,7 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/factory_definitions/internal/namedfactories/service.go#List",
+      "target": "pkg/services/factory_definitions/internal/services/catalog/namedfactories/service.go#List",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
     },

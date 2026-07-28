@@ -1,4 +1,4 @@
-package service_test
+package internal_test
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
+	factoryinternal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
 )
 
 func TestCatalogIsolatesFailuresClaimsInvalidEffectiveNamesAndIsDeterministic(t *testing.T) {
@@ -46,7 +46,7 @@ func TestCatalogIsolatesFailuresClaimsInvalidEffectiveNamesAndIsDeterministic(t 
 			packagedCandidate("valid-package", "packaged"),
 		},
 	}.discovery()
-	catalog, err := factoryservice.NewEffectiveCatalog(
+	catalog, err := factoryinternal.NewEffectiveCatalog(
 		discovery,
 		func(
 			ctx context.Context,
@@ -132,7 +132,7 @@ func TestCatalogCancellationIsAtomicAcrossDiscoveryAndMerge(t *testing.T) {
 	for _, test := range cancellationCases() {
 		t.Run(test.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
-			catalog, err := factoryservice.NewEffectiveCatalog(
+			catalog, err := factoryinternal.NewEffectiveCatalog(
 				test.discovery(cancel),
 				test.normalizer(cancel),
 			)

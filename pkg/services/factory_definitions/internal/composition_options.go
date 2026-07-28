@@ -1,4 +1,4 @@
-package service
+package internal
 
 import (
 	distributionservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution"
