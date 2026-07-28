@@ -567,24 +567,6 @@ func (stubValidator) PruneLayout(
 	return factorycontracts.ValidationResult{}
 }
 
-type stubRequiredToolChecker struct{}
-
-func (stubRequiredToolChecker) Check(
-	factorycontracts.RequiredToolConfig,
-) factorycontracts.RequiredToolCheckResult {
-	return factorycontracts.RequiredToolCheckResult{}
-}
-
-type stubOrchestratorValidator struct{}
-
-func (stubOrchestratorValidator) ValidateJavaScriptFactoryDefinition(
-	context.Context,
-	*factorycontracts.FactoryOrchestratorJavaScriptConfig,
-	factorycontracts.WorkflowSourceReader,
-) []factorycontracts.ValidationTarget {
-	return nil
-}
-
 type stubPersistence struct{}
 
 func (stubPersistence) PersistNamedFactory(
