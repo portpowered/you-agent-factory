@@ -219,7 +219,7 @@ import (
   work "github.com/portpowered/infinite-you/pkg/services/work"
 )
 func hiddenQueryImplementation() {
-  work.NewSelection()
+  work.PrepareInvocationInput()
   work.NormalizeList()
   runtime.CollectPublicWorkTokens()
   runtime.SplitPlaceID()
@@ -245,7 +245,7 @@ func hiddenQueryImplementation() {
 		"pkg/transports/cli/run/response_test.go|cross-owner-service-policy|pkg/services/factory_sessions|ValidateFactoryResponseEvent|1",
 		"pkg/transports/http/contracttests/models_test.go|cross-owner-service-policy|pkg/services/models|SupportedProviders|1",
 		"pkg/transports/http/contracttests/models_test.go|cross-owner-service-policy|pkg/services/factory_definitions|PublicWorkerModelProviderFromInternal|1",
-		"pkg/transports/http/work_read_role_test.go|cross-owner-service-policy|pkg/services/work|NewSelection|1",
+		"pkg/transports/http/work_read_role_test.go|cross-owner-service-policy|pkg/services/work|PrepareInvocationInput|1",
 		"pkg/transports/http/work_read_role_test.go|cross-owner-service-policy|pkg/services/work|NormalizeList|1",
 		"pkg/transports/http/work_read_role_test.go|cross-owner-service-policy|pkg/services/factory_runtime|CollectPublicWorkTokens|1",
 		"pkg/transports/http/work_read_role_test.go|cross-owner-service-policy|pkg/services/factory_runtime|SplitPlaceID|1",
