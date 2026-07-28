@@ -7,6 +7,6 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	testlink.RegisterDocumentOwner()
+	testlink.RegisterComposition()
 	m.Run()
 }

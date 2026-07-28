@@ -523,6 +523,70 @@ func TestSessionOwnerWait_PreservesTerminalFailureClassifications(t *testing.T) 
 	}
 }
 
+func TestSessionOwnerWait_ReturnsFailedWhileActiveWorkHasScopedFailure(t *testing.T) {
+	observation := activeSessionInvocationObservation()
+	failedChild := invocationWorkItem("work-branch-b", "quorum-branch-b", "failed", "Branch B", "quorum-branch-b:failed")
+	observation.WorldState.WorkStateChangesByWorkID[failedChild.ID] = []interfaces.FactoryWorldWorkStateChangeRecord{{
+		WorkID:       failedChild.ID,
+		WorkTypeName: failedChild.WorkTypeID,
+		ToState:      "failed",
+		ToPlaceID:    failedChild.PlaceID,
+		RequestID:    "request-1",
+	}}
+	observation.WorldState.FailedWorkItemsByID[failedChild.ID] = failedChild
+
+	result := waitForSessionOwnerObservation(t, observation, &interfaces.InvocationReturnConfig{
+		Policy:        work.ReturnPolicyExplicit,
+		WorkTypeName:  "quorum-merge",
+		TerminalState: "complete",
+	})
+	assertSessionOwnerEqual(t, "status", result.Status, interfaces.InvocationTerminalStatusFailed)
+	assertSessionOwnerEqual(t, "error code", result.ErrorCode, string(work.PrimaryResultErrorCodeFailed))
+	assertSessionOwnerEqual(t, "work state", result.WorkState, "quorum-branch-b:failed")
+}
+
+func TestSessionOwnerWait_DefaultWaitNextPollsUntilCompletion(t *testing.T) {
+	observations := 0
+	owner := newTestSessionOwner(sessionOwnerFixture{Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
+		observations++
+		if observations == 1 {
+			return activeSessionInvocationObservation(), nil
+		}
+		return completedSessionInvocationObservation("request-1", "trace-1", "done"), nil
+	}})
+	result, err := owner.waitForResult(context.Background(), "session-1", sessionWaitInput(nil))
+	if err != nil {
+		t.Fatalf("waitForResult: %v", err)
+	}
+	if observations < 2 {
+		t.Fatalf("observe calls = %d, want at least 2", observations)
+	}
+	assertSessionOwnerEqual(t, "status", result.Status, interfaces.InvocationTerminalStatusCompleted)
+	assertSessionOwnerEqual(t, "primary result", result.PrimaryResult[0].Text, "done")
+}
+
+func TestSessionOwnerWait_ReturnsFailedFromStoppedScopedFailure(t *testing.T) {
+	observation := stoppedSessionInvocationObservation()
+	failedChild := invocationWorkItem("work-branch-b", "quorum-branch-b", "failed", "Branch B", "quorum-branch-b:failed")
+	observation.WorldState.WorkStateChangesByWorkID[failedChild.ID] = []interfaces.FactoryWorldWorkStateChangeRecord{{
+		WorkID:       failedChild.ID,
+		WorkTypeName: failedChild.WorkTypeID,
+		ToState:      "failed",
+		ToPlaceID:    failedChild.PlaceID,
+		RequestID:    "request-1",
+	}}
+	observation.WorldState.FailedWorkItemsByID[failedChild.ID] = failedChild
+
+	result := waitForSessionOwnerObservation(t, observation, &interfaces.InvocationReturnConfig{
+		Policy:        work.ReturnPolicyExplicit,
+		WorkTypeName:  "quorum-merge",
+		TerminalState: "complete",
+	})
+	assertSessionOwnerEqual(t, "status", result.Status, interfaces.InvocationTerminalStatusFailed)
+	assertSessionOwnerEqual(t, "error code", result.ErrorCode, string(work.PrimaryResultErrorCodeFailed))
+	assertSessionOwnerEqual(t, "work state", result.WorkState, "quorum-branch-b:failed")
+}
+
 func waitForSessionOwnerObservation(t *testing.T, observation SessionInvocationObservation, policy *interfaces.InvocationReturnConfig) FactoryInvocationResult {
 	t.Helper()
 	owner := newTestSessionOwner(sessionOwnerFixture{Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
