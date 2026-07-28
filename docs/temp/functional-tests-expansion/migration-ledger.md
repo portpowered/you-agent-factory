@@ -993,7 +993,7 @@ can execute independently until package ownership reaches zero.
 | `workflow-delete-02-work-routing` | workflow | 7 | work/routing | released |
 | `workflow-delete-03-work-relationships` | workflow | 8 | work/relationships | released |
 | `workflow-delete-04-work-routing-logical` | workflow | 2 | work/routing | released |
-| `workflow-delete-05-workstations-repeater` | workflow | 13 | workstations/repeater | none |
+| `workflow-delete-05-workstations-repeater` | workflow | 13 | workstations/repeater | released |
 | `workflow-delete-06-workstations-watcher` | workflow | 7 | workstations/watcher | released |
 | `workflow-delete-07-factory-current` | workflow | 7 | factory/current | released |
 | `workflow-delete-08-guards` | workflow | 5 | guards | none |
@@ -1714,7 +1714,7 @@ without inventing destinations. Prefer independent, reviewable batch sizes.
 | `workflow-delete-02-work-routing` | workflow | 7 | work/routing | released |
 | `workflow-delete-03-work-relationships` | workflow | 8 | work/relationships | released |
 | `workflow-delete-04-work-routing-logical` | workflow | 2 | work/routing | released |
-| `workflow-delete-05-workstations-repeater` | workflow | 13 | workstations/repeater | planned |
+| `workflow-delete-05-workstations-repeater` | workflow | 13 | workstations/repeater | released |
 | `workflow-delete-06-workstations-watcher` | workflow | 7 | workstations/watcher | released |
 | `workflow-delete-07-factory-current` | workflow | 7 | factory/current | released |
 | `workflow-delete-08-guards` | workflow | 5 | guards | planned |
