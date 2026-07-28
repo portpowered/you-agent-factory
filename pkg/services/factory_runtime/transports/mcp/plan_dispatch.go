@@ -29,6 +29,9 @@ func PlanDispatch(
 		envelope := executionErrorEnvelope(errMissingRequestContext)
 		return ToolResponse[factoryruntime.PlanDispatchResult]{Error: &envelope}
 	}
+	if response, done := requestContextErrorResponse[factoryruntime.PlanDispatchResult](ctx); done {
+		return response
+	}
 	if runtime == nil {
 		envelope := unavailableRuntimeErrorEnvelope()
 		return ToolResponse[factoryruntime.PlanDispatchResult]{Error: &envelope}

@@ -23,6 +23,9 @@ func Observe(
 		envelope := executionErrorEnvelope(errMissingRequestContext)
 		return ToolResponse[factoryruntime.ObserveResult]{Error: &envelope}
 	}
+	if response, done := requestContextErrorResponse[factoryruntime.ObserveResult](ctx); done {
+		return response
+	}
 	if runtime == nil {
 		envelope := unavailableRuntimeErrorEnvelope()
 		return ToolResponse[factoryruntime.ObserveResult]{Error: &envelope}

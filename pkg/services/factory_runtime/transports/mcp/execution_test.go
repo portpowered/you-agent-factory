@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryrunmcp "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/mcp"
@@ -510,6 +512,121 @@ func TestBind_UnmappedRootErrorDoesNotLeakInternalPackagePaths(t *testing.T) {
 	)
 	if envelope.Message != "factory runtime execution failed" {
 		t.Fatalf("error.message = %q, want sanitized internal message; envelope = %#v", envelope.Message, envelope)
+	}
+}
+
+func TestBind_ControlPauseContextCanceledBeforeRootReturnsDocumentedEnvelope(t *testing.T) {
+	t.Parallel()
+
+	var invoked bool
+	operation := factoryrunmcp.Bind(factoryrunmcp.RootDependencies{
+		Runtime: fakeRuntimeRoot{invoked: &invoked},
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	raw, err := operation(ctx, factoryrunmcp.ToolControlPause, json.RawMessage(`{}`))
+	if err != nil {
+		t.Fatalf("CallTool(control_pause) transport error = %v, want typed tool response", err)
+	}
+	if invoked {
+		t.Fatal("fake runtime root was invoked for pre-canceled context")
+	}
+	envelope := assertTypedToolErrorEnvelope(
+		t,
+		raw,
+		"factory_runtime.request.canceled",
+		false,
+	)
+	if envelope.Message != "factory runtime request was canceled" {
+		t.Fatalf("error.message = %q, want canceled request message; envelope = %#v", envelope.Message, envelope)
+	}
+}
+
+func TestBind_ObserveContextCanceledDuringRootReturnsDocumentedEnvelope(t *testing.T) {
+	t.Parallel()
+
+	entered := make(chan struct{})
+	var enteredOnce sync.Once
+	fake := fakeRuntimeRoot{
+		observe: func(ctx context.Context, _ factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {
+			enteredOnce.Do(func() { close(entered) })
+			<-ctx.Done()
+			return factoryruntime.ObserveResult{}, ctx.Err()
+		},
+	}
+	operation := factoryrunmcp.Bind(factoryrunmcp.RootDependencies{Runtime: fake})
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	var raw json.RawMessage
+	var callErr error
+	go func() {
+		defer close(done)
+		raw, callErr = operation(
+			ctx,
+			factoryrunmcp.ToolObserve,
+			json.RawMessage(`{"scope":"PROGRESS"}`),
+		)
+	}()
+	select {
+	case <-entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("fake runtime root did not start before cancellation")
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("CallTool(observe) hung after cancellation")
+	}
+	if callErr != nil {
+		t.Fatalf("CallTool(observe) transport error = %v, want typed tool response", callErr)
+	}
+	envelope := assertTypedToolErrorEnvelope(
+		t,
+		raw,
+		"factory_runtime.request.canceled",
+		false,
+	)
+	if envelope.Message != "factory runtime request was canceled" {
+		t.Fatalf("error.message = %q, want canceled request message; envelope = %#v", envelope.Message, envelope)
+	}
+}
+
+func TestBind_PlanDispatchContextDeadlineExceededDuringRootReturnsDocumentedEnvelope(t *testing.T) {
+	t.Parallel()
+
+	fake := fakeRuntimeRoot{
+		planDispatch: func(ctx context.Context, _ factoryruntime.PlanDispatchRequest) (factoryruntime.PlanDispatchResult, error) {
+			<-ctx.Done()
+			return factoryruntime.PlanDispatchResult{}, ctx.Err()
+		},
+	}
+	operation := factoryrunmcp.Bind(factoryrunmcp.RootDependencies{Runtime: fake})
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
+	defer cancel()
+	raw, err := operation(
+		ctx,
+		factoryrunmcp.ToolPlanDispatch,
+		json.RawMessage(`{
+			"dispatchId":"dispatch-1",
+			"correlationId":"corr-1",
+			"workIds":["work-1"],
+			"workstationName":"ws-alpha",
+			"workerType":"coder",
+			"replayKey":"replay-1"
+		}`),
+	)
+	if err != nil {
+		t.Fatalf("CallTool(plan_dispatch) transport error = %v, want typed tool response", err)
+	}
+	envelope := assertTypedToolErrorEnvelope(
+		t,
+		raw,
+		"factory_runtime.request.timed_out",
+		true,
+	)
+	if envelope.Message != "factory runtime request timed out" {
+		t.Fatalf("error.message = %q, want timed out request message; envelope = %#v", envelope.Message, envelope)
 	}
 }
 

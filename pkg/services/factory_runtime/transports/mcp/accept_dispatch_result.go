@@ -28,6 +28,9 @@ func AcceptDispatchResult(
 		envelope := executionErrorEnvelope(errMissingRequestContext)
 		return ToolResponse[factoryruntime.AcceptDispatchResultResult]{Error: &envelope}
 	}
+	if response, done := requestContextErrorResponse[factoryruntime.AcceptDispatchResultResult](ctx); done {
+		return response
+	}
 	if runtime == nil {
 		envelope := unavailableRuntimeErrorEnvelope()
 		return ToolResponse[factoryruntime.AcceptDispatchResultResult]{Error: &envelope}

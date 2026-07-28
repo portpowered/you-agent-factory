@@ -13,6 +13,9 @@ func ControlPause(ctx context.Context, runtime factoryruntime.Service) ToolRespo
 		envelope := executionErrorEnvelope(errMissingRequestContext)
 		return ToolResponse[factoryruntime.PauseResult]{Error: &envelope}
 	}
+	if response, done := requestContextErrorResponse[factoryruntime.PauseResult](ctx); done {
+		return response
+	}
 	if runtime == nil {
 		envelope := unavailableRuntimeErrorEnvelope()
 		return ToolResponse[factoryruntime.PauseResult]{Error: &envelope}
