@@ -22,6 +22,10 @@ docs/temp/**
 ## Wave 0 functional-tests-expansion planning authority (durable)
 !docs/temp/functional-tests-expansion/
 !docs/temp/functional-tests-expansion/**
+## PSS planner decision and checklist authority (durable)
+!docs/temp/projects/
+!docs/temp/projects/packaged-service-structure/
+!docs/temp/projects/packaged-service-structure/**
 ## Do not include temporary files in general for worktree progress
 prd.json
 prd.md
