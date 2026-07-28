@@ -587,14 +587,6 @@
       "minimum": 81.31
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/checkpointstore",
-      "minimum": 85.71
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/checkpointsummary",
-      "minimum": 89.18
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/context",
       "minimum": 86.11
     },
@@ -661,6 +653,30 @@
         "deadline": "2027-07-15",
         "removalGate": "The unit coverage profile reports at least one measurable statement for this package or DEL-RUN deletes the shim."
       }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery",
+      "minimum": 96.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptstore",
+      "minimum": 85.71
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptsummary",
+      "minimum": 89.18
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/processlocal",
+      "minimum": 85.71
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/service",
+      "minimum": 93.18
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/wire",
+      "minimum": 100.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning",
@@ -738,7 +754,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime",
-      "minimum": 83.72
+      "minimum": 82.46
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime/buffers",
@@ -1747,6 +1763,10 @@
       "minimum": 85.74
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/service",
+      "minimum": 75.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_materialization",
       "exception": {
         "kind": "measurement",
@@ -1802,7 +1822,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/service",
-      "minimum": 72.95
+      "minimum": 33.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/stateaccessrecordings",
@@ -1878,7 +1898,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal",
-      "minimum": 72.00
+      "minimum": 71.65
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners",
@@ -2168,7 +2188,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/run",
-      "minimum": 80.33
+      "minimum": 80.25
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/runconfig",

@@ -39,6 +39,14 @@ func TestMapCommittedOwnerPackageWorkMoveDestinations(t *testing.T) {
 			},
 		},
 		{
+			path: "pkg/services/work/internal/service",
+			want: PackageMapping{
+				PackagePath: "pkg/services/work/internal/service",
+				Disposition: DispositionMove,
+				Destination: "work/internal",
+			},
+		},
+		{
 			path: "pkg/services/work/service",
 			want: PackageMapping{
 				PackagePath: "pkg/services/work/service",

@@ -103,6 +103,9 @@ func (service *Service) OpenApplication(
 	if err != nil {
 		return roles.OpenedProcessApplication{}, fmt.Errorf("open Factory Session application runtime: %w", err)
 	}
+	if ports.RuntimeHTTPServicesBound != nil {
+		ports.RuntimeHTTPServicesBound(opened.HTTP)
+	}
 	components, err := service.adaptRuntime(opened, inputs.Effects, visualizationSink)
 	if err != nil {
 		err = closeOpenedRuntime(opened, err)

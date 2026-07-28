@@ -1,6 +1,7 @@
-// Package checkpointsummary implements Factory Runtime's durable JavaScript
-// checkpoint-summary projection contract.
-package checkpointsummary
+// Package javascriptsummary implements Factory Runtime's durable JavaScript
+// checkpoint-summary projection contract inside the parent-private checkpoint
+// recovery layout.
+package javascriptsummary
 
 import (
 	"sort"
