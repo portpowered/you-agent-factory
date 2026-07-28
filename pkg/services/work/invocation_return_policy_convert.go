@@ -218,6 +218,19 @@ func argumentErrorFromInternal(err *invocationreturnpolicy.ArgumentError) *Argum
 	}
 }
 
+func argumentErrorToInternal(err *ArgumentError) *invocationreturnpolicy.ArgumentError {
+	if err == nil {
+		return nil
+	}
+	return &invocationreturnpolicy.ArgumentError{
+		Code:       invocationreturnpolicy.ArgumentErrorCode(err.Code),
+		Message:    err.Message,
+		Parameter:  err.Parameter,
+		Argument:   err.Argument,
+		SourceKind: invocationreturnpolicy.ArgumentSourceKind(err.SourceKind),
+	}
+}
+
 func inputErrorFromInternal(err *invocationreturnpolicy.InputError) *InputError {
 	if err == nil {
 		return nil

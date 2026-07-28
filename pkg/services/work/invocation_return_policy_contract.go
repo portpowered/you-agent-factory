@@ -226,6 +226,23 @@ func NamedArgumentInputsFromAnyMap(values map[string]any) ([]NamedArgumentInput,
 	return namedArgumentInputsFromInternal(inputs), nil
 }
 
+// QualifyInvocationArgumentError adds the invoked Factory name to
+// customer-visible ArgumentError diagnostics when the transport boundary knows it.
+func QualifyInvocationArgumentError(err error, factoryName string) error {
+	var argumentErr *ArgumentError
+	if errors.As(err, &argumentErr) {
+		return mapInvocationReturnPolicyError(
+			invocationreturnpolicy.QualifyInvocationArgumentError(
+				argumentErrorToInternal(argumentErr),
+				factoryName,
+			),
+		)
+	}
+	return mapInvocationReturnPolicyError(
+		invocationreturnpolicy.QualifyInvocationArgumentError(err, factoryName),
+	)
+}
+
 func NormalizeArguments(input NormalizeArgumentsInput) (NormalizedArguments, error) {
 	result, err := invocationreturnpolicy.NormalizeArguments(normalizeArgumentsInputToInternal(input))
 	if err != nil {
