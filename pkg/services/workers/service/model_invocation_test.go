@@ -27,7 +27,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
-	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/executor/agentrun"
+	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 	workerservice "github.com/portpowered/infinite-you/pkg/services/workers/service"
 )
