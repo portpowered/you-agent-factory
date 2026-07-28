@@ -52,6 +52,7 @@ func NewService(
 	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
 	portableFileSystem portablefiles.FileSystem,
 	directoryReplacementStore factorydefinitions.DirectoryReplacementStore,
+	options ...factorydefinitionsservice.CompositionOption,
 ) (factorydefinitions.Service, error) {
 	if err := validateDependencies(
 		sessionHost,
@@ -168,6 +169,7 @@ func NewService(
 		requiredToolChecker,
 		orchestratorValidator,
 		authoringLayout,
+		options...,
 	)
 	if definitions == nil {
 		return nil, fmt.Errorf("construct Factory Definitions: implementation rejected its dependencies")
