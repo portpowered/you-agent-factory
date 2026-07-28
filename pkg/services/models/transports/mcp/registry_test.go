@@ -157,6 +157,8 @@ func TestIsCanonicalToolHandlerRegistered_ReportsLiveTools(t *testing.T) {
 	for _, toolName := range []string{
 		modelmcp.ToolListCatalog,
 		modelmcp.ToolPrepareAssets,
+		modelmcp.ToolAcquireLease,
+		modelmcp.ToolInvokeWithLease,
 	} {
 		if !modelmcp.IsCanonicalToolHandlerRegistered(toolName) {
 			t.Fatalf("handler for %q should be registered", toolName)

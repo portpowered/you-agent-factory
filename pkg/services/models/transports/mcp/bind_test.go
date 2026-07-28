@@ -116,9 +116,11 @@ func TestPackageBoundary_DoesNotImportModelsInternal(t *testing.T) {
 
 type fakeModelsRoot struct {
 	models.Service
-	invoked            *bool
-	listCatalog        func(context.Context, models.ListModelsRequest) (models.ListModelsResult, error)
-	prepareModelAssets func(context.Context, models.PrepareModelAssetsRequest) (models.PrepareModelAssetsResult, error)
+	invoked              *bool
+	listCatalog          func(context.Context, models.ListModelsRequest) (models.ListModelsResult, error)
+	prepareModelAssets   func(context.Context, models.PrepareModelAssetsRequest) (models.PrepareModelAssetsResult, error)
+	acquireModelLease    func(context.Context, models.AcquireModelLeaseRequest) (models.AcquireModelLeaseResult, error)
+	invokeModelWithLease func(context.Context, models.InvokeModelRequest) (models.InvokeModelResult, error)
 }
 
 func (fake fakeModelsRoot) markInvoked() {
@@ -147,6 +149,28 @@ func (fake fakeModelsRoot) PrepareModelAssets(
 		panic("unexpected PrepareModelAssets on fake models root")
 	}
 	return fake.prepareModelAssets(ctx, request)
+}
+
+func (fake fakeModelsRoot) AcquireModelLease(
+	ctx context.Context,
+	request models.AcquireModelLeaseRequest,
+) (models.AcquireModelLeaseResult, error) {
+	fake.markInvoked()
+	if fake.acquireModelLease == nil {
+		panic("unexpected AcquireModelLease on fake models root")
+	}
+	return fake.acquireModelLease(ctx, request)
+}
+
+func (fake fakeModelsRoot) InvokeModelWithLease(
+	ctx context.Context,
+	request models.InvokeModelRequest,
+) (models.InvokeModelResult, error) {
+	fake.markInvoked()
+	if fake.invokeModelWithLease == nil {
+		panic("unexpected InvokeModelWithLease on fake models root")
+	}
+	return fake.invokeModelWithLease(ctx, request)
 }
 
 func assertPackageDirectImportsForbidden(t *testing.T, packagePath string, forbiddenRoots []string) {

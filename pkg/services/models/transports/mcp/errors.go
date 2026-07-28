@@ -8,7 +8,11 @@ import (
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 )
 
-var errEmptyModelName = fmt.Errorf("%w: empty model name", models.ErrNotFound)
+var (
+	errEmptyModelName      = fmt.Errorf("%w: empty model name", models.ErrNotFound)
+	errEmptyLeaseHolder    = fmt.Errorf("%w: empty lease holder", models.ErrHostInvalidHolder)
+	errEmptyModelOperation = fmt.Errorf("%w: empty model operation", models.ErrUnsupportedModelOperation)
+)
 
 const (
 	errorCodeBadRequest            = "BAD_REQUEST"
@@ -21,6 +25,17 @@ const (
 	errorCodeAssetSourceUnsupported       = "model.asset.source_unsupported"
 	errorCodeAssetIntegrityFailed         = "model.asset.integrity_failed"
 	errorCodeAssetPreparationInterrupted  = "model.asset.preparation_interrupted"
+	errorCodeAssetUnavailable             = "model.asset.unavailable"
+	errorCodeLeaseCapacityExhausted       = "model.lease.capacity_exhausted"
+	errorCodeLeaseCapacityContended       = "model.lease.capacity_contended"
+	errorCodeLeaseExpired                 = "model.lease.expired"
+	errorCodeLeaseInvalidHolder           = "model.lease.invalid_holder"
+	errorCodeLeaseNotFound                = "model.lease.not_found"
+	errorCodeHostRuntimeNotReady          = "model.host.runtime_not_ready"
+	errorCodeInferenceFailed              = "model.inference.failed"
+	errorCodeInferenceTimeout             = "model.inference.timeout"
+	errorCodeModelOperationUnsupported    = "model.operation.unsupported"
+	errorCodeInferenceResponseUnsupported = "model.inference.response_mode_unsupported"
 	errorCodeInternalExecution            = "model.execution.internal"
 	errorMessageRuntimeScopeInvalid = "models runtime scope is invalid"
 	errorMessageRuntimeScopeStale   = "models runtime scope is stale"
@@ -31,6 +46,17 @@ const (
 	errorMessageAssetSourceUnsupported      = "models asset source is unsupported"
 	errorMessageAssetIntegrityFailed        = "models asset integrity verification failed"
 	errorMessageAssetPreparationInterrupted = "models asset preparation was interrupted"
+	errorMessageAssetUnavailable            = "models assets are unavailable"
+	errorMessageLeaseCapacityExhausted      = "models lease capacity is exhausted"
+	errorMessageLeaseCapacityContended      = "models lease capacity is contended"
+	errorMessageLeaseExpired                = "models lease has expired"
+	errorMessageLeaseInvalidHolder          = "models lease holder is invalid"
+	errorMessageLeaseNotFound               = "models lease was not found"
+	errorMessageHostRuntimeNotReady         = "models host runtime is not ready"
+	errorMessageInferenceFailed             = "models inference failed"
+	errorMessageInferenceTimeout            = "models inference timed out"
+	errorMessageModelOperationUnsupported   = "models operation is not supported"
+	errorMessageInferenceResponseUnsupported = "models inference response mode is not supported"
 	errorMessageInternalExecution           = "models execution failed"
 )
 
@@ -96,6 +122,161 @@ func prepareAssetsErrorEnvelope(err error) ToolErrorEnvelope {
 			Code:      errorCodeAssetPreparationInterrupted,
 			Message:   errorMessageAssetPreparationInterrupted,
 			Retryable: true,
+			Details: map[string]any{
+				"reason": err.Error(),
+			},
+		}
+	default:
+		return executionErrorEnvelope(err)
+	}
+}
+
+func acquireLeaseErrorEnvelope(err error) ToolErrorEnvelope {
+	if envelope, ok := runtimeScopeErrorEnvelope(err); ok {
+		return envelope
+	}
+	switch {
+	case errors.Is(err, models.ErrHostCapacityExhausted):
+		return ToolErrorEnvelope{
+			Code:      errorCodeLeaseCapacityExhausted,
+			Message:   errorMessageLeaseCapacityExhausted,
+			Retryable: true,
+			Details: map[string]any{
+				"reason": err.Error(),
+			},
+		}
+	case errors.Is(err, models.ErrHostCapacityContended):
+		return ToolErrorEnvelope{
+			Code:      errorCodeLeaseCapacityContended,
+			Message:   errorMessageLeaseCapacityContended,
+			Retryable: true,
+			Details: map[string]any{
+				"reason": err.Error(),
+			},
+		}
+	case errors.Is(err, models.ErrHostRuntimeNotReady):
+		return ToolErrorEnvelope{
+			Code:      errorCodeHostRuntimeNotReady,
+			Message:   errorMessageHostRuntimeNotReady,
+			Retryable: true,
+			Details: map[string]any{
+				"reason": err.Error(),
+			},
+		}
+	case errors.Is(err, models.ErrHostInvalidHolder):
+		return ToolErrorEnvelope{
+			Code:      errorCodeLeaseInvalidHolder,
+			Message:   errorMessageLeaseInvalidHolder,
+			Retryable: false,
+			Details: map[string]any{
+				"reason": err.Error(),
+			},
+		}
+	default:
+		return executionErrorEnvelope(err)
+	}
+}
+
+func invokeWithLeaseErrorEnvelope(err error) ToolErrorEnvelope {
+	if envelope, ok := runtimeScopeErrorEnvelope(err); ok {
+		return envelope
+	}
+	switch {
+	case errors.Is(err, models.ErrHostCapacityExhausted):
+		return ToolErrorEnvelope{
+			Code:      errorCodeLeaseCapacityExhausted,
+			Message:   errorMessageLeaseCapacityExhausted,
+			Retryable: true,
+			Details: map[string]any{
+				"reason": err.Error(),
+			},
+		}
+	case errors.Is(err, models.ErrHostCapacityContended):
+		return ToolErrorEnvelope{
+			Code:      errorCodeLeaseCapacityContended,
+			Message:   errorMessageLeaseCapacityContended,
+			Retryable: true,
+			Details: map[string]any{
+				"reason": err.Error(),
+			},
+		}
+	case errors.Is(err, models.ErrHostRuntimeNotReady):
+		return ToolErrorEnvelope{
+			Code:      errorCodeHostRuntimeNotReady,
+			Message:   errorMessageHostRuntimeNotReady,
+			Retryable: true,
+			Details: map[string]any{
+				"reason": err.Error(),
+			},
+		}
+	case errors.Is(err, models.ErrHostLeaseExpired):
+		return ToolErrorEnvelope{
+			Code:      errorCodeLeaseExpired,
+			Message:   errorMessageLeaseExpired,
+			Retryable: false,
+			Details: map[string]any{
+				"reason": err.Error(),
+			},
+		}
+	case errors.Is(err, models.ErrHostLeaseNotFound):
+		return ToolErrorEnvelope{
+			Code:      errorCodeLeaseNotFound,
+			Message:   errorMessageLeaseNotFound,
+			Retryable: false,
+			Details: map[string]any{
+				"reason": err.Error(),
+			},
+		}
+	case errors.Is(err, models.ErrHostInvalidHolder):
+		return ToolErrorEnvelope{
+			Code:      errorCodeLeaseInvalidHolder,
+			Message:   errorMessageLeaseInvalidHolder,
+			Retryable: false,
+			Details: map[string]any{
+				"reason": err.Error(),
+			},
+		}
+	case errors.Is(err, models.ErrAssetUnavailable):
+		return ToolErrorEnvelope{
+			Code:      errorCodeAssetUnavailable,
+			Message:   errorMessageAssetUnavailable,
+			Retryable: true,
+			Details: map[string]any{
+				"reason": err.Error(),
+			},
+		}
+	case errors.Is(err, models.ErrInferenceTimeout):
+		return ToolErrorEnvelope{
+			Code:      errorCodeInferenceTimeout,
+			Message:   errorMessageInferenceTimeout,
+			Retryable: true,
+			Details: map[string]any{
+				"reason": err.Error(),
+			},
+		}
+	case errors.Is(err, models.ErrInferenceFailed):
+		return ToolErrorEnvelope{
+			Code:      errorCodeInferenceFailed,
+			Message:   errorMessageInferenceFailed,
+			Retryable: false,
+			Details: map[string]any{
+				"reason": err.Error(),
+			},
+		}
+	case errors.Is(err, models.ErrUnsupportedModelOperation):
+		return ToolErrorEnvelope{
+			Code:      errorCodeModelOperationUnsupported,
+			Message:   errorMessageModelOperationUnsupported,
+			Retryable: false,
+			Details: map[string]any{
+				"reason": err.Error(),
+			},
+		}
+	case errors.Is(err, models.ErrUnsupportedResponseMode):
+		return ToolErrorEnvelope{
+			Code:      errorCodeInferenceResponseUnsupported,
+			Message:   errorMessageInferenceResponseUnsupported,
+			Retryable: false,
 			Details: map[string]any{
 				"reason": err.Error(),
 			},

@@ -51,8 +51,10 @@ type canonicalToolHandler func(
 ) (json.RawMessage, error)
 
 var canonicalToolHandlers = map[string]canonicalToolHandler{
-	ToolListCatalog:   handleListCatalog,
-	ToolPrepareAssets: handlePrepareAssets,
+	ToolListCatalog:      handleListCatalog,
+	ToolPrepareAssets:    handlePrepareAssets,
+	ToolAcquireLease:     handleAcquireLease,
+	ToolInvokeWithLease:  handleInvokeWithLease,
 }
 
 func handleListCatalog(
@@ -72,6 +74,26 @@ func handlePrepareAssets(
 ) (json.RawMessage, error) {
 	return callToolJSON(input, "decode prepare assets input", func(request PrepareAssetsInput) ToolResponse[models.PrepareModelAssetsResult] {
 		return PrepareAssets(ctx, service, request)
+	})
+}
+
+func handleAcquireLease(
+	ctx context.Context,
+	service models.Service,
+	input json.RawMessage,
+) (json.RawMessage, error) {
+	return callToolJSON(input, "decode acquire lease input", func(request AcquireLeaseInput) ToolResponse[AcquireLeaseResult] {
+		return AcquireLease(ctx, service, request)
+	})
+}
+
+func handleInvokeWithLease(
+	ctx context.Context,
+	service models.Service,
+	input json.RawMessage,
+) (json.RawMessage, error) {
+	return callToolJSON(input, "decode invoke with lease input", func(request InvokeWithLeaseInput) ToolResponse[InvokeWithLeaseResult] {
+		return InvokeWithLease(ctx, service, request)
 	})
 }
 
