@@ -15,11 +15,8 @@ func RecordingsPeerFromProjectionService(
 	if peer == nil {
 		return nil, errors.New("initialize Factory visualization: projection service is required")
 	}
-	service, ok := peer.(recordings.Service)
-	if !ok {
-		return nil, errors.New(
-			"initialize Factory visualization: recordings peer must implement recordings.Service root contract",
-		)
+	if service, ok := peer.(recordings.Service); ok {
+		return service, nil
 	}
-	return service, nil
+	return &projectionServiceRoot{projection: peer}, nil
 }
