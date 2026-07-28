@@ -22,7 +22,7 @@
 // replay_recording_deletion_aliases.go, worker_provider_deletion_aliases.go, and
 // parallel_operation_deletion_aliases.go until peers finish cutover.
 //
-// Foreign worker vocabulary below the foreign-vocabulary marker in
-// contracts_root.go is temporary deletion-only debt until CLN-DEF story 007
-// deletes the contracts mega-barrel.
+// The public contracts mega-barrel was deleted in CLN-DEF story 007; implementation
+// types live in pkg/services/factory_definitions/internal/contracts and shared
+// namevalue helpers in pkg/services/factory_definitions/namevalue.
 package factorydefinitions

@@ -1,69 +1,67 @@
 package recordings
 
-import factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+import factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 
 // Recordings-owned Factory world-state projection vocabulary. Peers import
 // these aliases from pkg/services/recordings rather than treating the vocabulary
-// as Factory Definitions-owned peer contract surface. Implementation debt
-// remains in the contracts mega-barrel until CLN-DEF-CONTRACTS story 007
-// deletes it.
+// as Factory Definitions-owned peer contract surface.
 type (
-	ActiveThrottlePause                    = factorycontracts.ActiveThrottlePause
-	FactoryPlace                           = factorycontracts.FactoryPlace
-	FactoryPlaceOccupancy                  = factorycontracts.FactoryPlaceOccupancy
-	FactoryState                           = factorycontracts.FactoryState
-	FactoryStateDefinition                 = factorycontracts.FactoryStateDefinition
-	FactoryTerminalWork                    = factorycontracts.FactoryTerminalWork
-	FactoryWorkType                        = factorycontracts.FactoryWorkType
-	FactoryWorker                          = factorycontracts.FactoryWorker
-	FactoryWorkstation                     = factorycontracts.FactoryWorkstation
-	FactoryWorkstationRef                  = factorycontracts.FactoryWorkstationRef
-	FactoryWorldActiveExecution            = factorycontracts.FactoryWorldActiveExecution
-	FactoryWorldActivity                   = factorycontracts.FactoryWorldActivity
-	FactoryWorldAgentRunResponse           = factorycontracts.FactoryWorldAgentRunResponse
-	FactoryWorldDispatch                   = factorycontracts.FactoryWorldDispatch
-	FactoryWorldDispatchCompletion         = factorycontracts.FactoryWorldDispatchCompletion
-	FactoryWorldFailureDetail              = factorycontracts.FactoryWorldFailureDetail
-	FactoryWorldInferenceAttempt           = factorycontracts.FactoryWorldInferenceAttempt
-	FactoryWorldJavaScriptChildDispatchCounts = factorycontracts.FactoryWorldJavaScriptChildDispatchCounts
-	FactoryWorldJavaScriptProjection       = factorycontracts.FactoryWorldJavaScriptProjection
-	FactoryWorldPlaceRef                   = factorycontracts.FactoryWorldPlaceRef
-	FactoryWorldProviderSessionRecord      = factorycontracts.FactoryWorldProviderSessionRecord
-	FactoryWorldRuntimeView                = factorycontracts.FactoryWorldRuntimeView
-	FactoryWorldScriptRequest              = factorycontracts.FactoryWorldScriptRequest
-	FactoryWorldScriptResponse             = factorycontracts.FactoryWorldScriptResponse
-	FactoryWorldSessionBracketProjection   = factorycontracts.FactoryWorldSessionBracketProjection
-	FactoryWorldSessionBracketState        = factorycontracts.FactoryWorldSessionBracketState
-	FactoryWorldSessionRuntime             = factorycontracts.FactoryWorldSessionRuntime
-	FactoryWorldState                      = factorycontracts.FactoryWorldState
-	FactoryWorldSubmitWorkType             = factorycontracts.FactoryWorldSubmitWorkType
-	FactoryWorldThrottlePause              = factorycontracts.FactoryWorldThrottlePause
-	FactoryWorldTopologyView               = factorycontracts.FactoryWorldTopologyView
-	FactoryWorldTrace                      = factorycontracts.FactoryWorldTrace
-	FactoryWorldView                       = factorycontracts.FactoryWorldView
-	FactoryWorldWorkItemRef                = factorycontracts.FactoryWorldWorkItemRef
-	FactoryWorldWorkStateChangeRecord      = factorycontracts.FactoryWorldWorkStateChangeRecord
-	FactoryWorldWorkstationEdge            = factorycontracts.FactoryWorldWorkstationEdge
-	FactoryWorldWorkstationNode            = factorycontracts.FactoryWorldWorkstationNode
-	InitialStructurePayload                = factorycontracts.InitialStructurePayload
+	ActiveThrottlePause                    = factorydefinitions.ActiveThrottlePause
+	FactoryPlace                           = factorydefinitions.FactoryPlace
+	FactoryPlaceOccupancy                  = factorydefinitions.FactoryPlaceOccupancy
+	FactoryState                           = factorydefinitions.FactoryState
+	FactoryStateDefinition                 = factorydefinitions.FactoryStateDefinition
+	FactoryTerminalWork                    = factorydefinitions.FactoryTerminalWork
+	FactoryWorkType                        = factorydefinitions.FactoryWorkType
+	FactoryWorker                          = factorydefinitions.FactoryWorker
+	FactoryWorkstation                     = factorydefinitions.FactoryWorkstation
+	FactoryWorkstationRef                  = factorydefinitions.FactoryWorkstationRef
+	FactoryWorldActiveExecution            = factorydefinitions.FactoryWorldActiveExecution
+	FactoryWorldActivity                   = factorydefinitions.FactoryWorldActivity
+	FactoryWorldAgentRunResponse           = factorydefinitions.FactoryWorldAgentRunResponse
+	FactoryWorldDispatch                   = factorydefinitions.FactoryWorldDispatch
+	FactoryWorldDispatchCompletion         = factorydefinitions.FactoryWorldDispatchCompletion
+	FactoryWorldFailureDetail              = factorydefinitions.FactoryWorldFailureDetail
+	FactoryWorldInferenceAttempt           = factorydefinitions.FactoryWorldInferenceAttempt
+	FactoryWorldJavaScriptChildDispatchCounts = factorydefinitions.FactoryWorldJavaScriptChildDispatchCounts
+	FactoryWorldJavaScriptProjection       = factorydefinitions.FactoryWorldJavaScriptProjection
+	FactoryWorldPlaceRef                   = factorydefinitions.FactoryWorldPlaceRef
+	FactoryWorldProviderSessionRecord      = factorydefinitions.FactoryWorldProviderSessionRecord
+	FactoryWorldRuntimeView                = factorydefinitions.FactoryWorldRuntimeView
+	FactoryWorldScriptRequest              = factorydefinitions.FactoryWorldScriptRequest
+	FactoryWorldScriptResponse             = factorydefinitions.FactoryWorldScriptResponse
+	FactoryWorldSessionBracketProjection   = factorydefinitions.FactoryWorldSessionBracketProjection
+	FactoryWorldSessionBracketState        = factorydefinitions.FactoryWorldSessionBracketState
+	FactoryWorldSessionRuntime             = factorydefinitions.FactoryWorldSessionRuntime
+	FactoryWorldState                      = factorydefinitions.FactoryWorldState
+	FactoryWorldSubmitWorkType             = factorydefinitions.FactoryWorldSubmitWorkType
+	FactoryWorldThrottlePause              = factorydefinitions.FactoryWorldThrottlePause
+	FactoryWorldTopologyView               = factorydefinitions.FactoryWorldTopologyView
+	FactoryWorldTrace                      = factorydefinitions.FactoryWorldTrace
+	FactoryWorldView                       = factorydefinitions.FactoryWorldView
+	FactoryWorldWorkItemRef                = factorydefinitions.FactoryWorldWorkItemRef
+	FactoryWorldWorkStateChangeRecord      = factorydefinitions.FactoryWorldWorkStateChangeRecord
+	FactoryWorldWorkstationEdge            = factorydefinitions.FactoryWorldWorkstationEdge
+	FactoryWorldWorkstationNode            = factorydefinitions.FactoryWorldWorkstationNode
+	InitialStructurePayload                = factorydefinitions.InitialStructurePayload
 )
 
 const (
-	FactoryStateCompleted = factorycontracts.FactoryStateCompleted
-	FactoryStateFailed    = factorycontracts.FactoryStateFailed
-	FactoryStateIdle      = factorycontracts.FactoryStateIdle
-	FactoryStatePaused    = factorycontracts.FactoryStatePaused
-	FactoryStateRunning   = factorycontracts.FactoryStateRunning
-	StateTypeFailed       = factorycontracts.StateTypeFailed
-	StateTypeInitial      = factorycontracts.StateTypeInitial
-	StateTypeProcessing   = factorycontracts.StateTypeProcessing
-	StateTypeTerminal     = factorycontracts.StateTypeTerminal
+	FactoryStateCompleted = factorydefinitions.FactoryStateCompleted
+	FactoryStateFailed    = factorydefinitions.FactoryStateFailed
+	FactoryStateIdle      = factorydefinitions.FactoryStateIdle
+	FactoryStatePaused    = factorydefinitions.FactoryStatePaused
+	FactoryStateRunning   = factorydefinitions.FactoryStateRunning
+	StateTypeFailed       = factorydefinitions.StateTypeFailed
+	StateTypeInitial      = factorydefinitions.StateTypeInitial
+	StateTypeProcessing   = factorydefinitions.StateTypeProcessing
+	StateTypeTerminal     = factorydefinitions.StateTypeTerminal
 )
 
 var (
-	CloneFactoryWorldDispatchCompletion            = factorycontracts.CloneFactoryWorldDispatchCompletion
-	CloneFactoryWorldInferenceAttemptsByDispatchID = factorycontracts.CloneFactoryWorldInferenceAttemptsByDispatchID
-	CloneFactoryWorldProviderSessionRecord         = factorycontracts.CloneFactoryWorldProviderSessionRecord
-	IsSystemTimePlace                              = factorycontracts.IsSystemTimePlace
-	IsSystemTimeWorkType                           = factorycontracts.IsSystemTimeWorkType
+	CloneFactoryWorldDispatchCompletion            = factorydefinitions.CloneFactoryWorldDispatchCompletion
+	CloneFactoryWorldInferenceAttemptsByDispatchID = factorydefinitions.CloneFactoryWorldInferenceAttemptsByDispatchID
+	CloneFactoryWorldProviderSessionRecord         = factorydefinitions.CloneFactoryWorldProviderSessionRecord
+	IsSystemTimePlace                              = factorydefinitions.IsSystemTimePlace
+	IsSystemTimeWorkType                           = factorydefinitions.IsSystemTimeWorkType
 )

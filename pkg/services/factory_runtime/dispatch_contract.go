@@ -1,46 +1,46 @@
 package factory
 
-import factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+import factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 
 // Runtime-owned dispatch vocabulary published at the Factory Runtime root.
 // Runtime and Recordings dispatch seams consume these aliases rather than
 // treating the vocabulary as Factory Definitions-owned peer contract surface.
 type (
-	ActiveThrottlePause                   = factorycontracts.ActiveThrottlePause
-	CompletedDispatch                     = factorycontracts.CompletedDispatch
-	DispatchConsumedWorkRef               = factorycontracts.DispatchConsumedWorkRef
-	DispatchEntry                         = factorycontracts.DispatchEntry
-	DispatchReconciliationSource          = factorycontracts.DispatchReconciliationSource
-	DispatchRecord                        = factorycontracts.DispatchRecord
-	DispatchRequestEventMetadata          = factorycontracts.DispatchRequestEventMetadata
-	DispatchResourceRef                   = factorycontracts.DispatchResourceRef
-	FactoryDispatchKind                   = factorycontracts.FactoryDispatchKind
-	FactoryDispatchRecord                 = factorycontracts.FactoryDispatchRecord
-	FactoryDispatchStatus                 = factorycontracts.FactoryDispatchStatus
-	FactoryDispatchUsage                  = factorycontracts.FactoryDispatchUsage
-	FactoryDispatchWarning                = factorycontracts.FactoryDispatchWarning
-	FactorySessionChildDispatchCounts     = factorycontracts.FactorySessionChildDispatchCounts
-	FactorySessionDispatchFailureDetail   = factorycontracts.FactorySessionDispatchFailureDetail
-	FactorySessionDispatchJavaScriptState = factorycontracts.FactorySessionDispatchJavaScriptState
-	FactorySessionDispatchPetriState      = factorycontracts.FactorySessionDispatchPetriState
-	FactorySessionDispatchState           = factorycontracts.FactorySessionDispatchState
-	FactorySessionDispatchUsage           = factorycontracts.FactorySessionDispatchUsage
-	FactorySessionDispatchWarning         = factorycontracts.FactorySessionDispatchWarning
+	ActiveThrottlePause                   = factorydefinitions.ActiveThrottlePause
+	CompletedDispatch                     = factorydefinitions.CompletedDispatch
+	DispatchConsumedWorkRef               = factorydefinitions.DispatchConsumedWorkRef
+	DispatchEntry                         = factorydefinitions.DispatchEntry
+	DispatchReconciliationSource          = factorydefinitions.DispatchReconciliationSource
+	DispatchRecord                        = factorydefinitions.DispatchRecord
+	DispatchRequestEventMetadata          = factorydefinitions.DispatchRequestEventMetadata
+	DispatchResourceRef                   = factorydefinitions.DispatchResourceRef
+	FactoryDispatchKind                   = factorydefinitions.FactoryDispatchKind
+	FactoryDispatchRecord                 = factorydefinitions.FactoryDispatchRecord
+	FactoryDispatchStatus                 = factorydefinitions.FactoryDispatchStatus
+	FactoryDispatchUsage                  = factorydefinitions.FactoryDispatchUsage
+	FactoryDispatchWarning                = factorydefinitions.FactoryDispatchWarning
+	FactorySessionChildDispatchCounts     = factorydefinitions.FactorySessionChildDispatchCounts
+	FactorySessionDispatchFailureDetail   = factorydefinitions.FactorySessionDispatchFailureDetail
+	FactorySessionDispatchJavaScriptState = factorydefinitions.FactorySessionDispatchJavaScriptState
+	FactorySessionDispatchPetriState      = factorydefinitions.FactorySessionDispatchPetriState
+	FactorySessionDispatchState           = factorydefinitions.FactorySessionDispatchState
+	FactorySessionDispatchUsage           = factorydefinitions.FactorySessionDispatchUsage
+	FactorySessionDispatchWarning         = factorydefinitions.FactorySessionDispatchWarning
 )
 
 const (
-	DispatchReconciliationSourceProviderSession = factorycontracts.DispatchReconciliationSourceProviderSession
-	DispatchReconciliationSourceStreamReplay    = factorycontracts.DispatchReconciliationSourceStreamReplay
-	FactoryDispatchKindJavaScriptAgent          = factorycontracts.FactoryDispatchKindJavaScriptAgent
-	FactoryDispatchKindJavaScriptScript         = factorycontracts.FactoryDispatchKindJavaScriptScript
-	FactoryDispatchKindJavaScriptSynthesize     = factorycontracts.FactoryDispatchKindJavaScriptSynthesize
-	FactoryDispatchKindJavaScriptSystem         = factorycontracts.FactoryDispatchKindJavaScriptSystem
-	FactoryDispatchKindJavaScriptTool           = factorycontracts.FactoryDispatchKindJavaScriptTool
-	FactoryDispatchKindJavaScriptVerify         = factorycontracts.FactoryDispatchKindJavaScriptVerify
-	FactoryDispatchKindPetriTransition          = factorycontracts.FactoryDispatchKindPetriTransition
-	FactoryDispatchStatusCompleted              = factorycontracts.FactoryDispatchStatusCompleted
-	FactoryDispatchStatusFailed                 = factorycontracts.FactoryDispatchStatusFailed
-	FactoryDispatchStatusInterrupted            = factorycontracts.FactoryDispatchStatusInterrupted
-	FactoryDispatchStatusQueued                 = factorycontracts.FactoryDispatchStatusQueued
-	FactoryDispatchStatusRunning                = factorycontracts.FactoryDispatchStatusRunning
+	DispatchReconciliationSourceProviderSession = factorydefinitions.DispatchReconciliationSourceProviderSession
+	DispatchReconciliationSourceStreamReplay    = factorydefinitions.DispatchReconciliationSourceStreamReplay
+	FactoryDispatchKindJavaScriptAgent          = factorydefinitions.FactoryDispatchKindJavaScriptAgent
+	FactoryDispatchKindJavaScriptScript         = factorydefinitions.FactoryDispatchKindJavaScriptScript
+	FactoryDispatchKindJavaScriptSynthesize     = factorydefinitions.FactoryDispatchKindJavaScriptSynthesize
+	FactoryDispatchKindJavaScriptSystem         = factorydefinitions.FactoryDispatchKindJavaScriptSystem
+	FactoryDispatchKindJavaScriptTool           = factorydefinitions.FactoryDispatchKindJavaScriptTool
+	FactoryDispatchKindJavaScriptVerify         = factorydefinitions.FactoryDispatchKindJavaScriptVerify
+	FactoryDispatchKindPetriTransition          = factorydefinitions.FactoryDispatchKindPetriTransition
+	FactoryDispatchStatusCompleted              = factorydefinitions.FactoryDispatchStatusCompleted
+	FactoryDispatchStatusFailed                 = factorydefinitions.FactoryDispatchStatusFailed
+	FactoryDispatchStatusInterrupted            = factorydefinitions.FactoryDispatchStatusInterrupted
+	FactoryDispatchStatusQueued                 = factorydefinitions.FactoryDispatchStatusQueued
+	FactoryDispatchStatusRunning                = factorydefinitions.FactoryDispatchStatusRunning
 )

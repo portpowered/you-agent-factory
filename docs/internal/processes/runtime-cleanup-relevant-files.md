@@ -803,7 +803,12 @@ aliases in `parallel_operation_deletion_aliases.go`; peers use root
 outcomes through root Service match the legacy catalog operations for unchanged
 fixtures. Owner HTTP/MCP transports and `definition` remain on the singular
 `Service` binding; `pkg/wire` and process-edge CLI/Factory Sessions construction
-retain temporary deletion-only aliases until a later cutover packet. The
+retain temporary deletion-only aliases until a later cutover packet. CLN-DEF-CONTRACTS
+story 007 deletes the public `factory_definitions/contracts` mega-barrel: implementation
+types move to `internal/contracts`, shared `namevalue` moves to
+`pkg/services/factory_definitions/namevalue`, Recordings and Factory Runtime alias
+from the service root, `cmd/pkgboundarycheck` treats the retired public path as
+prohibited, and `contracts_mega_barrel_boundary_test.go` seals peer cutover.
 parent-private nested validation subservice locks its public surface in
 `internal/services/validation/boundary_test.go`: `service.go` exports only
 `Service` and `Dependencies` with factory_definitions root request/result

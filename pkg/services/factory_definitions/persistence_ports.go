@@ -4,7 +4,7 @@ import (
 	"io/fs"
 )
 
-import contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+import contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
 
 type CurrentFactoryPointerReader = contracts.CurrentFactoryPointerReader
 type CurrentFactoryPointerWriter = contracts.CurrentFactoryPointerWriter

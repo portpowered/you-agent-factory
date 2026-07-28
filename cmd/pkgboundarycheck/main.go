@@ -107,7 +107,7 @@ var transportPrivateServiceSubpackages = []string{
 // paths whose external callers have been migrated to the owning service root.
 // Packages within the same service may continue using these paths internally.
 var convergedServiceSubpackageRoots = map[string]string{
-	"pkg/services/factory_definitions/contracts":                "factory_definitions",
+	"pkg/services/factory_definitions/internal/contracts":       "factory_definitions",
 	"pkg/services/factory_definitions/decisionenvelope":         "factory_definitions",
 	"pkg/services/factory_definitions/invocationinterpolation":  "factory_definitions",
 	"pkg/services/factory_definitions/invocationoutput":         "factory_definitions",
@@ -189,6 +189,7 @@ var retiredPackageRoots = append([]retiredPackageRoot{
 	{packagePath: "pkg/apisurface", canonicalOwner: "pkg/transports/mapping"},
 	{packagePath: "pkg/cli", canonicalOwner: "pkg/transports/cli"},
 	{packagePath: "pkg/transports/cli/startup", canonicalOwner: "pkg/initializer/process"},
+	{packagePath: "pkg/services/factory_definitions/contracts", canonicalOwner: "pkg/services/factory_definitions"},
 	{packagePath: "pkg/platform/namedfactorypath", canonicalOwner: "pkg/services/factory_definitions"},
 	{packagePath: "pkg/platform/defaultpaths", canonicalOwner: "the defining service owner, or pkg/platform/internal/runtimeartifact for policy-free artifact mechanics"},
 	{packagePath: "pkg/wire/runtimeproviders", canonicalOwner: "focused provider files in pkg/wire"},

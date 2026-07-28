@@ -3,7 +3,7 @@ package factorydefinitions
 import (
 	"io/fs"
 
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
 )
 
 // PortableBundledFileInspection is the exact filesystem effect used to verify

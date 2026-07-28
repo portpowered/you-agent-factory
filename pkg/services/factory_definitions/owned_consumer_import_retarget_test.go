@@ -17,6 +17,7 @@ var ownedConsumerPackages = []string{
 }
 
 const contractsBarrelImport = "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+const ownerInternalContractsImport = "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
 
 func TestOwnedConsumers_DoNotImportContractsMegaBarrel(t *testing.T) {
 	t.Parallel()
@@ -26,6 +27,7 @@ func TestOwnedConsumers_DoNotImportContractsMegaBarrel(t *testing.T) {
 		t.Run(packagePath, func(t *testing.T) {
 			t.Parallel()
 			assertPackageDoesNotImport(t, packagePath, contractsBarrelImport)
+			assertPackageDoesNotImport(t, packagePath, ownerInternalContractsImport)
 		})
 	}
 }

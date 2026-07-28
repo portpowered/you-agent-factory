@@ -1,6 +1,6 @@
 package factorydefinitions
 
-import contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+import contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
 
 // Deletion-only aliases retain temporary Factory Definitions root symbols for
 // world-state projection vocabulary rehomed to pkg/services/recordings in

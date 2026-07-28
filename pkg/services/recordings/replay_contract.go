@@ -3,7 +3,7 @@ package recordings
 import (
 	"errors"
 
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 var (
@@ -123,12 +123,12 @@ type ObserveReplayResult struct {
 // aliases from pkg/services/recordings rather than treating the vocabulary as
 // Factory Definitions-owned peer contract surface.
 type (
-	CheckpointResumabilityStatus = factorycontracts.CheckpointResumabilityStatus
-	ReplayArtifact               = factorycontracts.ReplayArtifact
-	ReplayDiagnostics            = factorycontracts.ReplayDiagnostics
-	ReplayWallClockMetadata      = factorycontracts.ReplayWallClockMetadata
+	CheckpointResumabilityStatus = factorydefinitions.CheckpointResumabilityStatus
+	ReplayArtifact               = factorydefinitions.ReplayArtifact
+	ReplayDiagnostics            = factorydefinitions.ReplayDiagnostics
+	ReplayWallClockMetadata      = factorydefinitions.ReplayWallClockMetadata
 )
 
 const (
-	CheckpointResumabilityStatusResumable = factorycontracts.CheckpointResumabilityStatusResumable
+	CheckpointResumabilityStatusResumable = factorydefinitions.CheckpointResumabilityStatusResumable
 )

@@ -1,7 +1,7 @@
 package factorydefinitions
 
 import (
-	contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+	contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
 	resource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/resource"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
 )

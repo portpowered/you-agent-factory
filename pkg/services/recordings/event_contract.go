@@ -1,79 +1,77 @@
 package recordings
 
-import factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+import factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 
 // Recordings-owned Factory Event envelope, type vocabulary, and detached event
 // payloads. Peers import these aliases from pkg/services/recordings rather than
 // treating the vocabulary as Factory Definitions-owned peer contract surface.
-// Implementation debt remains in the contracts mega-barrel until CLN-DEF-CONTRACTS
-// story 007 deletes it.
 type (
-	ArtifactCreatedEventPayload           = factorycontracts.ArtifactCreatedEventPayload
-	DispatchInterruptedEventPayload       = factorycontracts.DispatchInterruptedEventPayload
-	DispatchQueuedEventPayload            = factorycontracts.DispatchQueuedEventPayload
-	DispatchReconciledEventPayload        = factorycontracts.DispatchReconciledEventPayload
-	DispatchRequestEventPayload           = factorycontracts.DispatchRequestEventPayload
-	FactoryChangeEventPayload             = factorycontracts.FactoryChangeEventPayload
-	FactoryEvent                          = factorycontracts.FactoryEvent
-	FactoryEventContext                   = factorycontracts.FactoryEventContext
-	FactoryEventReconnectCursor           = factorycontracts.FactoryEventReconnectCursor
-	FactoryEventReconnectScope            = factorycontracts.FactoryEventReconnectScope
-	FactoryEventStream                    = factorycontracts.FactoryEventStream
-	FactoryEventType                      = factorycontracts.FactoryEventType
-	FactorySessionCompletedEventPayload   = factorycontracts.FactorySessionCompletedEventPayload
-	FactorySessionLifecycleControlEventPayload = factorycontracts.FactorySessionLifecycleControlEventPayload
-	FactorySessionLogicalResolveHint      = factorycontracts.FactorySessionLogicalResolveHint
-	FactorySessionPausedEventPayload      = factorycontracts.FactorySessionPausedEventPayload
-	FactorySessionResultUpdatedEventPayload = factorycontracts.FactorySessionResultUpdatedEventPayload
-	FactorySessionResumedEventPayload     = factorycontracts.FactorySessionResumedEventPayload
-	FactorySessionStartedEventPayload     = factorycontracts.FactorySessionStartedEventPayload
-	FactorySessionSyncPreflightOptions    = factorycontracts.FactorySessionSyncPreflightOptions
-	FactoryStateResponseEventPayload      = factorycontracts.FactoryStateResponseEventPayload
-	InitialStructureRequestEventPayload   = factorycontracts.InitialStructureRequestEventPayload
-	JavaScriptCheckpointRefEventPayload   = factorycontracts.JavaScriptCheckpointRefEventPayload
-	JavaScriptPhaseChangeEventPayload     = factorycontracts.JavaScriptPhaseChangeEventPayload
-	OrchestratorCheckpointWrittenEventPayload = factorycontracts.OrchestratorCheckpointWrittenEventPayload
-	OrchestratorPhaseChangedEventPayload  = factorycontracts.OrchestratorPhaseChangedEventPayload
-	RunEventWallClock                     = factorycontracts.RunEventWallClock
-	RunRequestEventPayload                = factorycontracts.RunRequestEventPayload
-	RunResponseEventPayload               = factorycontracts.RunResponseEventPayload
-	WorkStateChangeEventPayload           = factorycontracts.WorkStateChangeEventPayload
+	ArtifactCreatedEventPayload           = factorydefinitions.ArtifactCreatedEventPayload
+	DispatchInterruptedEventPayload       = factorydefinitions.DispatchInterruptedEventPayload
+	DispatchQueuedEventPayload            = factorydefinitions.DispatchQueuedEventPayload
+	DispatchReconciledEventPayload        = factorydefinitions.DispatchReconciledEventPayload
+	DispatchRequestEventPayload           = factorydefinitions.DispatchRequestEventPayload
+	FactoryChangeEventPayload             = factorydefinitions.FactoryChangeEventPayload
+	FactoryEvent                          = factorydefinitions.FactoryEvent
+	FactoryEventContext                   = factorydefinitions.FactoryEventContext
+	FactoryEventReconnectCursor           = factorydefinitions.FactoryEventReconnectCursor
+	FactoryEventReconnectScope            = factorydefinitions.FactoryEventReconnectScope
+	FactoryEventStream                    = factorydefinitions.FactoryEventStream
+	FactoryEventType                      = factorydefinitions.FactoryEventType
+	FactorySessionCompletedEventPayload   = factorydefinitions.FactorySessionCompletedEventPayload
+	FactorySessionLifecycleControlEventPayload = factorydefinitions.FactorySessionLifecycleControlEventPayload
+	FactorySessionLogicalResolveHint      = factorydefinitions.FactorySessionLogicalResolveHint
+	FactorySessionPausedEventPayload      = factorydefinitions.FactorySessionPausedEventPayload
+	FactorySessionResultUpdatedEventPayload = factorydefinitions.FactorySessionResultUpdatedEventPayload
+	FactorySessionResumedEventPayload     = factorydefinitions.FactorySessionResumedEventPayload
+	FactorySessionStartedEventPayload     = factorydefinitions.FactorySessionStartedEventPayload
+	FactorySessionSyncPreflightOptions    = factorydefinitions.FactorySessionSyncPreflightOptions
+	FactoryStateResponseEventPayload      = factorydefinitions.FactoryStateResponseEventPayload
+	InitialStructureRequestEventPayload   = factorydefinitions.InitialStructureRequestEventPayload
+	JavaScriptCheckpointRefEventPayload   = factorydefinitions.JavaScriptCheckpointRefEventPayload
+	JavaScriptPhaseChangeEventPayload     = factorydefinitions.JavaScriptPhaseChangeEventPayload
+	OrchestratorCheckpointWrittenEventPayload = factorydefinitions.OrchestratorCheckpointWrittenEventPayload
+	OrchestratorPhaseChangedEventPayload  = factorydefinitions.OrchestratorPhaseChangedEventPayload
+	RunEventWallClock                     = factorydefinitions.RunEventWallClock
+	RunRequestEventPayload                = factorydefinitions.RunRequestEventPayload
+	RunResponseEventPayload               = factorydefinitions.RunResponseEventPayload
+	WorkStateChangeEventPayload           = factorydefinitions.WorkStateChangeEventPayload
 )
 
 const (
-	FactoryEventSchemaVersionV1 = factorycontracts.FactoryEventSchemaVersionV1
+	FactoryEventSchemaVersionV1 = factorydefinitions.FactoryEventSchemaVersionV1
 
-	FactoryEventTypeAgentRunResponse              = factorycontracts.FactoryEventTypeAgentRunResponse
-	FactoryEventTypeArtifactCreated               = factorycontracts.FactoryEventTypeArtifactCreated
-	FactoryEventTypeDispatchInterrupted           = factorycontracts.FactoryEventTypeDispatchInterrupted
-	FactoryEventTypeDispatchQueued                = factorycontracts.FactoryEventTypeDispatchQueued
-	FactoryEventTypeDispatchReconciled            = factorycontracts.FactoryEventTypeDispatchReconciled
-	FactoryEventTypeDispatchRequest               = factorycontracts.FactoryEventTypeDispatchRequest
-	FactoryEventTypeDispatchResponse              = factorycontracts.FactoryEventTypeDispatchResponse
-	FactoryEventTypeFactoryChange                 = factorycontracts.FactoryEventTypeFactoryChange
-	FactoryEventTypeFactoryStateResponse          = factorycontracts.FactoryEventTypeFactoryStateResponse
-	FactoryEventTypeInferenceRequest              = factorycontracts.FactoryEventTypeInferenceRequest
-	FactoryEventTypeInferenceResponse             = factorycontracts.FactoryEventTypeInferenceResponse
-	FactoryEventTypeInitialStructureRequest       = factorycontracts.FactoryEventTypeInitialStructureRequest
-	FactoryEventTypeJavaScriptCheckpointRef       = factorycontracts.FactoryEventTypeJavaScriptCheckpointRef
-	FactoryEventTypeJavaScriptPhaseChange         = factorycontracts.FactoryEventTypeJavaScriptPhaseChange
-	FactoryEventTypeModelRequest                  = factorycontracts.FactoryEventTypeModelRequest
-	FactoryEventTypeModelResponse                 = factorycontracts.FactoryEventTypeModelResponse
-	FactoryEventTypeOrchestratorCheckpointWritten = factorycontracts.FactoryEventTypeOrchestratorCheckpointWritten
-	FactoryEventTypeOrchestratorPhaseChanged      = factorycontracts.FactoryEventTypeOrchestratorPhaseChanged
-	FactoryEventTypeRelationshipChangeRequest     = factorycontracts.FactoryEventTypeRelationshipChangeRequest
-	FactoryEventTypeRunRequest                    = factorycontracts.FactoryEventTypeRunRequest
-	FactoryEventTypeRunResponse                   = factorycontracts.FactoryEventTypeRunResponse
-	FactoryEventTypeScriptRequest                 = factorycontracts.FactoryEventTypeScriptRequest
-	FactoryEventTypeScriptResponse                = factorycontracts.FactoryEventTypeScriptResponse
-	FactoryEventTypeSessionCompleted              = factorycontracts.FactoryEventTypeSessionCompleted
-	FactoryEventTypeSessionLifecycleControl       = factorycontracts.FactoryEventTypeSessionLifecycleControl
-	FactoryEventTypeSessionPaused                 = factorycontracts.FactoryEventTypeSessionPaused
-	FactoryEventTypeSessionResultUpdated          = factorycontracts.FactoryEventTypeSessionResultUpdated
-	FactoryEventTypeSessionResumed                = factorycontracts.FactoryEventTypeSessionResumed
-	FactoryEventTypeSessionStarted                = factorycontracts.FactoryEventTypeSessionStarted
-	FactoryEventTypeWorkRequest                   = factorycontracts.FactoryEventTypeWorkRequest
-	FactoryEventTypeWorkStateChange               = factorycontracts.FactoryEventTypeWorkStateChange
+	FactoryEventTypeAgentRunResponse              = factorydefinitions.FactoryEventTypeAgentRunResponse
+	FactoryEventTypeArtifactCreated               = factorydefinitions.FactoryEventTypeArtifactCreated
+	FactoryEventTypeDispatchInterrupted           = factorydefinitions.FactoryEventTypeDispatchInterrupted
+	FactoryEventTypeDispatchQueued                = factorydefinitions.FactoryEventTypeDispatchQueued
+	FactoryEventTypeDispatchReconciled            = factorydefinitions.FactoryEventTypeDispatchReconciled
+	FactoryEventTypeDispatchRequest               = factorydefinitions.FactoryEventTypeDispatchRequest
+	FactoryEventTypeDispatchResponse              = factorydefinitions.FactoryEventTypeDispatchResponse
+	FactoryEventTypeFactoryChange                 = factorydefinitions.FactoryEventTypeFactoryChange
+	FactoryEventTypeFactoryStateResponse          = factorydefinitions.FactoryEventTypeFactoryStateResponse
+	FactoryEventTypeInferenceRequest              = factorydefinitions.FactoryEventTypeInferenceRequest
+	FactoryEventTypeInferenceResponse             = factorydefinitions.FactoryEventTypeInferenceResponse
+	FactoryEventTypeInitialStructureRequest       = factorydefinitions.FactoryEventTypeInitialStructureRequest
+	FactoryEventTypeJavaScriptCheckpointRef       = factorydefinitions.FactoryEventTypeJavaScriptCheckpointRef
+	FactoryEventTypeJavaScriptPhaseChange         = factorydefinitions.FactoryEventTypeJavaScriptPhaseChange
+	FactoryEventTypeModelRequest                  = factorydefinitions.FactoryEventTypeModelRequest
+	FactoryEventTypeModelResponse                 = factorydefinitions.FactoryEventTypeModelResponse
+	FactoryEventTypeOrchestratorCheckpointWritten = factorydefinitions.FactoryEventTypeOrchestratorCheckpointWritten
+	FactoryEventTypeOrchestratorPhaseChanged      = factorydefinitions.FactoryEventTypeOrchestratorPhaseChanged
+	FactoryEventTypeRelationshipChangeRequest     = factorydefinitions.FactoryEventTypeRelationshipChangeRequest
+	FactoryEventTypeRunRequest                    = factorydefinitions.FactoryEventTypeRunRequest
+	FactoryEventTypeRunResponse                   = factorydefinitions.FactoryEventTypeRunResponse
+	FactoryEventTypeScriptRequest                 = factorydefinitions.FactoryEventTypeScriptRequest
+	FactoryEventTypeScriptResponse                = factorydefinitions.FactoryEventTypeScriptResponse
+	FactoryEventTypeSessionCompleted              = factorydefinitions.FactoryEventTypeSessionCompleted
+	FactoryEventTypeSessionLifecycleControl       = factorydefinitions.FactoryEventTypeSessionLifecycleControl
+	FactoryEventTypeSessionPaused                 = factorydefinitions.FactoryEventTypeSessionPaused
+	FactoryEventTypeSessionResultUpdated          = factorydefinitions.FactoryEventTypeSessionResultUpdated
+	FactoryEventTypeSessionResumed                = factorydefinitions.FactoryEventTypeSessionResumed
+	FactoryEventTypeSessionStarted                = factorydefinitions.FactoryEventTypeSessionStarted
+	FactoryEventTypeWorkRequest                   = factorydefinitions.FactoryEventTypeWorkRequest
+	FactoryEventTypeWorkStateChange               = factorydefinitions.FactoryEventTypeWorkStateChange
 )
 
-var NewFactoryEvent = factorycontracts.NewFactoryEvent
+var NewFactoryEvent = factorydefinitions.NewFactoryEvent

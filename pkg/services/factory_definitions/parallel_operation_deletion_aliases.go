@@ -1,6 +1,6 @@
 package factorydefinitions
 
-import contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+import contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
 
 // Deletion-only aliases retain temporary parallel catalog operation surfaces
 // replaced by singular Service request/result operations in CLN-DEF-CONTRACTS
