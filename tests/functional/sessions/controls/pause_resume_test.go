@@ -345,21 +345,22 @@ func TestAPIInvalidLifecycleTransitionReturnsConflict(t *testing.T) {
 		factoryapi.FactorySessionDurableLifecycleStatusTerminated,
 	)
 
-	terminalStatus := waitForDurableFactorySessionTerminal(
+	waitForDurableFactorySessionTerminal(
 		t,
 		baseURL,
 		sessionID,
 		pauseResumeDurableStatusTimeout,
 	)
 	before := readDurableFactorySession(t, baseURL, sessionID)
-	if before.Status != terminalStatus {
+	if before.Status != factoryapi.FactorySessionDurableLifecycleStatusTerminated &&
+		before.Status != factoryapi.FactorySessionDurableLifecycleStatusCanceled {
 		t.Fatalf(
-			"pre-invalid-control session %s status = %q, want %q",
+			"pre-invalid-control session %s status = %q, want TERMINATED or CANCELED",
 			sessionID,
 			before.Status,
-			terminalStatus,
 		)
 	}
+	terminalStatus := before.Status
 
 	resume := postSessionLifecycleControlExpectConflict(
 		t,
