@@ -1,6 +1,7 @@
 package relationships
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -102,6 +103,79 @@ func TestDependentWorkWaitsForPrerequisiteTargetState(t *testing.T) {
 	}
 }
 
+// TestDependentWorkDoesNotDispatchAfterPrerequisiteFailure proves through public
+// Work listings and Factory Event dispatch observations that a DEPENDS_ON
+// dependent never receives a worker dispatch when its prerequisite reaches a
+// failed terminal outcome instead of the declared requiredState.
+func TestDependentWorkDoesNotDispatchAfterPrerequisiteFailure(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dependency_tracking_dir"))
+
+	prerequisiteWorkID := "task-prerequisite-a"
+	dependentWorkID := "task-dependent-b"
+
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		WorkTypeID: "task",
+		WorkID:     prerequisiteWorkID,
+		Payload:    []byte("prerequisite task"),
+	})
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+		WorkTypeID: "task",
+		WorkID:     dependentWorkID,
+		Payload:    []byte("dependent task"),
+		Relations: []work.Relation{
+			{
+				Type:          work.RelationDependsOn,
+				TargetWorkID:  prerequisiteWorkID,
+				RequiredState: dependencyRequiredState,
+			},
+		},
+	})
+
+	provider := testutil.NewMockProviderWithErrors(
+		[]workerexecution.InferenceResponse{
+			{Content: "COMPLETE"},
+			{Content: "COMPLETE"},
+		},
+		[]error{
+			nil,
+			errors.New("prerequisite finish failed"),
+		},
+	)
+
+	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		t,
+		dir,
+		serviceedges.Edges{ProviderOverride: provider},
+		15*time.Second,
+	)
+
+	if !support.HasWorkAtCustomerState(listed, prerequisiteWorkID, support.WorkCustomerLocation("task", "failed")) {
+		t.Fatalf("prerequisite work %q not at failed in public listing: %#v", prerequisiteWorkID, listed)
+	}
+	if !support.HasWorkAtCustomerState(listed, dependentWorkID, support.WorkCustomerLocation("task", "failed")) {
+		t.Fatalf("dependent work %q not at blocked failed state in public listing: %#v", dependentWorkID, listed)
+	}
+	if support.HasWorkAtCustomerState(listed, dependentWorkID, support.WorkCustomerLocation("task", dependencyRequiredState)) {
+		t.Fatalf("dependent work %q reached %q after prerequisite failure: %#v", dependentWorkID, dependencyRequiredState, listed)
+	}
+	if support.HasWorkAtCustomerState(listed, dependentWorkID, support.WorkCustomerLocation("task", "processing")) {
+		t.Fatalf("dependent work %q reached processing after prerequisite failure: %#v", dependentWorkID, listed)
+	}
+
+	if got := len(support.ProviderCallsForWorker(provider, "starter")); got != 1 {
+		t.Fatalf("starter provider calls = %d, want 1 (prerequisite only)", got)
+	}
+	if got := len(support.ProviderCallsForWorker(provider, "finisher")); got != 1 {
+		t.Fatalf("finisher provider calls = %d, want 1 (prerequisite only)", got)
+	}
+
+	assertNoDependentStartDispatch(t, events, dependentWorkID)
+
+	if session.Runtime.Progress.Categories.Terminal != 0 || session.Runtime.Progress.Categories.Failed != 2 {
+		t.Fatalf("session progress categories = %+v, want zero terminal and two failed", session.Runtime.Progress.Categories)
+	}
+}
+
 func assertDependencyWorkLocations(t *testing.T, listed factoryapi.ListWorkResponse, wants map[string]int) {
 	t.Helper()
 	for location, want := range wants {
@@ -189,4 +263,29 @@ func dispatchEventIncludesWork(workIDs *[]string, workID string) bool {
 		}
 	}
 	return false
+}
+
+func assertNoDependentStartDispatch(t *testing.T, events []factoryapi.FactoryEvent, dependentWorkID string) {
+	t.Helper()
+
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeDispatchRequest {
+			continue
+		}
+		payload, err := event.Payload.AsDispatchRequestEventPayload()
+		if err != nil {
+			continue
+		}
+		if payload.TransitionId != dependencyStartWorkstation {
+			continue
+		}
+		if dispatchRequestIncludesWork(payload, dependentWorkID) {
+			t.Fatalf(
+				"dependent work %q received public %q dispatch after prerequisite failure at sequence %d",
+				dependentWorkID,
+				dependencyStartWorkstation,
+				event.Context.Sequence,
+			)
+		}
+	}
 }
