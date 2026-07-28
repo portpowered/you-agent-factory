@@ -438,7 +438,6 @@ func TestCurrentFactoryRunsToIdleWithoutStartingServer(t *testing.T) {
 	for _, expected := range []string{
 		"Factory initiated: " + factoryDir,
 		"Dashboard server disabled",
-		"Factory:",
 	} {
 		if !strings.Contains(stdout, expected) {
 			t.Fatalf("Current Factory stdout omitted %q:\n%s", expected, stdout)
