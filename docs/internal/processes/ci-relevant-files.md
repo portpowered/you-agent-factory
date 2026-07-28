@@ -529,6 +529,19 @@ Wave 0 functional-tests-expansion planning authority lives under
   `factory_definitions` and subsection `transports/cli/named_lifecycle`.
   Every top-level `Test*` needs a customer-readable Go doc so
   `functionaltestmetadata` stays viz-compatible.
+  Factory Definitions CLI validate/persist depth belongs in
+  `tests/functional/factory_definitions/transports/cli/validate_persist/validate_persist_test.go`:
+  prove actionable public `you --json factory config validate` rejection before
+  provider dispatch, failed validate non-mutation of durable named Factory state
+  via `factory list` and on-disk `factory.json`, and persist-from-file through
+  `factory create --from` followed by successful `you --json run --named
+  --with-server` with terminal primary results. Drive proofs through
+  `support.BuildProcess` + `Process.Execute`, substituting external effects
+  only through `edges.Edges` with `ProviderCommandRunner` / mocked Codex
+  preferred over `MockWorkers`. Catalog metadata infers domain
+  `factory_definitions` and subsection `transports/cli` from the path; every
+  top-level `Test*` needs a customer-readable Go doc so `functionaltestmetadata`
+  stays viz-compatible.
   `make pkg-structure` enforces the domain-mirrored functional layout
   `tests/functional/<domain>/<subsection>/...`: new shallow, catch-all, or
   unclassified scenario packages are blocking, while existing nonconforming
