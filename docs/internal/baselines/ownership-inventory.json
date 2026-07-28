@@ -2491,9 +2491,11 @@
     },
     {
       "packagePath": "pkg/services/automations/service",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "automations",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/automations/internal",
+      "deletionCondition": "delete transitional service/ package after owner wire retargets to internal implementation and DEL cutover proof completes"
     },
     {
       "packagePath": "pkg/services/automations/transports/http",
@@ -2797,9 +2799,11 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/service",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_definitions",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_definitions/internal",
+      "deletionCondition": "delete transitional service/ package after owner wire retargets to internal implementation and DEL cutover proof completes"
     },
     {
       "packagePath": "pkg/services/factory_definitions/snapshotcapture",
@@ -3127,15 +3131,19 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/service",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal",
+      "deletionCondition": "delete transitional service/ package after owner wire retargets to internal implementation and DEL cutover proof completes"
     },
     {
       "packagePath": "pkg/services/factory_runtime/service/host",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal",
+      "deletionCondition": "delete transitional service/ package after owner wire retargets to internal implementation and DEL cutover proof completes"
     },
     {
       "packagePath": "pkg/services/factory_runtime/state",
@@ -4021,9 +4029,11 @@
     },
     {
       "packagePath": "pkg/services/provider_sessions/service",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "provider_sessions",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/provider_sessions/internal",
+      "deletionCondition": "delete transitional service/ package after owner wire retargets to internal implementation and DEL cutover proof completes"
     },
     {
       "packagePath": "pkg/services/provider_sessions/transports/http",
@@ -4279,9 +4289,11 @@
     },
     {
       "packagePath": "pkg/services/recordings/service",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "recordings",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/recordings/internal",
+      "deletionCondition": "delete transitional service/ package after owner wire retargets to internal implementation and DEL cutover proof completes"
     },
     {
       "packagePath": "pkg/services/recordings/transports/cli",
@@ -4393,9 +4405,11 @@
     },
     {
       "packagePath": "pkg/services/work/service",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "work",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/work/internal",
+      "deletionCondition": "delete transitional service/ package after owner wire retargets to internal implementation and DEL cutover proof completes"
     },
     {
       "packagePath": "pkg/services/work/transports/mcp",
@@ -4763,9 +4777,11 @@
     },
     {
       "packagePath": "pkg/services/workers/service",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "workers",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/workers/internal",
+      "deletionCondition": "delete transitional service/ package after owner wire retargets to internal implementation and DEL cutover proof completes"
     },
     {
       "packagePath": "pkg/services/workers/services/agents",

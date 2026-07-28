@@ -10,7 +10,6 @@ import (
 	recordingartifacts "github.com/portpowered/infinite-you/pkg/services/recordings/artifacts"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	providercontract "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 )
 
 // ErrReconnectCursorNotFound reports that an acknowledged cursor does not
@@ -513,7 +512,7 @@ type BindReplayExecutionRequest struct {
 // Deprecated: provider and runner bindings are intentionally excluded from the
 // peer-facing Service replay slice.
 type BindReplayExecutionResult struct {
-	Provider           providercontract.Provider
+	Provider           workerexecution.Provider
 	CommandRunner      workerexecution.CommandRunner
 	Hooks              []ReplayHook
 	CompletionDelivery CompletionDeliveryPlanner
@@ -910,7 +909,7 @@ type RuntimeRecorderFactory func(
 type ReplayExecutionFactory func(
 	*interfaces.ReplayArtifact,
 ) (
-	providercontract.Provider,
+	workerexecution.Provider,
 	workerexecution.CommandRunner,
 	[]ReplayHook,
 	CompletionDeliveryPlanner,

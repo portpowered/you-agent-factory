@@ -176,6 +176,10 @@ func mapKnownNestedOwnerPackage(owner, packagePath, rest string) (PackageMapping
 		return PackageMapping{}, false
 	}
 
+	if mapping, ok := mapLegacyServiceImplementationPackage(owner, packagePath, rest); ok {
+		return mapping, true
+	}
+
 	// Packages already under the committed private subservice container retain
 	// that nested destination.
 	if strings.HasPrefix(rest, "internal/services/") {
@@ -199,6 +203,16 @@ func moveOrRetainMapping(packagePath, destination, disposition string) PackageMa
 		Disposition: disposition,
 		Destination: destination,
 	}
+}
+
+// mapLegacyServiceImplementationPackage marks transitional public service/
+// implementation facades for fold into owner/internal. Canonical service roots
+// allow only wire, internal, and transports child directories.
+func mapLegacyServiceImplementationPackage(owner, packagePath, rest string) (PackageMapping, bool) {
+	if rest != "service" && !strings.HasPrefix(rest, "service/") {
+		return PackageMapping{}, false
+	}
+	return moveOrRetainMapping(packagePath, owner+"/internal", DispositionMove), true
 }
 
 type nestedPathRule struct {
