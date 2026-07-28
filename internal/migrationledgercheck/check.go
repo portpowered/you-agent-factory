@@ -89,7 +89,6 @@ var RequiredSpecialtyTargets = []string{
 // ExpectedDeletionOnlyBatches is the ordered catch-all retirement batch index.
 var ExpectedDeletionOnlyBatches = []string{
 	"runtime_api-delete-01-transport-http",
-	"runtime_api-delete-06-factory-current",
 	"runtime_api-delete-07-events-replay",
 	"runtime_api-delete-08-models",
 	"runtime_api-delete-09-workers-resilience",

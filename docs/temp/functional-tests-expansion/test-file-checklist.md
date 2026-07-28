@@ -840,6 +840,14 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestImportExportPreservesNestedDocsScriptsAndMetadata`.
   - `TestInvalidImportDoesNotReplaceCurrentFactory`.
 
+- [x] `tests/functional/factory/definitions/import_export_named_factory_test.go`
+  - Named Factory create/upsert/replace-current import_export scenarios
+    migrated from `runtime_api-delete-06-factory-current`.
+
+- [x] `tests/functional/factory/definitions/validation_topology_test.go`
+  - Current/Named Factory topology validation targets migrated from
+    `runtime_api-delete-06-factory-current`.
+
 - [x] `tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go`
   - `TestCLISubmitBatchDryRunEmitsSummaryWithoutMutation`.
   - `TestCLISubmitBatchSuccessHumanAndJSONShapes`.
@@ -1005,6 +1013,16 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPIGetAndSaveCurrentFactoryWithinOneSession`.
   - `TestAPISaveCurrentFactoryValidatesBeforePersistence`.
   - `TestAPICurrentFactoriesRemainSessionScoped`.
+  - Current Factory docs/save/version/session scenarios migrated from
+    `runtime_api-delete-06-factory-current`.
+
+- [x] `tests/functional/factory/current/read_save_layout_test.go`
+  - Portable layout accept/reject/preserve/prune and waypoint/size variants
+    migrated from `runtime_api-delete-06-factory-current`.
+
+- [x] `tests/functional/factory/current/read_save_layout_validation_test.go`
+  - `TestCurrentFactoryPUT_PrePersistLayoutFailureRetainsStructuredPath`
+    migrated from `runtime_api-delete-06-factory-current`.
 
 - [x] `tests/functional/factory/current/read_save_long_test.go`
   - `TestCurrentFactoryActivationSwitchesPersistedFactories` verifies activation

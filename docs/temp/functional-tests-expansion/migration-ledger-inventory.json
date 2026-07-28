@@ -110,10 +110,6 @@
       "rationale": "Helper-only _test.go with no top-level customer Test* scenarios (shared helpers, fixtures, or TestMain-only)."
     },
     {
-      "path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_helpers_test.go",
-      "rationale": "Helper-only _test.go with no top-level customer Test* scenarios (shared helpers, fixtures, or TestMain-only)."
-    },
-    {
       "path": "tests/functional/runtime_api/functional_server_test.go",
       "rationale": "Helper-only _test.go with no top-level customer Test* scenarios (shared helpers, fixtures, or TestMain-only)."
     },
@@ -1339,6 +1335,116 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/factory/current/read_save_layout_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestCurrentFactoryEvents_ExposePortableLayoutOnInitialStructureAndFactoryChange",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/read_save_layout_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_layout_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestCurrentFactoryPUT_AcceptsLayoutForKnownBundledDocNode",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/read_save_layout_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_layout_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestCurrentFactoryPUT_AcceptsLayoutNodeMissingSize",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/read_save_layout_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_layout_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestCurrentFactoryPUT_AcceptsPortableLayoutEdgeWithMultipleWaypoints",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/read_save_layout_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_layout_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestCurrentFactoryPUT_AcceptsPortableLayoutEdgeWithOneWaypoint",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/read_save_layout_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_layout_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestCurrentFactoryPUT_AcceptsPortableLayoutMultipleNodesWithSize",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/read_save_layout_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_layout_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestCurrentFactoryPUT_AcceptsPortableLayoutMultipleNodesWithoutSize",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/read_save_layout_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_layout_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestCurrentFactoryPUT_PreservesPortableLayoutThroughSaveReloadAndRuntimeExecution",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/read_save_layout_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_layout_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestCurrentFactoryPUT_PrunesStaleLayoutWithoutReturningEphemeralLayoutMetadata",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/read_save_layout_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_layout_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestCurrentFactoryPUT_RejectsLayoutForUnknownBundledDocNode",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/read_save_layout_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_layout_validation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestCurrentFactoryPUT_PrePersistLayoutFailureRetainsStructuredPath",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/read_save_layout_validation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/factory/current/read_save_long_test.go",
       "package": "you-agent-factory/tests/functional/factory/current",
       "scenario": "TestCurrentFactoryActivationSwitchesPersistedFactories",
@@ -1392,6 +1498,176 @@
       "source_path": "tests/functional/factory/current/read_save_test.go",
       "package": "you-agent-factory/tests/functional/factory/current",
       "scenario": "TestAPISaveCurrentFactoryValidatesBeforePersistence",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/read_save_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestCurrentFactoryEvents_InitialStructureIncludesBundledFileContent",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/read_save_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestCurrentFactoryPUT_DefaultFactoryAcceptsFullCurrentFactoryReadbackDocument",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/read_save_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestCurrentFactoryPUT_DefaultFactoryMaterializesBundledFilesAndReturns",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/read_save_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestCurrentFactoryPUT_DocsCreateEditRenameDeleteRoundTrip",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/read_save_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestCurrentFactoryPUT_DocsSaveEmitsFactoryChangeWithBundledFilesAndVersion",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/read_save_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestCurrentFactoryPUT_FactoryChangeVersionsAdvanceOnEverySave",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/read_save_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestCurrentFactoryPUT_NonDefaultSessionImportIsolatesDefaultFactoryAndMaterializesBundledFiles",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/read_save_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestCurrentFactoryPUT_RejectsDuplicateDocTargetPaths",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/read_save_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestCurrentFactoryPUT_RejectsInvalidDocTargets",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/read_save_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestCurrentFactoryPUT_RequiresAdvancedSaveVersion",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/read_save_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestCurrentFactoryPUT_SaveDefaultFactoryDefinitionPersistsAndRunsReplacement",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/read_save_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestCurrentFactoryPUT_SaveEditableCurrentFactoryDefinitionEmitsCanonicalFactoryChangeEvent",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/read_save_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestCurrentFactoryPUT_SessionScopedNamedFactoryTransformationReadbackIsIsolated",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/read_save_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestCurrentFactoryPUT_ShellEscapedBundledInlineReplayReturnsPayloadInvalid",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/read_save_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestSessionFactoryPUT_UpsertCreateAllowsOmittedVersion",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/read_save_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestSessionFactoryPUT_UpsertReplaceDoesNotReturnAlreadyExists",
+      "lane": "short",
+      "destination": "tests/functional/factory/current/read_save_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestSessionFactoryPUT_UpsertReplaceRejectsStaleVersion",
       "lane": "short",
       "destination": "tests/functional/factory/current/read_save_test.go",
       "catch_all": "none",
@@ -1474,6 +1750,66 @@
       "scenario": "TestSingleDiscoveredProviderIsUsedWhenNoDefaultExists",
       "lane": "short",
       "destination": "tests/functional/factory/definitions/defaults_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/definitions/import_export_named_factory_test.go",
+      "package": "you-agent-factory/tests/functional/factory/definitions",
+      "scenario": "TestFactoryTransformation_CreateNamedFactoryEmitsCanonicalFactoryChangeEvent",
+      "lane": "short",
+      "destination": "tests/functional/factory/definitions/import_export_named_factory_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/definitions/import_export_named_factory_test.go",
+      "package": "you-agent-factory/tests/functional/factory/definitions",
+      "scenario": "TestFactoryTransformation_CreateNamedFactoryPreservesPortableLayoutThroughActivationAndReadback",
+      "lane": "short",
+      "destination": "tests/functional/factory/definitions/import_export_named_factory_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/definitions/import_export_named_factory_test.go",
+      "package": "you-agent-factory/tests/functional/factory/definitions",
+      "scenario": "TestFactoryTransformation_CreateNamedFactoryReadbackAndWorkSurface",
+      "lane": "short",
+      "destination": "tests/functional/factory/definitions/import_export_named_factory_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/definitions/import_export_named_factory_test.go",
+      "package": "you-agent-factory/tests/functional/factory/definitions",
+      "scenario": "TestFactoryTransformation_NamedFactoryPortableFilesReadBackThroughCanonicalContract",
+      "lane": "short",
+      "destination": "tests/functional/factory/definitions/import_export_named_factory_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/definitions/import_export_named_factory_test.go",
+      "package": "you-agent-factory/tests/functional/factory/definitions",
+      "scenario": "TestFactoryTransformation_ReplaceCurrentImportMatchesCreateNamedSplitLayout",
+      "lane": "short",
+      "destination": "tests/functional/factory/definitions/import_export_named_factory_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/definitions/import_export_named_factory_test.go",
+      "package": "you-agent-factory/tests/functional/factory/definitions",
+      "scenario": "TestFactoryTransformation_UpsertNamedFactoryReplacePreservesPortableLayout",
+      "lane": "short",
+      "destination": "tests/functional/factory/definitions/import_export_named_factory_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -1594,6 +1930,56 @@
       "scenario": "TestFactoryValidationReportsAllActionableDefinitionErrors",
       "lane": "short",
       "destination": "tests/functional/factory/definitions/validation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/definitions/validation_topology_test.go",
+      "package": "you-agent-factory/tests/functional/factory/definitions",
+      "scenario": "TestCurrentFactoryPUT_RejectsTypeCountCollisionBeforePersistingDefaultFactory",
+      "lane": "short",
+      "destination": "tests/functional/factory/definitions/validation_topology_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/definitions/validation_topology_test.go",
+      "package": "you-agent-factory/tests/functional/factory/definitions",
+      "scenario": "TestCurrentFactoryPUT_ReturnsCanonicalTopologyValidationTargets",
+      "lane": "short",
+      "destination": "tests/functional/factory/definitions/validation_topology_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/definitions/validation_topology_test.go",
+      "package": "you-agent-factory/tests/functional/factory/definitions",
+      "scenario": "TestCurrentFactoryPUT_ReturnsMultipleTopologyValidationTargets",
+      "lane": "short",
+      "destination": "tests/functional/factory/definitions/validation_topology_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/definitions/validation_topology_test.go",
+      "package": "you-agent-factory/tests/functional/factory/definitions",
+      "scenario": "TestFactoryTransformation_CreateNamedFactory_ReturnsBobOnFailureTarget",
+      "lane": "short",
+      "destination": "tests/functional/factory/definitions/validation_topology_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/definitions/validation_topology_test.go",
+      "package": "you-agent-factory/tests/functional/factory/definitions",
+      "scenario": "TestFactoryTransformation_CreateNamedFactory_ReturnsMultipleTopologyValidationTargets",
+      "lane": "short",
+      "destination": "tests/functional/factory/definitions/validation_topology_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -4897,396 +5283,6 @@
       "catch_all": "runtime_api",
       "specialty_targets": "none",
       "deletion_only_batch": "runtime_api-delete-10-observability-product"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_docs_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestCurrentFactoryEvents_InitialStructureIncludesBundledFileContent",
-      "lane": "short",
-      "destination": "tests/functional/factory/current/read_save_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_docs_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestCurrentFactoryPUT_DocsCreateEditRenameDeleteRoundTrip",
-      "lane": "short",
-      "destination": "tests/functional/factory/current/read_save_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_docs_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestCurrentFactoryPUT_DocsSaveEmitsFactoryChangeWithBundledFilesAndVersion",
-      "lane": "short",
-      "destination": "tests/functional/factory/current/read_save_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_docs_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestCurrentFactoryPUT_RejectsDuplicateDocTargetPaths",
-      "lane": "short",
-      "destination": "tests/functional/factory/current/read_save_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_docs_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestCurrentFactoryPUT_RejectsInvalidDocTargets",
-      "lane": "short",
-      "destination": "tests/functional/factory/current/read_save_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_docs_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestCurrentFactoryPUT_ShellEscapedBundledInlineReplayReturnsPayloadInvalid",
-      "lane": "short",
-      "destination": "tests/functional/factory/current/read_save_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_layout_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestCurrentFactoryEvents_ExposePortableLayoutOnInitialStructureAndFactoryChange",
-      "lane": "short",
-      "destination": "tests/functional/factory/current/read_save_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_layout_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestCurrentFactoryPUT_AcceptsLayoutForKnownBundledDocNode",
-      "lane": "short",
-      "destination": "tests/functional/factory/current/read_save_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_layout_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestCurrentFactoryPUT_AcceptsLayoutNodeMissingSize",
-      "lane": "short",
-      "destination": "tests/functional/factory/current/read_save_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_layout_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestCurrentFactoryPUT_PreservesPortableLayoutThroughSaveReloadAndRuntimeExecution",
-      "lane": "short",
-      "destination": "tests/functional/factory/current/read_save_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_layout_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestCurrentFactoryPUT_PrunesStaleLayoutWithoutReturningEphemeralLayoutMetadata",
-      "lane": "short",
-      "destination": "tests/functional/factory/current/read_save_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_layout_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestCurrentFactoryPUT_RejectsLayoutForUnknownBundledDocNode",
-      "lane": "short",
-      "destination": "tests/functional/factory/current/read_save_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_layout_validation_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestCurrentFactoryPUT_PrePersistLayoutFailureRetainsStructuredPath",
-      "lane": "short",
-      "destination": "tests/functional/factory/current/read_save_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_layout_variants_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestCurrentFactoryPUT_AcceptsPortableLayoutEdgeWithMultipleWaypoints",
-      "lane": "short",
-      "destination": "tests/functional/factory/current/read_save_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_layout_variants_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestCurrentFactoryPUT_AcceptsPortableLayoutEdgeWithOneWaypoint",
-      "lane": "short",
-      "destination": "tests/functional/factory/current/read_save_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_layout_variants_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestCurrentFactoryPUT_AcceptsPortableLayoutMultipleNodesWithSize",
-      "lane": "short",
-      "destination": "tests/functional/factory/current/read_save_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_layout_variants_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestCurrentFactoryPUT_AcceptsPortableLayoutMultipleNodesWithoutSize",
-      "lane": "short",
-      "destination": "tests/functional/factory/current/read_save_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_session_import_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestCurrentFactoryPUT_NonDefaultSessionImportIsolatesDefaultFactoryAndMaterializesBundledFiles",
-      "lane": "short",
-      "destination": "tests/functional/factory/current/read_save_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestCurrentFactoryPUT_DefaultFactoryAcceptsFullCurrentFactoryReadbackDocument",
-      "lane": "short",
-      "destination": "tests/functional/factory/current/read_save_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestCurrentFactoryPUT_DefaultFactoryMaterializesBundledFilesAndReturns",
-      "lane": "short",
-      "destination": "tests/functional/factory/current/read_save_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestCurrentFactoryPUT_FactoryChangeVersionsAdvanceOnEverySave",
-      "lane": "short",
-      "destination": "tests/functional/factory/current/read_save_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestCurrentFactoryPUT_RejectsTypeCountCollisionBeforePersistingDefaultFactory",
-      "lane": "short",
-      "destination": "tests/functional/factory/definitions/validation_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestCurrentFactoryPUT_RequiresAdvancedSaveVersion",
-      "lane": "short",
-      "destination": "tests/functional/factory/current/read_save_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestCurrentFactoryPUT_ReturnsCanonicalTopologyValidationTargets",
-      "lane": "short",
-      "destination": "tests/functional/factory/definitions/validation_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestCurrentFactoryPUT_ReturnsMultipleTopologyValidationTargets",
-      "lane": "short",
-      "destination": "tests/functional/factory/definitions/validation_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestCurrentFactoryPUT_SaveDefaultFactoryDefinitionPersistsAndRunsReplacement",
-      "lane": "short",
-      "destination": "tests/functional/factory/current/read_save_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestCurrentFactoryPUT_SaveEditableCurrentFactoryDefinitionEmitsCanonicalFactoryChangeEvent",
-      "lane": "short",
-      "destination": "tests/functional/factory/current/read_save_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestCurrentFactoryPUT_SessionScopedNamedFactoryTransformationReadbackIsIsolated",
-      "lane": "short",
-      "destination": "tests/functional/factory/current/read_save_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_import_replace_current_split_layout_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestFactoryTransformation_ReplaceCurrentImportMatchesCreateNamedSplitLayout",
-      "lane": "short",
-      "destination": "tests/functional/factory/definitions/import_export_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_named_factory_layout_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestFactoryTransformation_CreateNamedFactoryPreservesPortableLayoutThroughActivationAndReadback",
-      "lane": "short",
-      "destination": "tests/functional/factory/definitions/import_export_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_named_factory_layout_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestFactoryTransformation_UpsertNamedFactoryReplacePreservesPortableLayout",
-      "lane": "short",
-      "destination": "tests/functional/factory/definitions/import_export_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_named_factory_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestFactoryTransformation_CreateNamedFactoryEmitsCanonicalFactoryChangeEvent",
-      "lane": "short",
-      "destination": "tests/functional/factory/definitions/import_export_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_named_factory_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestFactoryTransformation_CreateNamedFactoryReadbackAndWorkSurface",
-      "lane": "short",
-      "destination": "tests/functional/factory/definitions/import_export_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_named_factory_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestFactoryTransformation_CreateNamedFactory_ReturnsBobOnFailureTarget",
-      "lane": "short",
-      "destination": "tests/functional/factory/definitions/validation_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_named_factory_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestFactoryTransformation_CreateNamedFactory_ReturnsMultipleTopologyValidationTargets",
-      "lane": "short",
-      "destination": "tests/functional/factory/definitions/validation_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_named_factory_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestFactoryTransformation_NamedFactoryPortableFilesReadBackThroughCanonicalContract",
-      "lane": "short",
-      "destination": "tests/functional/factory/definitions/import_export_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_session_factory_save_version_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestSessionFactoryPUT_UpsertCreateAllowsOmittedVersion",
-      "lane": "short",
-      "destination": "tests/functional/factory/current/read_save_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_session_factory_save_version_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestSessionFactoryPUT_UpsertReplaceDoesNotReturnAlreadyExists",
-      "lane": "short",
-      "destination": "tests/functional/factory/current/read_save_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/factory_transformation/api_session_factory_save_version_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api/factory_transformation",
-      "scenario": "TestSessionFactoryPUT_UpsertReplaceRejectsStaleVersion",
-      "lane": "short",
-      "destination": "tests/functional/factory/current/read_save_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-06-factory-current"
     },
     {
       "source_path": "tests/functional/runtime_api/topology_projection_smoke_long_test.go",
@@ -9332,12 +9328,12 @@
   "scanned_at_utc": "2026-07-28T16:02:22Z",
   "summary": {
     "by_catch_all": {
-      "bootstrap_portability": 22,
+      "bootstrap_portability": 19,
       "guards_batch": 15,
-      "none": 708,
-      "replay_contracts": 23,
-      "runtime_api": 96,
-      "smoke": 19,
+      "none": 802,
+      "replay_contracts": 19,
+      "runtime_api": 19,
+      "smoke": 10,
       "workflow": 30
     },
     "by_top_level_package": {
@@ -9434,8 +9430,7 @@
       "you-agent-factory/tests/functional/providers/kiro": 5,
       "you-agent-factory/tests/functional/providers/pi": 4,
       "you-agent-factory/tests/functional/replay_contracts": 23,
-      "you-agent-factory/tests/functional/runtime_api": 66,
-      "you-agent-factory/tests/functional/runtime_api/factory_transformation": 39,
+      "you-agent-factory/tests/functional/runtime_api": 29,
       "you-agent-factory/tests/functional/sessionparity": 13,
       "you-agent-factory/tests/functional/sessions": 1,
       "you-agent-factory/tests/functional/sessions/cli": 2,
@@ -9492,23 +9487,22 @@
     },
     "files_with_customer_Test": 254,
     "functional_test_go_files": 253,
-    "helper_only_non_customer_files": 51,
+    "helper_only_non_customer_files": 36,
     "internal_harness_Test_functions": 15,
     "internal_harness_test_files": 5,
-    "ledger_rows": 911
+    "ledger_rows": 914
   },
   "schema_note": "Machine-readable companion to migration-ledger.md Inventory. Required row fields match the ledger schema. Non-catch-all rows mapped by FND-007-006; catch-all rows mapped by FND-007-003\u2026005.",
   "runtime_api_mapping": {
     "mapped_at": "2026-07-24T02:25:00Z",
     "story": "fnd-007-migration-ledger-003",
-    "scenario_count": 106,
+    "scenario_count": 19,
     "batch_ids": [
       "runtime_api-delete-01-transport-http",
       "runtime_api-delete-02-work-submission",
       "runtime_api-delete-03-workstations-cron",
       "runtime_api-delete-04-sessions",
       "runtime_api-delete-05-factory-packaged",
-      "runtime_api-delete-06-factory-current",
       "runtime_api-delete-07-events-replay",
       "runtime_api-delete-08-models",
       "runtime_api-delete-09-workers-resilience",
@@ -9562,21 +9556,21 @@
     }
   },
   "completeness_audit": {
-    "audited_at_utc": "2026-07-28T16:02:22Z",
-    "story": "ft-wave2-events-response-events-stream-mergeability",
+    "audited_at_utc": "2026-07-28T17:35:00Z",
+    "story": "mig-runtime-api-held-destination-cleared-deletion-batches-mergeability",
     "live_customer_scenarios": 913,
     "ledger_rows": 913,
     "unmapped_scenarios": 0,
-    "checklist_destinations": 441,
+    "checklist_destinations": 445,
     "wrong_layer_destinations": 69,
     "invalid_destinations": 0,
-    "lane_short": 817,
+    "lane_short": 818,
     "lane_functionallong": 96,
     "specialty_targets_documented": 11,
-    "deletion_only_batches": 51,
+    "deletion_only_batches": 50,
     "validator": "go run ./cmd/migrationledgercheck",
     "row_count": 913,
-    "short_lane_rows": 817,
+    "short_lane_rows": 818,
     "functionallong_lane_rows": 96
   }
 }
