@@ -667,7 +667,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPackagedFusionOptionalInputsReachWorkers` covers supported options.
   - `TestPackagedFusionPartialWorkerFailureUsesDocumentedOutcome` covers error.
 
-- [ ] `tests/functional/factory/packaged/goal/invocation_test.go`
+- [x] `tests/functional/factory/packaged/goal/invocation_test.go`
   - `TestPackagedGoalAcceptCompletesWithSummary` covers accepted routing.
   - `TestPackagedGoalRejectRepeatsThenCompletes` covers feedback propagation.
   - `TestPackagedGoalUnknownDecisionFails` covers classifier failure.
