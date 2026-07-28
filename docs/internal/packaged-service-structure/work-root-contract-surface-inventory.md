@@ -114,7 +114,9 @@ delegators stay on `invocation_return_policy_contract.go`.
 ## Excess fold clusters
 
 No excess root contract clusters remain inventoried after CLN-WORK-CONTRACT-ROOTS
-story 006 cutover.
+story 006 cutover. Story 007 sealed the thin public root: transport adapters guard
+**direct** imports of `work/internal` (not transitive deps through published
+`work` thin delegators), and root contract/seal/wire behavioral proofs pass.
 
 ## Generator mirror
 
