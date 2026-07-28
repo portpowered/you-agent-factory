@@ -36,7 +36,7 @@ intentionally small enough to distribute across many agents.
   - `TestCLIVersionWritesOneMachineReadableVersion` verifies version output is
     stdout-only and contains no startup noise.
 
-- [ ] `tests/functional/transport/cli/process/unknown_command_test.go`
+- [x] `tests/functional/transport/cli/process/unknown_command_test.go`
   - `TestCLIUnknownCommandWritesActionableStderr` verifies the invalid token is
     named and suggestions are customer-safe.
   - `TestCLIUnknownCommandReturnsUsageExitCode` verifies stdout remains empty
