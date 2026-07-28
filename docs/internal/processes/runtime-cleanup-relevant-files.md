@@ -874,7 +874,11 @@ after the domain call returns.
 
 Cross-service Factory Runtime consumers depend on the singular root `Service`
 in `pkg/services/factory_runtime` (`interfaces.go`) plus root typed errors in
-`composition_contracts.go`. Do not publish a second peer-facing Runtime authority
+`composition_contracts.go`. Factory Sessions production packages must import only
+`pkg/services/factory_runtime` (not `factory_runtime/javascript`, `service`,
+`engine`, or other nested Runtime paths); lock this with
+`pkg/services/factory_sessions/runtime_consumer_import_boundary_test.go` and
+`cmd/pkgboundarycheck` peer-subpackage rules. Do not publish a second peer-facing Runtime authority
 (hosting `Lifecycle`/`HostedInstance`, `Factory` run-loop, or
 `JavaScriptWorkflows`) for control, observation, dispatch-plan, or checkpoint
 slices. Prove each published slice with a colocated `factory_test`
