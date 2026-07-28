@@ -184,7 +184,7 @@ func TestWorkAdmissionContentBoundary_PreparesWorkRequestThroughWorkService(t *t
 			Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "hello"}},
 		}},
 	}
-	prepared, err := server.prepareWorkRequest(context.Background(), request, nil)
+	prepared, err := server.prepareWorkRequest(context.Background(), "session-1", request, nil)
 	if err != nil {
 		t.Fatalf("prepareWorkRequest: %v", err)
 	}
