@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,7 +19,35 @@ import (
 const (
 	pauseResumeProcessTaskWorkstation = "process-task"
 	pauseResumeDrainWaitTimeout       = 30 * time.Second
+	pauseResumeBusyLoopWorkflowName   = "busy-loop"
+	pauseResumeDurableStatusTimeout   = 15 * time.Second
 )
+
+func pauseResumeControlsFactoryDirWithBusyLoop(t *testing.T) string {
+	t.Helper()
+
+	dir := support.ScaffoldFactory(t, pauseResumeControlsFactoryConfig())
+	workflowDir := filepath.Join(dir, ".claude", "workflows")
+	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
+		t.Fatalf("mkdir workflows: %v", err)
+	}
+	fixturePath := support.AgentFactoryPath(
+		t,
+		filepath.Join("tests", "fixtures", "javascript_runtime", pauseResumeBusyLoopWorkflowName+".workflow.js"),
+	)
+	raw, err := os.ReadFile(fixturePath)
+	if err != nil {
+		t.Fatalf("read workflow fixture %s: %v", fixturePath, err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(workflowDir, pauseResumeBusyLoopWorkflowName+".js"),
+		raw,
+		0o600,
+	); err != nil {
+		t.Fatalf("write workflow: %v", err)
+	}
+	return dir
+}
 
 func pauseResumeControlsFactoryConfig() map[string]any {
 	return map[string]any{
@@ -43,6 +74,120 @@ func pauseResumeControlsFactoryConfig() map[string]any {
 				"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
 			},
 		},
+	}
+}
+
+func startBusyLoopDurableSession(t *testing.T, baseURL string, requestID string) string {
+	t.Helper()
+
+	workflowName := pauseResumeBusyLoopWorkflowName
+	started := postSessionControlJSON[factoryapi.FactorySessionExecutionResponse](
+		t,
+		strings.TrimSuffix(baseURL, "/")+"/factory-sessions/async",
+		factoryapi.FactorySessionExecutionRequest{
+			RequestId: requestID,
+			Source: factoryapi.FactorySessionExecutionSource{
+				Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowName,
+				WorkflowName: &workflowName,
+			},
+		},
+		"start busy-loop durable Factory Session",
+	)
+	if started.SessionId == "" {
+		t.Fatalf("async durable session id is empty: %#v", started)
+	}
+	return started.SessionId
+}
+
+func readDurableFactorySession(
+	t *testing.T,
+	baseURL string,
+	sessionID string,
+) factoryapi.FactorySessionDurableReadModel {
+	t.Helper()
+
+	response := support.GetJSON[factoryapi.FactorySessionGetResponse](
+		t,
+		strings.TrimSuffix(baseURL, "/")+"/factory-sessions/"+sessionID,
+	)
+	session, err := response.AsFactorySessionDurableReadModel()
+	if err != nil {
+		t.Fatalf("decode durable session %s: %v", sessionID, err)
+	}
+	if session.SessionId != sessionID {
+		t.Fatalf("durable session id = %q, want %q", session.SessionId, sessionID)
+	}
+	return session
+}
+
+func waitForDurableFactorySessionStatus(
+	t *testing.T,
+	baseURL string,
+	sessionID string,
+	want factoryapi.FactorySessionDurableLifecycleStatus,
+	timeout time.Duration,
+) {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		session := readDurableFactorySession(t, baseURL, sessionID)
+		if session.Status == want {
+			return
+		}
+		time.Sleep(15 * time.Millisecond)
+	}
+	session := readDurableFactorySession(t, baseURL, sessionID)
+	t.Fatalf(
+		"durable session %s status = %q, want %q within %s",
+		sessionID,
+		session.Status,
+		want,
+		timeout,
+	)
+}
+
+func assertAcceptedSessionLifecycleControl(
+	t *testing.T,
+	response factoryapi.FactorySessionLifecycleControlResponse,
+	sessionID string,
+	operation factoryapi.FactorySessionLifecycleControlKind,
+	wantStatus factoryapi.FactorySessionDurableLifecycleStatus,
+) {
+	t.Helper()
+
+	if response.Operation != operation {
+		t.Fatalf("lifecycle control operation = %q, want %q", response.Operation, operation)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("lifecycle control outcome = %q, want ACCEPTED; response=%#v", response.Outcome, response)
+	}
+	if response.SessionId != sessionID {
+		t.Fatalf("lifecycle control sessionId = %q, want %q", response.SessionId, sessionID)
+	}
+	if response.Status != wantStatus {
+		t.Fatalf("lifecycle control status = %q, want %q", response.Status, wantStatus)
+	}
+}
+
+func assertLiveSessionLifecycleControlStatus(
+	t *testing.T,
+	baseURL string,
+	want factoryapi.FactorySessionDurableLifecycleStatus,
+) {
+	t.Helper()
+
+	session := support.GetDefaultSession(t, baseURL)
+	if session.Runtime.LifecycleControlStatus == nil {
+		t.Fatalf("live session %s lifecycleControlStatus = nil, want %q", session.Id, want)
+	}
+	if *session.Runtime.LifecycleControlStatus != want {
+		t.Fatalf(
+			"live session %s lifecycleControlStatus = %q, want %q",
+			session.Id,
+			*session.Runtime.LifecycleControlStatus,
+			want,
+		)
 	}
 }
 

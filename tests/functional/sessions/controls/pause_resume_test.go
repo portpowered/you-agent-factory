@@ -187,3 +187,124 @@ func TestPauseResumeEmitsDurableLifecycleEvents(t *testing.T) {
 
 	assertPauseResumeLifecycleControlEvents(t, server.GetFactoryEvents(t))
 }
+
+// TestAPIPauseResumeCancelAndTerminateFactorySession proves public API pause,
+// resume, cancel, and terminate controls return typed lifecycle-control outcomes
+// and leave each Factory Session in the expected lifecycle state after control.
+func TestAPIPauseResumeCancelAndTerminateFactorySession(t *testing.T) {
+	factoryDir := pauseResumeControlsFactoryDirWithBusyLoop(t)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                factoryDir,
+		UseMockWorkers:            true,
+		WaitForServiceModeRuntime: true,
+	})
+	defer server.Stop(t)
+
+	baseURL := server.URL()
+	liveSession := support.GetDefaultSession(t, baseURL)
+	liveSessionID := liveSession.Id
+	if liveSessionID == "" {
+		t.Fatal("live Factory Session id is empty")
+	}
+
+	pause := postSessionLifecycleControl(
+		t,
+		baseURL,
+		liveSessionID,
+		factoryapi.FactorySessionLifecycleControlKindPause,
+	)
+	assertAcceptedSessionLifecycleControl(
+		t,
+		pause,
+		liveSessionID,
+		factoryapi.FactorySessionLifecycleControlKindPause,
+		factoryapi.FactorySessionDurableLifecycleStatusPaused,
+	)
+	assertLiveSessionLifecycleControlStatus(
+		t,
+		baseURL,
+		factoryapi.FactorySessionDurableLifecycleStatusPaused,
+	)
+
+	resume := postSessionLifecycleControl(
+		t,
+		baseURL,
+		liveSessionID,
+		factoryapi.FactorySessionLifecycleControlKindResume,
+	)
+	assertAcceptedSessionLifecycleControl(
+		t,
+		resume,
+		liveSessionID,
+		factoryapi.FactorySessionLifecycleControlKindResume,
+		factoryapi.FactorySessionDurableLifecycleStatusRunning,
+	)
+	assertLiveSessionLifecycleControlStatus(
+		t,
+		baseURL,
+		factoryapi.FactorySessionDurableLifecycleStatusRunning,
+	)
+
+	cancelSessionID := startBusyLoopDurableSession(t, baseURL, "req-sessions-controls-cancel")
+	waitForDurableFactorySessionStatus(
+		t,
+		baseURL,
+		cancelSessionID,
+		factoryapi.FactorySessionDurableLifecycleStatusRunning,
+		pauseResumeDurableStatusTimeout,
+	)
+
+	cancel := postSessionLifecycleControl(
+		t,
+		baseURL,
+		cancelSessionID,
+		factoryapi.FactorySessionLifecycleControlKindCancel,
+	)
+	assertAcceptedSessionLifecycleControl(
+		t,
+		cancel,
+		cancelSessionID,
+		factoryapi.FactorySessionLifecycleControlKindCancel,
+		factoryapi.FactorySessionDurableLifecycleStatusCanceling,
+	)
+	waitForDurableFactorySessionStatus(
+		t,
+		baseURL,
+		cancelSessionID,
+		factoryapi.FactorySessionDurableLifecycleStatusCanceled,
+		pauseResumeDurableStatusTimeout,
+	)
+
+	terminateSessionID := startBusyLoopDurableSession(t, baseURL, "req-sessions-controls-terminate")
+	waitForDurableFactorySessionStatus(
+		t,
+		baseURL,
+		terminateSessionID,
+		factoryapi.FactorySessionDurableLifecycleStatusRunning,
+		pauseResumeDurableStatusTimeout,
+	)
+
+	terminate := postSessionLifecycleControl(
+		t,
+		baseURL,
+		terminateSessionID,
+		factoryapi.FactorySessionLifecycleControlKindTerminate,
+	)
+	assertAcceptedSessionLifecycleControl(
+		t,
+		terminate,
+		terminateSessionID,
+		factoryapi.FactorySessionLifecycleControlKindTerminate,
+		factoryapi.FactorySessionDurableLifecycleStatusTerminated,
+	)
+
+	terminated := readDurableFactorySession(t, baseURL, terminateSessionID)
+	if terminated.Status != factoryapi.FactorySessionDurableLifecycleStatusTerminated &&
+		terminated.Status != factoryapi.FactorySessionDurableLifecycleStatusCanceled {
+		t.Fatalf(
+			"durable session %s status after terminate = %q, want TERMINATED or CANCELED",
+			terminateSessionID,
+			terminated.Status,
+		)
+	}
+}
