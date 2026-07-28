@@ -20,11 +20,15 @@ func NewService(
 	inspectPath systeminitialization.InspectPath,
 	migrationFiles systeminitialization.LegacyFactoryMigrationFileSystem,
 ) (systeminitialization.Service, error) {
-	return bootstrapworkflow.New(
+	initializer, err := bootstrapworkflow.New(
 		operatorSettings,
 		packagedCatalog,
 		packagedInstaller,
 		inspectPath,
 		migrationFiles,
 	)
+	if err != nil {
+		return nil, err
+	}
+	return initializer, nil
 }

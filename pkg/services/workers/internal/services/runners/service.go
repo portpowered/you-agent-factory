@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/inference"
 )
@@ -13,6 +14,7 @@ import (
 const (
 	ScriptIdentity    = "script"
 	InferenceIdentity = "inference"
+	AgentIdentity     = "agent"
 )
 
 // Registration explicitly associates one canonical identity and metadata
@@ -67,6 +69,13 @@ type InferenceConfig struct {
 type InferenceDependencies struct {
 	Models   inference.LocalInvoker
 	Delegate workers.Runner
+}
+
+// AgentDependencies are the exact peer-service and observation capabilities
+// projected into one Agent Runner.
+type AgentDependencies struct {
+	Providers providers.Service
+	Publish   workers.ProgressPublisher
 }
 
 // Service resolves immutable runner registrations without executing or

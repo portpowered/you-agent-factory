@@ -28,6 +28,7 @@ import (
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	factorydefinitionscli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cobracompletion"
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
@@ -422,6 +423,7 @@ func withTestInjectedPlatformRoles(factory CommandFactory) CommandFactory {
 		RuntimeMetricsConfig: platformmetrics.RuntimeMetricsConfig{
 			MaxSize: 100, MaxBackups: 20, MaxAge: 30,
 		},
+		RecordingsCLI: recordingscli.New(),
 	}
 	factory.runDirectoryCreator = testRunDirectoryCreator{}
 	factory.browserOpener = func(context.Context, string) error { return nil }
