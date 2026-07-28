@@ -146,7 +146,12 @@ Use this map when changing the public REST contract.
   orchestrator implementation paths. Orchestration-specific semantic validation stays on the
   injected `OrchestratorDefinitionValidator` port; the nested validation
   subservice additionally forbids direct Runtime imports in
-  `internal/services/validation/boundary_test.go`.
+  `internal/services/validation/boundary_test.go`. Prove the sealed semantic
+  validation edge with
+  `pkg/services/factory_definitions/orchestration_semantic_validation_boundary_test.go`:
+  Definitions-owned strategy checks without a Runtime port, orchestration-invalid
+  targets through the injected port, and import guards on the validation and
+  orchestrator packages.
 - Factory Visualization HTTP decoding, root contract mapping, typed error
   translation, and cancel/timeout handling live in
   `pkg/services/factory_visualization/transports/http`. HTTP-VIS proves
