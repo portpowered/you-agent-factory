@@ -6,9 +6,9 @@ import (
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	activationlifecycle "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle"
 	activationlifecyclewire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle/wire"
+	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/testing/recordingsstub"
 )
 
 type wireSourceStub struct {
@@ -32,28 +32,6 @@ func (wireSourceStub) GetEngineObservation(context.Context) (*activationlifecycl
 	return &activationlifecycle.EngineObservation{}, nil
 }
 
-type wireProjectionStub struct{}
-
-func (wireProjectionStub) ReconstructFactoryWorldState(
-	[]factorydefinitions.FactoryEvent,
-	int,
-) (factorydefinitions.FactoryWorldState, error) {
-	return factorydefinitions.FactoryWorldState{}, nil
-}
-
-func (wireProjectionStub) SimpleDashboardRenderData(
-	factorydefinitions.FactoryWorldState,
-) recordings.SimpleDashboardRenderData {
-	return recordings.SimpleDashboardRenderData{}
-}
-
-func (wireProjectionStub) ProjectActiveThrottlePauses(
-	factorydefinitions.InitialStructurePayload,
-	[]factorydefinitions.ActiveThrottlePause,
-) []factorydefinitions.FactoryWorldThrottlePause {
-	return nil
-}
-
 type wireClock struct{}
 
 func (wireClock) Now() time.Time { return time.Unix(1, 0) }
@@ -66,7 +44,7 @@ func TestNewServiceConstructsActivationLifecycleOwner(t *testing.T) {
 	source := wireSourceStub{subscribeHook: func() { subscribeCalls++ }}
 	service, err := activationlifecyclewire.NewService(
 		source,
-		wireProjectionStub{},
+		&recordingsstub.Service{},
 		wireClock{},
 		wireSinkFunc(func(activationlifecycle.View) { presentCalls++ }),
 		nil,
@@ -99,7 +77,7 @@ func TestNewServiceExplicitRequestActivation(t *testing.T) {
 	source := wireSourceStub{subscribeHook: func() { subscribeCalls++ }}
 	service, err := activationlifecyclewire.NewService(
 		source,
-		wireProjectionStub{},
+		&recordingsstub.Service{},
 		wireClock{},
 		wireSinkFunc(func(activationlifecycle.View) { presentCalls++ }),
 		nil,
@@ -151,7 +129,7 @@ func TestNewServiceStopWaitCleanup(t *testing.T) {
 	source := wireSourceStub{subscribeHook: func() { subscribeCalls++ }}
 	service, err := activationlifecyclewire.NewService(
 		source,
-		wireProjectionStub{},
+		&recordingsstub.Service{},
 		wireClock{},
 		wireSinkFunc(func(activationlifecycle.View) {}),
 		nil,

@@ -12,6 +12,7 @@ import (
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	liveviewprojection "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection"
 	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
+	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/testing/recordingsstub"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
@@ -36,42 +37,6 @@ func (s wireSourceStub) GetRuntimeSnapshotFacts(context.Context) (*liveviewproje
 	return &liveviewprojection.RuntimeSnapshotFacts{}, nil
 }
 
-type wireProjectionStub struct{}
-
-func (wireProjectionStub) ReconstructFactoryWorldState(
-	[]factorydefinitions.FactoryEvent,
-	int,
-) (factorydefinitions.FactoryWorldState, error) {
-	return factorydefinitions.FactoryWorldState{}, nil
-}
-
-func (wireProjectionStub) SimpleDashboardRenderData(
-	factorydefinitions.FactoryWorldState,
-) recordings.SimpleDashboardRenderData {
-	return recordings.SimpleDashboardRenderData{}
-}
-
-func (wireProjectionStub) ProjectActiveThrottlePauses(
-	factorydefinitions.InitialStructurePayload,
-	[]factorydefinitions.ActiveThrottlePause,
-) []factorydefinitions.FactoryWorldThrottlePause {
-	return nil
-}
-
-func (wireProjectionStub) ProjectWorkstationRequests(
-	factorydefinitions.FactoryWorldState,
-) recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice {
-	return recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice{}
-}
-
-func (wireProjectionStub) ValidateReconnectReplay(
-	[]factorydefinitions.FactoryEvent,
-	factorydefinitions.FactoryEventReconnectCursor,
-	factorydefinitions.FactoryEventReconnectScope,
-) error {
-	return nil
-}
-
 type wireClock struct{}
 
 func (wireClock) Now() time.Time { return time.Unix(1, 0) }
@@ -81,7 +46,7 @@ func TestNewRootRejectsMissingConstructionPorts(t *testing.T) {
 
 	clock := wireClock{}
 	sink := factoryvisualization.SinkFunc(func(factoryvisualization.View) {})
-	projections := wireProjectionStub{}
+	projections := &recordingsstub.Service{}
 	source := wireSourceStub{}
 	tests := []struct {
 		name string
@@ -162,7 +127,7 @@ func mustNewWireRoot(t *testing.T) factoryvisualization.Root {
 	t.Helper()
 	root, err := factoryvisualizationwire.NewRoot(
 		wireSourceStub{},
-		wireProjectionStub{},
+		&recordingsstub.Service{},
 		wireClock{},
 		factoryvisualization.SinkFunc(func(factoryvisualization.View) {}),
 		nil,
@@ -215,12 +180,10 @@ func TestNewRootConstructsInertRoot(t *testing.T) {
 			panic("event subscription started during inert construction")
 		},
 	}
-	projections := wireRecordingProjectionStub{
-		reconstructHook: func() {
-			projectionReads++
-			panic("projection read during inert construction")
-		},
-	}
+	projections := newWireRecordingProjectionStub(func() {
+		projectionReads++
+		panic("projection read during inert construction")
+	})
 	sink := factoryvisualization.SinkFunc(func(factoryvisualization.View) {
 		presentCalls++
 		panic("presentation sink invoked during inert construction")
@@ -268,16 +231,22 @@ func TestNewRootConstructsInertRoot(t *testing.T) {
 }
 
 type wireRecordingProjectionStub struct {
-	wireProjectionStub
+	*recordingsstub.Service
 	reconstructHook func()
 }
 
-func (s wireRecordingProjectionStub) ReconstructFactoryWorldState(
-	events []factorydefinitions.FactoryEvent,
-	tick int,
-) (factorydefinitions.FactoryWorldState, error) {
-	if s.reconstructHook != nil {
-		s.reconstructHook()
+func newWireRecordingProjectionStub(hook func()) *wireRecordingProjectionStub {
+	stub := &wireRecordingProjectionStub{Service: &recordingsstub.Service{}, reconstructHook: hook}
+	stub.ReconstructWorldStateFn = func(request recordings.ReconstructWorldStateRequest) (recordings.ReconstructWorldStateResult, error) {
+		if stub.reconstructHook != nil {
+			stub.reconstructHook()
+		}
+		return recordings.ReconstructWorldStateResult{
+			WorldState: recordings.WorldStateView{
+				SchemaVersion: recordings.WorldStateViewSchemaV1,
+				Payload:       `{"topology":{}}`,
+			},
+		}, nil
 	}
-	return s.wireProjectionStub.ReconstructFactoryWorldState(events, tick)
+	return stub
 }
