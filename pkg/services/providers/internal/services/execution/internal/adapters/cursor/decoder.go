@@ -32,6 +32,7 @@ type decoder struct {
 	finalContent    string
 	finalSessionID  string
 	hasResult       bool
+	unsafeSuccessSession bool
 
 	progress        []providers.ExecuteProgress
 	declaredFailure *providers.ExecuteFailure
@@ -126,18 +127,22 @@ func (decoder *decoder) final() (string, *providers.SessionRef, error) {
 	if !decoder.hasResult || strings.TrimSpace(decoder.finalContent) == "" {
 		return "", nil, errors.New("cursor stream did not contain a terminal result")
 	}
+	if decoder.unsafeSuccessSession {
+		return "", nil, errors.New("cursor stream success result is missing or invalid session_id")
+	}
 	sessionID := strings.TrimSpace(decoder.finalSessionID)
 	if sessionID == "" {
 		sessionID = strings.TrimSpace(decoder.sessionID)
 	}
-	if !safeSessionID(sessionID) {
-		return "", nil, errors.New("cursor stream success result is missing or invalid session_id")
+	var session *providers.SessionRef
+	if safeSessionID(sessionID) {
+		session = &providers.SessionRef{
+			Provider: providers.IDCursor,
+			Kind:     providers.SessionIDKind,
+			ID:       sessionID,
+		}
 	}
-	return decoder.finalContent, &providers.SessionRef{
-		Provider: providers.IDCursor,
-		Kind:     providers.SessionIDKind,
-		ID:       sessionID,
-	}, nil
+	return decoder.finalContent, session, nil
 }
 
 func (decoder *decoder) progressFacts() []providers.ExecuteProgress {
@@ -241,6 +246,9 @@ func (decoder *decoder) decodeResult(envelope nativeEnvelope) {
 	resultText := boundedPublishedText(envelope.Result)
 	if subtype == resultSubtypeSuccess && !envelope.IsError {
 		decoder.hasResult = true
+		if sessionID != "" && !safeSessionID(sessionID) {
+			decoder.unsafeSuccessSession = true
+		}
 		if strings.TrimSpace(resultText) == "" {
 			decoder.finalContent = strings.TrimSpace(decoder.emittedResponse)
 			return
