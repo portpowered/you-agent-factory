@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -180,6 +181,45 @@ func TestAPIValidateFactoryAcceptsValidAndRejectsInvalidDefinitions(t *testing.T
 	}
 }
 
+// TestAPIPreviewFactoryReturnsPublicTopology proves the public Preview API accepts a
+// valid Factory source and that the running session exposes customer-visible work
+// types, workers, workstations, and route wiring without Petri-net vocabulary.
+func TestAPIPreviewFactoryReturnsPublicTopology(t *testing.T) {
+	runner := support.NewRecordingCommandRunner("runtime must not execute")
+	edges := serviceedges.Edges{ProviderCommandRunner: runner}
+
+	hostDir := support.ScaffoldFactory(t, previewTopologyFactoryConfig())
+	writeDefinitionsPreviewWorkflow(t, hostDir)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                hostDir,
+		UseMockWorkers:            true,
+		WaitForServiceModeRuntime: true,
+		Edges:                     edges,
+	})
+	defer server.Stop(t)
+
+	previewResult, previewStatus := postPreviewFactory(t, server.URL(), hostDir, definitionsPreviewWorkflowName)
+	if previewStatus != http.StatusOK {
+		t.Fatalf("POST /factories/preview status = %d, want 200", previewStatus)
+	}
+	if !previewResult.Valid {
+		t.Fatalf("preview result = %#v, want valid preview acceptance", previewResult)
+	}
+	if previewResult.SourceResolution.Found != true {
+		t.Fatalf("preview source resolution = %#v, want resolved source", previewResult.SourceResolution)
+	}
+	if previewResult.SourceResolution.SourceHash == nil || strings.TrimSpace(*previewResult.SourceResolution.SourceHash) == "" {
+		t.Fatalf("preview source resolution = %#v, want non-empty source hash", previewResult.SourceResolution)
+	}
+
+	currentFactory := getDefaultSessionFactory(t, server.URL())
+	assertPublicFactoryTopology(t, currentFactory)
+
+	if runner.CallCount() != 0 {
+		t.Fatalf("provider command runner calls = %d, want 0 during preview inspection", runner.CallCount())
+	}
+}
+
 func missingWorkerFactoryConfig() map[string]any {
 	return map[string]any{
 		"name": "missing-worker-reference",
@@ -323,6 +363,17 @@ func missingRouteFactoryConfig() map[string]any {
 	}
 }
 
+const (
+	definitionsPreviewWorkflowName = "definitions-preview"
+	definitionsPreviewWorkflowDir  = ".claude/workflows"
+)
+
+func previewTopologyFactoryConfig() map[string]any {
+	cfg := validAPIValidationFactoryConfig()
+	cfg["name"] = "api-preview-topology-host"
+	return cfg
+}
+
 func validAPIValidationFactoryConfig() map[string]any {
 	return map[string]any{
 		"name": "api-validation-host",
@@ -363,6 +414,110 @@ func factoryDefinitionFromConfig(cfg map[string]any) (factoryapi.Factory, error)
 		return factoryapi.Factory{}, err
 	}
 	return support.DecodeFactoryDefinition(payload)
+}
+
+const definitionsPreviewWorkflowSource = `
+meta({ name: "definitions-preview", version: 1 });
+phase("setup");
+log("definitions preview topology fixture");
+`
+
+func writeDefinitionsPreviewWorkflow(t *testing.T, projectRoot string) {
+	t.Helper()
+
+	workflowDir := filepath.Join(projectRoot, definitionsPreviewWorkflowDir)
+	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
+		t.Fatalf("mkdir preview workflow dir: %v", err)
+	}
+	workflowPath := filepath.Join(workflowDir, definitionsPreviewWorkflowName+".js")
+	if err := os.WriteFile(workflowPath, []byte(definitionsPreviewWorkflowSource), 0o600); err != nil {
+		t.Fatalf("write preview workflow %s: %v", workflowPath, err)
+	}
+}
+
+func postPreviewFactory(
+	t *testing.T,
+	serverURL string,
+	projectRoot string,
+	workflowName string,
+) (factoryapi.FactoryPreviewResult, int) {
+	t.Helper()
+
+	projectRoot = strings.TrimSpace(projectRoot)
+	workflowName = strings.TrimSpace(workflowName)
+	payload, err := json.Marshal(factoryapi.FactoryPreviewRequest{
+		SourceKind:  factoryapi.WORKFLOWNAME,
+		ProjectRoot: &projectRoot,
+		SourceValue: &workflowName,
+	})
+	if err != nil {
+		t.Fatalf("marshal preview factory request: %v", err)
+	}
+	endpoint := strings.TrimSuffix(serverURL, "/") + "/factories/preview"
+	response, err := http.Post(endpoint, "application/json", bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("POST %s: %v", endpoint, err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("read POST %s response: %v", endpoint, err)
+	}
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("POST %s status = %d body = %s, want 200", endpoint, response.StatusCode, strings.TrimSpace(string(body)))
+	}
+	var result factoryapi.FactoryPreviewResult
+	if err := json.Unmarshal(body, &result); err != nil {
+		t.Fatalf("decode POST %s response: %v: %s", endpoint, err, strings.TrimSpace(string(body)))
+	}
+	return result, response.StatusCode
+}
+
+func assertPublicFactoryTopology(t *testing.T, factory factoryapi.Factory) {
+	t.Helper()
+
+	if factory.WorkTypes == nil || len(*factory.WorkTypes) != 1 {
+		t.Fatalf("factory work types = %#v, want one public work type", factory.WorkTypes)
+	}
+	workType := (*factory.WorkTypes)[0]
+	if workType.Name != "task" {
+		t.Fatalf("factory work type name = %q, want task", workType.Name)
+	}
+	if len(workType.States) < 2 {
+		t.Fatalf("factory work type states = %#v, want init and completion states", workType.States)
+	}
+
+	if factory.Workers == nil || len(*factory.Workers) != 1 {
+		t.Fatalf("factory workers = %#v, want one worker", factory.Workers)
+	}
+	if (*factory.Workers)[0].Name != "worker-a" {
+		t.Fatalf("factory worker name = %q, want worker-a", (*factory.Workers)[0].Name)
+	}
+
+	if factory.Workstations == nil || len(*factory.Workstations) != 1 {
+		t.Fatalf("factory workstations = %#v, want one workstation", factory.Workstations)
+	}
+	workstation := (*factory.Workstations)[0]
+	if workstation.Name != "process" {
+		t.Fatalf("factory workstation name = %q, want process", workstation.Name)
+	}
+	if workstation.Worker != "worker-a" {
+		t.Fatalf("factory workstation worker = %q, want worker-a", workstation.Worker)
+	}
+	if len(workstation.Inputs) != 1 {
+		t.Fatalf("factory workstation inputs = %#v, want one input route", workstation.Inputs)
+	}
+	input := workstation.Inputs[0]
+	if input.WorkType != "task" || input.State != "init" {
+		t.Fatalf("factory workstation input route = %#v, want task/init", input)
+	}
+	if workstation.Outputs == nil || len(*workstation.Outputs) != 1 {
+		t.Fatalf("factory workstation outputs = %#v, want one output route", workstation.Outputs)
+	}
+	output := (*workstation.Outputs)[0]
+	if output.WorkType != "task" || output.State != "complete" {
+		t.Fatalf("factory workstation output route = %#v, want task/complete", output)
+	}
 }
 
 func postValidateFactory(
