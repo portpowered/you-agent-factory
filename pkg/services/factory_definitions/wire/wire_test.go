@@ -509,21 +509,20 @@ func (stubSessionHost) AttachFactoryDefinitions(
 	return definitions
 }
 
-type stubRequiredToolChecker map[string]factorycontracts.RequiredToolCheckResult
+type stubRequiredToolChecker struct{}
 
-func (s stubRequiredToolChecker) Check(tool factorycontracts.RequiredToolConfig) factorycontracts.RequiredToolCheckResult {
-	if result, ok := s[tool.Name]; ok {
-		return result
-	}
+func (stubRequiredToolChecker) Check(
+	factorycontracts.RequiredToolConfig,
+) factorycontracts.RequiredToolCheckResult {
 	return factorycontracts.RequiredToolCheckResult{}
 }
 
 type stubOrchestratorValidator struct{}
 
 func (stubOrchestratorValidator) ValidateJavaScriptFactoryDefinition(
-	_ context.Context,
-	_ *factorycontracts.FactoryOrchestratorJavaScriptConfig,
-	_ factorycontracts.WorkflowSourceReader,
+	context.Context,
+	*factorycontracts.FactoryOrchestratorJavaScriptConfig,
+	factorycontracts.WorkflowSourceReader,
 ) []factorycontracts.ValidationTarget {
 	return nil
 }
