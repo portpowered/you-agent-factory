@@ -1758,7 +1758,14 @@ response-stream output.
 - `pkg/services/factory_definitions/packages/subagent/` retains only packaged
   subagent metadata and response-shaping behavior; shared catalog validation,
   installation tests, and public functional outcomes own definition evidence.
-- Hermetic no-server named `@you/subagent` package proof lives in
+- Packaged `@you/subagent` invocation functional coverage lives in
+  `tests/functional/factory/packaged/subagent/invocation_test.go` for child
+  primary-result return, child Factory Response Event streaming, and stable child
+  failure through public CLI/API boundaries with mock workers. The mapped
+  `test-built-cli-acceptance` specialty binding for
+  `TestSubagentInvocation_SuccessfulNamedRun_ReturnsAuthoritativePrimaryResultJSON`
+  remains in `tests/functional/acceptance/invoke_repeat_subagent_outcomes_test.go`.
+- Hermetic no-server named `@you/subagent` package proof also lives in
   `pkg/transports/cli/run/run_invocation_test.go`
   (`TestRun_NamedSubagentHermeticInvocationSucceedsWithoutListeningServer`,
   `TestRun_NamedSubagentNoServerBootstrap_TextPrimaryResultIsAgentResponse`,
