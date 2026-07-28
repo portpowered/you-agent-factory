@@ -74,7 +74,7 @@ func TestCLIFactoryValidateRejectsInvalidDefinitionActionably(t *testing.T) {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			sourcePath := writeFactoryFile(t, test.body)
-			assertValidateRejectedActionably(t, sourcePath, test.wants...)
+			assertValidateRejectedActionably(t, sourcePath, test.wants, validateOptions{})
 		})
 	}
 }
@@ -93,12 +93,21 @@ func TestCLIFactoryValidateDoesNotMutateOnFailure(t *testing.T) {
 		durableBaselineFactoryName,
 		filepath.Join(sourceDir, "factory.json"),
 	)
+	env := customerHomeEnvironment(home)
 	before := captureDurableBaseline(t, home, workingDirectory, factoryDir)
 
 	invalidPath := writeFactoryFile(t, invalidFactoryWithDanglingWorker)
-	assertValidateRejectedActionably(t, invalidPath,
-		"factory validation found blocking issues",
-		"factory.worker.danglingReference",
+	assertValidateRejectedActionably(
+		t,
+		invalidPath,
+		[]string{
+			"factory validation found blocking issues",
+			"factory.worker.danglingReference",
+		},
+		validateOptions{
+			env:              env,
+			workingDirectory: workingDirectory,
+		},
 	)
 
 	after := captureDurableBaseline(t, home, workingDirectory, factoryDir)
@@ -181,14 +190,31 @@ func TestCLIFactoryPersistFromFileThenRunSucceeds(t *testing.T) {
 	}
 }
 
-func assertValidateRejectedActionably(t *testing.T, factorySource string, wants ...string) {
+type validateOptions struct {
+	env              []string
+	workingDirectory string
+}
+
+func assertValidateRejectedActionably(
+	t *testing.T,
+	factorySource string,
+	wants []string,
+	options validateOptions,
+) {
 	t.Helper()
 
 	runner := support.NewRecordingCommandRunner("runtime must not execute")
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "--json", "factory", "config", "validate", factorySource,
 	})
-	inputs.Input.WorkingDirectory = filepath.Dir(factorySource)
+	if options.env != nil {
+		inputs.Input.Env = options.env
+	}
+	if options.workingDirectory != "" {
+		inputs.Input.WorkingDirectory = options.workingDirectory
+	} else {
+		inputs.Input.WorkingDirectory = filepath.Dir(factorySource)
+	}
 	err := support.BuildProcess(
 		t,
 		serviceedges.Edges{ProviderCommandRunner: runner},
@@ -211,6 +237,7 @@ func assertValidateRejectedActionably(t *testing.T, factorySource string, wants 
 type durableBaseline struct {
 	factoryJSON []byte
 	factory     factoryapi.Factory
+	listEntries []factoryListEntry
 	listEntry   factoryListEntry
 }
 
@@ -236,11 +263,8 @@ func captureDurableBaseline(
 	if err != nil {
 		t.Fatalf("LoadedFactory(%s): %v", factoryDir, err)
 	}
-	entry, ok := findFactoryListEntry(
-		t,
-		executeFactoryList(t, home, workingDirectory),
-		durableBaselineFactoryName,
-	)
+	listEntries := executeFactoryList(t, home, workingDirectory)
+	entry, ok := findFactoryListEntry(t, listEntries, durableBaselineFactoryName)
 	if !ok {
 		t.Fatalf("factory list missing durable Factory %q", durableBaselineFactoryName)
 	}
@@ -254,6 +278,7 @@ func captureDurableBaseline(
 	return durableBaseline{
 		factoryJSON: append([]byte(nil), factoryJSON...),
 		factory:     factory,
+		listEntries: append([]factoryListEntry(nil), listEntries...),
 		listEntry:   entry,
 	}
 }
@@ -280,6 +305,13 @@ func assertDurableBaselineUnchanged(t *testing.T, before, after durableBaseline)
 			"factory list entry changed after failed validate\nbefore: %#v\nafter: %#v",
 			before.listEntry,
 			after.listEntry,
+		)
+	}
+	if !reflect.DeepEqual(before.listEntries, after.listEntries) {
+		t.Fatalf(
+			"factory list inventory changed after failed validate\nbefore: %#v\nafter: %#v",
+			before.listEntries,
+			after.listEntries,
 		)
 	}
 }
