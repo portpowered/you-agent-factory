@@ -723,50 +723,6 @@
       "name": "TestModelTransportSmoke_ServiceModeStartupAndDirectModelRoutesStayAligned"
     },
     {
-      "file": "runtime_api/api_packaged_deep_research_invocation_test.go",
-      "name": "TestSessionInvocationAPI_PackagedDeepResearchUsesMaterializedFactorySource"
-    },
-    {
-      "file": "runtime_api/api_packaged_goal_invocation_test.go",
-      "name": "TestPackagedGoalBuiltInTopology_SubmitWhilePausedResumesThroughSessionControl"
-    },
-    {
-      "file": "runtime_api/api_packaged_goal_invocation_test.go",
-      "name": "TestSessionInvocationAPI_PackagedGoalContinueRepeatsBeforeCompletion"
-    },
-    {
-      "file": "runtime_api/api_packaged_goal_invocation_test.go",
-      "name": "TestSessionInvocationAPI_PackagedGoalRejectRepeatsBeforeCompletion"
-    },
-    {
-      "file": "runtime_api/api_packaged_goal_invocation_test.go",
-      "name": "TestSessionInvocationAPI_PackagedGoalReturnsExplicitSummaryPrimaryResult"
-    },
-    {
-      "file": "runtime_api/api_packaged_goal_invocation_test.go",
-      "name": "TestSessionInvocationAPI_PackagedGoalWorkerFailureReturnsFailedStatusDetails"
-    },
-    {
-      "file": "runtime_api/api_packaged_quorum_invocation_test.go",
-      "name": "TestSessionInvocationAPI_PackagedQuorumAppliesRoleArguments"
-    },
-    {
-      "file": "runtime_api/api_packaged_quorum_invocation_test.go",
-      "name": "TestSessionInvocationAPI_PackagedQuorumGatesMergeUntilBothBranchesComplete"
-    },
-    {
-      "file": "runtime_api/api_packaged_review_invocation_test.go",
-      "name": "TestSessionInvocationAPI_PackagedReviewRejectsThenApprovesRevision"
-    },
-    {
-      "file": "runtime_api/api_packaged_review_invocation_test.go",
-      "name": "TestSessionInvocationAPI_PackagedReviewReturnsApprovedCandidate"
-    },
-    {
-      "file": "runtime_api/api_packaged_review_invocation_test.go",
-      "name": "TestSessionInvocationAPI_PackagedReviewWorkerFailureReturnsFailedStatus"
-    },
-    {
       "file": "runtime_api/api_request_batch_boundary_smoke_test.go",
       "name": "TestGeneratedAPIIntegrationSmoke_BatchWorkTypeNameNormalizesRuntimeWork"
     },

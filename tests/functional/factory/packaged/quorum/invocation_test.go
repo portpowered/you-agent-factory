@@ -2,6 +2,7 @@ package quorum
 
 import (
 	"testing"
+	"time"
 
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -91,6 +92,49 @@ func TestPackagedQuorumOptionalMemberSettingsReachWorkers(t *testing.T) {
 	runner.assertProviderModel(t, packagedQuorumBranchAWorkstation, codex, "gpt-5.1")
 	runner.assertProviderModel(t, packagedQuorumBranchBWorkstation, codex, "gpt-5.1")
 	runner.assertProviderModel(t, packagedQuorumMergeWorkstation, codex, "gpt-5.2")
+}
+
+// TestPackagedQuorumGatesMergeUntilBothBranchesComplete proves packaged
+// @you/quorum invocation does not dispatch merge until both branch members
+// complete under edge-mocked Codex providers and then returns one merged
+// primary result reflecting the submitted request.
+func TestPackagedQuorumGatesMergeUntilBothBranchesComplete(t *testing.T) {
+	runner := newPackagedQuorumGatedCommandRunner()
+	requestText := packagedQuorumRequestText(t)
+
+	responseCh := make(chan factoryapi.InvocationResponse, 1)
+	go func() {
+		responseCh <- runPackagedQuorumCLIJSONInvocation(t, runner, requestText)
+	}()
+
+	runner.waitForBranchStarts(t)
+	if got := runner.callCount(packagedQuorumMergeWorkstation); got != 0 {
+		t.Fatalf("merge call count before branch B release = %d, want 0", got)
+	}
+	close(runner.releaseBranchB)
+
+	select {
+	case response := <-responseCh:
+		if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+			t.Fatalf("invocation status = %q, want COMPLETED; response = %#v", response.Status, response)
+		}
+		assertMergedQuorumPrimaryResult(t, invocationPrimaryResultText(t, response), requestText)
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for gated quorum invocation to complete")
+	}
+	if got := runner.callCount(packagedQuorumMergeWorkstation); got != 1 {
+		t.Fatalf("merge call count = %d, want exactly 1", got)
+	}
+	assertPromptIncludes(
+		t,
+		runner.capturedMergePrompt(),
+		"Original request:\n",
+		requestText,
+		"Branch A output:\n",
+		"branch A",
+		"Branch B output:\n",
+		"branch B",
+	)
 }
 
 // TestPackagedQuorumInsufficientSuccessfulMembersFails proves that packaged

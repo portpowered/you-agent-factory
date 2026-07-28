@@ -1709,6 +1709,26 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/factory/packaged/goal/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/goal",
+      "scenario": "TestPackagedGoalContinueRepeatsThenCompletes",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/goal/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/quorum/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/quorum",
+      "scenario": "TestPackagedQuorumGatesMergeUntilBothBranchesComplete",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/quorum/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/factory/packaged/review/invocation_test.go",
       "package": "you-agent-factory/tests/functional/factory/packaged/review",
       "scenario": "TestPackagedReviewApprovalCompletes",
@@ -4417,116 +4437,6 @@
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/api_packaged_deep_research_invocation_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api",
-      "scenario": "TestSessionInvocationAPI_PackagedDeepResearchUsesMaterializedFactorySource",
-      "lane": "short",
-      "destination": "tests/functional/factory/packaged/deep_research/invocation_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-05-factory-packaged"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/api_packaged_goal_invocation_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api",
-      "scenario": "TestPackagedGoalBuiltInTopology_SubmitWhilePausedResumesThroughSessionControl",
-      "lane": "short",
-      "destination": "tests/functional/factory/packaged/goal/invocation_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-05-factory-packaged"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/api_packaged_goal_invocation_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api",
-      "scenario": "TestSessionInvocationAPI_PackagedGoalContinueRepeatsBeforeCompletion",
-      "lane": "short",
-      "destination": "tests/functional/factory/packaged/goal/invocation_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-05-factory-packaged"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/api_packaged_goal_invocation_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api",
-      "scenario": "TestSessionInvocationAPI_PackagedGoalRejectRepeatsBeforeCompletion",
-      "lane": "short",
-      "destination": "tests/functional/factory/packaged/goal/invocation_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-05-factory-packaged"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/api_packaged_goal_invocation_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api",
-      "scenario": "TestSessionInvocationAPI_PackagedGoalReturnsExplicitSummaryPrimaryResult",
-      "lane": "short",
-      "destination": "tests/functional/factory/packaged/goal/invocation_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-05-factory-packaged"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/api_packaged_goal_invocation_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api",
-      "scenario": "TestSessionInvocationAPI_PackagedGoalWorkerFailureReturnsFailedStatusDetails",
-      "lane": "short",
-      "destination": "tests/functional/factory/packaged/goal/invocation_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-05-factory-packaged"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/api_packaged_quorum_invocation_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api",
-      "scenario": "TestSessionInvocationAPI_PackagedQuorumAppliesRoleArguments",
-      "lane": "short",
-      "destination": "tests/functional/factory/packaged/quorum/invocation_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-05-factory-packaged"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/api_packaged_quorum_invocation_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api",
-      "scenario": "TestSessionInvocationAPI_PackagedQuorumGatesMergeUntilBothBranchesComplete",
-      "lane": "short",
-      "destination": "tests/functional/factory/packaged/quorum/invocation_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-05-factory-packaged"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/api_packaged_review_invocation_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api",
-      "scenario": "TestSessionInvocationAPI_PackagedReviewRejectsThenApprovesRevision",
-      "lane": "short",
-      "destination": "tests/functional/factory/packaged/review/invocation_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-05-factory-packaged"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/api_packaged_review_invocation_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api",
-      "scenario": "TestSessionInvocationAPI_PackagedReviewReturnsApprovedCandidate",
-      "lane": "short",
-      "destination": "tests/functional/factory/packaged/review/invocation_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-05-factory-packaged"
-    },
-    {
-      "source_path": "tests/functional/runtime_api/api_packaged_review_invocation_test.go",
-      "package": "you-agent-factory/tests/functional/runtime_api",
-      "scenario": "TestSessionInvocationAPI_PackagedReviewWorkerFailureReturnsFailedStatus",
-      "lane": "short",
-      "destination": "tests/functional/factory/packaged/review/invocation_test.go",
-      "catch_all": "runtime_api",
-      "specialty_targets": "none",
-      "deletion_only_batch": "runtime_api-delete-05-factory-packaged"
     },
     {
       "source_path": "tests/functional/runtime_api/api_provider_throttle_pause_observability_test.go",
@@ -9056,7 +8966,7 @@
       "guards_batch": 23,
       "none": 638,
       "replay_contracts": 23,
-      "runtime_api": 86,
+      "runtime_api": 75,
       "smoke": 62,
       "workflow": 30
     },
@@ -9066,7 +8976,7 @@
       "bootstrap_portability": 21,
       "cli": 59,
       "events": 5,
-      "factory": 51,
+      "factory": 53,
       "factory_visualization": 6,
       "guards_batch": 23,
       "models": 25,
@@ -9077,7 +8987,7 @@
       "provider_sessions": 15,
       "providers": 64,
       "replay_contracts": 23,
-      "runtime_api": 95,
+      "runtime_api": 84,
       "sessionparity": 13,
       "sessions": 41,
       "smoke": 62,
@@ -9087,9 +8997,9 @@
       "workflow": 30,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 885,
+    "customer_top_level_Test_scenarios": 880,
     "lane_functionallong": 95,
-    "lane_short": 790,
+    "lane_short": 781,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 14,
@@ -9110,8 +9020,8 @@
       "you-agent-factory/tests/functional/factory/packaged/catalog/required_inputs_test": 2,
       "you-agent-factory/tests/functional/factory/packaged/deep_research": 3,
       "you-agent-factory/tests/functional/factory/packaged/fusion": 3,
-      "you-agent-factory/tests/functional/factory/packaged/goal": 4,
-      "you-agent-factory/tests/functional/factory/packaged/quorum": 3,
+      "you-agent-factory/tests/functional/factory/packaged/goal": 5,
+      "you-agent-factory/tests/functional/factory/packaged/quorum": 4,
       "you-agent-factory/tests/functional/factory/packaged/review": 3,
       "you-agent-factory/tests/functional/factory/packaged/subagent": 3,
       "you-agent-factory/tests/functional/factory/packaged/tts": 3,
@@ -9143,7 +9053,7 @@
       "you-agent-factory/tests/functional/providers/kiro": 5,
       "you-agent-factory/tests/functional/providers/pi": 4,
       "you-agent-factory/tests/functional/replay_contracts": 23,
-      "you-agent-factory/tests/functional/runtime_api": 56,
+      "you-agent-factory/tests/functional/runtime_api": 45,
       "you-agent-factory/tests/functional/runtime_api/factory_transformation": 39,
       "you-agent-factory/tests/functional/sessionparity": 13,
       "you-agent-factory/tests/functional/sessions": 1,
@@ -9204,11 +9114,10 @@
   "runtime_api_mapping": {
     "mapped_at": "2026-07-24T02:25:00Z",
     "story": "fnd-007-migration-ledger-003",
-    "scenario_count": 93,
+    "scenario_count": 82,
     "batch_ids": [
       "runtime_api-delete-01-transport-http",
       "runtime_api-delete-02-work-submission",
-      "runtime_api-delete-05-factory-packaged",
       "runtime_api-delete-06-factory-current",
       "runtime_api-delete-07-events-replay",
       "runtime_api-delete-08-models",

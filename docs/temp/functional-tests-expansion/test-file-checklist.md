@@ -758,6 +758,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 - [x] `tests/functional/factory/packaged/goal/invocation_test.go`
   - `TestPackagedGoalAcceptCompletesWithSummary` covers accepted routing.
+  - `TestPackagedGoalContinueRepeatsThenCompletes` covers continue repeats.
   - `TestPackagedGoalRejectRepeatsThenCompletes` covers feedback propagation.
   - `TestPackagedGoalUnknownDecisionFails` covers classifier failure.
   - `TestPackagedGoalPausedSubmissionResumes` covers session control locally.
@@ -766,6 +767,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPackagedQuorumRequiredInputCompletes` covers member dispatch and final
     result.
   - `TestPackagedQuorumOptionalMemberSettingsReachWorkers` covers overrides.
+  - `TestPackagedQuorumGatesMergeUntilBothBranchesComplete` covers merge gating.
   - `TestPackagedQuorumInsufficientSuccessfulMembersFails` covers failure.
 
 - [x] `tests/functional/factory/packaged/review/invocation_test.go`
