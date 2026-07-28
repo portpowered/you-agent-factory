@@ -290,6 +290,7 @@
     "pkg/services/models/internal/services/runtime_scopes/wire",
     "pkg/services/models/transports/cli",
     "pkg/services/models/transports/http",
+    "pkg/services/models/transports/mcp",
     "pkg/services/models/wire",
     "pkg/services/operator_settings",
     "pkg/services/operator_settings/identityinventory",
@@ -1744,6 +1745,11 @@
     },
     {
       "packagePath": "pkg/services/models/transports/http",
+      "disposition": "retain",
+      "destination": "models"
+    },
+    {
+      "packagePath": "pkg/services/models/transports/mcp",
       "disposition": "retain",
       "destination": "models"
     },
