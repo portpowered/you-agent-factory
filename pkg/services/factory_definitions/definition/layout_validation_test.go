@@ -5,10 +5,10 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func TestValidateEditableFactoryTopology_AllowsRecoverableLayoutWarnings(t *testing.T) {

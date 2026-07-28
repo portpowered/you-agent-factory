@@ -1,5 +1,0 @@
-{"type":"system","subtype":"init","session_id":"cursor-session-tools"}
-{"type":"tool_call","subtype":"started","call_id":"call-read-1","tool_call":{"readToolCall":{"args":{"path":"README.md","prompt":"private submitted prompt","api_token":"cursor-secret"}}},"session_id":"cursor-session-tools"}
-{"type":"tool_call","subtype":"completed","call_id":"call-read-1","tool_call":{"readToolCall":{"result":{"success":{"path":"README.md","bytes":128}}}},"session_id":"cursor-session-tools"}
-{"type":"tool_call","subtype":"started","call_id":"call-shell-2","tool_call":{"function":{"name":"shell","arguments":{"command":"go test ./pkg/workers/provider/cursor","environment":{"ACCESS_TOKEN":"secret-value"}}}},"session_id":"cursor-session-tools"}
-{"type":"tool_call","subtype":"completed","call_id":"call-shell-2","tool_call":{"function":{"result":{"error":{"message":"command failed","output":"safe bounded failure"}}}},"session_id":"cursor-session-tools"}

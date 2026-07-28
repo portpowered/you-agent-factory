@@ -7,7 +7,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	liveviewprojection "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/testing/recordingsstub"
 )
 
 type stubSource struct{}
@@ -22,42 +22,6 @@ func (stubSource) SubscribeFactoryEvents(
 
 func (stubSource) GetRuntimeSnapshotFacts(context.Context) (*liveviewprojection.RuntimeSnapshotFacts, error) {
 	return nil, nil
-}
-
-type projectionStub struct{}
-
-func (projectionStub) ReconstructFactoryWorldState(
-	[]factorydefinitions.FactoryEvent,
-	int,
-) (factorydefinitions.FactoryWorldState, error) {
-	return factorydefinitions.FactoryWorldState{}, nil
-}
-
-func (projectionStub) SimpleDashboardRenderData(
-	factorydefinitions.FactoryWorldState,
-) recordings.SimpleDashboardRenderData {
-	return recordings.SimpleDashboardRenderData{}
-}
-
-func (projectionStub) ProjectActiveThrottlePauses(
-	factorydefinitions.InitialStructurePayload,
-	[]factorydefinitions.ActiveThrottlePause,
-) []factorydefinitions.FactoryWorldThrottlePause {
-	return nil
-}
-
-func (projectionStub) ProjectWorkstationRequests(
-	factorydefinitions.FactoryWorldState,
-) recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice {
-	return recordings.WorkstationFactoryWorldWorkstationRequestProjectionSlice{}
-}
-
-func (projectionStub) ValidateReconnectReplay(
-	[]factorydefinitions.FactoryEvent,
-	factorydefinitions.FactoryEventReconnectCursor,
-	factorydefinitions.FactoryEventReconnectScope,
-) error {
-	return nil
 }
 
 type stubSink struct{}
@@ -81,7 +45,7 @@ func TestNewServiceConstructsSingularLiveViewProjectionService(t *testing.T) {
 
 	svc, err = NewService(
 		stubSource{},
-		projectionStub{},
+		&recordingsstub.Service{},
 		fixedClock{},
 		stubSink{},
 		nil,

@@ -9,6 +9,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/testing/recordingsstub"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
@@ -101,7 +102,7 @@ func TestActivateThroughSessionBoundSourceReachesStarted(t *testing.T) {
 	}
 	service, err := New(
 		NewCurrentRuntimeSource(reader),
-		projectionStub{},
+		&recordingsstub.Service{},
 		fixedClock{now: time.Unix(1, 0)},
 		SinkFunc(func(View) {}),
 		nil,
@@ -138,7 +139,7 @@ func TestActivateWithUnavailableSessionRuntimeDoesNotSubscribe(t *testing.T) {
 	}
 	service, err := New(
 		NewCurrentRuntimeSource(reader),
-		projectionStub{},
+		&recordingsstub.Service{},
 		fixedClock{now: time.Unix(1, 0)},
 		SinkFunc(func(View) {}),
 		nil,

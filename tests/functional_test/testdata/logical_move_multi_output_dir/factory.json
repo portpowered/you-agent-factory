@@ -1,0 +1,75 @@
+{
+  "name": "logical_move_multi_output_dir",
+  "workTypes": [
+    {
+      "name": "task",
+      "states": [
+        {
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "name": "done",
+          "type": "TERMINAL"
+        }
+      ]
+    },
+    {
+      "name": "branch-a",
+      "states": [
+        {
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "name": "done",
+          "type": "TERMINAL"
+        }
+      ]
+    },
+    {
+      "name": "branch-b",
+      "states": [
+        {
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "name": "done",
+          "type": "TERMINAL"
+        }
+      ]
+    }
+  ],
+  "workers": [
+    {
+      "name": "logical-router"
+    }
+  ],
+  "workstations": [
+    {
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "task"
+        }
+      ],
+      "name": "router",
+      "outputs": [
+        {
+          "state": "done",
+          "workType": "task"
+        },
+        {
+          "state": "done",
+          "workType": "branch-a"
+        },
+        {
+          "state": "done",
+          "workType": "branch-b"
+        }
+      ],
+      "worker": "logical-router"
+    }
+  ]
+}

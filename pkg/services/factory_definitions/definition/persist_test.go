@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
-	generatedapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	generatedapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func mustEditableFactorySnapshot(t testing.TB, factory generatedapi.Factory) *factorydefinitions.FactorySnapshot {
@@ -47,7 +47,7 @@ func TestService_PreparePersistedFactoryPayload_NormalizesInlineBodiesOutOfCanon
 		Physical: time.Date(2026, 5, 31, 14, 0, 0, 0, time.UTC),
 	}
 
-	prepared, err := New(stubDefinitionHost{}).PreparePersistedFactoryPayload("alpha", mustEditableFactorySnapshot(t, factory), version)
+	prepared, err := newTestService(stubDefinitionHost{}).PreparePersistedFactoryPayload("alpha", mustEditableFactorySnapshot(t, factory), version)
 	if err != nil {
 		t.Fatalf("PreparePersistedFactoryPayload: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestService_PreparePersistedFactoryPayload_NormalizesInlineBodiesOutOfCanon
 func TestService_PreparePersistedFactoryPayload_RejectsMissingSnapshot(t *testing.T) {
 	t.Parallel()
 
-	_, err := New(stubDefinitionHost{}).PreparePersistedFactoryPayload("alpha", nil, factorydefinitions.FactoryVersion{})
+	_, err := newTestService(stubDefinitionHost{}).PreparePersistedFactoryPayload("alpha", nil, factorydefinitions.FactoryVersion{})
 	if err == nil || !strings.Contains(err.Error(), "editable factory snapshot is required") {
 		t.Fatalf("PreparePersistedFactoryPayload() error = %v, want missing snapshot guidance", err)
 	}
@@ -109,7 +109,7 @@ func TestService_PrepareEditableFactoryPersistView_UsesSameNormalizationAsPersis
 		}},
 	}
 
-	view, err := New(stubDefinitionHost{}).PrepareEditableFactoryPersistView("factory", mustEditableFactorySnapshot(t, factory))
+	view, err := newTestService(stubDefinitionHost{}).PrepareEditableFactoryPersistView("factory", mustEditableFactorySnapshot(t, factory))
 	if err != nil {
 		t.Fatalf("PrepareEditableFactoryPersistView: %v", err)
 	}
@@ -142,7 +142,7 @@ func TestService_PreparePersistedFactoryPayload_PrunesStaleLayout(t *testing.T) 
 		Viewport: &generatedapi.FactoryLayoutViewport{Zoom: 1},
 	}
 
-	prepared, err := New(stubDefinitionHost{}).PreparePersistedFactoryPayload("alpha", mustEditableFactorySnapshot(t, factory), factorydefinitions.FactoryVersion{
+	prepared, err := newTestService(stubDefinitionHost{}).PreparePersistedFactoryPayload("alpha", mustEditableFactorySnapshot(t, factory), factorydefinitions.FactoryVersion{
 		Logical:  2,
 		Physical: time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC),
 	})
@@ -174,7 +174,7 @@ func TestService_PreparePersistedFactoryPayload_PreservesUnsupportedSchemaVersio
 		Viewport: &generatedapi.FactoryLayoutViewport{Zoom: 1},
 	}
 
-	prepared, err := New(stubDefinitionHost{}).PreparePersistedFactoryPayload("alpha", mustEditableFactorySnapshot(t, factory), factorydefinitions.FactoryVersion{
+	prepared, err := newTestService(stubDefinitionHost{}).PreparePersistedFactoryPayload("alpha", mustEditableFactorySnapshot(t, factory), factorydefinitions.FactoryVersion{
 		Logical:  2,
 		Physical: time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC),
 	})
@@ -201,7 +201,7 @@ func TestService_PersistPayloadFromView_StampsVersionMetadata(t *testing.T) {
 			Body: &body,
 		}},
 	}
-	view, err := New(stubDefinitionHost{}).PrepareEditableFactoryPersistView("alpha", mustEditableFactorySnapshot(t, factory))
+	view, err := newTestService(stubDefinitionHost{}).PrepareEditableFactoryPersistView("alpha", mustEditableFactorySnapshot(t, factory))
 	if err != nil {
 		t.Fatalf("PrepareEditableFactoryPersistView: %v", err)
 	}
@@ -210,7 +210,7 @@ func TestService_PersistPayloadFromView_StampsVersionMetadata(t *testing.T) {
 		Physical: time.Date(2026, 6, 8, 8, 0, 0, 0, time.UTC),
 	}
 
-	prepared, err := New(stubDefinitionHost{}).PersistPayloadFromView(view, version)
+	prepared, err := newTestService(stubDefinitionHost{}).PersistPayloadFromView(view, version)
 	if err != nil {
 		t.Fatalf("PersistPayloadFromView: %v", err)
 	}
@@ -229,7 +229,7 @@ func TestService_SerializeNamedFactory_ReturnsLoadedRuntime(t *testing.T) {
 		t.Fatalf("LoadRuntimeConfig: %v", err)
 	}
 
-	got, err := New(stubDefinitionHost{}).SerializeNamedFactory("alpha", runtimeCfg, true)
+	got, err := newTestService(stubDefinitionHost{}).SerializeNamedFactory("alpha", runtimeCfg, true)
 	if err != nil {
 		t.Fatalf("SerializeNamedFactory: %v", err)
 	}
@@ -245,7 +245,7 @@ func TestService_SerializeNamedFactory_ReturnsLoadedRuntime(t *testing.T) {
 func TestService_PersistPayloadFromView_RejectsNilView(t *testing.T) {
 	t.Parallel()
 
-	_, err := New(stubDefinitionHost{}).PersistPayloadFromView(nil, factorydefinitions.FactoryVersion{
+	_, err := newTestService(stubDefinitionHost{}).PersistPayloadFromView(nil, factorydefinitions.FactoryVersion{
 		Logical:  1,
 		Physical: time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC),
 	})

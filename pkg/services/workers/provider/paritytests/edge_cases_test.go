@@ -191,7 +191,7 @@ func TestAssertObservableToolLifecycle_RejectsCompletedMismatch(t *testing.T) {
 func TestDecodeTransportSSEFrame_RejectsSequenceMismatch(t *testing.T) {
 	t.Parallel()
 
-	fixture, ok := FixtureByID(FixtureSnapshotOnlyOpenCode)
+	fixture, ok := FixtureByID(FixtureAgyFinalOnly)
 	if !ok {
 		t.Fatal("missing full-stream fixture")
 	}
@@ -252,7 +252,7 @@ func TestAssertCrossProviderParityCatalog(t *testing.T) {
 func TestDecodeTransportCLINDJSON_RoundTrip(t *testing.T) {
 	t.Parallel()
 
-	fixture, ok := FixtureByID(FixtureSnapshotOnlyOpenCode)
+	fixture, ok := FixtureByID(FixtureAgyFinalOnly)
 	if !ok {
 		t.Fatal("missing full-stream fixture")
 	}
@@ -315,7 +315,7 @@ func TestAssertTruthfulStreamingFidelity_UnsupportedClass(t *testing.T) {
 func TestAssertCrossProviderParityForFixture_RejectsTerminalContentMismatch(t *testing.T) {
 	t.Parallel()
 
-	fixture, ok := FixtureByID(FixtureSnapshotOnlyOpenCode)
+	fixture, ok := FixtureByID(FixtureAgyFinalOnly)
 	if !ok {
 		t.Fatal("missing full-stream fixture")
 	}

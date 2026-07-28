@@ -163,8 +163,8 @@ func mapProvidersExtraction(packagePath string) (PackageMapping, bool) {
 	case packagePath == "pkg/services/workers/agypty",
 		packagePath == "pkg/services/workers/cliprovider",
 		packagePath == "pkg/services/workers/provider",
-		packagePath == "pkg/services/workers/provider_test",
 		strings.HasPrefix(packagePath, "pkg/services/workers/provider/"),
+		packagePath == "pkg/services/workers/provider_test",
 		strings.HasPrefix(packagePath, "pkg/services/workers/provider_test/"):
 		destination := "providers/internal/services/execution"
 		if packagePath == "pkg/services/workers/provider/registry" {
@@ -189,11 +189,8 @@ func mapKnownNestedOwnerPackage(owner, packagePath, rest string) (PackageMapping
 		return mapping, true
 	}
 
-	// Packages already under the committed private subservice container map to
-	// that nested destination. Workers retain at the nested plan path; factory
-	// definitions keeps catalog/validation canonical retain, marks transitional
-	// IMP subservices move→owner/internal, and marks other committed subservices
-	// move until CLN cutover.
+	// Packages already under the committed private subservice container retain
+	// that nested destination unless the subservice is still transitional IMP debt.
 	if strings.HasPrefix(rest, "internal/services/") {
 		sub := strings.TrimPrefix(rest, "internal/services/")
 		subservice, _, _ := strings.Cut(sub, "/")
@@ -201,12 +198,7 @@ func mapKnownNestedOwnerPackage(owner, packagePath, rest string) (PackageMapping
 			if isTransitionalMoveNestedSubservice(owner, subservice) {
 				return moveOrRetainMapping(packagePath, owner+"/internal", DispositionMove), true
 			}
-			destination := owner + "/internal/services/" + subservice
-			disposition := DispositionRetain
-			if owner == "factory_definitions" && subservice != "catalog" && subservice != "validation" {
-				disposition = DispositionMove
-			}
-			return moveOrRetainMapping(packagePath, destination, disposition), true
+			return moveOrRetainMapping(packagePath, owner+"/internal/services/"+subservice, DispositionRetain), true
 		}
 	}
 
@@ -263,27 +255,63 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 	"factory_runtime": {
 		{exact: "javascript", prefix: "javascript/", dest: "factory_runtime/internal/services/orchestration"},
 		{prefix: "internal/orchestrators/", dest: "factory_runtime/internal/services/orchestration"},
-		{prefix: "tooling/javascript/", dest: "factory_runtime/internal/services/orchestration"},
+		{exact: "tooling", prefix: "tooling/", dest: "factory_runtime/internal/services/orchestration"},
+		{exact: "checkpointstore", prefix: "checkpointstore/", dest: "factory_runtime/internal/services/checkpoint_recovery"},
+		{exact: "checkpointsummary", prefix: "checkpointsummary/", dest: "factory_runtime/internal/services/checkpoint_recovery"},
+		{exact: "build", prefix: "build/", dest: "factory_runtime/internal/services/instance_host"},
+		{exact: "internal/factorystatus", prefix: "internal/factorystatus/", dest: "factory_runtime/internal"},
+		{exact: "internal/legacysnapshot", prefix: "internal/legacysnapshot/", dest: "factory_runtime/internal"},
+		{exact: "internal/rootobservation", prefix: "internal/rootobservation/", dest: "factory_runtime/internal"},
+		{exact: "internal/service", prefix: "internal/service/", dest: "factory_runtime/internal"},
+		{exact: "testkit", prefix: "testkit/", dest: "factory_runtime/internal"},
+		{exact: "testdata", prefix: "testdata/", dest: "factory_runtime/internal"},
+		{exact: "context", prefix: "context/", dest: "factory_runtime/internal/services/orchestration"},
+		{exact: "definitionmapping", prefix: "definitionmapping/", dest: "factory_runtime/internal/services/orchestration"},
+		{exact: "engine", prefix: "engine/", dest: "factory_runtime/internal/services/orchestration"},
+		{exact: "exhaustiontests", prefix: "exhaustiontests/", dest: "factory_runtime/internal/services/orchestration"},
+		{exact: "metrics", prefix: "metrics/", dest: "factory_runtime/internal/services/orchestration"},
+		{exact: "orchestrationowner", prefix: "orchestrationowner/", dest: "factory_runtime/internal/services/orchestration"},
+		{exact: "orchestratorcontract", prefix: "orchestratorcontract/", dest: "factory_runtime/internal/services/orchestration"},
+		{exact: "replayhooks", prefix: "replayhooks/", dest: "factory_runtime/internal/services/orchestration"},
+		{exact: "runtime", prefix: "runtime/", dest: "factory_runtime/internal/services/orchestration"},
+		{exact: "runtimecontract", prefix: "runtimecontract/", dest: "factory_runtime/internal/services/orchestration"},
+		{exact: "scheduler", prefix: "scheduler/", dest: "factory_runtime/internal/services/orchestration"},
+		{exact: "state", prefix: "state/", dest: "factory_runtime/internal/services/orchestration"},
+		{exact: "subsystems", prefix: "subsystems/", dest: "factory_runtime/internal/services/orchestration"},
+		{exact: "throttle", prefix: "throttle/", dest: "factory_runtime/internal/services/orchestration"},
+		{exact: "token", prefix: "token/", dest: "factory_runtime/internal/services/orchestration"},
+		{exact: "token_transformer", prefix: "token_transformer/", dest: "factory_runtime/internal/services/orchestration"},
 	},
 	"work": {
 		{exact: "materialize", prefix: "materialize/", dest: "work/internal/services/content_materialization"},
+		{exact: "stateaccessrecordings", prefix: "stateaccessrecordings/", dest: "work/internal/services/state_access"},
+		{exact: "testdata", prefix: "testdata/", dest: "work/internal"},
+	},
+	"operator_settings": {
+		{exact: "identityinventory", prefix: "identityinventory/", dest: "operator_settings/internal/services/document"},
+		{exact: "servicewire", prefix: "servicewire/", dest: "operator_settings/internal"},
+		{exact: "testlink", prefix: "testlink/", dest: "operator_settings/internal"},
+		{exact: "testproviders", prefix: "testproviders/", dest: "operator_settings/internal"},
+		{exact: "testdata", prefix: "testdata/", dest: "operator_settings/internal"},
+		{exact: "internal/service", prefix: "internal/service/", dest: "operator_settings/internal"},
 	},
 	"workers": {
 		{exact: "construction", prefix: "construction/", dest: "workers/internal/services/runtime_assembly"},
-		{exact: "diagnostics", prefix: "diagnostics/", dest: "workers/internal"},
-		{exact: "interface", prefix: "interface/", dest: "workers/internal"},
-		{exact: "execution", prefix: "execution/", dest: "workers/internal/services/workstations"},
-		{exact: "executor", prefix: "executor/", dest: "workers/internal/services/workstations"},
-		{exact: "invocation", prefix: "invocation/", dest: "workers/internal/services/workstations"},
 		{exact: "prompting", prefix: "prompting/", dest: "workers/internal/services/workstations"},
-		{exact: "skippermissions", prefix: "skippermissions/", dest: "workers/internal/services/workstations"},
 		{exact: "worktree", prefix: "worktree/", dest: "workers/internal/services/workstations"},
+		{exact: "skippermissions", prefix: "skippermissions/", dest: "workers/internal/services/workstations"},
+		{exact: "diagnostics", prefix: "diagnostics/", dest: "workers/internal/services/runners"},
+		{exact: "execution", prefix: "execution/", dest: "workers/internal/services/runners"},
+		{exact: "executor", prefix: "executor/", dest: "workers/internal/services/runners"},
+		{exact: "invocation", prefix: "invocation/", dest: "workers/internal/services/runners"},
 		{exact: "process", prefix: "process/", dest: "workers/internal/services/runners"},
 		{exact: "runner", prefix: "runner/", dest: "workers/internal/services/runners"},
+		{exact: "interface", prefix: "interface/", dest: "workers/internal/services/runners"},
+		{exact: "services", prefix: "services/", dest: "workers/internal/services/runners"},
 		{exact: "services/hosted_logic", prefix: "services/hosted_logic/", dest: "workers/internal/services/runners"},
 		{exact: "services/inference", prefix: "services/inference/", dest: "workers/internal/services/runners"},
 		{exact: "services/testing", prefix: "services/testing/", dest: "workers/internal/services/runners"},
-		{exact: "services", prefix: "services/", dest: "workers/internal/services/runners"},
+		{prefix: "services/", dest: "workers/internal/services/runners"},
 	},
 	"provider_sessions": {
 		{exact: "codex", prefix: "codex/", dest: "provider_sessions/internal/services/codex_reader"},
@@ -331,6 +359,8 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 		{exact: "runtimeconfig", prefix: "runtimeconfig/", dest: "factory_definitions/internal"},
 		{exact: "replayconfig", prefix: "replayconfig/", dest: "factory_definitions/internal"},
 		{exact: "workers", prefix: "workers/", dest: "factory_definitions/internal"},
+		{exact: "clonetests", prefix: "clonetests/", dest: "factory_definitions/internal"},
+		{exact: "systeminitializationtests", prefix: "systeminitializationtests/", dest: "factory_definitions/internal"},
 		{prefix: "internal/testcomposition", dest: "factory_definitions/internal"},
 	},
 }

@@ -413,7 +413,6 @@ func (s *Service) legacyProviderRunner(
 	built, err := s.providerFactory.New(
 		effectiveSkipPermissions,
 		logger,
-		nil,
 		inferenceProgressPublisher,
 		responseExecutor,
 		strings.TrimSpace(runtimeConfig.FactoryDir()),

@@ -4,11 +4,11 @@ import (
 	"context"
 
 	factorydefinitionfixtures "github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryeditable "github.com/portpowered/infinite-you/pkg/services/factory_definitions/editable"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func testFactoryDefinitionValidator() *factoryvalidation.Service {
