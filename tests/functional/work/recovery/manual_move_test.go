@@ -1,6 +1,7 @@
 package recovery
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"testing"
@@ -166,5 +167,76 @@ func TestTerminalFailedWorkCannotBeRedispatchedIllegally(t *testing.T) {
 	finalListed := support.ListDefaultSessionWork(t, server.URL())
 	if !support.HasWorkAtCustomerState(finalListed, workID, failedLocation) {
 		t.Fatalf("final work listing = %#v, want terminal failed %s", finalListed.Results, failedLocation)
+	}
+}
+
+// TestAPIMoveWorkResumesRecoverableFlow proves a valid POST /work/{id}/move against
+// recoverable failed work returns HTTP success with the requested customer-visible
+// state and allows the public session flow to resume to completion.
+func TestAPIMoveWorkResumesRecoverableFlow(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow work recovery functional test")
+	}
+
+	const (
+		workID    = "api-move-resume-work-id"
+		traceID   = "trace-api-move-resume"
+		requestID = "request-api-move-resume"
+	)
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "happy_path"))
+	provider := testutil.NewMockWorkerMapProviderWithDefault(map[string][]testutil.WorkResponse{
+		"worker-a": {
+			{Error: errors.New("initial recoverable failure")},
+			{Content: "COMPLETE"},
+		},
+		"worker-b": {
+			{Content: "COMPLETE"},
+		},
+	})
+	server := startRecoveryAPIServer(t, dir, provider)
+	defer server.Stop(t)
+
+	workTypeName := "task"
+	support.UpsertDefaultSessionWorkRequest(t, server.URL(), factoryapi.WorkRequest{
+		RequestId: requestID,
+		Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
+		Works: &[]factoryapi.Work{{
+			Name:         "task",
+			WorkId:       stringPtr(workID),
+			WorkTypeName: &workTypeName,
+			TraceId:      stringPtr(traceID),
+			Payload:      map[string]string{"title": "api move resume"},
+		}},
+	})
+
+	waitForWorkIDsAtState(t, server.URL(), []string{workID}, "failed", 15*time.Second)
+
+	const recoverState = "init"
+	status, body := postMoveWorkStatus(t, server.URL(), workID, recoverState)
+	if status != http.StatusOK {
+		t.Fatalf("API move status = %d, want 200 success: %s", status, body)
+	}
+
+	var moved factoryapi.Work
+	if err := json.Unmarshal([]byte(body), &moved); err != nil {
+		t.Fatalf("decode API move response: %v", err)
+	}
+	if support.StringPointerValue(moved.WorkId) != workID {
+		t.Fatalf("API move WorkId = %q, want %q", support.StringPointerValue(moved.WorkId), workID)
+	}
+	if workStateName(moved.State) != recoverState {
+		t.Fatalf("API move response state = %q, want requested %q; body=%s", workStateName(moved.State), recoverState, body)
+	}
+
+	completed := waitForWorkIDsComplete(t, server.URL(), []string{workID}, 15*time.Second)
+	if len(completed) != 1 || workStateName(completed[0].State) != "complete" {
+		t.Fatalf("resumed flow completion = %#v, want complete", completed)
+	}
+
+	listed := support.ListDefaultSessionWork(t, server.URL())
+	completeLocation := support.WorkCustomerLocation(workTypeName, "complete")
+	if !support.HasWorkAtCustomerState(listed, workID, completeLocation) {
+		t.Fatalf("work listing after API move resume = %#v, want %s", listed.Results, completeLocation)
 	}
 }
