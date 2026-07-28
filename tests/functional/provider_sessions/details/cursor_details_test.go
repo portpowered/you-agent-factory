@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -22,6 +24,7 @@ const (
 	cursorGoldenSuccessWorkspaceHash              = "cursor-fixture-workspace"
 	cursorGoldenExpectedProviderSessionDetailFile = "expected-provider-session-detail.json"
 	cursorUnavailableContentSessionID             = "cursor-fixture-unavailable-content"
+	cursorMissingSessionID                        = "cursor-fixture-missing-session"
 )
 
 // TestCursorProviderSessionDetailsLoadFromGoldenMetadata loads a sanitized Cursor
@@ -133,6 +136,42 @@ func TestCursorProviderSessionUnavailableContentRemainsInspectable(t *testing.T)
 	assertCursorProviderSessionDetailBodySafe(t, "unavailable-content", string(encoded), homeDir)
 }
 
+// TestCursorProviderSessionMissingIDReturnsNotFound proves that requesting
+// Cursor Provider Session details for a session_id that does not exist returns
+// a distinguishable not-found outcome instead of fabricating session detail.
+func TestCursorProviderSessionMissingIDReturnsNotFound(t *testing.T) {
+	homeDir := t.TempDir()
+
+	server := startCursorProviderSessionDetailServer(t, homeDir, serviceedges.Edges{})
+	defer server.Stop(t)
+
+	body := getCursorProviderSessionDetailErrorBody(
+		t,
+		server.URL(),
+		cursorMissingSessionID,
+		http.StatusNotFound,
+	)
+	if !strings.Contains(body, "provider session not found") {
+		t.Fatalf("error body = %q, want not-found message", body)
+	}
+
+	var failure factoryapi.ErrorResponse
+	if err := json.Unmarshal([]byte(body), &failure); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if failure.Code != factoryapi.ErrorResponseCodeNOTFOUND {
+		t.Fatalf("error code = %q, want NOT_FOUND", failure.Code)
+	}
+	if failure.Message == "" {
+		t.Fatal("error message is empty, want customer-readable not-found diagnostic")
+	}
+	if strings.Contains(body, `"transcript"`) || strings.Contains(body, `"providerSession"`) {
+		t.Fatalf("not-found response fabricated provider session detail: %s", body)
+	}
+
+	assertCursorProviderSessionDetailBodySafe(t, "missing-session", body, homeDir)
+}
+
 func startCursorProviderSessionDetailServer(
 	t *testing.T,
 	homeDir string,
@@ -151,6 +190,33 @@ func startCursorProviderSessionDetailServer(
 		Edges:                     edges,
 		Env:                       []string{"HOME=" + homeDir, "USERPROFILE=" + homeDir},
 	})
+}
+
+func getCursorProviderSessionDetailErrorBody(
+	t *testing.T,
+	baseURL, sessionID string,
+	wantStatus int,
+) string {
+	t.Helper()
+
+	response, err := http.Get(cursorProviderSessionDetailURL(baseURL, sessionID))
+	if err != nil {
+		t.Fatalf("GET provider session detail: %v", err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("read provider session detail body: %v", err)
+	}
+	if response.StatusCode != wantStatus {
+		t.Fatalf(
+			"GET provider session detail status = %d, want %d: %s",
+			response.StatusCode,
+			wantStatus,
+			strings.TrimSpace(string(body)),
+		)
+	}
+	return string(body)
 }
 
 func cursorProviderSessionDetailURL(baseURL, sessionID string) string {
