@@ -957,7 +957,10 @@ response-stream output.
   `pkg/services/operator_settings/internal/construct`; `pkg/services/operator_settings/wire`
   is the sole public construction bridge returning published peer surfaces; root
   `pkg/wire` constructs ConfigDocument through `operator_settings/wire` only.
-  `servicewire` retains thin delegation entry points until DEL-SET deletes the path.
+  `pkg/transports/cli/initsetup` constructs configure roots through
+  `operator_settings/wire` only. `servicewire` retains thin delegation entry
+  points until DEL-SET deletes the path; `wire/servicewire_import_boundary_test.go`
+  fails if production packages outside the owner reintroduce servicewire imports.
 - Operator Settings top-level directory inventory for INV-SET-TOPLEVEL lives in
   `docs/internal/projects/packaged-service-structure/operator-settings-top-level-inventory.json`
   with drift verification in `internal/ownershipinventory/operator_settings_top_level.go`;

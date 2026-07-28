@@ -14,7 +14,7 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	operatorsettingsservicewire "github.com/portpowered/infinite-you/pkg/services/operator_settings/servicewire"
+	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/initsetup"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 )
@@ -194,7 +194,7 @@ func TestConfigurerRejectsPromptedInvalidProviderWithoutPersisting(t *testing.T)
 }
 
 func testConfigService() operatorsettings.ConfigDocumentService {
-	return operatorsettingsservicewire.NewConfigDocumentService(
+	return settingswire.NewConfigDocumentService(
 		platformfilesystem.Local{},
 		func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
 			return os.CreateTemp(dir, pattern)
