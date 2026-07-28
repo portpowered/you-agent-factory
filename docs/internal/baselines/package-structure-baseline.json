@@ -2659,11 +2659,6 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/work/materialize",
-      "target": "pkg/services/work"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/work/service",
       "target": "pkg/services/work"
     },
