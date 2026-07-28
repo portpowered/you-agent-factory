@@ -1437,6 +1437,10 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document/identityinventory",
+      "minimum": 100.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document/internal/service",
       "minimum": 82.90
     },
@@ -1461,6 +1465,14 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution/wire",
       "minimum": 100.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testlink",
+      "minimum": 100.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders",
+      "minimum": 93.33
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/servicewire",
