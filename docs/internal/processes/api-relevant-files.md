@@ -24,6 +24,11 @@ Use this map when changing the public REST contract.
   Replay-execution hook/plan handoff vocabulary is published through
   `pkg/services/factory_runtime/replay_execution_contracts.go` and proven by
   `pkg/services/recordings/service/replay_execution_boundary_test.go`.
+  Projection/observation Runtime-owned marking, result, and observation
+  vocabulary is published through
+  `pkg/services/factory_runtime/observation_projection_contracts.go` and proven
+  by
+  `pkg/services/recordings/projections/projection_observation_boundary_test.go`.
   Event subscribe/history decode and SSE encoding live in
   `event_subscribe_mapping.go` and `handlers_events.go`; map reconnect query
   params into `recordings.SubscribeRequest` before `SubscribeFrom`, and encode
