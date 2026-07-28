@@ -1419,6 +1419,36 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/factory/packaged/quorum/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/quorum",
+      "scenario": "TestPackagedQuorumRequiredInputCompletes",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/quorum/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/quorum/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/quorum",
+      "scenario": "TestPackagedQuorumOptionalMemberSettingsReachWorkers",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/quorum/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/quorum/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/quorum",
+      "scenario": "TestPackagedQuorumInsufficientSuccessfulMembersFails",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/quorum/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/factory/packaged/subagent/invocation_test.go",
       "package": "you-agent-factory/tests/functional/factory/packaged/subagent",
       "scenario": "TestPackagedSubagentChildFailureReturnsStableFailure",
@@ -7865,9 +7895,9 @@
       "workflow": 30,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 763,
+    "customer_top_level_Test_scenarios": 766,
     "lane_functionallong": 95,
-    "lane_short": 668,
+    "lane_short": 671,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 7,
