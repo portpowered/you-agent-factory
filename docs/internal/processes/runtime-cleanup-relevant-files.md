@@ -881,7 +881,17 @@ in `pkg/services/factory_runtime` (`interfaces.go`) plus root typed errors in
 `cmd/pkgboundarycheck` peer-subpackage rules. Lock live control and observation
 through `pkg/services/factory_sessions/internal/services/live_runtime/control_observation_boundary_test.go`
 and gateway forwarding checks in
-`pkg/services/factory_sessions/internal/sessionservice/lifecycle_test.go`. Do not publish a second peer-facing Runtime authority
+`pkg/services/factory_sessions/internal/sessionservice/lifecycle_test.go`.
+Durable and JavaScript execution handoff must construct through Runtime root
+workflow, orchestration, and checkpoint contracts
+(`JavaScriptWorkflows`, `OrchestrationJavaScriptExecution`,
+`JavaScriptCheckpointSummaries`); prefer `internal/testutil/factoryruntimefixtures`
+or root-only fakes in Sessions tests instead of importing
+`factory_runtime/javascript`. Lock the execution lease with
+`pkg/services/factory_sessions/internal/execution/durable_execution_boundary_test.go`
+and production-plus-test import scanning in that package's
+`TestExecutionLeaseImportsFactoryRuntimeOnlyThroughRoot`. Do not publish a
+second peer-facing Runtime authority
 (hosting `Lifecycle`/`HostedInstance`, `Factory` run-loop, or
 `JavaScriptWorkflows`) for control, observation, dispatch-plan, or checkpoint
 slices. Prove each published slice with a colocated `factory_test`
