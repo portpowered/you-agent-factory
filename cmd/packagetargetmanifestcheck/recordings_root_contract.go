@@ -36,15 +36,6 @@ type recordingsRootContractFoldTarget struct {
 // RecordingsExcessRootContractFolds for package-target manifest checks.
 var recordingsExcessRootContractFolds = []recordingsRootContractFoldTarget{
 	{
-		cluster: "world_state",
-		files: []string{
-			"world_state_contract.go",
-			"world_state_contract_test.go",
-			"projections_import_boundary_test.go",
-		},
-		destination: "pkg/services/recordings/internal/services/projection_query",
-	},
-	{
 		cluster: "artifacts",
 		files: []string{
 			"artifacts_import_boundary_test.go",
@@ -58,22 +49,6 @@ var recordingsExcessRootContractFolds = []recordingsRootContractFoldTarget{
 			"replay_import_boundary_test.go",
 		},
 		destination: "pkg/services/recordings/internal/services/replay",
-	},
-	{
-		cluster: "dispatch",
-		files: []string{
-			"dispatch_contract.go",
-		},
-		destination: "pkg/services/recordings/internal/services/projection_query",
-	},
-	{
-		cluster: "workstation_request",
-		files: []string{
-			"workstation_requests.go",
-			"workstation_requests_content_assert_test.go",
-			"workstation_requests_test.go",
-		},
-		destination: "pkg/services/recordings/internal/services/projection_query",
 	},
 	{
 		cluster: "live_recording_target",

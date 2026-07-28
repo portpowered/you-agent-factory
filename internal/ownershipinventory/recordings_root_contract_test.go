@@ -61,10 +61,7 @@ func TestRecordingsExcessRootContractFoldDestinations(t *testing.T) {
 
 	want := map[string]string{
 		"artifacts":             "pkg/services/recordings/internal/services/artifacts_export",
-		"world_state":           "pkg/services/recordings/internal/services/projection_query",
 		"replay":                "pkg/services/recordings/internal/services/replay",
-		"dispatch":              "pkg/services/recordings/internal/services/projection_query",
-		"workstation_request":   "pkg/services/recordings/internal/services/projection_query",
 		"live_recording_target": "pkg/services/recordings/internal/services/recording_lifecycle",
 	}
 
@@ -91,11 +88,8 @@ func TestRecordingsExcessRootContractFoldDestinations(t *testing.T) {
 	slices.Sort(gotClusters)
 	wantClusters := []string{
 		"artifacts",
-		"dispatch",
 		"live_recording_target",
 		"replay",
-		"workstation_request",
-		"world_state",
 	}
 	if !slices.Equal(gotClusters, wantClusters) {
 		t.Fatalf("fold clusters = %v, want %v", gotClusters, wantClusters)

@@ -4866,6 +4866,14 @@
       "deletionCondition": "delete public package after IMP-REC-projection_query private subservice cutover proof"
     },
     {
+      "packagePath": "pkg/services/recordings/projections/workstation",
+      "disposition": "move",
+      "destination": "recordings",
+      "destinationKind": "owner",
+      "successor": "pkg/services/recordings/internal/services/projection_query",
+      "deletionCondition": "delete public package after IMP-REC-projection_query private subservice cutover proof"
+    },
+    {
       "packagePath": "pkg/services/recordings/replay",
       "disposition": "move",
       "destination": "recordings",

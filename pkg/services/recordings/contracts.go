@@ -7,6 +7,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	recordingworkstation "github.com/portpowered/infinite-you/pkg/services/recordings/projections/workstation"
 	recordingartifacts "github.com/portpowered/infinite-you/pkg/services/recordings/artifacts"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -282,6 +283,144 @@ const (
 )
 
 var NewFactoryEvent = interfaces.NewFactoryEvent
+
+// Factory world-state projection vocabulary is owned by projection_query; peers
+// import these aliases from the Recordings root package.
+type (
+	ActiveThrottlePause                         = interfaces.ActiveThrottlePause
+	FactoryPlace                                = interfaces.FactoryPlace
+	FactoryPlaceOccupancy                       = interfaces.FactoryPlaceOccupancy
+	FactoryState                                = interfaces.FactoryState
+	FactoryStateDefinition                      = interfaces.FactoryStateDefinition
+	FactoryTerminalWork                         = interfaces.FactoryTerminalWork
+	FactoryWorkType                             = interfaces.FactoryWorkType
+	FactoryWorker                               = interfaces.FactoryWorker
+	FactoryWorkstation                          = interfaces.FactoryWorkstation
+	FactoryWorkstationRef                       = interfaces.FactoryWorkstationRef
+	FactoryWorldActiveExecution                 = interfaces.FactoryWorldActiveExecution
+	FactoryWorldActivity                        = interfaces.FactoryWorldActivity
+	FactoryWorldAgentRunResponse                = interfaces.FactoryWorldAgentRunResponse
+	FactoryWorldDispatch                        = interfaces.FactoryWorldDispatch
+	FactoryWorldDispatchCompletion              = interfaces.FactoryWorldDispatchCompletion
+	FactoryWorldFailureDetail                   = interfaces.FactoryWorldFailureDetail
+	FactoryWorldInferenceAttempt                = interfaces.FactoryWorldInferenceAttempt
+	FactoryWorldJavaScriptChildDispatchCounts   = interfaces.FactoryWorldJavaScriptChildDispatchCounts
+	FactoryWorldJavaScriptProjection            = interfaces.FactoryWorldJavaScriptProjection
+	FactoryWorldPlaceRef                        = interfaces.FactoryWorldPlaceRef
+	FactoryWorldProviderSessionRecord           = interfaces.FactoryWorldProviderSessionRecord
+	FactoryWorldRuntimeView                     = interfaces.FactoryWorldRuntimeView
+	FactoryWorldScriptRequest                   = interfaces.FactoryWorldScriptRequest
+	FactoryWorldScriptResponse                  = interfaces.FactoryWorldScriptResponse
+	FactoryWorldSessionBracketProjection        = interfaces.FactoryWorldSessionBracketProjection
+	FactoryWorldSessionBracketState             = interfaces.FactoryWorldSessionBracketState
+	FactoryWorldSessionRuntime                  = interfaces.FactoryWorldSessionRuntime
+	FactoryWorldState                           = interfaces.FactoryWorldState
+	FactoryWorldSubmitWorkType                  = interfaces.FactoryWorldSubmitWorkType
+	FactoryWorldThrottlePause                   = interfaces.FactoryWorldThrottlePause
+	FactoryWorldTopologyView                    = interfaces.FactoryWorldTopologyView
+	FactoryWorldTrace                           = interfaces.FactoryWorldTrace
+	FactoryWorldView                            = interfaces.FactoryWorldView
+	FactoryWorldWorkItemRef                     = interfaces.FactoryWorldWorkItemRef
+	FactoryWorldWorkStateChangeRecord           = interfaces.FactoryWorldWorkStateChangeRecord
+	FactoryWorldWorkstationEdge                 = interfaces.FactoryWorldWorkstationEdge
+	FactoryWorldWorkstationNode                 = interfaces.FactoryWorldWorkstationNode
+	InitialStructurePayload                     = interfaces.InitialStructurePayload
+)
+
+const (
+	FactoryStateCompleted = interfaces.FactoryStateCompleted
+	FactoryStateFailed    = interfaces.FactoryStateFailed
+	FactoryStateIdle      = interfaces.FactoryStateIdle
+	FactoryStatePaused    = interfaces.FactoryStatePaused
+	FactoryStateRunning   = interfaces.FactoryStateRunning
+	StateTypeFailed       = interfaces.StateTypeFailed
+	StateTypeInitial      = interfaces.StateTypeInitial
+	StateTypeProcessing   = interfaces.StateTypeProcessing
+	StateTypeTerminal     = interfaces.StateTypeTerminal
+)
+
+var (
+	CloneFactoryWorldDispatchCompletion              = interfaces.CloneFactoryWorldDispatchCompletion
+	CloneFactoryWorldInferenceAttemptsByDispatchID   = interfaces.CloneFactoryWorldInferenceAttemptsByDispatchID
+	CloneFactoryWorldProviderSessionRecord           = interfaces.CloneFactoryWorldProviderSessionRecord
+	IsSystemTimePlace                                = interfaces.IsSystemTimePlace
+	IsSystemTimeWorkType                             = interfaces.IsSystemTimeWorkType
+)
+
+// Recordings-owned dispatch vocabulary is owned by projection_query; peers
+// import these aliases from the Recordings root package.
+type (
+	CompletedDispatch                     = interfaces.CompletedDispatch
+	DispatchConsumedWorkRef               = interfaces.DispatchConsumedWorkRef
+	DispatchEntry                         = interfaces.DispatchEntry
+	DispatchReconciliationSource          = interfaces.DispatchReconciliationSource
+	DispatchRecord                        = interfaces.DispatchRecord
+	DispatchRequestEventMetadata          = interfaces.DispatchRequestEventMetadata
+	DispatchResourceRef                   = interfaces.DispatchResourceRef
+	FactoryDispatchKind                   = interfaces.FactoryDispatchKind
+	FactoryDispatchRecord                 = interfaces.FactoryDispatchRecord
+	FactoryDispatchStatus                 = interfaces.FactoryDispatchStatus
+	FactoryDispatchUsage                  = interfaces.FactoryDispatchUsage
+	FactoryDispatchWarning                = interfaces.FactoryDispatchWarning
+	FactorySessionChildDispatchCounts     = interfaces.FactorySessionChildDispatchCounts
+	FactorySessionDispatchFailureDetail   = interfaces.FactorySessionDispatchFailureDetail
+	FactorySessionDispatchJavaScriptState = interfaces.FactorySessionDispatchJavaScriptState
+	FactorySessionDispatchPetriState      = interfaces.FactorySessionDispatchPetriState
+	FactorySessionDispatchState           = interfaces.FactorySessionDispatchState
+	FactorySessionDispatchUsage           = interfaces.FactorySessionDispatchUsage
+	FactorySessionDispatchWarning         = interfaces.FactorySessionDispatchWarning
+)
+
+const (
+	DispatchReconciliationSourceProviderSession = interfaces.DispatchReconciliationSourceProviderSession
+	DispatchReconciliationSourceStreamReplay    = interfaces.DispatchReconciliationSourceStreamReplay
+	FactoryDispatchKindJavaScriptAgent          = interfaces.FactoryDispatchKindJavaScriptAgent
+	FactoryDispatchKindJavaScriptScript         = interfaces.FactoryDispatchKindJavaScriptScript
+	FactoryDispatchKindJavaScriptSynthesize     = interfaces.FactoryDispatchKindJavaScriptSynthesize
+	FactoryDispatchKindJavaScriptSystem         = interfaces.FactoryDispatchKindJavaScriptSystem
+	FactoryDispatchKindJavaScriptTool           = interfaces.FactoryDispatchKindJavaScriptTool
+	FactoryDispatchKindJavaScriptVerify         = interfaces.FactoryDispatchKindJavaScriptVerify
+	FactoryDispatchKindPetriTransition          = interfaces.FactoryDispatchKindPetriTransition
+	FactoryDispatchStatusCompleted              = interfaces.FactoryDispatchStatusCompleted
+	FactoryDispatchStatusFailed                 = interfaces.FactoryDispatchStatusFailed
+	FactoryDispatchStatusInterrupted            = interfaces.FactoryDispatchStatusInterrupted
+	FactoryDispatchStatusQueued                 = interfaces.FactoryDispatchStatusQueued
+	FactoryDispatchStatusRunning                = interfaces.FactoryDispatchStatusRunning
+)
+
+// Workstation-request projection vocabulary is owned by projection_query;
+// peers import these aliases from the Recordings root package.
+type (
+	WorkstationFactoryWorldMutationView                         = recordingworkstation.WorkstationFactoryWorldMutationView
+	WorkstationFactoryWorldRunnerBaselineCapability             = recordingworkstation.WorkstationFactoryWorldRunnerBaselineCapability
+	WorkstationFactoryWorldRunnerCapabilitiesView               = recordingworkstation.WorkstationFactoryWorldRunnerCapabilitiesView
+	WorkstationFactoryWorldRunnerOptionalCapability             = recordingworkstation.WorkstationFactoryWorldRunnerOptionalCapability
+	WorkstationFactoryWorldRunnerOptionalCapabilityStatus       = recordingworkstation.WorkstationFactoryWorldRunnerOptionalCapabilityStatus
+	WorkstationFactoryWorldRunnerOptionalCapabilitySupportView  = recordingworkstation.WorkstationFactoryWorldRunnerOptionalCapabilitySupportView
+	WorkstationFactoryWorldScriptRequestView                    = recordingworkstation.WorkstationFactoryWorldScriptRequestView
+	WorkstationFactoryWorldScriptResponseView                   = recordingworkstation.WorkstationFactoryWorldScriptResponseView
+	WorkstationFactoryWorldSelectedRunnerView                   = recordingworkstation.WorkstationFactoryWorldSelectedRunnerView
+	WorkstationFactoryWorldTokenView                            = recordingworkstation.WorkstationFactoryWorldTokenView
+	WorkstationFactoryWorldWorkItemRef                          = recordingworkstation.WorkstationFactoryWorldWorkItemRef
+	WorkstationFactoryWorldWorkItemRefLineageContinuity         = recordingworkstation.WorkstationFactoryWorldWorkItemRefLineageContinuity
+	WorkstationFactoryWorldWorkItemRefLineageSourceKind         = recordingworkstation.WorkstationFactoryWorldWorkItemRefLineageSourceKind
+	WorkstationFactoryWorldWorkItemRefPayloadStatus             = recordingworkstation.WorkstationFactoryWorldWorkItemRefPayloadStatus
+	WorkstationFactoryWorldWorkstationRequestCountView          = recordingworkstation.WorkstationFactoryWorldWorkstationRequestCountView
+	WorkstationFactoryWorldWorkstationRequestProjectionSlice    = recordingworkstation.WorkstationFactoryWorldWorkstationRequestProjectionSlice
+	WorkstationFactoryWorldWorkstationRequestRequestView        = recordingworkstation.WorkstationFactoryWorldWorkstationRequestRequestView
+	WorkstationFactoryWorldWorkstationRequestResponseView       = recordingworkstation.WorkstationFactoryWorldWorkstationRequestResponseView
+	WorkstationFactoryWorldWorkstationRequestView               = recordingworkstation.WorkstationFactoryWorldWorkstationRequestView
+	WorkstationRunnerID                                         = recordingworkstation.WorkstationRunnerID
+	WorkstationRunnerSelectionSource                            = recordingworkstation.WorkstationRunnerSelectionSource
+	WorkstationStringMap                                        = recordingworkstation.WorkstationStringMap
+)
+
+// BuildFactoryWorldWorkstationRequestProjectionSlice keeps the additive
+// workstation-request contract at the API boundary while deriving it from the
+// canonical selected-tick FactoryWorldState model.
+func BuildFactoryWorldWorkstationRequestProjectionSlice(state FactoryWorldState) WorkstationFactoryWorldWorkstationRequestProjectionSlice {
+	return recordingworkstation.BuildFactoryWorldWorkstationRequestProjectionSlice(state)
+}
 
 // EventReconnectCursor retains the legacy projection-validation cursor shape.
 // New subscriptions use CanonicalEventCursor.

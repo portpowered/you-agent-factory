@@ -11,9 +11,10 @@
 //     and the owned aliases at the top of contracts_root.go.
 //
 // Foreign event envelope vocabulary is owned by pkg/services/recordings
-// (canonical_ledger/event_contract.go with peer aliases in contracts.go). World-state, dispatch, and replay vocabulary is owned
-// by pkg/services/recordings and pkg/services/factory_runtime (world_state_contract.go,
-// dispatch_contract.go, replay_contract.go). Worker execution vocabulary is
+// (canonical_ledger/event_contract.go with peer aliases in contracts.go). World-state,
+// dispatch, and workstation-request vocabulary is owned by projection_query with peer
+// aliases in recordings/contracts.go. Replay vocabulary is owned by
+// pkg/services/recordings/replay (replay_contract.go). Worker execution vocabulary is
 // owned by pkg/services/workers (worker_vocabulary_contract.go,
 // execution_contracts.go); provider-session identity is published at
 // pkg/services/providers (SessionRef) and pkg/services/workers

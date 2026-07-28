@@ -38,15 +38,6 @@ type RecordingsRootContractFoldTarget struct {
 // clusters beyond the thin Recordings service root contract.
 var RecordingsExcessRootContractFolds = []RecordingsRootContractFoldTarget{
 	{
-		Cluster: "world_state",
-		Files: []string{
-			"world_state_contract.go",
-			"world_state_contract_test.go",
-			"projections_import_boundary_test.go",
-		},
-		Destination: recordingsPackagePrefix + "/internal/services/projection_query",
-	},
-	{
 		Cluster: "artifacts",
 		Files: []string{
 			"artifacts_import_boundary_test.go",
@@ -60,22 +51,6 @@ var RecordingsExcessRootContractFolds = []RecordingsRootContractFoldTarget{
 			"replay_import_boundary_test.go",
 		},
 		Destination: recordingsPackagePrefix + "/internal/services/replay",
-	},
-	{
-		Cluster: "dispatch",
-		Files: []string{
-			"dispatch_contract.go",
-		},
-		Destination: recordingsPackagePrefix + "/internal/services/projection_query",
-	},
-	{
-		Cluster: "workstation_request",
-		Files: []string{
-			"workstation_requests.go",
-			"workstation_requests_content_assert_test.go",
-			"workstation_requests_test.go",
-		},
-		Destination: recordingsPackagePrefix + "/internal/services/projection_query",
 	},
 	{
 		Cluster: "live_recording_target",

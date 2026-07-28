@@ -39,20 +39,13 @@ fold or delete them.
 | `service_root_contract_seam_test.go` | Thin committed root contract (keep) | Peer-shaped characterization consumer exercising every published `Service` slice through one root dependency. |
 | `wire_peer_import_boundary_test.go` | Thin committed root contract (keep) | Wire import-boundary test proving `recordings/wire` peers stay on the published root seam. |
 | `workers_root_boundary_test.go` | Thin committed root contract (keep) | Workers import-boundary test proving worker execution stays on the published Recordings root seam. |
-| `world_state_contract.go` | Excess fold/consolidation debt | `projection_query` — world-state reconstruction helpers beyond thin projection vocabulary (`world_state` cluster). |
-| `world_state_contract_test.go` | Excess fold/consolidation debt | Co-located tests for `world_state_contract.go`. |
-| `projections_import_boundary_test.go` | Excess fold/consolidation debt | Projections import-boundary test; relocate with `world_state` cluster fold. |
 | `artifacts_import_boundary_test.go` | Excess fold/consolidation debt | `artifacts_export` — artifacts import-boundary test (`artifacts` cluster). |
 | `replay_contract.go` | Excess fold/consolidation debt | `replay` — replay plan/load vocabulary helpers beyond thin replay slice types (`replay` cluster). |
 | `replay_import_boundary_test.go` | Excess fold/consolidation debt | Replay import-boundary test; relocate with `replay` cluster fold. |
-| `dispatch_contract.go` | Excess fold/consolidation debt | `projection_query` — dispatch projection helpers (`dispatch` cluster). |
-| `workstation_requests.go` | Excess fold/consolidation debt | `projection_query` — workstation-request projection helpers (`workstation_request` cluster). |
-| `workstation_requests_content_assert_test.go` | Excess fold/consolidation debt | Co-located content-assert tests for workstation-request projection helpers. |
-| `workstation_requests_test.go` | Excess fold/consolidation debt | Co-located tests for `workstation_requests.go`. |
 | `live_recording_target.go` | Excess fold/consolidation debt | `recording_lifecycle` — live recording target path/naming planning (`live_recording_target` cluster). |
 | `live_recording_target_test.go` | Excess fold/consolidation debt | Co-located tests for `live_recording_target.go`. |
 
-**Totals:** 25 root-level `.go` files — 13 thin committed root contract (keep), 12
+**Totals:** 18 root-level `.go` files — 13 thin committed root contract (keep), 5
 excess fold/consolidation debt.
 
 ## Folded clusters (CLN-REC-CONTRACT-ROOTS)
@@ -60,20 +53,21 @@ excess fold/consolidation debt.
 | Cluster | Destination | Folded files (no longer at public root) |
 | --- | --- | --- |
 | `event` | `recordings/internal/services/canonical_ledger` | `canonical_event_contract_test.go`, `event_contract.go`, `event_contract_test.go`, `event_vocabulary_boundary_test.go`, `events_import_boundary_test.go` |
+| `world_state` | `recordings/internal/services/projection_query` | `world_state_contract.go`, `world_state_contract_test.go`, `projections_import_boundary_test.go` |
+| `dispatch` | `recordings/internal/services/projection_query` | `dispatch_contract.go` |
+| `workstation_request` | `recordings/internal/services/projection_query` | `workstation_requests.go`, `workstation_requests_content_assert_test.go`, `workstation_requests_test.go` |
 
-Peer-needed Factory Event vocabulary remains importable from the thin Recordings
-root (`contracts.go` re-exports from Factory Definitions; canonical_ledger owns
-the folded implementation home and characterization tests).
+Peer-needed Factory Event, world-state, dispatch, and workstation-request vocabulary
+remains importable from the thin Recordings root (`contracts.go` re-exports from
+Factory Definitions or `recordings/projections`; private subservices own the folded
+implementation homes and characterization tests).
 
 ## Excess fold clusters
 
 | Cluster | Destination | Root files |
 | --- | --- | --- |
-| `world_state` | `recordings/internal/services/projection_query` | `world_state_contract.go`, `world_state_contract_test.go`, `projections_import_boundary_test.go` |
 | `artifacts` | `recordings/internal/services/artifacts_export` | `artifacts_import_boundary_test.go` |
 | `replay` | `recordings/internal/services/replay` | `replay_contract.go`, `replay_import_boundary_test.go` |
-| `dispatch` | `recordings/internal/services/projection_query` | `dispatch_contract.go` |
-| `workstation_request` | `recordings/internal/services/projection_query` | `workstation_requests.go`, `workstation_requests_content_assert_test.go`, `workstation_requests_test.go` |
 | `live_recording_target` | `recordings/internal/services/recording_lifecycle` | `live_recording_target.go`, `live_recording_target_test.go` |
 
 ## Generator mirror
