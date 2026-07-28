@@ -220,6 +220,74 @@ func TestAPIPreviewFactoryReturnsPublicTopology(t *testing.T) {
 	}
 }
 
+// TestAPIPreviewDoesNotStartWorkersOrSessions proves the public Preview API inspects
+// Factory definitions without starting workers, dispatch activation, or new Factory
+// Sessions beyond the already-running service session.
+func TestAPIPreviewDoesNotStartWorkersOrSessions(t *testing.T) {
+	runner := support.NewRecordingCommandRunner("runtime must not execute")
+	edges := serviceedges.Edges{ProviderCommandRunner: runner}
+
+	hostDir := support.ScaffoldFactory(t, previewTopologyFactoryConfig())
+	writeDefinitionsPreviewWorkflow(t, hostDir)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                hostDir,
+		UseMockWorkers:            true,
+		WaitForServiceModeRuntime: true,
+		Edges:                     edges,
+	})
+	defer server.Stop(t)
+
+	sessionsBefore := support.GetJSON[factoryapi.ListFactorySessionsResponse](
+		t,
+		server.URL()+"/factory-sessions",
+	)
+	statusBefore := support.GetJSON[factoryapi.StatusResponse](
+		t,
+		strings.TrimSuffix(server.URL(), "/")+"/factory-sessions/~default/status",
+	)
+
+	previewResult, previewStatus := postPreviewFactory(t, server.URL(), hostDir, definitionsPreviewWorkflowName)
+	if previewStatus != http.StatusOK {
+		t.Fatalf("POST /factories/preview status = %d, want 200", previewStatus)
+	}
+	if !previewResult.Valid {
+		t.Fatalf("preview result = %#v, want valid preview acceptance", previewResult)
+	}
+
+	sessionsAfter := support.GetJSON[factoryapi.ListFactorySessionsResponse](
+		t,
+		server.URL()+"/factory-sessions",
+	)
+	if len(sessionsAfter.Sessions) != len(sessionsBefore.Sessions) {
+		t.Fatalf(
+			"factory sessions after preview = %d, want unchanged count %d",
+			len(sessionsAfter.Sessions),
+			len(sessionsBefore.Sessions),
+		)
+	}
+	statusAfter := support.GetJSON[factoryapi.StatusResponse](
+		t,
+		strings.TrimSuffix(server.URL(), "/")+"/factory-sessions/~default/status",
+	)
+	if statusAfter.TotalTokens != statusBefore.TotalTokens {
+		t.Fatalf(
+			"default session total tokens after preview = %d, want unchanged %d",
+			statusAfter.TotalTokens,
+			statusBefore.TotalTokens,
+		)
+	}
+	if statusAfter.RuntimeStatus != statusBefore.RuntimeStatus {
+		t.Fatalf(
+			"default session runtime status after preview = %q, want unchanged %q",
+			statusAfter.RuntimeStatus,
+			statusBefore.RuntimeStatus,
+		)
+	}
+	if runner.CallCount() != 0 {
+		t.Fatalf("provider command runner calls = %d, want 0 during preview-only inspection", runner.CallCount())
+	}
+}
+
 func missingWorkerFactoryConfig() map[string]any {
 	return map[string]any{
 		"name": "missing-worker-reference",
