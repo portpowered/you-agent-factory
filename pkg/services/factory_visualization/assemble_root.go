@@ -18,7 +18,7 @@ func AssembleRoot(
 	projection liveviewprojection.Service,
 	presentation responsePresentationOwner,
 	source Source,
-	projections recordings.ProjectionService,
+	recordingsPeer recordings.Service,
 	clock Clock,
 	sink Sink,
 	reportError ErrorReporter,
@@ -32,8 +32,8 @@ func AssembleRoot(
 		return nil, errors.New("assemble Factory visualization root: response event presentation owner is required")
 	case source == nil:
 		return nil, errors.New("assemble Factory visualization root: event source is required")
-	case projections == nil:
-		return nil, errors.New("assemble Factory visualization root: projection service is required")
+	case recordingsPeer == nil:
+		return nil, errors.New("assemble Factory visualization root: recordings service is required")
 	case clock == nil:
 		return nil, errors.New("assemble Factory visualization root: clock is required")
 	case sink == nil:
@@ -47,7 +47,7 @@ func AssembleRoot(
 		projection:        projection,
 		presentationOwner: presentation,
 		source:            source,
-		projections:       projections,
+		recordings:        recordingsPeer,
 		clock:             clock,
 		sink:              sink,
 		reportError:       reportError,

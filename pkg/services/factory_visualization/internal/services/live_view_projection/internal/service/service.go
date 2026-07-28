@@ -9,13 +9,14 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	liveviewprojection "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection"
+	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/recordingsqueries"
 )
 
 // Service owns retained event projection, reconnect cursor, and live
 // subscription lifecycle for one Factory visualization.
 type Service struct {
 	source      liveviewprojection.Source
-	projections recordings.ProjectionService
+	recordings  recordings.Service
 	clock       liveviewprojection.Clock
 	sink        liveviewprojection.Sink
 	reportError liveviewprojection.ErrorReporter
@@ -43,7 +44,7 @@ var (
 // New constructs the private live_view_projection implementation.
 func New(
 	source liveviewprojection.Source,
-	projections recordings.ProjectionService,
+	recordingsPeer recordings.Service,
 	clock liveviewprojection.Clock,
 	sink liveviewprojection.Sink,
 	reportError liveviewprojection.ErrorReporter,
@@ -51,15 +52,15 @@ func New(
 	switch {
 	case source == nil:
 		return nil, errors.New("initialize Factory visualization live view projection: event source is required")
-	case projections == nil:
-		return nil, errors.New("initialize Factory visualization live view projection: projection service is required")
+	case recordingsPeer == nil:
+		return nil, errors.New("initialize Factory visualization live view projection: recordings service is required")
 	case clock == nil:
 		return nil, errors.New("initialize Factory visualization live view projection: clock is required")
 	case sink == nil:
 		return nil, errors.New("initialize Factory visualization live view projection: presentation sink is required")
 	default:
 		return &Service{
-			source: source, projections: projections, clock: clock,
+			source: source, recordings: recordingsPeer, clock: clock,
 			sink: sink, reportError: reportError,
 		}, nil
 	}
@@ -244,7 +245,8 @@ func (s *Service) Observe(
 			AfterEventID:  req.Reconnect.AfterEventID,
 			AfterSequence: req.Reconnect.AfterSequence,
 		}
-		if err := s.projections.ValidateReconnectReplay(
+		if err := recordingsqueries.ValidateReconnectReplay(
+			s.recordings,
 			events,
 			cursor,
 			factorydefinitions.FactoryEventReconnectScope{},
@@ -257,7 +259,7 @@ func (s *Service) Observe(
 		}
 	}
 
-	if _, err := s.projections.ReconstructFactoryWorldState(events, snapshot.TickCount); err != nil {
+	if _, err := recordingsqueries.ReconstructWorldState(s.recordings, events, snapshot.TickCount); err != nil {
 		return liveviewprojection.ObserveResult{}, &liveviewprojection.ProjectionError{
 			Kind:    liveviewprojection.ProjectionErrorReconstructionFailed,
 			Message: "observe Factory visualization live view projection: projection reconstruction failed",
@@ -333,13 +335,22 @@ func (s *Service) projectAndPresent(ctx context.Context) {
 	s.mu.Lock()
 	events := append([]factorydefinitions.FactoryEvent(nil), s.events...)
 	s.mu.Unlock()
-	worldState, err := s.projections.ReconstructFactoryWorldState(events, snapshot.TickCount)
+	worldView, err := recordingsqueries.ReconstructWorldState(s.recordings, events, snapshot.TickCount)
 	if err != nil {
 		s.report(fmt.Errorf("project Factory visualization: %w", err))
 		return
 	}
-	renderData := s.projections.SimpleDashboardRenderData(worldState)
-	renderData.ActiveThrottlePauses = s.projections.ProjectActiveThrottlePauses(
+	renderData, err := recordingsqueries.QuerySimpleDashboard(s.recordings, worldView)
+	if err != nil {
+		s.report(fmt.Errorf("project Factory visualization dashboard: %w", err))
+		return
+	}
+	worldState, err := recordingsqueries.DecodeWorldStatePayload(worldView)
+	if err != nil {
+		s.report(fmt.Errorf("decode Factory visualization world state: %w", err))
+		return
+	}
+	renderData.ActiveThrottlePauses = recordingsqueries.ProjectActiveThrottlePauses(
 		worldState.Topology,
 		snapshot.ActiveThrottlePauses,
 	)

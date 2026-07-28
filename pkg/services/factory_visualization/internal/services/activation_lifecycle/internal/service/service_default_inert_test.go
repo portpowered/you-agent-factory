@@ -8,6 +8,7 @@ import (
 
 	activationlifecycle "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle"
 	lifecycleservice "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle/internal/service"
+	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/testing/recordingsstub"
 )
 
 func TestNewRejectsMissingActivationLifecycleDependencies(t *testing.T) {
@@ -15,7 +16,7 @@ func TestNewRejectsMissingActivationLifecycleDependencies(t *testing.T) {
 
 	clock := fixedLifecycleClock{now: time.Unix(1, 0)}
 	sink := lifecycleSinkFunc(func(activationlifecycle.View) {})
-	projections := lifecycleProjectionStub{}
+	projections := &recordingsstub.Service{}
 	source := &lifecycleSourceStub{}
 	tests := []struct {
 		name string
@@ -27,7 +28,7 @@ func TestNewRejectsMissingActivationLifecycleDependencies(t *testing.T) {
 		}, "event source"},
 		{"projections", func() (*lifecycleservice.Service, error) {
 			return lifecycleservice.New(source, nil, clock, sink, nil)
-		}, "projection service"},
+		}, "recordings service"},
 		{"clock", func() (*lifecycleservice.Service, error) {
 			return lifecycleservice.New(source, projections, nil, sink, nil)
 		}, "clock"},
@@ -61,7 +62,7 @@ func TestActivationLifecycleDefaultInertConstruction(t *testing.T) {
 	source.subscribeHook = func() { subscribeCalls++ }
 	owner, err := lifecycleservice.New(
 		source,
-		lifecycleProjectionStub{},
+		&recordingsstub.Service{},
 		fixedLifecycleClock{now: time.Unix(1, 0)},
 		lifecycleSinkFunc(func(activationlifecycle.View) { presentCalls++ }),
 		nil,

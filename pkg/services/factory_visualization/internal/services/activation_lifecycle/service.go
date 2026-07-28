@@ -107,19 +107,6 @@ type EventSource interface {
 	GetEngineObservation(context.Context) (*EngineObservation, error)
 }
 
-// ProjectionService reconstructs retained Factory world state for presentation.
-type ProjectionService interface {
-	ReconstructFactoryWorldState(
-		[]factorydefinitions.FactoryEvent,
-		int,
-	) (factorydefinitions.FactoryWorldState, error)
-	SimpleDashboardRenderData(factorydefinitions.FactoryWorldState) recordings.SimpleDashboardRenderData
-	ProjectActiveThrottlePauses(
-		factorydefinitions.InitialStructurePayload,
-		[]factorydefinitions.ActiveThrottlePause,
-	) []factorydefinitions.FactoryWorldThrottlePause
-}
-
 // Clock supplies observation timestamps.
 type Clock interface {
 	Now() time.Time

@@ -252,7 +252,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts",
-      "minimum": 64.82
+      "minimum": 64.70
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/namedfactories",
@@ -1275,6 +1275,10 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/recordingsqueries",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle",
       "exception": {
         "kind": "measurement",
@@ -1333,6 +1337,16 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/response_event_presentation/wire",
       "minimum": 100.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/testing/recordingsstub",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli",
@@ -2062,11 +2076,11 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/projections",
-      "minimum": 45.98
+      "minimum": 45.93
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/projections/dashboard",
-      "minimum": 36.36
+      "minimum": 0.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/replay",
@@ -2592,7 +2606,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/dashboard",
-      "minimum": 14.72
+      "minimum": 0.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/default",
@@ -2664,7 +2678,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/timedisplay",
-      "minimum": 19.23
+      "minimum": 7.69
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/work",

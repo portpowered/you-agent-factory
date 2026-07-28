@@ -576,7 +576,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestParentChildLineageSurvivesDispatchAndReplay`.
   - `TestChildFailureProjectsToDocumentedParentView`.
 
-- [ ] `tests/functional/work/routing/logical_move_test.go`
+- [x] `tests/functional/work/routing/logical_move_test.go`
   - `TestLogicalMoveCompletesWithoutWorkerDispatch`.
   - `TestLogicalMovePreservesWorkPayloadAndLineage`.
   - `TestLogicalMoveMultipleOutputsCreatesEveryExpectedWork`.
