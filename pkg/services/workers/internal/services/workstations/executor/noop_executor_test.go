@@ -7,7 +7,7 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers/executor"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 )
 
 func TestNoopExecutor_ReturnsAccepted(t *testing.T) {

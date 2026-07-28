@@ -11,7 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers/executor"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 )
 
 type runtimePathCapturingExecutor struct {

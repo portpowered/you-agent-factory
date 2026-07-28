@@ -463,6 +463,11 @@
     "pkg/services/workers/internal/services/runtime_assembly/internal/service",
     "pkg/services/workers/internal/services/runtime_assembly/wire",
     "pkg/services/workers/internal/services/workstations",
+    "pkg/services/workers/internal/services/workstations/execution",
+    "pkg/services/workers/internal/services/workstations/execution/recording",
+    "pkg/services/workers/internal/services/workstations/executor",
+    "pkg/services/workers/internal/services/workstations/executor/agentrun",
+    "pkg/services/workers/internal/services/workstations/executor/workstation",
     "pkg/services/workers/internal/services/workstations/internal/service",
     "pkg/services/workers/internal/services/workstations/wire",
     "pkg/services/workers/invocation",
@@ -2587,22 +2592,22 @@
     {
       "packagePath": "pkg/services/workers/execution",
       "disposition": "move",
-      "destination": "workers/internal/services/runners"
+      "destination": "workers/internal/services/workstations"
     },
     {
       "packagePath": "pkg/services/workers/execution/recording",
       "disposition": "move",
-      "destination": "workers/internal/services/runners"
+      "destination": "workers/internal/services/workstations"
     },
     {
       "packagePath": "pkg/services/workers/executor",
       "disposition": "move",
-      "destination": "workers/internal/services/runners"
+      "destination": "workers/internal/services/workstations"
     },
     {
       "packagePath": "pkg/services/workers/executor/agentrun",
       "disposition": "move",
-      "destination": "workers/internal/services/runners"
+      "destination": "workers/internal/services/workstations"
     },
     {
       "packagePath": "pkg/services/workers/interface",
@@ -2676,6 +2681,31 @@
     },
     {
       "packagePath": "pkg/services/workers/internal/services/workstations",
+      "disposition": "retain",
+      "destination": "workers/internal/services/workstations"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/workstations/execution",
+      "disposition": "retain",
+      "destination": "workers/internal/services/workstations"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/workstations/execution/recording",
+      "disposition": "retain",
+      "destination": "workers/internal/services/workstations"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/workstations/executor",
+      "disposition": "retain",
+      "destination": "workers/internal/services/workstations"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/workstations/executor/agentrun",
+      "disposition": "retain",
+      "destination": "workers/internal/services/workstations"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/workstations/executor/workstation",
       "disposition": "retain",
       "destination": "workers/internal/services/workstations"
     },

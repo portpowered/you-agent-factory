@@ -108,8 +108,8 @@ func TestMapPackageWorkersMoveDestinations(t *testing.T) {
 				Disposition:       ownershipinventory.DispositionMove,
 				Destination:       "workers",
 				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/workers/internal/services/runners",
-				DeletionCondition: "delete public package after IMP-WRK-runners private subservice cutover proof",
+				Successor:         "pkg/services/workers/internal/services/workstations",
+				DeletionCondition: "delete public package after IMP-WRK-workstations private subservice cutover proof",
 			},
 		},
 		{
@@ -119,8 +119,8 @@ func TestMapPackageWorkersMoveDestinations(t *testing.T) {
 				Disposition:       ownershipinventory.DispositionMove,
 				Destination:       "workers",
 				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/workers/internal/services/runners",
-				DeletionCondition: "delete public package after IMP-WRK-runners private subservice cutover proof",
+				Successor:         "pkg/services/workers/internal/services/workstations",
+				DeletionCondition: "delete public package after IMP-WRK-workstations private subservice cutover proof",
 			},
 		},
 		{
@@ -130,8 +130,8 @@ func TestMapPackageWorkersMoveDestinations(t *testing.T) {
 				Disposition:       ownershipinventory.DispositionMove,
 				Destination:       "workers",
 				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/workers/internal/services/runners",
-				DeletionCondition: "delete public package after IMP-WRK-runners private subservice cutover proof",
+				Successor:         "pkg/services/workers/internal/services/workstations",
+				DeletionCondition: "delete public package after IMP-WRK-workstations private subservice cutover proof",
 			},
 		},
 		{

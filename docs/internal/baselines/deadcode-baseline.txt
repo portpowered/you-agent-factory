@@ -195,9 +195,9 @@ pkg/services/recordings/internal/services/replay/replay/factory_snapshot.go: unr
 pkg/services/recordings/internal/services/replay/replay/recorder.go: unreachable func: Recorder.BindRecordingService
 pkg/services/work/internal/services/content_materialization/internal/service/materialize.go: unreachable func: Options.maxRedirects
 pkg/services/work/internal/services/content_materialization/internal/service/materialize.go: unreachable func: Options.timeout
-pkg/services/workers/executor/workstation_executor_test.go: unreachable func: writeRuntimeLookupAgentsMD
-pkg/services/workers/executor/workstation_executor_test.go: unreachable func: writeRuntimeLookupFactoryJSON
-pkg/services/workers/executor/workstation_executor_test.go: unreachable func: writeRuntimeLookupFixture
+pkg/services/workers/internal/services/workstations/executor/workstation_executor_test.go: unreachable func: writeRuntimeLookupAgentsMD
+pkg/services/workers/internal/services/workstations/executor/workstation_executor_test.go: unreachable func: writeRuntimeLookupFactoryJSON
+pkg/services/workers/internal/services/workstations/executor/workstation_executor_test.go: unreachable func: writeRuntimeLookupFixture
 pkg/services/workers/prompting/prompt.go: unreachable func: NewDefaultPromptRenderer
 pkg/services/workers/prompting/prompt_contract.go: unreachable func: NewService
 pkg/services/workers/prompting/prompt_contract.go: unreachable func: Service.BuildPromptTemplateContract

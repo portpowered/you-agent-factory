@@ -12,7 +12,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/executor"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 )
 
 type wsMockExecutor struct {
