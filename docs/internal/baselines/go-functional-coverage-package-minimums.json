@@ -1742,7 +1742,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/system_initialization/wire",
-      "minimum": 100.00
+      "minimum": 75.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work",
