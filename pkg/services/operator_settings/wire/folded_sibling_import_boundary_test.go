@@ -60,18 +60,13 @@ func TestProductionPackagesOutsideOwnerDoNotImportFoldedSiblingShims(t *testing.
 }
 
 // TestOwnerProductionPackagesOutsideFoldedDestinationsDoNotImportTransitionalSiblingShims
-// seals pss-cln-set-legacy-packages story 003: only delete-ready transitional shims
-// may import the folded public sibling paths as their implementation home.
+// seals pss-del-set-001: owner production packages must not import transitional
+// identityinventory, testlink, or testproviders shims.
 func TestOwnerProductionPackagesOutsideFoldedDestinationsDoNotImportTransitionalSiblingShims(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := testutil.MustRepoRoot(t)
 	ownerRoot := filepath.Join(repoRoot, filepath.FromSlash(operatorSettingsOwnerRelative))
-	allowedImporterRoots := []string{
-		filepath.Join(ownerRoot, "identityinventory"),
-		filepath.Join(ownerRoot, "testlink"),
-		filepath.Join(ownerRoot, "testproviders"),
-	}
 
 	err := filepath.WalkDir(ownerRoot, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -82,11 +77,6 @@ func TestOwnerProductionPackagesOutsideFoldedDestinationsDoNotImportTransitional
 		}
 		if !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
 			return nil
-		}
-		for _, allowedRoot := range allowedImporterRoots {
-			if path == allowedRoot || strings.HasPrefix(path, allowedRoot+string(filepath.Separator)) {
-				return nil
-			}
 		}
 		assertGoSourceDoesNotImportFoldedSiblingShims(t, path)
 		return nil

@@ -9,7 +9,7 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	operatorsettingsservicewire "github.com/portpowered/infinite-you/pkg/services/operator_settings/servicewire"
+	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 )
 
@@ -28,8 +28,8 @@ func TestServiceWireCompositionRootServesDocumentAndResolutionOperations(t *test
 		t.Fatalf("WriteFile(config): %v", err)
 	}
 
-	root, err := operatorsettingsservicewire.NewServiceFromConfigDocument(
-		operatorsettingsservicewire.NewConfigDocumentService(
+	root, err := settingswire.NewServiceFromConfigDocument(
+		settingswire.NewConfigDocumentService(
 			platformfilesystem.Local{},
 			func(dir, pattern string) (operatorsettings.TemporaryFile, error) {
 				return os.CreateTemp(dir, pattern)
@@ -85,7 +85,7 @@ func TestServiceWireCompositionRootServesDocumentAndResolutionOperations(t *test
 }
 
 func TestServiceFromHomePortsConstructsSettingsRoot(t *testing.T) {
-	root, err := operatorsettingsservicewire.NewServiceFromHomePorts(platformfilesystem.Local{}, globalconfigmapping.Decode)
+	root, err := settingswire.NewServiceFromHomePorts(platformfilesystem.Local{}, globalconfigmapping.Decode)
 	if err != nil {
 		t.Fatalf("NewServiceFromHomePorts() error = %v", err)
 	}
@@ -95,19 +95,19 @@ func TestServiceFromHomePortsConstructsSettingsRoot(t *testing.T) {
 }
 
 func TestServiceFromHomePortsRejectsMissingPorts(t *testing.T) {
-	_, err := operatorsettingsservicewire.NewServiceFromHomePorts(nil, globalconfigmapping.Decode)
+	_, err := settingswire.NewServiceFromHomePorts(nil, globalconfigmapping.Decode)
 	if err == nil || !strings.Contains(err.Error(), "filesystem is required") {
 		t.Fatalf("NewServiceFromHomePorts(nil, decode) error = %v, want filesystem required", err)
 	}
 
-	_, err = operatorsettingsservicewire.NewServiceFromHomePorts(platformfilesystem.Local{}, nil)
+	_, err = settingswire.NewServiceFromHomePorts(platformfilesystem.Local{}, nil)
 	if err == nil || !strings.Contains(err.Error(), "decoder is required") {
 		t.Fatalf("NewServiceFromHomePorts(files, nil) error = %v, want decoder required", err)
 	}
 }
 
 func TestServiceFromConfigDocumentConstructsFromDocumentPorts(t *testing.T) {
-	root, err := operatorsettingsservicewire.NewServiceFromConfigDocument(operatorsettings.ConfigDocumentService{
+	root, err := settingswire.NewServiceFromConfigDocument(operatorsettings.ConfigDocumentService{
 		Files:     platformfilesystem.Local{},
 		Decoder:   globalconfigmapping.Decode,
 		Encoder:   globalconfigmapping.Encode,
@@ -125,7 +125,7 @@ func TestServiceFromConfigDocumentConstructsFromDocumentPorts(t *testing.T) {
 }
 
 func TestServiceFromConfigDocumentRejectsMissingDocumentPorts(t *testing.T) {
-	_, err := operatorsettingsservicewire.NewServiceFromConfigDocument(operatorsettings.ConfigDocumentService{})
+	_, err := settingswire.NewServiceFromConfigDocument(operatorsettings.ConfigDocumentService{})
 	if err == nil || !strings.Contains(err.Error(), "operator settings document ports are required") {
 		t.Fatalf("NewServiceFromConfigDocument() error = %v, want document ports required", err)
 	}
@@ -146,7 +146,7 @@ func TestResolveFromHomeRejectsMissingFilesystemPorts(t *testing.T) {
 
 func TestRegisterDefaultsResolutionFromHomeRestoresAdapterOwnership(t *testing.T) {
 	operatorsettings.ConfigureDefaultsResolutionFromHome(nil)
-	operatorsettingsservicewire.RegisterDefaultsResolutionFromHome()
+	settingswire.RegisterDefaultsResolutionFromHome()
 }
 
 func TestResolveFromHomeUsesSettingsAdapterOwnershipPath(t *testing.T) {
@@ -181,7 +181,7 @@ func TestResolveFromHomeUsesSettingsAdapterOwnershipPath(t *testing.T) {
 
 func TestResolveFromHomeFallbackPreservesAcceptedSemantics(t *testing.T) {
 	operatorsettings.ConfigureDefaultsResolutionFromHome(nil)
-	t.Cleanup(operatorsettingsservicewire.RegisterDefaultsResolutionFromHome)
+	t.Cleanup(settingswire.RegisterDefaultsResolutionFromHome)
 
 	homeDir := t.TempDir()
 	configPath := operatorsettings.DefaultConfigPath(homeDir)
