@@ -735,10 +735,9 @@ Wave 0 functional-tests-expansion planning authority lives under
   Factory signals, and `support.StartFunctionalAPIServer` + `support.SubmitDefaultSessionWork`
   only when proving imported-factory work acceptance; compare flatten readback with
   JSON-normalized factory contracts because named identity lives in `factory list`
-  while authored `name` may remain on flatten payloads; artifact-contract-closeout
-  remap target for AutomatPortability is
-  `./tests/functional/factory/definitions -run 'TestAutomatPortabilityFixture_'`;
-  delete-03/04 catch-all `tests/functional/bootstrap_portability` export/import and
+  while authored `name` may remain on flatten payloads; `make artifact-contract-closeout`
+  selects `./tests/functional/factory/definitions -run 'TestAutomatPortabilityFixture_'`
+  (not `./tests/functional/bootstrap_portability`); delete-03/04 catch-all `tests/functional/bootstrap_portability` export/import and
   AutomatPortability Test* are retired — do not reintroduce them under
   bootstrap_portability; catalog metadata infers domain `factory/definitions`.
   `tests/functional/factory/definitions/validation_test.go` and sibling

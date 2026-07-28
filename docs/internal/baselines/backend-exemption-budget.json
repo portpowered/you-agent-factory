@@ -200,12 +200,6 @@
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
     },
     {
-      "rule": "backendsizecheck:ignore-file",
-      "target": "tests/functional/bootstrap_portability/automat_portability_fixture_test.go",
-      "owner": "backend-maintainers",
-      "removalReason": "service-ownership migration preserves this consolidated surface until a dedicated responsibility split removes the exemption."
-    },
-    {
       "rule": "backendsizecheck:ignore-function",
       "target": "cmd/pkgboundarycheck/initializer_behavior.go#scanInitializerBehavior",
       "owner": "backend-maintainers",

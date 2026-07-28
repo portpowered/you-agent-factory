@@ -51,26 +51,6 @@
       "name": "TestBuildProcessRemainsFilesystemWatcherInertBeforeRuntimeLifecycle"
     },
     {
-      "file": "bootstrap_portability/automat_portability_fixture_test.go",
-      "name": "TestAutomatPortabilityFixture_ExpandRestoresPortableRuntimeLayout"
-    },
-    {
-      "file": "bootstrap_portability/automat_portability_fixture_test.go",
-      "name": "TestAutomatPortabilityFixture_ExpandedLayoutIsDispatchReadyForBoundedSmoke"
-    },
-    {
-      "file": "bootstrap_portability/automat_portability_fixture_test.go",
-      "name": "TestAutomatPortabilityFixture_FlattenPreservesPortableBundleContract"
-    },
-    {
-      "file": "bootstrap_portability/automat_portability_fixture_test.go",
-      "name": "TestAutomatPortabilityFixture_ModelsBoundedPortableRuntimeLayout"
-    },
-    {
-      "file": "bootstrap_portability/automat_portability_integration_test.go",
-      "name": "TestAutomatPortabilityFixture_IntegrationSmoke_CoversFlattenExpandAndBoundedReadiness"
-    },
-    {
       "file": "cli/factory_run/output/failure_test.go",
       "name": "TestInvocationFailureOutputContracts"
     },
