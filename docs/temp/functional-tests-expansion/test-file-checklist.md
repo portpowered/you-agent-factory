@@ -534,6 +534,12 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestWorkBatchSelectsDefaultAndExplicitWorkTypes`.
   - `TestWorkBatchRejectsUnknownTypeWithoutPartialMutation`.
 
+- [x] `tests/functional/work/recordings/recordings_read_test.go`
+  - `TestRecordingsBackedWorkReadsUseRecordingsRootContract`.
+  - `TestGetWorkFromRecordingsRootUsesRecordingsServiceRoot`.
+  - `TestRecordingsBackedWorkReadsMapRichWorldState`.
+  - `TestRecordingsBackedWorkReadsSurfaceTypedProjectionFailures`.
+
 - [ ] `tests/functional/work/submission/http_test.go`
   - `TestAPISubmitBatchThenListAndGetWork`.
   - `TestAPIUpsertWorkRequestUsesCanonicalIdentity`.
@@ -757,7 +763,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAbsentProviderSessionIsNotFabricated`.
   - `TestMultipleDispatchesKeepDistinctProviderSessionRefs`.
 
-- [ ] `tests/functional/provider_sessions/association/response_exec_metadata_test.go`
+- [x] `tests/functional/provider_sessions/association/response_exec_metadata_test.go`
   - `TestResponseExecGoldenMetadataSurvivesCLIProjection`.
   - `TestResponseExecGoldenMetadataSurvivesAPIResponseEvents`.
   - `TestResponseExecGoldenMetadataSurvivesReplay`.
