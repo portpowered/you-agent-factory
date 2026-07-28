@@ -221,6 +221,45 @@ func TestMCPAsyncFactorySessionCanBePolledToSuccess(t *testing.T) {
 	closeMCPServer(t, nil, serveErr)
 }
 
+// TestMCPAsyncFactorySessionCanBePolledToFailure proves public MCP
+// you.factory_session.start_async plus get and get_result polling reach a
+// terminal failure outcome without presenting a terminal success result.
+func TestMCPAsyncFactorySessionCanBePolledToFailure(t *testing.T) {
+	projectRoot := setupAsyncThrowErrorWorkflowFixture(t)
+	client, shutdown, serveErr := startRootRuntimeMCPServer(t, projectRoot, nil)
+	assertMCPInitialized(t, client)
+
+	toolsResult := client.call("tools/list", map[string]any{})
+	toolNames := toolNamesFromListResult(t, toolsResult.Result)
+	for _, want := range []string{
+		mcpfactorysession.ToolStartAsync,
+		mcpfactorysession.ToolGetSession,
+		mcpfactorysession.ToolGetResult,
+	} {
+		if !containsString(toolNames, want) {
+			t.Fatalf("tools/list missing async poll tool %q; got %#v", want, toolNames)
+		}
+	}
+
+	sessionID, asyncStart := startMCPAsyncFailedSession(t, client)
+	assertCanonicalSessionID(t, asyncStart.SessionId, sessionID, "async failure start")
+
+	sessionRead, terminalResult := pollMCPAsyncSessionToTerminalFailure(t, client, sessionID, 8*time.Second)
+	assertCanonicalSessionID(t, sessionRead.SessionId, sessionID, "async failure poll session read")
+	if sessionRead.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
+		t.Fatalf("async failure poll session status = %q, want FAILED", sessionRead.Status)
+	}
+	assertMCPStructuredFailureDetail(t, sessionRead.FailureDetail, "async failure poll session read")
+	if sessionRead.ResultSummary != nil &&
+		sessionRead.ResultSummary.ResultStatus == factoryapi.FactorySessionResultStatusFinal {
+		t.Fatalf("async failure poll session resultSummary = %#v, want non-FINAL failure availability", sessionRead.ResultSummary)
+	}
+	assertMCPAsyncFailureNotTerminalSuccess(t, terminalResult)
+
+	shutdown()
+	closeMCPServer(t, nil, serveErr)
+}
+
 func toolNamesFromListResult(t *testing.T, result map[string]any) []string {
 	t.Helper()
 	rawTools, ok := result["tools"].([]any)
