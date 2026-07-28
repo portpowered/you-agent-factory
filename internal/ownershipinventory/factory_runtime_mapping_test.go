@@ -81,6 +81,72 @@ func TestMapPackageFactoryRuntimeMoveDestinations(t *testing.T) {
 			},
 		},
 		{
+			path: "pkg/services/factory_runtime/context",
+			wantMove: &ownershipinventory.PackageRow{
+				PackagePath:       "pkg/services/factory_runtime/context",
+				Disposition:       ownershipinventory.DispositionMove,
+				Destination:       "factory_runtime",
+				DestinationKind:   ownershipinventory.DestinationKindOwner,
+				Successor:         "pkg/services/factory_runtime/internal/services/orchestration",
+				DeletionCondition: "delete public package after IMP-RUN-orchestration private subservice cutover proof",
+			},
+		},
+		{
+			path: "pkg/services/factory_runtime/javascript",
+			wantMove: &ownershipinventory.PackageRow{
+				PackagePath:       "pkg/services/factory_runtime/javascript",
+				Disposition:       ownershipinventory.DispositionMove,
+				Destination:       "factory_runtime",
+				DestinationKind:   ownershipinventory.DestinationKindOwner,
+				Successor:         "pkg/services/factory_runtime/internal/services/orchestration",
+				DeletionCondition: "delete public package after IMP-RUN-orchestration private subservice cutover proof",
+			},
+		},
+		{
+			path: "pkg/services/factory_runtime/runtime/buffers",
+			wantMove: &ownershipinventory.PackageRow{
+				PackagePath:       "pkg/services/factory_runtime/runtime/buffers",
+				Disposition:       ownershipinventory.DispositionMove,
+				Destination:       "factory_runtime",
+				DestinationKind:   ownershipinventory.DestinationKindOwner,
+				Successor:         "pkg/services/factory_runtime/internal/services/orchestration",
+				DeletionCondition: "delete public package after IMP-RUN-orchestration private subservice cutover proof",
+			},
+		},
+		{
+			path: "pkg/services/factory_runtime/state/validation",
+			wantMove: &ownershipinventory.PackageRow{
+				PackagePath:       "pkg/services/factory_runtime/state/validation",
+				Disposition:       ownershipinventory.DispositionMove,
+				Destination:       "factory_runtime",
+				DestinationKind:   ownershipinventory.DestinationKindOwner,
+				Successor:         "pkg/services/factory_runtime/internal/services/orchestration",
+				DeletionCondition: "delete public package after IMP-RUN-orchestration private subservice cutover proof",
+			},
+		},
+		{
+			path: "pkg/services/factory_runtime/throttle",
+			wantMove: &ownershipinventory.PackageRow{
+				PackagePath:       "pkg/services/factory_runtime/throttle",
+				Disposition:       ownershipinventory.DispositionMove,
+				Destination:       "factory_runtime",
+				DestinationKind:   ownershipinventory.DestinationKindOwner,
+				Successor:         "pkg/services/factory_runtime/internal/services/orchestration",
+				DeletionCondition: "delete public package after IMP-RUN-orchestration private subservice cutover proof",
+			},
+		},
+		{
+			path: "pkg/services/factory_runtime/token_transformer",
+			wantMove: &ownershipinventory.PackageRow{
+				PackagePath:       "pkg/services/factory_runtime/token_transformer",
+				Disposition:       ownershipinventory.DispositionMove,
+				Destination:       "factory_runtime",
+				DestinationKind:   ownershipinventory.DestinationKindOwner,
+				Successor:         "pkg/services/factory_runtime/internal/services/orchestration",
+				DeletionCondition: "delete public package after IMP-RUN-orchestration private subservice cutover proof",
+			},
+		},
+		{
 			path: "pkg/services/factory_runtime/testdata",
 			wantMove: &ownershipinventory.PackageRow{
 				PackagePath:       "pkg/services/factory_runtime/testdata",
@@ -153,6 +219,8 @@ func factoryRuntimeCanonicalRetainRest(rest string) bool {
 	case rest == "wire" || strings.HasPrefix(rest, "wire/"):
 		return true
 	case rest == "transports" || strings.HasPrefix(rest, "transports/"):
+		return true
+	case rest == "internal" || strings.HasPrefix(rest, "internal/host"):
 		return true
 	case strings.HasPrefix(rest, "internal/services/orchestration"):
 		return true

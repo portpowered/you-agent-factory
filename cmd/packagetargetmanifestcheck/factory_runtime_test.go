@@ -167,6 +167,78 @@ func TestMapCommittedOwnerPackageFactoryRuntimeMoveDestinations(t *testing.T) {
 			},
 		},
 		{
+			path: "pkg/services/factory_runtime/context",
+			want: PackageMapping{
+				PackagePath: "pkg/services/factory_runtime/context",
+				Disposition: DispositionMove,
+				Destination: "factory_runtime/internal/services/orchestration",
+			},
+		},
+		{
+			path: "pkg/services/factory_runtime/definitionmapping",
+			want: PackageMapping{
+				PackagePath: "pkg/services/factory_runtime/definitionmapping",
+				Disposition: DispositionMove,
+				Destination: "factory_runtime/internal/services/orchestration",
+			},
+		},
+		{
+			path: "pkg/services/factory_runtime/metrics",
+			want: PackageMapping{
+				PackagePath: "pkg/services/factory_runtime/metrics",
+				Disposition: DispositionMove,
+				Destination: "factory_runtime/internal/services/orchestration",
+			},
+		},
+		{
+			path: "pkg/services/factory_runtime/orchestrationowner",
+			want: PackageMapping{
+				PackagePath: "pkg/services/factory_runtime/orchestrationowner",
+				Disposition: DispositionMove,
+				Destination: "factory_runtime/internal/services/orchestration",
+			},
+		},
+		{
+			path: "pkg/services/factory_runtime/orchestratorcontract",
+			want: PackageMapping{
+				PackagePath: "pkg/services/factory_runtime/orchestratorcontract",
+				Disposition: DispositionMove,
+				Destination: "factory_runtime/internal/services/orchestration",
+			},
+		},
+		{
+			path: "pkg/services/factory_runtime/replayhooks",
+			want: PackageMapping{
+				PackagePath: "pkg/services/factory_runtime/replayhooks",
+				Disposition: DispositionMove,
+				Destination: "factory_runtime/internal/services/orchestration",
+			},
+		},
+		{
+			path: "pkg/services/factory_runtime/state/validation",
+			want: PackageMapping{
+				PackagePath: "pkg/services/factory_runtime/state/validation",
+				Disposition: DispositionMove,
+				Destination: "factory_runtime/internal/services/orchestration",
+			},
+		},
+		{
+			path: "pkg/services/factory_runtime/throttle",
+			want: PackageMapping{
+				PackagePath: "pkg/services/factory_runtime/throttle",
+				Disposition: DispositionMove,
+				Destination: "factory_runtime/internal/services/orchestration",
+			},
+		},
+		{
+			path: "pkg/services/factory_runtime/token_transformer",
+			want: PackageMapping{
+				PackagePath: "pkg/services/factory_runtime/token_transformer",
+				Disposition: DispositionMove,
+				Destination: "factory_runtime/internal/services/orchestration",
+			},
+		},
+		{
 			path: "pkg/services/factory_runtime/internal/rootobservation",
 			want: PackageMapping{
 				PackagePath: "pkg/services/factory_runtime/internal/rootobservation",
@@ -276,6 +348,8 @@ func factoryRuntimeCanonicalRetainRest(rest string) bool {
 	case rest == "wire" || strings.HasPrefix(rest, "wire/"):
 		return true
 	case rest == "transports" || strings.HasPrefix(rest, "transports/"):
+		return true
+	case rest == "internal" || strings.HasPrefix(rest, "internal/host"):
 		return true
 	case strings.HasPrefix(rest, "internal/services/orchestration"):
 		return true
