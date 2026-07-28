@@ -8,16 +8,15 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -247,18 +246,7 @@ func ReconnectSequenceForFactoryEvent(event factoryapi.FactoryEvent) int {
 }
 
 func factoryEventsURLWithCursor(baseURL string, cursor FactoryEventReadCursor) string {
-	endpoint := DefaultSessionEventsURL(baseURL)
-	params := url.Values{}
-	if cursor.AfterEventID != "" {
-		params.Set("after_event_id", cursor.AfterEventID)
-	}
-	if cursor.AfterSequence != nil {
-		params.Set("after_sequence", strconv.Itoa(*cursor.AfterSequence))
-	}
-	if encoded := params.Encode(); encoded != "" {
-		endpoint += "?" + encoded
-	}
-	return endpoint
+	return SessionEventsURLWithCursor(baseURL, factorysessions.DefaultSessionID, cursor)
 }
 
 // GetFactoryEventsAfterAt reads retained Factory Event history after an

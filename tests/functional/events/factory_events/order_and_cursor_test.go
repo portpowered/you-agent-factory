@@ -200,6 +200,58 @@ func TestFactoryEventStreamIsOrderedAndClosesAtSessionTermination(t *testing.T) 
 	stream.WaitClosed(5 * time.Second)
 }
 
+// TestFactoryEventStreamReconnectHasNoGapOrDuplicate proves a dropped Factory
+// Event stream can reconnect from an acknowledged cursor and resume the live
+// timeline without gaps or duplicate deliveries.
+func TestFactoryEventStreamReconnectHasNoGapOrDuplicate(t *testing.T) {
+	dir := support.ScaffoldSingleStepFactory(t, "stream-reconnect-continuity")
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		UseMockWorkers:            true,
+		WaitForServiceModeRuntime: true,
+	})
+	t.Cleanup(func() { server.Stop(t) })
+
+	firstStream := support.OpenFactoryEventStreamAt(
+		t,
+		support.SessionEventsURL(server.URL(), factorysessions.DefaultSessionID),
+	)
+	firstPrefix := collectFactoryEventStreamUntilCount(t, firstStream, 4, 10*time.Second)
+	cursorIndex, cursorEvent := pickMidStreamCursorEvent(t, firstPrefix)
+	acknowledgedPrefix := append([]factoryapi.FactoryEvent(nil), firstPrefix[:cursorIndex+1]...)
+	firstStream.Close()
+
+	name := "stream-reconnect-continuity-work"
+	support.SubmitDefaultSessionWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+		Name:         &name,
+		WorkTypeName: "task",
+		Payload: map[string]string{
+			"title": "prove reconnect has no gap or duplicate",
+		},
+	})
+	support.WaitForTerminalStatus(t, server.URL(), 15*time.Second)
+
+	reconnectStream := support.OpenFactoryEventStreamAt(
+		t,
+		support.SessionEventsURLWithCursor(
+			server.URL(),
+			factorysessions.DefaultSessionID,
+			support.FactoryEventReadCursor{AfterEventID: cursorEvent.Id},
+		),
+	)
+	reconnectEvents := collectFactoryEventStreamUntilQuiet(t, reconnectStream, 10*time.Second)
+	reconnectStream.Close()
+
+	fullRetained := server.GetFactoryEvents(t)
+	assertFactoryEventStreamReconnectContinuity(
+		t,
+		acknowledgedPrefix,
+		reconnectEvents,
+		fullRetained,
+		cursorEvent,
+	)
+}
+
 func collectFactoryEventStreamUntilQuiet(
 	t *testing.T,
 	stream *support.FactoryEventStream,
@@ -240,6 +292,115 @@ func collectFactoryEventStreamUntilQuiet(
 	}
 }
 
+func collectFactoryEventStreamUntilCount(
+	t *testing.T,
+	stream *support.FactoryEventStream,
+	wantCount int,
+	timeout time.Duration,
+) []factoryapi.FactoryEvent {
+	t.Helper()
+
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	var collected []factoryapi.FactoryEvent
+	for len(collected) < wantCount {
+		select {
+		case <-deadline.C:
+			t.Fatalf(
+				"timed out collecting %d Factory Events from stream; got %d within %s",
+				wantCount,
+				len(collected),
+				timeout,
+			)
+		default:
+			event, ok := stream.TryNextEvent(50 * time.Millisecond)
+			if !ok {
+				continue
+			}
+			collected = append(collected, event)
+		}
+	}
+	return collected
+}
+
+func assertFactoryEventStreamReconnectContinuity(
+	t *testing.T,
+	acknowledgedPrefix []factoryapi.FactoryEvent,
+	reconnectEvents []factoryapi.FactoryEvent,
+	fullRetained []factoryapi.FactoryEvent,
+	acknowledged factoryapi.FactoryEvent,
+) {
+	t.Helper()
+
+	for _, event := range reconnectEvents {
+		if event.Id == acknowledged.Id {
+			t.Fatalf("reconnect re-delivered acknowledged event %q", acknowledged.Id)
+		}
+	}
+	for _, event := range acknowledgedPrefix {
+		for _, reconnectEvent := range reconnectEvents {
+			if reconnectEvent.Id == event.Id {
+				t.Fatalf("reconnect duplicated event %q already present in acknowledged prefix", event.Id)
+			}
+		}
+	}
+
+	combined := append(append([]factoryapi.FactoryEvent(nil), acknowledgedPrefix...), reconnectEvents...)
+	if len(combined) != len(fullRetained) {
+		t.Fatalf(
+			"combined reconnect timeline count = %d, want %d retained events",
+			len(combined),
+			len(fullRetained),
+		)
+	}
+	for index := range fullRetained {
+		if combined[index].Id != fullRetained[index].Id {
+			t.Fatalf(
+				"combined reconnect timeline at index %d = %q, want retained event %q",
+				index,
+				combined[index].Id,
+				fullRetained[index].Id,
+			)
+		}
+		if combined[index].Context.Sequence != fullRetained[index].Context.Sequence {
+			t.Fatalf(
+				"combined reconnect sequence at index %d for event %q = %d, want %d",
+				index,
+				combined[index].Id,
+				combined[index].Context.Sequence,
+				fullRetained[index].Context.Sequence,
+			)
+		}
+	}
+
+	assertFactoryEventsAscendingOrder(t, combined)
+
+	acknowledgedSequence := acknowledged.Context.Sequence
+	for _, event := range reconnectEvents {
+		if event.Context.Sequence <= acknowledgedSequence {
+			t.Fatalf(
+				"reconnect event %q sequence %d is not after acknowledged sequence %d",
+				event.Id,
+				event.Context.Sequence,
+				acknowledgedSequence,
+			)
+		}
+	}
+	for index := 1; index < len(reconnectEvents); index++ {
+		previous := reconnectEvents[index-1]
+		current := reconnectEvents[index]
+		if current.Context.Sequence <= previous.Context.Sequence {
+			t.Fatalf(
+				"reconnect gap or reorder between %q (sequence %d) and %q (sequence %d)",
+				previous.Id,
+				previous.Context.Sequence,
+				current.Id,
+				current.Context.Sequence,
+			)
+		}
+	}
+}
+
 func assertFactoryEventsInvalidCursorError(t *testing.T, errResp factoryapi.ErrorResponse) {
 	t.Helper()
 
@@ -266,6 +427,25 @@ func assertFactoryEventsInvalidCursorBodyDoesNotReplayHistory(
 	if strings.Contains(bodyText, "data: ") {
 		t.Fatal("invalid cursor response contained SSE data frames")
 	}
+}
+
+func pickMidStreamCursorEvent(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+) (int, factoryapi.FactoryEvent) {
+	t.Helper()
+
+	for index := range events {
+		if index >= len(events)-2 {
+			break
+		}
+		return index, events[index]
+	}
+	t.Fatalf(
+		"stream prefix missing a reusable mid-stream cursor before the final events; count = %d",
+		len(events),
+	)
+	return 0, factoryapi.FactoryEvent{}
 }
 
 func pickSessionScopedCursorEvent(
