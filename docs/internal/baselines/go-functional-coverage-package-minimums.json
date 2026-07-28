@@ -1949,6 +1949,10 @@
       "minimum": 7.37
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/transports/cli",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/transports/mcp",
       "exception": {
         "kind": "measurement",
