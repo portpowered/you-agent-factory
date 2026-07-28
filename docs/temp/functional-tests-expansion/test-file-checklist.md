@@ -648,7 +648,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPackagedFactoriesRejectMissingRequiredInputs` runs the package matrix.
   - `TestPackagedFactoriesNameMissingInputAndFactory` verifies diagnostics.
 
-- [ ] `tests/functional/factory/packaged/deep_research/invocation_test.go`
+- [x] `tests/functional/factory/packaged/deep_research/invocation_test.go`
   - `TestPackagedDeepResearchRequiredInputCompletes` verifies dispatch sequence
     and primary result with mock workers.
   - `TestPackagedDeepResearchOptionalInputsReachWorkers` covers overrides.

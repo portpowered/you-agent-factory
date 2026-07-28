@@ -7187,14 +7187,44 @@
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/deep_research/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/deep_research",
+      "scenario": "TestPackagedDeepResearchRequiredInputCompletes",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/deep_research/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/deep_research/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/deep_research",
+      "scenario": "TestPackagedDeepResearchOptionalInputsReachWorkers",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/deep_research/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/deep_research/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/deep_research",
+      "scenario": "TestPackagedDeepResearchWorkerFailureReturnsFailedOutcome",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/deep_research/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
     }
   ],
-  "scanned_at_utc": "2026-07-28T03:20:00Z",
+  "scanned_at_utc": "2026-07-28T03:45:00Z",
   "summary": {
     "by_catch_all": {
       "bootstrap_portability": 22,
       "guards_batch": 23,
-      "none": 441,
+      "none": 444,
       "replay_contracts": 23,
       "runtime_api": 96,
       "smoke": 62,
@@ -7205,7 +7235,7 @@
       "automations": 7,
       "bootstrap_portability": 21,
       "cli": 62,
-      "factory": 4,
+      "factory": 7,
       "guards_batch": 23,
       "models": 5,
       "observability": 9,
@@ -7224,9 +7254,9 @@
       "workflow": 30,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 699,
+    "customer_top_level_Test_scenarios": 702,
     "lane_functionallong": 95,
-    "lane_short": 604,
+    "lane_short": 607,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 7,
@@ -7240,6 +7270,7 @@
       "you-agent-factory/tests/functional/cli/root_discovery": 9,
       "you-agent-factory/tests/functional/cli/session_resume": 6,
       "you-agent-factory/tests/functional/factory/catalog": 3,
+      "you-agent-factory/tests/functional/factory/packaged/deep_research": 3,
       "you-agent-factory/tests/functional/factory/runtime_lifecycle": 1,
       "you-agent-factory/tests/functional/guards_batch": 23,
       "you-agent-factory/tests/functional/models/model_invoke": 3,
@@ -7303,7 +7334,7 @@
       "you-agent-factory/tests/functional/workstations/repeater": 13,
       "you-agent-factory/tests/functional/workstations/watcher": 9
     },
-    "files_with_customer_Test": 234,
+    "files_with_customer_Test": 235,
     "functional_test_go_files": 251,
     "helper_only_non_customer_files": 51,
     "internal_harness_Test_functions": 15,
