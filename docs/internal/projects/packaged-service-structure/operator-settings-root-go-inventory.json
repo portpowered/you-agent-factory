@@ -30,6 +30,11 @@
       "note": "Peer-facing defaults-resolution operations thin surface delegating to the private resolution subservice."
     },
     {
+      "file": "del_set_proof_gate_test.go",
+      "classification": "thin_root_contract_test",
+      "note": "DEL-SET story 005 gate proving structure, ownership, package-target, and root reconciliation verification pass after transitional public package deletion and baseline burn-down."
+    },
+    {
       "file": "doc.go",
       "classification": "thin_root_contract",
       "note": "Package documentation for the committed thin Operator Settings root contract surface."
@@ -43,6 +48,11 @@
       "file": "input_inventory_contract.go",
       "classification": "thin_root_contract",
       "note": "Peer-facing operator-config input inventory types and ProjectInputInventory thin surface delegating to private implementation."
+    },
+    {
+      "file": "packaged_root_shape_test.go",
+      "classification": "thin_root_contract_test",
+      "note": "DEL-SET story 005 seal proving Operator Settings ships only wire/, internal/, transports/, and INV-retained test-only testdata/ package directories plus thin root contract files."
     },
     {
       "file": "resolution_contract.go",
