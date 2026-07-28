@@ -1,4 +1,4 @@
-package recordings_test
+package canonicalledger_test
 
 import (
 	"testing"

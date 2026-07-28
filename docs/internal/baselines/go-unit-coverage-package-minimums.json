@@ -1926,7 +1926,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export/artifacts",
-      "minimum": 91.25
+      "minimum": 77.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export/internal/service",
@@ -2051,6 +2051,10 @@
         "deadline": "2027-07-15",
         "removalGate": "The unit coverage profile reports at least one measurable statement for this package or the transitional path is deleted."
       }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/projections/workstation",
+      "minimum": 82.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/replay",

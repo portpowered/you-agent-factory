@@ -1,4 +1,4 @@
-package recordings_test
+package projectionquery_test
 
 import (
 	"encoding/json"

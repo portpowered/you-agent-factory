@@ -440,6 +440,7 @@
     "pkg/services/recordings/internal/services/replay/wire",
     "pkg/services/recordings/projections",
     "pkg/services/recordings/projections/dashboard",
+    "pkg/services/recordings/projections/workstation",
     "pkg/services/recordings/replay",
     "pkg/services/recordings/service",
     "pkg/services/recordings/transports/cli",
@@ -2610,6 +2611,11 @@
     },
     {
       "packagePath": "pkg/services/recordings/projections/dashboard",
+      "disposition": "move",
+      "destination": "recordings/internal/services/projection_query"
+    },
+    {
+      "packagePath": "pkg/services/recordings/projections/workstation",
       "disposition": "move",
       "destination": "recordings/internal/services/projection_query"
     },

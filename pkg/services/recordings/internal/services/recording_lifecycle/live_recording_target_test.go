@@ -1,4 +1,4 @@
-package recordings_test
+package recordinglifecycle_test
 
 import (
 	"path/filepath"
@@ -6,14 +6,15 @@ import (
 	"time"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
-	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
+	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
 )
 
 func TestLiveRecordingTargetPlannerOwnsDefaultLayoutAndReportedSessionPath(t *testing.T) {
 	t.Parallel()
 
 	clock := platformclock.NewDeterministic(time.Date(2026, 2, 3, 18, 45, 12, 0, time.UTC), time.Second)
-	planner := recordings.NewLiveRecordingTargetPlanner(clock, func() string { return "uuid-1" }, filepath.Join)
+	planner := recordinglifecycle.NewLiveRecordingTargetPlanner(clock, func() string { return "uuid-1" }, filepath.Join)
 	target, err := planner.PlanLiveRecordingTarget(recordings.LiveRecordingTargetRequest{
 		HomeDir:           filepath.Join("home", "operator"),
 		ReportedSessionID: "~default",
@@ -38,10 +39,10 @@ func TestLiveRecordingTargetPlannerRequiresExactMechanics(t *testing.T) {
 		planner recordings.LiveRecordingTargetPlanner
 		want    string
 	}{
-		"clock":              {recordings.NewLiveRecordingTargetPlanner(nil, func() string { return "id" }, filepath.Join), "Recordings live target clock is required"},
-		"identity generator": {recordings.NewLiveRecordingTargetPlanner(validClock, nil, filepath.Join), "Recordings live target identity generator is required"},
-		"path joiner":        {recordings.NewLiveRecordingTargetPlanner(validClock, func() string { return "id" }, nil), "Recordings live target path joiner is required"},
-		"empty identity":     {recordings.NewLiveRecordingTargetPlanner(validClock, func() string { return "" }, filepath.Join), "Recordings live target identity generator returned an empty identity"},
+		"clock": {recordinglifecycle.NewLiveRecordingTargetPlanner(nil, func() string { return "id" }, filepath.Join), "Recordings live target clock is required"},
+		"identity generator": {recordinglifecycle.NewLiveRecordingTargetPlanner(validClock, nil, filepath.Join), "Recordings live target identity generator is required"},
+		"path joiner":        {recordinglifecycle.NewLiveRecordingTargetPlanner(validClock, func() string { return "id" }, nil), "Recordings live target path joiner is required"},
+		"empty identity":     {recordinglifecycle.NewLiveRecordingTargetPlanner(validClock, func() string { return "" }, filepath.Join), "Recordings live target identity generator returned an empty identity"},
 	}
 	for name, test := range tests {
 		test := test
@@ -59,7 +60,7 @@ func TestLiveRecordingTargetPlannerUsesInjectedIdentityForUniqueNames(t *testing
 	t.Parallel()
 
 	identities := []string{"uuid-1", "uuid-2"}
-	planner := recordings.NewLiveRecordingTargetPlanner(
+	planner := recordinglifecycle.NewLiveRecordingTargetPlanner(
 		platformclock.NewDeterministic(time.Date(2026, 2, 3, 18, 45, 12, 0, time.UTC), time.Second),
 		func() string {
 			identity := identities[0]
