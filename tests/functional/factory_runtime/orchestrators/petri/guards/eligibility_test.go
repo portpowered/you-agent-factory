@@ -76,6 +76,178 @@ func TestPetriAuthoredEligibilityGuardBlocksDispatchUntilSatisfied(t *testing.T)
 	}
 }
 
+// TestPetriParentOrSameNameGuardReleasesExpectedWork proves a SAME_NAME input
+// guard dispatches only when peer Work names correlate, releasing the expected
+// matched Work to its public terminal state while mismatched peers remain idle
+// without the guarded workstation's success outcome.
+func TestPetriParentOrSameNameGuardReleasesExpectedWork(t *testing.T) {
+	t.Run("matching peer names release correlated work", func(t *testing.T) {
+		dir := support.ScaffoldFactory(t, sameNameGuardFactoryConfig())
+		support.WriteAgentConfig(t, dir, "matcher", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+
+		const (
+			matchedPlanWorkID = "plan-alpha"
+			matchedTaskWorkID = "task-alpha"
+			matchedName       = "alpha"
+			matchTraceID      = "trace-same-name-match"
+		)
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			Name:       matchedName,
+			WorkID:     matchedPlanWorkID,
+			WorkTypeID: "plan",
+			TraceID:    matchTraceID,
+			Payload:    []byte(`{"role":"plan"}`),
+		})
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			Name:       matchedName,
+			WorkID:     matchedTaskWorkID,
+			WorkTypeID: "task",
+			TraceID:    matchTraceID,
+			Payload:    []byte(`{"role":"task"}`),
+		})
+
+		runner := support.NewShapedProviderCommandRunner(
+			codexCommandResult("Done. COMPLETE"),
+		)
+		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+			t,
+			dir,
+			serviceedges.Edges{ProviderCommandRunner: runner},
+			15*time.Second,
+		)
+
+		matchIndexes := dispatchResponseIndexesForTransition(t, events, "match-items")
+		if len(matchIndexes) != 1 {
+			t.Fatalf("match-items dispatch count = %d, want 1 for correlated peer names", len(matchIndexes))
+		}
+		if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "matched")); got != 1 {
+			t.Fatalf("matched task count = %d, want 1; listed=%#v", got, listed)
+		}
+		if !support.HasWorkAtCustomerState(listed, matchedTaskWorkID, support.WorkCustomerLocation("task", "matched")) {
+			t.Fatalf("task %q missing public matched outcome; listed=%#v", matchedTaskWorkID, listed)
+		}
+		if support.HasWorkAtCustomerState(listed, matchedTaskWorkID, support.WorkCustomerLocation("task", "ready")) {
+			t.Fatalf("task %q still at ready after SAME_NAME guard released correlated work", matchedTaskWorkID)
+		}
+		assertQuiescentSession(t, session, 1, 0)
+		if runner.CallCount() != 1 {
+			t.Fatalf("provider command calls = %d, want 1 for the correlated match-items dispatch", runner.CallCount())
+		}
+	})
+
+	t.Run("mismatched peer names keep guarded workstation idle", func(t *testing.T) {
+		dir := support.ScaffoldFactory(t, sameNameGuardFactoryConfig())
+		support.WriteAgentConfig(t, dir, "matcher", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+
+		const (
+			mismatchedPlanWorkID = "plan-beta"
+			mismatchedTaskWorkID = "task-gamma"
+			mismatchTraceID      = "trace-same-name-mismatch"
+		)
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			Name:       "beta",
+			WorkID:     mismatchedPlanWorkID,
+			WorkTypeID: "plan",
+			TraceID:    mismatchTraceID,
+			Payload:    []byte(`{"role":"plan"}`),
+		})
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			Name:       "gamma",
+			WorkID:     mismatchedTaskWorkID,
+			WorkTypeID: "task",
+			TraceID:    mismatchTraceID,
+			Payload:    []byte(`{"role":"task"}`),
+		})
+
+		runner := support.NewShapedProviderCommandRunner(
+			codexCommandResult("Done. COMPLETE"),
+		)
+		server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+			FactoryDir: dir,
+			Edges: serviceedges.Edges{
+				ProviderCommandRunner: runner,
+			},
+		})
+		defer server.Stop(t)
+
+		baseURL := server.URL()
+		waitForMinimumWorkAtCustomerState(
+			t,
+			baseURL,
+			support.WorkCustomerLocation("plan", "ready"),
+			1,
+			10*time.Second,
+		)
+		waitForMinimumWorkAtCustomerState(
+			t,
+			baseURL,
+			support.WorkCustomerLocation("task", "ready"),
+			1,
+			10*time.Second,
+		)
+		waitForBlockedSameNameGuardObservation(t, baseURL, 10*time.Second)
+
+		listed := support.ListDefaultSessionWork(t, baseURL)
+		if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "matched")); got != 0 {
+			t.Fatalf("matched task count = %d, want 0 for mismatched peer names; listed=%#v", got, listed)
+		}
+		if !support.HasWorkAtCustomerState(listed, mismatchedTaskWorkID, support.WorkCustomerLocation("task", "ready")) {
+			t.Fatalf("task %q missing public ready state; listed=%#v", mismatchedTaskWorkID, listed)
+		}
+
+		events := server.GetFactoryEvents(t)
+		if indexes := dispatchResponseIndexesForTransition(t, events, "match-items"); len(indexes) != 0 {
+			t.Fatalf("match-items dispatch count = %d, want 0 while peer names mismatch", len(indexes))
+		}
+		if runner.CallCount() != 0 {
+			t.Fatalf("provider command calls = %d, want 0 while SAME_NAME guard blocks mismatched peers", runner.CallCount())
+		}
+	})
+}
+
+func sameNameGuardFactoryConfig() map[string]any {
+	return map[string]any{
+		"name": "same-name-guard-eligibility",
+		"workTypes": []map[string]any{
+			{
+				"name": "plan",
+				"states": []map[string]string{
+					{"name": "ready", "type": "INITIAL"},
+				},
+			},
+			{
+				"name": "task",
+				"states": []map[string]string{
+					{"name": "ready", "type": "INITIAL"},
+					{"name": "matched", "type": "TERMINAL"},
+				},
+			},
+		},
+		"workers": []map[string]string{
+			{"name": "matcher"},
+		},
+		"workstations": []map[string]any{
+			{
+				"name":   "match-items",
+				"worker": "matcher",
+				"inputs": []map[string]any{
+					{"workType": "plan", "state": "ready"},
+					{
+						"workType": "task",
+						"state":    "ready",
+						"guards": []map[string]string{
+							{"type": "SAME_NAME", "matchInput": "plan"},
+						},
+					},
+				},
+				"outputs": []map[string]string{
+					{"workType": "task", "state": "matched"},
+				},
+			},
+		},
+	}
+}
+
 func visitGuardedCompletionFactoryConfig() map[string]any {
 	return map[string]any{
 		"name": "visit-guard-eligibility",
@@ -171,6 +343,45 @@ func assertTerminalWorkCorrelatesToTraceID(
 		return
 	}
 	t.Fatalf("listed work missing story:complete for trace %q", traceID)
+}
+
+func waitForBlockedSameNameGuardObservation(t *testing.T, baseURL string, timeout time.Duration) {
+	t.Helper()
+
+	support.WaitForStatus(t, baseURL, timeout, func(status factoryapi.StatusResponse) bool {
+		return status.Categories.Initial == 2 &&
+			status.Categories.Processing == 0 &&
+			status.Categories.Terminal == 0
+	})
+}
+
+func waitForMinimumWorkAtCustomerState(
+	t *testing.T,
+	baseURL string,
+	location string,
+	want int,
+	timeout time.Duration,
+) {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		listed := support.ListDefaultSessionWork(t, baseURL)
+		if support.CountWorkAtCustomerState(listed, location) >= want {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	listed := support.ListDefaultSessionWork(t, baseURL)
+	t.Fatalf(
+		"%s work count = %d, want at least %d within %s; listed=%#v",
+		location,
+		support.CountWorkAtCustomerState(listed, location),
+		want,
+		timeout,
+		listed,
+	)
 }
 
 func assertQuiescentSession(t *testing.T, session factoryapi.FactorySession, wantTerminal, wantFailed int) {
