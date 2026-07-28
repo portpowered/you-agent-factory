@@ -99,6 +99,7 @@ type fakeWorkRoot struct {
 	invoked                     *bool
 	getWork                     func(context.Context, string, string) (work.ReadModel, error)
 	listWork                    func(context.Context, string, work.ListOptions) (work.ListResult, error)
+	moveWorkForSession          func(context.Context, string, string, string, string) (work.OperatorMoveResult, error)
 	submitWorkRequestForSession func(context.Context, string, work.WorkRequest) (work.WorkRequestSubmitResult, error)
 }
 
@@ -142,6 +143,20 @@ func (fake fakeWorkRoot) SubmitWorkRequestForSession(
 		panic("unexpected SubmitWorkRequestForSession on fake Work root")
 	}
 	return fake.submitWorkRequestForSession(ctx, sessionID, request)
+}
+
+func (fake fakeWorkRoot) MoveWorkForSession(
+	ctx context.Context,
+	sessionID string,
+	workID string,
+	stateName string,
+	requestID string,
+) (work.OperatorMoveResult, error) {
+	fake.markInvoked()
+	if fake.moveWorkForSession == nil {
+		panic("unexpected MoveWorkForSession on fake Work root")
+	}
+	return fake.moveWorkForSession(ctx, sessionID, workID, stateName, requestID)
 }
 
 func assertPackageDirectImportsForbidden(t *testing.T, packagePath string, forbiddenRoots []string) {

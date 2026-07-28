@@ -12,12 +12,14 @@ const (
 	errorCodeAdmissionInvalid         = "work.admission.invalid"
 	errorCodeAdmissionConflict        = "work.admission.conflict"
 	errorCodeAdmissionRejected        = "work.admission.rejected"
-	errorCodeStateAccessNotFound      = "work.state_access.not_found"
-	errorCodeStateAccessInvalid       = "work.state_access.invalid"
+	errorCodeStateAccessNotFound        = "work.state_access.not_found"
+	errorCodeStateAccessInvalid         = "work.state_access.invalid"
+	errorCodeStateAccessAlreadyApplied  = "work.state_access.already_applied"
 	errorMessageAdmissionInvalid      = "invalid Work Request"
 	errorMessageAdmissionConflict     = "Work Request admission conflict"
 	errorMessageAdmissionRejected     = "Work Request rejected"
-	errorMessageStateAccessNotFound = "Work not found"
+	errorMessageStateAccessNotFound       = "Work not found"
+	errorMessageStateAccessAlreadyApplied = "Operator move request was already applied"
 )
 
 func decodeInputErrorEnvelope(context string, err error) ToolErrorEnvelope {
@@ -81,6 +83,15 @@ func submitErrorEnvelope(err error) ToolErrorEnvelope {
 
 func stateAccessErrorEnvelope(err error) ToolErrorEnvelope {
 	switch {
+	case errors.Is(err, work.ErrMoveWorkRequestAlreadyApplied):
+		return ToolErrorEnvelope{
+			Code:      errorCodeStateAccessAlreadyApplied,
+			Message:   errorMessageStateAccessAlreadyApplied,
+			Retryable: false,
+			Details: map[string]any{
+				"reason": err.Error(),
+			},
+		}
 	case errors.Is(err, work.ErrWorkNotFound):
 		return ToolErrorEnvelope{
 			Code:      errorCodeStateAccessNotFound,

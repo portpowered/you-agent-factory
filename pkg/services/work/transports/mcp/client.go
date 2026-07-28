@@ -42,6 +42,7 @@ var canonicalToolHandlers = map[string]canonicalToolHandler{
 	ToolSubmit: handleSubmit,
 	ToolList:   handleList,
 	ToolGet:    handleGet,
+	ToolMove:   handleMove,
 }
 
 func handleSubmit(
@@ -71,6 +72,16 @@ func handleGet(
 ) (json.RawMessage, error) {
 	return callToolJSON(input, "decode get work input", func(request GetInput) ToolResponse[work.ReadModel] {
 		return Get(ctx, service, request)
+	})
+}
+
+func handleMove(
+	ctx context.Context,
+	service work.Service,
+	input json.RawMessage,
+) (json.RawMessage, error) {
+	return callToolJSON(input, "decode move work input", func(request MoveInput) ToolResponse[work.OperatorMoveResult] {
+		return Move(ctx, service, request)
 	})
 }
 

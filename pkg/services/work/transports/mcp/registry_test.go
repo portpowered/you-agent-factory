@@ -170,8 +170,8 @@ func TestIsCanonicalToolHandlerRegistered_ReportsListGetAndSubmitHandlers(t *tes
 	if !workmcp.IsCanonicalToolHandlerRegistered(workmcp.ToolSubmit) {
 		t.Fatal("submit handler should be registered")
 	}
-	if workmcp.IsCanonicalToolHandlerRegistered(workmcp.ToolMove) {
-		t.Fatal("move handler should not be registered yet")
+	if !workmcp.IsCanonicalToolHandlerRegistered(workmcp.ToolMove) {
+		t.Fatal("move handler should be registered")
 	}
 }
 
