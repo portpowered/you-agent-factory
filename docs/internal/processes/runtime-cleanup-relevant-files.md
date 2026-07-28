@@ -878,7 +878,10 @@ in `pkg/services/factory_runtime` (`interfaces.go`) plus root typed errors in
 `pkg/services/factory_runtime` (not `factory_runtime/javascript`, `service`,
 `engine`, or other nested Runtime paths); lock this with
 `pkg/services/factory_sessions/runtime_consumer_import_boundary_test.go` and
-`cmd/pkgboundarycheck` peer-subpackage rules. Do not publish a second peer-facing Runtime authority
+`cmd/pkgboundarycheck` peer-subpackage rules. Lock live control and observation
+through `pkg/services/factory_sessions/internal/services/live_runtime/control_observation_boundary_test.go`
+and gateway forwarding checks in
+`pkg/services/factory_sessions/internal/sessionservice/lifecycle_test.go`. Do not publish a second peer-facing Runtime authority
 (hosting `Lifecycle`/`HostedInstance`, `Factory` run-loop, or
 `JavaScriptWorkflows`) for control, observation, dispatch-plan, or checkpoint
 slices. Prove each published slice with a colocated `factory_test`
