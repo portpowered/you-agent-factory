@@ -291,8 +291,14 @@ func TestFanInReleasesOnlyAfterEveryPrerequisite(t *testing.T) {
 
 	provider.WaitForSecondFinisherGate(t, 15*time.Second)
 
-	partialListed := support.ListDefaultSessionWork(t, baseURL)
-	partialEvents := support.GetFactoryEventsAt(t, baseURL)
+	partialListed, partialEvents := waitForPartialFanInObservation(
+		t,
+		baseURL,
+		15*time.Second,
+		prerequisiteAWorkID,
+		prerequisiteBWorkID,
+		dependentWorkID,
+	)
 	assertFanInBlockedAfterPartialPrerequisites(
 		t,
 		partialListed,
@@ -504,6 +510,44 @@ func startDependencyFactory(
 	inputs.Input.WorkingDirectory = dir
 	daemon = support.StartProcessCommand(t, process, inputs.Input)
 	return server.WaitForURL(t), daemon
+}
+
+func waitForPartialFanInObservation(
+	t *testing.T,
+	baseURL string,
+	timeout time.Duration,
+	prerequisiteAWorkID, prerequisiteBWorkID, dependentWorkID string,
+) (factoryapi.ListWorkResponse, []factoryapi.FactoryEvent) {
+	t.Helper()
+
+	completeLocation := support.WorkCustomerLocation("task", dependencyRequiredState)
+	processingLocation := support.WorkCustomerLocation("task", "processing")
+	initLocation := support.WorkCustomerLocation("task", "init")
+	deadline := time.Now().Add(timeout)
+
+	for time.Now().Before(deadline) {
+		listed := support.ListDefaultSessionWork(t, baseURL)
+		events := support.GetFactoryEventsAt(t, baseURL)
+
+		aComplete := support.HasWorkAtCustomerState(listed, prerequisiteAWorkID, completeLocation)
+		bComplete := support.HasWorkAtCustomerState(listed, prerequisiteBWorkID, completeLocation)
+		if aComplete != bComplete &&
+			!support.HasWorkAtCustomerState(listed, dependentWorkID, completeLocation) &&
+			!support.HasWorkAtCustomerState(listed, dependentWorkID, processingLocation) &&
+			support.HasWorkAtCustomerState(listed, dependentWorkID, initLocation) {
+			return listed, events
+		}
+
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	listed := support.ListDefaultSessionWork(t, baseURL)
+	t.Fatalf(
+		"timed out waiting %s for partial fan-in observation; listed=%#v",
+		timeout,
+		listed,
+	)
+	return listed, nil
 }
 
 func assertFanInBlockedAfterPartialPrerequisites(
