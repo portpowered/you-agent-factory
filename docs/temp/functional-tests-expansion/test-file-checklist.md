@@ -880,6 +880,23 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ### Factory runtime (service-mirrored Petri depth)
 
+- [x] `tests/functional/factory_runtime/peer_import_boundary_test.go`
+  - `TestFunctionalFactoryRuntimePackageUsesPublicProcessImportsOnly`.
+  - `TestProductionPeersReachFactoryRuntimeThroughPublishedSurfacesOnly`.
+
+- [x] `tests/functional/factory_runtime/root_composition/build_process_inert_test.go`
+  - `TestFactoryRuntimeEffectsRemainInertThroughRootBuildProcessConstruction`.
+
+- [x] `tests/functional/factory_runtime/root_composition/lifecycle_activation_test.go`
+  - `TestFactoryRuntimeControlObservationAndDispatchPlanActivateThroughRootBuildProcessAfterLifecycle`.
+
+- [x] `tests/functional/factory_runtime/root_composition/packaged_root_shape_test.go`
+  - `TestFactoryRuntimePackagedRootShapeMatchesCanonicalServiceLayout`.
+
+- [x] `tests/functional/factory_runtime/root_composition/workflow_orchestration_activation_test.go`
+  - `TestFactoryRuntimeJavaScriptWorkflowActivatesThroughRootBuildProcessAfterLifecycle`.
+  - `TestFactoryRuntimePetriOrchestrationActivatesThroughRootBuildProcessAfterLifecycle`.
+
 - [x] `tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go`
   - `TestPetriAuthoredEligibilityGuardBlocksDispatchUntilSatisfied`.
   - `TestPetriParentOrSameNameGuardReleasesExpectedWork`.

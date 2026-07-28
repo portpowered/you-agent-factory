@@ -9401,6 +9401,7 @@
       "you-agent-factory/tests/functional/factory_definitions/transports/cli/named_lifecycle": 3,
       "you-agent-factory/tests/functional/factory_definitions/transports/cli/validate_persist": 3,
       "you-agent-factory/tests/functional/factory_runtime/orchestrators/petri/guards": 3,
+      "you-agent-factory/tests/functional/factory_runtime/root_composition": 5,
       "you-agent-factory/tests/functional/factory_runtime/orchestrators/petri/routing": 3,
       "you-agent-factory/tests/functional/factory_visualization": 6,
       "you-agent-factory/tests/functional/guards_batch": 15,
