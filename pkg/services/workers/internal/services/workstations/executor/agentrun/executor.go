@@ -198,6 +198,7 @@ func agentRunInferenceRequest(
 		WorkerType:        request.WorkerType,
 		WorkstationType:   request.WorkstationType,
 		RunnerID:          request.RunnerID,
+		ExecutorProvider:  request.ExecutorProvider,
 		ProjectID:         request.ProjectID,
 		InputTokens:       cloneRawInputTokens(request.InputTokens),
 		ModelOperation:    request.ModelOperation,

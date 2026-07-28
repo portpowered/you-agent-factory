@@ -41,6 +41,7 @@ type Edges struct {
 	CLIObserver                                     platformprocess.CLIObserver
 	PlatformProcessClock                            platformprocess.Clock
 	PlatformProcessCommandFactory                   platformprocess.CommandFactory
+	ProvidersExecutableLocator                      platformprocess.ExecutableLocator
 	ProviderCommandRunner                           platformprocess.CommandRunner
 	AgyPTYHost                                      platformpty.Host
 	AgyPTYClock                                     platformclock.Source
@@ -188,6 +189,9 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.PlatformProcessCommandFactory != nil {
 		defaults.PlatformProcessCommandFactory = replacements.PlatformProcessCommandFactory
+	}
+	if replacements.ProvidersExecutableLocator != nil {
+		defaults.ProvidersExecutableLocator = replacements.ProvidersExecutableLocator
 	}
 	if replacements.ProviderCommandRunner != nil {
 		defaults.ProviderCommandRunner = replacements.ProviderCommandRunner

@@ -22,6 +22,7 @@ import (
 	factorydefinitionscli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	acpcli "github.com/portpowered/infinite-you/pkg/transports/cli/acp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
@@ -126,6 +127,7 @@ type CommandOperations struct {
 	MoveWork                          MoveWorkOperation
 	VisualizeWork                     VisualizeWorkOperation
 	OpenRunSelection                  runcli.SelectionFactory
+	ACP                               acpcli.Service
 }
 
 // CommandFactory constructs a fresh Cobra tree for each invocation from
@@ -176,6 +178,7 @@ type CommandFactory struct {
 	MoveWork              func(workcli.MoveConfig) error
 	VisualizeWork         func(workcli.VisualizeConfig) error
 	openRunSelection      runcli.SelectionFactory
+	acp                   acpcli.Service
 }
 
 // NewCommandFactory copies the Wire-built graph without installing defaults.
@@ -222,6 +225,7 @@ func NewCommandFactory(operations CommandOperations) CommandFactory {
 		MoveWork:                          operations.MoveWork,
 		VisualizeWork:                     operations.VisualizeWork,
 		openRunSelection:                  operations.OpenRunSelection,
+		acp:                               operations.ACP,
 	}
 }
 
@@ -370,6 +374,15 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 		return err
 	}
 	cfg.HomeDir = homeDir
+	if rootOptions.loadOperatorConfig != nil {
+		operatorConfig, loadErr := rootOptions.loadOperatorConfig(operatorconfig.DefaultConfigPath(homeDir))
+		if loadErr != nil && !errors.Is(loadErr, syscall.ENOTDIR) {
+			return loadErr
+		}
+		if loadErr == nil {
+			cfg.ACPIntegrations = append([]operatorconfig.ACPIntegration(nil), operatorConfig.Workers.ACP.Integrations...)
+		}
+	}
 	modelCacheDir, _, err := lookupProcessEnvironment(
 		rootOptions,
 		runcli.ModelCacheDirEnvironment,

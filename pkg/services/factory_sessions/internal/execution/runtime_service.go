@@ -929,6 +929,7 @@ func (s *JavaScriptRuntimeService) childExecutorHooks(mode, sessionID string) fa
 			records,
 			policy.MaxRetries,
 			s.childValues,
+			s.projectRoot,
 		)
 	}
 	return hooks

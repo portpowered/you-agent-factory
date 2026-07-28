@@ -106,6 +106,20 @@ func RunFactoryToCompletionWithEdgesAndObservations(
 	return session, work, events
 }
 
+// RunFactoryToCompletionWithConfiguredHome exposes the invocation-local
+// operator home before process start so functional tests can author settings
+// through the same filesystem contract consumed by the CLI.
+func RunFactoryToCompletionWithConfiguredHome(
+	t testing.TB,
+	dir string,
+	overrides serviceedges.Edges,
+	timeout time.Duration,
+	configure func(string),
+) (factoryapi.FactorySession, factoryapi.ListWorkResponse, []factoryapi.FactoryEvent) {
+	session, work, events, _ := runFactoryToCompletionWithHome(t, dir, overrides, timeout, false, configure)
+	return session, work, events
+}
+
 // RunFactoryToCompletionWithEdgesAndResponseEvents also reads the public
 // ephemeral response-event stream before stopping the root-built process.
 func RunFactoryToCompletionWithEdgesAndResponseEvents(
@@ -134,6 +148,22 @@ func runFactoryToCompletion(
 	[]factoryapi.FactoryEvent,
 	[]factoryapi.FactoryResponseEvent,
 ) {
+	return runFactoryToCompletionWithHome(t, dir, overrides, timeout, captureResponseEvents, nil)
+}
+
+func runFactoryToCompletionWithHome(
+	t testing.TB,
+	dir string,
+	overrides serviceedges.Edges,
+	timeout time.Duration,
+	captureResponseEvents bool,
+	configure func(string),
+) (
+	factoryapi.FactorySession,
+	factoryapi.ListWorkResponse,
+	[]factoryapi.FactoryEvent,
+	[]factoryapi.FactoryResponseEvent,
+) {
 	t.Helper()
 
 	server := NewProcessAPIServer()
@@ -149,6 +179,9 @@ func runFactoryToCompletion(
 		"--no-record",
 	})
 	homeDir := t.TempDir()
+	if configure != nil {
+		configure(homeDir)
+	}
 	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	inputs.Input.WorkingDirectory = dir
 	t.Cleanup(func() {

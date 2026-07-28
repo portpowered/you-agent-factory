@@ -612,7 +612,7 @@ func assertFactoryConfigSmokeGeneratedWorkers(t *testing.T, factory factoryapi.F
 	if (*factory.Workers)[0].ModelProvider == nil || *(*factory.Workers)[0].ModelProvider != factoryapi.WorkerModelProviderClaude {
 		t.Fatalf("generated boundary worker modelProvider = %#v, want CLAUDE", (*factory.Workers)[0].ModelProvider)
 	}
-	if (*factory.Workers)[0].ExecutorProvider == nil || *(*factory.Workers)[0].ExecutorProvider != factoryapi.WorkerProviderScriptWrap {
+	if (*factory.Workers)[0].ExecutorProvider == nil || *(*factory.Workers)[0].ExecutorProvider != factoryapi.WorkerProvider("SCRIPT_WRAP") {
 		t.Fatalf("generated boundary worker executorProvider = %#v, want SCRIPT_WRAP", (*factory.Workers)[0].ExecutorProvider)
 	}
 }

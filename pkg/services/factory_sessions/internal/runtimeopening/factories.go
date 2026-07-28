@@ -11,6 +11,7 @@ import (
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -94,6 +95,7 @@ type WorkersRuntimeFactory = func(
 	workers.Provider,
 	func() time.Time,
 	work.ContentMaterializer,
+	[]providers.Integration,
 ) (workers.RuntimeService, error)
 
 type AutomationHostedSourcesFactory = automations.HostedSourcesFactory

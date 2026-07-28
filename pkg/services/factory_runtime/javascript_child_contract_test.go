@@ -147,18 +147,19 @@ func TestRootService_RootOnlyPeerReturnsTypedFailures(t *testing.T) {
 func TestNormalize_AcceptsAndTrimsCanonicalFields(t *testing.T) {
 	t.Parallel()
 	got, err := factory.NormalizeJavaScriptChild(map[string]any{
-		"prompt":          "  review this  ",
-		"label":           "  reviewer  ",
-		"preset":          "  careful  ",
-		"modelProvider":   "  codex  ",
-		"model":           "  gpt-test  ",
-		"reasoningEffort": "  high  ",
+		"prompt":           "  review this  ",
+		"label":            "  reviewer  ",
+		"preset":           "  careful  ",
+		"executorProvider": "  cursor-acp  ",
+		"modelProvider":    "  codex  ",
+		"model":            "  gpt-test  ",
+		"reasoningEffort":  "  high  ",
 	})
 	if err != nil {
 		t.Fatalf("Normalize() error = %v", err)
 	}
 	want := factory.JavaScriptChildSpec{
-		Prompt: "review this", Label: "reviewer", Preset: "careful",
+		Prompt: "review this", Label: "reviewer", Preset: "careful", ExecutorProvider: "cursor-acp",
 		ModelProvider: "codex", Model: "gpt-test", ReasoningEffort: "high",
 	}
 	if got != want {

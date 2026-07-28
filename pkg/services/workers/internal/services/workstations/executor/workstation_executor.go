@@ -570,6 +570,7 @@ func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch work.Wo
 		WorkstationType:          dispatch.WorkstationName,
 		RunnerID:                 selection.RunnerID,
 		RunnerSelectionSource:    selection.Source,
+		ExecutorProvider:         workerDef.ExecutorProvider,
 		ProjectID:                requestContext.ProjectID,
 		FactorySessionID:         requestContext.SessionID,
 		InputTokens:              InputTokens(requestContext.InputTokens...),

@@ -416,6 +416,71 @@
       "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
+      "stableId": "cli/you.workers",
+      "name": "you workers",
+      "interface": "cli",
+      "classification": "grouping",
+      "status": "not-applicable",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "CLI grouping node has no independently runnable customer behavior; its child commands remain separately inventoried."
+    },
+    {
+      "stableId": "cli/you.workers.acp",
+      "name": "you workers acp",
+      "interface": "cli",
+      "classification": "grouping",
+      "status": "not-applicable",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "CLI grouping node has no independently runnable customer behavior; its child commands remain separately inventoried."
+    },
+    {
+      "stableId": "cli/you.workers.acp.add",
+      "name": "you workers acp add",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "covered",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/providers/acp/catalog_cli_test.go::TestRootBuiltACPCommandsAddListDeleteOneSettingsBackedCatalogEntry",
+          "boundary": "cli"
+        }
+      ]
+    },
+    {
+      "stableId": "cli/you.workers.acp.delete",
+      "name": "you workers acp delete",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "covered",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/providers/acp/catalog_cli_test.go::TestRootBuiltACPCommandsAddListDeleteOneSettingsBackedCatalogEntry",
+          "boundary": "cli"
+        }
+      ]
+    },
+    {
+      "stableId": "cli/you.workers.acp.list",
+      "name": "you workers acp list",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "covered",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/providers/acp/catalog_cli_test.go::TestRootBuiltACPCommandsAddListDeleteOneSettingsBackedCatalogEntry",
+          "boundary": "cli"
+        }
+      ]
+    },
+    {
       "stableId": "mcp/mcp.tool.you.factory_session.control",
       "name": "you.factory_session.control",
       "interface": "mcp",

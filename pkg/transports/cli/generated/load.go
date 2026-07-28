@@ -22,6 +22,11 @@ func WorkFamilyManifest() (climanifest.Manifest, error) {
 	return workFamilyManifestValue(), nil
 }
 
+// WorkersFamilyManifest returns generated worker-integration command metadata.
+func WorkersFamilyManifest() (climanifest.Manifest, error) {
+	return workersFamilyManifestValue(), nil
+}
+
 // FactoryConfigInitFamilyManifest returns generated §4.3 metadata for the
 // factory/config/init command family.
 func FactoryConfigInitFamilyManifest() (climanifest.Manifest, error) {

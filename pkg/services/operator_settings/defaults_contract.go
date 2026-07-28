@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
 const (
@@ -52,7 +53,23 @@ type Config struct {
 	BackendScopeID string
 	Defaults       Defaults
 	Runtime        RuntimeSettings
+	Workers        WorkerSettings
 	WorkerPresets  []WorkerPreset
+}
+
+type WorkerSettings struct {
+	ACP ACPSettings
+}
+
+type ACPSettings struct {
+	Integrations []ACPIntegration
+}
+
+type ACPIntegration struct {
+	ID        string
+	Name      string
+	Transport string
+	Command   string
 }
 
 // RuntimeArtifactSettings controls one rolling runtime observability artifact.
@@ -124,6 +141,10 @@ func (cfg Config) Normalize() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	workers, err := cfg.Workers.normalize()
+	if err != nil {
+		return Config{}, err
+	}
 	return Config{
 		BackendScopeID: strings.TrimSpace(cfg.BackendScopeID),
 		Defaults: Defaults{
@@ -131,8 +152,40 @@ func (cfg Config) Normalize() (Config, error) {
 			WorkerModel:         strings.TrimSpace(cfg.Defaults.WorkerModel),
 		},
 		Runtime:       runtime,
+		Workers:       workers,
 		WorkerPresets: presets,
 	}, nil
+}
+
+func (settings WorkerSettings) normalize() (WorkerSettings, error) {
+	integrations := make([]ACPIntegration, len(settings.ACP.Integrations))
+	ids := make(map[string]struct{}, len(integrations))
+	names := make(map[string]struct{}, len(integrations))
+	for index, integration := range settings.ACP.Integrations {
+		integration = ACPIntegration{
+			ID: strings.TrimSpace(integration.ID), Name: strings.TrimSpace(integration.Name),
+			Transport: strings.ToLower(strings.TrimSpace(integration.Transport)), Command: strings.TrimSpace(integration.Command),
+		}
+		if integration.ID == "" || integration.Name == "" || integration.Command == "" {
+			return WorkerSettings{}, fmt.Errorf("workers.acp.integrations[%d] requires non-empty id, name, and command", index)
+		}
+		if err := providers.ID(integration.Name).Validate(); err != nil {
+			return WorkerSettings{}, fmt.Errorf("workers.acp.integrations[%d].name: %w", index, err)
+		}
+		if integration.Transport != "stdio" {
+			return WorkerSettings{}, fmt.Errorf("workers.acp.integrations[%d] %q has unsupported transport %q: accepted value is stdio", index, integration.Name, integration.Transport)
+		}
+		if _, exists := ids[integration.ID]; exists {
+			return WorkerSettings{}, fmt.Errorf("workers.acp.integrations[%d].id %q is duplicated", index, integration.ID)
+		}
+		if _, exists := names[integration.Name]; exists {
+			return WorkerSettings{}, fmt.Errorf("workers.acp.integrations[%d].name %q is duplicated", index, integration.Name)
+		}
+		ids[integration.ID] = struct{}{}
+		names[integration.Name] = struct{}{}
+		integrations[index] = integration
+	}
+	return WorkerSettings{ACP: ACPSettings{Integrations: integrations}}, nil
 }
 
 func (settings RuntimeArtifactSettings) normalize(fieldPath string) (RuntimeArtifactSettings, error) {

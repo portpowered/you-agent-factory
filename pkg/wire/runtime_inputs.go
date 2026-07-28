@@ -19,6 +19,8 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
@@ -96,6 +98,7 @@ func provideRuntimeOpeningRequestFactory() runcli.RuntimeOpeningRequestFactory {
 				RunnerID:                          cfg.RunnerID,
 				MockWorkers:                       mockWorkers,
 				InvocationSkipPermissionsOverride: cfg.InvocationSkipPermissionsOverride,
+				ProviderIntegrations:              mapACPProviderIntegrations(cfg.ACPIntegrations),
 			},
 			Recordings: recordings.RuntimeOpeningRequest{
 				RecordPath: cfg.RecordPath,
@@ -115,6 +118,19 @@ func provideRuntimeOpeningRequestFactory() runcli.RuntimeOpeningRequestFactory {
 			},
 		}
 	}
+}
+
+func mapACPProviderIntegrations(values []operatorsettings.ACPIntegration) []providers.Integration {
+	if len(values) == 0 {
+		return nil
+	}
+	result := make([]providers.Integration, len(values))
+	for index, value := range values {
+		result[index] = providers.Integration{
+			ID: value.ID, Name: providers.ID(value.Name), Transport: value.Transport, Command: value.Command,
+		}
+	}
+	return result
 }
 
 // provideRuntimeInputResolver merges process edges into the exact opening

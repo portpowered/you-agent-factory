@@ -229,6 +229,7 @@ func loadGeneratedManifests() ([]climanifest.Manifest, []climanifest.Manifest, e
 	loaders := []func() (climanifest.Manifest, error){
 		generated.RepresentativeFamilyManifest, generated.SessionFamilyManifest,
 		generated.WorkFamilyManifest, generated.FactoryConfigInitFamilyManifest,
+		generated.WorkersFamilyManifest,
 		generated.ModelsDocsFamilyManifest, generated.RunSubmitFamilyManifest,
 		generated.MCPFamilyManifest,
 	}

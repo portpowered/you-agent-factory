@@ -85,6 +85,13 @@ func decodeTestConfig(data []byte) (operatorsettings.Config, error) {
 			config.WorkerPresets = append(config.WorkerPresets, mapped)
 		}
 	}
+	if generated.Workers != nil && generated.Workers.Acp != nil && generated.Workers.Acp.Integrations != nil {
+		for _, integration := range *generated.Workers.Acp.Integrations {
+			config.Workers.ACP.Integrations = append(config.Workers.ACP.Integrations, ACPIntegration{
+				ID: integration.Id, Name: integration.Name, Transport: string(integration.Transport), Command: integration.Command,
+			})
+		}
+	}
 	return config.Normalize()
 }
 
@@ -118,6 +125,16 @@ func encodeTestConfig(config operatorsettings.Config) ([]byte, error) {
 			}
 		}
 		generated.WorkerPresets = &presets
+	}
+	if config.Workers.ACP.Integrations != nil {
+		integrations := make([]factoryapi.GlobalConfigACPIntegration, len(config.Workers.ACP.Integrations))
+		for index, integration := range config.Workers.ACP.Integrations {
+			integrations[index] = factoryapi.GlobalConfigACPIntegration{
+				Id: integration.ID, Name: integration.Name, Command: integration.Command,
+				Transport: factoryapi.GlobalConfigACPIntegrationTransport(integration.Transport),
+			}
+		}
+		generated.Workers = &factoryapi.GlobalConfigWorkers{Acp: &factoryapi.GlobalConfigACPSettings{Integrations: &integrations}}
 	}
 	payload, err := json.MarshalIndent(generated, "", "  ")
 	return append(payload, '\n'), err

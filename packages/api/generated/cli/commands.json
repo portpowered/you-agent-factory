@@ -8899,6 +8899,122 @@
         "id": "you.docs.handler"
       }
     },
+    "you.workers": {
+      "id": "you.workers",
+      "name": "workers",
+      "path": "you workers",
+      "aliases": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.workers",
+        "documentation": {
+          "title": {"id": "you.workers.title", "canonicalEnglish": "Manage worker execution integrations"},
+          "description": {"id": "you.workers.description", "canonicalEnglish": "Inspect and configure customer-facing worker execution integrations."}
+        },
+        "examples": ["you workers acp list"],
+        "visibility": "public",
+        "sourceHash": "de337db29cafe8cc0ef433569f086c6a8d844036cbc576377c480980804ec19c"
+      },
+      "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.workers", "since": "1.0.0", "state": "active"},
+      "visibility": "visible",
+      "runnable": false,
+      "usage": {"line": "workers"}
+    },
+    "you.workers.acp": {
+      "id": "you.workers.acp",
+      "name": "acp",
+      "path": "you workers acp",
+      "aliases": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.workers.acp",
+        "documentation": {
+          "title": {"id": "you.workers.acp.title", "canonicalEnglish": "Manage ACP provider integrations"},
+          "description": {"id": "you.workers.acp.description", "canonicalEnglish": "List built-in Agent Client Protocol providers and add or delete operator-configured ACP providers."}
+        },
+        "examples": ["you workers acp list"],
+        "visibility": "public",
+        "sourceHash": "de337db29cafe8cc0ef433569f086c6a8d844036cbc576377c480980804ec19c"
+      },
+      "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.workers.acp", "since": "1.0.0", "state": "active"},
+      "visibility": "visible",
+      "runnable": false,
+      "usage": {"line": "acp"}
+    },
+    "you.workers.acp.list": {
+      "id": "you.workers.acp.list",
+      "name": "list",
+      "path": "you workers acp list",
+      "aliases": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.workers.acp.list",
+        "documentation": {
+          "title": {"id": "you.workers.acp.list.title", "canonicalEnglish": "List ACP providers"},
+          "description": {"id": "you.workers.acp.list.description", "canonicalEnglish": "List built-in and operator-configured ACP provider identities with their execution kind and current availability."}
+        },
+        "examples": ["you workers acp list"],
+        "visibility": "public",
+        "sourceHash": "de337db29cafe8cc0ef433569f086c6a8d844036cbc576377c480980804ec19c"
+      },
+      "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.workers.acp.list", "since": "1.0.0", "state": "active"},
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {"line": "list"},
+      "handler": {"id": "you.workers.acp.list.handler"}
+    },
+    "you.workers.acp.add": {
+      "id": "you.workers.acp.add",
+      "name": "add",
+      "path": "you workers acp add",
+      "aliases": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.workers.acp.add",
+        "documentation": {
+          "title": {"id": "you.workers.acp.add.title", "canonicalEnglish": "Add an ACP provider"},
+          "description": {"id": "you.workers.acp.add.description", "canonicalEnglish": "Add or replace one operator-configured stdio ACP provider integration."}
+        },
+        "examples": ["you workers acp add --name cursor-acp --transport stdio --argument 'cursor-agent acp'"],
+        "visibility": "public",
+        "sourceHash": "de337db29cafe8cc0ef433569f086c6a8d844036cbc576377c480980804ec19c"
+      },
+      "flags": {
+        "you.workers.acp.add.flag.name": {"id": "you.workers.acp.add.flag.name", "long": "name", "shorthand": "", "aliases": [], "scope": "local", "valueType": "string", "required": true, "default": "", "changedDefault": false, "noOptionDefault": "", "repeatable": false, "normalization": "trim", "completion": "none", "binding": "", "visibility": "visible", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.workers.acp.add.flag.name", "since": "1.0.0", "state": "active"}},
+        "you.workers.acp.add.flag.transport": {"id": "you.workers.acp.add.flag.transport", "long": "transport", "shorthand": "", "aliases": [], "scope": "local", "valueType": "string", "required": false, "default": "stdio", "changedDefault": false, "noOptionDefault": "", "repeatable": false, "normalization": "lowercase-trim", "completion": "none", "binding": "", "visibility": "visible", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.workers.acp.add.flag.transport", "since": "1.0.0", "state": "active"}},
+        "you.workers.acp.add.flag.argument": {"id": "you.workers.acp.add.flag.argument", "long": "argument", "shorthand": "", "aliases": [], "scope": "local", "valueType": "string", "required": true, "default": "", "changedDefault": false, "noOptionDefault": "", "repeatable": false, "normalization": "trim", "completion": "none", "binding": "", "visibility": "visible", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.workers.acp.add.flag.argument", "since": "1.0.0", "state": "active"}}
+      },
+      "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.workers.acp.add", "since": "1.0.0", "state": "active"},
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {"line": "add --name <provider> --transport stdio --argument <command>"},
+      "handler": {"id": "you.workers.acp.add.handler"}
+    },
+    "you.workers.acp.delete": {
+      "id": "you.workers.acp.delete",
+      "name": "delete",
+      "path": "you workers acp delete",
+      "aliases": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.workers.acp.delete",
+        "documentation": {
+          "title": {"id": "you.workers.acp.delete.title", "canonicalEnglish": "Delete an ACP provider"},
+          "description": {"id": "you.workers.acp.delete.description", "canonicalEnglish": "Delete one operator-configured ACP provider integration without removing built-in provider metadata."}
+        },
+        "examples": ["you workers acp delete --name cursor-acp"],
+        "visibility": "public",
+        "sourceHash": "de337db29cafe8cc0ef433569f086c6a8d844036cbc576377c480980804ec19c"
+      },
+      "flags": {
+        "you.workers.acp.delete.flag.name": {"id": "you.workers.acp.delete.flag.name", "long": "name", "shorthand": "", "aliases": [], "scope": "local", "valueType": "string", "required": true, "default": "", "changedDefault": false, "noOptionDefault": "", "repeatable": false, "normalization": "trim", "completion": "none", "binding": "", "visibility": "visible", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.workers.acp.delete.flag.name", "since": "1.0.0", "state": "active"}}
+      },
+      "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.workers.acp.delete", "since": "1.0.0", "state": "active"},
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {"line": "delete --name <provider>"},
+      "handler": {"id": "you.workers.acp.delete.handler"}
+    },
     "you.mcp": {
       "aliases": [],
       "channels": {

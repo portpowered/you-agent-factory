@@ -167,6 +167,12 @@ func (s *Service) runtimeRunnerDecorators(
 				inner, s.models, s.modelsScope, factoryCfg, definition,
 			)
 		},
+		func(inner workers.Runner, _ *interfaces.FactoryWorkerConfig) workers.Runner {
+			if s.providers == nil {
+				return inner
+			}
+			return providersExecutionRunner{next: inner, providers: s.providers, publish: progressPublisher}
+		},
 		func(inner workers.Runner, definition *interfaces.FactoryWorkerConfig) workers.Runner {
 			return modelrecording.NewRunner(inner, factoryCfg, definition, recorder, now)
 		},

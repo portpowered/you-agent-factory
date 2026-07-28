@@ -36,6 +36,12 @@ func TestLoadFileConfig_DecodesGeneratedContractAndNormalizesDomainValues(t *tes
 				"compress": true
 			}
 		},
+		"workers": {"acp":{"integrations":[{
+			"id":" entry-1 ",
+			"name":" cursor-acp ",
+			"transport":"stdio",
+			"command":" cursor-agent acp "
+		}]}},
 		"workerPresets": [{
 			"id": " research ",
 			"modelProvider": "openai",
@@ -73,6 +79,10 @@ func TestLoadFileConfig_DecodesGeneratedContractAndNormalizesDomainValues(t *tes
 	if len(config.WorkerPresets) != 1 || config.WorkerPresets[0] != wantPreset {
 		t.Fatalf("worker presets = %#v, want %#v", config.WorkerPresets, []operatorsettings.WorkerPreset{wantPreset})
 	}
+	wantIntegration := operatorsettings.ACPIntegration{ID: "entry-1", Name: "cursor-acp", Transport: "stdio", Command: "cursor-agent acp"}
+	if !reflect.DeepEqual(config.Workers.ACP.Integrations, []operatorsettings.ACPIntegration{wantIntegration}) {
+		t.Fatalf("ACP integrations = %#v, want %#v", config.Workers.ACP.Integrations, wantIntegration)
+	}
 }
 
 func TestEncode_RoundTripsCanonicalIdentityAndSiblingSettings(t *testing.T) {
@@ -85,6 +95,9 @@ func TestEncode_RoundTripsCanonicalIdentityAndSiblingSettings(t *testing.T) {
 		WorkerPresets: []operatorsettings.WorkerPreset{{
 			ID: "research", ModelProvider: "CODEX", Model: "gpt-5.4-mini", ReasoningEffort: "high",
 		}},
+		Workers: operatorsettings.WorkerSettings{ACP: operatorsettings.ACPSettings{Integrations: []operatorsettings.ACPIntegration{{
+			ID: "entry-1", Name: "cursor-acp", Transport: "stdio", Command: "cursor-agent acp",
+		}}}},
 	}
 
 	payload, err := globalconfig.Encode(want)
