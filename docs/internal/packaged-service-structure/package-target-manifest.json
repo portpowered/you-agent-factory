@@ -178,6 +178,7 @@
     "pkg/services/factory_runtime/tooling/javascript/callbehavior",
     "pkg/services/factory_runtime/tooling/javascript/catalog",
     "pkg/services/factory_runtime/tooling/javascript/symbolidentity",
+    "pkg/services/factory_runtime/transports/cli",
     "pkg/services/factory_runtime/wire",
     "pkg/services/factory_sessions",
     "pkg/services/factory_sessions/internal/applicationopening",
@@ -1170,6 +1171,11 @@
       "packagePath": "pkg/services/factory_runtime/tooling/javascript/symbolidentity",
       "disposition": "move",
       "destination": "factory_runtime/internal/services/orchestration"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/transports/cli",
+      "disposition": "retain",
+      "destination": "factory_runtime"
     },
     {
       "packagePath": "pkg/services/factory_runtime/wire",
