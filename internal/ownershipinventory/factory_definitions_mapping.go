@@ -20,8 +20,8 @@ var factoryDefinitionsMoveRules = []factoryDefinitionsMoveRule{
 	{exact: "namedfactories", prefix: "namedfactories/", subservice: "catalog"},
 	{exact: "namedpaths", prefix: "namedpaths/", subservice: "catalog"},
 	{exact: "persistence", prefix: "persistence/", subservice: "catalog"},
-	{exact: "resource", prefix: "resource/", subservice: "catalog"},
-	{exact: "definition", prefix: "definition/", subservice: "compilation"},
+	{exact: "resource", prefix: "resource/", subservice: "validation"},
+	{exact: "definition", prefix: "definition/"},
 	{exact: "loading", prefix: "loading/", subservice: "compilation"},
 	{exact: "loadedsource", prefix: "loadedsource/", subservice: "compilation"},
 	{exact: "validation", prefix: "validation/", subservice: "validation"},
@@ -30,17 +30,19 @@ var factoryDefinitionsMoveRules = []factoryDefinitionsMoveRule{
 	{exact: "editable", prefix: "editable/", subservice: "snapshots_portability"},
 	{exact: "replayconfig", prefix: "replayconfig/", subservice: "snapshots_portability"},
 	{exact: "packagedinstallation", prefix: "packagedinstallation/", subservice: "distribution"},
+	{exact: "packages/goal", prefix: "packages/goal/", subservice: "invocation_policy"},
 	{exact: "packages", prefix: "packages/", subservice: "distribution"},
-	{exact: "decisionenvelope", prefix: "decisionenvelope/"},
-	{exact: "invocationinterpolation", prefix: "invocationinterpolation/"},
-	{exact: "invocationoutput", prefix: "invocationoutput/"},
-	{exact: "invocationworktype", prefix: "invocationworktype/"},
-	{exact: "quorumpolicy", prefix: "quorumpolicy/"},
-	{exact: "workpropagation", prefix: "workpropagation/"},
-	{exact: "workstationexecution", prefix: "workstationexecution/"},
-	{exact: "ttsobservability", prefix: "ttsobservability/"},
+	{exact: "decisionenvelope", prefix: "decisionenvelope/", subservice: "invocation_policy"},
+	{exact: "invocationinterpolation", prefix: "invocationinterpolation/", subservice: "invocation_policy"},
+	{exact: "invocationoutput", prefix: "invocationoutput/", subservice: "invocation_policy"},
+	{exact: "invocationworktype", prefix: "invocationworktype/", subservice: "invocation_policy"},
+	{exact: "quorumpolicy", prefix: "quorumpolicy/", subservice: "invocation_policy"},
+	{exact: "workpropagation", prefix: "workpropagation/", subservice: "invocation_policy"},
+	{exact: "workstationexecution", prefix: "workstationexecution/", subservice: "invocation_policy"},
+	{exact: "ttsobservability", prefix: "ttsobservability/", subservice: "invocation_policy"},
 	{exact: "runtimeconfig", prefix: "runtimeconfig/"},
-	{exact: "workers", prefix: "workers/"},
+	{exact: "namevalue", prefix: "namevalue/", subservice: "validation"},
+	{exact: "workers", prefix: "workers/", subservice: "validation"},
 	{exact: "clonetests", prefix: "clonetests/"},
 	{exact: "systeminitializationtests", prefix: "systeminitializationtests/"},
 	{prefix: "internal/testcomposition"},
@@ -92,8 +94,6 @@ func isFactoryDefinitionsCanonicalRetain(rest string) bool {
 		return true
 	case strings.HasPrefix(rest, "internal/contracts"):
 		return true
-	case rest == "namevalue" || strings.HasPrefix(rest, "namevalue/"):
-		return true
 	default:
 		return false
 	}
@@ -118,9 +118,6 @@ func factoryDefinitionsSuccessor(subservice string) string {
 func factoryDefinitionsDeletionCondition(subservice, rest string) string {
 	if strings.HasPrefix(rest, "internal/contracts") {
 		return "CLN-DEF-CONTRACTS cutover: owner-internal contracts implementation retained after public mega-barrel deletion"
-	}
-	if rest == "namevalue" || strings.HasPrefix(rest, "namevalue/") {
-		return "CLN-DEF-CONTRACTS cutover: shared namevalue contract retained at owner root until workers/root cycle is inverted"
 	}
 	if subservice == "" {
 		return "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"

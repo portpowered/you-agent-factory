@@ -21,9 +21,10 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	providersessionswire "github.com/portpowered/infinite-you/pkg/services/provider_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	systeminitialization "github.com/portpowered/infinite-you/pkg/services/system_initialization"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
@@ -109,14 +110,14 @@ type Edges struct {
 	FactoryDefinitionAuthoredWriterFileSystem       factorydefinitions.AuthoredLayoutWriterFileSystem
 	FactoryDefinitionScaffoldFileSystem             factorydefinitions.ScaffoldFileSystem
 	FactoryDefinitionScaffoldOutput                 factorydefinitions.ScaffoldOutput
-	ProviderSessionFileSystem                       providersessions.FileSystem
-	ProviderSessionResolveHomeDirectory             providersessions.ResolveHomeDirectory
-	ProviderSessionCodexWalkDirectory               providersessions.CodexWalkDirectory
-	ProviderSessionCodexResolveSymlinks             providersessions.CodexResolveSymlinks
-	ProviderSessionCursorWalkDirectory              providersessions.CursorWalkDirectory
-	ProviderSessionCursorResolveSymlinks            providersessions.CursorResolveSymlinks
-	ProviderSessionCursorOpenDatabase               providersessions.CursorOpenSQLDatabase
-	ProviderSessionOperatingSystem                  providersessions.OperatingSystem
+	ProviderSessionFileSystem                       providersessionswire.FileSystem
+	ProviderSessionResolveHomeDirectory             providersessionswire.ResolveHomeDirectory
+	ProviderSessionCodexWalkDirectory               providersessionswire.CodexWalkDirectory
+	ProviderSessionCodexResolveSymlinks             providersessionswire.CodexResolveSymlinks
+	ProviderSessionCursorWalkDirectory              providersessionswire.CursorWalkDirectory
+	ProviderSessionCursorResolveSymlinks            providersessionswire.CursorResolveSymlinks
+	ProviderSessionCursorOpenDatabase               providersessionswire.CursorOpenSQLDatabase
+	ProviderSessionOperatingSystem                  providersessionswire.OperatingSystem
 	OperatorSettingsFileSystem                      operatorsettings.FileSystem
 	OperatorSettingsCreateTemporaryFile             operatorsettings.CreateTemporaryFile
 	OperatorSettingsIDGenerator                     operatorsettings.IDGenerator
@@ -133,7 +134,9 @@ type Edges struct {
 	APIServerStarter          platformhttpserver.Starter
 	BrowserOpener             platformbrowser.Opener
 	InvocationMetricsRecorder factorysessions.InvocationMetricsRecorder
-	RuntimeHostObserver       factorysessions.RuntimeHostObserver
+	RuntimeHostObserver                factorysessions.RuntimeHostObserver
+	FactoryVisualizationSink           factoryvisualization.Sink
+	FactoryVisualizationRootObserver   factoryvisualization.RootObserver
 	ModelPullMetricsRecorder  models.PullMetricsRecorder
 	ProviderOverride          providercontract.Provider
 	providercontract.ProviderRegistrations
@@ -469,6 +472,12 @@ func Merge(defaults Edges, replacements Edges) Edges {
 	}
 	if replacements.RuntimeHostObserver != nil {
 		defaults.RuntimeHostObserver = replacements.RuntimeHostObserver
+	}
+	if replacements.FactoryVisualizationSink != nil {
+		defaults.FactoryVisualizationSink = replacements.FactoryVisualizationSink
+	}
+	if replacements.FactoryVisualizationRootObserver != nil {
+		defaults.FactoryVisualizationRootObserver = replacements.FactoryVisualizationRootObserver
 	}
 	if replacements.ModelPullMetricsRecorder != nil {
 		defaults.ModelPullMetricsRecorder = replacements.ModelPullMetricsRecorder

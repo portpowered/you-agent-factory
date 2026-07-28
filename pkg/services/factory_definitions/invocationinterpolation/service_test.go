@@ -29,6 +29,43 @@ func TestInterpolateWorkerConfig_OmitsExactOptionalParameter(t *testing.T) {
 	}
 }
 
+func TestInterpolateWorkstationConfig_ResolvesOperationBindingConfigFromInvocationArgs(t *testing.T) {
+	workstation, err := InterpolateWorkstationConfig(factorydefinitions.FactoryWorkstationConfig{
+		OperationBindings: []factorydefinitions.ModelOperationBinding{{
+			Slot: "voice",
+			Config: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeJSON,
+				Role: "voice",
+				JSON: []byte(`{"name":"${voice}"}`),
+			}},
+		}, {
+			Slot: "format",
+			Config: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeJSON,
+				Role: "format",
+				JSON: []byte(`{"name":"${format}"}`),
+			}},
+		}},
+	}, &work.InvocationArguments{
+		Arguments: map[string]work.InvocationArgument{
+			"voice":  {Values: []string{"alloy"}},
+			"format": {Values: []string{"mp3"}},
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("InterpolateWorkstationConfig: %v", err)
+	}
+	if len(workstation.OperationBindings) != 2 {
+		t.Fatalf("bindings = %#v, want 2 operation bindings", workstation.OperationBindings)
+	}
+	if got := string(workstation.OperationBindings[0].Config[0].JSON); got != `{"name":"alloy"}` {
+		t.Fatalf("voice config json = %s, want alloy interpolation", got)
+	}
+	if got := string(workstation.OperationBindings[1].Config[0].JSON); got != `{"name":"mp3"}` {
+		t.Fatalf("format config json = %s, want mp3 interpolation", got)
+	}
+}
+
 func TestInterpolateWorkstationConfig_RejectsMissingEmbeddedParameter(t *testing.T) {
 	_, err := InterpolateWorkstationConfig(factorydefinitions.FactoryWorkstationConfig{
 		PromptTemplate: "Use ${missing} now",

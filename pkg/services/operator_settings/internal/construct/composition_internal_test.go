@@ -10,8 +10,6 @@ import (
 )
 
 func TestNewServiceFromConfigDocumentRejectsNilDocumentOwner(t *testing.T) {
-	t.Parallel()
-
 	restore := settingsconstruct.SetConstructResolutionServiceForTests(func() (resolution.Service, error) {
 		return &stubResolutionService{}, nil
 	})

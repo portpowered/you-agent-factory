@@ -851,6 +851,48 @@ func TestCalculateMutations_PackagedTTSUsesEditedWorkerBackendFromRuntimeConfig(
 	}
 }
 
+func TestCalculateMutations_PackagedTTSFailureSkipsMetadataShaping(t *testing.T) {
+	fixture := newCalculateMutationsFixture()
+	workstation := &interfaces.FactoryWorkstationConfig{
+		Name:      interfaces.PackagedTTSInvokeWorkstationName,
+		Type:      interfaces.WorkstationTypeInvoke,
+		Operation: "TTS",
+	}
+
+	mutations, err := calculateMutations(mutationCalculationInput{
+		workPropagation: testWorkPropagationPolicy(),
+		transition:      fixture.transition,
+		workstation:     workstation,
+		arcs: []petri.Arc{{
+			PlaceID: "task:failed",
+		}},
+		consumed:    fixture.consumed,
+		result:      resolvedWorkResult{outcome: workerexecution.OutcomeFailed, err: "omnivoice invoke failed"},
+		now:         fixture.now,
+		history:     fixture.baseHistory,
+		inputColors: fixture.inputColors,
+		transformer: fixture.transformer,
+		outputShaping: testTTSOutputShaping(
+			`{"artifactPath":"/tmp/speech.wav","mediaType":"audio/wav","backend":"OMNIVOICE_Q4_K_M/LLAMACPP"}`,
+			"",
+		),
+	})
+	if err != nil {
+		t.Fatalf("calculateMutations: %v", err)
+	}
+	if len(mutations) != 1 {
+		t.Fatalf("mutation count = %d, want 1", len(mutations))
+	}
+	for _, part := range mutations[0].NewToken.Color.Content {
+		if strings.Contains(part.Text, `"artifactPath"`) {
+			t.Fatalf(
+				"terminal content = %#v, want no false TTS artifact metadata on failure",
+				mutations[0].NewToken.Color.Content,
+			)
+		}
+	}
+}
+
 func TestCalculateMutations_PackagedGoalReplacesTerminalContentWithSummary(t *testing.T) {
 	fixture := newCalculateMutationsFixture()
 	workstation := &interfaces.FactoryWorkstationConfig{

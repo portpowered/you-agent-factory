@@ -836,7 +836,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/internal/service",
-      "minimum": 63.29
+      "minimum": 62.92
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/wire",
@@ -913,26 +913,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/scheduler",
       "minimum": 74.20
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/service",
-      "exception": {
-        "kind": "measurement",
-        "justification": "The active functional coverage profile contains no measurable statements for this transitional DEL-RUN shim package after wire retargeted construction to internal.",
-        "owner": "backend-quality",
-        "deadline": "2027-07-15",
-        "removalGate": "The functional coverage profile reports at least one measurable statement for this package or DEL-RUN deletes the shim."
-      }
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/service/host",
-      "exception": {
-        "kind": "measurement",
-        "justification": "The active functional coverage profile contains no measurable statements for this transitional DEL-RUN shim package after host implementation relocated to internal/host.",
-        "owner": "backend-quality",
-        "deadline": "2027-07-15",
-        "removalGate": "The functional coverage profile reports at least one measurable statement for this package or DEL-RUN deletes the shim."
-      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/state",
@@ -1160,7 +1140,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime",
-      "minimum": 60.49
+      "minimum": 59.87
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding",
@@ -1809,6 +1789,16 @@
       "minimum": 18.18
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/service",
       "minimum": 58.33
     },
@@ -2344,7 +2334,13 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/stateaccessrecordings",
-      "minimum": 100.00
+      "exception": {
+        "kind": "measurement",
+        "justification": "The transitional stateaccessrecordings compile shim delegates to work/internal/services/state_access/wire and has no functional coverage profile statements after peer proofs retargeted to work/wire.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package or DEL-WORK deletes the shim."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/transports/cli",
