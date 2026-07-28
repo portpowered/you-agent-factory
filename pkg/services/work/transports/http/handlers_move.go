@@ -37,6 +37,9 @@ func (a *Adapter) MoveWorkBySessionId(
 		a.writeError(w, http.StatusBadRequest, "stateName is required", "BAD_REQUEST")
 		return
 	}
+	if requestContextEnded(r.Context()) {
+		return
+	}
 
 	result, err := a.invokeMoveWorkAndRead(
 		r.Context(),
@@ -45,6 +48,9 @@ func (a *Adapter) MoveWorkBySessionId(
 		stateName,
 		strings.TrimSpace(optional.StringValue(decoded.RequestId)),
 	)
+	if shouldEndOnRequestContext(r.Context(), err) {
+		return
+	}
 	if err != nil {
 		a.writeRootOrInternalError(w, err, "failed to move work")
 		return

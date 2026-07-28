@@ -28,8 +28,14 @@ func (a *Adapter) ListWorkBySessionId(
 		a.writeListDecodeError(w, err)
 		return
 	}
+	if requestContextEnded(r.Context()) {
+		return
+	}
 
 	result, err := a.invokeListWork(r.Context(), string(sessionID), options)
+	if shouldEndOnRequestContext(r.Context(), err) {
+		return
+	}
 	if err != nil {
 		a.writeRootOrInternalError(w, err, "failed to list Work")
 		return
@@ -55,8 +61,14 @@ func (a *Adapter) GetWorkBySessionId(
 		a.writeError(w, http.StatusBadRequest, "work id is required", "BAD_REQUEST")
 		return
 	}
+	if requestContextEnded(r.Context()) {
+		return
+	}
 
 	result, err := a.invokeGetWork(r.Context(), string(sessionID), workID)
+	if shouldEndOnRequestContext(r.Context(), err) {
+		return
+	}
 	if err != nil {
 		a.writeRootOrInternalError(w, err, "failed to get Work")
 		return

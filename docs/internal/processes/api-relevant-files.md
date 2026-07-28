@@ -66,7 +66,10 @@ Use this map when changing the public REST contract.
   encode detached post-move `work.ReadModel` values through `WorkReadModelToAPI`.
   Typed Work root failures map through `error_mapping.go` via `RootErrorResponse`
   and `writeRootOrInternalError`; unmapped failures sanitize to INTERNAL_ERROR
-  without leaking internal package paths.
+  without leaking internal package paths. Request-context cancellation and
+  deadline exhaustion end without mapping to INTERNAL_ERROR; canceled requests
+  terminate without an ErrorResponse body and deadline exhaustion returns 504
+  (`request_context.go`).
 - Factory Definitions HTTP decoding, generated-contract mapping, service
   invocation, typed error mapping, and cancel/timeout handling live in
   `pkg/services/factory_definitions/transports/http`. The top-level

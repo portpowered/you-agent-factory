@@ -23,6 +23,15 @@ func RootErrorResponse(err error) (int, factoryapi.ErrorResponse, bool) {
 		return 0, factoryapi.ErrorResponse{}, false
 	}
 
+	if status, response, ok := workRequestContextErrorResponse(err); ok {
+		if response == nil {
+			return 0, factoryapi.ErrorResponse{}, true
+		}
+		if errResp, ok := response.(factoryapi.ErrorResponse); ok {
+			return status, errResp, true
+		}
+	}
+
 	switch {
 	case errors.Is(err, apisurface.ErrFactorySessionNotFound):
 		return notFoundErrorResponse("factory session not found")
@@ -65,6 +74,9 @@ func RootErrorResponse(err error) (int, factoryapi.ErrorResponse, bool) {
 }
 
 func (a *Adapter) writeRootError(w http.ResponseWriter, err error) bool {
+	if a.writeWorkRequestContextOutcome(w, err) {
+		return true
+	}
 	if status, response, ok := RootErrorResponse(err); ok {
 		a.writeJSON(w, status, response)
 		return true

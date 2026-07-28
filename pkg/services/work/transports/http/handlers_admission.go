@@ -30,8 +30,14 @@ func (a *Adapter) StageSubmitWorkFileBySessionId(
 		a.writeAdmissionDecodeError(w, err)
 		return
 	}
+	if requestContextEnded(r.Context()) {
+		return
+	}
 
 	result, err := a.invokeStageContent(r.Context(), stageRequest)
+	if shouldEndOnRequestContext(r.Context(), err) {
+		return
+	}
 	if err != nil {
 		a.writeRootOrInternalError(w, err, "failed to stage submit-work file")
 		return
@@ -56,14 +62,23 @@ func (a *Adapter) SubmitWorkBySessionId(
 		a.writeAdmissionDecodeError(w, err)
 		return
 	}
+	if requestContextEnded(r.Context()) {
+		return
+	}
 
 	workRequest, err := WorkRequestFromSubmitAPI(r.Context(), a.root, decoded.Request)
+	if shouldEndOnRequestContext(r.Context(), err) {
+		return
+	}
 	if err != nil {
 		a.writeAdmissionDecodeError(w, err)
 		return
 	}
 
 	result, err := a.invokeSubmitWorkRequestForSession(r.Context(), string(sessionID), workRequest)
+	if shouldEndOnRequestContext(r.Context(), err) {
+		return
+	}
 	if err != nil {
 		a.writeRootOrInternalError(w, err, "failed to submit work")
 		return
@@ -107,8 +122,14 @@ func (a *Adapter) UpsertWorkRequestBySessionId(
 		a.writeAdmissionDecodeError(w, err)
 		return
 	}
+	if requestContextEnded(r.Context()) {
+		return
+	}
 
 	result, err := a.invokeSubmitWorkRequestForSession(r.Context(), string(sessionID), workRequest)
+	if shouldEndOnRequestContext(r.Context(), err) {
+		return
+	}
 	if err != nil {
 		a.writeRootOrInternalError(w, err, "failed to submit work request")
 		return
