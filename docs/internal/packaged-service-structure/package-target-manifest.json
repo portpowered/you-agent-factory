@@ -169,7 +169,9 @@
     "pkg/services/factory_runtime/context",
     "pkg/services/factory_runtime/definitionmapping",
     "pkg/services/factory_runtime/engine",
+    "pkg/services/factory_runtime/internal",
     "pkg/services/factory_runtime/internal/factorystatus",
+    "pkg/services/factory_runtime/internal/host",
     "pkg/services/factory_runtime/internal/legacysnapshot",
     "pkg/services/factory_runtime/internal/orchestrators/javascript/preview",
     "pkg/services/factory_runtime/internal/orchestrators/javascript/runtime",
@@ -371,6 +373,7 @@
     "pkg/services/recordings/events",
     "pkg/services/recordings/events/kinds",
     "pkg/services/recordings/events/snapshot",
+    "pkg/services/recordings/internal",
     "pkg/services/recordings/internal/canonical",
     "pkg/services/recordings/internal/services/artifacts_export",
     "pkg/services/recordings/internal/services/artifacts_export/internal/service",
@@ -425,6 +428,7 @@
     "pkg/services/workers/executor",
     "pkg/services/workers/executor/agentrun",
     "pkg/services/workers/interface",
+    "pkg/services/workers/internal",
     "pkg/services/workers/internal/services/runners",
     "pkg/services/workers/internal/services/runners/internal/inference",
     "pkg/services/workers/internal/services/runners/internal/script",
@@ -1185,9 +1189,19 @@
       "destination": "factory_runtime/internal/services/orchestration"
     },
     {
+      "packagePath": "pkg/services/factory_runtime/internal",
+      "disposition": "retain",
+      "destination": "factory_runtime"
+    },
+    {
       "packagePath": "pkg/services/factory_runtime/internal/factorystatus",
       "disposition": "move",
       "destination": "factory_runtime/internal"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/host",
+      "disposition": "retain",
+      "destination": "factory_runtime"
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/legacysnapshot",
@@ -2195,6 +2209,11 @@
       "destination": "recordings/internal/services/canonical_ledger"
     },
     {
+      "packagePath": "pkg/services/recordings/internal",
+      "disposition": "retain",
+      "destination": "recordings"
+    },
+    {
       "packagePath": "pkg/services/recordings/internal/canonical",
       "disposition": "retain",
       "destination": "recordings"
@@ -2463,6 +2482,11 @@
       "packagePath": "pkg/services/workers/interface",
       "disposition": "move",
       "destination": "workers/internal/services/runners"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal",
+      "disposition": "retain",
+      "destination": "workers"
     },
     {
       "packagePath": "pkg/services/workers/internal/services/runners",

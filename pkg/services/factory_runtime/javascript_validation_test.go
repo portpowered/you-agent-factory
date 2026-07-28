@@ -9,7 +9,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factoryruntimeservice "github.com/portpowered/infinite-you/pkg/services/factory_runtime/service"
+	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	factoryruntimetestkit "github.com/portpowered/infinite-you/pkg/services/factory_runtime/testkit"
 )
 
@@ -146,7 +146,7 @@ func TestWorkflowSourceTargets_ValidatesFileBackedSource(t *testing.T) {
 	}
 
 	reader := factoryruntimetestkit.NewFileWorkflowSourceReader(dir, localWorkflowSourceFiles{})
-	targets := factoryruntimeservice.NewOrchestratorDefinitionValidator(testJavaScriptWorkflows()).ValidateJavaScriptFactoryDefinition(
+	targets := factoryruntimewire.NewOrchestratorDefinitionValidator(testJavaScriptWorkflows()).ValidateJavaScriptFactoryDefinition(
 		t.Context(),
 		&interfaces.FactoryOrchestratorJavaScriptConfig{SourceRef: "review.js"},
 		reader,
@@ -165,7 +165,7 @@ func TestWorkflowSourceTargets_RejectsFileBackedSyntaxError(t *testing.T) {
 	}
 
 	reader := factoryruntimetestkit.NewFileWorkflowSourceReader(dir, localWorkflowSourceFiles{})
-	targets := factoryruntimeservice.NewOrchestratorDefinitionValidator(testJavaScriptWorkflows()).ValidateJavaScriptFactoryDefinition(
+	targets := factoryruntimewire.NewOrchestratorDefinitionValidator(testJavaScriptWorkflows()).ValidateJavaScriptFactoryDefinition(
 		t.Context(),
 		&interfaces.FactoryOrchestratorJavaScriptConfig{SourceRef: "broken.js"},
 		reader,

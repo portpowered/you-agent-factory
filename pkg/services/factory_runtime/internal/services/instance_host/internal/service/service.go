@@ -8,7 +8,7 @@ import (
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	instancehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host"
-	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/service/host"
+	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 )
 
 // Host owns hosted-instance handle capacity and lifecycle delegation for one

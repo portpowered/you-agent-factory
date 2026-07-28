@@ -804,7 +804,7 @@ replay vocabulary at `pkg/services/recordings/world_state_contract.go` and
 `replay_contract.go`, dispatch vocabulary at
 `pkg/services/factory_runtime/dispatch_contract.go`, and
 `recordings/internal/services/projection_query/internal/service` plus
-`recordings/service` import Recordings root contracts instead of
+`recordings/internal` import Recordings root contracts instead of
 `factory_definitions/contracts` for those surfaces. Temporary deletion-only
 aliases remain in `world_state_recording_deletion_aliases.go`,
 `dispatch_runtime_deletion_aliases.go`, and `replay_recording_deletion_aliases.go`.

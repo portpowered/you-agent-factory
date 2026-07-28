@@ -12,7 +12,7 @@ import (
 	"time"
 
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingsservice "github.com/portpowered/infinite-you/pkg/services/recordings/service"
+	recordingsinternal "github.com/portpowered/infinite-you/pkg/services/recordings/internal"
 )
 
 type unusedLedger struct {
@@ -22,9 +22,9 @@ type unusedLedger struct {
 func TestAcceptedRecordingsRootUsesPrivateArtifactsExport(t *testing.T) {
 	t.Parallel()
 
-	root := recordingsservice.NewService(
+	root := recordingsinternal.NewService(
 		&unusedLedger{},
-		recordingsservice.NewProjectionService(),
+		recordingsinternal.NewProjectionService(),
 	)
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-export-root"}
 	bound, err := root.BindRecording(recordings.BindRecordingRequest{
@@ -100,9 +100,9 @@ func TestRecordingsRootPortableExportRoundTripOmitsPrivateStorage(t *testing.T) 
 			}, nil
 		},
 	)
-	root := recordingsservice.NewService(
+	root := recordingsinternal.NewService(
 		&unusedLedger{},
-		recordingsservice.NewProjectionService(),
+		recordingsinternal.NewProjectionService(),
 		planner,
 	)
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-round-trip"}
@@ -199,9 +199,9 @@ func TestRecordingsRootFailedExportLeavesNoReadablePublicArtifact(t *testing.T) 
 	if err := os.Mkdir(destination, 0o700); err != nil {
 		t.Fatalf("Mkdir: %v", err)
 	}
-	root := recordingsservice.NewService(
+	root := recordingsinternal.NewService(
 		&unusedLedger{},
-		recordingsservice.NewProjectionService(),
+		recordingsinternal.NewProjectionService(),
 	)
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-failed-root-export"}
 	bound, err := root.BindRecording(recordings.BindRecordingRequest{
@@ -253,9 +253,9 @@ func TestRecordingsRootFailedExportLeavesNoReadablePublicArtifact(t *testing.T) 
 func TestRecordingsRootReadPortableArtifactRejectsMissingAndForeignHandles(t *testing.T) {
 	t.Parallel()
 
-	root := recordingsservice.NewService(
+	root := recordingsinternal.NewService(
 		&unusedLedger{},
-		recordingsservice.NewProjectionService(),
+		recordingsinternal.NewProjectionService(),
 	)
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-root-read-guards"}
 	owner, err := root.BindRecording(recordings.BindRecordingRequest{
@@ -310,9 +310,9 @@ func TestRecordingsRootReadPortableArtifactRejectsMissingAndForeignHandles(t *te
 func TestRecordingsRootExportCancellationLeavesNoReadableArtifact(t *testing.T) {
 	t.Parallel()
 
-	root := recordingsservice.NewService(
+	root := recordingsinternal.NewService(
 		&unusedLedger{},
-		recordingsservice.NewProjectionService(),
+		recordingsinternal.NewProjectionService(),
 	)
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-root-cancel-export"}
 	bound, err := root.BindRecording(recordings.BindRecordingRequest{
@@ -352,9 +352,9 @@ func TestRecordingsRootExportCancellationLeavesNoReadableArtifact(t *testing.T) 
 func TestRecordingsRootReadPortableArtifactRejectsCancelledContext(t *testing.T) {
 	t.Parallel()
 
-	root := recordingsservice.NewService(
+	root := recordingsinternal.NewService(
 		&unusedLedger{},
-		recordingsservice.NewProjectionService(),
+		recordingsinternal.NewProjectionService(),
 	)
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-root-cancel-read"}
 	bound, err := root.BindRecording(recordings.BindRecordingRequest{

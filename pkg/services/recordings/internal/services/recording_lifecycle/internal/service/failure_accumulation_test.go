@@ -9,7 +9,7 @@ import (
 	"time"
 
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingsservice "github.com/portpowered/infinite-you/pkg/services/recordings/service"
+	recordingsinternal "github.com/portpowered/infinite-you/pkg/services/recordings/internal"
 )
 
 type fixedRecordingClock struct {
@@ -143,7 +143,7 @@ func TestSnapshotEncodingFailureIsDetachedAndRetriedAtFinalFlush(t *testing.T) {
 	t.Parallel()
 
 	writeCalls := atomic.Int32{}
-	writer := recordingsservice.NewRecordingSnapshotWriter(
+	writer := recordingsinternal.NewRecordingSnapshotWriter(
 		func(string, []byte) error {
 			writeCalls.Add(1)
 			return nil
@@ -225,9 +225,9 @@ func newFailureTestRoot(
 	tickers recordings.RecordingFlushTickerFactory,
 	clock recordings.RecordingClock,
 ) recordings.Service {
-	return recordingsservice.NewServiceWithLifecycleEffects(
+	return recordingsinternal.NewServiceWithLifecycleEffects(
 		&unusedLedger{},
-		recordingsservice.NewProjectionService(),
+		recordingsinternal.NewProjectionService(),
 		nil,
 		writer,
 		tickers,

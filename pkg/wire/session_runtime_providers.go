@@ -30,7 +30,7 @@ import (
 	factorycheckpointsummary "github.com/portpowered/infinite-you/pkg/services/factory_runtime/checkpointsummary"
 	factoryruntimejavascript "github.com/portpowered/infinite-you/pkg/services/factory_runtime/javascript"
 	factoryruntimeorchestrationowner "github.com/portpowered/infinite-you/pkg/services/factory_runtime/orchestrationowner"
-	factoryruntimeservice "github.com/portpowered/infinite-you/pkg/services/factory_runtime/service"
+	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/models"
@@ -40,7 +40,7 @@ import (
 	providersessionswire "github.com/portpowered/infinite-you/pkg/services/provider_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingartifacts "github.com/portpowered/infinite-you/pkg/services/recordings/artifacts"
-	recordingsservice "github.com/portpowered/infinite-you/pkg/services/recordings/service"
+	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
@@ -308,7 +308,7 @@ func provideWorkflowPreviewOperation(
 func provideOrchestratorDefinitionValidator(
 	workflows factoryruntime.JavaScriptWorkflows,
 ) factorydefinitions.OrchestratorDefinitionValidator {
-	return factoryruntimeservice.NewOrchestratorDefinitionValidator(workflows)
+	return factoryruntimewire.NewOrchestratorDefinitionValidator(workflows)
 }
 
 func provideFactoryDefinitionValidationService(
@@ -641,13 +641,13 @@ func provideFactorySessionSyncWaitScheduler() factorysessionwire.SyncWaitSchedul
 }
 
 func provideRecordingsProjectionFactory() factorysessionwire.RecordingsProjectionFactory {
-	return recordingsservice.NewProjectionService
+	return recordingswire.NewProjectionService
 }
 
 func provideRuntimeLedgerFactory() factorysessionwire.RuntimeLedgerFactory {
 	return func() factoryruntime.RuntimeLedgerFactory {
 		return func(topology recordings.InitialStructureSource, now func() time.Time, definitions factorydefinitions.RuntimeDefinitionLookup) recordings.RuntimeEventLedger {
-			return recordingsservice.NewRuntimeLedger(topology, now, uuid.NewString(), definitions)
+			return recordingswire.NewRuntimeLedger(topology, now, uuid.NewString(), definitions)
 		}
 	}
 }
@@ -687,7 +687,7 @@ func provideRuntimeRecorderFactory(
 		now func() time.Time,
 		recordPath string,
 	) (recordings.RuntimeRecorder, error) {
-		return recordingsservice.NewLifecycleRuntimeRecorder(
+		return recordingswire.NewLifecycleRuntimeRecorder(
 			flushInterval,
 			loaded,
 			now,
@@ -698,7 +698,7 @@ func provideRuntimeRecorderFactory(
 }
 
 func provideReplayClockFactory() factorysessionwire.ReplayClockFactory {
-	return recordingsservice.NewReplayClock
+	return recordingswire.NewReplayClock
 }
 
 func provideReplayExecutionFactory() recordings.ReplayExecutionFactory {
@@ -711,7 +711,7 @@ func provideReplayExecutionFactory() recordings.ReplayExecutionFactory {
 		recordings.CompletionDeliveryPlanner,
 		error,
 	) {
-		return recordingsservice.NewReplayExecution(
+		return recordingswire.NewReplayExecution(
 			artifact,
 			wirefactorydefinitions.FactorySnapshotJSONDecoder(),
 			wirefactorydefinitions.ReplayRuntimeConfigDecoder(),

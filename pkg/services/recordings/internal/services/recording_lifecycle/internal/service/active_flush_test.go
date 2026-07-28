@@ -8,7 +8,7 @@ import (
 	"time"
 
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingsservice "github.com/portpowered/infinite-you/pkg/services/recordings/service"
+	recordingsinternal "github.com/portpowered/infinite-you/pkg/services/recordings/internal"
 )
 
 type manualFlushTicker struct {
@@ -222,9 +222,9 @@ func newActiveFlushRoot(
 	writer recordings.RecordingSnapshotWriter,
 	tickers recordings.RecordingFlushTickerFactory,
 ) recordings.Service {
-	return recordingsservice.NewServiceWithLifecycleEffects(
+	return recordingsinternal.NewServiceWithLifecycleEffects(
 		&unusedLedger{},
-		recordingsservice.NewProjectionService(),
+		recordingsinternal.NewProjectionService(),
 		nil,
 		writer,
 		tickers,
