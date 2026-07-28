@@ -591,7 +591,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCLIInvocationIsVisibleThroughAPISessionAndWorkReads`.
   - `TestAPIInvocationResultMatchesCLICompatibleFacts`.
 
-- [ ] `tests/functional/sessions/restart/logical_identity_test.go`
+- [x] `tests/functional/sessions/restart/logical_identity_test.go`
   - `TestFactorySessionRestartRemapsLiveIDToLogicalIdentity`.
   - `TestFactorySessionResumeDoesNotRepeatCompletedDispatch`.
   - `TestFactorySessionHistoryRemainsReadableAfterRestart`.
