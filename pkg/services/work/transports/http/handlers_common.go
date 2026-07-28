@@ -25,6 +25,8 @@ func errorFamilyForStatus(status int) factoryapi.ErrorFamily {
 	switch status {
 	case http.StatusBadRequest:
 		return factoryapi.ErrorFamilyBadRequest
+	case http.StatusConflict:
+		return factoryapi.ErrorFamilyConflict
 	case http.StatusNotFound:
 		return factoryapi.ErrorFamilyNotFound
 	default:

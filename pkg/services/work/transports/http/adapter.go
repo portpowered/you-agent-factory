@@ -81,3 +81,17 @@ func (a *Adapter) invokeSubmitWorkRequestForSession(
 	}
 	return a.root.SubmitWorkRequestForSession(ctx, sessionID, request)
 }
+
+// invokeMoveWorkAndRead forwards move requests through the accepted Work root.
+func (a *Adapter) invokeMoveWorkAndRead(
+	ctx context.Context,
+	sessionID string,
+	workID string,
+	stateName string,
+	requestID string,
+) (work.ReadModel, error) {
+	if a == nil || a.root == nil {
+		return work.ReadModel{}, errors.New("work service is required")
+	}
+	return a.root.MoveWorkAndRead(ctx, sessionID, workID, stateName, requestID)
+}

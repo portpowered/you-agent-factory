@@ -60,7 +60,10 @@ Use this map when changing the public REST contract.
   invoke `StageContent` / `PrepareContent` / `SubmitWorkRequestForSession` on
   the accepted root, and encode detached admission results through
   `StageSubmitWorkFileResponseToAPI` / `SubmitWorkResponseToAPI` /
-  `UpsertWorkResponseToAPI`.
+  `UpsertWorkResponseToAPI`. Work move decode and JSON encoding live in
+  `move_mapping.go` and `handlers_move.go`; decode bodies through
+  adapter-owned validation, invoke `MoveWorkAndRead` on the accepted root, and
+  encode detached post-move `work.ReadModel` values through `WorkReadModelToAPI`.
 - Factory Definitions HTTP decoding, generated-contract mapping, service
   invocation, typed error mapping, and cancel/timeout handling live in
   `pkg/services/factory_definitions/transports/http`. The top-level
