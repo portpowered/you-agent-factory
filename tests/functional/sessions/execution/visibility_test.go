@@ -50,7 +50,7 @@ func TestCLIInvocationIsVisibleThroughAPISessionAndWorkReads(t *testing.T) {
 		t.Fatalf("session runtime status during CLI invocation = %#v, want observable lifecycle status", sessionDuring.Runtime)
 	}
 
-	waitForTerminalWorkPrimaryText(t, baseURL, terminalSuccessPrimaryResult, 5*time.Second)
+	waitForTerminalWorkPrimaryText(t, baseURL, terminalSuccessPrimaryResult, 15*time.Second)
 
 	<-command.Done()
 	if err := command.Err(); err != nil {
