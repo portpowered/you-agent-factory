@@ -15,7 +15,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerinference "github.com/portpowered/infinite-you/pkg/services/workers/services/inference"
+	runnerinference "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/inference"
 )
 
 const directModelInvocationTransitionID = "direct-model-invocation"
@@ -119,11 +119,11 @@ func (s *Service) InvokeModel(
 			Content: inputContent,
 		},
 	}}
-	workstationDef := workerinference.DirectInferenceWorkstationConfig(
+	workstationDef := runnerinference.DirectInferenceWorkstationConfig(
 		request.Operation,
 		factoryDefinitionBindings(request.Bindings),
 	)
-	resolvedBindings, err := workerinference.ResolveInferenceOperationBindings(workstationDef, workerDef, inputTokens)
+	resolvedBindings, err := runnerinference.ResolveInferenceOperationBindings(workstationDef, workerDef, inputTokens)
 	if err != nil {
 		return modelinference.Result{}, classifyModelInvocationError(err, failureContext)
 	}
@@ -160,7 +160,7 @@ func (s *Service) InvokeModel(
 		return modelinference.Result{}, classifyModelInvocationError(fmt.Errorf("provider execution failed: %s", strings.TrimSpace(result.Error)), failureContext)
 	}
 
-	outputContent, err := workerinference.WorkContentFromInferenceOutput(result.Output, operation)
+	outputContent, err := runnerinference.WorkContentFromInferenceOutput(result.Output, operation)
 	if err != nil {
 		return modelinference.Result{}, classifyModelInvocationError(err, failureContext)
 	}
@@ -286,7 +286,7 @@ func directModelInvocationWorkstationRequest(
 		ModelOperation:        strings.TrimSpace(request.Operation),
 		ModelBindings:         resolvedBindings,
 		SystemPrompt:          workerDef.Body,
-		UserMessage:           workerinference.InferenceOperationUserMessage(request.Operation, inputContent, resolvedBindings),
+		UserMessage:           runnerinference.InferenceOperationUserMessage(request.Operation, inputContent, resolvedBindings),
 	}
 }
 

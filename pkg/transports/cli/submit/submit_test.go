@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	workdomain "github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -843,6 +844,49 @@ func TestSubmit_JSONModeDoesNotEmitSuccessOnFailure(t *testing.T) {
 	}
 	if out.Len() != 0 {
 		t.Fatalf("stdout = %q, want empty JSON success envelope on failure", out.String())
+	}
+}
+
+func TestSubmit_StdinDashPayloadPostsEncodedMarkdown(t *testing.T) {
+	var receivedReq factoryapi.SubmitWorkRequest
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&receivedReq); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		if err := json.NewEncoder(w).Encode(factoryapi.SubmitWorkResponse{TraceId: "stdin-trace"}); err != nil {
+			t.Errorf("encode submit response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	read := workdomain.PayloadFileReader(func(string) ([]byte, error) {
+		t.Fatal("file reader should not be called for stdin unary submit")
+		return nil, nil
+	})
+
+	submitFn := NewSubmit(read, testHTTPProtocol(t))
+	err := submitFn(SubmitConfig{
+		Context:      context.Background(),
+		Name:         "stdin-task",
+		WorkTypeName: "task",
+		Payload:      "-",
+		Stdin:        strings.NewReader("# stdin work"),
+		Server:       mustServerBase(t, srv.URL),
+		Output:       io.Discard,
+	})
+	if err != nil {
+		t.Fatalf("NewSubmit(stdin) error = %v", err)
+	}
+
+	payload, err := json.Marshal(receivedReq.Payload)
+	if err != nil {
+		t.Fatalf("marshal received payload: %v", err)
+	}
+	if string(payload) != `"# stdin work"` {
+		t.Fatalf("Payload = %s, want encoded markdown string", string(payload))
 	}
 }
 

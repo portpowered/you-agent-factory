@@ -90,6 +90,7 @@ test results.
 | `providers/mock_workers` | Mock-worker behavior, which is not model-provider behavior. |
 | `providers/observability` | Provider-facing logging and diagnostics behavior, which is not model-provider behavior. |
 | `replay_contracts` | Replay, event-history, and artifact reconstruction behavior that must stay stable across recording and playback surfaces. |
+| `work/transports/cli/submit/unary_contract` | Work-owned unary `you submit` contract proofs: file and stdin payload ingress, default and explicit Factory Session targeting, and structured failure public-message preservation through `root.BuildProcess` + `Process.Execute`. |
 | `bootstrap_portability` | Init, bootstrap, portability, current-factory activation, and checked-in factory portability flows. |
 
 ## Shared Support

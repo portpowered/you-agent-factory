@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerconstruction "github.com/portpowered/infinite-you/pkg/services/workers/construction"
+	workerconstruction "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/construction"
 	providerconductor "github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 )

@@ -46,6 +46,7 @@ import (
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
+	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	systeminitialization "github.com/portpowered/infinite-you/pkg/services/system_initialization"
 	systeminitializationwire "github.com/portpowered/infinite-you/pkg/services/system_initialization/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -74,7 +75,7 @@ func provideTerminalLoggerBuilder() terminalpolicy.LoggerBuilder {
 }
 
 func provideLiveRecordingTargetPlanner() recordings.LiveRecordingTargetPlanner {
-	return recordings.NewLiveRecordingTargetPlanner(
+	return recordingswire.NewLiveRecordingTargetPlanner(
 		platformclock.Real{},
 		uuid.NewString,
 		filepath.Join,

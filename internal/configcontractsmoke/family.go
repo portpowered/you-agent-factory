@@ -58,7 +58,7 @@ var expectedFamilies = []Family{
 	},
 	{
 		ID:                   FamilyMockWorker,
-		ParserID:             "pkg/services/workers/interface.ParseMockWorkersConfig",
+		ParserID:             "pkg/services/workers/internal/interface.ParseMockWorkersConfig",
 		parser:               parseMockWorkers,
 		CanonicalOwnerPath:   "contracts/config/mock-workers.schema.json",
 		SchemaProjectionPath: "contracts/config/mock-workers.schema.json",

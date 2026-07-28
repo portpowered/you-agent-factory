@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	state "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/invocationworktype"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workdomain "github.com/portpowered/infinite-you/pkg/services/work"
@@ -675,7 +674,7 @@ func (s *Server) prepareWorkRequest(
 }
 
 func (s *Server) defaultWorkTypeIDForSession(ctx context.Context, sessionID string) (string, error) {
-	if s == nil || s.factoryDefinitions == nil {
+	if s == nil || s.factoryDefinitions == nil || s.invocationWorkType == nil {
 		return "", nil
 	}
 	namedFactory, err := s.factoryDefinitions.GetCurrentFactoryForSession(ctx, sessionID)
@@ -689,7 +688,7 @@ func (s *Server) defaultWorkTypeIDForSession(ctx context.Context, sessionID stri
 	if err != nil {
 		return "", err
 	}
-	defaultWorkTypeID, err := invocationworktype.NewService().DefaultWorkType(&factoryConfig)
+	defaultWorkTypeID, err := s.invocationWorkType.DefaultWorkType(&factoryConfig)
 	if err != nil {
 		return "", nil
 	}

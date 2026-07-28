@@ -167,6 +167,42 @@ func TestVerifyOperatorSettingsDualLedgerAlignmentPassesOnRepository(t *testing.
 	}
 }
 
+func TestVerifyOperatorSettingsTopLevelInventoryPassesOnRepository(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := findRepoRoot(t)
+	if err := ownershipinventory.VerifyOperatorSettingsTopLevelInventory(repoRoot); err != nil {
+		t.Fatalf("VerifyOperatorSettingsTopLevelInventory() error = %v", err)
+	}
+}
+
+func TestVerifyOperatorSettingsRootGoInventoryPassesOnRepository(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := findRepoRoot(t)
+	if err := ownershipinventory.VerifyOperatorSettingsRootGoInventory(repoRoot); err != nil {
+		t.Fatalf("VerifyOperatorSettingsRootGoInventory() error = %v", err)
+	}
+}
+
+func TestVerifyOperatorSettingsCommittedRootContractInventoryAlignmentPassesOnRepository(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := findRepoRoot(t)
+	if err := ownershipinventory.VerifyOperatorSettingsCommittedRootContractInventoryAlignment(repoRoot); err != nil {
+		t.Fatalf("VerifyOperatorSettingsCommittedRootContractInventoryAlignment() error = %v", err)
+	}
+}
+
+func TestVerifyOperatorSettingsRootReconciliationPassesOnRepository(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := findRepoRoot(t)
+	if err := ownershipinventory.VerifyOperatorSettingsRootReconciliation(repoRoot); err != nil {
+		t.Fatalf("VerifyOperatorSettingsRootReconciliation() error = %v", err)
+	}
+}
+
 func TestOperatorSettingsCommittedBaselinesAlignMoveDestinations(t *testing.T) {
 	t.Parallel()
 
