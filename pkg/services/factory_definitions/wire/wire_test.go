@@ -134,6 +134,7 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 				ports.packagedInstaller,
 				ports.requiredToolChecker,
 				ports.orchestratorValidator,
+				nil,
 			)
 			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("NewService() error = %v, want %q", err, test.want)
@@ -195,6 +196,7 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 		},
 		stubRequiredToolChecker{},
 		stubOrchestratorValidator{},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -282,6 +284,7 @@ func TestNewServiceServesPublishedPackagedCatalogPeerBehavior(t *testing.T) {
 		ports.packagedInstaller,
 		ports.requiredToolChecker,
 		ports.orchestratorValidator,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -363,6 +366,7 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 		ports.packagedInstaller,
 		ports.requiredToolChecker,
 		ports.orchestratorValidator,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)

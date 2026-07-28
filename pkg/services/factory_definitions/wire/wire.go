@@ -13,6 +13,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
+	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig"
 	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
 	factorysnapshotcapture "github.com/portpowered/infinite-you/pkg/services/factory_definitions/snapshotcapture"
@@ -40,6 +41,7 @@ func NewService(
 	packagedInstaller factorydefinitions.PackagedFactoryInstallationOperations,
 	requiredToolChecker factorydefinitions.RequiredToolChecker,
 	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
+	authoringLayout authoringlayout.Service,
 ) (factorydefinitions.Service, error) {
 	if err := validateDependencies(
 		sessionHost,
@@ -70,7 +72,7 @@ func NewService(
 		factorysnapshot.ObjectFromFactoryConfig,
 	)
 
-	definitions := factorydefinitionsservice.New(
+	definitions := factorydefinitionsservice.NewWithAuthoringLayout(
 		sessionHost,
 		clock,
 		versionFileSystem,
@@ -102,6 +104,7 @@ func NewService(
 		packagedInstaller,
 		requiredToolChecker,
 		orchestratorValidator,
+		authoringLayout,
 	)
 	if definitions == nil {
 		return nil, fmt.Errorf("construct Factory Definitions: implementation rejected its dependencies")
