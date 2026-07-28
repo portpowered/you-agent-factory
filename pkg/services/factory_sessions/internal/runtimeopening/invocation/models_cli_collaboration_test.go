@@ -13,6 +13,36 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
 )
 
+func TestOpenModelsCatalogScope_RequiresOperation(t *testing.T) {
+	t.Parallel()
+
+	var op *operation
+	_, err := op.OpenModelsCatalogScope(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "invocation operation is required") {
+		t.Fatalf("error = %v, want required operation", err)
+	}
+}
+
+func TestOpenModelsCatalogScope_RequiresOpenRuntime(t *testing.T) {
+	t.Parallel()
+
+	op := &operation{}
+	_, err := op.OpenModelsCatalogScope(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "invocation operation is required") {
+		t.Fatalf("error = %v, want required open runtime", err)
+	}
+}
+
+func TestOpenModelsCatalogScope_RequiresModelsRoot(t *testing.T) {
+	t.Parallel()
+
+	op := &operation{openRuntime: &runtimeopening.Factory{}}
+	_, err := op.OpenModelsCatalogScope(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "models presentation root is unavailable") {
+		t.Fatalf("error = %v, want unavailable models root", err)
+	}
+}
+
 func TestModelsPresentationRoot_ReturnsNilForUnsetOperation(t *testing.T) {
 	t.Parallel()
 
