@@ -7,7 +7,7 @@ import (
 	internalauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout"
 	compilationloadedsource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loadedsource"
 	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
+	wirevalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/validation"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	authoredmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/authored"
 )
@@ -51,7 +51,7 @@ func NewLoader(
 			factoryDir string,
 			factoryConfig *factorydefinitions.FactoryConfig,
 		) error {
-			return factoryvalidation.
+			return wirevalidation.
 				ValidatePortableResourceManifestOnPathWithSourceResolver(
 					factoryDir,
 					factoryConfig,
@@ -64,7 +64,7 @@ func NewLoader(
 			factoryDir string,
 			factoryConfig *factorydefinitions.FactoryConfig,
 		) error {
-			return factoryvalidation.
+			return wirevalidation.
 				ValidatePortableBundledFilesForExpandOnPathWithSourceResolver(
 					factoryDir,
 					factoryConfig,
@@ -72,7 +72,7 @@ func NewLoader(
 					inspectSource,
 				)
 		},
-		factoryvalidation.ValidateBlockingLoad,
+		wirevalidation.ValidateBlockingFactoryLoad,
 		applySupportedFiles,
 		applyStarterWork,
 		materializeFiles,
