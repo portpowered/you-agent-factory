@@ -8119,6 +8119,36 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/work/routing/classifier_test.go",
+      "package": "you-agent-factory/tests/functional/work/routing",
+      "scenario": "TestClassifierMultiOutputPreservesPayload",
+      "lane": "short",
+      "destination": "tests/functional/work/routing/classifier_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/work/routing/classifier_test.go",
+      "package": "you-agent-factory/tests/functional/work/routing",
+      "scenario": "TestClassifierRoutesEveryKnownDecision",
+      "lane": "short",
+      "destination": "tests/functional/work/routing/classifier_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/work/routing/classifier_test.go",
+      "package": "you-agent-factory/tests/functional/work/routing",
+      "scenario": "TestClassifierUnknownAndMalformedDecisionFailDistinctly",
+      "lane": "short",
+      "destination": "tests/functional/work/routing/classifier_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/work/routing/logical_move_test.go",
       "package": "you-agent-factory/tests/functional/work/routing",
       "scenario": "TestLogicalMoveCompletesWithoutWorkerDispatch",
@@ -8700,7 +8730,7 @@
       "you-agent-factory/tests/functional/work/recordings": 4,
       "you-agent-factory/tests/functional/work/recovery": 4,
       "you-agent-factory/tests/functional/work/relationships": 4,
-      "you-agent-factory/tests/functional/work/routing": 3,
+      "you-agent-factory/tests/functional/work/routing": 6,
       "you-agent-factory/tests/functional/work/submission": 6,
       "you-agent-factory/tests/functional/work/visualization": 1,
       "you-agent-factory/tests/functional/workers/agent": 1,
