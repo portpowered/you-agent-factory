@@ -440,10 +440,13 @@
     "pkg/services/workers/cliprovider",
     "pkg/services/workers/construction",
     "pkg/services/workers/diagnostics",
+    "pkg/services/workers/draftvalidation",
+    "pkg/services/workers/envdiagnostics",
     "pkg/services/workers/execution",
     "pkg/services/workers/execution/recording",
     "pkg/services/workers/executor",
     "pkg/services/workers/executor/agentrun",
+    "pkg/services/workers/inferencefailure",
     "pkg/services/workers/interface",
     "pkg/services/workers/internal",
     "pkg/services/workers/internal/diagnostics",
@@ -466,16 +469,21 @@
     "pkg/services/workers/internal/services/runtime_assembly/internal/service",
     "pkg/services/workers/internal/services/runtime_assembly/wire",
     "pkg/services/workers/internal/services/workstations",
+    "pkg/services/workers/internal/services/workstations/draftvalidation",
+    "pkg/services/workers/internal/services/workstations/envdiagnostics",
     "pkg/services/workers/internal/services/workstations/execution",
     "pkg/services/workers/internal/services/workstations/execution/recording",
     "pkg/services/workers/internal/services/workstations/executor",
     "pkg/services/workers/internal/services/workstations/executor/agentrun",
+    "pkg/services/workers/internal/services/workstations/inferencefailure",
     "pkg/services/workers/internal/services/workstations/internal/service",
     "pkg/services/workers/internal/services/workstations/invocation",
+    "pkg/services/workers/internal/services/workstations/poolboundary",
     "pkg/services/workers/internal/services/workstations/prompting",
     "pkg/services/workers/internal/services/workstations/skippermissions",
     "pkg/services/workers/internal/services/workstations/wire",
     "pkg/services/workers/internal/services/workstations/worktree",
+    "pkg/services/workers/internal/testhelpers",
     "pkg/services/workers/invocation",
     "pkg/services/workers/process",
     "pkg/services/workers/prompting",
@@ -504,6 +512,7 @@
     "pkg/services/workers/services/testing",
     "pkg/services/workers/skippermissions",
     "pkg/services/workers/wire",
+    "pkg/services/workers/workstationpool",
     "pkg/services/workers/worktree",
     "pkg/transports/cli",
     "pkg/transports/cli/acp",
@@ -2577,6 +2586,16 @@
       "destination": "workers/internal"
     },
     {
+      "packagePath": "pkg/services/workers/draftvalidation",
+      "disposition": "move",
+      "destination": "workers/internal/services/workstations"
+    },
+    {
+      "packagePath": "pkg/services/workers/envdiagnostics",
+      "disposition": "move",
+      "destination": "workers/internal/services/workstations"
+    },
+    {
       "packagePath": "pkg/services/workers/execution",
       "disposition": "move",
       "destination": "workers/internal/services/workstations"
@@ -2593,6 +2612,11 @@
     },
     {
       "packagePath": "pkg/services/workers/executor/agentrun",
+      "disposition": "move",
+      "destination": "workers/internal/services/workstations"
+    },
+    {
+      "packagePath": "pkg/services/workers/inferencefailure",
       "disposition": "move",
       "destination": "workers/internal/services/workstations"
     },
@@ -2707,6 +2731,16 @@
       "destination": "workers/internal/services/workstations"
     },
     {
+      "packagePath": "pkg/services/workers/internal/services/workstations/draftvalidation",
+      "disposition": "retain",
+      "destination": "workers/internal/services/workstations"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/workstations/envdiagnostics",
+      "disposition": "retain",
+      "destination": "workers/internal/services/workstations"
+    },
+    {
       "packagePath": "pkg/services/workers/internal/services/workstations/execution",
       "disposition": "retain",
       "destination": "workers/internal/services/workstations"
@@ -2727,12 +2761,22 @@
       "destination": "workers/internal/services/workstations"
     },
     {
+      "packagePath": "pkg/services/workers/internal/services/workstations/inferencefailure",
+      "disposition": "retain",
+      "destination": "workers/internal/services/workstations"
+    },
+    {
       "packagePath": "pkg/services/workers/internal/services/workstations/internal/service",
       "disposition": "retain",
       "destination": "workers/internal/services/workstations"
     },
     {
       "packagePath": "pkg/services/workers/internal/services/workstations/invocation",
+      "disposition": "retain",
+      "destination": "workers/internal/services/workstations"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/workstations/poolboundary",
       "disposition": "retain",
       "destination": "workers/internal/services/workstations"
     },
@@ -2755,6 +2799,11 @@
       "packagePath": "pkg/services/workers/internal/services/workstations/worktree",
       "disposition": "retain",
       "destination": "workers/internal/services/workstations"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/testhelpers",
+      "disposition": "move",
+      "destination": "workers/internal"
     },
     {
       "packagePath": "pkg/services/workers/invocation",
@@ -2895,6 +2944,11 @@
       "packagePath": "pkg/services/workers/wire",
       "disposition": "retain",
       "destination": "workers"
+    },
+    {
+      "packagePath": "pkg/services/workers/workstationpool",
+      "disposition": "move",
+      "destination": "workers/internal/services/workstations"
     },
     {
       "packagePath": "pkg/services/workers/worktree",

@@ -1,4 +1,4 @@
-package workers_test
+package mockworkers_test
 
 import (
 	"encoding/json"
@@ -9,23 +9,13 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testpath"
-	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	. "github.com/portpowered/infinite-you/pkg/services/workers"
+	. "github.com/portpowered/infinite-you/pkg/services/workers/internal/interface"
 )
 
 type mockWorkersConfigReader func(string) ([]byte, error)
 
 func (read mockWorkersConfigReader) ReadFile(path string) ([]byte, error) {
 	return read(path)
-}
-
-func localMockWorkersConfigLoader(t *testing.T) MockWorkersConfigLoader {
-	t.Helper()
-	load, err := NewMockWorkersConfigLoader(platformfilesystem.Local{})
-	if err != nil {
-		t.Fatalf("construct mock workers config loader: %v", err)
-	}
-	return load
 }
 
 func TestParseMockWorkersConfig_ValidConfigPreservesSelectorsAndRunTypeOptions(t *testing.T) {

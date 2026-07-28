@@ -22,8 +22,8 @@ var productionLoaderSources = []struct {
 	sha256Hex    string
 }{
 	{
-		relativePath: "pkg/services/workers/internal/interface/config.go",
-		sha256Hex:    "6208ee5c7f15b258be2fb6816690651acbf1a751cec58989448e01d7ad2cbe76",
+		relativePath: "pkg/services/workers/internal/interface/mock_workers_config.go",
+		sha256Hex:    "a3d23e6b3b626390b4683b5fcf989d5ced5fda31e67d0456b00b82f887043dfb",
 	},
 }
 

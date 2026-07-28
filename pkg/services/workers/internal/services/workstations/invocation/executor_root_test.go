@@ -1,4 +1,4 @@
-package workers_test
+package invocation_test
 
 import (
 	"context"

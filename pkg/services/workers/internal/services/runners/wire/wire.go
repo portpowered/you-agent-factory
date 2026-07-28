@@ -8,6 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
+	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/runner"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/inference"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/script"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/service"
@@ -136,7 +137,7 @@ func scriptMetadata() workers.RunnerMetadata {
 	return workers.RunnerMetadata{
 		ID:          runners.ScriptIdentity,
 		DisplayName: "Script",
-		Capabilities: workers.NewCapabilities(
+		Capabilities: workerrunner.NewCapabilities(
 			workers.RunnerOptionalCapabilitySupport{
 				Capability: workers.RunnerOptionalCapabilityImageInput,
 				Status:     workers.RunnerOptionalCapabilityStatusUnsupported,
@@ -165,7 +166,7 @@ func inferenceMetadata() workers.RunnerMetadata {
 	return workers.RunnerMetadata{
 		ID:          runners.InferenceIdentity,
 		DisplayName: "Inference",
-		Capabilities: workers.NewCapabilities(
+		Capabilities: workerrunner.NewCapabilities(
 			workers.RunnerOptionalCapabilitySupport{
 				Capability: workers.RunnerOptionalCapabilityImageInput,
 				Status:     workers.RunnerOptionalCapabilityStatusUnsupported,
@@ -194,7 +195,7 @@ func agentMetadata() workers.RunnerMetadata {
 	return workers.RunnerMetadata{
 		ID:          runners.AgentIdentity,
 		DisplayName: "Agent",
-		Capabilities: workers.NewCapabilities(
+		Capabilities: workerrunner.NewCapabilities(
 			workers.RunnerOptionalCapabilitySupport{
 				Capability: workers.RunnerOptionalCapabilityImageInput,
 				Status:     workers.RunnerOptionalCapabilityStatusUnsupported,

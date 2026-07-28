@@ -12,8 +12,6 @@ import (
 	workertaxonomy "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	workerdiagnostics "github.com/portpowered/infinite-you/pkg/services/workers/diagnostics"
-
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -424,7 +422,7 @@ func TestWorkDiagnosticsForInferenceRequest_SafeProjectionPreservesOpenCodeAgent
 		ModelProvider: string(modelprovider.ProviderOpenCode),
 		OpenCodeAgent: "implementer",
 	})
-	safe := workerdiagnostics.SafeWorkDiagnosticsFromWorkDiagnostics(diagnostics)
+	safe := workerexecution.SafeWorkDiagnosticsFromWorkDiagnostics(diagnostics)
 	if got := safe.Provider.RequestMetadata["opencode_agent"]; got != "implementer" {
 		t.Fatalf("safe opencode_agent = %q, want implementer", got)
 	}

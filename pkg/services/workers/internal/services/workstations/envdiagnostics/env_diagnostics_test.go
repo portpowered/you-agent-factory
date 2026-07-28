@@ -1,8 +1,10 @@
-package workers
+package envdiagnostics_test
 
 import (
 	"reflect"
 	"testing"
+
+	workstationenv "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/envdiagnostics"
 )
 
 func TestClassifyCommandEnvKey_SensitiveNamesAreRedacted(t *testing.T) {
@@ -18,35 +20,35 @@ func TestClassifyCommandEnvKey_SensitiveNamesAreRedacted(t *testing.T) {
 
 	for _, name := range testCases {
 		t.Run(name, func(t *testing.T) {
-			if got := ClassifyCommandEnvKey(name); got != CommandEnvClassificationRedacted {
-				t.Fatalf("ClassifyCommandEnvKey(%q) = %q, want %q", name, got, CommandEnvClassificationRedacted)
+			if got := workstationenv.ClassifyCommandEnvKey(name); got != workstationenv.CommandEnvClassificationRedacted {
+				t.Fatalf("workstationenv.ClassifyCommandEnvKey(%q) = %q, want %q", name, got, workstationenv.CommandEnvClassificationRedacted)
 			}
 		})
 	}
 }
 
 func TestClassifyCommandEnvKey_SafeAllowlistOnlyPermitsLowRiskValues(t *testing.T) {
-	testCases := map[string]CommandEnvClassification{
-		"CI":                    CommandEnvClassificationSafe,
-		"GIT_TERMINAL_PROMPT":   CommandEnvClassificationSafe,
-		"TERM":                  CommandEnvClassificationSafe,
-		"PATH":                  CommandEnvClassificationMetadataOnly,
-		"HOME":                  CommandEnvClassificationMetadataOnly,
-		"AGENT_FACTORY_API_KEY": CommandEnvClassificationRedacted,
-		"PORTOS_API_KEY":        CommandEnvClassificationRedacted,
+	testCases := map[string]workstationenv.CommandEnvClassification{
+		"CI":                    workstationenv.CommandEnvClassificationSafe,
+		"GIT_TERMINAL_PROMPT":   workstationenv.CommandEnvClassificationSafe,
+		"TERM":                  workstationenv.CommandEnvClassificationSafe,
+		"PATH":                  workstationenv.CommandEnvClassificationMetadataOnly,
+		"HOME":                  workstationenv.CommandEnvClassificationMetadataOnly,
+		"AGENT_FACTORY_API_KEY": workstationenv.CommandEnvClassificationRedacted,
+		"PORTOS_API_KEY":        workstationenv.CommandEnvClassificationRedacted,
 	}
 
 	for name, want := range testCases {
 		t.Run(name, func(t *testing.T) {
-			if got := ClassifyCommandEnvKey(name); got != want {
-				t.Fatalf("ClassifyCommandEnvKey(%q) = %q, want %q", name, got, want)
+			if got := workstationenv.ClassifyCommandEnvKey(name); got != want {
+				t.Fatalf("workstationenv.ClassifyCommandEnvKey(%q) = %q, want %q", name, got, want)
 			}
 		})
 	}
 }
 
 func TestProjectCommandEnvForDiagnostics_PreservesSafeMetadataAndRedactsSecrets(t *testing.T) {
-	projection := ProjectCommandEnvForDiagnostics([]string{
+	projection := workstationenv.ProjectCommandEnvForDiagnostics([]string{
 		"CI=true",
 		"PATH=C:\\Tools",
 		"OPENAI_API_KEY=sk-raw-secret",
@@ -64,13 +66,13 @@ func TestProjectCommandEnvForDiagnostics_PreservesSafeMetadataAndRedactsSecrets(
 	if projection.Values["CI"] != "true" {
 		t.Fatalf("CI value = %q, want raw allowlisted value", projection.Values["CI"])
 	}
-	if projection.Values["PATH"] != MetadataOnlyCommandEnvValue {
+	if projection.Values["PATH"] != workstationenv.MetadataOnlyCommandEnvValue {
 		t.Fatalf("PATH value = %q, want metadata marker", projection.Values["PATH"])
 	}
-	if projection.Values["OPENAI_API_KEY"] != RedactedCommandEnvValue {
+	if projection.Values["OPENAI_API_KEY"] != workstationenv.RedactedCommandEnvValue {
 		t.Fatalf("OPENAI_API_KEY value = %q, want redaction marker", projection.Values["OPENAI_API_KEY"])
 	}
-	if projection.Values["ANTHROPIC_AUTH_TOKEN"] != RedactedCommandEnvValue {
+	if projection.Values["ANTHROPIC_AUTH_TOKEN"] != workstationenv.RedactedCommandEnvValue {
 		t.Fatalf("ANTHROPIC_AUTH_TOKEN value = %q, want redaction marker", projection.Values["ANTHROPIC_AUTH_TOKEN"])
 	}
 	for name, value := range projection.Values {
@@ -81,7 +83,7 @@ func TestProjectCommandEnvForDiagnostics_PreservesSafeMetadataAndRedactsSecrets(
 }
 
 func TestCommandEnvDiagnosticMetadata_RecordsCountAndKeySet(t *testing.T) {
-	metadata := commandEnvDiagnosticMetadata(CommandEnvDiagnosticProjection{
+	metadata := workstationenv.CommandEnvDiagnosticMetadata(workstationenv.CommandEnvDiagnosticProjection{
 		Count: 2,
 		Keys:  []string{"CI", "OPENAI_API_KEY"},
 	})

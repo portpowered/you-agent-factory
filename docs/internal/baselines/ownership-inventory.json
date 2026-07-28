@@ -4864,6 +4864,22 @@
       "deletionCondition": "delete transitional top-level package after CLN-WRK-FOLD-TOPLEVEL cutover proof"
     },
     {
+      "packagePath": "pkg/services/workers/draftvalidation",
+      "disposition": "move",
+      "destination": "workers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/workers/internal/services/workstations",
+      "deletionCondition": "delete public package after IMP-WRK-workstations private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/workers/envdiagnostics",
+      "disposition": "move",
+      "destination": "workers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/workers/internal/services/workstations",
+      "deletionCondition": "delete public package after IMP-WRK-workstations private subservice cutover proof"
+    },
+    {
       "packagePath": "pkg/services/workers/execution",
       "disposition": "move",
       "destination": "workers",
@@ -4889,6 +4905,14 @@
     },
     {
       "packagePath": "pkg/services/workers/executor/agentrun",
+      "disposition": "move",
+      "destination": "workers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/workers/internal/services/workstations",
+      "deletionCondition": "delete public package after IMP-WRK-workstations private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/workers/inferencefailure",
       "disposition": "move",
       "destination": "workers",
       "destinationKind": "owner",
@@ -5042,6 +5066,18 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/workers/internal/services/workstations/draftvalidation",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/workstations/envdiagnostics",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/workers/internal/services/workstations/execution",
       "disposition": "retain",
       "destination": "workers",
@@ -5072,6 +5108,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/workers/internal/services/workstations/inferencefailure",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/workers/internal/services/workstations/internal/service",
       "disposition": "retain",
       "destination": "workers",
@@ -5079,6 +5121,12 @@
     },
     {
       "packagePath": "pkg/services/workers/internal/services/workstations/invocation",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/workstations/poolboundary",
       "disposition": "retain",
       "destination": "workers",
       "destinationKind": "owner"
@@ -5106,6 +5154,14 @@
       "disposition": "retain",
       "destination": "workers",
       "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/testhelpers",
+      "disposition": "move",
+      "destination": "workers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/workers/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-WRK-FOLD-TOPLEVEL cutover proof"
     },
     {
       "packagePath": "pkg/services/workers/invocation",
@@ -5352,6 +5408,14 @@
       "disposition": "retain",
       "destination": "workers",
       "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/workstationpool",
+      "disposition": "move",
+      "destination": "workers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/workers/internal/services/workstations",
+      "deletionCondition": "delete public package after IMP-WRK-workstations private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/workers/worktree",

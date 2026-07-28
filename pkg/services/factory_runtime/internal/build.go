@@ -16,7 +16,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 	"path/filepath"
 	"strings"
@@ -439,13 +438,13 @@ func (f *RuntimeFactory) compileOrchestrationNet(
 }
 
 func effectiveFactoryRunnerID(override string, factoryCfg *interfaces.FactoryConfig) string {
-	if runner := workerrunner.NormalizeRunnerID(override); runner != "" {
+	if runner := workers.NormalizeRunnerID(override); runner != "" {
 		return runner
 	}
 	if factoryCfg == nil {
 		return ""
 	}
-	return workerrunner.NormalizeRunnerID(factoryCfg.Runner)
+	return workers.NormalizeRunnerID(factoryCfg.Runner)
 }
 
 func effectiveDispatchRecorder(

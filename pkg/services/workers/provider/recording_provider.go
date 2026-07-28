@@ -9,8 +9,6 @@ import (
 	"sync"
 	"time"
 
-	workerdiagnostics "github.com/portpowered/infinite-you/pkg/services/workers/diagnostics"
-
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	providercontract "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 
@@ -246,8 +244,8 @@ func providerErrorExitCode(err error) *int {
 }
 
 func safeInferenceDiagnosticsEventPayload(diagnostics *workerexecution.WorkDiagnostics) json.RawMessage {
-	payload, err := workerdiagnostics.SafeWorkDiagnosticsEventPayload(
-		workerdiagnostics.SafeWorkDiagnosticsFromWorkDiagnostics(diagnostics),
+	payload, err := workerexecution.SafeWorkDiagnosticsEventPayload(
+		workerexecution.SafeWorkDiagnosticsFromWorkDiagnostics(diagnostics),
 	)
 	if err != nil {
 		panic(fmt.Sprintf("encode safe inference event diagnostics: %v", err))

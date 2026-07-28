@@ -5,8 +5,6 @@ import (
 	"strings"
 	"time"
 
-	workerdiagnostics "github.com/portpowered/infinite-you/pkg/services/workers/internal/diagnostics"
-
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 
 	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
@@ -41,7 +39,7 @@ func agentRunResponseEvent(
 ) workerexecution.AgentRunResponseEvent {
 	// SafeWorkDiagnostics contains only JSON-compatible typed fields and string
 	// maps, so encoding cannot fail for a value produced by this package.
-	diagnostics, _ := workerdiagnostics.SafeWorkDiagnosticsEventPayload(agentRunSafeDiagnostics(result.Diagnostics, transcript))
+	diagnostics, _ := workerexecution.SafeWorkDiagnosticsEventPayload(agentRunSafeDiagnostics(result.Diagnostics, transcript))
 	if string(diagnostics) == "null" {
 		diagnostics = nil
 	}
@@ -61,15 +59,15 @@ func agentRunResponseEvent(
 func agentRunSafeDiagnostics(
 	diagnostics *workerexecution.WorkDiagnostics,
 	transcript []messages.Message,
-) *workerdiagnostics.SafeWorkDiagnostics {
-	safe := workerdiagnostics.SafeWorkDiagnosticsFromWorkDiagnostics(diagnostics)
+) *workerexecution.SafeWorkDiagnostics {
+	safe := workerexecution.SafeWorkDiagnosticsFromWorkDiagnostics(diagnostics)
 	if safe == nil {
-		safe = &workerdiagnostics.SafeWorkDiagnostics{}
+		safe = &workerexecution.SafeWorkDiagnostics{}
 	}
 	agentRun := safe.AgentRun
 	if agentRun == nil {
-		agentRun = &workerdiagnostics.SafeAgentRunDiagnostic{
-			ExecutionBehavior: workerdiagnostics.AgentRunExecutionBehavior,
+		agentRun = &workerexecution.SafeAgentRunDiagnostic{
+			ExecutionBehavior: workerexecution.AgentRunExecutionBehavior,
 		}
 	}
 	if entries := boundedAgentRunTranscript(transcript); len(entries) > 0 {
@@ -82,7 +80,7 @@ func agentRunSafeDiagnostics(
 	return safe
 }
 
-func boundedAgentRunTranscript(history []messages.Message) []workerdiagnostics.AgentRunTranscriptEntry {
+func boundedAgentRunTranscript(history []messages.Message) []workerexecution.AgentRunTranscriptEntry {
 	if len(history) == 0 {
 		return nil
 	}
@@ -90,7 +88,7 @@ func boundedAgentRunTranscript(history []messages.Message) []workerdiagnostics.A
 	if len(history) > agentRunTranscriptMaxEntries {
 		start = len(history) - agentRunTranscriptMaxEntries
 	}
-	out := make([]workerdiagnostics.AgentRunTranscriptEntry, 0, len(history[start:]))
+	out := make([]workerexecution.AgentRunTranscriptEntry, 0, len(history[start:]))
 	for _, message := range history[start:] {
 		summary := strings.TrimSpace(message.TextContent())
 		if summary == "" {
@@ -99,7 +97,7 @@ func boundedAgentRunTranscript(history []messages.Message) []workerdiagnostics.A
 		if len(summary) > agentRunTranscriptSummaryLen {
 			summary = summary[:agentRunTranscriptSummaryLen] + "..."
 		}
-		out = append(out, workerdiagnostics.AgentRunTranscriptEntry{
+		out = append(out, workerexecution.AgentRunTranscriptEntry{
 			Role:    string(message.Role),
 			Summary: summary,
 		})

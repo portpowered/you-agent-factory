@@ -5,15 +5,17 @@ import (
 	"strings"
 )
 
-var baselineV1 = []RunnerBaselineCapability{
+var baselineV1RunnerCapabilities = []RunnerBaselineCapability{
 	RunnerBaselineCapabilityPromptSubmission,
 	RunnerBaselineCapabilityToolExecution,
 }
 
+// V1BaselineCapabilities returns the v1 baseline runner capability set.
 func V1BaselineCapabilities() []RunnerBaselineCapability {
-	return append([]RunnerBaselineCapability(nil), baselineV1...)
+	return append([]RunnerBaselineCapability(nil), baselineV1RunnerCapabilities...)
 }
 
+// NewCapabilities assembles one runner capability view from optional supports.
 func NewCapabilities(optional ...RunnerOptionalCapabilitySupport) RunnerCapabilities {
 	return RunnerCapabilities{
 		Baseline: V1BaselineCapabilities(),
@@ -21,9 +23,6 @@ func NewCapabilities(optional ...RunnerOptionalCapabilitySupport) RunnerCapabili
 	}
 }
 
-// TODO: we should convert this into a config file that we can just export out to customers, so that they can know, :
-// What is the agent interfaces that we support
-// We should make the interfaces for implementing a new worker more obvious.
 var builtInRunnerMetadata = map[string]RunnerMetadata{
 	RunnerIDCodex: {
 		ID:          RunnerIDCodex,

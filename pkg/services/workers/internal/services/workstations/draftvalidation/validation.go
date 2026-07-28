@@ -1,4 +1,4 @@
-package workers
+package draftvalidation
 
 import (
 	"encoding/json"

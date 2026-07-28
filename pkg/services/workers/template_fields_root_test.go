@@ -13,6 +13,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workertesthelpers "github.com/portpowered/infinite-you/pkg/services/workers/internal/testhelpers"
 	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/prompting"
 )
 
@@ -452,16 +453,16 @@ func TestApplyResolvedFields_NilResolved(t *testing.T) {
 
 func TestWorkstationExecutor_ParameterizedWorkingDirectory(t *testing.T) {
 	projectRoot := t.TempDir()
-	setTestWorkingDirectory(t, projectRoot)
+	workertesthelpers.SetTestWorkingDirectory(t, projectRoot)
 
-	mock := &wsMockExecutor{
-		result: workers.WorkResult{Outcome: workers.OutcomeAccepted},
+	mock := &workertesthelpers.WSMockExecutor{
+		Result: workers.WorkResult{Outcome: workers.OutcomeAccepted},
 	}
 
 	we := &workerexecutor.WorkstationExecutor{
 		Now:                     time.Now,
 		CurrentWorkingDirectory: os.Getwd,
-		RuntimeConfig: staticRuntimeConfig{
+		RuntimeConfig: workertesthelpers.StaticRuntimeConfig{
 			Workers: map[string]*interfaces.FactoryWorkerConfig{
 				"worker-a": {Body: "system"},
 			},
@@ -505,19 +506,19 @@ func TestWorkstationExecutor_ParameterizedWorkingDirectory(t *testing.T) {
 		"worktrees",
 		"feature-abc",
 	)
-	if canonicalWorkerTestPath(mock.dispatch.WorkingDirectory) != wantWorkingDirectory {
-		t.Fatalf("expected working directory %q, got %q", wantWorkingDirectory, mock.dispatch.WorkingDirectory)
+	if canonicalWorkerTestPath(mock.Dispatch.WorkingDirectory) != wantWorkingDirectory {
+		t.Fatalf("expected working directory %q, got %q", wantWorkingDirectory, mock.Dispatch.WorkingDirectory)
 	}
 }
 
 func TestWorkstationExecutor_ParameterizedEnv(t *testing.T) {
-	mock := &wsMockExecutor{
-		result: workers.WorkResult{Outcome: workers.OutcomeAccepted},
+	mock := &workertesthelpers.WSMockExecutor{
+		Result: workers.WorkResult{Outcome: workers.OutcomeAccepted},
 	}
 
 	we := &workerexecutor.WorkstationExecutor{
 		Now: time.Now,
-		RuntimeConfig: staticRuntimeConfig{
+		RuntimeConfig: workertesthelpers.StaticRuntimeConfig{
 			Workers: map[string]*interfaces.FactoryWorkerConfig{
 				"worker-a": {Body: "system"},
 			},
@@ -556,17 +557,17 @@ func TestWorkstationExecutor_ParameterizedEnv(t *testing.T) {
 		t.Errorf("expected ACCEPTED, got %s", result.Outcome)
 	}
 
-	if mock.dispatch.EnvVars["PROJECT"] != "myapp" {
-		t.Errorf("expected myapp, got %s", mock.dispatch.EnvVars["PROJECT"])
+	if mock.Dispatch.EnvVars["PROJECT"] != "myapp" {
+		t.Errorf("expected myapp, got %s", mock.Dispatch.EnvVars["PROJECT"])
 	}
 }
 
 func TestWorkstationExecutor_ParameterizedFieldError(t *testing.T) {
-	mock := &wsMockExecutor{}
+	mock := &workertesthelpers.WSMockExecutor{}
 
 	we := &workerexecutor.WorkstationExecutor{
 		Now: time.Now,
-		RuntimeConfig: staticRuntimeConfig{
+		RuntimeConfig: workertesthelpers.StaticRuntimeConfig{
 			Workers: map[string]*interfaces.FactoryWorkerConfig{
 				"worker-a": {Body: "system"},
 			},
@@ -597,7 +598,7 @@ func TestWorkstationExecutor_ParameterizedFieldError(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if mock.called {
+	if mock.Called {
 		t.Fatal("executor should not be called when parameterized field resolution fails")
 	}
 

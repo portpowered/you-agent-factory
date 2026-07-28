@@ -28,7 +28,7 @@ import (
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	workerexecution 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 type testFactoryOption func(*testFactoryConfig)

@@ -19,6 +19,7 @@ import (
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 	runnerswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire"
+	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/runner"
 	runtimeassembly "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly"
 	runtimeassemblywire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/wire"
 	workstationswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/wire"
@@ -259,7 +260,7 @@ func runtimeAssemblyRegistrations(
 	}
 	registrations := make([]runners.Registration, 0, len(identities))
 	for _, identity := range identities {
-		metadata, _ := workers.BuiltInRunnerMetadata(identity)
+		metadata, _ := workerrunner.BuiltInRunnerMetadata(identity)
 		registrations = append(registrations, runners.Registration{
 			Identity: identity,
 			Metadata: metadata,

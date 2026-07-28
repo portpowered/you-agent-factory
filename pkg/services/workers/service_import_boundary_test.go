@@ -10,6 +10,7 @@ const (
 	modulePrefix               = "github.com/portpowered/infinite-you/"
 	workersOwnerPrefix         = modulePrefix + "pkg/services/workers"
 	transitionalWorkersService = modulePrefix + "pkg/services/workers/service"
+	workersInternalPrefix      = workersOwnerPrefix + "/internal"
 )
 
 // TestProductionPackagesOutsideWorkersOwnerDoNotImportTransitionalServiceShim
@@ -27,6 +28,15 @@ func TestProductionPackagesOutsideWorkersOwnerDoNotImportTransitionalServiceShim
 				strings.HasPrefix(importPath, transitionalWorkersService+"/") {
 				t.Fatalf(
 					"%s must not import transitional Workers service shim %s; construct through %spkg/services/workers/wire",
+					packagePath,
+					importPath,
+					modulePrefix,
+				)
+			}
+			if importPath == workersInternalPrefix ||
+				strings.HasPrefix(importPath, workersInternalPrefix+"/") {
+				t.Fatalf(
+					"%s must not import moved Workers internal helper %s; construct through %spkg/services/workers/wire or published Workers root contracts",
 					packagePath,
 					importPath,
 					modulePrefix,

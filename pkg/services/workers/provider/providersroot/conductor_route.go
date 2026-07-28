@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/runner"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
 	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
@@ -44,7 +45,7 @@ func (s *Service) executeViaConductor(
 }
 
 func conductorIdentity(providerID string) string {
-	normalized := workers.NormalizeRunnerID(providerID)
+	normalized := workerrunner.NormalizeRunnerID(providerID)
 	switch normalized {
 	case workers.RunnerIDCursorCLI, "cursor":
 		return "cursor"

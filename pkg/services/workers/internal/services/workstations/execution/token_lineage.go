@@ -1,9 +1,0 @@
-package workerexecution
-
-import workers "github.com/portpowered/infinite-you/pkg/services/workers"
-
-var PreviousChainingTraceIDs = workers.PreviousChainingTraceIDs
-var PreviousChainingTraceIDsFromColors = workers.PreviousChainingTraceIDsFromColors
-var CurrentChainingTraceID = workers.CurrentChainingTraceID
-var CurrentChainingTraceIDFromColors = workers.CurrentChainingTraceIDFromColors
-var ChainingTraceDepthFromColors = workers.ChainingTraceDepthFromColors

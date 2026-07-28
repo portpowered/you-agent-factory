@@ -1,53 +1,54 @@
-package workers
+package runner
 
 import (
 	"fmt"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// RunnerStatus reports whether a built-in runner can be selected safely in the
+// Status reports whether a built-in runner can be selected safely in the
 // current build before dispatch starts.
-type RunnerStatus struct {
-	Metadata          RunnerMetadata
+type Status struct {
+	Metadata          workerexecution.RunnerMetadata
 	Available         bool
 	UnavailableReason string
 }
 
-var builtInRunnerStatus = map[string]RunnerStatus{
-	RunnerIDCodex: {
-		Metadata:  mustBuiltInRunnerMetadata(RunnerIDCodex),
+var builtInRunnerStatus = map[string]Status{
+	workerexecution.RunnerIDCodex: {
+		Metadata:  mustBuiltInRunnerMetadata(workerexecution.RunnerIDCodex),
 		Available: true,
 	},
-	RunnerIDGemini: {
-		Metadata:  mustBuiltInRunnerMetadata(RunnerIDGemini),
+	workerexecution.RunnerIDGemini: {
+		Metadata:  mustBuiltInRunnerMetadata(workerexecution.RunnerIDGemini),
 		Available: true,
 	},
-	RunnerIDKiro: {
-		Metadata:  mustBuiltInRunnerMetadata(RunnerIDKiro),
+	workerexecution.RunnerIDKiro: {
+		Metadata:  mustBuiltInRunnerMetadata(workerexecution.RunnerIDKiro),
 		Available: true,
 	},
-	RunnerIDCursorCLI: {
-		Metadata:  mustBuiltInRunnerMetadata(RunnerIDCursorCLI),
+	workerexecution.RunnerIDCursorCLI: {
+		Metadata:  mustBuiltInRunnerMetadata(workerexecution.RunnerIDCursorCLI),
 		Available: true,
 	},
-	RunnerIDOpenCode: {
-		Metadata:  mustBuiltInRunnerMetadata(RunnerIDOpenCode),
+	workerexecution.RunnerIDOpenCode: {
+		Metadata:  mustBuiltInRunnerMetadata(workerexecution.RunnerIDOpenCode),
 		Available: true,
 	},
-	RunnerIDPi: {
-		Metadata:  mustBuiltInRunnerMetadata(RunnerIDPi),
+	workerexecution.RunnerIDPi: {
+		Metadata:  mustBuiltInRunnerMetadata(workerexecution.RunnerIDPi),
 		Available: true,
 	},
 }
 
 // BuiltInRunnerStatus reports the build-local availability of one stable
 // runner registration.
-func BuiltInRunnerStatus(id string) (RunnerStatus, bool) {
+func BuiltInRunnerStatus(id string) (Status, bool) {
 	status, ok := builtInRunnerStatus[NormalizeRunnerID(id)]
 	if !ok {
-		return RunnerStatus{}, false
+		return Status{}, false
 	}
 	return status, true
 }
@@ -78,24 +79,24 @@ func ValidateBuiltInRunnerPrerequisites(locator platformprocess.ExecutableLocato
 
 func builtInRunnerCommand(id string) string {
 	switch NormalizeRunnerID(id) {
-	case RunnerIDCodex:
+	case workerexecution.RunnerIDCodex:
 		return string(modelprovider.ProviderCodex)
-	case RunnerIDGemini:
+	case workerexecution.RunnerIDGemini:
 		return string(modelprovider.ProviderGemini)
-	case RunnerIDKiro:
+	case workerexecution.RunnerIDKiro:
 		return string(modelprovider.ProviderKiro)
-	case RunnerIDCursorCLI:
+	case workerexecution.RunnerIDCursorCLI:
 		return string(modelprovider.ProviderCursor)
-	case RunnerIDOpenCode:
+	case workerexecution.RunnerIDOpenCode:
 		return string(modelprovider.ProviderOpenCode)
-	case RunnerIDPi:
+	case workerexecution.RunnerIDPi:
 		return string(modelprovider.ProviderPi)
 	default:
 		return ""
 	}
 }
 
-func mustBuiltInRunnerMetadata(id string) RunnerMetadata {
+func mustBuiltInRunnerMetadata(id string) workerexecution.RunnerMetadata {
 	metadata, ok := BuiltInRunnerMetadata(id)
 	if !ok {
 		panic("missing built-in runner metadata: " + id)
