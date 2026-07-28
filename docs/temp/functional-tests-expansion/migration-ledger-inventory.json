@@ -8689,6 +8689,36 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/workers/transports/cli/run/lifecycle/lifecycle_test.go",
+      "package": "you-agent-factory/tests/functional/workers/transports/cli/run/lifecycle",
+      "scenario": "TestCLIRunCleanInvocationCompletesWithoutDashboardStartup",
+      "lane": "short",
+      "destination": "tests/functional/workers/transports/cli/run/lifecycle/lifecycle_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/transports/cli/run/lifecycle/lifecycle_test.go",
+      "package": "you-agent-factory/tests/functional/workers/transports/cli/run/lifecycle",
+      "scenario": "TestCLIRunCleanInvocationFailurePreservesPublicError",
+      "lane": "short",
+      "destination": "tests/functional/workers/transports/cli/run/lifecycle/lifecycle_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/workers/transports/cli/run/lifecycle/lifecycle_test.go",
+      "package": "you-agent-factory/tests/functional/workers/transports/cli/run/lifecycle",
+      "scenario": "TestCLIRunServerAttachedInvocationTargetsExistingFactorySession",
+      "lane": "short",
+      "destination": "tests/functional/workers/transports/cli/run/lifecycle/lifecycle_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/workflow/code_review_loop_long_test.go",
       "package": "you-agent-factory/tests/functional/workflow",
       "scenario": "TestCodeReviewLoop",
@@ -9480,6 +9510,7 @@
       "you-agent-factory/tests/functional/workers/mock": 5,
       "you-agent-factory/tests/functional/workers/script": 13,
       "you-agent-factory/tests/functional/workers/transports/cli/run/help": 3,
+      "you-agent-factory/tests/functional/workers/transports/cli/run/lifecycle": 3,
       "you-agent-factory/tests/functional/workers/transports/cli/run/modes": 2,
       "you-agent-factory/tests/functional/workflow": 30,
       "you-agent-factory/tests/functional/workstations/cron": 4,

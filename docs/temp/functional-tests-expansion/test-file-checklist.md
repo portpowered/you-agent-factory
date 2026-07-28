@@ -860,6 +860,11 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCLIRunSuccessPrimaryResultTextJSONAndNDJSON`.
   - `TestCLIRunFailureOmitsFalseSuccessPrimaryResult`.
 
+- [x] `tests/functional/workers/transports/cli/run/lifecycle/lifecycle_test.go`
+  - `TestCLIRunCleanInvocationCompletesWithoutDashboardStartup`.
+  - `TestCLIRunCleanInvocationFailurePreservesPublicError`.
+  - `TestCLIRunServerAttachedInvocationTargetsExistingFactorySession`.
+
 ### Factory visualization
 
 - [x] `tests/functional/factory_visualization/activation_lifecycle_test.go`
