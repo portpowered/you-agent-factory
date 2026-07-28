@@ -142,9 +142,6 @@ func validateOperatorSettingsRootGoInventory(inventory OperatorSettingsRootGoInv
 	if len(inventory.Files) == 0 {
 		return fmt.Errorf("operator settings root go inventory has no files")
 	}
-	if len(inventory.Clusters) == 0 {
-		return fmt.Errorf("operator settings root go inventory has no clusters")
-	}
 	if err := validateOperatorSettingsRootGoClusters(inventory); err != nil {
 		return err
 	}

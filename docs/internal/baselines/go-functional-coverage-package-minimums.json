@@ -1951,8 +1951,16 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal",
+      "minimum": 75.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/construct",
       "minimum": 50.87
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/identityinputinventory",
+      "minimum": 47.82
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/service",
@@ -2001,6 +2009,10 @@
         "deadline": "2027-07-15",
         "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
       }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution/defaults",
+      "minimum": 47.05
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution/internal/service",
