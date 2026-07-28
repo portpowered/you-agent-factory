@@ -223,10 +223,6 @@
       "minimum": 80.57
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/authoredlayout",
-      "minimum": 54.26
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/decisionenvelope",
       "minimum": 84.84
     },
@@ -459,14 +455,6 @@
       "minimum": 70.68
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading",
-      "minimum": 64.72
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedfactories",
-      "minimum": 77.77
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths",
       "minimum": 80.00
     },
@@ -513,10 +501,6 @@
       "minimum": 70.55
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig",
-      "minimum": 64.39
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/quorumpolicy",
       "minimum": 76.19
     },
@@ -533,10 +517,6 @@
         "deadline": "2027-07-15",
         "removalGate": "The unit coverage profile reports at least one measurable statement for this package."
       }
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/runtimeconfig",
-      "minimum": 84.79
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service",

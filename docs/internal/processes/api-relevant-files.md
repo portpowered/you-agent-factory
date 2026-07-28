@@ -182,7 +182,15 @@ Use this map when changing the public REST contract.
   Also drop deleted top-level children from both
   `internal/ownershipinventory/owner_top_level.go` and
   `cmd/packagetargetmanifestcheck/owner_top_level.go` unexpected inventories.
-  Coverage baseline burn-down for deleted import paths is story 004.
+  DEL-DEF story 004 (`pss-del-def-004`) removes unit and functional coverage
+  baseline rows for the deleted transitional DEF import paths only
+  (`authoredlayout`, `portableconfig`, `loading`, `runtimeconfig`,
+  `namedfactories`) from
+  `docs/internal/baselines/go-unit-coverage-package-minimums.json` and
+  `docs/internal/baselines/go-functional-coverage-package-minimums.json`.
+  Leave `service/` coverage rows while the Automations-leased compile shim
+  remains; internal `internal/services/*` destination packages keep their own
+  coverage floors.
   CUT-DEF-RUN seals Factory Definitions production imports of Factory Runtime to
   the service root only (`pkg/services/factory_runtime`) for orchestration
   semantic-validation edges; the lease-wide guard is
