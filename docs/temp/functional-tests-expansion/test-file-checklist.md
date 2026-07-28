@@ -609,7 +609,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ### Definitions
 
-- [ ] `tests/functional/factory/definitions/init_test.go`
+- [x] `tests/functional/factory/definitions/init_test.go`
   - `TestFactoryInitCreatesRunnablePortableScaffold`.
   - `TestFactoryInitIsIdempotent`.
   - `TestFactoryInitFailureRoutingProducesFailedWork`.

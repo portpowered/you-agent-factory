@@ -1732,7 +1732,7 @@ without inventing destinations. Prefer independent, reviewable batch sizes.
 | `guards_batch-delete-05-resources-fairness` | guards_batch | 1 | resources | planned |
 | `guards_batch-delete-06-resilience-batch` | guards_batch | 6 | resilience/batch | planned |
 | `guards_batch-delete-07-workstations-watcher` | guards_batch | 1 | workstations/watcher | consumed |
-| `bootstrap_portability-delete-01-factory-definitions-init` | bootstrap_portability | 7 | factory/definitions | planned |
+| `bootstrap_portability-delete-01-factory-definitions-init` | bootstrap_portability | 7 | factory/definitions | consumed |
 | `bootstrap_portability-delete-02-factory-definitions-validation` | bootstrap_portability | 3 | factory/definitions | planned |
 | `bootstrap_portability-delete-03-factory-definitions-import-export` | bootstrap_portability | 10 | factory/definitions | planned |
 | `bootstrap_portability-delete-04-portable-config` | bootstrap_portability | 10 | factory/definitions, transport/cli | planned |

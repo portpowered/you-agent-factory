@@ -1249,6 +1249,36 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/factory/definitions/init_test.go",
+      "package": "you-agent-factory/tests/functional/factory/definitions",
+      "scenario": "TestFactoryInitCreatesRunnablePortableScaffold",
+      "lane": "short",
+      "destination": "tests/functional/factory/definitions/init_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/definitions/init_test.go",
+      "package": "you-agent-factory/tests/functional/factory/definitions",
+      "scenario": "TestFactoryInitFailureRoutingProducesFailedWork",
+      "lane": "short",
+      "destination": "tests/functional/factory/definitions/init_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/definitions/init_test.go",
+      "package": "you-agent-factory/tests/functional/factory/definitions",
+      "scenario": "TestFactoryInitIsIdempotent",
+      "lane": "short",
+      "destination": "tests/functional/factory/definitions/init_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/factory/runtime_lifecycle/one_shot_test.go",
       "package": "you-agent-factory/tests/functional/factory/runtime_lifecycle",
       "scenario": "TestOneShotRunJoinsRuntimeLifecycle",
@@ -2136,7 +2166,7 @@
       "destination": "tests/functional/factory/definitions/init_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
-      "deletion_only_batch": "bootstrap_portability-delete-01-factory-definitions-init"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/product/init_setup/init_setup_test.go",
@@ -7205,7 +7235,7 @@
       "automations": 7,
       "bootstrap_portability": 21,
       "cli": 62,
-      "factory": 4,
+      "factory": 7,
       "guards_batch": 23,
       "models": 5,
       "observability": 9,
@@ -7224,9 +7254,9 @@
       "workflow": 30,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 699,
+    "customer_top_level_Test_scenarios": 702,
     "lane_functionallong": 95,
-    "lane_short": 604,
+    "lane_short": 607,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 7,
@@ -7240,6 +7270,7 @@
       "you-agent-factory/tests/functional/cli/root_discovery": 9,
       "you-agent-factory/tests/functional/cli/session_resume": 6,
       "you-agent-factory/tests/functional/factory/catalog": 3,
+      "you-agent-factory/tests/functional/factory/definitions": 3,
       "you-agent-factory/tests/functional/factory/runtime_lifecycle": 1,
       "you-agent-factory/tests/functional/guards_batch": 23,
       "you-agent-factory/tests/functional/models/model_invoke": 3,
@@ -7379,18 +7410,18 @@
     }
   },
   "completeness_audit": {
-    "audited_at_utc": "2026-07-27T23:58:26Z",
-    "story": "ft-wave1-http-generated-client-004",
-    "live_customer_scenarios": 687,
-    "ledger_rows": 687,
+    "audited_at_utc": "2026-07-28T03:45:00Z",
+    "story": "ft-wave2-factory-definitions-init-004",
+    "live_customer_scenarios": 702,
+    "ledger_rows": 702,
     "unmapped_scenarios": 0,
     "checklist_destinations": 435,
     "wrong_layer_destinations": 69,
     "invalid_destinations": 0,
-    "lane_short": 592,
+    "lane_short": 607,
     "lane_functionallong": 95,
     "specialty_targets_documented": 11,
-    "deletion_only_batches": 52,
+    "deletion_only_batches": 51,
     "validator": "go run ./cmd/migrationledgercheck"
   }
 }
