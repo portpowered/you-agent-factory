@@ -2191,10 +2191,6 @@
       "minimum": 77.06
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter/opencode",
-      "minimum": 48.24
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter/testkit",
       "exception": {
         "kind": "measurement",

@@ -433,6 +433,11 @@ primary-result behavior.
   `docs/internal/baselines/go-unit-coverage-package-minimums.json` and
   `docs/internal/baselines/go-functional-coverage-package-minimums.json`;
   unit-only registration leaves `make test-functional-coverage` red.
+  Deleting a measured production package must remove its manifest rows from both
+  coverage baselines in the same slice; stale entries fail
+  `gocoveragecheck` with "outside the functional measured package set". Regenerate
+  `ownership-inventory.json` with `go run ./cmd/ownershipinventoryfreeze` when
+  Workers provider integration packages replace deleted adapter subtrees.
 - The authoritative manifest-to-Integration join belongs in
   `pkg/services/workers/provider/registry/`. Catalog registrations name only
   the canonical embedded identity; external registrations carry one detached

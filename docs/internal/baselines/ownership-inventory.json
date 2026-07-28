@@ -1199,12 +1199,6 @@
     },
     {
       "fromOwner": "factory_runtime",
-      "toOwner": "providers",
-      "class": "command",
-      "evidence": "pkg/services/factory_runtime/build -\u003e pkg/services/workers/provider/inferencecontract"
-    },
-    {
-      "fromOwner": "factory_runtime",
       "toOwner": "recordings",
       "class": "event",
       "evidence": "pkg/services/factory_runtime -\u003e pkg/services/recordings"
@@ -1453,7 +1447,7 @@
       "fromOwner": "providers",
       "toOwner": "platform",
       "class": "external_effect",
-      "evidence": "pkg/services/providers/internal/services/execution/wire -\u003e pkg/platform/process"
+      "evidence": "pkg/services/providers/internal/services/execution/internal/adapters/cursor -\u003e pkg/platform/filesystem"
     },
     {
       "fromOwner": "providers",
@@ -4762,14 +4756,6 @@
       "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
     },
     {
-      "packagePath": "pkg/services/workers/provider/adapter/opencode",
-      "disposition": "move",
-      "destination": "providers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/providers",
-      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
-    },
-    {
       "packagePath": "pkg/services/workers/provider/adapter/testkit",
       "disposition": "move",
       "destination": "providers",
@@ -4859,6 +4845,14 @@
     },
     {
       "packagePath": "pkg/services/workers/provider/kiro",
+      "disposition": "move",
+      "destination": "providers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/providers",
+      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/opencode",
       "disposition": "move",
       "destination": "providers",
       "destinationKind": "owner",
