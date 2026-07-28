@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -18,12 +19,13 @@ import (
 )
 
 const (
-	packagedGoalFactoryName            = "@you/goal"
-	packagedGoalPlanWorkstationName    = "plan-goal"
-	packagedGoalExecuteWorkstationName  = "execute-goal"
-	packagedGoalCheckWorkstationName    = "check-goal"
-	packagedGoalReviewWorkstationName   = "review-goal"
-	packagedGoalMockWorkerAcceptedSummary = "mock worker accepted"
+	packagedGoalFactoryName                 = "@you/goal"
+	packagedGoalPlanWorkstationName         = "plan-goal"
+	packagedGoalExecuteWorkstationName        = "execute-goal"
+	packagedGoalCheckWorkstationName          = "check-goal"
+	packagedGoalReviewWorkstationName         = "review-goal"
+	packagedGoalMockWorkerAcceptedSummary     = "mock worker accepted"
+	packagedGoalRejectThenCompleteSummary     = "finished after rejection"
 )
 
 func scaffoldPackagedGoalBuiltInFactory(t *testing.T) string {
@@ -81,6 +83,95 @@ func writePackagedGoalBuiltinMockWorkersConfig(t *testing.T) string {
 	return path
 }
 
+func writePackagedGoalRejectThenAcceptMockWorkersConfig(t *testing.T) (string, string) {
+	t.Helper()
+	return writePackagedGoalSequencedExecutorMockWorkersConfig(
+		t,
+		"goal is not complete yet",
+		"__COMPLETE_WITH_STOP_TOKEN__",
+	)
+}
+
+func writePackagedGoalSequencedExecutorMockWorkersConfig(t *testing.T, executorOutputs ...string) (string, string) {
+	t.Helper()
+
+	scriptDir := t.TempDir()
+	scriptPath := filepath.Join(scriptDir, "goal-executor-sequenced.sh")
+	counterPath := filepath.Join(scriptDir, "goal-executor-sequenced.count")
+	lines := []string{
+		"#!/bin/sh",
+		"count=0",
+		"if [ -f \"" + counterPath + "\" ]; then",
+		"  count=$(cat \"" + counterPath + "\")",
+		"fi",
+		"case \"$count\" in",
+	}
+	for idx, output := range executorOutputs {
+		switch output {
+		case "__COMPLETE_WITH_STOP_TOKEN__":
+			lines = append(lines, "  "+strconv.Itoa(idx)+") printf '%s\\n%s' '"+packagedGoalRejectThenCompleteSummary+"' '<COMPLETE>' ;;")
+		default:
+			lines = append(lines, "  "+strconv.Itoa(idx)+") printf '%s' '"+output+"' ;;")
+		}
+	}
+	fallback := packagedGoalMockWorkerAcceptedSummary
+	if len(executorOutputs) > 0 {
+		last := executorOutputs[len(executorOutputs)-1]
+		if last == "__COMPLETE_WITH_STOP_TOKEN__" {
+			fallback = packagedGoalRejectThenCompleteSummary + "\n<COMPLETE>"
+		} else {
+			fallback = last
+		}
+	}
+	lines = append(lines,
+		"  *) printf '%s' '"+fallback+"' ;;",
+		"esac",
+		"printf '%s' $((count + 1)) > \""+counterPath+"\"",
+	)
+	if err := os.WriteFile(scriptPath, []byte(strings.Join(lines, "\n")+"\n"), 0o755); err != nil {
+		t.Fatalf("write sequenced goal executor script: %v", err)
+	}
+
+	cfg := workers.MockWorkersConfig{
+		MockWorkers: []workers.MockWorkerConfig{
+			{
+				WorkerName:      "goal-executor",
+				WorkstationName: packagedGoalExecuteWorkstationName,
+				RunType:         workers.MockWorkerRunTypeScript,
+				ScriptConfig: &workers.MockWorkerScriptConfig{
+					Command: scriptPath,
+				},
+			},
+		},
+	}
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal packaged goal reject-then-accept mock-workers config: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "mock-workers-packaged-goal-reject-then-accept.json")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("write packaged goal reject-then-accept mock-workers config: %v", err)
+	}
+	return path, counterPath
+}
+
+func readPackagedGoalExecutorInvocationCount(t *testing.T, counterPath string) int {
+	t.Helper()
+
+	payload, err := os.ReadFile(counterPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0
+		}
+		t.Fatalf("read executor invocation counter: %v", err)
+	}
+	count, err := strconv.Atoi(strings.TrimSpace(string(payload)))
+	if err != nil {
+		t.Fatalf("parse executor invocation counter %q: %v", string(payload), err)
+	}
+	return count
+}
+
 func startPackagedGoalInvocationServer(t *testing.T, factoryDir, mockWorkersPath string) *support.FunctionalAPIServer {
 	t.Helper()
 
@@ -108,6 +199,18 @@ func postPackagedGoalInvocation(
 ) factoryapi.InvocationResponse {
 	t.Helper()
 
+	_, response := invokePackagedGoal(t, factoryDir, mockWorkersPath, goalText)
+	return response
+}
+
+func invokePackagedGoal(
+	t *testing.T,
+	factoryDir string,
+	mockWorkersPath string,
+	goalText string,
+) (*support.FunctionalAPIServer, factoryapi.InvocationResponse) {
+	t.Helper()
+
 	body := textInvocationRequestBody(goalText)
 	server := startPackagedGoalInvocationServer(t, factoryDir, mockWorkersPath)
 	response, err := http.Post(
@@ -128,7 +231,7 @@ func postPackagedGoalInvocation(
 	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
 		t.Fatalf("decode invocation response: %v", err)
 	}
-	return decoded
+	return server, decoded
 }
 
 func textInvocationRequestBody(goalText string) []byte {
