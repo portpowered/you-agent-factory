@@ -7,6 +7,8 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/expand"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/flatten"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/prepare"
 )
 
@@ -116,25 +118,34 @@ func (s *Service) PrepareFactoryLayout(
 }
 
 func (s *Service) FlattenFactoryLayout(
-	_ context.Context,
-	_ factorydefinitions.FlattenFactoryLayoutRequest,
+	ctx context.Context,
+	request factorydefinitions.FlattenFactoryLayoutRequest,
 ) (factorydefinitions.FlattenFactoryLayoutResult, error) {
 	if err := s.requirePorts(); err != nil {
 		return factorydefinitions.FlattenFactoryLayoutResult{}, err
 	}
-	return factorydefinitions.FlattenFactoryLayoutResult{},
-		fmt.Errorf("factory layout collaborator is required")
+	canonical, err := flatten.FactoryLayout(ctx, request.Path, s.flatten)
+	if err != nil {
+		return factorydefinitions.FlattenFactoryLayoutResult{}, err
+	}
+	return factorydefinitions.FlattenFactoryLayoutResult{Canonical: canonical}, nil
 }
 
 func (s *Service) ExpandFactoryLayout(
-	_ context.Context,
-	_ factorydefinitions.ExpandFactoryLayoutRequest,
+	ctx context.Context,
+	request factorydefinitions.ExpandFactoryLayoutRequest,
 ) (factorydefinitions.ExpandFactoryLayoutResult, error) {
 	if err := s.requirePorts(); err != nil {
 		return factorydefinitions.ExpandFactoryLayoutResult{}, err
 	}
-	return factorydefinitions.ExpandFactoryLayoutResult{},
-		fmt.Errorf("factory layout collaborator is required")
+	factoryDir, report, err := expand.FactoryLayout(ctx, request.Path, s.expand)
+	if err != nil {
+		return factorydefinitions.ExpandFactoryLayoutResult{}, err
+	}
+	return factorydefinitions.ExpandFactoryLayoutResult{
+		FactoryDir: factoryDir,
+		Report:     report,
+	}, nil
 }
 
 func (s *Service) CreateNamedFactory(
