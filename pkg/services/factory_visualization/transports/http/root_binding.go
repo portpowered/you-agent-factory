@@ -38,8 +38,7 @@ func (a *Adapter) requireVisualizationRoot() (VisualizationRoot, error) {
 	return a.visualization, nil
 }
 
-// Activate invokes the Visualization root Activate slice. HTTP decode and encode
-// for lifecycle operations arrive in later adapter stories.
+// Activate invokes the Visualization root Activate slice.
 func (a *Adapter) Activate(
 	ctx context.Context,
 	req factoryvisualization.ActivateRequest,
@@ -49,4 +48,28 @@ func (a *Adapter) Activate(
 		return factoryvisualization.ActivateResult{}, err
 	}
 	return root.Activate(ctx, req)
+}
+
+// Join invokes the Visualization root Join slice.
+func (a *Adapter) Join(
+	ctx context.Context,
+	req factoryvisualization.JoinRequest,
+) (factoryvisualization.JoinResult, error) {
+	root, err := a.requireVisualizationRoot()
+	if err != nil {
+		return factoryvisualization.JoinResult{}, err
+	}
+	return root.Join(ctx, req)
+}
+
+// StopDrain invokes the Visualization root StopDrain slice.
+func (a *Adapter) StopDrain(
+	ctx context.Context,
+	req factoryvisualization.StopDrainRequest,
+) (factoryvisualization.StopDrainResult, error) {
+	root, err := a.requireVisualizationRoot()
+	if err != nil {
+		return factoryvisualization.StopDrainResult{}, err
+	}
+	return root.StopDrain(ctx, req)
 }
