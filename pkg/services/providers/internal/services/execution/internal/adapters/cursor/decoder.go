@@ -145,6 +145,21 @@ func (decoder *decoder) final() (string, *providers.SessionRef, error) {
 	return decoder.finalContent, session, nil
 }
 
+func (decoder *decoder) failureSessionRef() *providers.SessionRef {
+	sessionID := strings.TrimSpace(decoder.finalSessionID)
+	if sessionID == "" {
+		sessionID = strings.TrimSpace(decoder.sessionID)
+	}
+	if !safeSessionID(sessionID) {
+		return nil
+	}
+	return &providers.SessionRef{
+		Provider: providers.IDCursor,
+		Kind:     providers.SessionIDKind,
+		ID:       sessionID,
+	}
+}
+
 func (decoder *decoder) progressFacts() []providers.ExecuteProgress {
 	progress := make([]providers.ExecuteProgress, len(decoder.progress))
 	for index := range decoder.progress {
@@ -268,10 +283,35 @@ func (decoder *decoder) decodeResult(envelope nativeEnvelope) {
 		decoder.finalContent = resultText
 		return
 	}
-	decoder.declareFailure(providers.ExecuteFailure{
-		Kind:    providers.ExecuteFailureKindUnknown,
-		Message: boundedDetail("Cursor reported a failed result"),
-	})
+	decoder.declareFailure(declaredFailureFromTerminalResult(subtype, envelope.Result))
+}
+
+func declaredFailureFromTerminalResult(subtype, result string) providers.ExecuteFailure {
+	kind := executeFailureKindFromTerminalSignal(subtype, result)
+	return providers.ExecuteFailure{
+		Kind:    kind,
+		Message: cursorDeclaredFailureMessage(kind),
+	}
+}
+
+func executeFailureKindFromTerminalSignal(subtype, result string) providers.ExecuteFailureKind {
+	signal := strings.ToLower(strings.TrimSpace(subtype) + " " + strings.TrimSpace(result))
+	switch {
+	case containsAny(signal, "the command line is too long", "command line too long", "command-line limit"):
+		return providers.ExecuteFailureKindInvalidRequest
+	case containsAny(signal, "authentication_error", "authentication failed", "authorization", "login required", "sign in", "unauthorized", "forbidden", "invalid api key", "401", "403"):
+		return providers.ExecuteFailureKindAuthentication
+	case containsAny(signal, "invalid_request", "bad request", "invalid argument", "invalid configuration", "configuration error", "config error", "model not found", "unsupported model"):
+		return providers.ExecuteFailureKindInvalidRequest
+	case containsAny(signal, "rate_limit", "rate limit", "throttl", "too many requests", "usage limit", "capacity", "resource exhausted", "quota", "429"):
+		return providers.ExecuteFailureKindThrottled
+	case containsAny(signal, "timeout", "timed out", "deadline exceeded"):
+		return providers.ExecuteFailureKindTimeout
+	case containsAny(signal, "api_error", "server_error", "internal server", "service unavailable", "provider unavailable", "upstream unavailable", "status 500", "status 502", "status 503", "status 504"):
+		return providers.ExecuteFailureKindDependency
+	default:
+		return providers.ExecuteFailureKindUnknown
+	}
 }
 
 func (decoder *decoder) stableMessageID() string {

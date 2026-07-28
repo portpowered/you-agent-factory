@@ -49,7 +49,7 @@ var forbiddenProviderImplementationImports = []string{
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/cursor",
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/gemini",
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/kiro",
-	"github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter/opencode",
+	"github.com/portpowered/infinite-you/pkg/services/workers/provider/opencode",
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/pi",
 }
 

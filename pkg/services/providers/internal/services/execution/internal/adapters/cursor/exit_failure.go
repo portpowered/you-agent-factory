@@ -58,7 +58,11 @@ func declaredFailureFromCommandOutput(stdout, stderr []byte) (providers.ExecuteF
 		if message == "" {
 			message = cursorDeclaredFailureMessage(providers.ExecuteFailureKindUnknown)
 		}
-		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindUnknown, Message: message}, true
+		kind := executeFailureKindFromTerminalSignal(envelope.Subtype, envelope.Result)
+		if message != cursorDeclaredFailureMessage(kind) {
+			message = cursorDeclaredFailureMessage(kind)
+		}
+		return providers.ExecuteFailure{Kind: kind, Message: message}, true
 	}
 	return providers.ExecuteFailure{}, false
 }

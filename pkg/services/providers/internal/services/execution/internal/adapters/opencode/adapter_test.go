@@ -155,6 +155,7 @@ func assertStructuredProgress(t *testing.T, progress []providers.ExecuteProgress
 		"run.started",
 		"message.completed",
 		"tool.completed",
+		"run.completed",
 	}
 	gotPhases := make([]string, len(progress))
 	for index := range progress {

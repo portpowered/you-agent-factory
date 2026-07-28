@@ -35,7 +35,15 @@ func (outcome attemptOutcome) terminalFailure() (execution.AttemptFailure, bool)
 
 func (outcome attemptOutcome) successResult(diagnostic *providers.ExecuteProgress) (providers.ExecuteResult, error) {
 	if failure, failed := outcome.terminalFailure(); failed {
-		return providers.ExecuteResult{}, failure
+		sessionRef := outcome.decoder.failureSessionRef()
+		if sessionRef != nil {
+			if failure.Declared != nil {
+				declared := failure.Declared.Clone()
+				declared.SessionRef = sessionRef
+				failure.Declared = &declared
+			}
+		}
+		return providers.ExecuteResult{SessionRef: sessionRef}, failure
 	}
 	content, session, finalErr := outcome.decoder.final()
 	if finalErr != nil {

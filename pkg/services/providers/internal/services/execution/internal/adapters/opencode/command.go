@@ -107,6 +107,9 @@ func buildCommand(
 	if strings.TrimSpace(request.Model) != "" {
 		args = append(args, "--model", strings.TrimSpace(request.Model))
 	}
+	if agent := strings.TrimSpace(request.EnvVars["opencode_agent"]); agent != "" {
+		args = append(args, "--agent", agent)
+	}
 	if request.ResumeSession != nil && strings.TrimSpace(request.ResumeSession.ID) != "" {
 		args = append(args, "--session", strings.TrimSpace(request.ResumeSession.ID))
 	}

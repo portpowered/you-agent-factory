@@ -104,7 +104,6 @@ func (s *Service) providerInstance() (inferencecontract.Provider, error) {
 	provider, err := s.config.Factory.New(
 		s.config.SkipPermissions,
 		logging.EnsureLogger(s.config.Logger),
-		nil,
 		s.config.Publish,
 		responseExecutor,
 		strings.TrimSpace(s.config.FactoryDirectory),

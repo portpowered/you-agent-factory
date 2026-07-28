@@ -19,7 +19,6 @@ import (
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
-	opencodeadapter "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter/opencode"
 	agyadapter "github.com/portpowered/infinite-you/pkg/services/workers/provider/agy"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -97,7 +96,6 @@ func NewFactory(
 func (f *Factory) New(
 	skipPermissions bool,
 	logger logging.Logger,
-	openCodeResolver *opencodeadapter.Resolver,
 	progressPublisher InferenceProgressPublisher,
 	responseStreamExecutor ResponseStreamExecutor,
 	agyFactoryRoot string,
@@ -108,20 +106,11 @@ func (f *Factory) New(
 	if f.commandClock == nil {
 		return nil, errors.New("construct provider-backed worker: command clock is required")
 	}
-	if openCodeResolver == nil {
-		var err error
-		openCodeResolver, err = opencodeadapter.NewDefaultResolver(
-			f.commandRunner, f.resolveSymlinks, f.executableLocator, f.executableFiles,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("construct provider-backed worker: %w", err)
-		}
-	}
 	provider := NewScriptWrapProviderWithDependencies(
 		skipPermissions,
 		logger,
 		workerprocess.CommandRunnerWithLogging(f.commandRunner, logger, f.commandClock),
-		openCodeResolver,
+		nil,
 		progressPublisher,
 		responseStreamExecutor,
 		agyFactoryRoot,

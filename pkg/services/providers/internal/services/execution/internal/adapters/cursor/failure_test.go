@@ -35,7 +35,7 @@ func TestCursorRootNormalizesFailureStagesAndSuppressesResults(t *testing.T) {
 		{
 			name:      "malformed stream-json",
 			stream:    `{"type":"system","subtype":"init","secret":"` + cursorFailureSecret,
-			wantKind:  providers.ExecuteFailureKindUnknown,
+			wantKind:  providers.ExecuteFailureKindInvalidRequest,
 			wantStage: "decode",
 		},
 		{
@@ -49,7 +49,7 @@ func TestCursorRootNormalizesFailureStagesAndSuppressesResults(t *testing.T) {
 			stream: "{\"type\":\"result\",\"subtype\":\"error\",\"is_error\":true,\"result\":\"unexpected status 429 " +
 				cursorFailureSecret + "\",\"session_id\":\"\"}\n",
 			effectErr: errors.New("exit included " + cursorFailureSecret),
-			wantKind:  providers.ExecuteFailureKindUnknown,
+			wantKind:  providers.ExecuteFailureKindThrottled,
 		},
 		{
 			name: "recognized native failure beats unknown stream failure",

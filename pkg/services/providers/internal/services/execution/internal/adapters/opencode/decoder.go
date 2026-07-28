@@ -107,6 +107,9 @@ func (decoder *decoder) flush() error {
 	}
 	decoder.pending = nil
 	decoder.finalContent = decoder.authoritativeContent()
+	if decoder.runStarted {
+		decoder.addProgress("run.completed", "completed", nil)
+	}
 	return nil
 }
 
@@ -149,6 +152,17 @@ func (decoder *decoder) final() (string, *providers.SessionRef, error) {
 		}
 	}
 	return content, session, nil
+}
+
+func (decoder *decoder) failureSessionRef() *providers.SessionRef {
+	if !validCorrelation(decoder.sessionID) {
+		return nil
+	}
+	return &providers.SessionRef{
+		Provider: providers.IDOpenCode,
+		Kind:     providers.SessionIDKind,
+		ID:       decoder.sessionID,
+	}
 }
 
 func (decoder *decoder) authoritativeContent() string {
@@ -292,12 +306,10 @@ func (decoder *decoder) decodeUsage(record structuredRecord) {
 }
 
 func (decoder *decoder) decodeError(record structuredRecord) {
-	message := boundedDetail(strings.TrimSpace(record.Error.Name))
-	if message == "" {
-		message = "OpenCode reported a structured execution failure"
-	}
+	kind := executeFailureKindFromStructuredError(record.Error)
+	message := openCodeDeclaredFailureMessage(kind)
 	decoder.declareFailure(providers.ExecuteFailure{
-		Kind:    providers.ExecuteFailureKindUnknown,
+		Kind:    kind,
 		Message: message,
 	})
 	decoder.ensureRunStarted("error")

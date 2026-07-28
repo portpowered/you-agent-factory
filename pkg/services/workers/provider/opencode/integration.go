@@ -1,4 +1,4 @@
-package cursor
+package opencode
 
 import (
 	"context"
@@ -11,18 +11,18 @@ import (
 	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 )
 
-// IntegrationDependencies are the Providers collaborators used by Cursor's
+// IntegrationDependencies are the Providers collaborators used by OpenCode's
 // registry-backed integration on the neutral conductor path.
 type IntegrationDependencies struct {
 	ProvidersService providers.Service
 }
 
-// Integration routes Cursor through the Providers root execution boundary.
+// Integration routes OpenCode through the Providers root execution boundary.
 type Integration struct {
 	providers providers.Service
 }
 
-// NewIntegration constructs Cursor's registry-backed integration.
+// NewIntegration constructs OpenCode's registry-backed integration.
 func NewIntegration(deps ...IntegrationDependencies) *Integration {
 	integration := &Integration{}
 	if len(deps) > 0 {
@@ -32,7 +32,7 @@ func NewIntegration(deps ...IntegrationDependencies) *Integration {
 }
 
 func (*Integration) Identity() inference.Identity {
-	return inference.Identity("cursor")
+	return inference.Identity(modelprovider.ProviderOpenCode)
 }
 
 func (*Integration) MaximumCapabilities() inference.CapabilitySet {
@@ -41,8 +41,6 @@ func (*Integration) MaximumCapabilities() inference.CapabilitySet {
 		inference.CapabilitySessionResume,
 		inference.CapabilityNativeStreaming,
 		inference.CapabilityMessageSnapshots,
-		inference.CapabilityToolLifecycle,
-		inference.CapabilityToolOutputDeltas,
 		inference.CapabilityUsage,
 		inference.CapabilityStableItemIDs,
 	)
@@ -56,7 +54,7 @@ func (i *Integration) Capabilities(context.Context, inference.InvocationRequest)
 	return i.MaximumCapabilities(), nil
 }
 
-// Invoke executes Cursor through providers.Service and publishes progress
+// Invoke executes OpenCode through providers.Service and publishes progress
 // before closing with exactly one terminal outcome.
 func (i *Integration) Invoke(
 	ctx context.Context,
@@ -66,7 +64,7 @@ func (i *Integration) Invoke(
 	if i == nil || i.providers == nil {
 		failure := inference.NewFailure(inference.FailureInput{
 			Kind:    inference.FailureDependency,
-			Message: "Cursor Providers service is unavailable",
+			Message: "OpenCode Providers service is unavailable",
 		})
 		if err := writeFailureProgress(ctx, writer, request.InvocationID(), failure); err != nil {
 			return err
@@ -102,7 +100,7 @@ func (i *Integration) Invoke(
 func executeRequestFromInvocation(request inference.InvocationRequest) providers.ExecuteRequest {
 	execution := request.Execution()
 	executeRequest := providers.ExecuteRequest{
-		Provider:           providers.IDCursor,
+		Provider:           providers.IDOpenCode,
 		AttemptID:          request.InvocationID(),
 		Model:              request.Model(),
 		SkipPermissions:    execution.SkipPermissions,
@@ -115,6 +113,12 @@ func executeRequestFromInvocation(request inference.InvocationRequest) providers
 		EnvVars:            cloneStringMap(execution.EnvVars),
 		WorkerType:         workerNameFromExecution(execution),
 		WorkstationName:    workstationNameFromExecution(execution),
+	}
+	if agent := strings.TrimSpace(execution.OpenCodeAgent); agent != "" {
+		if executeRequest.EnvVars == nil {
+			executeRequest.EnvVars = map[string]string{}
+		}
+		executeRequest.EnvVars["opencode_agent"] = agent
 	}
 	if session := requestedSession(request); session != nil {
 		executeRequest.ResumeSession = session
@@ -138,17 +142,17 @@ func workstationNameFromExecution(execution workers.ProviderInferenceRequest) st
 
 func requestedSession(request inference.InvocationRequest) *providers.SessionRef {
 	if session := request.ProviderSession(); session != nil &&
-		workers.CanonicalProviderSessionProvider(session.Provider()) == string(modelprovider.ProviderCursor) &&
+		strings.TrimSpace(session.Provider()) == string(providers.IDOpenCode) &&
 		strings.TrimSpace(session.Kind()) == providers.SessionIDKind {
 		return &providers.SessionRef{
-			Provider: providers.IDCursor,
+			Provider: providers.IDOpenCode,
 			Kind:     providers.SessionIDKind,
 			ID:       strings.TrimSpace(session.ID()),
 		}
 	}
 	if sessionID := strings.TrimSpace(request.Execution().SessionID); sessionID != "" {
 		return &providers.SessionRef{
-			Provider: providers.IDCursor,
+			Provider: providers.IDOpenCode,
 			Kind:     providers.SessionIDKind,
 			ID:       sessionID,
 		}
@@ -179,7 +183,7 @@ func failureFromExecuteError(request inference.InvocationRequest, err error) inf
 	}
 	return inference.NewFailure(inference.FailureInput{
 		Kind:            inference.FailureUnknown,
-		Message:         "Cursor invocation failed.",
+		Message:         "OpenCode invocation failed.",
 		ProviderSession: failureSessionForInvocation(request, nil),
 	})
 }

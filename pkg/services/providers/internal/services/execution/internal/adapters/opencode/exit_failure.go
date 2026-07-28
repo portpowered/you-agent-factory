@@ -2,6 +2,7 @@ package opencode
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -37,10 +38,11 @@ func declaredFailureFromCommandOutput(stdout, stderr []byte) (providers.ExecuteF
 			continue
 		}
 		message := boundedDetail(strings.TrimSpace(record.Error.Name))
+		kind := executeFailureKindFromStructuredError(record.Error)
 		if message == "" {
-			message = openCodeDeclaredFailureMessage(providers.ExecuteFailureKindUnknown)
+			message = openCodeDeclaredFailureMessage(kind)
 		}
-		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindUnknown, Message: message}, true
+		return providers.ExecuteFailure{Kind: kind, Message: message}, true
 	}
 	return providers.ExecuteFailure{}, false
 }
@@ -59,6 +61,48 @@ func openCodeDeclaredFailureMessage(kind providers.ExecuteFailureKind) string {
 		return "OpenCode encountered a temporary server error."
 	default:
 		return "OpenCode reported a structured execution failure."
+	}
+}
+
+func executeFailureKindFromStructuredError(error structuredError) providers.ExecuteFailureKind {
+	var payload struct {
+		Message    string `json:"message"`
+		StatusCode int    `json:"statusCode"`
+		Status     int    `json:"status"`
+	}
+	if len(error.Data) > 0 {
+		_ = json.Unmarshal(error.Data, &payload)
+	}
+	signal := strings.ToLower(strings.TrimSpace(error.Name) + " " + strings.TrimSpace(payload.Message))
+	switch {
+	case containsAny(signal, "providerautherror", "authentication_error", "permission_error", "unauthorized", "forbidden"):
+		return providers.ExecuteFailureKindAuthentication
+	case containsAny(signal, "invalid_request_error", "badrequesterror", "invalidrequesterror"):
+		return providers.ExecuteFailureKindInvalidRequest
+	case containsAny(signal, "ratelimiterror", "rate_limit_error", "overloaded_error", "quotaexceeded"):
+		return providers.ExecuteFailureKindThrottled
+	case containsAny(signal, "timeouterror", "timeout_error", "etimedout", "timed out", "timeout"):
+		return providers.ExecuteFailureKindTimeout
+	case containsAny(signal, "server_error", "internalservererror"):
+		return providers.ExecuteFailureKindDependency
+	}
+	statusCode := payload.StatusCode
+	if statusCode == 0 {
+		statusCode = payload.Status
+	}
+	switch {
+	case statusCode == 401 || statusCode == 403:
+		return providers.ExecuteFailureKindAuthentication
+	case statusCode == 400 || statusCode == 422:
+		return providers.ExecuteFailureKindInvalidRequest
+	case statusCode == 408:
+		return providers.ExecuteFailureKindTimeout
+	case statusCode == 429:
+		return providers.ExecuteFailureKindThrottled
+	case statusCode >= 500 && statusCode <= 599:
+		return providers.ExecuteFailureKindDependency
+	default:
+		return providers.ExecuteFailureKindUnknown
 	}
 }
 

@@ -1413,8 +1413,12 @@ response-stream output.
   `inferencecontract.ExecuteInvocation` remains the single owner of canonical,
   non-retryable cancellation. Bind the
   migrated providers as registry catalog Integrations
-  (`gemini.NewIntegration`, `kiro.NewIntegration`, `cursor.NewIntegration`) from
-  `BuiltInRegistrations`, and let
+  (`gemini.NewIntegration`, `kiro.NewIntegration`, `cursor.NewIntegration`,
+  `opencode.NewIntegration`) from
+  `BuiltInRegistrations`, wiring Cursor and OpenCode through
+  `IntegrationDependencies{ProvidersService}` like Codex/Claude so live attempts
+  use `providers.Service.Execute` instead of ScriptWrap or
+  `adapter/opencode` replay paths, and let
   `UsesNativeRunner` route Integrations that no longer advertise the
   native-runtime compatibility marker through `conductor.Invoke` without adding
   a concrete-provider switch in shared orchestration. Process composition

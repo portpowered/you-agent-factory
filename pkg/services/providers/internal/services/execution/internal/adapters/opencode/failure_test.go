@@ -34,7 +34,7 @@ func TestOpenCodeRootNormalizesFailureStagesAndSuppressesResults(t *testing.T) {
 		{
 			name:      "malformed JSONL",
 			stream:    `{"type":"text","part":{"secret":"` + openCodeFailureSecret,
-			wantKind:  providers.ExecuteFailureKindUnknown,
+			wantKind:  providers.ExecuteFailureKindInvalidRequest,
 			wantStage: "decode",
 		},
 		{
