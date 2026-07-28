@@ -369,6 +369,73 @@ func TestAPIOpenListGetAndCloseFactorySession(t *testing.T) {
 	}
 }
 
+// TestAPIFactorySessionNotFoundUsesTypedError proves the public HTTP Factory Session
+// boundary returns a typed not-found error (HTTP 404 with stable NOT_FOUND family/code)
+// when get or close targets a missing session ID, without silently resolving to the
+// default or another live session.
+func TestAPIFactorySessionNotFoundUsesTypedError(t *testing.T) {
+	primaryFactoryDir := support.ScaffoldFactory(t, sessionLifecycleCRUDFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:     primaryFactoryDir,
+		UseMockWorkers: true,
+	})
+	defer server.Stop(t)
+
+	baseURL := strings.TrimSuffix(server.URL(), "/")
+	openFactoryDir := filepath.Join(t.TempDir(), "session-lifecycle-crud-api-isolation-factory")
+	if err := os.Mkdir(openFactoryDir, 0o755); err != nil {
+		t.Fatalf("create factory directory: %v", err)
+	}
+
+	initNewFactory := true
+	opened := postSessionLifecycleJSON[factoryapi.OpenFactorySessionResponse](
+		t,
+		baseURL+"/factory-sessions",
+		factoryapi.OpenFactorySessionRequest{
+			FolderPath:     openFactoryDir,
+			InitNewFactory: &initNewFactory,
+		},
+		"open isolation Factory Session",
+	)
+	if opened.Session == nil || strings.TrimSpace(opened.Session.Id) == "" {
+		t.Fatalf("open isolation session response missing session id: %#v", opened)
+	}
+	openSessionID := opened.Session.Id
+	if openSessionID == sessionLifecycleCRUDMissingSessionID {
+		t.Fatalf("open session id = %q, want distinct from missing probe id %q", openSessionID, sessionLifecycleCRUDMissingSessionID)
+	}
+
+	assertAPISessionNotFound(t, baseURL, sessionLifecycleCRUDMissingSessionID)
+
+	selected := support.GetJSON[factoryapi.FactorySessionGetResponse](
+		t,
+		baseURL+"/factory-sessions/"+openSessionID,
+	)
+	resolved, err := selected.AsFactorySession()
+	if err != nil {
+		t.Fatalf("decode isolation session get response: %v", err)
+	}
+	if resolved.Id != openSessionID {
+		t.Fatalf("isolation session get id = %q, want %q", resolved.Id, openSessionID)
+	}
+	if resolved.Id == sessionLifecycleCRUDMissingSessionID {
+		t.Fatalf("missing-session get must not resolve to another live session id %q", openSessionID)
+	}
+
+	assertAPIDeleteSessionTypedNotFound(t, baseURL, sessionLifecycleCRUDMissingSessionID)
+
+	selectedAfterDelete, err := http.Get(baseURL + "/factory-sessions/" + openSessionID)
+	if err != nil {
+		t.Fatalf("GET isolation Factory Session %q after missing delete: %v", openSessionID, err)
+	}
+	defer selectedAfterDelete.Body.Close()
+	if selectedAfterDelete.StatusCode != http.StatusOK {
+		payload, _ := io.ReadAll(selectedAfterDelete.Body)
+		t.Fatalf("GET isolation Factory Session %q after missing delete status = %d, want 200: %s",
+			openSessionID, selectedAfterDelete.StatusCode, payload)
+	}
+}
+
 type cliCreatedSession struct {
 	id         string
 	folderPath string
@@ -578,12 +645,80 @@ func assertAPISessionNotFound(t *testing.T, baseURL, sessionID string) {
 
 	response, err := http.Get(baseURL + "/factory-sessions/" + sessionID)
 	if err != nil {
-		t.Fatalf("GET closed Factory Session %q: %v", sessionID, err)
+		t.Fatalf("GET Factory Session %q: %v", sessionID, err)
 	}
 	defer response.Body.Close()
+	assertAPISessionTypedNotFoundHTTPResponse(t, response, "GET", sessionID)
+}
+
+func assertAPIDeleteSessionTypedNotFound(t *testing.T, baseURL, sessionID string) {
+	t.Helper()
+
+	request, err := http.NewRequest(http.MethodDelete, baseURL+"/factory-sessions/"+sessionID, nil)
+	if err != nil {
+		t.Fatalf("construct delete Factory Session request: %v", err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("DELETE Factory Session %q: %v", sessionID, err)
+	}
+	defer response.Body.Close()
+	assertAPISessionTypedNotFoundHTTPResponse(t, response, "DELETE", sessionID)
+}
+
+func assertAPISessionTypedNotFoundHTTPResponse(
+	t *testing.T,
+	response *http.Response,
+	operation string,
+	sessionID string,
+) {
+	t.Helper()
+
 	if response.StatusCode != http.StatusNotFound {
 		payload, _ := io.ReadAll(response.Body)
-		t.Fatalf("GET closed Factory Session %q status = %d, want 404: %s", sessionID, response.StatusCode, payload)
+		t.Fatalf("%s missing Factory Session %q status = %d, want 404: %s", operation, sessionID, response.StatusCode, payload)
+	}
+
+	contentType := response.Header.Get("Content-Type")
+	if !strings.Contains(contentType, "application/json") {
+		payload, _ := io.ReadAll(response.Body)
+		t.Fatalf("%s missing Factory Session %q Content-Type = %q, want application/json structured error body: %s",
+			operation, sessionID, contentType, payload)
+	}
+
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("%s missing Factory Session %q read body: %v", operation, sessionID, err)
+	}
+	var errResp factoryapi.ErrorResponse
+	if err := json.Unmarshal(body, &errResp); err != nil {
+		t.Fatalf("%s missing Factory Session %q decode structured error: %v\nbody: %s", operation, sessionID, err, body)
+	}
+	if errResp.Family != factoryapi.ErrorFamilyNotFound {
+		t.Fatalf("%s missing Factory Session %q error family = %q, want %q: %#v",
+			operation, sessionID, errResp.Family, factoryapi.ErrorFamilyNotFound, errResp)
+	}
+	if errResp.Code != factoryapi.ErrorResponseCodeNOTFOUND {
+		t.Fatalf("%s missing Factory Session %q error code = %q, want %q: %#v",
+			operation, sessionID, errResp.Code, factoryapi.ErrorResponseCodeNOTFOUND, errResp)
+	}
+	if strings.TrimSpace(errResp.Message) == "" {
+		t.Fatalf("%s missing Factory Session %q error message is empty, want customer-readable not-found text: %#v",
+			operation, sessionID, errResp)
+	}
+	if !strings.Contains(strings.ToLower(errResp.Message), "not found") {
+		t.Fatalf("%s missing Factory Session %q error message = %q, want not-found guidance: %#v",
+			operation, sessionID, errResp.Message, errResp)
+	}
+
+	if operation == "GET" {
+		var shown factoryapi.FactorySession
+		if json.Unmarshal(body, &shown) == nil && strings.TrimSpace(shown.Id) != "" {
+			t.Fatalf("GET missing Factory Session %q must not emit a success session payload: %#v", sessionID, shown)
+		}
+		if strings.Contains(string(body), `"runtime"`) {
+			t.Fatalf("GET missing Factory Session %q must not emit a success session payload: %s", sessionID, body)
+		}
 	}
 }
 
