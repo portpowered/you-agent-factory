@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"sort"
@@ -154,6 +155,22 @@ func (e *ArgumentError) Error() string {
 		return ""
 	}
 	return e.Message
+}
+
+// QualifyInvocationArgumentError adds the invoked Factory name to
+// customer-visible ArgumentError diagnostics when the transport boundary knows it.
+func QualifyInvocationArgumentError(err error, factoryName string) error {
+	factoryName = strings.TrimSpace(factoryName)
+	if factoryName == "" {
+		return err
+	}
+	var argumentErr *ArgumentError
+	if !errors.As(err, &argumentErr) {
+		return err
+	}
+	qualified := *argumentErr
+	qualified.Message = fmt.Sprintf("%s (factory %q)", argumentErr.Message, factoryName)
+	return &qualified
 }
 
 func NamedArgumentInputsFromAnyMap(values map[string]any) ([]NamedArgumentInput, error) {
