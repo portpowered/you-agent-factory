@@ -18,6 +18,8 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+const sessionLifecycleCRUDMissingSessionID = "dur-sess-missing-999"
+
 // TestFactorySessionCreateListShowDelete proves the public CLI Factory Session
 // boundary supports a full create → list → show → delete lifecycle: a newly
 // created session returns a stable public session ID, appears in session list
@@ -221,6 +223,79 @@ func TestFactorySessionListMultipleSessions(t *testing.T) {
 	assertDistinctSessionListEntries(t, listed.Sessions, firstSession.id, secondSession.id)
 }
 
+// TestFactorySessionMissingShowAndDeleteFail proves the public CLI Factory Session
+// boundary rejects session show and delete for a missing session ID with a
+// customer-visible not-found outcome, without removing or corrupting any still-open
+// session created for isolation proof.
+func TestFactorySessionMissingShowAndDeleteFail(t *testing.T) {
+	primaryFactoryDir := support.ScaffoldFactory(t, sessionLifecycleCRUDFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:     primaryFactoryDir,
+		UseMockWorkers: true,
+	})
+	defer server.Stop(t)
+
+	baseURL := server.URL()
+	serverPort := portFromServerURL(t, baseURL)
+	binaryPath := buildYouCLIBinary(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	isolationFactoryDir := filepath.Join(t.TempDir(), "session-lifecycle-crud-isolation-factory")
+	if err := os.Mkdir(isolationFactoryDir, 0o755); err != nil {
+		t.Fatalf("create isolation factory directory: %v", err)
+	}
+	openSession := createSessionViaCLI(t, ctx, binaryPath, primaryFactoryDir, baseURL, isolationFactoryDir)
+
+	showOut, err := runYouCLI(ctx, binaryPath, primaryFactoryDir, baseURL,
+		"--json",
+		"session", "show", sessionLifecycleCRUDMissingSessionID,
+	)
+	assertCLISessionNotFoundFailure(t, "show", showOut, err, sessionLifecycleCRUDMissingSessionID, false)
+
+	deleteOut, err := runYouCLI(ctx, binaryPath, primaryFactoryDir, "",
+		"--json",
+		"session", "delete", sessionLifecycleCRUDMissingSessionID,
+		"--port", fmt.Sprintf("%d", serverPort),
+	)
+	assertCLISessionNotFoundFailure(t, "delete", deleteOut, err, sessionLifecycleCRUDMissingSessionID, true)
+
+	showOut, err = runYouCLI(ctx, binaryPath, primaryFactoryDir, baseURL,
+		"--json",
+		"session", "show", openSession.id,
+	)
+	if err != nil {
+		t.Fatalf("you session show for isolation session: %v\noutput:\n%s", err, showOut)
+	}
+	var shown factoryapi.FactorySession
+	if err := json.Unmarshal(bytesTrimSpace(showOut), &shown); err != nil {
+		t.Fatalf("decode isolation session show JSON: %v\noutput:\n%s", err, showOut)
+	}
+	if shown.Id != openSession.id {
+		t.Fatalf("isolation session show id = %q, want %q", shown.Id, openSession.id)
+	}
+	if shown.FolderPath != isolationFactoryDir {
+		t.Fatalf("isolation session show folder path = %q, want %q", shown.FolderPath, isolationFactoryDir)
+	}
+
+	listJSONOut, err := runYouCLI(ctx, binaryPath, primaryFactoryDir, baseURL,
+		"--json",
+		"session", "list",
+	)
+	if err != nil {
+		t.Fatalf("you session list --json after missing delete: %v\noutput:\n%s", err, listJSONOut)
+	}
+	var listed factoryapi.ListFactorySessionsResponse
+	if err := json.Unmarshal(bytesTrimSpace(listJSONOut), &listed); err != nil {
+		t.Fatalf("decode session list JSON after missing delete: %v\noutput:\n%s", err, listJSONOut)
+	}
+	if !sessionListContains(listed.Sessions, openSession.id, isolationFactoryDir) {
+		t.Fatalf("isolation session %q at %q missing from list after missing delete attempt: %#v",
+			openSession.id, isolationFactoryDir, listed.Sessions)
+	}
+}
+
 type cliCreatedSession struct {
 	id         string
 	folderPath string
@@ -382,4 +457,52 @@ func sessionListContains(
 
 func bytesTrimSpace(raw []byte) []byte {
 	return []byte(strings.TrimSpace(string(raw)))
+}
+
+func assertCLISessionNotFoundFailure(
+	t *testing.T,
+	operation string,
+	output []byte,
+	err error,
+	sessionID string,
+	expectDeleteConfirmation bool,
+) {
+	t.Helper()
+
+	if err == nil {
+		t.Fatalf("you session %s unexpectedly succeeded:\n%s", operation, output)
+	}
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok {
+		t.Fatalf("you session %s error = %v, want *exec.ExitError", operation, err)
+	}
+	if exitErr.ExitCode() == 0 {
+		t.Fatalf("you session %s exit code = 0, want non-zero", operation)
+	}
+
+	text := string(output)
+	if !strings.Contains(strings.ToLower(text), "not found") {
+		t.Fatalf("session %s missing not-found diagnostic:\n%s", operation, text)
+	}
+	if !strings.Contains(text, sessionID) {
+		t.Fatalf("session %s missing session id %q in diagnostic:\n%s", operation, sessionID, text)
+	}
+
+	if expectDeleteConfirmation {
+		var deleted struct {
+			SessionID string `json:"sessionId"`
+		}
+		if json.Unmarshal(bytesTrimSpace(output), &deleted) == nil && deleted.SessionID != "" {
+			t.Fatalf("session delete must not emit success confirmation payload:\n%s", text)
+		}
+		return
+	}
+
+	var shown factoryapi.FactorySession
+	if json.Unmarshal(bytesTrimSpace(output), &shown) == nil && strings.TrimSpace(shown.Id) != "" {
+		t.Fatalf("session show must not emit a success session payload:\n%s", text)
+	}
+	if strings.Contains(text, `"id"`) && strings.Contains(text, `"runtime"`) {
+		t.Fatalf("session show must not emit a success session payload:\n%s", text)
+	}
 }
