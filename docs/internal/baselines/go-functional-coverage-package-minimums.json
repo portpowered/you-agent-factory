@@ -18,7 +18,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/initializer/lifecycle",
-      "minimum": 75.60
+      "minimum": 75.6
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/initializer/process",
@@ -30,15 +30,15 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/browser",
-      "minimum": 10.00
+      "minimum": 10.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/clock",
-      "minimum": 19.60
+      "minimum": 19.6
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/contentstaging",
-      "minimum": 80.00
+      "minimum": 80.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/directoryreplace",
@@ -46,11 +46,11 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/filesystem",
-      "minimum": 75.00
+      "minimum": 75.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/generatedartifacts",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/httpserver",
@@ -62,7 +62,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/internal/runtimeartifact",
-      "minimum": 77.50
+      "minimum": 77.5
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/logging",
@@ -78,7 +78,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/process",
-      "minimum": 42.80
+      "minimum": 42.8
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/pty",
@@ -102,7 +102,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/root",
-      "minimum": 62.50
+      "minimum": 62.5
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/automations",
@@ -116,7 +116,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal",
-      "minimum": 65.00
+      "minimum": 65.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron",
@@ -130,27 +130,27 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/internal/service",
-      "minimum": 40.10
+      "minimum": 40.1
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/wire",
-      "minimum": 100.00
+      "minimum": 100.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/internal/service",
-      "minimum": 42.20
+      "minimum": 42.2
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/wire",
-      "minimum": 100.00
+      "minimum": 100.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/internal/linear",
@@ -162,7 +162,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/wire",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation",
@@ -180,7 +180,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation/wire",
-      "minimum": 100.00
+      "minimum": 100.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers",
@@ -204,7 +204,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/wire",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/automations/transports/http",
@@ -232,7 +232,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions",
-      "minimum": 44.60
+      "minimum": 44.6
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/authoredlayout",
@@ -240,7 +240,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/decisionenvelope",
-      "minimum": 40.90
+      "minimum": 40.9
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition",
@@ -254,15 +254,15 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/editable",
-      "minimum": 75.00
+      "minimum": 75.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal",
-      "minimum": 40.00
+      "minimum": 40.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts",
-      "minimum": 64.70
+      "minimum": 64.7
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout",
@@ -342,11 +342,11 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedfactories",
-      "minimum": 37.50
+      "minimum": 37.5
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire",
-      "minimum": 62.50
+      "minimum": 62.5
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation",
@@ -380,15 +380,15 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loadedsource",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/runtimeconfig",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire",
@@ -412,15 +412,15 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/internal/service",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedcatalog",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedinstallation",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/scaffoldfacts",
@@ -434,7 +434,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/wire",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability",
@@ -448,7 +448,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/capture",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/internal/service",
@@ -462,7 +462,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/materialize",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig",
@@ -470,7 +470,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/prepare",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/wire",
@@ -494,27 +494,27 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/orchestrator",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/requiredtools",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/service",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/structural",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/topology",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/wire",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/testcomposition",
@@ -532,7 +532,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/invocationoutput",
-      "minimum": 30.00
+      "minimum": 30.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/invocationworktype",
@@ -544,7 +544,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading",
-      "minimum": 45.00
+      "minimum": 45.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedfactories",
@@ -574,11 +574,11 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/packageassets",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/promptassets",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/review",
@@ -612,11 +612,11 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/persistence",
-      "minimum": 64.00
+      "minimum": 64.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig",
-      "minimum": 50.00
+      "minimum": 50.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/quorumpolicy",
@@ -652,7 +652,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/snapshotcapture",
-      "minimum": 20.00
+      "minimum": 20.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli",
@@ -738,15 +738,15 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal",
-      "minimum": 5.00
+      "minimum": 5.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/factorystatus",
-      "minimum": 90.00
+      "minimum": 90.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host",
-      "minimum": 5.00
+      "minimum": 5.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/legacysnapshot",
@@ -760,7 +760,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/javascript/preview",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/javascript/runtime",
@@ -780,7 +780,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/rootobservation",
-      "minimum": 78.00
+      "minimum": 78.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/service",
@@ -794,7 +794,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptstore",
@@ -832,7 +832,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/wire",
-      "minimum": 100.00
+      "minimum": 100.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host",
@@ -846,11 +846,11 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/internal/service",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/instance_host/wire",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration",
@@ -864,11 +864,11 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/internal/service",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/wire",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/javascript",
@@ -876,11 +876,11 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/metrics",
-      "minimum": 100.00
+      "minimum": 100.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/orchestrationowner",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/orchestratorcontract",
@@ -888,27 +888,27 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/replayhooks",
-      "minimum": 87.50
+      "minimum": 87.5
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime",
-      "minimum": 60.00
+      "minimum": 60.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime/buffers",
-      "minimum": 55.00
+      "minimum": 55.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtimecontract",
-      "minimum": 45.60
+      "minimum": 45.6
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/scheduler",
-      "minimum": 74.20
+      "minimum": 74.2
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/state",
-      "minimum": 81.00
+      "minimum": 81.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/state/validation",
@@ -930,7 +930,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/throttle",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/token",
@@ -938,23 +938,23 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/token_transformer",
-      "minimum": 80.80
+      "minimum": 80.8
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/tooling/javascript/callbehavior",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/tooling/javascript/catalog",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/tooling/javascript/symbolidentity",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/cli",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/http",
@@ -1018,7 +1018,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors/persistence",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution",
@@ -1026,7 +1026,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/livechild",
-      "minimum": 80.00
+      "minimum": 80.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/recordingreplay",
@@ -1048,7 +1048,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects",
-      "minimum": 50.00
+      "minimum": 50.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation",
@@ -1096,7 +1096,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents",
-      "minimum": 100.00
+      "minimum": 100.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseeventstore",
@@ -1136,7 +1136,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding",
-      "minimum": 60.10
+      "minimum": 60.1
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimehosting",
@@ -1152,11 +1152,11 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening/operatordefaults",
-      "minimum": 76.00
+      "minimum": 76.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/scopedlisting",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service",
@@ -1196,7 +1196,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity/wire",
-      "minimum": 60.00
+      "minimum": 60.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation",
@@ -1214,7 +1214,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation/wire",
-      "minimum": 80.00
+      "minimum": 80.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/live_runtime",
@@ -1232,11 +1232,11 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/live_runtime/wire",
-      "minimum": 100.00
+      "minimum": 100.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream/internal/service",
@@ -1244,7 +1244,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream/wire",
-      "minimum": 75.00
+      "minimum": 75.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionprojection",
@@ -1268,7 +1268,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session",
-      "minimum": 27.30
+      "minimum": 27.3
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/sessionexecution",
@@ -1284,7 +1284,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp/catalog",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire",
@@ -1302,7 +1302,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization",
-      "minimum": 16.80
+      "minimum": 16.8
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/contracts",
@@ -1316,7 +1316,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/recordingsqueries",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle",
@@ -1330,11 +1330,11 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle/internal/service",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle/wire",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection",
@@ -1348,7 +1348,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection/internal/service",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection/wire",
@@ -1372,11 +1372,11 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/response_event_presentation/internal/service",
-      "minimum": 80.00
+      "minimum": 80.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/response_event_presentation/wire",
-      "minimum": 100.00
+      "minimum": 100.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/testing/recordingsstub",
@@ -1488,7 +1488,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets/wire",
-      "minimum": 60.00
+      "minimum": 60.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog",
@@ -1690,7 +1690,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document/wire",
-      "minimum": 100.00
+      "minimum": 100.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution",
@@ -1732,7 +1732,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/servicewire",
-      "minimum": 86.00
+      "minimum": 86.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/testlink",
@@ -1852,11 +1852,11 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/cursor_reader/internal/service",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/cursor_reader/wire",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/service",
@@ -1950,19 +1950,19 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/commanddispatch",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/cursor",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/gemini",
@@ -1974,7 +1974,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/opencode",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/pi",
@@ -2236,7 +2236,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/wire",
-      "minimum": 100.00
+      "minimum": 100.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/projections",
@@ -2320,11 +2320,11 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/system_initialization",
-      "minimum": 12.50
+      "minimum": 12.5
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/system_initialization/internal/workflow",
-      "minimum": 38.00
+      "minimum": 38.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/system_initialization/transports/cli",
@@ -2338,7 +2338,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/system_initialization/wire",
-      "minimum": 75.00
+      "minimum": 75.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work",
@@ -2346,7 +2346,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/service",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_materialization",
@@ -2364,7 +2364,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_materialization/wire",
-      "minimum": 75.00
+      "minimum": 75.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_staging",
@@ -2382,7 +2382,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_staging/wire",
-      "minimum": 75.00
+      "minimum": 75.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access",
@@ -2396,11 +2396,11 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/internal/service",
-      "minimum": 73.50
+      "minimum": 73.5
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/wire",
-      "minimum": 76.90
+      "minimum": 76.9
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/service",
@@ -2424,7 +2424,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/transports/cli",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/transports/http",
@@ -2469,8 +2469,8 @@
       }
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/construction",
-      "minimum": 74.13
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal",
+      "minimum": 65.85
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/diagnostics",
@@ -2483,28 +2483,6 @@
       }
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution",
-      "exception": {
-        "kind": "measurement",
-        "justification": "The active functional coverage profile contains no measurable statements for this package.",
-        "owner": "backend-quality",
-        "deadline": "2027-07-15",
-        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
-      }
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution/recording",
-      "minimum": 67.08
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor",
-      "minimum": 76.47
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun",
-      "minimum": 43.76
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/interface",
       "exception": {
         "kind": "measurement",
@@ -2515,10 +2493,6 @@
       }
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal",
-      "minimum": 65.85
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners",
       "exception": {
         "kind": "measurement",
@@ -2527,6 +2501,10 @@
         "deadline": "2027-07-15",
         "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
       }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/inference",
+      "minimum": 61.19
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/inference",
@@ -2581,8 +2559,26 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process",
+      "minimum": 61.59
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/runner",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/testing",
+      "minimum": 34.61
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire",
-      "minimum": 85.00
+      "minimum": 85.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly",
@@ -2595,12 +2591,16 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/construction",
+      "minimum": 74.13
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/internal/service",
       "minimum": 1.21
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/wire",
-      "minimum": 60.00
+      "minimum": 60.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations",
@@ -2613,6 +2613,28 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution/recording",
+      "minimum": 67.08
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor",
+      "minimum": 76.47
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun",
+      "minimum": 43.76
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/internal/service",
       "minimum": 55.93
     },
@@ -2622,15 +2644,19 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/prompting",
-      "minimum": 23.80
+      "minimum": 23.8
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/skippermissions",
+      "minimum": 19.51
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/wire",
-      "minimum": 100.00
+      "minimum": 100.0
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process",
-      "minimum": 61.59
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/worktree",
+      "minimum": 53.54
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider",
@@ -2638,7 +2664,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter",
-      "minimum": 68.80
+      "minimum": 68.8
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter/testkit",
@@ -2664,7 +2690,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/commandenv",
-      "minimum": 100.00
+      "minimum": 100.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor",
@@ -2704,7 +2730,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/opencode",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/pi",
@@ -2723,16 +2749,6 @@
       "minimum": 6.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/runner",
-      "exception": {
-        "kind": "measurement",
-        "justification": "The active functional coverage profile contains no measurable statements for this package.",
-        "owner": "backend-quality",
-        "deadline": "2027-07-15",
-        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
-      }
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/service",
       "exception": {
         "kind": "measurement",
@@ -2741,18 +2757,6 @@
         "deadline": "2027-07-15",
         "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
       }
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/inference",
-      "minimum": 61.19
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/testing",
-      "minimum": 34.61
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/skippermissions",
-      "minimum": 19.51
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/wire",
@@ -2765,24 +2769,20 @@
       }
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/worktree",
-      "minimum": 53.54
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli",
       "minimum": 72.98
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/batchload",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/clidiag",
-      "minimum": 80.00
+      "minimum": 80.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/clihttp",
-      "minimum": 67.50
+      "minimum": 67.5
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/climanifest",
@@ -2820,7 +2820,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/dashboard",
-      "minimum": 0.00
+      "minimum": 0.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/default",
@@ -2832,15 +2832,15 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/factory",
-      "minimum": 31.60
+      "minimum": 31.6
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/factoryload",
-      "minimum": 77.50
+      "minimum": 77.5
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/generated",
-      "minimum": 90.40
+      "minimum": 90.4
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/initsetup",
@@ -2848,7 +2848,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/mcp",
-      "minimum": 70.00
+      "minimum": 70.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/observation",
@@ -2880,7 +2880,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/sessionpath",
-      "minimum": 75.00
+      "minimum": 75.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/submit",
@@ -2896,7 +2896,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/work",
-      "minimum": 27.70
+      "minimum": 27.7
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/workflow",
@@ -2918,7 +2918,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/http/application",
-      "minimum": 75.00
+      "minimum": 75.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/http/workstationprojection",
@@ -2932,11 +2932,11 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping",
-      "minimum": 25.00
+      "minimum": 25.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/composition",
-      "minimum": 75.00
+      "minimum": 75.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig",
@@ -2990,7 +2990,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot",
-      "minimum": 75.00
+      "minimum": 75.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig",
@@ -2998,7 +2998,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/optional",
-      "minimum": 97.50
+      "minimum": 97.5
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry",
@@ -3020,7 +3020,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/workerinference",
-      "minimum": 100.00
+      "minimum": 100.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mcp/discoverygen",
@@ -3034,11 +3034,11 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mcp/server",
-      "minimum": 73.80
+      "minimum": 73.8
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mcp/stdio",
-      "minimum": 70.00
+      "minimum": 70.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/wire",
