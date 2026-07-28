@@ -54,6 +54,39 @@ func TestResponseExecGoldenMetadataSurvivesCLIProjection(t *testing.T) {
 	}
 }
 
+// TestResponseExecGoldenMetadataSurvivesReplay records a sanitized Codex provider
+// execution transcript through root.BuildProcess, replays the public recording,
+// and proves replay observation preserves checked-in Provider Session and
+// invocation-result golden metadata without mapper-generated expectations.
+//
+//golden: docs/temp/functional/provider-sessions/codex/success/manifest.json
+func TestResponseExecGoldenMetadataSurvivesReplay(t *testing.T) {
+	t.Parallel()
+
+	loaded := loadResponseExecCodexGoldenCase(t, responseExecCodexSuccessGoldenCase)
+	replay := observeResponseExecCodexGoldenReplay(t, loaded)
+	observed := observeResponseExecFactoryEventGoldens(t, loaded, replay.FactoryEvents)
+
+	if err := support.CompareProviderSessionJSON(
+		loaded.Manifest.ID,
+		"expected-provider-session",
+		loaded.Manifest.NormalizedFields,
+		loaded.Expected.ProviderSession,
+		observed.ProviderSession,
+	); err != nil {
+		t.Fatalf("CompareProviderSessionJSON(provider-session): %v", err)
+	}
+	if err := support.CompareProviderSessionJSON(
+		loaded.Manifest.ID,
+		"expected-invocation-result",
+		loaded.Manifest.NormalizedFields,
+		loaded.Expected.InvocationResult,
+		observed.InvocationResult,
+	); err != nil {
+		t.Fatalf("CompareProviderSessionJSON(invocation-result): %v", err)
+	}
+}
+
 // TestResponseExecGoldenMetadataSurvivesAPIResponseEvents replays a sanitized
 // Codex provider execution transcript through root.BuildProcess and proves
 // public FactoryResponseEvent history after API observation preserves
@@ -156,6 +189,89 @@ func runResponseExecCodexGoldenReplay(
 		ResponseEvents: responseEvents,
 		Runner:         runner,
 	}
+}
+
+func observeResponseExecCodexGoldenReplay(
+	t *testing.T,
+	loaded support.ProviderSessionCase,
+) responseExecCodexReplayResult {
+	t.Helper()
+
+	artifactPath := recordResponseExecCodexGoldenRun(t, loaded)
+
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: t.TempDir(),
+		Args:       []string{"--replay", artifactPath, "--no-record"},
+	})
+	support.WaitForTerminalStatus(t, server.URL(), 30*time.Second)
+
+	listed := support.ListDefaultSessionWork(t, server.URL())
+	events := server.GetFactoryEvents(t)
+	server.Stop(t)
+
+	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
+		t.Fatalf("replayed completed work = %d, want 1; listed=%#v", got, listed)
+	}
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 0 {
+		t.Fatalf("replayed failed work = %d, want 0", got)
+	}
+
+	return responseExecCodexReplayResult{
+		Loaded:        loaded,
+		Listed:        listed,
+		FactoryEvents: events,
+	}
+}
+
+func recordResponseExecCodexGoldenRun(
+	t *testing.T,
+	loaded support.ProviderSessionCase,
+) string {
+	t.Helper()
+
+	var request struct {
+		Model string `json:"model"`
+	}
+	if err := json.Unmarshal(loaded.Request, &request); err != nil {
+		t.Fatalf("decode request.json: %v", err)
+	}
+	if request.Model == "" {
+		t.Fatal("request.model must be non-empty")
+	}
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, request.Model))
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"response-exec replay survival"}`))
+
+	exitCode := 0
+	if loaded.Process.ExitCode != nil {
+		exitCode = *loaded.Process.ExitCode
+	}
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		Stdout:   append([]byte(nil), loaded.Stdout.Raw...),
+		Stderr:   []byte(loaded.Stderr),
+		ExitCode: exitCode,
+	})
+
+	artifactPath := filepath.Join(t.TempDir(), "response-exec-metadata.replay.json")
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir,
+		Args:       []string{"--record", artifactPath},
+		Edges:      serviceedges.Edges{ProviderCommandRunner: runner},
+	})
+	support.WaitForTerminalStatus(t, server.URL(), 30*time.Second)
+
+	listed := support.ListDefaultSessionWork(t, server.URL())
+	server.Stop(t)
+
+	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
+		t.Fatalf("recorded completed work = %d, want 1; listed=%#v", got, listed)
+	}
+	if runner.CallCount() != 1 {
+		t.Fatalf("provider command runner calls = %d, want exactly one mocked Codex invocation", runner.CallCount())
+	}
+
+	return artifactPath
 }
 
 func observeResponseExecResponseEventGoldens(
