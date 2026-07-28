@@ -691,19 +691,9 @@
     {
       "source_path": "tests/functional/cli/factory_run/yaml_io_parity/yaml_io_parity_test.go",
       "package": "you-agent-factory/tests/functional/cli/factory_run/yaml_io_parity",
-      "scenario": "TestPackagedFactoryJSONAndYAMLValidateFlattenAndRunParity",
-      "lane": "short",
-      "destination": "tests/functional/factory/definitions/validation_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/cli/factory_run/yaml_io_parity/yaml_io_parity_test.go",
-      "package": "you-agent-factory/tests/functional/cli/factory_run/yaml_io_parity",
       "scenario": "TestPublicBlockingValidationRetainsJSONAndYAMLSourceContext",
       "lane": "short",
-      "destination": "tests/functional/factory/definitions/validation_test.go",
+      "destination": "tests/functional/factory_definitions/transports/cli/yaml_parity/yaml_parity_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -713,17 +703,7 @@
       "package": "you-agent-factory/tests/functional/cli/factory_run/yaml_io_parity",
       "scenario": "TestPublicMappingFailuresRetainJSONAndYAMLSourceContext",
       "lane": "short",
-      "destination": "tests/functional/factory/definitions/validation_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/cli/factory_run/yaml_io_parity/yaml_io_parity_test.go",
-      "package": "you-agent-factory/tests/functional/cli/factory_run/yaml_io_parity",
-      "scenario": "TestRejectedAuthoredSourcesFailBeforeRuntimeExecution",
-      "lane": "short",
-      "destination": "tests/functional/factory/definitions/validation_test.go",
+      "destination": "tests/functional/factory_definitions/transports/cli/yaml_parity/yaml_parity_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -733,17 +713,37 @@
       "package": "you-agent-factory/tests/functional/cli/factory_run/yaml_io_parity",
       "scenario": "TestRuntimeMappingFailureRetainsSelectedSourceContext",
       "lane": "short",
-      "destination": "tests/functional/factory/definitions/validation_test.go",
+      "destination": "tests/functional/factory_definitions/transports/cli/yaml_parity/yaml_parity_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/cli/factory_run/yaml_io_parity/yaml_io_parity_test.go",
-      "package": "you-agent-factory/tests/functional/cli/factory_run/yaml_io_parity",
-      "scenario": "TestYAMLCreateAndUpdateRemainRunnableAfterCanonicalPersistence",
+      "source_path": "tests/functional/factory_definitions/transports/cli/yaml_parity/yaml_parity_test.go",
+      "package": "you-agent-factory/tests/functional/factory_definitions/transports/cli/yaml_parity",
+      "scenario": "TestCLIFactoryJSONAndYAMLValidateFlattenAndRunParity",
       "lane": "short",
-      "destination": "tests/functional/factory/definitions/validation_test.go",
+      "destination": "tests/functional/factory_definitions/transports/cli/yaml_parity/yaml_parity_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory_definitions/transports/cli/yaml_parity/yaml_parity_test.go",
+      "package": "you-agent-factory/tests/functional/factory_definitions/transports/cli/yaml_parity",
+      "scenario": "TestCLIFactoryRejectedAuthoredSourcesFailBeforeRuntimeExecution",
+      "lane": "short",
+      "destination": "tests/functional/factory_definitions/transports/cli/yaml_parity/yaml_parity_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory_definitions/transports/cli/yaml_parity/yaml_parity_test.go",
+      "package": "you-agent-factory/tests/functional/factory_definitions/transports/cli/yaml_parity",
+      "scenario": "TestCLIFactoryYAMLCreateAndUpdateRemainRunnableAfterCanonicalPersistence",
+      "lane": "short",
+      "destination": "tests/functional/factory_definitions/transports/cli/yaml_parity/yaml_parity_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -9438,7 +9438,8 @@
       "you-agent-factory/tests/functional/bootstrap_portability": 19,
       "you-agent-factory/tests/functional/bootstrap_portability/metadata_contract": 2,
       "you-agent-factory/tests/functional/cli/factory_run/output": 2,
-      "you-agent-factory/tests/functional/cli/factory_run/yaml_io_parity": 6,
+      "you-agent-factory/tests/functional/cli/factory_run/yaml_io_parity": 3,
+      "you-agent-factory/tests/functional/factory_definitions/transports/cli/yaml_parity": 3,
       "you-agent-factory/tests/functional/cli/input_contract": 25,
       "you-agent-factory/tests/functional/cli/mcp_resume": 5,
       "you-agent-factory/tests/functional/cli/named_invocation": 6,
