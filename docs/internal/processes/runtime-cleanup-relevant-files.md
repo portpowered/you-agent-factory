@@ -1166,3 +1166,22 @@ The fold merge retargeted surviving pipeline implementation to
 `internal/services/orchestration` and `internal/services/instance_host`;
 story 003 retargeted `testkit` to `internal/testkit`. Those internal import
 paths remain canonical coverage debt and are not removed by this packet.
+
+## DEL-RUN-ENGINE-PIPELINE thin root and end-to-end proof
+
+Story 006 locks the thin Runtime root, wire construction, and reduced structure
+debt with
+`pkg/services/factory_runtime/engine_pipeline_thin_root_proof_gate_test.go`:
+
+| Invariant | Proof |
+| --- | --- |
+| Root children are only `wire/`, `internal/`, `transports/` plus thin contract files; `testdata` remains the only recorded unexpected public move-debt directory | `canonical_root_directories` + `unexpected_root_children_recorded_as_move_debt_only` subtests |
+| Deleted public engine/pipeline directories are absent | `deleted_public_pipeline_directories_absent` subtest + `wire/engine_pipeline_deletion_proof_test.go` |
+| Public `testkit` / `exhaustiontests` internalized | `canonical_root_directories` + `wire/test_support_internalization_proof_test.go` |
+| `factory_runtime/wire` constructs published `Service` and exercises Observe / PlanDispatch / ControlPause | `wire_constructs_published_control_observation_dispatch` subtest |
+| `service/` deletion remains owned by DEL-RUN-SERVICE; `checkpoint_recovery` undisturbed | `service_directory_absent` + `checkpoint_recovery_undisturbed` subtests |
+| Deleted pipeline paths are absent from structure/ownership ledgers for this owner | `package_structure_baseline_omits_deleted_public_pipeline_directories`, `package_target_manifest_omits_deleted_public_pipeline_packages`, and `ownership_inventory_omits_deleted_public_pipeline_packages` subtests |
+
+Sibling proof tests in `pkg/services/factory_runtime/wire/` and
+`packaged_root_shape_test.go` remain the focused owners for pre-start gates,
+baseline burn-down, and packaged-root shape drift.
