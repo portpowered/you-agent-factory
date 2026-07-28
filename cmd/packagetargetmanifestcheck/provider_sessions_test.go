@@ -129,6 +129,33 @@ func TestVerifyProviderSessionsDualLedgerAlignmentPassesOnRepository(t *testing.
 	}
 }
 
+func TestVerifyProviderSessionsTopLevelInventoryPassesOnRepository(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := findRepoRoot(t)
+	if err := ownershipinventory.VerifyProviderSessionsTopLevelInventory(repoRoot); err != nil {
+		t.Fatalf("VerifyProviderSessionsTopLevelInventory() error = %v", err)
+	}
+}
+
+func TestVerifyProviderSessionsZeroExtraPublicSiblingAbsencePassesOnRepository(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := findRepoRoot(t)
+	if err := ownershipinventory.VerifyProviderSessionsZeroExtraPublicSiblingAbsence(repoRoot); err != nil {
+		t.Fatalf("VerifyProviderSessionsZeroExtraPublicSiblingAbsence() error = %v", err)
+	}
+}
+
+func TestVerifyProviderSessionsINVDispositionBeyondServicePassesOnRepository(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := findRepoRoot(t)
+	if err := ownershipinventory.VerifyProviderSessionsINVDispositionBeyondService(repoRoot); err != nil {
+		t.Fatalf("VerifyProviderSessionsINVDispositionBeyondService() error = %v", err)
+	}
+}
+
 func TestProviderSessionsCommittedBaselinesAlignMoveDestinations(t *testing.T) {
 	t.Parallel()
 

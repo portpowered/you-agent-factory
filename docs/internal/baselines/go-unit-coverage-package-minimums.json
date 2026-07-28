@@ -1767,6 +1767,10 @@
       "minimum": 85.74
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/service",
+      "minimum": 75.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_materialization",
       "exception": {
         "kind": "measurement",
@@ -1822,7 +1826,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/service",
-      "minimum": 72.95
+      "minimum": 33.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/stateaccessrecordings",
