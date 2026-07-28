@@ -23,6 +23,8 @@ const (
 	scriptPollerWorkerName        = "script-poller"
 )
 
+// TestBuildProcessRemainsScriptPollerInertBeforeRuntimeLifecycle proves BuildProcess
+// does not invoke script poller commands before the runtime lifecycle starts.
 func TestBuildProcessRemainsScriptPollerInertBeforeRuntimeLifecycle(t *testing.T) {
 	t.Parallel()
 
@@ -38,6 +40,8 @@ func TestBuildProcessRemainsScriptPollerInertBeforeRuntimeLifecycle(t *testing.T
 	}
 }
 
+// TestAutomationsScriptPollerAdmitsWorkThroughRuntimeLifecycle proves script poller
+// workstations admit Work through the runtime lifecycle after BuildProcess composition.
 func TestAutomationsScriptPollerAdmitsWorkThroughRuntimeLifecycle(t *testing.T) {
 	dir := support.ScaffoldFactory(t, scriptPollerFactoryConfig())
 	support.ClearSeedInputs(t, dir)

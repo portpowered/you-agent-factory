@@ -840,6 +840,20 @@ Wave 0 functional-tests-expansion planning authority lives under
   every top-level `Test*` needs a customer-readable Go doc and `//golden:` manifest
   directive so `functionaltestmetadata` stays viz-compatible.
 
+- `tests/functional/provider_sessions/details/cursor_details_test.go` owns Cursor
+  Provider Session detail inspection through the public `GET /provider-sessions/detail`
+  boundary via `support.StartFunctionalAPIServer` with
+  `ProviderSessionResolveHomeDirectory` edge override. Write sanitized Cursor sqlite
+  fixtures under `~/.cursor/chats/{workspaceHash}/{sessionID}/store.db`, compare
+  success detail to `docs/temp/functional/provider-sessions/cursor/success/expected-provider-session-detail.json`
+  with `modifiedAt` and `sizeBytes` normalized, assert unavailable blobs surface
+  `unknownEventCount`/`unknownEvents` without fabricated transcript, and assert
+  missing session ids return HTTP 404 `NOT_FOUND` without fabricated detail bodies.
+  Do not widen into `codex_details_test.go` or `http_test.go`. Close catalog metadata
+  with `test-file-checklist.md`, `migration-ledger-inventory.json`, and customer-readable
+  Go docs (plus `//golden:` on the success load test) so `functionaltestmetadata`
+  stays viz-compatible.
+
 - `tests/functional/automations/` owns root.BuildProcess evidence for packaged
   Automations cron scheduling and filesystem watcher preseed. Keep cron workstation
   factories explicit with `"behavior": "CRON"` and observe submissions through
