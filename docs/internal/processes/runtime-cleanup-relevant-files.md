@@ -992,7 +992,23 @@ in `pkg/services/factory_runtime` (`interfaces.go`) plus root typed errors in
 `pkg/services/factory_runtime` (not `factory_runtime/javascript`, deleted
 `factory_runtime/service`, `engine`, or other nested Runtime paths); lock this with
 `pkg/services/factory_sessions/runtime_consumer_import_boundary_test.go` and
-`cmd/pkgboundarycheck` peer-subpackage rules. After DEL-RUN-SERVICE deletes the
+`cmd/pkgboundarycheck` peer-subpackage rules. CUT-RUN-REC seals Factory Runtime
+production Recordings imports to the service root only via
+`pkg/services/factory_runtime/recordings_import_boundary_test.go`
+(`TestProductionPackagesImportRecordingsRootOnly`) and behavioral construction
+proof in `pkg/services/factory_runtime/recordings_request_boundary_test.go`
+(`TestRuntimeConstructsRecordingsCapabilitiesThroughRoot`) plus
+`pkg/services/factory_runtime/internal/build_test.go`
+(`TestBuild_ConstructsRecordingsRootLedgerAndHostingCapabilities`); behavior
+preservation after the cut is locked in
+`pkg/services/factory_runtime/recordings_consumer_behavior_preservation_test.go`
+(`TestRuntimeRecordingsConsumerBehaviorPreserved`) alongside existing host,
+assembly, replay, and execution suites under `internal/host`,
+`internal/build_test.go`, `internal/services/instance_host/internal/service`,
+and `internal/services/orchestration/runtime`; mirror
+`pkg/services/work/recordings_import_boundary_test.go` and
+`pkg/services/recordings/runtime_import_boundary_test.go` for the reverse edge.
+After DEL-RUN-SERVICE deletes the
 transitional `factory_runtime/service` tree, lock the deletion with
 `pkg/services/factory_runtime/wire/service_deletion_proof_test.go` (filesystem,
 module import scan, ownership-inventory absence, wire construction, and pipeline
