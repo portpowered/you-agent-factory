@@ -1937,6 +1937,10 @@
       "minimum": 85.53
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/projections/workstation",
+      "minimum": 82.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/wire",
       "minimum": 100.00
     },
