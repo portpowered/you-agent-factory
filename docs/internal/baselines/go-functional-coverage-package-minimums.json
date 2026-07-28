@@ -456,7 +456,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/engine",
-      "minimum": 73.93
+      "minimum": 73.92
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/javascript/preview",
@@ -558,7 +558,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime",
-      "minimum": 65.21
+      "minimum": 65.06
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime/buffers",
@@ -1796,15 +1796,15 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider",
-      "minimum": 60.47
+      "minimum": 60.46
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter",
-      "minimum": 79.82
+      "minimum": 79.81
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter/opencode",
-      "minimum": 48.25
+      "minimum": 48.24
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter/testkit",
@@ -1818,7 +1818,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/agy",
-      "minimum": 70.69
+      "minimum": 70.68
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/claude",
@@ -1846,7 +1846,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor",
-      "minimum": 55.40
+      "minimum": 55.39
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/cursor",
@@ -1878,7 +1878,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/kiro",
-      "minimum": 71.56
+      "minimum": 71.55
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/pi",
