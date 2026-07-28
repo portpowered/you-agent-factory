@@ -198,12 +198,12 @@ func NewPackagedFactoryCatalog(
 	return factorydefinitionsinternal.NewPackagedFactoryCatalog(definitions)
 }
 
-// NewPackagedFactoryInstaller constructs packaged Factory installation operations
-// from exact persistence and filesystem ports.
+// NewPackagedFactoryInstaller constructs packaged Factory ensure/install
+// operations from exact persistence and filesystem ports.
 func NewPackagedFactoryInstaller(
 	persistence factorydefinitions.Persistence,
 	fileSystem factorydefinitions.PackagedInstallationFileSystem,
-) factorydefinitions.PackagedFactoryInstallationOperations {
+) factorydefinitions.PackagedFactoryInstaller {
 	return factorydefinitionsinternal.NewPackagedFactoryInstaller(persistence, fileSystem)
 }
 
