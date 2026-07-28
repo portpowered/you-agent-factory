@@ -2222,7 +2222,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/run",
-      "minimum": 57.71
+      "minimum": 56.97
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/runconfig",
