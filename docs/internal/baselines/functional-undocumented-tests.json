@@ -1319,18 +1319,6 @@
       "name": "TestConfigDrivenRetryLoopBreaker_TerminatesAfterMaxRetries"
     },
     {
-      "file": "workflow/conflict_resolution_test.go",
-      "name": "TestConflictResolution_ResolverFails"
-    },
-    {
-      "file": "workflow/conflict_resolution_test.go",
-      "name": "TestConflictResolution_ReviewApproveFirstTry"
-    },
-    {
-      "file": "workflow/conflict_resolution_test.go",
-      "name": "TestConflictResolution_ReviewFailResolveReReview"
-    },
-    {
       "file": "workflow/multi_output_color_propagation_long_test.go",
       "name": "TestMultiOutputColorPropagation"
     },
@@ -1357,22 +1345,6 @@
     {
       "file": "workflow/name_propagation_long_test.go",
       "name": "TestNamePropagation_MarkdownFile"
-    },
-    {
-      "file": "workflow/rejection_path_test.go",
-      "name": "TestRejectionPath_NoRejectionArcsFailsToken"
-    },
-    {
-      "file": "workflow/rejection_path_test.go",
-      "name": "TestRejectionPath_NoRejectionArcsFailureRecordSet"
-    },
-    {
-      "file": "workflow/rejection_path_test.go",
-      "name": "TestRejectionPath_NoRejectionArcsReleasesResources"
-    },
-    {
-      "file": "workflow/rejection_path_test.go",
-      "name": "TestRejectionPath_WithRejectionArcsRoutesViaArcs"
     },
     {
       "file": "workflow/repeater_parameterized_test.go",

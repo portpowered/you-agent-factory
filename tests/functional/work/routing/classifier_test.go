@@ -231,6 +231,131 @@ func TestClassifierUnknownAndMalformedDecisionFailDistinctly(t *testing.T) {
 	}
 }
 
+// TestClassifierReworkFailureTerminatesWithoutCompletion proves that when a
+// classifier routes Work into rework and the rework workstation fails, Work
+// terminates at task:failed without reaching task:done.
+func TestClassifierReworkFailureTerminatesWithoutCompletion(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "classifier_routing_dir"))
+	testutil.WriteSeedFile(t, dir, "task", []byte("classifier-rework-failure-payload"))
+
+	runner := testutil.NewProviderCommandRunner(
+		platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("needs_changes")},
+		platformprocess.CommandResult{ExitCode: 1, Stderr: []byte("rework failed")},
+	)
+	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+		t,
+		dir,
+		serviceedges.Edges{ProviderCommandRunner: runner},
+		20*time.Second,
+	)
+
+	assertClassifierRoutingFailedTerminal(t, session, listed)
+	assertClassifierRoutingWorkstationDispatches(
+		t,
+		support.ObserveDispatchEvents(t, events),
+		classifierRoutingWorkstation,
+		1,
+		[]string{"needs_changes"},
+	)
+}
+
+// TestClassifierRejectionWithoutArcsRoutesToFailedTerminal proves that when a
+// worker returns a rejection outcome and the factory has no rejection routing
+// arcs, Work terminates at task:failed without reaching task:done.
+func TestClassifierRejectionWithoutArcsRoutesToFailedTerminal(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "rejection_no_arcs"))
+	testutil.WriteSeedFile(t, dir, "task", []byte("work payload"))
+
+	provider := testutil.NewMockProvider(support.RejectedProviderResponse("not good enough"))
+	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(
+		t,
+		dir,
+		serviceedges.Edges{ProviderOverride: provider},
+		10*time.Second,
+	)
+
+	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "failed")); got != 1 {
+		t.Fatalf("task:failed work count = %d, want 1; listed=%#v", got, listed)
+	}
+	for _, state := range []string{"init", "done"} {
+		location := support.WorkCustomerLocation("task", state)
+		if got := support.CountWorkAtCustomerState(listed, location); got != 0 {
+			t.Fatalf("%s work count = %d, want 0 after rejection without arcs; listed=%#v", location, got, listed)
+		}
+	}
+}
+
+// TestClassifierRejectionWithoutArcsRecordsDispatchFeedback proves rejection
+// feedback is recorded on the public dispatch response event when no rejection
+// routing arcs are configured.
+func TestClassifierRejectionWithoutArcsRecordsDispatchFeedback(t *testing.T) {
+	const wantFeedback = "missing tests"
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "rejection_no_arcs"))
+	testutil.WriteSeedFile(t, dir, "task", []byte("work"))
+
+	provider := testutil.NewMockProvider(support.RejectedProviderResponse(wantFeedback))
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir,
+		Edges: serviceedges.Edges{
+			ProviderOverride: provider,
+		},
+	})
+	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	listed := support.ListDefaultSessionWork(t, server.URL())
+
+	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "failed")); got != 1 {
+		t.Fatalf("task:failed work count = %d, want 1; listed=%#v", got, listed)
+	}
+	for _, event := range server.GetFactoryEvents(t) {
+		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
+			continue
+		}
+		payload, err := event.Payload.AsDispatchResponseEventPayload()
+		if err != nil {
+			t.Fatalf("decode dispatch response: %v", err)
+		}
+		if payload.Outcome != factoryapi.WorkOutcomeRejected ||
+			payload.Output == nil ||
+			*payload.Output != wantFeedback {
+			t.Fatalf("dispatch response = %#v, want recorded rejection feedback %q", payload, wantFeedback)
+		}
+		server.Stop(t)
+		return
+	}
+	t.Fatal("Factory Event history has no dispatch response")
+}
+
+// TestClassifierRejectionWithoutArcsReleasesResourcesForSubsequentWork proves
+// that after a rejection without routing arcs fails one Work item, constrained
+// resources are released so a subsequent Work item can complete.
+func TestClassifierRejectionWithoutArcsReleasesResourcesForSubsequentWork(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "rejection_no_arcs_resources"))
+	testutil.WriteSeedFile(t, dir, "task", []byte("first item"))
+	testutil.WriteSeedFile(t, dir, "task", []byte("second item"))
+
+	provider := testutil.NewMockProvider(
+		support.RejectedProviderResponse("not good enough"),
+		support.AcceptedProviderResponse(),
+	)
+	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(
+		t,
+		dir,
+		serviceedges.Edges{ProviderOverride: provider},
+		20*time.Second,
+	)
+
+	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "failed")); got != 1 {
+		t.Fatalf("task:failed work count = %d, want 1; listed=%#v", got, listed)
+	}
+	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "done")); got != 1 {
+		t.Fatalf("task:done work count = %d, want 1; listed=%#v", got, listed)
+	}
+	if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "init")); got != 0 {
+		t.Fatalf("task:init work count = %d, want 0; listed=%#v", got, listed)
+	}
+}
+
 func newClassifierRoutingCommandRunner(
 	labels []string,
 	reworkResponses []string,

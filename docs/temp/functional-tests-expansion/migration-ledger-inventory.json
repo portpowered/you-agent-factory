@@ -8509,36 +8509,6 @@
       "deletion_only_batch": "workflow-delete-08-guards"
     },
     {
-      "source_path": "tests/functional/workflow/conflict_resolution_test.go",
-      "package": "you-agent-factory/tests/functional/workflow",
-      "scenario": "TestConflictResolution_ResolverFails",
-      "lane": "short",
-      "destination": "tests/functional/work/routing/classifier_test.go",
-      "catch_all": "workflow",
-      "specialty_targets": "none",
-      "deletion_only_batch": "workflow-delete-02-work-routing"
-    },
-    {
-      "source_path": "tests/functional/workflow/conflict_resolution_test.go",
-      "package": "you-agent-factory/tests/functional/workflow",
-      "scenario": "TestConflictResolution_ReviewApproveFirstTry",
-      "lane": "short",
-      "destination": "tests/functional/work/routing/classifier_test.go",
-      "catch_all": "workflow",
-      "specialty_targets": "none",
-      "deletion_only_batch": "workflow-delete-02-work-routing"
-    },
-    {
-      "source_path": "tests/functional/workflow/conflict_resolution_test.go",
-      "package": "you-agent-factory/tests/functional/workflow",
-      "scenario": "TestConflictResolution_ReviewFailResolveReReview",
-      "lane": "short",
-      "destination": "tests/functional/work/routing/classifier_test.go",
-      "catch_all": "workflow",
-      "specialty_targets": "none",
-      "deletion_only_batch": "workflow-delete-02-work-routing"
-    },
-    {
       "source_path": "tests/functional/workflow/executor_context_long_test.go",
       "package": "you-agent-factory/tests/functional/workflow",
       "scenario": "TestExecutorContext_InputTokenColors",
@@ -8637,46 +8607,6 @@
       "catch_all": "workflow",
       "specialty_targets": "none",
       "deletion_only_batch": "workflow-delete-07-factory-current"
-    },
-    {
-      "source_path": "tests/functional/workflow/rejection_path_test.go",
-      "package": "you-agent-factory/tests/functional/workflow",
-      "scenario": "TestRejectionPath_NoRejectionArcsFailsToken",
-      "lane": "short",
-      "destination": "tests/functional/work/routing/classifier_test.go",
-      "catch_all": "workflow",
-      "specialty_targets": "none",
-      "deletion_only_batch": "workflow-delete-02-work-routing"
-    },
-    {
-      "source_path": "tests/functional/workflow/rejection_path_test.go",
-      "package": "you-agent-factory/tests/functional/workflow",
-      "scenario": "TestRejectionPath_NoRejectionArcsFailureRecordSet",
-      "lane": "short",
-      "destination": "tests/functional/work/routing/classifier_test.go",
-      "catch_all": "workflow",
-      "specialty_targets": "none",
-      "deletion_only_batch": "workflow-delete-02-work-routing"
-    },
-    {
-      "source_path": "tests/functional/workflow/rejection_path_test.go",
-      "package": "you-agent-factory/tests/functional/workflow",
-      "scenario": "TestRejectionPath_NoRejectionArcsReleasesResources",
-      "lane": "short",
-      "destination": "tests/functional/work/routing/classifier_test.go",
-      "catch_all": "workflow",
-      "specialty_targets": "none",
-      "deletion_only_batch": "workflow-delete-02-work-routing"
-    },
-    {
-      "source_path": "tests/functional/workflow/rejection_path_test.go",
-      "package": "you-agent-factory/tests/functional/workflow",
-      "scenario": "TestRejectionPath_WithRejectionArcsRoutesViaArcs",
-      "lane": "short",
-      "destination": "tests/functional/work/routing/classifier_test.go",
-      "catch_all": "workflow",
-      "specialty_targets": "none",
-      "deletion_only_batch": "workflow-delete-02-work-routing"
     },
     {
       "source_path": "tests/functional/workflow/repeater_parameterized_test.go",
@@ -9128,7 +9058,7 @@
       "replay_contracts": 23,
       "runtime_api": 96,
       "smoke": 62,
-      "workflow": 28
+      "workflow": 21
     },
     "by_top_level_package": {
       "acceptance": 12,
@@ -9154,12 +9084,12 @@
       "transport": 106,
       "work": 29,
       "workers": 77,
-      "workflow": 28,
+      "workflow": 21,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 892,
+    "customer_top_level_Test_scenarios": 885,
     "lane_functionallong": 93,
-    "lane_short": 799,
+    "lane_short": 792,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 14,
