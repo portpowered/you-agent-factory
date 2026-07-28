@@ -1,9 +1,4 @@
-// Package operatorsettingsservicewire links the Operator Settings root to the
-// parent-private document owner without creating an import cycle.
-//
-// Construction implementation lives in operator_settings/internal/construct;
-// this package retains transitional entry points until DEL-SET removes it.
-package operatorsettingsservicewire
+package wire
 
 import (
 	"sync"

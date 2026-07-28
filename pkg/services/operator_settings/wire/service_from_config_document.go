@@ -1,4 +1,4 @@
-package operatorsettingsservicewire
+package wire
 
 import (
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"

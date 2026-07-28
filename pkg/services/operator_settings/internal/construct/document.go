@@ -1,15 +1,12 @@
-// Package operatorsettingsservicewire links the Operator Settings root to the
-// parent-private document owner without creating an import cycle.
-//
-// Construction implementation lives in operator_settings/internal/construct;
-// this package retains transitional entry points until DEL-SET removes it.
-package operatorsettingsservicewire
+// Package construct assembles Operator Settings roots and ConfigDocument
+// services from owner-private document and resolution capabilities.
+package construct
 
 import (
 	"sync"
 
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	settingsconstruct "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/construct"
+	settingsdocumentwire "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document/wire"
 )
 
 // NewDocumentOwner constructs the nested document owner from injected ports.
@@ -20,7 +17,7 @@ func NewDocumentOwner(
 	encoder operatorsettings.ConfigEncoder,
 	providers operatorsettings.ProviderCatalog,
 ) operatorsettings.DocumentOwner {
-	return settingsconstruct.NewDocumentOwner(files, createTemp, decoder, encoder, providers)
+	return settingsdocumentwire.NewService(files, createTemp, decoder, encoder, providers)
 }
 
 // NewConfigDocumentService constructs a root ConfigDocumentService whose load,
@@ -33,12 +30,13 @@ func NewConfigDocumentService(
 	providers operatorsettings.ProviderCatalog,
 	persistenceLock sync.Locker,
 ) operatorsettings.ConfigDocumentService {
-	return settingsconstruct.NewConfigDocumentService(
-		files,
-		createTemp,
-		decoder,
-		encoder,
-		providers,
-		persistenceLock,
-	)
+	return operatorsettings.ConfigDocumentService{
+		Files:           files,
+		CreateTemp:      createTemp,
+		Providers:       providers,
+		Decoder:         decoder,
+		Encoder:         encoder,
+		DocumentOwner:   NewDocumentOwner(files, createTemp, decoder, encoder, providers),
+		PersistenceLock: persistenceLock,
+	}
 }

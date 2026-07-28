@@ -1419,6 +1419,10 @@
       "minimum": 100.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/construct",
+      "minimum": 80.70
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/service",
       "minimum": 66.66
     },
