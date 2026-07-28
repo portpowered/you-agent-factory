@@ -91,6 +91,13 @@
     "pkg/services/factory_definitions/editable",
     "pkg/services/factory_definitions/internal/contracts",
     "pkg/services/factory_definitions/internal/namedfactories",
+    "pkg/services/factory_definitions/internal/services/authoring_layout",
+    "pkg/services/factory_definitions/internal/services/authoring_layout/expand",
+    "pkg/services/factory_definitions/internal/services/authoring_layout/flatten",
+    "pkg/services/factory_definitions/internal/services/authoring_layout/internal/service",
+    "pkg/services/factory_definitions/internal/services/authoring_layout/persist",
+    "pkg/services/factory_definitions/internal/services/authoring_layout/prepare",
+    "pkg/services/factory_definitions/internal/services/authoring_layout/wire",
     "pkg/services/factory_definitions/internal/services/catalog",
     "pkg/services/factory_definitions/internal/services/catalog/internal/service",
     "pkg/services/factory_definitions/internal/services/catalog/wire",
@@ -773,6 +780,41 @@
       "destination": "factory_definitions/internal/services/catalog"
     },
     {
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/authoring_layout"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/expand",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/authoring_layout"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/flatten",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/authoring_layout"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/internal/service",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/authoring_layout"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/persist",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/authoring_layout"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/prepare",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/authoring_layout"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/wire",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/authoring_layout"
+    },
+    {
       "packagePath": "pkg/services/factory_definitions/internal/services/catalog",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/catalog"
@@ -824,33 +866,33 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability",
-      "disposition": "retain",
-      "destination": "factory_definitions/internal/services/snapshots_portability"
+      "disposition": "move",
+      "destination": "factory_definitions/internal"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/capture",
-      "disposition": "retain",
-      "destination": "factory_definitions/internal/services/snapshots_portability"
+      "disposition": "move",
+      "destination": "factory_definitions/internal"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/internal/service",
-      "disposition": "retain",
-      "destination": "factory_definitions/internal/services/snapshots_portability"
+      "disposition": "move",
+      "destination": "factory_definitions/internal"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/materialize",
-      "disposition": "retain",
-      "destination": "factory_definitions/internal/services/snapshots_portability"
+      "disposition": "move",
+      "destination": "factory_definitions/internal"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/prepare",
-      "disposition": "retain",
-      "destination": "factory_definitions/internal/services/snapshots_portability"
+      "disposition": "move",
+      "destination": "factory_definitions/internal"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/wire",
-      "disposition": "retain",
-      "destination": "factory_definitions/internal/services/snapshots_portability"
+      "disposition": "move",
+      "destination": "factory_definitions/internal"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/validation",

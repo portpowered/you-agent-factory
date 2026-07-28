@@ -1,4 +1,4 @@
-package snapshotsportability_test
+package authoring_layout_test
 
 import (
 	"go/ast"
@@ -11,9 +11,9 @@ import (
 	"testing"
 )
 
-const snapshotsPortabilityPublicPackage = "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability"
+const authoringLayoutPublicPackage = "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
 
-var snapshotsPortabilityForbiddenImportRoots = []string{
+var authoringLayoutForbiddenImportRoots = []string{
 	"github.com/portpowered/infinite-you/pkg/wire",
 	"github.com/portpowered/infinite-you/pkg/root",
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime",
@@ -25,28 +25,28 @@ var snapshotsPortabilityForbiddenImportRoots = []string{
 	"github.com/portpowered/infinite-you/pkg/services/automations",
 	"github.com/portpowered/infinite-you/pkg/services/work",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog",
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout",
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation",
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation",
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution",
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/snapshotcapture",
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig",
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/authoredlayout",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/persistence",
 }
 
-var snapshotsPortabilityAllowedPublicTypeImportPrefixes = []string{
+var authoringLayoutAllowedPublicTypeImportPrefixes = []string{
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions",
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts",
 }
 
 func TestPackageBoundary_PublicSurfaceDoesNotImportForbiddenOwnership(t *testing.T) {
 	t.Parallel()
 
-	assertPackageDirectImportsForbidden(t, snapshotsPortabilityPublicPackage, snapshotsPortabilityForbiddenImportRoots)
+	assertPackageDirectImportsForbidden(t, authoringLayoutPublicPackage, authoringLayoutForbiddenImportRoots)
 }
 
-func TestPackageBoundary_PublicSurfaceDeclaresOnlyCTRDEFSnapshotVocabulary(t *testing.T) {
+func TestPackageBoundary_PublicSurfaceDeclaresOnlyCTRDEFAuthoringVocabulary(t *testing.T) {
 	t.Parallel()
 
 	servicePath := filepath.Join("service.go")
@@ -131,27 +131,39 @@ func assertTypeExprUsesAllowedImports(t *testing.T, expr ast.Expr) {
 	switch typed := expr.(type) {
 	case *ast.StarExpr:
 		assertTypeExprUsesAllowedImports(t, typed.X)
+	case *ast.ArrayType:
+		assertTypeExprUsesAllowedImports(t, typed.Elt)
 	case *ast.Ident:
-		if typed.Name == "context" || typed.Name == "Context" || typed.Name == "error" {
+		switch typed.Name {
+		case "context", "Context", "error", "string", "bool", "byte", "int", "int64":
 			return
 		}
-		t.Fatalf("unexpected bare identifier %s on snapshots_portability public surface; use factory_definitions vocabulary", typed.Name)
+		t.Fatalf("unexpected bare identifier %s on authoring_layout public surface; use factory_definitions or contracts vocabulary", typed.Name)
 	case *ast.SelectorExpr:
 		if ident, ok := typed.X.(*ast.Ident); ok && ident.Name == "context" && typed.Sel.Name == "Context" {
 			return
 		}
 		prefix := selectorImportPrefix(typed)
 		if prefix == "" {
-			t.Fatalf("could not resolve selector %s on snapshots_portability public surface", exprString(expr))
+			t.Fatalf("could not resolve selector %s on authoring_layout public surface", exprString(expr))
 		}
-		for _, allowed := range snapshotsPortabilityAllowedPublicTypeImportPrefixes {
+		for _, allowed := range authoringLayoutAllowedPublicTypeImportPrefixes {
 			if prefix == allowed {
 				return
 			}
 		}
-		t.Fatalf("snapshots_portability public surface type %s must use only factory_definitions root imports", exprString(expr))
+		t.Fatalf("authoring_layout public surface type %s must use only factory_definitions root or contracts imports", exprString(expr))
+	case *ast.FuncType:
+		for _, fieldList := range []*ast.FieldList{typed.Params, typed.Results} {
+			if fieldList == nil {
+				continue
+			}
+			for _, param := range fieldList.List {
+				assertTypeExprUsesAllowedImports(t, param.Type)
+			}
+		}
 	default:
-		t.Fatalf("unexpected type expression %T on snapshots_portability public surface", expr)
+		t.Fatalf("unexpected type expression %T on authoring_layout public surface", expr)
 	}
 }
 
@@ -161,6 +173,8 @@ func selectorImportPrefix(selector *ast.SelectorExpr) string {
 		switch typed.Name {
 		case "factorydefinitions":
 			return "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+		case "factorycontracts":
+			return "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 		case "context":
 			return "context"
 		default:
@@ -218,12 +232,10 @@ func TestPackageBoundary_WireSurfaceDoesNotConstructRuntimeOrSelectSiblingLeases
 		"petri",
 		"pkg/wire",
 		"internal/services/catalog",
-		"authoring_layout",
+		"internal/services/validation",
 		"compilation",
-		"validation",
+		"snapshots_portability",
 		"distribution",
-		"snapshotcapture",
-		"portableconfig",
 		"provideOrchestrator",
 		"NewPetri",
 	} {
@@ -232,6 +244,42 @@ func TestPackageBoundary_WireSurfaceDoesNotConstructRuntimeOrSelectSiblingLeases
 		}
 	}
 
-	wirePackage := snapshotsPortabilityPublicPackage + "/wire"
-	assertPackageDirectImportsForbidden(t, wirePackage, snapshotsPortabilityForbiddenImportRoots)
+	wirePackage := authoringLayoutPublicPackage + "/wire"
+	assertPackageDirectImportsForbidden(t, wirePackage, authoringLayoutForbiddenImportRoots)
+}
+
+func TestPackageBoundary_InternalLeasePackagesDoNotImportForbiddenOwnership(t *testing.T) {
+	t.Parallel()
+
+	for _, packageSuffix := range []string{
+		"/internal/service",
+		"/prepare",
+		"/persist",
+		"/flatten",
+		"/expand",
+	} {
+		assertPackageDirectImportsForbidden(
+			t,
+			authoringLayoutPublicPackage+packageSuffix,
+			authoringLayoutForbiddenImportRoots,
+		)
+	}
+}
+
+func TestPackageBoundary_TransitionalAuthoringPackagesRemainPresent(t *testing.T) {
+	t.Parallel()
+
+	for _, relativeDir := range []string{
+		"../../../authoredlayout",
+		"../../../definition",
+		"../../../persistence",
+	} {
+		info, err := os.Stat(relativeDir)
+		if err != nil {
+			t.Fatalf("transitional authoring package %s must remain present until DEL-DEF: %v", relativeDir, err)
+		}
+		if !info.IsDir() {
+			t.Fatalf("transitional authoring path %s must remain a directory until DEL-DEF", relativeDir)
+		}
+	}
 }

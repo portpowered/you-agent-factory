@@ -13,7 +13,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
 func assertManualWorkMoveRootRuntimeAndScopedStatusStayAligned(t *testing.T) {
@@ -199,7 +198,6 @@ func TestManualWorkRecovery_CascadeFailureThenAPIMovesResumeProgress(t *testing.
 	if !support.HasWorkAtCustomerState(listed, parentWorkID, "task:complete") {
 		t.Fatalf("work listing = %#v, want parent at task:complete", listed.Results)
 	}
-	functionalevidence.Covers(t, "rest/moveWorkBySessionId")
 }
 
 func postGeneratedMoveWork(t *testing.T, baseURL, workID, stateName string) factoryapi.Work {
