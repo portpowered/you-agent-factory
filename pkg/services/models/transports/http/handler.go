@@ -29,6 +29,9 @@ func NewHandler(adapter *Adapter, logger *zap.Logger) *Handler {
 }
 
 func (h *Handler) ListModels(w http.ResponseWriter, r *http.Request) {
+	if h.guardModelsRequestContext(w, r) {
+		return
+	}
 	response, err := h.adapter.ListModels(r.Context())
 	if err != nil {
 		h.writeCatalogError(w, err, catalogListFailedMessage)
@@ -38,6 +41,9 @@ func (h *Handler) ListModels(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetModel(w http.ResponseWriter, r *http.Request, modelName string) {
+	if h.guardModelsRequestContext(w, r) {
+		return
+	}
 	model, err := h.adapter.GetModel(r.Context(), modelName)
 	if err != nil {
 		h.writeCatalogError(w, err, catalogGetFailedMessage)
@@ -64,6 +70,9 @@ func (h *Handler) InvokeModel(w http.ResponseWriter, r *http.Request, modelName 
 			return
 		}
 	}
+	if h.guardModelsRequestContext(w, r) {
+		return
+	}
 
 	result, err := h.adapter.InvokeModel(r.Context(), modelName, req)
 	if err != nil {
@@ -86,6 +95,9 @@ func (h *Handler) writeInvocationError(w http.ResponseWriter, err error) {
 }
 
 func (h *Handler) PullModel(w http.ResponseWriter, r *http.Request, modelName string) {
+	if h.guardModelsRequestContext(w, r) {
+		return
+	}
 	result, err := h.adapter.PullModel(r.Context(), modelName)
 	if err != nil {
 		if isModelPullError(err) {

@@ -20,6 +20,9 @@ func (h *Handler) writeRootOrInternalError(
 	err error,
 	fallbackMessage string,
 ) {
+	if h.writeModelsRequestContextOutcome(w, err) {
+		return
+	}
 	if h.writeRootError(w, operation, err) {
 		return
 	}
