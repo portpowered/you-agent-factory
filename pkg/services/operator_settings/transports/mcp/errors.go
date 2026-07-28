@@ -15,6 +15,9 @@ const (
 	errorCodeDocumentNotFound      = "operator_settings.document.not_found"
 	errorCodeDocumentUnsupported   = "operator_settings.document.unsupported"
 	errorCodeDocumentConflict      = "operator_settings.document.conflict"
+	errorCodeResolutionInvalidInput        = "operator_settings.resolution.invalid_input"
+	errorCodeResolutionUnsupportedOverride = "operator_settings.resolution.unsupported_override"
+	errorCodeResolutionConflict            = "operator_settings.resolution.conflict"
 	errorCodeInternalExecution     = "operator_settings.execution.internal"
 	errorCodeRequestCanceled       = "operator_settings.request.canceled"
 	errorCodeRequestTimedOut       = "operator_settings.request.timed_out"
@@ -23,6 +26,9 @@ const (
 	errorMessageDocumentNotFound   = "operator document not found"
 	errorMessageDocumentUnsupported = "operator document update is unsupported"
 	errorMessageDocumentConflict   = "operator document persist conflict"
+	errorMessageResolutionInvalidInput        = "operator effective resolution input is invalid"
+	errorMessageResolutionUnsupportedOverride = "operator effective resolution override is unsupported"
+	errorMessageResolutionConflict            = "operator effective resolution conflict"
 	errorMessageRequestCanceled    = "operator settings request was canceled"
 	errorMessageRequestTimedOut    = "operator settings request timed out"
 	errorMessageInternalExecution  = "operator settings execution failed"
@@ -119,6 +125,30 @@ func applyDocumentUpdateErrorEnvelope(path string, err error) ToolErrorEnvelope 
 	return executionErrorEnvelope(err)
 }
 
+func resolveEffectiveErrorEnvelope(configPath string, err error) ToolErrorEnvelope {
+	var failure operatorsettings.ResolutionFailure
+	if errors.As(err, &failure) {
+		switch failure.Kind {
+		case operatorsettings.ResolutionFailureKindInvalidInput:
+			return resolutionInvalidInputErrorEnvelope(resolutionFailureField(failure), err)
+		case operatorsettings.ResolutionFailureKindUnsupportedOverride:
+			return resolutionUnsupportedOverrideErrorEnvelope(resolutionFailureField(failure), err)
+		case operatorsettings.ResolutionFailureKindConflict:
+			return resolutionConflictErrorEnvelope(resolutionFailureField(failure), err)
+		}
+	}
+	if errors.Is(err, operatorsettings.ErrResolutionInvalidInput) {
+		return resolutionInvalidInputErrorEnvelope("", err)
+	}
+	if errors.Is(err, operatorsettings.ErrResolutionUnsupportedOverride) {
+		return resolutionUnsupportedOverrideErrorEnvelope("", err)
+	}
+	if errors.Is(err, operatorsettings.ErrResolutionConflict) {
+		return resolutionConflictErrorEnvelope("", err)
+	}
+	return executionErrorEnvelope(err)
+}
+
 func loadDocumentErrorEnvelope(path string, err error) ToolErrorEnvelope {
 	var failure operatorsettings.DocumentFailure
 	if errors.As(err, &failure) {
@@ -179,6 +209,47 @@ func documentConflictErrorEnvelope(path string, err error) ToolErrorEnvelope {
 		Retryable: false,
 		Details:   documentFailureDetails(path, err),
 	}
+}
+
+func resolutionInvalidInputErrorEnvelope(field string, err error) ToolErrorEnvelope {
+	return ToolErrorEnvelope{
+		Code:      errorCodeResolutionInvalidInput,
+		Message:   errorMessageResolutionInvalidInput,
+		Retryable: false,
+		Details:   resolutionFailureDetails(field, err),
+	}
+}
+
+func resolutionUnsupportedOverrideErrorEnvelope(field string, err error) ToolErrorEnvelope {
+	return ToolErrorEnvelope{
+		Code:      errorCodeResolutionUnsupportedOverride,
+		Message:   errorMessageResolutionUnsupportedOverride,
+		Retryable: false,
+		Details:   resolutionFailureDetails(field, err),
+	}
+}
+
+func resolutionConflictErrorEnvelope(field string, err error) ToolErrorEnvelope {
+	return ToolErrorEnvelope{
+		Code:      errorCodeResolutionConflict,
+		Message:   errorMessageResolutionConflict,
+		Retryable: false,
+		Details:   resolutionFailureDetails(field, err),
+	}
+}
+
+func resolutionFailureField(failure operatorsettings.ResolutionFailure) string {
+	return strings.TrimSpace(failure.Field)
+}
+
+func resolutionFailureDetails(field string, err error) map[string]any {
+	details := map[string]any{
+		"reason": err.Error(),
+	}
+	if trimmed := strings.TrimSpace(field); trimmed != "" {
+		details["field"] = trimmed
+	}
+	return details
 }
 
 func documentFailureDetails(path string, err error) map[string]any {

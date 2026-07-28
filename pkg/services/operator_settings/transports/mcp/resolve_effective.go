@@ -60,7 +60,7 @@ func ResolveEffective(
 
 	result, err := service.ResolveEffective(mapResolveEffectiveRequest(input))
 	if err != nil {
-		envelope := executionErrorEnvelope(err)
+		envelope := resolveEffectiveErrorEnvelope(input.ConfigPath, err)
 		return ToolResponse[operatorsettings.ResolveEffectiveResult]{Error: &envelope}
 	}
 	return ToolResponse[operatorsettings.ResolveEffectiveResult]{Result: &result}
