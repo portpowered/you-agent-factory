@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -39,19 +41,21 @@ func TestDefinitionActivationGatewaySaveAndNamedSwap(t *testing.T) {
 	support.WaitForRuntimeIdle(t, baseURL, 10*time.Second)
 
 	current := getDefinitionActivationCurrentFactory(t, baseURL)
+	firstVersion := definitionActivationAdvancedFactoryVersion(t, current.Version)
 	firstSaved := saveDefinitionActivationCurrentFactory(
 		t,
 		baseURL,
-		definitionActivationFactoryBody("alpha", "story", current.Version),
+		definitionActivationFactoryBody("alpha", "story", &firstVersion),
 	)
 	if firstSaved.WorkTypes == nil || len(*firstSaved.WorkTypes) != 1 || (*firstSaved.WorkTypes)[0].Name != "story" {
 		t.Fatalf("first saved work types = %#v, want story", firstSaved.WorkTypes)
 	}
 
+	secondVersion := definitionActivationAdvancedFactoryVersion(t, firstSaved.Version)
 	secondSaved := saveDefinitionActivationCurrentFactory(
 		t,
 		baseURL,
-		definitionActivationFactoryBody("alpha", "article", firstSaved.Version),
+		definitionActivationFactoryBody("alpha", "article", &secondVersion),
 	)
 	if secondSaved.WorkTypes == nil || len(*secondSaved.WorkTypes) != 1 || (*secondSaved.WorkTypes)[0].Name != "article" {
 		t.Fatalf("second saved work types = %#v, want article", secondSaved.WorkTypes)
@@ -189,10 +193,11 @@ func TestDefinitionActivationGatewayDefaultRootSave(t *testing.T) {
 		t.Fatalf("default current factory name = %q, want UNDEFINED", current.Name)
 	}
 
+	saveVersion := definitionActivationAdvancedFactoryVersion(t, current.Version)
 	saved := saveDefinitionActivationCurrentFactory(
 		t,
 		baseURL,
-		definitionActivationDefaultFactorySaveBody("root-runtime", "story", current.Version),
+		definitionActivationDefaultFactorySaveBody("root-runtime", "story", &saveVersion),
 	)
 	if saved.WorkTypes == nil || len(*saved.WorkTypes) != 1 || (*saved.WorkTypes)[0].Name != "story" {
 		t.Fatalf("saved default factory work types = %#v, want story", saved.WorkTypes)
@@ -254,7 +259,7 @@ func saveDefinitionActivationCurrentFactory(t *testing.T, serverURL, body string
 		ctx,
 		http.MethodPut,
 		serverURL+"/factory-sessions/~default/factory",
-		bytes.NewReader([]byte(body)),
+		bytes.NewReader([]byte(definitionActivationSaveFactoryForSessionBody(body))),
 	)
 	if err != nil {
 		t.Fatalf("build PUT current factory request: %v", err)
@@ -266,7 +271,8 @@ func saveDefinitionActivationCurrentFactory(t *testing.T, serverURL, body string
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		t.Fatalf("PUT /factory-sessions/~default/factory status = %d, want 200", response.StatusCode)
+		payload, _ := io.ReadAll(response.Body)
+		t.Fatalf("PUT /factory-sessions/~default/factory status = %d, want 200: %s", response.StatusCode, payload)
 	}
 	var saved factoryapi.Factory
 	if err := json.NewDecoder(response.Body).Decode(&saved); err != nil {
@@ -321,6 +327,21 @@ func upsertDefinitionActivationNamedFactory(t *testing.T, serverURL, body string
 		t.Fatalf("decode named factory activation response: %v", err)
 	}
 	return activated
+}
+
+func definitionActivationSaveFactoryForSessionBody(factoryJSON string) string {
+	return fmt.Sprintf(`{"factory":%s}`, factoryJSON)
+}
+
+func definitionActivationAdvancedFactoryVersion(t *testing.T, version *factoryapi.HybridLogicalTimestamp) factoryapi.HybridLogicalTimestamp {
+	t.Helper()
+	if version == nil {
+		t.Fatal("factory version = nil, want version metadata")
+	}
+	return factoryapi.HybridLogicalTimestamp{
+		Logical:  version.Logical + 1,
+		Physical: version.Physical.UTC().Add(time.Nanosecond),
+	}
 }
 
 func definitionActivationFactoryBody(
