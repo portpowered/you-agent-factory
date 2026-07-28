@@ -5,7 +5,7 @@ import (
 
 	workflowsource "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/javascript/source"
 	workflowvalidation "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/javascript/validation"
-	workflowpolicy "github.com/portpowered/infinite-you/pkg/services/factory_runtime/orchestratorcontract"
+	workflowpolicy "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract"
 )
 
 // Request is the shared workflow validation and policy preview contract input.

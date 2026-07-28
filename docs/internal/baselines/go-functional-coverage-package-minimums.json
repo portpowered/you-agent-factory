@@ -725,11 +725,19 @@
       "minimum": 74.72
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/context",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/checkpointstore",
+      "minimum": 21.42
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/checkpointsummary",
+      "minimum": 83.78
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/context",
       "minimum": 5.55
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/definitionmapping",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/definitionmapping",
       "minimum": 61.62
     },
     {
@@ -875,19 +883,19 @@
       "minimum": 42.85
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/metrics",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/metrics",
       "minimum": 100.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/orchestrationowner",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestrationowner",
       "minimum": 0.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/orchestratorcontract",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract",
       "minimum": 48.38
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/replayhooks",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/replayhooks",
       "minimum": 87.50
     },
     {
@@ -899,7 +907,7 @@
       "minimum": 55.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtimecontract",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtimecontract",
       "minimum": 45.60
     },
     {

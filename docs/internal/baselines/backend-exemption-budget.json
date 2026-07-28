@@ -27,7 +27,7 @@
     },
     {
       "rule": "backendsizecheck:ignore-file",
-      "target": "pkg/services/factory_runtime/definitionmapping/mapper.go",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration/definitionmapping/mapper.go",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
     },
@@ -1185,7 +1185,7 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",
-      "target": "pkg/services/factory_runtime/definitionmapping/mapper.go",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration/definitionmapping/mapper.go",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
     },

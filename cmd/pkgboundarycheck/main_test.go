@@ -350,7 +350,7 @@ func TestRunAllowsPlatformObservabilityAndRejectsRetiredImports(t *testing.T) {
 
 	repoRoot := t.TempDir()
 	writeGoImportFile(t, repoRoot, "pkg/services/factory_runtime/internal/services/orchestration/runtime/canonical.go", "runtime", "github.com/portpowered/infinite-you/pkg/platform/logging")
-	writeGoImportFile(t, repoRoot, "pkg/services/factory_runtime/internal/services/orchestration/runtime/metrics.go", "runtime", "github.com/portpowered/infinite-you/pkg/services/factory_runtime/metrics")
+	writeGoImportFile(t, repoRoot, "pkg/services/factory_runtime/internal/services/orchestration/runtime/metrics.go", "runtime", "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/metrics")
 	writeGoImportFile(t, repoRoot, "pkg/wire/metrics.go", "wire", "github.com/portpowered/infinite-you/pkg/platform/metrics")
 
 	stderr := &bytes.Buffer{}
@@ -381,7 +381,7 @@ func TestRunAllowsPlatformObservabilityAndRejectsRetiredImports(t *testing.T) {
 	}
 	for _, want := range []string{
 		"prohibited retired package import: github.com/portpowered/infinite-you/pkg/internal/metrics",
-		"canonical owner: pkg/services/factory_runtime/metrics for domain contracts and pkg/platform/metrics for file-backed recording",
+		"canonical owner: pkg/services/factory_runtime/internal/services/orchestration/metrics for domain contracts and pkg/platform/metrics for file-backed recording",
 	} {
 		if !strings.Contains(stderr.String(), want) {
 			t.Fatalf("run() stderr = %q, want %q", stderr.String(), want)
@@ -720,8 +720,8 @@ func TestRunRejectsExternalImportsOfConvergedServiceSubpackages(t *testing.T) {
 		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/workstationexecution",
 		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/workpropagation",
 		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation",
-		"github.com/portpowered/infinite-you/pkg/services/factory_runtime/definitionmapping",
-		"github.com/portpowered/infinite-you/pkg/services/factory_runtime/replayhooks",
+		"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/definitionmapping",
+		"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/replayhooks",
 		"github.com/portpowered/infinite-you/pkg/services/recordings/projections/dashboard",
 		"github.com/portpowered/infinite-you/pkg/services/recordings/replay",
 		"github.com/portpowered/infinite-you/pkg/services/recordings/service",

@@ -108,8 +108,8 @@ pkg/services/factory_definitions/workers/taxonomy/taxonomy.go: unreachable func:
 pkg/services/factory_definitions/workers/taxonomy/taxonomy.go: unreachable func: IsProviderBackedWorkerType
 pkg/services/factory_definitions/workers/taxonomy/taxonomy.go: unreachable func: IsScriptWorkerType
 pkg/services/factory_definitions/workers/taxonomy/taxonomy.go: unreachable func: UsesModelhostLease
-pkg/services/factory_runtime/definitionmapping/maptests/config_mapper_resources_test.go: unreachable func: configMapperCronTimeToken
-pkg/services/factory_runtime/definitionmapping/maptests/config_mapper_resources_test.go: unreachable func: configMapperWorkToken
+pkg/services/factory_runtime/internal/services/orchestration/definitionmapping/maptests/config_mapper_resources_test.go: unreachable func: configMapperCronTimeToken
+pkg/services/factory_runtime/internal/services/orchestration/definitionmapping/maptests/config_mapper_resources_test.go: unreachable func: configMapperWorkToken
 pkg/services/factory_runtime/internal/config.go: unreachable func: ValidateRecordReplayPaths
 pkg/services/factory_runtime/internal/service/root.go: unreachable func: NewRoot
 pkg/services/factory_runtime/internal/services/orchestration/binding.go: unreachable func: compiledBinding.isOrchestrationBinding

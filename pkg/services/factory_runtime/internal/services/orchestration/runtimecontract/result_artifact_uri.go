@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/orchestratorcontract"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract"
 )
 
 const ArtifactURIScheme = orchestratorcontract.ArtifactURIScheme

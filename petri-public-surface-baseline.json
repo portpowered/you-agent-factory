@@ -164,7 +164,7 @@
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
-      "filePath": "pkg/services/factory_runtime/definitionmapping/maptests/config_mapper_equivalence_test.go",
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/definitionmapping/maptests/config_mapper_equivalence_test.go",
       "symbol": "Net",
       "shape": "raw net",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
@@ -173,7 +173,7 @@
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
-      "filePath": "pkg/services/factory_runtime/definitionmapping/maptests/config_mapper_equivalence_test.go",
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/definitionmapping/maptests/config_mapper_equivalence_test.go",
       "symbol": "PetriTransition",
       "shape": "raw transition",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
@@ -182,7 +182,7 @@
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
-      "filePath": "pkg/services/factory_runtime/definitionmapping/maptests/config_mapper_input_guards_any_child_failed_test.go",
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/definitionmapping/maptests/config_mapper_input_guards_any_child_failed_test.go",
       "symbol": "Net",
       "shape": "raw net",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
@@ -191,7 +191,7 @@
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
-      "filePath": "pkg/services/factory_runtime/definitionmapping/maptests/config_mapper_input_guards_dynamic_test.go",
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/definitionmapping/maptests/config_mapper_input_guards_dynamic_test.go",
       "symbol": "Net",
       "shape": "raw net",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
@@ -200,7 +200,7 @@
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
-      "filePath": "pkg/services/factory_runtime/definitionmapping/maptests/config_mapper_input_guards_static_test.go",
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/definitionmapping/maptests/config_mapper_input_guards_static_test.go",
       "symbol": "Net",
       "shape": "raw net",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
@@ -209,7 +209,7 @@
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
-      "filePath": "pkg/services/factory_runtime/definitionmapping/maptests/config_mapper_resources_test.go",
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/definitionmapping/maptests/config_mapper_resources_test.go",
       "symbol": "Net",
       "shape": "raw net",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
@@ -218,7 +218,7 @@
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
-      "filePath": "pkg/services/factory_runtime/definitionmapping/maptests/config_mapper_resources_test.go",
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/definitionmapping/maptests/config_mapper_resources_test.go",
       "symbol": "PetriTransition",
       "shape": "raw transition",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
@@ -227,7 +227,7 @@
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
-      "filePath": "pkg/services/factory_runtime/definitionmapping/maptests/config_mapper_resources_test.go",
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/definitionmapping/maptests/config_mapper_resources_test.go",
       "symbol": "RuntimeToken",
       "shape": "raw token",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
@@ -236,7 +236,7 @@
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
-      "filePath": "pkg/services/factory_runtime/definitionmapping/maptests/config_mapper_resources_test.go",
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/definitionmapping/maptests/config_mapper_resources_test.go",
       "symbol": "RuntimeTokenColor",
       "shape": "raw token",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
@@ -245,7 +245,7 @@
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
-      "filePath": "pkg/services/factory_runtime/definitionmapping/maptests/config_mapper_test.go",
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/definitionmapping/maptests/config_mapper_test.go",
       "symbol": "Net",
       "shape": "raw net",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
@@ -254,7 +254,7 @@
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
-      "filePath": "pkg/services/factory_runtime/definitionmapping/maptests/config_mapper_test.go",
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/definitionmapping/maptests/config_mapper_test.go",
       "symbol": "PetriTransition",
       "shape": "raw transition",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
@@ -263,7 +263,7 @@
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
-      "filePath": "pkg/services/factory_runtime/definitionmapping/maptests/config_mapper_workstation_cron_test.go",
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/definitionmapping/maptests/config_mapper_workstation_cron_test.go",
       "symbol": "Net",
       "shape": "raw net",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_runtime",
@@ -398,7 +398,7 @@
       "deletionGate": "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
     },
     {
-      "filePath": "pkg/services/factory_runtime/replayhooks/adapter.go",
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/replayhooks/adapter.go",
       "symbol": "EngineStateSnapshot",
       "shape": "engine snapshot",
       "importPath": "github.com/portpowered/infinite-you/pkg/services/factory_definitions",

@@ -7,8 +7,8 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factory_context "github.com/portpowered/infinite-you/pkg/services/factory_runtime/context"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/definitionmapping"
+	factory_context "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/context"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/definitionmapping"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"

@@ -3214,20 +3214,20 @@
       "deletionCondition": "delete public package after IMP-RUN-instance_host private subservice cutover proof"
     },
     {
-      "packagePath": "pkg/services/factory_runtime/context",
+      "packagePath": "pkg/services/factory_runtime/checkpointstore",
       "disposition": "move",
       "destination": "factory_runtime",
       "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
-      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
+      "successor": "pkg/services/factory_runtime/internal/services/checkpoint_recovery",
+      "deletionCondition": "delete public package after IMP-RUN-checkpoint_recovery private subservice cutover proof"
     },
     {
-      "packagePath": "pkg/services/factory_runtime/definitionmapping",
+      "packagePath": "pkg/services/factory_runtime/checkpointsummary",
       "disposition": "move",
       "destination": "factory_runtime",
       "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
-      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
+      "successor": "pkg/services/factory_runtime/internal/services/checkpoint_recovery",
+      "deletionCondition": "delete public package after IMP-RUN-checkpoint_recovery private subservice cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/definitionmapping/maptests",
@@ -3412,6 +3412,24 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/context",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/definitionmapping",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/definitionmapping/maptests",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/engine",
       "disposition": "retain",
       "destination": "factory_runtime",
@@ -3424,6 +3442,30 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/metrics",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/orchestrationowner",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/replayhooks",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/runtime",
       "disposition": "retain",
       "destination": "factory_runtime",
@@ -3431,6 +3473,12 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/orchestration/runtimecontract",
       "disposition": "retain",
       "destination": "factory_runtime",
       "destinationKind": "owner"
@@ -3509,46 +3557,6 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/javascript",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
-      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/metrics",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
-      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/orchestrationowner",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
-      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/orchestratorcontract",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
-      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/replayhooks",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
-      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/runtimecontract",
       "disposition": "move",
       "destination": "factory_runtime",
       "destinationKind": "owner",

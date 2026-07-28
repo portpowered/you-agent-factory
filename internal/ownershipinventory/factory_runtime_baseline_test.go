@@ -93,14 +93,7 @@ func TestFactoryRuntimeEnginePipelineMoveDestinationsLocked(t *testing.T) {
 		{path: "pkg/services/factory_runtime/build", wantSuccessor: instanceHostSuccessor, wantDestination: "factory_runtime"},
 		{path: "pkg/services/factory_runtime/checkpointstore", wantSuccessor: checkpointRecoverySuccessor, wantDestination: "factory_runtime"},
 		{path: "pkg/services/factory_runtime/checkpointsummary", wantSuccessor: checkpointRecoverySuccessor, wantDestination: "factory_runtime"},
-		{path: "pkg/services/factory_runtime/context", wantSuccessor: orchestrationSuccessor, wantDestination: "factory_runtime"},
-		{path: "pkg/services/factory_runtime/definitionmapping", wantSuccessor: orchestrationSuccessor, wantDestination: "factory_runtime"},
 		{path: "pkg/services/factory_runtime/javascript", wantSuccessor: orchestrationSuccessor, wantDestination: "factory_runtime"},
-		{path: "pkg/services/factory_runtime/metrics", wantSuccessor: orchestrationSuccessor, wantDestination: "factory_runtime"},
-		{path: "pkg/services/factory_runtime/orchestrationowner", wantSuccessor: orchestrationSuccessor, wantDestination: "factory_runtime"},
-		{path: "pkg/services/factory_runtime/orchestratorcontract", wantSuccessor: orchestrationSuccessor, wantDestination: "factory_runtime"},
-		{path: "pkg/services/factory_runtime/replayhooks", wantSuccessor: orchestrationSuccessor, wantDestination: "factory_runtime"},
-		{path: "pkg/services/factory_runtime/runtimecontract", wantSuccessor: orchestrationSuccessor, wantDestination: "factory_runtime"},
 		{path: "pkg/services/factory_runtime/tooling/javascript/catalog", wantSuccessor: orchestrationSuccessor, wantDestination: "factory_runtime"},
 	}
 

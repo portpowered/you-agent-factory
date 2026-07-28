@@ -1,6 +1,6 @@
 package factory
 
-import orchestratorcontract "github.com/portpowered/infinite-you/pkg/services/factory_runtime/orchestratorcontract"
+import orchestratorcontract "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract"
 
 const (
 	JavaScriptPolicyModeReadOnly        = orchestratorcontract.ModeReadOnly

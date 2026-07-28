@@ -2854,13 +2854,23 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/context",
+      "filePath": "pkg/services/factory_runtime/checkpointstore",
       "target": "pkg/services/factory_runtime"
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/definitionmapping",
+      "filePath": "pkg/services/factory_runtime/checkpointsummary",
       "target": "pkg/services/factory_runtime"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/context",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/definitionmapping",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration"
     },
     {
       "rule": "service-root-unexpected-directory",
@@ -2874,28 +2884,28 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/metrics",
-      "target": "pkg/services/factory_runtime"
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/metrics",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration"
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/orchestrationowner",
-      "target": "pkg/services/factory_runtime"
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/orchestrationowner",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration"
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/orchestratorcontract",
-      "target": "pkg/services/factory_runtime"
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration"
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/replayhooks",
-      "target": "pkg/services/factory_runtime"
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/replayhooks",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration"
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/runtimecontract",
-      "target": "pkg/services/factory_runtime"
+      "filePath": "pkg/services/factory_runtime/internal/services/orchestration/runtimecontract",
+      "target": "pkg/services/factory_runtime/internal/services/orchestration"
     },
     {
       "rule": "service-root-unexpected-directory",

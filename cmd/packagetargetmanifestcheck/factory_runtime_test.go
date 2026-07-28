@@ -127,10 +127,10 @@ func TestMapCommittedOwnerPackageFactoryRuntimeMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/runtimecontract",
+			path: "pkg/services/factory_runtime/internal/services/orchestration/runtimecontract",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_runtime/runtimecontract",
-				Disposition: DispositionMove,
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/runtimecontract",
+				Disposition: DispositionRetain,
 				Destination: "factory_runtime/internal/services/orchestration",
 			},
 		},
@@ -167,50 +167,50 @@ func TestMapCommittedOwnerPackageFactoryRuntimeMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/context",
+			path: "pkg/services/factory_runtime/internal/services/orchestration/context",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_runtime/context",
-				Disposition: DispositionMove,
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/context",
+				Disposition: DispositionRetain,
 				Destination: "factory_runtime/internal/services/orchestration",
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/definitionmapping",
+			path: "pkg/services/factory_runtime/internal/services/orchestration/definitionmapping",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_runtime/definitionmapping",
-				Disposition: DispositionMove,
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/definitionmapping",
+				Disposition: DispositionRetain,
 				Destination: "factory_runtime/internal/services/orchestration",
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/metrics",
+			path: "pkg/services/factory_runtime/internal/services/orchestration/metrics",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_runtime/metrics",
-				Disposition: DispositionMove,
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/metrics",
+				Disposition: DispositionRetain,
 				Destination: "factory_runtime/internal/services/orchestration",
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/orchestrationowner",
+			path: "pkg/services/factory_runtime/internal/services/orchestration/orchestrationowner",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_runtime/orchestrationowner",
-				Disposition: DispositionMove,
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/orchestrationowner",
+				Disposition: DispositionRetain,
 				Destination: "factory_runtime/internal/services/orchestration",
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/orchestratorcontract",
+			path: "pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_runtime/orchestratorcontract",
-				Disposition: DispositionMove,
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract",
+				Disposition: DispositionRetain,
 				Destination: "factory_runtime/internal/services/orchestration",
 			},
 		},
 		{
-			path: "pkg/services/factory_runtime/replayhooks",
+			path: "pkg/services/factory_runtime/internal/services/orchestration/replayhooks",
 			want: PackageMapping{
-				PackagePath: "pkg/services/factory_runtime/replayhooks",
-				Disposition: DispositionMove,
+				PackagePath: "pkg/services/factory_runtime/internal/services/orchestration/replayhooks",
+				Disposition: DispositionRetain,
 				Destination: "factory_runtime/internal/services/orchestration",
 			},
 		},
