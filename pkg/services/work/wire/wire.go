@@ -15,9 +15,9 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	internalservice "github.com/portpowered/infinite-you/pkg/services/work/internal/service"
 	contentstagingwire "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_staging/wire"
 	contentmaterializationwire "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_materialization/wire"
-	workservice "github.com/portpowered/infinite-you/pkg/services/work/service"
 )
 
 // DefaultContentMaterializationHTTPTimeout is the Work-owned outbound retrieval
@@ -93,7 +93,7 @@ func NewService(
 		writeFile,
 		openFile,
 	)
-	service := workservice.NewService(runtimes, nil, contentStaging, contentMaterializer)
+	service := internalservice.NewService(runtimes, nil, contentStaging, contentMaterializer)
 	return service, nil
 }
 
