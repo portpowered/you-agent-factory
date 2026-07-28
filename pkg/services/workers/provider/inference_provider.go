@@ -589,6 +589,9 @@ func normalizeProviderExecutionError(provider string, result CommandResult, err 
 		message := formatProviderCommandFailure(provider, result, err)
 		return newProviderErrorWithDiagnostics(workerexecution.WorkFailureTypeMissingExecutable, message, err, session, diagnostics)
 	default:
+		if result.ExitCode != 0 {
+			return normalizeProviderExitFailure(provider, result, session, diagnostics)
+		}
 		message := formatProviderCommandFailure(provider, result, err)
 		var execErr *exec.Error
 		if errors.As(err, &execErr) {
@@ -617,6 +620,11 @@ func parseProviderExitFailure(provider string, result CommandResult) parsedProvi
 	switch normalizedProvider {
 	case string(modelprovider.ProviderOpenCode):
 		failure := opencodeadapter.ParseProviderFailure(opencodeadapter.FailureInput{
+			Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
+		})
+		return parsedProviderFailure{failure: ProviderFailureResult{Reason: failure.Reason, Message: failure.Message}}
+	case string(modelprovider.ProviderKiro):
+		failure := kiropkg.ParseProviderFailure(kiropkg.FailureInput{
 			Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
 		})
 		return parsedProviderFailure{failure: ProviderFailureResult{Reason: failure.Reason, Message: failure.Message}}

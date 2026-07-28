@@ -147,7 +147,7 @@ func (s *Service) runtimeRunnerDecorators(
 		decorators = append(decorators, func(inner workers.Runner, _ *interfaces.FactoryWorkerConfig) workers.Runner {
 			return registryCapabilityRunner{next: inner, providers: s.providerRegistry}
 		})
-		if s.invocationConductor != nil {
+		if s.invocationConductor != nil && !s.agentDispatchUsesRegisteredRunner {
 			decorators = append(decorators, func(inner workers.Runner, _ *interfaces.FactoryWorkerConfig) workers.Runner {
 				return conductorInvocationRunner{
 					next:      inner,

@@ -10,7 +10,7 @@ import (
 
 // peerWorkRootConsumer is a peer-shaped characterization consumer (Factory
 // Sessions / Workers style) that depends only on the Work root package contract
-// surface. It must not import work/service, work/materialize, Factory Runtime,
+// surface. It must not import work/service, work internal content_materialization,
 // Petri, or other peer implementation packages to call or assert published
 // slices.
 type peerWorkRootConsumer struct {

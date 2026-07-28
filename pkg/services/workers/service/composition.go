@@ -168,8 +168,11 @@ func NewRuntimeWithSelection(
 		if builder, ok := service.executorBuilder.(*workerconstruction.Service); ok {
 			service.executorBuilder = builder.
 				WithRunnerSelection(providerRegistry.ResolveRunnerSelection).
-				WithProviderIdentityResolution(providerRegistry.CanonicalIdentity)
+				WithProviderIdentityResolution(providerRegistry.CanonicalIdentity).
+				WithProviderRegistry(providerRegistry).
+				WithAgentRunnerCutover(true)
 		}
+		service.agentDispatchUsesRegisteredRunner = true
 	}
 	return service, nil
 }

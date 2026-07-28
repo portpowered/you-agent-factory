@@ -68,6 +68,7 @@ type Service struct {
 	invocationConductor               *providerconductor.Conductor
 	runtimeAssembly                   runtimeassembly.Service
 	workstations                      workstations.Service
+	agentDispatchUsesRegisteredRunner bool
 }
 
 var _ workers.RuntimeService = (*Service)(nil)

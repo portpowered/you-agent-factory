@@ -13,6 +13,7 @@ import (
 
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionscli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -20,6 +21,145 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
 	"go.uber.org/zap"
 )
+
+func TestPackagedInitCommandCompositionUsesDefinitionsOwnedAdapter(t *testing.T) {
+	t.Parallel()
+
+	called := false
+	install := func(
+		context.Context,
+		interfaces.InstallPackagedFactoryRequest,
+	) (interfaces.InstallPackagedFactoryResult, error) {
+		called = true
+		return interfaces.InstallPackagedFactoryResult{
+			Definition: interfaces.DistributedFactoryDefinitionFacts{
+				Name:       "@you/goal",
+				FactoryDir: "/home/operator/.you-agent-factory/factories/@you/goal",
+			},
+			Outcome: interfaces.PackagedFactoryInstallCreated,
+			Format:  interfaces.PackagedFactoryFormatJSON,
+		}, nil
+	}
+	factory := NewCommandFactory(CommandOperations{
+		InstallPackagedFactory: factorydefinitionscli.BindInstallPackagedFactory(install),
+	})
+	if factory.InstallPackagedFactory == nil {
+		t.Fatal("InstallPackagedFactory operation is missing from composed factory")
+	}
+
+	root := factory.NewCommand(
+		func() (string, error) { return "/home/operator", nil },
+		func(string) (string, bool) { return "", false },
+		nil,
+	)
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetContext(startupcli.WithWorkingDirectory(context.Background(), "/workspace/fleet"))
+	root.SetArgs([]string{
+		"init", "--package", "@you/goal", "--dir", "alternate-factories",
+		"--format", "yaml", "--replace=true",
+	})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute packaged init: %v", err)
+	}
+	if !called {
+		t.Fatal("Definitions-owned packaged init adapter was not invoked through production composition")
+	}
+}
+
+func TestPackagedInitPreservesBehaviorThroughProductionComposition(t *testing.T) {
+	t.Parallel()
+
+	args := []string{
+		"--verbose", "--json",
+		"init", "--package", "@you/goal", "--dir", "alternate-factories",
+		"--format", "yaml", "--replace=true",
+	}
+	runPackagedInitCompositionCases(t, args, errors.New("packaged factory install failed"), func(result error) CommandOperations {
+		install := func(
+			_ context.Context,
+			request interfaces.InstallPackagedFactoryRequest,
+		) (interfaces.InstallPackagedFactoryResult, error) {
+			if request.Name != "@you/goal" ||
+				request.Format != interfaces.PackagedFactoryFormatYAML ||
+				!request.Replace {
+				return interfaces.InstallPackagedFactoryResult{}, fmt.Errorf(
+					"unexpected packaged install request: %#v",
+					request,
+				)
+			}
+			if result != nil {
+				return interfaces.InstallPackagedFactoryResult{}, result
+			}
+			return interfaces.InstallPackagedFactoryResult{
+				Definition: interfaces.DistributedFactoryDefinitionFacts{
+					Name:       "@you/goal",
+					FactoryDir: "/home/operator/.you-agent-factory/factories/@you/goal",
+				},
+				Outcome: interfaces.PackagedFactoryInstallCreated,
+				Format:  interfaces.PackagedFactoryFormatYAML,
+			}, nil
+		}
+		return CommandOperations{
+			InstallPackagedFactory: factorydefinitionscli.BindInstallPackagedFactory(install),
+		}
+	})
+}
+
+func runPackagedInitCompositionCases(
+	t *testing.T,
+	args []string,
+	wantError error,
+	operations func(error) CommandOperations,
+) {
+	t.Helper()
+	t.Run("success", func(t *testing.T) {
+		stdout, stderr, err := executePackagedInitComposition(t, operations(nil), args)
+		if err != nil {
+			t.Fatalf("Execute() error = %v", err)
+		}
+		if !strings.Contains(stdout, `"name":"@you/goal"`) ||
+			!strings.Contains(stdout, `"outcome":"created"`) {
+			t.Fatalf("stdout = %q, want packaged init JSON success", stdout)
+		}
+		if !strings.Contains(stderr, "init packaged factory request name=@you/goal") {
+			t.Fatalf("stderr = %q, want verbose packaged init diagnostics", stderr)
+		}
+	})
+	t.Run("failure", func(t *testing.T) {
+		stdout, stderr, err := executePackagedInitComposition(t, operations(wantError), args)
+		if err == nil || !strings.Contains(err.Error(), wantError.Error()) {
+			t.Fatalf("Execute() error = %v, want error containing %v", err, wantError)
+		}
+		if stdout != "" || !strings.Contains(stderr, wantError.Error()) {
+			t.Fatalf("failure stdout = %q, stderr = %q", stdout, stderr)
+		}
+	})
+}
+
+func executePackagedInitComposition(
+	t *testing.T,
+	operations CommandOperations,
+	args []string,
+) (string, string, error) {
+	t.Helper()
+	factory := NewCommandFactory(operations)
+	if factory.InstallPackagedFactory == nil {
+		t.Fatal("InstallPackagedFactory operation is missing from production composition")
+	}
+	root := factory.NewCommand(
+		func() (string, error) { return "/home/operator", nil },
+		func(string) (string, bool) { return "", false },
+		nil,
+	)
+	var stdout, stderr bytes.Buffer
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
+	root.SetContext(startupcli.WithWorkingDirectory(context.Background(), "/workspace/fleet"))
+	root.SetArgs(args)
+	err := root.Execute()
+	return stdout.String(), stderr.String(), err
+}
 
 func TestSessionCommandCompositionUsesTypedSessionsCLIAdapter(t *testing.T) {
 	t.Parallel()

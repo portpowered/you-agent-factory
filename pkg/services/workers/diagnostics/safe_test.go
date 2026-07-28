@@ -8,6 +8,46 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+func TestSafeWorkDiagnosticsRedactsHostSpecificWorkingDirectory(t *testing.T) {
+	t.Parallel()
+	safe := SafeWorkDiagnosticsFromWorkDiagnostics(&workerexecution.WorkDiagnostics{
+		Provider: &workerexecution.ProviderDiagnostic{
+			RequestMetadata: map[string]string{
+				"working_directory": `C:\Users\alice\factory`,
+				"worktree":          "feature-runtime",
+			},
+		},
+	})
+	if got := safe.Provider.RequestMetadata["working_directory"]; got != workerexecution.MetadataOnlyCommandEnvValue {
+		t.Fatalf("working_directory = %q, want metadata-only marker", got)
+	}
+	if got := safe.Provider.RequestMetadata["worktree"]; got != "feature-runtime" {
+		t.Fatalf("worktree = %q, want portable branch name preserved", got)
+	}
+
+	relative := SafeWorkDiagnosticsFromWorkDiagnostics(&workerexecution.WorkDiagnostics{
+		Provider: &workerexecution.ProviderDiagnostic{
+			RequestMetadata: map[string]string{
+				"working_directory": "workspace/cursor",
+			},
+		},
+	})
+	if got := relative.Provider.RequestMetadata["working_directory"]; got != "workspace/cursor" {
+		t.Fatalf("relative working_directory = %q, want preserved portable path", got)
+	}
+
+	portableAbsolute := SafeWorkDiagnosticsFromWorkDiagnostics(&workerexecution.WorkDiagnostics{
+		Provider: &workerexecution.ProviderDiagnostic{
+			RequestMetadata: map[string]string{
+				"working_directory": `C:\repo`,
+			},
+		},
+	})
+	if got := portableAbsolute.Provider.RequestMetadata["working_directory"]; got != `C:\repo` {
+		t.Fatalf("portable absolute working_directory = %q, want preserved fixture path", got)
+	}
+}
+
 func TestSafeWorkDiagnosticsAllowlistAndCloneIsolation(t *testing.T) {
 	t.Parallel()
 	safe := SafeWorkDiagnosticsFromWorkDiagnostics(&workerexecution.WorkDiagnostics{
@@ -25,11 +65,11 @@ func TestSafeWorkDiagnosticsAllowlistAndCloneIsolation(t *testing.T) {
 	if _, ok := safe.Provider.RequestMetadata["authorization"]; ok {
 		t.Fatal("secret provider metadata leaked")
 	}
-	if _, ok := safe.Provider.RequestMetadata["working_directory"]; ok {
-		t.Fatal("host working directory leaked")
+	if got := safe.Provider.RequestMetadata["working_directory"]; got != workerexecution.MetadataOnlyCommandEnvValue {
+		t.Fatalf("host working directory = %q, want metadata-only marker", got)
 	}
-	if _, ok := safe.Provider.RequestMetadata["worktree"]; ok {
-		t.Fatal("host worktree leaked")
+	if got := safe.Provider.RequestMetadata["worktree"]; got != workerexecution.MetadataOnlyCommandEnvValue {
+		t.Fatalf("host worktree = %q, want metadata-only marker", got)
 	}
 	if _, ok := safe.RenderedPrompt.Variables["api_key"]; ok {
 		t.Fatal("secret prompt variable leaked")
