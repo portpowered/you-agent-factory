@@ -133,6 +133,7 @@ func TestEdgesAggregateExactOwnerTypes(t *testing.T) {
 		"FactorySessionIDGenerator":                       {typeName: "factorysessions.SessionIDGenerator", effect: "generate opaque live and durable Factory Session identities"},
 		"FactorySessionRuntimeInstanceIDGenerator":        {typeName: "factorysessions.RuntimeInstanceIDGenerator", effect: "generate opaque Factory Session runtime instance identities"},
 		"FactorySessionResponseEventIDGenerator":          {typeName: "factorysessions.ResponseEventIDGenerator", effect: "generate opaque Factory Session response-event identities"},
+		"FactorySessionResponseEventRetentionLimits":      {typeName: "*factorysessions.ResponseEventRetentionLimits", effect: "override Factory Session response-event retention bounds for functional proofs"},
 		"FactorySessionCursorPersistenceFileSystem":       {typeName: "factorysessions.CursorPersistenceFileSystem", effect: "persist Factory Session reconnect cursors"},
 		"FactorySessionCursorCreateTemporaryFile":         {typeName: "factorysessions.CursorPersistenceCreateTemporaryFile", effect: "create atomic Factory Session reconnect-cursor writes"},
 		"FactorySessionRuntimePersistenceFileSystem":      {typeName: "factorysessions.RuntimePersistenceFileSystem", effect: "persist durable Factory Session runtime snapshots"},

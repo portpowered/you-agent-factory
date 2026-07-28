@@ -70,7 +70,7 @@ type liveRuntimeGatewayHost interface {
 
 func newLiveRuntimeCompositionGateway(t *testing.T, host liveRuntimeGatewayHost) *factorysessionservice.Service {
 	t.Helper()
-	responseService, err := responsestreamwire.NewService(func() string { return "response-event-live-runtime" })
+	responseService, err := responsestreamwire.NewService(func() string { return "response-event-live-runtime" }, nil)
 	if err != nil {
 		t.Fatalf("construct response-stream service: %v", err)
 	}

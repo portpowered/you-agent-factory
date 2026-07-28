@@ -42,7 +42,7 @@ func newService(t *testing.T) responsestreamservice.Service {
 	var next atomic.Uint64
 	service, err := responsestreamwire.NewService(func() string {
 		return fmt.Sprintf("response-event-%d", next.Add(1))
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
@@ -160,7 +160,7 @@ func TestService_CancellationAndSlowSubscribersStayBounded(t *testing.T) {
 
 func TestService_ConstructionIsInertAndRejectsMissingEffects(t *testing.T) {
 	t.Parallel()
-	if service, err := responsestreamwire.NewService(nil); err == nil || service != nil {
+	if service, err := responsestreamwire.NewService(nil, nil); err == nil || service != nil {
 		t.Fatalf("NewService(nil) = %#v, %v; want deterministic dependency error", service, err)
 	}
 	service := newService(t)

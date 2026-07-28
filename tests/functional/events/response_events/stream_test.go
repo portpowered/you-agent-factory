@@ -18,6 +18,116 @@ import (
 
 const codexPartialStreamGoldenCase = "success"
 
+const functionalResponseEventRetentionByteLimit = 16 * 1024 * 1024
+
+// TestAPIResponseEventCursorGapEmitsStreamGap proves the public Response Event
+// SSE API emits STREAM_GAP with explicit lost-range bounds when after_sequence
+// predates the currently retained response-event window instead of silently
+// skipping unavailable sequences.
+func TestAPIResponseEventCursorGapEmitsStreamGap(t *testing.T) {
+	loaded := loadCodexPartialStreamGoldenCase(t)
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	support.WriteAgentConfig(
+		t,
+		dir,
+		"worker",
+		support.BuildModelWorkerConfig(modelprovider.ProviderCodex, loaded.Process.Model),
+	)
+
+	exitCode := 0
+	if loaded.Process.ExitCode != nil {
+		exitCode = *loaded.Process.ExitCode
+	}
+	providerResult := platformprocess.CommandResult{
+		Stdout:   append([]byte(nil), loaded.Stdout.Raw...),
+		Stderr:   []byte(loaded.Stderr),
+		ExitCode: exitCode,
+	}
+	runner := testutil.NewProviderCommandRunner(providerResult, providerResult)
+
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		ResponseEventRetentionLimits: &factorysessions.ResponseEventRetentionLimits{
+			MaxEvents: 2,
+			MaxBytes:  functionalResponseEventRetentionByteLimit,
+		},
+		Edges: serviceedges.Edges{ProviderCommandRunner: runner},
+	})
+	t.Cleanup(func() { server.Stop(t) })
+
+	firstWorkName := "cursor-gap-first-work"
+	support.SubmitDefaultSessionWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+		Name:         &firstWorkName,
+		WorkTypeName: "task",
+		Payload: map[string]string{
+			"title": "seed retained response history",
+		},
+	})
+	support.WaitForTerminalStatus(t, server.URL(), 20*time.Second)
+
+	secondWorkName := "cursor-gap-second-work"
+	support.SubmitDefaultSessionWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+		Name:         &secondWorkName,
+		WorkTypeName: "task",
+		Payload: map[string]string{
+			"title": "evict earlier retained response history",
+		},
+	})
+	support.WaitForTerminalStatus(t, server.URL(), 20*time.Second)
+
+	sessionID := factorysessions.DefaultSessionID
+	retained := retainedFactoryResponseEventsWithoutGaps(
+		support.GetFactoryResponseEventsAt(t, server.URL(), sessionID),
+	)
+	if len(retained) < 2 {
+		t.Fatalf(
+			"retained Response Event count = %d, want at least 2 after tight retention",
+			len(retained),
+		)
+	}
+	firstAvailable := retained[0].Sequence
+	if firstAvailable <= 1 {
+		t.Fatalf(
+			"first retained sequence = %d, want eviction to leave a later firstAvailableSequence",
+			firstAvailable,
+		)
+	}
+	staleCursor := int64(1)
+	if firstAvailable <= 2 {
+		staleCursor = 0
+	}
+
+	gapStream := support.OpenFactoryResponseEventStreamAt(
+		t,
+		support.SessionResponseEventsURLWithAfterSequence(server.URL(), sessionID, staleCursor),
+	)
+	gapFrame := gapStream.NextFrame(10 * time.Second)
+	assertResponseEventStreamGapFrame(t, gapFrame, staleCursor, firstAvailable)
+
+	retainedFromGapStream := collectResponseEventStreamUntilCount(
+		t,
+		gapStream,
+		len(retained),
+		10*time.Second,
+	)
+	assertResponseEventFramesMatchRetainedCatchUp(t, retained, retainedFromGapStream)
+	gapStream.Close()
+
+	resumeStream := support.OpenFactoryResponseEventStreamAt(
+		t,
+		support.SessionResponseEventsURL(server.URL(), sessionID),
+	)
+	resumeFromStream := collectResponseEventStreamUntilRetainedCount(
+		t,
+		resumeStream,
+		len(retained),
+		10*time.Second,
+	)
+	assertResponseEventFramesMatchRetainedCatchUp(t, retained, resumeFromStream)
+	resumeStream.Close()
+}
+
 // TestAPIResponseEventSSEStreamsRetainedThenLiveEvents proves the public
 // Response Event SSE API first delivers retained matching records in ascending
 // FactoryResponseEvent.sequence and then continues with later live matching
@@ -148,6 +258,40 @@ func loadCodexPartialStreamGoldenCase(t *testing.T) support.ProviderSessionCase 
 		)
 	}
 	return loaded
+}
+
+func collectResponseEventStreamUntilRetainedCount(
+	t *testing.T,
+	stream *support.FactoryResponseEventStream,
+	wantRetainedCount int,
+	timeout time.Duration,
+) []support.FactoryResponseEventFrame {
+	t.Helper()
+
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	var collected []support.FactoryResponseEventFrame
+	for len(collected) < wantRetainedCount {
+		select {
+		case <-deadline.C:
+			t.Fatalf(
+				"timed out collecting %d retained Response Event frames from stream; got %d within %s",
+				wantRetainedCount,
+				len(collected),
+				timeout,
+			)
+		default:
+			frame, ok := stream.TryNextFrame(50 * time.Millisecond)
+			if !ok {
+				continue
+			}
+			if frame.Event.Kind == factoryapi.FactoryResponseEventKindStreamGap {
+				continue
+			}
+			collected = append(collected, frame)
+		}
+	}
+	return collected
 }
 
 func collectResponseEventStreamUntilCount(
@@ -305,6 +449,73 @@ func assertResponseEventFramesMatchRetainedCatchUp(
 				want.Sequence,
 			)
 		}
+	}
+}
+
+func retainedFactoryResponseEventsWithoutGaps(
+	events []factoryapi.FactoryResponseEvent,
+) []factoryapi.FactoryResponseEvent {
+	filtered := make([]factoryapi.FactoryResponseEvent, 0, len(events))
+	for _, event := range events {
+		if event.Kind == factoryapi.FactoryResponseEventKindStreamGap {
+			continue
+		}
+		filtered = append(filtered, event)
+	}
+	return filtered
+}
+
+func assertResponseEventStreamGapFrame(
+	t *testing.T,
+	frame support.FactoryResponseEventFrame,
+	afterSequence int64,
+	wantFirstAvailable int64,
+) {
+	t.Helper()
+
+	if frame.Event.Kind != factoryapi.FactoryResponseEventKindStreamGap {
+		t.Fatalf(
+			"stale cursor first event kind = %q, want STREAM_GAP",
+			frame.Event.Kind,
+		)
+	}
+	if frame.Event.Phase != factoryapi.FactoryResponseEventPhaseUpdated {
+		t.Fatalf(
+			"STREAM_GAP phase = %q, want UPDATED",
+			frame.Event.Phase,
+		)
+	}
+	gapUnion, err := frame.Event.Payload.AsFactoryResponseEventStreamGapPayload()
+	if err != nil {
+		t.Fatalf("decode STREAM_GAP union payload: %v", err)
+	}
+	gapPayload, err := gapUnion.AsFactoryResponseEventStreamGapPayload0()
+	if err != nil {
+		t.Fatalf("decode STREAM_GAP payload: %v", err)
+	}
+	if gapPayload.FromSequence <= afterSequence {
+		t.Fatalf(
+			"STREAM_GAP fromSequence = %d, want greater than stale cursor %d",
+			gapPayload.FromSequence,
+			afterSequence,
+		)
+	}
+	if gapPayload.ToSequence < gapPayload.FromSequence {
+		t.Fatalf(
+			"STREAM_GAP bounds = %d..%d, want non-empty unavailable range",
+			gapPayload.FromSequence,
+			gapPayload.ToSequence,
+		)
+	}
+	if gapPayload.FirstAvailableSequence != wantFirstAvailable {
+		t.Fatalf(
+			"STREAM_GAP firstAvailableSequence = %d, want %d",
+			gapPayload.FirstAvailableSequence,
+			wantFirstAvailable,
+		)
+	}
+	if gapPayload.Reason == nil || *gapPayload.Reason != "retention_window" {
+		t.Fatalf("STREAM_GAP reason = %#v, want retention_window", gapPayload.Reason)
 	}
 }
 

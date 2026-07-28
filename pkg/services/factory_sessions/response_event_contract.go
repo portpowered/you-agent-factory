@@ -104,6 +104,14 @@ var (
 	ErrInvalidResponseEventFilter = errors.New("invalid factory response-event filter")
 )
 
+// ResponseEventRetentionLimits configures hard session-wide bounds for retained
+// FactoryResponseEvent history. Process-edge replacements may supply tighter
+// limits for functional proofs without changing production defaults.
+type ResponseEventRetentionLimits struct {
+	MaxEvents int
+	MaxBytes  int
+}
+
 // --- merged from response_stream_contract.go ---
 
 // Response-stream root slice freezes subscription, cursor, event, gap, and
