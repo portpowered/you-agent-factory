@@ -2018,6 +2018,16 @@ response-stream output.
   stable-ID local/inherited inputs, missing injected dependencies, and
   initializer/home failures that must not invoke the operation. Do not weaken
   `go-unit-coverage-package-minimums.json` for migration-owned packages.
+- The Models CLI adapter at `pkg/services/models/transports/cli` must stay
+  registered under destination `models` in
+  `docs/internal/packaged-service-structure/package-target-manifest.json`,
+  `docs/internal/baselines/ownership-inventory.json`, and both
+  `go-*-coverage-package-minimums.json` baselines; prove registration with
+  `manifest_registration_test.go` rather than re-editing manifests when IMP-MOD
+  already landed the rows. When adapter-owned root paths add statements, restore
+  the unit floor with behavioral coverage for composition facade delegation,
+  remote `--server` list/inspect/pull, and catalog capability/slot mapping
+  instead of weakening `go-unit-coverage-package-minimums.json`.
 - Functional coverage does not inherit unit-test hits. After the same cutover,
   restore `go-functional-coverage-package-minimums.json` floors with short
   `tests/functional/...` evidence that exercises the migrated packages under the
