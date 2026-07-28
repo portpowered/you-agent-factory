@@ -1159,7 +1159,7 @@
       "fromOwner": "factory_definitions",
       "toOwner": "transports",
       "class": "command",
-      "evidence": "pkg/services/factory_definitions/wire -\u003e pkg/transports/mapping/factoryconfig"
+      "evidence": "pkg/services/factory_definitions/transports/http -\u003e pkg/transports/http/generated"
     },
     {
       "fromOwner": "factory_definitions",
@@ -1303,7 +1303,7 @@
       "fromOwner": "factory_visualization",
       "toOwner": "factory_definitions",
       "class": "query",
-      "evidence": "pkg/services/factory_visualization/internal/contracts -\u003e pkg/services/factory_definitions"
+      "evidence": "pkg/services/factory_visualization -\u003e pkg/services/factory_definitions"
     },
     {
       "fromOwner": "factory_visualization",
@@ -1321,7 +1321,25 @@
       "fromOwner": "factory_visualization",
       "toOwner": "recordings",
       "class": "event",
-      "evidence": "pkg/services/factory_visualization/internal/services/activation_lifecycle -\u003e pkg/services/recordings"
+      "evidence": "pkg/services/factory_visualization -\u003e pkg/services/recordings"
+    },
+    {
+      "fromOwner": "factory_visualization",
+      "toOwner": "transports",
+      "class": "command",
+      "evidence": "pkg/services/factory_visualization/transports/cli -\u003e pkg/transports/mapping"
+    },
+    {
+      "fromOwner": "factory_visualization",
+      "toOwner": "work",
+      "class": "command",
+      "evidence": "pkg/services/factory_visualization/transports/cli -\u003e pkg/services/work"
+    },
+    {
+      "fromOwner": "factory_visualization",
+      "toOwner": "workers",
+      "class": "command",
+      "evidence": "pkg/services/factory_visualization/transports/cli -\u003e pkg/services/workers"
     },
     {
       "fromOwner": "initializer",
@@ -3583,6 +3601,12 @@
     },
     {
       "packagePath": "pkg/services/factory_visualization/internal/services/response_event_presentation/wire",
+      "disposition": "retain",
+      "destination": "factory_visualization",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/transports/cli",
       "disposition": "retain",
       "destination": "factory_visualization",
       "destinationKind": "owner"

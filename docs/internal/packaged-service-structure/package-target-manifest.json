@@ -249,6 +249,7 @@
     "pkg/services/factory_visualization/internal/services/response_event_presentation",
     "pkg/services/factory_visualization/internal/services/response_event_presentation/internal/service",
     "pkg/services/factory_visualization/internal/services/response_event_presentation/wire",
+    "pkg/services/factory_visualization/transports/cli",
     "pkg/services/factory_visualization/wire",
     "pkg/services/models",
     "pkg/services/models/internal/artifacts",
@@ -1516,6 +1517,11 @@
       "packagePath": "pkg/services/factory_visualization/internal/services/response_event_presentation/wire",
       "disposition": "retain",
       "destination": "factory_visualization/internal/services/response_event_presentation"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/transports/cli",
+      "disposition": "retain",
+      "destination": "factory_visualization"
     },
     {
       "packagePath": "pkg/services/factory_visualization/wire",
