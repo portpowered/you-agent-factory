@@ -642,7 +642,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/mcp",
-      "minimum": 81.50
+      "minimum": 81.48
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire",
