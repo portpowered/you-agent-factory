@@ -3,6 +3,7 @@ package providers_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
@@ -45,7 +46,7 @@ func TestRootCatalogDelegation_FulfillsPublishedListAndGet(t *testing.T) {
 	}
 }
 
-func TestRootCatalogDelegation_ConstructionIsInert(t *testing.T) {
+func TestRootCatalogDelegation_RegistersCodexAdapter(t *testing.T) {
 	t.Parallel()
 
 	service, err := providerswire.NewService()
@@ -60,7 +61,10 @@ func TestRootCatalogDelegation_ConstructionIsInert(t *testing.T) {
 		Provider:  providers.IDCodex,
 		AttemptID: "root-delegation-attempt",
 	})
-	if !errors.Is(err, providers.ErrProviderUnavailable) {
-		t.Fatalf("Execute() error = %v, want ErrProviderUnavailable without an adapter", err)
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) ||
+		failure.Kind != providers.ExecuteFailureKindDependency ||
+		!strings.Contains(failure.Message, "Codex") {
+		t.Fatalf("Execute() error = %#v, want Codex adapter dependency failure", err)
 	}
 }

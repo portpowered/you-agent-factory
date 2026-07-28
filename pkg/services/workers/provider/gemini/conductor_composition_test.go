@@ -39,8 +39,8 @@ func TestBuiltInRegistrySelectsGeminiThroughAuthoritativeManifestIdentity(t *tes
 	if providers.UsesNativeRunner("gemini") {
 		t.Fatal("UsesNativeRunner(gemini) = true, want conductor route for migrated Gemini")
 	}
-	if !providers.UsesNativeRunner(workers.RunnerIDCodex) {
-		t.Fatal("UsesNativeRunner(codex) = false, want retained native path for unmigrated built-ins")
+	if providers.UsesNativeRunner(workers.RunnerIDCodex) || providers.UsesNativeRunner("claude") {
+		t.Fatal("UsesNativeRunner(codex/claude) = true, want conductor route for migrated built-ins")
 	}
 }
 

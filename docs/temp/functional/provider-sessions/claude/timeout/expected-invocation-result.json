@@ -1,5 +1,5 @@
 {
   "failureReason": "timeout",
-  "message": "Claude request timed out.",
+  "message": "provider invocation timed out",
   "ok": false
 }

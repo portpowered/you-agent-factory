@@ -71,6 +71,36 @@ func TestNewRejectsInvalidRegistrationSets(t *testing.T) {
 				Attempt:  validAttempt,
 			}},
 		},
+		{
+			name: "unavailable provider",
+			catalog: &recordingCatalog{
+				registration: func(id providers.ID) (providers.Descriptor, error) {
+					return providers.Descriptor{
+						ID:           id,
+						Availability: providers.AvailabilityCatalogOnly,
+					}, nil
+				},
+			},
+			registrations: []execution.Registration{{
+				Provider: providers.IDCodex,
+				Attempt:  validAttempt,
+			}},
+		},
+		{
+			name: "catalog mismatched provider",
+			catalog: &recordingCatalog{
+				registration: func(providers.ID) (providers.Descriptor, error) {
+					return providers.Descriptor{
+						ID:           providers.IDClaude,
+						Availability: providers.AvailabilitySelectable,
+					}, nil
+				},
+			},
+			registrations: []execution.Registration{{
+				Provider: providers.IDCodex,
+				Attempt:  validAttempt,
+			}},
+		},
 	}
 
 	for _, test := range tests {
@@ -900,10 +930,23 @@ type recordingCatalog struct {
 		context.Context,
 		providers.GetProviderRequest,
 	) (providers.GetProviderResult, error)
+	registration func(providers.ID) (providers.Descriptor, error)
 }
 
 func (*recordingCatalog) ResolveProviderID(id providers.ID) (providers.ID, error) {
 	return id, nil
+}
+
+func (catalog *recordingCatalog) RegistrationProvider(
+	id providers.ID,
+) (providers.Descriptor, error) {
+	if catalog.registration != nil {
+		return catalog.registration(id)
+	}
+	return providers.Descriptor{
+		ID:           id,
+		Availability: providers.AvailabilitySelectable,
+	}, nil
 }
 
 func (*recordingCatalog) ListProviders(

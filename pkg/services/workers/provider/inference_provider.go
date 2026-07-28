@@ -21,8 +21,6 @@ import (
 	provideradapter "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter"
 	opencodeadapter "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter/opencode"
 	agyadapter "github.com/portpowered/infinite-you/pkg/services/workers/provider/agy"
-	claudeexitfailure "github.com/portpowered/infinite-you/pkg/services/workers/provider/claude/exitfailure"
-	codexexitfailure "github.com/portpowered/infinite-you/pkg/services/workers/provider/codex/exitfailure"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/commandenv"
 	geminipkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/gemini"
 	providercontract "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
@@ -178,16 +176,16 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req workerexecution.Ru
 	if strings.EqualFold(strings.TrimSpace(req.ModelProvider), string(modelprovider.ProviderAgy)) {
 		return p.executeAgy(ctx, req, logger)
 	}
-	structuredResponseStream := p.progressPublisher != nil && p.responseStreamExecutor != nil && p.responseStreamExecutor.Supports(req.ModelProvider)
-	if structuredResponseStream && strings.EqualFold(strings.TrimSpace(req.ModelProvider), string(modelprovider.ProviderCodex)) {
-		structuredResponseStream = p.codexResponseStreamCapable()
+	if isConductorRoutedProvider(req.ModelProvider) {
+		response, err := providerRequestValidationFailure(
+			req,
+			fmt.Errorf("%s executes through the provider-neutral conductor", strings.TrimSpace(req.ModelProvider)),
+			logger,
+		)
+		return response, err
 	}
+	structuredResponseStream := p.progressPublisher != nil && p.responseStreamExecutor != nil && p.responseStreamExecutor.Supports(req.ModelProvider)
 	if structuredResponseStream {
-		if strings.EqualFold(strings.TrimSpace(req.ModelProvider), string(modelprovider.ProviderClaude)) {
-			if err := unsupportedImageContentError(req.InputTokens, "model provider claude"); err != nil {
-				return providerRequestValidationFailure(req, err, logger)
-			}
-		}
 		return p.executeStructuredResponseStream(ctx, req, logger)
 	}
 
@@ -492,12 +490,13 @@ func (p *ScriptWrapProvider) publishOpenCodeFailure(dispatchID string, err error
 	p.progressPublisher(fragment)
 }
 
-func (p *ScriptWrapProvider) codexResponseStreamCapable() bool {
-	if p == nil || p.exec == nil {
+func isConductorRoutedProvider(provider string) bool {
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case string(modelprovider.ProviderCodex), string(modelprovider.ProviderClaude):
+		return true
+	default:
 		return false
 	}
-	capable, ok := p.exec.(interface{ SupportsResponseStreaming() bool })
-	return ok && capable.SupportsResponseStreaming()
 }
 
 func (p *ScriptWrapProvider) executeStructuredResponseStream(
@@ -619,24 +618,6 @@ type parsedProviderFailure struct {
 func parseProviderExitFailure(provider string, result CommandResult) parsedProviderFailure {
 	normalizedProvider := strings.ToLower(strings.TrimSpace(provider))
 	switch normalizedProvider {
-	case string(modelprovider.ProviderClaude):
-		failure := claudeexitfailure.ParseProviderFailure(claudeexitfailure.FailureInput{
-			Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
-		})
-		return parsedProviderFailure{failure: ProviderFailureResult{Reason: failure.Reason, Message: failure.Message}}
-	case string(modelprovider.ProviderCodex):
-		resolved, ok := codexexitfailure.ResolveFailure(exitFailureInputFromCommand(result), codexexitfailure.ResolutionInput{})
-		if ok {
-			return parsedProviderFailure{
-				failure:       ProviderFailureResult{Reason: resolved.Result.Reason, Message: resolved.Result.Message},
-				internalCause: resolved.InternalCause,
-			}
-		}
-		parsed := codexexitfailure.ParseExitFailure(exitFailureInputFromCommand(result))
-		return parsedProviderFailure{
-			failure:       ProviderFailureResult{Reason: parsed.Reason, Message: parsed.Message},
-			internalCause: codexexitfailure.ExitInternalCause(result.ExitCode),
-		}
 	case string(modelprovider.ProviderOpenCode):
 		failure := opencodeadapter.ParseProviderFailure(opencodeadapter.FailureInput{
 			Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
@@ -730,15 +711,8 @@ func providerOutputContainsTimeout(result CommandResult) bool {
 	)
 }
 
-func parseProviderTimeoutFailure(provider string, result CommandResult) ProviderFailureResult {
-	normalizedProvider := strings.ToLower(strings.TrimSpace(provider))
+func parseProviderTimeoutFailure(_ string, result CommandResult) ProviderFailureResult {
 	message := formatProviderOutputOrDefault(result, "execution timeout")
-	switch normalizedProvider {
-	case string(modelprovider.ProviderCodex):
-		if codexError, ok := extractCodexErrorLine(result); ok {
-			message = codexError
-		}
-	}
 	return ProviderFailureResult{
 		Reason:  workerexecution.WorkFailureTypeTimeout,
 		Message: message,

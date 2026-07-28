@@ -15,6 +15,9 @@ type Service interface {
 	// ResolveProviderID returns the canonical identity for a catalog ID or
 	// accepted alias without probing readiness or performing adapter I/O.
 	ResolveProviderID(providers.ID) (providers.ID, error)
+	// RegistrationProvider returns the detached static catalog facts used to
+	// bind an execution registration. It never performs readiness probing.
+	RegistrationProvider(providers.ID) (providers.Descriptor, error)
 }
 
 // ProbeFacts are live readiness and prerequisite facts for one projected catalog
