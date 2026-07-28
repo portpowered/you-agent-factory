@@ -6,9 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -217,13 +220,70 @@ func (fs *FunctionalAPIServer) GetFactoryEvents(t *testing.T) []factoryapi.Facto
 	return GetFactoryEventsAt(t, fs.URL())
 }
 
+// GetFactoryEventsAfter reads retained Factory Event history after an
+// acknowledged reconnect cursor through the public session events endpoint.
+func (fs *FunctionalAPIServer) GetFactoryEventsAfter(
+	t *testing.T,
+	cursor FactoryEventReadCursor,
+) []factoryapi.FactoryEvent {
+	t.Helper()
+	return GetFactoryEventsAfterAt(t, fs.URL(), cursor)
+}
+
+// FactoryEventReadCursor identifies an acknowledged Factory Event reconnect
+// point for retained-history reads through the public events stream.
+type FactoryEventReadCursor struct {
+	AfterEventID  string
+	AfterSequence *int
+}
+
+// ReconnectSequenceForFactoryEvent returns the ordering point clients should
+// acknowledge with after_sequence for session-scoped Factory Event streams.
+func ReconnectSequenceForFactoryEvent(event factoryapi.FactoryEvent) int {
+	if event.Context.SessionSequence != nil {
+		return *event.Context.SessionSequence
+	}
+	return event.Context.Sequence
+}
+
+func factoryEventsURLWithCursor(baseURL string, cursor FactoryEventReadCursor) string {
+	endpoint := DefaultSessionEventsURL(baseURL)
+	params := url.Values{}
+	if cursor.AfterEventID != "" {
+		params.Set("after_event_id", cursor.AfterEventID)
+	}
+	if cursor.AfterSequence != nil {
+		params.Set("after_sequence", strconv.Itoa(*cursor.AfterSequence))
+	}
+	if encoded := params.Encode(); encoded != "" {
+		endpoint += "?" + encoded
+	}
+	return endpoint
+}
+
+// GetFactoryEventsAfterAt reads retained Factory Event history after an
+// acknowledged reconnect cursor through the public session events endpoint.
+func GetFactoryEventsAfterAt(
+	t testing.TB,
+	baseURL string,
+	cursor FactoryEventReadCursor,
+) []factoryapi.FactoryEvent {
+	t.Helper()
+	return readFactoryEventsFromURL(t, factoryEventsURLWithCursor(baseURL, cursor))
+}
+
 // GetFactoryEventsAt reads retained Factory Event history from a public
 // session endpoint without requiring the FunctionalAPIServer wrapper.
 func GetFactoryEventsAt(t testing.TB, baseURL string) []factoryapi.FactoryEvent {
 	t.Helper()
+	return readFactoryEventsFromURL(t, DefaultSessionEventsURL(baseURL))
+}
+
+func readFactoryEventsFromURL(t testing.TB, endpoint string) []factoryapi.FactoryEvent {
+	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, DefaultSessionEventsURL(baseURL), nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		t.Fatalf("build factory events request: %v", err)
 	}
@@ -233,7 +293,8 @@ func GetFactoryEventsAt(t testing.TB, baseURL string) []factoryapi.FactoryEvent 
 	}
 	if response.StatusCode != http.StatusOK {
 		defer response.Body.Close()
-		t.Fatalf("GET factory events status = %d", response.StatusCode)
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("GET factory events status = %d url = %q body = %s", response.StatusCode, endpoint, strings.TrimSpace(string(body)))
 	}
 
 	events := make(chan factoryapi.FactoryEvent, 256)

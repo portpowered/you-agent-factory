@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -46,6 +47,118 @@ func TestAPIGetFactoryEventsReturnsOrderedDurableHistory(t *testing.T) {
 		)
 	}
 	assertFactoryEventsSameRelativeOrder(t, firstRead, secondRead)
+}
+
+// TestAPIEventCursorReturnsOnlyNewerEvents proves a valid reconnect cursor
+// through the public Factory Events API returns only events recorded after the
+// acknowledged point and does not re-deliver the acknowledged event itself.
+func TestAPIEventCursorReturnsOnlyNewerEvents(t *testing.T) {
+	dir := support.ScaffoldSingleStepFactory(t, "cursor-only-newer-events")
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		UseMockWorkers:            true,
+		WaitForServiceModeRuntime: true,
+	})
+	t.Cleanup(func() { server.Stop(t) })
+
+	name := "cursor-only-newer-events-work"
+	support.SubmitDefaultSessionWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+		Name:         &name,
+		WorkTypeName: "task",
+		Payload: map[string]string{
+			"title": "prove cursor returns only newer events",
+		},
+	})
+	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+
+	fullRead := server.GetFactoryEvents(t)
+	if len(fullRead) < 4 {
+		t.Fatalf("retained Factory Event count = %d, want at least 4 events after work completion", len(fullRead))
+	}
+
+	cursorIndex, cursorEvent := pickSessionScopedCursorEvent(t, fullRead, factorysessions.DefaultSessionID)
+	wantAfter := append([]factoryapi.FactoryEvent(nil), fullRead[cursorIndex+1:]...)
+
+	afterEventIDRead := server.GetFactoryEventsAfter(t, support.FactoryEventReadCursor{
+		AfterEventID: cursorEvent.Id,
+	})
+	assertFactoryEventsCursorAfterResult(t, cursorEvent, wantAfter, afterEventIDRead)
+
+	reconnectSequence := support.ReconnectSequenceForFactoryEvent(cursorEvent)
+	afterSequenceRead := server.GetFactoryEventsAfter(t, support.FactoryEventReadCursor{
+		AfterSequence: &reconnectSequence,
+	})
+	assertFactoryEventsCursorAfterResult(t, cursorEvent, wantAfter, afterSequenceRead)
+}
+
+func pickSessionScopedCursorEvent(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	sessionID string,
+) (int, factoryapi.FactoryEvent) {
+	t.Helper()
+
+	for index := range events {
+		if index >= len(events)-2 {
+			break
+		}
+		event := events[index]
+		if !factoryEventBelongsToSession(event, sessionID) {
+			continue
+		}
+		return index, event
+	}
+	t.Fatalf(
+		"retained Factory Event history missing a reusable session-scoped cursor before the final events for session %q",
+		sessionID,
+	)
+	return 0, factoryapi.FactoryEvent{}
+}
+
+func factoryEventBelongsToSession(event factoryapi.FactoryEvent, sessionID string) bool {
+	return event.Context.SessionId != nil && *event.Context.SessionId == sessionID
+}
+
+func assertFactoryEventsCursorAfterResult(
+	t *testing.T,
+	acknowledged factoryapi.FactoryEvent,
+	wantAfter []factoryapi.FactoryEvent,
+	got []factoryapi.FactoryEvent,
+) {
+	t.Helper()
+
+	if len(got) != len(wantAfter) {
+		t.Fatalf(
+			"cursor-after event count = %d, want %d after acknowledging %q",
+			len(got),
+			len(wantAfter),
+			acknowledged.Id,
+		)
+	}
+	for _, event := range got {
+		if event.Id == acknowledged.Id {
+			t.Fatalf("cursor-after result re-delivered acknowledged event %q", acknowledged.Id)
+		}
+	}
+	for index := range wantAfter {
+		if got[index].Id != wantAfter[index].Id {
+			t.Fatalf(
+				"cursor-after event at index %d = %q, want %q",
+				index,
+				got[index].Id,
+				wantAfter[index].Id,
+			)
+		}
+		if got[index].Context.Sequence != wantAfter[index].Context.Sequence {
+			t.Fatalf(
+				"cursor-after sequence at index %d for event %q = %d, want %d",
+				index,
+				got[index].Id,
+				got[index].Context.Sequence,
+				wantAfter[index].Context.Sequence,
+			)
+		}
+	}
 }
 
 func assertFactoryEventsAscendingOrder(t *testing.T, events []factoryapi.FactoryEvent) {
