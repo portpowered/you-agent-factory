@@ -1896,6 +1896,13 @@ response-stream output.
   approval. Run the same gate for default configuration, edited materialized
   worker configuration, and `--default-worker-model-provider` /
   `--default-worker-model` operator overrides.
+- Factory-owned packaged `@you/review` invocation coverage lives in
+  `tests/functional/factory/packaged/review/invocation_test.go`. Prefer
+  `root.BuildProcess` + `Process.Execute` with `you --json run --named @you/review`
+  and `edges.Edges.ProviderCommandRunner` mocks shaped through
+  `support.NewShapedProviderCommandRunner` (work stdout then reviewer decision
+  envelope JSON) over `--with-mock-workers` when proving approval, rejection
+  feedback retry context, and bounded failure.
 - Named `@you/goal` operator-control smoke coverage lives in
   `tests/functional/smoke/cli_named_goal_operator_controls_smoke_test.go`,
   proving API and CLI pause/resume buffering, ordered post-resume drain via
