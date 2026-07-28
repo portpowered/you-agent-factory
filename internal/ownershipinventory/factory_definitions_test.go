@@ -130,15 +130,14 @@ func TestMapPackageFactoryDefinitionsMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/factory_definitions/contracts",
-			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_definitions/contracts",
-				Disposition:       ownershipinventory.DispositionMove,
-				Destination:       "factory_definitions",
-				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/factory_definitions/internal",
-				DeletionCondition: "delete contracts mega-barrel after CLN-DEF-CONTRACTS cutover proof",
-			},
+			path: "pkg/services/factory_definitions/internal/contracts",
+			wantRetain: true,
+			retainOwner: "factory_definitions",
+		},
+		{
+			path: "pkg/services/factory_definitions/namevalue",
+			wantRetain: true,
+			retainOwner: "factory_definitions",
 		},
 		{
 			path: "pkg/services/factory_definitions/workers/taxonomy",

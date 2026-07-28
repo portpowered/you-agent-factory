@@ -4,16 +4,16 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil/validationassert"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	factoryresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/resource"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func TestManagedRuntimeDependencyTargets_RejectsUnsupportedIdentity(t *testing.T) {
 	t.Parallel()
 
-	cfg := &interfaces.FactoryConfig{
+	cfg := &factorydefinitions.FactoryConfig{
 		Resources: []factoryresource.Config{{
 			Name:       "unknown-cache",
 			Type:       factoryresource.TypeModel,
@@ -31,7 +31,7 @@ func TestManagedRuntimeDependencyTargets_RejectsUnsupportedIdentity(t *testing.T
 func TestManagedRuntimeDependencyTargets_RejectsInvalidBackend(t *testing.T) {
 	t.Parallel()
 
-	cfg := &interfaces.FactoryConfig{
+	cfg := &factorydefinitions.FactoryConfig{
 		Resources: []factoryresource.Config{{
 			Name:       "omnivoice-cache",
 			Type:       factoryresource.TypeModel,
@@ -49,10 +49,10 @@ func TestManagedRuntimeDependencyTargets_RejectsInvalidBackend(t *testing.T) {
 func TestManagedRuntimeDependencyTargets_RejectsLocalWorkerWithoutDependency(t *testing.T) {
 	t.Parallel()
 
-	cfg := &interfaces.FactoryConfig{
+	cfg := &factorydefinitions.FactoryConfig{
 		Workers: []workerconfig.Config{{
 			Name:          "voice-local",
-			Type:          interfaces.WorkerTypeModel,
+			Type:          factorydefinitions.WorkerTypeModel,
 			Model:         "OMNIVOICE_Q4_K_M",
 			ModelLocality: workerconfig.ModelLocalityLocal,
 		}},
@@ -65,7 +65,7 @@ func TestManagedRuntimeDependencyTargets_RejectsLocalWorkerWithoutDependency(t *
 func TestManagedRuntimeDependencyTargets_AcceptsValidAuthoredFactory(t *testing.T) {
 	t.Parallel()
 
-	cfg := &interfaces.FactoryConfig{
+	cfg := &factorydefinitions.FactoryConfig{
 		Resources: []factoryresource.Config{{
 			Name:       "omnivoice-cache",
 			Type:       factoryresource.TypeModel,
@@ -76,7 +76,7 @@ func TestManagedRuntimeDependencyTargets_AcceptsValidAuthoredFactory(t *testing.
 		}},
 		Workers: []workerconfig.Config{{
 			Name:          "voice-local",
-			Type:          interfaces.WorkerTypeModel,
+			Type:          factorydefinitions.WorkerTypeModel,
 			Model:         "OMNIVOICE_Q4_K_M",
 			ModelLocality: workerconfig.ModelLocalityLocal,
 			Resources:     []factoryresource.Config{{Name: "omnivoice-cache", Capacity: 1}},
@@ -91,7 +91,7 @@ func TestManagedRuntimeDependencyTargets_AcceptsValidAuthoredFactory(t *testing.
 func TestValidate_IncludesManagedRuntimeDependencyTargets(t *testing.T) {
 	t.Parallel()
 
-	cfg := &interfaces.FactoryConfig{
+	cfg := &factorydefinitions.FactoryConfig{
 		Resources: []factoryresource.Config{{
 			Name:       "omnivoice-cache",
 			Type:       factoryresource.TypeModel,

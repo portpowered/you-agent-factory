@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	compilationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
 	factorydefinitiontestcomposition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/testcomposition"
 	compilationcanonical "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/canonical"
@@ -180,7 +179,7 @@ type effectiveMergedFacts struct {
 func effectiveWorkerAndWorkstationFacts(t *testing.T, contentIdentity string) effectiveMergedFacts {
 	t.Helper()
 
-	var cfg factorycontracts.FactoryConfig
+	var cfg factoryroot.FactoryConfig
 	if err := json.Unmarshal([]byte(contentIdentity), &cfg); err != nil {
 		t.Fatalf("decode ContentIdentity: %v", err)
 	}

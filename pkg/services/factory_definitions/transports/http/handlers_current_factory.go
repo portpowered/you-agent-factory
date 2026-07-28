@@ -4,7 +4,7 @@ import (
 	"io"
 	"net/http"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorydefinition"
@@ -55,7 +55,7 @@ func (s *Server) SaveCurrentFactoryBySessionId(
 				message,
 				"BAD_REQUEST",
 				[]factoryapi.FactoryValidationTarget{
-					apisurface.FactoryValidationTargetToAPI(interfaces.FormFactoryPayloadValidationTarget()),
+					apisurface.FactoryValidationTargetToAPI(factorydefinitions.FormFactoryPayloadValidationTarget()),
 				},
 			)
 			return
@@ -66,7 +66,7 @@ func (s *Server) SaveCurrentFactoryBySessionId(
 			"invalid request payload",
 			"BAD_REQUEST",
 			[]factoryapi.FactoryValidationTarget{
-				apisurface.FactoryValidationTargetToAPI(interfaces.FormFactoryPayloadValidationTarget()),
+				apisurface.FactoryValidationTargetToAPI(factorydefinitions.FormFactoryPayloadValidationTarget()),
 			},
 		)
 		return

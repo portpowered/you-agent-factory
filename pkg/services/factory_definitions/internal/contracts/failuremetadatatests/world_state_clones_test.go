@@ -3,7 +3,7 @@ package failuremetadatatests
 import (
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )

@@ -794,16 +794,9 @@ type WorkstationOutput struct {
 	Resource  *FactoryResourceUnit  `json:"resource,omitempty"`
 }
 
-// WorkstationResult describes the business result of a workstation execution.
-type WorkstationResult struct {
-	Outcome                     string                               `json:"outcome"`
-	Output                      string                               `json:"output,omitempty"`
-	Error                       string                               `json:"error,omitempty"`
-	Feedback                    string                               `json:"feedback,omitempty"`
-	SelectedClassificationLabel string                               `json:"selected_classification_label,omitempty"`
-	FailureDetail               *workerexecution.FailureDetail       `json:"failureDetail,omitempty"`
-	FailureMetadata             *workerexecution.WorkFailureMetadata `json:"failure_metadata,omitempty"`
-}
+// WorkstationResult is owned by pkg/services/workers; the contracts mega-barrel
+// retains a temporary alias until CLN-DEF-CONTRACTS story 007 deletes it.
+type WorkstationResult = workerexecution.WorkstationResult
 
 // FactoryTraceData carries trace identifiers attached to a runtime event.
 type FactoryTraceData struct {

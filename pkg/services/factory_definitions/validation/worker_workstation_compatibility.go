@@ -4,14 +4,13 @@ import (
 	"fmt"
 	"strings"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
-	workercompatibility "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 // WorkerWorkstationBehaviorCompatibilityTargets returns canonical validation targets
 // for incompatible worker/workstation runtime taxonomy pairings.
-func WorkerWorkstationBehaviorCompatibilityTargets(cfg *interfaces.FactoryConfig) []Target {
+func WorkerWorkstationBehaviorCompatibilityTargets(cfg *factorydefinitions.FactoryConfig) []Target {
 	if cfg == nil || len(cfg.Workstations) == 0 {
 		return nil
 	}
@@ -23,11 +22,11 @@ func WorkerWorkstationBehaviorCompatibilityTargets(cfg *interfaces.FactoryConfig
 
 	var targets []Target
 	for workstationIndex, workstation := range cfg.Workstations {
-		if workstation.Kind == interfaces.WorkstationKindPoller &&
+		if workstation.Kind == factorydefinitions.WorkstationKindPoller &&
 			strings.TrimSpace(workstation.Type) == "" {
 			continue
 		}
-		if !workercompatibility.RequiresWorkerWorkstationBehaviorCompatibility(
+		if !factorydefinitions.RequiresWorkerWorkstationBehaviorCompatibility(
 			workstation.Type,
 			workstation.Kind,
 			workstation.WorkerTypeName,
@@ -39,7 +38,7 @@ func WorkerWorkstationBehaviorCompatibilityTargets(cfg *interfaces.FactoryConfig
 		if !ok {
 			continue
 		}
-		if workercompatibility.CompatibleWorkerWorkstationBehavior(
+		if factorydefinitions.CompatibleWorkerWorkstationBehavior(
 			worker.Type, workstation.Type, workstation.Kind,
 		) {
 			continue
@@ -49,7 +48,7 @@ func WorkerWorkstationBehaviorCompatibilityTargets(cfg *interfaces.FactoryConfig
 		targets = append(targets, Target{
 			Code:     CodeWorkerWorkstationBehaviorCompatibility,
 			Severity: SeverityError,
-			Message: workercompatibility.WorkerWorkstationBehaviorMismatchMessage(
+			Message: factorydefinitions.WorkerWorkstationBehaviorMismatchMessage(
 				workstation.Name,
 				workstation.Type,
 				workstation.Kind,
@@ -73,13 +72,13 @@ func WorkerWorkstationBehaviorCompatibilityTargets(cfg *interfaces.FactoryConfig
 // The transport only copies these detached values; this service owns all
 // compatibility decisions and target construction.
 func SubmittedTaxonomyCompatibilityTargets(
-	taxonomy interfaces.SubmittedDefinitionTaxonomy,
+	taxonomy factorydefinitions.SubmittedDefinitionTaxonomy,
 ) []Target {
 	if len(taxonomy.Workers) == 0 || len(taxonomy.Workstations) == 0 {
 		return nil
 	}
 
-	workersByName := make(map[string]interfaces.SubmittedWorkerTaxonomy, len(taxonomy.Workers))
+	workersByName := make(map[string]factorydefinitions.SubmittedWorkerTaxonomy, len(taxonomy.Workers))
 	for _, worker := range taxonomy.Workers {
 		if name := strings.TrimSpace(worker.Name); name != "" {
 			workersByName[name] = worker
@@ -94,8 +93,8 @@ func SubmittedTaxonomyCompatibilityTargets(
 			continue
 		}
 		config := submittedWorkstationConfig(workstation)
-		if _, ok := interfaces.ExpectedWorkerBehaviorClassForWorkstation(
-			interfaces.Workstation{
+		if _, ok := factorydefinitions.ExpectedWorkerBehaviorClassForWorkstation(
+			factorydefinitions.Workstation{
 				Name: config.Name, Type: config.Type, Kind: config.Kind,
 				WorkerTypeName: config.WorkerTypeName,
 			},
@@ -106,7 +105,7 @@ func SubmittedTaxonomyCompatibilityTargets(
 		targets = append(targets, Target{
 			Code:     CodeWorkerWorkstationBehaviorCompatibility,
 			Severity: SeverityError,
-			Message: interfaces.WorkerWorkstationBehaviorMismatchMessage(
+			Message: factorydefinitions.WorkerWorkstationBehaviorMismatchMessage(
 				workstation.Name,
 				submittedWorkstationTypeLabel(workstation),
 				workstation.Behavior,
@@ -115,7 +114,7 @@ func SubmittedTaxonomyCompatibilityTargets(
 			),
 			Subject: Subject{
 				Type:     SubjectTypeWorkstation,
-				ID:       interfaces.CanonicalFactoryGraphWorkstationID(config),
+				ID:       factorydefinitions.CanonicalFactoryGraphWorkstationID(config),
 				Location: SubjectLocationReference,
 			},
 			Path: fmt.Sprintf("factory.workstations[%d].worker", workstation.Index),
@@ -125,9 +124,9 @@ func SubmittedTaxonomyCompatibilityTargets(
 }
 
 func submittedWorkstationConfig(
-	workstation interfaces.SubmittedWorkstationTaxonomy,
-) interfaces.FactoryWorkstationConfig {
-	return interfaces.FactoryWorkstationConfig{
+	workstation factorydefinitions.SubmittedWorkstationTaxonomy,
+) factorydefinitions.FactoryWorkstationConfig {
+	return factorydefinitions.FactoryWorkstationConfig{
 		Name: workstation.Name, Type: workstation.Type, Kind: workstation.Behavior,
 		WorkerTypeName: workstation.Worker,
 	}
@@ -135,63 +134,63 @@ func submittedWorkstationConfig(
 
 func submittedWorkerMatchesWorkstation(
 	workerType string,
-	workstation interfaces.SubmittedWorkstationTaxonomy,
+	workstation factorydefinitions.SubmittedWorkstationTaxonomy,
 ) bool {
 	config := submittedWorkstationConfig(workstation)
-	value := interfaces.Workstation{
+	value := factorydefinitions.Workstation{
 		Name: config.Name, Type: config.Type, Kind: config.Kind,
 		WorkerTypeName: config.WorkerTypeName,
 	}
-	if interfaces.ExemptFromWorkerWorkstationCompatibility(value) {
+	if factorydefinitions.ExemptFromWorkerWorkstationCompatibility(value) {
 		return true
 	}
 	workerType = strings.TrimSpace(workerType)
 	if workerType == "" {
 		return true
 	}
-	if config.Type == interfaces.WorkstationTypeModel && workerType == interfaces.WorkerTypeModel {
+	if config.Type == factorydefinitions.WorkstationTypeModel && workerType == factorydefinitions.WorkerTypeModel {
 		return true
 	}
-	if config.Type == interfaces.WorkstationTypeInvoke &&
-		(workerType == interfaces.WorkerTypeModel || workerType == interfaces.WorkerTypeInference) {
+	if config.Type == factorydefinitions.WorkstationTypeInvoke &&
+		(workerType == factorydefinitions.WorkerTypeModel || workerType == factorydefinitions.WorkerTypeInference) {
 		return true
 	}
-	if workerType == interfaces.WorkerTypeModel {
+	if workerType == factorydefinitions.WorkerTypeModel {
 		switch config.Type {
-		case interfaces.WorkstationTypeAgent, interfaces.WorkstationTypeInference:
+		case factorydefinitions.WorkstationTypeAgent, factorydefinitions.WorkstationTypeInference:
 			return true
 		}
 	}
-	return interfaces.CompatibleWorkerWorkstationBehavior(workerType, config.Type, config.Kind)
+	return factorydefinitions.CompatibleWorkerWorkstationBehavior(workerType, config.Type, config.Kind)
 }
 
-func submittedWorkstationTypeLabel(workstation interfaces.SubmittedWorkstationTaxonomy) string {
+func submittedWorkstationTypeLabel(workstation factorydefinitions.SubmittedWorkstationTaxonomy) string {
 	if strings.TrimSpace(workstation.Type) != "" {
 		return workstation.Type
 	}
-	if workstation.Behavior == interfaces.WorkstationKindPoller {
-		return interfaces.WorkstationTypePoller
+	if workstation.Behavior == factorydefinitions.WorkstationKindPoller {
+		return factorydefinitions.WorkstationTypePoller
 	}
-	return interfaces.WorkstationTypeModel
+	return factorydefinitions.WorkstationTypeModel
 }
 
 // PollerRunWorkstationKindTargets returns validation targets when an explicit
 // POLLER_RUN workstation type conflicts with a non-poller workstation kind.
-func PollerRunWorkstationKindTargets(cfg *interfaces.FactoryConfig) []Target {
+func PollerRunWorkstationKindTargets(cfg *factorydefinitions.FactoryConfig) []Target {
 	if cfg == nil || len(cfg.Workstations) == 0 {
 		return nil
 	}
 
 	var targets []Target
 	for workstationIndex, workstation := range cfg.Workstations {
-		if interfaces.StrictPublicFactoryWorkstationType(workstation.Type) != interfaces.WorkstationTypePoller {
+		if factorydefinitions.StrictPublicFactoryWorkstationType(workstation.Type) != factorydefinitions.WorkstationTypePoller {
 			continue
 		}
-		if workstation.Kind == "" || workstation.Kind == interfaces.WorkstationKindPoller {
+		if workstation.Kind == "" || workstation.Kind == factorydefinitions.WorkstationKindPoller {
 			continue
 		}
 
-		behaviorLabel := interfaces.CanonicalPublicWorkstationKind(workstation.Kind)
+		behaviorLabel := factorydefinitions.CanonicalPublicWorkstationKind(workstation.Kind)
 		basePath := fmt.Sprintf("%s.workstations[%d](%s)", validationRoot, workstationIndex, workstation.Name)
 		targets = append(targets, Target{
 			Code:     CodePollerRunWorkstationKindMismatch,

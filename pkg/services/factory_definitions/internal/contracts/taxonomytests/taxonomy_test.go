@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
 )
 

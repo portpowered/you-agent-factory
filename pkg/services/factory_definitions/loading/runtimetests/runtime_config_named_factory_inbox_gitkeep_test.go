@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func TestPersistNamedFactory_EnsuresCanonicalInputInboxGitkeepsOnCreate(t *testing.T) {
@@ -47,7 +47,7 @@ func TestReplaceNamedFactory_PreservesBatchInboxGitkeepAcrossReplace(t *testing.
 	}
 
 	factoryDir := filepath.Join(rootDir, "alpha")
-	batchGitkeep := filepath.Join(factoryDir, interfaces.InputsDir, "BATCH", interfaces.DefaultChannelName, ".gitkeep")
+	batchGitkeep := filepath.Join(factoryDir, factorydefinitions.InputsDir, "BATCH", factorydefinitions.DefaultChannelName, ".gitkeep")
 	if err := os.MkdirAll(filepath.Dir(batchGitkeep), 0o755); err != nil {
 		t.Fatalf("MkdirAll(batch inbox): %v", err)
 	}
@@ -55,7 +55,7 @@ func TestReplaceNamedFactory_PreservesBatchInboxGitkeepAcrossReplace(t *testing.
 		t.Fatalf("WriteFile(batch .gitkeep): %v", err)
 	}
 
-	staleStarter := filepath.Join(factoryDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName, "stale.md")
+	staleStarter := filepath.Join(factoryDir, factorydefinitions.InputsDir, "task", factorydefinitions.DefaultChannelName, "stale.md")
 	if err := os.WriteFile(staleStarter, []byte("stale starter\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile(stale starter): %v", err)
 	}
@@ -76,30 +76,30 @@ func TestReplaceNamedFactory_PreservesBatchInboxGitkeepAcrossReplace(t *testing.
 		t.Fatalf("stale input file after replace: stat err=%v, want absent", err)
 	}
 
-	bundledStarter := filepath.Join(factoryDir, interfaces.InputsDir, "task", interfaces.DefaultChannelName, "starter.md")
+	bundledStarter := filepath.Join(factoryDir, factorydefinitions.InputsDir, "task", factorydefinitions.DefaultChannelName, "starter.md")
 	assertRuntimeFactoryFileContent(t, bundledStarter, "starter work\n")
 }
 
 func assertInputInboxGitkeepFile(t *testing.T, factoryDir, channel string) {
 	t.Helper()
 
-	path := filepath.Join(factoryDir, interfaces.InputsDir, channel, interfaces.DefaultChannelName, ".gitkeep")
+	path := filepath.Join(factoryDir, factorydefinitions.InputsDir, channel, factorydefinitions.DefaultChannelName, ".gitkeep")
 	info, err := os.Stat(path)
 	if err != nil {
-		t.Fatalf("inputs/%s/%s/.gitkeep after materialization: %v", channel, interfaces.DefaultChannelName, err)
+		t.Fatalf("inputs/%s/%s/.gitkeep after materialization: %v", channel, factorydefinitions.DefaultChannelName, err)
 	}
 	if info.IsDir() {
-		t.Fatalf("inputs/%s/%s/.gitkeep after materialization: got directory, want regular file", channel, interfaces.DefaultChannelName)
+		t.Fatalf("inputs/%s/%s/.gitkeep after materialization: got directory, want regular file", channel, factorydefinitions.DefaultChannelName)
 	}
 	if info.Size() != 0 {
-		t.Fatalf("inputs/%s/%s/.gitkeep after materialization: size=%d, want empty sentinel", channel, interfaces.DefaultChannelName, info.Size())
+		t.Fatalf("inputs/%s/%s/.gitkeep after materialization: size=%d, want empty sentinel", channel, factorydefinitions.DefaultChannelName, info.Size())
 	}
 }
 
 func removeInputInboxGitkeep(t *testing.T, factoryDir, channel string) {
 	t.Helper()
 
-	path := filepath.Join(factoryDir, interfaces.InputsDir, channel, interfaces.DefaultChannelName, ".gitkeep")
+	path := filepath.Join(factoryDir, factorydefinitions.InputsDir, channel, factorydefinitions.DefaultChannelName, ".gitkeep")
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		t.Fatalf("Remove(%s): %v", path, err)
 	}

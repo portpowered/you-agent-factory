@@ -6,14 +6,13 @@ import (
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 )
 
-type Finding = interfaces.TopologyFinding
-type ValidationResult = interfaces.TopologyValidationResult
+type Finding = factorydefinitions.TopologyFinding
+type ValidationResult = factorydefinitions.TopologyValidationResult
 
 // validationRule is a function that inspects a factory config and returns findings.
-type validationRule func(cfg *interfaces.FactoryConfig) []Finding
+type validationRule func(cfg *factorydefinitions.FactoryConfig) []Finding
 
 const (
 	portableBundledScriptRoot = "factory/scripts/"
@@ -21,16 +20,16 @@ const (
 	portableBundledInputRoot  = "factory/inputs/"
 )
 
-type RequiredToolCheckResult = interfaces.RequiredToolCheckResult
-type RequiredToolFailureKind = interfaces.RequiredToolFailureKind
+type RequiredToolCheckResult = factorydefinitions.RequiredToolCheckResult
+type RequiredToolFailureKind = factorydefinitions.RequiredToolFailureKind
 
 const (
-	RequiredToolFailureKindNone         = interfaces.RequiredToolFailureKindNone
-	RequiredToolFailureKindMissing      = interfaces.RequiredToolFailureKindMissing
-	RequiredToolFailureKindVersionProbe = interfaces.RequiredToolFailureKindVersionProbe
+	RequiredToolFailureKindNone         = factorydefinitions.RequiredToolFailureKindNone
+	RequiredToolFailureKindMissing      = factorydefinitions.RequiredToolFailureKindMissing
+	RequiredToolFailureKindVersionProbe = factorydefinitions.RequiredToolFailureKindVersionProbe
 )
 
-type RequiredToolChecker = interfaces.RequiredToolChecker
+type RequiredToolChecker = factorydefinitions.RequiredToolChecker
 
 // ConfigValidator runs all registered validation rules against a factory config.
 type ConfigValidator struct {
@@ -66,7 +65,7 @@ func NewConfigValidator(requiredToolChecker RequiredToolChecker) *ConfigValidato
 }
 
 // Validate runs all rules and returns the aggregated result.
-func (cv *ConfigValidator) Validate(cfg *interfaces.FactoryConfig) *ValidationResult {
+func (cv *ConfigValidator) Validate(cfg *factorydefinitions.FactoryConfig) *ValidationResult {
 	result := &ValidationResult{}
 	for _, rule := range cv.rules {
 		result.Findings = append(result.Findings, rule(cfg)...)
@@ -77,13 +76,13 @@ func (cv *ConfigValidator) Validate(cfg *interfaces.FactoryConfig) *ValidationRe
 // ValidateRequiredTools runs only the declarative required-tool validation
 // rules. Load boundaries can use this narrower pass without re-running the full
 // topology validator.
-func ValidateRequiredTools(cfg *interfaces.FactoryConfig, checker RequiredToolChecker) *ValidationResult {
+func ValidateRequiredTools(cfg *factorydefinitions.FactoryConfig, checker RequiredToolChecker) *ValidationResult {
 	result := &ValidationResult{}
 	result.Findings = append(result.Findings, ruleRequiredTools(checker)(cfg)...)
 	return result
 }
 
-func validatePortableResourceManifest(cfg *interfaces.FactoryConfig, checker RequiredToolChecker, bundledFileRule func(*interfaces.FactoryConfig) []Finding) *ValidationResult {
+func validatePortableResourceManifest(cfg *factorydefinitions.FactoryConfig, checker RequiredToolChecker, bundledFileRule func(*factorydefinitions.FactoryConfig) []Finding) *ValidationResult {
 	result := ValidateRequiredTools(cfg, checker)
 	result.Findings = append(result.Findings, bundledFileRule(cfg)...)
 	return result
@@ -91,12 +90,12 @@ func validatePortableResourceManifest(cfg *interfaces.FactoryConfig, checker Req
 
 func validatePortableResourceManifestOnPath(
 	factoryDir string,
-	cfg *interfaces.FactoryConfig,
-	resolveSource interfaces.PortableBundledFileSourceResolver,
+	cfg *factorydefinitions.FactoryConfig,
+	resolveSource factorydefinitions.PortableBundledFileSourceResolver,
 	inspectSource factorydefinitions.PortableBundledFileInspection,
 	requiredToolChecker RequiredToolChecker,
 ) error {
-	result := validatePortableResourceManifest(cfg, requiredToolChecker, func(cfg *interfaces.FactoryConfig) []Finding {
+	result := validatePortableResourceManifest(cfg, requiredToolChecker, func(cfg *factorydefinitions.FactoryConfig) []Finding {
 		return ruleBundledFilesOnPath(factoryDir, cfg, resolveSource, inspectSource)
 	})
 	if !result.HasErrors() {
@@ -107,11 +106,11 @@ func validatePortableResourceManifestOnPath(
 
 func validatePortableBundledFilesForExpandOnPath(
 	factoryDir string,
-	cfg *interfaces.FactoryConfig,
-	resolveSource interfaces.PortableBundledFileSourceResolver,
+	cfg *factorydefinitions.FactoryConfig,
+	resolveSource factorydefinitions.PortableBundledFileSourceResolver,
 	inspectSource factorydefinitions.PortableBundledFileInspection,
 ) error {
-	result := validatePortableResourceManifest(cfg, nil, func(cfg *interfaces.FactoryConfig) []Finding {
+	result := validatePortableResourceManifest(cfg, nil, func(cfg *factorydefinitions.FactoryConfig) []Finding {
 		if strings.TrimSpace(factoryDir) == "" {
 			return ruleBundledFiles(cfg)
 		}
@@ -125,7 +124,7 @@ func validatePortableBundledFilesForExpandOnPath(
 
 func ValidatePortableResourceManifestOnPath(
 	factoryDir string,
-	cfg *interfaces.FactoryConfig,
+	cfg *factorydefinitions.FactoryConfig,
 	requiredToolChecker RequiredToolChecker,
 ) error {
 	return validatePortableResourceManifestOnPath(factoryDir, cfg, nil, nil, requiredToolChecker)
@@ -133,8 +132,8 @@ func ValidatePortableResourceManifestOnPath(
 
 func ValidatePortableResourceManifestOnPathWithSourceResolver(
 	factoryDir string,
-	cfg *interfaces.FactoryConfig,
-	resolveSource interfaces.PortableBundledFileSourceResolver,
+	cfg *factorydefinitions.FactoryConfig,
+	resolveSource factorydefinitions.PortableBundledFileSourceResolver,
 	inspectSource factorydefinitions.PortableBundledFileInspection,
 	requiredToolChecker RequiredToolChecker,
 ) error {
@@ -149,15 +148,15 @@ func ValidatePortableResourceManifestOnPathWithSourceResolver(
 
 func ValidatePortableBundledFilesForExpandOnPath(
 	factoryDir string,
-	cfg *interfaces.FactoryConfig,
+	cfg *factorydefinitions.FactoryConfig,
 ) error {
 	return validatePortableBundledFilesForExpandOnPath(factoryDir, cfg, nil, nil)
 }
 
 func ValidatePortableBundledFilesForExpandOnPathWithSourceResolver(
 	factoryDir string,
-	cfg *interfaces.FactoryConfig,
-	resolveSource interfaces.PortableBundledFileSourceResolver,
+	cfg *factorydefinitions.FactoryConfig,
+	resolveSource factorydefinitions.PortableBundledFileSourceResolver,
 	inspectSource factorydefinitions.PortableBundledFileInspection,
 ) error {
 	return validatePortableBundledFilesForExpandOnPath(
@@ -168,13 +167,13 @@ func ValidatePortableBundledFilesForExpandOnPathWithSourceResolver(
 	)
 }
 
-func BundledFileFindings(cfg *interfaces.FactoryConfig) []Finding {
+func BundledFileFindings(cfg *factorydefinitions.FactoryConfig) []Finding {
 	return ruleBundledFiles(cfg)
 }
 
 // --- Rule: input type validation ---
 
-func ruleResourceUsage(cfg *interfaces.FactoryConfig) []Finding {
+func ruleResourceUsage(cfg *factorydefinitions.FactoryConfig) []Finding {
 	var findings []Finding
 	validResources := make(map[string]bool)
 	for _, r := range cfg.Resources {
@@ -223,7 +222,7 @@ func ruleResourceUsage(cfg *interfaces.FactoryConfig) []Finding {
 	return findings
 }
 
-func ruleResourceDefinitions(cfg *interfaces.FactoryConfig) []Finding {
+func ruleResourceDefinitions(cfg *factorydefinitions.FactoryConfig) []Finding {
 	if cfg == nil || len(cfg.Resources) == 0 {
 		return nil
 	}
@@ -249,9 +248,9 @@ func ruleResourceDefinitions(cfg *interfaces.FactoryConfig) []Finding {
 		}
 
 		switch strings.TrimSpace(resource.Type) {
-		case "", interfaces.ResourceTypeInvocationSlot:
+		case "", factorydefinitions.ResourceTypeInvocationSlot:
 			continue
-		case interfaces.ResourceTypeModel:
+		case factorydefinitions.ResourceTypeModel:
 			if strings.TrimSpace(resource.Model) == "" {
 				findings = append(findings, Finding{
 					Severity: SeverityError,
@@ -276,7 +275,7 @@ func ruleResourceDefinitions(cfg *interfaces.FactoryConfig) []Finding {
 					Rule:     "resource-model-load-policy",
 				})
 			}
-		case interfaces.ResourceTypeProviderQuota:
+		case factorydefinitions.ResourceTypeProviderQuota:
 			if strings.TrimSpace(resource.Provider) == "" {
 				findings = append(findings, Finding{
 					Severity: SeverityError,
@@ -302,7 +301,7 @@ func ruleResourceDefinitions(cfg *interfaces.FactoryConfig) []Finding {
 // --- Rule: portable required-tool validation ---
 
 func ruleRequiredTools(checker RequiredToolChecker) validationRule {
-	return func(cfg *interfaces.FactoryConfig) []Finding {
+	return func(cfg *factorydefinitions.FactoryConfig) []Finding {
 		if cfg == nil || cfg.ResourceManifest == nil || len(cfg.ResourceManifest.RequiredTools) == 0 {
 			return nil
 		}
@@ -364,19 +363,19 @@ func ruleRequiredTools(checker RequiredToolChecker) validationRule {
 
 // --- Rule: portable bundled-file validation ---
 
-func ruleBundledFiles(cfg *interfaces.FactoryConfig) []Finding {
-	return ruleBundledFilesWithContentValidator(cfg, func(basePath string, file interfaces.BundledFileConfig) []Finding {
+func ruleBundledFiles(cfg *factorydefinitions.FactoryConfig) []Finding {
+	return ruleBundledFilesWithContentValidator(cfg, func(basePath string, file factorydefinitions.BundledFileConfig) []Finding {
 		return validateBundledFileContent(basePath, file)
 	})
 }
 
 func ruleBundledFilesOnPath(
 	factoryDir string,
-	cfg *interfaces.FactoryConfig,
-	resolveSource interfaces.PortableBundledFileSourceResolver,
+	cfg *factorydefinitions.FactoryConfig,
+	resolveSource factorydefinitions.PortableBundledFileSourceResolver,
 	inspectSource factorydefinitions.PortableBundledFileInspection,
 ) []Finding {
-	return ruleBundledFilesWithContentValidator(cfg, func(basePath string, file interfaces.BundledFileConfig) []Finding {
+	return ruleBundledFilesWithContentValidator(cfg, func(basePath string, file factorydefinitions.BundledFileConfig) []Finding {
 		return validateBundledFileContentOnPath(
 			factoryDir,
 			basePath,
@@ -387,7 +386,7 @@ func ruleBundledFilesOnPath(
 	})
 }
 
-func ruleBundledFilesWithContentValidator(cfg *interfaces.FactoryConfig, validateContent func(basePath string, file interfaces.BundledFileConfig) []Finding) []Finding {
+func ruleBundledFilesWithContentValidator(cfg *factorydefinitions.FactoryConfig, validateContent func(basePath string, file factorydefinitions.BundledFileConfig) []Finding) []Finding {
 	if cfg == nil || cfg.ResourceManifest == nil || len(cfg.ResourceManifest.BundledFiles) == 0 {
 		return nil
 	}
@@ -418,8 +417,8 @@ func ruleBundledFilesWithContentValidator(cfg *interfaces.FactoryConfig, validat
 	return findings
 }
 
-func validateBundledFileType(basePath string, file interfaces.BundledFileConfig) []Finding {
-	err := interfaces.ValidatePortableBundledFileType(file)
+func validateBundledFileType(basePath string, file factorydefinitions.BundledFileConfig) []Finding {
+	err := factorydefinitions.ValidatePortableBundledFileType(file)
 	if err == nil {
 		return nil
 	}
@@ -431,18 +430,18 @@ func validateBundledFileType(basePath string, file interfaces.BundledFileConfig)
 	}}
 }
 
-func validateBundledFileTarget(basePath string, file interfaces.BundledFileConfig) []Finding {
-	err := interfaces.ValidatePortableBundledFileTarget(file)
+func validateBundledFileTarget(basePath string, file factorydefinitions.BundledFileConfig) []Finding {
+	err := factorydefinitions.ValidatePortableBundledFileTarget(file)
 	if err == nil {
 		return nil
 	}
 	rule := "bundled-file-target-path"
-	var validationErr *interfaces.PortableBundledFileValidationError
+	var validationErr *factorydefinitions.PortableBundledFileValidationError
 	if errors.As(err, &validationErr) {
 		switch validationErr.Kind {
-		case interfaces.PortableBundledFileValidationTargetRoot:
+		case factorydefinitions.PortableBundledFileValidationTargetRoot:
 			rule = "bundled-file-target-root"
-		case interfaces.PortableBundledFileValidationTargetRootHelper:
+		case factorydefinitions.PortableBundledFileValidationTargetRootHelper:
 			rule = "bundled-file-target-root-helper"
 		}
 	}
@@ -454,9 +453,9 @@ func validateBundledFileTarget(basePath string, file interfaces.BundledFileConfi
 	}}
 }
 
-func validateBundledFileContent(basePath string, file interfaces.BundledFileConfig) []Finding {
+func validateBundledFileContent(basePath string, file factorydefinitions.BundledFileConfig) []Finding {
 	findings := validateBundledFileEncoding(basePath, file)
-	if strings.TrimSpace(file.Content.Inline) == "" && !interfaces.ShouldOmitSupportedPortableBundledInline(file) {
+	if strings.TrimSpace(file.Content.Inline) == "" && !factorydefinitions.ShouldOmitSupportedPortableBundledInline(file) {
 		findings = append(findings, Finding{
 			Severity: SeverityError,
 			Path:     basePath + ".content.inline",
@@ -467,7 +466,7 @@ func validateBundledFileContent(basePath string, file interfaces.BundledFileConf
 	return findings
 }
 
-func validateBundledFileEncoding(basePath string, file interfaces.BundledFileConfig) []Finding {
+func validateBundledFileEncoding(basePath string, file factorydefinitions.BundledFileConfig) []Finding {
 	var findings []Finding
 	if strings.TrimSpace(file.Content.Encoding) == "" {
 		findings = append(findings, Finding{
@@ -476,11 +475,11 @@ func validateBundledFileEncoding(basePath string, file interfaces.BundledFileCon
 			Message:  "missing required 'encoding' field",
 			Rule:     "bundled-file-content-encoding",
 		})
-	} else if file.Content.Encoding != interfaces.BundledFileEncodingUTF8 {
+	} else if file.Content.Encoding != factorydefinitions.BundledFileEncodingUTF8 {
 		findings = append(findings, Finding{
 			Severity: SeverityError,
 			Path:     basePath + ".content.encoding",
-			Message:  fmt.Sprintf("encoding %q is unsupported; use %q", file.Content.Encoding, interfaces.BundledFileEncodingUTF8),
+			Message:  fmt.Sprintf("encoding %q is unsupported; use %q", file.Content.Encoding, factorydefinitions.BundledFileEncodingUTF8),
 			Rule:     "bundled-file-content-encoding",
 		})
 	}
@@ -490,8 +489,8 @@ func validateBundledFileEncoding(basePath string, file interfaces.BundledFileCon
 func validateBundledFileContentOnPath(
 	factoryDir string,
 	basePath string,
-	file interfaces.BundledFileConfig,
-	resolveSource interfaces.PortableBundledFileSourceResolver,
+	file factorydefinitions.BundledFileConfig,
+	resolveSource factorydefinitions.PortableBundledFileSourceResolver,
 	inspectSource factorydefinitions.PortableBundledFileInspection,
 ) []Finding {
 	if strings.TrimSpace(file.Content.Inline) != "" {
@@ -523,7 +522,7 @@ func validateBundledFileContentOnPath(
 	return validateBundledFileContent(basePath, file)
 }
 
-func buildValidWorkstations(cfg *interfaces.FactoryConfig) map[string]bool {
+func buildValidWorkstations(cfg *factorydefinitions.FactoryConfig) map[string]bool {
 	ws := make(map[string]bool)
 	for _, w := range cfg.Workstations {
 		ws[w.Name] = true
@@ -531,7 +530,7 @@ func buildValidWorkstations(cfg *interfaces.FactoryConfig) map[string]bool {
 	return ws
 }
 
-func ruleWorkerModelOperations(cfg *interfaces.FactoryConfig) []Finding {
+func ruleWorkerModelOperations(cfg *factorydefinitions.FactoryConfig) []Finding {
 	if cfg == nil || len(cfg.Workers) == 0 {
 		return nil
 	}
@@ -542,7 +541,7 @@ func ruleWorkerModelOperations(cfg *interfaces.FactoryConfig) []Finding {
 		if len(worker.Operations) == 0 && strings.TrimSpace(worker.ModelLocality) == "" {
 			continue
 		}
-		if strings.TrimSpace(worker.Type) != "" && !interfaces.IsInferenceWorkerType(worker.Type) {
+		if strings.TrimSpace(worker.Type) != "" && !factorydefinitions.IsInferenceWorkerType(worker.Type) {
 			findings = append(findings, Finding{
 				Severity: SeverityError,
 				Path:     basePath,
@@ -579,7 +578,7 @@ func ruleWorkerModelOperations(cfg *interfaces.FactoryConfig) []Finding {
 	return findings
 }
 
-func validateModelOperationSlots(slots []interfaces.ModelOperationSlot, path string, direction string) []Finding {
+func validateModelOperationSlots(slots []factorydefinitions.ModelOperationSlot, path string, direction string) []Finding {
 	if len(slots) == 0 {
 		return nil
 	}
@@ -618,12 +617,12 @@ func validateModelOperationSlots(slots []interfaces.ModelOperationSlot, path str
 	return findings
 }
 
-func ruleModelInvokeWorkstations(cfg *interfaces.FactoryConfig) []Finding {
+func ruleModelInvokeWorkstations(cfg *factorydefinitions.FactoryConfig) []Finding {
 	if cfg == nil || len(cfg.Workstations) == 0 {
 		return nil
 	}
 
-	workersByName := make(map[string]interfaces.FactoryWorkerConfig, len(cfg.Workers))
+	workersByName := make(map[string]factorydefinitions.FactoryWorkerConfig, len(cfg.Workers))
 	for _, worker := range cfg.Workers {
 		workersByName[worker.Name] = worker
 	}
@@ -636,10 +635,10 @@ func ruleModelInvokeWorkstations(cfg *interfaces.FactoryConfig) []Finding {
 	return findings
 }
 
-func validateModelInvokeWorkstation(workstation interfaces.FactoryWorkstationConfig, workstationIndex int, workersByName map[string]interfaces.FactoryWorkerConfig) []Finding {
+func validateModelInvokeWorkstation(workstation factorydefinitions.FactoryWorkstationConfig, workstationIndex int, workersByName map[string]factorydefinitions.FactoryWorkerConfig) []Finding {
 	basePath := fmt.Sprintf("workstations[%d](%s)", workstationIndex, workstation.Name)
 	operationName := strings.TrimSpace(workstation.Operation)
-	if !interfaces.IsInferenceRunWorkstationType(workstation.Type) {
+	if !factorydefinitions.IsInferenceRunWorkstationType(workstation.Type) {
 		return validateNonInvokeOperationUsage(basePath, operationName)
 	}
 
@@ -673,7 +672,7 @@ func validateNonInvokeOperationUsage(basePath string, operationName string) []Fi
 	}}
 }
 
-func requiredInferenceRunWorkstationFindings(workstation interfaces.FactoryWorkstationConfig, basePath string, operationName string) []Finding {
+func requiredInferenceRunWorkstationFindings(workstation factorydefinitions.FactoryWorkstationConfig, basePath string, operationName string) []Finding {
 	var findings []Finding
 	if operationName == "" {
 		findings = append(findings, Finding{
@@ -694,12 +693,12 @@ func requiredInferenceRunWorkstationFindings(workstation interfaces.FactoryWorks
 	return findings
 }
 
-func validateModelInvokeWorker(workstation interfaces.FactoryWorkstationConfig, worker interfaces.FactoryWorkerConfig, basePath string, operationName string) ([]Finding, interfaces.ModelOperation, bool) {
-	if strings.TrimSpace(worker.Type) != "" && !interfaces.IsInferenceWorkerType(worker.Type) {
-		return nil, interfaces.ModelOperation{}, false
+func validateModelInvokeWorker(workstation factorydefinitions.FactoryWorkstationConfig, worker factorydefinitions.FactoryWorkerConfig, basePath string, operationName string) ([]Finding, factorydefinitions.ModelOperation, bool) {
+	if strings.TrimSpace(worker.Type) != "" && !factorydefinitions.IsInferenceWorkerType(worker.Type) {
+		return nil, factorydefinitions.ModelOperation{}, false
 	}
 	if operationName == "" {
-		return nil, interfaces.ModelOperation{}, false
+		return nil, factorydefinitions.ModelOperation{}, false
 	}
 
 	operation, found := findWorkerOperation(worker.Operations, operationName)
@@ -709,7 +708,7 @@ func validateModelInvokeWorker(workstation interfaces.FactoryWorkstationConfig, 
 			Path:     basePath + ".operation",
 			Message:  fmt.Sprintf("worker %q does not declare requested operation %q", workstation.WorkerTypeName, operationName),
 			Rule:     "workstation-model-invoke-operation-mismatch",
-		}}, interfaces.ModelOperation{}, false
+		}}, factorydefinitions.ModelOperation{}, false
 	}
 	if len(operation.Inputs) == 0 || len(operation.Outputs) == 0 {
 		return []Finding{{
@@ -717,22 +716,22 @@ func validateModelInvokeWorker(workstation interfaces.FactoryWorkstationConfig, 
 			Path:     basePath + ".operation",
 			Message:  fmt.Sprintf("worker %q operation %q has an incompatible content contract; inference-run workstations require at least one input slot and one output slot", workstation.WorkerTypeName, operationName),
 			Rule:     "workstation-model-invoke-content-contract",
-		}}, interfaces.ModelOperation{}, false
+		}}, factorydefinitions.ModelOperation{}, false
 	}
 
 	return nil, operation, true
 }
 
-func findWorkerOperation(operations []interfaces.ModelOperation, name string) (interfaces.ModelOperation, bool) {
+func findWorkerOperation(operations []factorydefinitions.ModelOperation, name string) (factorydefinitions.ModelOperation, bool) {
 	for _, operation := range operations {
 		if strings.TrimSpace(operation.Name) == name {
 			return operation, true
 		}
 	}
-	return interfaces.ModelOperation{}, false
+	return factorydefinitions.ModelOperation{}, false
 }
 
-func validateModelOperationBindings(bindings []interfaces.ModelOperationBinding, inputs []interfaces.ModelOperationSlot, path string) []Finding {
+func validateModelOperationBindings(bindings []factorydefinitions.ModelOperationBinding, inputs []factorydefinitions.ModelOperationSlot, path string) []Finding {
 	if len(bindings) == 0 {
 		return nil
 	}
@@ -789,7 +788,7 @@ func validateModelOperationBindings(bindings []interfaces.ModelOperationBinding,
 	return findings
 }
 
-func selectorIsEmpty(selector *interfaces.ModelOperationBindingSelector) bool {
+func selectorIsEmpty(selector *factorydefinitions.ModelOperationBindingSelector) bool {
 	if selector == nil {
 		return true
 	}

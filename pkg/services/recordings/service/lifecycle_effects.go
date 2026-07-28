@@ -53,13 +53,13 @@ func NewReplayRecordingSnapshotWriter(
 		if len(events) > 0 {
 			recordedAt = events[0].Context.EventTime
 		}
-		wallClock := &factorydefinitions.ReplayWallClockMetadata{
+		wallClock := &recordings.ReplayWallClockMetadata{
 			StartedAt: recordedAt,
 		}
 		if snapshot.Status.FinalizedAt != nil {
 			wallClock.FinishedAt = snapshot.Status.FinalizedAt.UTC()
 		}
-		data, err := replay.MarshalArtifact(&factorydefinitions.ReplayArtifact{
+		data, err := replay.MarshalArtifact(&recordings.ReplayArtifact{
 			SchemaVersion: replay.CurrentSchemaVersion,
 			RecordedAt:    recordedAt,
 			Events:        events,
@@ -68,7 +68,7 @@ func NewReplayRecordingSnapshotWriter(
 		if err != nil {
 			return fmt.Errorf("%w: %w", recordings.ErrRecordingSnapshotEncoding, err)
 		}
-		var persisted factorydefinitions.ReplayArtifact
+		var persisted recordings.ReplayArtifact
 		if err := json.Unmarshal(data, &persisted); err != nil {
 			return fmt.Errorf("%w: %w", recordings.ErrRecordingSnapshotEncoding, err)
 		}

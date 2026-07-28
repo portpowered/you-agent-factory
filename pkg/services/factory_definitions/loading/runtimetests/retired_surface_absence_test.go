@@ -11,7 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/retiredsurfaceguard"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	. "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	namedfactorypath "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packagedinstallation"
 )
@@ -125,7 +125,7 @@ func TestRetiredEncodedPathResolution_ResolveUsesHierarchicalFactoryNotEncodedSi
 
 func TestRetiredEncodedPathResolution_MaterializeLeavesEncodedSiblingUntouched(t *testing.T) {
 	homeDir := t.TempDir()
-	namedFactoriesRoot := interfaces.NamedFactoriesRoot(homeDir)
+	namedFactoriesRoot := factorydefinitions.NamedFactoriesRoot(homeDir)
 	if err := os.MkdirAll(namedFactoriesRoot, 0o755); err != nil {
 		t.Fatalf("MkdirAll(namedFactoriesRoot): %v", err)
 	}
@@ -151,7 +151,7 @@ func TestRetiredEncodedPathResolution_MaterializeLeavesEncodedSiblingUntouched(t
 		t.Fatalf("materialize target dir = %q, must not use percent-encoded scoped leaf names", wantGoalDir)
 	}
 
-	var goalResult *interfaces.PackagedFactoryInstallResult
+	var goalResult *factorydefinitions.PackagedFactoryInstallResult
 	for i := range result {
 		if result[i].Name == "@you/goal" {
 			goalResult = &result[i]
@@ -216,7 +216,7 @@ func TestRetiredSurfaceResidue_ReadCurrentFactoryPointerRejectsLegacyEncodedSegm
 	}
 
 	encodedSegment := legacyEncodedNamedFactorySegment("@you/goal")
-	pointerPath := filepath.Join(rootDir, interfaces.CurrentFactoryPointerFile)
+	pointerPath := filepath.Join(rootDir, factorydefinitions.CurrentFactoryPointerFile)
 	if err := os.WriteFile(pointerPath, []byte(encodedSegment+"\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile(current pointer): %v", err)
 	}
@@ -270,7 +270,7 @@ func TestRetiredSurfaceResidue_ConfigInitLeavesLegacyEncodedSiblingUntouched(t *
 	}
 }
 
-func publishedPackagedDefinitions(t *testing.T) []interfaces.PackagedDefinition {
+func publishedPackagedDefinitions(t *testing.T) []factorydefinitions.PackagedDefinition {
 	t.Helper()
 	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
 	if err != nil {
