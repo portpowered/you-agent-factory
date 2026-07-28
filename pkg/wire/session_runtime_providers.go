@@ -972,13 +972,21 @@ func provideConductorInvocationWithProgressFactory(edges serviceedges.Edges) fac
 	operatingSystem := resolveWorkersOperatingSystem(edges)
 	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
 	return func(
-		registry *providerregistry.Registry,
+		registry workers.ProviderRegistry,
 		runner workers.CommandRunner,
-		allocator agypty.PTYAllocator,
+		allocator workers.PTYAllocator,
 		publisher workers.ProgressPublisher,
 	) (workers.InvocationExecutor, error) {
+		var concreteRegistry *providerregistry.Registry
+		if registry != nil {
+			typed, ok := registry.(*providerregistry.Registry)
+			if !ok {
+				return nil, fmt.Errorf("conductor invocation requires concrete provider registry")
+			}
+			concreteRegistry = typed
+		}
 		return workersservice.NewConductorInvocationWithProgress(
-			registry,
+			concreteRegistry,
 			runner,
 			commandClock,
 			allocator,
