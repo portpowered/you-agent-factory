@@ -4,11 +4,37 @@ import (
 	"fmt"
 	"time"
 
+	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingsinternal "github.com/portpowered/infinite-you/pkg/services/recordings/internal"
+	artifactsimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export/artifacts"
+	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/replay"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+// NewPortableRecordingWriter constructs the portable recording writer selected
+// by process-graph composition without importing the transitional artifacts/
+// shim.
+func NewPortableRecordingWriter(
+	makeDirectories recordings.RecordingMakeDirectories,
+	createTemporaryFile recordings.RecordingCreateTemporaryFile,
+	removePath recordings.RecordingRemovePath,
+	renamePath recordings.RecordingRenamePath,
+) (recordings.PortableRecordingWriter, error) {
+	return artifactsimpl.NewAtomicWriter(makeDirectories, createTemporaryFile, removePath, renamePath)
+}
+
+// NewReplayArtifactLoader constructs the replay artifact loader selected by
+// process-graph composition without importing the transitional replay/ shim.
+func NewReplayArtifactLoader(
+	storage platformreplay.Storage,
+	decodeFactorySnapshot factorydefinitions.FactorySnapshotJSONDecoder,
+) recordings.ReplayArtifactLoader {
+	return func(path string) (*recordings.ReplayArtifact, error) {
+		return replayimpl.Load(storage, path, decodeFactorySnapshot)
+	}
+}
 
 // NewProjectionService constructs the Recordings projection capability for
 // process-graph composition.

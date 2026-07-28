@@ -40,6 +40,8 @@ var forbiddenCompositionImports = []string{
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/scaffold",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation",
+	"github.com/portpowered/infinite-you/pkg/services/recordings/artifacts",
+	"github.com/portpowered/infinite-you/pkg/services/recordings/events",
 	"github.com/portpowered/infinite-you/pkg/services/recordings/projections",
 	"github.com/portpowered/infinite-you/pkg/services/recordings/replay",
 	"github.com/portpowered/infinite-you/pkg/services/workers/executor",

@@ -5,7 +5,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/recordings/replay"
+	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/replay"
 )
 
 func TestNewArtifactClock_UsesRecordedTickEventTimes(t *testing.T) {

@@ -9,8 +9,8 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryevents "github.com/portpowered/infinite-you/pkg/services/recordings/events"
-	"github.com/portpowered/infinite-you/pkg/services/recordings/replay"
+	factoryevents "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/events"
+	replay "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/replay"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
