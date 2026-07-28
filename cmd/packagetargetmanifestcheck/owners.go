@@ -192,6 +192,9 @@ func mapKnownNestedOwnerPackage(owner, packagePath, rest string) (PackageMapping
 	if owner == "factory_definitions" && rest == "internal" {
 		return moveOrRetainMapping(packagePath, owner+"/internal", DispositionRetain), true
 	}
+	if owner == "factory_definitions" && strings.HasPrefix(rest, "internal/lifecycle") {
+		return moveOrRetainMapping(packagePath, owner+"/internal", DispositionRetain), true
+	}
 
 	// Packages already under the committed private subservice container retain
 	// that nested destination unless the subservice is still transitional IMP debt.
@@ -344,7 +347,7 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 		{exact: "namedpaths", prefix: "namedpaths/", dest: "factory_definitions/internal/services/catalog"},
 		{exact: "persistence", prefix: "persistence/", dest: "factory_definitions/internal/services/catalog"},
 		{exact: "resource", prefix: "resource/", dest: "factory_definitions/internal/services/catalog"},
-		{exact: "definition", prefix: "definition/", dest: "factory_definitions/internal/services/compilation"},
+		{exact: "definition", prefix: "definition/", dest: "factory_definitions/internal"},
 		{exact: "loading", prefix: "loading/", dest: "factory_definitions/internal/services/compilation"},
 		{exact: "loadedsource", prefix: "loadedsource/", dest: "factory_definitions/internal/services/compilation"},
 		{exact: "validation", prefix: "validation/", dest: "factory_definitions/internal/services/validation"},

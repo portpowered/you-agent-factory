@@ -47,6 +47,11 @@ func TestMapPackageFactoryDefinitionsMoveDestinations(t *testing.T) {
 			retainOwner: "factory_definitions",
 		},
 		{
+			path:        "pkg/services/factory_definitions/internal/lifecycle",
+			wantRetain:  true,
+			retainOwner: "factory_definitions",
+		},
+		{
 			path: "pkg/services/factory_definitions/service",
 			wantMove: &ownershipinventory.PackageRow{
 				PackagePath:       "pkg/services/factory_definitions/service",
@@ -55,6 +60,17 @@ func TestMapPackageFactoryDefinitionsMoveDestinations(t *testing.T) {
 				DestinationKind:   ownershipinventory.DestinationKindOwner,
 				Successor:         "pkg/services/factory_definitions/internal",
 				DeletionCondition: "delete transitional service/ package after owner wire retargets to internal implementation and DEL cutover proof completes",
+			},
+		},
+		{
+			path: "pkg/services/factory_definitions/definition",
+			wantMove: &ownershipinventory.PackageRow{
+				PackagePath:       "pkg/services/factory_definitions/definition",
+				Disposition:       ownershipinventory.DispositionMove,
+				Destination:       "factory_definitions",
+				DestinationKind:   ownershipinventory.DestinationKindOwner,
+				Successor:         "pkg/services/factory_definitions/internal",
+				DeletionCondition: "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof",
 			},
 		},
 		{

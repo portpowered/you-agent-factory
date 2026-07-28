@@ -855,7 +855,10 @@ Factory Definitions `wire/wire.go` composes the lifecycle host through
 `factory_definitions/internal` (`NewWithAuthoringLayout` → `internal/lifecycle`)
 and must not import public `definition/` or transitional `service/` shims;
 `wire/boundary_test.go` and `wire/wire_lifecycle_compose_test.go` lock that
-construction path. `wire/wire.go` also composes the compilation subservice from the
+construction path. `non_owner_definition_import_boundary_test.go` seals zero
+production peer imports of public `definition/` (including peer integration
+tests); peers use `factory_definitions` root or `factory_definitions/wire`.
+`wire/wire.go` also composes the compilation subservice from the
 nested loader ports and delegates `CompileEffectiveFactorySource` on the returned
 root `Service`. Bind compilation canonical encode through
 `internal/services/compilation/canonical` so owner wire does not import

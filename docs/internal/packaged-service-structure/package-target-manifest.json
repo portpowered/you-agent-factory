@@ -91,6 +91,7 @@
     "pkg/services/factory_definitions/editable",
     "pkg/services/factory_definitions/internal",
     "pkg/services/factory_definitions/internal/contracts",
+    "pkg/services/factory_definitions/internal/lifecycle",
     "pkg/services/factory_definitions/internal/services/authoring_layout",
     "pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout",
     "pkg/services/factory_definitions/internal/services/authoring_layout/expand",
@@ -334,6 +335,7 @@
     "pkg/services/models/wire",
     "pkg/services/operator_settings",
     "pkg/services/operator_settings/identityinventory",
+    "pkg/services/operator_settings/internal/construct",
     "pkg/services/operator_settings/internal/service",
     "pkg/services/operator_settings/internal/services/document",
     "pkg/services/operator_settings/internal/services/document/internal/service",
@@ -792,7 +794,7 @@
     {
       "packagePath": "pkg/services/factory_definitions/definition",
       "disposition": "move",
-      "destination": "factory_definitions/internal/services/compilation"
+      "destination": "factory_definitions/internal"
     },
     {
       "packagePath": "pkg/services/factory_definitions/editable",
@@ -808,6 +810,11 @@
       "packagePath": "pkg/services/factory_definitions/internal/contracts",
       "disposition": "retain",
       "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/lifecycle",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout",
@@ -2023,6 +2030,11 @@
       "packagePath": "pkg/services/operator_settings/identityinventory",
       "disposition": "move",
       "destination": "operator_settings/internal/services/document"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/internal/construct",
+      "disposition": "retain",
+      "destination": "operator_settings"
     },
     {
       "packagePath": "pkg/services/operator_settings/internal/service",
