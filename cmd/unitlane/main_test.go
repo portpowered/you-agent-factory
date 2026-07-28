@@ -16,10 +16,10 @@ import (
 func TestDiscoverPackagesExcludesIndependentSuiteRoots(t *testing.T) {
 	root := t.TempDir()
 	writeTestPackageFile(t, root, "factory")
-	writeTestPackageFile(t, root, "services/factory_definitions/loading/runtimetests")
+	writeTestPackageFile(t, root, "services/factory_definitions/internal/services/compilation/runtimetests")
 	writeTestPackageFile(t, root, "transports/http/contracttests")
 	writeTestPackageFile(t, root, "transports/http/servertests/factorysessionsse")
-	writeTestPackageFile(t, root, "services/factory_runtime/exhaustiontests")
+	writeTestPackageFile(t, root, "services/factory_runtime/internal/exhaustiontests")
 	writeTestPackageFile(t, root, "services/workers/provider/functionaltests")
 	writeTestPackageFile(t, root, "ignored/testdata/nested")
 

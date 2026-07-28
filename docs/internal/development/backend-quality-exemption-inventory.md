@@ -112,7 +112,7 @@ directive occurrence in the focused scan:
 - `pkg/services/factory_sessions/transports/cli/sessionexecution`
 - `pkg/transports/cli/factoryrun`
 - `pkg/config/inboxgitkeep`
-- `pkg/services/workers/interface`
+- `pkg/services/workers/internal/interface`
 - `pkg/initializer/runtimeconstruction/operatordefaults`
 - `pkg/config/retiredboundary`
 - `pkg/factory`

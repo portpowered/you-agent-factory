@@ -17,6 +17,49 @@ import (
 )
 
 const (
+	orderedJavaScriptPipelineResult = "ordered-pipeline-complete"
+	orderedJavaScriptPipelineWorkflow = `return (async function () {
+  const first = await agent.run({
+    prompt: "stage-one-input",
+    label: "stage-one",
+  });
+  const stageTwoPrompt =
+    "stage-two-after:" + first.dispatchId + ":" + first.status + ":" + first.output.text;
+  const second = await agent.run({
+    prompt: stageTwoPrompt,
+    label: "stage-two",
+  });
+
+  if (first.status !== "COMPLETED" || second.status !== "COMPLETED") {
+    throw new Error("ordered pipeline did not complete both stages");
+  }
+  return {
+    finalValue: "` + orderedJavaScriptPipelineResult + `",
+    stages: [
+      {
+        stage: first.label,
+        childIndex: first.childIndex,
+        dispatchId: first.dispatchId,
+        resultStatus: first.status,
+        response: first.output.text,
+      },
+      {
+        stage: second.label,
+        childIndex: second.childIndex,
+        dispatchId: second.dispatchId,
+        resultStatus: second.status,
+        response: second.output.text,
+      },
+    ],
+    dependency: {
+      priorDispatchId: first.dispatchId,
+      observedByStageTwo: second.output.text.indexOf(stageTwoPrompt) !== -1,
+    },
+  };
+})();`
+)
+
+const (
 	inlineJavaScriptSuccessResult      = "<SUCCESS>"
 	inlineJavaScriptSyntaxErrorSource  = "workflow.final(\"ok\");\nphase(\"setup\";\n"
 	inlineJavaScriptSyntaxErrorLine    = 2
@@ -31,9 +74,10 @@ var privateJavaScriptVMDiagnosticMarkers = []string{
 }
 
 // TestInlineJavaScriptFactoryRunsFromCLI proves an inline JavaScript Factory
-// definition completes through the public you run customer process boundary with
-// a terminal COMPLETED primary outcome and without private VM
-// internals in success diagnostics.
+// definition completes through the public you run customer process boundary
+// with mock workers, a terminal COMPLETED primary outcome that returns the
+// authored primary result, and without private VM internals in success
+// diagnostics.
 func TestInlineJavaScriptFactoryRunsFromCLI(t *testing.T) {
 	t.Parallel()
 
@@ -89,6 +133,47 @@ func TestInlineJavaScriptFactoryRunsFromCLI(t *testing.T) {
 
 	result := decodeSingleInvocationResponse(t, inputs.Stdout())
 	assertInlineJavaScriptSuccessOutcome(t, result)
+	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
+}
+
+// TestInlineJavaScriptFactoryRunsOrderedTwoStagePipeline proves an inline
+// JavaScript Factory with sequential agent.run child dispatches completes
+// through the public you run customer process boundary with ordered stage
+// evidence, stage-two dependency on stage-one output, and a terminal COMPLETED
+// primary outcome without live provider execution.
+func TestInlineJavaScriptFactoryRunsOrderedTwoStagePipeline(t *testing.T) {
+	t.Parallel()
+
+	dir := scaffoldOrderedInlineJavaScriptPipelineFactory(t)
+	mockWorkersPath := writeEmptyMockWorkersConfig(t, dir)
+
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "run",
+		"--factory", filepath.Join(dir, "factory.json"),
+		"--with-mock-workers", mockWorkersPath,
+		"--output", "primary",
+		"--no-record",
+		"hello",
+	})
+	homeDir := t.TempDir()
+	inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.WorkingDirectory = dir
+
+	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
+	if err := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}).Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute() error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
+	}
+	if inputs.Stderr() != "" {
+		t.Fatalf("stderr = %q, want empty stderr on successful JSON invocation", inputs.Stderr())
+	}
+	if runner.CallCount() != 0 {
+		t.Fatalf("provider command runner call count = %d, want 0 for mock-worker child execution", runner.CallCount())
+	}
+
+	result := decodeSingleInvocationResponse(t, inputs.Stdout())
+	assertOrderedInlineJavaScriptPipelineOutcome(t, result)
 	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
 }
 
@@ -154,6 +239,35 @@ func TestInlineJavaScriptSyntaxErrorReturnsSourceLocation(t *testing.T) {
 	assertNoPrivateJavaScriptVMDiagnostics(t, inputs.Stdout(), inputs.Stderr())
 }
 
+func scaffoldOrderedInlineJavaScriptPipelineFactory(t *testing.T) string {
+	t.Helper()
+
+	dir := support.ScaffoldFactory(t, map[string]any{
+		"name": "inline-javascript-ordered-pipeline",
+		"invocationSignature": map[string]any{
+			"parameters": []any{map[string]any{
+				"name": "prompt", "required": false,
+				"bindings": []any{map[string]any{"kind": "POSITIONAL", "position": 1}},
+			}},
+		},
+		"orchestrator": map[string]any{
+			"kind": "JAVASCRIPT",
+			"javascript": map[string]any{
+				"sourceRef": "workflow.js",
+				"argsSchema": map[string]any{
+					"type":                 "object",
+					"properties":           map[string]any{"prompt": map[string]any{"type": "string"}},
+					"additionalProperties": false,
+				},
+			},
+		},
+	})
+	if err := os.WriteFile(filepath.Join(dir, "workflow.js"), []byte(orderedJavaScriptPipelineWorkflow), 0o600); err != nil {
+		t.Fatalf("write ordered pipeline workflow: %v", err)
+	}
+	return dir
+}
+
 func writeEmptyMockWorkersConfig(t *testing.T, dir string) string {
 	t.Helper()
 
@@ -177,6 +291,66 @@ func decodeSingleInvocationResponse(t *testing.T, stdout string) factoryapi.Invo
 		t.Fatalf("stdout contained more than one terminal JSON result: %v\nstdout:\n%s", err, stdout)
 	}
 	return result
+}
+
+type orderedInlineJavaScriptPipelineEvidence struct {
+	FinalValue string `json:"finalValue"`
+	Stages     []struct {
+		Stage        string `json:"stage"`
+		ChildIndex   int    `json:"childIndex"`
+		DispatchID   string `json:"dispatchId"`
+		ResultStatus string `json:"resultStatus"`
+		Response     string `json:"response"`
+	} `json:"stages"`
+	Dependency struct {
+		PriorDispatchID    string `json:"priorDispatchId"`
+		ObservedByStageTwo bool   `json:"observedByStageTwo"`
+	} `json:"dependency"`
+}
+
+func assertOrderedInlineJavaScriptPipelineOutcome(t *testing.T, result factoryapi.InvocationResponse) {
+	t.Helper()
+
+	if result.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("terminal outcome = %s, want COMPLETED", result.Status)
+	}
+	if result.PrimaryResult == nil || len(*result.PrimaryResult) != 1 {
+		t.Fatalf("primary result = %#v, want exactly one content part", result.PrimaryResult)
+	}
+	part, err := (*result.PrimaryResult)[0].AsWorkJsonContentPart()
+	if err != nil {
+		t.Fatalf("decode primary result content part: %v", err)
+	}
+
+	var evidence orderedInlineJavaScriptPipelineEvidence
+	encoded, err := json.Marshal(part.Json)
+	if err != nil {
+		t.Fatalf("encode ordered pipeline evidence: %v", err)
+	}
+	if err := json.Unmarshal(encoded, &evidence); err != nil {
+		t.Fatalf("decode ordered pipeline evidence: %v", err)
+	}
+	if evidence.FinalValue != orderedJavaScriptPipelineResult {
+		t.Fatalf("final customer value = %q, want %q", evidence.FinalValue, orderedJavaScriptPipelineResult)
+	}
+	if len(evidence.Stages) != 2 {
+		t.Fatalf("stage evidence count = %d, want exactly 2", len(evidence.Stages))
+	}
+	for index, wantStage := range []string{"stage-one", "stage-two"} {
+		stage := evidence.Stages[index]
+		if stage.Stage != wantStage || stage.ChildIndex != index+1 || stage.DispatchID == "" || stage.ResultStatus != "COMPLETED" {
+			t.Fatalf("stage evidence[%d] = %#v, want %s child %d with one completed dispatch result", index, stage, wantStage, index+1)
+		}
+		if !strings.Contains(stage.Response, ":"+wantStage+":") {
+			t.Fatalf("stage evidence[%d] response = %q, want deterministic mock response for %s", index, stage.Response, wantStage)
+		}
+	}
+	if evidence.Stages[0].DispatchID == evidence.Stages[1].DispatchID {
+		t.Fatalf("stage dispatch IDs are duplicated: %q", evidence.Stages[0].DispatchID)
+	}
+	if evidence.Dependency.PriorDispatchID != evidence.Stages[0].DispatchID || !evidence.Dependency.ObservedByStageTwo {
+		t.Fatalf("stage-two dependency evidence = %#v, want completed stage-one dispatch %q", evidence.Dependency, evidence.Stages[0].DispatchID)
+	}
 }
 
 func assertInlineJavaScriptSuccessOutcome(t *testing.T, result factoryapi.InvocationResponse) {

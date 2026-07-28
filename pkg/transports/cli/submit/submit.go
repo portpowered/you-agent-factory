@@ -24,6 +24,7 @@ type SubmitConfig struct {
 	Name         string
 	WorkTypeName string
 	Payload      string
+	Stdin        io.Reader
 	Server       string
 	SessionID    string
 	JSON         bool
@@ -60,7 +61,7 @@ func submit(read workdomain.PayloadFileReader, cfg SubmitConfig) error {
 		return fmt.Errorf("CLI HTTP protocol is required")
 	}
 
-	payload, data, payloadType, err := readSubmitPayload(read, cfg.Payload)
+	payload, data, payloadType, err := readSubmitPayload(read, cfg.Payload, cfg.Stdin)
 	if err != nil {
 		return err
 	}

@@ -234,6 +234,18 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestScriptWorkerReceivesDeclaredEnvironmentOnly`.
   - `TestScriptWorkerMissingExecutableFailsActionably`.
 
+- [x] `tests/functional/workers/transports/cli/run/help/invocation_help_test.go`
+  - `TestCLIRunHelpShowsInvocationSignatureForNamedFactory` verifies run --help
+    prints invocation signature for a named Factory.
+  - `TestCLIRunHelpDistinguishesRequiredAndOptionalParameters` verifies required
+    vs optional parameters are visibly distinguished.
+  - `TestCLIRunHelpDoesNotDispatchExternalWork` verifies help is read-only and
+    does not invoke provider command execution.
+
+- [x] `tests/functional/workers/transports/cli/run/modes/output_modes_test.go`
+  - `TestCLIRunSuccessPrimaryResultTextJSONAndNDJSON`.
+  - `TestCLIRunFailureOmitsFalseSuccessPrimaryResult`.
+
 ### Inference workers — shared contract
 
 - [x] `tests/functional/workers/inference/selection_test.go`
@@ -354,6 +366,12 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestMockWorkersReplaceOnlyNamedChildren`.
   - `TestUnknownWorkerOverrideFailsActionably`.
   - `TestMockWorkerFailureReturnsStablePublicFailure`.
+
+- [x] `tests/functional/workers/mock/service_config_override_alignment_test.go`
+  - `TestServiceConfigOverrideAlignment_CustomerProcessSharesScriptAndProviderCommandRunner`.
+
+- [x] `tests/functional/workers/mock/service_config_override_alignment_long_test.go`
+  - `TestServiceConfigOverrideAlignment_CustomerProcessScriptCommandRunner`.
 
 ## Wave 1 — orchestration
 
@@ -556,6 +574,16 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestWorkBatchSelectsDefaultAndExplicitWorkTypes`.
   - `TestWorkBatchRejectsUnknownTypeWithoutPartialMutation`.
 
+- [x] `tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go`
+  - `TestCLISubmitBatchDryRunEmitsSummaryWithoutMutation` verifies dry-run
+    summary without Work upsert.
+  - `TestCLISubmitBatchSuccessHumanAndJSONShapes` verifies human and JSON success
+    shapes through Process.Execute.
+  - `TestCLISubmitBatchInvalidJSONFailsBeforeUpsert` verifies malformed JSON fails
+    before any Work mutation.
+  - `TestCLISubmitBatchContractHarnessExecutesThroughRootBuildProcess` verifies
+    the Work-owned CLI batch contract cell uses root.BuildProcess + edges.Edges.
+
 - [x] `tests/functional/work/recordings/recordings_read_test.go`
   - `TestRecordingsBackedWorkReadsUseRecordingsRootContract`.
   - `TestGetWorkFromRecordingsRootUsesRecordingsServiceRoot`.
@@ -704,6 +732,19 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestExplicitFactoryConfigOverridesGlobalDefaults`.
   - `TestSingleDiscoveredProviderIsUsedWhenNoDefaultExists`.
 
+- [x] `tests/functional/factory_definitions/transports/cli/named_lifecycle/named_lifecycle_test.go`
+  - `TestCLIFactoryNamedCreateListUpdateDelete` verifies create, list, update, and
+    delete for a named Factory through root.BuildProcess + Process.Execute.
+  - `TestCLIFactoryListReflectsCreateAndDelete` verifies list membership after
+    create and removal.
+  - `TestCLIFactoryDeleteMissingReturnsActionableFailure` verifies delete of a
+    missing named Factory returns an actionable failure without mutation.
+
+- [x] `tests/functional/factory_definitions/transports/cli/validate_persist/validate_persist_test.go`
+  - `TestCLIFactoryValidateRejectsInvalidDefinitionActionably`.
+  - `TestCLIFactoryValidateDoesNotMutateOnFailure`.
+  - `TestCLIFactoryPersistFromFileThenRunSucceeds`.
+
 - [ ] `tests/functional/factory/definitions/import_export_test.go`
   - `TestExportedFactoryCanBeImportedAndRun`.
   - `TestImportExportPreservesNestedDocsScriptsAndMetadata`.
@@ -733,6 +774,11 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPetriMultiStagePipelineCompletesAtPublicTerminals`.
   - `TestPetriFailureRoutesToDocumentedFailedPlace`.
   - `TestPetriMultiTransitionPreservesWorkCorrelation`.
+
+- [x] `tests/functional/factory_runtime/orchestrators/petri/guards/eligibility_test.go`
+  - `TestPetriAuthoredEligibilityGuardBlocksDispatchUntilSatisfied`.
+  - `TestPetriParentOrSameNameGuardReleasesExpectedWork`.
+  - `TestPetriVisitOrMatchGuardFailureIsVisibleInPublicWorkState`.
 
 ### Packaged factories
 
@@ -851,6 +897,12 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 - [x] `tests/functional/providers/kiro/process_harness_test.go`
   - `TestKiroCommandCancellationThroughRootBuildProcessIsCanonical`.
 
+- [x] `tests/functional/providers/agy/process_harness_test.go`
+  - `TestAgyConductorSuccessThroughRootBuildProcess`.
+  - `TestAgyNativeFailureThroughRootBuildProcessIsSafe`.
+  - `TestAgyTimeoutFailureThroughRootBuildProcess`.
+  - `TestAgyCommandCancellationThroughRootBuildProcessIsCanonical`.
+
 - [x] `tests/functional/providers/pi/process_harness_test.go`
   - `TestPiStreamingSuccessThroughRootBuildProcess`.
   - `TestPiResumeContinuityThroughRootBuildProcess`.
@@ -890,6 +942,12 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestResponseExecGoldenMetadataSurvivesReplay`.
     - The assertions use checked-in expected metadata, not mapper-generated
     expected values.
+
+- [x] `tests/functional/provider_sessions/build_process_inert_test.go`
+  - `TestProviderSessionsRemainInertThroughRootBuildProcessConstruction`.
+
+- [x] `tests/functional/provider_sessions/peer_import_boundary_test.go`
+  - `TestFunctionalProviderSessionsPackageUsesPublicProcessImportsOnly`.
 
 ## Wave 2 — operator settings
 
@@ -970,6 +1028,10 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestResourceContentionDoesNotDuplicateWork`.
 
 ## Wave 3 — observability
+
+- [x] `tests/functional/observability/verification/verify_tier_contract_test.go`
+  - Verify-tier Makefile/CI contract smoke for `verify-*` tier wiring, wrapper
+    scripts, and lane ordering (wrong-layer replacement for smoke catch-all).
 
 - [ ] `tests/functional/observability/logging/redaction_test.go`
   - `TestRuntimeLogsCorrelateSessionWorkAndDispatch`.

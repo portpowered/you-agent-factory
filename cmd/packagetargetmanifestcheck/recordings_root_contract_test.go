@@ -24,24 +24,8 @@ func TestRecordingsRootGoFilesMatchCommittedInventory(t *testing.T) {
 func TestRecordingsExcessRootContractFoldDestinations(t *testing.T) {
 	t.Parallel()
 
-	want := map[string]string{
-		"artifacts":             "pkg/services/recordings/internal/services/artifacts_export",
-		"event":                 "pkg/services/recordings/internal/services/canonical_ledger",
-		"world_state":           "pkg/services/recordings/internal/services/projection_query",
-		"replay":                "pkg/services/recordings/internal/services/replay",
-		"dispatch":              "pkg/services/recordings/internal/services/projection_query",
-		"workstation_request":   "pkg/services/recordings/internal/services/projection_query",
-		"live_recording_target": "pkg/services/recordings/internal/services/recording_lifecycle",
-	}
-
-	for _, target := range recordingsExcessRootContractFolds {
-		wantDestination, ok := want[target.cluster]
-		if !ok {
-			t.Fatalf("unexpected fold cluster %q", target.cluster)
-		}
-		if target.destination != wantDestination {
-			t.Fatalf("cluster %q destination = %q, want %q", target.cluster, target.destination, wantDestination)
-		}
+	if len(recordingsExcessRootContractFolds) != 0 {
+		t.Fatalf("fold clusters = %v, want none after CLN-REC-CONTRACT-ROOTS seal", recordingsExcessRootContractFolds)
 	}
 }
 

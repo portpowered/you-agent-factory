@@ -9,13 +9,13 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	workerconstruction "github.com/portpowered/infinite-you/pkg/services/workers/construction"
-	modelrecording "github.com/portpowered/infinite-you/pkg/services/workers/execution/recording"
-	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/executor"
+	workerconstruction "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/construction"
+	modelrecording "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution/recording"
+	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
-	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/runner"
-	"github.com/portpowered/infinite-you/pkg/services/workers/skippermissions"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
+	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/runner"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/skippermissions"
 )
 
 // BuildRuntimeExecutors constructs every configured runtime worker through the

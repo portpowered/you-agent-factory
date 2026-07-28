@@ -219,6 +219,10 @@ func factoryRuntimeCanonicalRetainRest(rest string) bool {
 		return true
 	case rest == "internal" || strings.HasPrefix(rest, "internal/host"):
 		return true
+	case strings.HasPrefix(rest, "internal/testkit"):
+		return true
+	case strings.HasPrefix(rest, "internal/exhaustiontests"):
+		return true
 	case strings.HasPrefix(rest, "internal/services/orchestration"):
 		return true
 	case strings.HasPrefix(rest, "internal/services/instance_host"):
@@ -277,6 +281,8 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 		{exact: "internal/runtimeopening", prefix: "internal/runtimeopening/", dest: "factory_sessions/internal/services/runtime_opening"},
 	},
 	"factory_runtime": {
+		{exact: "internal", dest: "factory_runtime/internal"},
+		{exact: "internal/host", prefix: "internal/host/", dest: "factory_runtime/internal"},
 		{exact: "javascript", prefix: "javascript/", dest: "factory_runtime/internal/services/orchestration"},
 		{prefix: "internal/orchestrators/", dest: "factory_runtime/internal/services/orchestration"},
 		{exact: "tooling", prefix: "tooling/", dest: "factory_runtime/internal/services/orchestration"},
@@ -289,12 +295,10 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 		{exact: "internal/legacysnapshot", prefix: "internal/legacysnapshot/", dest: "factory_runtime/internal"},
 		{exact: "internal/rootobservation", prefix: "internal/rootobservation/", dest: "factory_runtime/internal"},
 		{exact: "internal/service", prefix: "internal/service/", dest: "factory_runtime/internal"},
-		{exact: "testkit", prefix: "testkit/", dest: "factory_runtime/internal"},
 		{exact: "testdata", prefix: "testdata/", dest: "factory_runtime/internal"},
 		{exact: "context", prefix: "context/", dest: "factory_runtime/internal/services/orchestration"},
 		{exact: "definitionmapping", prefix: "definitionmapping/", dest: "factory_runtime/internal/services/orchestration"},
 		{exact: "engine", prefix: "engine/", dest: "factory_runtime/internal/services/orchestration"},
-		{exact: "exhaustiontests", prefix: "exhaustiontests/", dest: "factory_runtime/internal/services/orchestration"},
 		{exact: "metrics", prefix: "metrics/", dest: "factory_runtime/internal/services/orchestration"},
 		{exact: "orchestrationowner", prefix: "orchestrationowner/", dest: "factory_runtime/internal/services/orchestration"},
 		{exact: "orchestratorcontract", prefix: "orchestratorcontract/", dest: "factory_runtime/internal/services/orchestration"},
@@ -309,9 +313,11 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 		{exact: "token_transformer", prefix: "token_transformer/", dest: "factory_runtime/internal/services/orchestration"},
 	},
 	"work": {
+		{exact: "internal/contenturl", prefix: "internal/contenturl/", dest: "work/internal"},
+		{exact: "internal/invocationreturnpolicy", prefix: "internal/invocationreturnpolicy/", dest: "work/internal"},
+		{exact: "internal/requestadmission", prefix: "internal/requestadmission/", dest: "work/internal"},
 		{exact: "internal/service", prefix: "internal/service/", dest: "work/internal"},
 		{exact: "materialize", prefix: "materialize/", dest: "work/internal/services/content_materialization"},
-		{exact: "stateaccessrecordings", prefix: "stateaccessrecordings/", dest: "work/internal/services/state_access"},
 		{exact: "testdata", prefix: "testdata/", dest: "work/internal"},
 	},
 	"operator_settings": {
@@ -320,25 +326,28 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 		{exact: "testlink", prefix: "testlink/", dest: "operator_settings/internal"},
 		{exact: "testproviders", prefix: "testproviders/", dest: "operator_settings/internal"},
 		{exact: "testdata", prefix: "testdata/", dest: "operator_settings/internal"},
+		{exact: "internal", dest: "operator_settings/internal"},
 		{exact: "internal/construct", prefix: "internal/construct/", dest: "operator_settings/internal"},
+		{exact: "internal/identityinputinventory", prefix: "internal/identityinputinventory/", dest: "operator_settings/internal"},
 		{exact: "internal/service", prefix: "internal/service/", dest: "operator_settings/internal"},
-		{exact: "internal/construct", prefix: "internal/construct/", dest: "operator_settings/internal"},
 		{exact: "internal/testlink", prefix: "internal/testlink/", dest: "operator_settings/internal"},
 		{exact: "internal/testproviders", prefix: "internal/testproviders/", dest: "operator_settings/internal"},
 	},
 	"workers": {
 		{exact: "internal", dest: "workers/internal"},
+		{exact: "internal/diagnostics", prefix: "internal/diagnostics/", dest: "workers/internal"},
+		{exact: "internal/interface", prefix: "internal/interface/", dest: "workers/internal"},
 		{exact: "construction", prefix: "construction/", dest: "workers/internal/services/runtime_assembly"},
 		{exact: "prompting", prefix: "prompting/", dest: "workers/internal/services/workstations"},
 		{exact: "worktree", prefix: "worktree/", dest: "workers/internal/services/workstations"},
 		{exact: "skippermissions", prefix: "skippermissions/", dest: "workers/internal/services/workstations"},
-		{exact: "diagnostics", prefix: "diagnostics/", dest: "workers/internal/services/runners"},
-		{exact: "execution", prefix: "execution/", dest: "workers/internal/services/runners"},
-		{exact: "executor", prefix: "executor/", dest: "workers/internal/services/runners"},
-		{exact: "invocation", prefix: "invocation/", dest: "workers/internal/services/runners"},
+		{exact: "diagnostics", prefix: "diagnostics/", dest: "workers/internal"},
+		{exact: "execution", prefix: "execution/", dest: "workers/internal/services/workstations"},
+		{exact: "executor", prefix: "executor/", dest: "workers/internal/services/workstations"},
+		{exact: "invocation", prefix: "invocation/", dest: "workers/internal/services/workstations"},
 		{exact: "process", prefix: "process/", dest: "workers/internal/services/runners"},
 		{exact: "runner", prefix: "runner/", dest: "workers/internal/services/runners"},
-		{exact: "interface", prefix: "interface/", dest: "workers/internal/services/runners"},
+		{exact: "interface", prefix: "interface/", dest: "workers/internal"},
 		{exact: "services", prefix: "services/", dest: "workers/internal/services/runners"},
 		{exact: "services/hosted_logic", prefix: "services/hosted_logic/", dest: "workers/internal/services/runners"},
 		{exact: "services/inference", prefix: "services/inference/", dest: "workers/internal/services/runners"},

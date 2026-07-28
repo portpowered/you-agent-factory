@@ -31,11 +31,20 @@ func TestWorkThinRootContractFiles(t *testing.T) {
 		"content_contract.go",
 		"content_materialization_public_seam_test.go",
 		"content_materialize_contract.go",
+		"content_staging_contract.go",
 		"content_staging_public_seam_test.go",
 		"contracts.go",
+		"del_work_baseline_gate_test.go",
+		"del_work_deletion_gate_test.go",
+		"del_work_prerequisite_gate_test.go",
+		"del_work_proof_gate_test.go",
+		"packaged_root_shape_test.go",
 		"input.go",
 		"input_test.go",
 		"invocation_return_policy_contract.go",
+		"invocation_return_policy_convert.go",
+		"invocation_policy_service_test.go",
+		"lineage_contract.go",
 		"read_contract.go",
 		"recordings_import_boundary_test.go",
 		"recordings_request_boundary_test.go",
@@ -45,6 +54,8 @@ func TestWorkThinRootContractFiles(t *testing.T) {
 		"service_peer_bindings_test.go",
 		"service_root_contract_seal_test.go",
 		"service_root_contract_test.go",
+		"primary_result_test.go",
+		"primary_result_regression_test.go",
 		"wire_behavioral_proof_test.go",
 		"legacy_packages_disposition_test.go",
 	}
@@ -66,14 +77,7 @@ func TestWorkThinRootContractFiles(t *testing.T) {
 func TestWorkExcessRootContractFoldDestinations(t *testing.T) {
 	t.Parallel()
 
-	want := map[string]string{
-		"request_admission":            "pkg/services/work/internal",
-		"invocation_return_policy":     "pkg/services/work/internal",
-		"lineage_graph_modules":        "pkg/services/work/internal/services/state_access",
-		"state_access_query":           "pkg/services/work/internal/services/state_access",
-		"content_staging_impl":         "pkg/services/work/internal/services/content_staging",
-		"content_materialization_impl": "pkg/services/work/internal/services/content_materialization",
-	}
+	want := map[string]string{}
 
 	for _, target := range ownershipinventory.WorkExcessRootContractFolds {
 		wantDestination, ok := want[target.Cluster]
@@ -99,14 +103,7 @@ func TestWorkExcessRootContractFoldDestinations(t *testing.T) {
 		gotClusters = append(gotClusters, target.Cluster)
 	}
 	slices.Sort(gotClusters)
-	wantClusters := []string{
-		"content_materialization_impl",
-		"content_staging_impl",
-		"invocation_return_policy",
-		"lineage_graph_modules",
-		"request_admission",
-		"state_access_query",
-	}
+	wantClusters := []string{}
 	if !slices.Equal(gotClusters, wantClusters) {
 		t.Fatalf("fold clusters = %v, want %v", gotClusters, wantClusters)
 	}

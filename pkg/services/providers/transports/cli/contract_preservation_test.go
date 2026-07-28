@@ -116,27 +116,49 @@ func TestAcceptedCLIContract_PSSI03SurfacesRemainOutOfScope(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := testutil.MustRepoPath(t, ".")
-	for _, relativePath := range []string{
-		"pkg/services/providers/transports/cli/composition.go",
-		"pkg/services/providers/transports/http",
-		"pkg/services/providers/transports/mcp",
-	} {
-		relativePath := relativePath
-		t.Run(relativePath, func(t *testing.T) {
-			t.Parallel()
+	compositionPath := filepath.Join(
+		repoRoot,
+		filepath.FromSlash("pkg/services/providers/transports/cli/composition.go"),
+	)
+	if _, err := os.Stat(compositionPath); err == nil {
+		t.Fatalf(
+			"%s exists; this packet must not add PSS-I03 composition surfaces",
+			compositionPath,
+		)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("stat %s = %v", compositionPath, err)
+	}
+}
 
-			path := filepath.Join(repoRoot, filepath.FromSlash(relativePath))
-			_, err := os.Stat(path)
-			if err == nil {
-				t.Fatalf(
-					"%s exists; this packet must not add PSS-I03 composition, HTTP-PROV, or MCP-PROV surfaces",
-					relativePath,
-				)
-			}
-			if !errors.Is(err, os.ErrNotExist) {
-				t.Fatalf("stat %s = %v", relativePath, err)
-			}
-		})
+func TestAcceptedCLIContract_DoesNotDependOnHTTPOrMCPTransports(t *testing.T) {
+	t.Parallel()
+
+	const (
+		httpTransport = "github.com/portpowered/infinite-you/pkg/services/providers/transports/http"
+		mcpTransport  = "github.com/portpowered/infinite-you/pkg/services/providers/transports/mcp"
+	)
+
+	cmd := exec.Command(
+		"go",
+		"list",
+		"-deps",
+		"-f",
+		"{{if not .Standard}}{{.ImportPath}}{{end}}",
+		providersCLIImportPath,
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("go list deps: %v\n%s", err, output)
+	}
+
+	for _, dep := range strings.Fields(string(output)) {
+		switch dep {
+		case httpTransport, mcpTransport:
+			t.Fatalf(
+				"Providers CLI adapter must not depend on HTTP-PROV or MCP-PROV transports; found %s",
+				dep,
+			)
+		}
 	}
 }
 

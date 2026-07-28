@@ -96,6 +96,41 @@ Use this map when changing the public REST contract.
   deadline exhaustion end without mapping to INTERNAL_ERROR; canceled requests
   terminate without an ErrorResponse body and deadline exhaustion returns 504
   (`request_context.go`).
+- DEL-WORK story 001 (`pss-del-work-001`) confirms CLN-WORK-FOLD-SERVICE,
+  CLN-WORK-LEGACY-PACKAGES, and CLN-WORK-CONTRACT-ROOTS are Factory-complete
+  before leased deletion begins. Observable gate proofs live in
+  `pkg/services/work/del_work_prerequisite_gate_test.go` (tree invariants from
+  CLN-WORK-FOLD-SERVICE internal fold, CLN-WORK-LEGACY-PACKAGES private
+  subservices, and CLN-WORK-CONTRACT-ROOTS thin root contract seal). Fold
+  behavioral proofs live in sibling boundary tests under `pkg/services/work/`.
+- DEL-WORK story 002 (`pss-del-work-002`) deletes emptied transitional `service/`
+  and `stateaccessrecordings/` public paths and clears production/test imports.
+  Observable deletion gate proofs live in
+  `pkg/services/work/del_work_deletion_gate_test.go`; wire behavioral proofs
+  remain in `wire_behavioral_proof_test.go` and `wire/recordings_state_access_test.go`.
+- DEL-WORK story 003 (`pss-del-work-003`) lowers structure, ownership, and
+  package-target baselines for deleted transitional `service/` and
+  `stateaccessrecordings/` paths. Observable baseline gate proofs live in
+  `pkg/services/work/del_work_baseline_gate_test.go`; burn down
+  `package-structure-baseline.json`, `ownership-inventory.json`, and
+  `package-target-manifest.json` rows together and remove deleted paths from
+  `workMoveRules` / `nestedOwnerMoveRules["work"]`.
+- DEL-WORK story 004 (`pss-del-work-004`) lowers unit and functional coverage
+  baseline rows for deleted transitional `service/` and `stateaccessrecordings/`
+  import paths only. Observable coverage gate proofs live in
+  `pkg/services/work/del_work_baseline_gate_test.go`; burn down
+  `go-unit-coverage-package-minimums.json` and
+  `go-functional-coverage-package-minimums.json` rows together without touching
+  other Work package coverage floors.
+- DEL-WORK story 005 (`pss-del-work-005`) proves root shape, structure/ownership
+  debt reduction, and repository structure verification after transitional
+  public deletion; proofs live in
+  `pkg/services/work/packaged_root_shape_test.go` and
+  `pkg/services/work/del_work_proof_gate_test.go`. Work ownership verification
+  helpers live in `internal/ownershipinventory/work_top_level.go`,
+  `internal/ownershipinventory/work_dual_ledger.go`, and
+  `VerifyWorkRootGoInventory` in `work_root_contract.go`. Fold behavioral
+  proofs remain in sibling boundary tests under `pkg/services/work/`.
 - Factory Runtime HTTP decoding, generated-contract mapping, Runtime root
   invocation, typed error mapping, and cancel/timeout handling live in
   `pkg/services/factory_runtime/transports/http`. The adapter consumes the
@@ -388,6 +423,26 @@ Use this map when changing the public REST contract.
   `docs/internal/baselines/ownership-inventory.json`, and the
   `go-*-coverage-package-minimums.json` baselines when adding or moving the
   owner-local transport package.
+- Providers catalog HTTP decoding, adapter-owned response mapping
+  (`catalog_mapping.go`), service invocation (`catalog_operations.go`),
+  typed catalog error mapping (`catalog_error_mapping.go`), and handler entry
+  points (`handlers_catalog.go`) live in
+  `pkg/services/providers/transports/http`. Providers execute HTTP decoding,
+  adapter-owned response mapping (`execute_mapping.go`), service invocation
+  (`execute_operations.go`), typed execute error mapping (`execute_error_mapping.go`),
+  and handler entry points (`handlers_execute.go`) live in the same package.
+  The top-level `pkg/transports/http` server does not register Providers routes
+  until PSS-I02 fan-in; the owner-local adapter consumes `providers.Service` (or a
+  fake root in tests) and must not import `pkg/services/providers/internal/**`.
+  HTTP-PROV uses adapter-owned JSON success shapes (not shared OpenAPI authorship)
+  and maps catalog typed failures (`ErrInvalidID`, `ErrUnknownProvider`,
+  `ErrProviderUnavailable`) to stable HTTP outcomes via `CatalogRootErrorResponse`.
+  Execute typed failures (`ExecuteFailure` kinds and `ErrExecuteFailed`,
+  `ErrExecuteCancelled`, `ErrExecuteTimeout`, plus shared catalog failures) map
+  through `ExecuteRootErrorResponse`. Request-context cancellation and deadline
+  exhaustion for execute map through `request_context.go` to the published execute
+  cancel/timeout HTTP outcomes (`PROVIDER_EXECUTION_CANCELED`,
+  `PROVIDER_EXECUTION_TIMEOUT`) and must not fall through to `INTERNAL_ERROR`.
 - Shared filesystem documents represented in OpenAPI should decode and encode
   through the generated model in a focused `pkg/transports/mapping` package,
   then map into domain-owned values. Inject that codec into the service
@@ -452,6 +507,7 @@ Use this map when changing the public REST contract.
 - Work-list filtering, ordering, and validation policy belongs in `pkg/work/query`; `pkg/api/handlers_work_read.go` maps generated `ListWorkBySessionIdParams` and `Work` values into that domain projection, while `pkg/cli/work/list.go` maps normalized query options into URL parameters. Keep generated OpenAPI types and URL encoding at those transport boundaries, and prove policy with pure query tests plus route-level API and CLI request tests.
 - Functional-scenario public component projection lives in `internal/functionalscenarios` with the maintenance entrypoint in `cmd/functionalscenarioproject`. Treat `contracts/cli/commands.json`, `contracts/mcp/tools.json`, and bundled `api/openapi.yaml` as its canonical inputs; derive SSE components from OpenAPI operations whose response media types include `text/event-stream` so the SSE inventory cannot drift into a handwritten route list.
 - Test-only durable Factory Session cross-interface captures live in `tests/functional/sessionparity`. Keep REST event observations as the actual `text/event-stream` body (`data:` frames containing Factory Event JSON), CLI event observations as the direct `--json` array, and live MCP observations as complete JSON-RPC `tools/call` responses whose serialized `ToolResponse` is in `result.content[0].text`; do not substitute pre-extracted typed results for the live MCP boundary.
+- Work-owned unary `you submit` contract proofs belong in `tests/functional/work/transports/cli/submit/unary_contract/unary_contract_test.go` through `support.BuildProcess` + `Process.Execute` with public `you submit --json`, file-backed and stdin (`--payload -`) payloads, default and explicit `--session` targeting, and structured failure preservation against a controlled public HTTP edge. Assert public CLI acknowledgment, session-scoped work list observations, and typed safe failure markers only; do not import service implementations or internal Petri packages.
 - Work-owned CLI batch ingress shape, work-type selection, and unknown-type rejection proofs belong in `tests/functional/work/submission/batch_inputs_test.go` through `you submit batch` with inline, file path, and stdin (`-`) payloads plus public default-session work list observations. Work-owned CLI submit-batch contract depth (dry-run non-mutation, success human/JSON shapes, invalid JSON before upsert) belongs in `tests/functional/work/transports/cli/submit/batch_contract/batch_contract_test.go` through `support.BuildProcess` + `Process.Execute` with external effects replaced only through `edges.Edges` (`ProviderCommandRunner` / mocked Codex preferred over `MockWorkers`). HTTP batch submit/list/get, canonical Work Request upsert identity, and typed not-found for unknown Work belong in `tests/functional/work/submission/http_test.go` through `support.UpsertDefaultSessionWorkRequest`, `support.ListDefaultSessionWork`, and `GET /work/{id}` on the public default session. HTTP stage-then-submit proofs that staged file references create Work with the expected customer-visible content belong in `tests/functional/work/submission/stage_and_submit_test.go` through `POST /work/staged-files`, structured `POST /work` items, and `GET /work/{id}` on the public default session.
 - Request-batch functional lifecycle coverage for generated REST writes/reads and the Factory Event SSE stream remains in `tests/functional/runtime_api/api_request_batch_boundary_smoke_test.go`, with `support.StartFunctionalAPIServiceModeServer` as the approved test seam. `make functional-boundary-check` accepts only repository `tests/functional/*_test.go` sources, scans the work-owned batch ingress, HTTP submission, and stage-and-submit cells in `batch_inputs_test.go`, `http_test.go`, and `stage_and_submit_test.go`, and rejects direct Factory runtime, projection, service, or Petri imports; owner-level package tests remain the place for those internals.
 - Functional API replay setup belongs in `tests/functional/internal/support`: pass replay artifact and execution-root inputs through `FunctionalAPIServerConfig` so scenario files can observe only the public Factory Session event stream and terminal API payloads, rather than capturing `FactoryService`, engine snapshots, or reconstructed projections.

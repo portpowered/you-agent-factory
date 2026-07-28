@@ -5,7 +5,8 @@ packet records evidence-backed classification only; it does not move, fold, or
 delete packages.
 
 **Inventory captured:** 2026-07-28 UTC from the live tree at
-`pkg/services/work/` (immediate child directories only).
+`pkg/services/work/` (immediate child directories only) after DEL-WORK transitional
+public deletion (`service/`, `stateaccessrecordings/`).
 
 ## Classification legend
 
@@ -23,13 +24,15 @@ live public siblings as debt until CLN/DEL cutover packets remove them.
 | Directory | Classification | Disposition | Destination |
 | --- | --- | --- | --- |
 | `internal` | Canonical | retain | `work` (private implementation tree; subservices `content_staging`, `content_materialization`, and `state_access` already exist) |
-| `service` | Work transitional debt | move | `work/internal` |
-| `stateaccessrecordings` | Work transitional debt | move | `work/internal/services/state_access` |
 | `testdata` | Work transitional debt | move | `work/internal` (test-only fixtures; not a canonical retain-at-root exception) |
 | `transports` | Canonical | retain | `work` |
 | `wire` | Canonical | retain | `work` |
 
-**Totals:** 6 immediate child directories — 3 canonical, 3 Work transitional debt.
+**Deleted after DEL-WORK:** `service/` and `stateaccessrecordings/` transitional
+public paths were removed in DEL-WORK story 002; they no longer appear on disk or
+in the committed owner top-level inventory.
+
+**Totals:** 4 immediate child directories — 3 canonical, 1 Work transitional debt.
 
 ## Generator mirror
 
@@ -37,11 +40,10 @@ The committed generator tables in `internal/ownershipinventory/owner_top_level.g
 and `cmd/packagetargetmanifestcheck/owner_top_level.go` mirror this inventory:
 
 - **Expected retain:** `internal`, `transports`, `wire`
-- **Unexpected move siblings:** `service`, `stateaccessrecordings`, `testdata`
+- **Unexpected move siblings:** `testdata`
 
 Move destinations align with `workMoveRules` / `nestedOwnerMoveRules` for `work`:
-`service` and `testdata` → `work/internal`; `stateaccessrecordings` →
-`work/internal/services/state_access`. Mapping rules are confirmed in
+`testdata` → `work/internal`. Mapping rules are confirmed in
 `internal/ownershipinventory/work_mapping.go`, `cmd/packagetargetmanifestcheck/owners.go`
 (`nestedOwnerMoveRules["work"]`), and locked by
 `TestWorkTopLevelUnexpectedMoveDestinationsMatchInventory` /

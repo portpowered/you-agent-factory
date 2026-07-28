@@ -10,7 +10,7 @@ import (
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	workerinvocation "github.com/portpowered/infinite-you/pkg/services/workers/invocation"
+	workerinvocation "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/invocation"
 
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 )

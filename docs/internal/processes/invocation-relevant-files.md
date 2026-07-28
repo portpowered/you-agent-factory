@@ -1011,6 +1011,52 @@ response-stream output.
   `VerifyOperatorSettingsDualLedgerAlignment` to prove ownership-inventory and
   package-target-manifest agree on unexpected-sibling move rows and that fold
   targets never regress to owner-root retain destinations.
+- CLN-SET-CONTRACT-ROOTS story-001 reconciliation locks live root `.go` files,
+  INV JSON inventory, Go root-contract mirror
+  (`internal/ownershipinventory/operator_settings_root_contract.go`),
+  top-level directory inventory, and dual ledgers through
+  `VerifyOperatorSettingsRootReconciliation`; package-target checks mirror the
+  Go inventory in `cmd/packagetargetmanifestcheck/operator_settings_root_contract.go`.
+- CLN-SET-CONTRACT-ROOTS story-002 folds `document_construction_bridge` into
+  `pkg/services/operator_settings/internal/services/document` (`bridge.go`,
+  `owner_construct.go`, `config_document_service.go`, `register.go`); the peer
+  root keeps `config_document.go` as the thin `ConfigDocumentService` surface
+  wired through `ConfigureConfigDocumentOperations` to avoid root↔subservice
+  import cycles; wire/construct/servicewire/testlink blank-import the document
+  subservice so registration runs before `ConfigureDocumentOwnerConstructor`.
+- CLN-SET-CONTRACT-ROOTS story-003 folds `identity_input_index_inventory` into
+  `pkg/services/operator_settings/internal/identityinputinventory` (`identity.go`,
+  `input_index.go`, case tables, `register.go`); the peer root keeps
+  `backend_scope.go` and `input_inventory_contract.go` as thin surfaces wired
+  through `ConfigureIdentityInputInventoryOperations`; wire/construct/servicewire/testlink
+  blank-import the private package so registration runs before backend-scope and
+  input-inventory callers execute.
+- CLN-SET-CONTRACT-ROOTS story-004 folds `resolution_composition` and
+  `defaults_resolution_implementation` into
+  `pkg/services/operator_settings/internal/services/resolution/defaults`
+  (`operator_config.go`, `environment_resolution.go`, `provider_scope.go`,
+  `register.go`); the peer root keeps `defaults_contract.go`,
+  `defaults_resolution.go`, and `resolution_contract.go` as thin surfaces wired
+  through `ConfigureDefaultsResolutionOperations` and
+  `ConfigureDefaultsResolutionFromHome`; keep `Config.Normalize` at the root for
+  codec decode paths; wire/construct/servicewire/testlink blank-import the
+  defaults subpackage so registration runs before defaults-resolution callers.
+- CLN-SET-CONTRACT-ROOTS story-005 folds `providers_root_construction` into
+  `pkg/services/operator_settings/internal/providers_root_construct.go` and relocates
+  construction-port characterization tests under `operator_settings/internal`;
+  the peer root keeps `construction_ports_contract.go` as the thin owner-wire port
+  surface (func types plus `FileSystem`/`TemporaryFile` contracts) and
+  `operator_settings/wire/construction_ports.go` re-exports those aliases for
+  process-edge bags; register Providers-root construction from
+  `operator_settings/wire/register.go` (not `pkg/wire`) so owner wire can import
+  `operator_settings/internal` without widening peer import boundaries.
+- CLN-SET-CONTRACT-ROOTS story-006 seals the thin Operator Settings root with
+  `root_wire_behavioral_boundary_test.go`: wire-constructed behavioral proof at
+  the peer root exercises published `operatorsettings.Service` LoadDocument,
+  ApplyDocumentUpdate, and ResolveEffective success and typed-failure outcomes
+  exclusively through `operator_settings/wire`; inventory mirrors list the file
+  as a thin_root_contract_test keeper alongside
+  `service_root_contract_invariants_test.go`.
 - When global named-factory guidance changes, update its authored
   `contracts/cli/commands.json` records and the task-oriented guidance in
   `docs/reference/authoring-factories.md` plus `config.md`; do not restore
@@ -2324,6 +2370,7 @@ response-stream output.
   flows even when backend runtime validation already accepts the factory.
 - Managed-runtime invocation readiness gating and direct invocation policy live in `pkg/models/service/invoke.go`; the canonical service consumes neutral `pkg/models/host.Host.InspectReadiness` snapshots, projects public readiness through `pkg/transports/mapping/managed_runtime_invocation.go`, and owns invocation failure classification and readiness logs. Stable provider command identity lives in `pkg/models/provider`; worker and model invocation exchange `pkg/workers/execution` requests, results, provider sessions, and normalized failures, while `pkg/workers/diagnostics` owns the safe generated projection. `pkg/wire/production.go` supplies the active-runtime reader, process model host, assets, logger, clock, metrics, invocation executor builder, and runner identity directly; `FactoryService` and `runtimehost.Host` only retain compatibility forwarding/composition seams and are never passed into the model family. Factory worker execution routes through `pkg/models/host/execution.go` when a process-wide host is configured, otherwise through the local manager fallback. Process-wide local-runtime ownership and lease boundaries belong in `pkg/models/host`; keep `pkg/models/local` as the managed-runtime catalog compatibility projection layer. See `docs/architecture/model-host.md`.
 - When a shared merge introduces a backend package-coverage floor that the reviewed head no longer reaches, use the failing CI profile's exact reported value to make the smallest manifest adjustment; do not run the manifest updater against the whole repository because it can ratchet unrelated package floors.
+- After folding invocation-time policy into `internal/services/invocation_policy`, add nested owner packages to both `go-unit-coverage-package-minimums.json` and `go-functional-coverage-package-minimums.json`. Reset transitional top-level policy shim unit floors to `0.00` when unit tests still execute shim statements; use measurement exceptions in the functional manifest when the functional profile has no measurable shim statements (minimum `0.00` alone fails `gocoveragecheck` when `totalStatements` is zero).
 - Functional event-leak assertions must target the injected sensitive fixture, not generic temporary-directory fragments: root-process event payloads legitimately include the harness's factory source and working-directory paths.
 - After a canonical CLI-family cutover shrinks a package (for example
   `pkg/transports/cli/mcp` or Models

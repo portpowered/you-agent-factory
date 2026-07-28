@@ -979,22 +979,7 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/guards_batch/cascading_failure_test.go",
-      "target": "guards_batch"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/guards_batch/concurrency_limit_long_test.go",
-      "target": "guards_batch"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/guards_batch/dependency_terminal_test.go",
-      "target": "guards_batch"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/guards_batch/dependency_tracking_test.go",
       "target": "guards_batch"
     },
     {
@@ -1249,42 +1234,7 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/cli_factory_prompt_run_smoke_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/cli_named_deep_research_smoke_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/smoke/cli_named_goal_invocation_parity_smoke_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/cli_named_goal_operator_controls_smoke_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/cli_named_goal_routing_smoke_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/cli_named_goal_run_smoke_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/cli_named_quorum_invocation_smoke_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/cli_named_review_invocation_smoke_test.go",
       "target": "smoke"
     },
     {
@@ -1319,16 +1269,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/service_config_override_alignment_long_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/service_config_override_alignment_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/smoke/service_lifecycle_smoke_long_test.go",
       "target": "smoke"
     },
@@ -1340,11 +1280,6 @@
     {
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/smoke/stateless_loaded_config_smoke_long_test.go",
-      "target": "smoke"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/smoke/verify_fast_command_smoke_test.go",
       "target": "smoke"
     },
     {
@@ -2049,32 +1984,32 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/content_url.go",
+      "filePath": "pkg/services/work/content_contract.go",
       "target": "ContentURLAndFileConflictError"
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/content_url.go",
+      "filePath": "pkg/services/work/content_contract.go",
       "target": "FilesystemPathToContentURL"
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/content_url.go",
+      "filePath": "pkg/services/work/content_contract.go",
       "target": "NormalizeFileBackedContent"
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/content_url.go",
+      "filePath": "pkg/services/work/content_contract.go",
       "target": "NormalizeFileBackedContentPart"
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/content_url.go",
+      "filePath": "pkg/services/work/content_contract.go",
       "target": "ResolveDispatchContentURL"
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/content_url.go",
+      "filePath": "pkg/services/work/content_contract.go",
       "target": "ValidateContentURL"
     },
     {
@@ -2209,28 +2144,18 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/query_list.go",
+      "filePath": "pkg/services/work/read_contract.go",
       "target": "NewListRequestPreparation"
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/query_list.go",
+      "filePath": "pkg/services/work/read_contract.go",
       "target": "NormalizeList"
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/query_list.go",
+      "filePath": "pkg/services/work/read_contract.go",
       "target": "ValidWorkStateType"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/query_select.go",
-      "target": "NewSelection"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/work/query_select.go",
-      "target": "ValidateSelection"
     },
     {
       "rule": "service-root-exported-function",
@@ -2775,7 +2700,7 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/work",
-      "target": "pkg/services/work/content_contract.go:ContentHTTPDoer,pkg/services/work/content_contract.go:ContentMaterializer,pkg/services/work/content_contract.go:ContentTemporaryFile,pkg/services/work/content_staging.go:ContentStagingClock,pkg/services/work/content_staging.go:ContentStagingFileSystem,pkg/services/work/content_staging.go:ContentStagingRandom,pkg/services/work/content_staging.go:ContentStagingService,pkg/services/work/contracts.go:InvocationWorldStateProvider,pkg/services/work/file_inputs.go:FileSource,pkg/services/work/invocation_input_preparation.go:InvocationInputPreparation,pkg/services/work/query_list.go:ListRequestPreparation,pkg/services/work/request_codec.go:FactoryRequestBatchPreparation,pkg/services/work/request_preparation.go:ContentPreparation,pkg/services/work/request_preparation.go:RequestPreparationService,pkg/services/work/service_contract.go:FileSubmissionService,pkg/services/work/service_contract.go:Runtime,pkg/services/work/service_contract.go:RuntimeResolver,pkg/services/work/service_contract.go:Service,pkg/services/work/visualization.go:VisualizationFileSystem"
+      "target": "pkg/services/work/content_contract.go:ContentHTTPDoer,pkg/services/work/content_contract.go:ContentMaterializer,pkg/services/work/content_contract.go:ContentTemporaryFile,pkg/services/work/content_staging_contract.go:ContentStagingClock,pkg/services/work/content_staging_contract.go:ContentStagingFileSystem,pkg/services/work/content_staging_contract.go:ContentStagingRandom,pkg/services/work/content_staging_contract.go:ContentStagingService,pkg/services/work/contracts.go:InvocationWorldStateProvider,pkg/services/work/file_inputs.go:FileSource,pkg/services/work/invocation_input_preparation.go:InvocationInputPreparation,pkg/services/work/read_contract.go:ListRequestPreparation,pkg/services/work/request_codec.go:FactoryRequestBatchPreparation,pkg/services/work/request_preparation.go:ContentPreparation,pkg/services/work/request_preparation.go:RequestPreparationService,pkg/services/work/service_contract.go:FileSubmissionService,pkg/services/work/service_contract.go:Runtime,pkg/services/work/service_contract.go:RuntimeResolver,pkg/services/work/service_contract.go:Service,pkg/services/work/visualization.go:VisualizationFileSystem"
     },
     {
       "rule": "service-root-interface-count",
@@ -3099,11 +3024,6 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/exhaustiontests",
-      "target": "pkg/services/factory_runtime"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_runtime/internal/services/orchestration/javascript",
       "target": "pkg/services/factory_runtime/internal/services/orchestration"
     },
@@ -3135,11 +3055,6 @@
     {
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_runtime/testdata",
-      "target": "pkg/services/factory_runtime"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_runtime/testkit",
       "target": "pkg/services/factory_runtime"
     },
     {
@@ -3211,16 +3126,6 @@
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/recordings/service",
       "target": "pkg/services/recordings"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/work/service",
-      "target": "pkg/services/work"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/work/stateaccessrecordings",
-      "target": "pkg/services/work"
     },
     {
       "rule": "service-root-unexpected-directory",

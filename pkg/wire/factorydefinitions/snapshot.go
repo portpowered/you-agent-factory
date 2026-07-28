@@ -2,7 +2,6 @@ package factorydefinitions
 
 import (
 	contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 )
 
@@ -27,7 +26,7 @@ func FactorySnapshotCapturer() contracts.FactorySnapshotCapturer {
 // FactorySnapshotDirectoryLoader composes authored Factory loading and
 // snapshot capture for Recordings import paths.
 func FactorySnapshotDirectoryLoader(
-	loader *factoryloading.Loader,
+	loader *factorydefinitionswire.Loader,
 ) contracts.FactorySnapshotDirectoryLoader {
 	return factorydefinitionswire.FactorySnapshotDirectoryLoader(loader)
 }

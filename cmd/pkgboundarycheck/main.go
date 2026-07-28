@@ -56,9 +56,6 @@ var allowedServiceValueConstructionSymbols = map[string]map[string]struct{}{
 		"NewLogicalTargetValidationError": {},
 		"NewSessionID":                    {},
 	},
-	"github.com/portpowered/infinite-you/pkg/services/work": {
-		"NewSelection": {},
-	},
 	"github.com/portpowered/infinite-you/pkg/services/operator_settings": {
 		"EnsureLocalBackendScope": {},
 	},
@@ -105,7 +102,6 @@ var transportPrivateServiceSubpackages = []string{
 	"pkg/services/factory_sessions/internal/sessionservice",
 	"pkg/services/recordings/events",
 	"pkg/services/recordings/internal/services/canonical_ledger/events",
-	"pkg/services/work/service",
 	"pkg/services/workers/diagnostics",
 	"pkg/services/workers/executor",
 	"pkg/services/workers/provider",
@@ -183,7 +179,6 @@ var convergedServiceSubpackageRoots = map[string]string{
 	"pkg/services/recordings/artifacts":                                                "recordings",
 	"pkg/services/recordings/replay":                            "recordings",
 	"pkg/services/recordings/service":                           "recordings",
-	"pkg/services/work/service":                                 "work",
 	"pkg/services/workers/agypty":                               "workers",
 	"pkg/services/workers/execution/recording":                  "workers",
 	"pkg/services/workers/invocation":                           "workers",
