@@ -52,3 +52,12 @@ func (a *Adapter) invokeApplyDocumentUpdate(
 	}
 	return a.root.ApplyDocumentUpdate(request)
 }
+
+func (a *Adapter) invokeResolveEffective(
+	request operatorsettings.ResolveEffectiveRequest,
+) (operatorsettings.ResolveEffectiveResult, error) {
+	if a == nil || a.root == nil {
+		return operatorsettings.ResolveEffectiveResult{}, errors.New("operator settings service is required")
+	}
+	return a.root.ResolveEffective(request)
+}

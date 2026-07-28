@@ -9,14 +9,19 @@ import (
 )
 
 const (
-	operatorSettingsInvalidLoadRequestMessage    = "invalid operator settings load request"
-	operatorSettingsInvalidUpdateRequestMessage  = "invalid operator settings update request"
-	operatorSettingsDocumentMalformedMessage     = "operator document is malformed"
-	operatorSettingsDocumentNotFoundMessage      = "operator document not found"
-	operatorSettingsDocumentUnsupportedMessage   = "operator document update is unsupported"
-	operatorSettingsDocumentConflictMessage      = "operator document persist conflict"
-	operatorSettingsErrorCodeDocumentUnsupported = "OPERATOR_DOCUMENT_UNSUPPORTED"
-	operatorSettingsErrorCodeDocumentConflict    = "OPERATOR_DOCUMENT_CONFLICT"
+	operatorSettingsInvalidLoadRequestMessage           = "invalid operator settings load request"
+	operatorSettingsInvalidUpdateRequestMessage         = "invalid operator settings update request"
+	operatorSettingsDocumentMalformedMessage            = "operator document is malformed"
+	operatorSettingsDocumentNotFoundMessage             = "operator document not found"
+	operatorSettingsDocumentUnsupportedMessage          = "operator document update is unsupported"
+	operatorSettingsDocumentConflictMessage             = "operator document persist conflict"
+	operatorSettingsResolutionInvalidInputMessage       = "operator effective resolution input is invalid"
+	operatorSettingsResolutionUnsupportedOverrideMessage = "operator effective resolution override is unsupported"
+	operatorSettingsResolutionConflictMessage           = "operator effective resolution conflict"
+	operatorSettingsErrorCodeDocumentUnsupported        = "OPERATOR_DOCUMENT_UNSUPPORTED"
+	operatorSettingsErrorCodeDocumentConflict             = "OPERATOR_DOCUMENT_CONFLICT"
+	operatorSettingsErrorCodeResolutionUnsupportedOverride = "OPERATOR_RESOLUTION_UNSUPPORTED_OVERRIDE"
+	operatorSettingsErrorCodeResolutionConflict         = "OPERATOR_RESOLUTION_CONFLICT"
 )
 
 // RootErrorResponse maps typed Operator Settings root failures and adapter
@@ -43,6 +48,12 @@ func RootErrorResponse(err error) (int, factoryapi.ErrorResponse, bool) {
 		return unsupportedDocumentErrorResponse()
 	case errors.Is(err, operatorsettings.ErrDocumentConflict):
 		return conflictErrorResponse(operatorSettingsDocumentConflictMessage)
+	case errors.Is(err, operatorsettings.ErrResolutionInvalidInput):
+		return badRequestErrorResponse(operatorSettingsResolutionInvalidInputMessage)
+	case errors.Is(err, operatorsettings.ErrResolutionUnsupportedOverride):
+		return unsupportedResolutionOverrideErrorResponse()
+	case errors.Is(err, operatorsettings.ErrResolutionConflict):
+		return resolutionConflictErrorResponse()
 	default:
 		return 0, factoryapi.ErrorResponse{}, false
 	}
@@ -77,5 +88,21 @@ func conflictErrorResponse(message string) (int, factoryapi.ErrorResponse, bool)
 		Message: message,
 		Family:  factoryapi.ErrorFamilyConflict,
 		Code:    factoryapi.ErrorResponseCode(operatorSettingsErrorCodeDocumentConflict),
+	}, true
+}
+
+func unsupportedResolutionOverrideErrorResponse() (int, factoryapi.ErrorResponse, bool) {
+	return http.StatusBadRequest, factoryapi.ErrorResponse{
+		Message: operatorSettingsResolutionUnsupportedOverrideMessage,
+		Family:  factoryapi.ErrorFamilyBadRequest,
+		Code:    factoryapi.ErrorResponseCode(operatorSettingsErrorCodeResolutionUnsupportedOverride),
+	}, true
+}
+
+func resolutionConflictErrorResponse() (int, factoryapi.ErrorResponse, bool) {
+	return http.StatusConflict, factoryapi.ErrorResponse{
+		Message: operatorSettingsResolutionConflictMessage,
+		Family:  factoryapi.ErrorFamilyConflict,
+		Code:    factoryapi.ErrorResponseCode(operatorSettingsErrorCodeResolutionConflict),
 	}, true
 }

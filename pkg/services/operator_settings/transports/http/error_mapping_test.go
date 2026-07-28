@@ -153,6 +153,94 @@ func TestRootErrorResponse_DistinguishesMalformedAndNotFoundOutcomes(t *testing.
 	}
 }
 
+func TestRootErrorResponse_MapsResolutionInvalidInputFailures(t *testing.T) {
+	t.Parallel()
+
+	status, response, ok := operatorsettingshttp.SettingsRootErrorResponseForTest(
+		operatorsettings.ErrResolutionInvalidInput,
+	)
+	if !ok {
+		t.Fatal("RootErrorResponse = not handled, want typed invalid input")
+	}
+	if status != http.StatusBadRequest ||
+		response.Family != factoryapi.ErrorFamilyBadRequest ||
+		response.Code != factoryapi.ErrorResponseCodeBADREQUEST ||
+		response.Message != "operator effective resolution input is invalid" {
+		t.Fatalf("RootErrorResponse = %d %#v, want invalid resolution input", status, response)
+	}
+}
+
+func TestRootErrorResponse_MapsResolutionUnsupportedOverrideFailures(t *testing.T) {
+	t.Parallel()
+
+	status, response, ok := operatorsettingshttp.SettingsRootErrorResponseForTest(
+		typedResolutionFailure(operatorsettings.ResolutionFailureKindUnsupportedOverride),
+	)
+	if !ok {
+		t.Fatal("RootErrorResponse = not handled, want typed unsupported override")
+	}
+	if status != http.StatusBadRequest ||
+		response.Family != factoryapi.ErrorFamilyBadRequest ||
+		response.Code != factoryapi.ErrorResponseCode("OPERATOR_RESOLUTION_UNSUPPORTED_OVERRIDE") ||
+		response.Message != "operator effective resolution override is unsupported" {
+		t.Fatalf("RootErrorResponse = %d %#v, want unsupported override", status, response)
+	}
+}
+
+func TestRootErrorResponse_MapsResolutionConflictFailures(t *testing.T) {
+	t.Parallel()
+
+	status, response, ok := operatorsettingshttp.SettingsRootErrorResponseForTest(
+		typedResolutionFailure(operatorsettings.ResolutionFailureKindConflict),
+	)
+	if !ok {
+		t.Fatal("RootErrorResponse = not handled, want typed resolution conflict")
+	}
+	if status != http.StatusConflict ||
+		response.Family != factoryapi.ErrorFamilyConflict ||
+		response.Code != factoryapi.ErrorResponseCode("OPERATOR_RESOLUTION_CONFLICT") ||
+		response.Message != "operator effective resolution conflict" {
+		t.Fatalf("RootErrorResponse = %d %#v, want resolution conflict", status, response)
+	}
+}
+
+func TestRootErrorResponse_DistinguishesResolutionFailureOutcomes(t *testing.T) {
+	t.Parallel()
+
+	invalidStatus, invalidResponse, invalidOK := operatorsettingshttp.SettingsRootErrorResponseForTest(
+		operatorsettings.ErrResolutionInvalidInput,
+	)
+	unsupportedStatus, unsupportedResponse, unsupportedOK := operatorsettingshttp.SettingsRootErrorResponseForTest(
+		operatorsettings.ErrResolutionUnsupportedOverride,
+	)
+	conflictStatus, conflictResponse, conflictOK := operatorsettingshttp.SettingsRootErrorResponseForTest(
+		operatorsettings.ErrResolutionConflict,
+	)
+	if !invalidOK || !unsupportedOK || !conflictOK {
+		t.Fatal("RootErrorResponse must map all resolution failure kinds")
+	}
+	if invalidResponse.Message == unsupportedResponse.Message ||
+		invalidResponse.Code == unsupportedResponse.Code {
+		t.Fatalf(
+			"invalid input (%d %#v) and unsupported override (%d %#v) must be distinguishable",
+			invalidStatus,
+			invalidResponse,
+			unsupportedStatus,
+			unsupportedResponse,
+		)
+	}
+	if unsupportedResponse.Message == conflictResponse.Message ||
+		unsupportedResponse.Code == conflictResponse.Code {
+		t.Fatalf(
+			"unsupported override (%d %#v) and conflict (%d %#v) must be distinguishable",
+			unsupportedStatus,
+			unsupportedResponse,
+			conflictStatus,
+			conflictResponse,
+		)
+	}
+}
+
 func TestRootErrorResponse_ReturnsFalseForNilAndUnmappedFailures(t *testing.T) {
 	t.Parallel()
 
@@ -171,5 +259,13 @@ func typedDocumentFailure(kind operatorsettings.DocumentFailureKind) error {
 		Kind:    kind,
 		Message: "fixture",
 		Path:    "/tmp/config.json",
+	}
+}
+
+func typedResolutionFailure(kind operatorsettings.ResolutionFailureKind) error {
+	return operatorsettings.ResolutionFailure{
+		Kind:    kind,
+		Message: "fixture",
+		Field:   "workerModelProvider",
 	}
 }
