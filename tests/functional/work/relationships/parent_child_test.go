@@ -3,6 +3,7 @@ package relationships
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -26,6 +27,14 @@ const (
 	parentChildLineageParent    = "parent"
 	parentChildLineageChild     = "child"
 	parentChildLineageWorkType  = "task"
+
+	parentChildFailureRequestID = "request-parent-child-failure"
+	parentChildFailureParentID  = "parent-story-set-id"
+	parentChildFailureChildID   = "child-story-id"
+	parentChildFailureParent    = "story-set"
+	parentChildFailureChild     = "story-child"
+	parentChildFailureParentType = "story-set"
+	parentChildFailureChildType  = "story"
 )
 
 // TestParentChildLineageSurvivesDispatchAndReplay proves through public CLI
@@ -128,6 +137,96 @@ func TestParentChildLineageSurvivesDispatchAndReplay(t *testing.T) {
 	assertParentChildRelationOnWork(t, shown, parentChildLineageParentID)
 }
 
+// TestChildFailureProjectsToDocumentedParentView proves through public CLI
+// batch submission and Work inspection that when a PARENT_CHILD child reaches a
+// failed terminal state, the documented parent-aware failure projection
+// (ANY_CHILD_FAILED) surfaces on the parent Work as a failed customer-visible
+// state while PARENT_CHILD lineage remains observable on the child.
+func TestChildFailureProjectsToDocumentedParentView(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "submitted_parent_child_filewatcher"))
+
+	provider := testutil.NewMockWorkerMapProviderWithDefault(map[string][]testutil.WorkResponse{
+		"story-worker": {
+			{Error: errors.New("child story processing failed")},
+		},
+		"story-set-failure-handler": {
+			{Content: "Story set failed. COMPLETE"},
+		},
+	})
+
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Edges: serviceedges.Edges{
+			ProviderOverride: provider,
+		},
+	})
+	defer server.Stop(t)
+
+	baseURL := server.URL()
+	binaryPath := buildParentChildCLIBinary(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	batchJSON := fmt.Sprintf(
+		`{"requestId":%q,"type":"FACTORY_REQUEST_BATCH","works":[{"name":%q,"workId":%q,"workTypeName":%q,"state":"waiting","payload":{"title":"release story set"}},{"name":%q,"workId":%q,"workTypeName":%q,"payload":{"title":"failing child story"}}],"relations":[{"type":"PARENT_CHILD","sourceWorkName":%q,"targetWorkName":%q}]}`,
+		parentChildFailureRequestID,
+		parentChildFailureParent,
+		parentChildFailureParentID,
+		parentChildFailureParentType,
+		parentChildFailureChild,
+		parentChildFailureChildID,
+		parentChildFailureChildType,
+		parentChildFailureChild,
+		parentChildFailureParent,
+	)
+	submitOut, err := runParentChildCLI(ctx, binaryPath, dir, baseURL,
+		"--json",
+		"submit", "batch",
+		batchJSON,
+	)
+	if err != nil {
+		t.Fatalf("you submit batch: %v\noutput:\n%s", err, submitOut)
+	}
+	assertParentChildFailureBatchSubmitAcknowledgment(t, submitOut, parentChildFailureRequestID)
+
+	support.WaitForTerminalStatus(t, baseURL, 15*time.Second)
+
+	listed := support.ListDefaultSessionWork(t, baseURL)
+	assertParentChildFailureProjectionInWorkListing(t, listed, parentChildFailureParentID, parentChildFailureChildID)
+
+	parentShown, err := runParentChildWorkShowCLIJSON(
+		t,
+		ctx,
+		binaryPath,
+		dir,
+		baseURL,
+		parentChildFailureParentID,
+	)
+	if err != nil {
+		t.Fatalf("you work show %s: %v", parentChildFailureParentID, err)
+	}
+	assertParentChildFailureOnWork(t, parentShown, parentChildFailureParentType, "failed")
+
+	childShown, err := runParentChildWorkShowCLIJSON(
+		t,
+		ctx,
+		binaryPath,
+		dir,
+		baseURL,
+		parentChildFailureChildID,
+	)
+	if err != nil {
+		t.Fatalf("you work show %s: %v", parentChildFailureChildID, err)
+	}
+	assertParentChildFailureOnWork(t, childShown, parentChildFailureChildType, "failed")
+	assertParentChildRelationOnWork(t, childShown, parentChildFailureParentID)
+
+	events := server.GetFactoryEvents(t)
+	assertParentChildFailureProjectionInFactoryEvents(t, events, parentChildFailureRequestID, parentChildFailureChildID)
+}
+
 func assertParentChildBatchSubmitAcknowledgment(t *testing.T, output []byte, requestID string) {
 	t.Helper()
 
@@ -143,6 +242,121 @@ func assertParentChildBatchSubmitAcknowledgment(t *testing.T, output []byte, req
 		if !strings.Contains(text, marker) {
 			t.Fatalf("submit batch output missing %q:\n%s", marker, text)
 		}
+	}
+}
+
+func assertParentChildFailureBatchSubmitAcknowledgment(t *testing.T, output []byte, requestID string) {
+	t.Helper()
+
+	text := string(output)
+	for _, marker := range []string{
+		`"requestId":` + jsonStringLiteral(requestID),
+		`"traceId":`,
+		`"workCount":2`,
+		parentChildFailureParent,
+		parentChildFailureChild,
+		parentChildFailureParentType,
+		parentChildFailureChildType,
+	} {
+		if !strings.Contains(text, marker) {
+			t.Fatalf("submit batch output missing %q:\n%s", marker, text)
+		}
+	}
+}
+
+func assertParentChildFailureProjectionInWorkListing(
+	t *testing.T,
+	listed factoryapi.ListWorkResponse,
+	parentWorkID, childWorkID string,
+) {
+	t.Helper()
+
+	if !support.HasWorkAtCustomerState(
+		listed,
+		parentWorkID,
+		support.WorkCustomerLocation(parentChildFailureParentType, "failed"),
+	) {
+		t.Fatalf(
+			"public work list missing parent %q at %s:failed: %#v",
+			parentWorkID,
+			parentChildFailureParentType,
+			listed.Results,
+		)
+	}
+	if !support.HasWorkAtCustomerState(
+		listed,
+		childWorkID,
+		support.WorkCustomerLocation(parentChildFailureChildType, "failed"),
+	) {
+		t.Fatalf(
+			"public work list missing child %q at %s:failed: %#v",
+			childWorkID,
+			parentChildFailureChildType,
+			listed.Results,
+		)
+	}
+	if got := support.CountWorkAtCustomerState(
+		listed,
+		support.WorkCustomerLocation(parentChildFailureParentType, "waiting"),
+	); got != 0 {
+		t.Fatalf("parent still at waiting = %d, want 0 after ANY_CHILD_FAILED projection", got)
+	}
+}
+
+func assertParentChildFailureOnWork(t *testing.T, item factoryapi.Work, workTypeName, stateName string) {
+	t.Helper()
+
+	if item.WorkTypeName == nil || *item.WorkTypeName != workTypeName {
+		t.Fatalf("work type = %q, want %q: %#v", support.StringPointerValue(item.WorkTypeName), workTypeName, item)
+	}
+	if item.State == nil || item.State.Name != stateName {
+		t.Fatalf("work state = %#v, want %q for %q", item.State, stateName, workTypeName)
+	}
+}
+
+func assertParentChildFailureProjectionInFactoryEvents(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	_ string,
+	_ string,
+) {
+	t.Helper()
+
+	childFailureIndex := -1
+	parentFailureIndex := -1
+
+	for i, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
+			continue
+		}
+		payload, err := event.Payload.AsDispatchResponseEventPayload()
+		if err != nil {
+			t.Fatalf("decode DISPATCH_RESPONSE event: %v", err)
+		}
+		switch payload.TransitionId {
+		case "process-story":
+			if payload.Outcome == factoryapi.WorkOutcomeFailed {
+				childFailureIndex = i
+			}
+		case "fail-story-set-from-child":
+			if payload.Outcome == factoryapi.WorkOutcomeAccepted {
+				parentFailureIndex = i
+			}
+		}
+	}
+
+	if childFailureIndex == -1 {
+		t.Fatal("Factory Event history missing failed child dispatch completion for process-story")
+	}
+	if parentFailureIndex == -1 {
+		t.Fatal("Factory Event history missing parent ANY_CHILD_FAILED dispatch completion for fail-story-set-from-child")
+	}
+	if parentFailureIndex <= childFailureIndex {
+		t.Fatalf(
+			"parent failure dispatch index %d should be after child failure index %d",
+			parentFailureIndex,
+			childFailureIndex,
+		)
 	}
 }
 
