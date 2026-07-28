@@ -38,6 +38,8 @@ func NewService(
 	listEffective factorydefinitions.EffectiveFactoryCatalogOperation,
 	packagedCatalog factorydefinitions.PackagedFactoryCatalogOperations,
 	packagedInstaller factorydefinitions.PackagedFactoryInstallationOperations,
+	requiredToolChecker factorydefinitions.RequiredToolChecker,
+	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
 ) (factorydefinitions.Service, error) {
 	if err := validateDependencies(
 		sessionHost,
@@ -53,6 +55,8 @@ func NewService(
 		listEffective,
 		packagedCatalog,
 		packagedInstaller,
+		requiredToolChecker,
+		orchestratorValidator,
 	); err != nil {
 		return nil, err
 	}
@@ -71,6 +75,7 @@ func NewService(
 		clock,
 		versionFileSystem,
 		validator,
+		loader.LoadSourceFromCanonicalJSON,
 		func(
 			factoryDir string,
 			workstationLoader factorydefinitions.WorkstationLoader,
@@ -95,6 +100,8 @@ func NewService(
 		namedFactoryCatalogFileSystem,
 		packagedCatalog,
 		packagedInstaller,
+		requiredToolChecker,
+		orchestratorValidator,
 	)
 	if definitions == nil {
 		return nil, fmt.Errorf("construct Factory Definitions: implementation rejected its dependencies")
@@ -124,6 +131,8 @@ func validateDependencies(
 	listEffective factorydefinitions.EffectiveFactoryCatalogOperation,
 	packagedCatalog factorydefinitions.PackagedFactoryCatalogOperations,
 	packagedInstaller factorydefinitions.PackagedFactoryInstallationOperations,
+	requiredToolChecker factorydefinitions.RequiredToolChecker,
+	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
 ) error {
 	if sessionHost == nil {
 		return fmt.Errorf("construct Factory Definitions: session host is required")
@@ -166,6 +175,12 @@ func validateDependencies(
 	}
 	if packagedInstaller.Install == nil {
 		return fmt.Errorf("construct Factory Definitions: packaged Factory installer is required")
+	}
+	if requiredToolChecker == nil {
+		return fmt.Errorf("construct Factory Definitions: required tool checker is required")
+	}
+	if orchestratorValidator == nil {
+		return fmt.Errorf("construct Factory Definitions: orchestrator validator is required")
 	}
 	return nil
 }
