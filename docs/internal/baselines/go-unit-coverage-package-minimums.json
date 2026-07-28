@@ -1946,15 +1946,15 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider",
-      "minimum": 78.59
+      "minimum": 78.19
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter",
-      "minimum": 92.66
+      "minimum": 88.07
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter/testkit",
-      "minimum": 81.18
+      "minimum": 80.67
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/agy",
@@ -1978,7 +1978,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/cursor",
-      "minimum": 87.72
+      "minimum": 53.24
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/gemini",

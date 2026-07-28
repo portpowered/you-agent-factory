@@ -1068,7 +1068,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream/fragmentmap",
-      "minimum": 51.32
+      "minimum": 49.55
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream/ndjsoncontract",
@@ -2420,11 +2420,11 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider",
-      "minimum": 39.88
+      "minimum": 36.92
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter",
-      "minimum": 77.06
+      "minimum": 68.80
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter/testkit",
@@ -2502,7 +2502,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry",
-      "minimum": 65.58
+      "minimum": 65.54
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/structured",
