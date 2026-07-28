@@ -1479,6 +1479,11 @@
     },
     {
       "rule": "functional-test-unclassified-domain",
+      "filePath": "tests/functional/factory_definitions/transports/cli/named_lifecycle/named_lifecycle_test.go",
+      "target": "factory_definitions"
+    },
+    {
+      "rule": "functional-test-unclassified-domain",
       "filePath": "tests/functional/internal/restclient/adapter.go",
       "target": "internal"
     },
