@@ -584,6 +584,14 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCLISubmitBatchContractHarnessExecutesThroughRootBuildProcess` verifies
     the Work-owned CLI batch contract cell uses root.BuildProcess + edges.Edges.
 
+- [x] `tests/functional/work/transports/cli/submit/unary_contract/unary_contract_test.go`
+  - `TestCLISubmitUnaryFileAndStdinReachWork` verifies unary submit from file and
+    stdin reaches Work on a running Factory Session.
+  - `TestCLISubmitUnaryDefaultAndExplicitSessionTargeting` verifies default and
+  explicit session targeting for unary submit.
+  - `TestCLISubmitUnaryStructuredFailurePreservesPublicMessage` verifies
+    structured failure surfaces a public CLI message.
+
 - [x] `tests/functional/work/recordings/recordings_read_test.go`
   - `TestRecordingsBackedWorkReadsUseRecordingsRootContract`.
   - `TestGetWorkFromRecordingsRootUsesRecordingsServiceRoot`.
