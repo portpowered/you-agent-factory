@@ -4128,6 +4128,24 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/work/internal/services/content_staging",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/services/content_staging/internal/service",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/services/content_staging/wire",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/work/internal/services/state_access",
       "disposition": "retain",
       "destination": "work",
@@ -4153,6 +4171,12 @@
     },
     {
       "packagePath": "pkg/services/work/service",
+      "disposition": "retain",
+      "destination": "work",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/work/wire",
       "disposition": "retain",
       "destination": "work",
       "destinationKind": "owner"
