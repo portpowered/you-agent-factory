@@ -143,6 +143,7 @@ var convergedServiceSubpackageRoots = map[string]string{
 	"pkg/services/factory_runtime/runtime":                      "factory_runtime",
 	"pkg/services/factory_runtime/runtimecontract":              "factory_runtime",
 	"pkg/services/factory_runtime/scheduler":                    "factory_runtime",
+	"pkg/services/factory_runtime/service":                      "factory_runtime",
 	"pkg/services/factory_runtime/service/host":                 "factory_runtime",
 	"pkg/services/factory_runtime/subsystems":                   "factory_runtime",
 	"pkg/services/factory_runtime/throttle":                     "factory_runtime",
