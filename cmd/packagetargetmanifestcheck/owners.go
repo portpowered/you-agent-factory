@@ -102,13 +102,6 @@ func isCommittedNestedSubservice(owner, subservice string) bool {
 	return slices.Contains(allowed, subservice)
 }
 
-// isTransitionalMoveNestedSubservice marks committed nested subservices that
-// still live under transitional public paths and must stay move→owner/internal
-// until their IMP cutover proof lands (ownership inventory uses the same rule).
-func isTransitionalMoveNestedSubservice(owner, subservice string) bool {
-	return owner == "factory_definitions" && subservice == "snapshots_portability"
-}
-
 // mapCommittedOwnerPackage maps one inventory path that belongs to a committed
 // product owner (including Providers extraction sources under workers) to its
 // plan-tree destination. Returns ok=false for non-owner residuals (edges,
@@ -200,9 +193,6 @@ func mapKnownNestedOwnerPackage(owner, packagePath, rest string) (PackageMapping
 		sub := strings.TrimPrefix(rest, "internal/services/")
 		subservice, _, _ := strings.Cut(sub, "/")
 		if subservice != "" && isCommittedNestedSubservice(owner, subservice) {
-			if isTransitionalMoveNestedSubservice(owner, subservice) {
-				return moveOrRetainMapping(packagePath, owner+"/internal", DispositionMove), true
-			}
 			return moveOrRetainMapping(packagePath, owner+"/internal/services/"+subservice, DispositionRetain), true
 		}
 	}
@@ -345,7 +335,7 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 		{exact: "namedpaths", prefix: "namedpaths/", dest: "factory_definitions/internal/services/catalog"},
 		{exact: "persistence", prefix: "persistence/", dest: "factory_definitions/internal/services/catalog"},
 		{exact: "resource", prefix: "resource/", dest: "factory_definitions/internal/services/catalog"},
-		{exact: "definition", prefix: "definition/", dest: "factory_definitions/internal/services/compilation"},
+		{exact: "definition", prefix: "definition/", dest: "factory_definitions/internal"},
 		{exact: "loading", prefix: "loading/", dest: "factory_definitions/internal/services/compilation"},
 		{exact: "loadedsource", prefix: "loadedsource/", dest: "factory_definitions/internal/services/compilation"},
 		{exact: "validation", prefix: "validation/", dest: "factory_definitions/internal/services/validation"},

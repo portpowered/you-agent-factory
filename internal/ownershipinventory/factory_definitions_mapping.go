@@ -21,7 +21,7 @@ var factoryDefinitionsMoveRules = []factoryDefinitionsMoveRule{
 	{exact: "namedpaths", prefix: "namedpaths/", subservice: "catalog"},
 	{exact: "persistence", prefix: "persistence/", subservice: "catalog"},
 	{exact: "resource", prefix: "resource/", subservice: "catalog"},
-	{exact: "definition", prefix: "definition/", subservice: "compilation"},
+	{exact: "definition", prefix: "definition/"},
 	{exact: "loading", prefix: "loading/", subservice: "compilation"},
 	{exact: "loadedsource", prefix: "loadedsource/", subservice: "compilation"},
 	{exact: "validation", prefix: "validation/", subservice: "validation"},
@@ -87,6 +87,8 @@ func isFactoryDefinitionsCanonicalRetain(rest string) bool {
 	case strings.HasPrefix(rest, "internal/services/compilation"):
 		return true
 	case strings.HasPrefix(rest, "internal/services/distribution"):
+		return true
+	case strings.HasPrefix(rest, "internal/services/snapshots_portability"):
 		return true
 	case strings.HasPrefix(rest, "internal/contracts"):
 		return true

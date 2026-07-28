@@ -22,6 +22,22 @@ func TestMapPackageFactoryDefinitionsMoveDestinations(t *testing.T) {
 			retainOwner: "factory_definitions",
 		},
 		{
+			path: "pkg/services/factory_definitions/definition",
+			wantMove: &ownershipinventory.PackageRow{
+				PackagePath:       "pkg/services/factory_definitions/definition",
+				Disposition:       ownershipinventory.DispositionMove,
+				Destination:       "factory_definitions",
+				DestinationKind:   ownershipinventory.DestinationKindOwner,
+				Successor:         "pkg/services/factory_definitions/internal",
+				DeletionCondition: "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof",
+			},
+		},
+		{
+			path:        "pkg/services/factory_definitions/internal/services/snapshots_portability/wire",
+			wantRetain:  true,
+			retainOwner: "factory_definitions",
+		},
+		{
 			path:        "pkg/services/factory_definitions/wire/defaultscaffold",
 			wantRetain:  true,
 			retainOwner: "factory_definitions",
