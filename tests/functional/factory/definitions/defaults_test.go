@@ -1,6 +1,7 @@
 package definitions
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -113,6 +115,59 @@ func TestExplicitFactoryConfigOverridesGlobalDefaults(t *testing.T) {
 	support.AssertArgsContainSequence(t, call.Args, []string{"--model", factoryOverrideModel})
 }
 
+// TestSingleDiscoveredProviderIsUsedWhenNoDefaultExists proves that when no
+// operator or Factory default provider is configured and exactly one supported
+// provider is discoverable, model-backed Work dispatches through that provider.
+func TestSingleDiscoveredProviderIsUsedWhenNoDefaultExists(t *testing.T) {
+	t.Setenv(operatorsettings.EnvDefaultWorkerModelProvider, "")
+	t.Setenv(operatorsettings.EnvDefaultWorkerModel, "")
+
+	dir := support.ScaffoldFactory(t, defaultsFactoryConfig())
+	support.WriteAgentConfig(t, dir, "worker-a", `---
+type: MODEL_WORKER
+stopToken: COMPLETE
+---
+Process the input task.
+`)
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"single discovered provider when no default exists"}`))
+
+	homeDir := t.TempDir()
+	discoveredProvider := string(modelprovider.ProviderCodex)
+	codexPath := writeFixtureExecutable(t, discoveredProvider)
+	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: support.CodexSuccessStdout("Done. COMPLETE"),
+	})
+
+	_, listed := runFactoryWithOperatorHome(
+		t,
+		dir,
+		homeDir,
+		serviceedges.Edges{
+			ProviderCommandRunner: runner,
+			WorkersExecutableLocator: singleCommandExecutableLocator{
+				command: discoveredProvider,
+				path:    codexPath,
+			},
+		},
+		15*time.Second,
+	)
+
+	if got := support.CountWorkAtCustomerState(listed, "task:complete"); got != 1 {
+		t.Fatalf("completed work tokens = %d, want 1; listed=%#v", got, listed)
+	}
+	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 0 {
+		t.Fatalf("failed work tokens = %d, want 0", got)
+	}
+	if runner.CallCount() != 1 {
+		t.Fatalf("provider command runner calls = %d, want 1", runner.CallCount())
+	}
+
+	call := runner.LastRequest()
+	if call.Command != discoveredProvider {
+		t.Fatalf("command = %q, want discovered provider %q", call.Command, discoveredProvider)
+	}
+}
+
 func defaultsFactoryConfig() map[string]any {
 	return map[string]any{
 		"workTypes": []map[string]any{
@@ -191,4 +246,26 @@ func runFactoryWithOperatorHome(
 	work := support.ListDefaultSessionWork(t, baseURL)
 	daemon.Stop(t)
 	return session, work
+}
+
+type singleCommandExecutableLocator struct {
+	command string
+	path    string
+}
+
+func (l singleCommandExecutableLocator) LookPath(file string) (string, error) {
+	if file == l.command {
+		return l.path, nil
+	}
+	return "", fmt.Errorf("executable %q not found", file)
+}
+
+func writeFixtureExecutable(t *testing.T, name string) string {
+	t.Helper()
+
+	path := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(path, []byte(name+"-fixture-executable\n"), 0o755); err != nil {
+		t.Fatalf("write %s fixture executable: %v", name, err)
+	}
+	return path
 }
