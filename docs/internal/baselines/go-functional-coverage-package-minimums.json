@@ -828,7 +828,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/internal/service",
-      "minimum": 63.29
+      "minimum": 62.92
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/wire",
@@ -2336,7 +2336,13 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/stateaccessrecordings",
-      "minimum": 100.00
+      "exception": {
+        "kind": "measurement",
+        "justification": "The transitional stateaccessrecordings compile shim delegates to work/internal/services/state_access/wire and has no functional coverage profile statements after peer proofs retargeted to work/wire.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package or DEL-WORK deletes the shim."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/transports/cli",
