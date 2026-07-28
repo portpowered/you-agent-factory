@@ -1226,7 +1226,7 @@ or no longer owns overlapping deletion leases:
 | `CLN-DEF-FOLD-SNAPSHOTS` | `pss-cln-def-fold-snapshots` | merged PR #1613; `internal/services/snapshots_portability` |
 | `CLN-DEF-FOLD-DISTRIBUTION` | `pss-cln-def-fold-distribution` | merged PR #1611; `internal/services/distribution` |
 | `CLN-DEF-FOLD-INVOCATION-POLICY` | `pss-cln-def-fold-invocation-policy` | merged PR #1615; `internal/services/invocation_policy` |
-| `DEL-DEF` (serialization) | `pss-del-def` | open PR #1603 owns `service/`, `authoredlayout/`, `clonetests/`, `definition/` until merged |
+| `DEL-DEF` (serialization) | `pss-del-def` | merged PR #1603; overlapping TOPLEVEL paths remain DEL-DEF-owned until that packet deletes them |
 
 Record the operational gate snapshot in
 `docs/internal/processes/del-def-residual-prestart-gates.json` and lock the
@@ -1234,3 +1234,11 @@ confirmation with
 `pkg/services/factory_definitions/del_def_residual_prerequisite_gate_test.go`.
 While `DEL-DEF` remains in-flight, `deletion_hold_active` is `true` and story
 002+ residual deletion or baseline burn-down must wait.
+
+## DEL-DEF-RESIDUAL baseline burn-down gates
+
+Story 003 lowers structure, ownership, and package-target baselines for the
+deleted residual transitional public packages. Lock the ledger absence proof in
+`pkg/services/factory_definitions/del_def_residual_baseline_gate_test.go` after
+`ownership-inventory.json`, `package-target-manifest.json`, and
+`package-structure-baseline.json` no longer list those deleted paths.
