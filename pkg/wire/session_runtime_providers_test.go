@@ -18,11 +18,23 @@ func (wireTestProvider) Infer(context.Context, workers.ProviderInferenceRequest)
 	return workers.InferenceResponse{}, nil
 }
 
-func TestProvideFactorySessionExecutionFactory_RespectsMockWorkersGate(t *testing.T) {
+func TestProvideFactorySessionExecutionFactory_BuildsLiveChildInvocation(t *testing.T) {
 	t.Parallel()
 
 	edges := serviceedges.Edges{
 		ProviderCommandRunner: testutil.NewProviderCommandRunner(),
+	}
+	providersService, err := provideProvidersService(edges)
+	if err != nil {
+		t.Fatalf("provideProvidersService() error = %v", err)
+	}
+	registry, err := provideProviderRegistry(edges, providersService)
+	if err != nil {
+		t.Fatalf("provideProviderRegistry() error = %v", err)
+	}
+	registryRebinder, err := provideProviderRegistryRebinder(edges)
+	if err != nil {
+		t.Fatalf("provideProviderRegistryRebinder() error = %v", err)
 	}
 	workflowFiles := provideFactoryRuntimeWorkflowSources(edges)
 	workflowHome := provideFactoryRuntimeWorkflowHome(edges)
@@ -37,13 +49,14 @@ func TestProvideFactorySessionExecutionFactory_RespectsMockWorkersGate(t *testin
 	syncWaits := provideFactorySessionSyncWaitScheduler()
 	sessionIDs := provideFactorySessionIDGenerator(edges)
 	responseEventIDs := provideFactorySessionResponseEventIDGenerator(edges)
-	invocation := provideWorkerInvocationFactory(edges)
 	invocationWithProgress := provideWorkerInvocationWithProgressFactory(edges)
 	allocator, err := provideAgyPTYAllocator(edges)
 	if err != nil {
 		t.Fatalf("provideAgyPTYAllocator() error = %v", err)
 	}
 	adaptRunner := provideWorkerCommandRunnerAdapter()
+	mockRunnerFactory := provideWorkersMockCommandRunnerFactory()
+	conductorInvocation := provideConductorInvocationWithProgressFactory(edges)
 	factory := provideFactorySessionExecutionFactory(
 		workflows,
 		provideOrchestrationJavaScriptExecution(provideFactoryRuntimeIDGenerator(edges), workflows),
@@ -52,16 +65,22 @@ func TestProvideFactorySessionExecutionFactory_RespectsMockWorkersGate(t *testin
 		syncWaits,
 		sessionIDs,
 		responseEventIDs,
-		invocation,
 		invocationWithProgress,
 		allocator,
 		adaptRunner,
+		registry,
+		registryRebinder,
+		mockRunnerFactory,
+		conductorInvocation,
 		edges,
 	)
 
 	provider := wireTestProvider{}
 	clock := platformclock.Real{}
-	for _, mockWorkersEnabled := range []bool{true, false} {
+	for _, mockWorkers := range []*workers.MockWorkersConfig{
+		nil,
+		workers.NewEmptyMockWorkersConfig(),
+	} {
 		execution, err := factory(
 			t.TempDir(),
 			factorysessions.PersistencePolicy(""),
@@ -69,13 +88,13 @@ func TestProvideFactorySessionExecutionFactory_RespectsMockWorkersGate(t *testin
 			clock,
 			nil,
 			factoryruntime.JavaScriptWorkerSettings{},
-			mockWorkersEnabled,
+			mockWorkers,
 		)
 		if err != nil {
-			t.Fatalf("factory(mockWorkersEnabled=%t) error = %v", mockWorkersEnabled, err)
+			t.Fatalf("factory(mockWorkers=%#v) error = %v", mockWorkers, err)
 		}
 		if execution == nil {
-			t.Fatalf("factory(mockWorkersEnabled=%t) returned nil execution service", mockWorkersEnabled)
+			t.Fatalf("factory(mockWorkers=%#v) returned nil execution service", mockWorkers)
 		}
 	}
 }

@@ -64,7 +64,7 @@ intentionally small enough to distribute across many agents.
   - `TestCLIInterruptedExitCode` covers cancellation/interruption.
   - `TestCLISuccessExitCode` covers normal quiescence.
 
-- [ ] `tests/functional/transport/cli/process/context_cancellation_test.go`
+- [x] `tests/functional/transport/cli/process/context_cancellation_test.go`
   - `TestCLIContextCancellationStopsExternalWork` verifies the injected
     provider process is cancelled.
   - `TestCLIContextCancellationEmitsNoSuccessResult` verifies the terminal
@@ -591,7 +591,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestCLIInvocationIsVisibleThroughAPISessionAndWorkReads`.
   - `TestAPIInvocationResultMatchesCLICompatibleFacts`.
 
-- [ ] `tests/functional/sessions/restart/logical_identity_test.go`
+- [x] `tests/functional/sessions/restart/logical_identity_test.go`
   - `TestFactorySessionRestartRemapsLiveIDToLogicalIdentity`.
   - `TestFactorySessionResumeDoesNotRepeatCompletedDispatch`.
   - `TestFactorySessionHistoryRemainsReadableAfterRestart`.
@@ -633,7 +633,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ### Packaged factories
 
-- [ ] `tests/functional/factory/packaged/catalog/discovery_test.go`
+- [x] `tests/functional/factory/packaged/catalog/discovery_test.go`
   - `TestPackagedFactoryCatalogListsEveryEmbeddedFactory` compares runtime
     discovery with the embedded package inventory.
   - `TestPackagedFactoryCatalogHasUniqueStableNames` rejects collisions.
@@ -648,7 +648,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPackagedFactoriesRejectMissingRequiredInputs` runs the package matrix.
   - `TestPackagedFactoriesNameMissingInputAndFactory` verifies diagnostics.
 
-- [ ] `tests/functional/factory/packaged/deep_research/invocation_test.go`
+- [x] `tests/functional/factory/packaged/deep_research/invocation_test.go`
   - `TestPackagedDeepResearchRequiredInputCompletes` verifies dispatch sequence
     and primary result with mock workers.
   - `TestPackagedDeepResearchOptionalInputsReachWorkers` covers overrides.

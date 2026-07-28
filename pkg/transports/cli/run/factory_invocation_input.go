@@ -1,7 +1,6 @@
 package run
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -20,6 +19,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	visualizationcli "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/runconfig"
 	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
@@ -284,9 +284,12 @@ func runFactoryInvocation(
 		invocationCfg.Output = responseStreamOutputCancelOnWriteError(cfg.Output, cancel)
 	}
 
-	streamRenderer := invocationFactoryEventRenderer(invocationCfg, presentation)
+	streamRenderer, err := invocationFactoryEventRenderer(invocationCfg, presentation)
+	if err != nil {
+		return err
+	}
 	if streamRenderer != nil {
-		defer streamRenderer.stopProgressRendering()
+		defer streamRenderer.StopProgressRendering()
 	}
 
 	var consume factorysessions.FactoryEventConsumer
@@ -442,10 +445,10 @@ func invocationResultFailure(result apisurface.FactoryInvocationResult) error {
 func writeInvocationFailure(
 	cfg RunConfig,
 	result apisurface.FactoryInvocationResult,
-	streamRenderer factoryEventRenderer,
+	streamRenderer visualizationcli.FactoryEventRenderer,
 ) error {
 	if streamRenderer != nil {
-		if err := streamRenderer.writeFinalInvocationResult(result); err != nil {
+		if err := streamRenderer.WriteFinalInvocationResult(result); err != nil {
 			return err
 		}
 	} else if cfg.JSONOutput {
@@ -459,10 +462,10 @@ func writeInvocationFailure(
 func writeInvocationSuccess(
 	cfg RunConfig,
 	result apisurface.FactoryInvocationResult,
-	streamRenderer factoryEventRenderer,
+	streamRenderer visualizationcli.FactoryEventRenderer,
 ) error {
 	if streamRenderer != nil {
-		return streamRenderer.writeFinalInvocationResult(result)
+		return streamRenderer.WriteFinalInvocationResult(result)
 	}
 	if cfg.JSONOutput {
 		return writeInvocationJSON(cfg, result)
@@ -491,46 +494,6 @@ func writeInvocationJSON(cfg RunConfig, result apisurface.FactoryInvocationResul
 	}
 	_, err = fmt.Fprintln(output, string(encoded))
 	return err
-}
-
-func factoryEventForPublicPresentation(event interfaces.FactoryEvent) (interfaces.FactoryEvent, bool) {
-	var payload any
-	decoder := json.NewDecoder(bytes.NewReader(event.Payload))
-	decoder.UseNumber()
-	if len(event.Payload) == 0 || decoder.Decode(&payload) != nil {
-		event.Payload = json.RawMessage(`{}`)
-		return event, true
-	}
-	payload = redactPrivateFactoryEventPayload(payload)
-	encoded, err := json.Marshal(payload)
-	if err != nil {
-		return interfaces.FactoryEvent{}, false
-	}
-	event.Payload = encoded
-	return event, true
-}
-
-func redactPrivateFactoryEventPayload(value any) any {
-	if list, ok := value.([]any); ok {
-		for index, child := range list {
-			list[index] = redactPrivateFactoryEventPayload(child)
-		}
-		return list
-	}
-	object, ok := value.(map[string]any)
-	if !ok {
-		return value
-	}
-	if object["schemaVersion"] == string(factorysessions.ResponseEventSchemaVersionV1) {
-		return map[string]any{}
-	}
-	for _, key := range []string{"diagnostics", "response", "providerSession", "provider_session", "providerSessionRef", "textDelta", "toolCallId", "toolCalls"} {
-		delete(object, key)
-	}
-	for key, child := range object {
-		object[key] = redactPrivateFactoryEventPayload(child)
-	}
-	return object
 }
 
 func invocationPrimaryResultText(parts []work.WorkContentPart) (string, error) {

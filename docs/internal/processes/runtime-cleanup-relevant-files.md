@@ -902,7 +902,33 @@ after the domain call returns.
 
 Cross-service Factory Runtime consumers depend on the singular root `Service`
 in `pkg/services/factory_runtime` (`interfaces.go`) plus root typed errors in
-`composition_contracts.go`. Do not publish a second peer-facing Runtime authority
+`composition_contracts.go`. Factory Sessions production packages must import only
+`pkg/services/factory_runtime` (not `factory_runtime/javascript`, `service`,
+`engine`, or other nested Runtime paths); lock this with
+`pkg/services/factory_sessions/runtime_consumer_import_boundary_test.go` and
+`cmd/pkgboundarycheck` peer-subpackage rules. Lock live control and observation
+through `pkg/services/factory_sessions/runtime_control_observation_boundary_test.go`
+(import scan plus root peer characterization),
+`pkg/services/factory_sessions/internal/services/live_runtime/control_observation_boundary_test.go`,
+and consolidated gateway proof in
+`pkg/services/factory_sessions/internal/sessionservice/runtime_control_observation_boundary_test.go`
+(with additional forwarding checks in `lifecycle_test.go`).
+Durable and JavaScript execution handoff must construct through Runtime root
+workflow, orchestration, and checkpoint contracts
+(`JavaScriptWorkflows`, `OrchestrationJavaScriptExecution`,
+`JavaScriptCheckpointSummaries`); prefer `internal/testutil/factoryruntimefixtures`
+or root-only fakes in Sessions tests instead of importing
+`factory_runtime/javascript`. Lock the execution lease with
+`pkg/services/factory_sessions/internal/execution/durable_execution_boundary_test.go`
+and production-plus-test import scanning in that package's
+`TestExecutionLeaseImportsFactoryRuntimeOnlyThroughRoot`. Session opening and
+projection must consume Runtime root observation and snapshot shapes
+(`Observation`, `StateSnapshot`, `ObserveRequest`/`ObserveResult`) through
+`pkg/services/factory_runtime` only; lock the opening/projection lease with
+`pkg/services/factory_sessions/internal/sessionprojection/opening_projection_boundary_test.go`
+(import scan plus `TestProjectionContextConstructsFromRootObservationAndSnapshot`).
+Do not publish a
+second peer-facing Runtime authority
 (hosting `Lifecycle`/`HostedInstance`, `Factory` run-loop, or
 `JavaScriptWorkflows`) for control, observation, dispatch-plan, or checkpoint
 slices. Prove each published slice with a colocated `factory_test`

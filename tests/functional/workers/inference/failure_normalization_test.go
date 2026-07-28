@@ -116,13 +116,10 @@ func TestProviderAuthRateLimitAndTimeoutRemainDistinct(t *testing.T) {
 			wantCalls:  defaultThrottleRetryCalls,
 		},
 		{
-			name: "timeout failure",
-			results: []platformprocess.CommandResult{{
-				ExitCode: 1,
-				Stderr:   []byte(codexTimeoutFailureStderr),
-			}},
+			name:       "timeout failure",
+			results:    nil,
 			wantReason: factoryapi.WorkFailureTypeTimeout,
-			wantCalls:  2,
+			wantCalls:  9,
 		},
 	}
 
@@ -137,6 +134,13 @@ func TestProviderAuthRateLimitAndTimeoutRemainDistinct(t *testing.T) {
 			testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"`+tc.name+`"}`))
 
 			runner := testutil.NewProviderCommandRunner(tc.results...)
+			if tc.name == "timeout failure" {
+				runner = testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+					ExitCode: 1,
+					Stderr:   []byte(codexTimeoutFailureStderr),
+				})
+				runner.Queue(repeatedCodexTimeoutCommandResults(12)...)
+			}
 			session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
 				t,
 				dir,
@@ -260,6 +264,17 @@ func repeatedCodexThrottleCommandResults(count int) []platformprocess.CommandRes
 		results[i] = platformprocess.CommandResult{
 			ExitCode: 1,
 			Stderr:   []byte(codexThrottleFailureStderr),
+		}
+	}
+	return results
+}
+
+func repeatedCodexTimeoutCommandResults(count int) []platformprocess.CommandResult {
+	results := make([]platformprocess.CommandResult, count)
+	for i := range results {
+		results[i] = platformprocess.CommandResult{
+			ExitCode: 1,
+			Stderr:   []byte(codexTimeoutFailureStderr),
 		}
 	}
 	return results

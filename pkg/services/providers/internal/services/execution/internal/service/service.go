@@ -3,15 +3,21 @@ package service
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 )
 
+type adapterBinding struct {
+	provider providers.Descriptor
+	attempt  execution.Attempt
+}
+
 type service struct {
 	catalog  catalog.Service
-	attempts map[providers.ID]execution.Attempt
+	adapters map[providers.ID]adapterBinding
 }
 
 var _ execution.Service = (*service)(nil)
@@ -25,12 +31,12 @@ func New(
 	if catalogService == nil {
 		return nil, fmt.Errorf("construct Providers Execution: catalog is required")
 	}
-	attempts := make(map[providers.ID]execution.Attempt, len(registrations))
+	adapters := make(map[providers.ID]adapterBinding, len(registrations))
 	for _, registration := range registrations {
 		if err := registration.Provider.Validate(); err != nil {
 			return nil, fmt.Errorf("construct Providers Execution: %w", err)
 		}
-		canonical, err := catalogService.ResolveProviderID(registration.Provider)
+		descriptor, err := catalogService.RegistrationProvider(registration.Provider)
 		if err != nil {
 			return nil, fmt.Errorf(
 				"construct Providers Execution: adapter provider %q: %w",
@@ -38,11 +44,18 @@ func New(
 				err,
 			)
 		}
-		if canonical != registration.Provider {
+		if descriptor.ID != registration.Provider {
 			return nil, fmt.Errorf(
 				"construct Providers Execution: adapter provider %q must use canonical id %q",
 				registration.Provider,
-				canonical,
+				descriptor.ID,
+			)
+		}
+		if descriptor.Availability != providers.AvailabilitySelectable {
+			return nil, fmt.Errorf(
+				"construct Providers Execution: adapter provider %q: %w",
+				registration.Provider,
+				providers.ErrProviderUnavailable,
 			)
 		}
 		if registration.Attempt == nil {
@@ -51,15 +64,18 @@ func New(
 				registration.Provider,
 			)
 		}
-		if _, exists := attempts[registration.Provider]; exists {
+		if _, exists := adapters[registration.Provider]; exists {
 			return nil, fmt.Errorf(
 				"construct Providers Execution: duplicate adapter for %q",
 				registration.Provider,
 			)
 		}
-		attempts[registration.Provider] = registration.Attempt
+		adapters[registration.Provider] = adapterBinding{
+			provider: descriptor,
+			attempt:  registration.Attempt,
+		}
 	}
-	return &service{catalog: catalogService, attempts: attempts}, nil
+	return &service{catalog: catalogService, adapters: adapters}, nil
 }
 
 func (s *service) Execute(
@@ -86,14 +102,30 @@ func (s *service) Execute(
 	if err != nil {
 		return providers.ExecuteResult{}, err
 	}
-	attempt, ok := s.attempts[resolved.Provider.ID]
+	binding, ok := s.adapters[resolved.Provider.ID]
 	if !ok {
 		return providers.ExecuteResult{}, providers.ErrProviderUnavailable
 	}
+	if !sameRegistrationFacts(binding.provider, resolved.Provider) {
+		return providers.ExecuteResult{}, providers.ExecuteFailure{
+			Kind:    providers.ExecuteFailureKindDependency,
+			Message: "provider registration does not match the canonical catalog",
+		}
+	}
 	detached.Provider = resolved.Provider.ID
-	result, err = attempt(ctx, detached)
+	result, err = binding.attempt(ctx, detached)
 	if err != nil {
 		return providers.ExecuteResult{}, normalizeAttemptFailure(ctx, err, detached)
 	}
 	return normalizeSuccess(result, resolved.Provider.ID, detached)
+}
+
+func sameRegistrationFacts(
+	registered providers.Descriptor,
+	resolved providers.Descriptor,
+) bool {
+	return registered.ID == resolved.ID &&
+		registered.Availability == resolved.Availability &&
+		slices.Equal(registered.Aliases, resolved.Aliases) &&
+		slices.Equal(registered.Capabilities, resolved.Capabilities)
 }

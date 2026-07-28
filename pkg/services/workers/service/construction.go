@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"time"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -76,6 +77,13 @@ func (s *Service) WithCommandRunners(providerRunner, scriptRunner workers.Comman
 		}
 		clone.providerCommandRunner = providerRunner
 		clone.providerCommandInjected = true
+		reboundRegistry, err := rebindProviderRegistry(s.providerRegistry, providerRunner, s.providerRegistryRebinder)
+		if err != nil {
+			return nil, err
+		}
+		if err := applyReboundProviderRegistry(&clone, reboundRegistry); err != nil {
+			return nil, err
+		}
 	}
 	if scriptRunner != nil {
 		clone.scriptFactory, err = s.scriptFactory.WithCommandRunner(scriptRunner)
@@ -103,6 +111,15 @@ func (s *Service) WithCommandRunners(providerRunner, scriptRunner workers.Comman
 		clone.decisionEnvelopes,
 	)
 	return &clone, nil
+}
+
+func serviceCommandClock(s *Service) workerprocess.Clock {
+	return workerprocess.ClockFunc(func() time.Time {
+		if s != nil && s.clock != nil {
+			return s.clock()
+		}
+		return time.Now()
+	})
 }
 
 func rebuildExecutorBuilder(

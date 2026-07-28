@@ -16,7 +16,7 @@ func TestServiceConfigOverrideAlignment_FunctionalHTTPServerProviderCommandRunne
 	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
 	support.WriteAgentConfig(t, dir, "worker-b", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
 
-	runner := testutil.NewProviderCommandRunner(
+	runner := support.NewShapedProviderCommandRunner(
 		platformprocess.CommandResult{Stdout: []byte("step one complete. COMPLETE")},
 		platformprocess.CommandResult{Stdout: []byte("step two complete. COMPLETE")},
 	)

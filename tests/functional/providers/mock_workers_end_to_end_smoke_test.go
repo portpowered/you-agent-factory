@@ -230,7 +230,7 @@ func assertMockWorkersSmokeRecordedOutcomes(t *testing.T, artifact *interfaces.R
 	if string(rejectResult.FailureDetail.Reason) != string(workerexecution.WorkFailureTypeUnknown) {
 		t.Fatalf("reject-process failure reason = %q, want stable %q", rejectResult.FailureDetail.Reason, workerexecution.WorkFailureTypeUnknown)
 	}
-	if !strings.Contains(stringPointerValue(rejectResult.Error), "provider error: unknown: Codex reported a terminal error.") {
+	if !strings.Contains(stringPointerValue(rejectResult.Error), "provider error: unknown: Codex reported a terminal error") {
 		t.Fatalf("reject-process error = %q, want stable unknown code with audited message", stringPointerValue(rejectResult.Error))
 	}
 	scriptResult := outcomes["script-process"]

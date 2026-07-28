@@ -44,12 +44,12 @@ func TestSelectedTickCrossBoundarySmoke_ReconstructsCanonicalStateAcrossSupporte
 
 	now := t0.Add(12 * time.Second)
 	output := dashboard.FormatSimpleDashboardWithRenderData(
-		interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net]{
-			FactoryState:  "RUNNING",
-			RuntimeStatus: interfaces.RuntimeStatusActive,
-			TickCount:     11,
-			Uptime:        11 * time.Second,
-		},
+		factoryruntime.DashboardEngineStateSnapshot(
+			"RUNNING",
+			interfaces.RuntimeStatusActive,
+			11,
+			11*time.Second,
+		),
 		projections.SimpleDashboardRenderDataFromWorldState(worldState),
 		now,
 	)
