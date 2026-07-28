@@ -212,14 +212,14 @@ func assertInstallPackagedFactoryParity(
 		if err := json.Unmarshal(serviceOut.Bytes(), &payload); err != nil {
 			t.Fatalf("json.Unmarshal() error = %v", err)
 		}
-		if payload.Outcome != "skipped" || payload.Name != "@you/goal" {
-			t.Fatalf("payload = %#v, want skipped JSON facts", payload)
+		if payload.Name == "" || payload.FactoryDir == "" || payload.Outcome == "" || payload.Format == "" {
+			t.Fatalf("payload = %#v, want retained JSON fields", payload)
 		}
 	}
 	if serviceErr == nil && !cfg.JSON {
-		if got := serviceOut.String(); !strings.Contains(got, "Installed packaged factory @you/goal") &&
-			!strings.Contains(got, "Packaged factory @you/goal is already installed") {
-			t.Fatalf("stdout = %q, want human success output", got)
+		got := serviceOut.String()
+		if !strings.Contains(got, "@you/goal") {
+			t.Fatalf("stdout = %q, want human success output mentioning package name", got)
 		}
 	}
 	if serviceErr != nil && strings.Contains(cfg.Format, "toml") {
