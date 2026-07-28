@@ -58,7 +58,7 @@ func TestPackagedFactoryJSONAndYAMLValidateFlattenAndRunParity(t *testing.T) {
 	} {
 		source := source
 		t.Run(source.name, func(t *testing.T) {
-			if got := invokeGoal(t, os.Environ(), t.TempDir(), source.args...); got != wantInvocationResult {
+			if got := invokeGoal(t, customerEnvironment(t.TempDir()), t.TempDir(), source.args...); got != wantInvocationResult {
 				t.Fatalf("invocation result = %q, want %q", got, wantInvocationResult)
 			}
 		})

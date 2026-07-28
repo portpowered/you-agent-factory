@@ -77,6 +77,9 @@
     "pkg/services/automations/internal/services/reconciliation",
     "pkg/services/automations/internal/services/reconciliation/internal/service",
     "pkg/services/automations/internal/services/reconciliation/wire",
+    "pkg/services/automations/internal/services/script_pollers",
+    "pkg/services/automations/internal/services/script_pollers/internal/service",
+    "pkg/services/automations/internal/services/script_pollers/wire",
     "pkg/services/automations/service",
     "pkg/services/edges",
     "pkg/services/factory_definitions",
@@ -123,6 +126,7 @@
     "pkg/services/factory_definitions/transports/cli",
     "pkg/services/factory_definitions/ttsobservability",
     "pkg/services/factory_definitions/validation",
+    "pkg/services/factory_definitions/wire",
     "pkg/services/factory_definitions/wire/defaultscaffold",
     "pkg/services/factory_definitions/workers",
     "pkg/services/factory_definitions/workers/taxonomy",
@@ -241,6 +245,9 @@
     "pkg/services/factory_visualization/internal/services/live_view_projection",
     "pkg/services/factory_visualization/internal/services/live_view_projection/internal/service",
     "pkg/services/factory_visualization/internal/services/live_view_projection/wire",
+    "pkg/services/factory_visualization/internal/services/response_event_presentation",
+    "pkg/services/factory_visualization/internal/services/response_event_presentation/internal/service",
+    "pkg/services/factory_visualization/internal/services/response_event_presentation/wire",
     "pkg/services/models",
     "pkg/services/models/internal/artifacts",
     "pkg/services/models/internal/catalog",
@@ -255,6 +262,10 @@
     "pkg/services/models/internal/services/catalog",
     "pkg/services/models/internal/services/catalog/internal/service",
     "pkg/services/models/internal/services/catalog/wire",
+    "pkg/services/models/internal/services/inference",
+    "pkg/services/models/internal/services/inference/internal/artifacts",
+    "pkg/services/models/internal/services/inference/internal/service",
+    "pkg/services/models/internal/services/inference/wire",
     "pkg/services/models/internal/services/runtime_host",
     "pkg/services/models/internal/services/runtime_host/internal/service",
     "pkg/services/models/internal/services/runtime_host/internal/services/leases",
@@ -322,6 +333,8 @@
     "pkg/services/recordings/service",
     "pkg/services/recordings/wire",
     "pkg/services/system_initialization",
+    "pkg/services/system_initialization/internal/workflow",
+    "pkg/services/system_initialization/wire",
     "pkg/services/work",
     "pkg/services/work/internal/services/content_staging",
     "pkg/services/work/internal/services/content_staging/internal/service",
@@ -641,6 +654,21 @@
       "destination": "automations/internal/services/reconciliation"
     },
     {
+      "packagePath": "pkg/services/automations/internal/services/script_pollers",
+      "disposition": "retain",
+      "destination": "automations/internal/services/script_pollers"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/script_pollers/internal/service",
+      "disposition": "retain",
+      "destination": "automations/internal/services/script_pollers"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal/services/script_pollers/wire",
+      "disposition": "retain",
+      "destination": "automations/internal/services/script_pollers"
+    },
+    {
       "packagePath": "pkg/services/automations/service",
       "disposition": "retain",
       "destination": "automations"
@@ -867,6 +895,11 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/validation",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/wire",
       "disposition": "retain",
       "destination": "factory_definitions"
     },
@@ -1461,6 +1494,21 @@
       "destination": "factory_visualization/internal/services/live_view_projection"
     },
     {
+      "packagePath": "pkg/services/factory_visualization/internal/services/response_event_presentation",
+      "disposition": "retain",
+      "destination": "factory_visualization/internal/services/response_event_presentation"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/internal/services/response_event_presentation/internal/service",
+      "disposition": "retain",
+      "destination": "factory_visualization/internal/services/response_event_presentation"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/internal/services/response_event_presentation/wire",
+      "disposition": "retain",
+      "destination": "factory_visualization/internal/services/response_event_presentation"
+    },
+    {
       "packagePath": "pkg/services/models",
       "disposition": "retain",
       "destination": "models"
@@ -1529,6 +1577,26 @@
       "packagePath": "pkg/services/models/internal/services/catalog/wire",
       "disposition": "retain",
       "destination": "models/internal/services/catalog"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/inference",
+      "disposition": "retain",
+      "destination": "models/internal/services/inference"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/inference/internal/artifacts",
+      "disposition": "retain",
+      "destination": "models/internal/services/inference"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/inference/internal/service",
+      "disposition": "retain",
+      "destination": "models/internal/services/inference"
+    },
+    {
+      "packagePath": "pkg/services/models/internal/services/inference/wire",
+      "disposition": "retain",
+      "destination": "models/internal/services/inference"
     },
     {
       "packagePath": "pkg/services/models/internal/services/runtime_host",
@@ -1862,6 +1930,16 @@
     },
     {
       "packagePath": "pkg/services/system_initialization",
+      "disposition": "retain",
+      "destination": "system_initialization"
+    },
+    {
+      "packagePath": "pkg/services/system_initialization/internal/workflow",
+      "disposition": "retain",
+      "destination": "system_initialization"
+    },
+    {
+      "packagePath": "pkg/services/system_initialization/wire",
       "disposition": "retain",
       "destination": "system_initialization"
     },
