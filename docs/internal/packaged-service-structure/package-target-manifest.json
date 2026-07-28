@@ -359,6 +359,8 @@
     "pkg/services/providers/internal/services/execution/internal/adapters/claude",
     "pkg/services/providers/internal/services/execution/internal/adapters/codex",
     "pkg/services/providers/internal/services/execution/internal/adapters/commanddispatch",
+    "pkg/services/providers/internal/services/execution/internal/adapters/cursor",
+    "pkg/services/providers/internal/services/execution/internal/adapters/opencode",
     "pkg/services/providers/internal/services/execution/internal/service",
     "pkg/services/providers/internal/services/execution/wire",
     "pkg/services/providers/internal/testutil/execution",
@@ -442,7 +444,6 @@
     "pkg/services/workers/prompting",
     "pkg/services/workers/provider",
     "pkg/services/workers/provider/adapter",
-    "pkg/services/workers/provider/adapter/opencode",
     "pkg/services/workers/provider/adapter/testkit",
     "pkg/services/workers/provider/agy",
     "pkg/services/workers/provider/claude",
@@ -454,6 +455,7 @@
     "pkg/services/workers/provider/inferencecontract",
     "pkg/services/workers/provider/inferencecontract/testkit",
     "pkg/services/workers/provider/kiro",
+    "pkg/services/workers/provider/opencode",
     "pkg/services/workers/provider/pi",
     "pkg/services/workers/provider/providersroot",
     "pkg/services/workers/provider/registry",
@@ -2132,6 +2134,16 @@
       "destination": "providers/internal/services/execution"
     },
     {
+      "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/cursor",
+      "disposition": "retain",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/opencode",
+      "disposition": "retain",
+      "destination": "providers/internal/services/execution"
+    },
+    {
       "packagePath": "pkg/services/providers/internal/services/execution/internal/service",
       "disposition": "retain",
       "destination": "providers/internal/services/execution"
@@ -2547,11 +2559,6 @@
       "destination": "providers/internal/services/execution"
     },
     {
-      "packagePath": "pkg/services/workers/provider/adapter/opencode",
-      "disposition": "move",
-      "destination": "providers/internal/services/execution"
-    },
-    {
       "packagePath": "pkg/services/workers/provider/adapter/testkit",
       "disposition": "move",
       "destination": "providers/internal/services/execution"
@@ -2603,6 +2610,11 @@
     },
     {
       "packagePath": "pkg/services/workers/provider/kiro",
+      "disposition": "move",
+      "destination": "providers/internal/services/execution"
+    },
+    {
+      "packagePath": "pkg/services/workers/provider/opencode",
       "disposition": "move",
       "destination": "providers/internal/services/execution"
     },

@@ -350,6 +350,38 @@ primary-result behavior.
   `boundedStreamDetail` (do not `TrimSpace` stream fragments) so full-stream
   fidelity concatenation matches completed snapshots; reconcile lifecycle failures
   with the same precedence rules as other Providers-owned adapters.
+- Provider-native Cursor execution state lives below the same parent-private
+  Providers Execution boundary. Keep its stream-json partial-record buffer,
+  assistant/tool correlation, progress projection, flush guard, authoritative
+  `result` record selection, and detached session extraction invocation-local.
+  Register the adapter for canonical `providers.IDCursor` (`agent`) and resolve
+  the `cursor` catalog alias only through Providers Catalog before dispatch.
+  Materialize oversized Windows prompts to a temporary `@path` argument through
+  `CommandEffectOptions` injected from `providers/wire.CursorPlatformDependencies`
+  and `providers/wire.WithCursorPlatform`; keep UTF-16 limit, cleanup-once, and
+  fail-closed behavior aligned with the legacy Workers Cursor shim.
+  Inject the native effect into the adapter registration; reconcile lifecycle
+  failures with the same precedence rules as other Providers-owned adapters.
+  Prove cancellation, timeout, declared/parse failure, and late-success
+  suppression through `conformance_test.go`, `failure_test.go`, and
+  `exit_failure_test.go` against the Providers root path.
+- Provider-native OpenCode execution state lives below the same parent-private
+  Providers Execution boundary. Keep its structured JSONL partial-record buffer,
+  text/tool/reasoning correlation, snapshot-vs-delta final selection, flush
+  guard, and detached session extraction invocation-local. Register the adapter
+  for canonical `providers.IDOpenCode` (`opencode`) and support both structured
+  (`--format json`) and final-only success through `ModeStructured` and
+  `ModeFinalOnly` on `NewRegistrationWithMode` / `CommandEffectOptions`.
+  `NewCommandEffect` negotiates structured mode by default, caches downgrade to
+  final-only after one safe `unsupported_format` rejection, and surfaces the
+  `structured_mode_degraded` diagnostic through Providers root progress facts.
+  Block fallback when `RegistrationOptions.RequireStructuredStream` or request
+  env `providers_require_structured_stream=true` is set. Inject the native
+  effect into the adapter registration; reconcile lifecycle failures with the
+  same precedence rules as other Providers-owned adapters. Prove cancellation,
+  timeout, declared/parse failure, stderr exit classification, and
+  late-success suppression through `conformance_test.go`, `failure_test.go`,
+  and `exit_failure_test.go` against the Providers root path.
 - Keep reusable one-attempt conformance under the Providers-private Execution
   testkit. Build the singular Providers root around a fresh
   controllable adapter for each scenario, observe only Providers-owned
@@ -401,6 +433,14 @@ primary-result behavior.
   `docs/internal/baselines/go-unit-coverage-package-minimums.json` and
   `docs/internal/baselines/go-functional-coverage-package-minimums.json`;
   unit-only registration leaves `make test-functional-coverage` red.
+  Deleting a measured production package must remove its manifest rows from both
+  coverage baselines in the same slice; stale entries fail
+  `gocoveragecheck` with "outside the functional measured package set". When an
+  adapter subtree is replaced by a Workers integration package (for example
+  `provider/opencode`), add the successor package to both manifests in the same
+  slice. Regenerate `ownership-inventory.json` with
+  `go run ./cmd/ownershipinventoryfreeze` when Workers provider integration
+  packages replace deleted adapter subtrees.
 - The authoritative manifest-to-Integration join belongs in
   `pkg/services/workers/provider/registry/`. Catalog registrations name only
   the canonical embedded identity; external registrations carry one detached
@@ -670,6 +710,11 @@ response-stream output.
   execution publishes canonical phase/checkpoint updates through the same
   invocation-local callback, and finite replay history enters that consumer
   before the separate terminal response is finalized.
+- Durable JavaScript `agent.run` live child invocations must rebuild through
+  `conductorInvocationWithProgress` in `pkg/wire/session_runtime_providers.go`
+  so migrated cursor/opencode attempts publish canonical response drafts via
+  `sessionProgressPublisher`; legacy `invocationWithProgress` only emits legacy
+  progress fragments that durable response-event stores ignore.
 - JavaScript canonical history must remain append-only while an invocation-local
   consumer is attached. Build phase/checkpoint events in runtime-record order,
   represent phase completion as a distinct immutable transition, and assign
@@ -1448,8 +1493,12 @@ response-stream output.
   `inferencecontract.ExecuteInvocation` remains the single owner of canonical,
   non-retryable cancellation. Bind the
   migrated providers as registry catalog Integrations
-  (`gemini.NewIntegration`, `kiro.NewIntegration`, `cursor.NewIntegration`) from
-  `BuiltInRegistrations`, and let
+  (`gemini.NewIntegration`, `kiro.NewIntegration`, `cursor.NewIntegration`,
+  `opencode.NewIntegration`) from
+  `BuiltInRegistrations`, wiring Cursor and OpenCode through
+  `IntegrationDependencies{ProvidersService}` like Codex/Claude so live attempts
+  use `providers.Service.Execute` instead of ScriptWrap or
+  `adapter/opencode` replay paths, and let
   `UsesNativeRunner` route Integrations that no longer advertise the
   native-runtime compatibility marker through `conductor.Invoke` without adding
   a concrete-provider switch in shared orchestration. Process composition
@@ -1930,6 +1979,13 @@ response-stream output.
   approval. Run the same gate for default configuration, edited materialized
   worker configuration, and `--default-worker-model-provider` /
   `--default-worker-model` operator overrides.
+- Factory-owned packaged `@you/review` invocation coverage lives in
+  `tests/functional/factory/packaged/review/invocation_test.go`. Prefer
+  `root.BuildProcess` + `Process.Execute` with `you --json run --named @you/review`
+  and `edges.Edges.ProviderCommandRunner` mocks shaped through
+  `support.NewShapedProviderCommandRunner` (work stdout then reviewer decision
+  envelope JSON) over `--with-mock-workers` when proving approval, rejection
+  feedback retry context, and bounded failure.
 - Named `@you/goal` operator-control smoke coverage lives in
   `tests/functional/smoke/cli_named_goal_operator_controls_smoke_test.go`,
   proving API and CLI pause/resume buffering, ordered post-resume drain via

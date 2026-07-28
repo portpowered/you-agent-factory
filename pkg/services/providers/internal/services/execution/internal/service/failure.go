@@ -74,6 +74,12 @@ func normalizeAttemptFailure(
 			Kind: providers.ExecuteFailureKindCanceled,
 		}, request)
 	}
+	if hasLifecycle && lifecycle.DecodeError != nil {
+		return normalizeDeclaredFailure(providers.ExecuteFailure{
+			Kind:        providers.ExecuteFailureKindInvalidRequest,
+			Diagnostics: lifecycleStageDiagnostics(lifecycle, hasLifecycle),
+		}, request)
+	}
 	return normalizeDeclaredFailure(providers.ExecuteFailure{
 		Kind:        providers.ExecuteFailureKindUnknown,
 		Diagnostics: lifecycleStageDiagnostics(lifecycle, hasLifecycle),

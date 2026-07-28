@@ -24,7 +24,6 @@ func TestWorkersCompletedEffectInjectionsHaveNoOwnerFallbacks(t *testing.T) {
 		"executor/workstation_executor.go":                {[]byte("time.Now"), []byte("time.Since"), []byte("os.Getwd")},
 		"executor/script.go":                              {[]byte("time.Now"), []byte("time.Since"), []byte("os.Environ")},
 		"provider/commandenv/environment.go":              {[]byte("os.Environ")},
-		"provider/adapter/opencode/structured_adapter.go": {[]byte("os.Environ")},
 		"provider/agy/adapter.go":                         {[]byte("os.Stat("), []byte("exec.LookPath(")},
 		"prompting/prompt_docs.go":                        {[]byte("os.Stat"), []byte("os.ReadFile"), []byte("filepath.WalkDir")},
 		"worktree/prepare.go":                             {[]byte("time.Since")},

@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-const factoryRuntimeRoot = modulePrefix + "pkg/services/factory_runtime"
-
 // TestProductionPackagesImportFactoryRuntimeRootOnly seals CUT-VIS-RUN story 001:
 // Factory Visualization production packages may depend on Factory Runtime only
 // through the service root contract, not nested Runtime implementation, Petri,

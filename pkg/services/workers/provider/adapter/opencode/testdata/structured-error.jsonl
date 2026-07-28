@@ -1,2 +1,0 @@
-{"type":"step_start","timestamp":1783962000000,"sessionID":"ses_error_42","part":{"id":"step_error","sessionID":"ses_error_42","messageID":"msg_error","type":"step-start"}}
-{"type":"error","timestamp":1783962000001,"sessionID":"ses_error_42","error":{"name":"ProviderAuthError","data":{"message":"private prompt and sk-opencode-secret must not escape","statusCode":401,"responseBody":"private provider body"}}}

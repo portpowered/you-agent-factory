@@ -129,17 +129,23 @@ func waitForDurableFactorySessionTerminal(
 	t.Helper()
 
 	deadline := time.Now().Add(timeout)
+	var lastTerminal factoryapi.FactorySessionDurableLifecycleStatus
 	for time.Now().Before(deadline) {
 		session := readDurableFactorySession(t, baseURL, sessionID)
 		if session.Status == factoryapi.FactorySessionDurableLifecycleStatusTerminated ||
 			session.Status == factoryapi.FactorySessionDurableLifecycleStatusCanceled {
-			return session.Status
+			if lastTerminal == session.Status {
+				return session.Status
+			}
+			lastTerminal = session.Status
+		} else {
+			lastTerminal = ""
 		}
 		time.Sleep(15 * time.Millisecond)
 	}
 	session := readDurableFactorySession(t, baseURL, sessionID)
 	t.Fatalf(
-		"durable session %s status = %q, want TERMINATED or CANCELED within %s",
+		"durable session %s status = %q, want stable TERMINATED or CANCELED within %s",
 		sessionID,
 		session.Status,
 		timeout,

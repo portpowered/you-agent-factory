@@ -96,7 +96,7 @@ func newInvocation(
 		return nil, fmt.Errorf("construct Worker provider: %w", err)
 	}
 	provider, err := factory.New(
-		false, nil, nil, progressPublisher, workerproviderstructured.NewExecutor(), "",
+		false, nil, progressPublisher, workerproviderstructured.NewExecutor(), "",
 	)
 	if err != nil {
 		return nil, fmt.Errorf("construct Worker provider: %w", err)
