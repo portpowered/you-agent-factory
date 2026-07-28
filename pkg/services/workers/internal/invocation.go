@@ -8,7 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
 	workerinvocation "github.com/portpowered/infinite-you/pkg/services/workers/invocation"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 	workerproviderstructured "github.com/portpowered/infinite-you/pkg/services/workers/provider/structured"
 )

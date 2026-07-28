@@ -1,5 +1,6 @@
-// Package runner retains same-service compatibility names while canonical
-// runner selection policy lives at pkg/services/workers.
+// Package runner retains same-service compatibility names for the private
+// Workers Runners subservice while canonical runner selection policy lives at
+// pkg/services/workers.
 package runner
 
 import workers "github.com/portpowered/infinite-you/pkg/services/workers"

@@ -13,8 +13,8 @@ import (
 	modelrecording "github.com/portpowered/infinite-you/pkg/services/workers/execution/recording"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/executor"
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
-	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/runner"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
+	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/runner"
 	"github.com/portpowered/infinite-you/pkg/services/workers/skippermissions"
 )
 

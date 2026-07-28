@@ -1,3 +1,5 @@
+// Package process owns Workers command-runner policy and subprocess projection for
+// the private Workers Runners subservice.
 package process
 
 import (

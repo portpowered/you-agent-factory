@@ -7,7 +7,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 	workerprovidercontract "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 )

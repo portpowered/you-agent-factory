@@ -18,7 +18,7 @@ import (
 	workerconstruction "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/construction"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/executor/agentrun"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 	providerconductor "github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
 	providercontract "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"

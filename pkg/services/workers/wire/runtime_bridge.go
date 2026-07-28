@@ -14,7 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/executor/agentrun"
 	workersinternal "github.com/portpowered/infinite-you/pkg/services/workers/internal"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 	"go.uber.org/zap"

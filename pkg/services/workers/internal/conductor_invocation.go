@@ -10,7 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/executor"
 	workerinvocation "github.com/portpowered/infinite-you/pkg/services/workers/invocation"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 	providerconductor "github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 )

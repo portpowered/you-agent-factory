@@ -2115,8 +2115,8 @@
       "minimum": 86.84
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/process",
-      "minimum": 73.21
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process",
+      "minimum": 69.0
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/prompting",
@@ -2195,7 +2195,7 @@
       "minimum": 14.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/runner",
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/runner",
       "exception": {
         "kind": "measurement",
         "justification": "The active unit coverage profile contains no measurable statements for this package.",

@@ -5180,6 +5180,18 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/workers/internal/services/runners/process",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/runners/runner",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/workers/internal/services/runners/wire",
       "disposition": "retain",
       "destination": "workers",

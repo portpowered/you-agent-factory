@@ -2625,7 +2625,7 @@
       "minimum": 81.57
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/process",
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process",
       "minimum": 61.59
     },
     {
@@ -2723,7 +2723,7 @@
       "minimum": 6.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/runner",
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/runner",
       "exception": {
         "kind": "measurement",
         "justification": "The active functional coverage profile contains no measurable statements for this package.",

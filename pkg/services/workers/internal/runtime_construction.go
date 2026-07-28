@@ -15,7 +15,7 @@ import (
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/executor/agentrun"
 	workstationswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/wire"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
+	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 )
 
