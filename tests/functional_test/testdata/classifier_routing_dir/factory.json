@@ -1,0 +1,113 @@
+{
+  "name": "classifier_routing_dir",
+  "workTypes": [
+    {
+      "name": "task",
+      "states": [
+        {
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "name": "rework",
+          "type": "PROCESSING"
+        },
+        {
+          "name": "done",
+          "type": "TERMINAL"
+        },
+        {
+          "name": "failed",
+          "type": "FAILED"
+        }
+      ]
+    }
+  ],
+  "workers": [
+    {
+      "name": "classifier-worker"
+    },
+    {
+      "name": "rework-worker"
+    }
+  ],
+  "workstations": [
+    {
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "task"
+        }
+      ],
+      "name": "classifier",
+      "type": "CLASSIFIER_WORKSTATION",
+      "worker": "classifier-worker",
+      "classificationRoutes": [
+        {
+          "label": "accepted",
+          "outputs": [
+            {
+              "state": "done",
+              "workType": "task"
+            }
+          ]
+        },
+        {
+          "label": "approved",
+          "outputs": [
+            {
+              "state": "done",
+              "workType": "task"
+            }
+          ]
+        },
+        {
+          "label": "needs_changes",
+          "outputs": [
+            {
+              "state": "rework",
+              "workType": "task"
+            }
+          ]
+        },
+        {
+          "label": "rejected",
+          "outputs": [
+            {
+              "state": "init",
+              "workType": "task"
+            }
+          ]
+        }
+      ],
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "task"
+        }
+      ]
+    },
+    {
+      "inputs": [
+        {
+          "state": "rework",
+          "workType": "task"
+        }
+      ],
+      "name": "rework",
+      "outputs": [
+        {
+          "state": "init",
+          "workType": "task"
+        }
+      ],
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "task"
+        }
+      ],
+      "worker": "rework-worker"
+    }
+  ]
+}
