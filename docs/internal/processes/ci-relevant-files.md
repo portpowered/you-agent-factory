@@ -140,6 +140,12 @@
   `functional-boundary-check` stays unavoidable through the nested
   `test-functional-coverage` call, and the lane uploads Markdown, coverage
   JSON, profile, and command log on success and failure.
+  Verify-tier Make and CI script wiring (verify-fast, verify-pr, verify-extended,
+  long-tests, verify-pr-inference, backend/UI coverage aliases, and CI wrapper
+  scripts) is wrong-layer contract evidence owned under
+  `tests/functional/observability/verification/verify_tier_contract_test.go`
+  with shared stubbed-Make helpers in the same package; do not re-home those
+  proofs under `tests/functional/smoke`.
   JavaScript file-backed loading functional coverage belongs in
   `tests/functional/orchestration/javascript/loading/file_javascript_test.go`:
   drive sync Factory Session execution through `support.BuildProcess` +
