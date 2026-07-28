@@ -19,7 +19,7 @@ import (
 	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryeditable "github.com/portpowered/infinite-you/pkg/services/factory_definitions/editable"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
 	factorynamedfactories "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedfactories"
 	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
@@ -405,7 +405,7 @@ func provideEditableFactoryValidator(
 		snapshot *factorydefinitions.FactorySnapshot,
 		workstationLoader factorydefinitions.WorkstationLoader,
 	) error {
-		return factoryeditable.ValidateSnapshot(
+		return factorydefinitionswire.ValidateEditableSnapshot(
 			ctx,
 			snapshot,
 			workstationLoader,

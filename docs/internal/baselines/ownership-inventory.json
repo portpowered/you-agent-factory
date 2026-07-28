@@ -2814,6 +2814,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/editable",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/internal/service",
       "disposition": "retain",
       "destination": "factory_definitions",
@@ -2833,6 +2839,12 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/prepare",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/replayconfig",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"

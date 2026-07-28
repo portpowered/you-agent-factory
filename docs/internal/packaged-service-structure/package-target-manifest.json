@@ -124,10 +124,12 @@
     "pkg/services/factory_definitions/internal/services/distribution/wire",
     "pkg/services/factory_definitions/internal/services/snapshots_portability",
     "pkg/services/factory_definitions/internal/services/snapshots_portability/capture",
+    "pkg/services/factory_definitions/internal/services/snapshots_portability/editable",
     "pkg/services/factory_definitions/internal/services/snapshots_portability/internal/service",
     "pkg/services/factory_definitions/internal/services/snapshots_portability/materialize",
     "pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig",
     "pkg/services/factory_definitions/internal/services/snapshots_portability/prepare",
+    "pkg/services/factory_definitions/internal/services/snapshots_portability/replayconfig",
     "pkg/services/factory_definitions/internal/services/snapshots_portability/wire",
     "pkg/services/factory_definitions/internal/services/validation",
     "pkg/services/factory_definitions/internal/services/validation/internal/orchestrator",
@@ -991,6 +993,11 @@
       "destination": "factory_definitions/internal/services/snapshots_portability"
     },
     {
+      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/editable",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/snapshots_portability"
+    },
+    {
       "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/internal/service",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/snapshots_portability"
@@ -1007,6 +1014,11 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/prepare",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/snapshots_portability"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/replayconfig",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/snapshots_portability"
     },

@@ -236,7 +236,13 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/editable",
-      "minimum": 68.75
+      "exception": {
+        "kind": "measurement",
+        "justification": "Transitional var re-export shim; implementation coverage lives under snapshots_portability/editable.",
+        "owner": "factory-definition-maintainers",
+        "deadline": "2027-07-15",
+        "removalGate": "DEL-DEF deletes this transitional public package path."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal",
@@ -415,6 +421,10 @@
       "minimum": 43.50
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/editable",
+      "minimum": 68.75
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/internal/service",
       "minimum": 58.70
     },
@@ -429,6 +439,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/prepare",
       "minimum": 52.60
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/replayconfig",
+      "minimum": 82.22
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/wire",
@@ -580,7 +594,13 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig",
-      "minimum": 64.39
+      "exception": {
+        "kind": "measurement",
+        "justification": "Transitional var re-export shim; implementation coverage lives under snapshots_portability/portableconfig.",
+        "owner": "factory-definition-maintainers",
+        "deadline": "2027-07-15",
+        "removalGate": "DEL-DEF deletes this transitional public package path."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/quorumpolicy",
@@ -588,7 +608,13 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/replayconfig",
-      "minimum": 82.22
+      "exception": {
+        "kind": "measurement",
+        "justification": "Transitional var re-export shim; implementation coverage lives under snapshots_portability/replayconfig.",
+        "owner": "factory-definition-maintainers",
+        "deadline": "2027-07-15",
+        "removalGate": "DEL-DEF deletes this transitional public package path."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/resource",
@@ -610,7 +636,13 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/snapshotcapture",
-      "minimum": 85.48
+      "exception": {
+        "kind": "measurement",
+        "justification": "Transitional var re-export shim; implementation coverage lives under snapshots_portability/capture.",
+        "owner": "factory-definition-maintainers",
+        "deadline": "2027-07-15",
+        "removalGate": "DEL-DEF deletes this transitional public package path."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli",
