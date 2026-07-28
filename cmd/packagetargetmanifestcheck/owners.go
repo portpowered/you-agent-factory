@@ -219,6 +219,10 @@ func factoryRuntimeCanonicalRetainRest(rest string) bool {
 		return true
 	case rest == "internal" || strings.HasPrefix(rest, "internal/host"):
 		return true
+	case strings.HasPrefix(rest, "internal/testkit"):
+		return true
+	case strings.HasPrefix(rest, "internal/exhaustiontests"):
+		return true
 	case strings.HasPrefix(rest, "internal/services/orchestration"):
 		return true
 	case strings.HasPrefix(rest, "internal/services/instance_host"):
@@ -289,12 +293,10 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 		{exact: "internal/legacysnapshot", prefix: "internal/legacysnapshot/", dest: "factory_runtime/internal"},
 		{exact: "internal/rootobservation", prefix: "internal/rootobservation/", dest: "factory_runtime/internal"},
 		{exact: "internal/service", prefix: "internal/service/", dest: "factory_runtime/internal"},
-		{exact: "testkit", prefix: "testkit/", dest: "factory_runtime/internal"},
 		{exact: "testdata", prefix: "testdata/", dest: "factory_runtime/internal"},
 		{exact: "context", prefix: "context/", dest: "factory_runtime/internal/services/orchestration"},
 		{exact: "definitionmapping", prefix: "definitionmapping/", dest: "factory_runtime/internal/services/orchestration"},
 		{exact: "engine", prefix: "engine/", dest: "factory_runtime/internal/services/orchestration"},
-		{exact: "exhaustiontests", prefix: "exhaustiontests/", dest: "factory_runtime/internal/services/orchestration"},
 		{exact: "metrics", prefix: "metrics/", dest: "factory_runtime/internal/services/orchestration"},
 		{exact: "orchestrationowner", prefix: "orchestrationowner/", dest: "factory_runtime/internal/services/orchestration"},
 		{exact: "orchestratorcontract", prefix: "orchestratorcontract/", dest: "factory_runtime/internal/services/orchestration"},

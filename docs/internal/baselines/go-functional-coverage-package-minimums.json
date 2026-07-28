@@ -1115,7 +1115,7 @@
       "minimum": 0.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/testkit",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/testkit",
       "exception": {
         "kind": "measurement",
         "justification": "The active functional coverage profile contains no measurable statements for this package.",

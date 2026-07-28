@@ -983,7 +983,7 @@
       "minimum": 100.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/testkit",
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/testkit",
       "minimum": 75.00
     },
     {

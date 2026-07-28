@@ -1167,7 +1167,7 @@
       "fromOwner": "factory_definitions",
       "toOwner": "automations",
       "class": "command",
-      "evidence": "pkg/services/factory_definitions/validation -\u003e pkg/services/automations"
+      "evidence": "pkg/services/factory_definitions/internal/services/validation/impl -\u003e pkg/services/automations"
     },
     {
       "fromOwner": "factory_definitions",
@@ -2694,6 +2694,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/namedpaths",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_definitions/internal/services/catalog/persistence",
       "disposition": "retain",
       "destination": "factory_definitions",
@@ -3310,15 +3316,13 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/factory_runtime/exhaustiontests",
-      "disposition": "move",
+      "packagePath": "pkg/services/factory_runtime/internal",
+      "disposition": "retain",
       "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/orchestration",
-      "deletionCondition": "delete public package after IMP-RUN-orchestration private subservice cutover proof"
+      "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/factory_runtime/internal",
+      "packagePath": "pkg/services/factory_runtime/internal/exhaustiontests",
       "disposition": "retain",
       "destination": "factory_runtime",
       "destinationKind": "owner"
@@ -3654,12 +3658,10 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/factory_runtime/testkit",
-      "disposition": "move",
+      "packagePath": "pkg/services/factory_runtime/internal/testkit",
+      "disposition": "retain",
       "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal",
-      "deletionCondition": "delete transitional top-level package after CLN-RUN-FOLD-TOPLEVEL cutover proof"
+      "destinationKind": "owner"
     },
     {
       "packagePath": "pkg/services/factory_runtime/transports/cli",

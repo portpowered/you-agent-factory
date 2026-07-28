@@ -230,7 +230,7 @@
     "pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/catalog",
     "pkg/services/factory_runtime/internal/services/orchestration/tooling/javascript/symbolidentity",
     "pkg/services/factory_runtime/internal/services/orchestration/wire",
-    "pkg/services/factory_runtime/testkit",
+    "pkg/services/factory_runtime/internal/testkit",
     "pkg/services/factory_runtime/transports/cli",
     "pkg/services/factory_runtime/transports/http",
     "pkg/services/factory_runtime/transports/mcp",
@@ -1531,9 +1531,9 @@
       "destination": "factory_runtime/internal/services/orchestration"
     },
     {
-      "packagePath": "pkg/services/factory_runtime/testkit",
-      "disposition": "move",
-      "destination": "factory_runtime/internal"
+      "packagePath": "pkg/services/factory_runtime/internal/testkit",
+      "disposition": "retain",
+      "destination": "factory_runtime"
     },
     {
       "packagePath": "pkg/services/factory_runtime/transports/cli",

@@ -1118,3 +1118,14 @@ the confirmation with
 `pkg/services/factory_runtime/wire/engine_pipeline_prestart_gate_test.go`.
 After both gates are Factory-complete, `deletion_hold_active` is `false` and
 story 002+ deletion or baseline burn-down may proceed.
+
+## DEL-RUN-ENGINE-PIPELINE test-support internalization
+
+Story 003 moves unexpected public Runtime root test-support into `internal/`:
+
+| Former public path | Internalized path | Proof |
+| --- | --- | --- |
+| `pkg/services/factory_runtime/testkit` | `pkg/services/factory_runtime/internal/testkit` | `wire/test_support_internalization_proof_test.go` |
+| `pkg/services/factory_runtime/exhaustiontests` | `pkg/services/factory_runtime/internal/exhaustiontests` | same proof test; Makefile unit lane uses internal path |
+
+After internalization, update `owner_top_level` unexpected lists (only `testdata` remains at the Runtime root), extend `factoryRuntimeCanonicalRetainRest` / `isFactoryRuntimeCanonicalRetain` for `internal/testkit` and `internal/exhaustiontests`, and refresh ownership inventory + package-target manifest via `go run ./cmd/ownershipinventoryfreeze` and `go run ./cmd/packagetargetmanifestcheck -write-inventory -write-owner-packages`. Consumer tests import `pkg/services/factory_runtime/internal/testkit`.
