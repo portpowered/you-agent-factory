@@ -57,6 +57,7 @@ var prohibitedPetriPublicSurfaceSymbols = map[string]string{
 var petriPublicSurfaceWatchedImports = map[string]struct{}{
 	factoryRuntimeRootImportPath: {},
 	factoryDefinitionsImportPath: {},
+	factoryDefinitionsInternalContractsImportPath: {},
 }
 
 type petriPublicSurfaceFinding struct {

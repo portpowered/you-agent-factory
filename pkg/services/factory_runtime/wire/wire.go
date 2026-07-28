@@ -12,7 +12,7 @@ import (
 	"fmt"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factoryruntimeroot "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/service"
+	factoryruntimeinternal "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -57,7 +57,7 @@ func NewService(
 			return workersCanceler(ctx, request)
 		}
 	}
-	service, err := factoryruntimeroot.NewRoot(
+	service, err := factoryruntimeinternal.NewRoot(
 		newID,
 		workflows,
 		workflowRuntime,
@@ -72,4 +72,22 @@ func NewService(
 		return nil, fmt.Errorf("construct Factory Runtime: implementation rejected its dependencies")
 	}
 	return service, nil
+}
+
+// BindActiveService attaches the hosted runtime delegate that serves published
+// control, observation, and dispatch-plan operations on a wire-constructed
+// root.
+func BindActiveService(root factoryruntime.Service, active factoryruntime.Service) error {
+	if root == nil {
+		return fmt.Errorf("bind Factory Runtime active service: root is required")
+	}
+	if active == nil {
+		return fmt.Errorf("bind Factory Runtime active service: active service is required")
+	}
+	concrete, ok := root.(*factoryruntimeinternal.Root)
+	if !ok {
+		return fmt.Errorf("bind Factory Runtime active service: root is not wire-constructed implementation")
+	}
+	concrete.BindActiveService(active)
+	return nil
 }

@@ -19,7 +19,7 @@ func listFactoryVisualizationPackages(t *testing.T) []string {
 	cmd := exec.Command("go", "list", factoryVisualizationRoot+"/...")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("go list factory visualization packages: %v\n%s", err, output)
+		t.Fatalf("go list factory_visualization packages: %v\n%s", err, output)
 	}
 	return strings.Fields(string(output))
 }
