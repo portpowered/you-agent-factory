@@ -169,6 +169,7 @@ var convergedServiceSubpackageRoots = map[string]string{
 	"pkg/services/recordings/internal/services/canonical_ledger/events": "recordings",
 	"pkg/services/recordings/internal/services/projection_query/projections":        "recordings",
 	"pkg/services/recordings/internal/services/projection_query/projections/dashboard": "recordings",
+	"pkg/services/recordings/internal/services/replay/replay":                            "recordings",
 	"pkg/services/recordings/replay":                            "recordings",
 	"pkg/services/recordings/service":                           "recordings",
 	"pkg/services/work/service":                                 "work",
@@ -261,6 +262,7 @@ var approvedPeerServiceContractImports = map[string]struct{}{
 	"pkg/services/factory_runtime/service\x00github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":                  {},
 	"pkg/services/recordings\x00github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":                               {},
 	"pkg/services/recordings/replay\x00github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":                        {},
+	"pkg/services/recordings/internal/services/replay/replay\x00github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract": {},
 	"pkg/services/recordings/service\x00github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":                       {},
 }
 

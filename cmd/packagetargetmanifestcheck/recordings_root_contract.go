@@ -58,6 +58,7 @@ var recordingsExcessRootContractFolds = []recordingsRootContractFoldTarget{
 		cluster: "replay",
 		files: []string{
 			"replay_contract.go",
+			"replay_import_boundary_test.go",
 		},
 		destination: "pkg/services/recordings/internal/services/replay",
 	},

@@ -351,7 +351,7 @@
     },
     {
       "rule": "backendsizecheck:ignore-function",
-      "target": "pkg/services/recordings/replay/configtests/generated_factory_test.go#TestGeneratedFactoryFromLoadedConfig_EmbedsSplitRuntimeDefinitionsInGeneratedFactory",
+      "target": "pkg/services/recordings/internal/services/replay/replay/configtests/generated_factory_test.go#TestGeneratedFactoryFromLoadedConfig_EmbedsSplitRuntimeDefinitionsInGeneratedFactory",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
     },
@@ -849,37 +849,37 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/recordings/replay/configtests/effective_config_generated_test.go#assertEmbeddedGeneratedFactory",
+      "target": "pkg/services/recordings/internal/services/replay/replay/configtests/effective_config_generated_test.go#assertEmbeddedGeneratedFactory",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/recordings/replay/configtests/effective_config_test.go#TestGeneratedFactoryFromLoadedConfig_EmitsCanonicalPublicWorkstationKind",
+      "target": "pkg/services/recordings/internal/services/replay/replay/configtests/effective_config_test.go#TestGeneratedFactoryFromLoadedConfig_EmitsCanonicalPublicWorkstationKind",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/recordings/replay/configtests/generated_factory_test.go#TestGeneratedFactoryFromLoadedConfig_EmbedsSplitRuntimeDefinitionsInGeneratedFactory",
+      "target": "pkg/services/recordings/internal/services/replay/replay/configtests/generated_factory_test.go#TestGeneratedFactoryFromLoadedConfig_EmbedsSplitRuntimeDefinitionsInGeneratedFactory",
       "owner": "backend-maintainers",
       "removalReason": "this generated-factory artifact test keeps split-definition embedding assertions together on the public contract seam."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/recordings/replay/event_artifact_test.go#assertMergedGeneratedWorkstations",
+      "target": "pkg/services/recordings/internal/services/replay/replay/event_artifact_test.go#assertMergedGeneratedWorkstations",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/recordings/replay/event_log_test.go#assertReducedCompletionSafeDiagnostics",
+      "target": "pkg/services/recordings/internal/services/replay/replay/event_log_test.go#assertReducedCompletionSafeDiagnostics",
       "owner": "backend-maintainers",
       "removalReason": "refactor this target and remove this exemption when the threshold debt is resolved."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/services/recordings/replay/javascript_recording_contract_test.go#assertRecordedJavaScriptLifecycle",
+      "target": "pkg/services/recordings/internal/services/replay/replay/javascript_recording_contract_test.go#assertRecordedJavaScriptLifecycle",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this decision flow; simplify branches and remove this exemption."
     },
@@ -1485,7 +1485,7 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-function-lines",
-      "target": "pkg/services/recordings/replay/configtests/generated_factory_test.go#TestGeneratedFactoryFromLoadedConfig_EmbedsSplitRuntimeDefinitionsInGeneratedFactory",
+      "target": "pkg/services/recordings/internal/services/replay/replay/configtests/generated_factory_test.go#TestGeneratedFactoryFromLoadedConfig_EmbedsSplitRuntimeDefinitionsInGeneratedFactory",
       "owner": "backend-maintainers",
       "removalReason": "service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption."
     },

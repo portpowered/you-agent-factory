@@ -1783,8 +1783,12 @@
       "minimum": 0.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/replay",
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/replay",
       "minimum": 78.72
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/replay",
+      "minimum": 0.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/service",

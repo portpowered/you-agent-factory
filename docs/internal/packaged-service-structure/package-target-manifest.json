@@ -404,6 +404,7 @@
     "pkg/services/recordings/internal/services/recording_lifecycle/wire",
     "pkg/services/recordings/internal/services/replay",
     "pkg/services/recordings/internal/services/replay/internal/service",
+    "pkg/services/recordings/internal/services/replay/replay",
     "pkg/services/recordings/internal/services/replay/wire",
     "pkg/services/recordings/projections",
     "pkg/services/recordings/projections/dashboard",
@@ -2376,6 +2377,11 @@
     },
     {
       "packagePath": "pkg/services/recordings/internal/services/replay/internal/service",
+      "disposition": "retain",
+      "destination": "recordings/internal/services/replay"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/replay/replay",
       "disposition": "retain",
       "destination": "recordings/internal/services/replay"
     },
