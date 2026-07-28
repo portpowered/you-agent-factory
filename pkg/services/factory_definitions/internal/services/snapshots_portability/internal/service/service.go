@@ -12,6 +12,8 @@ import (
 	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	snapshotsportability "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability"
 	snapshotsportabilitycapture "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/capture"
+	snapshotsportabilitymaterialize "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/materialize"
+	snapshotsportabilityprepare "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/prepare"
 )
 
 // Service is the private nested snapshots_portability implementation behind
@@ -107,7 +109,7 @@ func (s *Service) CaptureFactorySnapshot(
 
 func (s *Service) PrepareFactorySnapshotImport(
 	ctx context.Context,
-	_ factorydefinitions.PrepareFactorySnapshotImportRequest,
+	request factorydefinitions.PrepareFactorySnapshotImportRequest,
 ) (factorydefinitions.PrepareFactorySnapshotImportResult, error) {
 	if err := s.requirePorts(); err != nil {
 		return factorydefinitions.PrepareFactorySnapshotImportResult{}, err
@@ -115,12 +117,12 @@ func (s *Service) PrepareFactorySnapshotImport(
 	if err := ctx.Err(); err != nil {
 		return factorydefinitions.PrepareFactorySnapshotImportResult{}, err
 	}
-	return factorydefinitions.PrepareFactorySnapshotImportResult{}, factorydefinitions.ErrInvalidFactorySnapshotPayload
+	return snapshotsportabilityprepare.Import(request.Payload, s.decodeSnapshot)
 }
 
 func (s *Service) MaterializeFactorySnapshot(
 	ctx context.Context,
-	_ factorydefinitions.MaterializeFactorySnapshotRequest,
+	request factorydefinitions.MaterializeFactorySnapshotRequest,
 ) (factorydefinitions.MaterializeFactorySnapshotResult, error) {
 	if err := s.requirePorts(); err != nil {
 		return factorydefinitions.MaterializeFactorySnapshotResult{}, err
@@ -128,7 +130,12 @@ func (s *Service) MaterializeFactorySnapshot(
 	if err := ctx.Err(); err != nil {
 		return factorydefinitions.MaterializeFactorySnapshotResult{}, err
 	}
-	return factorydefinitions.MaterializeFactorySnapshotResult{}, factorydefinitions.ErrUnsafeFactorySnapshotMaterialize
+	return snapshotsportabilitymaterialize.Snapshot(
+		request.TargetDir,
+		request.Snapshot,
+		s.validateMaterializeWrites,
+		s.materializePortableFiles,
+	)
 }
 
 func isJSONObjectCanonical(canonical []byte) bool {
