@@ -286,6 +286,68 @@ func TestRootAdapter_InvokeJSONResolvesThroughModelsRootCatalogAndInference(t *t
 	}
 }
 
+func TestRootAdapter_InvokeJSONMapsAudioInferenceContent(t *testing.T) {
+	t.Parallel()
+
+	audioPath := filepath.Join(t.TempDir(), "speech.wav")
+	scope := testRuntimeScope(t)
+	lease := testModelLease(t)
+	service := modelscli.NewService(modelscli.Config{
+		Models: stubModelsRoot{
+			getCatalogModel: func(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+				return modelinference.GetModelResult{
+					Model: modelinference.Detail{
+						Summary: modelinference.Summary{
+							Name:             "OMNIVOICE_Q4_K_M",
+							ProviderLocality: modelinference.LocalityLocal,
+						},
+						Capabilities: []modelinference.Capability{{
+							Worker:           "tts-worker",
+							ProviderLocality: modelinference.LocalityLocal,
+							Operations:       []modelinference.Operation{{Name: "TTS"}},
+						}},
+					},
+				}, nil
+			},
+			acquireModelLease: func(context.Context, modelinference.AcquireModelLeaseRequest) (modelinference.AcquireModelLeaseResult, error) {
+				return modelinference.AcquireModelLeaseResult{
+					Lease: modelinference.ModelLease{Lease: lease},
+				}, nil
+			},
+			invokeModelWithLease: func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error) {
+				return modelinference.InvokeModelResult{
+					ModelName: "OMNIVOICE_Q4_K_M",
+					Operation: "TTS",
+					Content: []modelinference.InferenceContent{{
+						ContentType: "audio/wav",
+						Content:     audioPath,
+					}},
+				}, nil
+			},
+		},
+		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
+			return modelscli.InvokeRuntimeScope{Scope: scope}, nil
+		},
+	})
+
+	var out bytes.Buffer
+	if err := service.Invoke(modelscli.InvokeConfig{
+		Context:   context.Background(),
+		ModelName: "OMNIVOICE_Q4_K_M",
+		Operation: "TTS",
+		Text:      "hello world",
+		JSON:      true,
+		Output:    &out,
+	}); err != nil {
+		t.Fatalf("Invoke() error = %v", err)
+	}
+	for _, want := range []string{`"type":"AUDIO"`, "speech.wav", `"contentType":"audio/wav"`} {
+		if !bytes.Contains(out.Bytes(), []byte(want)) {
+			t.Fatalf("Invoke() JSON missing %q:\n%s", want, out.String())
+		}
+	}
+}
+
 func TestRootAdapter_InvokeAudioExportsArtifactThroughModelsRoot(t *testing.T) {
 	t.Parallel()
 

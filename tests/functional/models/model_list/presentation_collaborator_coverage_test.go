@@ -91,6 +91,27 @@ func TestProcessModelsPull_RoutesThroughPresentationCollaboratorWithoutServer(t 
 	}
 }
 
+// TestProcessModelsInvokeJSON_RoutesThroughPresentationCollaboratorWithoutServer proves
+// local models invoke --json reaches the owned adapter through Factory Sessions
+// ModelsCLIPresentationCollaborator rather than the remote HTTP bootstrap path.
+func TestProcessModelsInvokeJSON_RoutesThroughPresentationCollaboratorWithoutServer(t *testing.T) {
+	t.Parallel()
+
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "models", "invoke", "OMNIVOICE_Q4_K_M",
+		"--operation", "TTS", "--text", "hello from owned invoke",
+	})
+	err := process.Execute(inputs.Input)
+	if err == nil {
+		t.Fatalf("Process.Execute(local models invoke --json) error = nil, want failure without catalog fixture")
+	}
+	stderr := inputs.Stderr()
+	if strings.Contains(stderr, "localhost:7437") || strings.Contains(stderr, "connection refused") {
+		t.Fatalf("stderr = %q, want owned Models-root path rather than remote HTTP bootstrap", stderr)
+	}
+}
+
 // local models inspect uses the presentation collaborator-owned adapter path.
 func TestProcessModelsInspect_RoutesThroughPresentationCollaboratorWithoutServer(t *testing.T) {
 	t.Parallel()

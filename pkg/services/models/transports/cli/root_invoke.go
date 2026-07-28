@@ -175,13 +175,46 @@ func inferenceContentToWorkParts(content []modelinference.InferenceContent) []wo
 	}
 	parts := make([]work.WorkContentPart, 0, len(content))
 	for _, item := range content {
-		parts = append(parts, work.WorkContentPart{
-			Type: work.WorkContentPartTypeText,
-			Text: item.Content,
-			Slot: "text",
-		})
+		parts = append(parts, inferenceContentToWorkPart(item))
 	}
 	return parts
+}
+
+func inferenceContentToWorkPart(item modelinference.InferenceContent) work.WorkContentPart {
+	contentType := strings.TrimSpace(item.ContentType)
+	value := strings.TrimSpace(item.Content)
+	switch {
+	case strings.HasPrefix(strings.ToLower(contentType), "audio/"):
+		return work.WorkContentPart{
+			Type:        work.WorkContentPartTypeAudio,
+			File:        value,
+			ContentType: contentType,
+			Slot:        "audio",
+		}
+	case strings.HasPrefix(strings.ToLower(contentType), "image/"):
+		return work.WorkContentPart{
+			Type:        work.WorkContentPartTypeImage,
+			URL:         value,
+			ContentType: contentType,
+			Slot:        "image",
+		}
+	case strings.EqualFold(contentType, "application/json"):
+		return work.WorkContentPart{
+			Type: work.WorkContentPartTypeJSON,
+			JSON: json.RawMessage(value),
+			Slot: "json",
+		}
+	default:
+		if contentType == "" {
+			contentType = "text/plain"
+		}
+		return work.WorkContentPart{
+			Type:        work.WorkContentPartTypeText,
+			Text:        value,
+			ContentType: contentType,
+			Slot:        "text",
+		}
+	}
 }
 
 func inferenceArtifactSourcePath(result modelinference.InvokeModelResult) (string, error) {
