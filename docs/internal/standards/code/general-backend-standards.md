@@ -2,7 +2,7 @@
 
 ---
 author: andreas abdi
-last modified: 2026, may, 27
+last modified: 2026, july, 27
 doc-id: STD-017
 ---
 
@@ -271,6 +271,25 @@ Rules:
   internal engine-state snapshot through functional support. Assertions
   **MUST** use public CLI, HTTP, MCP, Factory Session, Work, and Factory Event
   contracts or observations made by the injected external-effect edge.
+- Functional application tests **MUST** execute scenarios through
+  `Process.Execute` by default after constructing through `root.BuildProcess`.
+  They **MAY** invoke a built `you` CLI binary only when the cell must prove
+  OS/process-boundary behavior that `BuildProcess` cannot express.
+- Functional tests **MUST** prefer public CLI invocation over HTTP/API for
+  ordinary customer flows. HTTP or API entry **MAY** be used only for
+  API-owned contracts or explicit CLI+API parity cells.
+- External effects **MUST** be replaced only through `edges.Edges`. Functional
+  tests **MUST** prefer `ProviderCommandRunner` and other command-runner edge
+  mocks over custom in-process provider fakes.
+- Functional tests **MUST** prefer mocked Codex or another real
+  inference-provider variant through the command-runner edge and sanitized
+  goldens over `--with-mock-workers` / `MockWorkers`, except for cells under
+  `tests/functional/workers/mock/...` that own the workers/mock feature.
+- Functional tests **MUST NOT** add sleeps or timeout-padded wait helpers as the
+  default synchronization strategy. Prefer fixing readiness or latency root
+  causes first. Any sleep, polling loop, or timeout-padded wait helper **MUST**
+  include an in-code justification for why deterministic observation or edge
+  mocking cannot substitute.
 - Functional test sources **MUST** live under
   `tests/functional/<domain>/<subsection>/...`, where `<domain>` is a durable
   product-domain noun such as `transport`, `workers`, `orchestration`,

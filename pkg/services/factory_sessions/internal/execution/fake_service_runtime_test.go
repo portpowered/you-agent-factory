@@ -2940,6 +2940,106 @@ func TestValidateCheckpointSummaryForResume_RejectsInvalidMetadata(t *testing.T)
 	}
 }
 
+func TestApplyRuntimeCheckpointPartialProjection_SurfacesPartialResultWhileRunning(t *testing.T) {
+	t.Parallel()
+	const sessionID = "dur-sess-checkpoint-partial-001"
+	state := &runtimeSessionState{
+		session: SessionReadResult{
+			SessionID: sessionID,
+			Status:    LifecycleStatusRunning,
+		},
+		artifacts: []ArtifactSummary{{ID: "artifact-checkpoint-1", Kind: "text"}},
+	}
+	checkpoint := &factory.JavaScriptCheckpointRecord{
+		ID:    "checkpoint-1",
+		Label: "after-step-one",
+		State: map[string]any{"text": "checkpoint partial output"},
+	}
+
+	applyRuntimeCheckpointPartialProjection(state, checkpoint)
+
+	if state.session.ResultSummary == nil || state.session.ResultSummary.ResultStatus != string(ResultStatusPartial) {
+		t.Fatalf("result summary = %#v, want PARTIAL", state.session.ResultSummary)
+	}
+	if state.result.ResultStatus != ResultStatusPartial {
+		t.Fatalf("result status = %q, want PARTIAL", state.result.ResultStatus)
+	}
+	if state.result.Mode != ResultModePartial {
+		t.Fatalf("result mode = %q, want partial", state.result.Mode)
+	}
+	if state.result.SessionStatus != LifecycleStatusRunning {
+		t.Fatalf("session status = %q, want RUNNING", state.result.SessionStatus)
+	}
+	if len(state.result.PrimaryResult) == 0 {
+		t.Fatal("primary result missing")
+	}
+	if len(state.result.ArtifactIDs) != 1 || state.result.ArtifactIDs[0] != "artifact-checkpoint-1" {
+		t.Fatalf("artifact IDs = %#v, want checkpoint artifact", state.result.ArtifactIDs)
+	}
+}
+
+func TestApplyRuntimeCheckpointPartialProjection_NoopsForTerminalOrEmptyCheckpoint(t *testing.T) {
+	t.Parallel()
+	checkpoint := &factory.JavaScriptCheckpointRecord{
+		ID:    "checkpoint-1",
+		Label: "after-step-one",
+		State: map[string]any{"text": "checkpoint partial output"},
+	}
+	running := &runtimeSessionState{
+		session: SessionReadResult{SessionID: "dur-sess-checkpoint-partial-002", Status: LifecycleStatusRunning},
+		result:  ResultReadResult{SessionID: "dur-sess-checkpoint-partial-002", ResultStatus: ResultStatusNotReady},
+	}
+	terminal := &runtimeSessionState{
+		session: SessionReadResult{SessionID: "dur-sess-checkpoint-partial-003", Status: LifecycleStatusSucceeded},
+		result:  ResultReadResult{SessionID: "dur-sess-checkpoint-partial-003", ResultStatus: ResultStatusFinal},
+	}
+
+	applyRuntimeCheckpointPartialProjection(nil, checkpoint)
+	applyRuntimeCheckpointPartialProjection(running, nil)
+	applyRuntimeCheckpointPartialProjection(terminal, checkpoint)
+	applyRuntimeCheckpointPartialProjection(running, &factory.JavaScriptCheckpointRecord{ID: "checkpoint-empty"})
+
+	if running.result.ResultStatus != ResultStatusNotReady {
+		t.Fatalf("running result status = %q, want NOT_READY", running.result.ResultStatus)
+	}
+	if terminal.result.ResultStatus != ResultStatusFinal {
+		t.Fatalf("terminal result status = %q, want FINAL", terminal.result.ResultStatus)
+	}
+}
+
+func TestJavaScriptRuntimeService_ApplyRunningRuntimeRecord_CheckpointProjectsPartialResult(t *testing.T) {
+	t.Parallel()
+	const sessionID = "dur-sess-checkpoint-running-record-001"
+	service := newConfiguredJavaScriptRuntimeService(javaScriptRuntimeServiceConfig{ProjectRoot: t.TempDir()})
+	if err := seedRuntimeSessionWithRunningDispatch(service, sessionID, "dispatch-1", "step-one"); err != nil {
+		t.Fatalf("seedRuntimeSessionWithRunningDispatch: %v", err)
+	}
+
+	service.applyRunningRuntimeRecord(sessionID, factory.JavaScriptRuntimeRecord{
+		Sequence: 2,
+		Kind:     factory.JavaScriptRecordKindCheckpoint,
+		Checkpoint: &factory.JavaScriptCheckpointRecord{
+			ID:    "checkpoint-1",
+			Label: "after-step-one",
+			State: map[string]any{"text": "checkpoint partial output"},
+		},
+	})
+
+	result, err := service.GetResult(context.Background(), sessionID, ResultRequest{Mode: ResultModePartial})
+	if err != nil {
+		t.Fatalf("GetResult partial: %v", err)
+	}
+	if result.ResultStatus != ResultStatusPartial {
+		t.Fatalf("partial status = %q, want PARTIAL", result.ResultStatus)
+	}
+	if len(result.PrimaryResult) == 0 {
+		t.Fatal("partial primaryResult missing")
+	}
+	if result.SessionStatus != LifecycleStatusRunning {
+		t.Fatalf("session status = %q, want RUNNING", result.SessionStatus)
+	}
+}
+
 func TestFinalizeInterruptedTerminalSession_PreservesPartialAndUnavailableResults(t *testing.T) {
 	t.Parallel()
 	sessionID := "dur-sess-interrupted-finalize-001"

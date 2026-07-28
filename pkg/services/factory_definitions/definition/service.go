@@ -13,6 +13,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
+	compilationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
 	namedfactorypath "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
 )
@@ -32,9 +33,10 @@ const (
 type Service struct {
 	nonCatalogDefaults
 	catalog.Service
-	validationService     validationservice.Service
-	authoringLayoutService authoringlayout.Service
-	host              Host
+	validationService        validationservice.Service
+	authoringLayoutService   authoringlayout.Service
+	compilationService       compilationservice.Service
+	host                     Host
 	versionFileSystem factoryroot.VersionFileSystem
 	packagedCatalog   factoryroot.PackagedFactoryCatalogOperations
 	packagedInstaller factoryroot.PackagedFactoryInstallationOperations
@@ -117,6 +119,18 @@ func NewWithCatalogPackagesAndInstallation(
 	return service
 }
 
+// NewWithCompilation constructs the Definitions root collaborator with private
+// compilation ownership for the CTR-DEF compile slice.
+func NewWithCompilation(
+	host Host,
+	compilationService compilationservice.Service,
+	versionFileSystems ...factoryroot.VersionFileSystem,
+) *Service {
+	service := New(host, versionFileSystems...)
+	service.compilationService = compilationService
+	return service
+}
+
 // NewWithValidation constructs the Definitions root collaborator with private
 // validation ownership for the CTR-DEF validate slice.
 func NewWithValidation(
@@ -174,6 +188,16 @@ func NewWithCatalogPackagesValidationInstallationAndAuthoring(
 	service.validationService = validationService
 	service.authoringLayoutService = authoringLayoutService
 	return service
+}
+
+func (s *Service) CompileEffectiveFactorySource(
+	ctx context.Context,
+	request factoryroot.CompileEffectiveFactorySourceRequest,
+) (factoryroot.CompileEffectiveFactorySourceResult, error) {
+	if s == nil || s.compilationService == nil {
+		return factoryroot.UnimplementedService{}.CompileEffectiveFactorySource(ctx, request)
+	}
+	return s.compilationService.CompileEffectiveFactorySource(ctx, request)
 }
 
 func (s *Service) ValidateStructuralFactoryDefinition(

@@ -64,6 +64,7 @@
     "pkg/platform/stdio",
     "pkg/root",
     "pkg/services/automations",
+    "pkg/services/automations/internal",
     "pkg/services/automations/internal/services/cron",
     "pkg/services/automations/internal/services/cron/internal/service",
     "pkg/services/automations/internal/services/cron/wire",
@@ -95,6 +96,13 @@
     "pkg/services/factory_definitions/internal/services/catalog",
     "pkg/services/factory_definitions/internal/services/catalog/internal/service",
     "pkg/services/factory_definitions/internal/services/catalog/wire",
+    "pkg/services/factory_definitions/internal/services/compilation",
+    "pkg/services/factory_definitions/internal/services/compilation/canonical",
+    "pkg/services/factory_definitions/internal/services/compilation/internal/service",
+    "pkg/services/factory_definitions/internal/services/compilation/loadedsource",
+    "pkg/services/factory_definitions/internal/services/compilation/loading",
+    "pkg/services/factory_definitions/internal/services/compilation/runtimeconfig",
+    "pkg/services/factory_definitions/internal/services/compilation/wire",
     "pkg/services/factory_definitions/internal/services/validation",
     "pkg/services/factory_definitions/internal/services/validation/internal/orchestrator",
     "pkg/services/factory_definitions/internal/services/validation/internal/requiredtools",
@@ -303,6 +311,7 @@
     "pkg/services/operator_settings/internal/services/resolution/wire",
     "pkg/services/operator_settings/servicewire",
     "pkg/services/operator_settings/testlink",
+    "pkg/services/operator_settings/transports/cli",
     "pkg/services/operator_settings/transports/http",
     "pkg/services/operator_settings/transports/mcp",
     "pkg/services/operator_settings/wire",
@@ -623,6 +632,11 @@
       "destination": "automations"
     },
     {
+      "packagePath": "pkg/services/automations/internal",
+      "disposition": "retain",
+      "destination": "automations/internal"
+    },
+    {
       "packagePath": "pkg/services/automations/internal/services/cron",
       "disposition": "retain",
       "destination": "automations/internal/services/cron"
@@ -776,6 +790,41 @@
       "packagePath": "pkg/services/factory_definitions/internal/services/catalog/wire",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/catalog"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/compilation",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/compilation"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/compilation/canonical",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/compilation"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/compilation/internal/service",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/compilation"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/compilation/loadedsource",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/compilation"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/compilation/loading",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/compilation"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/compilation/runtimeconfig",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/compilation"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/compilation/wire",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/compilation"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/validation",
@@ -1818,6 +1867,11 @@
       "destination": "operator_settings"
     },
     {
+      "packagePath": "pkg/services/operator_settings/transports/cli",
+      "disposition": "retain",
+      "destination": "operator_settings"
+    },
+    {
       "packagePath": "pkg/services/operator_settings/transports/http",
       "disposition": "retain",
       "destination": "operator_settings"
@@ -2178,12 +2232,12 @@
       "destination": "work"
     },
     {
-      "packagePath": "pkg/services/work/transports/mcp",
+      "packagePath": "pkg/services/work/transports/http",
       "disposition": "retain",
       "destination": "work"
     },
     {
-      "packagePath": "pkg/services/work/transports/http",
+      "packagePath": "pkg/services/work/transports/mcp",
       "disposition": "retain",
       "destination": "work"
     },

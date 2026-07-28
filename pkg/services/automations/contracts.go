@@ -77,6 +77,11 @@ type HostedPollers interface {
 	) error
 }
 
+// Clock is the automation time source needed for scheduling and supervision.
+type Clock interface {
+	Now() time.Time
+}
+
 // Service supervises runtime-scoped cron, watcher, listener, and poller
 // automations.
 type Service interface {

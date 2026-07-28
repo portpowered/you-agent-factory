@@ -104,11 +104,7 @@ func initNewFactoryAndOpenSession(
 
 	targets, discoverErr := host.DiscoverTargets(folderPath)
 	if discoverErr == nil {
-		return nil, sessionvalidation.New(
-			factorysessions.ValidationReasonNotRunnable,
-			"folderPath",
-			fmt.Errorf("folder %q already exposes runnable factory targets", resolvedFolder),
-		)
+		return idempotentInitNewFactoryAndOpenSession(ctx, host, liveOpener, resolvedFolder, targets)
 	}
 	reason, _, ok := sessionvalidation.ReasonFromError(discoverErr)
 	if !ok ||
@@ -136,6 +132,34 @@ func initNewFactoryAndOpenSession(
 	}
 	if selectedTarget == nil {
 		return nil, fmt.Errorf("initialized factory folder %q did not resolve to a runnable target", resolvedFolder)
+	}
+	if liveOpener == nil {
+		return nil, fmt.Errorf("live session dataplane opener is required")
+	}
+
+	sessionID, err := liveOpener.OpenForTarget(ctx, *selectedTarget)
+	if err != nil {
+		return nil, err
+	}
+	return &factorysessions.OpenResult{SessionID: sessionID}, nil
+}
+
+func idempotentInitNewFactoryAndOpenSession(
+	ctx context.Context,
+	host OpenControlHost,
+	liveOpener LiveOpener,
+	resolvedFolder string,
+	targets []factorysessions.Target,
+) (*factorysessions.OpenResult, error) {
+	selectedTarget, err := host.SelectTarget(targets, nil)
+	if err != nil {
+		return nil, err
+	}
+	if selectedTarget == nil {
+		return nil, fmt.Errorf("initialized factory folder %q did not resolve to a runnable target", resolvedFolder)
+	}
+	if err := host.InitializeFactoryScaffold(selectedTarget.FactoryDir); err != nil {
+		return nil, err
 	}
 	if liveOpener == nil {
 		return nil, fmt.Errorf("live session dataplane opener is required")

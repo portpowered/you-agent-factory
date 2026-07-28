@@ -323,6 +323,63 @@ func TestNewServiceServesPublishedPackagedCatalogPeerBehavior(t *testing.T) {
 	}
 }
 
+func TestNewServiceServesPublishedCompilePeerBehavior(t *testing.T) {
+	t.Parallel()
+
+	ports := validConstructionPorts(t)
+	service, err := factorydefinitionswire.NewService(
+		ports.sessionHost,
+		ports.validator,
+		ports.persistence,
+		ports.loader,
+		ports.applySupportedFiles,
+		ports.applyStarterWork,
+		ports.namedPaths,
+		ports.namedFactoryCatalogFileSystem,
+		ports.clock,
+		ports.versionFileSystem,
+		ports.listEffective,
+		ports.packagedCatalog,
+		ports.packagedInstaller,
+		ports.requiredToolChecker,
+		ports.orchestratorValidator,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	var root factorydefinitions.Service = service
+
+	_, invalidErr := root.CompileEffectiveFactorySource(
+		context.Background(),
+		factorydefinitions.CompileEffectiveFactorySourceRequest{Canonical: []byte("{")},
+	)
+	if !errors.Is(invalidErr, factorydefinitions.ErrInvalidAuthoredFactorySource) {
+		t.Fatalf(
+			"CompileEffectiveFactorySource invalid-source error = %v, want %v",
+			invalidErr,
+			factorydefinitions.ErrInvalidAuthoredFactorySource,
+		)
+	}
+
+	_, unresolvedErr := root.CompileEffectiveFactorySource(
+		context.Background(),
+		factorydefinitions.CompileEffectiveFactorySourceRequest{
+			Canonical: []byte(`{"worker":"$unresolved"}`),
+		},
+	)
+	if !errors.Is(unresolvedErr, factorydefinitions.ErrUnresolvedDefinitionReference) {
+		t.Fatalf(
+			"CompileEffectiveFactorySource unresolved error = %v, want %v",
+			unresolvedErr,
+			factorydefinitions.ErrUnresolvedDefinitionReference,
+		)
+	}
+	if errors.Is(unresolvedErr, factorydefinitions.ErrInvalidAuthoredFactorySource) {
+		t.Fatal("unresolved definition reference must not also match ErrInvalidAuthoredFactorySource")
+	}
+}
+
 func TestStaticClockReturnsFixedInstant(t *testing.T) {
 	t.Parallel()
 

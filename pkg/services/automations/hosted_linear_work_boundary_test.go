@@ -18,7 +18,7 @@ import (
 	factorydefinitioncomposition "github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
-	automationservice "github.com/portpowered/infinite-you/pkg/services/automations/service"
+	automationinternal "github.com/portpowered/infinite-you/pkg/services/automations/internal"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
@@ -116,7 +116,7 @@ func newHostedLinearBoundaryAutomationService(
 	t *testing.T,
 	httpClient *http.Client,
 	linearEndpoint string,
-) *automationservice.Service {
+) *automationinternal.Service {
 	t.Helper()
 
 	checkpoints, err := automations.NewHostedLinearCheckpointStore(platformfilesystem.Local{})
@@ -130,7 +130,7 @@ func newHostedLinearBoundaryAutomationService(
 		automations.NewHostedLinearSecretResolver(func(string) string { return "" }, os.ReadFile),
 		linearEndpoint,
 	)
-	return automationservice.New(
+	return automationinternal.New(
 		zap.NewNop(),
 		clockwork.NewFakeClock(),
 		nil,

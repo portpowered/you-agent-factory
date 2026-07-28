@@ -8,7 +8,7 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	hostedsourceswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/wire"
-	automationservice "github.com/portpowered/infinite-you/pkg/services/automations/service"
+	automationinternal "github.com/portpowered/infinite-you/pkg/services/automations/internal"
 	"go.uber.org/zap"
 )
 
@@ -49,7 +49,7 @@ func TestAutomationsHostedSourcesConstructsInertly(t *testing.T) {
 func TestAutomationsServiceConstructsHostedSourcesOwnerInertly(t *testing.T) {
 	t.Parallel()
 
-	service := automationservice.NewService(
+	service := automationinternal.NewService(
 		zap.NewNop(),
 		clockwork.NewFakeClock(),
 		nil,
