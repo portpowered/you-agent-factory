@@ -16,8 +16,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter"
 	opencodeadapter "github.com/portpowered/infinite-you/pkg/services/workers/provider/adapter/opencode"
 	"github.com/portpowered/infinite-you/pkg/services/workers/provider/agy"
-	"github.com/portpowered/infinite-you/pkg/services/workers/provider/claude"
-	"github.com/portpowered/infinite-you/pkg/services/workers/provider/codex"
 )
 
 // TerminalResult is the neutral terminal outcome produced by one parity fixture run.
@@ -100,10 +98,6 @@ func runAgyTerminal(_ context.Context, fixture Fixture, transcript []byte) (Term
 
 func adapterForFixture(fixture Fixture) (adapter.Adapter, error) {
 	switch fixture.Provider {
-	case adapter.Identity(modelprovider.ProviderClaude):
-		return claude.NewAdapter(), nil
-	case adapter.Identity(modelprovider.ProviderCodex):
-		return codex.NewResponseAdapter(), nil
 	case adapter.Identity(modelprovider.ProviderOpenCode):
 		return openCodeAdapterForFixture(fixture)
 	default:

@@ -320,6 +320,57 @@ func commandTestRequest() CommandRequest {
 	}
 }
 
+func TestProjectPlatformCommandRunnerRoundTripsAdaptedRunner(t *testing.T) {
+	effect := &recordingEffect{}
+	adapted := AdaptCommandRunner(effect)
+	projected := ProjectPlatformCommandRunner(adapted)
+	request := platformprocess.CommandRequest{
+		Command: "codex",
+		Args:    []string{"exec", "--json"},
+		Stdin:   []byte("prompt"),
+		WorkDir: t.TempDir(),
+	}
+	result, err := projected.Run(t.Context(), request)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if string(result.Stdout) != "ok" {
+		t.Fatalf("stdout = %q, want ok", result.Stdout)
+	}
+	if effect.request.Command != request.Command {
+		t.Fatalf("effect command = %q, want %q", effect.request.Command, request.Command)
+	}
+}
+
+func TestProjectPlatformCommandRunnerPreservesWorkersStreaming(t *testing.T) {
+	streaming := &streamingWorkerRunner{}
+	projected := ProjectPlatformCommandRunner(streaming)
+	streamingPlatform, ok := projected.(interface {
+		RunStreaming(context.Context, platformprocess.CommandRequest, platformprocess.OutputChunkObserver) (platformprocess.CommandResult, error)
+	})
+	if !ok {
+		t.Fatal("projected runner does not expose streaming")
+	}
+	result, err := streamingPlatform.RunStreaming(
+		t.Context(),
+		platformprocess.CommandRequest{Command: "claude"},
+		func(stream string, chunk []byte) {
+			if stream != OutputStreamStdout || string(chunk) != "live" {
+				t.Fatalf("chunk = (%q, %q), want stdout/live", stream, chunk)
+			}
+		},
+	)
+	if err != nil {
+		t.Fatalf("RunStreaming() error = %v", err)
+	}
+	if !streaming.called {
+		t.Fatal("workers streaming runner was not invoked")
+	}
+	if string(result.Stdout) != "live" {
+		t.Fatalf("stdout = %q, want live", result.Stdout)
+	}
+}
+
 type recordingLogger struct {
 	entries []map[string]any
 }

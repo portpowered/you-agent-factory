@@ -45,7 +45,7 @@ func TestFunctionalServerOverrideCompatibilityRegression_MockWorkersAndProviderO
 		support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
 		support.WriteAgentConfig(t, dir, "worker-b", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
 
-		runner := testutil.NewProviderCommandRunner(
+		runner := support.NewShapedProviderCommandRunner(
 			platformprocess.CommandResult{Stdout: []byte("first runtime step complete. COMPLETE")},
 			platformprocess.CommandResult{Stdout: []byte("second runtime step complete. COMPLETE")},
 		)

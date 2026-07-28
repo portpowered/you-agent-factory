@@ -7167,14 +7167,34 @@
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/process/context_cancellation_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/process",
+      "scenario": "TestCLIContextCancellationStopsExternalWork",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/process/context_cancellation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/transport/cli/process/context_cancellation_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/process",
+      "scenario": "TestCLIContextCancellationEmitsNoSuccessResult",
+      "lane": "short",
+      "destination": "tests/functional/transport/cli/process/context_cancellation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
     }
   ],
-  "scanned_at_utc": "2026-07-28T04:45:00Z",
+  "scanned_at_utc": "2026-07-28T03:20:00Z",
   "summary": {
     "by_catch_all": {
       "bootstrap_portability": 22,
       "guards_batch": 23,
-      "none": 439,
+      "none": 441,
       "replay_contracts": 23,
       "runtime_api": 96,
       "smoke": 62,
@@ -7198,15 +7218,15 @@
       "sessionparity": 13,
       "sessions": 3,
       "smoke": 62,
-      "transport": 102,
+      "transport": 104,
       "work": 2,
       "workers": 70,
       "workflow": 30,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 697,
+    "customer_top_level_Test_scenarios": 699,
     "lane_functionallong": 95,
-    "lane_short": 602,
+    "lane_short": 604,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 7,
@@ -7251,7 +7271,7 @@
       "you-agent-factory/tests/functional/transport/cli/commands": 20,
       "you-agent-factory/tests/functional/transport/cli/output": 13,
       "you-agent-factory/tests/functional/transport/cli/parameters": 19,
-      "you-agent-factory/tests/functional/transport/cli/process": 15,
+      "you-agent-factory/tests/functional/transport/cli/process": 17,
       "you-agent-factory/tests/functional/transport/docs": 1,
       "you-agent-factory/tests/functional/transport/http": 1,
       "you-agent-factory/tests/functional/transport/http/server": 14,
@@ -7283,7 +7303,7 @@
       "you-agent-factory/tests/functional/workstations/repeater": 13,
       "you-agent-factory/tests/functional/workstations/watcher": 9
     },
-    "files_with_customer_Test": 233,
+    "files_with_customer_Test": 234,
     "functional_test_go_files": 251,
     "helper_only_non_customer_files": 51,
     "internal_harness_Test_functions": 15,

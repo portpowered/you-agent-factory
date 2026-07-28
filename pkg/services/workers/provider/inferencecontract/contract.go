@@ -4,8 +4,6 @@
 package inferencecontract
 
 import (
-	"context"
-
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -13,6 +11,4 @@ import (
 //
 // Deprecated: Provider is the runtime port implemented by the repository's
 // built-in adapters. New provider integrations should implement Integration.
-type Provider interface {
-	Infer(context.Context, workers.ProviderInferenceRequest) (workers.InferenceResponse, error)
-}
+type Provider = workers.Provider

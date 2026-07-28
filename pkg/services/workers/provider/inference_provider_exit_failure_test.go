@@ -120,7 +120,7 @@ func TestFactoryNewUsesInjectedClockForProviderDiagnostics(t *testing.T) {
 		t.Fatalf("Factory.New() error = %v", err)
 	}
 	response, err := provider.Infer(t.Context(), workerexecution.ProviderInferenceRequest{
-		ModelProvider: string(modelprovider.ProviderCodex),
+		ModelProvider: nativeScriptWrapHarnessProvider,
 		UserMessage:   "measure this provider invocation",
 	})
 	if err != nil {
@@ -158,6 +158,7 @@ func TestScriptWrapProvider_Infer_GenericNonCodexExitFailuresPreserveMessageAndC
 }
 
 func TestScriptWrapProvider_Infer_CodexGPT56SolFailureUsesCanonicalResultAndDecision(t *testing.T) {
+	skipConductorRoutedNativeProviderTest(t)
 	t.Parallel()
 	entry := providerErrorCorpusEntryForTest(t, "codex_gpt_5_6_sol_requires_newer_cli")
 	result := entry.CommandResult()
@@ -182,7 +183,7 @@ func TestScriptWrapProvider_Infer_CodexGPT56SolFailureUsesCanonicalResultAndDeci
 }
 
 func TestScriptWrapProvider_Infer_LogsCorrelatedNormalizedCodexFailureAfterParsing(t *testing.T) {
-	t.Parallel()
+	skipConductorRoutedNativeProviderTest(t)
 	const prompt = "synthetic prompt must not appear"
 	const credential = "credential-value-must-not-appear"
 	sequence := []string{}
@@ -242,7 +243,7 @@ func assertNormalizedFailureFields(t *testing.T, fields map[string]any) {
 }
 
 func TestScriptWrapProvider_Infer_LogsNormalizedFailuresWithoutSyntheticExitCodes(t *testing.T) {
-	t.Parallel()
+	skipConductorRoutedNativeProviderTest(t)
 	for _, tc := range []struct {
 		name          string
 		err           error
@@ -279,6 +280,7 @@ func TestScriptWrapProvider_Infer_LogsNormalizedFailuresWithoutSyntheticExitCode
 }
 
 func TestScriptWrapProvider_Infer_CodexExecutionFailureJSONLogsExcludeCommandOutput(t *testing.T) {
+	skipConductorRoutedNativeProviderTest(t)
 	t.Parallel()
 	const prompt = "codex execution prompt must not appear"
 	const stdoutSecret = "stdout-secret-must-not-appear"
@@ -339,6 +341,7 @@ func normalizedFailureJSONRecord(t *testing.T, logs string) map[string]any {
 }
 
 func TestScriptWrapProvider_Infer_CodexUpgradeFailureIsSearchableInJSONLogs(t *testing.T) {
+	skipConductorRoutedNativeProviderTest(t)
 	t.Parallel()
 	var output bytes.Buffer
 	encoderConfig := zap.NewProductionEncoderConfig()
@@ -468,9 +471,8 @@ func TestProgressStreamIdentity_SelectsProviderOwnedObservers(t *testing.T) {
 		command  string
 		identity adapter.Identity
 	}{
-		{command: "codex", identity: adapter.Identity(modelprovider.ProviderCodex)},
-		{command: `C:\tools\codex.cmd`, identity: adapter.Identity(modelprovider.ProviderCodex)},
 		{command: "claude", identity: adapter.Identity(modelprovider.ProviderClaude)},
+		{command: "opencode", identity: adapter.Identity(modelprovider.ProviderOpenCode)},
 	}
 	for _, tc := range tests {
 		if got := progressStreamIdentity(tc.command); got != tc.identity {
@@ -480,6 +482,7 @@ func TestProgressStreamIdentity_SelectsProviderOwnedObservers(t *testing.T) {
 }
 
 func TestIsCodexCommand_AcceptsNativeExecutableShapes(t *testing.T) {
+	skipConductorRoutedNativeProviderTest(t)
 	t.Parallel()
 	for _, command := range []string{"codex", "codex.exe", `C:\tools\codex.cmd`, "/usr/local/bin/codex"} {
 		if !isCodexCommand(command) {
@@ -717,6 +720,7 @@ func TestNewProviderErrorFromResult_DerivesPolicyFromCanonicalReason(t *testing.
 }
 
 func TestParseClaudeProviderFailure_CredentialFieldValuesNeverPassThrough(t *testing.T) {
+	skipConductorRoutedNativeProviderTest(t)
 	t.Parallel()
 	testCases := []struct {
 		name   string

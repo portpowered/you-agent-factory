@@ -84,8 +84,30 @@ func explicitPackageMapping(packagePath string) (PackageRow, bool) {
 			"delete Workers hosted_logic after Automation Hosted Sources cutover proof (IMP-automations-hosted-sources)",
 		), true
 	default:
+		if row, ok := legacyServiceImplementationMapping(packagePath); ok {
+			return row, true
+		}
 		return PackageRow{}, false
 	}
+}
+
+func legacyServiceImplementationMapping(packagePath string) (PackageRow, bool) {
+	const prefix = "pkg/services/"
+	if !strings.HasPrefix(packagePath, prefix) {
+		return PackageRow{}, false
+	}
+	remainder := strings.TrimPrefix(packagePath, prefix)
+	parts := strings.SplitN(remainder, "/", 3)
+	if len(parts) < 2 || parts[0] == "" || parts[1] != "service" {
+		return PackageRow{}, false
+	}
+	owner := parts[0]
+	return moveRow(
+		packagePath,
+		owner,
+		"pkg/services/"+owner+"/internal",
+		"delete transitional service/ package after owner wire retargets to internal implementation and DEL cutover proof completes",
+	), true
 }
 
 func retainRow(packagePath, destination, kind string) PackageRow {
