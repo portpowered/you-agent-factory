@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -132,6 +133,60 @@ func TestCLIRunHelpDistinguishesRequiredAndOptionalParameters(t *testing.T) {
 	assertInvocationHelpParameterRequirement(t, got, invocationHelpRequiredParameter, true)
 	assertInvocationHelpParameterRequirement(t, got, invocationHelpOptionalParameter, false)
 	assertInvocationHelpParameterRequirement(t, got, invocationHelpOptionalPathParameter, false)
+}
+
+// TestCLIRunHelpDoesNotDispatchExternalWork proves you run --named <factory>
+// --help completes as read-only Factory invocation discovery without invoking
+// external provider command execution or worker dispatch.
+func TestCLIRunHelpDoesNotDispatchExternalWork(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	workingDirectory := t.TempDir()
+	sourceDir := support.ScaffoldFactory(t, invocationHelpFactoryConfig())
+	support.CreateNamedFactory(
+		t,
+		homeDir,
+		workingDirectory,
+		invocationHelpNamedFactoryName,
+		filepath.Join(sourceDir, interfaces.FactoryConfigFile),
+	)
+
+	runner := testutil.NewProviderCommandRunner()
+	process := support.BuildProcess(t, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	})
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run",
+		"--named", invocationHelpNamedFactoryName,
+		"--help",
+	})
+	inputs.Input.Env = append(inputs.Input.Env, "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.WorkingDirectory = workingDirectory
+
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf(
+			"Process.Execute(run --named %s --help) error = %v\nstdout:\n%s\nstderr:\n%s",
+			invocationHelpNamedFactoryName,
+			err,
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
+	}
+	if runner.CallCount() != 0 {
+		t.Fatalf(
+			"provider command runner call count = %d, want 0 for read-only run help",
+			runner.CallCount(),
+		)
+	}
+
+	got := inputs.Stdout()
+	if !strings.Contains(got, "Factory invocation help") {
+		t.Fatalf("run --named %s --help missing Factory invocation help:\n%s", invocationHelpNamedFactoryName, got)
+	}
+	if !strings.Contains(got, "Selected factory: "+invocationHelpFactoryConfigName+" (named factory "+invocationHelpNamedFactoryName+")") {
+		t.Fatalf("run --named %s --help missing selected factory line:\n%s", invocationHelpNamedFactoryName, got)
+	}
 }
 
 func invocationHelpUsageLine(t *testing.T, help string) string {
