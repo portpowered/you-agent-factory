@@ -992,6 +992,29 @@ Wave 0 functional-tests-expansion planning authority lives under
   Catalog metadata infers domain `workers` and subsection
   `transports/cli/run/modes` from the path; every top-level `Test*` needs a
   customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
+- Workers-owned CLI run lifecycle functional coverage belongs in
+  `tests/functional/workers/transports/cli/run/lifecycle/lifecycle_test.go`:
+  drive clean/prompt-style public `you run --factory` through
+  `support.BuildProcess` + `support.FakeInputs` with `serviceedges.Edges`
+  populated via `support.ConfigureWorkerCommands` and
+  `support.NewStaticSuccessCommandRunner` (preferred over `--with-mock-workers`);
+  scaffold a minimal Codex model-worker factory with `support.ScaffoldFactory`
+  and `support.BuildModelWorkerConfig`; prove default primary-result stdout is
+  pipeable and free of dashboard open/startup sidecar chatter. For
+  server-attached targeting, prove `you run --with-server` routes through the
+  hosted live Factory Session (not a detached local one-shot): start a continuous
+  host with `support.StartFunctionalAPIServer` only to show `you --server <url>
+  run` without `--with-server` cannot attach when client provider edges are
+  isolated, then run a separate hosted `you run --factory --with-server`
+  invocation with provider edges on the hosted process only and correlate
+  observable session identity (and optional `/work` reads) on the hosted API
+  while the one-shot host is alive. For clean-invocation failure, use
+  `support.NewShapedProviderCommandRunner` with a deterministic non-zero exit
+  and stderr payload, assert empty stdout without false-success primary result,
+  and decode exactly one stderr `ErrorResponse` with actionable code/message.
+  Catalog metadata infers domain `workers` and subsection
+  `transports/cli/run/lifecycle` from the path; every top-level `Test*` needs a
+  customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
 - Packaged `@you/tts` invocation functional coverage belongs in
   `tests/functional/factory/packaged/tts/invocation_test.go`: prove required-text
   audio artifact metadata, optional voice/format reachability on fake provider

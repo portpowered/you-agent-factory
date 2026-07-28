@@ -63,11 +63,6 @@ func TestMapPackageFactoryDefinitionsMoveDestinations(t *testing.T) {
 			retainOwner: "factory_definitions",
 		},
 		{
-			path:        "pkg/services/factory_definitions/internal/lifecycle",
-			wantRetain:  true,
-			retainOwner: "factory_definitions",
-		},
-		{
 			path: "pkg/services/factory_definitions/service",
 			wantMove: &ownershipinventory.PackageRow{
 				PackagePath:       "pkg/services/factory_definitions/service",
@@ -79,53 +74,9 @@ func TestMapPackageFactoryDefinitionsMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/factory_definitions/definition",
-			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_definitions/definition",
-				Disposition:       ownershipinventory.DispositionMove,
-				Destination:       "factory_definitions",
-				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/factory_definitions/internal",
-				DeletionCondition: "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof",
-			},
-		},
-		{
-			path: "pkg/services/factory_definitions/authoredlayout",
-			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_definitions/authoredlayout",
-				Disposition:       ownershipinventory.DispositionMove,
-				Destination:       "factory_definitions",
-				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/factory_definitions/internal/services/authoring_layout",
-				DeletionCondition: "delete public package after IMP-DEF-authoring_layout private subservice cutover proof",
-			},
-		},
-		{
-			path: "pkg/services/factory_definitions/namedfactories",
-			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_definitions/namedfactories",
-				Disposition:       ownershipinventory.DispositionMove,
-				Destination:       "factory_definitions",
-				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/factory_definitions/internal/services/catalog",
-				DeletionCondition: "delete public package after IMP-DEF-catalog private subservice cutover proof",
-			},
-		},
-		{
 			path:        "pkg/services/factory_definitions/internal/services/catalog/namedfactories",
 			wantRetain:  true,
 			retainOwner: "factory_definitions",
-		},
-		{
-			path: "pkg/services/factory_definitions/loading",
-			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_definitions/loading",
-				Disposition:       ownershipinventory.DispositionMove,
-				Destination:       "factory_definitions",
-				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/factory_definitions/internal/services/compilation",
-				DeletionCondition: "delete public package after IMP-DEF-compilation private subservice cutover proof",
-			},
 		},
 		{
 			path: "pkg/services/factory_definitions/validation",
@@ -136,17 +87,6 @@ func TestMapPackageFactoryDefinitionsMoveDestinations(t *testing.T) {
 				DestinationKind:   ownershipinventory.DestinationKindOwner,
 				Successor:         "pkg/services/factory_definitions/internal/services/validation",
 				DeletionCondition: "delete public package after IMP-DEF-validation private subservice cutover proof",
-			},
-		},
-		{
-			path: "pkg/services/factory_definitions/portableconfig",
-			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_definitions/portableconfig",
-				Disposition:       ownershipinventory.DispositionMove,
-				Destination:       "factory_definitions",
-				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/factory_definitions/internal/services/snapshots_portability",
-				DeletionCondition: "delete public package after IMP-DEF-snapshots_portability private subservice cutover proof",
 			},
 		},
 		{

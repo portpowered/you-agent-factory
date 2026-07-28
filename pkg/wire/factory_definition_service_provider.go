@@ -8,7 +8,6 @@ import (
 	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
-	wirefactorydefinitions "github.com/portpowered/infinite-you/pkg/wire/factorydefinitions"
 )
 
 func provideFactoryDefinitionsFactory(
@@ -55,11 +54,11 @@ func provideFactoryDefinitionsFactory(
 			},
 			persistence.CreateNamedFactory,
 			namedPaths.WriteCurrentPointer,
-			wirefactorydefinitions.PortableFactoryConfigPreparer(
+			factorydefinitionswire.PortableFactoryConfigPreparer(
 				applySupportedFiles,
 				applyStarterWork,
 			),
-			wirefactorydefinitions.FactorySnapshotCapturer(),
+			factorydefinitionswire.FactorySnapshotCapturer(),
 			persistence.ReplaceFactoryLayout,
 			namedPaths,
 			namedFactoryCatalogFileSystem,

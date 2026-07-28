@@ -29,9 +29,7 @@ var compilationForbiddenImportRoots = []string{
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution",
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/loadedsource",
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/runtimeconfig",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/persistence",
 }
 
