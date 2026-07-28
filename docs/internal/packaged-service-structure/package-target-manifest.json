@@ -1046,8 +1046,8 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/namevalue",
-      "disposition": "retain",
-      "destination": "factory_definitions"
+      "disposition": "move",
+      "destination": "factory_definitions/internal/services/validation"
     },
     {
       "packagePath": "pkg/services/factory_definitions/packagedinstallation",
@@ -1057,7 +1057,7 @@
     {
       "packagePath": "pkg/services/factory_definitions/packages/goal",
       "disposition": "move",
-      "destination": "factory_definitions/internal/services/distribution"
+      "destination": "factory_definitions/internal/services/invocation_policy"
     },
     {
       "packagePath": "pkg/services/factory_definitions/packages/packageassets",
@@ -1102,12 +1102,12 @@
     {
       "packagePath": "pkg/services/factory_definitions/replayconfig",
       "disposition": "move",
-      "destination": "factory_definitions/internal"
+      "destination": "factory_definitions/internal/services/snapshots_portability"
     },
     {
       "packagePath": "pkg/services/factory_definitions/resource",
       "disposition": "move",
-      "destination": "factory_definitions/internal/services/catalog"
+      "destination": "factory_definitions/internal/services/validation"
     },
     {
       "packagePath": "pkg/services/factory_definitions/runtimeconfig",
@@ -1162,12 +1162,12 @@
     {
       "packagePath": "pkg/services/factory_definitions/workers",
       "disposition": "move",
-      "destination": "factory_definitions/internal"
+      "destination": "factory_definitions/internal/services/validation"
     },
     {
       "packagePath": "pkg/services/factory_definitions/workers/taxonomy",
       "disposition": "move",
-      "destination": "factory_definitions/internal"
+      "destination": "factory_definitions/internal/services/validation"
     },
     {
       "packagePath": "pkg/services/factory_definitions/workpropagation",

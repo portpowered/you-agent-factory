@@ -120,7 +120,7 @@ func TestMapCommittedOwnerPackageFactoryDefinitionsMoveDestinations(t *testing.T
 			want: PackageMapping{
 				PackagePath: "pkg/services/factory_definitions/packages/goal",
 				Disposition: DispositionMove,
-				Destination: "factory_definitions/internal/services/distribution",
+				Destination: "factory_definitions/internal/services/invocation_policy",
 			},
 		},
 		{
@@ -135,15 +135,42 @@ func TestMapCommittedOwnerPackageFactoryDefinitionsMoveDestinations(t *testing.T
 		},
 		{
 			path: "pkg/services/factory_definitions/namevalue",
-			wantRetain: true,
-			retainOwner: "factory_definitions",
+			want: PackageMapping{
+				PackagePath: "pkg/services/factory_definitions/namevalue",
+				Disposition: DispositionMove,
+				Destination: "factory_definitions/internal/services/validation",
+			},
+		},
+		{
+			path: "pkg/services/factory_definitions/workers",
+			want: PackageMapping{
+				PackagePath: "pkg/services/factory_definitions/workers",
+				Disposition: DispositionMove,
+				Destination: "factory_definitions/internal/services/validation",
+			},
 		},
 		{
 			path: "pkg/services/factory_definitions/workers/taxonomy",
 			want: PackageMapping{
 				PackagePath: "pkg/services/factory_definitions/workers/taxonomy",
 				Disposition: DispositionMove,
-				Destination: "factory_definitions/internal",
+				Destination: "factory_definitions/internal/services/validation",
+			},
+		},
+		{
+			path: "pkg/services/factory_definitions/replayconfig",
+			want: PackageMapping{
+				PackagePath: "pkg/services/factory_definitions/replayconfig",
+				Disposition: DispositionMove,
+				Destination: "factory_definitions/internal/services/snapshots_portability",
+			},
+		},
+		{
+			path: "pkg/services/factory_definitions/resource",
+			want: PackageMapping{
+				PackagePath: "pkg/services/factory_definitions/resource",
+				Disposition: DispositionMove,
+				Destination: "factory_definitions/internal/services/validation",
 			},
 		},
 		{
@@ -313,8 +340,6 @@ func factoryDefinitionsCanonicalRetainRest(rest string) bool {
 	case strings.HasPrefix(rest, "internal/services/snapshots_portability"):
 		return true
 	case strings.HasPrefix(rest, "internal/contracts"):
-		return true
-	case rest == "namevalue" || strings.HasPrefix(rest, "namevalue/"):
 		return true
 	default:
 		return false

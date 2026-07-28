@@ -140,8 +140,8 @@ func TestMapPackageFactoryDefinitionsMoveDestinations(t *testing.T) {
 				Disposition:       ownershipinventory.DispositionMove,
 				Destination:       "factory_definitions",
 				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/factory_definitions/internal/services/distribution",
-				DeletionCondition: "delete public package after IMP-DEF-distribution private subservice cutover proof",
+				Successor:         "pkg/services/factory_definitions/internal/services/invocation_policy",
+				DeletionCondition: "delete public package after IMP-DEF-invocation_policy private subservice cutover proof",
 			},
 		},
 		{
@@ -151,8 +151,25 @@ func TestMapPackageFactoryDefinitionsMoveDestinations(t *testing.T) {
 		},
 		{
 			path: "pkg/services/factory_definitions/namevalue",
-			wantRetain: true,
-			retainOwner: "factory_definitions",
+			wantMove: &ownershipinventory.PackageRow{
+				PackagePath:       "pkg/services/factory_definitions/namevalue",
+				Disposition:       ownershipinventory.DispositionMove,
+				Destination:       "factory_definitions",
+				DestinationKind:   ownershipinventory.DestinationKindOwner,
+				Successor:         "pkg/services/factory_definitions/internal/services/validation",
+				DeletionCondition: "delete public package after IMP-DEF-validation private subservice cutover proof",
+			},
+		},
+		{
+			path: "pkg/services/factory_definitions/workers",
+			wantMove: &ownershipinventory.PackageRow{
+				PackagePath:       "pkg/services/factory_definitions/workers",
+				Disposition:       ownershipinventory.DispositionMove,
+				Destination:       "factory_definitions",
+				DestinationKind:   ownershipinventory.DestinationKindOwner,
+				Successor:         "pkg/services/factory_definitions/internal/services/validation",
+				DeletionCondition: "delete public package after IMP-DEF-validation private subservice cutover proof",
+			},
 		},
 		{
 			path: "pkg/services/factory_definitions/workers/taxonomy",
@@ -161,8 +178,30 @@ func TestMapPackageFactoryDefinitionsMoveDestinations(t *testing.T) {
 				Disposition:       ownershipinventory.DispositionMove,
 				Destination:       "factory_definitions",
 				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/factory_definitions/internal",
-				DeletionCondition: "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof",
+				Successor:         "pkg/services/factory_definitions/internal/services/validation",
+				DeletionCondition: "delete public package after IMP-DEF-validation private subservice cutover proof",
+			},
+		},
+		{
+			path: "pkg/services/factory_definitions/replayconfig",
+			wantMove: &ownershipinventory.PackageRow{
+				PackagePath:       "pkg/services/factory_definitions/replayconfig",
+				Disposition:       ownershipinventory.DispositionMove,
+				Destination:       "factory_definitions",
+				DestinationKind:   ownershipinventory.DestinationKindOwner,
+				Successor:         "pkg/services/factory_definitions/internal/services/snapshots_portability",
+				DeletionCondition: "delete public package after IMP-DEF-snapshots_portability private subservice cutover proof",
+			},
+		},
+		{
+			path: "pkg/services/factory_definitions/resource",
+			wantMove: &ownershipinventory.PackageRow{
+				PackagePath:       "pkg/services/factory_definitions/resource",
+				Disposition:       ownershipinventory.DispositionMove,
+				Destination:       "factory_definitions",
+				DestinationKind:   ownershipinventory.DestinationKindOwner,
+				Successor:         "pkg/services/factory_definitions/internal/services/validation",
+				DeletionCondition: "delete public package after IMP-DEF-validation private subservice cutover proof",
 			},
 		},
 		{
