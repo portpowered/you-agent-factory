@@ -90,10 +90,57 @@ func CursorProviderSuccessStdout(result string) []byte {
 	return append(append(systemEncoded, '\n'), resultEncoded...)
 }
 
+func CodexSuccessStdout(result string) []byte {
+	if result == "" {
+		result = "Done. COMPLETE"
+	}
+	item, err := json.Marshal(map[string]any{
+		"type": "item.completed",
+		"item": map[string]any{
+			"id":   "codex-functional-message",
+			"type": "agent_message",
+			"text": result,
+		},
+	})
+	if err != nil {
+		panic(err)
+	}
+	turnCompleted, err := json.Marshal(map[string]any{
+		"type":  "turn.completed",
+		"usage": map[string]any{"input_tokens": 1, "output_tokens": 1},
+	})
+	if err != nil {
+		panic(err)
+	}
+	return []byte(
+		`{"type":"turn.started"}` + "\n" +
+			string(item) + "\n" +
+			string(turnCompleted) + "\n",
+	)
+}
+
+func ClaudeSuccessStdout(result string) []byte {
+	if result == "" {
+		result = "Done. COMPLETE"
+	}
+	payload := map[string]any{
+		"type":        "result",
+		"subtype":     "success",
+		"is_error":    false,
+		"result":      result,
+		"session_id":  "claude-functional-test-session",
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		panic(err)
+	}
+	return append(encoded, '\n')
+}
+
 func AcceptedCommandResults(count int) []platformprocess.CommandResult {
 	results := make([]platformprocess.CommandResult, count)
 	for i := range results {
-		results[i] = platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")}
+		results[i] = platformprocess.CommandResult{Stdout: CodexSuccessStdout("Done. COMPLETE")}
 	}
 	return results
 }

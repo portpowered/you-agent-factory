@@ -1,9 +1,0 @@
-{"type":"system","subtype":"init","session_id":"claude-session-snapshot"}
-{"type":"stream_event","session_id":"claude-session-snapshot","event":{"type":"message_start","message":{"id":"msg_text","role":"assistant","content":[]}}}
-{"type":"stream_event","session_id":"claude-session-snapshot","event":{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}}
-{"type":"stream_event","session_id":"claude-session-snapshot","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"draft text"}}}
-{"type":"stream_event","session_id":"claude-session-snapshot","event":{"type":"content_block_stop","index":0}}
-{"type":"stream_event","session_id":"claude-session-snapshot","event":{"type":"message_stop"}}
-{"type":"assistant","session_id":"claude-session-snapshot","message":{"id":"msg_text","role":"assistant","content":[{"type":"text","text":"authoritative text"}]}}
-{"type":"assistant","session_id":"claude-session-snapshot","message":{"id":"msg_text","role":"assistant","content":[{"type":"text","text":"authoritative text"}]}}
-{"type":"assistant","session_id":"claude-session-snapshot","message":{"id":"msg_text_2","role":"assistant","content":[{"type":"text","text":"later message"}]}}

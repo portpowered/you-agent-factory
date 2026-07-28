@@ -45,7 +45,9 @@ var apiSet = wire.NewSet(
 )
 
 var servicesSet = wire.NewSet(
+	provideProvidersService,
 	provideProviderRegistry,
+	provideProviderRegistryRebinder,
 	wire.Bind(new(initializerapplication.ProviderRegistry), new(*providerregistry.Registry)),
 	provideFactorySessionProviderIdentityResolver,
 	factorysessionwire.NewRequestPreparation,
@@ -128,6 +130,7 @@ var servicesSet = wire.NewSet(
 	provideOrchestrationJavaScriptExecution,
 	provideOrchestrationCompilation,
 	provideFactorySessionExecutionFactory,
+	provideConductorInvocationWithProgressFactory,
 	provideRecordingsProjectionFactory,
 	provideRecordingsFactory,
 	provideRuntimeLedgerFactory,

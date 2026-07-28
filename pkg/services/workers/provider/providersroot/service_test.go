@@ -44,12 +44,12 @@ func TestExecutePreservesWorkerContextForNativeProviders(t *testing.T) {
 	}
 
 	result, err := root.Execute(t.Context(), providers.ExecuteRequest{
-		Provider:         providers.IDCodex,
-		AttemptID:        "dispatch-goal-1",
-		WorkerType:       "goal-executor",
-		WorkstationName:  "execute-goal",
-		SystemPrompt:     "system",
-		UserMessage:      "user",
+		Provider:        providers.IDKiro,
+		AttemptID:       "dispatch-goal-1",
+		WorkerType:      "goal-executor",
+		WorkstationName: "execute-goal",
+		SystemPrompt:    "system",
+		UserMessage:     "user",
 	})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
