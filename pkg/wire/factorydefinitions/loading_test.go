@@ -10,8 +10,8 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
-	factorynamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig"
 	wirefactorydefinitions "github.com/portpowered/infinite-you/pkg/wire/factorydefinitions"
 )
 
@@ -110,7 +110,7 @@ func newTestLoader(
 			config,
 		)
 	}
-	namedPaths, err := factorynamedpaths.New(fileSystem)
+	namedPaths, err := factorydefinitionswire.NewPathResolver(fileSystem)
 	if err != nil {
 		t.Fatalf("construct named-path resolver: %v", err)
 	}

@@ -11,6 +11,7 @@ const (
 	transitionalServiceImport     = "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
 	transitionalDefinitionImport  = "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition"
 	transitionalValidationImport  = "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
+	factoryDefinitionsModule      = "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 var transitionalSnapshotPackages = []string{
@@ -18,6 +19,37 @@ var transitionalSnapshotPackages = []string{
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/snapshotcapture",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/editable",
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/replayconfig",
+}
+
+var foldedCatalogSiblingSuffixes = []string{
+	"/namedpaths",
+	"/namedfactories",
+	"/persistence",
+	"/resource",
+}
+
+func TestWire_DoesNotImportFoldedCatalogPublicSiblings(t *testing.T) {
+	t.Parallel()
+
+	cmd := exec.Command("go", "list", "-f", "{{.Imports}}", factoryDefinitionsWirePackage)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("go list imports for %s: %v\n%s", factoryDefinitionsWirePackage, err, output)
+	}
+
+	imports := strings.Fields(strings.Trim(string(output), "[]"))
+	for _, importPath := range imports {
+		for _, suffix := range foldedCatalogSiblingSuffixes {
+			if importPath == factoryDefinitionsModule+suffix ||
+				strings.HasPrefix(importPath, factoryDefinitionsModule+suffix+"/") {
+				t.Fatalf(
+					"%s must construct catalog ports from catalog-owned modules, not public sibling %s",
+					factoryDefinitionsWirePackage,
+					importPath,
+				)
+			}
+		}
+	}
 }
 
 func TestWire_DoesNotImportTransitionalServiceShim(t *testing.T) {

@@ -48,6 +48,15 @@ func NewNamedFactoryCatalog(
 	return catalognamedfactories.New(paths, fileSystem)
 }
 
+// ResolveCurrent resolves the active Factory definition under rootDir using
+// the catalog-owned named-factory helper and an injected path resolver.
+func ResolveCurrent(
+	paths factorydefinitions.NamedPathResolver,
+	rootDir string,
+) (string, error) {
+	return catalognamedfactories.ResolveCurrent(paths, rootDir)
+}
+
 // NewPersistence constructs the catalog-owned Factory Definitions persistence
 // implementation from the exact serialization and filesystem ports used by owner
 // composition.

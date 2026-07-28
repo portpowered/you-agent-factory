@@ -31,7 +31,8 @@ import (
 	platformruntimeartifact "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorynamedfactories "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedfactories"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packagedinstallation"
 	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -63,7 +64,7 @@ func provideCurrentFactoryDirectoryResolver(
 	namedPaths factorydefinitions.NamedPathResolver,
 ) factorydefinitions.CurrentFactoryDirectoryResolver {
 	return func(rootDir string) (string, error) {
-		return factorynamedfactories.ResolveCurrent(namedPaths, rootDir)
+		return factorydefinitionswire.ResolveCurrent(namedPaths, rootDir)
 	}
 }
 
