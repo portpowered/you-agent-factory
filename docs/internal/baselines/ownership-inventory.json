@@ -1342,6 +1342,12 @@
       "evidence": "pkg/services/factory_visualization/transports/http -\u003e pkg/transports/http/generated"
     },
     {
+      "fromOwner": "factory_visualization",
+      "toOwner": "transports",
+      "class": "command",
+      "evidence": "pkg/services/factory_visualization/transports/http -\u003e pkg/transports/http/generated"
+    },
+    {
       "fromOwner": "initializer",
       "toOwner": "platform",
       "class": "lifecycle",
@@ -3207,6 +3213,12 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/transports/cli",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/transports/mcp",
       "disposition": "retain",
       "destination": "factory_runtime",
       "destinationKind": "owner"
