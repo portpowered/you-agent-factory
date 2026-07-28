@@ -111,8 +111,8 @@
     "pkg/services/factory_definitions/internal/services/compilation/runtimeconfig",
     "pkg/services/factory_definitions/internal/services/compilation/wire",
     "pkg/services/factory_definitions/internal/services/distribution",
-    "pkg/services/factory_definitions/internal/services/distribution/internal/service",
     "pkg/services/factory_definitions/internal/services/distribution/goal",
+    "pkg/services/factory_definitions/internal/services/distribution/internal/service",
     "pkg/services/factory_definitions/internal/services/distribution/packageassets",
     "pkg/services/factory_definitions/internal/services/distribution/packagedcatalog",
     "pkg/services/factory_definitions/internal/services/distribution/packagedinstallation",
@@ -340,6 +340,7 @@
     "pkg/services/models/wire",
     "pkg/services/operator_settings",
     "pkg/services/operator_settings/identityinventory",
+    "pkg/services/operator_settings/internal/construct",
     "pkg/services/operator_settings/internal/service",
     "pkg/services/operator_settings/internal/services/document",
     "pkg/services/operator_settings/internal/services/document/internal/service",
@@ -917,12 +918,12 @@
       "destination": "factory_definitions/internal/services/distribution"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/internal/service",
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/goal",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/distribution"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/goal",
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/internal/service",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/distribution"
     },
@@ -2060,6 +2061,11 @@
       "packagePath": "pkg/services/operator_settings/identityinventory",
       "disposition": "move",
       "destination": "operator_settings/internal/services/document"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/internal/construct",
+      "disposition": "move",
+      "destination": "operator_settings/internal"
     },
     {
       "packagePath": "pkg/services/operator_settings/internal/service",

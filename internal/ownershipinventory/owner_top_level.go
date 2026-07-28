@@ -72,8 +72,6 @@ var productOwnerTopLevelSpecs = map[string]OwnerTopLevelSpec{
 		ExpectedRetain: []string{"internal", "transports", "wire"},
 		Unexpected: []string{
 			"build",
-			"checkpointstore",
-			"checkpointsummary",
 			"context",
 			"definitionmapping",
 			"engine",
