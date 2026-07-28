@@ -461,6 +461,71 @@ func TestSessionResponseEventStore_CompleteWhileWaitingNextDrainsPublishedEvent(
 	}
 }
 
+func TestSessionResponseEventStore_NextCanceledContextDrainsRetainedEvents(t *testing.T) {
+	t.Parallel()
+
+	store := newResponseEventStore("session-abc")
+	if _, err := store.Publish(samplePublishInput()); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+
+	subscription, err := store.Subscribe(0)
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	defer subscription.Detach()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	events, err := subscription.Next(ctx)
+	if err != nil {
+		t.Fatalf("Next with canceled context and retained events: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("event count = %d, want 1", len(events))
+	}
+	if events[0].Sequence != 1 {
+		t.Fatalf("sequence = %d, want 1", events[0].Sequence)
+	}
+}
+
+func TestSessionResponseEventStore_DrainReturnsRetainedEvents(t *testing.T) {
+	t.Parallel()
+
+	store := newResponseEventStore("session-abc")
+	for range 2 {
+		if _, err := store.Publish(samplePublishInput()); err != nil {
+			t.Fatalf("publish: %v", err)
+		}
+	}
+
+	subscription, err := store.Subscribe(0)
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	defer subscription.Detach()
+
+	events, err := subscription.Drain()
+	if err != nil {
+		t.Fatalf("Drain: %v", err)
+	}
+	if len(events) != 2 {
+		t.Fatalf("drained event count = %d, want 2", len(events))
+	}
+	if events[0].Sequence != 1 || events[1].Sequence != 2 {
+		t.Fatalf("sequences = [%d,%d], want [1,2]", events[0].Sequence, events[1].Sequence)
+	}
+
+	events, err = subscription.Drain()
+	if err != nil {
+		t.Fatalf("Drain after cursor advance: %v", err)
+	}
+	if len(events) != 0 {
+		t.Fatalf("second drain event count = %d, want 0", len(events))
+	}
+}
+
 func TestSessionResponseEventStore_DetachWhileWaitingNextReturnsPromptly(t *testing.T) {
 	t.Parallel()
 
