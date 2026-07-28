@@ -205,6 +205,230 @@ func TestPetriParentOrSameNameGuardReleasesExpectedWork(t *testing.T) {
 	})
 }
 
+// TestPetriVisitOrMatchGuardFailureIsVisibleInPublicWorkState proves
+// VISIT_COUNT and MATCHES_FIELDS eligibility guard failures are observable
+// through public Work and Factory Session surfaces without inspecting internal
+// Petri markings.
+func TestPetriVisitOrMatchGuardFailureIsVisibleInPublicWorkState(t *testing.T) {
+	t.Run("visit count loop breaker routes over-limit work to failed", func(t *testing.T) {
+		dir := support.ScaffoldFactory(t, visitCountLoopBreakerFactoryConfig())
+		support.WriteAgentConfig(t, dir, "executor", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+		support.WriteAgentConfig(t, dir, "reviewer", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+		support.WriteWorkstationConfig(t, dir, "review-loop-breaker", "---\ntype: LOGICAL_MOVE\n---\n")
+
+		const traceID = "trace-visit-count-guard-failure"
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			WorkTypeID: "story",
+			TraceID:    traceID,
+			Payload:    []byte(`{"title":"visit-count guard failure proof"}`),
+		})
+
+		runner := support.NewShapedProviderCommandRunner(
+			codexCommandResult("Done. COMPLETE"),
+			codexCommandResult("needs more work"),
+			codexCommandResult("Done. COMPLETE"),
+			codexCommandResult("needs more work"),
+		)
+		session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(
+			t,
+			dir,
+			serviceedges.Edges{ProviderCommandRunner: runner},
+			15*time.Second,
+		)
+
+		for placeID, want := range map[string]int{
+			support.WorkCustomerLocation("story", "failed"):    1,
+			support.WorkCustomerLocation("story", "init"):      0,
+			support.WorkCustomerLocation("story", "in-review"): 0,
+			support.WorkCustomerLocation("story", "complete"):  0,
+		} {
+			if got := support.CountWorkAtCustomerState(listed, placeID); got != want {
+				t.Fatalf("%s work count = %d, want %d; listed=%#v", placeID, got, want, listed)
+			}
+		}
+		loopBreakerIndexes := dispatchResponseIndexesForTransition(t, events, "review-loop-breaker")
+		if len(loopBreakerIndexes) != 1 {
+			t.Fatalf("review-loop-breaker dispatch count = %d, want 1 after visit-count guard failure", len(loopBreakerIndexes))
+		}
+		assertQuiescentSession(t, session, 0, 1)
+		assertTerminalWorkCorrelatesToTraceID(t, listed, traceID)
+		if runner.CallCount() != 4 {
+			t.Fatalf("provider command calls = %d, want 4 (execute, review reject, execute, review reject)", runner.CallCount())
+		}
+	})
+
+	t.Run("matches fields guard blocks mismatched inputs", func(t *testing.T) {
+		dir := support.ScaffoldFactory(t, matchesFieldsGuardFactoryConfig())
+		support.WriteAgentConfig(t, dir, "matcher", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
+
+		const (
+			mismatchedPlanWorkID = "plan-alpha"
+			mismatchedTaskWorkID = "task-beta"
+			mismatchTraceID      = "trace-matches-fields-mismatch"
+		)
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			Name:       "flavor-a",
+			WorkID:     mismatchedPlanWorkID,
+			WorkTypeID: "plan",
+			TraceID:    mismatchTraceID,
+			Payload:    []byte(`{"role":"plan"}`),
+		})
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+			Name:       "flavor-b",
+			WorkID:     mismatchedTaskWorkID,
+			WorkTypeID: "task",
+			TraceID:    mismatchTraceID,
+			Payload:    []byte(`{"role":"task"}`),
+		})
+
+		runner := support.NewShapedProviderCommandRunner(
+			codexCommandResult("Done. COMPLETE"),
+		)
+		server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+			FactoryDir: dir,
+			Edges: serviceedges.Edges{
+				ProviderCommandRunner: runner,
+			},
+		})
+		defer server.Stop(t)
+
+		baseURL := server.URL()
+		waitForMinimumWorkAtCustomerState(
+			t,
+			baseURL,
+			support.WorkCustomerLocation("plan", "ready"),
+			1,
+			10*time.Second,
+		)
+		waitForMinimumWorkAtCustomerState(
+			t,
+			baseURL,
+			support.WorkCustomerLocation("task", "ready"),
+			1,
+			10*time.Second,
+		)
+		waitForBlockedMatchesFieldsGuardObservation(t, baseURL, 10*time.Second)
+
+		listed := support.ListDefaultSessionWork(t, baseURL)
+		if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("plan", "matched")); got != 0 {
+			t.Fatalf("matched plan count = %d, want 0 for mismatched field values; listed=%#v", got, listed)
+		}
+		if got := support.CountWorkAtCustomerState(listed, support.WorkCustomerLocation("task", "matched")); got != 0 {
+			t.Fatalf("matched task count = %d, want 0 for mismatched field values; listed=%#v", got, listed)
+		}
+		for workID, location := range map[string]string{
+			mismatchedPlanWorkID: support.WorkCustomerLocation("plan", "ready"),
+			mismatchedTaskWorkID: support.WorkCustomerLocation("task", "ready"),
+		} {
+			if !support.HasWorkAtCustomerState(listed, workID, location) {
+				t.Fatalf("work %q missing public %s state; listed=%#v", workID, location, listed)
+			}
+		}
+
+		events := server.GetFactoryEvents(t)
+		if indexes := dispatchResponseIndexesForTransition(t, events, "pair-items"); len(indexes) != 0 {
+			t.Fatalf("pair-items dispatch count = %d, want 0 while MATCHES_FIELDS guard blocks mismatched names", len(indexes))
+		}
+		if runner.CallCount() != 0 {
+			t.Fatalf("provider command calls = %d, want 0 while MATCHES_FIELDS guard blocks mismatched inputs", runner.CallCount())
+		}
+	})
+}
+
+func visitCountLoopBreakerFactoryConfig() map[string]any {
+	return map[string]any{
+		"name": "visit-count-guard-failure",
+		"workTypes": []map[string]any{{
+			"name": "story",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "in-review", "type": "PROCESSING"},
+				{"name": "complete", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": []map[string]string{
+			{"name": "executor"},
+			{"name": "reviewer"},
+		},
+		"workstations": []map[string]any{
+			{
+				"name":      "execute-story",
+				"worker":    "executor",
+				"inputs":    []map[string]string{{"workType": "story", "state": "init"}},
+				"outputs":   []map[string]string{{"workType": "story", "state": "in-review"}},
+				"onFailure": []map[string]string{{"workType": "story", "state": "failed"}},
+			},
+			{
+				"name":        "review-story",
+				"worker":      "reviewer",
+				"inputs":      []map[string]string{{"workType": "story", "state": "in-review"}},
+				"onFailure":   []map[string]string{{"workType": "story", "state": "failed"}},
+				"onRejection": []map[string]string{{"workType": "story", "state": "init"}},
+				"outputs":     []map[string]string{{"workType": "story", "state": "complete"}},
+			},
+			{
+				"name":   "review-loop-breaker",
+				"type":   "LOGICAL_MOVE",
+				"inputs": []map[string]string{{"workType": "story", "state": "init"}},
+				"outputs": []map[string]string{
+					{"workType": "story", "state": "failed"},
+				},
+				"guards": []map[string]any{{
+					"type":        "VISIT_COUNT",
+					"workstation": "review-story",
+					"maxVisits":   float64(2),
+				}},
+			},
+		},
+	}
+}
+
+func matchesFieldsGuardFactoryConfig() map[string]any {
+	return map[string]any{
+		"name": "matches-fields-guard-eligibility",
+		"workTypes": []map[string]any{
+			{
+				"name": "plan",
+				"states": []map[string]string{
+					{"name": "ready", "type": "INITIAL"},
+					{"name": "matched", "type": "TERMINAL"},
+				},
+			},
+			{
+				"name": "task",
+				"states": []map[string]string{
+					{"name": "ready", "type": "INITIAL"},
+					{"name": "matched", "type": "TERMINAL"},
+				},
+			},
+		},
+		"workers": []map[string]string{
+			{"name": "matcher"},
+		},
+		"workstations": []map[string]any{
+			{
+				"name":   "pair-items",
+				"worker": "matcher",
+				"inputs": []map[string]string{
+					{"workType": "plan", "state": "ready"},
+					{"workType": "task", "state": "ready"},
+				},
+				"outputs": []map[string]string{
+					{"workType": "plan", "state": "matched"},
+					{"workType": "task", "state": "matched"},
+				},
+				"guards": []map[string]any{{
+					"type": "MATCHES_FIELDS",
+					"matchConfig": map[string]string{
+						"inputKey": ".Name",
+					},
+				}},
+			},
+		},
+	}
+}
+
 func sameNameGuardFactoryConfig() map[string]any {
 	return map[string]any{
 		"name": "same-name-guard-eligibility",
@@ -334,15 +558,20 @@ func assertTerminalWorkCorrelatesToTraceID(
 	t.Helper()
 
 	for _, item := range listed.Results {
-		if item.State == nil || item.State.Name != "complete" {
+		if item.State == nil {
+			continue
+		}
+		switch item.State.Name {
+		case "complete", "failed":
+		default:
 			continue
 		}
 		if item.TraceId == nil || *item.TraceId != traceID {
-			t.Fatalf("complete work trace ID = %#v, want %q", item.TraceId, traceID)
+			t.Fatalf("%s work trace ID = %#v, want %q", item.State.Name, item.TraceId, traceID)
 		}
 		return
 	}
-	t.Fatalf("listed work missing story:complete for trace %q", traceID)
+	t.Fatalf("listed work missing terminal story outcome for trace %q", traceID)
 }
 
 func waitForBlockedSameNameGuardObservation(t *testing.T, baseURL string, timeout time.Duration) {
@@ -352,6 +581,17 @@ func waitForBlockedSameNameGuardObservation(t *testing.T, baseURL string, timeou
 		return status.Categories.Initial == 2 &&
 			status.Categories.Processing == 0 &&
 			status.Categories.Terminal == 0
+	})
+}
+
+func waitForBlockedMatchesFieldsGuardObservation(t *testing.T, baseURL string, timeout time.Duration) {
+	t.Helper()
+
+	support.WaitForStatus(t, baseURL, timeout, func(status factoryapi.StatusResponse) bool {
+		return status.Categories.Initial == 2 &&
+			status.Categories.Processing == 0 &&
+			status.Categories.Terminal == 0 &&
+			status.Categories.Failed == 0
 	})
 }
 
