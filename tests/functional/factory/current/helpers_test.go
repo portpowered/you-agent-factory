@@ -203,3 +203,14 @@ func versionDocument(version factoryapi.HybridLogicalTimestamp) map[string]strin
 		"physical": version.Physical.UTC().Format(time.RFC3339Nano),
 	}
 }
+
+const factoryValidationCodeDanglingPlaceReference = "factory.route.danglingPlaceReference"
+
+func hasValidationTargetCode(targets []factoryapi.FactoryValidationTarget, code string) bool {
+	for _, target := range targets {
+		if target.Code == code {
+			return true
+		}
+	}
+	return false
+}
