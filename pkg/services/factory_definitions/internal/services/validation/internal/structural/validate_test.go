@@ -3,30 +3,30 @@ package structural_test
 import (
 	"testing"
 
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/structural"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
-func validPetriFactoryConfig() *factorycontracts.FactoryConfig {
-	return &factorycontracts.FactoryConfig{
+func validPetriFactoryConfig() *factorydefinitions.FactoryConfig {
+	return &factorydefinitions.FactoryConfig{
 		Name: "structural-validation",
-		WorkTypes: []factorycontracts.WorkTypeConfig{{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{{
 			Name: "task",
-			States: []factorycontracts.StateConfig{
-				{Name: "init", Type: factorycontracts.StateTypeInitial},
-				{Name: "done", Type: factorycontracts.StateTypeTerminal},
-				{Name: "failed", Type: factorycontracts.StateTypeFailed},
+			States: []factorydefinitions.StateConfig{
+				{Name: "init", Type: factorydefinitions.StateTypeInitial},
+				{Name: "done", Type: factorydefinitions.StateTypeTerminal},
+				{Name: "failed", Type: factorydefinitions.StateTypeFailed},
 			},
 		}},
 		Workers: []workerconfig.Config{{Name: "worker-a"}},
-		Workstations: []factorycontracts.FactoryWorkstationConfig{{
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{{
 			Name:           "process",
 			WorkerTypeName: "worker-a",
-			Inputs:         []factorycontracts.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-			Outputs:        []factorycontracts.IOConfig{{WorkTypeName: "task", StateName: "done"}},
-			OnFailure:      []factorycontracts.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
+			Inputs:         []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+			Outputs:        []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+			OnFailure:      []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
 		}},
 	}
 }
@@ -53,8 +53,8 @@ func TestValidate_DuplicateWorkerReturnsTypedStructuralTarget(t *testing.T) {
 	found := false
 	for _, target := range result.Targets {
 		if target.Code == factoryvalidation.CodeDuplicateIdentifier &&
-			target.Severity == factorycontracts.ValidationSeverityError &&
-			target.Subject.Type == factorycontracts.ValidationSubjectTypeWorker {
+			target.Severity == factorydefinitions.ValidationSeverityError &&
+			target.Subject.Type == factorydefinitions.ValidationSubjectTypeWorker {
 			found = true
 		}
 	}

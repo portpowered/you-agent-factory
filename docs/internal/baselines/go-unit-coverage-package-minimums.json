@@ -231,14 +231,6 @@
       "minimum": 54.26
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts",
-      "minimum": 88.23
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts/namevalue",
-      "minimum": 92.59
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/decisionenvelope",
       "minimum": 84.84
     },
@@ -249,6 +241,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/editable",
       "minimum": 68.75
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts",
+      "minimum": 88.23
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/namedfactories",
@@ -305,6 +301,36 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire",
       "minimum": 90.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active unit coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The unit coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/capture",
+      "minimum": 43.50
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/internal/service",
+      "minimum": 58.70
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/materialize",
+      "minimum": 55.80
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/prepare",
+      "minimum": 52.60
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/wire",
+      "minimum": 93.75
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation",
@@ -373,6 +399,10 @@
       "minimum": 80.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namevalue",
+      "minimum": 92.59
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packagedinstallation",
       "minimum": 81.11
     },
@@ -412,7 +442,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig",
-      "minimum": 67.00
+      "minimum": 64.39
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/quorumpolicy",
@@ -1649,6 +1679,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/service",
       "minimum": 72.95
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/stateaccessrecordings",
+      "minimum": 100.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/transports/cli",

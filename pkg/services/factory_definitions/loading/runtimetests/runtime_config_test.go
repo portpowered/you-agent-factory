@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 // portos:func-length-exception owner=agent-factory reason=legacy-runtime-config-fixture review=2026-07-18 removal=split-runtime-config-fixture-before-next-runtime-config-change
@@ -154,7 +154,7 @@ Process.
 		t.Fatalf("expected one preserved factory guard, got %#v", loaded.FactoryConfig().Guards)
 	}
 	guard := loaded.FactoryConfig().Guards[0]
-	if guard.Type != interfaces.GuardTypeInferenceThrottle || guard.ModelProvider != "claude" || guard.Model != "claude-sonnet-4-5-20250514" || guard.RefreshWindow != "3s" {
+	if guard.Type != factorydefinitions.GuardTypeInferenceThrottle || guard.ModelProvider != "claude" || guard.Model != "claude-sonnet-4-5-20250514" || guard.RefreshWindow != "3s" {
 		t.Fatalf("preserved factory guard = %#v", guard)
 	}
 }
@@ -180,57 +180,57 @@ func TestLoadRuntimeConfig_DetachesInlineWorkerMutableNestedFields(t *testing.T)
 	assertDetachedInlineWorkerMutableNestedFields(t, workerDef)
 }
 
-func inlineWorkerDetachmentSourceConfig() *interfaces.FactoryConfig {
-	return &interfaces.FactoryConfig{
-		Workers: []interfaces.FactoryWorkerConfig{{
+func inlineWorkerDetachmentSourceConfig() *factorydefinitions.FactoryConfig {
+	return &factorydefinitions.FactoryConfig{
+		Workers: []factorydefinitions.FactoryWorkerConfig{{
 			Name:             "executor",
-			Type:             interfaces.WorkerTypeModel,
+			Type:             factorydefinitions.WorkerTypeModel,
 			Provider:         "anthropic",
 			Model:            "claude-sonnet-4-20250514",
 			ModelProvider:    "CLAUDE",
 			ExecutorProvider: "codex",
 			Command:          "run-worker",
 			Args:             []string{"--mode", "inline"},
-			Resources: []interfaces.ResourceConfig{{
+			Resources: []factorydefinitions.ResourceConfig{{
 				Name:     "agent-slot",
-				Type:     interfaces.ResourceTypeInvocationSlot,
+				Type:     factorydefinitions.ResourceTypeInvocationSlot,
 				Capacity: 2,
 				Provider: "shared",
 			}},
 			Timeout:         "45s",
 			StopToken:       "COMPLETE",
 			SkipPermissions: true,
-			Auth:            &interfaces.HostedWorkerAuthConfig{SecretRef: "linear-token"},
-			Linear: &interfaces.HostedLinearWorkerConfig{
+			Auth:            &factorydefinitions.HostedWorkerAuthConfig{SecretRef: "linear-token"},
+			Linear: &factorydefinitions.HostedLinearWorkerConfig{
 				PollInterval: "30s",
 				TeamIDs:      []string{"team-a"},
 				StateIDs:     []string{"state-a"},
-				Mapping: interfaces.HostedLinearWorkerMappingConfig{
+				Mapping: factorydefinitions.HostedLinearWorkerMappingConfig{
 					WorkType: "story",
 					State:    "ready",
 				},
-				Claim: &interfaces.HostedLinearWorkerClaimConfig{
+				Claim: &factorydefinitions.HostedLinearWorkerClaimConfig{
 					AssigneeField: "owner",
 				},
 			},
 			Body: "You are the inline executor.",
-			Operations: []interfaces.ModelOperation{{
+			Operations: []factorydefinitions.ModelOperation{{
 				Name: "TTS",
-				Inputs: []interfaces.ModelOperationSlot{{
+				Inputs: []factorydefinitions.ModelOperationSlot{{
 					Name:         "text",
-					ContentTypes: []string{interfaces.ModelOperationContentTypeText},
+					ContentTypes: []string{factorydefinitions.ModelOperationContentTypeText},
 					Required:     true,
 				}},
-				Outputs: []interfaces.ModelOperationSlot{{
+				Outputs: []factorydefinitions.ModelOperationSlot{{
 					Name:         "audio",
-					ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
+					ContentTypes: []string{factorydefinitions.ModelOperationContentTypeAudio},
 				}},
 			}},
 		}},
 	}
 }
 
-func mutateInlineWorkerMutableNestedFields(sourceWorker *interfaces.FactoryWorkerConfig) {
+func mutateInlineWorkerMutableNestedFields(sourceWorker *factorydefinitions.FactoryWorkerConfig) {
 	sourceWorker.Args[0] = "--mutated"
 	sourceWorker.Resources[0].Name = "mutated-slot"
 	sourceWorker.Resources[0].Capacity = 9
@@ -241,12 +241,12 @@ func mutateInlineWorkerMutableNestedFields(sourceWorker *interfaces.FactoryWorke
 	sourceWorker.Linear.Mapping.State = "triage"
 	sourceWorker.Linear.Claim.AssigneeField = "reviewer"
 	sourceWorker.Operations[0].Inputs[0].Name = "mutated-input"
-	sourceWorker.Operations[0].Inputs[0].ContentTypes[0] = interfaces.ModelOperationContentTypeJSON
+	sourceWorker.Operations[0].Inputs[0].ContentTypes[0] = factorydefinitions.ModelOperationContentTypeJSON
 	sourceWorker.Operations[0].Outputs[0].Name = "mutated-output"
-	sourceWorker.Operations[0].Outputs[0].ContentTypes[0] = interfaces.ModelOperationContentTypeBinary
+	sourceWorker.Operations[0].Outputs[0].ContentTypes[0] = factorydefinitions.ModelOperationContentTypeBinary
 }
 
-func assertDetachedInlineWorkerMutableNestedFields(t *testing.T, workerDef *interfaces.FactoryWorkerConfig) {
+func assertDetachedInlineWorkerMutableNestedFields(t *testing.T, workerDef *factorydefinitions.FactoryWorkerConfig) {
 	t.Helper()
 
 	assertDetachedInlineWorkerArgsAndResources(t, workerDef)
@@ -254,15 +254,15 @@ func assertDetachedInlineWorkerMutableNestedFields(t *testing.T, workerDef *inte
 	assertDetachedInlineWorkerOperations(t, workerDef)
 }
 
-func assertDetachedInlineWorkerArgsAndResources(t *testing.T, workerDef *interfaces.FactoryWorkerConfig) {
+func assertDetachedInlineWorkerArgsAndResources(t *testing.T, workerDef *factorydefinitions.FactoryWorkerConfig) {
 	t.Helper()
 
 	if !reflect.DeepEqual(workerDef.Args, []string{"--mode", "inline"}) {
 		t.Fatalf("expected inline worker args to stay detached, got %#v", workerDef.Args)
 	}
-	if !reflect.DeepEqual(workerDef.Resources, []interfaces.ResourceConfig{{
+	if !reflect.DeepEqual(workerDef.Resources, []factorydefinitions.ResourceConfig{{
 		Name:     "agent-slot",
-		Type:     interfaces.ResourceTypeInvocationSlot,
+		Type:     factorydefinitions.ResourceTypeInvocationSlot,
 		Capacity: 2,
 		Provider: "shared",
 	}}) {
@@ -270,7 +270,7 @@ func assertDetachedInlineWorkerArgsAndResources(t *testing.T, workerDef *interfa
 	}
 }
 
-func assertDetachedInlineWorkerAuthAndLinear(t *testing.T, workerDef *interfaces.FactoryWorkerConfig) {
+func assertDetachedInlineWorkerAuthAndLinear(t *testing.T, workerDef *factorydefinitions.FactoryWorkerConfig) {
 	t.Helper()
 
 	if workerDef.Auth == nil || workerDef.Auth.SecretRef != "linear-token" {
@@ -293,7 +293,7 @@ func assertDetachedInlineWorkerAuthAndLinear(t *testing.T, workerDef *interfaces
 	}
 }
 
-func assertDetachedInlineWorkerOperations(t *testing.T, workerDef *interfaces.FactoryWorkerConfig) {
+func assertDetachedInlineWorkerOperations(t *testing.T, workerDef *factorydefinitions.FactoryWorkerConfig) {
 	t.Helper()
 
 	if len(workerDef.Operations) != 1 {
@@ -302,13 +302,13 @@ func assertDetachedInlineWorkerOperations(t *testing.T, workerDef *interfaces.Fa
 	if workerDef.Operations[0].Inputs[0].Name != "text" {
 		t.Fatalf("expected inline worker operation input name to stay detached, got %#v", workerDef.Operations[0].Inputs)
 	}
-	if !reflect.DeepEqual(workerDef.Operations[0].Inputs[0].ContentTypes, []string{interfaces.ModelOperationContentTypeText}) {
+	if !reflect.DeepEqual(workerDef.Operations[0].Inputs[0].ContentTypes, []string{factorydefinitions.ModelOperationContentTypeText}) {
 		t.Fatalf("expected inline worker operation input content types to stay detached, got %#v", workerDef.Operations[0].Inputs[0].ContentTypes)
 	}
 	if workerDef.Operations[0].Outputs[0].Name != "audio" {
 		t.Fatalf("expected inline worker operation output name to stay detached, got %#v", workerDef.Operations[0].Outputs)
 	}
-	if !reflect.DeepEqual(workerDef.Operations[0].Outputs[0].ContentTypes, []string{interfaces.ModelOperationContentTypeAudio}) {
+	if !reflect.DeepEqual(workerDef.Operations[0].Outputs[0].ContentTypes, []string{factorydefinitions.ModelOperationContentTypeAudio}) {
 		t.Fatalf("expected inline worker operation output content types to stay detached, got %#v", workerDef.Operations[0].Outputs[0].ContentTypes)
 	}
 }
@@ -365,7 +365,7 @@ Execute {{ .WorkID }}.
 	if !ok {
 		t.Fatal("expected executor worker definition")
 	}
-	if workerDef.Type != interfaces.WorkerTypeAgent || workerDef.Model != "claude-sonnet-4-20250514" {
+	if workerDef.Type != factorydefinitions.WorkerTypeAgent || workerDef.Model != "claude-sonnet-4-20250514" {
 		t.Fatalf("worker type/model = %#v", workerDef)
 	}
 	if workerDef.ModelProvider != "claude" || workerDef.ExecutorProvider != "script_wrap" {
@@ -431,7 +431,7 @@ Poll Linear.
 	if !ok {
 		t.Fatal("expected linear-poller worker definition")
 	}
-	if workerDef.Type != interfaces.WorkerTypeHosted || workerDef.Provider != interfaces.HostedWorkerProviderLinear {
+	if workerDef.Type != factorydefinitions.WorkerTypeHosted || workerDef.Provider != factorydefinitions.HostedWorkerProviderLinear {
 		t.Fatalf("hosted worker identity = %#v", workerDef)
 	}
 	if workerDef.Auth == nil || workerDef.Auth.SecretRef != "secrets/linear-api-key" {
@@ -571,7 +571,7 @@ func TestLoadRuntimeConfig_RejectsMissingRequiredFactoryName(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MarshalIndent: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile), data, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(factoryDir, factorydefinitions.FactoryConfigFile), data, 0o644); err != nil {
 		t.Fatalf("WriteFile(factory.json): %v", err)
 	}
 
@@ -682,14 +682,14 @@ func TestLoadRuntimeConfig_AllowsTopologyOnlyLogicalMoveLoopBreakersWithoutSplit
 	if !ok {
 		t.Fatal("expected loop-breaker workstation to be present")
 	}
-	if workstation.Type != interfaces.WorkstationTypeLogical {
-		t.Fatalf("loop-breaker type = %q, want %q", workstation.Type, interfaces.WorkstationTypeLogical)
+	if workstation.Type != factorydefinitions.WorkstationTypeLogical {
+		t.Fatalf("loop-breaker type = %q, want %q", workstation.Type, factorydefinitions.WorkstationTypeLogical)
 	}
 	if len(workstation.Guards) != 1 {
 		t.Fatalf("loop-breaker guards = %#v, want one visit_count guard", workstation.Guards)
 	}
-	if workstation.Guards[0].Type != interfaces.GuardTypeVisitCount {
-		t.Fatalf("loop-breaker guard type = %q, want %q", workstation.Guards[0].Type, interfaces.GuardTypeVisitCount)
+	if workstation.Guards[0].Type != factorydefinitions.GuardTypeVisitCount {
+		t.Fatalf("loop-breaker guard type = %q, want %q", workstation.Guards[0].Type, factorydefinitions.GuardTypeVisitCount)
 	}
 	if workstation.Guards[0].Workstation != "execute-story" || workstation.Guards[0].MaxVisits != 3 {
 		t.Fatalf("loop-breaker guard = %#v, want execute-story maxVisits=3", workstation.Guards[0])
@@ -741,7 +741,7 @@ Runtime prompt.
 		t.Fatalf("LoadRuntimeConfig: %v", err)
 	}
 
-	var lookup interfaces.RuntimeConfigLookup = loaded
+	var lookup factorydefinitions.RuntimeConfigLookup = loaded
 
 	assertCanonicalRuntimeConfigLookupFactoryDir(t, lookup, factoryDir)
 	assertCanonicalRuntimeConfigLookupRuntimeBaseDir(t, lookup, factoryDir)
@@ -750,7 +750,7 @@ Runtime prompt.
 	if !ok || worker == nil {
 		t.Fatalf("Worker(executor) = %#v ok=%v, want runtime worker hit", worker, ok)
 	}
-	if worker.Type != interfaces.WorkerTypeScript || worker.Command != "go" {
+	if worker.Type != factorydefinitions.WorkerTypeScript || worker.Command != "go" {
 		t.Fatalf("effective worker lookup = %#v, want runtime-applied script worker", worker)
 	}
 	if loaded.FactoryConfig().Workers[0].Type != worker.Type || loaded.FactoryConfig().Workers[0].Command != worker.Command {

@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 // ValidateSnapshot applies the canonical pre-persist rules to one detached
@@ -14,41 +14,41 @@ import (
 // are responsible for mapping them into their public response contracts.
 func ValidateSnapshot(
 	ctx context.Context,
-	snapshot *interfaces.FactorySnapshot,
-	workstationLoader interfaces.WorkstationLoader,
-	mapRequest interfaces.EditableFactoryValidationRequestMapper,
-	validate interfaces.DefinitionValidationOperation,
+	snapshot *factorydefinitions.FactorySnapshot,
+	workstationLoader factorydefinitions.WorkstationLoader,
+	mapRequest factorydefinitions.EditableFactoryValidationRequestMapper,
+	validate factorydefinitions.DefinitionValidationOperation,
 ) error {
 	if snapshot == nil {
 		return fmt.Errorf(
 			"%w: Factory snapshot is required",
-			interfaces.ErrInvalidNamedFactory,
+			factorydefinitions.ErrInvalidNamedFactory,
 		)
 	}
 	if mapRequest == nil || validate == nil {
 		return fmt.Errorf(
 			"%w: Factory definition adapters are required",
-			interfaces.ErrInvalidNamedFactory,
+			factorydefinitions.ErrInvalidNamedFactory,
 		)
 	}
 
 	request, err := mapRequest(snapshot, workstationLoader)
 	if err != nil {
-		return fmt.Errorf("%w: %v", interfaces.ErrInvalidNamedFactory, err)
+		return fmt.Errorf("%w: %v", factorydefinitions.ErrInvalidNamedFactory, err)
 	}
-	request.Profile = interfaces.ValidationProfilePrePersist
+	request.Profile = factorydefinitions.ValidationProfilePrePersist
 	result, err := validate.ValidateDefinition(ctx, request)
 	if err != nil {
-		if errors.Is(err, interfaces.ErrInvalidNamedFactory) {
+		if errors.Is(err, factorydefinitions.ErrInvalidNamedFactory) {
 			return err
 		}
-		return fmt.Errorf("%w: %v", interfaces.ErrInvalidNamedFactory, err)
+		return fmt.Errorf("%w: %v", factorydefinitions.ErrInvalidNamedFactory, err)
 	}
 	if !result.HasBlockingTargets() {
 		return nil
 	}
-	return interfaces.NewValidationTopologyError(
-		interfaces.DefaultTopologyValidationMessage,
+	return factorydefinitions.NewValidationTopologyError(
+		factorydefinitions.DefaultTopologyValidationMessage,
 		result.BlockingTargets(),
 	)
 }

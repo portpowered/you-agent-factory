@@ -11,14 +11,18 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/portablefiles"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
 	compilationcanonical "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/canonical"
 	compilationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
 	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig"
+	snapshotsportability "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability"
+	snapshotsportabilitycapture "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/capture"
+	snapshotsportabilitymaterialize "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/materialize"
+	snapshotsportabilityprepare "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/prepare"
+	snapshotsportabilitywire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/wire"
 	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
-	factorysnapshotcapture "github.com/portpowered/infinite-you/pkg/services/factory_definitions/snapshotcapture"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
 )
@@ -43,6 +47,7 @@ func NewService(
 	packagedInstaller factorydefinitions.PackagedFactoryInstallationOperations,
 	requiredToolChecker factorydefinitions.RequiredToolChecker,
 	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
+	portableFileSystem portablefiles.FileSystem,
 ) (factorydefinitions.Service, error) {
 	if err := validateDependencies(
 		sessionHost,
@@ -60,18 +65,30 @@ func NewService(
 		packagedInstaller,
 		requiredToolChecker,
 		orchestratorValidator,
+		portableFileSystem,
 	); err != nil {
 		return nil, err
 	}
 
-	preparePortableFactoryConfig := portableconfig.NewPreparer(
+	preparePortableFactoryConfig := snapshotsportabilityprepare.NewPreparer(
 		factorydefinitions.CloneFactoryConfig,
 		applySupportedFiles,
 		applyStarterWork,
 	)
-	captureFactorySnapshot := factorysnapshotcapture.NewExplicit(
+	captureFactorySnapshot := snapshotsportabilitycapture.NewExplicit(
 		factorysnapshot.ObjectFromFactoryConfig,
 	)
+	snapshotsPortability, err := snapshotsportabilitywire.NewService(snapshotsportability.Dependencies{
+		LoadCanonical:             loader.LoadSourceFromCanonicalJSON,
+		CaptureLoaded:             snapshotsportabilitycapture.NewLoaded(factorysnapshot.ObjectFromFactoryConfig),
+		PreparePortable:           preparePortableFactoryConfig,
+		DecodeSnapshot:            snapshotsportabilitycapture.NewJSONDecoder(factorymapping.GeneratedFactoryFromOpenAPIJSON),
+		MaterializePortableFiles:  snapshotsportabilitymaterialize.NewMaterializer(portableFileSystem),
+		ValidateMaterializeWrites: snapshotsportabilitymaterialize.NewWritesValidator(portableFileSystem),
+	})
+	if err != nil {
+		return nil, err
+	}
 
 	compilation, err := compilationwire.NewService(compilationservice.Dependencies{
 		LoadCanonical:      loader.LoadSourceFromCanonicalJSON,
@@ -129,7 +146,14 @@ func NewService(
 	if attached == nil {
 		return nil, fmt.Errorf("construct Factory Definitions: effective catalog attachment rejected its dependencies")
 	}
-	return attachCompilation(attached, compilation), nil
+	withSnapshots, err := factorydefinitionsservice.AttachSnapshotsPortability(attached, snapshotsPortability)
+	if err != nil {
+		return nil, err
+	}
+	if withSnapshots == nil {
+		return nil, fmt.Errorf("construct Factory Definitions: snapshots portability attachment rejected its dependencies")
+	}
+	return attachCompilation(withSnapshots, compilation), nil
 }
 
 func validateDependencies(
@@ -148,6 +172,7 @@ func validateDependencies(
 	packagedInstaller factorydefinitions.PackagedFactoryInstallationOperations,
 	requiredToolChecker factorydefinitions.RequiredToolChecker,
 	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
+	portableFileSystem portablefiles.FileSystem,
 ) error {
 	if sessionHost == nil {
 		return fmt.Errorf("construct Factory Definitions: session host is required")
@@ -196,6 +221,9 @@ func validateDependencies(
 	}
 	if orchestratorValidator == nil {
 		return fmt.Errorf("construct Factory Definitions: orchestrator definition validator is required")
+	}
+	if portableFileSystem == nil {
+		return fmt.Errorf("construct Factory Definitions: portable filesystem is required")
 	}
 	return nil
 }

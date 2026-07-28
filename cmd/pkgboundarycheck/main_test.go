@@ -486,7 +486,7 @@ func TestRunRejectsRetiredPackageRootsWithCanonicalOwners(t *testing.T) {
 		{packagePath: "pkg/workers", canonicalOwner: "pkg/services/workers"},
 		{packagePath: "pkg/modelhost", canonicalOwner: "pkg/services/models"},
 		{packagePath: "pkg/localmodels", canonicalOwner: "pkg/services/models"},
-		{packagePath: "pkg/hostedworkers", canonicalOwner: "pkg/services/automations/internal/services/hosted_sources or Workers Hosted Runner remote execution under pkg/services/workers/internal/services/runners"},
+		{packagePath: "pkg/hostedworkers", canonicalOwner: "Automation Hosted Sources (hosted polling / observation, secret resolution for observation, poll/restart/checkpoint, observation normalization, and commanding Work admission) or Workers Hosted Runner (remote Work execution request/result, execution lifecycle observation, cancellation, and normalized execution outcome under the Runner contract); transitional pkg/services/workers/services/hosted_logic location alone is not durable ownership"},
 		{packagePath: "pkg/invocations", canonicalOwner: "pkg/services/work, pkg/services/factory_sessions, or pkg/services/workers, according to the concern"},
 		{packagePath: "pkg/materialize", canonicalOwner: "pkg/services/work"},
 		{packagePath: "pkg/timework", canonicalOwner: "pkg/services/automations/internal/services/cron"},
@@ -562,7 +562,7 @@ func TestRunRejectsRetiredPackageImportsWithCanonicalOwners(t *testing.T) {
 		{
 			importPath:     "github.com/portpowered/infinite-you/pkg/hostedworkers/linear",
 			retiredRoot:    "pkg/hostedworkers",
-			canonicalOwner: "pkg/services/automations/internal/services/hosted_sources or Workers Hosted Runner remote execution under pkg/services/workers/internal/services/runners",
+			canonicalOwner: "Automation Hosted Sources (hosted polling / observation, secret resolution for observation, poll/restart/checkpoint, observation normalization, and commanding Work admission) or Workers Hosted Runner (remote Work execution request/result, execution lifecycle observation, cancellation, and normalized execution outcome under the Runner contract); transitional pkg/services/workers/services/hosted_logic location alone is not durable ownership",
 		},
 		{
 			importPath:     "github.com/portpowered/infinite-you/pkg/invocations/inference",

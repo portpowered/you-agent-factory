@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
 	validationserviceimpl "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/service"
 	validationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/wire"
@@ -16,24 +15,24 @@ import (
 )
 
 type stubLoadedSource struct {
-	cfg *factorycontracts.FactoryConfig
+	cfg *factoryroot.FactoryConfig
 }
 
-func (s stubLoadedSource) FactoryConfig() *factorycontracts.FactoryConfig { return s.cfg }
+func (s stubLoadedSource) FactoryConfig() *factoryroot.FactoryConfig { return s.cfg }
 func (s stubLoadedSource) FactoryDir() string                             { return "" }
 func (s stubLoadedSource) RuntimeBaseDir() string                         { return "" }
 func (s stubLoadedSource) SetRuntimeBaseDir(string)                       {}
-func (s stubLoadedSource) PortableBundledFileReplacements() []factorycontracts.PortableBundledFileReplacement {
+func (s stubLoadedSource) PortableBundledFileReplacements() []factoryroot.PortableBundledFileReplacement {
 	return nil
 }
 func (s stubLoadedSource) MutateWorkers(func(*workerconfig.Config) error) error { return nil }
-func (s stubLoadedSource) Workstation(string) (*factorycontracts.FactoryWorkstationConfig, bool) {
+func (s stubLoadedSource) Workstation(string) (*factoryroot.FactoryWorkstationConfig, bool) {
 	return nil, false
 }
 func (s stubLoadedSource) Worker(string) (*workerconfig.Config, bool) { return nil, false }
 
-func stubLoadCanonical(payload []byte, _ factorycontracts.WorkstationLoader) (factorycontracts.MutableLoadedFactorySource, error) {
-	var cfg factorycontracts.FactoryConfig
+func stubLoadCanonical(payload []byte, _ factoryroot.WorkstationLoader) (factoryroot.MutableLoadedFactorySource, error) {
+	var cfg factoryroot.FactoryConfig
 	if err := json.Unmarshal(payload, &cfg); err != nil {
 		return nil, factoryroot.ErrInvalidNamedFactory
 	}
@@ -41,23 +40,23 @@ func stubLoadCanonical(payload []byte, _ factorycontracts.WorkstationLoader) (fa
 }
 
 type stubOperations struct {
-	structuralResult factorycontracts.ValidationResult
-	effectiveResult  factorycontracts.ValidationResult
+	structuralResult factoryroot.ValidationResult
+	effectiveResult  factoryroot.ValidationResult
 }
 
 func (s stubOperations) ValidateDefinition(
 	_ context.Context,
-	_ factorycontracts.DefinitionValidationRequest,
-) (factorycontracts.ValidationResult, error) {
+	_ factoryroot.DefinitionValidationRequest,
+) (factoryroot.ValidationResult, error) {
 	return s.structuralResult, nil
 }
 
 func (s stubOperations) ValidateSubmittedDefinition(
 	ctx context.Context,
-	request factorycontracts.SubmittedDefinitionValidationRequest,
-) (factorycontracts.ValidationResult, error) {
-	return s.ValidateDefinition(ctx, factorycontracts.DefinitionValidationRequest{
-		Profile:              factorycontracts.ValidationProfileTopology,
+	request factoryroot.SubmittedDefinitionValidationRequest,
+) (factoryroot.ValidationResult, error) {
+	return s.ValidateDefinition(ctx, factoryroot.DefinitionValidationRequest{
+		Profile:              factoryroot.ValidationProfileTopology,
 		Config:               request.Config,
 		WorkflowSourceReader: request.WorkflowSourceReader,
 		SubmittedTaxonomy:    request.Taxonomy,
@@ -66,8 +65,8 @@ func (s stubOperations) ValidateSubmittedDefinition(
 
 func (s stubOperations) ValidateEffectiveDefinition(
 	_ context.Context,
-	_ factorycontracts.EffectiveDefinitionValidationRequest,
-) (factorycontracts.ValidationResult, error) {
+	_ factoryroot.EffectiveDefinitionValidationRequest,
+) (factoryroot.ValidationResult, error) {
 	return s.effectiveResult, nil
 }
 
@@ -86,9 +85,9 @@ func newValidationService(t *testing.T, operations stubOperations) validationser
 
 func newValidationServiceWithConfig(
 	t *testing.T,
-	cfg *factorycontracts.FactoryConfig,
-	checker factorycontracts.RequiredToolChecker,
-	orchestratorValidator factorycontracts.OrchestratorDefinitionValidator,
+	cfg *factoryroot.FactoryConfig,
+	checker factoryroot.RequiredToolChecker,
+	orchestratorValidator factoryroot.OrchestratorDefinitionValidator,
 ) validationservice.Service {
 	t.Helper()
 	validator := factoryvalidation.New(orchestratorValidator)
@@ -106,31 +105,31 @@ func newValidationServiceWithConfig(
 }
 
 func stubLoadCanonicalForConfig(
-	cfg *factorycontracts.FactoryConfig,
-) factorycontracts.CanonicalFactoryJSONLoader {
-	return func(_ []byte, _ factorycontracts.WorkstationLoader) (factorycontracts.MutableLoadedFactorySource, error) {
+	cfg *factoryroot.FactoryConfig,
+) factoryroot.CanonicalFactoryJSONLoader {
+	return func(_ []byte, _ factoryroot.WorkstationLoader) (factoryroot.MutableLoadedFactorySource, error) {
 		return stubLoadedSource{cfg: cfg}, nil
 	}
 }
 
-func validPetriFactoryConfig() *factorycontracts.FactoryConfig {
-	return &factorycontracts.FactoryConfig{
+func validPetriFactoryConfig() *factoryroot.FactoryConfig {
+	return &factoryroot.FactoryConfig{
 		Name: "structural-validation",
-		WorkTypes: []factorycontracts.WorkTypeConfig{{
+		WorkTypes: []factoryroot.WorkTypeConfig{{
 			Name: "task",
-			States: []factorycontracts.StateConfig{
-				{Name: "init", Type: factorycontracts.StateTypeInitial},
-				{Name: "done", Type: factorycontracts.StateTypeTerminal},
-				{Name: "failed", Type: factorycontracts.StateTypeFailed},
+			States: []factoryroot.StateConfig{
+				{Name: "init", Type: factoryroot.StateTypeInitial},
+				{Name: "done", Type: factoryroot.StateTypeTerminal},
+				{Name: "failed", Type: factoryroot.StateTypeFailed},
 			},
 		}},
 		Workers: []workerconfig.Config{{Name: "worker-a"}},
-		Workstations: []factorycontracts.FactoryWorkstationConfig{{
+		Workstations: []factoryroot.FactoryWorkstationConfig{{
 			Name:           "process",
 			WorkerTypeName: "worker-a",
-			Inputs:         []factorycontracts.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-			Outputs:        []factorycontracts.IOConfig{{WorkTypeName: "task", StateName: "done"}},
-			OnFailure:      []factorycontracts.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
+			Inputs:         []factoryroot.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+			Outputs:        []factoryroot.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+			OnFailure:      []factoryroot.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
 		}},
 	}
 }
@@ -180,10 +179,10 @@ func TestValidationService_InvalidPayloadReturnsTypedError(t *testing.T) {
 func TestValidationService_StructuralFindingsReturnValidationFailure(t *testing.T) {
 	t.Parallel()
 	svc := newValidationService(t, stubOperations{
-		structuralResult: factorycontracts.ValidationResult{
-			Targets: []factorycontracts.ValidationTarget{{
-				Code:     factorycontracts.ValidationCodeFactoryPayloadInvalid,
-				Severity: factorycontracts.ValidationSeverityError,
+		structuralResult: factoryroot.ValidationResult{
+			Targets: []factoryroot.ValidationTarget{{
+				Code:     factoryroot.ValidationCodeFactoryPayloadInvalid,
+				Severity: factoryroot.ValidationSeverityError,
 				Message:  "definition validation failed",
 			}},
 		},
@@ -271,8 +270,8 @@ func TestValidationService_WiredStructuralValidationReturnsTypedDuplicateWorkerT
 	found := false
 	for _, target := range validationFailure.Validation.Targets {
 		if target.Code == factoryvalidation.CodeDuplicateIdentifier &&
-			target.Severity == factorycontracts.ValidationSeverityError &&
-			target.Subject.Type == factorycontracts.ValidationSubjectTypeWorker {
+			target.Severity == factoryroot.ValidationSeverityError &&
+			target.Subject.Type == factoryroot.ValidationSubjectTypeWorker {
 			found = true
 		}
 	}
@@ -285,7 +284,7 @@ func TestValidationService_WiredTopologyValidationReturnsTypedDanglingPlaceTarge
 	t.Parallel()
 
 	cfg := validPetriFactoryConfig()
-	cfg.Workstations[0].Outputs = []factorycontracts.IOConfig{{
+	cfg.Workstations[0].Outputs = []factoryroot.IOConfig{{
 		WorkTypeName: "task",
 		StateName:    "bogus",
 	}}
@@ -308,8 +307,8 @@ func TestValidationService_WiredTopologyValidationReturnsTypedDanglingPlaceTarge
 	found := false
 	for _, target := range validationFailure.Validation.Targets {
 		if target.Code == factoryvalidation.CodeDanglingPlaceReference &&
-			target.Severity == factorycontracts.ValidationSeverityError &&
-			target.Subject.Type == factorycontracts.ValidationSubjectTypeRoute {
+			target.Severity == factoryroot.ValidationSeverityError &&
+			target.Subject.Type == factoryroot.ValidationSubjectTypeRoute {
 			found = true
 		}
 	}
@@ -318,21 +317,21 @@ func TestValidationService_WiredTopologyValidationReturnsTypedDanglingPlaceTarge
 	}
 }
 
-type wiredStubRequiredToolChecker map[string]factorycontracts.RequiredToolCheckResult
+type wiredStubRequiredToolChecker map[string]factoryroot.RequiredToolCheckResult
 
-func (s wiredStubRequiredToolChecker) Check(tool factorycontracts.RequiredToolConfig) factorycontracts.RequiredToolCheckResult {
+func (s wiredStubRequiredToolChecker) Check(tool factoryroot.RequiredToolConfig) factoryroot.RequiredToolCheckResult {
 	if result, ok := s[tool.Command]; ok {
 		return result
 	}
-	return factorycontracts.RequiredToolCheckResult{}
+	return factoryroot.RequiredToolCheckResult{}
 }
 
 func TestValidationService_WiredRequiredToolValidationSucceedsWhenCheckerReportsPresent(t *testing.T) {
 	t.Parallel()
 
 	cfg := validPetriFactoryConfig()
-	cfg.ResourceManifest = &factorycontracts.PortableResourceManifestConfig{
-		RequiredTools: []factorycontracts.RequiredToolConfig{{
+	cfg.ResourceManifest = &factoryroot.PortableResourceManifestConfig{
+		RequiredTools: []factoryroot.RequiredToolConfig{{
 			Name:    "Portable helper",
 			Command: "present-tool",
 		}},
@@ -363,15 +362,15 @@ func TestValidationService_WiredRequiredToolValidationReturnsTypedMissingToolTar
 	t.Parallel()
 
 	cfg := validPetriFactoryConfig()
-	cfg.ResourceManifest = &factorycontracts.PortableResourceManifestConfig{
-		RequiredTools: []factorycontracts.RequiredToolConfig{{
+	cfg.ResourceManifest = &factoryroot.PortableResourceManifestConfig{
+		RequiredTools: []factoryroot.RequiredToolConfig{{
 			Name:    "Missing helper",
 			Command: "missing-tool",
 		}},
 	}
 	svc := newValidationServiceWithConfig(t, cfg, wiredStubRequiredToolChecker{
 		"missing-tool": {
-			FailureKind: factorycontracts.RequiredToolFailureKindMissing,
+			FailureKind: factoryroot.RequiredToolFailureKindMissing,
 			Err:         errors.New(`required tool "Missing helper" command "missing-tool" was not found on PATH`),
 		},
 	}, nil)
@@ -393,8 +392,8 @@ func TestValidationService_WiredRequiredToolValidationReturnsTypedMissingToolTar
 	found := false
 	for _, target := range validationFailure.Validation.Targets {
 		if target.Code == factoryvalidation.CodeRequiredToolMissing &&
-			target.Severity == factorycontracts.ValidationSeverityError &&
-			target.Subject.Type == factorycontracts.ValidationSubjectTypeFactory &&
+			target.Severity == factoryroot.ValidationSeverityError &&
+			target.Subject.Type == factoryroot.ValidationSubjectTypeFactory &&
 			target.Subject.ID == "Missing helper" {
 			found = true
 		}
@@ -405,22 +404,22 @@ func TestValidationService_WiredRequiredToolValidationReturnsTypedMissingToolTar
 }
 
 type wiredStubOrchestratorValidator struct {
-	targets []factorycontracts.ValidationTarget
+	targets []factoryroot.ValidationTarget
 }
 
 func (s wiredStubOrchestratorValidator) ValidateJavaScriptFactoryDefinition(
 	_ context.Context,
-	_ *factorycontracts.FactoryOrchestratorJavaScriptConfig,
-	_ factorycontracts.WorkflowSourceReader,
-) []factorycontracts.ValidationTarget {
-	return append([]factorycontracts.ValidationTarget(nil), s.targets...)
+	_ *factoryroot.FactoryOrchestratorJavaScriptConfig,
+	_ factoryroot.WorkflowSourceReader,
+) []factoryroot.ValidationTarget {
+	return append([]factoryroot.ValidationTarget(nil), s.targets...)
 }
 
 func TestValidationService_WiredOrchestratorValidationReturnsTypedUnsupportedKindTarget(t *testing.T) {
 	t.Parallel()
 
 	cfg := validPetriFactoryConfig()
-	cfg.Orchestrator = &factorycontracts.FactoryOrchestratorConfig{Kind: "LEGACY"}
+	cfg.Orchestrator = &factoryroot.FactoryOrchestratorConfig{Kind: "LEGACY"}
 	svc := newValidationServiceWithConfig(t, cfg, nil, nil)
 
 	_, err := svc.ValidateStructuralFactoryDefinition(
@@ -440,8 +439,8 @@ func TestValidationService_WiredOrchestratorValidationReturnsTypedUnsupportedKin
 	found := false
 	for _, target := range validationFailure.Validation.Targets {
 		if target.Code == factoryvalidation.CodeOrchestratorUnsupportedKind &&
-			target.Severity == factorycontracts.ValidationSeverityError &&
-			target.Subject.Type == factorycontracts.ValidationSubjectTypeFactory {
+			target.Severity == factoryroot.ValidationSeverityError &&
+			target.Subject.Type == factoryroot.ValidationSubjectTypeFactory {
 			found = true
 		}
 	}
@@ -453,24 +452,24 @@ func TestValidationService_WiredOrchestratorValidationReturnsTypedUnsupportedKin
 func TestValidationService_WiredOrchestratorValidationMergesRuntimeValidatorTargets(t *testing.T) {
 	t.Parallel()
 
-	cfg := &factorycontracts.FactoryConfig{
+	cfg := &factoryroot.FactoryConfig{
 		Name: "javascript-orchestrator",
-		Orchestrator: &factorycontracts.FactoryOrchestratorConfig{
-			Kind: factorycontracts.OrchestratorKindJavaScript,
-			JavaScript: &factorycontracts.FactoryOrchestratorJavaScriptConfig{
+		Orchestrator: &factoryroot.FactoryOrchestratorConfig{
+			Kind: factoryroot.OrchestratorKindJavaScript,
+			JavaScript: &factoryroot.FactoryOrchestratorJavaScriptConfig{
 				SourceRef:  "factory/workflows/review.js",
 				Entrypoint: "main",
 			},
 		},
 	}
-	svc := newValidationServiceWithConfig(t, cfg, nil, wiredStubOrchestratorValidator{targets: []factorycontracts.ValidationTarget{{
+	svc := newValidationServiceWithConfig(t, cfg, nil, wiredStubOrchestratorValidator{targets: []factoryroot.ValidationTarget{{
 		Code:     "factory.orchestrator.javascript.invalidPolicy",
-		Severity: factorycontracts.ValidationSeverityError,
+		Severity: factoryroot.ValidationSeverityError,
 		Message:  "invalid default policy",
-		Subject: factorycontracts.ValidationSubject{
-			Type:     factorycontracts.ValidationSubjectTypeFactory,
+		Subject: factoryroot.ValidationSubject{
+			Type:     factoryroot.ValidationSubjectTypeFactory,
 			ID:       "factory",
-			Location: factorycontracts.ValidationSubjectLocationDefinition,
+			Location: factoryroot.ValidationSubjectLocationDefinition,
 		},
 		Path: "factory.orchestrator.javascript.defaultPolicy",
 	}}})

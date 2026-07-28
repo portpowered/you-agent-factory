@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -52,24 +52,24 @@ func TestValidationResult_Errors_ReturnsOnlyErrors(t *testing.T) {
 }
 
 func TestConfigValidator_ReportsAllErrors(t *testing.T) {
-	cfg := &interfaces.FactoryConfig{
-		InputTypes: []interfaces.InputTypeConfig{
+	cfg := &factorydefinitions.FactoryConfig{
+		InputTypes: []factorydefinitions.InputTypeConfig{
 			{Name: "", Type: "default"},
 		},
-		WorkTypes: []interfaces.WorkTypeConfig{{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{{
 			Name: "task",
-			States: []interfaces.StateConfig{{
+			States: []factorydefinitions.StateConfig{{
 				Name: "init",
-				Type: interfaces.StateTypeInitial,
+				Type: factorydefinitions.StateTypeInitial,
 			}},
 		}},
-		Workstations: []interfaces.FactoryWorkstationConfig{{
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{{
 			Name: "ws1",
-			Inputs: []interfaces.IOConfig{{
+			Inputs: []factorydefinitions.IOConfig{{
 				WorkTypeName: "task",
 				StateName:    "init",
 			}},
-			Outputs: []interfaces.IOConfig{{
+			Outputs: []factorydefinitions.IOConfig{{
 				WorkTypeName: "task",
 				StateName:    "nonexistent",
 			}},
@@ -92,19 +92,19 @@ func TestConfigValidator_ReportsAllErrors(t *testing.T) {
 }
 
 func TestRuleInputTypes_MissingName(t *testing.T) {
-	cfg := &interfaces.FactoryConfig{InputTypes: []interfaces.InputTypeConfig{{Name: "", Type: "default"}}}
+	cfg := &factorydefinitions.FactoryConfig{InputTypes: []factorydefinitions.InputTypeConfig{{Name: "", Type: "default"}}}
 	findings := ruleInputTypes(cfg)
 	assertFindingExists(t, findings, "input-type-name")
 }
 
 func TestRuleInputTypes_ReservedDefault(t *testing.T) {
-	cfg := &interfaces.FactoryConfig{InputTypes: []interfaces.InputTypeConfig{{Name: "default", Type: "default"}}}
+	cfg := &factorydefinitions.FactoryConfig{InputTypes: []factorydefinitions.InputTypeConfig{{Name: "default", Type: "default"}}}
 	findings := ruleInputTypes(cfg)
 	assertFindingExists(t, findings, "input-type-reserved")
 }
 
 func TestRuleInputTypes_Duplicate(t *testing.T) {
-	cfg := &interfaces.FactoryConfig{InputTypes: []interfaces.InputTypeConfig{
+	cfg := &factorydefinitions.FactoryConfig{InputTypes: []factorydefinitions.InputTypeConfig{
 		{Name: "foo", Type: "default"},
 		{Name: "foo", Type: "default"},
 	}}
@@ -113,21 +113,21 @@ func TestRuleInputTypes_Duplicate(t *testing.T) {
 }
 
 func TestRuleInputTypes_MissingType(t *testing.T) {
-	cfg := &interfaces.FactoryConfig{InputTypes: []interfaces.InputTypeConfig{{Name: "foo", Type: ""}}}
+	cfg := &factorydefinitions.FactoryConfig{InputTypes: []factorydefinitions.InputTypeConfig{{Name: "foo", Type: ""}}}
 	findings := ruleInputTypes(cfg)
 	assertFindingExists(t, findings, "input-type-type")
 }
 
 func TestRuleInputTypes_UnknownType(t *testing.T) {
-	cfg := &interfaces.FactoryConfig{InputTypes: []interfaces.InputTypeConfig{{Name: "foo", Type: "bogus"}}}
+	cfg := &factorydefinitions.FactoryConfig{InputTypes: []factorydefinitions.InputTypeConfig{{Name: "foo", Type: "bogus"}}}
 	findings := ruleInputTypes(cfg)
 	assertFindingExists(t, findings, "input-type-type")
 }
 
 func TestRuleInputTypes_ValidConfig(t *testing.T) {
-	cfg := &interfaces.FactoryConfig{InputTypes: []interfaces.InputTypeConfig{{
+	cfg := &factorydefinitions.FactoryConfig{InputTypes: []factorydefinitions.InputTypeConfig{{
 		Name: "batch",
-		Type: interfaces.InputKindDefault,
+		Type: factorydefinitions.InputKindDefault,
 	}}}
 	findings := ruleInputTypes(cfg)
 	if len(findings) != 0 {
@@ -137,24 +137,24 @@ func TestRuleInputTypes_ValidConfig(t *testing.T) {
 
 type stubRequiredToolChecker map[string]RequiredToolCheckResult
 
-func (s stubRequiredToolChecker) Check(tool interfaces.RequiredToolConfig) RequiredToolCheckResult {
+func (s stubRequiredToolChecker) Check(tool factorydefinitions.RequiredToolConfig) RequiredToolCheckResult {
 	if result, ok := s[tool.Command]; ok {
 		return result
 	}
 	return RequiredToolCheckResult{}
 }
 
-func testBaseConfig() *interfaces.FactoryConfig {
-	return &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{{
+func testBaseConfig() *factorydefinitions.FactoryConfig {
+	return &factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{{
 			Name: "task",
-			States: []interfaces.StateConfig{
-				{Name: "init", Type: interfaces.StateTypeInitial},
-				{Name: "done", Type: interfaces.StateTypeTerminal},
-				{Name: "failed", Type: interfaces.StateTypeFailed},
+			States: []factorydefinitions.StateConfig{
+				{Name: "init", Type: factorydefinitions.StateTypeInitial},
+				{Name: "done", Type: factorydefinitions.StateTypeTerminal},
+				{Name: "failed", Type: factorydefinitions.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.FactoryWorkerConfig{{Name: "w1"}},
+		Workers: []factorydefinitions.FactoryWorkerConfig{{Name: "w1"}},
 	}
 }
 
@@ -199,35 +199,35 @@ func assertFindingMatch(t *testing.T, findings []Finding, rule string, pathSubst
 
 func TestRuleModelInvokeWorkstations_AcceptsCompatibleModelInvokeWorkstation(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.FactoryWorkerConfig{{
+	cfg.Workers = []factorydefinitions.FactoryWorkerConfig{{
 		Name: "tts-worker",
-		Type: interfaces.WorkerTypeModel,
-		Operations: []interfaces.ModelOperation{{
+		Type: factorydefinitions.WorkerTypeModel,
+		Operations: []factorydefinitions.ModelOperation{{
 			Name: "TTS",
-			Inputs: []interfaces.ModelOperationSlot{{
+			Inputs: []factorydefinitions.ModelOperationSlot{{
 				Name:         "text",
-				ContentTypes: []string{interfaces.ModelOperationContentTypeText},
+				ContentTypes: []string{factorydefinitions.ModelOperationContentTypeText},
 				Required:     true,
 			}},
-			Outputs: []interfaces.ModelOperationSlot{{
+			Outputs: []factorydefinitions.ModelOperationSlot{{
 				Name:         "audio",
-				ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
+				ContentTypes: []string{factorydefinitions.ModelOperationContentTypeAudio},
 			}},
 		}},
 	}}
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:      "speak",
-		Type:      interfaces.WorkstationTypeInvoke,
+		Type:      factorydefinitions.WorkstationTypeInvoke,
 		Operation: "TTS",
-		OperationBindings: []interfaces.ModelOperationBinding{{
+		OperationBindings: []factorydefinitions.ModelOperationBinding{{
 			Slot: "text",
-			Selector: &interfaces.ModelOperationBindingSelector{
+			Selector: &factorydefinitions.ModelOperationBindingSelector{
 				Label: "utterance",
 			},
 		}},
 		WorkerTypeName: "tts-worker",
-		Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-		Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+		Inputs:         []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		Outputs:        []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "done"}},
 	}}
 
 	findings := ruleModelInvokeWorkstations(cfg)
@@ -241,41 +241,41 @@ func TestRuleModelInvokeWorkstations_AcceptsCompatibleModelInvokeWorkstationAcro
 
 	testCases := []struct {
 		name   string
-		worker interfaces.FactoryWorkerConfig
+		worker factorydefinitions.FactoryWorkerConfig
 	}{
 		{
 			name: "local worker",
-			worker: interfaces.FactoryWorkerConfig{
+			worker: factorydefinitions.FactoryWorkerConfig{
 				Name:          "tts-worker",
-				Type:          interfaces.WorkerTypeModel,
+				Type:          factorydefinitions.WorkerTypeModel,
 				Model:         "OMNIVOICE_Q4_K_M",
 				ModelProvider: workerexecution.RunnerIDCodex,
-				ModelLocality: interfaces.ModelLocalityLocal,
-				Operations: []interfaces.ModelOperation{{
+				ModelLocality: factorydefinitions.ModelLocalityLocal,
+				Operations: []factorydefinitions.ModelOperation{{
 					Name: "TTS",
-					Inputs: []interfaces.ModelOperationSlot{
-						{Name: "text", ContentTypes: []string{interfaces.ModelOperationContentTypeText}, Required: true},
-						{Name: "voice", ContentTypes: []string{interfaces.ModelOperationContentTypeJSON}},
+					Inputs: []factorydefinitions.ModelOperationSlot{
+						{Name: "text", ContentTypes: []string{factorydefinitions.ModelOperationContentTypeText}, Required: true},
+						{Name: "voice", ContentTypes: []string{factorydefinitions.ModelOperationContentTypeJSON}},
 					},
-					Outputs: []interfaces.ModelOperationSlot{{Name: "audio", ContentTypes: []string{interfaces.ModelOperationContentTypeAudio}}},
+					Outputs: []factorydefinitions.ModelOperationSlot{{Name: "audio", ContentTypes: []string{factorydefinitions.ModelOperationContentTypeAudio}}},
 				}},
 			},
 		},
 		{
 			name: "cloud worker",
-			worker: interfaces.FactoryWorkerConfig{
+			worker: factorydefinitions.FactoryWorkerConfig{
 				Name:          "tts-worker",
-				Type:          interfaces.WorkerTypeModel,
+				Type:          factorydefinitions.WorkerTypeModel,
 				Model:         "gpt-4o-mini-tts",
 				ModelProvider: workerexecution.RunnerIDCodex,
-				ModelLocality: interfaces.ModelLocalityCloud,
-				Operations: []interfaces.ModelOperation{{
+				ModelLocality: factorydefinitions.ModelLocalityCloud,
+				Operations: []factorydefinitions.ModelOperation{{
 					Name: "TTS",
-					Inputs: []interfaces.ModelOperationSlot{
-						{Name: "text", ContentTypes: []string{interfaces.ModelOperationContentTypeText}, Required: true},
-						{Name: "voice", ContentTypes: []string{interfaces.ModelOperationContentTypeJSON}},
+					Inputs: []factorydefinitions.ModelOperationSlot{
+						{Name: "text", ContentTypes: []string{factorydefinitions.ModelOperationContentTypeText}, Required: true},
+						{Name: "voice", ContentTypes: []string{factorydefinitions.ModelOperationContentTypeJSON}},
 					},
-					Outputs: []interfaces.ModelOperationSlot{{Name: "audio", ContentTypes: []string{interfaces.ModelOperationContentTypeAudio}}},
+					Outputs: []factorydefinitions.ModelOperationSlot{{Name: "audio", ContentTypes: []string{factorydefinitions.ModelOperationContentTypeAudio}}},
 				}},
 			},
 		},
@@ -284,18 +284,18 @@ func TestRuleModelInvokeWorkstations_AcceptsCompatibleModelInvokeWorkstationAcro
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := testBaseConfig()
-			cfg.Workers = []interfaces.FactoryWorkerConfig{tt.worker}
-			cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+			cfg.Workers = []factorydefinitions.FactoryWorkerConfig{tt.worker}
+			cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 				Name:           "speak",
-				Type:           interfaces.WorkstationTypeInvoke,
+				Type:           factorydefinitions.WorkstationTypeInvoke,
 				Operation:      "TTS",
 				WorkerTypeName: "tts-worker",
-				OperationBindings: []interfaces.ModelOperationBinding{
-					{Slot: "text", Selector: &interfaces.ModelOperationBindingSelector{Label: "utterance"}},
+				OperationBindings: []factorydefinitions.ModelOperationBinding{
+					{Slot: "text", Selector: &factorydefinitions.ModelOperationBindingSelector{Label: "utterance"}},
 					{Slot: "voice", Config: []work.WorkContentPart{{Type: work.WorkContentPartTypeJSON, JSON: []byte(`{"name":"alloy"}`)}}},
 				},
-				Inputs:  []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-				Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+				Inputs:  []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+				Outputs: []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "done"}},
 			}}
 
 			findings := ruleModelInvokeWorkstations(cfg)
@@ -308,9 +308,9 @@ func TestRuleModelInvokeWorkstations_AcceptsCompatibleModelInvokeWorkstationAcro
 
 func TestRuleModelInvokeWorkstations_RejectsOperationOnNonModelInvokeType(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:           "legacy",
-		Type:           interfaces.WorkstationTypeModel,
+		Type:           factorydefinitions.WorkstationTypeModel,
 		Operation:      "TTS",
 		WorkerTypeName: "w1",
 	}}
@@ -321,37 +321,37 @@ func TestRuleModelInvokeWorkstations_RejectsOperationOnNonModelInvokeType(t *tes
 
 func TestRuleModelInvokeWorkstations_RejectsWorkerCompatibilityAndOperationMismatch(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.FactoryWorkerConfig{
+	cfg.Workers = []factorydefinitions.FactoryWorkerConfig{
 		{
 			Name: "scripted",
-			Type: interfaces.WorkerTypeScript,
+			Type: factorydefinitions.WorkerTypeScript,
 		},
 		{
 			Name: "tts-worker",
-			Type: interfaces.WorkerTypeModel,
-			Operations: []interfaces.ModelOperation{{
+			Type: factorydefinitions.WorkerTypeModel,
+			Operations: []factorydefinitions.ModelOperation{{
 				Name: "EMBED",
-				Inputs: []interfaces.ModelOperationSlot{{
+				Inputs: []factorydefinitions.ModelOperationSlot{{
 					Name:         "text",
-					ContentTypes: []string{interfaces.ModelOperationContentTypeText},
+					ContentTypes: []string{factorydefinitions.ModelOperationContentTypeText},
 				}},
-				Outputs: []interfaces.ModelOperationSlot{{
+				Outputs: []factorydefinitions.ModelOperationSlot{{
 					Name:         "vector",
-					ContentTypes: []string{interfaces.ModelOperationContentTypeJSON},
+					ContentTypes: []string{factorydefinitions.ModelOperationContentTypeJSON},
 				}},
 			}},
 		},
 	}
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{
 		{
 			Name:           "bad-worker-type",
-			Type:           interfaces.WorkstationTypeInvoke,
+			Type:           factorydefinitions.WorkstationTypeInvoke,
 			Operation:      "TTS",
 			WorkerTypeName: "scripted",
 		},
 		{
 			Name:           "bad-operation",
-			Type:           interfaces.WorkstationTypeInvoke,
+			Type:           factorydefinitions.WorkstationTypeInvoke,
 			Operation:      "TTS",
 			WorkerTypeName: "tts-worker",
 		},
@@ -364,20 +364,20 @@ func TestRuleModelInvokeWorkstations_RejectsWorkerCompatibilityAndOperationMisma
 
 func TestRuleModelInvokeWorkstations_RejectsIncompleteContentContract(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.FactoryWorkerConfig{{
+	cfg.Workers = []factorydefinitions.FactoryWorkerConfig{{
 		Name: "tts-worker",
-		Type: interfaces.WorkerTypeModel,
-		Operations: []interfaces.ModelOperation{{
+		Type: factorydefinitions.WorkerTypeModel,
+		Operations: []factorydefinitions.ModelOperation{{
 			Name: "TTS",
-			Inputs: []interfaces.ModelOperationSlot{{
+			Inputs: []factorydefinitions.ModelOperationSlot{{
 				Name:         "text",
-				ContentTypes: []string{interfaces.ModelOperationContentTypeText},
+				ContentTypes: []string{factorydefinitions.ModelOperationContentTypeText},
 			}},
 		}},
 	}}
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:           "speak",
-		Type:           interfaces.WorkstationTypeInvoke,
+		Type:           factorydefinitions.WorkstationTypeInvoke,
 		Operation:      "TTS",
 		WorkerTypeName: "tts-worker",
 	}}
@@ -388,31 +388,31 @@ func TestRuleModelInvokeWorkstations_RejectsIncompleteContentContract(t *testing
 
 func TestRuleModelInvokeWorkstations_RejectsDuplicateUnknownAndEmptyOperationBindings(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.FactoryWorkerConfig{{
+	cfg.Workers = []factorydefinitions.FactoryWorkerConfig{{
 		Name: "tts-worker",
-		Type: interfaces.WorkerTypeModel,
-		Operations: []interfaces.ModelOperation{{
+		Type: factorydefinitions.WorkerTypeModel,
+		Operations: []factorydefinitions.ModelOperation{{
 			Name: "TTS",
-			Inputs: []interfaces.ModelOperationSlot{{
+			Inputs: []factorydefinitions.ModelOperationSlot{{
 				Name:         "text",
-				ContentTypes: []string{interfaces.ModelOperationContentTypeText},
+				ContentTypes: []string{factorydefinitions.ModelOperationContentTypeText},
 				Required:     true,
 			}},
-			Outputs: []interfaces.ModelOperationSlot{{
+			Outputs: []factorydefinitions.ModelOperationSlot{{
 				Name:         "audio",
-				ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
+				ContentTypes: []string{factorydefinitions.ModelOperationContentTypeAudio},
 			}},
 		}},
 	}}
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:           "speak",
-		Type:           interfaces.WorkstationTypeInvoke,
+		Type:           factorydefinitions.WorkstationTypeInvoke,
 		Operation:      "TTS",
 		WorkerTypeName: "tts-worker",
-		OperationBindings: []interfaces.ModelOperationBinding{
-			{Slot: "text", Selector: &interfaces.ModelOperationBindingSelector{Label: "utterance"}},
+		OperationBindings: []factorydefinitions.ModelOperationBinding{
+			{Slot: "text", Selector: &factorydefinitions.ModelOperationBindingSelector{Label: "utterance"}},
 			{Slot: "text", Config: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "fallback"}}},
-			{Slot: "voice", Selector: &interfaces.ModelOperationBindingSelector{Role: "system"}},
+			{Slot: "voice", Selector: &factorydefinitions.ModelOperationBindingSelector{Role: "system"}},
 			{Slot: "style"},
 		},
 	}}
@@ -425,20 +425,20 @@ func TestRuleModelInvokeWorkstations_RejectsDuplicateUnknownAndEmptyOperationBin
 
 func TestRuleWorkerModelOperations_RejectsDuplicateOperationAndSlotNames(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.FactoryWorkerConfig{{
+	cfg.Workers = []factorydefinitions.FactoryWorkerConfig{{
 		Name:          "tts-worker",
-		Type:          interfaces.WorkerTypeModel,
-		ModelLocality: interfaces.ModelLocalityLocal,
-		Operations: []interfaces.ModelOperation{{
+		Type:          factorydefinitions.WorkerTypeModel,
+		ModelLocality: factorydefinitions.ModelLocalityLocal,
+		Operations: []factorydefinitions.ModelOperation{{
 			Name: "TTS",
-			Inputs: []interfaces.ModelOperationSlot{
-				{Name: "text", ContentTypes: []string{interfaces.ModelOperationContentTypeText}},
-				{Name: "text", ContentTypes: []string{interfaces.ModelOperationContentTypeJSON}},
+			Inputs: []factorydefinitions.ModelOperationSlot{
+				{Name: "text", ContentTypes: []string{factorydefinitions.ModelOperationContentTypeText}},
+				{Name: "text", ContentTypes: []string{factorydefinitions.ModelOperationContentTypeJSON}},
 			},
-			Outputs: []interfaces.ModelOperationSlot{{Name: "audio", ContentTypes: []string{interfaces.ModelOperationContentTypeAudio}}},
+			Outputs: []factorydefinitions.ModelOperationSlot{{Name: "audio", ContentTypes: []string{factorydefinitions.ModelOperationContentTypeAudio}}},
 		}, {
 			Name:    "TTS",
-			Outputs: []interfaces.ModelOperationSlot{{Name: "audio", ContentTypes: []string{interfaces.ModelOperationContentTypeAudio}}},
+			Outputs: []factorydefinitions.ModelOperationSlot{{Name: "audio", ContentTypes: []string{factorydefinitions.ModelOperationContentTypeAudio}}},
 		}},
 	}}
 
@@ -450,11 +450,11 @@ func TestRuleWorkerModelOperations_RejectsDuplicateOperationAndSlotNames(t *test
 
 func TestRuleWorkerModelOperations_RejectsCapabilityDeclarationsOnScriptWorkers(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.FactoryWorkerConfig{{
+	cfg.Workers = []factorydefinitions.FactoryWorkerConfig{{
 		Name:          "scripted",
-		Type:          interfaces.WorkerTypeScript,
-		ModelLocality: interfaces.ModelLocalityCloud,
-		Operations:    []interfaces.ModelOperation{{Name: "TTS"}},
+		Type:          factorydefinitions.WorkerTypeScript,
+		ModelLocality: factorydefinitions.ModelLocalityCloud,
+		Operations:    []factorydefinitions.ModelOperation{{Name: "TTS"}},
 	}}
 
 	findings := ruleWorkerModelOperations(cfg)
@@ -464,13 +464,13 @@ func TestRuleWorkerModelOperations_RejectsCapabilityDeclarationsOnScriptWorkers(
 
 func TestRuleWorkerModelOperations_RejectsCapabilityDeclarationsOnAgentWorkers(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.FactoryWorkerConfig{{
+	cfg.Workers = []factorydefinitions.FactoryWorkerConfig{{
 		Name: "executor",
-		Type: interfaces.WorkerTypeAgent,
-		Operations: []interfaces.ModelOperation{{
+		Type: factorydefinitions.WorkerTypeAgent,
+		Operations: []factorydefinitions.ModelOperation{{
 			Name:    "TTS",
-			Inputs:  []interfaces.ModelOperationSlot{{Name: "text", ContentTypes: []string{interfaces.ModelOperationContentTypeText}}},
-			Outputs: []interfaces.ModelOperationSlot{{Name: "audio", ContentTypes: []string{interfaces.ModelOperationContentTypeAudio}}},
+			Inputs:  []factorydefinitions.ModelOperationSlot{{Name: "text", ContentTypes: []string{factorydefinitions.ModelOperationContentTypeText}}},
+			Outputs: []factorydefinitions.ModelOperationSlot{{Name: "audio", ContentTypes: []string{factorydefinitions.ModelOperationContentTypeAudio}}},
 		}},
 	}}
 
@@ -481,12 +481,12 @@ func TestRuleWorkerModelOperations_RejectsCapabilityDeclarationsOnAgentWorkers(t
 
 func TestRuleWorkerModelOperations_RejectsMissingSlotContentTypes(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.FactoryWorkerConfig{{
+	cfg.Workers = []factorydefinitions.FactoryWorkerConfig{{
 		Name: "tts-worker",
-		Type: interfaces.WorkerTypeModel,
-		Operations: []interfaces.ModelOperation{{
+		Type: factorydefinitions.WorkerTypeModel,
+		Operations: []factorydefinitions.ModelOperation{{
 			Name:   "TTS",
-			Inputs: []interfaces.ModelOperationSlot{{Name: "text"}},
+			Inputs: []factorydefinitions.ModelOperationSlot{{Name: "text"}},
 		}},
 	}}
 
@@ -497,9 +497,9 @@ func TestRuleWorkerModelOperations_RejectsMissingSlotContentTypes(t *testing.T) 
 
 func TestRuleResourceUsage_NonexistentResource(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:      "ws",
-		Resources: []interfaces.ResourceConfig{{Name: "bogus", Capacity: 1}},
+		Resources: []factorydefinitions.ResourceConfig{{Name: "bogus", Capacity: 1}},
 	}}
 	findings := ruleResourceUsage(cfg)
 	assertFindingExists(t, findings, "resource-usage-ref")
@@ -507,10 +507,10 @@ func TestRuleResourceUsage_NonexistentResource(t *testing.T) {
 
 func TestRuleResourceUsage_ZeroCapacity(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Resources = []interfaces.ResourceConfig{{Name: "gpu", Capacity: 4}}
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Resources = []factorydefinitions.ResourceConfig{{Name: "gpu", Capacity: 4}}
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:      "ws",
-		Resources: []interfaces.ResourceConfig{{Name: "gpu", Capacity: 0}},
+		Resources: []factorydefinitions.ResourceConfig{{Name: "gpu", Capacity: 0}},
 	}}
 	findings := ruleResourceUsage(cfg)
 	assertFindingExists(t, findings, "resource-usage-capacity")
@@ -518,10 +518,10 @@ func TestRuleResourceUsage_ZeroCapacity(t *testing.T) {
 
 func TestRuleResourceUsage_ValidConfig(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Resources = []interfaces.ResourceConfig{{Name: "gpu", Capacity: 4}}
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Resources = []factorydefinitions.ResourceConfig{{Name: "gpu", Capacity: 4}}
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:      "ws",
-		Resources: []interfaces.ResourceConfig{{Name: "gpu", Capacity: 2}},
+		Resources: []factorydefinitions.ResourceConfig{{Name: "gpu", Capacity: 2}},
 	}}
 	findings := ruleResourceUsage(cfg)
 	if len(findings) != 0 {
@@ -531,10 +531,10 @@ func TestRuleResourceUsage_ValidConfig(t *testing.T) {
 
 func TestRuleResourceUsage_ValidatesWorkerRequirements(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Resources = []interfaces.ResourceConfig{{Name: "gpu", Capacity: 4}}
-	cfg.Workers = []interfaces.FactoryWorkerConfig{{
+	cfg.Resources = []factorydefinitions.ResourceConfig{{Name: "gpu", Capacity: 4}}
+	cfg.Workers = []factorydefinitions.FactoryWorkerConfig{{
 		Name:      "worker-a",
-		Resources: []interfaces.ResourceConfig{{Name: "gpu", Capacity: 0}, {Name: "missing", Capacity: 1}},
+		Resources: []factorydefinitions.ResourceConfig{{Name: "gpu", Capacity: 0}, {Name: "missing", Capacity: 1}},
 	}}
 
 	findings := ruleResourceUsage(cfg)
@@ -544,9 +544,9 @@ func TestRuleResourceUsage_ValidatesWorkerRequirements(t *testing.T) {
 
 func TestRuleResourceDefinitions_RequiresModelMetadata(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Resources = []interfaces.ResourceConfig{{
+	cfg.Resources = []factorydefinitions.ResourceConfig{{
 		Name:     "omnivoice-cache",
-		Type:     interfaces.ResourceTypeModel,
+		Type:     factorydefinitions.ResourceTypeModel,
 		Capacity: 1,
 	}}
 
@@ -558,9 +558,9 @@ func TestRuleResourceDefinitions_RequiresModelMetadata(t *testing.T) {
 
 func TestRuleResourceDefinitions_RequiresProviderQuotaMetadata(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Resources = []interfaces.ResourceConfig{{
+	cfg.Resources = []factorydefinitions.ResourceConfig{{
 		Name:     "codex-tts-quota",
-		Type:     interfaces.ResourceTypeProviderQuota,
+		Type:     factorydefinitions.ResourceTypeProviderQuota,
 		Capacity: 2,
 	}}
 
@@ -571,9 +571,9 @@ func TestRuleResourceDefinitions_RequiresProviderQuotaMetadata(t *testing.T) {
 
 func TestRuleResourceDefinitions_AcceptsModelResourceMetadata(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Resources = []interfaces.ResourceConfig{{
+	cfg.Resources = []factorydefinitions.ResourceConfig{{
 		Name:       "omnivoice-cache",
-		Type:       interfaces.ResourceTypeModel,
+		Type:       factorydefinitions.ResourceTypeModel,
 		Capacity:   1,
 		Model:      "OMNIVOICE_Q4_K_M",
 		Backend:    "LLAMACPP",
@@ -587,8 +587,8 @@ func TestRuleResourceDefinitions_AcceptsModelResourceMetadata(t *testing.T) {
 
 func TestRuleRequiredTools_MissingNameAndCommand(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.ResourceManifest = &interfaces.PortableResourceManifestConfig{
-		RequiredTools: []interfaces.RequiredToolConfig{{}},
+	cfg.ResourceManifest = &factorydefinitions.PortableResourceManifestConfig{
+		RequiredTools: []factorydefinitions.RequiredToolConfig{{}},
 	}
 
 	findings := ruleRequiredTools(nil)(cfg)
@@ -598,8 +598,8 @@ func TestRuleRequiredTools_MissingNameAndCommand(t *testing.T) {
 
 func TestConfigValidator_RequiredToolsReportsPresentAndMissingCommandsDeterministically(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.ResourceManifest = &interfaces.PortableResourceManifestConfig{
-		RequiredTools: []interfaces.RequiredToolConfig{
+	cfg.ResourceManifest = &factorydefinitions.PortableResourceManifestConfig{
+		RequiredTools: []factorydefinitions.RequiredToolConfig{
 			{Name: "Go toolchain", Command: "go"},
 			{Name: "Missing helper", Command: "missing-tool"},
 		},
@@ -631,8 +631,8 @@ func TestConfigValidator_RequiredToolsReportsPresentAndMissingCommandsDeterminis
 
 func TestRuleRequiredTools_InvalidVersionProbeUsesVersionArgsPath(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.ResourceManifest = &interfaces.PortableResourceManifestConfig{
-		RequiredTools: []interfaces.RequiredToolConfig{{
+	cfg.ResourceManifest = &factorydefinitions.PortableResourceManifestConfig{
+		RequiredTools: []factorydefinitions.RequiredToolConfig{{
 			Name:        "Python",
 			Command:     "python",
 			VersionArgs: []string{"--version"},
@@ -653,8 +653,8 @@ func TestRuleRequiredTools_InvalidVersionProbeUsesVersionArgsPath(t *testing.T) 
 
 func TestRuleRequiredTools_MissingCommandWithVersionArgsUsesCommandPath(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.ResourceManifest = &interfaces.PortableResourceManifestConfig{
-		RequiredTools: []interfaces.RequiredToolConfig{{
+	cfg.ResourceManifest = &factorydefinitions.PortableResourceManifestConfig{
+		RequiredTools: []factorydefinitions.RequiredToolConfig{{
 			Name:        "Portable helper",
 			Command:     "missing-helper",
 			VersionArgs: []string{"--version"},
@@ -675,8 +675,8 @@ func TestRuleRequiredTools_MissingCommandWithVersionArgsUsesCommandPath(t *testi
 
 func TestRuleRequiredTools_RejectsBlankVersionArgsEntries(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.ResourceManifest = &interfaces.PortableResourceManifestConfig{
-		RequiredTools: []interfaces.RequiredToolConfig{{
+	cfg.ResourceManifest = &factorydefinitions.PortableResourceManifestConfig{
+		RequiredTools: []factorydefinitions.RequiredToolConfig{{
 			Name:        "Python",
 			Command:     "python",
 			VersionArgs: []string{"--version", ""},
@@ -689,11 +689,11 @@ func TestRuleRequiredTools_RejectsBlankVersionArgsEntries(t *testing.T) {
 
 func TestRuleBundledFiles_RejectsUnsupportedTypeEncodingAndRoot(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.ResourceManifest = &interfaces.PortableResourceManifestConfig{
-		BundledFiles: []interfaces.BundledFileConfig{{
+	cfg.ResourceManifest = &factorydefinitions.PortableResourceManifestConfig{
+		BundledFiles: []factorydefinitions.BundledFileConfig{{
 			Type:       "BINARY",
 			TargetPath: "factory/misc/helper.bin",
-			Content: interfaces.BundledFileContentConfig{
+			Content: factorydefinitions.BundledFileContentConfig{
 				Encoding: "base64",
 				Inline:   "AA==",
 			},
@@ -707,11 +707,11 @@ func TestRuleBundledFiles_RejectsUnsupportedTypeEncodingAndRoot(t *testing.T) {
 
 func TestRuleBundledFiles_RejectsUnsafeTargetPath(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.ResourceManifest = &interfaces.PortableResourceManifestConfig{
-		BundledFiles: []interfaces.BundledFileConfig{{
+	cfg.ResourceManifest = &factorydefinitions.PortableResourceManifestConfig{
+		BundledFiles: []factorydefinitions.BundledFileConfig{{
 			Type:       "SCRIPT",
 			TargetPath: "../scripts/setup-workspace.py",
-			Content: interfaces.BundledFileContentConfig{
+			Content: factorydefinitions.BundledFileContentConfig{
 				Encoding: "utf-8",
 				Inline:   "print('portable')\n",
 			},
@@ -727,12 +727,12 @@ func TestRuleBundledFiles_RejectsUnsafeTargetPath(t *testing.T) {
 
 func TestRuleBundledFiles_RejectsAbsoluteTargetPath(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.ResourceManifest = &interfaces.PortableResourceManifestConfig{
-		BundledFiles: []interfaces.BundledFileConfig{{
-			Type:       interfaces.BundledFileTypeScript,
+	cfg.ResourceManifest = &factorydefinitions.PortableResourceManifestConfig{
+		BundledFiles: []factorydefinitions.BundledFileConfig{{
+			Type:       factorydefinitions.BundledFileTypeScript,
 			TargetPath: "/factory/scripts/setup-workspace.py",
-			Content: interfaces.BundledFileContentConfig{
-				Encoding: interfaces.BundledFileEncodingUTF8,
+			Content: factorydefinitions.BundledFileContentConfig{
+				Encoding: factorydefinitions.BundledFileEncodingUTF8,
 				Inline:   "print('portable')\n",
 			},
 		}},
@@ -747,12 +747,12 @@ func TestRuleBundledFiles_RejectsAbsoluteTargetPath(t *testing.T) {
 
 func TestRuleBundledFiles_RejectsMissingInlineContent(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.ResourceManifest = &interfaces.PortableResourceManifestConfig{
-		BundledFiles: []interfaces.BundledFileConfig{{
-			Type:       interfaces.BundledFileTypeRootHelper,
+	cfg.ResourceManifest = &factorydefinitions.PortableResourceManifestConfig{
+		BundledFiles: []factorydefinitions.BundledFileConfig{{
+			Type:       factorydefinitions.BundledFileTypeRootHelper,
 			TargetPath: "Makefile",
-			Content: interfaces.BundledFileContentConfig{
-				Encoding: interfaces.BundledFileEncodingUTF8,
+			Content: factorydefinitions.BundledFileContentConfig{
+				Encoding: factorydefinitions.BundledFileEncodingUTF8,
 			},
 		}},
 	}
@@ -766,19 +766,19 @@ func TestRuleBundledFiles_RejectsMissingInlineContent(t *testing.T) {
 
 func TestRuleBundledFilesOnPathFailsClosedWithoutSourceInspection(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.ResourceManifest = &interfaces.PortableResourceManifestConfig{
-		BundledFiles: []interfaces.BundledFileConfig{{
-			Type:       interfaces.BundledFileTypeScript,
+	cfg.ResourceManifest = &factorydefinitions.PortableResourceManifestConfig{
+		BundledFiles: []factorydefinitions.BundledFileConfig{{
+			Type:       factorydefinitions.BundledFileTypeScript,
 			TargetPath: "factory/scripts/setup.js",
-			Content: interfaces.BundledFileContentConfig{
-				Encoding: interfaces.BundledFileEncodingUTF8,
+			Content: factorydefinitions.BundledFileContentConfig{
+				Encoding: factorydefinitions.BundledFileEncodingUTF8,
 			},
 		}},
 	}
 	findings := ruleBundledFilesOnPath(
 		t.TempDir(),
 		cfg,
-		func(string, interfaces.BundledFileConfig) (string, bool) {
+		func(string, factorydefinitions.BundledFileConfig) (string, bool) {
 			return "setup.js", true
 		},
 		nil,
@@ -788,12 +788,12 @@ func TestRuleBundledFilesOnPathFailsClosedWithoutSourceInspection(t *testing.T) 
 
 func TestRuleBundledFiles_RejectsUnsupportedRootHelperTarget(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.ResourceManifest = &interfaces.PortableResourceManifestConfig{
-		BundledFiles: []interfaces.BundledFileConfig{{
-			Type:       interfaces.BundledFileTypeRootHelper,
+	cfg.ResourceManifest = &factorydefinitions.PortableResourceManifestConfig{
+		BundledFiles: []factorydefinitions.BundledFileConfig{{
+			Type:       factorydefinitions.BundledFileTypeRootHelper,
 			TargetPath: "README.md",
-			Content: interfaces.BundledFileContentConfig{
-				Encoding: interfaces.BundledFileEncodingUTF8,
+			Content: factorydefinitions.BundledFileContentConfig{
+				Encoding: factorydefinitions.BundledFileEncodingUTF8,
 				Inline:   "outside allowlist\n",
 			},
 		}},
@@ -805,58 +805,58 @@ func TestRuleBundledFiles_RejectsUnsupportedRootHelperTarget(t *testing.T) {
 
 func TestRuleWorkerWorkstationBehaviorCompatibility_AcceptsCompatiblePairings(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.FactoryWorkerConfig{
-		{Name: "infer", Type: interfaces.WorkerTypeInference, Operations: inferenceOperationFixture()},
-		{Name: "legacy-infer", Type: interfaces.WorkerTypeModel, Operations: inferenceOperationFixture()},
-		{Name: "agent", Type: interfaces.WorkerTypeAgent},
-		{Name: "legacy-agent", Type: interfaces.WorkerTypeModel},
-		{Name: "script", Type: interfaces.WorkerTypeScript},
-		{Name: "poller", Type: interfaces.WorkerTypePoller, Provider: interfaces.HostedWorkerProviderLinear},
+	cfg.Workers = []factorydefinitions.FactoryWorkerConfig{
+		{Name: "infer", Type: factorydefinitions.WorkerTypeInference, Operations: inferenceOperationFixture()},
+		{Name: "legacy-infer", Type: factorydefinitions.WorkerTypeModel, Operations: inferenceOperationFixture()},
+		{Name: "agent", Type: factorydefinitions.WorkerTypeAgent},
+		{Name: "legacy-agent", Type: factorydefinitions.WorkerTypeModel},
+		{Name: "script", Type: factorydefinitions.WorkerTypeScript},
+		{Name: "poller", Type: factorydefinitions.WorkerTypePoller, Provider: factorydefinitions.HostedWorkerProviderLinear},
 	}
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{
 		{
 			Name:           "infer-run",
-			Type:           interfaces.WorkstationTypeInference,
+			Type:           factorydefinitions.WorkstationTypeInference,
 			Operation:      "TTS",
 			WorkerTypeName: "infer",
-			Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-			Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+			Inputs:         []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+			Outputs:        []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "done"}},
 		},
 		{
 			Name:           "legacy-infer-run",
-			Type:           interfaces.WorkstationTypeInvoke,
+			Type:           factorydefinitions.WorkstationTypeInvoke,
 			Operation:      "TTS",
 			WorkerTypeName: "legacy-infer",
-			Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-			Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+			Inputs:         []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+			Outputs:        []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "done"}},
 		},
 		{
 			Name:           "agent-run",
-			Type:           interfaces.WorkstationTypeAgent,
+			Type:           factorydefinitions.WorkstationTypeAgent,
 			WorkerTypeName: "agent",
-			Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-			Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+			Inputs:         []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+			Outputs:        []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "done"}},
 		},
 		{
 			Name:           "legacy-agent-run",
-			Type:           interfaces.WorkstationTypeModel,
+			Type:           factorydefinitions.WorkstationTypeModel,
 			WorkerTypeName: "legacy-agent",
-			Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-			Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+			Inputs:         []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+			Outputs:        []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "done"}},
 		},
 		{
 			Name:           "script-run",
-			Type:           interfaces.WorkstationTypeScript,
+			Type:           factorydefinitions.WorkstationTypeScript,
 			WorkerTypeName: "script",
-			Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-			Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+			Inputs:         []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+			Outputs:        []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "done"}},
 		},
 		{
 			Name:           "poller-run",
-			Type:           interfaces.WorkstationTypePoller,
+			Type:           factorydefinitions.WorkstationTypePoller,
 			WorkerTypeName: "poller",
-			Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-			Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+			Inputs:         []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+			Outputs:        []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "done"}},
 		},
 	}
 
@@ -870,33 +870,33 @@ func TestRuleWorkerWorkstationBehaviorCompatibility_AcceptsCompatiblePairings(t 
 
 func TestRuleWorkerWorkstationBehaviorCompatibility_RejectsIncompatiblePairings(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.FactoryWorkerConfig{
-		{Name: "infer", Type: interfaces.WorkerTypeInference, Operations: inferenceOperationFixture()},
-		{Name: "agent", Type: interfaces.WorkerTypeAgent},
-		{Name: "script", Type: interfaces.WorkerTypeScript},
+	cfg.Workers = []factorydefinitions.FactoryWorkerConfig{
+		{Name: "infer", Type: factorydefinitions.WorkerTypeInference, Operations: inferenceOperationFixture()},
+		{Name: "agent", Type: factorydefinitions.WorkerTypeAgent},
+		{Name: "script", Type: factorydefinitions.WorkerTypeScript},
 	}
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{
 		{
 			Name:           "agent-with-infer",
-			Type:           interfaces.WorkstationTypeAgent,
+			Type:           factorydefinitions.WorkstationTypeAgent,
 			WorkerTypeName: "infer",
-			Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-			Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+			Inputs:         []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+			Outputs:        []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "done"}},
 		},
 		{
 			Name:           "infer-with-agent",
-			Type:           interfaces.WorkstationTypeInference,
+			Type:           factorydefinitions.WorkstationTypeInference,
 			Operation:      "TTS",
 			WorkerTypeName: "agent",
-			Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-			Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+			Inputs:         []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+			Outputs:        []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "done"}},
 		},
 		{
 			Name:           "poller-with-agent",
-			Type:           interfaces.WorkstationTypePoller,
+			Type:           factorydefinitions.WorkstationTypePoller,
 			WorkerTypeName: "agent",
-			Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-			Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+			Inputs:         []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+			Outputs:        []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "done"}},
 		},
 	}
 
@@ -908,18 +908,18 @@ func TestRuleWorkerWorkstationBehaviorCompatibility_RejectsIncompatiblePairings(
 
 func TestConfigValidator_LegacyModelWorkstationPairingRemainsValid(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.FactoryWorkerConfig{{
+	cfg.Workers = []factorydefinitions.FactoryWorkerConfig{{
 		Name:             "planner",
-		Type:             interfaces.WorkerTypeModel,
+		Type:             factorydefinitions.WorkerTypeModel,
 		ModelProvider:    "CLAUDE",
 		ExecutorProvider: "SCRIPT_WRAP",
 	}}
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:           "plan-task",
-		Type:           interfaces.WorkstationTypeModel,
+		Type:           factorydefinitions.WorkstationTypeModel,
 		WorkerTypeName: "planner",
-		Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-		Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+		Inputs:         []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		Outputs:        []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "done"}},
 	}}
 
 	result := NewConfigValidator(nil).Validate(cfg)
@@ -930,16 +930,16 @@ func TestConfigValidator_LegacyModelWorkstationPairingRemainsValid(t *testing.T)
 	}
 }
 
-func inferenceOperationFixture() []interfaces.ModelOperation {
-	return []interfaces.ModelOperation{{
+func inferenceOperationFixture() []factorydefinitions.ModelOperation {
+	return []factorydefinitions.ModelOperation{{
 		Name: "TTS",
-		Inputs: []interfaces.ModelOperationSlot{{
+		Inputs: []factorydefinitions.ModelOperationSlot{{
 			Name:         "text",
-			ContentTypes: []string{interfaces.ModelOperationContentTypeText},
+			ContentTypes: []string{factorydefinitions.ModelOperationContentTypeText},
 		}},
-		Outputs: []interfaces.ModelOperationSlot{{
+		Outputs: []factorydefinitions.ModelOperationSlot{{
 			Name:         "audio",
-			ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
+			ContentTypes: []string{factorydefinitions.ModelOperationContentTypeAudio},
 		}},
 	}}
 }

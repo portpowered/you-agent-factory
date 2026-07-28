@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	snapshotsportabilitycapture "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/capture"
 )
 
 // NewJSONDecoder binds a representation decoder to the Factory Definition
@@ -11,9 +12,7 @@ import (
 func NewJSONDecoder[T any](
 	decodeBoundary func([]byte) (T, error),
 ) factorydefinitions.FactorySnapshotJSONDecoder {
-	return func(data []byte) (*factorydefinitions.FactorySnapshot, error) {
-		return DecodeJSON(data, decodeBoundary)
-	}
+	return snapshotsportabilitycapture.NewJSONDecoder(decodeBoundary)
 }
 
 // DecodeJSON validates one representation boundary and captures a detached
@@ -22,14 +21,7 @@ func DecodeJSON[T any](
 	data []byte,
 	decodeBoundary func([]byte) (T, error),
 ) (*factorydefinitions.FactorySnapshot, error) {
-	if decodeBoundary == nil {
-		return nil, errors.New("Factory boundary JSON decoder is required")
-	}
-	boundary, err := decodeBoundary(data)
-	if err != nil {
-		return nil, err
-	}
-	return factorydefinitions.NewFactorySnapshot(boundary)
+	return snapshotsportabilitycapture.DecodeJSON(data, decodeBoundary)
 }
 
 // NewDirectoryLoader binds Factory Definition loading and snapshot capture to

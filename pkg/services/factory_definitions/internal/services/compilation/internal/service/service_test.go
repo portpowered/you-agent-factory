@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	compilationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
 	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
 )
@@ -16,39 +16,39 @@ import (
 type stubLoadedSource struct {
 	factoryDir     string
 	runtimeBaseDir string
-	cfg            *factorycontracts.FactoryConfig
+	cfg            *factorydefinitions.FactoryConfig
 }
 
-func (s stubLoadedSource) FactoryConfig() *factorycontracts.FactoryConfig { return s.cfg }
+func (s stubLoadedSource) FactoryConfig() *factorydefinitions.FactoryConfig { return s.cfg }
 func (s stubLoadedSource) FactoryDir() string                             { return s.factoryDir }
 func (s stubLoadedSource) RuntimeBaseDir() string                         { return s.runtimeBaseDir }
 func (s stubLoadedSource) SetRuntimeBaseDir(string)                       {}
-func (s stubLoadedSource) PortableBundledFileReplacements() []factorycontracts.PortableBundledFileReplacement {
+func (s stubLoadedSource) PortableBundledFileReplacements() []factorydefinitions.PortableBundledFileReplacement {
 	return nil
 }
-func (s stubLoadedSource) MutateWorkers(func(*factorycontracts.FactoryWorkerConfig) error) error {
+func (s stubLoadedSource) MutateWorkers(func(*factorydefinitions.FactoryWorkerConfig) error) error {
 	return nil
 }
-func (s stubLoadedSource) Workstation(string) (*factorycontracts.FactoryWorkstationConfig, bool) {
+func (s stubLoadedSource) Workstation(string) (*factorydefinitions.FactoryWorkstationConfig, bool) {
 	return nil, false
 }
-func (s stubLoadedSource) Worker(string) (*factorycontracts.FactoryWorkerConfig, bool) {
+func (s stubLoadedSource) Worker(string) (*factorydefinitions.FactoryWorkerConfig, bool) {
 	return nil, false
 }
 
 func newCompilationService(
 	t *testing.T,
-	loadCanonical factorycontracts.CanonicalFactoryJSONLoader,
-	loadFromFactoryDir factorycontracts.LoadedFactoryLoader,
+	loadCanonical factorydefinitions.CanonicalFactoryJSONLoader,
+	loadFromFactoryDir factorydefinitions.LoadedFactoryLoader,
 ) compilationservice.Service {
 	t.Helper()
 	if loadCanonical == nil {
-		loadCanonical = func([]byte, factorycontracts.WorkstationLoader) (factorycontracts.MutableLoadedFactorySource, error) {
+		loadCanonical = func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 			return nil, factoryroot.ErrInvalidNamedFactory
 		}
 	}
 	if loadFromFactoryDir == nil {
-		loadFromFactoryDir = func(string, factorycontracts.WorkstationLoader) (factorycontracts.MutableLoadedFactorySource, error) {
+		loadFromFactoryDir = func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 			return nil, factoryroot.ErrInvalidNamedFactory
 		}
 	}
@@ -63,15 +63,15 @@ func newCompilationService(
 	return svc
 }
 
-func stubEncodeFactory(cfg *factorycontracts.FactoryConfig) ([]byte, error) {
+func stubEncodeFactory(cfg *factorydefinitions.FactoryConfig) ([]byte, error) {
 	if cfg == nil {
 		return nil, errors.New("factory config is required")
 	}
 	return json.Marshal(cfg)
 }
 
-func stubLoadCanonical(payload []byte, _ factorycontracts.WorkstationLoader) (factorycontracts.MutableLoadedFactorySource, error) {
-	var cfg factorycontracts.FactoryConfig
+func stubLoadCanonical(payload []byte, _ factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+	var cfg factorydefinitions.FactoryConfig
 	if err := json.Unmarshal(payload, &cfg); err != nil {
 		return nil, factoryroot.ErrInvalidNamedFactory
 	}
@@ -165,15 +165,15 @@ func TestCompileEffectiveFactorySource_LoadsAuthoredFactoryDirectory(t *testing.
 
 	loadFromFactoryDir := func(
 		factoryDir string,
-		_ factorycontracts.WorkstationLoader,
-	) (factorycontracts.MutableLoadedFactorySource, error) {
+		_ factorydefinitions.WorkstationLoader,
+	) (factorydefinitions.MutableLoadedFactorySource, error) {
 		if factoryDir != "/factories/alpha" {
 			t.Fatalf("factoryDir = %q, want /factories/alpha", factoryDir)
 		}
 		return stubLoadedSource{
 			factoryDir:     factoryDir,
 			runtimeBaseDir: factoryDir,
-			cfg:            &factorycontracts.FactoryConfig{Name: "alpha"},
+			cfg:            &factorydefinitions.FactoryConfig{Name: "alpha"},
 		}, nil
 	}
 	svc := newCompilationService(t, nil, loadFromFactoryDir)
@@ -199,12 +199,12 @@ func TestCompileEffectiveFactorySource_DoesNotStartFactorySessionOrRuntime(t *te
 
 	loadCanonical := func(
 		_ []byte,
-		_ factorycontracts.WorkstationLoader,
-	) (factorycontracts.MutableLoadedFactorySource, error) {
+		_ factorydefinitions.WorkstationLoader,
+	) (factorydefinitions.MutableLoadedFactorySource, error) {
 		return stubLoadedSource{
 			factoryDir:     "/factories/alpha",
 			runtimeBaseDir: "/factories/alpha",
-			cfg:            &factorycontracts.FactoryConfig{Name: "alpha"},
+			cfg:            &factorydefinitions.FactoryConfig{Name: "alpha"},
 		}, nil
 	}
 	svc := newCompilationService(t, loadCanonical, nil)

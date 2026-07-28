@@ -1,6 +1,6 @@
 package validation
 
-import factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+import factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 
 // Profile selects which validation rules run for one OpenAPI factory payload.
 type Profile = factorydefinitions.ValidationProfile

@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 )
 
 type effectiveCatalog struct {
@@ -160,7 +159,7 @@ func detachedEntry(
 	candidate factorydefinitions.EffectiveFactoryCatalogCandidate,
 	definition *factorydefinitions.FactoryConfig,
 ) (factorydefinitions.EffectiveFactoryCatalogEntry, error) {
-	cloned, err := factorycontracts.CloneFactoryConfig(definition)
+	cloned, err := factorydefinitions.CloneFactoryConfig(definition)
 	if err != nil {
 		return factorydefinitions.EffectiveFactoryCatalogEntry{}, err
 	}

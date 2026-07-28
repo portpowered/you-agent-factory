@@ -9,7 +9,7 @@ import (
 
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntimeconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/runtimeconfig"
 )
 
@@ -154,14 +154,14 @@ Fallback body.
 }
 
 func TestRuntimeConfigMerge_MergesWorkstationStopWordsAndDetachesSlices(t *testing.T) {
-	factoryCfg := &interfaces.FactoryConfig{
-		Workstations: []interfaces.FactoryWorkstationConfig{{
+	factoryCfg := &factorydefinitions.FactoryConfig{
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{{
 			Name:      "execute-story",
 			StopWords: []string{"CANONICAL", "SHARED"},
 		}},
 	}
 	runtimeDefs := testRuntimeDefinitionLookup{
-		workstations: map[string]*interfaces.FactoryWorkstationConfig{
+		workstations: map[string]*factorydefinitions.FactoryWorkstationConfig{
 			"execute-story": {
 				Name:             "execute-story",
 				StopWords:        []string{"RUNTIME", "SHARED"},
@@ -241,7 +241,7 @@ Execute the story script.
 	assertFlattenedInlineScriptConfig(t, cfg)
 
 	standaloneDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(standaloneDir, interfaces.FactoryConfigFile), flattened, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(standaloneDir, factorydefinitions.FactoryConfigFile), flattened, 0o644); err != nil {
 		t.Fatalf("write standalone factory.json: %v", err)
 	}
 
@@ -308,22 +308,22 @@ func TestLoadRuntimeConfig_RejectsMissingSplitWorkstationWhenScriptExecutionCont
 	}
 }
 
-func assertFlattenedInlineScriptConfig(t *testing.T, cfg *interfaces.FactoryConfig) {
+func assertFlattenedInlineScriptConfig(t *testing.T, cfg *factorydefinitions.FactoryConfig) {
 	t.Helper()
 
 	if len(cfg.Workers) != 1 || len(cfg.Workstations) != 1 {
 		t.Fatalf("expected flattened config to preserve one worker and workstation, got %d/%d", len(cfg.Workers), len(cfg.Workstations))
 	}
 	worker := cfg.Workers[0]
-	if worker.Type != interfaces.WorkerTypeScript || worker.Command != "powershell" {
+	if worker.Type != factorydefinitions.WorkerTypeScript || worker.Command != "powershell" {
 		t.Fatalf("flattened worker definition = %#v", worker)
 	}
 	if len(worker.Args) != 2 || worker.Args[0] != "-File" || worker.Args[1] != "scripts/execute-story.ps1" {
 		t.Fatalf("flattened worker args = %#v", worker.Args)
 	}
 	workstation := cfg.Workstations[0]
-	if workstation.Type != interfaces.WorkstationTypeModel {
-		t.Fatalf("flattened workstation type = %q, want %q", workstation.Type, interfaces.WorkstationTypeModel)
+	if workstation.Type != factorydefinitions.WorkstationTypeModel {
+		t.Fatalf("flattened workstation type = %q, want %q", workstation.Type, factorydefinitions.WorkstationTypeModel)
 	}
 	if workstation.WorkingDirectory != "/repo/{{ .WorkID }}" || workstation.Worktree != "worktrees/{{ .WorkID }}" {
 		t.Fatalf("flattened workstation execution context = %#v", workstation)
@@ -340,15 +340,15 @@ func assertLoadedInlineScriptRuntime(t *testing.T, loaded *LoadedFactoryConfig) 
 	if !ok {
 		t.Fatal("expected flattened script worker definition to load")
 	}
-	if loadedWorker.Type != interfaces.WorkerTypeScript || loadedWorker.Command != "powershell" || loadedWorker.Timeout != "45m" {
+	if loadedWorker.Type != factorydefinitions.WorkerTypeScript || loadedWorker.Command != "powershell" || loadedWorker.Timeout != "45m" {
 		t.Fatalf("loaded script worker definition = %#v", loadedWorker)
 	}
 	loadedWorkstation, ok := loaded.Workstation("execute-story")
 	if !ok {
 		t.Fatal("expected flattened inline workstation definition to load")
 	}
-	if loadedWorkstation.Type != interfaces.WorkstationTypeModel {
-		t.Fatalf("loaded workstation type = %q, want %q", loadedWorkstation.Type, interfaces.WorkstationTypeModel)
+	if loadedWorkstation.Type != factorydefinitions.WorkstationTypeModel {
+		t.Fatalf("loaded workstation type = %q, want %q", loadedWorkstation.Type, factorydefinitions.WorkstationTypeModel)
 	}
 	if loadedWorkstation.WorkingDirectory != "/repo/{{ .WorkID }}" || loadedWorkstation.Worktree != "worktrees/{{ .WorkID }}" {
 		t.Fatalf("loaded workstation execution context = %#v", loadedWorkstation)
@@ -358,8 +358,8 @@ func assertLoadedInlineScriptRuntime(t *testing.T, loaded *LoadedFactoryConfig) 
 	}
 }
 
-func loadRuntimeFactoryConfig(factoryDir string) (*interfaces.FactoryConfig, error) {
-	data, err := os.ReadFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile))
+func loadRuntimeFactoryConfig(factoryDir string) (*factorydefinitions.FactoryConfig, error) {
+	data, err := os.ReadFile(filepath.Join(factoryDir, factorydefinitions.FactoryConfigFile))
 	if err != nil {
 		return nil, err
 	}
