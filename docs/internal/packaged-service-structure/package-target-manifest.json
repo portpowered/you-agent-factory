@@ -326,6 +326,7 @@
     "pkg/services/providers/internal/services/execution/internal/adapters/claude",
     "pkg/services/providers/internal/services/execution/internal/adapters/codex",
     "pkg/services/providers/internal/services/execution/internal/adapters/commanddispatch",
+    "pkg/services/providers/internal/services/execution/internal/adapters/cursor",
     "pkg/services/providers/internal/services/execution/internal/service",
     "pkg/services/providers/internal/services/execution/wire",
     "pkg/services/providers/internal/testutil/execution",
@@ -1933,6 +1934,11 @@
       "destination": "providers/internal/services/execution"
     },
     {
+      "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/cursor",
+      "disposition": "retain",
+      "destination": "providers/internal/services/execution"
+    },
+    {
       "packagePath": "pkg/services/providers/internal/services/execution/internal/service",
       "disposition": "retain",
       "destination": "providers/internal/services/execution"
@@ -2178,12 +2184,12 @@
       "destination": "work"
     },
     {
-      "packagePath": "pkg/services/work/transports/mcp",
+      "packagePath": "pkg/services/work/transports/http",
       "disposition": "retain",
       "destination": "work"
     },
     {
-      "packagePath": "pkg/services/work/transports/http",
+      "packagePath": "pkg/services/work/transports/mcp",
       "disposition": "retain",
       "destination": "work"
     },

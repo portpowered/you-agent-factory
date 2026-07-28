@@ -350,6 +350,14 @@ primary-result behavior.
   `boundedStreamDetail` (do not `TrimSpace` stream fragments) so full-stream
   fidelity concatenation matches completed snapshots; reconcile lifecycle failures
   with the same precedence rules as other Providers-owned adapters.
+- Provider-native Cursor execution state lives below the same parent-private
+  Providers Execution boundary. Keep its stream-json partial-record buffer,
+  assistant/tool correlation, progress projection, flush guard, authoritative
+  `result` record selection, and detached session extraction invocation-local.
+  Register the adapter for canonical `providers.IDCursor` (`agent`) and resolve
+  the `cursor` catalog alias only through Providers Catalog before dispatch.
+  Inject the native effect into the adapter registration; reconcile lifecycle
+  failures with the same precedence rules as other Providers-owned adapters.
 - Keep reusable one-attempt conformance under the Providers-private Execution
   testkit. Build the singular Providers root around a fresh
   controllable adapter for each scenario, observe only Providers-owned
