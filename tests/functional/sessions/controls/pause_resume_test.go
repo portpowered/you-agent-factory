@@ -308,3 +308,104 @@ func TestAPIPauseResumeCancelAndTerminateFactorySession(t *testing.T) {
 		)
 	}
 }
+
+// TestAPIInvalidLifecycleTransitionReturnsConflict proves illegal Factory Session
+// lifecycle controls through the public API return HTTP conflict with typed rejection
+// outcomes and leave the session in its prior terminal lifecycle state.
+func TestAPIInvalidLifecycleTransitionReturnsConflict(t *testing.T) {
+	factoryDir := pauseResumeControlsFactoryDirWithBusyLoop(t)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                factoryDir,
+		UseMockWorkers:            true,
+		WaitForServiceModeRuntime: true,
+	})
+	defer server.Stop(t)
+
+	baseURL := server.URL()
+	sessionID := startBusyLoopDurableSession(t, baseURL, "req-sessions-controls-invalid-transition")
+	waitForDurableFactorySessionStatus(
+		t,
+		baseURL,
+		sessionID,
+		factoryapi.FactorySessionDurableLifecycleStatusRunning,
+		pauseResumeDurableStatusTimeout,
+	)
+
+	terminate := postSessionLifecycleControl(
+		t,
+		baseURL,
+		sessionID,
+		factoryapi.FactorySessionLifecycleControlKindTerminate,
+	)
+	assertAcceptedSessionLifecycleControl(
+		t,
+		terminate,
+		sessionID,
+		factoryapi.FactorySessionLifecycleControlKindTerminate,
+		factoryapi.FactorySessionDurableLifecycleStatusTerminated,
+	)
+
+	terminalStatus := waitForDurableFactorySessionTerminal(
+		t,
+		baseURL,
+		sessionID,
+		pauseResumeDurableStatusTimeout,
+	)
+	before := readDurableFactorySession(t, baseURL, sessionID)
+	if before.Status != terminalStatus {
+		t.Fatalf(
+			"pre-invalid-control session %s status = %q, want %q",
+			sessionID,
+			before.Status,
+			terminalStatus,
+		)
+	}
+
+	resume := postSessionLifecycleControlExpectConflict(
+		t,
+		baseURL,
+		sessionID,
+		factoryapi.FactorySessionLifecycleControlKindResume,
+	)
+	assertRejectedSessionLifecycleControl(
+		t,
+		resume,
+		sessionID,
+		factoryapi.FactorySessionLifecycleControlKindResume,
+		terminalStatus,
+	)
+
+	afterResume := readDurableFactorySession(t, baseURL, sessionID)
+	if afterResume.Status != terminalStatus {
+		t.Fatalf(
+			"session %s status after rejected resume = %q, want unchanged %q",
+			sessionID,
+			afterResume.Status,
+			terminalStatus,
+		)
+	}
+
+	pause := postSessionLifecycleControlExpectConflict(
+		t,
+		baseURL,
+		sessionID,
+		factoryapi.FactorySessionLifecycleControlKindPause,
+	)
+	assertRejectedSessionLifecycleControl(
+		t,
+		pause,
+		sessionID,
+		factoryapi.FactorySessionLifecycleControlKindPause,
+		terminalStatus,
+	)
+
+	afterPause := readDurableFactorySession(t, baseURL, sessionID)
+	if afterPause.Status != terminalStatus {
+		t.Fatalf(
+			"session %s status after rejected pause = %q, want unchanged %q",
+			sessionID,
+			afterPause.Status,
+			terminalStatus,
+		)
+	}
+}

@@ -120,6 +120,33 @@ func readDurableFactorySession(
 	return session
 }
 
+func waitForDurableFactorySessionTerminal(
+	t *testing.T,
+	baseURL string,
+	sessionID string,
+	timeout time.Duration,
+) factoryapi.FactorySessionDurableLifecycleStatus {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		session := readDurableFactorySession(t, baseURL, sessionID)
+		if session.Status == factoryapi.FactorySessionDurableLifecycleStatusTerminated ||
+			session.Status == factoryapi.FactorySessionDurableLifecycleStatusCanceled {
+			return session.Status
+		}
+		time.Sleep(15 * time.Millisecond)
+	}
+	session := readDurableFactorySession(t, baseURL, sessionID)
+	t.Fatalf(
+		"durable session %s status = %q, want TERMINATED or CANCELED within %s",
+		sessionID,
+		session.Status,
+		timeout,
+	)
+	return ""
+}
+
 func waitForDurableFactorySessionStatus(
 	t *testing.T,
 	baseURL string,
@@ -206,6 +233,84 @@ func postSessionLifecycleControl(
 		factoryapi.FactorySessionLifecycleControlRequest{},
 		"apply Factory Session lifecycle control "+string(operation),
 	)
+}
+
+func postSessionLifecycleControlExpectConflict(
+	t *testing.T,
+	baseURL string,
+	sessionID string,
+	operation factoryapi.FactorySessionLifecycleControlKind,
+) factoryapi.FactorySessionLifecycleControlResponse {
+	t.Helper()
+
+	pathSegment := lifecycleControlPathSegment(operation)
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/factory-sessions/" + sessionID + "/" + pathSegment
+	body, err := json.Marshal(factoryapi.FactorySessionLifecycleControlRequest{})
+	if err != nil {
+		t.Fatalf("marshal lifecycle control request: %v", err)
+	}
+	response, err := http.Post(endpoint, "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST %s: %v", endpoint, err)
+	}
+	defer response.Body.Close()
+	payload, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("read POST %s response: %v", endpoint, err)
+	}
+	if response.StatusCode != http.StatusConflict {
+		t.Fatalf(
+			"POST %s status = %d, want 409 conflict: %s",
+			endpoint,
+			response.StatusCode,
+			payload,
+		)
+	}
+	var decoded factoryapi.FactorySessionLifecycleControlResponse
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatalf("decode POST %s response: %v\n%s", endpoint, err, payload)
+	}
+	return decoded
+}
+
+func isRejectedLifecycleControlOutcome(
+	outcome factoryapi.FactorySessionLifecycleControlOutcome,
+) bool {
+	switch outcome {
+	case factoryapi.FactorySessionLifecycleControlOutcomeConflict,
+		factoryapi.FactorySessionLifecycleControlOutcomeInvalidState,
+		factoryapi.FactorySessionLifecycleControlOutcomeTerminalSession:
+		return true
+	default:
+		return false
+	}
+}
+
+func assertRejectedSessionLifecycleControl(
+	t *testing.T,
+	response factoryapi.FactorySessionLifecycleControlResponse,
+	sessionID string,
+	operation factoryapi.FactorySessionLifecycleControlKind,
+	wantStatus factoryapi.FactorySessionDurableLifecycleStatus,
+) {
+	t.Helper()
+
+	if response.Operation != operation {
+		t.Fatalf("lifecycle control operation = %q, want %q", response.Operation, operation)
+	}
+	if !isRejectedLifecycleControlOutcome(response.Outcome) {
+		t.Fatalf(
+			"lifecycle control outcome = %q, want CONFLICT, INVALID_STATE, or TERMINAL_SESSION; response=%#v",
+			response.Outcome,
+			response,
+		)
+	}
+	if response.SessionId != sessionID {
+		t.Fatalf("lifecycle control sessionId = %q, want %q", response.SessionId, sessionID)
+	}
+	if response.Status != wantStatus {
+		t.Fatalf("lifecycle control status = %q, want %q unchanged", response.Status, wantStatus)
+	}
 }
 
 func lifecycleControlPathSegment(operation factoryapi.FactorySessionLifecycleControlKind) string {
