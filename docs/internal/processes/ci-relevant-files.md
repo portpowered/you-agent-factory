@@ -146,6 +146,17 @@
   `tests/functional/observability/verification/verify_tier_contract_test.go`
   with shared stubbed-Make helpers in the same package; do not re-home those
   proofs under `tests/functional/smoke`.
+  Inline JavaScript Factory loading functional coverage belongs in
+  `tests/functional/orchestration/javascript/loading/inline_javascript_test.go`:
+  drive sync Factory Session execution through `support.BuildProcess` +
+  `support.FakeInputs` with `you --json run`, `--factory`, and
+  `--with-mock-workers`; prove inline definitions complete with terminal
+  `COMPLETED` primary outcomes and without private VM internals; prove
+  sequential `agent.run` child dispatches complete in order with stage-output
+  dependency evidence on the primary result and zero live provider execution;
+  prove deliberate inline syntax failures fail before dispatch with
+  customer-stable `workflow.source.syntaxError` diagnostics that name the
+  authored source line. Substitute external effects only through `edges.Edges`.
   JavaScript file-backed loading functional coverage belongs in
   `tests/functional/orchestration/javascript/loading/file_javascript_test.go`:
   drive sync Factory Session execution through `support.BuildProcess` +
