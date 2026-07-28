@@ -403,6 +403,10 @@
       "minimum": 64.38
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/http",
+      "minimum": 79.67
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/ttsobservability",
       "minimum": 73.33
     },
