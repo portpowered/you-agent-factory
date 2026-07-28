@@ -11,6 +11,10 @@ const (
 	httpSubmitListGetRequestID = "work-http-submit-list-get"
 	httpSubmitListGetWorkName  = "http-submit-list-get-task"
 	httpSubmitListGetWorkID    = "work-http-submit-list-get-id"
+
+	httpUpsertCanonicalRequestID = "work-http-upsert-canonical"
+	httpUpsertCanonicalWorkName  = "http-upsert-canonical-task"
+	httpUpsertCanonicalWorkID    = "work-http-upsert-canonical-id"
 )
 
 // TestAPISubmitBatchThenListAndGetWork proves a successful public HTTP batch
@@ -97,6 +101,88 @@ func TestAPISubmitBatchThenListAndGetWork(t *testing.T) {
 			httpSubmitListGetWorkID,
 			support.StringPointerValue(got.WorkTypeName),
 			batchInputsWorkType,
+		)
+	}
+}
+
+// TestAPIUpsertWorkRequestUsesCanonicalIdentity proves repeat upserts of the
+// same logical Work Request through the public HTTP API keep canonical Work
+// Request and Work identities so retries and idempotent clients do not create
+// divergent identities for the same upsert key.
+func TestAPIUpsertWorkRequestUsesCanonicalIdentity(t *testing.T) {
+	factoryDir := support.ScaffoldFactory(t, batchInputsFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:     factoryDir,
+		UseMockWorkers: true,
+	})
+	defer server.Stop(t)
+
+	workTypeName := batchInputsWorkType
+	batchRequest := factoryapi.WorkRequest{
+		RequestId: httpUpsertCanonicalRequestID,
+		Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
+		Works: &[]factoryapi.Work{{
+			Name:         httpUpsertCanonicalWorkName,
+			WorkId:       stringPtr(httpUpsertCanonicalWorkID),
+			WorkTypeName: &workTypeName,
+			Payload:      map[string]string{"title": "HTTP upsert canonical identity"},
+		}},
+	}
+
+	first := support.UpsertDefaultSessionWorkRequest(t, server.URL(), batchRequest)
+	if first.RequestId != httpUpsertCanonicalRequestID {
+		t.Fatalf("first PUT /work-requests requestId = %q, want %q", first.RequestId, httpUpsertCanonicalRequestID)
+	}
+	if first.TraceId == "" {
+		t.Fatalf("first PUT /work-requests traceId is empty, want customer-visible trace identity")
+	}
+	if len(first.Works) != 1 || first.Works[0].WorkId != httpUpsertCanonicalWorkID {
+		t.Fatalf(
+			"first PUT /work-requests works = %#v, want one work with id %q",
+			first.Works,
+			httpUpsertCanonicalWorkID,
+		)
+	}
+
+	second := support.UpsertDefaultSessionWorkRequest(t, server.URL(), batchRequest)
+	if second.RequestId != first.RequestId {
+		t.Fatalf(
+			"repeat PUT /work-requests requestId = %q, want canonical %q",
+			second.RequestId,
+			first.RequestId,
+		)
+	}
+	if second.TraceId != first.TraceId {
+		t.Fatalf(
+			"repeat PUT /work-requests traceId = %q, want canonical %q",
+			second.TraceId,
+			first.TraceId,
+		)
+	}
+	if len(second.Works) != 1 || second.Works[0].WorkId != first.Works[0].WorkId {
+		t.Fatalf(
+			"repeat PUT /work-requests works = %#v, want canonical work id %q",
+			second.Works,
+			first.Works[0].WorkId,
+		)
+	}
+
+	endpoint := support.DefaultSessionWorkURL(server.URL(), "/work/"+httpUpsertCanonicalWorkID)
+	got := support.GetJSON[factoryapi.Work](t, endpoint)
+	if support.StringPointerValue(got.WorkId) != httpUpsertCanonicalWorkID {
+		t.Fatalf(
+			"GET /work/%s workId = %q, want canonical %q",
+			httpUpsertCanonicalWorkID,
+			support.StringPointerValue(got.WorkId),
+			httpUpsertCanonicalWorkID,
+		)
+	}
+	if got.Name != httpUpsertCanonicalWorkName {
+		t.Fatalf(
+			"GET /work/%s name = %q, want %q",
+			httpUpsertCanonicalWorkID,
+			got.Name,
+			httpUpsertCanonicalWorkName,
 		)
 	}
 }
