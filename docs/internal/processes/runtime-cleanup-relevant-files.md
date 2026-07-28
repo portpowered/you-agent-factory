@@ -769,7 +769,14 @@ foreign split in `owned_contract.go` plus the foreign-vocabulary marker in
 `contracts/namevalue` only because the root already imports `workers` and a
 service-root import would cycle. `owned_consumer_import_retarget_test.go` and
 `definition/cross_path_equivalence_test.go` prove the retarget with import
-boundary checks plus catalog/validate behavioral equivalence. The
+boundary checks plus catalog/validate behavioral equivalence. CLN-DEF-CONTRACTS
+story 003 publishes Factory Event envelope and type vocabulary at
+`pkg/services/recordings/event_contract.go`; `events/kinds` and
+`event_vocabulary_boundary_test.go` prove event inventory consumers import
+Recordings root instead of `factory_definitions/contracts`. Temporary
+deletion-only event aliases remain in
+`factory_definitions/event_recording_deletion_aliases.go` until downstream
+peers finish cutover. The
 parent-private nested validation subservice locks its public surface in
 `internal/services/validation/boundary_test.go`: `service.go` exports only
 `Service` and `Dependencies` with factory_definitions root request/result

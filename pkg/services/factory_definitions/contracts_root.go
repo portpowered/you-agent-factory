@@ -27,7 +27,6 @@ type TopologyFinding = contracts.TopologyFinding
 type TopologyValidationResult = contracts.TopologyValidationResult
 type BlockingFactoryLoadError = contracts.BlockingFactoryLoadError
 type ValidationTopologyError = contracts.ValidationTopologyError
-type FactorySessionSyncPreflightOptions = contracts.FactorySessionSyncPreflightOptions
 type FactoryOrchestratorJavaScriptConfig = contracts.FactoryOrchestratorJavaScriptConfig
 type FactoryGuardConfig = contracts.FactoryGuardConfig
 type FactoryWorkstationConfig = contracts.FactoryWorkstationConfig
@@ -120,7 +119,6 @@ var (
 var (
 	ValidateNameValue                            = contracts.ValidateNameValue
 	ResolveNameValue                             = contracts.ResolveNameValue
-	NewFactoryEvent                              = contracts.NewFactoryEvent
 	CanonicalFactoryGraphEntityID                = contracts.CanonicalFactoryGraphEntityID
 	CanonicalFactoryGraphWorkTypeID              = contracts.CanonicalFactoryGraphWorkTypeID
 	CanonicalFactoryGraphWorkStateID             = contracts.CanonicalFactoryGraphWorkStateID
@@ -227,26 +225,22 @@ var NormalizeAgentToolPolicy = workerconfig.NormalizeAgentToolPolicy
 var CloneWorkerConfig = workerconfig.Clone
 
 // Foreign-vocabulary deletion-only aliases below are retained until
-// CLN-DEF-CONTRACTS stories 003-005 rehome them toward Recordings, Runtime,
-// Work, Workers, and Providers ownership.
+// CLN-DEF-CONTRACTS stories 004-005 rehome world-state, dispatch, replay, and
+// worker vocabulary toward Runtime, Recordings, Work, Workers, and Providers.
+// Event envelope vocabulary was rehomed to pkg/services/recordings in story 003.
 
 type (
 	ActiveThrottlePause                              = contracts.ActiveThrottlePause
 	ArcMode                                          = contracts.ArcMode
-	ArtifactCreatedEventPayload                      = contracts.ArtifactCreatedEventPayload
 	BundledFileConfig                                = contracts.BundledFileConfig
 	CheckpointResumabilityStatus                     = contracts.CheckpointResumabilityStatus
 	CompletedDispatch                                = contracts.CompletedDispatch
 	CronConfig                                       = contracts.CronConfig
 	DispatchConsumedWorkRef                          = contracts.DispatchConsumedWorkRef
 	DispatchEntry                                    = contracts.DispatchEntry
-	DispatchInterruptedEventPayload                  = contracts.DispatchInterruptedEventPayload
-	DispatchQueuedEventPayload                       = contracts.DispatchQueuedEventPayload
-	DispatchReconciledEventPayload                   = contracts.DispatchReconciledEventPayload
 	DispatchReconciliationSource                     = contracts.DispatchReconciliationSource
 	DispatchRecord                                   = contracts.DispatchRecord
 	DispatchRequestEventMetadata                     = contracts.DispatchRequestEventMetadata
-	DispatchRequestEventPayload                      = contracts.DispatchRequestEventPayload
 	DispatchResourceRef                              = contracts.DispatchResourceRef
 	EnabledTransition                                = contracts.EnabledTransition
 	EngineStateSnapshot[TMarking any, TTopology any] = contracts.EngineStateSnapshot[TMarking, TTopology]
@@ -254,7 +248,6 @@ type (
 	FactoryArtifactCaptureMetadata                   = contracts.FactoryArtifactCaptureMetadata
 	FactoryArtifactRedactionCounts                   = contracts.FactoryArtifactRedactionCounts
 	FactoryArtifactRef                               = contracts.FactoryArtifactRef
-	FactoryChangeEventPayload                        = contracts.FactoryChangeEventPayload
 	FactoryCompletionRecord                          = contracts.FactoryCompletionRecord
 	FactoryConstraint                                = contracts.FactoryConstraint
 	FactoryDispatchKind                              = contracts.FactoryDispatchKind
@@ -262,12 +255,6 @@ type (
 	FactoryDispatchStatus                            = contracts.FactoryDispatchStatus
 	FactoryDispatchUsage                             = contracts.FactoryDispatchUsage
 	FactoryDispatchWarning                           = contracts.FactoryDispatchWarning
-	FactoryEvent                                     = contracts.FactoryEvent
-	FactoryEventContext                              = contracts.FactoryEventContext
-	FactoryEventReconnectCursor                      = contracts.FactoryEventReconnectCursor
-	FactoryEventReconnectScope                       = contracts.FactoryEventReconnectScope
-	FactoryEventStream                               = contracts.FactoryEventStream
-	FactoryEventType                                 = contracts.FactoryEventType
 	FactoryInvocationResult                          = contracts.FactoryInvocationResult
 	FactoryLayoutBoundsConfig                        = contracts.FactoryLayoutBoundsConfig
 	FactoryLayoutAnnotationConfig                    = contracts.FactoryLayoutAnnotationConfig
@@ -290,7 +277,6 @@ type (
 	FactoryResourceUnit                              = contracts.FactoryResourceUnit
 	FactorySessionArtifactState                      = contracts.FactorySessionArtifactState
 	FactorySessionChildDispatchCounts                = contracts.FactorySessionChildDispatchCounts
-	FactorySessionCompletedEventPayload              = contracts.FactorySessionCompletedEventPayload
 	FactorySessionDispatchFailureDetail              = contracts.FactorySessionDispatchFailureDetail
 	FactorySessionDispatchJavaScriptState            = contracts.FactorySessionDispatchJavaScriptState
 	FactorySessionDispatchPetriState                 = contracts.FactorySessionDispatchPetriState
@@ -301,20 +287,13 @@ type (
 	FactorySessionJavaScriptCheckpointRef            = contracts.FactorySessionJavaScriptCheckpointRef
 	FactorySessionJavaScriptRuntimeState             = contracts.FactorySessionJavaScriptRuntimeState
 	FactorySessionJavaScriptScriptStatus             = contracts.FactorySessionJavaScriptScriptStatus
-	FactorySessionLifecycleControlEventPayload       = contracts.FactorySessionLifecycleControlEventPayload
 	FactorySessionLifecycleControlKind               = contracts.FactorySessionLifecycleControlKind
 	FactorySessionLifecycleControlOutcome            = contracts.FactorySessionLifecycleControlOutcome
 	FactorySessionLifecycleStatus                    = contracts.FactorySessionLifecycleStatus
-	FactorySessionLogicalResolveHint                 = contracts.FactorySessionLogicalResolveHint
-	FactorySessionPausedEventPayload                 = contracts.FactorySessionPausedEventPayload
 	FactorySessionResultStatus                       = contracts.FactorySessionResultStatus
-	FactorySessionResultUpdatedEventPayload          = contracts.FactorySessionResultUpdatedEventPayload
-	FactorySessionResumedEventPayload                = contracts.FactorySessionResumedEventPayload
-	FactorySessionStartedEventPayload                = contracts.FactorySessionStartedEventPayload
 	FactorySnapshot                                  = contracts.FactorySnapshot
 	FactoryState                                     = contracts.FactoryState
 	FactoryStateDefinition                           = contracts.FactoryStateDefinition
-	FactoryStateResponseEventPayload                 = contracts.FactoryStateResponseEventPayload
 	FactoryTerminalWork                              = contracts.FactoryTerminalWork
 	FactoryVersion                                   = contracts.FactoryVersion
 	FactoryWorkType                                  = contracts.FactoryWorkType
@@ -351,16 +330,11 @@ type (
 	FiringDecision                                   = contracts.FiringDecision
 	GuardConfig                                      = contracts.GuardConfig
 	InitialStructurePayload                          = contracts.InitialStructurePayload
-	InitialStructureRequestEventPayload              = contracts.InitialStructureRequestEventPayload
 	InvocationParameterBindingConfig                 = contracts.InvocationParameterBindingConfig
 	InvocationReturnConfig                           = contracts.InvocationReturnConfig
 	JavaScriptCheckpointArtifactRef                  = contracts.JavaScriptCheckpointArtifactRef
 	JavaScriptCheckpointRecord                       = contracts.JavaScriptCheckpointRecord
-	JavaScriptCheckpointRefEventPayload              = contracts.JavaScriptCheckpointRefEventPayload
-	JavaScriptPhaseChangeEventPayload                = contracts.JavaScriptPhaseChangeEventPayload
 	MarkingMutation                                  = contracts.MarkingMutation
-	OrchestratorCheckpointWrittenEventPayload        = contracts.OrchestratorCheckpointWrittenEventPayload
-	OrchestratorPhaseChangedEventPayload             = contracts.OrchestratorPhaseChangedEventPayload
 	OrchestratorPhaseStatus                          = contracts.OrchestratorPhaseStatus
 	PortableResourceManifestConfig                   = contracts.PortableResourceManifestConfig
 	ReplayArtifact                                   = contracts.ReplayArtifact
@@ -368,9 +342,6 @@ type (
 	ReplayWallClockMetadata                          = contracts.ReplayWallClockMetadata
 	RequestValidationError                           = contracts.RequestValidationError
 	RequiredToolConfig                               = contracts.RequiredToolConfig
-	RunEventWallClock                                = contracts.RunEventWallClock
-	RunRequestEventPayload                           = contracts.RunRequestEventPayload
-	RunResponseEventPayload                          = contracts.RunResponseEventPayload
 	RuntimeMode                                      = contracts.RuntimeMode
 	RuntimeStatus                                    = contracts.RuntimeStatus
 	RuntimeWorkstationLookup                         = contracts.RuntimeWorkstationLookup
@@ -380,7 +351,6 @@ type (
 	TokenMutationRecord                              = contracts.TokenMutationRecord
 	WorkPropagationMode                              = contracts.WorkPropagationMode
 	WorkRequestPayload                               = contracts.WorkRequestPayload
-	WorkStateChangeEventPayload                      = contracts.WorkStateChangeEventPayload
 	WorkstationInput                                 = contracts.WorkstationInput
 	WorkstationLoader                                = contracts.WorkstationLoader
 	WorkstationResult                                = contracts.WorkstationResult
@@ -421,38 +391,6 @@ const (
 	FactoryDispatchStatusInterrupted              = contracts.FactoryDispatchStatusInterrupted
 	FactoryDispatchStatusQueued                   = contracts.FactoryDispatchStatusQueued
 	FactoryDispatchStatusRunning                  = contracts.FactoryDispatchStatusRunning
-	FactoryEventSchemaVersionV1                   = contracts.FactoryEventSchemaVersionV1
-	FactoryEventTypeAgentRunResponse              = contracts.FactoryEventTypeAgentRunResponse
-	FactoryEventTypeArtifactCreated               = contracts.FactoryEventTypeArtifactCreated
-	FactoryEventTypeDispatchInterrupted           = contracts.FactoryEventTypeDispatchInterrupted
-	FactoryEventTypeDispatchQueued                = contracts.FactoryEventTypeDispatchQueued
-	FactoryEventTypeDispatchReconciled            = contracts.FactoryEventTypeDispatchReconciled
-	FactoryEventTypeDispatchRequest               = contracts.FactoryEventTypeDispatchRequest
-	FactoryEventTypeDispatchResponse              = contracts.FactoryEventTypeDispatchResponse
-	FactoryEventTypeFactoryChange                 = contracts.FactoryEventTypeFactoryChange
-	FactoryEventTypeFactoryStateResponse          = contracts.FactoryEventTypeFactoryStateResponse
-	FactoryEventTypeInferenceRequest              = contracts.FactoryEventTypeInferenceRequest
-	FactoryEventTypeInferenceResponse             = contracts.FactoryEventTypeInferenceResponse
-	FactoryEventTypeInitialStructureRequest       = contracts.FactoryEventTypeInitialStructureRequest
-	FactoryEventTypeJavaScriptCheckpointRef       = contracts.FactoryEventTypeJavaScriptCheckpointRef
-	FactoryEventTypeJavaScriptPhaseChange         = contracts.FactoryEventTypeJavaScriptPhaseChange
-	FactoryEventTypeModelRequest                  = contracts.FactoryEventTypeModelRequest
-	FactoryEventTypeModelResponse                 = contracts.FactoryEventTypeModelResponse
-	FactoryEventTypeOrchestratorCheckpointWritten = contracts.FactoryEventTypeOrchestratorCheckpointWritten
-	FactoryEventTypeOrchestratorPhaseChanged      = contracts.FactoryEventTypeOrchestratorPhaseChanged
-	FactoryEventTypeRelationshipChangeRequest     = contracts.FactoryEventTypeRelationshipChangeRequest
-	FactoryEventTypeRunRequest                    = contracts.FactoryEventTypeRunRequest
-	FactoryEventTypeRunResponse                   = contracts.FactoryEventTypeRunResponse
-	FactoryEventTypeScriptRequest                 = contracts.FactoryEventTypeScriptRequest
-	FactoryEventTypeScriptResponse                = contracts.FactoryEventTypeScriptResponse
-	FactoryEventTypeSessionCompleted              = contracts.FactoryEventTypeSessionCompleted
-	FactoryEventTypeSessionLifecycleControl       = contracts.FactoryEventTypeSessionLifecycleControl
-	FactoryEventTypeSessionPaused                 = contracts.FactoryEventTypeSessionPaused
-	FactoryEventTypeSessionResultUpdated          = contracts.FactoryEventTypeSessionResultUpdated
-	FactoryEventTypeSessionResumed                = contracts.FactoryEventTypeSessionResumed
-	FactoryEventTypeSessionStarted                = contracts.FactoryEventTypeSessionStarted
-	FactoryEventTypeWorkRequest                   = contracts.FactoryEventTypeWorkRequest
-	FactoryEventTypeWorkStateChange               = contracts.FactoryEventTypeWorkStateChange
 	FactorySessionJavaScriptScriptStatusFailed    = contracts.FactorySessionJavaScriptScriptStatusFailed
 	FactorySessionJavaScriptScriptStatusFinished  = contracts.FactorySessionJavaScriptScriptStatusFinished
 	FactorySessionJavaScriptScriptStatusIdle      = contracts.FactorySessionJavaScriptScriptStatusIdle

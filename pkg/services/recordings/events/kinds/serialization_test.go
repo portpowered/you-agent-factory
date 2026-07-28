@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -54,7 +54,7 @@ func TestRoundTripFactoryEventEnvelope_NamesKindOnFailure(t *testing.T) {
 	if !ok {
 		t.Fatalf("error = %T %v, want FactoryEventSerializationError", err, err)
 	}
-	if serializationErr.Kind != factorycontracts.FactoryEventTypeWorkRequest {
+	if serializationErr.Kind != recordings.FactoryEventTypeWorkRequest {
 		t.Fatalf("serialization error kind = %q, want WORK_REQUEST", serializationErr.Kind)
 	}
 	if !strings.Contains(err.Error(), "WORK_REQUEST") {

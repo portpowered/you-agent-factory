@@ -212,11 +212,11 @@ func (subscription EventSubscription) Next(ctx context.Context) SubscriptionOutc
 
 // EventReconnectCursor retains the legacy projection-validation cursor shape.
 // New subscriptions use CanonicalEventCursor.
-type EventReconnectCursor = interfaces.FactoryEventReconnectCursor
+type EventReconnectCursor = FactoryEventReconnectCursor
 
 // EventReconnectScope retains the legacy projection-validation scope shape.
 // New subscriptions use CanonicalEventScope.
-type EventReconnectScope = interfaces.FactoryEventReconnectScope
+type EventReconnectScope = FactoryEventReconnectScope
 
 // AppendRecordedEventRequest is the plain ordered-append request peers send
 // through the Recordings root append/subscribe slice.
@@ -677,16 +677,16 @@ type ReadPortableArtifactResult struct {
 // It remains available to existing runtime callers while producer cutovers are
 // deferred, but it is not part of the peer-facing Service contract.
 type Ledger interface {
-	CanonicalEvents() []interfaces.FactoryEvent
+	CanonicalEvents() []FactoryEvent
 	Subscribe(
 		context.Context,
-		*interfaces.FactoryEventReconnectCursor,
-		interfaces.FactoryEventReconnectScope,
-	) (interfaces.FactoryEventStream, error)
+		*FactoryEventReconnectCursor,
+		FactoryEventReconnectScope,
+	) (FactoryEventStream, error)
 	StreamGenerationID() string
-	AddEventRecorder(func(interfaces.FactoryEvent))
-	AddEventTypeRecorder(func(interfaces.FactoryEventType))
-	AppendRecordedEvent(interfaces.FactoryEvent)
+	AddEventRecorder(func(FactoryEvent))
+	AddEventTypeRecorder(func(FactoryEventType))
+	AppendRecordedEvent(FactoryEvent)
 }
 
 // Service is the singular Recordings root contract for cross-service peers.
@@ -775,7 +775,7 @@ type Service interface {
 // deferred, but it is not part of the peer-facing Service contract.
 type ProjectionService interface {
 	ReconstructFactoryWorldState(
-		[]interfaces.FactoryEvent,
+		[]FactoryEvent,
 		int,
 	) (interfaces.FactoryWorldState, error)
 	SimpleDashboardRenderData(interfaces.FactoryWorldState) SimpleDashboardRenderData
@@ -787,9 +787,9 @@ type ProjectionService interface {
 		interfaces.FactoryWorldState,
 	) WorkstationFactoryWorldWorkstationRequestProjectionSlice
 	ValidateReconnectReplay(
-		[]interfaces.FactoryEvent,
-		interfaces.FactoryEventReconnectCursor,
-		interfaces.FactoryEventReconnectScope,
+		[]FactoryEvent,
+		FactoryEventReconnectCursor,
+		FactoryEventReconnectScope,
 	) error
 }
 
@@ -805,7 +805,7 @@ type WorkstationRequestProjector interface {
 // WorldStateReconstructor is the narrow canonical reduction operation used by
 // adapters that map external event shapes before invoking Recordings.
 type WorldStateReconstructor func(
-	[]interfaces.FactoryEvent,
+	[]FactoryEvent,
 	int,
 ) (interfaces.FactoryWorldState, error)
 
@@ -883,7 +883,7 @@ type RuntimeRecorder interface {
 	BindRecordingService(Service, CanonicalEventScope) error
 	Start(context.Context)
 	Stop()
-	RecordEvent(interfaces.FactoryEvent)
+	RecordEvent(FactoryEvent)
 	RecordError(error)
 	Finish(time.Time)
 	Flush() error
