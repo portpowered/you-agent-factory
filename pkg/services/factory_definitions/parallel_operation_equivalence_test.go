@@ -11,9 +11,9 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
+	catalognamedfactories "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedfactories"
+	catalognamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire"
-	factorynamedfactories "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedfactories"
-	factorynamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
 )
 
 func TestParallelOperationEquivalence_ServiceMatchesLegacyCatalogOperations(t *testing.T) {
@@ -50,7 +50,7 @@ func TestParallelOperationEquivalence_ServiceMatchesLegacyCatalogOperations(t *t
 		t.Fatalf("SetCurrentFactoryPointer(alpha): %v", err)
 	}
 
-	legacyCurrent, err := factorynamedfactories.ResolveCurrent(paths, projectRoot)
+	legacyCurrent, err := catalognamedfactories.ResolveCurrent(paths, projectRoot)
 	if err != nil {
 		t.Fatalf("legacy ResolveCurrent: %v", err)
 	}
@@ -140,13 +140,13 @@ func newParallelOperationCatalogPair(
 	t.Helper()
 
 	fileSystem := platformfilesystem.Local{}
-	paths, err := factorynamedpaths.New(fileSystem)
+	paths, err := catalognamedpaths.New(fileSystem)
 	if err != nil {
-		t.Fatalf("namedpaths.New: %v", err)
+		t.Fatalf("catalognamedpaths.New: %v", err)
 	}
-	legacyCatalog, err := factorynamedfactories.New(paths, fileSystem)
+	legacyCatalog, err := catalognamedfactories.New(paths, fileSystem)
 	if err != nil {
-		t.Fatalf("namedfactories.New: %v", err)
+		t.Fatalf("catalognamedfactories.New: %v", err)
 	}
 	catalogService, err := catalogwire.NewService(catalog.Dependencies{
 		Paths:      paths,

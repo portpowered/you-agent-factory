@@ -7,6 +7,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
+	catalognamedfactories "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedfactories"
 	catalognamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
 	catalogservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/internal/service"
 )
@@ -35,4 +36,13 @@ func NewPathResolver(
 	fileSystem factorydefinitions.NamedPathFileSystem,
 ) (factorydefinitions.NamedPathResolver, error) {
 	return catalognamedpaths.New(fileSystem)
+}
+
+// NewNamedFactoryCatalog constructs the catalog-owned named-factory catalog
+// from the exact path and catalog-filesystem ports used by catalog composition.
+func NewNamedFactoryCatalog(
+	paths factorydefinitions.NamedPathResolver,
+	fileSystem factorydefinitions.NamedFactoryCatalogFileSystem,
+) (factorydefinitions.NamedFactoryCatalog, error) {
+	return catalognamedfactories.New(paths, fileSystem)
 }
