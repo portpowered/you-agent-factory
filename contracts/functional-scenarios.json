@@ -571,7 +571,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/runtime_api/api_generated_smoke_test.go::TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAligned",
+          "test": "tests/functional/transport/http/server/generated_client_test.go::TestGeneratedClientAndServerSchemaStayAligned",
           "boundary": "rest"
         }
       ],
@@ -697,7 +697,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/runtime_api/api_generated_smoke_test.go::TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAligned",
+          "test": "tests/functional/transport/http/server/generated_client_test.go::TestGeneratedClientAndServerSchemaStayAligned",
           "boundary": "rest"
         }
       ]
@@ -807,7 +807,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/runtime_api/api_generated_smoke_test.go::TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAligned",
+          "test": "tests/functional/transport/http/server/generated_client_test.go::TestGeneratedClientAndServerSchemaStayAligned",
           "boundary": "rest"
         }
       ]
@@ -937,7 +937,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/runtime_api/api_generated_smoke_test.go::TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAligned",
+          "test": "tests/functional/transport/http/server/generated_client_test.go::TestGeneratedClientAndServerSchemaStayAligned",
           "boundary": "rest"
         }
       ]

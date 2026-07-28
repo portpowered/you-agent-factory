@@ -193,7 +193,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPIUnsupportedContentTypeReturns415`.
   - `TestAPIMalformedJSONReturnsStructured400`.
 
-- [ ] `tests/functional/transport/http/server/generated_client_test.go`
+- [x] `tests/functional/transport/http/server/generated_client_test.go`
   - `TestGeneratedClientStatusAndSessionRoundTrip`.
   - `TestGeneratedClientDecodesRepresentativeStructuredError`.
   - `TestGeneratedClientAndServerSchemaStayAligned`.

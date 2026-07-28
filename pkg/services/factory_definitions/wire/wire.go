@@ -55,6 +55,8 @@ func NewService(
 		listEffective,
 		packagedCatalog,
 		packagedInstaller,
+		requiredToolChecker,
+		orchestratorValidator,
 	); err != nil {
 		return nil, err
 	}
@@ -129,6 +131,8 @@ func validateDependencies(
 	listEffective factorydefinitions.EffectiveFactoryCatalogOperation,
 	packagedCatalog factorydefinitions.PackagedFactoryCatalogOperations,
 	packagedInstaller factorydefinitions.PackagedFactoryInstallationOperations,
+	requiredToolChecker factorydefinitions.RequiredToolChecker,
+	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
 ) error {
 	if sessionHost == nil {
 		return fmt.Errorf("construct Factory Definitions: session host is required")
@@ -171,6 +175,12 @@ func validateDependencies(
 	}
 	if packagedInstaller.Install == nil {
 		return fmt.Errorf("construct Factory Definitions: packaged Factory installer is required")
+	}
+	if requiredToolChecker == nil {
+		return fmt.Errorf("construct Factory Definitions: required tool checker is required")
+	}
+	if orchestratorValidator == nil {
+		return fmt.Errorf("construct Factory Definitions: orchestrator definition validator is required")
 	}
 	return nil
 }
