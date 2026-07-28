@@ -31,9 +31,21 @@ func RetryHandoffFromFailure(failure inference.Failure) RetryHandoff {
 func normalizeConductorFailure(failure inference.Failure) inference.Failure {
 	switch failure.Kind() {
 	case inference.FailureCanceled:
-		return interruptionFailure(inference.FailureCanceled, false, InvariantCanceled, canceledFailureMessage)
+		return interruptionFailure(
+			inference.FailureCanceled,
+			false,
+			InvariantCanceled,
+			canceledFailureMessage,
+			failure.ProviderSession(),
+		)
 	case inference.FailureTimeout:
-		return interruptionFailure(inference.FailureTimeout, true, InvariantTimeout, timeoutFailureMessage)
+		return interruptionFailure(
+			inference.FailureTimeout,
+			true,
+			InvariantTimeout,
+			timeoutFailureMessage,
+			failure.ProviderSession(),
+		)
 	default:
 		return sanitizeFailure(failure)
 	}
@@ -44,11 +56,13 @@ func interruptionFailure(
 	retryable bool,
 	invariant string,
 	message string,
+	providerSession *inference.ProviderSession,
 ) inference.Failure {
 	return inference.NewFailure(inference.FailureInput{
-		Kind:      kind,
-		Message:   message,
-		Retryable: retryable,
+		Kind:            kind,
+		Message:         message,
+		Retryable:       retryable,
+		ProviderSession: providerSession,
 		Diagnostics: map[string]string{
 			"invariant": invariant,
 		},

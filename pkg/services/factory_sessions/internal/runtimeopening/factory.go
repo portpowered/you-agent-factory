@@ -272,6 +272,15 @@ func (f *Factory) OpenApplicationRuntime(
 	return opened.application, err
 }
 
+// ModelsRoot returns the process-scoped accepted Models root used by runtime
+// opening and Models CLI presentation collaborators.
+func (f *Factory) ModelsRoot() models.Service {
+	if f == nil {
+		return nil
+	}
+	return f.modelService
+}
+
 // OpenInvocationRuntime opens one Factory Session and returns only the roles
 // required by one-shot model or Factory invocation.
 func (f *Factory) OpenInvocationRuntime(

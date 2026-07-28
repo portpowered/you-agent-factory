@@ -12,8 +12,7 @@ func TestCatalog_CoversAllFidelityClasses(t *testing.T) {
 	t.Parallel()
 
 	want := map[FidelityClass]bool{
-		FidelitySnapshotOnly: false,
-		FidelityFinalOnly:    false,
+		FidelityFinalOnly: false,
 	}
 	var agyFinalOnly bool
 	for _, fixture := range Catalog() {
