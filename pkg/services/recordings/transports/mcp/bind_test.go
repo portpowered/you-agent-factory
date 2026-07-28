@@ -58,6 +58,23 @@ func TestBind_FakeRootInvokedThroughCanonicalQueryStatusTool(t *testing.T) {
 	}
 }
 
+func TestCallTool_UnknownToolReturnsStableError(t *testing.T) {
+	t.Parallel()
+
+	_, err := mcprecording.CallTool(
+		context.Background(),
+		fakeRecordingsRoot{},
+		"you.recording.unknown_tool",
+		json.RawMessage(`{}`),
+	)
+	if err == nil {
+		t.Fatal("CallTool(unknown tool) error = nil, want unsupported-tool error")
+	}
+	if got := err.Error(); got != `unsupported tool "you.recording.unknown_tool"` {
+		t.Fatalf("CallTool(unknown tool) error = %q, want %q", got, `unsupported tool "you.recording.unknown_tool"`)
+	}
+}
+
 func TestBind_ToolOperationRejectsMissingContext(t *testing.T) {
 	t.Parallel()
 

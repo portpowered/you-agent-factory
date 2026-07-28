@@ -12,6 +12,15 @@ const (
 	ToolReadPortableArtifact  = "you.recording.read_portable_artifact"
 )
 
+// Stable error envelope fields shared by every Recordings MCP tool.
+var sharedErrorStableFields = []string{
+	"error.code",
+	"error.message",
+	"error.retryable",
+	"error.recordingId",
+	"error.details",
+}
+
 // ToolErrorEnvelope is the stable MCP failure shape for Recordings tools.
 type ToolErrorEnvelope struct {
 	Code       string         `json:"code"`
