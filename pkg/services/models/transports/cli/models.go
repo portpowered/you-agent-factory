@@ -84,20 +84,23 @@ type Service interface {
 	Pull(PullConfig) error
 }
 
-type service struct {
+type httpService struct {
 	http       clihttp.Protocol
 	invocation InvocationOperation
 }
 
-// New constructs the Models CLI service injected into Cobra composition.
+// New constructs the composition-stable Models CLI service injected into Cobra
+// composition. Production wiring should migrate to NewService over the Models
+// root; this constructor remains a thin HTTP-and-bootstrap facade until CLI-MOD
+// composition story 002 lands.
 func New(httpProtocol clihttp.Protocol, invocation InvocationOperation) Service {
 	if httpProtocol == nil || invocation == nil {
 		return nil
 	}
-	return &service{http: httpProtocol, invocation: invocation}
+	return &httpService{http: httpProtocol, invocation: invocation}
 }
 
-func (service *service) List(cfg ListConfig) error {
+func (service *httpService) List(cfg ListConfig) error {
 	if cfg.Context == nil {
 		return fmt.Errorf("context is required")
 	}
@@ -120,7 +123,7 @@ func (service *service) List(cfg ListConfig) error {
 	return renderList(response, cfg.Output)
 }
 
-func (service *service) Inspect(cfg InspectConfig) error {
+func (service *httpService) Inspect(cfg InspectConfig) error {
 	if cfg.Context == nil {
 		return fmt.Errorf("context is required")
 	}
@@ -144,7 +147,7 @@ func (service *service) Inspect(cfg InspectConfig) error {
 	return renderModel(model, cfg.Output)
 }
 
-func (service *service) Invoke(cfg InvokeConfig) error {
+func (service *httpService) Invoke(cfg InvokeConfig) error {
 	if cfg.Context == nil {
 		return fmt.Errorf("context is required")
 	}
@@ -210,7 +213,7 @@ func (service *service) Invoke(cfg InvokeConfig) error {
 	return err
 }
 
-func (service *service) Pull(cfg PullConfig) error {
+func (service *httpService) Pull(cfg PullConfig) error {
 	if cfg.Context == nil {
 		return fmt.Errorf("context is required")
 	}
