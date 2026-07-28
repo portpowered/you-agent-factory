@@ -24,7 +24,13 @@ func (a *Adapter) ListFactorySessionArtifacts(
 		a.writeError(w, http.StatusBadRequest, "invalid artifact read scope", "BAD_REQUEST")
 		return
 	}
+	if requestContextEnded(r.Context()) {
+		return
+	}
 	artifacts, err := a.loadArtifactProjections(r.Context(), statusRequest.RecordingID)
+	if shouldEndOnRequestContext(r.Context(), err) {
+		return
+	}
 	if err != nil {
 		a.writeRootOrInternalError(w, recordingsHTTPOperationArtifactRead, err)
 		return
@@ -54,7 +60,13 @@ func (a *Adapter) GetFactorySessionArtifact(
 		a.writeError(w, http.StatusBadRequest, "invalid artifact read scope", "BAD_REQUEST")
 		return
 	}
+	if requestContextEnded(r.Context()) {
+		return
+	}
 	artifacts, err := a.loadArtifactProjections(r.Context(), readRequest.RecordingID)
+	if shouldEndOnRequestContext(r.Context(), err) {
+		return
+	}
 	if err != nil {
 		a.writeRootOrInternalError(w, recordingsHTTPOperationArtifactRead, err)
 		return
@@ -71,9 +83,15 @@ func (a *Adapter) loadArtifactProjections(
 	ctx context.Context,
 	recordingID recordings.RecordingID,
 ) ([]interfaces.FactorySessionArtifactState, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if _, err := a.invokeQueryRecordingStatus(recordings.RecordingStatusRequest{
 		RecordingID: recordingID,
 	}); err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	built, err := a.invokeBuildPortableArtifact(recordings.BuildPortableArtifactRequest{
@@ -82,10 +100,16 @@ func (a *Adapter) loadArtifactProjections(
 	if err != nil {
 		return nil, err
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	reconstructed, err := a.invokeReconstructWorldState(
 		ReconstructWorldStateRequestFromPortableArtifact(built.Artifact),
 	)
 	if err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	return ArtifactStatesFromWorldStatePayload(reconstructed.WorldState.Payload)

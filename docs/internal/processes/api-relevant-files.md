@@ -26,6 +26,10 @@ Use this map when changing the public REST contract.
   response shapes. Typed Recordings root failures map through
   `error_mapping.go` into public `ErrorResponse` bodies with stable status,
   family, and code; unmapped failures use sanitized internal messages.
+  Request-context cancellation and deadline exhaustion end without mapping to
+  `INTERNAL_ERROR`: stream handlers return once SSE headers may be committed,
+  and non-stream handlers return without encoding a body when the context ends
+  before success encoding (`request_context.go`).
   Package-boundary tests must prove the adapter does not import
   `pkg/services/recordings/internal/**`.
 - Factory Session CLI request construction, rendering, diagnostics, and

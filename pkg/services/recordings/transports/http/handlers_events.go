@@ -45,7 +45,13 @@ func (a *Adapter) GetEventsBySessionId(
 		a.writeError(w, http.StatusBadRequest, "invalid event reconnect cursor", "BAD_REQUEST")
 		return
 	}
+	if requestContextEnded(r.Context()) {
+		return
+	}
 	result, err := a.invokeSubscribeFrom(r.Context(), request)
+	if shouldEndOnRequestContext(r.Context(), err) {
+		return
+	}
 	if err != nil {
 		a.writeRootOrInternalError(w, recordingsHTTPOperationEventSubscribe, err)
 		return
@@ -132,6 +138,9 @@ func (a *Adapter) streamFactoryEvents(
 	}
 
 	for {
+		if requestContextEnded(r.Context()) {
+			return
+		}
 		outcome := subscription.Next(r.Context())
 		switch outcome.Kind {
 		case recordings.SubscriptionClosed:
