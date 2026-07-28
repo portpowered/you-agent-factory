@@ -14,8 +14,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/inboxgitkeep"
 	"github.com/portpowered/infinite-you/pkg/platform/portablefiles"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig"
+	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
+	internalportableconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig"
 	compilationcanonical "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/canonical"
 	compilationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
 	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
@@ -24,7 +24,7 @@ import (
 	snapshotsportabilitymaterialize "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/materialize"
 	snapshotsportabilityprepare "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/prepare"
 	snapshotsportabilitywire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/wire"
-	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
+	factorydefinitionsinternal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
@@ -39,7 +39,7 @@ func NewService(
 	activationGateway factorydefinitions.DefinitionActivationGateway,
 	validator factorydefinitions.Validator,
 	persistence factorydefinitions.Persistence,
-	loader *factoryloading.Loader,
+	loader *compilationloading.Loader,
 	applySupportedFiles factorydefinitions.PortableBundledFilesApplier,
 	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
 	namedPaths factorydefinitions.NamedPathResolver,
@@ -53,7 +53,7 @@ func NewService(
 	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
 	portableFileSystem portablefiles.FileSystem,
 	directoryReplacementStore factorydefinitions.DirectoryReplacementStore,
-	options ...factorydefinitionsservice.CompositionOption,
+	options ...CompositionOption,
 ) (factorydefinitions.Service, error) {
 	if err := validateDependencies(
 		sessionHost,
@@ -114,7 +114,7 @@ func NewService(
 	if err != nil {
 		return nil, err
 	}
-	pruneRemovedDocs, err := portableconfig.NewPortableBundledDocsPruner(portableFileSystem)
+	pruneRemovedDocs, err := internalportableconfig.NewPortableBundledDocsPruner(portableFileSystem)
 	if err != nil {
 		return nil, fmt.Errorf("construct Factory Definitions authoring layout: %w", err)
 	}
@@ -124,10 +124,10 @@ func NewService(
 			return validationentry.MapFactoryJSONForPersistence(payload, loader.LoadSourceFromCanonicalJSON)
 		},
 		Loader:             loader,
-		MaterializeFiles:   portableconfig.NewMaterializer(portableFileSystem),
-		ValidateWrites:     portableconfig.NewWritesValidator(portableFileSystem),
+		MaterializeFiles:   internalportableconfig.NewMaterializer(portableFileSystem),
+		ValidateWrites:     internalportableconfig.NewWritesValidator(portableFileSystem),
 		PruneRemovedDocs:   pruneRemovedDocs,
-		CopySupportedFiles: portableconfig.NewFilesCopier(portableFileSystem),
+		CopySupportedFiles: internalportableconfig.NewFilesCopier(portableFileSystem),
 		AuthoredWriterFS:   authoringFS,
 		EnsureInbox:        inboxgitkeep.NewLocal(portableFileSystem),
 		PersistenceFS:      authoringFS,
@@ -138,7 +138,7 @@ func NewService(
 		return nil, fmt.Errorf("construct Factory Definitions authoring layout: %w", err)
 	}
 
-	definitions := factorydefinitionsservice.NewWithAuthoringLayout(
+	definitions := factorydefinitionsinternal.NewWithAuthoringLayout(
 		sessionHost,
 		activationGateway,
 		clock,
@@ -178,14 +178,14 @@ func NewService(
 		return nil, fmt.Errorf("construct Factory Definitions: implementation rejected its dependencies")
 	}
 
-	attached, err := factorydefinitionsservice.AttachEffectiveCatalog(definitions, listEffective)
+	attached, err := factorydefinitionsinternal.AttachEffectiveCatalog(definitions, listEffective)
 	if err != nil {
 		return nil, err
 	}
 	if attached == nil {
 		return nil, fmt.Errorf("construct Factory Definitions: effective catalog attachment rejected its dependencies")
 	}
-	withSnapshots, err := factorydefinitionsservice.AttachSnapshotsPortability(attached, snapshotsPortability)
+	withSnapshots, err := factorydefinitionsinternal.AttachSnapshotsPortability(attached, snapshotsPortability)
 	if err != nil {
 		return nil, err
 	}
@@ -200,7 +200,7 @@ func validateDependencies(
 	activationGateway factorydefinitions.DefinitionActivationGateway,
 	validator factorydefinitions.Validator,
 	persistence factorydefinitions.Persistence,
-	loader *factoryloading.Loader,
+	loader *compilationloading.Loader,
 	applySupportedFiles factorydefinitions.PortableBundledFilesApplier,
 	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
 	namedPaths factorydefinitions.NamedPathResolver,

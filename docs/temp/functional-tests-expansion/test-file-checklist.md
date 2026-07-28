@@ -581,7 +581,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestLogicalMovePreservesWorkPayloadAndLineage`.
   - `TestLogicalMoveMultipleOutputsCreatesEveryExpectedWork`.
 
-- [ ] `tests/functional/work/routing/classifier_test.go`
+- [x] `tests/functional/work/routing/classifier_test.go`
   - `TestClassifierRoutesEveryKnownDecision`.
   - `TestClassifierUnknownAndMalformedDecisionFailDistinctly`.
   - `TestClassifierMultiOutputPreservesPayload`.
@@ -967,3 +967,9 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   correct domain.
 - [ ] `transport`, `workers`, `orchestration`, and `workstations` appear first
   in the report and contain no undocumented scenarios.
+- [x] `tests/functional/sessions/root_composition/build_process_inert_test.go`
+- [x] `tests/functional/sessions/root_composition/lifecycle_runtime_opening_test.go`
+- [x] `tests/functional/sessions/root_composition/packaged_root_shape_test.go`
+- [x] `tests/functional/sessions/root_composition/peer_import_seal_test.go`
+- [x] `tests/functional/sessions/root_composition/work_admission_response_stream_test.go`
+- [x] `tests/functional/sessions/root_composition/work_peer_import_seal_test.go`

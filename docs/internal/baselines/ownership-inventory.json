@@ -1707,19 +1707,19 @@
       "fromOwner": "work",
       "toOwner": "factory_definitions",
       "class": "query",
-      "evidence": "pkg/services/work/internal/services/state_access/wire -\u003e pkg/services/factory_definitions"
+      "evidence": "pkg/services/work/internal/service -\u003e pkg/services/factory_definitions"
     },
     {
       "fromOwner": "work",
       "toOwner": "factory_runtime",
       "class": "command",
-      "evidence": "pkg/services/work/service -\u003e pkg/services/factory_runtime"
+      "evidence": "pkg/services/work/internal/service -\u003e pkg/services/factory_runtime"
     },
     {
       "fromOwner": "work",
       "toOwner": "factory_sessions",
       "class": "command",
-      "evidence": "pkg/services/work/service -\u003e pkg/services/factory_sessions"
+      "evidence": "pkg/services/work/internal/service -\u003e pkg/services/factory_sessions"
     },
     {
       "fromOwner": "work",
@@ -2554,6 +2554,12 @@
       "deletionCondition": "delete public package after IMP-DEF-snapshots_portability private subservice cutover proof"
     },
     {
+      "packagePath": "pkg/services/factory_definitions/internal",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_definitions/internal/contracts",
       "disposition": "retain",
       "destination": "factory_definitions",
@@ -2584,15 +2590,13 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/namedfactories",
-      "disposition": "move",
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout",
+      "disposition": "retain",
       "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal/services/catalog",
-      "deletionCondition": "delete public package after IMP-DEF-catalog private subservice cutover proof"
+      "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout",
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
@@ -2641,6 +2645,12 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/catalog/internal/service",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/namedfactories",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
@@ -2755,6 +2765,14 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/materialize",
+      "disposition": "move",
+      "destination": "factory_definitions",
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_definitions/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig",
       "disposition": "move",
       "destination": "factory_definitions",
       "destinationKind": "owner",
@@ -3190,22 +3208,6 @@
       "deletionCondition": "delete public package after IMP-RUN-instance_host private subservice cutover proof"
     },
     {
-      "packagePath": "pkg/services/factory_runtime/checkpointstore",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/checkpoint_recovery",
-      "deletionCondition": "delete public package after IMP-RUN-checkpoint_recovery private subservice cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_runtime/checkpointsummary",
-      "disposition": "move",
-      "destination": "factory_runtime",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_runtime/internal/services/checkpoint_recovery",
-      "deletionCondition": "delete public package after IMP-RUN-checkpoint_recovery private subservice cutover proof"
-    },
-    {
       "packagePath": "pkg/services/factory_runtime/context",
       "disposition": "move",
       "destination": "factory_runtime",
@@ -3328,6 +3330,42 @@
       "destinationKind": "owner",
       "successor": "pkg/services/factory_runtime/internal",
       "deletionCondition": "delete transitional top-level package after CLN-RUN-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/checkpoint_recovery",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptstore",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptsummary",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/processlocal",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/service",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/services/checkpoint_recovery/wire",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/services/dispatch_planning",
@@ -4806,6 +4844,14 @@
       "disposition": "retain",
       "destination": "work",
       "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/service",
+      "disposition": "move",
+      "destination": "work",
+      "destinationKind": "owner",
+      "successor": "pkg/services/work/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-WORK-FOLD-TOPLEVEL cutover proof"
     },
     {
       "packagePath": "pkg/services/work/internal/services/content_materialization",

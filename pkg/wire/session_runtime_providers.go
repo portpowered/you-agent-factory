@@ -26,11 +26,9 @@ import (
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	factoryworkstationexecution "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workstationexecution"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factorycheckpointstore "github.com/portpowered/infinite-you/pkg/services/factory_runtime/checkpointstore"
-	factorycheckpointsummary "github.com/portpowered/infinite-you/pkg/services/factory_runtime/checkpointsummary"
+	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	factoryruntimejavascript "github.com/portpowered/infinite-you/pkg/services/factory_runtime/javascript"
 	factoryruntimeorchestrationowner "github.com/portpowered/infinite-you/pkg/services/factory_runtime/orchestrationowner"
-	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/models"
@@ -504,7 +502,7 @@ func provideFactorySessionsService(
 	resolveSymlinks factorysessions.LogicalTargetResolveSymlinks,
 ) (factorysessions.Service, error) {
 	return factorysessionwire.NewService(func() factoryruntime.JavaScriptCheckpointStore {
-		return factorycheckpointstore.New()
+		return factoryruntimewire.NewJavaScriptCheckpointStore()
 	}, sessionResultProjection, interpolation, invocationWorkTypes, ttsObservability, eventIDs, sessionIDs, resolveHome, directories, namedPaths, invocationInputFiles, initialWorkFiles, resolveSymlinks)
 }
 
@@ -587,7 +585,7 @@ func provideFactorySessionExecutionFactory(
 			executor,
 			clock,
 			syncWaits,
-			factorycheckpointsummary.New(),
+			factoryruntimewire.NewJavaScriptCheckpointSummaries(),
 			workflows,
 			orchestration,
 			workerPresetIDs,
@@ -626,7 +624,7 @@ func provideStandaloneSessionExecutionFactory(
 			executor,
 			clock,
 			syncWaits,
-			factorycheckpointsummary.New(),
+			factoryruntimewire.NewJavaScriptCheckpointSummaries(),
 			workflows,
 			orchestration,
 			recordingWriter,
