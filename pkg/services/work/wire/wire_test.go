@@ -211,6 +211,109 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	}
 }
 
+func TestNewServiceConstructsInertRoot(t *testing.T) {
+	t.Parallel()
+
+	var (
+		runtimeCalls    int
+		filesystemCalls int
+		clockCalls      int
+		httpCalls       int
+		inspectCalls    int
+		createTempCalls int
+		removeCalls     int
+		writeCalls      int
+		openCalls       int
+		randomCalls     int
+	)
+	inputs := validNewServiceInputs(t)
+	inputs.runtimes = inertRuntimeResolver{onResolve: func() {
+		runtimeCalls++
+		panic("runtime resolved during inert construction")
+	}}
+	inputs.filesystem = inertStagingFileSystem{onCall: func() {
+		filesystemCalls++
+		panic("content staging filesystem invoked during inert construction")
+	}}
+	inputs.random = inertStagingRandom{
+		onRead: func() { randomCalls++ },
+	}
+	inputs.clock = inertStagingClock{onNow: func() {
+		clockCalls++
+		panic("content staging clock invoked during inert construction")
+	}}
+	inputs.httpDoer = inertHTTPDoer{onDo: func() {
+		httpCalls++
+		panic("HTTP doer invoked during inert construction")
+	}}
+	inputs.inspectPath = func(string) (fs.FileInfo, error) {
+		inspectCalls++
+		panic("inspect path invoked during inert construction")
+	}
+	inputs.createTempFile = func(string, string) (work.ContentTemporaryFile, error) {
+		createTempCalls++
+		panic("create temporary file invoked during inert construction")
+	}
+	inputs.removePath = func(string) error {
+		removeCalls++
+		panic("remove path invoked during inert construction")
+	}
+	inputs.writeFile = func(string, []byte, fs.FileMode) error {
+		writeCalls++
+		panic("write file invoked during inert construction")
+	}
+	inputs.openFile = func(string) (io.WriteCloser, error) {
+		openCalls++
+		panic("open file invoked during inert construction")
+	}
+
+	runtime.GC()
+	time.Sleep(20 * time.Millisecond)
+	baseline := runtime.NumGoroutine()
+
+	service, err := inputs.callNewService()
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	if service == nil {
+		t.Fatal("NewService() returned nil service")
+	}
+	var root work.Service = service
+	if root == nil {
+		t.Fatal("constructed value is not assignable to work.Service")
+	}
+	if runtimeCalls != 0 {
+		t.Fatalf("construction resolved runtimes %d times, want inert construction", runtimeCalls)
+	}
+	if filesystemCalls != 0 {
+		t.Fatalf("construction invoked content staging filesystem %d times, want inert construction", filesystemCalls)
+	}
+	if clockCalls != 0 {
+		t.Fatalf("construction read content staging clock %d times, want inert construction", clockCalls)
+	}
+	if httpCalls != 0 {
+		t.Fatalf("construction invoked HTTP doer %d times, want inert construction", httpCalls)
+	}
+	if inspectCalls != 0 || createTempCalls != 0 || removeCalls != 0 || writeCalls != 0 || openCalls != 0 {
+		t.Fatalf(
+			"construction invoked materialization effects (inspect=%d create=%d remove=%d write=%d open=%d), want inert construction",
+			inspectCalls, createTempCalls, removeCalls, writeCalls, openCalls,
+		)
+	}
+	if randomCalls != 1 {
+		t.Fatalf("construction read content staging randomness %d times, want exactly one signing-secret read", randomCalls)
+	}
+
+	runtime.GC()
+	time.Sleep(20 * time.Millisecond)
+	if leaked := runtime.NumGoroutine() - baseline; leaked > 4 {
+		t.Fatalf(
+			"goroutine leak after construction: baseline=%d current=%d delta=%d",
+			baseline, runtime.NumGoroutine(), leaked,
+		)
+	}
+}
+
 type newServiceInputs struct {
 	runtimes       work.RuntimeResolver
 	filesystem     work.ContentStagingFileSystem
@@ -330,4 +433,83 @@ func mustParseURL(t *testing.T, raw string) *url.URL {
 		t.Fatalf("url.Parse(%q) error = %v", raw, err)
 	}
 	return parsed
+}
+
+type inertRuntimeResolver struct {
+	onResolve func()
+}
+
+func (r inertRuntimeResolver) ResolveWorkRuntime(string) (work.Runtime, error) {
+	if r.onResolve != nil {
+		r.onResolve()
+	}
+	return nil, nil
+}
+
+type inertStagingFileSystem struct {
+	onCall func()
+}
+
+func (f inertStagingFileSystem) MkdirTemp(string, string) (string, error) {
+	if f.onCall != nil {
+		f.onCall()
+	}
+	return "", nil
+}
+
+func (f inertStagingFileSystem) WriteFile(string, []byte, fs.FileMode) error {
+	if f.onCall != nil {
+		f.onCall()
+	}
+	return nil
+}
+
+func (f inertStagingFileSystem) Stat(string) (fs.FileInfo, error) {
+	if f.onCall != nil {
+		f.onCall()
+	}
+	return nil, nil
+}
+
+func (f inertStagingFileSystem) RemoveAll(string) error {
+	if f.onCall != nil {
+		f.onCall()
+	}
+	return nil
+}
+
+type inertStagingRandom struct {
+	onRead func()
+}
+
+func (r inertStagingRandom) Read(buffer []byte) (int, error) {
+	if r.onRead != nil {
+		r.onRead()
+	}
+	for i := range buffer {
+		buffer[i] = 0x11
+	}
+	return len(buffer), nil
+}
+
+type inertStagingClock struct {
+	onNow func()
+}
+
+func (c inertStagingClock) Now() time.Time {
+	if c.onNow != nil {
+		c.onNow()
+	}
+	return time.Unix(0, 0)
+}
+
+type inertHTTPDoer struct {
+	onDo func()
+}
+
+func (d inertHTTPDoer) Do(*http.Request) (*http.Response, error) {
+	if d.onDo != nil {
+		d.onDo()
+	}
+	return nil, nil
 }
