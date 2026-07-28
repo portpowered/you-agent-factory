@@ -766,6 +766,14 @@ vocabulary and contracts injected ports, direct imports avoid Wire/Runtime/
 Petri/peer/sibling-lease paths, and `wire/wire.go` constructs from injected
 ports without selecting Runtime/Petri implementations or sibling catalog/
 authoring_layout/compilation/snapshots_portability/distribution leases.
+The parent-private nested compilation subservice locks its public surface in
+`internal/services/compilation/boundary_test.go`: `service.go` exports only
+`Service` and `Dependencies` with factory_definitions root compile
+request/result vocabulary and contracts injected load/encode ports, direct
+imports avoid Wire/Runtime/Petri/peer/sibling-lease paths and public
+loading/loadedsource/runtimeconfig packages, and `wire/wire.go` constructs from
+injected ports without selecting Runtime/Petri implementations or sibling
+catalog/authoring_layout/validation/snapshots_portability/distribution leases.
 Snapshot
 slices stay on the singular `Service` via `CaptureFactorySnapshot`,
 `PrepareFactorySnapshotImport`, and `MaterializeFactorySnapshot` returning

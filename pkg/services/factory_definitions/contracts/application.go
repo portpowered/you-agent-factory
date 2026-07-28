@@ -226,6 +226,8 @@ type FactoryLayoutExpander func(string) (string, LayoutExpansionReport, error)
 
 type FactoryConfigJSONDecoder func([]byte) (*FactoryConfig, error)
 
+type FactoryConfigJSONEncoder func(*FactoryConfig) ([]byte, error)
+
 type CanonicalFactoryJSONLoader func(
 	[]byte,
 	WorkstationLoader,
