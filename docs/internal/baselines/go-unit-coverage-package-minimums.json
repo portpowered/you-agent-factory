@@ -569,16 +569,6 @@
       }
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/persistence",
-      "exception": {
-        "kind": "measurement",
-        "justification": "The active unit coverage profile contains no measurable statements for this transitional compile shim.",
-        "owner": "backend-quality",
-        "deadline": "2027-07-15",
-        "removalGate": "DEL-DEF removes the public persistence shim or the unit coverage profile reports measurable statements for this package."
-      }
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/goal",
       "exception": {
         "kind": "measurement",
@@ -636,6 +626,16 @@
         "owner": "backend-quality",
         "deadline": "2027-07-15",
         "removalGate": "The unit coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/persistence",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active unit coverage profile contains no measurable statements for this transitional compile shim.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "DEL-DEF removes the public persistence shim or the unit coverage profile reports measurable statements for this package."
       }
     },
     {
