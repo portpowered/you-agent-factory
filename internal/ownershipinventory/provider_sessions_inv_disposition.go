@@ -26,6 +26,25 @@ func ProviderSessionsUnexpectedPublicSiblingBeyondServicePackagePaths(inventory 
 	return packagePaths
 }
 
+// VerifyProviderSessionsZeroExtraPublicSiblingAbsence locks INV-PSES-TOPLEVEL's
+// zero-extra path: the live top-level tree must match the committed inventory,
+// hasUnexpectedPublicSiblingsBeyondService must remain false, and every child
+// beyond service/ must stay canonical_retain rather than an unremapped public
+// sibling.
+func VerifyProviderSessionsZeroExtraPublicSiblingAbsence(root string) error {
+	if err := VerifyProviderSessionsTopLevelInventory(root); err != nil {
+		return err
+	}
+	inventory, err := LoadProviderSessionsTopLevelInventory(root)
+	if err != nil {
+		return err
+	}
+	if inventory.HasUnexpectedPublicSiblingsBeyondService {
+		return fmt.Errorf("provider sessions zero-extra public-sibling absence lock requires hasUnexpectedPublicSiblingsBeyondService = false, got true with %v", inventory.UnexpectedPublicSiblingsBeyondService)
+	}
+	return verifyProviderSessionsZeroExtraBeyondServiceDisposition(inventory)
+}
+
 // VerifyProviderSessionsINVDispositionBeyondService consumes INV-PSES-TOPLEVEL's
 // disposition for unexpected public siblings beyond service/. When INV records
 // zero extras, the live tree must match that absence. When INV names siblings,

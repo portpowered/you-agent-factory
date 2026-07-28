@@ -8,6 +8,41 @@ import (
 	"github.com/portpowered/infinite-you/internal/ownershipinventory"
 )
 
+func TestVerifyProviderSessionsZeroExtraPublicSiblingAbsencePassesOnRepository(t *testing.T) {
+	t.Parallel()
+
+	root := repositoryRoot(t)
+	if err := ownershipinventory.VerifyProviderSessionsZeroExtraPublicSiblingAbsence(root); err != nil {
+		t.Fatalf("VerifyProviderSessionsZeroExtraPublicSiblingAbsence() error = %v", err)
+	}
+}
+
+func TestVerifyProviderSessionsZeroExtraPublicSiblingAbsenceFailsWhenLiveSiblingAppears(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeProviderSessionsTopLevelInventoryFixture(t, root, providerSessionsTopLevelInventoryFixture{
+		children: []ownershipinventory.ProviderSessionsTopLevelChild{
+			{Directory: "internal", Classification: ownershipinventory.ProviderSessionsTopLevelCanonicalRetain},
+			{Directory: "service", Classification: ownershipinventory.ProviderSessionsTopLevelUnexpectedPublicSibling},
+			{Directory: "transports", Classification: ownershipinventory.ProviderSessionsTopLevelCanonicalRetain},
+			{Directory: "wire", Classification: ownershipinventory.ProviderSessionsTopLevelCanonicalRetain},
+		},
+		hasUnexpectedBeyondService: false,
+	})
+	for _, directory := range []string{"internal", "service", "transports", "wire", "surprise"} {
+		mkdirAll(t, filepath.Join(root, "pkg/services/provider_sessions", directory))
+	}
+
+	err := ownershipinventory.VerifyProviderSessionsZeroExtraPublicSiblingAbsence(root)
+	if err == nil {
+		t.Fatal("VerifyProviderSessionsZeroExtraPublicSiblingAbsence() error = nil, want live sibling drift failure")
+	}
+	if !strings.Contains(err.Error(), "drift") {
+		t.Fatalf("VerifyProviderSessionsZeroExtraPublicSiblingAbsence() error = %v, want live sibling drift failure", err)
+	}
+}
+
 func TestVerifyProviderSessionsINVDispositionBeyondServicePassesOnRepository(t *testing.T) {
 	t.Parallel()
 

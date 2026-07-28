@@ -9,6 +9,49 @@ import (
 	"github.com/portpowered/infinite-you/internal/ownershipinventory"
 )
 
+// TestProviderSessionsZeroExtraPublicSiblingAbsenceLocked seals
+// pss-cln-pses-legacy-packages-002: inventory/generator assertions keep INV's
+// zero-extra absence locked so a new unexpected public top-level sibling cannot
+// silently retain without an explicit remap or consistent INV flag flip.
+func TestProviderSessionsZeroExtraPublicSiblingAbsenceLocked(t *testing.T) {
+	t.Parallel()
+
+	root := repositoryRoot(t)
+	if err := ownershipinventory.VerifyProviderSessionsZeroExtraPublicSiblingAbsence(root); err != nil {
+		t.Fatalf("VerifyProviderSessionsZeroExtraPublicSiblingAbsence() error = %v", err)
+	}
+
+	inventory, err := ownershipinventory.LoadProviderSessionsTopLevelInventory(root)
+	if err != nil {
+		t.Fatalf("LoadProviderSessionsTopLevelInventory() error = %v", err)
+	}
+	if inventory.HasUnexpectedPublicSiblingsBeyondService {
+		t.Fatal("hasUnexpectedPublicSiblingsBeyondService = true, want false for zero-extra lock")
+	}
+	if len(inventory.UnexpectedPublicSiblingsBeyondService) != 0 {
+		t.Fatalf("unexpectedPublicSiblingsBeyondService = %v, want none", inventory.UnexpectedPublicSiblingsBeyondService)
+	}
+
+	beyondService := ownershipinventory.ProviderSessionsUnexpectedPublicSiblingBeyondServicePackagePaths(inventory)
+	if len(beyondService) != 0 {
+		t.Fatalf("beyond-service package paths = %v, want none while zero-extra lock is active", beyondService)
+	}
+
+	var unexpected []string
+	for _, child := range inventory.Children {
+		if child.Directory == "service" {
+			continue
+		}
+		if child.Classification == ownershipinventory.ProviderSessionsTopLevelUnexpectedPublicSibling ||
+			child.Classification == ownershipinventory.ProviderSessionsTopLevelINVUnexpectedPublicSibling {
+			unexpected = append(unexpected, child.Directory)
+		}
+	}
+	if len(unexpected) != 0 {
+		t.Fatalf("unexpected public siblings beyond service/ = %v, want none", unexpected)
+	}
+}
+
 // TestProviderSessionsINVDispositionBeyondServiceConsumesZeroExtraPath seals
 // pss-cln-pses-legacy-packages-001: when INV records zero unexpected public
 // siblings beyond service/, this packet confirms the zero-extra path and makes
