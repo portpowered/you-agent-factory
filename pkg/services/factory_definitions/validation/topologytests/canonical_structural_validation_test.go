@@ -3,39 +3,39 @@ package topologytests
 import (
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 )
 
 func canonicalTopologyFindings(
 	t *testing.T,
-	cfg *interfaces.FactoryConfig,
-) []interfaces.TopologyFinding {
+	cfg *factorydefinitions.FactoryConfig,
+) []factorydefinitions.TopologyFinding {
 	t.Helper()
 	return factoryvalidation.New(nil).
 		ValidateTopology(t.Context(), cfg, nil).
 		Findings
 }
 
-func topologyTestBaseConfig() *interfaces.FactoryConfig {
-	return &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{{
+func topologyTestBaseConfig() *factorydefinitions.FactoryConfig {
+	return &factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{{
 			Name: "task",
-			States: []interfaces.StateConfig{
-				{Name: "init", Type: interfaces.StateTypeInitial},
-				{Name: "done", Type: interfaces.StateTypeTerminal},
-				{Name: "failed", Type: interfaces.StateTypeFailed},
+			States: []factorydefinitions.StateConfig{
+				{Name: "init", Type: factorydefinitions.StateTypeInitial},
+				{Name: "done", Type: factorydefinitions.StateTypeTerminal},
+				{Name: "failed", Type: factorydefinitions.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.FactoryWorkerConfig{{Name: "w1"}},
+		Workers: []factorydefinitions.FactoryWorkerConfig{{Name: "w1"}},
 	}
 }
 
 func TestCanonicalStructuralFindings_InvalidInputPlaceReference(t *testing.T) {
 	cfg := topologyTestBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:   "ws",
-		Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "bogus"}},
+		Inputs: []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "bogus"}},
 	}}
 
 	findings := canonicalTopologyFindings(t, cfg)
@@ -50,10 +50,10 @@ func TestCanonicalStructuralFindings_InvalidInputPlaceReference(t *testing.T) {
 
 func TestCanonicalStructuralFindings_InvalidOutputPlaceReference(t *testing.T) {
 	cfg := topologyTestBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:    "ws",
-		Inputs:  []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-		Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "bogus"}},
+		Inputs:  []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		Outputs: []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "bogus"}},
 	}}
 
 	findings := canonicalTopologyFindings(t, cfg)
@@ -68,10 +68,10 @@ func TestCanonicalStructuralFindings_InvalidOutputPlaceReference(t *testing.T) {
 
 func TestCanonicalStructuralFindings_InvalidOnRejectionPlaceReference(t *testing.T) {
 	cfg := topologyTestBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:        "ws",
-		Inputs:      []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-		OnRejection: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "bogus"}},
+		Inputs:      []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		OnRejection: []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "bogus"}},
 	}}
 
 	findings := canonicalTopologyFindings(t, cfg)
@@ -86,10 +86,10 @@ func TestCanonicalStructuralFindings_InvalidOnRejectionPlaceReference(t *testing
 
 func TestCanonicalStructuralFindings_InvalidOnFailurePlaceReference(t *testing.T) {
 	cfg := topologyTestBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:      "ws",
-		Inputs:    []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-		OnFailure: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "bogus"}},
+		Inputs:    []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		OnFailure: []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "bogus"}},
 	}}
 
 	findings := canonicalTopologyFindings(t, cfg)
@@ -104,12 +104,12 @@ func TestCanonicalStructuralFindings_InvalidOnFailurePlaceReference(t *testing.T
 
 func TestCanonicalStructuralFindings_ValidPlaceReferences(t *testing.T) {
 	cfg := topologyTestBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:        "ws",
-		Inputs:      []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-		Outputs:     []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
-		OnRejection: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
-		OnFailure:   []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
+		Inputs:      []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		Outputs:     []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+		OnRejection: []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
+		OnFailure:   []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
 	}}
 
 	findings := canonicalTopologyFindings(t, cfg)
@@ -122,14 +122,14 @@ func TestCanonicalStructuralFindings_ValidPlaceReferences(t *testing.T) {
 
 func TestCanonicalStructuralFindings_InvalidClassificationRouteOutput(t *testing.T) {
 	cfg := topologyTestBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:           "classifier",
-		Type:           interfaces.WorkstationTypeClassify,
+		Type:           factorydefinitions.WorkstationTypeClassify,
 		WorkerTypeName: "w1",
-		Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-		ClassificationRoutes: []interfaces.ClassificationRouteConfig{{
+		Inputs:         []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		ClassificationRoutes: []factorydefinitions.ClassificationRouteConfig{{
 			Label:   "approved",
-			Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "bogus"}},
+			Outputs: []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "bogus"}},
 		}},
 	}}
 
@@ -139,60 +139,60 @@ func TestCanonicalStructuralFindings_InvalidClassificationRouteOutput(t *testing
 }
 
 func TestConfigValidator_PreservesOperationalAndStructuralValidationCoverage(t *testing.T) {
-	cfg := &interfaces.FactoryConfig{
-		InputTypes: []interfaces.InputTypeConfig{{Name: "default", Type: interfaces.InputKindDefault}},
-		WorkTypes: []interfaces.WorkTypeConfig{{
+	cfg := &factorydefinitions.FactoryConfig{
+		InputTypes: []factorydefinitions.InputTypeConfig{{Name: "default", Type: factorydefinitions.InputKindDefault}},
+		WorkTypes: []factorydefinitions.WorkTypeConfig{{
 			Name: "task",
-			States: []interfaces.StateConfig{{
+			States: []factorydefinitions.StateConfig{{
 				Name: "init",
-				Type: interfaces.StateTypeInitial,
+				Type: factorydefinitions.StateTypeInitial,
 			}},
 		}},
-		Workers: []interfaces.FactoryWorkerConfig{
+		Workers: []factorydefinitions.FactoryWorkerConfig{
 			{Name: "w1"},
-			{Name: "planner", Type: interfaces.WorkerTypeModel},
+			{Name: "planner", Type: factorydefinitions.WorkerTypeModel},
 		},
-		Workstations: []interfaces.FactoryWorkstationConfig{
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{
 			{
 				Name:           "classifier",
-				Type:           interfaces.WorkstationTypeClassify,
+				Type:           factorydefinitions.WorkstationTypeClassify,
 				Kind:           "bogus-kind",
 				WorkerTypeName: "missing-worker",
-				Inputs: []interfaces.IOConfig{{
+				Inputs: []factorydefinitions.IOConfig{{
 					WorkTypeName: "task",
 					StateName:    "init",
-					Guard:        &interfaces.InputGuardConfig{Type: interfaces.GuardTypeAllChildrenComplete},
+					Guard:        &factorydefinitions.InputGuardConfig{Type: factorydefinitions.GuardTypeAllChildrenComplete},
 				}},
-				Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "missing-state"}},
-				Guards: []interfaces.GuardConfig{{
-					Type: interfaces.GuardTypeVisitCount,
+				Outputs: []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "missing-state"}},
+				Guards: []factorydefinitions.GuardConfig{{
+					Type: factorydefinitions.GuardTypeVisitCount,
 				}},
 			},
 			{
 				Name:    "daily-refresh",
-				Kind:    interfaces.WorkstationKindCron,
-				Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+				Kind:    factorydefinitions.WorkstationKindCron,
+				Outputs: []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
 			},
 			{
 				Name:           "linear-poller",
-				Kind:           interfaces.WorkstationKindPoller,
+				Kind:           factorydefinitions.WorkstationKindPoller,
 				WorkerTypeName: "planner",
 			},
 			{
 				Name:           "repeater-loop",
-				Kind:           interfaces.WorkstationKindRepeater,
+				Kind:           factorydefinitions.WorkstationKindRepeater,
 				WorkerTypeName: "w1",
-				Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+				Outputs:        []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
 			},
 		},
-		Resources: []interfaces.ResourceConfig{{
+		Resources: []factorydefinitions.ResourceConfig{{
 			Name: "quota",
-			Type: interfaces.ResourceTypeProviderQuota,
+			Type: factorydefinitions.ResourceTypeProviderQuota,
 		}},
-		ResourceManifest: &interfaces.PortableResourceManifestConfig{
-			RequiredTools: []interfaces.RequiredToolConfig{{Name: "", Command: ""}},
-			BundledFiles: []interfaces.BundledFileConfig{{
-				Type: interfaces.BundledFileTypeScript,
+		ResourceManifest: &factorydefinitions.PortableResourceManifestConfig{
+			RequiredTools: []factorydefinitions.RequiredToolConfig{{Name: "", Command: ""}},
+			BundledFiles: []factorydefinitions.BundledFileConfig{{
+				Type: factorydefinitions.BundledFileTypeScript,
 			}},
 		},
 	}
@@ -219,9 +219,9 @@ func TestConfigValidator_PreservesOperationalAndStructuralValidationCoverage(t *
 
 func TestCanonicalStructuralFindings_RejectsUnsupportedManagedRuntimeIdentity(t *testing.T) {
 	cfg := topologyTestBaseConfig()
-	cfg.Resources = []interfaces.ResourceConfig{{
+	cfg.Resources = []factorydefinitions.ResourceConfig{{
 		Name:       "unknown-cache",
-		Type:       interfaces.ResourceTypeModel,
+		Type:       factorydefinitions.ResourceTypeModel,
 		Capacity:   1,
 		Model:      "UNKNOWN_RUNTIME",
 		Backend:    "LLAMACPP",
@@ -234,11 +234,11 @@ func TestCanonicalStructuralFindings_RejectsUnsupportedManagedRuntimeIdentity(t 
 
 func TestCanonicalStructuralFindings_RejectsLocalWorkerWithoutModelResource(t *testing.T) {
 	cfg := topologyTestBaseConfig()
-	cfg.Workers = []interfaces.FactoryWorkerConfig{{
+	cfg.Workers = []factorydefinitions.FactoryWorkerConfig{{
 		Name:          "voice-local",
-		Type:          interfaces.WorkerTypeModel,
+		Type:          factorydefinitions.WorkerTypeModel,
 		Model:         "OMNIVOICE_Q4_K_M",
-		ModelLocality: interfaces.ModelLocalityLocal,
+		ModelLocality: factorydefinitions.ModelLocalityLocal,
 	}}
 
 	findings := canonicalTopologyFindings(t, cfg)
@@ -247,14 +247,14 @@ func TestCanonicalStructuralFindings_RejectsLocalWorkerWithoutModelResource(t *t
 
 func TestCanonicalStructuralFindings_RejectsUnsupportedWorkPropagationMode(t *testing.T) {
 	cfg := topologyTestBaseConfig()
-	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
 		Name:   "process",
-		Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-		Outputs: []interfaces.IOConfig{
+		Inputs: []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		Outputs: []factorydefinitions.IOConfig{
 			{WorkTypeName: "task", StateName: "done"},
 		},
-		WorkPropagation: &interfaces.WorkPropagationConfig{
-			Mode: interfaces.WorkPropagationMode("MERGE_PAYLOAD"),
+		WorkPropagation: &factorydefinitions.WorkPropagationConfig{
+			Mode: factorydefinitions.WorkPropagationMode("MERGE_PAYLOAD"),
 		},
 	}}
 
@@ -263,17 +263,17 @@ func TestCanonicalStructuralFindings_RejectsUnsupportedWorkPropagationMode(t *te
 	assertCanonicalFindingPath(t, findings, "factory.workstations[0](process).workPropagation.mode")
 }
 
-func assertCanonicalFindingCode(t *testing.T, findings []interfaces.TopologyFinding, code string) {
+func assertCanonicalFindingCode(t *testing.T, findings []factorydefinitions.TopologyFinding, code string) {
 	t.Helper()
 	for _, finding := range findings {
-		if finding.Rule == code && finding.Severity == interfaces.ValidationSeverityError {
+		if finding.Rule == code && finding.Severity == factorydefinitions.ValidationSeverityError {
 			return
 		}
 	}
 	t.Fatalf("expected canonical finding code %q, got %#v", code, findings)
 }
 
-func assertCanonicalFindingPath(t *testing.T, findings []interfaces.TopologyFinding, path string) {
+func assertCanonicalFindingPath(t *testing.T, findings []factorydefinitions.TopologyFinding, path string) {
 	t.Helper()
 	for _, finding := range findings {
 		if finding.Path == path {
@@ -283,7 +283,7 @@ func assertCanonicalFindingPath(t *testing.T, findings []interfaces.TopologyFind
 	t.Fatalf("expected canonical finding path %q, got %#v", path, findings)
 }
 
-func assertCanonicalTargetSubject(t *testing.T, cfg *interfaces.FactoryConfig, want factoryvalidation.Subject) {
+func assertCanonicalTargetSubject(t *testing.T, cfg *factorydefinitions.FactoryConfig, want factoryvalidation.Subject) {
 	t.Helper()
 	for _, target := range factoryvalidation.Validate(cfg).Targets {
 		if target.Subject == want {
@@ -293,10 +293,10 @@ func assertCanonicalTargetSubject(t *testing.T, cfg *interfaces.FactoryConfig, w
 	t.Fatalf("expected canonical subject %#v, got targets %#v", want, factoryvalidation.Validate(cfg).Targets)
 }
 
-func assertFindingExists(t *testing.T, findings []interfaces.TopologyFinding, rule string) {
+func assertFindingExists(t *testing.T, findings []factorydefinitions.TopologyFinding, rule string) {
 	t.Helper()
 	for _, finding := range findings {
-		if finding.Rule == rule && finding.Severity == interfaces.ValidationSeverityError {
+		if finding.Rule == rule && finding.Severity == factorydefinitions.ValidationSeverityError {
 			return
 		}
 	}

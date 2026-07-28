@@ -3,36 +3,36 @@ package goal
 import (
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func TestShouldFormatInvocationSummary_MatchesPackagedInvokeWorkstation(t *testing.T) {
 	cases := []struct {
 		name        string
-		workstation *interfaces.FactoryWorkstationConfig
+		workstation *factorydefinitions.FactoryWorkstationConfig
 		want        bool
 	}{
 		{
 			name: "packaged goal execute workstation",
-			workstation: &interfaces.FactoryWorkstationConfig{
+			workstation: &factorydefinitions.FactoryWorkstationConfig{
 				Name: PackagedExecuteWorkstationName,
-				Type: interfaces.WorkstationTypeModel,
+				Type: factorydefinitions.WorkstationTypeModel,
 			},
 			want: true,
 		},
 		{
 			name: "other workstation",
-			workstation: &interfaces.FactoryWorkstationConfig{
+			workstation: &factorydefinitions.FactoryWorkstationConfig{
 				Name: "other-workstation",
-				Type: interfaces.WorkstationTypeModel,
+				Type: factorydefinitions.WorkstationTypeModel,
 			},
 		},
 		{
 			name: "logical move",
-			workstation: &interfaces.FactoryWorkstationConfig{
+			workstation: &factorydefinitions.FactoryWorkstationConfig{
 				Name: PackagedInvokeWorkstationName,
-				Type: interfaces.WorkstationTypeLogical,
+				Type: factorydefinitions.WorkstationTypeLogical,
 			},
 		},
 	}

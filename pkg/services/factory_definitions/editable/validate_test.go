@@ -7,7 +7,6 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/editable"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
@@ -25,7 +24,7 @@ func TestValidateSnapshotReturnsDomainTopologyError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DecodeCrossPathInvalidFactory: %v", err)
 	}
-	snapshot, err := interfaces.NewFactorySnapshot(factory)
+	snapshot, err := factorydefinitions.NewFactorySnapshot(factory)
 	if err != nil {
 		t.Fatalf("NewFactorySnapshot: %v", err)
 	}
@@ -45,12 +44,12 @@ func TestValidateSnapshotForcesPrePersistOwnerProfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DecodeCrossPathValidAlphaFactory: %v", err)
 	}
-	snapshot, err := interfaces.NewFactorySnapshot(factory)
+	snapshot, err := factorydefinitions.NewFactorySnapshot(factory)
 	if err != nil {
 		t.Fatalf("NewFactorySnapshot: %v", err)
 	}
 	canonicalLoads := 0
-	loadCanonical := func(payload []byte, loader interfaces.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+	loadCanonical := func(payload []byte, loader factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 		canonicalLoads++
 		return factorydefinitioncomposition.LoadCanonicalJSON(payload, loader)
 	}
@@ -58,7 +57,7 @@ func TestValidateSnapshotForcesPrePersistOwnerProfile(t *testing.T) {
 		t.Context(),
 		snapshot,
 		nil,
-		func(snapshot *interfaces.FactorySnapshot, loader interfaces.WorkstationLoader) (factorydefinitions.DefinitionValidationRequest, error) {
+		func(snapshot *factorydefinitions.FactorySnapshot, loader factorydefinitions.WorkstationLoader) (factorydefinitions.DefinitionValidationRequest, error) {
 			request, mapErr := validationentry.MapEditableFactorySnapshot(snapshot, loader, loadCanonical)
 			request.Profile = factorydefinitions.ValidationProfileTopology
 			return request, mapErr
@@ -74,16 +73,16 @@ func TestValidateSnapshotForcesPrePersistOwnerProfile(t *testing.T) {
 }
 
 func validateSnapshot(
-	snapshot *interfaces.FactorySnapshot,
-	workstationLoader interfaces.WorkstationLoader,
+	snapshot *factorydefinitions.FactorySnapshot,
+	workstationLoader factorydefinitions.WorkstationLoader,
 ) error {
 	return editable.ValidateSnapshot(
 		context.Background(),
 		snapshot,
 		workstationLoader,
 		func(
-			snapshot *interfaces.FactorySnapshot,
-			loader interfaces.WorkstationLoader,
+			snapshot *factorydefinitions.FactorySnapshot,
+			loader factorydefinitions.WorkstationLoader,
 		) (factorydefinitions.DefinitionValidationRequest, error) {
 			return validationentry.MapEditableFactorySnapshot(
 				snapshot,

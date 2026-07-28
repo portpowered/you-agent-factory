@@ -763,11 +763,17 @@ story 001 seals owned catalog and validate peer exercise in
 `service_root_contract_invariants_test.go` (`peerOwnedDefinitionsConsumer` uses
 only `pkg/services/factory_definitions` imports) and documents the owned vs
 foreign split in `owned_contract.go` plus the foreign-vocabulary marker in
-`contracts_root.go`. The
+`contracts_root.go`. Story 002 retargets owner-local Definition consumers
+(`definition`, `validation`, `editable`, `service`, owner transports) off
+`factory_definitions/contracts` onto the service root; `workers` keeps
+`contracts/namevalue` only because the root already imports `workers` and a
+service-root import would cycle. `owned_consumer_import_retarget_test.go` and
+`definition/cross_path_equivalence_test.go` prove the retarget with import
+boundary checks plus catalog/validate behavioral equivalence. The
 parent-private nested validation subservice locks its public surface in
 `internal/services/validation/boundary_test.go`: `service.go` exports only
 `Service` and `Dependencies` with factory_definitions root request/result
-vocabulary and contracts injected ports, direct imports avoid Wire/Runtime/
+vocabulary and root-injected ports, direct imports avoid Wire/Runtime/
 Petri/peer/sibling-lease paths, and `wire/wire.go` constructs from injected
 ports without selecting Runtime/Petri implementations or sibling catalog/
 authoring_layout/compilation/snapshots_portability/distribution leases.

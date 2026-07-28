@@ -8,26 +8,26 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/validationassert"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func validateFactoryAPIPrePersistForTest(
 	ctx context.Context,
 	factory factoryapi.Factory,
-) (interfaces.ValidationResult, error) {
+) (factorydefinitions.ValidationResult, error) {
 	payload, err := json.Marshal(factory)
 	if err != nil {
-		return interfaces.ValidationResult{}, err
+		return factorydefinitions.ValidationResult{}, err
 	}
 	request, err := validationentry.MapFactoryJSONForPersistence(payload, testCanonicalFactoryLoader)
 	if err != nil {
-		return interfaces.ValidationResult{}, err
+		return factorydefinitions.ValidationResult{}, err
 	}
-	request.Profile = interfaces.ValidationProfilePrePersist
+	request.Profile = factorydefinitions.ValidationProfilePrePersist
 	return testFactoryDefinitionValidator().ValidateDefinition(ctx, request)
 }
 
@@ -45,7 +45,7 @@ func TestValidateEditableFactoryTopology_MatchesValidateFactoryAPIPrePersist(t *
 	}
 
 	saveErr := validateEditableFactoryTopology(factory, nil)
-	var topologyErr *interfaces.ValidationTopologyError
+	var topologyErr *factorydefinitions.ValidationTopologyError
 	if !errors.As(saveErr, &topologyErr) {
 		t.Fatalf("validateEditableFactoryTopology error = %v, want topology validation error", saveErr)
 	}
@@ -65,15 +65,15 @@ func TestValidateEditableFactoryTopology_ReturnsTargetsForResourceSlotRoutes(t *
 	factory := factoryWithResourceSlotRoutes()
 
 	saveErr := validateEditableFactoryTopology(factory, nil)
-	var topologyErr *interfaces.ValidationTopologyError
+	var topologyErr *factorydefinitions.ValidationTopologyError
 	if !errors.As(saveErr, &topologyErr) {
 		t.Fatalf("validateEditableFactoryTopology error = %v, want topology validation error", saveErr)
 	}
 
 	validationassert.HasDomainTargetCode(t, topologyErr.Targets, factoryvalidation.CodeDanglingPlaceReference)
-	validationassert.HasDomainTargetSubject(t, topologyErr.Targets, interfaces.ValidationSubject{
-		Type: interfaces.ValidationSubjectTypeRoute, ID: "cleaner->executor-slot:available",
-		Location: interfaces.ValidationSubjectLocationInputs,
+	validationassert.HasDomainTargetSubject(t, topologyErr.Targets, factorydefinitions.ValidationSubject{
+		Type: factorydefinitions.ValidationSubjectTypeRoute, ID: "cleaner->executor-slot:available",
+		Location: factorydefinitions.ValidationSubjectLocationInputs,
 	})
 }
 
@@ -108,7 +108,7 @@ func TestValidateEditableFactoryTopology_RejectsDuplicateDefaultHandlingWorkType
 	*factory.WorkTypes = append(*factory.WorkTypes, second)
 
 	saveErr := validateEditableFactoryTopology(factory, nil)
-	var topologyErr *interfaces.ValidationTopologyError
+	var topologyErr *factorydefinitions.ValidationTopologyError
 	if !errors.As(saveErr, &topologyErr) {
 		t.Fatalf("validateEditableFactoryTopology error = %v, want topology validation error", saveErr)
 	}
@@ -164,7 +164,7 @@ func TestValidateEditableFactoryTopology_MatchesValidateFactoryAPIForInvocationR
 	}
 
 	saveErr := validateEditableFactoryTopology(factory, nil)
-	var topologyErr *interfaces.ValidationTopologyError
+	var topologyErr *factorydefinitions.ValidationTopologyError
 	if !errors.As(saveErr, &topologyErr) {
 		t.Fatalf("validateEditableFactoryTopology error = %v, want topology validation error", saveErr)
 	}
@@ -196,7 +196,7 @@ func TestValidateEditableFactoryTopology_MatchesValidateFactoryAPIForWorkPropaga
 	}
 
 	saveErr := validateEditableFactoryTopology(factory, nil)
-	var topologyErr *interfaces.ValidationTopologyError
+	var topologyErr *factorydefinitions.ValidationTopologyError
 	if !errors.As(saveErr, &topologyErr) {
 		t.Fatalf("validateEditableFactoryTopology error = %v, want topology validation error", saveErr)
 	}

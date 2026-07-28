@@ -5,10 +5,10 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func TestValidateEditableFactoryTopology_AllowsRecoverableLayoutWarnings(t *testing.T) {
@@ -19,7 +19,7 @@ func TestValidateEditableFactoryTopology_AllowsRecoverableLayoutWarnings(t *test
 		t.Fatalf("DecodeCrossPathValidAlphaFactory: %v", err)
 	}
 	factory.Layout = &factoryapi.FactoryLayout{
-		SchemaVersion: interfaces.SupportedFactoryLayoutSchemaVersion,
+		SchemaVersion: factorydefinitions.SupportedFactoryLayoutSchemaVersion,
 		Nodes: &[]factoryapi.FactoryLayoutNode{{
 			Id:       "workstation:stale-node",
 			Position: factoryapi.FactoryLayoutPoint{X: 10, Y: 20},

@@ -4,12 +4,12 @@ import (
 	"testing"
 	"time"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/workstationexecution"
 )
 
 func TestNormalizeWorkstationExecutionLimit_MovesLegacyTimeoutIntoCanonicalLimit(t *testing.T) {
-	cfg := &interfaces.FactoryWorkstationConfig{
+	cfg := &factorydefinitions.FactoryWorkstationConfig{
 		Timeout: "45m",
 	}
 
@@ -24,7 +24,7 @@ func TestNormalizeWorkstationExecutionLimit_MovesLegacyTimeoutIntoCanonicalLimit
 }
 
 func TestWorkstationExecutionTimeout_UsesCanonicalLimitOnly(t *testing.T) {
-	cfg := &interfaces.FactoryWorkstationConfig{
+	cfg := &factorydefinitions.FactoryWorkstationConfig{
 		Timeout: "45m",
 	}
 
@@ -38,8 +38,8 @@ func TestWorkstationExecutionTimeout_UsesCanonicalLimitOnly(t *testing.T) {
 }
 
 func TestWorkstationExecutionTimeout_ParsesCanonicalLimit(t *testing.T) {
-	cfg := &interfaces.FactoryWorkstationConfig{
-		Limits: interfaces.WorkstationLimits{MaxExecutionTime: "45m"},
+	cfg := &factorydefinitions.FactoryWorkstationConfig{
+		Limits: factorydefinitions.WorkstationLimits{MaxExecutionTime: "45m"},
 	}
 
 	timeout, err := workstationexecution.NewService().ExecutionTimeout(cfg)
@@ -52,8 +52,8 @@ func TestWorkstationExecutionTimeout_ParsesCanonicalLimit(t *testing.T) {
 }
 
 func TestWorkstationExecutionTimeout_ReturnsCanonicalParseError(t *testing.T) {
-	cfg := &interfaces.FactoryWorkstationConfig{
-		Limits:  interfaces.WorkstationLimits{MaxExecutionTime: "not-a-duration"},
+	cfg := &factorydefinitions.FactoryWorkstationConfig{
+		Limits:  factorydefinitions.WorkstationLimits{MaxExecutionTime: "not-a-duration"},
 		Timeout: "45m",
 	}
 

@@ -12,7 +12,6 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/loading"
 	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
@@ -379,18 +378,18 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 type stubRequiredToolChecker struct{}
 
 func (stubRequiredToolChecker) Check(
-	factorycontracts.RequiredToolConfig,
-) factorycontracts.RequiredToolCheckResult {
-	return factorycontracts.RequiredToolCheckResult{}
+	factorydefinitions.RequiredToolConfig,
+) factorydefinitions.RequiredToolCheckResult {
+	return factorydefinitions.RequiredToolCheckResult{}
 }
 
 type stubOrchestratorValidator struct{}
 
 func (stubOrchestratorValidator) ValidateJavaScriptFactoryDefinition(
 	context.Context,
-	*factorycontracts.FactoryOrchestratorJavaScriptConfig,
-	factorycontracts.WorkflowSourceReader,
-) []factorycontracts.ValidationTarget {
+	*factorydefinitions.FactoryOrchestratorJavaScriptConfig,
+	factorydefinitions.WorkflowSourceReader,
+) []factorydefinitions.ValidationTarget {
 	return nil
 }
 
@@ -531,40 +530,40 @@ type stubValidator struct{}
 
 func (stubValidator) Validate(
 	context.Context,
-	*factorycontracts.FactoryConfig,
-	factorycontracts.WorkflowSourceReader,
-) factorycontracts.ValidationResult {
-	return factorycontracts.ValidationResult{}
+	*factorydefinitions.FactoryConfig,
+	factorydefinitions.WorkflowSourceReader,
+) factorydefinitions.ValidationResult {
+	return factorydefinitions.ValidationResult{}
 }
-func (stubValidator) ValidateBlockingLoad(context.Context, *factorycontracts.FactoryConfig) factorycontracts.ValidationResult {
-	return factorycontracts.ValidationResult{}
+func (stubValidator) ValidateBlockingLoad(context.Context, *factorydefinitions.FactoryConfig) factorydefinitions.ValidationResult {
+	return factorydefinitions.ValidationResult{}
 }
 func (stubValidator) ValidateTopology(
 	context.Context,
-	*factorycontracts.FactoryConfig,
-	factorycontracts.RequiredToolChecker,
-) factorycontracts.TopologyValidationResult {
-	return factorycontracts.TopologyValidationResult{}
+	*factorydefinitions.FactoryConfig,
+	factorydefinitions.RequiredToolChecker,
+) factorydefinitions.TopologyValidationResult {
+	return factorydefinitions.TopologyValidationResult{}
 }
 func (stubValidator) WorkerWorkstationBehaviorCompatibility(
 	context.Context,
-	*factorycontracts.FactoryConfig,
-) []factorycontracts.ValidationTarget {
+	*factorydefinitions.FactoryConfig,
+) []factorydefinitions.ValidationTarget {
 	return nil
 }
 func (stubValidator) WorkTypeHandlingBehavior(
 	context.Context,
-	*factorycontracts.FactoryConfig,
+	*factorydefinitions.FactoryConfig,
 	bool,
-) []factorycontracts.ValidationTarget {
+) []factorydefinitions.ValidationTarget {
 	return nil
 }
 func (stubValidator) PruneLayout(
 	context.Context,
-	*factorycontracts.FactoryConfig,
-	factorycontracts.PendingFactoryGraphTopology,
-) factorycontracts.ValidationResult {
-	return factorycontracts.ValidationResult{}
+	*factorydefinitions.FactoryConfig,
+	factorydefinitions.PendingFactoryGraphTopology,
+) factorydefinitions.ValidationResult {
+	return factorydefinitions.ValidationResult{}
 }
 
 type stubPersistence struct{}

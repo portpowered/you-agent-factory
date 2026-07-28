@@ -5,9 +5,9 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/validationassert"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func TestValidateBlockingLoad_RejectsCrossPathInvalidWithoutOutcomeRouteOnlyFindings(t *testing.T) {
@@ -37,15 +37,15 @@ func TestValidateBlockingLoad_RejectsCrossPathInvalidWithoutOutcomeRouteOnlyFind
 func TestValidateBlockingLoad_DoesNotDeferMissingOutputRoutes(t *testing.T) {
 	t.Parallel()
 
-	cfg := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{{
+	cfg := &factorydefinitions.FactoryConfig{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{{
 			Name: "task",
-			States: []interfaces.StateConfig{
-				{Name: "init", Type: interfaces.StateTypeInitial},
-				{Name: "complete", Type: interfaces.StateTypeTerminal},
+			States: []factorydefinitions.StateConfig{
+				{Name: "init", Type: factorydefinitions.StateTypeInitial},
+				{Name: "complete", Type: factorydefinitions.StateTypeTerminal},
 			},
 		}},
-		Workstations: []interfaces.FactoryWorkstationConfig{{
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{{
 			Name: "consume",
 		}},
 	}

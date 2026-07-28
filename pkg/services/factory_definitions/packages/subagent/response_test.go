@@ -3,13 +3,13 @@ package subagent
 import (
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func TestShouldFormatInvocationResponse_MatchesPackagedRunSubagentWorkstation(t *testing.T) {
-	workstation := &interfaces.FactoryWorkstationConfig{
+	workstation := &factorydefinitions.FactoryWorkstationConfig{
 		Name:           PackagedRunWorkstationName,
-		Type:           interfaces.WorkstationTypeAgent,
+		Type:           factorydefinitions.WorkstationTypeAgent,
 		WorkerTypeName: PackagedWorkerName,
 	}
 	if !ShouldFormatInvocationResponse(workstation) {
@@ -18,9 +18,9 @@ func TestShouldFormatInvocationResponse_MatchesPackagedRunSubagentWorkstation(t 
 }
 
 func TestShouldFormatInvocationResponse_RejectsUnrelatedWorkstations(t *testing.T) {
-	workstation := &interfaces.FactoryWorkstationConfig{
+	workstation := &factorydefinitions.FactoryWorkstationConfig{
 		Name:           "other-workstation",
-		Type:           interfaces.WorkstationTypeAgent,
+		Type:           factorydefinitions.WorkstationTypeAgent,
 		WorkerTypeName: PackagedWorkerName,
 	}
 	if ShouldFormatInvocationResponse(workstation) {
@@ -32,9 +32,9 @@ func TestShouldFormatInvocationResponse_RejectsNilAndNonAgentTypes(t *testing.T)
 	if ShouldFormatInvocationResponse(nil) {
 		t.Fatal("expected nil workstation to be rejected")
 	}
-	workstation := &interfaces.FactoryWorkstationConfig{
+	workstation := &factorydefinitions.FactoryWorkstationConfig{
 		Name: PackagedRunWorkstationName,
-		Type: interfaces.WorkstationTypeLogical,
+		Type: factorydefinitions.WorkstationTypeLogical,
 	}
 	if ShouldFormatInvocationResponse(workstation) {
 		t.Fatal("expected logical workstation type to be rejected")

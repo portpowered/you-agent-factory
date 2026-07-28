@@ -10,7 +10,6 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	factorydefinition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire"
@@ -58,7 +57,7 @@ func TestCrossPathFixtures_ValidateFactoryAPIPrePersistMatchesEditableSavePreChe
 
 			saveErr := validateEditableFactoryTopology(factory, nil)
 			apiFailed := apiResult.HasBlockingTargets()
-			var topologyErr *interfaces.ValidationTopologyError
+			var topologyErr *factoryroot.ValidationTopologyError
 			saveFailed := errors.As(saveErr, &topologyErr)
 
 			if apiFailed != tc.wantFail {

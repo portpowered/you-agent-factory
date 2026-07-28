@@ -77,6 +77,34 @@ const (
 	ValidationProfilePrePersist        = contracts.ValidationProfilePrePersist
 	DefaultTopologyValidationMessage   = contracts.DefaultTopologyValidationMessage
 
+	InvocationParameterTypeHintString        = contracts.InvocationParameterTypeHintString
+	InvocationParameterTypeHintPath          = contracts.InvocationParameterTypeHintPath
+	InvocationParameterTypeHintFilePath      = contracts.InvocationParameterTypeHintFilePath
+	InvocationParameterTypeHintDirectoryPath = contracts.InvocationParameterTypeHintDirectoryPath
+	InvocationParameterTypeHintNumberString  = contracts.InvocationParameterTypeHintNumberString
+	InvocationParameterTypeHintBooleanString = contracts.InvocationParameterTypeHintBooleanString
+	InvocationParameterTypeHintJSON          = contracts.InvocationParameterTypeHintJSON
+
+	InvocationParameterValueModeExact        = contracts.InvocationParameterValueModeExact
+	InvocationParameterValueModeRepeated     = contracts.InvocationParameterValueModeRepeated
+	InvocationParameterValueModeVariadic     = contracts.InvocationParameterValueModeVariadic
+	InvocationParameterValueModeFileContents = contracts.InvocationParameterValueModeFileContents
+
+	InvocationParameterBindingKindNamed     = contracts.InvocationParameterBindingKindNamed
+	InvocationParameterBindingKindStdin     = contracts.InvocationParameterBindingKindStdin
+	InvocationParameterBindingKindNamedRest = contracts.InvocationParameterBindingKindNamedRest
+
+	InvocationUnknownNamedArgumentPolicyReject  = contracts.InvocationUnknownNamedArgumentPolicyReject
+	InvocationUnknownNamedArgumentPolicyAllow   = contracts.InvocationUnknownNamedArgumentPolicyAllow
+	InvocationUnknownNamedArgumentPolicyCollect = contracts.InvocationUnknownNamedArgumentPolicyCollect
+
+	InvocationOutputContractModeInline = contracts.InvocationOutputContractModeInline
+	InvocationOutputContractModeFile   = contracts.InvocationOutputContractModeFile
+	InvocationOutputContractModeJSON   = contracts.InvocationOutputContractModeJSON
+
+	InvocationReturnPolicySubmittedWorkTerminal = contracts.InvocationReturnPolicySubmittedWorkTerminal
+	InvocationReturnPolicyExplicit              = contracts.InvocationReturnPolicyExplicit
+
 	FactoryAgentsFileName                 = contracts.FactoryAgentsFileName
 	WorkersDir                            = contracts.WorkersDir
 	WorkstationsDir                       = contracts.WorkstationsDir
@@ -93,7 +121,14 @@ var (
 	ValidateNameValue                            = contracts.ValidateNameValue
 	ResolveNameValue                             = contracts.ResolveNameValue
 	NewFactoryEvent                              = contracts.NewFactoryEvent
+	CanonicalFactoryGraphEntityID                = contracts.CanonicalFactoryGraphEntityID
+	CanonicalFactoryGraphWorkTypeID              = contracts.CanonicalFactoryGraphWorkTypeID
+	CanonicalFactoryGraphWorkStateID             = contracts.CanonicalFactoryGraphWorkStateID
+	CanonicalFactoryGraphResourceID              = contracts.CanonicalFactoryGraphResourceID
+	CanonicalFactoryGraphWorkerID                = contracts.CanonicalFactoryGraphWorkerID
 	CanonicalFactoryGraphWorkstationID           = contracts.CanonicalFactoryGraphWorkstationID
+	IsBundledFileGraphNodeID                     = contracts.IsBundledFileGraphNodeID
+	IsPetriOrchestratorFactory                   = contracts.IsPetriOrchestratorFactory
 	PublicWorkerModelProviderFromInternal        = contracts.PublicWorkerModelProviderFromInternal
 	PermissivePublicFactoryRunnerID              = contracts.PermissivePublicFactoryRunnerID
 	PermissivePublicFactoryRunnerSelectionSource = contracts.PermissivePublicFactoryRunnerSelectionSource
@@ -374,6 +409,7 @@ const (
 	DispatchReconciliationSourceStreamReplay      = contracts.DispatchReconciliationSourceStreamReplay
 	FactoryConfigFile                             = contracts.FactoryConfigFile
 	FactoryDir                                    = contracts.FactoryDir
+	DefaultCurrentFactoryName                     = contracts.DefaultCurrentFactoryName
 	FactoryDispatchKindJavaScriptScript           = contracts.FactoryDispatchKindJavaScriptScript
 	FactoryDispatchKindJavaScriptSynthesize       = contracts.FactoryDispatchKindJavaScriptSynthesize
 	FactoryDispatchKindJavaScriptSystem           = contracts.FactoryDispatchKindJavaScriptSystem

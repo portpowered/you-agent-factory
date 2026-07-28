@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func TestLoadRuntimeConfig_SourceContextPreservesBlockingValidationTargets(t *testing.T) {
@@ -35,10 +35,10 @@ func TestLoadRuntimeConfig_SourceContextPreservesBlockingValidationTargets(t *te
 			if !containsAll(err.Error(), sourcePath, test.format, "validate factory config") {
 				t.Fatalf("error = %q, want selected source path and format", err)
 			}
-			if !errors.Is(err, interfaces.ErrInvalidNamedFactory) {
+			if !errors.Is(err, factorydefinitions.ErrInvalidNamedFactory) {
 				t.Fatalf("error = %v, want ErrInvalidNamedFactory", err)
 			}
-			loadErr, ok := interfaces.AsBlockingFactoryLoadError(err)
+			loadErr, ok := factorydefinitions.AsBlockingFactoryLoadError(err)
 			if !ok || len(loadErr.Targets) == 0 {
 				t.Fatalf("error = %v, want blocking validation targets", err)
 			}
@@ -251,7 +251,7 @@ Implement {{ .WorkID }}.
 func TestReplaceFactoryLayoutAtDir_PreservesPortableLayoutThroughBackendLoadSave(t *testing.T) {
 	targetDir := t.TempDir()
 	initial := namedFactoryPayload(t, "alpha")
-	if err := os.WriteFile(filepath.Join(targetDir, interfaces.FactoryConfigFile), initial, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(targetDir, factorydefinitions.FactoryConfigFile), initial, 0o644); err != nil {
 		t.Fatalf("WriteFile(factory.json): %v", err)
 	}
 
@@ -270,7 +270,7 @@ func TestReplaceFactoryLayoutAtDir_PreservesPortableLayoutThroughBackendLoadSave
 	}
 	assertLoadedPortableLayoutConfig(t, loaded.FactoryConfig(), "workstation:execute-alpha")
 
-	factoryJSON, err := os.ReadFile(filepath.Join(targetDir, interfaces.FactoryConfigFile))
+	factoryJSON, err := os.ReadFile(filepath.Join(targetDir, factorydefinitions.FactoryConfigFile))
 	if err != nil {
 		t.Fatalf("ReadFile(factory.json): %v", err)
 	}

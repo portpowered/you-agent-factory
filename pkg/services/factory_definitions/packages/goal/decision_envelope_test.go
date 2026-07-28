@@ -5,17 +5,17 @@ import (
 	"strings"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func TestUsesDecisionEnvelopeOutcome_IdentifiesConfiguredWorkstation(t *testing.T) {
-	if !UsesDecisionEnvelopeOutcome(&interfaces.FactoryWorkstationConfig{
+	if !UsesDecisionEnvelopeOutcome(&factorydefinitions.FactoryWorkstationConfig{
 		OutcomeFormat: DecisionEnvelopeOutcomeFormat,
 	}) {
 		t.Fatal("decision-envelope outcomeFormat should enable envelope parsing")
 	}
-	if UsesDecisionEnvelopeOutcome(&interfaces.FactoryWorkstationConfig{Name: "review"}) {
+	if UsesDecisionEnvelopeOutcome(&factorydefinitions.FactoryWorkstationConfig{Name: "review"}) {
 		t.Fatal("review workstation without outcomeFormat should not use envelope parsing")
 	}
 	if UsesDecisionEnvelopeOutcome(nil) {
@@ -24,15 +24,15 @@ func TestUsesDecisionEnvelopeOutcome_IdentifiesConfiguredWorkstation(t *testing.
 }
 
 func TestUsesGoalRoutingDecisionEnvelope_RequiresClassificationRoutes(t *testing.T) {
-	if !UsesGoalRoutingDecisionEnvelope(&interfaces.FactoryWorkstationConfig{
+	if !UsesGoalRoutingDecisionEnvelope(&factorydefinitions.FactoryWorkstationConfig{
 		OutcomeFormat: DecisionEnvelopeOutcomeFormat,
-		ClassificationRoutes: []interfaces.ClassificationRouteConfig{
-			{Label: "accepted", Outputs: []interfaces.IOConfig{{WorkTypeName: "goal", StateName: "complete"}}},
+		ClassificationRoutes: []factorydefinitions.ClassificationRouteConfig{
+			{Label: "accepted", Outputs: []factorydefinitions.IOConfig{{WorkTypeName: "goal", StateName: "complete"}}},
 		},
 	}) {
 		t.Fatal("decision-envelope workstation with classificationRoutes should use goal routing")
 	}
-	if UsesGoalRoutingDecisionEnvelope(&interfaces.FactoryWorkstationConfig{
+	if UsesGoalRoutingDecisionEnvelope(&factorydefinitions.FactoryWorkstationConfig{
 		OutcomeFormat: DecisionEnvelopeOutcomeFormat,
 	}) {
 		t.Fatal("decision-envelope workstation without classificationRoutes should not use goal routing")
