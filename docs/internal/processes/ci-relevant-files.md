@@ -771,6 +771,19 @@ Wave 0 functional-tests-expansion planning authority lives under
   every top-level `Test*` needs a customer-readable Go doc so
   `functionaltestmetadata` stays viz-compatible.
 
+- `tests/functional/provider_sessions/association/association_test.go` owns
+  Provider Session ref correlation on public Factory Session dispatch projections.
+  Drive proofs through `support.StartFunctionalAPIServer` with a JavaScript
+  `agent.run` fake-child workflow (no live provider runner calls), then assert on
+  `GET /factory-sessions/{session_id}/dispatches` and
+  `GET /factory-sessions/{session_id}/dispatches/{dispatch_id}` only:
+  `providerSessionRefs`, owning dispatch `id`, and list/detail `sessionId`
+  correlation. Do not invent provider metadata or widen into `details/*` or
+  `response_exec_metadata_test.go`. Catalog metadata infers domain
+  `provider_sessions` and subsection `association`; every top-level `Test*`
+  needs a customer-readable Go doc so `functionaltestmetadata` stays
+  viz-compatible.
+
 - `tests/functional/automations/` owns root.BuildProcess evidence for packaged
   Automations cron scheduling and filesystem watcher preseed. Keep cron workstation
   factories explicit with `"behavior": "CRON"` and observe submissions through
