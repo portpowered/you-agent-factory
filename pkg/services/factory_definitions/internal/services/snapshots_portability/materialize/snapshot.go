@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 )
 
 // Snapshot restores bundled portable assets under one target directory and
@@ -13,8 +12,8 @@ import (
 func Snapshot(
 	targetDir string,
 	snapshot *factorydefinitions.FactorySnapshot,
-	validateMaterializeWrites factorycontracts.PortableBundledFileWritesValidator,
-	materializePortableFiles factorycontracts.PortableBundledFilesMaterializer,
+	validateMaterializeWrites factorydefinitions.PortableBundledFileWritesValidator,
+	materializePortableFiles factorydefinitions.PortableBundledFilesMaterializer,
 ) (factorydefinitions.MaterializeFactorySnapshotResult, error) {
 	if validateMaterializeWrites == nil || materializePortableFiles == nil {
 		return factorydefinitions.MaterializeFactorySnapshotResult{}, factorydefinitions.ErrUnsafeFactorySnapshotMaterialize
@@ -46,19 +45,19 @@ func Snapshot(
 
 func factoryConfigFromSnapshot(
 	snapshot *factorydefinitions.FactorySnapshot,
-) (*factorycontracts.FactoryConfig, []factorydefinitions.PortableSnapshotAssetFact, error) {
-	var factoryConfig factorycontracts.FactoryConfig
+) (*factorydefinitions.FactoryConfig, []factorydefinitions.PortableSnapshotAssetFact, error) {
+	var factoryConfig factorydefinitions.FactoryConfig
 	if err := snapshot.Decode(&factoryConfig); err != nil {
 		return nil, nil, err
 	}
 	if factoryConfig.ResourceManifest == nil {
-		factoryConfig.ResourceManifest = &factorycontracts.PortableResourceManifestConfig{}
+		factoryConfig.ResourceManifest = &factorydefinitions.PortableResourceManifestConfig{}
 	}
 	return &factoryConfig, portableAssetsFromConfig(&factoryConfig), nil
 }
 
 func portableAssetsFromConfig(
-	factoryConfig *factorycontracts.FactoryConfig,
+	factoryConfig *factorydefinitions.FactoryConfig,
 ) []factorydefinitions.PortableSnapshotAssetFact {
 	if factoryConfig == nil ||
 		factoryConfig.ResourceManifest == nil ||

@@ -17,7 +17,6 @@ import (
 	"context"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 )
 
 // Service owns detached Factory snapshot capture, prepare-import, and
@@ -42,10 +41,10 @@ type Service interface {
 // snapshots_portability does not choose host filesystem adapters, boundary
 // codecs, or Wire/root constructors.
 type Dependencies struct {
-	LoadCanonical             factorycontracts.CanonicalFactoryJSONLoader
-	CaptureLoaded             factorycontracts.LoadedFactorySnapshotCapturer
-	PreparePortable           factorycontracts.PortableFactoryConfigPreparer
+	LoadCanonical             factorydefinitions.CanonicalFactoryJSONLoader
+	CaptureLoaded             factorydefinitions.LoadedFactorySnapshotCapturer
+	PreparePortable           factorydefinitions.PortableFactoryConfigPreparer
 	DecodeSnapshot            factorydefinitions.FactorySnapshotJSONDecoder
-	MaterializePortableFiles  factorycontracts.PortableBundledFilesMaterializer
-	ValidateMaterializeWrites factorycontracts.PortableBundledFileWritesValidator
+	MaterializePortableFiles  factorydefinitions.PortableBundledFilesMaterializer
+	ValidateMaterializeWrites factorydefinitions.PortableBundledFileWritesValidator
 }
