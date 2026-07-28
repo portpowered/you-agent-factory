@@ -713,7 +713,12 @@ Wave 0 functional-tests-expansion planning authority lives under
   nested docs/scripts/metadata preservation, and invalid-import Current Factory
   safety through `support.BuildProcess` + `support.FlattenFactoryConfig` /
   `support.CreateNamedFactory` CLI round-trips with `support.RunFactoryToCompletionWithEdgesAndWork`
-  for terminal run proofs; catalog metadata infers domain `factory/definitions`.
+  for terminal run proofs; sibling `agent_factory_export_import_fixture_test.go`,
+  `export_import_fixture_test.go`, and `export_import_nested_docs_test.go` own
+  delete-03 fixture/nested-docs drain proofs via `flattenFactoryConfigWithEdges`
+  (local `BuildProcess` + `ProviderCommandRunner` zero-call helper) and public
+  `factory create` / `factory list` Current Factory signals; catalog metadata
+  infers domain `factory/definitions`.
   `tests/functional/factory/definitions/validation_test.go` and sibling
   `metadata_contract_test.go` own Factory definition validation rejection,
   metadata contract round-trip/canonicalization, and invocation-help rendering
