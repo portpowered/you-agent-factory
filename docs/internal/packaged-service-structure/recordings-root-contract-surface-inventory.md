@@ -40,10 +40,8 @@ fold or delete them.
 | `wire_peer_import_boundary_test.go` | Thin committed root contract (keep) | Wire import-boundary test proving `recordings/wire` peers stay on the published root seam. |
 | `workers_root_boundary_test.go` | Thin committed root contract (keep) | Workers import-boundary test proving worker execution stays on the published Recordings root seam. |
 | `artifacts_import_boundary_test.go` | Excess fold/consolidation debt | `artifacts_export` — artifacts import-boundary test (`artifacts` cluster). |
-| `live_recording_target.go` | Excess fold/consolidation debt | `recording_lifecycle` — live recording target path/naming planning (`live_recording_target` cluster). |
-| `live_recording_target_test.go` | Excess fold/consolidation debt | Co-located tests for `live_recording_target.go`. |
 
-**Totals:** 16 root-level `.go` files — 13 thin committed root contract (keep), 3
+**Totals:** 14 root-level `.go` files — 13 thin committed root contract (keep), 1
 excess fold/consolidation debt.
 
 ## Folded clusters (CLN-REC-CONTRACT-ROOTS)
@@ -55,19 +53,19 @@ excess fold/consolidation debt.
 | `dispatch` | `recordings/internal/services/projection_query` | `dispatch_contract.go` |
 | `workstation_request` | `recordings/internal/services/projection_query` | `workstation_requests.go`, `workstation_requests_content_assert_test.go`, `workstation_requests_test.go` |
 | `replay` | `recordings/internal/services/replay` | `replay_contract.go`, `replay_import_boundary_test.go` |
+| `live_recording_target` | `recordings/internal/services/recording_lifecycle` | `live_recording_target.go`, `live_recording_target_test.go` |
 
-Peer-needed Factory Event, world-state, dispatch, workstation-request, and replay vocabulary
-remains importable from the thin Recordings root (`contracts.go` re-exports from
-Factory Definitions, `recordings/projections`, or defines Recordings-owned replay
-slice types directly; private subservices own the folded implementation homes and
-characterization tests).
+Peer-needed Factory Event, world-state, dispatch, workstation-request, replay, and
+live-recording-target vocabulary remains importable from the thin Recordings root
+(`contracts.go` re-exports from Factory Definitions, `recordings/projections`, or
+defines Recordings-owned slice types directly; private subservices own the folded
+implementation homes and characterization tests).
 
 ## Excess fold clusters
 
 | Cluster | Destination | Root files |
 | --- | --- | --- |
 | `artifacts` | `recordings/internal/services/artifacts_export` | `artifacts_import_boundary_test.go` |
-| `live_recording_target` | `recordings/internal/services/recording_lifecycle` | `live_recording_target.go`, `live_recording_target_test.go` |
 
 ## Generator mirror
 

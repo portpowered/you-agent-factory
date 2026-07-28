@@ -25,8 +25,7 @@ func TestRecordingsExcessRootContractFoldDestinations(t *testing.T) {
 	t.Parallel()
 
 	want := map[string]string{
-		"artifacts":             "pkg/services/recordings/internal/services/artifacts_export",
-		"live_recording_target": "pkg/services/recordings/internal/services/recording_lifecycle",
+		"artifacts": "pkg/services/recordings/internal/services/artifacts_export",
 	}
 
 	for _, target := range recordingsExcessRootContractFolds {

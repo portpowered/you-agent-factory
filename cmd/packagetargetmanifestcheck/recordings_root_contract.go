@@ -42,14 +42,6 @@ var recordingsExcessRootContractFolds = []recordingsRootContractFoldTarget{
 		},
 		destination: "pkg/services/recordings/internal/services/artifacts_export",
 	},
-	{
-		cluster: "live_recording_target",
-		files: []string{
-			"live_recording_target.go",
-			"live_recording_target_test.go",
-		},
-		destination: "pkg/services/recordings/internal/services/recording_lifecycle",
-	},
 }
 
 func listRecordingsRootGoFiles(root string) ([]string, error) {

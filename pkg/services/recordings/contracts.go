@@ -713,6 +713,50 @@ type RecordingTargetRequest struct {
 	ReportedSessionID string
 }
 
+// Live recording target vocabulary is owned by recording_lifecycle; peers
+// import these types from the Recordings root package.
+
+// RecordingClock is the exact time source consumed by live recording target
+// planning. Wire supplies the production clock.
+type RecordingClock interface {
+	Now() time.Time
+}
+
+// RecordingIdentityGenerator supplies an opaque uniqueness token for a live
+// recording filename.
+type RecordingIdentityGenerator func() string
+
+// RecordingPathJoiner supplies platform-specific path joining mechanics.
+type RecordingPathJoiner func(...string) string
+
+// LiveRecordingTargetRequest identifies the customer edge used to place and
+// report one automatically generated live recording.
+type LiveRecordingTargetRequest struct {
+	HomeDir           string
+	ReportedSessionID string
+}
+
+// LiveRecordingTarget carries the runtime template path and the customer path
+// reported for the selected Factory Session.
+type LiveRecordingTarget struct {
+	ServicePath  string
+	ReportedPath string
+}
+
+// LiveRecordingTargetPlanner owns default live-recording layout, naming, and
+// session-token interpretation.
+type LiveRecordingTargetPlanner interface {
+	PlanLiveRecordingTarget(LiveRecordingTargetRequest) (LiveRecordingTarget, error)
+}
+
+// LiveRecordingTargetPlannerFunc adapts a programmable exact operation.
+type LiveRecordingTargetPlannerFunc func(LiveRecordingTargetRequest) (LiveRecordingTarget, error)
+
+// PlanLiveRecordingTarget implements LiveRecordingTargetPlanner.
+func (fn LiveRecordingTargetPlannerFunc) PlanLiveRecordingTarget(request LiveRecordingTargetRequest) (LiveRecordingTarget, error) {
+	return fn(request)
+}
+
 // StartRecordingRequest selects and binds one recording lifecycle. Disabled
 // requests are intentionally inert: they do not select a target or allocate an
 // identity.

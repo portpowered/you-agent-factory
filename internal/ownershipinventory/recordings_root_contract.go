@@ -44,14 +44,6 @@ var RecordingsExcessRootContractFolds = []RecordingsRootContractFoldTarget{
 		},
 		Destination: recordingsPackagePrefix + "/internal/services/artifacts_export",
 	},
-	{
-		Cluster: "live_recording_target",
-		Files: []string{
-			"live_recording_target.go",
-			"live_recording_target_test.go",
-		},
-		Destination: recordingsPackagePrefix + "/internal/services/recording_lifecycle",
-	},
 }
 
 // ListRecordingsRootGoFiles returns every live root-level .go file name under
