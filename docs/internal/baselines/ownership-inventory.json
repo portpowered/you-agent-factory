@@ -4140,6 +4140,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/recordings/transports/cli",
+      "disposition": "retain",
+      "destination": "recordings",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/recordings/transports/http",
       "disposition": "retain",
       "destination": "recordings",

@@ -336,6 +336,7 @@
     "pkg/services/recordings/projections/dashboard",
     "pkg/services/recordings/replay",
     "pkg/services/recordings/service",
+    "pkg/services/recordings/transports/cli",
     "pkg/services/recordings/transports/http",
     "pkg/services/recordings/wire",
     "pkg/services/system_initialization",
@@ -1957,6 +1958,11 @@
     },
     {
       "packagePath": "pkg/services/recordings/service",
+      "disposition": "retain",
+      "destination": "recordings"
+    },
+    {
+      "packagePath": "pkg/services/recordings/transports/cli",
       "disposition": "retain",
       "destination": "recordings"
     },
