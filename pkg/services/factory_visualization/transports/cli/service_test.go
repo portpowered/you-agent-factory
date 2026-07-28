@@ -285,9 +285,12 @@ func (f *fakeRootPeer) Observe(
 }
 
 func (f *fakeRootPeer) OpenPresentation(
-	_ context.Context,
+	ctx context.Context,
 	req factoryvisualization.OpenPresentationRequest,
 ) (factoryvisualization.OpenPresentationResult, error) {
+	if err := ctx.Err(); err != nil {
+		return factoryvisualization.OpenPresentationResult{}, err
+	}
 	if req.Mode == "" {
 		return factoryvisualization.OpenPresentationResult{}, &factoryvisualization.PresentationError{
 			Kind:    factoryvisualization.PresentationErrorInvalidInput,
@@ -308,9 +311,12 @@ func (f *fakeRootPeer) OpenPresentation(
 }
 
 func (f *fakeRootPeer) PresentProgress(
-	_ context.Context,
+	ctx context.Context,
 	req factoryvisualization.PresentProgressRequest,
 ) (factoryvisualization.PresentProgressResult, error) {
+	if err := ctx.Err(); err != nil {
+		return factoryvisualization.PresentProgressResult{}, err
+	}
 	session, err := f.presentation(req.SessionID)
 	if err != nil {
 		return factoryvisualization.PresentProgressResult{}, err
@@ -336,9 +342,12 @@ func (f *fakeRootPeer) PresentProgress(
 }
 
 func (f *fakeRootPeer) FinalizePresentation(
-	_ context.Context,
+	ctx context.Context,
 	req factoryvisualization.FinalizePresentationRequest,
 ) (factoryvisualization.FinalizePresentationResult, error) {
+	if err := ctx.Err(); err != nil {
+		return factoryvisualization.FinalizePresentationResult{}, err
+	}
 	session, err := f.presentation(req.SessionID)
 	if err != nil {
 		return factoryvisualization.FinalizePresentationResult{}, err
