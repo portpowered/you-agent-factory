@@ -157,6 +157,12 @@ Use this map when changing the public REST contract.
   import guards on the public `validation` package, AST checks on
   `validation_contract.go` and `contracts/validation.go`, and behavioral proofs
   that validation targets use Definitions-owned code/severity/subject vocabulary.
+  Prove typed invalid-topology, required-tool, and orchestrator/strategy cases on
+  the sealed public validation path with
+  `pkg/services/factory_definitions/sealed_validation_path_boundary_test.go`:
+  `validation.Service.ValidateTopology` and `Validate` behavioral proofs with
+  code/severity/subject or rule/path assertions, plus import guards on the
+  validation package for the Runtime semantic-validation edge.
 - Factory Visualization HTTP decoding, root contract mapping, typed error
   translation, and cancel/timeout handling live in
   `pkg/services/factory_visualization/transports/http`. HTTP-VIS proves
