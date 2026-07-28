@@ -19,7 +19,7 @@ func TestStateAccessSealSubmitAndMovePipeline(t *testing.T) {
 	t.Parallel()
 
 	adapter := &sealSessionAdapter{}
-	svc := New(stubSessionResolver{adapter: adapter})
+	svc := New(stubSessionResolver{adapter: adapter}, nil)
 	ctx := context.Background()
 
 	submitted, err := svc.SubmitWorkRequestForSession(ctx, "session-seal", work.WorkRequest{
@@ -63,7 +63,7 @@ func TestStateAccessSealFullStateAccessPipeline(t *testing.T) {
 	t.Parallel()
 
 	adapter := &sealSessionAdapter{}
-	svc := New(stubSessionResolver{adapter: adapter})
+	svc := New(stubSessionResolver{adapter: adapter}, nil)
 	ctx := context.Background()
 	sessionID := "session-seal-full"
 
@@ -126,7 +126,7 @@ func TestStateAccessSealTypedFailures(t *testing.T) {
 	t.Parallel()
 
 	adapter := &sealSessionAdapter{}
-	svc := New(stubSessionResolver{adapter: adapter})
+	svc := New(stubSessionResolver{adapter: adapter}, nil)
 	ctx := context.Background()
 	sessionID := "session-seal-failures"
 
