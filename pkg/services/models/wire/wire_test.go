@@ -55,6 +55,76 @@ func TestNewServiceRejectsMissingConstructionPorts(t *testing.T) {
 			want: "asset HTTP client is required",
 		},
 		{
+			name: "asset make-directories effect",
+			mutate: func(edges *constructionEdges) {
+				edges.assetMkdirAll = nil
+			},
+			want: "asset make-directories effect is required",
+		},
+		{
+			name: "asset inspect-path effect",
+			mutate: func(edges *constructionEdges) {
+				edges.assetStat = nil
+			},
+			want: "asset inspect-path effect is required",
+		},
+		{
+			name: "asset resolve-home effect",
+			mutate: func(edges *constructionEdges) {
+				edges.assetHome = nil
+			},
+			want: "asset resolve-home effect is required",
+		},
+		{
+			name: "asset write-file effect",
+			mutate: func(edges *constructionEdges) {
+				edges.assetWriteFile = nil
+			},
+			want: "asset write-file effect is required",
+		},
+		{
+			name: "asset rename-path effect",
+			mutate: func(edges *constructionEdges) {
+				edges.assetRename = nil
+			},
+			want: "asset rename-path effect is required",
+		},
+		{
+			name: "asset remove-path effect",
+			mutate: func(edges *constructionEdges) {
+				edges.assetRemove = nil
+			},
+			want: "asset remove-path effect is required",
+		},
+		{
+			name: "asset read-file effect",
+			mutate: func(edges *constructionEdges) {
+				edges.assetReadFile = nil
+			},
+			want: "asset read-file effect is required",
+		},
+		{
+			name: "asset read-directory effect",
+			mutate: func(edges *constructionEdges) {
+				edges.assetReadDir = nil
+			},
+			want: "asset read-directory effect is required",
+		},
+		{
+			name: "asset create-file effect",
+			mutate: func(edges *constructionEdges) {
+				edges.assetCreate = nil
+			},
+			want: "asset create-file effect is required",
+		},
+		{
+			name: "asset open-file effect",
+			mutate: func(edges *constructionEdges) {
+				edges.assetOpen = nil
+			},
+			want: "asset open-file effect is required",
+		},
+		{
 			name: "process launcher",
 			mutate: func(edges *constructionEdges) {
 				edges.processLauncher = nil
@@ -90,6 +160,27 @@ func TestNewServiceRejectsMissingConstructionPorts(t *testing.T) {
 			want: "model runtime HTTP client is required",
 		},
 		{
+			name: "runtime file inspector",
+			mutate: func(edges *constructionEdges) {
+				edges.runtimeInspect = nil
+			},
+			want: "model runtime file inspector is required",
+		},
+		{
+			name: "runtime temporary directory resolver",
+			mutate: func(edges *constructionEdges) {
+				edges.runtimeTempDir = nil
+			},
+			want: "model runtime temporary directory resolver is required",
+		},
+		{
+			name: "runtime temporary file creator",
+			mutate: func(edges *constructionEdges) {
+				edges.runtimeTempFile = nil
+			},
+			want: "model runtime temporary file creator is required",
+		},
+		{
 			name: "process clock",
 			mutate: func(edges *constructionEdges) {
 				edges.now = nil
@@ -122,6 +213,50 @@ func TestNewServiceReturnsPublishedRootInterface(t *testing.T) {
 		t.Fatal("NewService() returned nil service")
 	}
 }
+
+func TestNewInvocationArtifactExporterConstructsPublishedExporter(t *testing.T) {
+	t.Parallel()
+
+	exporter, err := NewInvocationArtifactExporter(invocationArtifactFileSystemStub{})
+	if err != nil {
+		t.Fatalf("NewInvocationArtifactExporter() error = %v", err)
+	}
+	if exporter == nil {
+		t.Fatal("NewInvocationArtifactExporter() returned nil exporter")
+	}
+}
+
+func TestNewServiceHonorsRuntimeAssetEndpointOverrides(t *testing.T) {
+	t.Parallel()
+
+	edges := validConstructionEdges()
+	edges.assetEndpoints = models.RuntimeAssetEndpoints{
+		BaseURL:    "https://example.test/models",
+		APIBaseURL: "https://example.test/api",
+	}
+	service, err := edges.newService()
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	if service == nil {
+		t.Fatal("NewService() returned nil service")
+	}
+}
+
+type invocationArtifactFileSystemStub struct{}
+
+func (invocationArtifactFileSystemStub) Open(string) (io.ReadCloser, error) {
+	return io.NopCloser(strings.NewReader("")), nil
+}
+
+func (invocationArtifactFileSystemStub) Create(string) (io.WriteCloser, error) {
+	return nopWriteCloser{}, nil
+}
+
+type nopWriteCloser struct{}
+
+func (nopWriteCloser) Write(p []byte) (int, error) { return len(p), nil }
+func (nopWriteCloser) Close() error                { return nil }
 
 func TestNewServiceConstructsInertRoot(t *testing.T) {
 	t.Parallel()
@@ -234,11 +369,24 @@ type constructionEdges struct {
 	assetPlatform   models.AssetHostPlatform
 	assetHTTP       models.AssetHTTPDoer
 	assetEndpoints  models.RuntimeAssetEndpoints
+	assetMkdirAll   models.AssetMakeDirectories
+	assetStat       models.AssetInspectPath
+	assetHome       models.AssetResolveHomeDirectory
+	assetWriteFile  models.AssetWriteFile
+	assetRename     models.AssetRenamePath
+	assetRemove     models.AssetRemovePath
+	assetReadFile   models.AssetReadFile
+	assetReadDir    models.AssetReadDirectory
+	assetCreate     models.AssetCreateFile
+	assetOpen       models.AssetOpenFile
 	processLauncher models.HostProcessLauncher
 	hostHTTP        models.HostHTTPDoer
 	hostClock       models.HostClock
 	runtimeRunner   platformprocess.CommandRunner
 	runtimeHTTP     models.RuntimeHTTPDoer
+	runtimeInspect  models.RuntimeInspectFile
+	runtimeTempDir  models.RuntimeTempDirectory
+	runtimeTempFile models.RuntimeCreateTempFile
 	now             func() time.Time
 	issuerEntropy   platformrandom.Source
 }
@@ -250,13 +398,28 @@ func validConstructionEdges() constructionEdges {
 			Architecture:    runtime.GOARCH,
 		},
 		assetHTTP:       http.DefaultClient,
+		assetMkdirAll:   os.MkdirAll,
+		assetStat:       os.Stat,
+		assetHome:       os.UserHomeDir,
+		assetWriteFile:  os.WriteFile,
+		assetRename:     os.Rename,
+		assetRemove:     os.Remove,
+		assetReadFile:   os.ReadFile,
+		assetReadDir:    os.ReadDir,
+		assetCreate:     func(path string) (io.WriteCloser, error) { return os.Create(path) },
+		assetOpen:       func(path string) (io.ReadCloser, error) { return os.Open(path) },
 		processLauncher: inertProcessLauncher{},
 		hostHTTP:        http.DefaultClient,
 		hostClock:       inertHostClock{},
 		runtimeRunner:   inertCommandRunner{},
 		runtimeHTTP:     http.DefaultClient,
-		now:             func() time.Time { return time.Unix(123, 456) },
-		issuerEntropy:   platformrandom.CryptoSource{},
+		runtimeInspect:  os.Stat,
+		runtimeTempDir:  os.TempDir,
+		runtimeTempFile: func(dir, pattern string) (models.RuntimeTempFile, error) {
+			return os.CreateTemp(dir, pattern)
+		},
+		now:           func() time.Time { return time.Unix(123, 456) },
+		issuerEntropy: platformrandom.CryptoSource{},
 	}
 }
 
@@ -265,26 +428,24 @@ func (edges constructionEdges) newService() (models.Service, error) {
 		edges.assetPlatform,
 		edges.assetHTTP,
 		edges.assetEndpoints,
-		os.MkdirAll,
-		os.Stat,
-		os.UserHomeDir,
-		os.WriteFile,
-		os.Rename,
-		os.Remove,
-		os.ReadFile,
-		os.ReadDir,
-		func(path string) (io.WriteCloser, error) { return os.Create(path) },
-		func(path string) (io.ReadCloser, error) { return os.Open(path) },
+		edges.assetMkdirAll,
+		edges.assetStat,
+		edges.assetHome,
+		edges.assetWriteFile,
+		edges.assetRename,
+		edges.assetRemove,
+		edges.assetReadFile,
+		edges.assetReadDir,
+		edges.assetCreate,
+		edges.assetOpen,
 		edges.processLauncher,
 		edges.hostHTTP,
 		edges.hostClock,
 		edges.runtimeRunner,
 		edges.runtimeHTTP,
-		os.Stat,
-		os.TempDir,
-		func(dir, pattern string) (models.RuntimeTempFile, error) {
-			return os.CreateTemp(dir, pattern)
-		},
+		edges.runtimeInspect,
+		edges.runtimeTempDir,
+		edges.runtimeTempFile,
 		zap.NewNop(),
 		edges.now,
 		edges.issuerEntropy,
