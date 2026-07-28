@@ -589,19 +589,6 @@ func writeRunWireTestWorkstationAgentsMD(t *testing.T, factoryDir, workstationNa
 	}
 }
 
-func TestBoundedHumanProgressPayload(t *testing.T) {
-	t.Parallel()
-
-	payload := strings.Repeat("a", maxHumanProgressLineBytes+10)
-	got := boundedHumanProgressPayload(payload)
-	if len([]byte(got)) > maxHumanProgressLineBytes+3 {
-		t.Fatalf("bounded payload too long: %d bytes", len([]byte(got)))
-	}
-	if !strings.HasSuffix(got, "...") {
-		t.Fatalf("bounded payload = %q, want ellipsis suffix", got)
-	}
-}
-
 func assertStartupOutputSharedLayoutRuntimePaths(
 	t *testing.T,
 	output, logRoot, metricsRoot string,

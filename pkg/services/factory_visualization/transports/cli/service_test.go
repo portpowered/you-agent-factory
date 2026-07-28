@@ -16,18 +16,34 @@ import (
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
-func TestNewRequiresVisualizationRootAndPresentation(t *testing.T) {
+func TestNewRequiresPresentation(t *testing.T) {
 	t.Parallel()
 
 	presentation := factoryvisualization.NewResponsePresentation()
-	if service := visualizationcli.New(nil, presentation); service != nil {
-		t.Fatalf("New(nil, presentation) = %T, want nil", service)
+	if service := visualizationcli.New(nil, presentation); service == nil {
+		t.Fatal("New(nil, presentation) = nil, want Visualization CLI service")
 	}
 	if service := visualizationcli.New(&fakeRootPeer{}, nil); service != nil {
 		t.Fatalf("New(root, nil) = %T, want nil", service)
 	}
 	if service := visualizationcli.New(&fakeRootPeer{}, presentation); service == nil {
 		t.Fatal("New(root, presentation) = nil, want Visualization CLI service")
+	}
+}
+
+func TestNewFromPresentationConstructsPresentationOnlyAdapter(t *testing.T) {
+	t.Parallel()
+
+	if service := visualizationcli.NewFromPresentation(nil); service != nil {
+		t.Fatalf("NewFromPresentation(nil) = %T, want nil", service)
+	}
+	service := visualizationcli.NewFromPresentation(factoryvisualization.NewResponsePresentation())
+	if service == nil {
+		t.Fatal("NewFromPresentation(presentation) = nil, want Visualization CLI service")
+	}
+	_, err := service.OpenPresentationSession(context.Background(), factoryvisualization.OpenPresentationRequest{})
+	if err == nil || !strings.Contains(err.Error(), "visualization root is required") {
+		t.Fatalf("OpenPresentationSession error = %v, want missing root failure", err)
 	}
 }
 
