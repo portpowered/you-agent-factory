@@ -107,7 +107,7 @@ func (i *Integration) Invoke(
 	}
 	return writer.Close(ctx, inference.SuccessfulCompletion(inference.NewResponse(inference.ResponseInput{
 		Content:         result.Content,
-		ProviderSession: sessionRefToInference(result.SessionRef),
+		ProviderSession: successSessionForInvocation(request, result.SessionRef),
 	})))
 }
 
@@ -235,6 +235,13 @@ func failureSessionForInvocation(
 		return session
 	}
 	return sessionRefToInference(requestedSession(request))
+}
+
+func successSessionForInvocation(
+	request inference.InvocationRequest,
+	ref *providers.SessionRef,
+) *inference.ProviderSession {
+	return failureSessionForInvocation(request, ref)
 }
 
 func cloneStringMap(values map[string]string) map[string]string {

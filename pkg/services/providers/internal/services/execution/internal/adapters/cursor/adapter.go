@@ -65,9 +65,20 @@ func newAttempt(effect Effect) execution.Attempt {
 		}
 		content, session, finalErr := decoder.final()
 		if finalErr != nil {
-			return providers.ExecuteResult{}, execution.AttemptFailure{
-				FinalParseError: finalErr,
+			sessionRef := decoder.failureSessionRef()
+			progress := decoder.progressFacts()
+			failure := execution.AttemptFailure{
+				Declared: &providers.ExecuteFailure{
+					Kind:    providers.ExecuteFailureKindInvalidRequest,
+					Message: cursorDeclaredFailureMessage(providers.ExecuteFailureKindInvalidRequest),
+					Diagnostics: &providers.ExecuteDiagnostics{
+						Progress: progress,
+						Metadata: map[string]string{"failure_stage": "final_parse"},
+					},
+					SessionRef: sessionRef,
+				},
 			}
+			return providers.ExecuteResult{SessionRef: sessionRef}, failure
 		}
 		return providers.ExecuteResult{
 			Content:    content,

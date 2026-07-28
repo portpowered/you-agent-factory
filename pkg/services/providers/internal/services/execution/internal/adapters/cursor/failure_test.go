@@ -41,7 +41,7 @@ func TestCursorRootNormalizesFailureStagesAndSuppressesResults(t *testing.T) {
 		{
 			name:      "incomplete final state",
 			stream:    "{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"cursor-session-partial\"}\n",
-			wantKind:  providers.ExecuteFailureKindUnknown,
+			wantKind:  providers.ExecuteFailureKindInvalidRequest,
 			wantStage: "final_parse",
 		},
 		{
