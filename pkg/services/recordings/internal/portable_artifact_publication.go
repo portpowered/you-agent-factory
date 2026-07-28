@@ -1,4 +1,4 @@
-package service
+package internal
 
 import (
 	artifactsexport "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export"
