@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -37,7 +38,7 @@ func TestAdapter_LoadDocumentInvokesFakeRootAndEncodesSuccess(t *testing.T) {
 	}
 	adapter := NewAdapterFromRoot(RootBinding{Settings: fake})
 
-	response, err := adapter.LoadDocument(LoadDocumentInput{
+	response, err := adapter.LoadDocument(context.Background(), LoadDocumentInput{
 		Path:            configPath,
 		RequireExisting: true,
 	})
@@ -71,7 +72,7 @@ func TestAdapter_LoadDocumentRejectsInvalidInputBeforeFakeRoot(t *testing.T) {
 	}
 	adapter := NewAdapterFromRoot(RootBinding{Settings: fake})
 
-	_, err := adapter.LoadDocument(LoadDocumentInput{RequireExisting: true})
+	_, err := adapter.LoadDocument(context.Background(), LoadDocumentInput{RequireExisting: true})
 	if err == nil || !IsLoadDocumentBadRequest(err) {
 		t.Fatalf("LoadDocument error = %v, want typed bad request", err)
 	}
@@ -89,7 +90,7 @@ func TestAdapter_LoadDocumentPropagatesTypedRootFailures(t *testing.T) {
 	}
 	adapter := NewAdapterFromRoot(RootBinding{Settings: fake})
 
-	_, err := adapter.LoadDocument(LoadDocumentInput{
+	_, err := adapter.LoadDocument(context.Background(), LoadDocumentInput{
 		Path:            "/tmp/missing.json",
 		RequireExisting: true,
 	})

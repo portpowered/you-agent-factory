@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -46,7 +47,7 @@ func TestAdapter_ApplyDocumentUpdateInvokesFakeRootAndEncodesSuccess(t *testing.
 	}
 	adapter := NewAdapterFromRoot(RootBinding{Settings: fake})
 
-	response, err := adapter.ApplyDocumentUpdate(ApplyDocumentUpdateInput{
+	response, err := adapter.ApplyDocumentUpdate(context.Background(), ApplyDocumentUpdateInput{
 		Path:                 configPath,
 		ExpectedBackendScope: scopeID,
 		Model:                &nextModel,
@@ -83,7 +84,7 @@ func TestAdapter_ApplyDocumentUpdateRejectsInvalidInputBeforeFakeRoot(t *testing
 	}
 	adapter := NewAdapterFromRoot(RootBinding{Settings: fake})
 
-	_, err := adapter.ApplyDocumentUpdate(ApplyDocumentUpdateInput{Model: stringPointer("gpt-5")})
+	_, err := adapter.ApplyDocumentUpdate(context.Background(), ApplyDocumentUpdateInput{Model: stringPointer("gpt-5")})
 	if err == nil || !IsApplyDocumentUpdateBadRequest(err) {
 		t.Fatalf("ApplyDocumentUpdate error = %v, want typed bad request", err)
 	}
@@ -115,7 +116,7 @@ func TestAdapter_ApplyDocumentUpdatePropagatesTypedRootFailures(t *testing.T) {
 			adapter := NewAdapterFromRoot(RootBinding{Settings: fake})
 			model := "gpt-5"
 
-			_, err := adapter.ApplyDocumentUpdate(ApplyDocumentUpdateInput{
+			_, err := adapter.ApplyDocumentUpdate(context.Background(), ApplyDocumentUpdateInput{
 				Path:  "/tmp/config.json",
 				Model: &model,
 			})

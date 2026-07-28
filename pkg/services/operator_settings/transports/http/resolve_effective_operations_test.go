@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -48,7 +49,7 @@ func TestAdapter_ResolveEffectiveInvokesFakeRootAndEncodesSuccess(t *testing.T) 
 	}
 	adapter := NewAdapterFromRoot(RootBinding{Settings: fake})
 
-	response, err := adapter.ResolveEffective(ResolveEffectiveInput{
+	response, err := adapter.ResolveEffective(context.Background(), ResolveEffectiveInput{
 		DocumentBaseline: operatorsettings.DocumentDefaults{
 			WorkerModelProvider: "codex",
 			WorkerModel:         "gpt-5",
@@ -90,7 +91,7 @@ func TestAdapter_ResolveEffectiveRejectsBaselineMismatchBeforeFakeRoot(t *testin
 	}
 	adapter := NewAdapterFromRoot(RootBinding{Settings: fake})
 
-	_, err := adapter.ResolveEffective(ResolveEffectiveInput{
+	_, err := adapter.ResolveEffective(context.Background(), ResolveEffectiveInput{
 		DocumentBaseline: operatorsettings.DocumentDefaults{
 			WorkerModelProvider: "codex",
 			WorkerModel:         "gpt-5",
@@ -126,7 +127,7 @@ func TestAdapter_ResolveEffectivePropagatesTypedRootFailures(t *testing.T) {
 			}
 			adapter := NewAdapterFromRoot(RootBinding{Settings: fake})
 
-			_, err := adapter.ResolveEffective(ResolveEffectiveInput{
+			_, err := adapter.ResolveEffective(context.Background(), ResolveEffectiveInput{
 				DocumentBaseline: operatorsettings.DocumentDefaults{
 					WorkerModelProvider: "codex",
 					WorkerModel:         "gpt-5",
@@ -168,7 +169,7 @@ func TestAdapter_ResolveEffectiveDoesNotMutateOperatorDocumentState(t *testing.T
 	}
 	adapter := NewAdapterFromRoot(RootBinding{Settings: fake})
 
-	_, err := adapter.ResolveEffective(ResolveEffectiveInput{
+	_, err := adapter.ResolveEffective(context.Background(), ResolveEffectiveInput{
 		DocumentBaseline: operatorsettings.DocumentDefaults{
 			WorkerModelProvider: "codex",
 			WorkerModel:         "gpt-5",

@@ -8,6 +8,8 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
+const operatorSettingsInternalFailureMessage = "operator settings request failed"
+
 const (
 	operatorSettingsInvalidLoadRequestMessage           = "invalid operator settings load request"
 	operatorSettingsInvalidUpdateRequestMessage         = "invalid operator settings update request"
@@ -30,6 +32,15 @@ const (
 func RootErrorResponse(err error) (int, factoryapi.ErrorResponse, bool) {
 	if err == nil {
 		return 0, factoryapi.ErrorResponse{}, false
+	}
+
+	if status, response, ok := settingsRequestContextErrorResponse(err); ok {
+		if response == nil {
+			return 0, factoryapi.ErrorResponse{}, true
+		}
+		if errResp, ok := response.(factoryapi.ErrorResponse); ok {
+			return status, errResp, true
+		}
 	}
 
 	if IsLoadDocumentBadRequest(err) {
@@ -105,4 +116,27 @@ func resolutionConflictErrorResponse() (int, factoryapi.ErrorResponse, bool) {
 		Family:  factoryapi.ErrorFamilyConflict,
 		Code:    factoryapi.ErrorResponseCode(operatorSettingsErrorCodeResolutionConflict),
 	}, true
+}
+
+func (a *Adapter) writeRootError(w http.ResponseWriter, err error) bool {
+	if a.writeSettingsRequestContextOutcome(w, err) {
+		return true
+	}
+	if status, response, ok := RootErrorResponse(err); ok {
+		a.writeJSON(w, status, response)
+		return true
+	}
+	return false
+}
+
+func (a *Adapter) writeRootOrInternalError(w http.ResponseWriter, err error) {
+	if a.writeRootError(w, err) {
+		return
+	}
+	a.writeError(
+		w,
+		http.StatusInternalServerError,
+		operatorSettingsInternalFailureMessage,
+		string(factoryapi.ErrorResponseCodeINTERNALERROR),
+	)
 }

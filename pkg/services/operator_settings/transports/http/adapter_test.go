@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -40,7 +41,7 @@ func TestAdapter_BindsSettingsRootViaFakeRootSeam(t *testing.T) {
 		t.Fatal("adapter must expose the injected Settings root")
 	}
 
-	result, err := adapter.invokeLoadDocument(operatorsettings.LoadDocumentRequest{
+	result, err := adapter.invokeLoadDocument(context.Background(), operatorsettings.LoadDocumentRequest{
 		Path:            configPath,
 		RequireExisting: true,
 	})
@@ -78,7 +79,7 @@ func TestAdapter_PropagatesTypedRootFailures(t *testing.T) {
 	}
 	adapter := NewAdapterFromRoot(RootBinding{Settings: fake})
 
-	_, err := adapter.invokeLoadDocument(operatorsettings.LoadDocumentRequest{
+	_, err := adapter.invokeLoadDocument(context.Background(), operatorsettings.LoadDocumentRequest{
 		Path:            "/tmp/missing.json",
 		RequireExisting: true,
 	})
@@ -92,7 +93,7 @@ func TestAdapter_RequiresInjectedRoot(t *testing.T) {
 
 	var adapter *Adapter
 
-	_, err := adapter.invokeLoadDocument(operatorsettings.LoadDocumentRequest{})
+	_, err := adapter.invokeLoadDocument(context.Background(), operatorsettings.LoadDocumentRequest{})
 	if err == nil {
 		t.Fatal("invokeLoadDocument on nil adapter = nil, want error")
 	}
