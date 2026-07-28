@@ -2,13 +2,15 @@ package wire
 
 import (
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingsservice "github.com/portpowered/infinite-you/pkg/services/recordings/service"
+	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 )
 
 type neutralReplayCompositionLedger struct {
@@ -25,10 +27,17 @@ func TestInjectBundleComposesRecordingsNeutralReplayThroughWireFactory(t *testin
 		t.Fatalf("InjectBundle() error = %v", err)
 	}
 
-	service := recordingsservice.NewService(
-		&neutralReplayCompositionLedger{},
-		recordingsservice.NewProjectionService(),
+	factory := provideRecordingsFactory(
+		provideLiveRecordingTargetPlanner(),
+		platformreplay.Local{},
 	)
+	service := factory(
+		&neutralReplayCompositionLedger{},
+		recordingswire.NewProjectionService(),
+	)
+	if service == nil {
+		t.Fatal("provideRecordingsFactory() returned nil service")
+	}
 	recording := finalizedNeutralReplayRecording(t, service)
 	assertNeutralReplayTypedFailures(t, service, recording)
 }
@@ -40,16 +49,28 @@ func finalizedNeutralReplayRecording(
 	t.Helper()
 
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-root-neutral-replay"}
+	artifactPath := filepath.Join(t.TempDir(), "neutral-replay.json")
 	bound, err := service.BindRecording(recordings.BindRecordingRequest{
-		Artifact: "artifact:root-neutral-replay",
+		Artifact: recordings.RecordingArtifactReference(artifactPath),
 		Scope:    scope,
 	})
 	if err != nil {
 		t.Fatalf("BindRecording: %v", err)
 	}
+	runRequest, err := wireCompositionRunRequestEvent(
+		"root-neutral-replay-run-request",
+		0,
+		scope,
+		time.Unix(1_700_000_000, 0).UTC(),
+		"generation-root-neutral-replay",
+	)
+	if err != nil {
+		t.Fatalf("wireCompositionRunRequestEvent: %v", err)
+	}
 	for index, event := range []recordings.CanonicalEvent{
-		neutralReplayCompositionEvent("root-neutral-replay-1", 0, scope),
-		neutralReplayCompositionEvent("root-neutral-replay-2", 1, scope),
+		runRequest,
+		neutralReplayCompositionEvent("root-neutral-replay-1", 1, scope),
+		neutralReplayCompositionEvent("root-neutral-replay-2", 2, scope),
 	} {
 		if _, err := service.RecordRecordingEvent(recordings.RecordRecordingEventRequest{
 			RecordingID: bound.Status.RecordingID,

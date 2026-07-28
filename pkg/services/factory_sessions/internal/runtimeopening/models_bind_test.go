@@ -338,7 +338,7 @@ func TestOpenRuntimeClosesModelsScopeExactlyOnceAfterLaterStepFails(t *testing.T
 		automationHostedSourcesFactory:  openingCoordinatorHostedPollers,
 		factoryScaffoldInitializer:  openingCoordinatorInitializeScaffold,
 		editableFactoryValidator:    openingCoordinatorValidateEditable,
-		contentMaterializer:         openingCoordinatorContentMaterializer{},
+		workService: work.MaterializationService(openingCoordinatorContentMaterializer{}),
 		factoryDefinitionValidator:  openingCoordinatorValidator{},
 		namedPaths:                  openingCoordinatorNamedPaths{},
 		loadFactory:                 openingCoordinatorLoadFactory,
@@ -386,7 +386,7 @@ func (failure *openingCoordinatorFailure) openWorkerExecution(
 	roles.CurrentRuntimeResolver,
 	models.Service,
 	models.RuntimeScopeRef,
-	work.ContentMaterializer,
+	work.Service,
 	WorkersRuntimeFactory,
 ) (workers.RuntimeService, error) {
 	*failure.events = append(*failure.events, "later-step-failed")

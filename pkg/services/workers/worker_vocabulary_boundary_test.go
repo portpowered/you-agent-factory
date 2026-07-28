@@ -12,7 +12,7 @@ const (
 )
 
 var workerVocabularyConsumerPackages = []string{
-	"github.com/portpowered/infinite-you/pkg/services/recordings/service",
+	"github.com/portpowered/infinite-you/pkg/services/recordings/internal",
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/workerdiagnostics",
 }
 

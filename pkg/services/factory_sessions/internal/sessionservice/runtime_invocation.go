@@ -5,8 +5,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/portpowered/infinite-you/pkg/services/work"
-
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
@@ -16,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 	invocationservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation"
 	invocationwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation/wire"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 // NewInvocationOwner constructs the canonical invocation owner from the
@@ -55,6 +54,7 @@ func NewInvocationOwner(
 		Interpolation: interpolation,
 		WorkTypes:     invocationWorkTypes,
 		InputFiles:    inputFiles,
+		Work:          work.NewInvocationPolicyService(),
 	})
 }
 

@@ -16,6 +16,7 @@ var RecordingsThinRootContractFiles = []string{
 	"metadata.go",
 	"runtime_import_boundary_test.go",
 	"runtime_request_boundary_test.go",
+	"service_import_boundary_test.go",
 	"service_root_contract_fake_test.go",
 	"service_root_contract_invariants_test.go",
 	"service_root_contract_lifecycle_test.go",

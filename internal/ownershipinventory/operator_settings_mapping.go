@@ -85,3 +85,14 @@ func operatorSettingsDeletionCondition(subservice string) string {
 	}
 	return "delete public package after IMP-OPS-" + subservice + " private subservice cutover proof"
 }
+
+func isOperatorSettingsPrivateSuccessor(successor string) bool {
+	switch successor {
+	case operatorSettingsPackagePrefix + "/internal",
+		operatorSettingsPackagePrefix + "/internal/services/document",
+		operatorSettingsPackagePrefix + "/internal/services/resolution":
+		return true
+	default:
+		return false
+	}
+}

@@ -1,0 +1,237 @@
+package runtime_api
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/portpowered/infinite-you/pkg/services/work"
+)
+
+// TestWorkRootPolicySlicesRejectUnsupportedOperations proves published Work root
+// policy/materialization/admission binders fail closed on slices they do not own.
+// The functional lane measures coverage for pkg/services/work when these tests run.
+func TestWorkRootPolicySlicesRejectUnsupportedOperations(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	policy := work.NewInvocationPolicyService()
+	materialization := work.MaterializationService(work.ContentMaterializeFunc(func(context.Context, string) (string, work.ContentCleanup, error) {
+		return "/tmp/materialized", func() {}, nil
+	}))
+	admissionPrep, err := work.NewRequestPreparationService(work.NewContentPreparation())
+	if err != nil {
+		t.Fatalf("NewRequestPreparationService: %v", err)
+	}
+	admission := work.AdmissionContentService(
+		&functionalPeerContentStaging{},
+		admissionPrep,
+	)
+
+	for _, tc := range []struct {
+		name    string
+		service work.Service
+		call    func(work.Service) error
+		want    string
+	}{
+		{
+			name:    "policy admission",
+			service: policy,
+			call: func(service work.Service) error {
+				_, err := service.SubmitWorkRequestForSession(ctx, "session-1", work.WorkRequest{})
+				return err
+			},
+			want: "does not support admission",
+		},
+		{
+			name:    "policy content staging",
+			service: policy,
+			call: func(service work.Service) error {
+				_, err := service.StageContent(ctx, work.StageContentRequest{})
+				return err
+			},
+			want: "does not support content staging",
+		},
+		{
+			name:    "materialization admission prep",
+			service: materialization,
+			call: func(service work.Service) error {
+				_, err := service.PrepareWorkRequest(ctx, work.WorkRequestPreparation{})
+				return err
+			},
+			want: "does not support admission prep",
+		},
+		{
+			name:    "materialization state access",
+			service: materialization,
+			call: func(service work.Service) error {
+				_, err := service.MoveWorkForSession(ctx, "session-1", "work-1", "done", "move-1")
+				return err
+			},
+			want: "does not support state access",
+		},
+		{
+			name:    "materialization content staging",
+			service: materialization,
+			call: func(service work.Service) error {
+				_, err := service.StageContent(ctx, work.StageContentRequest{})
+				return err
+			},
+			want: "does not support content staging",
+		},
+		{
+			name:    "materialization invocation policy",
+			service: materialization,
+			call: func(service work.Service) error {
+				_, err := service.ResolvePrimaryResult(ctx, work.PrimaryResultSelectionInput{})
+				return err
+			},
+			want: "does not support invocation policy",
+		},
+		{
+			name:    "admission materialization",
+			service: admission,
+			call: func(service work.Service) error {
+				_, _, err := service.MaterializeContentURL(ctx, "file:///peer.png")
+				return err
+			},
+			want: "does not support content materialization",
+		},
+		{
+			name:    "admission invocation input",
+			service: admission,
+			call: func(service work.Service) error {
+				_, err := service.PrepareInvocationInput(ctx, work.InvocationInputPreparationRequest{})
+				return err
+			},
+			want: "does not support invocation policy",
+		},
+		{
+			name:    "admission primary result",
+			service: admission,
+			call: func(service work.Service) error {
+				_, err := service.ResolvePrimaryResult(ctx, work.PrimaryResultSelectionInput{})
+				return err
+			},
+			want: "does not support invocation policy",
+		},
+		{
+			name:    "admission state access",
+			service: admission,
+			call: func(service work.Service) error {
+				_, err := service.ListWork(ctx, "session-1", work.ListOptions{})
+				return err
+			},
+			want: "does not support state access",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if err := tc.call(tc.service); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error = %v, want substring %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestWorkRootPolicyServiceResolvePrimaryResultHonorsCanceledContext(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := work.NewInvocationPolicyService().ResolvePrimaryResult(ctx, work.PrimaryResultSelectionInput{})
+	if err == nil || !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want context.Canceled", err)
+	}
+}
+
+func TestWorkRootPolicyServicePrepareInvocationInputRejectsWhitespaceOnlyText(t *testing.T) {
+	t.Parallel()
+
+	_, err := work.NewInvocationPolicyService().PrepareInvocationInput(context.Background(), work.InvocationInputPreparationRequest{
+		CompatibilityContent: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "   "}},
+	})
+	if err == nil || !errors.Is(err, work.ErrInvalidInvocationInput) {
+		t.Fatalf("error = %v, want ErrInvalidInvocationInput", err)
+	}
+}
+
+func TestWorkRootPolicyServicePrepareInvocationInputAcceptsDirectArgs(t *testing.T) {
+	t.Parallel()
+
+	prepared, err := work.NewInvocationPolicyService().PrepareInvocationInput(context.Background(), work.InvocationInputPreparationRequest{
+		Signature: &work.InvocationSignatureConfig{
+			Parameters: []work.InvocationParameterConfig{{
+				Name:     "input",
+				Bindings: []work.InvocationParameterBindingConfig{{Kind: "POSITIONAL", Position: 1}},
+			}},
+		},
+		DirectArgs: []work.NamedArgumentInput{{Key: "input", Values: []string{"structured-draft"}}},
+	})
+	if err != nil {
+		t.Fatalf("PrepareInvocationInput: %v", err)
+	}
+	if prepared.NormalizedArguments == nil ||
+		prepared.NormalizedArguments.Arguments["input"].Values[0] != "structured-draft" {
+		t.Fatalf("prepared = %#v, want direct args normalization", prepared)
+	}
+}
+
+func TestWorkRootPolicyServiceResolvePrimaryResultSubmittedTerminalSuccess(t *testing.T) {
+	t.Parallel()
+
+	rootInitial := work.FactoryWorkItem{
+		ID: "work-root", WorkTypeID: "task", State: "init", DisplayName: "root", TraceID: "trace-1", PlaceID: "task:init",
+	}
+	rootTerminal := work.FactoryWorkItem{
+		ID: "work-root", WorkTypeID: "task", State: "complete", DisplayName: "root", TraceID: "trace-1", PlaceID: "task:complete",
+		Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "terminal output"}},
+	}
+	state := work.InvocationWorldState{
+		WorkRequestsByID: map[string]work.InvocationWorkRequest{
+			"request-1": {WorkItems: []work.FactoryWorkItem{rootInitial}},
+		},
+		TerminalWorkByID: map[string]work.InvocationTerminalWork{
+			rootTerminal.ID: {WorkItem: rootTerminal, Status: "TERMINAL"},
+		},
+	}
+
+	selection, err := work.NewInvocationPolicyService().ResolvePrimaryResult(context.Background(), work.PrimaryResultSelectionInput{
+		RequestID:  "request-1",
+		WorldState: state,
+	})
+	if err != nil {
+		t.Fatalf("ResolvePrimaryResult: %v", err)
+	}
+	if selection.WorkID != rootTerminal.ID || len(selection.PrimaryResult) != 1 ||
+		selection.PrimaryResult[0].Text != "terminal output" {
+		t.Fatalf("selection = %#v, want submitted-terminal primary output", selection)
+	}
+}
+
+type functionalPeerContentStaging struct{}
+
+func (functionalPeerContentStaging) StageContent(
+	_ context.Context,
+	request work.StageContentRequest,
+) (work.StageContentResult, error) {
+	return work.StageContentResult{
+		StagedFileRef: "functional-stage-ref",
+		FileName:      request.FileName,
+		MediaType:     request.MediaType,
+	}, nil
+}
+
+func (functionalPeerContentStaging) PrepareContent(context.Context, []work.StagedSubmissionItem) ([]work.WorkContentPart, error) {
+	return nil, nil
+}
+
+func (functionalPeerContentStaging) ResolveContent(context.Context, string) (work.ResolvedStagedContent, error) {
+	return work.ResolvedStagedContent{}, nil
+}
+
+func (functionalPeerContentStaging) CleanupContent(context.Context, string) error {
+	return nil
+}

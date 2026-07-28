@@ -135,7 +135,7 @@ func TestNewWorkerExecutionForwardsWorkersRootBindings(t *testing.T) {
 		nil,
 		nil,
 		models.RuntimeScopeRef{},
-		nil,
+		work.MaterializationService(materializerStub{}),
 		workersRuntimeFactory,
 	)
 	if err != nil {

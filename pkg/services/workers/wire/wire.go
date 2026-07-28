@@ -17,7 +17,7 @@ import (
 	runnerswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire"
 	runtimeassemblywire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/wire"
 	workstationswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/wire"
-	workerservice "github.com/portpowered/infinite-you/pkg/services/workers/service"
+	workersinternal "github.com/portpowered/infinite-you/pkg/services/workers/internal"
 )
 
 // NewService constructs an inert Workers root from construction ports. It
@@ -62,7 +62,7 @@ func NewService(
 	if err != nil {
 		return nil, err
 	}
-	return workerservice.NewRoot(runtimeAssembly, workstationswire.NewService())
+	return workersinternal.NewRoot(runtimeAssembly, workstationswire.NewService())
 }
 
 func validateConstructionPorts(
