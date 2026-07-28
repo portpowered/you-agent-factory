@@ -1,4 +1,4 @@
-package work
+package invocationreturnpolicy
 
 import (
 	"context"
@@ -17,7 +17,7 @@ type InvocationInputPreparationRequest struct {
 	Signature            *InvocationSignatureConfig
 	StdinText            *string
 	DirectArgs           []NamedArgumentInput
-	CompatibilityContent []WorkContentPart
+	CompatibilityContent []ContentPart
 }
 
 // PreparedInvocationInput is a detached canonical invocation input. Exactly
@@ -235,7 +235,7 @@ func isExplicitBooleanStringValue(value string) bool {
 }
 
 func cloneResolvedInput(input ResolvedInput) ResolvedInput {
-	input.Content = CloneWorkContentParts(input.Content)
+	input.Content = cloneContentParts(input.Content)
 	return input
 }
 

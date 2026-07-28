@@ -1,9 +1,11 @@
-package work
+package invocationreturnpolicy
 
 import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/portpowered/infinite-you/pkg/services/work/internal/lineagegraph"
 )
 
 const (
@@ -44,7 +46,7 @@ type PrimaryResultSelection struct {
 	WorkTypeName  string
 	WorkName      string
 	TerminalState string
-	PrimaryResult []WorkContentPart
+	PrimaryResult []ContentPart
 }
 
 // InvocationFailureContext carries sanitized session and work identifiers that
@@ -110,7 +112,7 @@ func ResolvePrimaryResult(input PrimaryResultSelectionInput) (PrimaryResultSelec
 func resolveSubmittedWorkTerminalPrimaryResult(
 	requestID string,
 	state InvocationWorldState,
-	submitted []FactoryWorkItem,
+	submitted []WorkItem,
 ) (PrimaryResultSelection, error) {
 	for _, item := range submitted {
 		logicalWorkID := logicalWorkIDForSubmittedItem(state.PayloadLineage, item.ID)
@@ -144,7 +146,7 @@ func resolveSubmittedWorkTerminalPrimaryResult(
 func resolveExplicitPrimaryResult(
 	requestID string,
 	state InvocationWorldState,
-	submitted []FactoryWorkItem,
+	submitted []WorkItem,
 	cfg *InvocationReturnConfig,
 ) (PrimaryResultSelection, error) {
 	scope := invocationScopeWorkIDs(state.PayloadLineage, submitted)
@@ -178,8 +180,8 @@ func collectExplicitPrimaryResultMatches(
 	state InvocationWorldState,
 	scope map[string]struct{},
 	cfg *InvocationReturnConfig,
-) []FactoryWorkItem {
-	matches := make([]FactoryWorkItem, 0, len(state.TerminalWorkByID))
+) []WorkItem {
+	matches := make([]WorkItem, 0, len(state.TerminalWorkByID))
 	for _, terminalWorkID := range sortedTerminalWorkIDs(state.TerminalWorkByID) {
 		terminal := state.TerminalWorkByID[terminalWorkID]
 		if isFailedTerminalWork(terminal) {
@@ -199,15 +201,15 @@ func collectExplicitPrimaryResultMatches(
 func collectExplicitPrimaryResultMatchesForInvocationTrace(
 	state InvocationWorldState,
 	requestID string,
-	submitted []FactoryWorkItem,
+	submitted []WorkItem,
 	cfg *InvocationReturnConfig,
-) []FactoryWorkItem {
+) []WorkItem {
 	traceIDs := invocationTraceIDs(state, requestID, submitted)
 	if len(traceIDs) == 0 {
 		return nil
 	}
 
-	matches := make([]FactoryWorkItem, 0, 1)
+	matches := make([]WorkItem, 0, 1)
 	for _, terminalWorkID := range sortedTerminalWorkIDs(state.TerminalWorkByID) {
 		terminal := state.TerminalWorkByID[terminalWorkID]
 		if isFailedTerminalWork(terminal) {
@@ -227,7 +229,7 @@ func collectExplicitPrimaryResultMatchesForInvocationTrace(
 func invocationTraceIDs(
 	state InvocationWorldState,
 	requestID string,
-	submitted []FactoryWorkItem,
+	submitted []WorkItem,
 ) map[string]struct{} {
 	traceIDs := make(map[string]struct{})
 	if request, ok := state.WorkRequestsByID[requestID]; ok {
@@ -246,8 +248,8 @@ func invocationTraceIDs(
 func collectUniqueExplicitTerminalMatches(
 	state InvocationWorldState,
 	cfg *InvocationReturnConfig,
-) []FactoryWorkItem {
-	matches := make([]FactoryWorkItem, 0, 1)
+) []WorkItem {
+	matches := make([]WorkItem, 0, 1)
 	for _, terminalWorkID := range sortedTerminalWorkIDs(state.TerminalWorkByID) {
 		terminal := state.TerminalWorkByID[terminalWorkID]
 		if isFailedTerminalWork(terminal) {
@@ -265,7 +267,7 @@ func isFailedTerminalWork(terminal InvocationTerminalWork) bool {
 	return strings.TrimSpace(terminal.Status) == "FAILED"
 }
 
-func selectedPrimaryResult(requestID, policy string, item FactoryWorkItem) PrimaryResultSelection {
+func selectedPrimaryResult(requestID, policy string, item WorkItem) PrimaryResultSelection {
 	return PrimaryResultSelection{
 		RequestID:     requestID,
 		Policy:        policy,
@@ -273,7 +275,7 @@ func selectedPrimaryResult(requestID, policy string, item FactoryWorkItem) Prima
 		WorkTypeName:  item.WorkTypeID,
 		WorkName:      item.DisplayName,
 		TerminalState: terminalStateName(item),
-		PrimaryResult: CloneWorkContentParts(item.Content),
+		PrimaryResult: cloneContentParts(item.Content),
 	}
 }
 
@@ -332,7 +334,7 @@ func ClassifyMissingPrimaryResult(input PrimaryResultSelectionInput) (*PrimaryRe
 func ClassifyMissingPrimaryResultWorkItem(
 	requestID string,
 	invocationReturn *InvocationReturnConfig,
-	item FactoryWorkItem,
+	item WorkItem,
 	sessionID string,
 ) *PrimaryResultError {
 	result := classifiedPrimaryResultError(requestID, resolvedInvocationReturnPolicy(invocationReturn), item)
@@ -400,7 +402,7 @@ func ClassifyFailedInvocation(
 func classifiedPrimaryResultError(
 	requestID string,
 	policy string,
-	item FactoryWorkItem,
+	item WorkItem,
 ) *PrimaryResultError {
 	stateName := currentWorkStateName(item)
 	stateLabel := workStateLabel(item)
@@ -431,7 +433,7 @@ func classifiedPrimaryResultError(
 func failedPrimaryResultError(
 	requestID string,
 	policy string,
-	item FactoryWorkItem,
+	item WorkItem,
 ) *PrimaryResultError {
 	return &PrimaryResultError{
 		Code:      PrimaryResultErrorCodeFailed,
@@ -525,7 +527,7 @@ func classifyInterruptedInvocation(
 func interruptedPrimaryResultError(
 	sessionLabel string,
 	dispatchID string,
-	work FactoryWorkItem,
+	work WorkItem,
 	workLabel string,
 	sessionID string,
 	requestID string,
@@ -577,9 +579,9 @@ func dispatchMatchesInvocationScope(dispatch InvocationDispatchState, scope map[
 
 func interruptedDispatchWorkItem(
 	dispatch InvocationDispatchState,
-	workItems map[string]FactoryWorkItem,
+	workItems map[string]WorkItem,
 	scope map[string]struct{},
-) (FactoryWorkItem, string) {
+) (WorkItem, string) {
 	for _, workID := range dispatch.RelatedWorkIDs {
 		trimmed := strings.TrimSpace(workID)
 		if _, ok := scope[trimmed]; !ok {
@@ -587,11 +589,11 @@ func interruptedDispatchWorkItem(
 		}
 		item, ok := workItems[trimmed]
 		if !ok {
-			return FactoryWorkItem{ID: trimmed}, trimmed
+			return WorkItem{ID: trimmed}, trimmed
 		}
 		return item, workDisplayLabel(item)
 	}
-	return FactoryWorkItem{}, ""
+	return WorkItem{}, ""
 }
 
 func invocationFailureContextFromScopedWork(
@@ -615,7 +617,7 @@ func invocationFailureContextFromScopedWork(
 	return invocationFailureContextFromWorkItem(sessionID, request.WorkItems[0])
 }
 
-func invocationFailureContextFromWorkItem(sessionID string, item FactoryWorkItem) InvocationFailureContext {
+func invocationFailureContextFromWorkItem(sessionID string, item WorkItem) InvocationFailureContext {
 	return InvocationFailureContext{
 		SessionID: strings.TrimSpace(sessionID),
 		WorkID:    strings.TrimSpace(item.ID),
@@ -625,11 +627,11 @@ func invocationFailureContextFromWorkItem(sessionID string, item FactoryWorkItem
 }
 
 func scopedCurrentWorkItem(
-	workItems map[string]FactoryWorkItem,
+	workItems map[string]WorkItem,
 	scope map[string]struct{},
-) (FactoryWorkItem, bool) {
+) (WorkItem, bool) {
 	if len(workItems) == 0 || len(scope) == 0 {
-		return FactoryWorkItem{}, false
+		return WorkItem{}, false
 	}
 	workIDs := make([]string, 0, len(workItems))
 	for workID := range workItems {
@@ -645,7 +647,7 @@ func scopedCurrentWorkItem(
 		}
 		return item, true
 	}
-	return FactoryWorkItem{}, false
+	return WorkItem{}, false
 }
 
 func resolvedInvocationReturnPolicy(cfg *InvocationReturnConfig) string {
@@ -655,23 +657,23 @@ func resolvedInvocationReturnPolicy(cfg *InvocationReturnConfig) string {
 	return strings.TrimSpace(cfg.Policy)
 }
 
-func logicalWorkIDForSubmittedItem(lineage WorkPayloadLineageProjection, workID string) string {
+func logicalWorkIDForSubmittedItem(lineage lineagegraph.WorkPayloadLineageProjection, workID string) string {
 	resolution := lineage.ResolveInitialSubmittedSnapshot(workID)
-	if resolution.Status == WorkPayloadResolutionResolved && resolution.Snapshot != nil {
+	if resolution.Status == lineagegraph.WorkPayloadResolutionResolved && resolution.Snapshot != nil {
 		return resolution.Snapshot.LogicalWorkID
 	}
 	return workID
 }
 
-func logicalWorkIDForSelectedItem(lineage WorkPayloadLineageProjection, workID string) string {
+func logicalWorkIDForSelectedItem(lineage lineagegraph.WorkPayloadLineageProjection, workID string) string {
 	resolution := lineage.ResolveSelectedWorkSnapshot(workID)
-	if resolution.Status == WorkPayloadResolutionResolved && resolution.Snapshot != nil && resolution.Snapshot.LogicalWorkID != "" {
+	if resolution.Status == lineagegraph.WorkPayloadResolutionResolved && resolution.Snapshot != nil && resolution.Snapshot.LogicalWorkID != "" {
 		return resolution.Snapshot.LogicalWorkID
 	}
 	return workID
 }
 
-func explicitPrimaryResultMatches(item FactoryWorkItem, cfg *InvocationReturnConfig) bool {
+func explicitPrimaryResultMatches(item WorkItem, cfg *InvocationReturnConfig) bool {
 	if cfg == nil {
 		return false
 	}
@@ -687,7 +689,7 @@ func explicitPrimaryResultMatches(item FactoryWorkItem, cfg *InvocationReturnCon
 	return true
 }
 
-func terminalStateName(item FactoryWorkItem) string {
+func terminalStateName(item WorkItem) string {
 	if state := strings.TrimSpace(item.State); state != "" {
 		return state
 	}
@@ -711,12 +713,12 @@ func sortedTerminalWorkIDs(terminal map[string]InvocationTerminalWork) []string 
 }
 
 func scopedWorkItemInState(
-	workItems map[string]FactoryWorkItem,
+	workItems map[string]WorkItem,
 	scope map[string]struct{},
 	wantState string,
-) (FactoryWorkItem, bool) {
+) (WorkItem, bool) {
 	if len(workItems) == 0 || len(scope) == 0 {
-		return FactoryWorkItem{}, false
+		return WorkItem{}, false
 	}
 	ids := make([]string, 0, len(workItems))
 	for workID := range workItems {
@@ -731,14 +733,14 @@ func scopedWorkItemInState(
 			return item, true
 		}
 	}
-	return FactoryWorkItem{}, false
+	return WorkItem{}, false
 }
 
 func scopedFailedWorkItem(
 	state InvocationWorldState,
 	scope map[string]struct{},
-	submitted []FactoryWorkItem,
-) (FactoryWorkItem, bool) {
+	submitted []WorkItem,
+) (WorkItem, bool) {
 	if item, ok := scopedWorkItemInState(state.FailedWorkItemsByID, scope, "failed"); ok {
 		return item, true
 	}
@@ -755,12 +757,12 @@ func scopedFailedWorkItem(
 	}
 	traceIDs := submittedTraceIDs(submitted)
 	if len(traceIDs) == 0 {
-		return FactoryWorkItem{}, false
+		return WorkItem{}, false
 	}
 	return traceMatchedFailedWorkItem(state.FailedWorkItemsByID, traceIDs)
 }
 
-func submittedTraceIDs(submitted []FactoryWorkItem) map[string]struct{} {
+func submittedTraceIDs(submitted []WorkItem) map[string]struct{} {
 	traceIDs := make(map[string]struct{}, len(submitted))
 	for _, item := range submitted {
 		traceID := strings.TrimSpace(item.TraceID)
@@ -773,11 +775,11 @@ func submittedTraceIDs(submitted []FactoryWorkItem) map[string]struct{} {
 }
 
 func traceMatchedFailedWorkItem(
-	workItems map[string]FactoryWorkItem,
+	workItems map[string]WorkItem,
 	traceIDs map[string]struct{},
-) (FactoryWorkItem, bool) {
+) (WorkItem, bool) {
 	if len(workItems) == 0 || len(traceIDs) == 0 {
-		return FactoryWorkItem{}, false
+		return WorkItem{}, false
 	}
 	ids := make([]string, 0, len(workItems))
 	for workID := range workItems {
@@ -790,16 +792,16 @@ func traceMatchedFailedWorkItem(
 			return item, true
 		}
 	}
-	return FactoryWorkItem{}, false
+	return WorkItem{}, false
 }
 
 func requestMatchedFailedWorkItem(
 	state InvocationWorldState,
 	requestID string,
-) (FactoryWorkItem, bool) {
+) (WorkItem, bool) {
 	trimmedRequestID := strings.TrimSpace(requestID)
 	if trimmedRequestID == "" || len(state.WorkStateChangesByWorkID) == 0 {
-		return FactoryWorkItem{}, false
+		return WorkItem{}, false
 	}
 	workIDs := make([]string, 0, len(state.WorkStateChangesByWorkID))
 	for workID := range state.WorkStateChangesByWorkID {
@@ -821,7 +823,7 @@ func requestMatchedFailedWorkItem(
 			if item, ok := state.WorkItemsByID[workID]; ok {
 				return item, true
 			}
-			return FactoryWorkItem{
+			return WorkItem{
 				ID:         workID,
 				WorkTypeID: strings.TrimSpace(record.WorkTypeName),
 				State:      "failed",
@@ -829,7 +831,7 @@ func requestMatchedFailedWorkItem(
 			}, true
 		}
 	}
-	return FactoryWorkItem{}, false
+	return WorkItem{}, false
 }
 
 func placeStateName(placeID string) string {
@@ -843,7 +845,7 @@ func placeStateName(placeID string) string {
 	return trimmed
 }
 
-func workDisplayLabel(item FactoryWorkItem) string {
+func workDisplayLabel(item WorkItem) string {
 	if label := strings.TrimSpace(item.DisplayName); label != "" {
 		return label
 	}
@@ -853,7 +855,7 @@ func workDisplayLabel(item FactoryWorkItem) string {
 	return "submitted work"
 }
 
-func workStateLabel(item FactoryWorkItem) string {
+func workStateLabel(item WorkItem) string {
 	if placeID := strings.TrimSpace(item.PlaceID); placeID != "" {
 		return placeID
 	}
@@ -864,7 +866,7 @@ func workStateLabel(item FactoryWorkItem) string {
 	return stateName
 }
 
-func currentWorkStateName(item FactoryWorkItem) string {
+func currentWorkStateName(item WorkItem) string {
 	if placeID := strings.TrimSpace(item.PlaceID); placeID != "" {
 		if _, suffix, ok := strings.Cut(placeID, ":"); ok {
 			return suffix
@@ -875,8 +877,8 @@ func currentWorkStateName(item FactoryWorkItem) string {
 }
 
 func invocationScopeWorkIDs(
-	lineage WorkPayloadLineageProjection,
-	submitted []FactoryWorkItem,
+	lineage lineagegraph.WorkPayloadLineageProjection,
+	submitted []WorkItem,
 ) map[string]struct{} {
 	scopeWorkIDs := make(map[string]struct{}, len(submitted))
 	scopeLogicalIDs := make(map[string]struct{}, len(submitted))
@@ -907,11 +909,11 @@ func invocationScopeWorkIDs(
 	return scopeWorkIDs
 }
 
-func sortedLineageSnapshots(lineage WorkPayloadLineageProjection) []WorkPayloadSnapshot {
+func sortedLineageSnapshots(lineage lineagegraph.WorkPayloadLineageProjection) []lineagegraph.WorkPayloadSnapshot {
 	if len(lineage.SnapshotsByID) == 0 {
 		return nil
 	}
-	snapshots := make([]WorkPayloadSnapshot, 0, len(lineage.SnapshotsByID))
+	snapshots := make([]lineagegraph.WorkPayloadSnapshot, 0, len(lineage.SnapshotsByID))
 	for _, snapshot := range lineage.SnapshotsByID {
 		snapshots = append(snapshots, snapshot)
 	}
@@ -925,7 +927,7 @@ func sortedLineageSnapshots(lineage WorkPayloadLineageProjection) []WorkPayloadS
 }
 
 func hasScopedParent(
-	snapshot WorkPayloadSnapshot,
+	snapshot lineagegraph.WorkPayloadSnapshot,
 	scopeWorkIDs map[string]struct{},
 	scopeLogicalIDs map[string]struct{},
 ) bool {

@@ -37,6 +37,8 @@ func TestWorkThinRootContractFiles(t *testing.T) {
 		"input.go",
 		"input_test.go",
 		"invocation_return_policy_contract.go",
+		"invocation_return_policy_convert.go",
+		"invocation_policy_service_test.go",
 		"lineage_contract.go",
 		"read_contract.go",
 		"recordings_import_boundary_test.go",
@@ -47,6 +49,8 @@ func TestWorkThinRootContractFiles(t *testing.T) {
 		"service_peer_bindings_test.go",
 		"service_root_contract_seal_test.go",
 		"service_root_contract_test.go",
+		"primary_result_test.go",
+		"primary_result_regression_test.go",
 		"wire_behavioral_proof_test.go",
 		"legacy_packages_disposition_test.go",
 	}
@@ -68,9 +72,7 @@ func TestWorkThinRootContractFiles(t *testing.T) {
 func TestWorkExcessRootContractFoldDestinations(t *testing.T) {
 	t.Parallel()
 
-	want := map[string]string{
-		"invocation_return_policy": "pkg/services/work/internal",
-	}
+	want := map[string]string{}
 
 	for _, target := range ownershipinventory.WorkExcessRootContractFolds {
 		wantDestination, ok := want[target.Cluster]
@@ -96,9 +98,7 @@ func TestWorkExcessRootContractFoldDestinations(t *testing.T) {
 		gotClusters = append(gotClusters, target.Cluster)
 	}
 	slices.Sort(gotClusters)
-	wantClusters := []string{
-		"invocation_return_policy",
-	}
+	wantClusters := []string{}
 	if !slices.Equal(gotClusters, wantClusters) {
 		t.Fatalf("fold clusters = %v, want %v", gotClusters, wantClusters)
 	}

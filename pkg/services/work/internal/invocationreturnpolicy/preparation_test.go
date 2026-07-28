@@ -1,4 +1,4 @@
-package work
+package invocationreturnpolicy
 
 import (
 	"context"
@@ -155,7 +155,7 @@ func TestPrepareInvocationInputCompatibilityContentUsesPublishedRequestShape(t *
 	t.Parallel()
 
 	prepared, err := prepareInvocationInput(t, InvocationInputPreparationRequest{
-		CompatibilityContent: []WorkContentPart{{Type: WorkContentPartTypeText, Text: "hello"}},
+		CompatibilityContent: []ContentPart{{Type: ContentPartTypeText, Text: "hello"}},
 	})
 	if err != nil {
 		t.Fatalf("PrepareInvocationInput: %v", err)

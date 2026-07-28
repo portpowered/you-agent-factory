@@ -1,4 +1,4 @@
-package work
+package invocationreturnpolicy
 
 import (
 	"errors"
@@ -359,7 +359,7 @@ func TestNormalizeArguments_CompatibilityFallsBackToSharedTextResolver(t *testin
 
 func TestNormalizeArguments_CompatibilityPreservesAPIContentFallback(t *testing.T) {
 	got, err := NormalizeArguments(NormalizeArgumentsInput{
-		CompatibilityContent: []WorkContentPart{{Type: WorkContentPartTypeText, Text: "hello"}},
+		CompatibilityContent: []ContentPart{{Type: ContentPartTypeText, Text: "hello"}},
 	})
 	if err != nil {
 		t.Fatalf("NormalizeArguments: %v", err)
@@ -411,8 +411,8 @@ func TestNormalizeArguments_CompatibilityAcceptsOnlyDocumentedInputSources(t *te
 		{
 			name: "compatibility content",
 			input: NormalizeArgumentsInput{
-				CompatibilityContent: []WorkContentPart{{
-					Type: WorkContentPartTypeText,
+				CompatibilityContent: []ContentPart{{
+					Type: ContentPartTypeText,
 					Text: "from content",
 				}},
 			},
@@ -474,8 +474,8 @@ func TestNormalizeArguments_CompatibilitySourceConflictsUseStableCode(t *testing
 		{PositionalArgs: []string{"from arguments"}, StdinText: &stdinText},
 		{CompatibilityText: &positionalText, StdinText: &stdinText},
 		{
-			CompatibilityContent: []WorkContentPart{{
-				Type: WorkContentPartTypeText,
+			CompatibilityContent: []ContentPart{{
+				Type: ContentPartTypeText,
 				Text: "from content",
 			}},
 			PositionalArgs: []string{"from arguments"},

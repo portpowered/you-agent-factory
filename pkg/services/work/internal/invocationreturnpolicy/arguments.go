@@ -1,4 +1,4 @@
-package work
+package invocationreturnpolicy
 
 import (
 	"crypto/sha256"
@@ -138,7 +138,7 @@ type NormalizeArgumentsInput struct {
 	DirectArgs           []NamedArgumentInput
 	StdinText            *string
 	CompatibilityText    *string
-	CompatibilityContent []WorkContentPart
+	CompatibilityContent []ContentPart
 }
 
 type ArgumentError struct {

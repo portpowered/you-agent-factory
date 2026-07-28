@@ -34,7 +34,11 @@ fold or delete them.
 | `contracts.go` | Thin committed root contract (keep) | Canonical Work request, content-part, relation, invocation-config, and admission vocabulary shared across published slices. |
 | `input.go` | Thin committed root contract (keep) | Invocation input vocabulary (`InputSourceLabel`, `ResolvedInput`, `TextInputSources`, `InputErrorCode`) consumed by peers without importing implementation packages. |
 | `input_test.go` | Thin committed root contract (keep) | Co-located characterization tests for `input.go` root vocabulary. |
-| `invocation_return_policy_contract.go` | Thin committed root contract (keep) | Invocation/return-policy slice typed failures (`ErrInvalidInvocationInput`, `ErrUnsupportedReturnPolicy`). |
+| `invocation_return_policy_contract.go` | Thin committed root contract (keep) | Invocation/return-policy published vocabulary, typed failures, thin delegators to `work/internal/invocationreturnpolicy`, and `NewInvocationPolicyService` peer constructor. |
+| `invocation_return_policy_convert.go` | Thin committed root contract (keep) | Work ↔ `invocationreturnpolicy` boundary conversions for the invocation/return-policy fold. |
+| `invocation_policy_service_test.go` | Thin committed root contract (keep) | Root-contract characterization tests for `NewInvocationPolicyService` published slice behavior. |
+| `primary_result_test.go` | Thin committed root contract (keep) | Behavioral characterization tests for published `ResolvePrimaryResult` and classification helpers through the Work root. |
+| `primary_result_regression_test.go` | Thin committed root contract (keep) | Regression fixtures proving primary-result byte identity through the published Work root. |
 | `read_contract.go` | Thin committed root contract (keep) | State-access slice detached projections (`ReadModel`, `ListResult`, `ErrWorkNotFound`, list defaults). |
 | `recordings_import_boundary_test.go` | Thin committed root contract (keep) | CUT-WORK-REC boundary test proving Recordings imports stay on the published Work root seam. |
 | `recordings_request_boundary_test.go` | Thin committed root contract (keep) | CUT-WORK-REC boundary test proving state-access Recordings queries construct through the Work root contract. |
@@ -47,8 +51,8 @@ fold or delete them.
 | `service_peer_bindings.go` | Thin committed root contract (keep) | Post-inventory peer-binding constructors projecting published `Service` slices (`MaterializationService`, `AdmissionContentService`, and related bindings). |
 | `service_peer_bindings_test.go` | Thin committed root contract (keep) | Co-located characterization tests for `service_peer_bindings.go` peer constructors. |
 | `wire_behavioral_proof_test.go` | Thin committed root contract (keep) | Post-inventory wire behavioral proof exercising admission, content, state-access, and invocation observables through `work/wire`. |
-| `arguments.go` | Excess fold/consolidation debt | `work/internal` — invocation argument normalization, metadata projection, and signature binding logic (`invocation_return_policy` cluster). |
-| `arguments_test.go` | Excess fold/consolidation debt | Co-located tests for `arguments.go`; move with invocation/return-policy fold. |
+| `arguments.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 006 to `work/internal/invocationreturnpolicy`; argument vocabulary and delegators stay on `invocation_return_policy_contract.go`. |
+| `arguments_test.go` | Excess fold/consolidation debt | **Folded** with `arguments.go` to `work/internal/invocationreturnpolicy`. |
 | `dependency_graph.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 004 to `work/internal/lineagegraph`; thin lineage/graph/visualization vocabulary and delegators remain on `lineage_contract.go`. |
 | `dependency_graph_markdown.go` | Excess fold/consolidation debt | **Folded** with `dependency_graph.go` to `work/internal/lineagegraph`. |
 | `dependency_graph_markdown_test.go` | Excess fold/consolidation debt | **Folded** with `dependency_graph.go` to `work/internal/lineagegraph`. |
@@ -57,15 +61,14 @@ fold or delete them.
 | `dependency_graph_test.go` | Excess fold/consolidation debt | **Folded** with `dependency_graph.go` to `work/internal/lineagegraph`. |
 | `file_inputs.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 005 to `work/internal/requestadmission`; thin file-loader delegators stay on `admission_contract.go`. |
 | `file_inputs_test.go` | Excess fold/consolidation debt | **Folded** with `file_inputs.go` to `work/internal/requestadmission`. |
-| `invocation_input_preparation.go` | Excess fold/consolidation debt | `work/internal` — `PrepareInvocationInput` implementation and argv/stdin normalization policy. |
-| `invocation_input_preparation_test.go` | Excess fold/consolidation debt | Co-located tests for `invocation_input_preparation.go`. |
-| `invocation_policy_service.go` | Excess fold/consolidation debt | `work/internal` — `NewInvocationPolicyService` invocation/return-policy slice constructor and inert `Service` implementation body (`invocation_return_policy` cluster). |
-| `invocation_policy_service_test.go` | Excess fold/consolidation debt | Co-located tests for `invocation_policy_service.go`; relocate with invocation/return-policy fold. |
+| `invocation_input_preparation.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 006 to `work/internal/invocationreturnpolicy`; `NewInvocationInputPreparation` delegator stays on `invocation_return_policy_contract.go`. |
+| `invocation_input_preparation_test.go` | Excess fold/consolidation debt | **Folded** with `invocation_input_preparation.go` to `work/internal/invocationreturnpolicy`. |
+| `invocation_policy_service.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 006 to `work/internal/invocationreturnpolicy`; `NewInvocationPolicyService` adapter stays on `invocation_return_policy_contract.go`. |
 | `lineage.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 004 to `work/internal/lineagegraph`; payload-lineage projection types and delegators remain on `lineage_contract.go`. |
 | `lineage_contract.go` | Thin committed root contract (keep) | Published lineage/graph/visualization vocabulary plus thin delegators to `work/internal/lineagegraph`. |
-| `primary_result.go` | Excess fold/consolidation debt | `work/internal` — primary-result selection policy, world-state evaluation, and return-policy resolution logic. |
-| `primary_result_regression_test.go` | Excess fold/consolidation debt | Regression fixtures for `primary_result.go`; relocate with invocation/return-policy fold. |
-| `primary_result_test.go` | Excess fold/consolidation debt | Co-located tests for `primary_result.go`. |
+| `primary_result.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 006 to `work/internal/invocationreturnpolicy`; `ResolvePrimaryResult` and classification delegators stay on `invocation_return_policy_contract.go`. |
+| `primary_result_regression_test.go` | Thin committed root contract (keep) | Regression fixtures for published `ResolvePrimaryResult`; retained at root after story 006 fold. |
+| `primary_result_test.go` | Thin committed root contract (keep) | Behavioral tests for published `ResolvePrimaryResult`; retained at root after story 006 fold. |
 | `query_list.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 003 to `work/internal/stateaccessquery`; thin list vocabulary and delegators remain on `read_contract.go`. |
 | `query_list_test.go` | Excess fold/consolidation debt | **Folded** with `query_list.go` to `work/internal/stateaccessquery`. |
 | `query_select.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 003 to `work/internal/stateaccessquery`; selection policy is private to state_access reads. |
@@ -79,7 +82,7 @@ fold or delete them.
 | `visualization.go` | Excess fold/consolidation debt | **Folded** in CLN-WORK-CONTRACT-ROOTS story 004 to `work/internal/lineagegraph`; `NewVisualizationOperation` stays on `lineage_contract.go` as a thin delegator. |
 | `visualization_test.go` | Excess fold/consolidation debt | **Folded** with `visualization.go` to `work/internal/lineagegraph`. |
 
-**Totals:** 31 root-level `.go` files — 22 thin committed root contract (keep), 9
+**Totals:** 30 root-level `.go` files — 30 thin committed root contract (keep), 0
 excess fold/consolidation debt.
 
 `content_staging_impl` and `content_materialization_impl` folded in
@@ -102,11 +105,16 @@ on `lineage_contract.go`.
 request admission implementation lives under `work/internal/requestadmission`, and
 thin admission vocabulary plus delegators stay on `admission_contract.go`.
 
+`invocation_return_policy` folded in CLN-WORK-CONTRACT-ROOTS story 006:
+invocation argument normalization, input preparation, primary-result selection,
+and policy-service implementation live under
+`work/internal/invocationreturnpolicy`, and thin published vocabulary plus
+delegators stay on `invocation_return_policy_contract.go`.
+
 ## Excess fold clusters
 
-| Cluster | Destination | Root files |
-| --- | --- | --- |
-| `invocation_return_policy` | `work/internal` | `arguments.go`, `arguments_test.go`, `invocation_input_preparation.go`, `invocation_input_preparation_test.go`, `invocation_policy_service.go`, `invocation_policy_service_test.go`, `primary_result.go`, `primary_result_test.go`, `primary_result_regression_test.go` |
+No excess root contract clusters remain inventoried after CLN-WORK-CONTRACT-ROOTS
+story 006 cutover.
 
 ## Generator mirror
 

@@ -24,6 +24,8 @@ var workThinRootContractFiles = []string{
 	"input.go",
 	"input_test.go",
 	"invocation_return_policy_contract.go",
+	"invocation_return_policy_convert.go",
+	"invocation_policy_service_test.go",
 	"lineage_contract.go",
 	"read_contract.go",
 	"recordings_import_boundary_test.go",
@@ -34,6 +36,8 @@ var workThinRootContractFiles = []string{
 	"service_peer_bindings_test.go",
 	"service_root_contract_seal_test.go",
 	"service_root_contract_test.go",
+	"primary_result_test.go",
+	"primary_result_regression_test.go",
 	"wire_behavioral_proof_test.go",
 	"legacy_packages_disposition_test.go",
 }
@@ -46,23 +50,7 @@ type workRootContractFoldTarget struct {
 
 // workExcessRootContractFolds mirrors internal/ownershipinventory
 // WorkExcessRootContractFolds for package-target manifest checks.
-var workExcessRootContractFolds = []workRootContractFoldTarget{
-	{
-		cluster: "invocation_return_policy",
-		files: []string{
-			"arguments.go",
-			"arguments_test.go",
-			"invocation_input_preparation.go",
-			"invocation_input_preparation_test.go",
-			"invocation_policy_service.go",
-			"invocation_policy_service_test.go",
-			"primary_result.go",
-			"primary_result_test.go",
-			"primary_result_regression_test.go",
-		},
-		destination: "pkg/services/work/internal",
-	},
-}
+var workExcessRootContractFolds = []workRootContractFoldTarget{}
 
 func listWorkRootGoFiles(root string) ([]string, error) {
 	workRoot := filepath.Join(root, filepath.FromSlash(workRootRelative))

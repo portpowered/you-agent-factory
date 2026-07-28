@@ -25,6 +25,8 @@ var WorkThinRootContractFiles = []string{
 	"input.go",
 	"input_test.go",
 	"invocation_return_policy_contract.go",
+	"invocation_return_policy_convert.go",
+	"invocation_policy_service_test.go",
 	"lineage_contract.go",
 	"read_contract.go",
 	"recordings_import_boundary_test.go",
@@ -35,6 +37,8 @@ var WorkThinRootContractFiles = []string{
 	"service_peer_bindings_test.go",
 	"service_root_contract_seal_test.go",
 	"service_root_contract_test.go",
+	"primary_result_test.go",
+	"primary_result_regression_test.go",
 	"wire_behavioral_proof_test.go",
 	"legacy_packages_disposition_test.go",
 }
@@ -49,23 +53,7 @@ type WorkRootContractFoldTarget struct {
 
 // WorkExcessRootContractFolds inventories excess root contract/helper clusters
 // beyond the thin Work service root contract.
-var WorkExcessRootContractFolds = []WorkRootContractFoldTarget{
-	{
-		Cluster: "invocation_return_policy",
-		Files: []string{
-			"arguments.go",
-			"arguments_test.go",
-			"invocation_input_preparation.go",
-			"invocation_input_preparation_test.go",
-			"invocation_policy_service.go",
-			"invocation_policy_service_test.go",
-			"primary_result.go",
-			"primary_result_test.go",
-			"primary_result_regression_test.go",
-		},
-		Destination: workPackagePrefix + "/internal",
-	},
-}
+var WorkExcessRootContractFolds = []WorkRootContractFoldTarget{}
 
 // ListWorkRootGoFiles returns every live root-level .go file name under
 // pkg/services/work/.

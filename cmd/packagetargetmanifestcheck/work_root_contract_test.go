@@ -24,10 +24,7 @@ func TestWorkRootGoFilesMatchCommittedInventory(t *testing.T) {
 func TestWorkExcessRootContractFoldDestinations(t *testing.T) {
 	t.Parallel()
 
-	want := map[string]string{
-		"request_admission":        "pkg/services/work/internal",
-		"invocation_return_policy": "pkg/services/work/internal",
-	}
+	want := map[string]string{}
 
 	for _, target := range workExcessRootContractFolds {
 		wantDestination, ok := want[target.cluster]
@@ -132,9 +129,7 @@ func TestWorkExcessRootContractFoldClustersMatchInventoryNote(t *testing.T) {
 		}
 	}
 	slices.Sort(gotClusters)
-	wantClusters := []string{
-		"invocation_return_policy",
-	}
+	wantClusters := []string{}
 	if !slices.Equal(gotClusters, wantClusters) {
 		t.Fatalf("fold clusters = %v, want %v", gotClusters, wantClusters)
 	}
