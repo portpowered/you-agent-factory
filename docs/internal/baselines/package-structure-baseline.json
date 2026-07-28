@@ -1364,11 +1364,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/workflow/logical_move_long_test.go",
-      "target": "workflow"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/workflow/multi_output_color_propagation_long_test.go",
       "target": "workflow"
     },

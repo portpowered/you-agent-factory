@@ -1331,14 +1331,6 @@
       "name": "TestConflictResolution_ReviewFailResolveReReview"
     },
     {
-      "file": "workflow/logical_move_long_test.go",
-      "name": "TestLogicalMove_PreservesTokenColor"
-    },
-    {
-      "file": "workflow/logical_move_long_test.go",
-      "name": "TestLogicalMove_Success"
-    },
-    {
       "file": "workflow/multi_output_color_propagation_long_test.go",
       "name": "TestMultiOutputColorPropagation"
     },

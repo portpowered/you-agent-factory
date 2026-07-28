@@ -111,7 +111,6 @@ var ExpectedDeletionOnlyBatches = []string{
 	"workflow-delete-01-orchestration-dispatch",
 	"workflow-delete-02-work-routing",
 	"workflow-delete-03-work-relationships",
-	"workflow-delete-04-work-routing-logical",
 	"workflow-delete-07-factory-current",
 	"workflow-delete-08-guards",
 	"workflow-delete-09-orchestration-javascript",

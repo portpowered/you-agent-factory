@@ -751,8 +751,6 @@ batch ids (FND-007-003…005). Remaining non-catch-all packages use `n/a` for
 | tests/functional/workflow/executor_context_long_test.go | you-agent-factory/tests/functional/workflow | TestExecutorContext_InputTokenColors | functionallong | tests/functional/work/relationships/parent_child_test.go | workflow | none | workflow-delete-03-work-relationships |
 | tests/functional/workflow/executor_context_long_test.go | you-agent-factory/tests/functional/workflow | TestExecutorContext_ParentLineage | functionallong | tests/functional/work/relationships/parent_child_test.go | workflow | none | workflow-delete-03-work-relationships |
 | tests/functional/workflow/executor_context_long_test.go | you-agent-factory/tests/functional/workflow | TestExecutorContext_RejectionFeedback | functionallong | tests/functional/work/relationships/parent_child_test.go | workflow | none | workflow-delete-03-work-relationships |
-| tests/functional/workflow/logical_move_long_test.go | you-agent-factory/tests/functional/workflow | TestLogicalMove_PreservesTokenColor | functionallong | tests/functional/work/routing/logical_move_test.go | workflow | none | workflow-delete-04-work-routing-logical |
-| tests/functional/workflow/logical_move_long_test.go | you-agent-factory/tests/functional/workflow | TestLogicalMove_Success | functionallong | tests/functional/work/routing/logical_move_test.go | workflow | none | workflow-delete-04-work-routing-logical |
 | tests/functional/workflow/multi_output_color_propagation_long_test.go | you-agent-factory/tests/functional/workflow | TestMultiOutputColorPropagation | functionallong | tests/functional/work/relationships/parent_child_test.go | workflow | none | workflow-delete-03-work-relationships |
 | tests/functional/workflow/multi_output_color_propagation_long_test.go | you-agent-factory/tests/functional/workflow | TestMultiOutputColorPropagation_NameAvailableDownstream | functionallong | tests/functional/work/relationships/parent_child_test.go | workflow | none | workflow-delete-03-work-relationships |
 | tests/functional/workflow/multi_output_color_propagation_test.go | you-agent-factory/tests/functional/workflow | TestDocReviewerExamplePNGFanoutPreservesSharedNameDownstream | short | tests/functional/work/relationships/parent_child_test.go | workflow | none | workflow-delete-03-work-relationships |
@@ -1016,7 +1014,7 @@ can execute independently until package ownership reaches zero.
 | `workflow-delete-01-orchestration-dispatch` | workflow | 1 | orchestration/petri, factory/packaged/review | none |
 | `workflow-delete-02-work-routing` | workflow | 7 | work/routing | none |
 | `workflow-delete-03-work-relationships` | workflow | 8 | work/relationships | none |
-| `workflow-delete-04-work-routing-logical` | workflow | 2 | work/routing | none |
+| `workflow-delete-04-work-routing-logical` | workflow | 2 | work/routing | released |
 | `workflow-delete-05-workstations-repeater` | workflow | 13 | workstations/repeater | none |
 | `workflow-delete-06-workstations-watcher` | workflow | 7 | workstations/watcher | consumed |
 | `workflow-delete-07-factory-current` | workflow | 7 | factory/current | none |
@@ -1191,8 +1189,6 @@ Batch execution guidance for later move work:
 | tests/functional/workflow/executor_context_long_test.go | you-agent-factory/tests/functional/workflow | TestExecutorContext_InputTokenColors | functionallong | tests/functional/work/relationships/parent_child_test.go | workflow | none | workflow-delete-03-work-relationships |
 | tests/functional/workflow/executor_context_long_test.go | you-agent-factory/tests/functional/workflow | TestExecutorContext_ParentLineage | functionallong | tests/functional/work/relationships/parent_child_test.go | workflow | none | workflow-delete-03-work-relationships |
 | tests/functional/workflow/executor_context_long_test.go | you-agent-factory/tests/functional/workflow | TestExecutorContext_RejectionFeedback | functionallong | tests/functional/work/relationships/parent_child_test.go | workflow | none | workflow-delete-03-work-relationships |
-| tests/functional/workflow/logical_move_long_test.go | you-agent-factory/tests/functional/workflow | TestLogicalMove_PreservesTokenColor | functionallong | tests/functional/work/routing/logical_move_test.go | workflow | none | workflow-delete-04-work-routing-logical |
-| tests/functional/workflow/logical_move_long_test.go | you-agent-factory/tests/functional/workflow | TestLogicalMove_Success | functionallong | tests/functional/work/routing/logical_move_test.go | workflow | none | workflow-delete-04-work-routing-logical |
 | tests/functional/workflow/multi_output_color_propagation_long_test.go | you-agent-factory/tests/functional/workflow | TestMultiOutputColorPropagation | functionallong | tests/functional/work/relationships/parent_child_test.go | workflow | none | workflow-delete-03-work-relationships |
 | tests/functional/workflow/multi_output_color_propagation_long_test.go | you-agent-factory/tests/functional/workflow | TestMultiOutputColorPropagation_NameAvailableDownstream | functionallong | tests/functional/work/relationships/parent_child_test.go | workflow | none | workflow-delete-03-work-relationships |
 | tests/functional/workflow/multi_output_color_propagation_test.go | you-agent-factory/tests/functional/workflow | TestDocReviewerExamplePNGFanoutPreservesSharedNameDownstream | short | tests/functional/work/relationships/parent_child_test.go | workflow | none | workflow-delete-03-work-relationships |
@@ -1761,7 +1757,7 @@ without inventing destinations. Prefer independent, reviewable batch sizes.
 | `workflow-delete-01-orchestration-dispatch` | workflow | 1 | orchestration/petri, factory/packaged/review | planned |
 | `workflow-delete-02-work-routing` | workflow | 7 | work/routing | planned |
 | `workflow-delete-03-work-relationships` | workflow | 8 | work/relationships | planned |
-| `workflow-delete-04-work-routing-logical` | workflow | 2 | work/routing | planned |
+| `workflow-delete-04-work-routing-logical` | workflow | 2 | work/routing | released |
 | `workflow-delete-05-workstations-repeater` | workflow | 13 | workstations/repeater | planned |
 | `workflow-delete-06-workstations-watcher` | workflow | 7 | workstations/watcher | consumed |
 | `workflow-delete-07-factory-current` | workflow | 7 | factory/current | planned |

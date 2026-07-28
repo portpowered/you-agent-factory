@@ -8569,26 +8569,6 @@
       "deletion_only_batch": "workflow-delete-03-work-relationships"
     },
     {
-      "source_path": "tests/functional/workflow/logical_move_long_test.go",
-      "package": "you-agent-factory/tests/functional/workflow",
-      "scenario": "TestLogicalMove_PreservesTokenColor",
-      "lane": "functionallong",
-      "destination": "tests/functional/work/routing/logical_move_test.go",
-      "catch_all": "workflow",
-      "specialty_targets": "none",
-      "deletion_only_batch": "workflow-delete-04-work-routing-logical"
-    },
-    {
-      "source_path": "tests/functional/workflow/logical_move_long_test.go",
-      "package": "you-agent-factory/tests/functional/workflow",
-      "scenario": "TestLogicalMove_Success",
-      "lane": "functionallong",
-      "destination": "tests/functional/work/routing/logical_move_test.go",
-      "catch_all": "workflow",
-      "specialty_targets": "none",
-      "deletion_only_batch": "workflow-delete-04-work-routing-logical"
-    },
-    {
       "source_path": "tests/functional/workflow/multi_output_color_propagation_long_test.go",
       "package": "you-agent-factory/tests/functional/workflow",
       "scenario": "TestMultiOutputColorPropagation",
@@ -9148,7 +9128,7 @@
       "replay_contracts": 23,
       "runtime_api": 96,
       "smoke": 62,
-      "workflow": 30
+      "workflow": 28
     },
     "by_top_level_package": {
       "acceptance": 12,
@@ -9174,11 +9154,11 @@
       "transport": 106,
       "work": 29,
       "workers": 77,
-      "workflow": 30,
+      "workflow": 28,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 894,
-    "lane_functionallong": 95,
+    "customer_top_level_Test_scenarios": 892,
+    "lane_functionallong": 93,
     "lane_short": 799,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
@@ -9277,7 +9257,7 @@
       "you-agent-factory/tests/functional/workers/inference/pi": 3,
       "you-agent-factory/tests/functional/workers/mock": 3,
       "you-agent-factory/tests/functional/workers/script": 13,
-      "you-agent-factory/tests/functional/workflow": 30,
+      "you-agent-factory/tests/functional/workflow": 28,
       "you-agent-factory/tests/functional/workstations/cron": 4,
       "you-agent-factory/tests/functional/workstations/execution": 4,
       "you-agent-factory/tests/functional/workstations/poller": 4,
