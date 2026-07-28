@@ -1671,7 +1671,7 @@
       "fromOwner": "wire",
       "toOwner": "providers",
       "class": "construction",
-      "evidence": "pkg/wire -\u003e pkg/services/workers/provider/inferencecontract"
+      "evidence": "pkg/wire -\u003e pkg/services/providers"
     },
     {
       "fromOwner": "wire",
@@ -2488,14 +2488,6 @@
       "disposition": "retain",
       "destination": "automations",
       "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/automations/service",
-      "disposition": "move",
-      "destination": "automations",
-      "destinationKind": "owner",
-      "successor": "pkg/services/automations/internal",
-      "deletionCondition": "delete transitional service/ package after owner wire retargets to internal implementation and DEL cutover proof completes"
     },
     {
       "packagePath": "pkg/services/automations/transports/http",
