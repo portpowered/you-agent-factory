@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	identityInputBaselinePath = "pkg/services/operator_settings/identityinventory/testdata/baseline/system-config-input-index.json"
-	identityFixtureDirectory  = "pkg/services/operator_settings/identityinventory/testdata/fixtures"
+	identityInputBaselinePath = "pkg/services/operator_settings/internal/services/document/identityinventory/testdata/baseline/system-config-input-index.json"
+	identityFixtureDirectory  = "pkg/services/operator_settings/internal/services/document/identityinventory/testdata/fixtures"
 )
 
 type committedIdentityInputInventoryDocument struct {

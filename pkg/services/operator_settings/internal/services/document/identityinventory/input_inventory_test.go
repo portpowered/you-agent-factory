@@ -11,11 +11,11 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	identityinventory "github.com/portpowered/infinite-you/pkg/services/operator_settings/identityinventory"
+	identityinventory "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document/identityinventory"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 )
 
-const fixturesRelativeDir = "pkg/services/operator_settings/identityinventory/testdata/fixtures"
+const fixturesRelativeDir = "pkg/services/operator_settings/internal/services/document/identityinventory/testdata/fixtures"
 
 func TestIndexedEnsureScopeCases_MatchProductionLoader(t *testing.T) {
 	inventory := identityinventory.ProjectInputInventory()

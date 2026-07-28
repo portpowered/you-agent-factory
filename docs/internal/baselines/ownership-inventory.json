@@ -1183,7 +1183,7 @@
       "fromOwner": "factory_runtime",
       "toOwner": "automations",
       "class": "command",
-      "evidence": "pkg/services/factory_runtime/service -\u003e pkg/services/automations"
+      "evidence": "pkg/services/factory_runtime/internal -\u003e pkg/services/automations"
     },
     {
       "fromOwner": "factory_runtime",
@@ -1405,7 +1405,7 @@
       "fromOwner": "operator_settings",
       "toOwner": "providers",
       "class": "command",
-      "evidence": "pkg/services/operator_settings/internal/services/resolution/internal/service -\u003e pkg/services/providers"
+      "evidence": "pkg/services/operator_settings/internal/construct -\u003e pkg/services/providers"
     },
     {
       "fromOwner": "operator_settings",
@@ -3255,9 +3255,11 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-RUN-FOLD-TOPLEVEL cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/factorystatus",
@@ -3269,9 +3271,11 @@
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/host",
-      "disposition": "retain",
+      "disposition": "move",
       "destination": "factory_runtime",
-      "destinationKind": "owner"
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_runtime/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-RUN-FOLD-TOPLEVEL cutover proof"
     },
     {
       "packagePath": "pkg/services/factory_runtime/internal/legacysnapshot",
@@ -4338,6 +4342,14 @@
       "deletionCondition": "delete public package after IMP-OPS-document private subservice cutover proof"
     },
     {
+      "packagePath": "pkg/services/operator_settings/internal/construct",
+      "disposition": "move",
+      "destination": "operator_settings",
+      "destinationKind": "owner",
+      "successor": "pkg/services/operator_settings/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-OPS-FOLD-TOPLEVEL cutover proof"
+    },
+    {
       "packagePath": "pkg/services/operator_settings/internal/service",
       "disposition": "move",
       "destination": "operator_settings",
@@ -4347,6 +4359,12 @@
     },
     {
       "packagePath": "pkg/services/operator_settings/internal/services/document",
+      "disposition": "retain",
+      "destination": "operator_settings",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/operator_settings/internal/services/document/identityinventory",
       "disposition": "retain",
       "destination": "operator_settings",
       "destinationKind": "owner"
