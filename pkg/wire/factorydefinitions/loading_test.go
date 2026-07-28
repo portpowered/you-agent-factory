@@ -48,6 +48,15 @@ func TestLoaderLoadsDirectoryAndCanonicalRepresentations(t *testing.T) {
 	}
 }
 
+func TestAuthoredFactorySourceLoaderConstructsResolver(t *testing.T) {
+	t.Parallel()
+
+	loader := wirefactorydefinitions.AuthoredFactorySourceLoader(platformfilesystem.Local{})
+	if loader == nil {
+		t.Fatal("expected non-nil authored Factory source loader")
+	}
+}
+
 func TestLoaderUsesSameYAMLRootSelectionForRuntimeAndReadOnlyValidation(t *testing.T) {
 	t.Parallel()
 
