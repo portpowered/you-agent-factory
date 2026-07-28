@@ -6,10 +6,10 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	"github.com/portpowered/infinite-you/pkg/transports/http/apitypes"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func TestPreparePersistedFactoryPayload_PrunesStaleLayout(t *testing.T) {
@@ -20,7 +20,7 @@ func TestPreparePersistedFactoryPayload_PrunesStaleLayout(t *testing.T) {
 		t.Fatalf("DecodeCrossPathValidAlphaFactory: %v", err)
 	}
 	factory.Layout = &factoryapi.FactoryLayout{
-		SchemaVersion: interfaces.SupportedFactoryLayoutSchemaVersion,
+		SchemaVersion: factorydefinitions.SupportedFactoryLayoutSchemaVersion,
 		Nodes: &[]factoryapi.FactoryLayoutNode{{
 			Id:       "workstation:process",
 			Position: factoryapi.FactoryLayoutPoint{X: 10, Y: 20},
@@ -127,7 +127,7 @@ func namedFactoryPayloadWithStaleLayout(t *testing.T) []byte {
 		t.Fatalf("DecodeCrossPathValidAlphaFactory: %v", err)
 	}
 	factory.Layout = &factoryapi.FactoryLayout{
-		SchemaVersion: interfaces.SupportedFactoryLayoutSchemaVersion,
+		SchemaVersion: factorydefinitions.SupportedFactoryLayoutSchemaVersion,
 		Nodes: &[]factoryapi.FactoryLayoutNode{{
 			Id:       "workstation:process",
 			Position: factoryapi.FactoryLayoutPoint{X: 10, Y: 20},

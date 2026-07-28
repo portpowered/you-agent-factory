@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 func TestValidateFactoryEventKindParity_CurrentInventoryMatchesOpenAPI(t *testing.T) {
@@ -15,7 +15,7 @@ func TestValidateFactoryEventKindParity_CurrentInventoryMatchesOpenAPI(t *testin
 		t.Fatalf("parse factory event type payload mapping: %v", err)
 	}
 
-	openAPIMappingKinds := make([]factorycontracts.FactoryEventType, 0, len(mapping))
+	openAPIMappingKinds := make([]recordings.FactoryEventType, 0, len(mapping))
 	for _, entry := range mapping {
 		openAPIMappingKinds = append(openAPIMappingKinds, entry.EventType)
 	}
@@ -61,15 +61,15 @@ func TestValidateBundledFactoryEventKindParity_ReportsZeroDrift(t *testing.T) {
 func TestCompareFactoryEventKindParity_NamesRuntimeOnlyKind(t *testing.T) {
 	drift := CompareFactoryEventKindParity(FactoryEventKindParityInput{
 		RuntimeKinds: []PublicEmittableKind{
-			{Kind: factorycontracts.FactoryEventTypeRunRequest, EmissionEvidence: "test"},
-			{Kind: factorycontracts.FactoryEventTypeWorkRequest, EmissionEvidence: "test"},
+			{Kind: recordings.FactoryEventTypeRunRequest, EmissionEvidence: "test"},
+			{Kind: recordings.FactoryEventTypeWorkRequest, EmissionEvidence: "test"},
 		},
-		OpenAPIMappingKinds: []factorycontracts.FactoryEventType{
-			factorycontracts.FactoryEventTypeRunRequest,
+		OpenAPIMappingKinds: []recordings.FactoryEventType{
+			recordings.FactoryEventTypeRunRequest,
 		},
 	})
 
-	if len(drift.RuntimeOnlyKinds) != 1 || drift.RuntimeOnlyKinds[0] != factorycontracts.FactoryEventTypeWorkRequest {
+	if len(drift.RuntimeOnlyKinds) != 1 || drift.RuntimeOnlyKinds[0] != recordings.FactoryEventTypeWorkRequest {
 		t.Fatalf("runtime-only drift = %#v, want [WORK_REQUEST]", drift.RuntimeOnlyKinds)
 	}
 	if len(drift.ContractOnlyKinds) != 0 {
@@ -85,15 +85,15 @@ func TestCompareFactoryEventKindParity_NamesRuntimeOnlyKind(t *testing.T) {
 func TestCompareFactoryEventKindParity_NamesContractOnlyKind(t *testing.T) {
 	drift := CompareFactoryEventKindParity(FactoryEventKindParityInput{
 		RuntimeKinds: []PublicEmittableKind{
-			{Kind: factorycontracts.FactoryEventTypeRunRequest, EmissionEvidence: "test"},
+			{Kind: recordings.FactoryEventTypeRunRequest, EmissionEvidence: "test"},
 		},
-		OpenAPIMappingKinds: []factorycontracts.FactoryEventType{
-			factorycontracts.FactoryEventTypeRunRequest,
-			factorycontracts.FactoryEventTypeFactoryChange,
+		OpenAPIMappingKinds: []recordings.FactoryEventType{
+			recordings.FactoryEventTypeRunRequest,
+			recordings.FactoryEventTypeFactoryChange,
 		},
 	})
 
-	if len(drift.ContractOnlyKinds) != 1 || drift.ContractOnlyKinds[0] != factorycontracts.FactoryEventTypeFactoryChange {
+	if len(drift.ContractOnlyKinds) != 1 || drift.ContractOnlyKinds[0] != recordings.FactoryEventTypeFactoryChange {
 		t.Fatalf("contract-only drift = %#v, want [FACTORY_CHANGE]", drift.ContractOnlyKinds)
 	}
 
@@ -108,13 +108,13 @@ func TestCompareFactoryEventKindParity_ClassifiedContractOnlyKindsAreNotUnexplai
 		RuntimeKinds: PublicEmittableFactoryEventKinds(),
 		ContractOnlyKinds: []ContractOnlyKind{
 			{
-				Kind:     factorycontracts.FactoryEventTypeJavaScriptPhaseChange,
+				Kind:     recordings.FactoryEventTypeJavaScriptPhaseChange,
 				Evidence: "classified for test",
 			},
 		},
-		OpenAPIMappingKinds: []factorycontracts.FactoryEventType{
-			factorycontracts.FactoryEventTypeRunRequest,
-			factorycontracts.FactoryEventTypeJavaScriptPhaseChange,
+		OpenAPIMappingKinds: []recordings.FactoryEventType{
+			recordings.FactoryEventTypeRunRequest,
+			recordings.FactoryEventTypeJavaScriptPhaseChange,
 		},
 	})
 
@@ -125,7 +125,7 @@ func TestCompareFactoryEventKindParity_ClassifiedContractOnlyKindsAreNotUnexplai
 
 func TestContractOnlyFactoryEventKinds_HasEvidenceForEveryEntry(t *testing.T) {
 	contractOnly := ContractOnlyFactoryEventKinds()
-	seen := make(map[factorycontracts.FactoryEventType]struct{}, len(contractOnly))
+	seen := make(map[recordings.FactoryEventType]struct{}, len(contractOnly))
 	for _, entry := range contractOnly {
 		if strings.TrimSpace(string(entry.Kind)) == "" {
 			t.Fatal("contract-only inventory entry missing kind")
@@ -142,17 +142,17 @@ func TestContractOnlyFactoryEventKinds_HasEvidenceForEveryEntry(t *testing.T) {
 
 func TestExcludedAndContractOnlyKinds_AreNotSilentOmissionsInParity(t *testing.T) {
 	_, _, enumValues := loadBundledFactoryEventDiscriminatorContract(t)
-	enumSet := make(map[factorycontracts.FactoryEventType]struct{}, len(enumValues))
+	enumSet := make(map[recordings.FactoryEventType]struct{}, len(enumValues))
 	for _, eventType := range enumValues {
 		enumSet[eventType] = struct{}{}
 	}
 
-	runtimeSet := make(map[factorycontracts.FactoryEventType]struct{}, len(PublicEmittableFactoryEventKinds()))
+	runtimeSet := make(map[recordings.FactoryEventType]struct{}, len(PublicEmittableFactoryEventKinds()))
 	for _, entry := range PublicEmittableFactoryEventKinds() {
 		runtimeSet[entry.Kind] = struct{}{}
 	}
 
-	contractOnlySet := make(map[factorycontracts.FactoryEventType]struct{}, len(ContractOnlyFactoryEventKinds()))
+	contractOnlySet := make(map[recordings.FactoryEventType]struct{}, len(ContractOnlyFactoryEventKinds()))
 	for _, entry := range ContractOnlyFactoryEventKinds() {
 		contractOnlySet[entry.Kind] = struct{}{}
 		if _, ok := enumSet[entry.Kind]; !ok {
@@ -167,7 +167,7 @@ func TestExcludedAndContractOnlyKinds_AreNotSilentOmissionsInParity(t *testing.T
 		if entry.Category != "retired-factory-event-vocabulary" {
 			continue
 		}
-		retiredKind := factorycontracts.FactoryEventType(entry.Name)
+		retiredKind := recordings.FactoryEventType(entry.Name)
 		if _, ok := enumSet[retiredKind]; ok {
 			t.Fatalf("retired excluded kind %q still appears in FactoryEventType enum", entry.Name)
 		}

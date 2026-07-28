@@ -18,6 +18,65 @@ func (wireTestProvider) Infer(context.Context, workers.ProviderInferenceRequest)
 	return workers.InferenceResponse{}, nil
 }
 
+type wireTestProviderRegistry struct{}
+
+func (wireTestProviderRegistry) UsesNativeRunner(string) bool { return false }
+
+func (wireTestProviderRegistry) RunnerMetadata(string) (workers.RunnerMetadata, error) {
+	return workers.RunnerMetadata{}, nil
+}
+
+func (wireTestProviderRegistry) ResolveRunnerSelection(string, string, string) (workers.ResolvedRunnerSelection, error) {
+	return workers.ResolvedRunnerSelection{}, nil
+}
+
+func TestProvideConductorInvocationWithProgressFactory_AcceptsWorkersProviderRegistry(t *testing.T) {
+	t.Parallel()
+
+	edges := serviceedges.Edges{
+		ProviderCommandRunner: testutil.NewProviderCommandRunner(),
+	}
+	providersService, err := provideProvidersService(edges)
+	if err != nil {
+		t.Fatalf("provideProvidersService() error = %v", err)
+	}
+	registry, err := provideProviderRegistry(edges, providersService)
+	if err != nil {
+		t.Fatalf("provideProviderRegistry() error = %v", err)
+	}
+	allocator, err := provideAgyPTYAllocator(edges)
+	if err != nil {
+		t.Fatalf("provideAgyPTYAllocator() error = %v", err)
+	}
+	adaptRunner := provideWorkerCommandRunnerAdapter()
+	factory := provideConductorInvocationWithProgressFactory(edges)
+	executor, err := factory(registry, adaptRunner(edges.ProviderCommandRunner), allocator, nil)
+	if err != nil {
+		t.Fatalf("factory() error = %v", err)
+	}
+	if executor == nil {
+		t.Fatal("factory() returned nil executor")
+	}
+}
+
+func TestProvideConductorInvocationWithProgressFactory_RejectsNonConcreteRegistry(t *testing.T) {
+	t.Parallel()
+
+	edges := serviceedges.Edges{
+		ProviderCommandRunner: testutil.NewProviderCommandRunner(),
+	}
+	allocator, err := provideAgyPTYAllocator(edges)
+	if err != nil {
+		t.Fatalf("provideAgyPTYAllocator() error = %v", err)
+	}
+	adaptRunner := provideWorkerCommandRunnerAdapter()
+	factory := provideConductorInvocationWithProgressFactory(edges)
+	_, err = factory(wireTestProviderRegistry{}, adaptRunner(edges.ProviderCommandRunner), allocator, nil)
+	if err == nil {
+		t.Fatal("factory() error = nil, want non-concrete registry rejection")
+	}
+}
+
 func TestProvideFactorySessionExecutionFactory_BuildsLiveChildInvocation(t *testing.T) {
 	t.Parallel()
 

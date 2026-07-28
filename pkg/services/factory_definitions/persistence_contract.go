@@ -1,6 +1,6 @@
 package factorydefinitions
 
-import contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+import contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
 
 type PreparedFactoryLayoutPayload = contracts.PreparedFactoryLayoutPayload
 type FactorySplitLayoutReplaceResult = contracts.FactorySplitLayoutReplaceResult
@@ -9,8 +9,6 @@ type NamedFactoryListEntry = contracts.NamedFactoryListEntry
 type NamedFactoryResolution = contracts.NamedFactoryResolution
 type NamedFactoryResolutionSource = contracts.NamedFactoryResolutionSource
 type NamedFactoryPrecedenceDecision = contracts.NamedFactoryPrecedenceDecision
-type NamedFactoryCatalog = contracts.NamedFactoryCatalog
-type CurrentFactoryDirectoryResolver = contracts.CurrentFactoryDirectoryResolver
 type Persistence = contracts.Persistence
 
 const (

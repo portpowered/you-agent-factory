@@ -3,13 +3,13 @@ package tts
 import (
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func TestClassifyInvocationWait_LoadingWhenActiveWorkRemains(t *testing.T) {
-	outcome, failure := ClassifyInvocationWait(interfaces.FactoryWorldState{}, "req-1", true)
+	outcome, failure := ClassifyInvocationWait(factorydefinitions.FactoryWorldState{}, "req-1", true)
 	if outcome != InvocationWaitOutcomeLoading {
 		t.Fatalf("outcome = %q, want loading", outcome)
 	}
@@ -58,18 +58,18 @@ func TestIsModelNotReadyFailure_DetectsStableModelFailureEvidence(t *testing.T) 
 }
 
 func TestIsPackagedFactory_MatchesBuiltInCatalogIdentity(t *testing.T) {
-	if !IsPackagedFactory(&interfaces.FactoryConfig{Name: PackagedFactoryName}) {
+	if !IsPackagedFactory(&factorydefinitions.FactoryConfig{Name: PackagedFactoryName}) {
 		t.Fatal("expected factory name match")
 	}
-	if !IsPackagedFactory(&interfaces.FactoryConfig{Project: PackagedFactoryProject}) {
+	if !IsPackagedFactory(&factorydefinitions.FactoryConfig{Project: PackagedFactoryProject}) {
 		t.Fatal("expected factory project match")
 	}
-	if IsPackagedFactory(&interfaces.FactoryConfig{Name: "alpha"}) {
+	if IsPackagedFactory(&factorydefinitions.FactoryConfig{Name: "alpha"}) {
 		t.Fatal("unexpected packaged factory match for unrelated factory")
 	}
 }
 
-func packagedTTSFailureWorldState(requestID, workID, failureMessage string) interfaces.FactoryWorldState {
+func packagedTTSFailureWorldState(requestID, workID, failureMessage string) factorydefinitions.FactoryWorldState {
 	submitted := work.FactoryWorkItem{
 		ID:         workID,
 		WorkTypeID: "task",
@@ -80,18 +80,18 @@ func packagedTTSFailureWorldState(requestID, workID, failureMessage string) inte
 	failed.State = "failed"
 	failed.PlaceID = "task:failed"
 
-	state := interfaces.FactoryWorldState{
-		WorkRequestsByID:       make(map[string]interfaces.WorkRequestPayload),
+	state := factorydefinitions.FactoryWorldState{
+		WorkRequestsByID:       make(map[string]factorydefinitions.WorkRequestPayload),
 		FailedWorkItemsByID:    make(map[string]work.FactoryWorkItem),
-		FailureDetailsByWorkID: make(map[string]interfaces.FactoryWorldFailureDetail),
+		FailureDetailsByWorkID: make(map[string]factorydefinitions.FactoryWorldFailureDetail),
 	}
-	state.WorkRequestsByID[requestID] = interfaces.WorkRequestPayload{
+	state.WorkRequestsByID[requestID] = factorydefinitions.WorkRequestPayload{
 		RequestID: requestID,
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
 		WorkItems: []work.FactoryWorkItem{submitted},
 	}
 	state.FailedWorkItemsByID[workID] = failed
-	state.FailureDetailsByWorkID[workID] = interfaces.FactoryWorldFailureDetail{
+	state.FailureDetailsByWorkID[workID] = factorydefinitions.FactoryWorldFailureDetail{
 		WorkstationName: PackagedInvokeWorkstationName,
 		WorkItem:        failed,
 		FailureDetail:   &workerexecution.FailureDetail{Reason: workerexecution.WorkFailureTypeUnknown, Message: failureMessage},

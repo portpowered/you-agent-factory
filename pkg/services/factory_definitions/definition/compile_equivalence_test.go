@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	factorydefinition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition"
 	compilationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
 	compilationcanonical "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/canonical"
@@ -176,7 +175,7 @@ type peerEffectiveMergedFacts struct {
 func peerEffectiveWorkerAndWorkstationFacts(t *testing.T, contentIdentity string) peerEffectiveMergedFacts {
 	t.Helper()
 
-	var cfg factorycontracts.FactoryConfig
+	var cfg factoryroot.FactoryConfig
 	if err := json.Unmarshal([]byte(contentIdentity), &cfg); err != nil {
 		t.Fatalf("decode ContentIdentity: %v", err)
 	}

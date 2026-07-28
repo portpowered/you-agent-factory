@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
 )
@@ -36,7 +36,7 @@ func TestSealedValidationPath_InvalidTopologyReturnsTypedTarget(t *testing.T) {
 	t.Parallel()
 
 	cfg := sealedValidationPathPetriFactoryConfig()
-	cfg.Workstations[0].Outputs = []factorycontracts.IOConfig{{
+	cfg.Workstations[0].Outputs = []factorydefinitions.IOConfig{{
 		WorkTypeName: "task",
 		StateName:    "bogus",
 	}}
@@ -50,7 +50,7 @@ func TestSealedValidationPath_InvalidTopologyReturnsTypedTarget(t *testing.T) {
 	found := false
 	for _, finding := range result.Findings {
 		if finding.Rule == factoryvalidation.CodeDanglingPlaceReference &&
-			finding.Severity == factorycontracts.ValidationSeverityError &&
+			finding.Severity == factorydefinitions.ValidationSeverityError &&
 			finding.Path != "" {
 			found = true
 		}
@@ -67,15 +67,15 @@ func TestSealedValidationPath_InvalidRequiredToolReturnsTypedTarget(t *testing.T
 	t.Parallel()
 
 	cfg := sealedValidationPathPetriFactoryConfig()
-	cfg.ResourceManifest = &factorycontracts.PortableResourceManifestConfig{
-		RequiredTools: []factorycontracts.RequiredToolConfig{{
+	cfg.ResourceManifest = &factorydefinitions.PortableResourceManifestConfig{
+		RequiredTools: []factorydefinitions.RequiredToolConfig{{
 			Name:    "Missing helper",
 			Command: "missing-tool",
 		}},
 	}
 	checker := sealedValidationPathRequiredToolChecker{
 		"missing-tool": {
-			FailureKind: factorycontracts.RequiredToolFailureKindMissing,
+			FailureKind: factorydefinitions.RequiredToolFailureKindMissing,
 			Err:         errors.New(`required tool "Missing helper" command "missing-tool" was not found on PATH`),
 		},
 	}
@@ -89,7 +89,7 @@ func TestSealedValidationPath_InvalidRequiredToolReturnsTypedTarget(t *testing.T
 	found := false
 	for _, finding := range result.Findings {
 		if finding.Rule == "required-tool-missing" &&
-			finding.Severity == factorycontracts.ValidationSeverityError &&
+			finding.Severity == factorydefinitions.ValidationSeverityError &&
 			finding.Path == "resourceManifest.requiredTools[0].command" {
 			found = true
 		}
@@ -106,7 +106,7 @@ func TestSealedValidationPath_InvalidOrchestratorStrategyReturnsTypedTarget(t *t
 	t.Parallel()
 
 	cfg := sealedValidationPathPetriFactoryConfig()
-	cfg.Orchestrator = &factorycontracts.FactoryOrchestratorConfig{Kind: "LEGACY"}
+	cfg.Orchestrator = &factorydefinitions.FactoryOrchestratorConfig{Kind: "LEGACY"}
 
 	validator := factoryvalidation.New(nil)
 	result := validator.Validate(context.Background(), cfg, nil)
@@ -118,9 +118,9 @@ func TestSealedValidationPath_InvalidOrchestratorStrategyReturnsTypedTarget(t *t
 	for _, target := range result.Targets {
 		assertValidationTargetUsesDefinitionsVocabulary(t, target)
 		if target.Code == factoryvalidation.CodeOrchestratorUnsupportedKind &&
-			target.Severity == factorycontracts.ValidationSeverityError &&
-			target.Subject.Type == factorycontracts.ValidationSubjectTypeFactory &&
-			target.Subject.Location == factorycontracts.ValidationSubjectLocationDefinition {
+			target.Severity == factorydefinitions.ValidationSeverityError &&
+			target.Subject.Type == factorydefinitions.ValidationSubjectTypeFactory &&
+			target.Subject.Location == factorydefinitions.ValidationSubjectLocationDefinition {
 			found = true
 		}
 	}
@@ -137,15 +137,15 @@ func TestSealedValidationPath_RuntimeSemanticValidationThroughSealedPort(t *test
 	t.Parallel()
 
 	cfg := validJavaScriptOrchestratorConfig()
-	validator := factoryvalidation.New(runtimeSemanticValidationStub{targets: []factorycontracts.ValidationTarget{{
+	validator := factoryvalidation.New(runtimeSemanticValidationStub{targets: []factorydefinitions.ValidationTarget{{
 		Code:     "workflow.source.syntaxError",
-		Severity: factorycontracts.ValidationSeverityError,
+		Severity: factorydefinitions.ValidationSeverityError,
 		Message:  "unexpected token",
 		Path:     "factory.orchestrator.javascript.inlineSource",
-		Subject: factorycontracts.ValidationSubject{
-			Type:     factorycontracts.ValidationSubjectTypeFactory,
+		Subject: factorydefinitions.ValidationSubject{
+			Type:     factorydefinitions.ValidationSubjectTypeFactory,
 			ID:       "factory",
-			Location: factorycontracts.ValidationSubjectLocationDefinition,
+			Location: factorydefinitions.ValidationSubjectLocationDefinition,
 		},
 	}}})
 
@@ -154,8 +154,8 @@ func TestSealedValidationPath_RuntimeSemanticValidationThroughSealedPort(t *test
 	for _, target := range result.Targets {
 		assertValidationTargetUsesDefinitionsVocabulary(t, target)
 		if target.Code == "workflow.source.syntaxError" &&
-			target.Severity == factorycontracts.ValidationSeverityError &&
-			target.Subject.Type == factorycontracts.ValidationSubjectTypeFactory &&
+			target.Severity == factorydefinitions.ValidationSeverityError &&
+			target.Subject.Type == factorydefinitions.ValidationSubjectTypeFactory &&
 			target.Path == "factory.orchestrator.javascript.inlineSource" {
 			found = true
 		}
@@ -165,35 +165,35 @@ func TestSealedValidationPath_RuntimeSemanticValidationThroughSealedPort(t *test
 	}
 }
 
-func sealedValidationPathPetriFactoryConfig() *factorycontracts.FactoryConfig {
-	return &factorycontracts.FactoryConfig{
+func sealedValidationPathPetriFactoryConfig() *factorydefinitions.FactoryConfig {
+	return &factorydefinitions.FactoryConfig{
 		Name: "sealed-validation-path",
-		WorkTypes: []factorycontracts.WorkTypeConfig{{
+		WorkTypes: []factorydefinitions.WorkTypeConfig{{
 			Name: "task",
-			States: []factorycontracts.StateConfig{
-				{Name: "init", Type: factorycontracts.StateTypeInitial},
-				{Name: "done", Type: factorycontracts.StateTypeTerminal},
-				{Name: "failed", Type: factorycontracts.StateTypeFailed},
+			States: []factorydefinitions.StateConfig{
+				{Name: "init", Type: factorydefinitions.StateTypeInitial},
+				{Name: "done", Type: factorydefinitions.StateTypeTerminal},
+				{Name: "failed", Type: factorydefinitions.StateTypeFailed},
 			},
 		}},
 		Workers: []workerconfig.Config{{Name: "worker-a"}},
-		Workstations: []factorycontracts.FactoryWorkstationConfig{{
+		Workstations: []factorydefinitions.FactoryWorkstationConfig{{
 			Name:           "process",
 			WorkerTypeName: "worker-a",
-			Inputs:         []factorycontracts.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-			Outputs:        []factorycontracts.IOConfig{{WorkTypeName: "task", StateName: "done"}},
-			OnFailure:      []factorycontracts.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
+			Inputs:         []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+			Outputs:        []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+			OnFailure:      []factorydefinitions.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
 		}},
 	}
 }
 
-type sealedValidationPathRequiredToolChecker map[string]factorycontracts.RequiredToolCheckResult
+type sealedValidationPathRequiredToolChecker map[string]factorydefinitions.RequiredToolCheckResult
 
 func (s sealedValidationPathRequiredToolChecker) Check(
-	tool factorycontracts.RequiredToolConfig,
-) factorycontracts.RequiredToolCheckResult {
+	tool factorydefinitions.RequiredToolConfig,
+) factorydefinitions.RequiredToolCheckResult {
 	if result, ok := s[tool.Command]; ok {
 		return result
 	}
-	return factorycontracts.RequiredToolCheckResult{}
+	return factorydefinitions.RequiredToolCheckResult{}
 }

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts/namevalue"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/namevalue"
 	factoryresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/resource"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workers"
 	"github.com/portpowered/infinite-you/pkg/services/work"

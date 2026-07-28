@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 )
 
 const (
@@ -21,7 +20,7 @@ const (
 )
 
 // IsPackagedFactory reports whether cfg identifies the built-in @you/subagent factory.
-func IsPackagedFactory(cfg *interfaces.FactoryConfig) bool {
+func IsPackagedFactory(cfg *factorydefinitions.FactoryConfig) bool {
 	if cfg == nil {
 		return false
 	}

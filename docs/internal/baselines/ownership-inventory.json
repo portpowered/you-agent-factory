@@ -1171,13 +1171,13 @@
       "fromOwner": "factory_definitions",
       "toOwner": "work",
       "class": "command",
-      "evidence": "pkg/services/factory_definitions/contracts -\u003e pkg/services/work"
+      "evidence": "pkg/services/factory_definitions -\u003e pkg/services/work"
     },
     {
       "fromOwner": "factory_definitions",
       "toOwner": "workers",
       "class": "command",
-      "evidence": "pkg/services/factory_definitions/contracts -\u003e pkg/services/workers"
+      "evidence": "pkg/services/factory_definitions -\u003e pkg/services/workers"
     },
     {
       "fromOwner": "factory_runtime",
@@ -2538,54 +2538,6 @@
       "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/contracts",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal",
-      "deletionCondition": "delete contracts mega-barrel after CLN-DEF-CONTRACTS cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/contracts/contracttests",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal",
-      "deletionCondition": "delete contracts mega-barrel after CLN-DEF-CONTRACTS cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/contracts/failuremetadatatests",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal",
-      "deletionCondition": "delete contracts mega-barrel after CLN-DEF-CONTRACTS cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/contracts/graphtopologytests",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal",
-      "deletionCondition": "delete contracts mega-barrel after CLN-DEF-CONTRACTS cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/contracts/namevalue",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal",
-      "deletionCondition": "delete contracts mega-barrel after CLN-DEF-CONTRACTS cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/contracts/taxonomytests",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal",
-      "deletionCondition": "delete contracts mega-barrel after CLN-DEF-CONTRACTS cutover proof"
-    },
-    {
       "packagePath": "pkg/services/factory_definitions/decisionenvelope",
       "disposition": "move",
       "destination": "factory_definitions",
@@ -2608,6 +2560,36 @@
       "destinationKind": "owner",
       "successor": "pkg/services/factory_definitions/internal/services/snapshots_portability",
       "deletionCondition": "delete public package after IMP-DEF-snapshots_portability private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/contracts",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/contracts/contracttests",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/contracts/failuremetadatatests",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/contracts/graphtopologytests",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/contracts/taxonomytests",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/namedfactories",
@@ -2790,6 +2772,12 @@
       "destinationKind": "owner",
       "successor": "pkg/services/factory_definitions/internal/services/catalog",
       "deletionCondition": "delete public package after IMP-DEF-catalog private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/namevalue",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
     },
     {
       "packagePath": "pkg/services/factory_definitions/packagedinstallation",

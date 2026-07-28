@@ -14,7 +14,6 @@ import (
 	"context"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 )
 
 // Service owns Factory Definition validation behind the CTR-DEF root validate
@@ -35,9 +34,9 @@ type Service interface {
 // validation does not construct Runtime/Petri implementations or choose host
 // filesystem adapters.
 type Dependencies struct {
-	Operations            factorycontracts.DefinitionValidationOperation
-	Effective             factorycontracts.EffectiveDefinitionValidationOperation
-	LoadCanonical         factorycontracts.CanonicalFactoryJSONLoader
-	RequiredToolChecker   factorycontracts.RequiredToolChecker
-	OrchestratorValidator factorycontracts.OrchestratorDefinitionValidator
+	Operations            factorydefinitions.DefinitionValidationOperation
+	Effective             factorydefinitions.EffectiveDefinitionValidationOperation
+	LoadCanonical         factorydefinitions.CanonicalFactoryJSONLoader
+	RequiredToolChecker   factorydefinitions.RequiredToolChecker
+	OrchestratorValidator factorydefinitions.OrchestratorDefinitionValidator
 }

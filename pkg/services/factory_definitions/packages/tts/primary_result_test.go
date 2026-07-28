@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func TestPackagedTTSInvocationPrimaryResult_ReturnsMetadataNotRawAudio(t *testing.T) {
@@ -44,12 +44,12 @@ func TestPackagedTTSInvocationPrimaryResult_ReturnsMetadataNotRawAudio(t *testin
 		Content:    metadataContent,
 	}
 
-	state := interfaces.FactoryWorldState{
+	state := factorydefinitions.FactoryWorldState{
 		PayloadLineage:   work.WorkPayloadLineageProjection{},
-		WorkRequestsByID: make(map[string]interfaces.WorkRequestPayload),
-		TerminalWorkByID: make(map[string]interfaces.FactoryTerminalWork),
+		WorkRequestsByID: make(map[string]factorydefinitions.WorkRequestPayload),
+		TerminalWorkByID: make(map[string]factorydefinitions.FactoryTerminalWork),
 	}
-	state.WorkRequestsByID[requestID] = interfaces.WorkRequestPayload{
+	state.WorkRequestsByID[requestID] = factorydefinitions.WorkRequestPayload{
 		RequestID: requestID,
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
 		WorkItems: []work.FactoryWorkItem{submitted},
@@ -57,7 +57,7 @@ func TestPackagedTTSInvocationPrimaryResult_ReturnsMetadataNotRawAudio(t *testin
 	state.PayloadLineage.RecordWorkRequestSnapshot(1, requestID, submitted)
 	state.PayloadLineage.RecordConsumedInputSnapshot("dispatch-tts", submitted)
 	state.PayloadLineage.RecordDispatchOutputSnapshot(2, "dispatch-tts", []work.FactoryWorkItem{submitted}, terminal, 0)
-	state.TerminalWorkByID[workID] = interfaces.FactoryTerminalWork{WorkItem: terminal, Status: "TERMINAL"}
+	state.TerminalWorkByID[workID] = factorydefinitions.FactoryTerminalWork{WorkItem: terminal, Status: "TERMINAL"}
 
 	selection, err := work.ResolvePrimaryResult(work.PrimaryResultSelectionInput{
 		RequestID:  requestID,

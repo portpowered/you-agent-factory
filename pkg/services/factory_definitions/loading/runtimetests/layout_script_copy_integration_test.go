@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 type portableCopyRoundTrip struct {
@@ -52,7 +52,7 @@ func buildPortableCopyRoundTrip(t *testing.T, copyScript bool) portableCopyRound
 		t.Fatalf("FlattenFactoryConfig: %v", err)
 	}
 
-	if err := os.WriteFile(filepath.Join(sourceDir, interfaces.FactoryConfigFile), flattened, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(sourceDir, factorydefinitions.FactoryConfigFile), flattened, 0o644); err != nil {
 		t.Fatalf("WriteFile(flattened factory.json): %v", err)
 	}
 	expandedDir, err := ExpandFactoryConfigLayout(sourceDir)
@@ -131,7 +131,7 @@ func assertPortableExpandedRuntimeConfig(t *testing.T, loaded *LoadedFactoryConf
 	if !ok {
 		t.Fatal("expected expanded script worker definition to load")
 	}
-	if worker.Type != interfaces.WorkerTypeScript || worker.Command != "powershell" || worker.Timeout != "45m" {
+	if worker.Type != factorydefinitions.WorkerTypeScript || worker.Command != "powershell" || worker.Timeout != "45m" {
 		t.Fatalf("loaded worker = %#v", worker)
 	}
 	if len(worker.Args) != 2 || worker.Args[1] != "scripts/execute-story.ps1" {
@@ -142,7 +142,7 @@ func assertPortableExpandedRuntimeConfig(t *testing.T, loaded *LoadedFactoryConf
 	if !ok {
 		t.Fatal("expected expanded workstation definition to load")
 	}
-	if workstation.Type != interfaces.WorkstationTypeModel || workstation.CopyReferencedScripts != copyScript {
+	if workstation.Type != factorydefinitions.WorkstationTypeModel || workstation.CopyReferencedScripts != copyScript {
 		t.Fatalf("loaded workstation = %#v", workstation)
 	}
 }
@@ -156,7 +156,7 @@ func writePortableFactoryJSON(t *testing.T, factoryDir string, cfg map[string]an
 	if err != nil {
 		t.Fatalf("marshal factory.json: %v", err)
 	}
-	writePortableFile(t, filepath.Join(factoryDir, interfaces.FactoryConfigFile), string(data)+"\n")
+	writePortableFile(t, filepath.Join(factoryDir, factorydefinitions.FactoryConfigFile), string(data)+"\n")
 }
 
 func writePortableFile(t *testing.T, path, content string) {

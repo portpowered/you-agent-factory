@@ -12,7 +12,6 @@ import (
 	"context"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorycontracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 )
 
 // Service owns effective-source compilation behind the CTR-DEF root compile
@@ -29,7 +28,7 @@ type Service interface {
 // compilation does not construct Runtime/Petri implementations or choose host
 // filesystem adapters.
 type Dependencies struct {
-	LoadCanonical      factorycontracts.CanonicalFactoryJSONLoader
-	LoadFromFactoryDir factorycontracts.LoadedFactoryLoader
-	EncodeFactory      factorycontracts.FactoryConfigJSONEncoder
+	LoadCanonical      factorydefinitions.CanonicalFactoryJSONLoader
+	LoadFromFactoryDir factorydefinitions.LoadedFactoryLoader
+	EncodeFactory      factorydefinitions.FactoryConfigJSONEncoder
 }
