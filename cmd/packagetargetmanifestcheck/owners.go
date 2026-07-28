@@ -301,6 +301,8 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 	},
 	"workers": {
 		{exact: "internal", dest: "workers/internal"},
+		{exact: "internal/diagnostics", prefix: "internal/diagnostics/", dest: "workers/internal"},
+		{exact: "internal/interface", prefix: "internal/interface/", dest: "workers/internal"},
 		{exact: "construction", prefix: "construction/", dest: "workers/internal/services/runtime_assembly"},
 		{exact: "prompting", prefix: "prompting/", dest: "workers/internal/services/workstations"},
 		{exact: "worktree", prefix: "worktree/", dest: "workers/internal/services/workstations"},

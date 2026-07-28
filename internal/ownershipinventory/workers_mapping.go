@@ -22,6 +22,8 @@ var workersMoveRules = []workersMoveRule{
 	{exact: "skippermissions", prefix: "skippermissions/", subservice: "workstations"},
 	{exact: "diagnostics", prefix: "diagnostics/"},
 	{exact: "interface", prefix: "interface/"},
+	{exact: "internal/diagnostics", prefix: "internal/diagnostics/"},
+	{exact: "internal/interface", prefix: "internal/interface/"},
 	{exact: "execution", prefix: "execution/", subservice: "workstations"},
 	{exact: "executor", prefix: "executor/", subservice: "workstations"},
 	{exact: "invocation", prefix: "invocation/", subservice: "workstations"},
