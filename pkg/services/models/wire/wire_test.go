@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -22,6 +23,179 @@ import (
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	"go.uber.org/zap"
 )
+
+func TestNewServiceRejectsMissingConstructionPorts(t *testing.T) {
+	t.Parallel()
+
+	edges := validConstructionEdges()
+	tests := []struct {
+		name   string
+		mutate func(*constructionEdges)
+		want   string
+	}{
+		{
+			name: "issuer entropy",
+			mutate: func(edges *constructionEdges) {
+				edges.issuerEntropy = nil
+			},
+			want: "issuer entropy is required",
+		},
+		{
+			name: "asset host platform",
+			mutate: func(edges *constructionEdges) {
+				edges.assetPlatform = models.AssetHostPlatform{}
+			},
+			want: "asset host platform is required",
+		},
+		{
+			name: "asset HTTP client",
+			mutate: func(edges *constructionEdges) {
+				edges.assetHTTP = nil
+			},
+			want: "asset HTTP client is required",
+		},
+		{
+			name: "process launcher",
+			mutate: func(edges *constructionEdges) {
+				edges.processLauncher = nil
+			},
+			want: "model host process launcher is required",
+		},
+		{
+			name: "host HTTP client",
+			mutate: func(edges *constructionEdges) {
+				edges.hostHTTP = nil
+			},
+			want: "model host HTTP client is required",
+		},
+		{
+			name: "host clock",
+			mutate: func(edges *constructionEdges) {
+				edges.hostClock = nil
+			},
+			want: "model host clock is required",
+		},
+		{
+			name: "runtime command runner",
+			mutate: func(edges *constructionEdges) {
+				edges.runtimeRunner = nil
+			},
+			want: "model runtime command runner is required",
+		},
+		{
+			name: "runtime HTTP client",
+			mutate: func(edges *constructionEdges) {
+				edges.runtimeHTTP = nil
+			},
+			want: "model runtime HTTP client is required",
+		},
+		{
+			name: "process clock",
+			mutate: func(edges *constructionEdges) {
+				edges.now = nil
+			},
+			want: "process clock is required",
+		},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			current := edges
+			test.mutate(&current)
+			service, err := current.newService()
+			if service != nil {
+				t.Fatal("NewService() returned non-nil service, want nil")
+			}
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("NewService() error = %v, want %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestNewServiceReturnsPublishedRootInterface(t *testing.T) {
+	t.Parallel()
+
+	var service models.Service = mustNewWireService(t)
+	if service == nil {
+		t.Fatal("NewService() returned nil service")
+	}
+}
+
+type constructionEdges struct {
+	assetPlatform   models.AssetHostPlatform
+	assetHTTP       models.AssetHTTPDoer
+	assetEndpoints  models.RuntimeAssetEndpoints
+	processLauncher models.HostProcessLauncher
+	hostHTTP        models.HostHTTPDoer
+	hostClock       models.HostClock
+	runtimeRunner   platformprocess.CommandRunner
+	runtimeHTTP     models.RuntimeHTTPDoer
+	now             func() time.Time
+	issuerEntropy   platformrandom.Source
+}
+
+func validConstructionEdges() constructionEdges {
+	return constructionEdges{
+		assetPlatform: models.AssetHostPlatform{
+			OperatingSystem: runtime.GOOS,
+			Architecture:    runtime.GOARCH,
+		},
+		assetHTTP:       http.DefaultClient,
+		processLauncher: inertProcessLauncher{},
+		hostHTTP:        http.DefaultClient,
+		hostClock:       inertHostClock{},
+		runtimeRunner:   inertCommandRunner{},
+		runtimeHTTP:     http.DefaultClient,
+		now:             func() time.Time { return time.Unix(123, 456) },
+		issuerEntropy:   platformrandom.CryptoSource{},
+	}
+}
+
+func (edges constructionEdges) newService() (models.Service, error) {
+	return NewService(
+		edges.assetPlatform,
+		edges.assetHTTP,
+		edges.assetEndpoints,
+		os.MkdirAll,
+		os.Stat,
+		os.UserHomeDir,
+		os.WriteFile,
+		os.Rename,
+		os.Remove,
+		os.ReadFile,
+		os.ReadDir,
+		func(path string) (io.WriteCloser, error) { return os.Create(path) },
+		func(path string) (io.ReadCloser, error) { return os.Open(path) },
+		edges.processLauncher,
+		edges.hostHTTP,
+		edges.hostClock,
+		edges.runtimeRunner,
+		edges.runtimeHTTP,
+		os.Stat,
+		os.TempDir,
+		func(dir, pattern string) (models.RuntimeTempFile, error) {
+			return os.CreateTemp(dir, pattern)
+		},
+		zap.NewNop(),
+		edges.now,
+		edges.issuerEntropy,
+		nil,
+		nil,
+		nil,
+		models.LocalRuntimeHooks{},
+	)
+}
+
+func mustNewWireService(t *testing.T) models.Service {
+	t.Helper()
+	service, err := validConstructionEdges().newService()
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	return service
+}
 
 func TestProductionCompositionRejectsScopesFromAnotherModelsAuthority(t *testing.T) {
 	t.Parallel()
