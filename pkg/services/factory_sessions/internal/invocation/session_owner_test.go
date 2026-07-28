@@ -227,6 +227,26 @@ func TestStructuredInvocationContentRequiresOnePrimaryPositionalValue(t *testing
 	}
 }
 
+func TestSessionOwner_ReturnsArgumentErrorFromPrepareInvocationInput(t *testing.T) {
+	owner := newTestSessionOwner(sessionOwnerFixture{
+		FactoryConfig: func(string) (*interfaces.FactoryConfig, error) { return sessionOwnerFactoryConfig(), nil },
+		SubmitWork: func(context.Context, string, workdomain.SubmitRequest) (workdomain.WorkRequestSubmitResult, error) {
+			return workdomain.WorkRequestSubmitResult{}, nil
+		},
+		Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
+			return SessionInvocationObservation{}, nil
+		},
+	})
+
+	_, err := owner.InvokeFactorySession(context.Background(), "session-1", sessionOwnerInvocationRequest(factoryapi.InvocationRequest{
+		Args: &map[string]any{"input": "hello"},
+	}))
+	var argumentErr *work.ArgumentError
+	if !errors.As(err, &argumentErr) || argumentErr.Code != work.ArgumentErrorCodeInvalidActiveSignature {
+		t.Fatalf("error = %v, want INVALID_ACTIVE_SIGNATURE", err)
+	}
+}
+
 func TestSessionOwner_RejectsWhitespaceOnlyCompatibilityTextBeforeSubmittingWork(t *testing.T) {
 	textKind := factoryapi.InvocationInputSourceKindText
 	content := sessionOwnerTextContent(t, "   ")

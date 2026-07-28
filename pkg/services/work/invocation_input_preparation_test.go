@@ -136,6 +136,21 @@ func TestResolveSignatureFactoryInvocationInput_NormalizesPositionalNamedBoolean
 	}
 }
 
+func TestPrepareInvocationInputDirectArgsUsesPublishedRequestShape(t *testing.T) {
+	t.Parallel()
+
+	prepared, err := prepareInvocationInput(t, InvocationInputPreparationRequest{
+		Signature:  signatureFactoryInvocationConfig(),
+		DirectArgs: []NamedArgumentInput{{Key: "input", Values: []string{"draft"}}},
+	})
+	if err != nil {
+		t.Fatalf("PrepareInvocationInput: %v", err)
+	}
+	if prepared.NormalizedArguments == nil || prepared.NormalizedArguments.Arguments["input"].Values[0] != "draft" {
+		t.Fatalf("prepared = %#v, want direct args normalization", prepared)
+	}
+}
+
 func TestPrepareInvocationInputCompatibilityContentUsesPublishedRequestShape(t *testing.T) {
 	t.Parallel()
 
