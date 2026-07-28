@@ -3,9 +3,8 @@
 package portableconfig
 
 import (
-	"errors"
-
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	snapshotsportabilityprepare "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/prepare"
 )
 
 // NewPreparer binds the authored-file operations selected by Wire to the
@@ -15,20 +14,11 @@ func NewPreparer(
 	applyBundledFiles factorydefinitions.PortableBundledFilesApplier,
 	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
 ) factorydefinitions.PortableFactoryConfigPreparer {
-	return func(
-		factoryDir string,
-		factoryConfig *factorydefinitions.FactoryConfig,
-		includeInlineContent bool,
-	) (*factorydefinitions.FactoryConfig, error) {
-		return Prepare(
-			factoryDir,
-			factoryConfig,
-			includeInlineContent,
-			cloneFactoryConfig,
-			applyBundledFiles,
-			applyStarterWork,
-		)
-	}
+	return snapshotsportabilityprepare.NewPreparer(
+		cloneFactoryConfig,
+		applyBundledFiles,
+		applyStarterWork,
+	)
 }
 
 // Prepare clones one authored Factory and projects its supported portable
@@ -41,29 +31,12 @@ func Prepare(
 	applyBundledFiles factorydefinitions.PortableBundledFilesApplier,
 	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
 ) (*factorydefinitions.FactoryConfig, error) {
-	if cloneFactoryConfig == nil {
-		return nil, errors.New("Factory Definition cloner is required")
-	}
-	if applyBundledFiles == nil {
-		return nil, errors.New("portable bundled-files applier is required")
-	}
-	if applyStarterWork == nil {
-		return nil, errors.New("Factory starter-Work applier is required")
-	}
-	cloned, err := cloneFactoryConfig(factoryConfig)
-	if err != nil {
-		return nil, err
-	}
-	if err := applyBundledFiles(
+	return snapshotsportabilityprepare.PrepareConfig(
 		factoryDir,
-		cloned,
+		factoryConfig,
 		includeInlineContent,
-		false,
-	); err != nil {
-		return nil, err
-	}
-	if err := applyStarterWork(factoryDir, cloned); err != nil {
-		return nil, err
-	}
-	return cloned, nil
+		cloneFactoryConfig,
+		applyBundledFiles,
+		applyStarterWork,
+	)
 }
