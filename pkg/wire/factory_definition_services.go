@@ -15,15 +15,9 @@ import (
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorydecisionenvelope "github.com/portpowered/infinite-you/pkg/services/factory_definitions/decisionenvelope"
-	factoryinvocationinterpolation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/invocationinterpolation"
-	factoryinvocationoutput "github.com/portpowered/infinite-you/pkg/services/factory_definitions/invocationoutput"
-	factoryinvocationworktype "github.com/portpowered/infinite-you/pkg/services/factory_definitions/invocationworktype"
-	factoryquorumpolicy "github.com/portpowered/infinite-you/pkg/services/factory_definitions/quorumpolicy"
-	factoryttsobservability "github.com/portpowered/infinite-you/pkg/services/factory_definitions/ttsobservability"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/portableconfig"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factorydefaultscaffold "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/defaultscaffold"
-	factoryworkpropagation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workpropagation"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -80,32 +74,56 @@ func provideContentMaterializer(
 	)
 }
 
-func provideDecisionEnvelopeService() factorydefinitions.DecisionEnvelopeService {
-	return factorydecisionenvelope.NewService()
+func provideFactoryInvocationPolicyPorts() (factorydefinitionswire.InvocationPolicyPorts, error) {
+	return factorydefinitionswire.InvocationPolicyPortsFromNestedOwner()
 }
 
-func provideInvocationInterpolationService() factorydefinitions.InvocationInterpolationService {
-	return factoryinvocationinterpolation.NewService()
+func provideDecisionEnvelopeService(
+	ports factorydefinitionswire.InvocationPolicyPorts,
+) factorydefinitions.DecisionEnvelopeService {
+	return ports.DecisionEnvelope
 }
 
-func provideInvocationOutputShapingService() factorydefinitions.InvocationOutputShapingService {
-	return factoryinvocationoutput.NewService()
+func provideInvocationInterpolationService(
+	ports factorydefinitionswire.InvocationPolicyPorts,
+) factorydefinitions.InvocationInterpolationService {
+	return ports.InvocationInterpolation
 }
 
-func provideInvocationWorkTypeService() factorydefinitions.InvocationWorkTypeService {
-	return factoryinvocationworktype.NewService()
+func provideInvocationOutputShapingService(
+	ports factorydefinitionswire.InvocationPolicyPorts,
+) factorydefinitions.InvocationOutputShapingService {
+	return ports.InvocationOutput
 }
 
-func provideQuorumPolicyService() factorydefinitions.QuorumPolicyService {
-	return factoryquorumpolicy.NewService()
+func provideInvocationWorkTypeService(
+	ports factorydefinitionswire.InvocationPolicyPorts,
+) factorydefinitions.InvocationWorkTypeService {
+	return ports.InvocationWorkType
 }
 
-func provideWorkPropagationPolicyService() factorydefinitions.WorkPropagationPolicyService {
-	return factoryworkpropagation.NewService()
+func provideQuorumPolicyService(
+	ports factorydefinitionswire.InvocationPolicyPorts,
+) factorydefinitions.QuorumPolicyService {
+	return ports.QuorumPolicy
 }
 
-func provideTTSObservabilityService() factorydefinitions.TTSObservabilityService {
-	return factoryttsobservability.NewService()
+func provideWorkPropagationPolicyService(
+	ports factorydefinitionswire.InvocationPolicyPorts,
+) factorydefinitions.WorkPropagationPolicyService {
+	return ports.WorkPropagation
+}
+
+func provideWorkstationExecutionPolicyService(
+	ports factorydefinitionswire.InvocationPolicyPorts,
+) factorydefinitions.WorkstationExecutionPolicyService {
+	return ports.WorkstationExecution
+}
+
+func provideTTSObservabilityService(
+	ports factorydefinitionswire.InvocationPolicyPorts,
+) factorydefinitions.TTSObservabilityService {
+	return ports.TTSObservability
 }
 
 func provideFactoryDefinitionPortableFileSystem(
@@ -285,6 +303,24 @@ func provideFactoryDefinitionInputInboxSentinelEnsurer(
 	fileSystem factorydefinitions.AuthoredLayoutWriterFileSystem,
 ) factorydefinitions.InputInboxSentinelEnsurer {
 	return inboxgitkeep.NewLocal(fileSystem)
+}
+
+func providePortableBundledFilesApplier(
+	fileSystem portablefiles.FileSystem,
+) (factorydefinitions.PortableBundledFilesApplier, error) {
+	return portableconfig.NewPortableBundledFilesApplier(fileSystem)
+}
+
+func provideFactoryStarterWorkApplier(
+	fileSystem portablefiles.FileSystem,
+) (factorydefinitions.FactoryStarterWorkApplier, error) {
+	return portableconfig.NewFactoryStarterWorkApplier(fileSystem)
+}
+
+func providePortableBundledDocsPruner(
+	fileSystem portablefiles.FileSystem,
+) (factorydefinitions.PortableBundledDocsPruner, error) {
+	return portableconfig.NewPortableBundledDocsPruner(fileSystem)
 }
 
 func providePortableBundledFilesMaterializer(fileSystem portablefiles.FileSystem) factorydefinitions.PortableBundledFilesMaterializer {

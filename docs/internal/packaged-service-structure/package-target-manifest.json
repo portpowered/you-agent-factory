@@ -126,6 +126,17 @@
     "pkg/services/factory_definitions/internal/services/distribution/subagent",
     "pkg/services/factory_definitions/internal/services/distribution/tts",
     "pkg/services/factory_definitions/internal/services/distribution/wire",
+    "pkg/services/factory_definitions/internal/services/invocation_policy",
+    "pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope",
+    "pkg/services/factory_definitions/internal/services/invocation_policy/internal/service",
+    "pkg/services/factory_definitions/internal/services/invocation_policy/invocationinterpolation",
+    "pkg/services/factory_definitions/internal/services/invocation_policy/invocationoutput",
+    "pkg/services/factory_definitions/internal/services/invocation_policy/invocationworktype",
+    "pkg/services/factory_definitions/internal/services/invocation_policy/quorumpolicy",
+    "pkg/services/factory_definitions/internal/services/invocation_policy/ttsobservability",
+    "pkg/services/factory_definitions/internal/services/invocation_policy/wire",
+    "pkg/services/factory_definitions/internal/services/invocation_policy/workpropagation",
+    "pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution",
     "pkg/services/factory_definitions/internal/services/snapshots_portability",
     "pkg/services/factory_definitions/internal/services/snapshots_portability/capture",
     "pkg/services/factory_definitions/internal/services/snapshots_portability/editable",
@@ -1025,6 +1036,61 @@
       "packagePath": "pkg/services/factory_definitions/internal/services/distribution/wire",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/distribution"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/invocation_policy"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/invocation_policy"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/internal/service",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/invocation_policy"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/invocationinterpolation",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/invocation_policy"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/invocationoutput",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/invocation_policy"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/invocationworktype",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/invocation_policy"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/quorumpolicy",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/invocation_policy"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/ttsobservability",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/invocation_policy"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/wire",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/invocation_policy"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/workpropagation",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/invocation_policy"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/invocation_policy"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability",

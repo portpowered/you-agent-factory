@@ -21,7 +21,6 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factorydefinitionsservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service"
-	factoryworkstationexecution "github.com/portpowered/infinite-you/pkg/services/factory_definitions/workstationexecution"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -448,7 +447,10 @@ func provideInitialFactorySnapshotFactory(
 	}
 }
 
-func provideAutomationFactory(edges serviceedges.Edges) factorysessionwire.AutomationFactory {
+func provideAutomationFactory(
+	edges serviceedges.Edges,
+	workstationExecution factorydefinitions.WorkstationExecutionPolicyService,
+) factorysessionwire.AutomationFactory {
 	return func(
 		logger *zap.Logger,
 		clock factoryruntime.Clock,
@@ -483,7 +485,7 @@ func provideAutomationFactory(edges serviceedges.Edges) factorysessionwire.Autom
 			nil,
 			"",
 			workerswire.ResolveTemplateFields,
-			factoryworkstationexecution.NewService(),
+			workstationExecution,
 		)
 		if err != nil {
 			return nil
@@ -728,6 +730,7 @@ func provideReplayExecutionFactory() recordings.ReplayExecutionFactory {
 func provideWorkersRuntimeFactory(
 	interpolation factorydefinitions.InvocationInterpolationService,
 	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
+	workstationExecution factorydefinitions.WorkstationExecutionPolicyService,
 	processEnvironment func() []string,
 	currentWorkingDirectory func() (string, error),
 	retryRandom platformrandom.Source,
@@ -832,7 +835,7 @@ func provideWorkersRuntimeFactory(
 			currentWorkingDirectory,
 			contentMaterializer,
 			interpolation,
-			factoryworkstationexecution.NewService(),
+			workstationExecution,
 			factoryDocs,
 			resolveSymlinks,
 			executableLocator,
