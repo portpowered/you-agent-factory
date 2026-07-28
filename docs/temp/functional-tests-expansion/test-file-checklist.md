@@ -684,7 +684,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestPackagedReviewRejectionCarriesFeedback` covers retry context.
   - `TestPackagedReviewRetryExhaustionFails` covers bounded failure.
 
-- [ ] `tests/functional/factory/packaged/subagent/invocation_test.go`
+- [x] `tests/functional/factory/packaged/subagent/invocation_test.go`
   - `TestPackagedSubagentReturnsChildResult` covers basic dispatch.
   - `TestPackagedSubagentStreamsChildResponseEvents` covers observation.
   - `TestPackagedSubagentChildFailureReturnsStableFailure` covers error.

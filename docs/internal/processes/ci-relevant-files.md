@@ -306,6 +306,17 @@
   Catalog metadata infers domain `workers` and subsection `mock` from the path;
   every top-level `Test*` needs a customer-readable Go doc so
   `functionaltestmetadata` stays viz-compatible.
+  Packaged `@you/subagent` invocation functional coverage belongs in
+  `tests/functional/factory/packaged/subagent/invocation_test.go`: prove child
+  primary-result return through public CLI JSON and hermetic no-server named
+  invocation, child Factory Response Event streaming on
+  `GET /factory-sessions/~default/response-events`, and stable child failure
+  through CLI JSON plus API invocation with rejecting mock workers. Drive proofs
+  through `support.InstallPackagedFactory`, `support.WriteMockWorkersConfig`,
+  `support.BuildProcess`, and `support.StartFunctionalAPIServer` without
+  service-internal Petri imports. Catalog metadata infers domain `factory` and
+  subsection `packaged/subagent` from the path; every top-level `Test*` needs a
+  customer-readable Go doc so `functionaltestmetadata` stays viz-compatible.
   CLI single-JSON result functional coverage belongs in
   `tests/functional/transport/cli/output/json_result_test.go`: invoke
   `support.BuildProcess(t, serviceedges.Edges{}).Execute` with global `--json`

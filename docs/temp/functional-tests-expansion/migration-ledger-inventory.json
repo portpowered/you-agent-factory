@@ -7389,6 +7389,36 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/factory/packaged/subagent/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/subagent",
+      "scenario": "TestPackagedSubagentReturnsChildResult",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/subagent/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/subagent/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/subagent",
+      "scenario": "TestPackagedSubagentStreamsChildResponseEvents",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/subagent/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/subagent/invocation_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/subagent",
+      "scenario": "TestPackagedSubagentChildFailureReturnsStableFailure",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/subagent/invocation_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/sessions/mcp/controls_test.go",
       "package": "you-agent-factory/tests/functional/sessions/mcp",
       "scenario": "TestMCPPauseResumeAndCancelTargetCanonicalFactorySession",
@@ -7459,12 +7489,12 @@
       "deletion_only_batch": "n/a"
     }
   ],
-  "scanned_at_utc": "2026-07-28T04:35:00Z",
+  "scanned_at_utc": "2026-07-28T05:00:00Z",
   "summary": {
     "by_catch_all": {
       "bootstrap_portability": 22,
       "guards_batch": 23,
-      "none": 457,
+      "none": 460,
       "replay_contracts": 23,
       "runtime_api": 96,
       "smoke": 62,
@@ -7475,7 +7505,7 @@
       "automations": 7,
       "bootstrap_portability": 21,
       "cli": 59,
-      "factory": 11,
+      "factory": 12,
       "guards_batch": 23,
       "models": 5,
       "observability": 9,
@@ -7494,9 +7524,9 @@
       "workflow": 30,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 726,
+    "customer_top_level_Test_scenarios": 729,
     "lane_functionallong": 95,
-    "lane_short": 631,
+    "lane_short": 634,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 7,
@@ -7515,6 +7545,7 @@
       "you-agent-factory/tests/functional/factory/packaged/deep_research": 3,
       "you-agent-factory/tests/functional/factory/packaged/fusion": 3,
       "you-agent-factory/tests/functional/factory/packaged/goal": 4,
+      "you-agent-factory/tests/functional/factory/packaged/subagent": 3,
       "you-agent-factory/tests/functional/factory/runtime_lifecycle": 1,
       "you-agent-factory/tests/functional/guards_batch": 23,
       "you-agent-factory/tests/functional/models/model_invoke": 3,
