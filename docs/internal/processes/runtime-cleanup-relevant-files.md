@@ -1278,3 +1278,21 @@ after residual transitional public packages are removed:
 Deeper fold-behavior preservation across catalog, authoring, validate,
 snapshot/portability, and distribute slices remains in
 `pkg/services/factory_definitions/wire/fold_behavior_preservation_test.go`.
+
+## DEL-WRK delete-ready inventory
+
+Story 001 records the confirmed delete-ready set for emptied Workers transitional
+packages after CLN-WRK-* consumption:
+
+| Artifact | Purpose |
+| --- | --- |
+| `docs/internal/processes/del-wrk-delete-ready-inventory.json` | Canonical delete-ready, held-back, and excluded paths for DEL-WRK |
+| `pkg/services/workers/del_wrk_delete_ready_inventory_gate_test.go` | Locks CLN-WRK prerequisites, shim-only delete-ready paths, zero-import proof, held-back callers, Providers extraction exclusions, and `internal/services/*` retention |
+| `pkg/services/workers/legacy_fold_boundary_test.go` | Existing folded-legacy import boundary and shim-only characterization used as CLN-WRK-LEGACY-PACKAGES observable proof |
+
+Delete-ready paths must contain only `shim.go` and have zero module importers
+before story 002 deletes them. Held-back paths still have production or test
+imports, or (for `service/`) remain multi-file owner-local compile shims.
+Providers extraction sources (`provider/`, `provider_test/`, `agypty/`,
+`cliprovider/`) and all `internal/services/*` subservices stay excluded from
+deletion until later IMP-PROV absorption or separate packets.

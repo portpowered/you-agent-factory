@@ -1,0 +1,108 @@
+{
+  "packet_id": "DEL-WRK",
+  "branch_name": "pss-del-wrk",
+  "recorded_at_utc": "2026-07-28T19:10:00Z",
+  "story_id": "pss-del-wrk-001",
+  "gates": {
+    "CLN-WRK-FOLD-SERVICE": {
+      "factory_complete": true,
+      "observable_proof": [
+        "pkg/services/workers/internal/services/runtime_assembly",
+        "pkg/services/workers/internal/services/workstations",
+        "pkg/services/workers/internal/services/runners",
+        "pkg/services/workers/wire/wire.go"
+      ]
+    },
+    "CLN-WRK-LEGACY-PACKAGES": {
+      "factory_complete": true,
+      "observable_proof": [
+        "pkg/services/workers/legacy_fold_boundary_test.go"
+      ]
+    },
+    "CLN-WRK-CONTRACT-ROOTS": {
+      "factory_complete": true,
+      "observable_proof": [
+        "pkg/services/workers/service_root_contract_seal_test.go",
+        "docs/internal/packaged-service-structure/workers-root-contract-surface-inventory.md"
+      ]
+    }
+  },
+  "delete_ready_relative_dirs": [
+    "construction",
+    "diagnostics",
+    "draftvalidation",
+    "execution",
+    "execution/recording",
+    "executor",
+    "inferencefailure",
+    "interface",
+    "services/agents",
+    "services/inference",
+    "skippermissions",
+    "workstationpool"
+  ],
+  "held_back": [
+    {
+      "relative_dir": "envdiagnostics",
+      "hold_reason": "production import remains in pkg/services/workers/command.go"
+    },
+    {
+      "relative_dir": "executor/agentrun",
+      "hold_reason": "production import remains in pkg/wire/session_runtime_providers.go"
+    },
+    {
+      "relative_dir": "invocation",
+      "hold_reason": "production import remains in pkg/wire/session_runtime_providers.go"
+    },
+    {
+      "relative_dir": "process",
+      "hold_reason": "production imports remain in pkg/wire, pkg/services/workers/provider/*, and pkg/services/providers/*"
+    },
+    {
+      "relative_dir": "prompting",
+      "hold_reason": "production import remains in pkg/wire/session_runtime_providers.go"
+    },
+    {
+      "relative_dir": "runner",
+      "hold_reason": "test imports remain in pkg/services/workers/wire/wire_test.go and internal/services/runners/runner"
+    },
+    {
+      "relative_dir": "service",
+      "hold_reason": "owner-local compile shim is not shim-only and still carries construction implementation"
+    },
+    {
+      "relative_dir": "services/testing",
+      "hold_reason": "test imports remain in pkg/services/workers/provider and pkg/services/providers adapter tests"
+    },
+    {
+      "relative_dir": "worktree",
+      "hold_reason": "production import remains in pkg/wire/session_runtime_providers.go"
+    }
+  ],
+  "excluded_from_delete": [
+    {
+      "relative_dir": "agypty",
+      "exclusion_reason": "Providers extraction source still required for IMP-PROV-04+"
+    },
+    {
+      "relative_dir": "cliprovider",
+      "exclusion_reason": "Providers extraction source still required for IMP-PROV-04+"
+    },
+    {
+      "relative_dir": "internal",
+      "exclusion_reason": "owner-private Workers implementation tree including internal/services/* subservices"
+    },
+    {
+      "relative_dir": "provider",
+      "exclusion_reason": "Providers extraction source still required for IMP-PROV-04+"
+    },
+    {
+      "relative_dir": "provider_test",
+      "exclusion_reason": "Providers extraction test support still required for IMP-PROV-04+"
+    },
+    {
+      "relative_dir": "wire",
+      "exclusion_reason": "canonical Workers construction surface"
+    }
+  ]
+}
