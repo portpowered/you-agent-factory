@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -96,9 +97,68 @@ func TestPackagedTTSRequiredInputProducesAudioArtifactMetadata(t *testing.T) {
 	}
 }
 
+// TestPackagedTTSOptionalVoiceAndFormatReachModel proves that optional voice and
+// format options supplied through the public packaged-factory invocation
+// surface reach the fake model edge on resolved TTS operation bindings.
+func TestPackagedTTSOptionalVoiceAndFormatReachModel(t *testing.T) {
+	text := fmt.Sprintf(
+		"functional packaged tts optional voice format %d",
+		time.Now().UnixNano(),
+	)
+	voice := "alloy"
+	format := "mp3"
+
+	homeDir := t.TempDir()
+	factoryDir := support.InstallPackagedFactory(
+		t,
+		homeDir,
+		factorydefinitions.PackagedTTSFactoryName,
+	)
+	overwritePackagedTTSFactoryWithOptionalVoiceAndFormatTopology(t, factoryDir)
+
+	fakeProvider := newPackagedTTSFakeProvider([]byte(packagedTTSFakeAudioFixture))
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                factoryDir,
+		WaitForServiceModeRuntime: true,
+		Env: []string{
+			"HOME=" + homeDir,
+			"USERPROFILE=" + homeDir,
+		},
+		Edges: serviceedges.Edges{
+			ProviderOverride: fakeProvider,
+		},
+	})
+
+	response := postPackagedTTSInvocationWithArgs(t, server, map[string]any{
+		"text":   text,
+		"voice":  voice,
+		"format": format,
+	})
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("invocation status = %q, want COMPLETED; response = %#v", response.Status, response)
+	}
+
+	request := fakeProvider.lastRequest()
+	if request == nil {
+		t.Fatal("fake provider Infer was not called, want packaged factory inference to reach the fake model edge")
+	}
+	if voiceBinding, ok := modelBindingJSON(request.ModelBindings, "voice"); !ok {
+		t.Fatalf("model bindings = %#v, want voice slot binding", request.ModelBindings)
+	} else if got := stringValueFromBindingJSON(voiceBinding, "name"); got != voice {
+		t.Fatalf("voice binding name = %q, want %q; binding = %s", got, voice, voiceBinding)
+	}
+	if formatBinding, ok := modelBindingJSON(request.ModelBindings, "format"); !ok {
+		t.Fatalf("model bindings = %#v, want format slot binding", request.ModelBindings)
+	} else if got := stringValueFromBindingJSON(formatBinding, "name"); got != format {
+		t.Fatalf("format binding name = %q, want %q; binding = %s", got, format, formatBinding)
+	}
+}
+
 type packagedTTSFakeProvider struct {
+	mu    sync.Mutex
 	audio []byte
 	calls int
+	last  *workerexecution.ProviderInferenceRequest
 }
 
 func newPackagedTTSFakeProvider(audio []byte) *packagedTTSFakeProvider {
@@ -109,14 +169,33 @@ func (provider *packagedTTSFakeProvider) callCount() int {
 	if provider == nil {
 		return 0
 	}
+	provider.mu.Lock()
+	defer provider.mu.Unlock()
 	return provider.calls
+}
+
+func (provider *packagedTTSFakeProvider) lastRequest() *workerexecution.ProviderInferenceRequest {
+	if provider == nil {
+		return nil
+	}
+	provider.mu.Lock()
+	defer provider.mu.Unlock()
+	if provider.last == nil {
+		return nil
+	}
+	cloned := workerexecution.CloneProviderInferenceRequest(*provider.last)
+	return &cloned
 }
 
 func (provider *packagedTTSFakeProvider) Infer(
 	_ context.Context,
 	request workerexecution.ProviderInferenceRequest,
 ) (workerexecution.InferenceResponse, error) {
+	provider.mu.Lock()
 	provider.calls++
+	cloned := workerexecution.CloneProviderInferenceRequest(request)
+	provider.last = &cloned
+	provider.mu.Unlock()
 	if strings.TrimSpace(request.ModelOperation) != "TTS" {
 		return workerexecution.InferenceResponse{}, fmt.Errorf(
 			"packaged tts fake provider unexpected operation %q",
@@ -147,9 +226,21 @@ var _ providercontract.Provider = (*packagedTTSFakeProvider)(nil)
 // @you/tts layout but replaces authored topology with a cloud-backed inference
 // worker that reaches the provider override fake edge.
 func overwritePackagedTTSFactoryWithProviderFakeTopology(t *testing.T, factoryDir string) {
+	overwritePackagedTTSFactoryTopology(t, factoryDir, scaffoldPackagedTTSLikeFactory)
+}
+
+func overwritePackagedTTSFactoryWithOptionalVoiceAndFormatTopology(t *testing.T, factoryDir string) {
+	overwritePackagedTTSFactoryTopology(t, factoryDir, scaffoldPackagedTTSLikeFactoryWithOptionalVoiceAndFormat)
+}
+
+func overwritePackagedTTSFactoryTopology(
+	t *testing.T,
+	factoryDir string,
+	scaffoldFactory func(*testing.T) string,
+) {
 	t.Helper()
 
-	scaffoldDir := scaffoldPackagedTTSLikeFactory(t)
+	scaffoldDir := scaffoldFactory(t)
 	scaffoldConfig, err := os.ReadFile(filepath.Join(scaffoldDir, factorydefinitions.FactoryConfigFile))
 	if err != nil {
 		t.Fatalf("read scaffold factory.json: %v", err)
@@ -253,6 +344,127 @@ func scaffoldPackagedTTSLikeFactory(t *testing.T) string {
 	})
 }
 
+func scaffoldPackagedTTSLikeFactoryWithOptionalVoiceAndFormat(t *testing.T) string {
+	t.Helper()
+	return support.ScaffoldFactory(t, map[string]any{
+		"name": "tts",
+		"invocationSignature": map[string]any{
+			"parameters": []map[string]any{
+				{
+					"name":     "text",
+					"required": true,
+					"bindings": []map[string]any{
+						{"kind": "POSITIONAL", "position": 1},
+						{"kind": "STDIN"},
+					},
+				},
+				{
+					"name":         "voice",
+					"externalName": "voice",
+					"typeHint":     "STRING",
+					"bindings":     []map[string]any{{"kind": "NAMED"}},
+				},
+				{
+					"name":         "format",
+					"externalName": "format",
+					"typeHint":     "STRING",
+					"bindings":     []map[string]any{{"kind": "NAMED"}},
+				},
+			},
+		},
+		"resources": []map[string]any{{
+			"name":       "omnivoice-cache",
+			"type":       "MODEL",
+			"capacity":   1,
+			"model":      factorydefinitions.DefaultTTSModelName,
+			"backend":    factorydefinitions.DefaultTTSBackendName,
+			"loadPolicy": "ON_DEMAND",
+		}},
+		"workTypes": []map[string]any{{
+			"name": "task",
+			"handlingBehavior": []string{
+				factorydefinitions.WorkTypeHandlingBehaviorDefault,
+			},
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": []map[string]any{{
+			"name":          "tts-executor",
+			"type":          factorydefinitions.WorkerTypeInference,
+			"model":         factorydefinitions.DefaultTTSModelName,
+			"modelLocality": factorydefinitions.ModelLocalityCloud,
+			"modelProvider": "CODEX",
+			"operations": []map[string]any{{
+				"name": "TTS",
+				"inputs": []map[string]any{
+					{
+						"name":         "text",
+						"contentTypes": []string{"TEXT"},
+						"required":     true,
+					},
+					{
+						"name":         "voice",
+						"contentTypes": []string{"JSON"},
+					},
+					{
+						"name":         "format",
+						"contentTypes": []string{"JSON"},
+					},
+				},
+				"outputs": []map[string]any{{
+					"name":         "audio",
+					"contentTypes": []string{"AUDIO"},
+				}},
+			}},
+		}},
+		"workstations": []map[string]any{{
+			"name":      "execute-tts",
+			"type":      "INFERENCE_RUN",
+			"operation": "TTS",
+			"worker":    "tts-executor",
+			"operationBindings": []map[string]any{
+				{
+					"slot": "text",
+					"selector": map[string]any{
+						"type": "TEXT",
+					},
+				},
+				{
+					"slot": "voice",
+					"config": []map[string]any{{
+						"type": "JSON",
+						"role": "voice",
+						"json": map[string]any{"name": "${voice}"},
+					}},
+				},
+				{
+					"slot": "format",
+					"config": []map[string]any{{
+						"type": "JSON",
+						"role": "format",
+						"json": map[string]any{"name": "${format}"},
+					}},
+				},
+			},
+			"inputs": []map[string]string{{
+				"workType": "task",
+				"state":    "init",
+			}},
+			"outputs": []map[string]string{{
+				"workType": "task",
+				"state":    "complete",
+			}},
+			"onFailure": []map[string]string{{
+				"workType": "task",
+				"state":    "failed",
+			}},
+		}},
+	})
+}
+
 func postPackagedTTSInvocation(
 	t *testing.T,
 	server *support.FunctionalAPIServer,
@@ -285,6 +497,62 @@ func postPackagedTTSInvocation(
 		t.Fatalf("decode invocation response: %v", err)
 	}
 	return decoded
+}
+
+func postPackagedTTSInvocationWithArgs(
+	t *testing.T,
+	server *support.FunctionalAPIServer,
+	args map[string]any,
+) factoryapi.InvocationResponse {
+	t.Helper()
+
+	body, err := json.Marshal(factoryapi.InvocationRequest{Args: &args})
+	if err != nil {
+		t.Fatalf("marshal invocation request: %v", err)
+	}
+
+	endpoint := strings.TrimSuffix(server.URL(), "/") +
+		"/factory-sessions/" + factorysessions.DefaultSessionID + "/invocations"
+	response, err := http.Post(endpoint, "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST %s: %v", endpoint, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		payload, _ := io.ReadAll(response.Body)
+		t.Fatalf("POST %s status = %d, want 200: %s", endpoint, response.StatusCode, string(payload))
+	}
+
+	var decoded factoryapi.InvocationResponse
+	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
+		t.Fatalf("decode invocation response: %v", err)
+	}
+	return decoded
+}
+
+func modelBindingJSON(
+	bindings []workerexecution.ResolvedModelOperationBinding,
+	slot string,
+) (json.RawMessage, bool) {
+	for _, binding := range bindings {
+		if binding.Slot != slot || len(binding.Content) == 0 {
+			continue
+		}
+		part := binding.Content[0]
+		if len(part.JSON) > 0 {
+			return part.JSON, true
+		}
+	}
+	return nil, false
+}
+
+func stringValueFromBindingJSON(payload json.RawMessage, key string) string {
+	var decoded map[string]any
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		return ""
+	}
+	value, _ := decoded[key].(string)
+	return value
 }
 
 func invocationTextSourceKindPtr() *factoryapi.InvocationInputSourceKind {
