@@ -542,11 +542,23 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedfactories",
-      "minimum": 77.77
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active unit coverage profile contains no measurable statements for this transitional compile shim.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "DEL-DEF removes the public namedfactories shim or the unit coverage profile reports measurable statements for this package."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths",
-      "minimum": 80.00
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active unit coverage profile contains no measurable statements for this transitional compile shim.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "DEL-DEF removes the public namedpaths shim or the unit coverage profile reports measurable statements for this package."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namevalue",
