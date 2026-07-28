@@ -2106,8 +2106,22 @@ response-stream output.
 - `pkg/transports/cli/run/packaged_tts_invocation.go` logs named-factory resolution context at
   the CLI boundary without recording packaged-factory metrics or logging submitted
   text or generated artifact bodies.
-- `pkg/services/factory_definitions/packages/goal/` owns packaged `@you/goal` factory metadata
-  constants (`PackagedFactoryName`, `PackagedInvokeWorkstationName`).
+- `pkg/services/factory_definitions/internal/services/distribution/goal/` owns packaged
+  `@you/goal` asset/materialize/metadata modules used by distribute install/catalog
+  paths. It must not import `factory_definitions/decisionenvelope` or define
+  decision-envelope interpretation symbols; boundary proof lives in
+  `internal/decision_envelope_ownership_boundary_test.go`.
+- `pkg/services/factory_definitions/packages/goal/` remains a transitional shim for
+  folded asset/metadata modules and for `decision_envelope.go`, which still
+  re-exports `factory_definitions/decisionenvelope` until
+  `CLN-DEF-FOLD-INVOCATION-POLICY` cutover. This distribution fold does not claim
+  invocation-policy or decision-envelope ownership complete.
+- `pkg/services/factory_definitions/decisionenvelope/` implements packaged goal
+  decision-envelope interpretation behind the Definitions root contract and is
+  not absorbed into distribution ownership by this packet.
+- `pkg/services/factory_definitions/packages/goal/` transitional metadata constants
+  (`PackagedFactoryName`, `PackagedInvokeWorkstationName`) delegate to
+  distribution-owned goal modules.
 - `packages/packaged-factories/generated/manifest.json` is the single
   registration point for shipped named Factories. Regeneration derives it from
   authored Factory directories, and normal initializer startup materializes every
