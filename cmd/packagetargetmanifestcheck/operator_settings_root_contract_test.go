@@ -25,7 +25,6 @@ func TestOperatorSettingsExcessRootContractFoldDestinations(t *testing.T) {
 	t.Parallel()
 
 	want := map[string]string{
-		"document_construction_bridge":       "pkg/services/operator_settings/internal/services/document",
 		"identity_input_index_inventory":     "pkg/services/operator_settings/internal",
 		"resolution_composition":             "pkg/services/operator_settings/internal/services/resolution",
 		"providers_root_construction":        "pkg/services/operator_settings/internal",
@@ -139,7 +138,6 @@ func TestOperatorSettingsExcessRootContractFoldClustersMatchInventoryNote(t *tes
 	wantClusters := []string{
 		"construction_ports",
 		"defaults_resolution_implementation",
-		"document_construction_bridge",
 		"identity_input_index_inventory",
 		"providers_root_construction",
 		"resolution_composition",

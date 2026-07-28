@@ -7,6 +7,8 @@ import (
 	settingsconstruct "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/construct"
 	internaltestproviders "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+
+	_ "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document"
 )
 
 // RegisterDocumentOwner wires the nested document owner constructor into Operator Settings

@@ -27,6 +27,7 @@ func TestOperatorSettingsThinRootContractFiles(t *testing.T) {
 	t.Parallel()
 
 	want := []string{
+		"config_document.go",
 		"doc.go",
 		"document_contract.go",
 		"resolution_contract.go",
@@ -53,7 +54,6 @@ func TestOperatorSettingsExcessRootContractFoldDestinations(t *testing.T) {
 	t.Parallel()
 
 	want := map[string]string{
-		"document_construction_bridge":       "pkg/services/operator_settings/internal/services/document",
 		"identity_input_index_inventory":     "pkg/services/operator_settings/internal",
 		"resolution_composition":             "pkg/services/operator_settings/internal/services/resolution",
 		"providers_root_construction":        "pkg/services/operator_settings/internal",
@@ -88,7 +88,6 @@ func TestOperatorSettingsExcessRootContractFoldDestinations(t *testing.T) {
 	wantClusters := []string{
 		"construction_ports",
 		"defaults_resolution_implementation",
-		"document_construction_bridge",
 		"identity_input_index_inventory",
 		"providers_root_construction",
 		"resolution_composition",

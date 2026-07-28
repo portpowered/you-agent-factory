@@ -1,4 +1,4 @@
-package operatorsettings_test
+package settingsdocument_test
 
 import (
 	"errors"

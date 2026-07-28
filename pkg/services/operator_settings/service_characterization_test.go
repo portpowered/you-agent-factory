@@ -2,10 +2,108 @@ package operatorsettings_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 )
+
+type documentPeerFake struct {
+	documents map[string]operatorsettings.Document
+}
+
+func newDocumentPeerFake(entries map[string]operatorsettings.Document) *documentPeerFake {
+	copied := make(map[string]operatorsettings.Document, len(entries))
+	for path, document := range entries {
+		copied[path] = document.Clone()
+	}
+	return &documentPeerFake{documents: copied}
+}
+
+func (fake *documentPeerFake) LoadDocument(
+	request operatorsettings.LoadDocumentRequest,
+) (operatorsettings.LoadDocumentResult, error) {
+	if err := request.Validate(); err != nil {
+		return operatorsettings.LoadDocumentResult{}, err
+	}
+	path := strings.TrimSpace(request.Path)
+	document, found := fake.documents[path]
+	if !found {
+		if request.RequireExisting {
+			return operatorsettings.LoadDocumentResult{}, operatorsettings.DocumentFailure{
+				Kind: operatorsettings.DocumentFailureKindNotFound,
+				Path: path,
+			}
+		}
+		return operatorsettings.LoadDocumentResult{
+			Document: operatorsettings.EmptyDocument(),
+			Path:     path,
+			Found:    false,
+		}, nil
+	}
+	return operatorsettings.LoadDocumentResult{
+		Document: document.Clone(),
+		Path:     path,
+		Found:    true,
+	}, nil
+}
+
+func (fake *documentPeerFake) ApplyDocumentUpdate(
+	request operatorsettings.ApplyDocumentUpdateRequest,
+) (operatorsettings.ApplyDocumentUpdateResult, error) {
+	if err := request.Validate(); err != nil {
+		return operatorsettings.ApplyDocumentUpdateResult{}, err
+	}
+	path := strings.TrimSpace(request.Path)
+	document, found := fake.documents[path]
+	if !found {
+		document = operatorsettings.EmptyDocument()
+	}
+	expected := strings.TrimSpace(request.ExpectedBackendScope)
+	if expected != "" && document.BackendScopeID != expected {
+		return operatorsettings.ApplyDocumentUpdateResult{}, operatorsettings.DocumentFailure{
+			Kind:    operatorsettings.DocumentFailureKindConflict,
+			Message: "backend scope mismatch",
+			Path:    path,
+		}
+	}
+	updated, err := fake.mergeProviderModelUpdate(document, request.ProviderModel)
+	if err != nil {
+		return operatorsettings.ApplyDocumentUpdateResult{}, err
+	}
+	fake.documents[path] = updated
+	return operatorsettings.ApplyDocumentUpdateResult{
+		Document:  updated.Clone(),
+		Path:      path,
+		Persisted: true,
+	}, nil
+}
+
+func (fake *documentPeerFake) mergeProviderModelUpdate(
+	document operatorsettings.Document,
+	update operatorsettings.DocumentProviderModelUpdate,
+) (operatorsettings.Document, error) {
+	if update.Provider != nil {
+		provider := strings.TrimSpace(*update.Provider)
+		if provider == "" {
+			return operatorsettings.Document{}, operatorsettings.DocumentFailure{
+				Kind:    operatorsettings.DocumentFailureKindMalformed,
+				Message: "worker model provider is required",
+			}
+		}
+		if provider == "unsupported-provider" {
+			return operatorsettings.Document{}, operatorsettings.DocumentFailure{
+				Kind:    operatorsettings.DocumentFailureKindUnsupported,
+				Message: provider,
+			}
+		}
+		document.Defaults.WorkerModelProvider = provider
+	}
+	if update.Model != nil {
+		document.Defaults.WorkerModel = strings.TrimSpace(*update.Model)
+	}
+	return document, nil
+}
 
 // servicePeerFake implements the full Operator Settings Service using only root
 // contracts and in-memory state. It does not import filesystem, codec, CLI, UI,

@@ -1009,6 +1009,13 @@ response-stream output.
   top-level directory inventory, and dual ledgers through
   `VerifyOperatorSettingsRootReconciliation`; package-target checks mirror the
   Go inventory in `cmd/packagetargetmanifestcheck/operator_settings_root_contract.go`.
+- CLN-SET-CONTRACT-ROOTS story-002 folds `document_construction_bridge` into
+  `pkg/services/operator_settings/internal/services/document` (`bridge.go`,
+  `owner_construct.go`, `config_document_service.go`, `register.go`); the peer
+  root keeps `config_document.go` as the thin `ConfigDocumentService` surface
+  wired through `ConfigureConfigDocumentOperations` to avoid root↔subservice
+  import cycles; wire/construct/servicewire/testlink blank-import the document
+  subservice so registration runs before `ConfigureDocumentOwnerConstructor`.
 - When global named-factory guidance changes, update its authored
   `contracts/cli/commands.json` records and the task-oriented guidance in
   `docs/reference/authoring-factories.md` plus `config.md`; do not restore
