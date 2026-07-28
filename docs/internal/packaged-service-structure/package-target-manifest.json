@@ -64,6 +64,7 @@
     "pkg/platform/stdio",
     "pkg/root",
     "pkg/services/automations",
+    "pkg/services/automations/internal",
     "pkg/services/automations/internal/services/cron",
     "pkg/services/automations/internal/services/cron/internal/service",
     "pkg/services/automations/internal/services/cron/wire",
@@ -629,6 +630,11 @@
       "packagePath": "pkg/services/automations",
       "disposition": "retain",
       "destination": "automations"
+    },
+    {
+      "packagePath": "pkg/services/automations/internal",
+      "disposition": "retain",
+      "destination": "automations/internal"
     },
     {
       "packagePath": "pkg/services/automations/internal/services/cron",

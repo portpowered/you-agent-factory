@@ -12,7 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/portpowered/infinite-you/pkg/services/automations"
-	automationservice "github.com/portpowered/infinite-you/pkg/services/automations/service"
+	automationinternal "github.com/portpowered/infinite-you/pkg/services/automations/internal"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
@@ -30,8 +30,8 @@ func (diskFilesystemInputReader) Stat(name string) (fs.FileInfo, error) {
 	return os.Stat(name)
 }
 
-func newFilesystemWatcherBoundaryService() *automationservice.Service {
-	return automationservice.New(
+func newFilesystemWatcherBoundaryService() *automationinternal.Service {
+	return automationinternal.New(
 		zap.NewNop(),
 		clockwork.NewFakeClock(),
 		nil,
@@ -54,7 +54,7 @@ func setupFilesystemWatcherBoundaryDir(t *testing.T) string {
 
 func newFilesystemWatcherForBoundary(
 	t *testing.T,
-	svc *automationservice.Service,
+	svc *automationinternal.Service,
 	dir string,
 	submitter automations.WorkRequestSubmitter,
 ) automations.FilesystemWatcher {

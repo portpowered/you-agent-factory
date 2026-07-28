@@ -1,4 +1,4 @@
-package service_test
+package internal_test
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 
 	factorydefinitioncomposition "github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
-	automationservice "github.com/portpowered/infinite-you/pkg/services/automations/service"
+	automationinternal "github.com/portpowered/infinite-you/pkg/services/automations/internal"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -171,7 +171,7 @@ func TestScriptPollerCommandRequest_DefaultsEmptyWorkingDirectoryToRuntimeBaseDi
 	)
 	runtimeCfg.SetRuntimeBaseDir(runtimeBaseDir)
 
-	req, err := automationservice.ScriptPollerCommandRequest(
+	req, err := automationinternal.ScriptPollerCommandRequest(
 		runtimeCfg,
 		newCanonicalScriptPollerWorkstation(),
 		newCanonicalScriptPollerWorker("--mode", "watch"),
@@ -198,7 +198,7 @@ func TestParseScriptPollerOutput_RejectsUnsupportedRawFactoryEvents(t *testing.T
 		t.Fatalf("marshal raw event payload: %v", err)
 	}
 
-	_, hasOutput, parseErr := automationservice.ParseScriptPollerOutput(rawEventJSON)
+	_, hasOutput, parseErr := automationinternal.ParseScriptPollerOutput(rawEventJSON)
 	if !hasOutput {
 		t.Fatal("expected raw event payload to count as poller output")
 	}
@@ -208,7 +208,7 @@ func TestParseScriptPollerOutput_RejectsUnsupportedRawFactoryEvents(t *testing.T
 }
 
 func TestParseScriptPollerOutput_RejectsMalformedStdout(t *testing.T) {
-	_, hasOutput, err := automationservice.ParseScriptPollerOutput([]byte("submitted work\n"))
+	_, hasOutput, err := automationinternal.ParseScriptPollerOutput([]byte("submitted work\n"))
 	if !hasOutput {
 		t.Fatal("expected non-empty stdout to count as poller output")
 	}
@@ -370,7 +370,7 @@ func TestStartScriptPoller_RestartsOnMalformedOutputWithBackoff(t *testing.T) {
 
 	waitForPollerRunnerCalls(t, runner, 1, time.Second)
 	waitForFakeClockWaiters(t, fakeClock, 1)
-	fakeClock.Advance(automationservice.ScriptPollerRestartBackoffMin)
+	fakeClock.Advance(automationinternal.ScriptPollerRestartBackoffMin)
 	waitForPollerRunnerCalls(t, runner, 2, time.Second)
 
 	if observedLogs.FilterMessage("script poller restarting").Len() == 0 {

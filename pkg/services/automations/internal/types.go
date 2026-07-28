@@ -1,4 +1,4 @@
-package service
+package internal
 
 import automations "github.com/portpowered/infinite-you/pkg/services/automations"
 
