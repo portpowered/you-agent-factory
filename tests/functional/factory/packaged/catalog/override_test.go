@@ -14,10 +14,12 @@ import (
 )
 
 const (
-	packagedGoalFactoryName        = "@you/goal"
-	localGoalOverrideDescription   = "customer local override for packaged goal"
-	invalidOverrideLeakProbe       = "broken-local-override-secret"
-	invalidGoalOverrideFactoryJSON = `{"` + invalidOverrideLeakProbe + `":"do-not-expose"`
+	packagedGoalFactoryName             = "@you/goal"
+	localGoalOverrideDescription        = "customer local override for packaged goal"
+	unrelatedLocalFactoryName           = "customer-local-workshop"
+	unrelatedLocalFactoryDescription    = "unrelated project-local Factory"
+	invalidOverrideLeakProbe            = "broken-local-override-secret"
+	invalidGoalOverrideFactoryJSON      = `{"` + invalidOverrideLeakProbe + `":"do-not-expose"`
 )
 
 // TestLocalFactoryOverridesPackagedFactoryWithSameName proves that when a customer
@@ -129,6 +131,54 @@ func TestInvalidLocalOverrideDoesNotFallBackSilently(t *testing.T) {
 			packagedGoalFactoryName,
 		)
 	}
+}
+
+// TestUnrelatedLocalFactoryDoesNotHidePackagedFactories proves that when a
+// customer adds a project-local Factory whose name does not collide with any
+// packaged built-in, the public factory list still enumerates packaged
+// Factories alongside the unrelated local entry instead of replacing the
+// packaged catalog wholesale.
+func TestUnrelatedLocalFactoryDoesNotHidePackagedFactories(t *testing.T) {
+	home := t.TempDir()
+	workingDirectory := t.TempDir()
+	projectRoot := filepath.Join(workingDirectory, "factory")
+	writeFactory(t, projectRoot, unrelatedLocalFactoryName, unrelatedLocalFactoryDescription)
+
+	entries := executeFactoryList(t, home, workingDirectory)
+	assertEntry(
+		t,
+		entries,
+		unrelatedLocalFactoryName,
+		filepath.Join(projectRoot, unrelatedLocalFactoryName),
+		unrelatedLocalFactoryDescription,
+	)
+
+	packagedEntries := packagedUnmaterializedEntries(entries)
+	if len(packagedEntries) == 0 {
+		t.Fatalf(
+			"entries = %#v, want packaged @you/* Factories visible alongside unrelated local Factory",
+			entries,
+		)
+	}
+	if !slices.ContainsFunc(packagedEntries, func(entry listEntry) bool {
+		return entry.Name == packagedGoalFactoryName
+	}) {
+		t.Fatalf(
+			"packaged entries = %#v, want %s still enumerated",
+			packagedEntries,
+			packagedGoalFactoryName,
+		)
+	}
+}
+
+func packagedUnmaterializedEntries(entries []listEntry) []listEntry {
+	var packaged []listEntry
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name, "@you/") && entry.FactoryDirectory == "-" {
+			packaged = append(packaged, entry)
+		}
+	}
+	return packaged
 }
 
 func writeInvalidScopedFactory(t *testing.T, root, name string, payload []byte) string {
