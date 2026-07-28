@@ -645,7 +645,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 
 ### Packaged factories
 
-- [ ] `tests/functional/factory/packaged/catalog/discovery_test.go`
+- [x] `tests/functional/factory/packaged/catalog/discovery_test.go`
   - `TestPackagedFactoryCatalogListsEveryEmbeddedFactory` compares runtime
     discovery with the embedded package inventory.
   - `TestPackagedFactoryCatalogHasUniqueStableNames` rejects collisions.

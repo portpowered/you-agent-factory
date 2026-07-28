@@ -1219,36 +1219,6 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/factory/catalog/effective_catalog_test.go",
-      "package": "you-agent-factory/tests/functional/factory/catalog",
-      "scenario": "TestFactoryListHonorsPreCanceledContextAtomically",
-      "lane": "short",
-      "destination": "tests/functional/factory/packaged/catalog/discovery_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/factory/catalog/effective_catalog_test.go",
-      "package": "you-agent-factory/tests/functional/factory/catalog",
-      "scenario": "TestFactoryListProjectsEffectiveCatalogWithoutInitialization",
-      "lane": "short",
-      "destination": "tests/functional/factory/packaged/catalog/discovery_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
-      "source_path": "tests/functional/factory/catalog/effective_catalog_test.go",
-      "package": "you-agent-factory/tests/functional/factory/catalog",
-      "scenario": "TestFactoryListReportsCatalogDiscoveryFailuresAtomically",
-      "lane": "short",
-      "destination": "tests/functional/factory/packaged/catalog/discovery_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
       "source_path": "tests/functional/factory/runtime_lifecycle/one_shot_test.go",
       "package": "you-agent-factory/tests/functional/factory/runtime_lifecycle",
       "scenario": "TestOneShotRunJoinsRuntimeLifecycle",
@@ -5319,16 +5289,6 @@
       "deletion_only_batch": "n/a"
     },
     {
-      "source_path": "tests/functional/transport/http/packaged_factories_catalog_test.go",
-      "package": "you-agent-factory/tests/functional/transport/http",
-      "scenario": "TestPackagedFactoriesAPI_ReturnsPublishedCatalog",
-      "lane": "short",
-      "destination": "tests/functional/factory/packaged/catalog/discovery_test.go",
-      "catch_all": "none",
-      "specialty_targets": "none",
-      "deletion_only_batch": "n/a"
-    },
-    {
       "source_path": "tests/functional/transport/http/server/content_negotiation_test.go",
       "package": "you-agent-factory/tests/functional/transport/http/server",
       "scenario": "TestAPIJSONRequestsAndResponsesUseDocumentedContentType",
@@ -7327,14 +7287,84 @@
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/catalog/discovery_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/catalog",
+      "scenario": "TestFactoryListHonorsPreCanceledContextAtomically",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/catalog/discovery_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/catalog/discovery_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/catalog",
+      "scenario": "TestFactoryListProjectsEffectiveCatalogWithoutInitialization",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/catalog/discovery_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/catalog/discovery_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/catalog",
+      "scenario": "TestFactoryListReportsCatalogDiscoveryFailuresAtomically",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/catalog/discovery_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/catalog/discovery_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/catalog",
+      "scenario": "TestPackagedFactoriesAPI_ReturnsPublishedCatalog",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/catalog/discovery_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/catalog/discovery_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/catalog",
+      "scenario": "TestNewEmbeddedFactoryRequiresFunctionalMatrixEntry",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/catalog/discovery_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/catalog/discovery_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/catalog",
+      "scenario": "TestPackagedFactoryCatalogHasUniqueStableNames",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/catalog/discovery_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/packaged/catalog/discovery_test.go",
+      "package": "you-agent-factory/tests/functional/factory/packaged/catalog",
+      "scenario": "TestPackagedFactoryCatalogListsEveryEmbeddedFactory",
+      "lane": "short",
+      "destination": "tests/functional/factory/packaged/catalog/discovery_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
     }
   ],
-  "scanned_at_utc": "2026-07-28T04:15:00Z",
+  "scanned_at_utc": "2026-07-28T04:25:00Z",
   "summary": {
     "by_catch_all": {
       "bootstrap_portability": 22,
       "guards_batch": 23,
-      "none": 457,
+      "none": 460,
       "replay_contracts": 23,
       "runtime_api": 96,
       "smoke": 62,
@@ -7345,7 +7375,7 @@
       "automations": 7,
       "bootstrap_portability": 21,
       "cli": 62,
-      "factory": 7,
+      "factory": 11,
       "guards_batch": 23,
       "models": 5,
       "observability": 9,
@@ -7358,15 +7388,15 @@
       "sessionparity": 13,
       "sessions": 6,
       "smoke": 62,
-      "transport": 107,
+      "transport": 106,
       "work": 6,
       "workers": 74,
       "workflow": 30,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 713,
+    "customer_top_level_Test_scenarios": 716,
     "lane_functionallong": 95,
-    "lane_short": 618,
+    "lane_short": 621,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
       "you-agent-factory/tests/functional/automations": 7,
@@ -7379,7 +7409,7 @@
       "you-agent-factory/tests/functional/cli/named_invocation": 6,
       "you-agent-factory/tests/functional/cli/root_discovery": 9,
       "you-agent-factory/tests/functional/cli/session_resume": 6,
-      "you-agent-factory/tests/functional/factory/catalog": 3,
+      "you-agent-factory/tests/functional/factory/packaged/catalog": 7,
       "you-agent-factory/tests/functional/factory/packaged/deep_research": 3,
       "you-agent-factory/tests/functional/factory/runtime_lifecycle": 1,
       "you-agent-factory/tests/functional/guards_batch": 23,
@@ -7415,7 +7445,6 @@
       "you-agent-factory/tests/functional/transport/cli/parameters": 19,
       "you-agent-factory/tests/functional/transport/cli/process": 17,
       "you-agent-factory/tests/functional/transport/docs": 1,
-      "you-agent-factory/tests/functional/transport/http": 1,
       "you-agent-factory/tests/functional/transport/http/server": 14,
       "you-agent-factory/tests/functional/transport/http/status": 2,
       "you-agent-factory/tests/functional/transport/mcp/protocol": 3,
@@ -7522,15 +7551,15 @@
     }
   },
   "completeness_audit": {
-    "audited_at_utc": "2026-07-28T04:15:00Z",
+    "audited_at_utc": "2026-07-28T04:25:00Z",
     "story": "ft-wave2-work-dependencies-mergeability",
-    "live_customer_scenarios": 713,
-    "ledger_rows": 713,
+    "live_customer_scenarios": 716,
+    "ledger_rows": 716,
     "unmapped_scenarios": 0,
     "checklist_destinations": 435,
     "wrong_layer_destinations": 69,
     "invalid_destinations": 0,
-    "lane_short": 618,
+    "lane_short": 621,
     "lane_functionallong": 95,
     "specialty_targets_documented": 11,
     "deletion_only_batches": 52,

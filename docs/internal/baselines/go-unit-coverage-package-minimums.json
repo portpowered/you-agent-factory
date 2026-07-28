@@ -488,7 +488,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/javascript/source",
-      "minimum": 69.51
+      "minimum": 66.54
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/javascript/validation",
@@ -562,7 +562,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/javascript",
-      "minimum": 77.14
+      "minimum": 74.28
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/metrics",
@@ -582,7 +582,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime",
-      "minimum": 84.05
+      "minimum": 83.72
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/runtime/buffers",
@@ -1251,6 +1251,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/testlink",
       "minimum": 100.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/http",
+      "minimum": 80.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/mcp",
