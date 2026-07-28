@@ -2,13 +2,13 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	canonicalpkg "github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
 	"github.com/portpowered/infinite-you/pkg/services/recordings/replay"
@@ -25,7 +25,7 @@ type lifecycleRuntimeRecorder struct {
 	flushInterval time.Duration
 	now           func() time.Time
 	startedAt     time.Time
-	initialEvent  factorydefinitions.FactoryEvent
+	initialEvent  factoryruntime.FactoryEvent
 	seen          map[string]struct{}
 	nextSequence  recordings.CanonicalEventSequence
 	finalizeErr   error
@@ -33,7 +33,7 @@ type lifecycleRuntimeRecorder struct {
 }
 
 type pendingRuntimeRecording struct {
-	event *factorydefinitions.FactoryEvent
+	event *factoryruntime.FactoryEvent
 	err   error
 }
 
@@ -153,7 +153,7 @@ func (recorder *lifecycleRuntimeRecorder) Stop() {
 	})
 }
 
-func (recorder *lifecycleRuntimeRecorder) RecordEvent(event factorydefinitions.FactoryEvent) {
+func (recorder *lifecycleRuntimeRecorder) RecordEvent(event factoryruntime.FactoryEvent) {
 	if recorder == nil {
 		return
 	}
@@ -170,7 +170,7 @@ func (recorder *lifecycleRuntimeRecorder) RecordEvent(event factorydefinitions.F
 }
 
 func (recorder *lifecycleRuntimeRecorder) recordEventLocked(
-	event factorydefinitions.FactoryEvent,
+	event factoryruntime.FactoryEvent,
 ) error {
 	if recorder.service == nil {
 		return fmt.Errorf("Recordings root service is not bound")
@@ -263,7 +263,7 @@ func (recorder *lifecycleRuntimeRecorder) Finalize(finishedAt time.Time) error {
 	if recorder.finalizeErr != nil {
 		return recorder.finalizeErr
 	}
-	if err := recorder.recordEventLocked(runtimeFinishedEvent(recorder.startedAt, finishedAt)); err != nil {
+	if err := recorder.recordEventLocked(factoryruntime.RunFinishedFactoryEvent(recorder.startedAt, finishedAt)); err != nil {
 		recorder.recordErrorLocked("terminal_metadata_failed", "record terminal Factory event", err)
 	}
 	_, recorder.finalizeErr = recorder.service.FinishRecording(recordings.FinishRecordingRequest{
@@ -271,29 +271,4 @@ func (recorder *lifecycleRuntimeRecorder) Finalize(finishedAt time.Time) error {
 		FinishedAt:  finishedAt,
 	})
 	return recorder.finalizeErr
-}
-
-func runtimeFinishedEvent(startedAt, finishedAt time.Time) factorydefinitions.FactoryEvent {
-	state := factorydefinitions.FactoryStateCompleted
-	startedAtUTC := startedAt.UTC()
-	finishedAtUTC := finishedAt.UTC()
-	payload, err := json.Marshal(factorydefinitions.RunResponseEventPayload{
-		State: &state,
-		WallClock: &factorydefinitions.RunEventWallClock{
-			StartedAt:  &startedAtUTC,
-			FinishedAt: &finishedAtUTC,
-		},
-	})
-	if err != nil {
-		payload = json.RawMessage(`{}`)
-	}
-	return factorydefinitions.FactoryEvent{
-		Id:            "factory-event/run-finished",
-		SchemaVersion: factorydefinitions.FactoryEventSchemaVersionV1,
-		Type:          factorydefinitions.FactoryEventTypeRunResponse,
-		Context: factorydefinitions.FactoryEventContext{
-			EventTime: finishedAtUTC,
-		},
-		Payload: payload,
-	}
 }
