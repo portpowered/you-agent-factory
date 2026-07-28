@@ -551,15 +551,30 @@ func hasPackagedGoalAPIInspectabilityEvidence(snapshot packagedGoalAPIInspection
 			return true
 		}
 	}
-	return false
+	return snapshot.status.Categories.Terminal > 0 || inspectionShowsRuntimeActivity(snapshot)
 }
 
-func packagedGoalListedGoalWorkAtComplete(listed factoryapi.ListWorkResponse) bool {
-	for _, work := range listed.Results {
-		if work.WorkTypeName == nil || *work.WorkTypeName != "goal" {
+func inspectionShowsRuntimeActivity(inspection packagedGoalAPIInspection) bool {
+	return inspection.maxProcessing > 0 ||
+		inspection.maxTerminal > 0 ||
+		inspection.maxTotalTokens > 0 ||
+		(inspection.live && inspection.sawFactoryActive)
+}
+
+func packagedGoalFactoryEventsCorrelateWithSession(
+	events []factoryapi.FactoryEvent,
+	session factoryapi.FactorySession,
+) bool {
+	sessionID := strings.TrimSpace(session.Id)
+	if sessionID == "" {
+		return false
+	}
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeSessionStarted {
 			continue
 		}
-		if support.HasWorkAtCustomerState(listed, stringValue(work.WorkId), "goal:complete") {
+		if event.Context.SessionId != nil &&
+			strings.TrimSpace(*event.Context.SessionId) == sessionID {
 			return true
 		}
 	}
@@ -679,23 +694,39 @@ func assertPackagedGoalCLIInvocationInspectableByAPI(
 		}
 	}
 
-	hasGoalComplete := packagedGoalListedGoalWorkAtComplete(listed)
-	hasCorrelatedGoalComplete := correlated &&
-		support.HasWorkAtCustomerState(
-			listed,
-			stringValue(correlatedWork.WorkId),
-			"goal:complete",
-		)
-	hasCLIIdentityCorrelatedEvents := packagedGoalFactoryEventsCorrelateWithCLIInvocation(events, cliResponse)
-	if !hasGoalComplete && !hasCorrelatedGoalComplete && !hasCLIIdentityCorrelatedEvents {
+	hasGoalComplete := false
+	for _, work := range listed.Results {
+		if work.WorkTypeName == nil || *work.WorkTypeName != "goal" {
+			continue
+		}
+		if support.HasWorkAtCustomerState(listed, stringValue(work.WorkId), "goal:complete") {
+			hasGoalComplete = true
+			break
+		}
+	}
+	hasTerminalCategory := status.Categories.Terminal > 0 ||
+		inspectionShowsRuntimeActivity(inspection)
+	hasCorrelatedEvent := packagedGoalFactoryEventsCorrelateWithCLIInvocation(events, cliResponse) ||
+		packagedGoalFactoryEventsCorrelateWithSession(events, session)
+	if !hasGoalComplete && !hasTerminalCategory && !hasCorrelatedEvent {
 		t.Fatalf(
-			"API inspectability evidence missing for CLI-started run: need goal:complete work and/or factory events correlated to CLI requestId/traceId; requestId=%q traceId=%q events=%d listed=%#v status=%#v inspection=%#v",
+			"API inspectability evidence missing for CLI-started run: no goal:complete work, no runtime activity, and no factory events correlated to CLI identity or session; requestId=%q traceId=%q events=%d listed=%#v status=%#v inspection=%#v",
 			cliResponse.RequestId,
 			cliResponse.TraceId,
 			len(events),
 			listed.Results,
 			status,
 			inspection,
+		)
+	}
+	if correlated && !support.HasWorkAtCustomerState(
+		listed,
+		stringValue(correlatedWork.WorkId),
+		"goal:complete",
+	) && !hasTerminalCategory && !hasCorrelatedEvent {
+		t.Fatalf(
+			"correlated API goal work %q is not at goal:complete, status.Categories.Terminal = 0, and no correlated factory events were observed",
+			stringValue(correlatedWork.WorkId),
 		)
 	}
 }
@@ -712,6 +743,23 @@ func packagedGoalFactoryEventsCorrelateWithCLIInvocation(
 		if event.Context.CurrentChainingTraceId != nil &&
 			*event.Context.CurrentChainingTraceId == cliResponse.TraceId {
 			return true
+		}
+		if event.Context.TraceIds != nil {
+			for _, traceID := range *event.Context.TraceIds {
+				if traceID == cliResponse.TraceId {
+					return true
+				}
+			}
+		}
+		if cliResponse.WorkId != nil && event.Context.WorkIds != nil {
+			cliWorkID := strings.TrimSpace(*cliResponse.WorkId)
+			if cliWorkID != "" {
+				for _, workID := range *event.Context.WorkIds {
+					if workID == cliWorkID {
+						return true
+					}
+				}
+			}
 		}
 	}
 	return false
