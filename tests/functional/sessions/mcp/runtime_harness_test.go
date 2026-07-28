@@ -354,11 +354,15 @@ func assertMCPAsyncRunningResultNotReady(
 			"mode":      mode,
 		}),
 	)
-	if response.Result != nil && response.Result.ResultStatus == factoryapi.FactorySessionResultStatusFinal {
-		return
-	}
 	if response.Result != nil {
-		t.Fatalf("get_result running = %#v, want not-ready envelope", response.Result)
+		switch response.Result.ResultStatus {
+		case factoryapi.FactorySessionResultStatusFinal,
+			factoryapi.FactorySessionResultStatusUnavailable:
+			// Result can reach a terminal shape before durable session status catches up.
+			return
+		default:
+			t.Fatalf("get_result running = %#v, want not-ready envelope", response.Result)
+		}
 	}
 	if response.Error == nil || response.Error.Code != "factory_session.result.not_ready" {
 		t.Fatalf("get_result error = %#v, want factory_session.result.not_ready", response.Error)
