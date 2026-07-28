@@ -2,6 +2,7 @@ package main
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/ownershipinventory"
@@ -109,6 +110,53 @@ func TestCommittedManifestOperatorSettingsRejectsRetainToOwnerRootForUnexpectedS
 		}
 		if row.Destination == "operator_settings" {
 			t.Fatalf("committed manifest row %q move destination = owner root, want nested plan path", packagePath)
+		}
+	}
+}
+
+func TestVerifyOperatorSettingsDualLedgerAlignmentPassesOnRepository(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := findRepoRoot(t)
+	if err := ownershipinventory.VerifyOperatorSettingsDualLedgerAlignment(repoRoot); err != nil {
+		t.Fatalf("VerifyOperatorSettingsDualLedgerAlignment() error = %v", err)
+	}
+}
+
+func TestOperatorSettingsCommittedBaselinesAlignMoveDestinations(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := findRepoRoot(t)
+	manifest, err := loadManifest(filepath.Join(repoRoot, manifestRelativePath))
+	if err != nil {
+		t.Fatalf("loadManifest() error = %v", err)
+	}
+	ownership, err := ownershipinventory.Load(repoRoot)
+	if err != nil {
+		t.Fatalf("ownershipinventory.Load() error = %v", err)
+	}
+
+	ownershipByPath := make(map[string]ownershipinventory.PackageRow, len(ownership.Packages))
+	for _, row := range ownership.Packages {
+		ownershipByPath[row.PackagePath] = row
+	}
+
+	const ownerPrefix = "pkg/services/operator_settings/"
+	for _, row := range manifest.Packages {
+		if row.PackagePath != "pkg/services/operator_settings" && !strings.HasPrefix(row.PackagePath, ownerPrefix) {
+			continue
+		}
+		if row.Disposition != DispositionMove {
+			continue
+		}
+		ownershipRow, ok := ownershipByPath[row.PackagePath]
+		if !ok {
+			t.Fatalf("ownership inventory missing committed manifest move row %q", row.PackagePath)
+		}
+		wantSuccessor := "pkg/services/" + row.Destination
+		if ownershipRow.Successor != wantSuccessor {
+			t.Fatalf("dual-ledger drift for %q: manifest destination %q => successor %q, ownership has %q",
+				row.PackagePath, row.Destination, wantSuccessor, ownershipRow.Successor)
 		}
 	}
 }

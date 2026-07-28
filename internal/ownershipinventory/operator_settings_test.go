@@ -52,9 +52,12 @@ func TestMapPackageOperatorSettingsCanonicalChildrenRetain(t *testing.T) {
 	canonical := []string{
 		"pkg/services/operator_settings",
 		"pkg/services/operator_settings/wire",
+		"pkg/services/operator_settings/transports",
 		"pkg/services/operator_settings/transports/cli",
+		"pkg/services/operator_settings/internal",
 		"pkg/services/operator_settings/internal/service",
 		"pkg/services/operator_settings/internal/services/document",
+		"pkg/services/operator_settings/internal/services/resolution",
 	}
 	for _, packagePath := range canonical {
 		got, err := ownershipinventory.MapPackage(packagePath)

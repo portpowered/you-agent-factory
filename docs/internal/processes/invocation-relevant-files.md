@@ -903,6 +903,14 @@ response-stream output.
   to `operator_settings/internal` or
   `operator_settings/internal/services/{document,resolution}` for
   CLN-SET-CONTRACT-ROOTS.
+- Operator Settings INV-SET-TOPLEVEL retain-regression proofs live in
+  `internal/ownershipinventory/operator_settings_dual_ledger.go` plus mirrored
+  tests in `internal/ownershipinventory/operator_settings_baseline_test.go`,
+  `internal/ownershipinventory/operator_settings_dual_ledger_test.go`, and
+  `cmd/packagetargetmanifestcheck/operator_settings_test.go`; use
+  `VerifyOperatorSettingsDualLedgerAlignment` to prove ownership-inventory and
+  package-target-manifest agree on unexpected-sibling move rows and that fold
+  targets never regress to owner-root retain destinations.
 - When global named-factory guidance changes, update its authored
   `contracts/cli/commands.json` records and the task-oriented guidance in
   `docs/reference/authoring-factories.md` plus `config.md`; do not restore
