@@ -16,7 +16,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/prompting"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/prompting"
 )
 
 const Identity = "script"

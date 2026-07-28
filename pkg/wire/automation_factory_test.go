@@ -9,6 +9,7 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
@@ -43,7 +44,12 @@ func TestProvideAutomationFactoryConstructsThroughAutomationsWire(t *testing.T) 
 		"",
 	)
 
-	factory := provideAutomationFactory(serviceedges.Edges{})
+	ports, err := factorydefinitionswire.InvocationPolicyPortsFromNestedOwner()
+	if err != nil {
+		t.Fatalf("InvocationPolicyPortsFromNestedOwner() error = %v", err)
+	}
+
+	factory := provideAutomationFactory(serviceedges.Edges{}, ports.WorkstationExecution)
 	service := factory(
 		zap.NewNop(),
 		platformclock.Real{},
