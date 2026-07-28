@@ -179,6 +179,7 @@ func TestProviderSessionsRootGoInventoryDistinguishesThinContractTestsFromImplem
 	}
 
 	wantThinTests := []string{
+		"del_pses_prerequisite_gate_test.go",
 		"legacy_packages_disposition_test.go",
 		"providers_import_boundary_test.go",
 		"root_contracts_providers_boundary_test.go",

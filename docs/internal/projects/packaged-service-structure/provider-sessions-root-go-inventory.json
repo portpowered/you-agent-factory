@@ -9,6 +9,11 @@
       "note": "Peer Service interface plus Inspect/Project/Details request, result, value, and typed-error contracts."
     },
     {
+      "file": "del_pses_prerequisite_gate_test.go",
+      "classification": "thin_root_contract_test",
+      "note": "DEL-PSES story 001 gate proving CLN-PSES-FOLD-SERVICE, CLN-PSES-LEGACY-PACKAGES, and CLN-PSES-CONTRACT-ROOTS tree invariants before leased deletion begins."
+    },
+    {
       "file": "doc.go",
       "classification": "thin_root_contract",
       "note": "Package documentation for the committed thin Provider Sessions root contract surface."

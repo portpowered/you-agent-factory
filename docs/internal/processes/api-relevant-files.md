@@ -350,6 +350,14 @@ Use this map when changing the public REST contract.
   `pkg/wire`, `pkg/root`, `pkg/initializer`, top-level CLI composition, shared
   MCP host/composition fan-in, HTTP-WORK, CLI-WORK, or other services' MCP
   adapters when reconciling manifest churn.
+- DEL-PSES story 001 (`pss-del-pses-001`) confirms CLN-PSES fold packets are
+  Factory-complete before leased deletion begins. Observable gate proofs live in
+  `pkg/services/provider_sessions/del_pses_prerequisite_gate_test.go` (tree
+  invariants from CLN-PSES-FOLD-SERVICE internal fold, CLN-PSES-LEGACY-PACKAGES
+  zero-extra sibling lock and reader subservices, CLN-PSES-CONTRACT-ROOTS thin
+  root contract seal, and transitional `service/` retained for deletion). Fold
+  behavioral proofs live in sibling boundary tests under
+  `pkg/services/provider_sessions/`.
 - Provider Session HTTP decoding, generated-contract mapping, service
   invocation, typed root error mapping (`error_mapping.go`), cancel/timeout edge
   mapping, and response encoding for owned Provider Sessions operations live in
