@@ -96,6 +96,14 @@ Use this map when changing the public REST contract.
   deadline exhaustion end without mapping to INTERNAL_ERROR; canceled requests
   terminate without an ErrorResponse body and deadline exhaustion returns 504
   (`request_context.go`).
+- DEL-WORK story 001 (`pss-del-work-001`) confirms CLN-WORK-FOLD-SERVICE,
+  CLN-WORK-LEGACY-PACKAGES, and CLN-WORK-CONTRACT-ROOTS are Factory-complete
+  before leased deletion begins. Observable gate proofs live in
+  `pkg/services/work/del_work_prerequisite_gate_test.go` (tree invariants from
+  CLN-WORK-FOLD-SERVICE internal fold and transitional `service/` shim retention,
+  CLN-WORK-LEGACY-PACKAGES transitional public siblings and private subservices,
+  and CLN-WORK-CONTRACT-ROOTS thin root contract seal). Fold behavioral proofs
+  live in sibling boundary tests under `pkg/services/work/`.
 - Factory Runtime HTTP decoding, generated-contract mapping, Runtime root
   invocation, typed error mapping, and cancel/timeout handling live in
   `pkg/services/factory_runtime/transports/http`. The adapter consumes the
