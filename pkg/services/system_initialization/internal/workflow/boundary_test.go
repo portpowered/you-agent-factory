@@ -30,6 +30,9 @@ func TestWorkflowDoesNotDependOnInitializerOrTransports(t *testing.T) {
 			"pkg/transports/http",
 			"pkg/transports/mcp",
 			"pkg/services/edges",
+			"pkg/services/operator_settings/servicewire",
+			"pkg/services/operator_settings/identityinventory",
+			"pkg/services/operator_settings/internal/",
 		} {
 			if strings.Contains(string(source), forbidden) {
 				t.Errorf("%s imports forbidden lifecycle, transport, or composition package %q", entry.Name(), forbidden)
@@ -90,6 +93,9 @@ func TestWorkflowPackageBoundary_DoesNotImportInitializerOrStoreOwnershipPackage
 		"github.com/portpowered/infinite-you/pkg/wire",
 		"github.com/portpowered/infinite-you/pkg/transports",
 		"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packagedinstallation",
+		"github.com/portpowered/infinite-you/pkg/services/operator_settings/servicewire",
+		"github.com/portpowered/infinite-you/pkg/services/operator_settings/identityinventory",
+		"github.com/portpowered/infinite-you/pkg/services/operator_settings/internal",
 	}
 	for _, dep := range strings.Fields(string(output)) {
 		for _, forbidden := range forbiddenRoots {
