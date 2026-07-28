@@ -28,6 +28,7 @@ func TestNewRejectsMissingRequiredDependencies(t *testing.T) {
 		{name: "interpolation", drop: func(deps *invocationservice.Dependencies) { deps.Interpolation = nil }, want: "interpolation service"},
 		{name: "Work Type", drop: func(deps *invocationservice.Dependencies) { deps.WorkTypes = nil }, want: "Work Type service"},
 		{name: "input reader", drop: func(deps *invocationservice.Dependencies) { deps.InputFiles = nil }, want: "input file reader"},
+		{name: "Work service", drop: func(deps *invocationservice.Dependencies) { deps.Work = nil }, want: "Work service"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -170,6 +171,31 @@ func TestServiceCompletesTimeoutExactlyOnce(t *testing.T) {
 	}
 }
 
+func TestServiceResolveInvocationInputNormalizesCompatibilityText(t *testing.T) {
+	t.Parallel()
+
+	deps := validDependencies(nil)
+	service, err := New(deps)
+	if err != nil {
+		t.Fatalf("New(): %v", err)
+	}
+	cfg := &factorydefinitions.FactoryConfig{WorkTypes: []factorydefinitions.WorkTypeConfig{{
+		Name: "task", HandlingBehavior: []string{factorydefinitions.WorkTypeHandlingBehaviorDefault},
+	}}}
+	sourceKind := factorysessions.InvocationInputSourceKindText
+	resolved, err := service.ResolveInvocationInput(cfg, factorysessions.InvocationRequest{
+		ContentProvided: true,
+		SourceKind:      &sourceKind,
+		Content:         []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "hello"}},
+	})
+	if err != nil {
+		t.Fatalf("ResolveInvocationInput(): %v", err)
+	}
+	if len(resolved.Content) != 1 || resolved.Content[0].Text != "hello" {
+		t.Fatalf("resolved content = %#v, want hello compatibility text", resolved.Content)
+	}
+}
+
 func TestServicePreservesDependencyFailure(t *testing.T) {
 	t.Parallel()
 
@@ -213,6 +239,7 @@ func validDependencies(calls *int) invocationservice.Dependencies {
 			count()
 			return nil, nil
 		},
+		Work: work.NewInvocationPolicyService(),
 	}
 }
 

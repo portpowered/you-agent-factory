@@ -101,15 +101,28 @@ func TestWorkTopLevelUnexpectedCoveredByMoveRules(t *testing.T) {
 	t.Parallel()
 
 	spec := productOwnerTopLevelSpecs["work"]
+	wantDestination := map[string]string{
+		"service":               "work/internal",
+		"stateaccessrecordings": "work/internal/services/state_access",
+		"testdata":              "work/internal",
+	}
+	if len(spec.unexpected) != len(wantDestination) {
+		t.Fatalf("unexpected inventory drift: got %v, want keys %v", spec.unexpected, wantDestination)
+	}
+
 	for _, child := range spec.unexpected {
 		rest := child
+		want, ok := wantDestination[child]
+		if !ok {
+			t.Fatalf("unexpected sibling %q missing from confirmed inventory destinations", child)
+		}
 		if child == "service" {
 			got, ok := mapLegacyServiceImplementationPackage("work", "pkg/services/work/"+child, rest)
 			if !ok {
 				t.Fatalf("mapLegacyServiceImplementationPackage() ok = false for %q", child)
 			}
-			if got.Disposition != DispositionMove || got.Destination != "work/internal" {
-				t.Fatalf("service move mapping = %#v, want move→work/internal", got)
+			if got.Disposition != DispositionMove || got.Destination != want {
+				t.Fatalf("service move mapping = %#v, want move→%s", got, want)
 			}
 			continue
 		}
@@ -118,9 +131,52 @@ func TestWorkTopLevelUnexpectedCoveredByMoveRules(t *testing.T) {
 		if !ok {
 			t.Fatalf("nestedOwnerMoveDestination(work, %q) ok = false", rest)
 		}
-		if destination == "work" {
-			t.Fatalf("unexpected top-level child %q maps to owner root retain destination", child)
+		if destination != want {
+			t.Fatalf("unexpected top-level child %q destination = %q, want %q", child, destination, want)
 		}
+	}
+}
+
+func TestWorkUnexpectedSiblingMoveDestinationsLocked(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		path            string
+		wantDestination string
+	}{
+		{
+			path:            "pkg/services/work/service",
+			wantDestination: "work/internal",
+		},
+		{
+			path:            "pkg/services/work/stateaccessrecordings",
+			wantDestination: "work/internal/services/state_access",
+		},
+		{
+			path:            "pkg/services/work/testdata",
+			wantDestination: "work/internal",
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.path, func(t *testing.T) {
+			t.Parallel()
+
+			got, ok := mapCommittedOwnerPackage(tc.path)
+			if !ok {
+				t.Fatalf("mapCommittedOwnerPackage(%q) ok = false", tc.path)
+			}
+			if mappingIsRetainToOwnerRoot(got, "work") {
+				t.Fatalf("mapCommittedOwnerPackage(%q) regressed to retain→work", tc.path)
+			}
+			if got.Disposition != DispositionMove {
+				t.Fatalf("mapCommittedOwnerPackage(%q) disposition = %q, want move", tc.path, got.Disposition)
+			}
+			if got.Destination != tc.wantDestination {
+				t.Fatalf("mapCommittedOwnerPackage(%q) destination = %q, want %q", tc.path, got.Destination, tc.wantDestination)
+			}
+		})
 	}
 }
 

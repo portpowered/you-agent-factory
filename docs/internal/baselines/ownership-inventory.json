@@ -1743,7 +1743,7 @@
       "fromOwner": "workers",
       "toOwner": "factory_sessions",
       "class": "command",
-      "evidence": "pkg/services/workers/service -\u003e pkg/services/factory_sessions"
+      "evidence": "pkg/services/workers/internal -\u003e pkg/services/factory_sessions"
     },
     {
       "fromOwner": "workers",
@@ -3262,6 +3262,18 @@
       "deletionCondition": "delete transitional top-level package after CLN-RUN-FOLD-TOPLEVEL cutover proof"
     },
     {
+      "packagePath": "pkg/services/factory_runtime/internal/factorystatus",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_runtime/internal/legacysnapshot",
+      "disposition": "retain",
+      "destination": "factory_runtime",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_runtime/internal/orchestrators/javascript/preview",
       "disposition": "move",
       "destination": "factory_runtime",
@@ -4380,6 +4392,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/provider_sessions/internal/service",
+      "disposition": "retain",
+      "destination": "provider_sessions",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/provider_sessions/internal/services/codex_reader",
       "disposition": "retain",
       "destination": "provider_sessions",
@@ -4980,6 +4998,14 @@
       "destinationKind": "owner",
       "successor": "pkg/services/workers/internal/services/runners",
       "deletionCondition": "delete public package after IMP-WRK-runners private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal",
+      "disposition": "move",
+      "destination": "workers",
+      "destinationKind": "owner",
+      "successor": "pkg/services/workers/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-WRK-FOLD-TOPLEVEL cutover proof"
     },
     {
       "packagePath": "pkg/services/workers/internal/services/runners",

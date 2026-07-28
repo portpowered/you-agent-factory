@@ -49,6 +49,11 @@ type Service interface {
 	// ErrWorkRequestRejected). Path-backed or protocol decoding is not part of
 	// this root domain seam; see FileSubmissionService for file adapters.
 	SubmitWorkRequestForSession(context.Context, string, WorkRequest) (WorkRequestSubmitResult, error)
+	// PrepareWorkRequest is the published admission-prep slice. Peers supply an
+	// already-mapped WorkRequest and optional canonical public JSON so Work can
+	// enforce lineage, content normalization, and mutually exclusive submission
+	// fields before admission.
+	PrepareWorkRequest(context.Context, WorkRequestPreparation) (WorkRequest, error)
 
 	// MoveWorkForSession is part of the published state-access slice. Peers apply
 	// an operator move with Work identity, target state name, and requestId, and

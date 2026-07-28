@@ -376,15 +376,12 @@ func TestAPIInvalidLifecycleTransitionReturnsConflict(t *testing.T) {
 		terminalStatus,
 	)
 
-	afterResume := readDurableFactorySession(t, baseURL, sessionID)
-	if afterResume.Status != terminalStatus {
-		t.Fatalf(
-			"session %s status after rejected resume = %q, want unchanged %q",
-			sessionID,
-			afterResume.Status,
-			terminalStatus,
-		)
-	}
+	assertDurableFactorySessionRemainsTerminal(
+		t,
+		baseURL,
+		sessionID,
+		"session status after rejected resume",
+	)
 
 	pause := postSessionLifecycleControlExpectConflict(
 		t,
@@ -400,13 +397,10 @@ func TestAPIInvalidLifecycleTransitionReturnsConflict(t *testing.T) {
 		terminalStatus,
 	)
 
-	afterPause := readDurableFactorySession(t, baseURL, sessionID)
-	if afterPause.Status != terminalStatus {
-		t.Fatalf(
-			"session %s status after rejected pause = %q, want unchanged %q",
-			sessionID,
-			afterPause.Status,
-			terminalStatus,
-		)
-	}
+	assertDurableFactorySessionRemainsTerminal(
+		t,
+		baseURL,
+		sessionID,
+		"session status after rejected pause",
+	)
 }

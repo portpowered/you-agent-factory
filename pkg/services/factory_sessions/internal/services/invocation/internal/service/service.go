@@ -42,6 +42,9 @@ func New(deps invocationservice.Dependencies) (*Service, error) {
 	if deps.InputFiles == nil {
 		return nil, fmt.Errorf("construct Factory Session invocation: input file reader is required")
 	}
+	if deps.Work == nil {
+		return nil, fmt.Errorf("construct Factory Session invocation: Work service is required")
+	}
 	return &Service{owner: legacyinvocation.NewSessionOwner(
 		deps.FactoryConfig,
 		deps.SubmitWork,
@@ -52,6 +55,7 @@ func New(deps invocationservice.Dependencies) (*Service, error) {
 		deps.Interpolation,
 		deps.WorkTypes,
 		deps.InputFiles,
+		deps.Work,
 	)}, nil
 }
 
@@ -62,9 +66,6 @@ func (s *Service) InvokeFactorySession(
 	sessionID string,
 	request factorysessions.InvocationRequest,
 ) (factorydefinitions.FactoryInvocationResult, error) {
-	if s == nil || s.owner == nil {
-		return factorydefinitions.FactoryInvocationResult{}, fmt.Errorf("Factory Session invocation service is unavailable")
-	}
 	return s.owner.InvokeFactorySession(ctx, sessionID, request)
 }
 
@@ -74,8 +75,5 @@ func (s *Service) ResolveInvocationInput(
 	cfg *factorydefinitions.FactoryConfig,
 	request factorysessions.InvocationRequest,
 ) (factorysessions.ResolvedInvocationInput, error) {
-	if s == nil || s.owner == nil {
-		return factorysessions.ResolvedInvocationInput{}, fmt.Errorf("Factory Session invocation service is unavailable")
-	}
 	return s.owner.ResolveInvocationInput(cfg, request)
 }

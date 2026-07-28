@@ -106,6 +106,17 @@ func (s *applicationService) SubmitWorkRequestForSession(
 	return s.stateAccess.SubmitWorkRequestForSession(ctx, sessionID, request)
 }
 
+func (s *applicationService) PrepareWorkRequest(
+	ctx context.Context,
+	input work.WorkRequestPreparation,
+) (work.WorkRequest, error) {
+	preparation, err := work.NewRequestPreparationService(work.NewContentPreparation())
+	if err != nil {
+		return work.WorkRequest{}, err
+	}
+	return preparation.PrepareWorkRequest(ctx, input)
+}
+
 func (s *applicationService) MoveWorkForSession(
 	ctx context.Context,
 	sessionID string,

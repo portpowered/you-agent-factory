@@ -10,11 +10,14 @@ import (
 
 // InvocationInputPreparationRequest contains the raw invocation values
 // observed at a transport edge. Work owns interpreting those values; the
-// transport owns only collecting argv, stdin, and terminal metadata.
+// transport owns only collecting argv, stdin, structured API args, and
+// compatibility content carriers.
 type InvocationInputPreparationRequest struct {
-	Arguments []string
-	Signature *InvocationSignatureConfig
-	StdinText *string
+	Arguments            []string
+	Signature            *InvocationSignatureConfig
+	StdinText            *string
+	DirectArgs           []NamedArgumentInput
+	CompatibilityContent []WorkContentPart
 }
 
 // PreparedInvocationInput is a detached canonical invocation input. Exactly
@@ -95,6 +98,21 @@ func (invocationInputPreparation) PrepareInvocationInput(
 		return PreparedInvocationInput{}, err
 	}
 
+	if len(request.DirectArgs) > 0 || len(request.CompatibilityContent) > 0 {
+		result, err := NormalizeArguments(NormalizeArgumentsInput{
+			Signature:            request.Signature,
+			DirectArgs:           request.DirectArgs,
+			CompatibilityContent: request.CompatibilityContent,
+		})
+		if err != nil {
+			return PreparedInvocationInput{}, err
+		}
+		if err := ctx.Err(); err != nil {
+			return PreparedInvocationInput{}, err
+		}
+		return preparedInvocationInputFromNormalized(result), nil
+	}
+
 	positional, named, _, err := parseInvocationArguments(request.Arguments, request.Signature)
 	if err != nil {
 		return PreparedInvocationInput{}, err
@@ -119,6 +137,10 @@ func (invocationInputPreparation) PrepareInvocationInput(
 	if err := ctx.Err(); err != nil {
 		return PreparedInvocationInput{}, err
 	}
+	return preparedInvocationInputFromNormalized(result), nil
+}
+
+func preparedInvocationInputFromNormalized(result NormalizedArguments) PreparedInvocationInput {
 	prepared := PreparedInvocationInput{NormalizedArguments: cloneNormalizedArguments(&result)}
 	if result.CompatibilityInput != nil {
 		resolved := cloneResolvedInput(*result.CompatibilityInput)
@@ -126,7 +148,7 @@ func (invocationInputPreparation) PrepareInvocationInput(
 		prepared.ResolvedInput = &resolved
 		prepared.NormalizedArguments = nil
 	}
-	return prepared, nil
+	return prepared
 }
 
 func parseInvocationArguments(
