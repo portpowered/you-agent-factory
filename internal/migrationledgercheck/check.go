@@ -113,7 +113,6 @@ var ExpectedDeletionOnlyBatches = []string{
 	"bootstrap_portability-delete-02-factory-definitions-validation",
 	"bootstrap_portability-delete-03-factory-definitions-import-export",
 	"bootstrap_portability-delete-04-portable-config",
-	"bootstrap_portability-delete-05-factory-current",
 	"replay_contracts-delete-01-events-replay",
 	"replay_contracts-delete-02-events-factory-events",
 	"replay_contracts-delete-03-events-response-events",

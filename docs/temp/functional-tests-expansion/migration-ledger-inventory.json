@@ -639,36 +639,6 @@
       "deletion_only_batch": "bootstrap_portability-delete-02-factory-definitions-validation"
     },
     {
-      "source_path": "tests/functional/bootstrap_portability/watcher_current_factory_activation_long_test.go",
-      "package": "you-agent-factory/tests/functional/bootstrap_portability",
-      "scenario": "TestCurrentFactoryActivationFixture_ActivatesSecondPersistedFactoryAndResolvesCurrentFactory",
-      "lane": "functionallong",
-      "destination": "tests/functional/factory/current/read_save_test.go",
-      "catch_all": "bootstrap_portability",
-      "specialty_targets": "current-factory-watcher-switch-smoke",
-      "deletion_only_batch": "bootstrap_portability-delete-05-factory-current"
-    },
-    {
-      "source_path": "tests/functional/bootstrap_portability/watcher_current_factory_activation_long_test.go",
-      "package": "you-agent-factory/tests/functional/bootstrap_portability",
-      "scenario": "TestCurrentFactoryActivationFixture_LiveAPIReadsFollowActivatedFactory",
-      "lane": "functionallong",
-      "destination": "tests/functional/factory/current/read_save_test.go",
-      "catch_all": "bootstrap_portability",
-      "specialty_targets": "none",
-      "deletion_only_batch": "bootstrap_portability-delete-05-factory-current"
-    },
-    {
-      "source_path": "tests/functional/bootstrap_portability/watcher_current_factory_activation_long_test.go",
-      "package": "you-agent-factory/tests/functional/bootstrap_portability",
-      "scenario": "TestCurrentFactoryActivationFixture_WatchedFileExecutionFollowsActivatedFactory",
-      "lane": "functionallong",
-      "destination": "tests/functional/factory/current/read_save_test.go",
-      "catch_all": "bootstrap_portability",
-      "specialty_targets": "none",
-      "deletion_only_batch": "bootstrap_portability-delete-05-factory-current"
-    },
-    {
       "source_path": "tests/functional/cli/factory_run/output/failure_test.go",
       "package": "you-agent-factory/tests/functional/cli/factory_run/output",
       "scenario": "TestInvocationFailureOutputContracts",
@@ -1314,6 +1284,36 @@
       "scenario": "TestAPITemplateValidationDoesNotMutateCurrentFactory",
       "lane": "short",
       "destination": "tests/functional/factory/current/prompt_template_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_long_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestCurrentFactoryActivationSwitchesPersistedFactories",
+      "lane": "functionallong",
+      "destination": "tests/functional/factory/current/read_save_test.go",
+      "catch_all": "none",
+      "specialty_targets": "current-factory-watcher-switch-smoke",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_long_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestCurrentFactoryLiveAPIReadsFollowActivatedFactory",
+      "lane": "functionallong",
+      "destination": "tests/functional/factory/current/read_save_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
+      "source_path": "tests/functional/factory/current/read_save_long_test.go",
+      "package": "you-agent-factory/tests/functional/factory/current",
+      "scenario": "TestCurrentFactoryWatchedFileExecutionFollowsActivatedFactory",
+      "lane": "functionallong",
+      "destination": "tests/functional/factory/current/read_save_test.go",
       "catch_all": "none",
       "specialty_targets": "none",
       "deletion_only_batch": "n/a"
@@ -3616,7 +3616,7 @@
       "destination": "tests/functional/factory/packaged/goal/invocation_test.go",
       "catch_all": "bootstrap_portability",
       "specialty_targets": "none",
-      "deletion_only_batch": "bootstrap_portability-delete-05-factory-current"
+      "deletion_only_batch": "n/a"
     },
     {
       "source_path": "tests/functional/provider_sessions/association/association_test.go",
@@ -6659,6 +6659,16 @@
       "deletion_only_batch": "n/a"
     },
     {
+      "source_path": "tests/functional/transport/cli/parameters/working_directory_long_test.go",
+      "package": "you-agent-factory/tests/functional/transport/cli/parameters",
+      "scenario": "TestCLIProviderExecResolvesWorkdirAgainstFactoryRuntimeRoot",
+      "lane": "functionallong",
+      "destination": "tests/functional/transport/cli/parameters/working_directory_test.go",
+      "catch_all": "none",
+      "specialty_targets": "none",
+      "deletion_only_batch": "n/a"
+    },
+    {
       "source_path": "tests/functional/transport/cli/parameters/working_directory_test.go",
       "package": "you-agent-factory/tests/functional/transport/cli/parameters",
       "scenario": "TestCLIMissingWorkingDirectoryAssetFailsActionably",
@@ -9339,8 +9349,8 @@
       "workflow": 30,
       "workstations": 34
     },
-    "customer_top_level_Test_scenarios": 910,
-    "lane_functionallong": 95,
+    "customer_top_level_Test_scenarios": 911,
+    "lane_functionallong": 96,
     "lane_short": 815,
     "by_full_package": {
       "you-agent-factory/tests/functional/acceptance": 12,
@@ -9462,7 +9472,7 @@
     "helper_only_non_customer_files": 51,
     "internal_harness_Test_functions": 15,
     "internal_harness_test_files": 5,
-    "ledger_rows": 910
+    "ledger_rows": 911
   },
   "schema_note": "Machine-readable companion to migration-ledger.md Inventory. Required row fields match the ledger schema. Non-catch-all rows mapped by FND-007-006; catch-all rows mapped by FND-007-003\u2026005.",
   "runtime_api_mapping": {
@@ -9508,8 +9518,6 @@
       "bootstrap_portability-delete-02-factory-definitions-validation",
       "bootstrap_portability-delete-03-factory-definitions-import-export",
       "bootstrap_portability-delete-04-portable-config",
-      "bootstrap_portability-delete-05-factory-current",
-      "bootstrap_portability-delete-06-transport-cli",
       "replay_contracts-delete-01-events-replay",
       "replay_contracts-delete-02-events-factory-events",
       "replay_contracts-delete-03-events-response-events",
