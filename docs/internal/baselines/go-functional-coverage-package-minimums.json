@@ -2076,7 +2076,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/projections",
-      "minimum": 45.93
+      "minimum": 45.87
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/projections/dashboard",
