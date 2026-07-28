@@ -36,6 +36,14 @@ const (
 
 	batchInputsExplicitTypeRequestID = "work-batch-inputs-explicit-type"
 	batchInputsExplicitTypeWorkName  = "explicit-type-review"
+
+	batchInputsUnknownTypeRequestID = "work-batch-inputs-unknown-type"
+	batchInputsUnknownTypeWorkName  = "unknown-type-task"
+	batchInputsUnknownWorkType      = "nonexistent-type"
+
+	batchInputsMixedBatchRequestID   = "work-batch-inputs-mixed-batch"
+	batchInputsMixedValidWorkName    = "mixed-valid-task"
+	batchInputsMixedInvalidWorkName  = "mixed-invalid-task"
 )
 
 // TestWorkBatchAcceptsInlineFileAndStdinShapes proves the public Work Request
@@ -166,6 +174,59 @@ func TestWorkBatchSelectsDefaultAndExplicitWorkTypes(t *testing.T) {
 			submitted.Works[0].WorkID,
 			batchInputsAltWorkType,
 		)
+	})
+}
+
+// TestWorkBatchRejectsUnknownTypeWithoutPartialMutation proves public Work Request
+// batch ingress rejects batches that name an unknown work type with a
+// customer-visible failure and leaves durable Work unchanged for that request.
+func TestWorkBatchRejectsUnknownTypeWithoutPartialMutation(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow work batch unknown-type rejection sweep")
+	}
+
+	factoryDir := support.ScaffoldFactory(t, batchWorkTypeSelectionFactoryConfig())
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:     factoryDir,
+		UseMockWorkers: true,
+	})
+	defer server.Stop(t)
+
+	baseURL := server.URL()
+	binaryPath := buildYouCLIBinary(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	baselineListed := support.ListDefaultSessionWork(t, baseURL)
+	baselineCount := len(baselineListed.Results)
+
+	t.Run("unknown_type", func(t *testing.T) {
+		batchJSON := fmt.Sprintf(
+			`{"requestId":%q,"type":"FACTORY_REQUEST_BATCH","works":[{"name":%q,"workTypeName":%q,"payload":{"title":"Unknown work type rejection"}}]}`,
+			batchInputsUnknownTypeRequestID,
+			batchInputsUnknownTypeWorkName,
+			batchInputsUnknownWorkType,
+		)
+		output, err := runYouSubmitBatch(ctx, binaryPath, factoryDir, baseURL, batchJSON, nil)
+		assertBatchSubmitRejected(t, output, err, batchInputsUnknownTypeRequestID)
+		assertWorkNotListedByName(t, baseURL, batchInputsUnknownTypeWorkName)
+		assertListedWorkCount(t, baseURL, baselineCount)
+	})
+
+	t.Run("mixed_batch_no_partial_submit", func(t *testing.T) {
+		batchJSON := fmt.Sprintf(
+			`{"requestId":%q,"type":"FACTORY_REQUEST_BATCH","works":[{"name":%q,"workTypeName":%q,"payload":{"title":"Valid work in mixed batch"}},{"name":%q,"workTypeName":%q,"payload":{"title":"Invalid work in mixed batch"}}]}`,
+			batchInputsMixedBatchRequestID,
+			batchInputsMixedValidWorkName,
+			batchInputsWorkType,
+			batchInputsMixedInvalidWorkName,
+			batchInputsUnknownWorkType,
+		)
+		output, err := runYouSubmitBatch(ctx, binaryPath, factoryDir, baseURL, batchJSON, nil)
+		assertBatchSubmitRejected(t, output, err, batchInputsMixedBatchRequestID)
+		assertWorkNotListedByName(t, baseURL, batchInputsMixedValidWorkName)
+		assertWorkNotListedByName(t, baseURL, batchInputsMixedInvalidWorkName)
+		assertListedWorkCount(t, baseURL, baselineCount)
 	})
 }
 
@@ -353,6 +414,69 @@ func findListedWorkByNameAndID(listed factoryapi.ListWorkResponse, workName, wor
 func listedWorkContainsNameAndID(listed factoryapi.ListWorkResponse, workName, workID string) bool {
 	_, ok := findListedWorkByNameAndID(listed, workName, workID)
 	return ok
+}
+
+func assertBatchSubmitRejected(t *testing.T, output []byte, err error, requestID string) {
+	t.Helper()
+
+	if err == nil {
+		t.Fatalf("you submit batch unexpectedly succeeded:\n%s", output)
+	}
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok {
+		t.Fatalf("you submit batch error = %v, want *exec.ExitError", err)
+	}
+	if exitErr.ExitCode() != 1 {
+		t.Fatalf("you submit batch exit code = %d, want 1", exitErr.ExitCode())
+	}
+
+	text := string(output)
+	for _, marker := range []string{
+		"batch submission failed (400)",
+		"code=BAD_REQUEST",
+		"family=BAD_REQUEST",
+	} {
+		if !strings.Contains(text, marker) {
+			t.Fatalf("submit batch rejection output missing %q:\n%s", marker, text)
+		}
+	}
+
+	for _, marker := range []string{
+		`"requestId":` + jsonStringLiteral(requestID),
+		"requestId: " + requestID,
+		`"traceId":`,
+		"traceId:",
+		`"workCount":`,
+		"work count:",
+	} {
+		if strings.Contains(text, marker) {
+			t.Fatalf("submit batch rejection output must not contain success acknowledgment marker %q:\n%s", marker, text)
+		}
+	}
+}
+
+func assertWorkNotListedByName(t *testing.T, baseURL, workName string) {
+	t.Helper()
+
+	listed := support.ListDefaultSessionWork(t, baseURL)
+	for _, item := range listed.Results {
+		if item.Name == workName {
+			t.Fatalf(
+				"public work list unexpectedly contains rejected work name=%q: %#v",
+				workName,
+				item,
+			)
+		}
+	}
+}
+
+func assertListedWorkCount(t *testing.T, baseURL string, want int) {
+	t.Helper()
+
+	listed := support.ListDefaultSessionWork(t, baseURL)
+	if got := len(listed.Results); got != want {
+		t.Fatalf("public work list count = %d, want %d after rejected batch: %#v", got, want, listed.Results)
+	}
 }
 
 func bytesTrimSpace(raw []byte) []byte {
