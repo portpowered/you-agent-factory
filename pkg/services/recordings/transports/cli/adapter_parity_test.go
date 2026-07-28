@@ -185,6 +185,30 @@ func TestAdapterResolveRecordPathWithContextHonorsCancellation(t *testing.T) {
 	}
 }
 
+func TestAdapterResolveRecordPathWithContextHonorsCancellationAfterPlanner(t *testing.T) {
+	t.Parallel()
+
+	adapter := recordingscli.New()
+	ctx, cancel := context.WithCancel(context.Background())
+	planner := recordings.LiveRecordingTargetPlannerFunc(
+		func(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
+			cancel()
+			return recordings.LiveRecordingTarget{
+				ServicePath:  "/tmp/template.json",
+				ReportedPath: "/tmp/resolved.json",
+			}, nil
+		},
+	)
+
+	_, err := adapter.ResolveRecordPathWithContext(ctx, recordingscli.InvocationRequest{
+		HomeDir:                t.TempDir(),
+		RecordingTargetPlanner: planner,
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("ResolveRecordPathWithContext() error = %v, want context.Canceled", err)
+	}
+}
+
 func TestAdapterShutdownReportingUnaffectedByCanceledRequestContext(t *testing.T) {
 	t.Parallel()
 
