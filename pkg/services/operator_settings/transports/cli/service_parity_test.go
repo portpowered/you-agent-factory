@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -323,6 +324,51 @@ func TestConstructedService_ConfigureSurfacesDocumentConflictParity(t *testing.T
 	})
 }
 
+func TestConstructedService_ConfigureHonorsMidPromptContextCancellationParity(t *testing.T) {
+	t.Parallel()
+
+	root := paritySettingsRoot(t)
+	service := constructedSettingsCLIService(t, root)
+	homeDir := t.TempDir()
+	configPath := operatorsettings.DefaultConfigPath(homeDir)
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(config): %v", err)
+	}
+	original := []byte(`{"defaults":{"workerModelProvider":"codex","workerModel":"original"}}`)
+	if err := os.WriteFile(configPath, original, 0o600); err != nil {
+		t.Fatalf("WriteFile(config): %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	cfg := operatorsettingscli.ConfigureConfig{
+		Context:       ctx,
+		HomeDir:       homeDir,
+		Interactive:   true,
+		Input:         &blockingAfterProviderReader{provider: strings.NewReader("codex\n"), release: release},
+		Output:        &cancelOnModelPromptWriter{cancel: cancel},
+		NewLineReader: testLineReaderFactory,
+	}
+
+	serviceErr := service.Configure(cfg)
+	commandErr := operatorsettingscli.Configure(cfg, root)
+	if (serviceErr == nil) != (commandErr == nil) {
+		t.Fatalf("service error = %v, command error = %v", serviceErr, commandErr)
+	}
+	for _, err := range []error{serviceErr, commandErr} {
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("Configure() error = %v, want context.Canceled", err)
+		}
+	}
+	got, readErr := os.ReadFile(configPath)
+	if readErr != nil {
+		t.Fatalf("ReadFile(config): %v", readErr)
+	}
+	if !bytes.Equal(got, original) {
+		t.Fatalf("config changed after mid-prompt cancellation:\n%s", got)
+	}
+}
+
 func TestConstructedService_ConfigureHonorsContextCancellationOnSuppliedProviderPathParity(t *testing.T) {
 	t.Parallel()
 
@@ -385,6 +431,30 @@ func newConflictSettingsRoot(
 	entries map[string]operatorsettings.Document,
 ) *conflictSettingsRoot {
 	return &conflictSettingsRoot{fakeSettingsRoot: newFakeSettingsRoot(entries)}
+}
+
+type blockingAfterProviderReader struct {
+	provider *strings.Reader
+	release  <-chan struct{}
+}
+
+func (reader *blockingAfterProviderReader) Read(payload []byte) (int, error) {
+	if reader.provider.Len() > 0 {
+		return reader.provider.Read(payload)
+	}
+	<-reader.release
+	return 0, io.EOF
+}
+
+type cancelOnModelPromptWriter struct {
+	cancel context.CancelFunc
+}
+
+func (writer *cancelOnModelPromptWriter) Write(payload []byte) (int, error) {
+	if strings.Contains(string(payload), "Model") {
+		writer.cancel()
+	}
+	return len(payload), nil
 }
 
 func (root *conflictSettingsRoot) ApplyDocumentUpdate(

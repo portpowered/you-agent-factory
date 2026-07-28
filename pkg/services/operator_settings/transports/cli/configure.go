@@ -119,9 +119,10 @@ func (service *service) configurePrompted(cfg ConfigureConfig, homeDir string) e
 	}
 	update, err := service.acquireProviderModelPrompt(cfg, loaded.Document.Defaults)
 	if err != nil {
-		if errors.Is(err, io.EOF) ||
-			errors.Is(err, operatorsettings.ErrProviderModelInputCanceled) ||
-			errors.Is(err, context.Canceled) {
+		if errors.Is(err, context.Canceled) {
+			return fmt.Errorf("configure provider/model defaults: setup canceled: %w", err)
+		}
+		if errors.Is(err, io.EOF) || errors.Is(err, operatorsettings.ErrProviderModelInputCanceled) {
 			return fmt.Errorf("configure provider/model defaults: setup canceled: %w", operatorsettings.ErrProviderModelInputCanceled)
 		}
 		return fmt.Errorf("configure provider/model defaults: %w", err)
