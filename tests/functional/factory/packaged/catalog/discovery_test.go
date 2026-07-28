@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
@@ -41,6 +42,66 @@ func TestPackagedFactoryCatalogListsEveryEmbeddedFactory(t *testing.T) {
 	}
 }
 
+// TestPackagedFactoryCatalogHasUniqueStableNames proves runtime packaged
+// Factory catalog discovery through GET /packaged-factories publishes each
+// Factory under a unique, stable customer-facing identity: lexical name order,
+// no duplicate names/slugs/projects, and consistent @you/<slug> name binding
+// suitable for matrix targeting.
+func TestPackagedFactoryCatalogHasUniqueStableNames(t *testing.T) {
+	catalog, err := discoveredPackagedFactoryCatalogViaHTTP(t)
+	if err != nil {
+		t.Fatalf("runtime packaged Factory catalog discovery: %v", err)
+	}
+	if len(catalog.Factories) == 0 {
+		t.Fatal("catalog discovery returned no published factories")
+	}
+
+	embeddedSlugByName, err := embeddedPackagedFactorySlugByName()
+	if err != nil {
+		t.Fatalf("embedded packaged Factory inventory: %v", err)
+	}
+
+	names := make([]string, len(catalog.Factories))
+	seenNames := make(map[string]struct{}, len(catalog.Factories))
+	seenSlugs := make(map[string]struct{}, len(catalog.Factories))
+	seenProjects := make(map[string]struct{}, len(catalog.Factories))
+	for index, factory := range catalog.Factories {
+		names[index] = factory.Name
+		if factory.Name == "" || factory.Slug == "" || factory.Project == "" {
+			t.Fatalf("catalog entry missing stable identity fields: %#v", factory)
+		}
+		expectedName := "@you/" + factory.Slug
+		if factory.Name != expectedName {
+			t.Fatalf("name/slug binding drift: name=%q slug=%q want name %q", factory.Name, factory.Slug, expectedName)
+		}
+		if embeddedSlug, ok := embeddedSlugByName[factory.Name]; !ok {
+			t.Fatalf("catalog name %q absent from embedded inventory", factory.Name)
+		} else if embeddedSlug != factory.Slug {
+			t.Fatalf(
+				"catalog slug drift for %q: discovered=%q embedded=%q",
+				factory.Name,
+				factory.Slug,
+				embeddedSlug,
+			)
+		}
+		if _, duplicate := seenNames[factory.Name]; duplicate {
+			t.Fatalf("duplicate catalog name %q", factory.Name)
+		}
+		seenNames[factory.Name] = struct{}{}
+		if _, duplicate := seenSlugs[factory.Slug]; duplicate {
+			t.Fatalf("duplicate catalog slug %q", factory.Slug)
+		}
+		seenSlugs[factory.Slug] = struct{}{}
+		if _, duplicate := seenProjects[factory.Project]; duplicate {
+			t.Fatalf("duplicate catalog project %q", factory.Project)
+		}
+		seenProjects[factory.Project] = struct{}{}
+	}
+	if !slices.IsSorted(names) {
+		t.Fatalf("catalog names not in stable lexical order: %v", names)
+	}
+}
+
 func embeddedPackagedFactoryNames() ([]string, error) {
 	inventory, err := packagedfactorycatalog.Discover(
 		context.Background(),
@@ -58,7 +119,38 @@ func embeddedPackagedFactoryNames() ([]string, error) {
 	return names, nil
 }
 
+func embeddedPackagedFactorySlugByName() (map[string]string, error) {
+	inventory, err := packagedfactorycatalog.Discover(
+		context.Background(),
+		packagedfactories.Source(),
+		"factories",
+	)
+	if err != nil {
+		return nil, err
+	}
+	slugByName := make(map[string]string, len(inventory.Entries))
+	for _, entry := range inventory.Entries {
+		slugByName[entry.Factory.Name] = entry.Slug
+	}
+	return slugByName, nil
+}
+
 func discoveredPackagedFactoryNamesViaHTTP(t *testing.T) ([]string, error) {
+	t.Helper()
+
+	catalog, err := discoveredPackagedFactoryCatalogViaHTTP(t)
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, len(catalog.Factories))
+	for index, factory := range catalog.Factories {
+		names[index] = factory.Name
+	}
+	slices.Sort(names)
+	return names, nil
+}
+
+func discoveredPackagedFactoryCatalogViaHTTP(t *testing.T) (factoryapi.PackagedFactoryCatalogResponse, error) {
 	t.Helper()
 
 	dir := support.ScaffoldFactory(t, packagedFactoryCatalogTestConfig())
@@ -70,23 +162,27 @@ func discoveredPackagedFactoryNamesViaHTTP(t *testing.T) ([]string, error) {
 
 	response, err := http.Get(server.URL() + "/packaged-factories")
 	if err != nil {
-		return nil, err
+		return factoryapi.PackagedFactoryCatalogResponse{}, err
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GET /packaged-factories status = %d, want %d", response.StatusCode, http.StatusOK)
+		return factoryapi.PackagedFactoryCatalogResponse{}, fmt.Errorf(
+			"GET /packaged-factories status = %d, want %d",
+			response.StatusCode,
+			http.StatusOK,
+		)
 	}
 
 	var catalog factoryapi.PackagedFactoryCatalogResponse
 	if err := json.NewDecoder(response.Body).Decode(&catalog); err != nil {
-		return nil, err
+		return factoryapi.PackagedFactoryCatalogResponse{}, err
 	}
-	names := make([]string, len(catalog.Factories))
-	for index, factory := range catalog.Factories {
-		names[index] = factory.Name
+	for _, factory := range catalog.Factories {
+		if strings.TrimSpace(factory.Name) == "" {
+			return factoryapi.PackagedFactoryCatalogResponse{}, fmt.Errorf("catalog entry missing name: %#v", factory)
+		}
 	}
-	slices.Sort(names)
-	return names, nil
+	return catalog, nil
 }
 
 func nameSetDiff(want, got []string) (missing, extra []string) {
