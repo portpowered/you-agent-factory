@@ -19,8 +19,10 @@ type workMoveRule struct {
 // legacyServiceImplementationMapping in map.go; every other unexpected Work
 // top-level sibling maps move with a private successor (never retain→work).
 var workMoveRules = []workMoveRule{
+	{exact: "internal/contenturl", prefix: "internal/contenturl/", subservice: ""},
+	{exact: "internal/invocationreturnpolicy", prefix: "internal/invocationreturnpolicy/", subservice: ""},
+	{exact: "internal/requestadmission", prefix: "internal/requestadmission/", subservice: ""},
 	{exact: "materialize", prefix: "materialize/", subservice: "content_materialization"},
-	{exact: "stateaccessrecordings", prefix: "stateaccessrecordings/", subservice: "state_access"},
 	{exact: "testdata", prefix: "testdata/", subservice: ""},
 }
 
@@ -61,12 +63,6 @@ func isWorkCanonicalRetain(rest string) bool {
 	case strings.HasPrefix(rest, "internal/services/content_materialization"):
 		return true
 	case strings.HasPrefix(rest, "internal/services/state_access"):
-		return true
-	case rest == "internal/contenturl" || strings.HasPrefix(rest, "internal/contenturl/"):
-		return true
-	case rest == "internal/invocationreturnpolicy" || strings.HasPrefix(rest, "internal/invocationreturnpolicy/"):
-		return true
-	case rest == "internal/requestadmission" || strings.HasPrefix(rest, "internal/requestadmission/"):
 		return true
 	default:
 		return false

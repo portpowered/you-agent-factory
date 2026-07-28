@@ -471,8 +471,6 @@
     "pkg/services/work/internal/services/state_access/lineagegraph",
     "pkg/services/work/internal/services/state_access/stateaccessquery",
     "pkg/services/work/internal/services/state_access/wire",
-    "pkg/services/work/service",
-    "pkg/services/work/stateaccessrecordings",
     "pkg/services/work/transports/cli",
     "pkg/services/work/transports/http",
     "pkg/services/work/transports/mcp",
@@ -2700,18 +2698,18 @@
     },
     {
       "packagePath": "pkg/services/work/internal/contenturl",
-      "disposition": "retain",
-      "destination": "work"
+      "disposition": "move",
+      "destination": "work/internal"
     },
     {
       "packagePath": "pkg/services/work/internal/invocationreturnpolicy",
-      "disposition": "retain",
-      "destination": "work"
+      "disposition": "move",
+      "destination": "work/internal"
     },
     {
       "packagePath": "pkg/services/work/internal/requestadmission",
-      "disposition": "retain",
-      "destination": "work"
+      "disposition": "move",
+      "destination": "work/internal"
     },
     {
       "packagePath": "pkg/services/work/internal/service",
@@ -2771,16 +2769,6 @@
     {
       "packagePath": "pkg/services/work/internal/services/state_access/wire",
       "disposition": "retain",
-      "destination": "work/internal/services/state_access"
-    },
-    {
-      "packagePath": "pkg/services/work/service",
-      "disposition": "move",
-      "destination": "work/internal"
-    },
-    {
-      "packagePath": "pkg/services/work/stateaccessrecordings",
-      "disposition": "move",
       "destination": "work/internal/services/state_access"
     },
     {
