@@ -50,8 +50,20 @@ func postMoveWorkExpectStatus(
 
 func postMoveWorkStatus(t *testing.T, baseURL, workID, stateName string) (int, string) {
 	t.Helper()
+	return postMoveWorkStatusWithRequestID(t, baseURL, workID, stateName, "")
+}
 
-	body, err := json.Marshal(factoryapi.MoveWorkRequest{StateName: stateName})
+func postMoveWorkStatusWithRequestID(
+	t *testing.T,
+	baseURL, workID, stateName, requestID string,
+) (int, string) {
+	t.Helper()
+
+	request := factoryapi.MoveWorkRequest{StateName: stateName}
+	if requestID != "" {
+		request.RequestId = &requestID
+	}
+	body, err := json.Marshal(request)
 	if err != nil {
 		t.Fatalf("marshal move request: %v", err)
 	}
@@ -67,23 +79,21 @@ func postMoveWorkStatus(t *testing.T, baseURL, workID, stateName string) (int, s
 
 func postMoveWork(t *testing.T, baseURL, workID, stateName string) factoryapi.Work {
 	t.Helper()
+	return postMoveWorkWithRequestID(t, baseURL, workID, stateName, "")
+}
 
-	body, err := json.Marshal(factoryapi.MoveWorkRequest{StateName: stateName})
-	if err != nil {
-		t.Fatalf("marshal move request: %v", err)
-	}
-	endpoint := support.DefaultSessionWorkURL(baseURL, "/work/"+workID+"/move")
-	resp, err := http.Post(endpoint, "application/json", bytes.NewReader(body))
-	if err != nil {
-		t.Fatalf("POST %s: %v", endpoint, err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		payload, _ := io.ReadAll(resp.Body)
-		t.Fatalf("POST %s status = %d, want 200: %s", endpoint, resp.StatusCode, string(payload))
+func postMoveWorkWithRequestID(
+	t *testing.T,
+	baseURL, workID, stateName, requestID string,
+) factoryapi.Work {
+	t.Helper()
+
+	status, body := postMoveWorkStatusWithRequestID(t, baseURL, workID, stateName, requestID)
+	if status != http.StatusOK {
+		t.Fatalf("POST /work/%s/move status = %d, want 200: %s", workID, status, body)
 	}
 	var work factoryapi.Work
-	if err := json.NewDecoder(resp.Body).Decode(&work); err != nil {
+	if err := json.Unmarshal([]byte(body), &work); err != nil {
 		t.Fatalf("decode move response: %v", err)
 	}
 	return work

@@ -240,3 +240,78 @@ func TestAPIMoveWorkResumesRecoverableFlow(t *testing.T) {
 		t.Fatalf("work listing after API move resume = %#v, want %s", listed.Results, completeLocation)
 	}
 }
+
+// TestAPIInvalidMoveReturnsConflictWithoutMutation proves a duplicate public
+// Work move request-id returns HTTP 409 Conflict and leaves the customer-visible
+// work state unchanged after a successful move has already been applied.
+func TestAPIInvalidMoveReturnsConflictWithoutMutation(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow work recovery functional test")
+	}
+
+	const (
+		workID        = "api-invalid-move-work-id"
+		traceID       = "trace-api-invalid-move"
+		requestID     = "request-api-invalid-move"
+		moveRequestID = "move-request-api-invalid-move"
+	)
+
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "happy_path"))
+	provider := newRecoveryRedispatchBlockingProvider("worker-a", "worker-a")
+	server := startRecoveryAPIServer(t, dir, provider)
+	defer server.Stop(t)
+
+	workTypeName := "task"
+	support.UpsertDefaultSessionWorkRequest(t, server.URL(), factoryapi.WorkRequest{
+		RequestId: requestID,
+		Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
+		Works: &[]factoryapi.Work{{
+			Name:         "task",
+			WorkId:       stringPtr(workID),
+			WorkTypeName: &workTypeName,
+			TraceId:      stringPtr(traceID),
+			Payload:      map[string]string{"title": "api invalid move conflict"},
+		}},
+	})
+
+	waitForWorkIDsAtState(t, server.URL(), []string{workID}, "failed", 15*time.Second)
+
+	const recoverState = "init"
+	moved := postMoveWorkWithRequestID(t, server.URL(), workID, recoverState, moveRequestID)
+	if workStateName(moved.State) != recoverState {
+		t.Fatalf("initial API move response state = %q, want %q", workStateName(moved.State), recoverState)
+	}
+
+	provider.waitForBlockedRedispatch(t, 15*time.Second)
+	waitForSessionInFlightDispatches(t, server.URL(), 1, 15*time.Second)
+
+	beforeInvalidMove := support.ListDefaultSessionWork(t, server.URL())
+	beforeState := workStateName(requireWorkByID(t, beforeInvalidMove, workID).State)
+	if beforeState != recoverState {
+		t.Fatalf("work state before invalid move = %q, want %q", beforeState, recoverState)
+	}
+
+	status, body := postMoveWorkStatusWithRequestID(
+		t,
+		server.URL(),
+		workID,
+		recoverState,
+		moveRequestID,
+	)
+	if status != http.StatusConflict {
+		t.Fatalf("duplicate API move status = %d, want 409 conflict: %s", status, body)
+	}
+
+	afterInvalidMove := support.ListDefaultSessionWork(t, server.URL())
+	afterState := workStateName(requireWorkByID(t, afterInvalidMove, workID).State)
+	if afterState != beforeState {
+		t.Fatalf(
+			"work state after invalid move = %q, want unchanged %q; listing=%#v",
+			afterState,
+			beforeState,
+			afterInvalidMove.Results,
+		)
+	}
+
+	provider.releaseBlockedRedispatch()
+}
