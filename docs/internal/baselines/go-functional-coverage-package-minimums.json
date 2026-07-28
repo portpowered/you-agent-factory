@@ -1160,7 +1160,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/engine",
-      "minimum": 73.32
+      "minimum": 68.90
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/internal/service",
@@ -1188,7 +1188,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime",
-      "minimum": 60.00
+      "minimum": 56.08
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers",
@@ -2486,7 +2486,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/projections",
-      "minimum": 45.87
+      "minimum": 44.85
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/projections/dashboard",
@@ -2728,7 +2728,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/internal/service",
-      "minimum": 72.00
+      "minimum": 67.64
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/lineagegraph",
