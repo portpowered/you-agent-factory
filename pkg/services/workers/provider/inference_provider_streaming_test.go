@@ -61,7 +61,8 @@ func TestScriptWrapProvider_OpenCodeNegotiatedAdapterPublishesProductionStream(t
 }
 
 func TestScriptWrapProvider_OpenCodeProductionProgressRunnerUsesCanonicalAdapterStream(t *testing.T) {
-	t.Parallel()
+	// Do not run in parallel: Linux CI can return "text file busy" when executing
+	// the freshly written shell script under heavy parallel package load.
 	stdout, err := os.ReadFile("adapter/opencode/testdata/structured-success.jsonl")
 	if err != nil {
 		t.Fatalf("ReadFile() error = %v", err)

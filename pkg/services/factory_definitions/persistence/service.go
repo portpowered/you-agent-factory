@@ -5,11 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
 	"path/filepath"
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	authoringlayoutpersist "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/persist"
 	namedfactorypath "github.com/portpowered/infinite-you/pkg/services/factory_definitions/namedpaths"
 )
 
@@ -262,133 +262,29 @@ func (s *service) ReplaceFactoryLayout(
 	}, nil
 }
 
-// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func (s *service) persistNamedFactory(
 	rootDir string,
 	name string,
 	prepared *factorydefinitions.PreparedFactoryLayoutPayload,
 	replaceExisting bool,
 ) (string, error) {
-	if s == nil || s.write == nil {
-		return "", fmt.Errorf("Factory Definitions layout writer is required")
+	if s == nil {
+		return "", fmt.Errorf("Factory Definitions persistence service is required")
 	}
-	if s.validate == nil {
-		return "", fmt.Errorf("Factory Definitions layout validator is required")
-	}
-	if prepared == nil {
-		return "", fmt.Errorf("prepared Factory layout payload is required")
-	}
-	if strings.TrimSpace(rootDir) == "" {
-		return "", fmt.Errorf("factory root is required")
-	}
-	if err := namedfactorypath.ValidateName(name); err != nil {
-		return "", err
-	}
-
-	canonicalName := strings.TrimSpace(name)
-	targetDir, err := namedfactorypath.MapDir(rootDir, canonicalName)
-	if err != nil {
-		return "", err
-	}
-	if err := s.validateTarget(targetDir, canonicalName, replaceExisting); err != nil {
-		return "", err
-	}
-	if err := s.ensureParentDirectories(rootDir, targetDir); err != nil {
-		return "", err
-	}
-
-	stagingDir, err := s.fileSystem.MkdirTemp(rootDir, stagingPrefix(canonicalName))
-	if err != nil {
-		return "", fmt.Errorf("create staging directory for factory %q: %w", canonicalName, err)
-	}
-	keepStaging := false
-	defer func() {
-		if !keepStaging {
-			_ = s.fileSystem.RemoveAll(stagingDir)
-		}
-	}()
-
-	sourcePath := filepath.Join(targetDir, factorydefinitions.FactoryConfigFile)
-	if err := s.write(stagingDir, prepared, sourcePath); err != nil {
-		return "", fmt.Errorf("%w: %w", factorydefinitions.ErrInvalidNamedFactory, err)
-	}
-	if err := s.validate(stagingDir); err != nil {
-		return "", fmt.Errorf(
-			"%w: validate factory %q config: %w",
-			factorydefinitions.ErrInvalidNamedFactory,
-			canonicalName,
-			err,
-		)
-	}
-	if replaceExisting {
-		if err := s.replaceDirectory(stagingDir, targetDir, canonicalName); err != nil {
-			return "", err
-		}
-	} else if err := s.fileSystem.Rename(stagingDir, targetDir); err != nil {
-		return "", fmt.Errorf("commit factory %q: %w", canonicalName, err)
-	}
-	keepStaging = true
-	return targetDir, nil
-}
-
-func (s *service) validateTarget(targetDir, name string, replaceExisting bool) error {
-	if _, err := s.fileSystem.Stat(targetDir); err == nil {
-		if replaceExisting {
-			return nil
-		}
-		return fmt.Errorf(
-			"%w: factory %q already exists",
-			factorydefinitions.ErrNamedFactoryAlreadyExists,
-			name,
-		)
-	} else if !errors.Is(err, fs.ErrNotExist) {
-		return fmt.Errorf("check existing factory %q: %w", name, err)
-	}
-	if replaceExisting {
-		return fmt.Errorf("replace factory %q: %w", name, fs.ErrNotExist)
-	}
-	return nil
-}
-
-func (s *service) ensureParentDirectories(rootDir, targetDir string) error {
-	if err := s.fileSystem.MkdirAll(rootDir, 0o755); err != nil {
-		return fmt.Errorf("create factory root %s: %w", rootDir, err)
-	}
-	parentDir := filepath.Dir(targetDir)
-	if parentDir == rootDir {
-		return nil
-	}
-	if err := s.fileSystem.MkdirAll(parentDir, 0o755); err != nil {
-		return fmt.Errorf("create factory parent directory %s: %w", parentDir, err)
-	}
-	return nil
-}
-
-func (s *service) replaceDirectory(stagingDir, targetDir, name string) error {
-	if s.directories == nil {
-		return fmt.Errorf("directory replacement store is required")
-	}
-	backupDir, err := s.directories.Commit(
-		filepath.Dir(targetDir),
-		targetDir,
-		stagingDir,
+	return authoringlayoutpersist.NamedFactory(
+		context.Background(),
+		rootDir,
+		name,
+		prepared,
+		replaceExisting,
+		authoringlayoutpersist.Ports{
+			Write:                s.write,
+			Validate:             s.validate,
+			FileSystem:           s.fileSystem,
+			RequireDefinitionDir: s.requireDefinitionDir,
+			Directories:          s.directories,
+		},
 	)
-	if err != nil {
-		return fmt.Errorf("commit factory %q: %w", name, err)
-	}
-	if backupDir == "" {
-		return nil
-	}
-	return s.fileSystem.RemoveAll(backupDir)
-}
-
-func stagingPrefix(name string) string {
-	safe := strings.NewReplacer("/", "--", `\`, "--", "@", "").
-		Replace(strings.TrimSpace(name))
-	if safe == "" {
-		safe = "factory"
-	}
-	return "." + safe + ".staging-"
 }
 
 var _ factorydefinitions.Persistence = (*service)(nil)

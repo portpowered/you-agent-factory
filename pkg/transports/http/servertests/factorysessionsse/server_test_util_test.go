@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -105,10 +104,6 @@ func (*programmedFactorySessionEvents) SubmitWorkRequestForSession(context.Conte
 
 func (*programmedFactorySessionEvents) MoveWorkForSession(context.Context, string, string, string, string) (work.OperatorMoveResult, error) {
 	panic("unexpected WorkAPI.MoveWorkForSession call")
-}
-
-func (*programmedFactorySessionEvents) GetEngineStateSnapshotForSession(context.Context, string) (*interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net], error) {
-	panic("unexpected WorkAPI.GetEngineStateSnapshotForSession call")
 }
 
 func newAPITestServer(workAPI apisurface.WorkAPI) *api.Server {

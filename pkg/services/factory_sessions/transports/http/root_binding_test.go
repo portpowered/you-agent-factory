@@ -157,10 +157,6 @@ func (fake *httpSessionsRootFake) ProbeDurableFactorySessionEvents(context.Conte
 	return factorysessions.ErrDurableSessionNotFound
 }
 
-func (fake *httpSessionsRootFake) GetEngineStateSnapshotForSession(context.Context, string) (*factoryruntime.StateSnapshot, error) {
-	return nil, factorysessions.ErrSessionNotFound
-}
-
 func (fake *httpSessionsRootFake) ObserveForSession(context.Context, string, factoryruntime.ObserveRequest) (factoryruntime.ObserveResult, error) {
 	return factoryruntime.ObserveResult{}, factorysessions.ErrSessionNotFound
 }

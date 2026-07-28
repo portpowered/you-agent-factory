@@ -576,6 +576,12 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
 - [x] `tests/functional/work/visualization/dependency_graph_test.go`
   - `TestWorkVisualizeProducesDeterministicGraph`.
 
+- [x] `tests/functional/work/recordings/recordings_read_test.go`
+  - `TestRecordingsBackedWorkReadsUseRecordingsRootContract`.
+  - `TestGetWorkFromRecordingsRootUsesRecordingsServiceRoot`.
+  - `TestRecordingsBackedWorkReadsMapRichWorldState`.
+  - `TestRecordingsBackedWorkReadsSurfaceTypedProjectionFailures`.
+
 ## Wave 2 — sessions
 
 - [ ] `tests/functional/sessions/lifecycle/crud_test.go`
@@ -635,7 +641,7 @@ under `work/`, `sessions/`, `factory/`, and `product/`.
   - `TestAPIPreviewFactoryReturnsPublicTopology`.
   - `TestAPIPreviewDoesNotStartWorkersOrSessions`.
 
-- [ ] `tests/functional/factory/definitions/defaults_test.go`
+- [x] `tests/functional/factory/definitions/defaults_test.go`
   - `TestGlobalConfigSuppliesDefaultProviderAndModel`.
   - `TestExplicitFactoryConfigOverridesGlobalDefaults`.
   - `TestSingleDiscoveredProviderIsUsedWhenNoDefaultExists`.
