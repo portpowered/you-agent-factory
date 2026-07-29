@@ -22,11 +22,11 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionscli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	modelcontract "github.com/portpowered/infinite-you/pkg/services/models"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
-	factorydefinitionscli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -1987,6 +1987,50 @@ func TestRunCommand_OutputResponseStreamFlagMapsToRunConfig(t *testing.T) {
 	}
 }
 
+func TestRunCommand_TextInvocationDefaultsToResponseStream(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() { runCLI = originalRunCLI }()
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+	root := newTransportNamedFactoryRoot(t, packagedGoalFactoryName)
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--named", "@you/goal", "ship the goal"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute default run output: %v", err)
+	}
+	if got.InvocationOutputMode != runcli.InvocationOutputResponseStream {
+		t.Fatalf("InvocationOutputMode = %q, want response stream", got.InvocationOutputMode)
+	}
+}
+
+func TestRunCommand_ExplicitPrimaryOutputRetainsPrimaryMode(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() { runCLI = originalRunCLI }()
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+	root := newTransportNamedFactoryRoot(t, packagedGoalFactoryName)
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--named", "@you/goal", "--output", "primary", "ship the goal"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute explicit primary output: %v", err)
+	}
+	if got.InvocationOutputMode != runcli.InvocationOutputPrimaryResult {
+		t.Fatalf("InvocationOutputMode = %q, want primary", got.InvocationOutputMode)
+	}
+}
+
 func TestRunCommand_WithMockWorkersFlagMapsToRunConfig(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {
@@ -2364,6 +2408,43 @@ func TestRootCommand_DefaultWorkerModelFlagMapsToRunConfig(t *testing.T) {
 	}
 	if got.OperatorDefaults.WorkerModelSource != operatorconfig.SourceFlag {
 		t.Fatalf("model source = %q, want flag", got.OperatorDefaults.WorkerModelSource)
+	}
+}
+
+func TestRootCommand_RunProviderAndModelOverrideOperatorDefaults(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() { runCLI = originalRunCLI }()
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := newLegacyTestRootCommandWithOperatorDefaults(expectOperatorDefaultsResolution(
+		t,
+		operatorconfig.Defaults{},
+		operatorconfig.FlagOverrides{},
+		operatorconfig.ResolvedDefaults{
+			WorkerModelProvider:       "CODEX",
+			WorkerModel:               "configured-model",
+			WorkerModelProviderSource: operatorconfig.SourceFile,
+			WorkerModelSource:         operatorconfig.SourceFile,
+		},
+		nil,
+	))
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--provider", "cursor-acp", "--model", "auto", "--no-record"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run with provider/model overrides: %v", err)
+	}
+	if got.OperatorDefaults.WorkerModelProvider != "cursor-acp" || got.OperatorDefaults.WorkerModel != "auto" {
+		t.Fatalf("defaults = %+v, want cursor-acp/auto", got.OperatorDefaults)
+	}
+	if got.OperatorDefaults.WorkerModelProviderSource != operatorconfig.SourceFlag || got.OperatorDefaults.WorkerModelSource != operatorconfig.SourceFlag {
+		t.Fatalf("override sources = %+v, want flag", got.OperatorDefaults)
 	}
 }
 

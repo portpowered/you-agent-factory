@@ -6,25 +6,30 @@ doc-id: agent-factory/guides/providers
 
 # Providers and ACP Agents
 
-The `executorProvider` on an agent worker selects the program that executes the
-agent loop. Agent Client Protocol (ACP) integrations let `you` start a compatible
+The `executorProvider` on an agent worker selects the execution mechanism;
+`ACP` selects Agent Client Protocol execution. The separate `modelProvider`
+names the configured integration. ACP integrations let `you` start a compatible
 agent over local stdio while Factory Sessions, work routing, event recording,
 and final-result selection remain owned by the Factory runtime.
 
-Use `you workers acp` to manage ACP integrations and `you run` to prove that an
+Use `you workers list` to discover all workers, `you workers acp` to manage
+custom ACP integrations, and `you run` to prove that an
 agent can complete real work. Factory validation checks configuration shape; it
 does not launch an agent or prove that a custom provider is still installed.
 
 ## Install an ACP agent
 
 Install and authenticate the agent before configuring a worker. `you` includes
-these stdio presets:
+a broad, data-backed stdio catalog. Representative entries are:
 
 | Provider identity | Launch command |
 |-------------------|----------------|
 | `cursor-acp` | `cursor-agent acp` |
-| `kiro-acp` | `kiro-cli acp` |
-| `opencode-acp` | `opencode acp` |
+| `kiro-acp` | `kiro-cli-chat acp` |
+| `opencode-acp` | `npx -y opencode-ai acp` |
+| `codex-acp` | `npx -y @agentclientprotocol/codex-acp` |
+| `claude-acp` | `npx -y @agentclientprotocol/claude-agent-acp` |
+| `gemini-acp` | `gemini --acp` |
 
 For Cursor, confirm that the command is installed and that the account is
 authenticated:
@@ -37,7 +42,7 @@ cursor-agent acp --help
 List the built-in presets and any operator-added ACP integrations:
 
 ```bash
-you workers acp list
+you workers list
 ```
 
 `selectable` means the identity is present in the Providers catalog. The
@@ -51,7 +56,7 @@ as one `--argument` value:
 
 ```bash
 you workers acp add --name company-cursor --transport stdio --argument "cursor-agent acp"
-you workers acp list
+you workers list
 ```
 
 P0 supports stdio only. The command may include arguments; `you` parses it when
@@ -96,7 +101,8 @@ In a split Factory, select the provider in `workers/<name>/AGENTS.md`:
 ```yaml
 ---
 type: AGENT_WORKER
-executorProvider: cursor-acp
+executorProvider: ACP
+modelProvider: cursor-acp
 skipPermissions: true
 ---
 
@@ -120,7 +126,7 @@ stream visible until it reaches a terminal result:
 
 ```bash
 you factory config validate ./factory
-you run --factory ./factory/factory.json --skip-permissions --output response-stream "Add one table-driven test and run the focused test command."
+you run --factory ./factory/factory.json --provider cursor-acp --model auto --skip-permissions "Add one table-driven test and run the focused test command."
 ```
 
 `--skip-permissions` is invocation-only. Omit it when the ACP agent should ask
@@ -132,7 +138,8 @@ For a portable JSON or YAML Factory, set the same identity on its worker:
 {
   "name": "executor",
   "type": "AGENT_WORKER",
-  "executorProvider": "cursor-acp",
+  "executorProvider": "ACP",
+  "modelProvider": "cursor-acp",
   "skipPermissions": true
 }
 ```
@@ -149,11 +156,12 @@ name:
 you factory list
 you run --named @you/goal --help
 you factory config validate ~/.you-agent-factory/factories/@you/goal
-you run --named @you/goal --skip-permissions --output response-stream "Add a simple unit test, run it, and finish the goal."
+you run --named @you/goal --provider cursor-acp --model auto --skip-permissions "Add a simple unit test, run it, and finish the goal."
 ```
 
-For `@you/goal`, add `"executorProvider": "cursor-acp"` to the
-`goal-executor` worker in its materialized `factory.json`. On Windows, the same
+For `@you/goal`, set `"executorProvider": "ACP"` and
+`"modelProvider": "cursor-acp"` on the `goal-executor` worker in its
+materialized `factory.json`. On Windows, the same
 Factory is under `%USERPROFILE%\.you-agent-factory\factories\@you\goal`.
 
 ## Use ACP from JavaScript
@@ -166,7 +174,8 @@ return (async function () {
   phase("test");
   return await agent.run({
     label: "cursor-test-author",
-    executorProvider: "cursor-acp",
+    executorProvider: "ACP",
+    modelProvider: "cursor-acp",
     prompt: "Add one table-driven unit test and run the focused test command."
   });
 })();
@@ -189,12 +198,12 @@ Delete by provider name and confirm it no longer appears:
 
 ```bash
 you workers acp delete --name company-cursor
-you workers acp list
+you workers list
 ```
 
 Factories that still name the deleted custom identity can pass offline Factory
 validation because the identity is syntactically valid. Their next real run
-fails provider selection. Update `executorProvider`, reinstall the integration,
+fails provider selection. Update `modelProvider`, reinstall the integration,
 or use a built-in preset.
 
 ## Troubleshooting
@@ -204,7 +213,7 @@ or use a built-in preset.
 - `ACP authentication required` means the agent advertised authentication but
   could not open a session. Complete the agent's own login flow and retry.
 - An unknown-provider or failed-state result after deleting a custom integration
-  means a worker still references its old `executorProvider`.
+  means a worker still references its old `modelProvider`.
 - A permission cancellation means the agent requested an operation that was not
   approved. Retry with the intended permission flow or deliberately add
   `--skip-permissions` for that invocation.

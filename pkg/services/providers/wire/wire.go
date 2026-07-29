@@ -225,6 +225,17 @@ func NewService(options ...Option) (providers.Service, error) {
 	)
 }
 
+// PackagedACPIntegrations returns the detached data-backed ACP defaults used by
+// Providers. Composition uses this exact source when materializing a new
+// operator configuration so init and runtime discovery cannot drift.
+func PackagedACPIntegrations() ([]providers.ACPIntegration, error) {
+	packaged, err := builtinswire.NewService()
+	if err != nil {
+		return nil, err
+	}
+	return packaged.ACPIntegrations(), nil
+}
+
 func newRoot(
 	catalogService catalog.Service,
 	commandRunner platformprocess.CommandRunner,

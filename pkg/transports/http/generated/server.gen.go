@@ -6510,7 +6510,7 @@ type Worker struct {
 	// Description Optional localized customer-facing explanation of this worker.
 	Description *NameValue `json:"description,omitempty"`
 
-	// ExecutorProvider Canonical Providers catalog identity used to select worker execution, an exact invocation-parameter placeholder, or the retained `SCRIPT_WRAP` compatibility value. ACP-backed identities use names such as `cursor-acp`; the Providers catalog determines their private execution kind.
+	// ExecutorProvider Execution mechanism. Use `ACP` for ACP-backed workers and put the configured integration identity (for example `cursor-acp`) in modelProvider. `SCRIPT_WRAP` remains the command-wrapper compatibility value; legacy named executor identities remain accepted during migration.
 	ExecutorProvider *WorkerProvider `json:"executorProvider,omitempty"`
 
 	// Id Optional durable public identifier for this worker. When present, graph and layout references should use this id instead of the mutable name.
@@ -6525,7 +6525,7 @@ type Worker struct {
 	// ModelLocality Provider locality for this model capability declaration. Use `LOCAL` for embedded or host-managed inference and `CLOUD` for remote provider execution.
 	ModelLocality *WorkerModelLocality `json:"modelLocality,omitempty"`
 
-	// ModelProvider Canonical model-provider identity used for model routing and provider diagnostics, or an exact invocation-parameter placeholder such as `${modelProvider}`. Extension identities use lowercase standardized syntax; built-in values such as `CLAUDE` and `CODEX` remain compatibility conveniences.
+	// ModelProvider Canonical provider identity used for model routing and provider diagnostics, or an exact invocation-parameter placeholder such as `${modelProvider}`. For `executorProvider: ACP`, this names the configured ACP integration, such as `cursor-acp`. Extension identities use lowercase standardized syntax; built-in values such as `CLAUDE` and `CODEX` remain compatibility conveniences.
 	ModelProvider *WorkerModelProvider `json:"modelProvider,omitempty"`
 
 	// Name Worker name referenced by Workstation.worker.
@@ -6562,7 +6562,7 @@ type WorkerModelLocality string
 // WorkerModelProvider Built-in model-provider constants retained as generated-client conveniences. Authored modelProvider fields use the open ProviderIdentity contract, so this list is not an exhaustive provider inventory.
 type WorkerModelProvider string
 
-// WorkerProvider Built-in worker-provider compatibility values. Authored executorProvider fields also accept extensible lowercase Providers catalog identities.
+// WorkerProvider Worker execution mechanism. Canonical values are ACP and SCRIPT_WRAP; extensible lowercase identities remain accepted for compatibility with existing factories.
 type WorkerProvider = string
 
 // WorkerType Worker implementation families supported by the public factory-config contract.

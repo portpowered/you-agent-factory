@@ -848,6 +848,7 @@ func TestNewRunServerFamilyComponentsRegistersLocalFlags(t *testing.T) {
 		"runtime-metrics-max-size-mb", "runtime-metrics-max-backups",
 		"runtime-metrics-max-age-days", "runtime-metrics-compress", "with-mock-workers",
 		"with-server", "with-site", "quiet", "output", "skip-permissions", "port",
+		"provider", "model",
 	} {
 		if components.Run.Flags().Lookup(flagName) == nil {
 			t.Fatalf("generated run missing local flag %q", flagName)
@@ -916,6 +917,7 @@ func testRunServerBindings() climanifestcobra.RunServerFlagBindings {
 	for _, inputID := range []string{
 		"you.run.flag.work", "you.run.flag.dir", "you.run.flag.named",
 		"you.run.flag.factory", "you.run.flag.record", "you.run.flag.replay",
+		"you.run.flag.provider", "you.run.flag.model",
 		"you.run.flag.runtime-log-dir", "you.run.flag.runtime-metrics-dir",
 		"you.run.flag.with-mock-workers", "you.run.flag.output",
 	} {

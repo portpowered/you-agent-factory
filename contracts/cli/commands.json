@@ -11239,7 +11239,7 @@
           },
           "description": {
             "id": "you.run.description",
-            "canonicalEnglish": "Load workflow and run the factory engine.\n\nWithout an explicit --dir, --named, or --factory selector, you run validates the exact invocation-local ./factory/factory.json as the Current Factory; it does not bootstrap a missing Factory or follow another current-factory pointer. Run you run --work ./docs/examples/startup-work.json to submit explicit default Work; Factory directory runs can consume factory/inputs/task/default while active. Missing and invalid definitions fail before runtime, listener, or browser activation. Ordinary batch, continuous, named, portable Factory, replay, mock-worker, and JavaScript runs start no HTTP listener. Add --with-server to serve the Current Factory API for exactly the run lifetime without opening a browser, or --with-site to imply that server and open the embedded dashboard once after readiness. Server-enabled runs bind only the loopback host and preferred port from global --server, advance monotonically through port 65535 on collisions, report the actual bound URL, and join the listener before returning.\n\nDefault execution uses batch mode and exits after idle completion. Use --continuously to keep the factory alive while idle until you cancel it. Use --with-mock-workers with an optional JSON config path for deterministic outcomes. Use --quiet to suppress dashboard output for scripted or CI-oriented runs. Use --skip-permissions to request an invocation-only unsafe permission bypass for agent workers without changing persisted factory configuration. Normal live runs record by default unless you pass --no-record. Replay artifacts are sensitive and can contain prompts, payloads, stdout, stderr, and diagnostic metadata.\n\nUse --named with a persisted canonical factory name to resolve project-local factories before global built-ins under ~/.you-agent-factory/factories. Built-ins materialize lazily into that global root on first use and stay editable on disk. Use --factory with a JSON, YAML, or JavaScript Factory source. Supported selectors are --dir, --named, and --factory. Selected Factories can define custom invocation arguments; run you run --named <factory> --help or you run --factory <factory.yaml> --help to inspect signature-backed usage while keeping existing run-level flags available. In Factory invocation mode, provide either trailing positional text or piped stdin text, or use signature-defined file, repeated, and defaulted inputs; conflicting positional text and stdin return INVOCATION_INPUT_SOURCE_CONFLICT. Named-Factory selection lives in you docs authoring-factories; invocation behavior lives in you docs run and you docs sessions; model choices live in you docs models.\n\nSupported one-shot Factory invocations use primary-result-only stdout by default. Global --json selects one InvocationResponse; --output response-stream selects ordered human Factory Events; combining global --json with response-stream selects NDJSON. Quiet conflicts with global JSON and explicit --output. Failures use one standard ErrorResponse on stderr. Runtime logs are structured JSON rolling files grouped by UTC start date under the selected log root; environment details are record-channel diagnostics only, and system logs include command stdout/stderr only on command failures. Runtime metrics are a separate structured JSONL operational channel with independent rolling files."
+            "canonicalEnglish": "Load workflow and run the factory engine.\n\nWithout an explicit --dir, --named, or --factory selector, you run validates the exact invocation-local ./factory/factory.json as the Current Factory; it does not bootstrap a missing Factory or follow another current-factory pointer. Run you run --work ./docs/examples/startup-work.json to submit explicit default Work; Factory directory runs can consume factory/inputs/task/default while active. Missing and invalid definitions fail before runtime, listener, or browser activation. Ordinary batch, continuous, named, portable Factory, replay, mock-worker, and JavaScript runs start no HTTP listener. Add --with-server to serve the Current Factory API for exactly the run lifetime without opening a browser, or --with-site to imply that server and open the embedded dashboard once after readiness. Server-enabled runs bind only the loopback host and preferred port from global --server, advance monotonically through port 65535 on collisions, report the actual bound URL, and join the listener before returning.\n\nDefault execution uses batch mode and exits after idle completion. Use --continuously to keep the factory alive while idle until you cancel it. Use --with-mock-workers with an optional JSON config path for deterministic outcomes. Use --quiet to suppress dashboard output for scripted or CI-oriented runs. Use --skip-permissions to request an invocation-only unsafe permission bypass for agent workers without changing persisted factory configuration. Normal live runs record by default unless you pass --no-record. Replay artifacts are sensitive and can contain prompts, payloads, stdout, stderr, and diagnostic metadata.\n\nUse --named with a persisted canonical factory name to resolve project-local factories before global built-ins under ~/.you-agent-factory/factories. Built-ins materialize lazily into that global root on first use and stay editable on disk. Use --factory with a JSON, YAML, or JavaScript Factory source. Supported selectors are --dir, --named, and --factory. Selected Factories can define custom invocation arguments; run you run --named <factory> --help or you run --factory <factory.yaml> --help to inspect signature-backed usage while keeping existing run-level flags available. In Factory invocation mode, provide either trailing positional text or piped stdin text, or use signature-defined file, repeated, and defaulted inputs; conflicting positional text and stdin return INVOCATION_INPUT_SOURCE_CONFLICT. Named-Factory selection lives in you docs authoring-factories; invocation behavior lives in you docs run and you docs sessions; model choices live in you docs models.\n\nThe common ACP workflow is `you run --named @you/goal --provider cursor-acp --model auto \"Describe the task\"`. Run-level --provider selects modelProvider and --model selects an optional model within that provider. Supported one-shot text invocations use the ordered response stream by default; use --output primary for final-result-only stdout. Global --json with response-stream selects NDJSON. Quiet conflicts with global JSON and explicit --output. Failures use one standard ErrorResponse on stderr. Runtime logs are structured JSON rolling files grouped by UTC start date under the selected log root; environment details are record-channel diagnostics only, and system logs include command stdout/stderr only on command failures. Runtime metrics are a separate structured JSONL operational channel with independent rolling files."
           }
         },
         "examples": [
@@ -11474,6 +11474,54 @@
             "since": "1.0.0"
           }
         },
+        "you.run.flag.provider": {
+          "id": "you.run.flag.provider",
+          "long": "provider",
+          "usage": "override the worker modelProvider for this run (for example cursor-acp)",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.run.flag.provider",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.run.flag.model": {
+          "id": "you.run.flag.model",
+          "long": "model",
+          "usage": "override the optional model selected within the provider for this run",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.run.flag.model",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
         "you.run.flag.no-record": {
           "id": "you.run.flag.no-record",
           "long": "no-record",
@@ -11501,7 +11549,7 @@
         "you.run.flag.output": {
           "id": "you.run.flag.output",
           "long": "output",
-          "usage": "invocation stdout mode: primary (default) or response-stream for canonical Factory Events on supported live or replayed one-shot factory runs",
+          "usage": "invocation stdout mode: response-stream (default for one-shot text invocations) or primary for final-result-only output",
           "shorthand": "",
           "aliases": [],
           "scope": "local",

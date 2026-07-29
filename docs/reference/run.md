@@ -219,13 +219,13 @@ Supported one-shot `--factory` and `--named` invocations expose three stdout
 modes. Use `you docs config` for `invocationReturn` and primary-result
 selection policy.
 
-### Primary-result mode (default)
+### Primary-result mode
 
-Successful invocations write only the Factory's configured primary result to
-stdout. Redirect it directly:
+Select `--output primary` to write only the Factory's configured primary result
+to stdout. Redirect it directly:
 
 ```bash
-you run --factory ./factory.json "Summarize the changelog" > result.txt
+you run --factory ./factory.json --output primary "Summarize the changelog" > result.txt
 ```
 
 Add `--quiet` when the same terminal-only contract must also suppress operator
@@ -236,24 +236,24 @@ global `--json` and with explicit `--output`.
 
 ### Single-JSON automation mode
 
-Add global `--json` without `--output response-stream` to write exactly one
+Add global `--json` with `--output primary` to write exactly one
 `InvocationResponse` JSON object. Lifecycle records and provider-session chunks
 are not included. Live and `--replay` invocations use the same single-response
 presentation rule:
 
 ```bash
-you --json run --factory ./factory.json "Summarize the changelog"
+you --json run --factory ./factory.json --output primary "Summarize the changelog"
 ```
 
-### Human Factory Event stream mode
+### Human Factory Event stream mode (default)
 
-Select `--output response-stream` to render the ordered canonical Factory Event
-lifecycle for people on the terminal. The same consumer is used for live and
+One-shot text invocations render the ordered canonical Factory Event lifecycle
+for people on the terminal by default. The same consumer is used for live and
 `--replay` invocations, and the stream ends with the same primary result as
 primary-result mode:
 
 ```bash
-you run --named team-review --output response-stream "Review the release notes"
+you run --named team-review "Review the release notes"
 ```
 
 Human lifecycle lines summarize Work acceptance, Factory Session start and
@@ -265,7 +265,7 @@ human presentation; terminal detection does not silently select another format.
 
 ### NDJSON automation mode
 
-Add global `--json` with `--output response-stream` for newline-delimited
+Add global `--json` for newline-delimited
 automation output. Each non-empty stdout line is one complete JSON record.
 Streamed events use `recordType=factory_event` with a nested canonical
 `FactoryEvent`, including its unchanged session sequence context. An available
@@ -279,7 +279,7 @@ earlier releases. The CLI never emits a raw `FactoryResponseEvent` or a
 `recordType=response_event` record.
 
 ```bash
-you --json run --factory ./factory.json --output response-stream "Summarize the changelog"
+you --json run --factory ./factory.json "Summarize the changelog"
 ```
 
 ### Invocation failures

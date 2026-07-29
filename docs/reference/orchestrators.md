@@ -106,7 +106,7 @@ argument contract is intentionally small:
 | `prompt` | Required, non-empty string |
 | `label` | Optional string |
 | `preset` | Optional string |
-| `executorProvider` | Optional Providers catalog identity, such as `cursor-acp`; omitted selection preserves the compatibility route |
+| `executorProvider` | Execution mechanism; use `ACP` for an ACP integration and put its identity in `modelProvider` |
 | `modelProvider` | Optional string |
 | `model` | Optional string |
 | `reasoningEffort` | Optional string |
@@ -118,7 +118,8 @@ const child = await agent.run({
   prompt: "Review the proposed change",
   label: "reviewer",
   preset: "careful",
-  executorProvider: "cursor-acp",
+  executorProvider: "ACP",
+  modelProvider: "cursor-acp",
   modelProvider: "codex",
   model: "gpt-example",
   reasoningEffort: "high",

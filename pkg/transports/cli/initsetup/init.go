@@ -7,8 +7,8 @@ import (
 	"io"
 
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	operatorsettingscli "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/cli"
+	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 )
 
 // ContextLineReader is the exact cancellation-aware input role used by setup.
@@ -38,6 +38,7 @@ type Config struct {
 func NewConfigurer(
 	service operatorsettings.ConfigDocumentService,
 	newLineReader ContextLineReaderFactory,
+	packagedACPDefaults ...[]operatorsettings.ACPIntegration,
 ) func(Config) error {
 	return func(cfg Config) error {
 		adapterCfg := operatorsettingscli.ConfigureConfig{
@@ -52,6 +53,12 @@ func NewConfigurer(
 		}
 		if err := operatorsettingscli.ValidateConfigureBoundary(adapterCfg); err != nil {
 			return err
+		}
+		if len(packagedACPDefaults) > 0 {
+			path := operatorsettings.DefaultConfigPath(cfg.HomeDir)
+			if _, err := service.EnsurePackagedACPIntegrations(cfg.Context, path, packagedACPDefaults[0]); err != nil {
+				return fmt.Errorf("materialize packaged ACP integrations: %w", err)
+			}
 		}
 		root, err := settingswire.NewServiceFromConfigDocument(service)
 		if err != nil {

@@ -70,9 +70,6 @@ func ValidateConfigureBoundary(cfg ConfigureConfig) error {
 		}
 		return nil
 	}
-	if cfg.Model != nil && strings.TrimSpace(*cfg.Model) == "" {
-		return fmt.Errorf("model must be non-empty when supplied")
-	}
 	return nil
 }
 
@@ -197,9 +194,6 @@ func (service *service) acquireProviderModelPrompt(
 	}
 	if strings.TrimSpace(provider) == "" {
 		return operatorsettings.ProviderModelUpdate{}, fmt.Errorf("provider is required")
-	}
-	if strings.TrimSpace(model) == "" {
-		return operatorsettings.ProviderModelUpdate{}, fmt.Errorf("model is required")
 	}
 	return operatorsettings.ProviderModelUpdate{
 		Provider: &provider,

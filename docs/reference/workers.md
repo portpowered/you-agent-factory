@@ -92,8 +92,9 @@ See `you docs workstations` for the matching `INFERENCE_RUN`, `AGENT_RUN`,
 - Optional `openCodeAgent` selects a named OpenCode agent profile when the
   resolved runner is `opencode`. Omit it to keep today's default `opencode run`
   behavior without `--agent`.
-- `executorProvider` accepts `SCRIPT_WRAP` and canonical Providers catalog
-  identities such as `cursor-acp`. See `you docs providers` for ACP setup and
+- `executorProvider` accepts the canonical mechanisms `SCRIPT_WRAP` and `ACP`.
+  For ACP, `modelProvider` names an integration such as `cursor-acp`. See
+  `you docs providers` for ACP setup and
   lifecycle commands.
 - Older snake_case and alias frontmatter keys are compatibility-only inputs.
   New docs and authored configs should use canonical camelCase fields.
@@ -446,13 +447,13 @@ Use `you docs workstations` for `behavior: "POLLER"` lifecycle semantics and
 
 Keep `modelProvider` and `executorProvider` separate:
 
-- `modelProvider` names the model backend. Current built-in values are
-  `CLAUDE` and `CODEX`. Omit it when operator defaults supply the provider for
-  this run.
+- `modelProvider` names the selected provider integration. It may be a model
+  backend such as `CLAUDE` or `CODEX`, or an ACP integration such as
+  `cursor-acp`. Omit it only when operator defaults supply the provider.
 - `model` names the concrete model identifier such as `gpt-5-codex`. Omit it
   when operator defaults supply the model for this run.
-- `executorProvider` names the execution wrapper around that worker. The
-  current public built-in value is `SCRIPT_WRAP`.
+- `executorProvider` names the execution mechanism around that worker. Use
+  `SCRIPT_WRAP` for command wrappers and `ACP` for Agent Client Protocol.
 
 For a normal model worker, both fields can appear on the same worker because
 they answer different questions: which model backend to use, and which worker

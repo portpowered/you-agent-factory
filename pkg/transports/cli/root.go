@@ -417,6 +417,14 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 		return err
 	}
 	cfg.OperatorDefaults = resolvedOperatorDefaults
+	if provider := strings.TrimSpace(cfg.ProviderOverride); provider != "" {
+		cfg.OperatorDefaults.WorkerModelProvider = provider
+		cfg.OperatorDefaults.WorkerModelProviderSource = operatorconfig.SourceFlag
+	}
+	if model := strings.TrimSpace(cfg.ModelOverride); model != "" {
+		cfg.OperatorDefaults.WorkerModel = model
+		cfg.OperatorDefaults.WorkerModelSource = operatorconfig.SourceFlag
+	}
 	cfg.Stdin = cmd.InOrStdin()
 	cfg.StdinIsTTY = func() bool { return startupcli.StdinIsTTY(cmd.Context()) }
 	cfg.OutputIsTTY = startupcli.StdoutIsTTY(cmd.Context())
@@ -425,6 +433,11 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 		return err
 	}
 	cleanInvocation, textInvocation := runInvocationModes(cmd, cfg)
+	invocationFactorySelected := cmd.Flags().Changed("factory") || cmd.Flags().Changed("named")
+	defaultResponseStream := textInvocation || (invocationFactorySelected && !cfg.Continuously && !cmd.Flags().Changed("work") && len(promptArgs) > 0)
+	if defaultResponseStream && strings.TrimSpace(cfg.InvocationOutputMode) == "" && !cfg.InvocationOutputExplicit {
+		cfg.InvocationOutputMode = runcli.InvocationOutputResponseStream
+	}
 	cfg.CleanInvocation = cleanInvocation
 	cfg.JSON = globals.json
 	runPolicy := resolveEffectiveRunPolicy(cmd, cfg, policy)

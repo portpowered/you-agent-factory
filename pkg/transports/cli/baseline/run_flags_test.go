@@ -1,6 +1,7 @@
 package baseline_test
 
 import (
+	"os"
 	"sort"
 	"strings"
 	"testing"
@@ -19,6 +20,12 @@ func TestRunFlagsBaseline_MatchesFixture(t *testing.T) {
 	}
 
 	if got == want {
+		return
+	}
+	if os.Getenv("UPDATE_CLI_BASELINES") == "1" {
+		if err := os.WriteFile(runFlagsFixture, []byte(got), 0o600); err != nil {
+			t.Fatalf("update run flags baseline fixture: %v", err)
+		}
 		return
 	}
 

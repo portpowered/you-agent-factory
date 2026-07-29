@@ -1389,7 +1389,7 @@ $defs:
             executorProvider:
                 allOf:
                     - $ref: '#/$defs/WorkerProvider'
-                description: Canonical Providers catalog identity used to select worker execution, an exact invocation-parameter placeholder, or the retained `SCRIPT_WRAP` compatibility value. ACP-backed identities use names such as `cursor-acp`; the Providers catalog determines their private execution kind.
+                description: Execution mechanism. Use `ACP` for ACP-backed workers and put the configured integration identity (for example `cursor-acp`) in modelProvider. `SCRIPT_WRAP` remains the command-wrapper compatibility value; legacy named executor identities remain accepted during migration.
             id:
                 description: Optional durable public identifier for this worker. When present, graph and layout references should use this id instead of the mutable name.
                 type: string
@@ -1405,7 +1405,7 @@ $defs:
                     - $ref: '#/$defs/WorkerModelLocality'
                 description: Provider locality for this model capability declaration. Use `LOCAL` for embedded or host-managed inference and `CLOUD` for remote provider execution.
             modelProvider:
-                description: Canonical model-provider identity used for model routing and provider diagnostics, or an exact invocation-parameter placeholder such as `${modelProvider}`. Extension identities use lowercase standardized syntax; built-in values such as `CLAUDE` and `CODEX` remain compatibility conveniences.
+                description: 'Canonical provider identity used for model routing and provider diagnostics, or an exact invocation-parameter placeholder such as `${modelProvider}`. For `executorProvider: ACP`, this names the configured ACP integration, such as `cursor-acp`. Extension identities use lowercase standardized syntax; built-in values such as `CLAUDE` and `CODEX` remain compatibility conveniences.'
                 oneOf:
                     - $ref: '#/$defs/ProviderIdentity'
                     - pattern: ^\$\{[A-Za-z0-9_.-]+\}$
@@ -1453,10 +1453,10 @@ $defs:
             - CLOUD
         type: string
     WorkerProvider:
-        description: Built-in worker-provider compatibility values. Authored executorProvider fields also accept extensible lowercase Providers catalog identities.
+        description: Worker execution mechanism. Canonical values are ACP and SCRIPT_WRAP; extensible lowercase identities remain accepted for compatibility with existing factories.
         maxLength: 128
         minLength: 1
-        pattern: ^(?:SCRIPT_WRAP|\$\{[A-Za-z0-9_.-]+\}|[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*)$
+        pattern: ^(?:ACP|SCRIPT_WRAP|\$\{[A-Za-z0-9_.-]+\}|[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*)$
         type: string
     WorkerType:
         description: Worker implementation families supported by the public factory-config contract.

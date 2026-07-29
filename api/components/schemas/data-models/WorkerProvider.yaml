@@ -1,5 +1,5 @@
 type: string
-description: Built-in worker-provider compatibility values. Authored executorProvider fields also accept extensible lowercase Providers catalog identities.
+description: Worker execution mechanism. Canonical values are ACP and SCRIPT_WRAP; extensible lowercase identities remain accepted for compatibility with existing factories.
 minLength: 1
 maxLength: 128
-pattern: '^(?:SCRIPT_WRAP|\$\{[A-Za-z0-9_.-]+\}|[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*)$'
+pattern: '^(?:ACP|SCRIPT_WRAP|\$\{[A-Za-z0-9_.-]+\}|[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*)$'

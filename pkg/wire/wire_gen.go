@@ -394,7 +394,10 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	expandFactoryConfigOperation := provideExpandFactoryConfigOperation(v43)
 	providerCatalog := provideOperatorSettingsProviderCatalog(providerRegistry)
 	configDocumentService := provideOperatorConfigDocumentService(fileSystem, createTemporaryFile, providerCatalog, configDecoder, configEncoder)
-	configureInitOperation := provideConfigureInitOperation(configDocumentService)
+	configureInitOperation, err := provideConfigureInitOperation(configDocumentService)
+	if err != nil {
+		return nil, err
+	}
 	installPackagedFactoryOperation := provideInstallPackagedFactoryOperation(packagedFactoryCatalogOperations, packagedFactoryInstallationOperations)
 	cliInstallPackagedFactoryOperation := provideInstallPackagedFactoryCLI(installPackagedFactoryOperation)
 	queryFactoryOperation := provideQueryFactoryOperation(wireStandardCLIHTTPProtocol)

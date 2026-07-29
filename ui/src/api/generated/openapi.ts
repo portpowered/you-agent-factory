@@ -4375,11 +4375,11 @@ export interface components {
       provider?: components["schemas"]["HostedWorkerProvider"];
       /** @description Model identifier to request from the configured model provider when this worker uses model execution. */
       model?: string;
-      /** @description Canonical model-provider identity used for model routing and provider diagnostics, or an exact invocation-parameter placeholder such as `${modelProvider}`. Extension identities use lowercase standardized syntax; built-in values such as `CLAUDE` and `CODEX` remain compatibility conveniences. */
+      /** @description Canonical provider identity used for model routing and provider diagnostics, or an exact invocation-parameter placeholder such as `${modelProvider}`. For `executorProvider: ACP`, this names the configured ACP integration, such as `cursor-acp`. Extension identities use lowercase standardized syntax; built-in values such as `CLAUDE` and `CODEX` remain compatibility conveniences. */
       modelProvider?: components["schemas"]["ProviderIdentity"] | string;
       /** @description Provider locality for this model capability declaration. Use `LOCAL` for embedded or host-managed inference and `CLOUD` for remote provider execution. */
       modelLocality?: components["schemas"]["WorkerModelLocality"];
-      /** @description Canonical Providers catalog identity used to select worker execution, an exact invocation-parameter placeholder, or the retained `SCRIPT_WRAP` compatibility value. ACP-backed identities use names such as `cursor-acp`; the Providers catalog determines their private execution kind. */
+      /** @description Execution mechanism. Use `ACP` for ACP-backed workers and put the configured integration identity (for example `cursor-acp`) in modelProvider. `SCRIPT_WRAP` remains the command-wrapper compatibility value; legacy named executor identities remain accepted during migration. */
       executorProvider?: components["schemas"]["WorkerProvider"];
       /** @description Provider-agnostic model operations that this worker can execute, including named input and output slots. */
       operations?: components["schemas"]["ModelOperation"][];
@@ -4570,7 +4570,7 @@ export interface components {
      * @enum {string}
      */
     WorkerModelLocality: WorkerModelLocality;
-    /** @description Built-in worker-provider compatibility values. Authored executorProvider fields also accept extensible lowercase Providers catalog identities. */
+    /** @description Worker execution mechanism. Canonical values are ACP and SCRIPT_WRAP; extensible lowercase identities remain accepted for compatibility with existing factories. */
     WorkerProvider: string;
     /** @description One provider-agnostic operation exposed by a model worker, such as `TTS`. */
     ModelOperation: {

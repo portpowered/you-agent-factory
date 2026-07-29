@@ -501,6 +501,7 @@ func applyRunCommandInvocationOutputMode(cmd *cobra.Command, cfg *runcli.RunConf
 	if !changed {
 		return nil
 	}
+	cfg.InvocationOutputExplicit = true
 	normalized, err := runcli.NormalizeInvocationOutputMode(cfg.InvocationOutputMode)
 	if err != nil {
 		return err

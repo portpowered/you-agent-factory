@@ -36,19 +36,28 @@ func TestConfigurerRequiresSuppliedProviderBeforePersistence(t *testing.T) {
 	}
 }
 
-func TestConfigurerRejectsEmptySuppliedModelBeforePersistence(t *testing.T) {
+func TestConfigurerAcceptsEmptySuppliedModelAndClearsDefault(t *testing.T) {
 	model := "  "
-	err := initsetup.NewConfigurer(operatorsettings.ConfigDocumentService{}, testLineReaderFactory)(
+	service := testConfigService()
+	homeDir := t.TempDir()
+	err := initsetup.NewConfigurer(service, testLineReaderFactory)(
 		initsetup.Config{
 			Context:  context.Background(),
-			HomeDir:  t.TempDir(),
+			HomeDir:  homeDir,
 			Provider: "codex",
 			Model:    &model,
 			Output:   &bytes.Buffer{},
 		},
 	)
-	if err == nil || !strings.Contains(err.Error(), "model must be non-empty") {
-		t.Fatalf("configure error = %v, want empty-model rejection", err)
+	if err != nil {
+		t.Fatalf("configure error = %v", err)
+	}
+	document, err := service.Load(filepath.Join(homeDir, ".you-agent-factory", "config.json"))
+	if err != nil {
+		t.Fatalf("load persisted config: %v", err)
+	}
+	if document.FileConfig().Defaults.WorkerModel != "" {
+		t.Fatalf("worker model = %q, want cleared", document.FileConfig().Defaults.WorkerModel)
 	}
 }
 

@@ -45,6 +45,8 @@ type Config struct {
 	InvocationNormalizedArguments *work.NormalizedArguments
 	PreparedInvocationInput       *work.PreparedInvocationInput
 	RunnerID                      string
+	ProviderOverride              string
+	ModelOverride                 string
 	OperatorDefaults              operatorconfig.ResolvedDefaults
 	ACPIntegrations               []operatorconfig.ACPIntegration
 	ExecutionBaseDir              string
@@ -90,6 +92,7 @@ type Config struct {
 	OutputIsTTY                   bool
 	JSONOutput                    bool
 	InvocationOutputMode          string
+	InvocationOutputExplicit      bool
 	InvocationMetricsRecorder     InvocationMetricsRecorder
 
 	InvocationSkipPermissionsOverride *bool

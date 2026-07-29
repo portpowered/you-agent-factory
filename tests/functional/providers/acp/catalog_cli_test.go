@@ -69,6 +69,37 @@ func TestRootBuiltACPCommandsAddListDeleteOneSettingsBackedCatalogEntry(t *testi
 	)
 }
 
+func TestYouInitMaterializesPackagedACPDefaultsAndPreservesCustomEntries(t *testing.T) {
+	home := t.TempDir()
+	working := t.TempDir()
+	process := support.BuildProcess(t, serviceedges.Edges{
+		OperatorSettingsIDGenerator: func() string { return "custom-entry" },
+		ProvidersExecutableLocator:  availableExecutableLocator{},
+	})
+
+	executeACPCommand(t, process, home, working, "init", "--provider", "codex", "--model", "")
+	configPath := filepath.Join(home, ".you-agent-factory", "config.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read initialized config: %v", err)
+	}
+	for _, want := range []string{`"cursor-acp"`, `"cursor-agent acp"`, `"opencode-acp"`} {
+		if !strings.Contains(string(data), want) {
+			t.Fatalf("initialized config omitted %s: %s", want, data)
+		}
+	}
+
+	executeACPCommand(t, process, home, working, "workers", "acp", "add", "--name", "custom-acp", "--argument", "custom-agent acp")
+	executeACPCommand(t, process, home, working, "init", "--provider", "codex")
+	data, err = os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read reinitialized config: %v", err)
+	}
+	if !strings.Contains(string(data), `"custom-acp"`) || strings.Count(string(data), `"name": "cursor-acp"`) != 1 {
+		t.Fatalf("re-running init did not preserve exact integrations: %s", data)
+	}
+}
+
 func executeACPCommand(t *testing.T, process support.Process, home, working string, args ...string) string {
 	t.Helper()
 	inputs := support.FakeInputs(context.Background(), append([]string{"you"}, args...))
