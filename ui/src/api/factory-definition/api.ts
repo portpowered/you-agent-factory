@@ -305,9 +305,11 @@ const WORKER_MODEL_PROVIDER_VALUES = new Set<FactoryWorkerModelProvider>([
   "OPENCODE",
 ]);
 const EXACT_INVOCATION_PLACEHOLDER_PATTERN = /^\$\{([A-Za-z0-9_.-]+)\}$/;
+const PROVIDER_IDENTITY_PATTERN =
+  /^(?:[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*|AGY|ANTHROPIC|CLAUDE|CODEX|CURSOR|CURSOR_AGENT|GEMINI|KIRO|OPENAI|OPENCODE|PI)$/;
 const WORKER_PROVIDER_VALUES = new Set<
   NonNullable<FactoryWorker["executorProvider"]>
->(["SCRIPT_WRAP"]);
+>(["ACP", "SCRIPT_WRAP"]);
 const WORKER_MODEL_LOCALITY_VALUES = new Set<
   NonNullable<FactoryWorker["modelLocality"]>
 >(["LOCAL", "CLOUD"]);
@@ -944,7 +946,8 @@ function readOptionalWorkerModelProvider(
   if (
     WORKER_MODEL_PROVIDER_VALUES.has(
       modelProvider as FactoryWorkerModelProvider,
-    )
+    ) ||
+    PROVIDER_IDENTITY_PATTERN.test(modelProvider)
   ) {
     return modelProvider as FactoryWorker["modelProvider"];
   }
@@ -952,7 +955,7 @@ function readOptionalWorkerModelProvider(
     return modelProvider as FactoryWorker["modelProvider"];
   }
   throw new FactoryDefinitionAPIError(
-    `${path}.modelProvider must be one of ${Array.from(WORKER_MODEL_PROVIDER_VALUES).join(", ")}.`,
+    `${path}.modelProvider must be a valid provider identity or one of ${Array.from(WORKER_MODEL_PROVIDER_VALUES).join(", ")}.`,
   );
 }
 

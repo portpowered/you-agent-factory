@@ -1165,6 +1165,30 @@ const SUPPORTED_WORKER_MODEL_PROVIDERS = [
 ] as const;
 
 describe("worker modelProvider validation", () => {
+  it("round-trips an ACP worker without rewriting its provider identity", () => {
+    const normalized = normalizeFactoryDefinition({
+      name: "acp-provider-factory",
+      workers: [
+        {
+          executorProvider: "ACP",
+          modelProvider: "cursor-acp",
+          name: "writer",
+          skipPermissions: true,
+          type: "AGENT_WORKER",
+        },
+      ],
+    });
+
+    expect(normalized.workers?.[0]).toMatchObject({
+      executorProvider: "ACP",
+      modelProvider: "cursor-acp",
+      skipPermissions: true,
+    });
+    expect(
+      normalizeFactoryDefinition(JSON.parse(JSON.stringify(normalized))),
+    ).toEqual(normalized);
+  });
+
   it.each(SUPPORTED_WORKER_MODEL_PROVIDERS)(
     "parses and round-trips MODEL_WORKER modelProvider %s",
     (modelProvider) => {
