@@ -1,0 +1,122 @@
+{
+  "requestId": "planner-wave-run-del-split-20260728",
+  "type": "FACTORY_REQUEST_BATCH",
+  "currentChainingTraceId": "trace-planner-wave-run-del-split-20260728",
+  "works": [
+    {
+      "name": "pss-del-run-service",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "DEL-RUN-SERVICE: delete emptied factory_runtime/service and lower baselines",
+        "program": "Packaged Service Structure",
+        "packetId": "DEL-RUN-SERVICE",
+        "sourcePath": "docs/temp/customer-ask.md",
+        "currentProgress": [
+          "Customer rejected monolithic DEL-RUN as too expensive (~20 package moves in one packet).",
+          "Monolithic pss-del-run (batch-planner-wave-run-vertical-fold-20260727-pss-del-run) was planner-superseded to idea:failed before it could start.",
+          "CLN-RUN-PETRI-ROOT, CUT-SES-RUN, and CUT-RUN-WRK are Factory-terminal; CLN-RUN-FOLD-SERVICE is live (work-task-338).",
+          "CLN-RUN-FOLD-SERVICE folds pkg/services/factory_runtime/service (+ service/host) into internal and retargets factory_runtime/wire + root pkg/wire.",
+          "IMP-RUN-04 is live on a narrow checkpoint_recovery lease and must not be blocked or overlapped by this deletion packet."
+        ],
+        "requestedOutcome": "PRE-START HOLD (cross-batch; not expressible as DEPENDS_ON): do not begin implementation until pss-cln-run-fold-service / CLN-RUN-FOLD-SERVICE is Factory-complete (idea+plan+task+review terminal, PR merged). After that gate, delete only the emptied transitional public factory_runtime/service tree (including service/host) and any thin public aliases left solely for that composed service path. Lower exact package-structure, ownership-inventory, package-target-manifest, and coverage baseline rows for those deleted service paths so they cannot return as retain. Confirm factory_runtime/wire remains the sole public construction bridge and no production/test imports of factory_runtime/service remain. Do not delete engine/runtime/state/scheduler/subsystems/build/token/javascript or other pipeline packages (DEL-RUN-ENGINE-PIPELINE). Do not fold packages (CLN owns folds). Do not implement or disturb IMP-RUN-04 checkpoint_recovery. Do not admit CUT-RUN-REC. Delivery contract: loop implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete Factory work.",
+        "changedPathLease": [
+          "pkg/services/factory_runtime/service/** (deletion only)",
+          "docs/internal/baselines/package-structure-baseline.json rows for factory_runtime/service only",
+          "docs/internal/baselines/ownership-inventory.json rows for factory_runtime/service only",
+          "docs/internal/packaged-service-structure/package-target-manifest.json rows for factory_runtime/service only",
+          "related coverage baseline rows for deleted service packages only",
+          "exclude factory_runtime/engine|runtime|state|scheduler|subsystems|build|token|javascript pipeline deletions",
+          "exclude factory_runtime/internal/services/checkpoint_recovery and IMP-RUN-04 surfaces",
+          "exclude CLN fold moves (already owned by CLN-RUN-FOLD-SERVICE)"
+        ],
+        "acceptanceCriteria": [
+          "pkg/services/factory_runtime/service (and service/host) no longer exist as public packages",
+          "No production or test imports of factory_runtime/service remain (behavioral compile/test proof)",
+          "factory_runtime/wire still constructs the Runtime root without peer imports of deleted service paths (behavioral)",
+          "Structure/ownership/package-target baselines no longer list factory_runtime/service as retain debt",
+          "Engine/pipeline public packages are not deleted by this packet",
+          "Typecheck, lint, and required CI are terminal green; PR merged before Factory completion"
+        ],
+        "antiPatterns": [
+          "Starting deletion while CLN-RUN-FOLD-SERVICE is still non-terminal",
+          "Absorbing engine/pipeline deletions into this service-only packet",
+          "Reintroducing a monolithic DEL-RUN scope",
+          "Folding packages under a DEL lease",
+          "Touching IMP-RUN-04 checkpoint_recovery or admitting CUT-RUN-REC"
+        ]
+      }
+    },
+    {
+      "name": "pss-del-run-engine-pipeline",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "DEL-RUN-ENGINE-PIPELINE: delete emptied Runtime engine/pipeline public packages",
+        "program": "Packaged Service Structure",
+        "packetId": "DEL-RUN-ENGINE-PIPELINE",
+        "sourcePath": "docs/temp/customer-ask.md",
+        "currentProgress": [
+          "Customer requires subpackage DEL slices instead of monolithic DEL-RUN.",
+          "CLN-RUN-FOLD-ENGINE-PIPELINE remains dependency-blocked on CLN-RUN-FOLD-SERVICE and will move build/engine/runtime/scheduler/state/subsystems/token/javascript and related transitional top-level packages under internal.",
+          "DEL-RUN-SERVICE owns service-path deletion; this packet owns the emptied pipeline package deletions and baseline burn-down.",
+          "IMP-RUN-04 may consolidate checkpointstore/checkpointsummary into internal/services/checkpoint_recovery; do not fight that lease—only delete paths emptied and released by the engine-pipeline fold / IMP-RUN-04 merge loop."
+        ],
+        "requestedOutcome": "PRE-START HOLD (cross-batch; not expressible as DEPENDS_ON): do not begin implementation until (1) pss-cln-run-fold-engine-pipeline / CLN-RUN-FOLD-ENGINE-PIPELINE is Factory-complete and (2) DEL-RUN-SERVICE is Factory-complete. After those gates, delete emptied superseded public factory_runtime pipeline packages left by the engine-pipeline fold (primary set: build, engine, runtime, runtime/buffers, scheduler, state, state/validation, subsystems, token, token_transformer, throttle, context, definitionmapping, metrics, orchestrationowner, orchestratorcontract, replayhooks, runtimecontract, javascript, tooling/javascript, and any other fold-emptied public dirs excluding wire/, internal/, transports/, and thin root contracts). Lower exact package-structure, ownership-inventory, package-target-manifest, and coverage baseline rows for those deleted paths. Prefer moving remaining public testkit into internal (or approved exception) rather than leaving unexpected public test support. Confirm factory_runtime root children trend to only wire/, internal/, transports/ plus thin contract files. Do not delete service/ if DEL-RUN-SERVICE already removed it. Do not re-fold packages. Do not implement IMP-RUN-04. Do not admit CUT-RUN-REC. Delivery contract: loop implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete Factory work.",
+        "changedPathLease": [
+          "pkg/services/factory_runtime/{build,engine,runtime,scheduler,state,subsystems,token,token_transformer,throttle,context,definitionmapping,metrics,orchestrationowner,orchestratorcontract,replayhooks,runtimecontract,javascript,tooling,testkit,exhaustiontests}/** deletion of emptied public paths only",
+          "pkg/services/factory_runtime/checkpointstore/** and checkpointsummary/** only if still public and emptied/released after IMP-RUN-04 + fold (otherwise leave to IMP-RUN-04 owner)",
+          "docs/internal/baselines/package-structure-baseline.json rows for deleted pipeline paths",
+          "docs/internal/baselines/ownership-inventory.json rows for deleted pipeline paths",
+          "docs/internal/packaged-service-structure/package-target-manifest.json rows for deleted pipeline paths",
+          "related coverage baseline rows for deleted pipeline packages only",
+          "exclude factory_runtime/service (DEL-RUN-SERVICE)",
+          "exclude active IMP-RUN-04 checkpoint_recovery implementation paths",
+          "exclude CLN fold moves"
+        ],
+        "acceptanceCriteria": [
+          "Emptied public pipeline packages listed by CLN-RUN-FOLD-ENGINE-PIPELINE no longer exist",
+          "No production or test imports of deleted pipeline packages remain (behavioral)",
+          "factory_runtime root children are only wire/, internal/, transports/ plus thin contract files (or INV-approved test exceptions under internal)",
+          "Structure/ownership/package-target baselines no longer list deleted paths as retain debt",
+          "service/ deletion remains owned by DEL-RUN-SERVICE (not re-opened here)",
+          "Typecheck, lint, and required CI are terminal green; PR merged before Factory completion"
+        ],
+        "antiPatterns": [
+          "Starting deletion while CLN-RUN-FOLD-ENGINE-PIPELINE or DEL-RUN-SERVICE is non-terminal",
+          "Reassembling a monolithic DEL-RUN that also deletes service/",
+          "Deleting packages still required by a live IMP-RUN-04 lease",
+          "Folding packages under a DEL lease",
+          "Admitting CUT-RUN-REC inside this packet"
+        ]
+      }
+    },
+    {
+      "name": "planner-loopback-run-del-split",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Meta-planner follow-up after Runtime DEL-RUN service + engine-pipeline slices",
+        "sourcePath": "docs/temp/meta.md",
+        "requestedOutcome": "After DEL-RUN-SERVICE and DEL-RUN-ENGINE-PIPELINE reach Factory complete, reconcile inventories and changed paths against the living service-root shape. Prefer FUN-runtime when prerequisites are clear. Prefer CUT-RUN-REC only after Runtime CLN-RUN-FOLD-SERVICE/ENGINE no longer own factory_runtime implementation leases and these DEL slices are terminal. Prefer remaining WRK/REC/PSES/SET CLN/DEL progress and FUN-* after each owner's DEL. Hold IMP-PROV-05/06 / LWR-PROV while IMP-PROV-04 is live; hold IMP-WRK-07 / PSS-I0*. Do not revive monolithic pss-del-run. Refill toward executor-slot capacity 16 from the live ready set."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "pss-del-run-engine-pipeline",
+      "targetWorkName": "pss-del-run-service",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-run-del-split",
+      "targetWorkName": "pss-del-run-service",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-run-del-split",
+      "targetWorkName": "pss-del-run-engine-pipeline",
+      "requiredState": "complete"
+    }
+  ]
+}

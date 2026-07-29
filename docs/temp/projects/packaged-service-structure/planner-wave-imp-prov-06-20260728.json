@@ -1,0 +1,114 @@
+{
+  "requestId": "planner-wave-imp-prov-06-20260728",
+  "type": "FACTORY_REQUEST_BATCH",
+  "currentChainingTraceId": "trace-planner-wave-imp-prov-06-20260728",
+  "works": [
+    {
+      "name": "pss-imp-prov-06-agy-pty-adapters",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "PSS IMP-PROV-06: migrate Agy (PTY) into Providers-owned execution adapters",
+        "program": "Packaged Service Structure / Standardized Providers",
+        "packetId": "IMP-PROV-06",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "ask": "After Factory-terminal IMP-PROV-05 (Gemini/Kiro/Pi), migrate the final concrete provider adapter group — Agy and its PTY transport — into parent-private Providers Execution adapters bound through the accepted catalog-backed execution registry, preserving observable parity and deleting only superseded Workers-owned Agy execution branches.",
+        "priority": "P0 serialized final concrete provider adapter group after terminal IMP-PROV-05",
+        "dependsOnEvidence": [
+          "IMP-PROV-02 accepted: Providers Execution registry/conductor absorbed (PR #1385)",
+          "IMP-PROV-03 Codex/Claude adapters Factory-terminal (PR #1427)",
+          "IMP-PROV-04 Cursor/OpenCode adapters Factory-terminal (PR #1553)",
+          "IMP-PROV-05 Gemini/Kiro/Pi adapters Factory-terminal: idea/plan/task/review complete; PR #1587 merged as 693c366b2 with required CI SUCCESS/SKIPPED",
+          "Adapter groups remain serial: do not start LWR-PROV in this packet while this group is non-terminal",
+          "Live transitional Agy source remains under pkg/services/workers/provider/agy while Providers adapters for Agy are absent"
+        ],
+        "currentProgress": [
+          "Providers root + Catalog + Execution registry are Factory-terminal; Claude/Codex/Cursor/OpenCode/Gemini/Kiro/Pi live under pkg/services/providers/internal/services/execution/internal/adapters/",
+          "Agy still executes through transitional Workers-owned package pkg/services/workers/provider/agy (PTY allocation, executable discovery, terminal lifecycle, decoding, final selection, session metadata, failure handling)",
+          "IMP-PROV-05 unlocked this final serialized concrete adapter group; free executor capacity exists after PROV-05 task completion (~8/16 before this admission)",
+          "LWR-PROV must remain held until this group is Factory-terminal"
+        ],
+        "changedPathLease": [
+          "pkg/services/providers/internal/services/execution/** private Agy adapter modules (including PTY allocation, discovery, terminal lifecycle)",
+          "Providers execution registry / built-in adapter bindings for the Agy catalog identity",
+          "focused Providers conformance plus root.BuildProcess functional evidence for Agy/PTY",
+          "deletion or thin-integration residual only for aggregate legacy Agy execution branches actually superseded by this cutover",
+          "shared coverage/ownership/package-target manifests only as required by adapter registration and legacy deletion",
+          "exclude LWR-PROV and Providers HTTP/CLI/MCP protocol adapters",
+          "exclude already-migrated Claude/Codex/Cursor/OpenCode/Gemini/Kiro/Pi adapter packages except unavoidable shared harness/registry touch-ups",
+          "exclude pkg/wire composition ownership beyond unavoidable Providers wire registration already owned by prior PROV waves",
+          "exclude top-level CLI root/manifest/Cobra composition (PSS-I03)",
+          "exclude authored OpenAPI and generated clients except unavoidable regenerations owned by a later PSS-I02 fan-in",
+          "exclude Provider Sessions readers, Models, Automations/Recordings/PSES/Workers folds, Runtime durability, IMP-WRK-07"
+        ],
+        "systemShapeRequirements": [
+          "Use pkg/services/providers as the standalone owner; keep concrete Agy implementation parent-private under Execution adapters",
+          "Agy loads identity/capability metadata from the Providers-owned catalog and registers through the accepted execution registry",
+          "PTY allocation, executable discovery, terminal lifecycle, decoding, final selection, session metadata, and failure handling remain inside the private Agy adapter — not in aggregate Workers conductor switches",
+          "No new shared orchestration switch case for Agy; remove executeAgy and Agy construction branches from aggregate provider once adapters own live execution"
+        ],
+        "testCoverageRequirements": [
+          "Shared provider conformance protocol for Agy",
+          "Focused public functional tests entered through root.BuildProcess covering invocation, PTY, timeout/failure, and session behavior",
+          "Preserve observable parity versus transitional pkg/services/workers/provider/agy",
+          "Package-boundary/file-count checks and relevant functional gates pass on the merged head"
+        ],
+        "objective": "Deliver the final serialized concrete provider adapter group after accepted IMP-PROV-05. Move Agy live execution (including PTY allocation, executable discovery, terminal lifecycle, decoding, final selection, session metadata, and failure handling) behind a private Providers Execution adapter that implements the accepted Providers root protocol and shared conformance suite. Preserve observable invocation, streaming/final-result where applicable, cancellation, timeout, safe diagnostics, provider-session reference, and failure behavior while deleting only the superseded Agy legacy branches.",
+        "scope": [
+          "Use pkg/services/providers as the standalone owner and keep concrete implementations parent-private under Execution.",
+          "Agy loads identity/capability metadata from the Providers-owned catalog and registers through the accepted execution registry.",
+          "Preserve Agy PTY/discovery/terminal/session/failure behavior with observable parity versus the transitional Workers package.",
+          "Prove canonical request mapping, ordered progress/tool/message drafts where applicable, exactly one terminal result, cancellation/timeout normalization, safe diagnostics, and provider-session metadata through shared conformance and focused functional tests entered through root.BuildProcess.",
+          "Delete only Agy aggregate execution, decoding, failure, timeout, and session branches that are actually replaced; leave thin Workers integration shims only when required for transitional composition parity, matching prior adapter residual patterns.",
+          "Do not edit top-level CLI/Cobra composition, authored OpenAPI/generation, Packaged Factory catalog ownership, Provider Sessions readers, Models, Automations wire folds, or already-migrated provider adapters except unavoidable shared registry touch-ups.",
+          "Do not admit LWR-PROV, Workers fold/DEL, OpenAPI fan-in, or PSS-I03 in this packet.",
+          "Treat shared coverage, ownership, and package-target manifest churn as accepted integration work; rebase and reconcile it through delivery."
+        ],
+        "acceptanceCriteria": [
+          "Agy executes only through its Providers-owned private adapter and the accepted Providers execution registry (behavioral)",
+          "The adapter passes the shared provider conformance protocol plus focused public functional tests entered through root.BuildProcess covering invocation, PTY, timeout/failure, and session behavior (behavioral)",
+          "Streaming/final selection where applicable, cancellation, timeout, normalized failures, and detached Provider Session references retain observable parity",
+          "No shared orchestration switch gains a new Agy case, and replaced legacy branches (including executeAgy / aggregate construction) are removed in the same slice",
+          "Workers transitional package for Agy no longer owns live execution bodies once the Providers adapter is registered; any residual integration files are thin and non-authoritative",
+          "Shared coverage/ownership/package-target manifests are reconciled on the merged head",
+          "Required focused tests, package-boundary/file-count checks, relevant functional gates, and repository verification pass",
+          "Required CI is terminal green, blocking PR conversation comments are addressed, merge conflicts are resolved, and the PR is merged before Factory completion"
+        ],
+        "outOfScope": [
+          "LWR-PROV Providers HTTP/CLI/MCP protocol adapters",
+          "Reopening Claude/Codex/Cursor/OpenCode/Gemini/Kiro/Pi adapter packages except unavoidable shared harness/registry touch-ups",
+          "Workers fold/DEL, IMP-WRK-07 hosted_logic, Automations/Recordings/PSES folds",
+          "CUT-RUN-REC, Runtime ENGINE/SERVICE DEL ownership",
+          "PSS-I0* integrators, authored OpenAPI fan-in, top-level CLI root/manifest/Cobra (PSS-I03)"
+        ],
+        "antiPatterns": [
+          "Starting LWR-PROV protocol adapters in this packet",
+          "Adding Agy cases to aggregate Workers conductor/provider_behavior switches instead of a Providers adapter",
+          "Duplicating catalog metadata in Go instead of binding the catalog identity through the accepted registry",
+          "Splitting PTY into a separate fake provider identity instead of keeping PTY inside the private Agy adapter",
+          "Reopening already-migrated adapter packages except for unavoidable shared harness/registry touch-ups",
+          "Treating green CI without merge as Factory completion",
+          "Holding the packet solely for shared coverage/ownership/package-target manifest churn"
+        ],
+        "deliveryContract": "Continue the implementation and review loop until every required CI check is terminal and passing, every blocking PR conversation comment is addressed, merge conflicts are resolved, and the PR is merged. Only then may Factory work complete. Opening a PR, making it review-ready, or obtaining green CI without merge is not completion. Shared-file churn is not an admission blocker; rebase and reconcile shared files as part of this delivery loop.",
+        "requestedOutcome": "Implement IMP-PROV-06 by migrating Agy live execution — including PTY allocation, executable discovery, terminal lifecycle, decoding, final selection, session metadata, and failure handling — into a parent-private Providers Execution adapter bound through the accepted catalog-backed execution registry. Preserve observable Agy request, PTY, stream/final-result where applicable, cancellation, timeout, diagnostics, failure, and detached Provider Session reference behavior. Remove only aggregate legacy Agy branches superseded by the cutover (including executeAgy / construction). Do not admit LWR-PROV, Workers fold/DEL, Automations/Recordings/PSES wire folds, OpenAPI fan-in, or PSS-I03. Explicitly loop through implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete the Factory work."
+      }
+    },
+    {
+      "name": "planner-loopback-imp-prov-06",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Reconcile IMP-PROV-06 Agy/PTY adapters",
+        "objective": "Re-enter the meta-planner only after IMP-PROV-06 is terminal. First reconcile failed, blocked, stranded, recoverable, or duplicate work. Inspect implementation, changed paths, tests, exact-head CI, blocking PR conversations, conflicts, merge evidence, queue/session health, Runtime CLN/DEL leases, and current customer/program plans. Then explicitly proceed, revise/split/reorder, submit a newly discovered batch, or hold. Do not advance a prewritten queue solely because this loopback fired. Keep provider protocol adapters gated: prefer LWR-PROV only after IMP-PROV-06 is terminal and no concrete IMP-PROV adapter group remains open.",
+        "requestedOutcome": "After pss-imp-prov-06-agy-pty-adapters reaches Factory complete, reconcile queue/session/PR/CI evidence and repair any stranded merged tasks. Prefer LWR-PROV only after IMP-PROV-06 is terminal; prefer CUT-RUN-REC only after Runtime CLN-RUN-FOLD-SERVICE/ENGINE no longer own factory_runtime implementation leases; prefer FUN-* only after each owner's DEL terminal; hold IMP-WRK-07 while hosted_logic remains polling-only; hold PSS-I0*. Refill maximum safe throughput toward executor-slot capacity 16 from the live ready set."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-imp-prov-06",
+      "targetWorkName": "pss-imp-prov-06-agy-pty-adapters",
+      "requiredState": "complete"
+    }
+  ]
+}

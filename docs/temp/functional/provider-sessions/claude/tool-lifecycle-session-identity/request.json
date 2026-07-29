@@ -1,5 +1,0 @@
-{
-  "model": "claude-sonnet-4",
-  "prompt": "Call the weather tool for Oslo and finish with COMPLETE for the Claude tool lifecycle golden.",
-  "sessionId": "claude-golden-tool-session"
-}

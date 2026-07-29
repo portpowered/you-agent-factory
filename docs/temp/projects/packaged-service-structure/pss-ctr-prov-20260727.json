@@ -1,0 +1,39 @@
+{
+  "requestId": "pss-ctr-prov-20260727",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "pss-ctr-prov-root-contract",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "CTR-PROV: Publish the standalone Providers root contract",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "currentProgress": [
+          "Schema-Driven CLI and Clean CLI UX are accepted complete. Session PR #1346 merged as e7d951e5d and docs/legacy/evidence closure PR #1348 merged as 9851a8b68; the CLI-only portfolio gate is released.",
+          "IMP-WRK-06 inference runner is accepted and Factory-consumed: PR #1349 merged exact head 6bc2591d2 as f57510b64 with selected CI green, terminal idea/plan/task/review, and changed paths limited to Workers inference nesting, runners wire registration, Workers service composition, coverage/ownership baselines, and invocation-path inventory.",
+          "Standardized Providers foundations plus Gemini, Kiro, and Cursor migrations are terminal under transitional pkg/services/workers/provider. Catalog, protocol, registry, open configuration, and neutral conductor behavior must be absorbed into standalone pkg/services/providers rather than forked or migrated again under Workers.",
+          "IMP-WRK-04 agent runner remains gated on CTR-PROV. Current workers/services/hosted_logic is Linear polling only and belongs to Automation Hosted Sources (IMP-AUTO-05), not IMP-WRK-07 Hosted Runner remote execution; hosted runner stays deferred as a later build-now Workers leaf.",
+          "No active implementation owner holds Wire/root, OpenAPI/generation, CLI manifests, coverage manifests, ownership inventory, or Providers/Workers composition leases."
+        ],
+        "requestedOutcome": "Implement CTR-PROV by publishing the standalone Providers root at pkg/services/providers with additive, typed, detached request/result/value/error contracts for provider IDs/descriptors, availability/capabilities, one-attempt execute, and SessionRef. Characterize the published slices so a fake peer can implement them without importing Workers provider internals, Petri/JavaScript types, concrete adapter packages, or transport/UI concerns. Keep construction inert and leave transitional pkg/services/workers/provider/** adapters, catalog, registry, and conductor implementations in place for later IMP-PROV-* absorption; do not relocate concrete adapters, delete workers/provider, or start Claude/Codex/Pi/OpenCode/Agy migrations in this packet. Do not implement IMP-WRK-04 agent runner, IMP-WRK-07 hosted runner, Automation hosted-sources polling moves, Models assets/host/lease packets, OpenAPI or generated API artifact changes, CLI manifests/root/run/server behavior, pkg/root, pkg/wire, pkg/initializer, UI code, or broad functional-test topology. Any ownership-inventory or package-target-manifest updates must register only the Providers root and remain lease-minimal. Require focused root-contract characterization tests, gofmt, vet/lint, architecture/ownership checks, and make verify-fast."
+      }
+    },
+    {
+      "name": "pss-ctr-prov-loopback",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Reassess Workers and Providers successors after CTR-PROV",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "requestedOutcome": "Review the accepted CTR-PROV implementation, Factory review, changed paths, tests and CI, then reconcile the queue. Compare owner-disjoint successors against live leases: IMP-PROV-01 catalog absorption, IMP-PROV-02 execution/registry/conductor absorption, IMP-WRK-04 agent runner, IMP-WRK-07 hosted runner, IMP-RUN-03 dispatch planning, IMP-SES-06 runtime opening, and IMP-MOD-03 assets. Prefer the smallest high-unlock Providers implementation or Workers packet that does not collide with active ownership; keep concrete adapter migrations behind IMP-PROV-02."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "pss-ctr-prov-loopback",
+      "targetWorkName": "pss-ctr-prov-root-contract",
+      "requiredState": "complete"
+    }
+  ]
+}

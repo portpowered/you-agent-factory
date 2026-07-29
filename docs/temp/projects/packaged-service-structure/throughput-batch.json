@@ -1,0 +1,122 @@
+{
+  "requestId": "pss-throughput-batch",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "structured-packages-implementation-prov-02-execution",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "Absorb provider-neutral execution behind the Providers root",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "priority": "P0 high-unlock backend refactoring",
+        "changedPathOwnership": [
+          "pkg/services/providers/internal/services/execution/**",
+          "provider-neutral execution implementation currently owned by transitional registry/conductor paths",
+          "Providers root execution binding and focused conformance tests"
+        ],
+        "requestedOutcome": "Implement IMP-PROV-02 after the accepted Providers root contract. Absorb provider-neutral Execute behavior behind the Providers-owned execution subservice, preserve typed request/result/error/cancellation semantics, and leave concrete provider adapters for IMP-PROV-03 through IMP-PROV-06. Keep Catalog and Execution as sibling private capabilities behind the singular Providers root and do not create another registry or public service graph. Shared coverage, ownership, and package-target manifest edits are allowed. Explicitly loop through implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete the Factory work."
+      }
+    },
+    {
+      "name": "structured-packages-implementation-run-03-dispatch-planning",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "Extract Factory Runtime dispatch planning behind neutral Workers requests",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "priority": "P0 backend runtime refactoring",
+        "changedPathOwnership": [
+          "pkg/services/factory_runtime/internal/services/dispatch_planning/**",
+          "focused Factory Runtime transition-to-dispatch call sites",
+          "focused dispatch duplicate, result, and retry-boundary tests"
+        ],
+        "requestedOutcome": "Implement IMP-RUN-03 as a parent-private Factory Runtime dispatch-planning service. Translate runnable orchestration decisions into canonical Workers requests/outbox actions without exposing Petri vocabulary or invoking executors directly. Preserve ordering, idempotency, duplicate-result handling, retry boundaries, cancellation, and canonical event behavior. Shared coverage, ownership, and package-target manifest edits are allowed. Explicitly loop through implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete the Factory work."
+      }
+    },
+    {
+      "name": "structured-packages-implementation-mod-03-assets",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "Converge Models asset resolution, cache, pull, and verification",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "priority": "P0 backend Models refactoring",
+        "changedPathOwnership": [
+          "pkg/services/models/internal/services/assets/**",
+          "legacy pkg/services/models/internal/assets callers and deletion",
+          "focused asset cache, pull, integrity, cancellation, and cleanup tests"
+        ],
+        "requestedOutcome": "Implement IMP-MOD-03 behind the singular process-scoped Models root and accepted runtime-scope contract. Move asset resolution, cache lookup, pull, and verification into the parent-private assets subservice; preserve cache-hit behavior and make interruption, corruption, cancellation, and partial-download cleanup explicit. Do not reconstruct Models services for a selected Factory or broaden into Runtime Host/Leases/Inference. Shared coverage, ownership, and package-target manifest edits are allowed. Explicitly loop through implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete the Factory work."
+      }
+    },
+    {
+      "name": "structured-packages-implementation-auto-01-reconciliation",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "Converge Automation desired and observed state reconciliation",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "priority": "P0 backend Automation refactoring",
+        "changedPathOwnership": [
+          "pkg/services/automations/internal/services/reconciliation/**",
+          "focused existing Automation supervision call sites",
+          "focused restart, idempotency, cancellation, and status-convergence tests"
+        ],
+        "requestedOutcome": "Implement IMP-AUTO-01 as the parent-private Automation reconciliation owner. Make desired state, observed state, supervision transitions, cancellation, restart, and status convergence explicit and deterministic while keeping external effects injected and construction inert. Preserve canonical event behavior and do not absorb cron, poller, watcher, or hosted-source policy into this packet. Shared coverage, ownership, and package-target manifest edits are allowed. Explicitly loop through implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete the Factory work."
+      }
+    },
+    {
+      "name": "structured-packages-implementation-rec-03-recording-lifecycle",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "Converge recording target, flush, and finalize lifecycle ownership",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "priority": "P0 backend Recordings refactoring",
+        "changedPathOwnership": [
+          "pkg/services/recordings/internal/services/recording_lifecycle/**",
+          "focused existing recording target/flush/finalize call sites",
+          "focused crash, final-flush, cancellation, and accumulated-error tests"
+        ],
+        "requestedOutcome": "Implement IMP-REC-03 as the parent-private Recordings lifecycle owner. Provide explicit target selection, flush, finalize, cancellation, and error accumulation semantics; ensure final flush behavior is deterministic across normal close and crash paths; and preserve canonical ledger/projection ownership without absorbing replay or export. Shared coverage, ownership, and package-target manifest edits are allowed. Explicitly loop through implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete the Factory work."
+      }
+    },
+    {
+      "name": "structured-packages-throughput-loopback",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Review the PSS throughput wave after implementation completion",
+        "sourcePath": "docs/temp/customer-ask.md",
+        "requestedOutcome": "Reconcile queue and session health, inspect merged implementation, review, required CI, changed-path, and contention evidence for the five PSS ideas, update planner state, and decide from current evidence whether to proceed, revise, submit a correction, or hold."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "structured-packages-throughput-loopback",
+      "targetWorkName": "structured-packages-implementation-prov-02-execution",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "structured-packages-throughput-loopback",
+      "targetWorkName": "structured-packages-implementation-run-03-dispatch-planning",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "structured-packages-throughput-loopback",
+      "targetWorkName": "structured-packages-implementation-mod-03-assets",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "structured-packages-throughput-loopback",
+      "targetWorkName": "structured-packages-implementation-auto-01-reconciliation",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "structured-packages-throughput-loopback",
+      "targetWorkName": "structured-packages-implementation-rec-03-recording-lifecycle",
+      "requiredState": "complete"
+    }
+  ]
+}

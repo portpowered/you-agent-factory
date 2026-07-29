@@ -1,0 +1,139 @@
+{
+  "requestId": "planner-wave-auto-fold-cut-del-20260727",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "pss-cut-auto-work",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "CUT-AUTO-WORK: Automations consumes Work root only",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "packetId": "CUT-AUTO-WORK",
+        "currentProgress": [
+          "Automations IMP-AUTO-01..05, LWR-AUTO, and HTTP-AUTO are Factory-terminal.",
+          "pkg/services/automations still has transitional public service/ beside internal/services/*.",
+          "Planner preference now prioritizes vertical owner completion (CUT → fold → DEL → FUN) over more horizontal construction when an owner is adapter-complete.",
+          "CUT-AUTO-WORK is the Automations→Work consumer-edge packet from the PSS plan."
+        ],
+        "requestedOutcome": "Lease only Automations call sites that still reach Work through non-root paths or loose Work surfaces. Retarget those imports/call sites to the Work service root contract (and event/command shapes owned by Work) so Automations no longer depends on Work implementation packages. Do not fold or delete automations/service in this packet; do not open PSS-I01/I02/I03 shared integrators; do not touch unrelated owners. Prove with focused Automations/Work boundary tests that Automations constructs Work requests only through the Work root. Delivery contract: loop implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts are resolved, the PR is merged, and only then complete Factory work.",
+        "changedPathLease": [
+          "pkg/services/automations/** (consumer Work-edge call sites only)",
+          "exclude pkg/services/automations/service fold/delete",
+          "exclude pkg/wire except if an Automations→Work import must move with the consumer edge"
+        ],
+        "acceptanceCriteria": [
+          "Automations production code imports Work only through the Work service root contract",
+          "No new Automations imports of Work implementation or loose Work helper packages",
+          "Focused tests prove Work admission/request construction through the root boundary",
+          "Typecheck, lint, and tests pass; required CI green; PR merged before Factory completion"
+        ]
+      }
+    },
+    {
+      "name": "pss-cln-auto-fold-service",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "CLN-AUTO-FOLD-SERVICE: fold automations/service into internal",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "packetId": "CLN-AUTO-FOLD-SERVICE",
+        "currentProgress": [
+          "Private Automations subservices already live under internal/services/{reconciliation,cron,script_pollers,filesystem_watchers,hosted_sources}.",
+          "Public pkg/services/automations/service remains the composed root implementation; automations/wire and root pkg/wire still construct through it.",
+          "package-target-manifest and ownership-inventory already mark automations/service as disposition move → automations/internal.",
+          "Canonical service-root directories are only wire/, internal/, and transports/."
+        ],
+        "requestedOutcome": "Fold transitional pkg/services/automations/service implementation into pkg/services/automations/internal (keeping parent-private subservices under internal/services/*). Retarget automations/wire so it is the sole public construction bridge returning automations.Service/Root from internal implementation. Retarget the narrow root pkg/wire Automations construction call away from automations/service so it uses automations/wire only. Leave the package path present only if still required for compile during this PR; prefer zero remaining production imports of automations/service. Do not perform baseline deletion of the path (that is DEL-AUTO). Do not redesign public Automations UX or reopen HTTP/OpenAPI/CLI shared integrators. Delivery contract: loop implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts are resolved, the PR is merged, and only then complete Factory work.",
+        "changedPathLease": [
+          "pkg/services/automations/service/**",
+          "pkg/services/automations/internal/**",
+          "pkg/services/automations/wire/**",
+          "pkg/wire Automations construction only (session_runtime_providers or equivalent)",
+          "docs/internal baselines only if required for non-deletion path moves"
+        ],
+        "acceptanceCriteria": [
+          "automations/wire constructs the Automations root from internal implementation without exporting internal types on the peer surface",
+          "Root pkg/wire no longer imports pkg/services/automations/service",
+          "No production package outside automations owner imports automations/service",
+          "Observable Automations behavior (reconcile/sidecars/pollers/watchers) is preserved",
+          "Typecheck, lint, and tests pass; required CI green; PR merged before Factory completion"
+        ]
+      }
+    },
+    {
+      "name": "pss-del-auto",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "DEL-AUTO: delete automations/service and lower baselines",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "packetId": "DEL-AUTO",
+        "currentProgress": [
+          "CUT-AUTO-WORK and CLN-AUTO-FOLD-SERVICE are submitted ahead of this packet in the same vertical batch.",
+          "package-structure-baseline already records automations/service as service-root-unexpected-directory debt.",
+          "package-target-manifest and ownership-inventory mark automations/service as move with deletion after wire retarget."
+        ],
+        "requestedOutcome": "After CUT-AUTO-WORK and CLN-AUTO-FOLD-SERVICE are merged and Factory-consumed, delete the superseded pkg/services/automations/service package (and any leftover transitional Automations aliases that the fold emptied). Lower exact package-structure, ownership-inventory, package-target-manifest, and coverage baseline rows so automations/service is gone and cannot return as retain. Confirm automations root children are only wire/, internal/, and transports/ plus contract files. Do not delete internal/services/* subservices. Do not open unrelated owner deletions. Delivery contract: loop implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts are resolved, the PR is merged, and only then complete Factory work.",
+        "changedPathLease": [
+          "pkg/services/automations/service/** (deletion)",
+          "docs/internal/baselines/package-structure-baseline.json",
+          "docs/internal/baselines/ownership-inventory.json",
+          "docs/internal/packaged-service-structure/package-target-manifest.json",
+          "related coverage baseline rows for the deleted package only"
+        ],
+        "acceptanceCriteria": [
+          "pkg/services/automations/service no longer exists",
+          "No production or test imports of the deleted package remain",
+          "Structure/ownership/package-target baselines no longer list automations/service as unexpected retain debt",
+          "make pkg-structure / ownership checks pass with reduced debt",
+          "Typecheck, lint, and tests pass; required CI green; PR merged before Factory completion"
+        ]
+      }
+    },
+    {
+      "name": "planner-loopback-auto-fold-cut-del",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Meta-planner follow-up after Automations fold/CUT/DEL vertical chunk",
+        "sourcePath": "docs/temp/meta.md",
+        "requestedOutcome": "After CUT-AUTO-WORK, CLN-AUTO-FOLD-SERVICE, and DEL-AUTO reach Factory complete, reconcile changed paths and inventories, admit FUN-automations if prerequisites are clear, and decide whether the next vertical deletion owner (another */service fold/CUT/DEL) or remaining Phase-3/gated work is the highest-value refill. Preserve the preference for vertical owner completion over horizontal construction when feasible."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "pss-cln-auto-fold-service",
+      "targetWorkName": "pss-cut-auto-work",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "pss-del-auto",
+      "targetWorkName": "pss-cut-auto-work",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "pss-del-auto",
+      "targetWorkName": "pss-cln-auto-fold-service",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-auto-fold-cut-del",
+      "targetWorkName": "pss-cut-auto-work",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-auto-fold-cut-del",
+      "targetWorkName": "pss-cln-auto-fold-service",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-auto-fold-cut-del",
+      "targetWorkName": "pss-del-auto",
+      "requiredState": "complete"
+    }
+  ]
+}

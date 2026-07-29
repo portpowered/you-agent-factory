@@ -1,0 +1,202 @@
+{
+  "requestId": "packaged-service-structure-imp-wave-01-20260724",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "pss-imp-ses-01-session-identity",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "IMP-SES-01: Move Sessions identity normalize/discover/resolve into private subservice",
+        "sourcePaths": [
+          "docs/temp/projects/packaged-service-structure/plan.md",
+          "docs/temp/projects/packaged-service-structure/checklist.md",
+          "docs/architecture/packaged-structure.md"
+        ],
+        "programs": [
+          "Packaged Service Structure Phase 2"
+        ],
+        "planStory": "IMP-SES-01",
+        "prerequisites": [
+          "CTR-SES (merged PR #1269, Factory idea/task complete)"
+        ],
+        "exclusiveLease": "pkg/services/factory_sessions/internal/services/identity (create or relocate only this nested subservice)",
+        "requestedOutcome": "Implement Sessions identity as a private nested subservice under factory_sessions that normalizes, discovers, and resolves session keys behind the accepted CTR-SES root identity slice. Preserve public root behavior and unlock later IMP-SES packets without taking live-runtime, durable-execution, invocation, response-stream, or opening leases.",
+        "behavioralAcceptanceCriteria": [
+          "Sessions identity normalize/discover/resolve lives under factory_sessions/internal/services/identity (or the equivalent nested private subservice path required by FND-02).",
+          "Stable session keys remain deterministic; ambiguous and not-found cases return the typed failures published by CTR-SES.",
+          "Public Sessions root identity behavior stays equivalent for representative success and typed failure cases already covered by CTR-SES characterization.",
+          "No peer implementation, filesystem/SQL/OS effect types, Runtime/Petri types, or Wire/root construction ownership appear in the identity subservice public surface.",
+          "A fake peer can exercise the root identity slice through the private implementation; focused identity tests cover stable keys plus ambiguous/not-found cases.",
+          "Typecheck/lint and focused Sessions identity tests pass."
+        ],
+        "scopeBoundaries": [
+          "Identity subservice only; do not implement IMP-SES-02..06 in this packet.",
+          "Do not edit CLI-manifest/generation owned by schema-cli-static-docs-models-mcp-migration (PR #1262).",
+          "Do not edit workers construction owned by standardized-provider-neutral-conductor (PR #1267).",
+          "Do not take CTR-RUN/CTR-REC/CTR-WRK leases or change public OpenAPI solely for package motion.",
+          "Do not expand into live_runtime, durable_execution, invocation, response_stream, or runtime_opening directories."
+        ],
+        "verification": [
+          "focused Sessions identity characterization/unit tests",
+          "make verify-fast",
+          "make lint"
+        ]
+      }
+    },
+    {
+      "name": "pss-imp-ses-05-response-stream",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "IMP-SES-05: Move Sessions response_stream retain/publish/filter/complete into private subservice",
+        "sourcePaths": [
+          "docs/temp/projects/packaged-service-structure/plan.md",
+          "docs/temp/projects/packaged-service-structure/checklist.md",
+          "docs/architecture/packaged-structure.md"
+        ],
+        "programs": [
+          "Packaged Service Structure Phase 2"
+        ],
+        "planStory": "IMP-SES-05",
+        "prerequisites": [
+          "CTR-SES (merged PR #1269, Factory idea/task complete)"
+        ],
+        "exclusiveLease": "pkg/services/factory_sessions/internal/services/response_stream (create or relocate only this nested subservice)",
+        "requestedOutcome": "Implement Sessions response_stream as a private nested subservice that retains, publishes, filters, and completes response events behind the accepted CTR-SES root response-stream slice. Prove slow-subscriber, gap, completion, and race behavior without owning identity, live-runtime, invocation, or transport codecs.",
+        "behavioralAcceptanceCriteria": [
+          "Response-stream retain/publish/filter/complete lives under factory_sessions/internal/services/response_stream (or the equivalent nested private subservice path required by FND-02).",
+          "Slow subscriber, gap, completion, and race proofs pass for the published CTR-SES response-stream slice.",
+          "Public Sessions root response-stream behavior stays equivalent for representative success and typed failure cases.",
+          "Transport codecs/writers and Recordings ledger storage remain outside this subservice; no Runtime/Petri leak.",
+          "Focused response-stream tests cover retain/publish/filter/complete plus slow-subscriber/gap/completion/race cases.",
+          "Typecheck/lint and focused Sessions response-stream tests pass."
+        ],
+        "scopeBoundaries": [
+          "response_stream subservice only; do not implement IMP-SES-01..04 or IMP-SES-06 here.",
+          "Do not take CLI-manifest, workers-construction, Wire/root, or OpenAPI generation leases.",
+          "Do not change public OpenAPI solely for package motion.",
+          "Do not move HTTP/CLI/MCP presentation ownership into this packet."
+        ],
+        "verification": [
+          "focused Sessions response-stream characterization/unit tests",
+          "make verify-fast",
+          "make lint"
+        ]
+      }
+    },
+    {
+      "name": "pss-imp-work-01-admission",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "IMP-WORK-01: Move Work admission normalize/validate/idempotent-accept into private subservice",
+        "sourcePaths": [
+          "docs/temp/projects/packaged-service-structure/plan.md",
+          "docs/temp/projects/packaged-service-structure/checklist.md",
+          "docs/architecture/packaged-structure.md"
+        ],
+        "programs": [
+          "Packaged Service Structure Phase 2"
+        ],
+        "planStory": "IMP-WORK-01",
+        "prerequisites": [
+          "CTR-WORK (merged PR #1272, Factory idea/task complete)"
+        ],
+        "exclusiveLease": "pkg/services/work/internal/services/admission (create or relocate only this nested subservice)",
+        "requestedOutcome": "Implement Work admission as a private nested subservice that normalizes, validates, and idempotently accepts work behind the accepted CTR-WORK root admission slice. Cover duplicate, conflict, and rejection cases without taking content staging, materialization, or state-access leases.",
+        "behavioralAcceptanceCriteria": [
+          "Work admission normalize/validate/idempotent-accept lives under work/internal/services/admission (or the equivalent nested private subservice path required by FND-02).",
+          "Duplicate, conflict, and rejection cases return the typed failures published by CTR-WORK.",
+          "Public Work root admission behavior stays equivalent for representative success and typed failure cases.",
+          "No Session/Runtime/Petri types, filesystem/SQL/OS effect types, or Wire/root construction ownership appear in the admission public surface.",
+          "Focused admission tests cover normalize/validate plus duplicate/conflict/rejection cases.",
+          "Typecheck/lint and focused Work admission tests pass."
+        ],
+        "scopeBoundaries": [
+          "Admission subservice only; do not implement IMP-WORK-02..04 in this packet.",
+          "Do not edit CLI-manifest/generation or provider-conductor workers construction.",
+          "Do not take Sessions, Recordings, or Runtime leases.",
+          "Do not change public OpenAPI solely for package motion."
+        ],
+        "verification": [
+          "focused Work admission characterization/unit tests",
+          "make verify-fast",
+          "make lint"
+        ]
+      }
+    },
+    {
+      "name": "pss-imp-work-02-content-staging",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "IMP-WORK-02: Move Work content_staging secure references/expiry/cleanup into private subservice",
+        "sourcePaths": [
+          "docs/temp/projects/packaged-service-structure/plan.md",
+          "docs/temp/projects/packaged-service-structure/checklist.md",
+          "docs/architecture/packaged-structure.md"
+        ],
+        "programs": [
+          "Packaged Service Structure Phase 2"
+        ],
+        "planStory": "IMP-WORK-02",
+        "prerequisites": [
+          "CTR-WORK (merged PR #1272, Factory idea/task complete)"
+        ],
+        "exclusiveLease": "pkg/services/work/internal/services/content_staging (create or relocate only this nested subservice)",
+        "requestedOutcome": "Implement Work content_staging as a private nested subservice that issues secure staged references with expiry and cleanup behind the accepted CTR-WORK root staging slice. Prove tamper, expiry, and partial-stage cleanup without implementing materialization or state-access.",
+        "behavioralAcceptanceCriteria": [
+          "Content staging secure references, expiry, and cleanup live under work/internal/services/content_staging (or the equivalent nested private subservice path required by FND-02).",
+          "Tamper, expiry, and partial-stage cleanup proofs pass for the published CTR-WORK staging slice.",
+          "Public Work root staging behavior stays equivalent for representative success and typed failure cases.",
+          "Materialization (SSRF/cache/size) and state-access remain out of scope; no Runtime/Petri leak.",
+          "Focused staging tests cover secure reference issuance plus tamper/expiry/partial-cleanup cases.",
+          "Typecheck/lint and focused Work content-staging tests pass."
+        ],
+        "scopeBoundaries": [
+          "content_staging subservice only; do not implement IMP-WORK-01, IMP-WORK-03, or IMP-WORK-04 here.",
+          "Do not edit CLI-manifest/generation or provider-conductor workers construction.",
+          "Do not take Sessions/Recordings/Runtime leases or change public OpenAPI solely for package motion.",
+          "Do not expand into remote fetch/materialization policy beyond staging references."
+        ],
+        "verification": [
+          "focused Work content-staging characterization/unit tests",
+          "make verify-fast",
+          "make lint"
+        ]
+      }
+    },
+    {
+      "name": "packaged-service-structure-imp-wave-01-loopback",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Meta-planner follow-up after PSS IMP wave 01 (SES/WORK)",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/checklist.md",
+        "requestedOutcome": "After IMP-SES-01, IMP-SES-05, IMP-WORK-01, and IMP-WORK-02 reach terminal accepted evidence, reconcile the queue and decide whether to release further owner-local IMP packets, PSS-F02 after F01 terminal, CTR-WRK after conductor clears, or hold for remaining CTR/CLI/provider gates."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "packaged-service-structure-imp-wave-01-loopback",
+      "targetWorkName": "pss-imp-ses-01-session-identity",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "packaged-service-structure-imp-wave-01-loopback",
+      "targetWorkName": "pss-imp-ses-05-response-stream",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "packaged-service-structure-imp-wave-01-loopback",
+      "targetWorkName": "pss-imp-work-01-admission",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "packaged-service-structure-imp-wave-01-loopback",
+      "targetWorkName": "pss-imp-work-02-content-staging",
+      "requiredState": "complete"
+    }
+  ]
+}

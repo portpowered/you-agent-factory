@@ -1,0 +1,217 @@
+{
+  "requestId": "packaged-service-structure-fnd-wave-03-20260724",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "pss-fnd-09-functional-support-public-observations",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "FND-09: Convert functional support to public process/edge observations",
+        "sourcePaths": [
+          "docs/temp/projects/packaged-service-structure/plan.md",
+          "docs/temp/projects/packaged-service-structure/checklist.md",
+          "tests/functional_test/CLAUDE.md"
+        ],
+        "programs": [
+          "Packaged Service Structure Phase 0"
+        ],
+        "planStory": "FND-09",
+        "exclusiveLease": "shared functional support",
+        "requestedOutcome": "Convert functional support helpers to public process and edge observations so no support helper exposes Petri or service internals. Preserve root.BuildProcess construction and edges.Edges external-effect overrides as the only test seams.",
+        "behavioralAcceptanceCriteria": [
+          "No functional support helper exposes Petri markings/tokens/nets or private service internals.",
+          "Functional tests continue to construct only through root.BuildProcess and replace only external effects through edges.",
+          "Typecheck/lint and focused functional-support tests pass."
+        ],
+        "scopeBoundaries": [
+          "Shared functional support only; do not broaden into a full functional topology rewrite.",
+          "Do not change CLI-manifest ownership or provider conductor implementation.",
+          "Do not assert source-layout inventories as the only proof."
+        ],
+        "verification": [
+          "focused functional-support helper tests",
+          "make verify-fast",
+          "make lint"
+        ]
+      }
+    },
+    {
+      "name": "pss-fnd-12-behavior-baselines",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "FND-12: Capture public behavior baselines before service moves",
+        "sourcePaths": [
+          "docs/temp/projects/packaged-service-structure/plan.md",
+          "docs/temp/projects/packaged-service-structure/checklist.md"
+        ],
+        "programs": [
+          "Packaged Service Structure Phase 0"
+        ],
+        "planStory": "FND-12",
+        "exclusiveLease": "behavior baseline capture for CLI/HTTP/MCP/replay/visualization",
+        "requestedOutcome": "Capture behavior baselines for public CLI, HTTP, MCP, replay, and visualization activation so representative success and typed failure cases exist before package moves. Prefer reuse of existing focused/functional evidence over inventing meta source-scan tests.",
+        "behavioralAcceptanceCriteria": [
+          "Representative success and typed failure baselines exist for public CLI, HTTP, MCP, replay, and visualization activation.",
+          "Baselines are runnable before service package moves begin.",
+          "No meta tests that only scan source files or docs topology are added as the sole proof.",
+          "Typecheck/lint and the captured baseline suites pass."
+        ],
+        "scopeBoundaries": [
+          "Baseline capture only; do not migrate service packages.",
+          "Do not refresh or own the live docs/models/mcp CLI-manifest baselines belonging to PR #1262 except by referencing them.",
+          "Do not change provider conductor behavior."
+        ],
+        "verification": [
+          "captured baseline suites",
+          "make verify-fast",
+          "make lint"
+        ]
+      }
+    },
+    {
+      "name": "pss-f01-ownership-inventory-path-leases",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "PSS-F01: Freeze ownership inventory and path leases",
+        "sourcePaths": [
+          "docs/temp/projects/packaged-service-structure/plan.md",
+          "docs/temp/projects/packaged-service-structure/checklist.md",
+          "docs/architecture/packaged-structure.md",
+          "docs/architecture/structures.md"
+        ],
+        "programs": [
+          "Packaged Service Structure Phase 0"
+        ],
+        "planStory": "PSS-F01",
+        "exclusiveLease": "ownership inventory and path-lease freeze",
+        "requestedOutcome": "Freeze the deterministic migration inventory that assigns every production package, constructor, datastore, lifecycle role, protocol adapter, and cross-service import to one target owner, and publish the initial path-lease freeze that unblocks PSS-F02. Reuse FND-01 outputs where available; do not reopen top-level service-shape decisions.",
+        "behavioralAcceptanceCriteria": [
+          "Inventory covers production packages under pkg, seed services, additional current roots, and large responsibility clusters within each owner.",
+          "Every committed top-level and nested service has authority, state/store, lifecycle, consumers, transaction boundary, and failure/recovery rationale recorded.",
+          "Every cross-service edge is classified as command, query, event, protocol composition, construction, lifecycle, or external effect.",
+          "Providers, Provider Sessions, Operator Settings, System Bootstrap, Factory Visualization, and Recordings map to the committed tree without another discovery task.",
+          "Process Edges is recorded as the explicit architecture exception.",
+          "Inventory is stable-sorted and suitable for the exact deletion-only nonconformance ledger.",
+          "Typecheck/lint and focused inventory/lease freeze validation pass."
+        ],
+        "scopeBoundaries": [
+          "Inventory and lease freeze only; do not perform owner package moves.",
+          "Do not bypass live portfolio holds on CLI manifest or provider conductor.",
+          "Do not create competing provider catalog/execution abstractions."
+        ],
+        "verification": [
+          "focused ownership-inventory and path-lease freeze validation",
+          "make verify-fast",
+          "make lint"
+        ]
+      }
+    },
+    {
+      "name": "pss-ctr-work-root-contract",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "CTR-WORK: Publish additive Work root contract slices",
+        "sourcePaths": [
+          "docs/temp/projects/packaged-service-structure/plan.md",
+          "docs/temp/projects/packaged-service-structure/checklist.md"
+        ],
+        "programs": [
+          "Packaged Service Structure Phase 1"
+        ],
+        "planStory": "CTR-WORK",
+        "exclusiveLease": "direct Go files in pkg/services/work root contract",
+        "requestedOutcome": "Publish additive Work root-contract slices for the singular Work interface covering admission, content staging/materialization, and state access without exposing implementation types. High-unlock priority: this unblocks IMP-WORK-* and several cross-owner IMP packets.",
+        "behavioralAcceptanceCriteria": [
+          "Work exposes one named root interface with plain request/result/value/typed-error contracts.",
+          "No peer implementation types appear in the root contract.",
+          "Representative success and typed failure characterization tests pass for the published slices.",
+          "Typecheck/lint and focused contract tests pass."
+        ],
+        "scopeBoundaries": [
+          "Root contract slices only; do not complete IMP-WORK nested cuts in this packet.",
+          "Do not take Wire/CLI-manifest/provider-conductor leases.",
+          "Do not change public OpenAPI solely for package motion."
+        ],
+        "verification": [
+          "focused Work contract characterization tests",
+          "make verify-fast",
+          "make lint"
+        ]
+      }
+    },
+    {
+      "name": "pss-ctr-ses-root-contract",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "CTR-SES: Publish additive Factory Sessions root contract slices",
+        "sourcePaths": [
+          "docs/temp/projects/packaged-service-structure/plan.md",
+          "docs/temp/projects/packaged-service-structure/checklist.md"
+        ],
+        "programs": [
+          "Packaged Service Structure Phase 1"
+        ],
+        "planStory": "CTR-SES",
+        "exclusiveLease": "direct Go files in pkg/services/factory_sessions root contract",
+        "requestedOutcome": "Publish additive Factory Sessions root-contract slices that keep one aggregate session authority while preparing private nested capabilities. Reuse accepted packaged-structure-sessions evidence; do not make Sessions a global barrier for unrelated owners.",
+        "behavioralAcceptanceCriteria": [
+          "Factory Sessions exposes one named root interface with plain contracts.",
+          "Peer services cannot import nested session implementation contracts through the published root.",
+          "Representative success and typed failure characterization tests pass.",
+          "Typecheck/lint and focused contract tests pass."
+        ],
+        "scopeBoundaries": [
+          "Root contract slices only; nested IMP-SES packets remain separate.",
+          "Do not block Runtime/Workers owner-local packets by expanding this into a global prerequisite.",
+          "Do not take CLI-manifest or provider-conductor leases."
+        ],
+        "verification": [
+          "focused Factory Sessions contract characterization tests",
+          "make verify-fast",
+          "make lint"
+        ]
+      }
+    },
+    {
+      "name": "packaged-service-structure-fnd-wave-03-loopback",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Review PSS foundation wave 03 and early CTR unlocks",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/checklist.md",
+        "requestedOutcome": "Reconcile queue and session health; inspect evidence for FND-09/12, PSS-F01, CTR-WORK, and CTR-SES; update checklist/meta/progress; then open more non-colliding CTR stewards and ready IMP packets, or hold where portfolio contention remains."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "packaged-service-structure-fnd-wave-03-loopback",
+      "targetWorkName": "pss-fnd-09-functional-support-public-observations",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "packaged-service-structure-fnd-wave-03-loopback",
+      "targetWorkName": "pss-fnd-12-behavior-baselines",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "packaged-service-structure-fnd-wave-03-loopback",
+      "targetWorkName": "pss-f01-ownership-inventory-path-leases",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "packaged-service-structure-fnd-wave-03-loopback",
+      "targetWorkName": "pss-ctr-work-root-contract",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "packaged-service-structure-fnd-wave-03-loopback",
+      "targetWorkName": "pss-ctr-ses-root-contract",
+      "requiredState": "complete"
+    }
+  ]
+}

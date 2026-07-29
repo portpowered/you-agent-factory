@@ -1,0 +1,38 @@
+{
+  "requestId": "clean-cli-event-functional-ownership-20260722",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "clean-cli-event-functional-ownership",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "Give Clean CLI event presentation canonical raw functional-test ownership",
+        "sourcePath": "docs/temp/projects/clean-cli-ux-you-run/full-plan.md",
+        "currentProgress": [
+          "PR #1237 merged the canonical Factory Event presentation implementation and passed all applicable CI checks.",
+          "Focused CLI run, Factory Session execution, invocation, and dynamic-workflow tests pass on the accepted head.",
+          "Customer-facing output assertions still live partly in legacy built acceptance and smoke files, while the planned tests/functional/cli/factory_run/output and events packages do not yet exist.",
+          "Schema CLI resolved-input work and its generic-Cobra successor own CLI construction; Packaged Structure Sessions owns Factory Session and Wire restructuring; global config owns OpenAPI/generated config surfaces."
+        ],
+        "requestedOutcome": "Create the smallest behavior-preserving evidence slice that gives the merged Clean CLI event/output contract canonical raw functional-test ownership under tests/functional/cli/factory_run/output and tests/functional/cli/factory_run/events. Exercise public root.BuildProcess behavior for human, quiet, single-JSON, discriminated NDJSON, standard failure stderr, canonical event ordering, provider-chunk exclusion, and JavaScript phase/checkpoint projection using existing deterministic fixtures. Migrate or delete only directly superseded response-stream/--output assertions from legacy acceptance or smoke tests, retaining built-CLI coverage solely where actual process exit status is the behavior. Do not change production CLI behavior, command manifests or generated CLI artifacts, root/Cobra construction, Wire, OpenAPI/generated API contracts, Factory catalogs, Factory Session implementation, Makefile/test-lane topology, or unrelated tests. Prove the new packages with focused Go tests plus the narrow existing functional and built-CLI gates affected by the migration."
+      }
+    },
+    {
+      "name": "clean-cli-event-functional-ownership-loopback",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Review Clean CLI event functional ownership and choose the next safe slice",
+        "sourcePath": "docs/temp/checklist.md",
+        "requestedOutcome": "Inspect implementation, review, tests, changed paths, queue/session health, and Schema-Driven CLI progress after the event functional-ownership slice. Reconcile broken Work, then choose the next smallest Clean CLI slice only if its shared owners are clear."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "clean-cli-event-functional-ownership-loopback",
+      "targetWorkName": "clean-cli-event-functional-ownership",
+      "requiredState": "complete"
+    }
+  ]
+}

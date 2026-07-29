@@ -1,0 +1,87 @@
+{
+  "requestId": "planner-wave-fun-pses-20260728",
+  "type": "FACTORY_REQUEST_BATCH",
+  "currentChainingTraceId": "trace-planner-wave-fun-pses-20260728",
+  "works": [
+    {
+      "name": "pss-fun-provider-sessions",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "FUN-provider-sessions: public-process proof for Provider Sessions after vertical completion",
+        "program": "Packaged Service Structure",
+        "packetId": "FUN-provider-sessions",
+        "sourcePath": "docs/temp/customer-ask.md",
+        "ask": "After Provider Sessions INV→CLN→DEL (#1616), prove from an external-user perspective that Provider Sessions still works: association/details/inspect/project/reader surfaces remain inert until runtime lifecycle, then activate through public Provider Sessions protocol surfaces constructed only via root.BuildProcess and edges.Edges—without inventing root/wire test subsystems or peer-importing provider_sessions/internal or deleted provider_sessions/service.",
+        "systemShapeRequirements": [
+          "Keep packaged Provider Sessions root as wire/, internal/, transports/ plus thin root contracts; do not fold or delete packages in this packet",
+          "Do not invent new pkg/root or pkg/wire Provider Sessions helper APIs solely for tests",
+          "Functional proofs construct the process only through root.BuildProcess and replace effects only via edges.Edges",
+          "Do not invent Provider Sessions HTTP/CLI/MCP adapters or reopen CUT-PSES-PROV / Providers adapter groups"
+        ],
+        "testCoverageRequirements": [
+          "Own proofs under tests/functional/provider_sessions (existing association/ + details/ suites are the primary home)",
+          "First validate whether existing functional proofs already cover association, Codex/Cursor details, and HTTP details; add only missing external proofs for inert construction and post-lifecycle activation through public surfaces",
+          "Do not substitute peer-import scanners, packaged_root_shape unit tests, or del_pses_* gate tests for external behavior proof",
+          "Do not invent a new peer/root/wire Provider Sessions test subsystem"
+        ],
+        "acceptanceCriteria": [
+          "Association and details (Codex/Cursor/HTTP) have external functional proof of inert construction and post-lifecycle activation through public Provider Sessions surfaces (behavioral)",
+          "No functional-suite or production peer import of deleted provider_sessions/service or provider_sessions/internal from outside the Provider Sessions owner",
+          "Packaged Provider Sessions root shape remains wire/, internal/, transports/ plus thin root contracts",
+          "Typecheck, lint, and required CI are terminal green; PR merged before Factory completion"
+        ],
+        "outOfScope": [
+          "New Provider Sessions HTTP/CLI/MCP adapters",
+          "New pkg/root or pkg/wire Provider Sessions composition helpers created only to make tests compile",
+          "Package fold/delete under pkg/services/provider_sessions/**",
+          "PSS-I0* shared integrators",
+          "Providers HTTP/CLI/MCP (still gated on LWR-PROV)",
+          "Reopening CUT-PSES-PROV or concrete IMP-PROV adapter groups"
+        ],
+        "antiPatterns": [
+          "Treating DEL-PSES merge alone as FUN-provider-sessions complete without public-process proof",
+          "Building a root/wire 'ProviderSessionsRootFromEdges' subsystem because tests asked for public composition",
+          "Treating packaged_root_shape or del_pses_* unit gates as sufficient FUN proof without external lifecycle behavior",
+          "Peer-importing provider_sessions/internal or deleted provider_sessions/service from functional suites",
+          "Inventing protocol adapters or reopening accepted CLI UX under a FUN lease",
+          "Touching live Runtime ENGINE fold/DEL, Workers/Settings/Work/Recordings CLN/DEL, or LWR-PROV leases under a FUN lease"
+        ],
+        "currentProgress": [
+          "INV-PSES-TOPLEVEL, CLN-PSES-FOLD-SERVICE, CLN-PSES-LEGACY-PACKAGES, CLN-PSES-CONTRACT-ROOTS, and DEL-PSES are Factory-terminal (DEL-PSES PR #1616 merged 4afcf2ec4; tip ancestry includes bd7cad0b6).",
+          "Live pkg/services/provider_sessions root directories are only wire/, internal/, and transports/ plus thin root contract/test files; service/ is gone and packaged_root_shape_test locks that shape.",
+          "Existing tests/functional/provider_sessions covers association and details (codex/cursor/http); FUN must validate/extend those for public-process inertness + lifecycle, not invent a second suite topology.",
+          "HTTP-PSES / CUT-PSES-PROV / IMP-PSES-01/02 / LWR-PSES are already Factory-terminal; FUN closes the vertical with explicit public-process proof.",
+          "LWR-PROV is live separately; this packet must stay lease-disjoint from Providers Wire and protocol-adapter invention."
+        ],
+        "changedPathLease": [
+          "tests/functional/provider_sessions/**",
+          "pkg/services/provider_sessions/** root contract/characterization tests only when required for public-process proof gaps",
+          "exclude package folds/deletes under pkg/services/provider_sessions/**",
+          "exclude Provider Sessions HTTP/CLI/MCP adapter invention",
+          "exclude PSS-I01/I02/I03/I04 shared integrators",
+          "exclude Providers LWR-PROV wire/** and Providers transports/**",
+          "exclude Runtime CLN-RUN-FOLD-ENGINE / DEL-RUN-ENGINE implementation leases",
+          "exclude Workers/Settings/Work/Recordings/Definitions residual CLN/DEL leases"
+        ],
+        "requestedOutcome": "Prove Provider Sessions as a packaged service through public process composition only: root.BuildProcess, public Provider Sessions protocol surfaces (HTTP-PSES already terminal), and edges.Edges effect replacement. Validate and, only where needed, extend focused functional proofs under tests/functional/provider_sessions so association and Codex/Cursor/HTTP details remain inert until runtime lifecycle starts, then exercise public Provider Sessions behavior without importing provider_sessions/internal or deleted provider_sessions/service from outside the owner and without inventing pkg/root or pkg/wire test-only composition helpers. Confirm no production peer reaches Provider Sessions through transitional packages. Do not fold or delete packages. Do not invent additional Provider Sessions protocol adapters or reopen accepted Schema-Driven/Clean CLI UX. Do not open PSS-I0* shared integrators. Do not reopen CUT-PSES-PROV. Delivery contract: loop implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete Factory work."
+      }
+    },
+    {
+      "name": "planner-loopback-fun-pses",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Meta-planner follow-up after FUN-provider-sessions",
+        "sourcePath": "docs/temp/customer-ask.md",
+        "requestedOutcome": "After FUN-provider-sessions reaches Factory complete, reconcile inventories, functional coverage, and queue/session/PR/CI evidence and repair any stranded merged tasks. Prefer FUN-work after Work DEL, FUN-settings after Settings DEL, FUN-workers after Workers DEL, and FUN-recordings after Recordings DEL when prerequisites clear. Prefer Providers HTTP/CLI/MCP only after LWR-PROV Factory-terminal. Prefer FUN-definitions after DEL-DEF and DEL-DEF-RESIDUAL; prefer FUN-runtime after DEL-RUN SERVICE+ENGINE. Hold CUT-RUN-REC while Runtime CLN-RUN-FOLD-ENGINE owns factory_runtime implementation leases. Hold IMP-WRK-07 while hosted_logic remains polling-only; hold PSS-I0*. If DEL-RUN-ENGINE remains task:failed solely because ENGINE fold is non-terminal, keep it parked until ENGINE fold Factory-complete then one recoverable retry to task:init. Do not invent horizontal adapters for adapter-complete owners. Refill maximum safe throughput toward executor-slot capacity 16 from the live ready set."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-fun-pses",
+      "targetWorkName": "pss-fun-provider-sessions",
+      "requiredState": "complete"
+    }
+  ]
+}

@@ -1,5 +1,0 @@
-{
-  "prompt": "Say hello for the harness load-smoke case.",
-  "model": "fixture-model",
-  "session_id": "session_fixture_load_smoke"
-}

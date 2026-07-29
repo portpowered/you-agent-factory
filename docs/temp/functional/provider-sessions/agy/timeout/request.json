@@ -1,5 +1,0 @@
-{
-  "prompt": "Process the golden timeout task.",
-  "model": "gemini-pro",
-  "session_id": "ses_fixture_agy_timeout"
-}

@@ -1,0 +1,109 @@
+{
+  "requestId": "planner-wave-set-cuts-20260728",
+  "type": "FACTORY_REQUEST_BATCH",
+  "currentChainingTraceId": "trace-planner-wave-set-cuts-20260728",
+  "works": [
+    {
+      "name": "pss-cut-set-prov",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "CUT-SET-PROV: Operator Settings consumes Providers root only",
+        "program": "Packaged Service Structure",
+        "packetId": "CUT-SET-PROV",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "currentProgress": [
+          "HTTP-SET (#1516), MCP-SET (#1514), and CLI-SET (#1521 / fdefd3dc7) are Factory-terminal; Settings is adapter-complete for transport packets.",
+          "IMP-SET-01/02, CTR-SET, and LWR-SET are Factory-terminal.",
+          "Live Operator Settings already imports pkg/services/providers root from resolution/wire paths; residual Providers construction still reaches providers/wire in Settings-owned wire/tests.",
+          "IMP-PROV-04 Cursor/OpenCode adapters are live under Providers ownership; this packet leases only Settings→Providers consumer edges and must not reopen provider adapter groups.",
+          "Operator Settings still has transitional top-level debt (servicewire/, identityinventory/, testlink/, excess root .go); fold/DEL is out of scope for this CUT."
+        ],
+        "requestedOutcome": "Lease only Operator Settings call sites that still reach Providers through non-root paths (including providers/wire construction helpers used as peer imports from Settings production code) or loose Providers surfaces. Retarget those imports/call sites so Settings production code queries Providers only through the Providers service root contract for semantic validation and catalog facts, matching the PSS cross-service rule that Settings may query Providers but does not own catalog facts. Do not fold or delete operator_settings/servicewire, identityinventory, or other Settings transitional dirs. Do not edit root pkg/wire except if an unavoidable Settings→Providers import edge must move with the consumer cut. Do not touch IMP-PROV-04/05 adapter paths, LWR-PROV, PSS-I0* shared integrators, or reopen Schema-Driven/Clean CLI UX. Prove with focused Settings/Providers boundary tests that Settings constructs Providers requests only through the Providers root. Delivery contract: loop implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete Factory work.",
+        "changedPathLease": [
+          "pkg/services/operator_settings/** (Settings→Providers consumer-edge call sites only)",
+          "exclude operator_settings fold/delete of servicewire/identityinventory/testlink",
+          "exclude pkg/services/providers/** except through Providers root contract imports",
+          "exclude IMP-PROV-04/05 adapter implementation paths",
+          "exclude pkg/wire except unavoidable Settings→Providers edge retarget",
+          "exclude top-level CLI/OpenAPI/MCP shared fan-in"
+        ],
+        "acceptanceCriteria": [
+          "Operator Settings production code imports Providers only through the Providers service root contract",
+          "No new Settings production imports of Providers implementation packages or providers/wire as a peer dependency",
+          "Focused tests prove Providers query/request construction through the root boundary (behavioral import-boundary or fake-root proof)",
+          "Existing Settings document load/update/atomic persist and effective resolution behavior is preserved",
+          "Typecheck, lint, and required CI are terminal green; blocking PR comments addressed; conflicts reconciled; PR merged before Factory completion"
+        ],
+        "antiPatterns": [
+          "Meta-tests that only scan import graphs without exercising Settings→Providers request behavior",
+          "Inventing Settings HTTP/CLI/MCP adapters or reopening accepted CLI UX",
+          "Editing Providers adapter groups (IMP-PROV-04+) while claiming a Settings consumer CUT",
+          "Folding operator_settings transitional dirs in this CUT packet",
+          "Marking CUT complete while production Settings still imports providers/wire or Providers internals"
+        ]
+      }
+    },
+    {
+      "name": "pss-cut-boot-set",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "BOOT-SET: System Bootstrap consumes Operator Settings root only",
+        "program": "Packaged Service Structure",
+        "packetId": "BOOT-SET",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "currentProgress": [
+          "Settings HTTP/CLI/MCP adapters are Factory-terminal; BOOT-SET was held only while CLI-SET owned the Settings lease.",
+          "IMP-BOOT-01 / CLI-BOOT / LWR-BOOT evidence is already accepted; system_initialization root children are already wire/, internal/, transports/ plus thin contracts.",
+          "Live system_initialization service.go, internal/workflow, and tests import operator_settings root; confirm no Bootstrap production path reaches Settings transitional packages (servicewire/identityinventory) or Settings internals.",
+          "BOOT-DEF may already be queued/terminal under DEF repair; this packet leases only Bootstrap→Settings edges."
+        ],
+        "requestedOutcome": "Lease only System Bootstrap call sites that still reach Operator Settings through non-root paths or loose Settings surfaces. Retarget those imports/call sites to the Operator Settings service root contract so Bootstrap Initialize/rollback commands Settings only through the published root and never owns Settings document/resolution state. Do not redesign Clean CLI init UX. Do not edit top-level CLI root/manifest composition (PSS-I03). Do not fold Settings transitional packages. Do not couple Bootstrap to pkg/initializer lifecycle ownership. Prove with focused Bootstrap/Settings boundary tests that Initialize/rollback Settings commands go through the Settings root only. Delivery contract: loop implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete Factory work.",
+        "changedPathLease": [
+          "pkg/services/system_initialization/** (Bootstrap→Settings consumer-edge call sites only)",
+          "exclude operator_settings fold/delete",
+          "exclude pkg/initializer lifecycle ownership redesign",
+          "exclude top-level CLI root/manifest composition",
+          "exclude BOOT-DEF / Definitions consumer edges",
+          "exclude Settings transport adapters"
+        ],
+        "acceptanceCriteria": [
+          "System Bootstrap production code imports Operator Settings only through the Settings service root contract",
+          "No Bootstrap production imports of operator_settings/servicewire, identityinventory, or Settings internal packages",
+          "Focused tests prove Initialize/rollback Settings command construction through the Settings root (behavioral)",
+          "Observable Bootstrap initialize/idempotent-repeat/partial-failure/rollback facts are preserved",
+          "Typecheck, lint, and required CI are terminal green; blocking PR comments addressed; conflicts reconciled; PR merged before Factory completion"
+        ],
+        "antiPatterns": [
+          "Reopening Clean CLI init UX or Schema-Driven CLI design",
+          "Moving Settings persistence ownership into Bootstrap",
+          "Editing operator_settings transitional fold paths under a BOOT-SET lease",
+          "Facade-only wrappers that leave Bootstrap calling Settings internals",
+          "Claiming done without a behavioral Bootstrap→Settings root-boundary proof"
+        ]
+      }
+    },
+    {
+      "name": "planner-loopback-set-cuts",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Meta-planner follow-up after Settings CUT-SET-PROV and BOOT-SET",
+        "sourcePath": "docs/temp/customer-ask.md",
+        "requestedOutcome": "After CUT-SET-PROV and BOOT-SET reach Factory complete, reconcile queue/session/PR/CI evidence and repair any stranded merged tasks. Prefer Settings INV→fold→DEL residual debt if still present, Recordings/PSES fold→DEL when lease-disjoint, and remaining Workers CLN/DEL progress. Hold CUT-VIS-RUN / CUT-RUN-REC while Runtime Petri CLN is live; hold IMP-PROV-05/06 and LWR-PROV while IMP-PROV-04 is non-terminal; hold IMP-WRK-07 / IMP-RUN-04 / PSS-I0*. Do not invent WRK protocol adapters or reopen accepted CLI UX. Refill maximum safe throughput toward executor-slot capacity 16 from the live ready set."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-set-cuts",
+      "targetWorkName": "pss-cut-set-prov",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-set-cuts",
+      "targetWorkName": "pss-cut-boot-set",
+      "requiredState": "complete"
+    }
+  ]
+}

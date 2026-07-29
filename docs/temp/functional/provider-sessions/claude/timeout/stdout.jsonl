@@ -1,5 +1,0 @@
-{"type":"system","subtype":"init","session_id":"claude-golden-timeout-session"}
-{"type":"stream_event","session_id":"claude-golden-timeout-session","event":{"type":"message_start","message":{"id":"claude-msg-timeout","role":"assistant","content":[]}}}
-{"type":"stream_event","session_id":"claude-golden-timeout-session","event":{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}}
-{"type":"stream_event","session_id":"claude-golden-timeout-session","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Partial "}}}
-{"type":"stream_event","session_id":"claude-golden-timeout-session","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"answer COMPLETE"}}}

@@ -1,5 +1,0 @@
-{
-  "failureReason": "auth_failure",
-  "message": "Cursor authentication failed. Sign in again or check the configured credentials.",
-  "ok": false
-}

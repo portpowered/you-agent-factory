@@ -1,6 +1,0 @@
-{
-  "ok": true,
-  "content": "Hello",
-  "finishReason": "stop",
-  "usage": {"inputTokens": 4, "outputTokens": 1}
-}

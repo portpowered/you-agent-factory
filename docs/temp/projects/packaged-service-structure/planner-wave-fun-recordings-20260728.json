@@ -1,0 +1,93 @@
+{
+  "requestId": "planner-wave-fun-recordings-20260728",
+  "type": "FACTORY_REQUEST_BATCH",
+  "currentChainingTraceId": "trace-planner-wave-fun-recordings-20260728",
+  "works": [
+    {
+      "name": "pss-fun-recordings",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "FUN-recordings: public-process proof for Recordings after INV→CLN→DEL vertical completion",
+        "program": "Packaged Service Structure",
+        "packetId": "FUN-recordings",
+        "sourcePath": "docs/temp/customer-ask.md",
+        "ask": "After INV-REC-TOPLEVEL, CLN-REC-FOLD-SERVICE, CLN-REC-LEGACY-PACKAGES, CLN-REC-CONTRACT-ROOTS, and DEL-REC Factory completion, prove from an external-user perspective that Recordings still works: record/replay lifecycle, canonical event/artifact/projection-query surfaces, portable recording build/validate, and HTTP/CLI/MCP Recordings transports remain inert until runtime lifecycle, then activate through public Recordings protocol surfaces constructed only via root.BuildProcess and edges.Edges—without inventing root/wire test subsystems or peer-importing recordings/internal or deleted transitional Recordings packages (service/, artifacts/, events/, projections/, replay/ public roots).",
+        "systemShapeRequirements": [
+          "Keep packaged Recordings root as wire/, internal/, transports/ plus thin root contracts; do not fold or delete packages in this packet",
+          "Do not invent new pkg/root or pkg/wire Recordings helper APIs solely for tests",
+          "Functional proofs construct the process only through root.BuildProcess and replace effects only via edges.Edges",
+          "Do not invent Recordings HTTP/CLI/MCP adapters (transports/ already present; adapters are not this packet) or reopen accepted Schema-Driven/Clean CLI UX",
+          "Do not revive deleted recordings transitional siblings (service/, artifacts/, events/, projections/, replay/ public roots) or reopen CLN-REC / DEL-REC deletion leases",
+          "Do not reopen CUT-RUN-REC / CUT-WORK-REC / CUT-VIS-REC consumer cuts"
+        ],
+        "testCoverageRequirements": [
+          "Own proofs under tests/functional/recordings (establish focused suite if absent); first validate existing tests/functional/replay_contracts and smoke/cli record-replay coverage as the primary historical home and retarget/extend only for public-process gaps",
+          "First validate whether existing functional proofs already cover inert construction and post-lifecycle activation for record/replay, event/artifact surfaces, portable recording validate/build, and HTTP/CLI/MCP Recordings transports; add only missing external proofs",
+          "Do not substitute packaged_root_shape, del_rec_* gate tests, peer-import scanners, or unit-only thin-root proofs for external behavior proof",
+          "Do not invent a new peer/root/wire Recordings test subsystem or a second suite topology that duplicates replay_contracts without consolidating ownership"
+        ],
+        "acceptanceCriteria": [
+          "Record/replay lifecycle and Recordings HTTP/CLI/MCP transport surfaces have external functional proof of inert construction and post-lifecycle activation through public Recordings surfaces (behavioral)",
+          "No functional-suite or production peer import of deleted Recordings transitional packages (service/, artifacts/, events/, projections/, replay/ public roots) or recordings/internal from outside the Recordings owner",
+          "Packaged Recordings root remains wire/, internal/, transports/ plus thin root contracts",
+          "Typecheck, lint, and required CI are terminal green; PR merged before Factory completion"
+        ],
+        "outOfScope": [
+          "New Recordings HTTP/CLI/MCP adapters",
+          "New pkg/root or pkg/wire Recordings composition helpers created only to make tests compile",
+          "Package fold/delete under pkg/services/recordings/**",
+          "PSS-I0* shared integrators",
+          "FUN-workers / FUN-settings / FUN-definitions / FUN-work (separate owner gates)",
+          "IMP-WRK-07 hosted_logic / polling-only Workers adapters",
+          "Reopening CLN-REC, DEL-REC, CUT-RUN-REC, CUT-WORK-REC, or CUT-VIS-REC"
+        ],
+        "antiPatterns": [
+          "Treating DEL-REC merge alone as FUN-recordings complete without public-process proof",
+          "Building a root/wire 'RecordingsRootFromEdges' subsystem because tests asked for public composition",
+          "Treating packaged_root_shape or del_rec_* unit gates as sufficient FUN proof without external lifecycle behavior",
+          "Peer-importing recordings/internal or deleted transitional Recordings packages from functional suites",
+          "Leaving replay_contracts or other suites importing deleted service/artifacts/events/projections/replay public roots without retargeting to public Recordings surfaces",
+          "Inventing protocol adapters or reopening accepted CLI UX under a FUN lease",
+          "Folding/deleting residual dirs under a FUN lease",
+          "Touching live WRK-CONTRACT / DEL-WRK / DEL-DEF-RESIDUAL / RET-DEF-ROOT-WIRE / FUN-settings / PSS-I0* under a FUN lease"
+        ],
+        "currentProgress": [
+          "INV-REC-TOPLEVEL, CLN-REC-FOLD-SERVICE, CLN-REC-LEGACY-PACKAGES, CLN-REC-CONTRACT-ROOTS, and DEL-REC are Factory-terminal (DEL-REC PR #1647 merged 4f64dc9a8; idea/plan/task/review complete).",
+          "On origin/main tip after DEL-REC, pkg/services/recordings public directories are exactly wire/, internal/, transports/; service/, artifacts/, events/, projections/, and replay/ public roots are gone; packaged_root_shape / del_rec_* gates lock the deletion.",
+          "Recordings transports/ already exposes cli/http/mcp; CUT-RUN-REC (#1644) and related consumer cuts are Factory-terminal; FUN closes the vertical with explicit public-process proof.",
+          "Existing tests/functional/replay_contracts plus smoke/cli record-replay and work/recordings-read cover historical record/replay behavior; dedicated tests/functional/recordings is absent — FUN must validate/extend public-process inertness + lifecycle under an owned Recordings suite home without inventing a duplicate topology.",
+          "Customer ask after REC toplevel cleanup prefers FUN-recordings when prerequisites are clear; free executor capacity exists while WRK-CONTRACT, DEL-DEF-RESIDUAL, RET-DEF, and FUN-settings lanes progress naturally."
+        ],
+        "changedPathLease": [
+          "tests/functional/recordings/**",
+          "tests/functional/replay_contracts/**",
+          "tests/functional/smoke/** only when record-replay smoke proofs require retarget",
+          "pkg/services/recordings/** root contract/characterization tests only when required for public-process proof gaps",
+          "exclude package folds/deletes under pkg/services/recordings/**",
+          "exclude Recordings HTTP/CLI/MCP adapter invention",
+          "exclude PSS-I01/I02/I03/I04 shared integrators",
+          "exclude WRK-CONTRACT / DEL-WRK / DEL-DEF-RESIDUAL / RET-DEF-ROOT-WIRE / FUN-settings implementation leases except shared-file rebase",
+          "exclude CUT-RUN-REC / CUT-WORK-REC / CUT-VIS-REC reopen"
+        ],
+        "requestedOutcome": "Prove Recordings as a packaged service through public process composition only: root.BuildProcess, public Recordings protocol surfaces (HTTP/CLI/MCP transports already present), and edges.Edges effect replacement. Validate and, only where needed, establish/extend focused functional proofs under tests/functional/recordings (and retarget existing tests/functional/replay_contracts / smoke record-replay proofs) so record/replay lifecycle, event/artifact/projection-query surfaces, portable recording build/validate, and Recordings transports remain inert until runtime lifecycle starts, then exercise public Recordings behavior without importing recordings/internal or deleted transitional Recordings packages (service/, artifacts/, events/, projections/, replay/ public roots) from outside the owner and without inventing pkg/root or pkg/wire test-only composition helpers. Confirm no production peer reaches Recordings through deleted transitional packages. Do not fold or delete packages. Do not invent Recordings protocol adapters or reopen accepted Schema-Driven/Clean CLI UX. Do not open PSS-I0* shared integrators. Delivery contract: loop implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete Factory work."
+      }
+    },
+    {
+      "name": "planner-loopback-fun-recordings",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Meta-planner follow-up after FUN-recordings",
+        "sourcePath": "docs/temp/customer-ask.md",
+        "requestedOutcome": "After FUN-recordings reaches Factory complete, reconcile inventories, functional coverage, and queue/session/PR/CI evidence and repair any stranded merged tasks. Prefer FUN-workers after Workers DEL, FUN-definitions after DEL-DEF-RESIDUAL, and remaining FUN-settings / RET-DEF-ROOT-WIRE progress when prerequisites clear. Prefer WRK-CONTRACT→DEL-WRK natural consume. Hold IMP-WRK-07 while hosted_logic remains polling-only; hold PSS-I0*. Do not invent WRK protocol adapters or reopen accepted CLI UX. Do not revive deleted Recordings transitional packages. Refill maximum safe throughput toward executor-slot capacity 16 from the live ready set."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-fun-recordings",
+      "targetWorkName": "pss-fun-recordings",
+      "requiredState": "complete"
+    }
+  ]
+}

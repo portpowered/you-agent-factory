@@ -1,0 +1,161 @@
+{
+  "requestId": "planner-wave-fun-run-cut-run-rec-20260728",
+  "type": "FACTORY_REQUEST_BATCH",
+  "currentChainingTraceId": "trace-planner-wave-fun-run-cut-run-rec-20260728",
+  "works": [
+    {
+      "name": "pss-fun-runtime",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "FUN-runtime: public-process proof for Factory Runtime after SERVICE+ENGINE DEL",
+        "program": "Packaged Service Structure",
+        "packetId": "FUN-runtime",
+        "sourcePath": "docs/temp/customer-ask.md",
+        "ask": "After DEL-RUN-SERVICE and DEL-RUN-ENGINE-PIPELINE Factory completion, prove from an external-user perspective that Factory Runtime still works: process-scoped Runtime construction remains inert until runtime lifecycle, then control/observation/dispatch-plan/JavaScript workflow/orchestration surfaces activate through public Runtime protocol and root contracts composed only via root.BuildProcess and edges.Edges—without inventing root/wire test subsystems or peer-importing factory_runtime/internal or deleted transitional public packages.",
+        "systemShapeRequirements": [
+          "Keep packaged Factory Runtime root as wire/, internal/, transports/ plus thin root contracts; do not fold or delete packages in this packet (residual public testdata/ is inventory debt, not this packet's deletion scope)",
+          "Do not invent new pkg/root or pkg/wire Factory Runtime helper APIs solely for tests",
+          "Functional proofs construct the process only through root.BuildProcess and replace effects only via edges.Edges",
+          "Do not invent Runtime HTTP/CLI/MCP adapters or reopen CUT-SES-RUN / CUT-RUN-WRK / CUT-RUN-REC beyond proving public behavior",
+          "Do not revive monolithic pss-del-run or reopen DEL-RUN-SERVICE / DEL-RUN-ENGINE-PIPELINE deletion leases"
+        ],
+        "testCoverageRequirements": [
+          "Own proofs under tests/functional/factory_runtime (and existing closely related public Runtime suites such as tests/functional/orchestrators or tests/functional/runtime_api only when they already own the behavior)",
+          "First validate whether existing functional proofs already cover inert construction, lifecycle activation, dispatch/observation, and JavaScript/orchestration public surfaces; add only missing external proofs",
+          "Do not substitute packaged_root_shape, engine_pipeline_* gate tests, peer-import scanners, or unit-only thin-root proofs for external behavior proof",
+          "Do not invent a new peer/root/wire Factory Runtime test subsystem"
+        ],
+        "acceptanceCriteria": [
+          "External functional proof that Factory Runtime constructs inertly through root.BuildProcess and activates control/observation/dispatch-plan (and existing public JS/orchestration surfaces) after lifecycle (behavioral)",
+          "No functional-suite or production peer import of deleted factory_runtime transitional packages (service/, engine/, runtime/, scheduler/, state/, subsystems/, testkit/, exhaustiontests/, …) or factory_runtime/internal from outside the Runtime owner",
+          "Packaged Factory Runtime root remains wire/, internal/, transports/ plus thin root contracts (testdata/ may remain as committed unexpected move debt only)",
+          "Typecheck, lint, and required CI are terminal green; PR merged before Factory completion"
+        ],
+        "outOfScope": [
+          "New Factory Runtime HTTP/CLI/MCP adapters",
+          "New pkg/root or pkg/wire Factory Runtime composition helpers created only to make tests compile",
+          "Package fold/delete under pkg/services/factory_runtime/** (including testdata/ burn-down)",
+          "PSS-I0* shared integrators",
+          "CUT-RUN-REC implementation (separate packet in this wave)",
+          "IMP-WRK-07 hosted_logic / polling-only Workers adapters",
+          "Reopening monolithic DEL-RUN or already-terminal DEL-RUN SERVICE/ENGINE leases"
+        ],
+        "antiPatterns": [
+          "Treating DEL-RUN SERVICE/ENGINE merge alone as FUN-runtime complete without public-process proof",
+          "Building a root/wire 'RuntimeRootFromEdges' subsystem because tests asked for public composition",
+          "Treating packaged_root_shape or engine_pipeline_* unit gates as sufficient FUN proof without external lifecycle behavior",
+          "Peer-importing factory_runtime/internal or deleted transitional public Runtime packages from functional suites",
+          "Inventing protocol adapters or reopening accepted CLI UX under a FUN lease",
+          "Folding/deleting testdata/ or other residual dirs under a FUN lease",
+          "Touching live Providers HTTP/CLI adapters, WRK/REC/SET/WORK/DEF CLN-DEL lanes, or PSS-I0* under a FUN lease"
+        ],
+        "currentProgress": [
+          "CLN-RUN-FOLD-SERVICE + CLN-RUN-FOLD-ENGINE-PIPELINE are Factory-terminal (#1602 / a9d50a34b).",
+          "DEL-RUN-SERVICE is Factory-terminal (work-task-370; tip ancestry 655e4167e).",
+          "DEL-RUN-ENGINE-PIPELINE is Factory-terminal (work-task-453 / PR #1637 merged 6e48c875f; idea/plan/task/review complete).",
+          "Live pkg/services/factory_runtime public directories are wire/, internal/, transports/, plus residual unexpected testdata/; service/ and engine-pipeline public packages are gone; testkit/exhaustiontests internalized.",
+          "Existing tests/functional/factory_runtime covers orchestrators/API/JS surfaces; FUN must validate/extend those for public-process inertness + lifecycle, not invent a second suite topology.",
+          "CUT-SES-RUN / CUT-RUN-WRK / IMP-RUN-04 are already Factory-terminal; CUT-RUN-REC is admitted in parallel as a separate lease."
+        ],
+        "changedPathLease": [
+          "tests/functional/factory_runtime/**",
+          "tests/functional/orchestrators/** and tests/functional/runtime_api/** only when extending existing public Runtime proofs already owned there",
+          "pkg/services/factory_runtime/** root contract/characterization tests only when required for public-process proof gaps",
+          "exclude package folds/deletes under pkg/services/factory_runtime/**",
+          "exclude Factory Runtime HTTP/CLI/MCP adapter invention",
+          "exclude PSS-I01/I02/I03/I04 shared integrators",
+          "exclude CUT-RUN-REC Recordings-edge retargets (owned by pss-cut-run-rec)",
+          "exclude Providers HTTP/CLI adapter leases and Workers/Settings/Work/Recordings/Definitions residual CLN/DEL leases"
+        ],
+        "requestedOutcome": "Prove Factory Runtime as a packaged service through public process composition only: root.BuildProcess, public Runtime protocol/root contracts, and edges.Edges effect replacement. Validate and, only where needed, extend focused functional proofs under tests/functional/factory_runtime (reusing existing related public Runtime suites only when they already own the behavior) so Runtime construction remains inert until runtime lifecycle starts, then exercise public control/observation/dispatch-plan and existing JS/orchestration surfaces without importing factory_runtime/internal or deleted transitional public Runtime packages from outside the owner and without inventing pkg/root or pkg/wire test-only composition helpers. Confirm no production peer reaches Runtime through deleted transitional packages. Do not fold or delete packages (including residual testdata/). Do not invent Runtime protocol adapters or reopen accepted Schema-Driven/Clean CLI UX. Do not open PSS-I0* shared integrators. Do not implement CUT-RUN-REC under this lease. Delivery contract: loop implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete Factory work."
+      }
+    },
+    {
+      "name": "pss-cut-run-rec",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "CUT-RUN-REC: Factory Runtime consumes Recordings root only",
+        "program": "Packaged Service Structure",
+        "packetId": "CUT-RUN-REC",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "ask": "After Runtime CLN-RUN-FOLD-SERVICE/ENGINE and DEL-RUN SERVICE+ENGINE are Factory-terminal, cut Factory Runtime's Recordings consumer edge so Runtime reaches Recordings only through the Recordings service root contract—no Recordings implementation packages, transitional public dirs, or loose helper surfaces—and prove the boundary with focused Runtime/Recordings tests.",
+        "systemShapeRequirements": [
+          "Lease only Factory Runtime call sites that still reach Recordings through non-root paths or loose Recordings surfaces; retarget them to the Recordings service root contract (and root-owned ledger/replay/event shapes)",
+          "Do not fold or delete factory_runtime or recordings packages in this packet",
+          "Do not edit root pkg/wire construction except a narrow Runtime→Recordings import retarget if unavoidable",
+          "Do not reopen CUT-REC-RUN (already terminal Recordings→Runtime edge) or implement FUN-runtime under this lease",
+          "Do not invent Recordings or Runtime HTTP/CLI/MCP adapters"
+        ],
+        "testCoverageRequirements": [
+          "Add or extend focused Runtime/Recordings boundary tests near the cut (prefer owner-local factory_runtime tests or existing recordings/runtime boundary suites)",
+          "Prove Runtime constructs ledger/replay/hosting Recordings requests only through the Recordings root contract",
+          "Do not treat FUN-runtime public-process suites as a substitute for this consumer-edge proof",
+          "Reuse existing tests when they already cover the boundary; add only missing proofs"
+        ],
+        "acceptanceCriteria": [
+          "Factory Runtime production code imports Recordings only through the Recordings service root contract (behavioral compile/import proof)",
+          "No new Runtime imports of Recordings implementation packages (internal/, service/, or other transitional public Recordings dirs)",
+          "Focused tests prove ledger/replay/hosting Recordings construction through the Recordings root boundary (behavioral)",
+          "Observable Runtime hosting/replay/execution behavior that depends on Recordings remains preserved",
+          "Typecheck, lint, and required CI are terminal green; PR merged before Factory completion"
+        ],
+        "outOfScope": [
+          "FUN-runtime public-process proof suite (separate packet in this wave)",
+          "Recordings fold/DEL / CONTRACT residual packets",
+          "CUT-REC-RUN reopen or Recordings→Runtime edge rewrites beyond preserving the already-cut direction",
+          "PSS-I0* shared integrators",
+          "IMP-WRK-07 / Providers adapters / DEF residual CLN-DEL",
+          "Deleting factory_runtime/testdata or other residual Runtime dirs"
+        ],
+        "antiPatterns": [
+          "Starting this cut while claiming Runtime fold/DEL leases are still live (they are terminal—do not re-hold)",
+          "Folding Recordings or Runtime packages under a CUT lease",
+          "Deep-importing recordings/internal or transitional Recordings packages from Runtime production code",
+          "Implementing FUN-runtime functional suites under the CUT lease",
+          "Editing Automations/Workers/Sessions ownership or inventing protocol adapters",
+          "Reviving monolithic pss-del-run"
+        ],
+        "currentProgress": [
+          "CLN-RUN-FOLD-SERVICE/ENGINE and DEL-RUN-SERVICE/ENGINE are Factory-terminal; factory_runtime implementation leases for folds/deletes are clear.",
+          "CUT-REC-RUN (Recordings→Runtime) is already Factory-terminal; this packet is the reverse Runtime→Recordings consumer edge held until ENGINE DEL.",
+          "Live Runtime already imports github.com/portpowered/infinite-you/pkg/services/recordings from root contracts and internal assembly/host/orchestration paths; CUT must audit and eliminate any non-root Recordings reaches and harden the root-only boundary with tests.",
+          "Recordings residual CLN-CONTRACT/DEL packets remain live separately; stay lease-disjoint from recordings fold/delete.",
+          "FUN-runtime is admitted in parallel and must not absorb this cut."
+        ],
+        "changedPathLease": [
+          "pkg/services/factory_runtime/** (Recordings-edge call sites and boundary tests only)",
+          "pkg/services/recordings/** only if a narrow Recordings-root-facing seam must accept retargeted contracts (no fold/delete)",
+          "exclude pkg/services/recordings fold/delete / CONTRACT residual implementation",
+          "exclude tests/functional/factory_runtime/** FUN-runtime proof expansion owned by pss-fun-runtime",
+          "exclude pkg/wire except narrow Runtime→Recordings import retarget if required",
+          "exclude PSS-I01/I02/I03/I04 shared integrators",
+          "exclude Providers HTTP/CLI adapter leases and WRK/SET/WORK/DEF residual CLN/DEL leases"
+        ],
+        "requestedOutcome": "After Runtime CLN folds and DEL-RUN SERVICE+ENGINE are Factory-complete, lease only Factory Runtime call sites that still reach Recordings through non-root paths or loose Recordings surfaces. Retarget those imports/call sites to the Recordings service root contract so Runtime no longer depends on Recordings implementation packages. Preserve Runtime hosting/replay/execution behavior that depends on Recordings ledgers and hooks. Do not fold or delete factory_runtime or recordings packages; do not edit root pkg/wire beyond a narrow import retarget if required; do not open shared integrators; do not implement FUN-runtime under this lease; do not reopen CUT-REC-RUN. Prove with focused Runtime/Recordings boundary tests that Runtime constructs Recordings requests only through the Recordings root. Delivery contract: loop implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete Factory work."
+      }
+    },
+    {
+      "name": "planner-loopback-fun-run-cut-run-rec",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Meta-planner follow-up after FUN-runtime + CUT-RUN-REC",
+        "sourcePath": "docs/temp/meta.md",
+        "requestedOutcome": "After FUN-runtime and CUT-RUN-REC reach Factory complete, reconcile inventories and changed paths against the living service-root shape (Runtime residual unexpected testdata/ only unless cleared). Prefer remaining WRK/REC/SET/WORK/DEF CLN/DEL progress and FUN-* only after each owner's DEL. Prefer Providers adapter loopback outcomes when HTTP/CLI/MCP are terminal. Hold IMP-WRK-07 while hosted_logic remains polling-only; hold PSS-I0*. Do not revive monolithic pss-del-run. Repair stranded merged tasks if any. Refill toward executor-slot capacity 16 from the live ready set."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-fun-run-cut-run-rec",
+      "targetWorkName": "pss-fun-runtime",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-fun-run-cut-run-rec",
+      "targetWorkName": "pss-cut-run-rec",
+      "requiredState": "complete"
+    }
+  ]
+}

@@ -1,0 +1,66 @@
+{
+  "requestId": "packaged-service-structure-imp-wave-02-20260724",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "pss-imp-ses-04-invocation",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "IMP-SES-04: Move Sessions invocation prepare/command-Work/observe into private subservice",
+        "sourcePaths": [
+          "docs/temp/projects/packaged-service-structure/plan.md",
+          "docs/temp/projects/packaged-service-structure/checklist.md",
+          "docs/architecture/packaged-structure.md"
+        ],
+        "programs": [
+          "Packaged Service Structure Phase 2"
+        ],
+        "planStory": "IMP-SES-04",
+        "prerequisites": [
+          "CTR-SES (merged PR #1269, Factory idea/task complete)",
+          "CTR-WORK (merged PR #1272, Factory idea/task complete)"
+        ],
+        "exclusiveLease": "pkg/services/factory_sessions/internal/services/invocation (create or relocate only this nested subservice)",
+        "requestedOutcome": "Implement Sessions invocation as a private nested subservice that prepares invocation input, commands Work, and observes completion behind the accepted CTR-SES root invocation slice and CTR-WORK peer root. Prove timeout, cancel, and partial-result behavior without taking identity, live-runtime, durable-execution, response-stream, or runtime-opening leases.",
+        "behavioralAcceptanceCriteria": [
+          "Sessions invocation prepare/command-Work/observe-completion lives under factory_sessions/internal/services/invocation (or the equivalent nested private subservice path required by FND-02).",
+          "Timeout, cancel, and partial-result cases return the typed failures and observable outcomes published by CTR-SES for the invocation slice.",
+          "Public Sessions root invocation behavior stays equivalent for representative success and typed failure cases already covered by CTR-SES characterization.",
+          "Work is commanded only through the accepted CTR-WORK peer root contracts; no Work implementation/module imports, Runtime/Petri types, or Wire/root construction ownership appear in the invocation subservice public surface.",
+          "A fake Work peer can exercise prepare/command/observe through the private implementation; focused invocation tests cover timeout/cancel/partial-result behavior.",
+          "Typecheck/lint and focused Sessions invocation tests pass."
+        ],
+        "scopeBoundaries": [
+          "Invocation subservice only; do not implement IMP-SES-01, IMP-SES-02, IMP-SES-03, IMP-SES-05, or IMP-SES-06 in this packet.",
+          "Do not edit CLI-manifest/generation owned by schema-cli-static-docs-models-mcp-migration (PR #1262).",
+          "Do not edit workers construction owned by standardized-provider-neutral-conductor (PR #1267).",
+          "Do not take CTR-RUN/CTR-REC/CTR-WRK leases or change public OpenAPI solely for package motion.",
+          "Do not expand into identity, live_runtime, durable_execution, response_stream, or runtime_opening directories.",
+          "Do not implement Work admission/staging/materialization; consume Work only via the accepted peer root."
+        ],
+        "verification": [
+          "focused Sessions invocation characterization/unit tests",
+          "make verify-fast",
+          "make lint"
+        ]
+      }
+    },
+    {
+      "name": "packaged-service-structure-imp-wave-02-loopback",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Meta-planner follow-up after PSS IMP wave 02 (SES-04)",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/checklist.md",
+        "requestedOutcome": "After IMP-SES-04 reaches terminal accepted evidence, reconcile the queue and decide whether to release further owner-local IMP packets unlocked by newly accepted CTR slices, PSS-F02 after F01 terminal, CTR-WRK after conductor clears, or hold for remaining CTR/CLI/provider gates."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "packaged-service-structure-imp-wave-02-loopback",
+      "targetWorkName": "pss-imp-ses-04-invocation",
+      "requiredState": "complete"
+    }
+  ]
+}

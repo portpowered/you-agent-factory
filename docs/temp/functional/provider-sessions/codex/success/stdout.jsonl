@@ -1,6 +1,0 @@
-{"type":"thread.started","thread_id":"session_fixture_codex_success"}
-{"type":"turn.started"}
-{"type":"item.started","item":{"id":"tool_fixture_1","type":"mcp_tool_call","server":"docs","tool":"lookup","arguments":{"query":"fixture"},"result":null,"error":null,"status":"in_progress"}}
-{"type":"item.completed","item":{"id":"tool_fixture_1","type":"mcp_tool_call","server":"docs","tool":"lookup","arguments":{"query":"fixture"},"result":{"content":[{"type":"text","text":"fixture lookup result"}]},"error":null,"status":"completed"}}
-{"type":"item.completed","item":{"id":"message_fixture_1","type":"agent_message","text":"Codex fixture answer COMPLETE"}}
-{"type":"turn.completed","usage":{"input_tokens":8,"output_tokens":12}}

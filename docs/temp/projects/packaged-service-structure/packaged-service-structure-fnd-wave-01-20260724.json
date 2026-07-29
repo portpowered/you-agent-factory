@@ -1,0 +1,216 @@
+{
+  "requestId": "packaged-service-structure-fnd-wave-01-20260724",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "pss-fnd-01-package-target-manifest",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "FND-01: Complete package-to-target and deletion manifest",
+        "sourcePaths": [
+          "docs/temp/projects/packaged-service-structure/plan.md",
+          "docs/temp/projects/packaged-service-structure/checklist.md",
+          "docs/architecture/packaged-structure.md",
+          "docs/architecture/structures.md"
+        ],
+        "programs": [
+          "Packaged Service Structure Phase 0"
+        ],
+        "planStory": "FND-01",
+        "exclusiveLease": "architecture inventory only",
+        "requestedOutcome": "Produce the complete package-to-target and deletion manifest for the Packaged Service Structure migration. Every production package under pkg must map to exactly one committed destination in the plan's 13-owner tree (plus the edges exception) or to an explicit deletion queue with a named successor and deletion condition. Do not reopen service-shape decisions. Do not migrate implementation packages in this packet.",
+        "behavioralAcceptanceCriteria": [
+          "Every production package has exactly one committed destination or deletion mapping.",
+          "The inventory is stable-sorted and usable as the exact deletion-only nonconformance ledger seed.",
+          "Providers, Provider Sessions, Operator Settings, System Bootstrap, Factory Visualization, Recordings, Work, Models, and other committed owners appear without a new discovery/decomposition task.",
+          "Process Edges is recorded as the sole broad external-effect architecture exception.",
+          "Typecheck/lint/focused verification for any added inventory tooling or fixtures pass."
+        ],
+        "scopeBoundaries": [
+          "Do not move packages or change runtime behavior beyond inventory/manifest artifacts and their validators.",
+          "Do not own OpenAPI, CLI manifest, provider conductor, or Wire/root composition cutovers.",
+          "Do not submit CTR/IMP packets inside this idea."
+        ],
+        "verification": [
+          "focused inventory/manifest validation if tooling is added",
+          "make verify-fast",
+          "make lint"
+        ]
+      }
+    },
+    {
+      "name": "pss-fnd-02-recursive-internal-services-enforcement",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "FND-02: Enforce recursive parent-private internal/services shape",
+        "sourcePaths": [
+          "docs/temp/projects/packaged-service-structure/plan.md",
+          "docs/temp/projects/packaged-service-structure/checklist.md",
+          "docs/architecture/packaged-structure.md"
+        ],
+        "programs": [
+          "Packaged Service Structure Phase 0"
+        ],
+        "planStory": "FND-02",
+        "exclusiveLease": "architecture text plus pkg-structure checker paths",
+        "requestedOutcome": "Update standards and recursive enforcement so nested services live at parent-private internal/services/<subservice> with implementations under the subservice's own internal. Public sibling services/ containers and missing subservice internal implementations must fail fixtures.",
+        "behavioralAcceptanceCriteria": [
+          "Public sibling services/ containers fail the structure checker fixtures.",
+          "Missing subservice internal implementations fail the structure checker fixtures.",
+          "Canonical recursive internal/services/<subservice>/internal shape is documented in the normative standards this packet owns.",
+          "Typecheck/lint and focused structure-checker tests pass."
+        ],
+        "scopeBoundaries": [
+          "Do not migrate whole service trees in this packet; only standards/enforcement/fixtures.",
+          "Do not change CLI manifest generation, provider conductor, or Wire composition.",
+          "Keep the lease limited to architecture text and pkg-structure checker paths."
+        ],
+        "verification": [
+          "focused pkg-structure checker fixture tests",
+          "make verify-fast",
+          "make lint"
+        ]
+      }
+    },
+    {
+      "name": "pss-fnd-03-owner-derived-import-enforcement",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "FND-03: Make cross-owner import enforcement owner-derived",
+        "sourcePaths": [
+          "docs/temp/projects/packaged-service-structure/plan.md",
+          "docs/temp/projects/packaged-service-structure/checklist.md"
+        ],
+        "programs": [
+          "Packaged Service Structure Phase 0"
+        ],
+        "planStory": "FND-03",
+        "exclusiveLease": "ownership checker paths",
+        "requestedOutcome": "Make cross-owner import enforcement owner-derived from the committed service tree so peer root-contract imports pass and peer implementation/subservice imports fail.",
+        "behavioralAcceptanceCriteria": [
+          "Peer root imports pass ownership checker fixtures.",
+          "Peer implementation and nested-subservice imports fail ownership checker fixtures.",
+          "Enforcement derives from owner inventory rather than a hand-maintained ad hoc allowlist where the plan requires owner-derived rules.",
+          "Typecheck/lint and focused ownership-checker tests pass."
+        ],
+        "scopeBoundaries": [
+          "Do not relocate service packages in this packet.",
+          "Do not change public API/CLI/MCP contracts solely to satisfy the checker.",
+          "Do not take Wire/root/OpenAPI/CLI-manifest leases."
+        ],
+        "verification": [
+          "focused ownership-checker fixture tests",
+          "make verify-fast",
+          "make lint"
+        ]
+      }
+    },
+    {
+      "name": "pss-fnd-10-path-lease-packet-manifest",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "FND-10: Create changed-path lease and packet-state manifest",
+        "sourcePaths": [
+          "docs/temp/projects/packaged-service-structure/plan.md",
+          "docs/temp/projects/packaged-service-structure/checklist.md"
+        ],
+        "programs": [
+          "Packaged Service Structure Phase 0"
+        ],
+        "planStory": "FND-10",
+        "exclusiveLease": "program metadata only",
+        "requestedOutcome": "Create the changed-path lease and packet-state manifest used by the Packaged Service Structure scheduler so duplicate active leases are rejected before dispatch and every packet has an explicit exclusive path set.",
+        "behavioralAcceptanceCriteria": [
+          "Duplicate active leases are rejected before dispatch.",
+          "Every cataloged packet can declare an exclusive changed-path lease and current state.",
+          "The manifest is usable by planners without editing generated OpenAPI/CLI/provider surfaces.",
+          "Typecheck/lint and focused lease-manifest validation pass."
+        ],
+        "scopeBoundaries": [
+          "Program metadata only; do not migrate services.",
+          "Do not own shared Wire/HTTP/CLI/MCP fan-in cutovers.",
+          "Do not invent a second architecture tree."
+        ],
+        "verification": [
+          "focused lease/packet-manifest validation",
+          "make verify-fast",
+          "make lint"
+        ]
+      }
+    },
+    {
+      "name": "pss-fnd-11-shared-surface-ownership-inventory",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "FND-11: Inventory OpenAPI/CLI/MCP shared-file ownership",
+        "sourcePaths": [
+          "docs/temp/projects/packaged-service-structure/plan.md",
+          "docs/temp/projects/packaged-service-structure/checklist.md"
+        ],
+        "programs": [
+          "Packaged Service Structure Phase 0"
+        ],
+        "planStory": "FND-11",
+        "exclusiveLease": "integration metadata",
+        "requestedOutcome": "Inventory OpenAPI/generated/CLI/MCP shared-file ownership so every shared surface has one serial integrator and a queue of owner requests. Record that PSS-I02/I03/I04 are the serial lanes and that current portfolio owners (#1262 CLI manifest, provider conductor) must be respected.",
+        "behavioralAcceptanceCriteria": [
+          "Every shared OpenAPI/generated/CLI/MCP surface has one serial integrator and queued owner-request model.",
+          "The inventory explicitly maps PSS-I02, PSS-I03, and PSS-I04 to those surfaces.",
+          "Current live portfolio contention with Schema CLI docs/models/mcp and Standardized Providers conductor is documented as hold conditions, not bypassed.",
+          "Typecheck/lint and focused inventory validation pass."
+        ],
+        "scopeBoundaries": [
+          "Integration metadata only; do not perform a CLI or OpenAPI cutover in this packet.",
+          "Do not take the live CLI-manifest or provider-conductor ownership away from current tasks.",
+          "Do not change generated artifacts except via documented regeneration if a validator requires it."
+        ],
+        "verification": [
+          "focused shared-surface inventory validation",
+          "make verify-fast",
+          "make lint"
+        ]
+      }
+    },
+    {
+      "name": "packaged-service-structure-fnd-wave-01-loopback",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Review PSS foundation wave 01 before next refill",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/checklist.md",
+        "requestedOutcome": "Reconcile queue and session health; inspect evidence for FND-01/02/03/10/11; update checklist/meta/progress; then submit the next disjoint foundation or contract wave, revise packet shape, or hold if shared-owner contention requires it."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "packaged-service-structure-fnd-wave-01-loopback",
+      "targetWorkName": "pss-fnd-01-package-target-manifest",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "packaged-service-structure-fnd-wave-01-loopback",
+      "targetWorkName": "pss-fnd-02-recursive-internal-services-enforcement",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "packaged-service-structure-fnd-wave-01-loopback",
+      "targetWorkName": "pss-fnd-03-owner-derived-import-enforcement",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "packaged-service-structure-fnd-wave-01-loopback",
+      "targetWorkName": "pss-fnd-10-path-lease-packet-manifest",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "packaged-service-structure-fnd-wave-01-loopback",
+      "targetWorkName": "pss-fnd-11-shared-surface-ownership-inventory",
+      "requiredState": "complete"
+    }
+  ]
+}

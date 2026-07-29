@@ -1,0 +1,122 @@
+{
+  "requestId": "planner-wave-rec-pses-cuts-20260727",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "pss-cut-rec-run",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "CUT-REC-RUN: Recordings consumes Factory Runtime root only",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "packetId": "CUT-REC-RUN",
+        "currentProgress": [
+          "Recordings IMP packets, LWR-REC, HTTP-REC, CLI-REC, and MCP-REC are Factory-terminal.",
+          "pkg/services/recordings still has transitional public service/ plus extra top-level packages; Automations already owns the live fold/DEL/pkg/wire deletion lane.",
+          "CUT-REC-RUN is the Recordings→Runtime consumer-edge packet and is lease-disjoint from Automations CUT/fold.",
+          "Planner preference: admit owner-local CUT edges now; hold Recordings fold/DEL until Automations releases the shared pkg/wire construction lease."
+        ],
+        "requestedOutcome": "Lease only Recordings call sites that still reach Factory Runtime through non-root paths or loose Runtime surfaces. Retarget those imports/call sites to the Factory Runtime service root contract (and event/command shapes owned by Runtime) so Recordings no longer depends on Runtime implementation packages. Do not fold or delete recordings/service; do not edit root pkg/wire construction; do not open PSS-I01/I02/I03 shared integrators; do not touch Automations or Provider Sessions. Prove with focused Recordings/Runtime boundary tests that Recordings constructs Runtime requests only through the Runtime root. Delivery contract: loop implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts are resolved, the PR is merged, and only then complete Factory work.",
+        "changedPathLease": [
+          "pkg/services/recordings/** (consumer Runtime-edge call sites only)",
+          "exclude pkg/services/recordings/service fold/delete",
+          "exclude pkg/wire",
+          "exclude pkg/services/automations/**",
+          "exclude pkg/services/provider_sessions/**"
+        ],
+        "acceptanceCriteria": [
+          "Recordings production code imports Factory Runtime only through the Runtime service root contract",
+          "No new Recordings imports of Runtime implementation or loose Runtime helper packages",
+          "Focused tests prove Runtime request construction through the root boundary",
+          "Typecheck, lint, and tests pass; required CI green; PR merged before Factory completion"
+        ]
+      }
+    },
+    {
+      "name": "pss-cut-rec-wrk",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "CUT-REC-WRK: Recordings consumes Workers root only",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "packetId": "CUT-REC-WRK",
+        "currentProgress": [
+          "Recordings protocol adapters and LWR-REC are Factory-terminal.",
+          "CUT-REC-WRK is the Recordings→Workers consumer-edge packet from the PSS plan.",
+          "Live Work/Models adapters and Automations vertical deletion occupy other leases; this packet stays on Recordings consumer call sites only."
+        ],
+        "requestedOutcome": "Lease only Recordings call sites that still reach Workers through non-root paths or loose Workers surfaces. Retarget those imports/call sites to the Workers service root contract so Recordings no longer depends on Workers implementation packages. Do not fold or delete recordings/service; do not edit root pkg/wire; do not open shared integrators; do not invent Workers HTTP/CLI/MCP adapters. Prove with focused Recordings/Workers boundary tests. Delivery contract: loop implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts are resolved, the PR is merged, and only then complete Factory work.",
+        "changedPathLease": [
+          "pkg/services/recordings/** (consumer Workers-edge call sites only)",
+          "exclude pkg/services/recordings/service fold/delete",
+          "exclude pkg/wire",
+          "exclude pkg/services/workers/** except through Workers root contract imports",
+          "exclude pkg/services/automations/**"
+        ],
+        "acceptanceCriteria": [
+          "Recordings production code imports Workers only through the Workers service root contract",
+          "No new Recordings imports of Workers implementation packages",
+          "Focused tests prove Workers request construction through the root boundary",
+          "Typecheck, lint, and tests pass; required CI green; PR merged before Factory completion"
+        ]
+      }
+    },
+    {
+      "name": "pss-cut-pses-prov",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "CUT-PSES-PROV: Provider Sessions consumes Providers root only",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "packetId": "CUT-PSES-PROV",
+        "currentProgress": [
+          "Provider Sessions LWR-PSES and HTTP-PSES are Factory-terminal; normative CLI/MCP adapter sets do not include PSES.",
+          "pkg/services/provider_sessions still has transitional public service/ beside internal/, transports/, and wire/.",
+          "CUT-PSES-PROV is the Provider Sessions→Providers consumer-edge packet and is lease-disjoint from Automations and Recordings CUTs.",
+          "Hold PSES fold/DEL until Automations releases the shared pkg/wire construction lease; hold LWR-PROV / IMP-PROV-04 while IMP-PROV-03 is live."
+        ],
+        "requestedOutcome": "Lease only Provider Sessions call sites that still reach Providers through non-root paths or Workers-owned transitional provider packages. Retarget those imports/call sites to the standalone Providers service root contract so Provider Sessions no longer depends on Providers/Workers implementation packages. Do not fold or delete provider_sessions/service; do not edit root pkg/wire; do not admit IMP-PROV-04 or LWR-PROV; do not touch Automations or Recordings. Prove with focused Provider Sessions/Providers boundary tests. Delivery contract: loop implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts are resolved, the PR is merged, and only then complete Factory work.",
+        "changedPathLease": [
+          "pkg/services/provider_sessions/** (consumer Providers-edge call sites only)",
+          "exclude pkg/services/provider_sessions/service fold/delete",
+          "exclude pkg/wire",
+          "exclude pkg/services/providers/** except through Providers root contract imports",
+          "exclude pkg/services/automations/**",
+          "exclude pkg/services/recordings/**"
+        ],
+        "acceptanceCriteria": [
+          "Provider Sessions production code imports Providers only through the Providers service root contract",
+          "No new Provider Sessions imports of Providers/Workers provider implementation packages",
+          "Focused tests prove Providers request construction through the root boundary",
+          "Typecheck, lint, and tests pass; required CI green; PR merged before Factory completion"
+        ]
+      }
+    },
+    {
+      "name": "planner-loopback-rec-pses-cuts",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Meta-planner follow-up after Recordings and Provider Sessions CUT edges",
+        "sourcePath": "docs/temp/meta.md",
+        "requestedOutcome": "After CUT-REC-RUN, CUT-REC-WRK, and CUT-PSES-PROV reach Factory complete, reconcile queue/session evidence and Automations fold/DEL progress. Prefer admitting Recordings and/or Provider Sessions fold→DEL vertical chunks only when the shared pkg/wire Automations construction lease is free. Otherwise refill other lease-disjoint CUTs or gated Phase-3 work. Do not invent horizontal adapters for owners that are already adapter-complete."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-rec-pses-cuts",
+      "targetWorkName": "pss-cut-rec-run",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-rec-pses-cuts",
+      "targetWorkName": "pss-cut-rec-wrk",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-rec-pses-cuts",
+      "targetWorkName": "pss-cut-pses-prov",
+      "requiredState": "complete"
+    }
+  ]
+}

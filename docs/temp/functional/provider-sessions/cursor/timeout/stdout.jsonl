@@ -1,3 +1,0 @@
-{"type":"system","subtype":"init","session_id":"session_fixture_cursor_timeout"}
-{"type":"assistant","timestamp_ms":1,"message":{"role":"assistant","content":[{"type":"text","text":"working"}]},"session_id":"session_fixture_cursor_timeout"}
-{"type":"result","subtype":"error","is_error":true,"result":"deadline exceeded while waiting for Cursor","session_id":"session_fixture_cursor_timeout"}

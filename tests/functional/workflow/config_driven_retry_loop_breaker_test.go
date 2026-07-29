@@ -78,3 +78,12 @@ func assertPublicDispatchRoute(t *testing.T, events []factoryapi.FactoryEvent, t
 		t.Fatalf("public events missing transition %s before terminal place %s", transitionID, toPlaceID)
 	}
 }
+
+func assertWorkflowSessionPlaces(t *testing.T, listed factoryapi.ListWorkResponse, wants map[string]int) {
+	t.Helper()
+	for placeID, want := range wants {
+		if got := support.CountWorkAtCustomerState(listed, placeID); got != want {
+			t.Errorf("%s token count = %d, want %d", placeID, got, want)
+		}
+	}
+}

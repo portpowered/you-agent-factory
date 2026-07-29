@@ -1,0 +1,57 @@
+{
+  "requestId": "packaged-service-structure-imp-mod-rec-wave-20260725",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "pss-imp-mod-01-runtime-scopes",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "PSS IMP-MOD-01: make Models runtime scopes an opaque, lifecycle-safe service",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "currentProgress": [
+          "CTR-MOD was accepted in PR #1271 and CTR-SES in PR #1269; both are merged on main.",
+          "The published Models root slice owns runtime-scope contracts, while Factory Sessions owns identity/opening boundaries.",
+          "This packet has the exclusive target lease pkg/services/models/internal/services/runtime_scopes and must not broaden into catalog, assets, host, inference, Wire, CLI, HTTP, OpenAPI, or generated-contract work."
+        ],
+        "requestedOutcome": "Implement IMP-MOD-01 as one narrow observable vertical slice: opaque Models runtime scopes can be opened and closed through the accepted root contracts and bindings; stale or foreign scopes are rejected deterministically; construction remains inert with no deferred service construction. Add focused behavior and boundary evidence, preserve existing public behavior, and run relevant package/boundary tests."
+      }
+    },
+    {
+      "name": "pss-imp-rec-02-projection-query",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "PSS IMP-REC-02: make Recordings projection queries deterministic across live and replay",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "currentProgress": [
+          "CTR-REC was accepted in PR #1280 and is merged on main.",
+          "The Recordings root contract publishes the projection-query slice and retains canonical event ownership.",
+          "This packet has the exclusive target lease pkg/services/recordings/internal/services/projection_query and must not modify shared event vocabulary, runtime orchestration, visualization live projection, Wire, HTTP, CLI, OpenAPI, or generated artifacts."
+        ],
+        "requestedOutcome": "Implement IMP-REC-02 as one narrow observable vertical slice: deterministic projection queries reduce canonical recordings so live state equals replayed state, and reconnect cursors are handled predictably. Keep projection/query implementation private behind the accepted Recordings root contract, add focused live-versus-replay and reconnect-cursor evidence, and run relevant package/boundary tests."
+      }
+    },
+    {
+      "name": "packaged-service-structure-imp-mod-rec-wave-loopback",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Reconcile Models and Recordings owner-local implementation wave",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/checklist.md",
+        "requestedOutcome": "After both IMP-MOD-01 and IMP-REC-02 reach complete, inspect their reviews, changed paths, tests, queue health, and portfolio contention before deciding whether to release their successors or revise the PSS plan."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "packaged-service-structure-imp-mod-rec-wave-loopback",
+      "targetWorkName": "pss-imp-mod-01-runtime-scopes",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "packaged-service-structure-imp-mod-rec-wave-loopback",
+      "targetWorkName": "pss-imp-rec-02-projection-query",
+      "requiredState": "complete"
+    }
+  ]
+}

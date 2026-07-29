@@ -1,0 +1,136 @@
+{
+  "requestId": "planner-wave-settings-adapters-20260727",
+  "type": "FACTORY_REQUEST_BATCH",
+  "currentChainingTraceId": "trace-planner-wave-settings-adapters-20260727",
+  "works": [
+    {
+      "name": "pss-http-set-adapter",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "PSS HTTP-SET: package Settings owner-local HTTP adapter",
+        "program": "Packaged Service Structure",
+        "packetId": "HTTP-SET",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "priority": "P1 backend Settings transport adapter",
+        "dependsOnEvidence": [
+          "CTR-SET accepted (PR #1454 / 6b859170d)",
+          "IMP-SET-01 accepted (PR #1458 / 62114d793); IMP-SET-02 accepted (PR #1459)",
+          "LWR-SET accepted: PR #1505 merged; Factory idea/plan/task/review complete",
+          "HTTP-SES/HTTP-DEF/HTTP-REC/HTTP-VIS/HTTP-AUTO/HTTP-MOD/HTTP-WORK may be live or terminal; stay on Settings HTTP paths only"
+        ],
+        "changedPathOwnership": [
+          "pkg/services/operator_settings/transports/http/** or the owner-local Settings HTTP adapter path",
+          "focused fake-root parity for mapping, typed errors, and cancel/timeout behavior",
+          "shared coverage/ownership/package-target manifests only as required by adapter package registration"
+        ],
+        "excludePaths": [
+          "api/openapi-main.yaml and api/components/** shared OpenAPI authorship",
+          "generated OpenAPI/Go/TS clients except unavoidable regenerations owned by a later PSS-I02 fan-in",
+          "pkg/wire",
+          "pkg/root",
+          "pkg/initializer",
+          "top-level CLI root/manifest composition (PSS-I03)",
+          "other services' HTTP adapters",
+          "CLI-SET / MCP-SET adapter paths",
+          "reopening IMP-SET / LWR-SET ownership",
+          "CUT-SET-PROV / Settings fold/DEL"
+        ],
+        "requestedOutcome": "Implement HTTP-SET as the Settings (operator_settings) service-owned HTTP adapter. Decode/map Settings HTTP requests through the accepted Settings root, translate typed errors, and prove fake-root parity for mapping and cancel/timeout behavior without importing Settings internals or owning canonical state. Do not author shared OpenAPI or perform PSS-I02 route/client fan-in. Do not edit pkg/wire, pkg/root, pkg/initializer, top-level CLI composition, or reopen Settings IMP/LWR ownership. Shared coverage, ownership, and package-target manifest edits are allowed and must be rebased through the merge loop. Explicitly loop through implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete the Factory work."
+      }
+    },
+    {
+      "name": "pss-cli-set-adapter",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "PSS CLI-SET: move Settings CLI behavior behind a service-owned adapter",
+        "program": "Packaged Service Structure / CLI package-structure migration",
+        "packetId": "CLI-SET",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "priority": "P1 CLI package-structure migration",
+        "dependsOnEvidence": [
+          "Schema-Driven CLI and Clean CLI UX are accepted complete; preserve their command/flag/error/output contract",
+          "CLI-BOOT and other owner-local CLI adapters establish the pattern; keep PSS-I03 top-level composition out of scope",
+          "LWR-SET accepted: PR #1505 merged; Factory idea/plan/task/review complete",
+          "you init / operator settings command behavior already exists; this packet moves it behind Settings-owned adapter injection"
+        ],
+        "changedPathOwnership": [
+          "pkg/services/operator_settings/transports/cli/** or the owner-local Settings CLI adapter path",
+          "focused command/output/exit/cancel parity through the injected Settings adapter",
+          "shared coverage/ownership/package-target manifests only as required by adapter package registration"
+        ],
+        "excludePaths": [
+          "top-level CLI root/manifest/Cobra composition (PSS-I03)",
+          "contracts/cli/commands.json authorship and shared CLI generation ownership beyond unavoidable adapter wiring",
+          "pkg/wire",
+          "pkg/root",
+          "pkg/initializer",
+          "other services' CLI adapters",
+          "HTTP-SET / MCP-SET adapter paths",
+          "reopening Schema-Driven CLI or Clean CLI UX design",
+          "reopening IMP-SET / LWR-SET ownership"
+        ],
+        "requestedOutcome": "Implement CLI-SET as the Settings service-owned CLI adapter. Move or complete Settings/init-adjacent command behavior behind an injected adapter over the accepted Settings root while preserving the accepted Schema-Driven/Clean CLI command, flag, error, output, and completion contract. Top-level Cobra/root/manifest composition remains out of scope. Do not edit pkg/wire, pkg/root, pkg/initializer, or reopen Settings IMP/LWR ownership. Shared coverage, ownership, and package-target manifest edits are allowed and must be rebased through the merge loop. Explicitly loop through implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete the Factory work."
+      }
+    },
+    {
+      "name": "pss-mcp-set-adapter",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "PSS MCP-SET: package Settings owner-local MCP adapter",
+        "program": "Packaged Service Structure",
+        "packetId": "MCP-SET",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "priority": "P1 backend Settings transport adapter",
+        "dependsOnEvidence": [
+          "CTR-SET and IMP-SET-01/02 accepted",
+          "LWR-SET accepted: PR #1505 merged; Factory idea/plan/task/review complete",
+          "MCP-SES/MCP-DEF/MCP-REC/MCP-MOD/MCP-RUN/MCP-VIS/MCP-WORK may be live or terminal; stay on Settings MCP paths only and do not touch PSS-I04 shared MCP registry fan-in"
+        ],
+        "changedPathOwnership": [
+          "pkg/services/operator_settings/transports/mcp/** or the owner-local Settings MCP adapter path",
+          "focused tool/request mapping and typed-error parity through the Settings root",
+          "shared coverage/ownership/package-target manifests only as required by adapter package registration"
+        ],
+        "excludePaths": [
+          "PSS-I04 shared MCP registry/server fan-in",
+          "pkg/wire",
+          "pkg/root",
+          "pkg/initializer",
+          "other services' MCP adapters",
+          "HTTP-SET / CLI-SET adapter paths",
+          "reopening IMP-SET / LWR-SET ownership"
+        ],
+        "requestedOutcome": "Implement MCP-SET as the Settings service-owned MCP adapter. Expose Settings operations through owner-local MCP tools/handlers over the accepted Settings root without importing Settings internals or owning canonical state. Do not perform PSS-I04 shared MCP registry fan-in. Do not edit pkg/wire, pkg/root, pkg/initializer, or reopen Settings IMP/LWR ownership. Shared coverage, ownership, and package-target manifest edits are allowed and must be rebased through the merge loop. Explicitly loop through implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete the Factory work."
+      }
+    },
+    {
+      "name": "planner-loopback-settings-adapters",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Meta-planner follow-up after Settings HTTP/CLI/MCP adapter wave",
+        "sourcePath": "docs/temp/customer-ask.md",
+        "requestedOutcome": "After HTTP-SET, CLI-SET, and MCP-SET reach Factory complete, reconcile queue/session/PR/CI evidence and repair any stranded merged tasks. Prefer lease-disjoint vertical CUT/fold/DEL for adapter-complete owners (Vis CUT-VIS-RUN/CUT-VIS-REC, Sessions CUT-SES-WORK/CUT-SES-WRK, Settings CUT-SET-PROV/BOOT-SET only when leases are free). Hold IMP-PROV-04 while IMP-PROV-03 is non-terminal; hold LWR-PROV and provider protocol adapters until concrete IMP-PROV groups clear; hold Workers fold/DEL while Automations owns pkg/wire or PROV-03 owns workers/provider. Refill maximum safe throughput toward executor-slot capacity 16 from the live ready set without inventing WRK protocol adapters or reopening accepted CLI UX."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-settings-adapters",
+      "targetWorkName": "pss-http-set-adapter",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-settings-adapters",
+      "targetWorkName": "pss-cli-set-adapter",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-settings-adapters",
+      "targetWorkName": "pss-mcp-set-adapter",
+      "requiredState": "complete"
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "requestId": "pss-workers-script-runner-20260726",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "pss-imp-wrk-05-script-runner",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "Migrate script execution behind the private Workers Runner contract",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "currentProgress": [
+          "IMP-WRK-01 runtime assembly, IMP-WRK-02 workstation routing/capacity, and IMP-WRK-03 runner registry/conformance are terminal and accepted in the Factory.",
+          "The accepted Workers parent exposes one Runner-neutral request/result contract and keeps its registry and implementations private under pkg/services/workers/internal/services/runners.",
+          "Legacy script execution remains spread across pkg/services/workers/executor/script.go, pkg/services/workers/services/scripts, process-command seams, and aggregate provider-oriented functional tests.",
+          "The active schema-cli-clean-run-server-lifecycle task owns CLI manifest, command registry, root-work, run configuration, and lifecycle paths; this packet must remain disjoint from that lease.",
+          "The Providers root is not yet accepted, so agent/provider runner migration remains gated; the script runner has no Providers prerequisite and is the smallest dependency-ready Workers successor."
+        ],
+        "requestedOutcome": "Implement IMP-WRK-05 as the parent-private script Runner under pkg/services/workers/internal/services/runners/internal/services/script. Adapt the existing script command behavior to the accepted common Workers Runner contract and registry without creating a peer-facing script service or a second execution contract. Preserve deterministic command/argument/template resolution, explicit working directory and environment precedence, ordered progress and partial stdout/stderr diagnostics, canonical success/failure results, context cancellation, timeout and process-tree cleanup, and caller-owned data isolation. Register and resolve the script strategy through the private immutable runner registry and prove it with the accepted reusable runner conformance kit plus focused command-edge tests. Keep process/filesystem effects injected; construction and registry resolution must remain inert. Retire or narrow only script-specific legacy facades after behavioral parity is proven. Do not change provider adapters, provider catalog/conductor/session behavior, model runtime, hosted/agent/inference runner implementations, OpenAPI or generated API artifacts, CLI manifests/root/run/server behavior, pkg/root, pkg/wire, pkg/initializer, UI code, or broad functional-test topology. Any minimal Workers-root vocabulary addition must remain Runner-neutral, typed, detached, and backward-compatible. Require focused unit/integration tests, cancellation and timeout/process cleanup proof, race-safe result behavior where applicable, gofmt, vet/lint, architecture/ownership checks, and the narrow existing script functional evidence."
+      }
+    },
+    {
+      "name": "pss-workers-script-runner-loopback",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Reassess Workers runner leaves after script migration",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "requestedOutcome": "Review the accepted IMP-WRK-05 implementation, Factory review, changed paths, tests and CI, then reconcile the queue and choose the next owner-disjoint Workers runner or workstation integration slice. Do not automatically advance: keep IMP-WRK-04 gated until the Providers root is accepted, and compare inference, hosted, Factory Runtime dispatch planning, and Factory Session runtime opening against current ownership evidence."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "pss-workers-script-runner-loopback",
+      "targetWorkName": "pss-imp-wrk-05-script-runner",
+      "requiredState": "complete"
+    }
+  ]
+}

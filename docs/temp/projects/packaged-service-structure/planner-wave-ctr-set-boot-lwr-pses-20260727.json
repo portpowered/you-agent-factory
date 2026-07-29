@@ -1,0 +1,99 @@
+{
+  "requestId": "planner-wave-ctr-set-boot-lwr-pses-20260727",
+  "type": "FACTORY_REQUEST_BATCH",
+  "currentChainingTraceId": "trace-planner-wave-ctr-set-boot-lwr-pses-20260727",
+  "works": [
+    {
+      "name": "pss-ctr-set-root-contract",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "PSS CTR-SET: publish the Operator Settings root contract",
+        "program": "Packaged Service Structure",
+        "packetId": "CTR-SET",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "priority": "P0 backend Settings contract",
+        "dependsOnEvidence": [
+          "Schema-Driven CLI and Clean CLI UX are accepted complete; Clean CLI ownership no longer blocks CTR-SET",
+          "CTR-PROV accepted (PR #1350 / dd63993ea) so later IMP-SET-02 can consume Providers without forking settings contracts"
+        ],
+        "changedPathOwnership": [
+          "pkg/services/operator_settings root contracts and characterization tests",
+          "focused fake-peer proof for document operations and effective resolution seams",
+          "shared coverage/ownership/package-target manifests only as required by new package registration"
+        ],
+        "requestedOutcome": "Publish the singular Operator Settings root contract covering document operations and effective resolution without relocating implementation packages yet. Characterize the slice, prove a fake peer can implement it, and keep implementation/storage/lifecycle types out of the root surface. Do not admit IMP-SET-* in this packet. Do not redesign Clean CLI UX or regenerate CLI manifests merely because Settings contracts appear. Shared coverage, ownership, and package-target manifest edits are allowed. Explicitly loop through implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete the Factory work."
+      }
+    },
+    {
+      "name": "pss-ctr-boot-root-contract",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "PSS CTR-BOOT: publish the System Bootstrap root contract",
+        "program": "Packaged Service Structure",
+        "packetId": "CTR-BOOT",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "priority": "P0 backend Bootstrap contract",
+        "dependsOnEvidence": [
+          "Schema-Driven CLI and Clean CLI UX are accepted complete; public you init ownership is settled",
+          "CTR-DEF accepted (#1277) so later IMP-BOOT-01 can depend on Definitions without forking bootstrap contracts"
+        ],
+        "changedPathOwnership": [
+          "pkg/services/system_initialization root contracts and characterization tests",
+          "focused fake-peer proof for initialize request/result and rollback-fact seams",
+          "shared coverage/ownership/package-target manifests only as required by new package registration"
+        ],
+        "requestedOutcome": "Publish the singular System Bootstrap root contract covering initialize request/result and rollback facts without relocating implementation packages yet. Characterize the slice, prove a fake peer can implement it, and keep implementation/storage/lifecycle types out of the root surface. Do not admit IMP-BOOT-01 in this packet. Do not reopen Clean CLI init UX or top-level CLI composition beyond what contract publication requires. Shared coverage, ownership, and package-target manifest edits are allowed. Explicitly loop through implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete the Factory work."
+      }
+    },
+    {
+      "name": "pss-lwr-pses-service-wire",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "PSS LWR-PSES: package Provider Sessions service-local Wire",
+        "program": "Packaged Service Structure",
+        "packetId": "LWR-PSES",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "priority": "P1 backend Provider Sessions composition",
+        "dependsOnEvidence": [
+          "CTR-PSES accepted",
+          "IMP-PSES-01 accepted (PR #1419); IMP-PSES-02 accepted (PR #1418); both Factory idea/task/review complete"
+        ],
+        "changedPathOwnership": [
+          "pkg/services/provider_sessions/wire/** or the owner-local Provider Sessions Wire composition path",
+          "focused inert construction proof that returns only the Provider Sessions root interface and starts nothing",
+          "shared coverage/ownership/package-target manifests only as required by Wire package registration"
+        ],
+        "requestedOutcome": "Implement LWR-PSES as the Provider Sessions service-local Wire packet. Compose the accepted Provider Sessions root from parent-private readers through an inert Wire path that returns only the root interface and starts no lifecycle. Do not edit pkg/wire, pkg/root, pkg/initializer, OpenAPI generation, CLI root/manifest composition, or other services' Wire. Do not expand into HTTP/CLI/MCP adapters. Shared coverage, ownership, and package-target manifest edits are allowed. Explicitly loop through implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete the Factory work."
+      }
+    },
+    {
+      "name": "planner-loopback-ctr-set-boot-lwr-pses",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Meta-planner follow-up after CTR-SET, CTR-BOOT, and LWR-PSES",
+        "sourcePath": "docs/temp/customer-ask.md",
+        "requestedOutcome": "Reconcile queue/session/PR evidence after CTR-SET, CTR-BOOT, and LWR-PSES complete. Prefer IMP-SET-01 after CTR-SET, IMP-BOOT-01 only after CTR-BOOT plus CTR-SET, IMP-PROV-04 only after terminal IMP-PROV-03, IMP-MOD-06 only after terminal IMP-MOD-05, IMP-WORK-03 only after accepted IMP-WORK-02, and IMP-VIS-* only after accepted CTR-VIS. Refill remaining free executor slots with dependency-ready lease-disjoint packets; hold IMP-WRK-07 while hosted_logic remains polling-only."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-ctr-set-boot-lwr-pses",
+      "targetWorkName": "pss-ctr-set-root-contract",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-ctr-set-boot-lwr-pses",
+      "targetWorkName": "pss-ctr-boot-root-contract",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-ctr-set-boot-lwr-pses",
+      "targetWorkName": "pss-lwr-pses-service-wire",
+      "requiredState": "complete"
+    }
+  ]
+}

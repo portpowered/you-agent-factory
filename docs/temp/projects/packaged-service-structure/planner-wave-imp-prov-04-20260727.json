@@ -1,0 +1,79 @@
+{
+  "requestId": "planner-wave-imp-prov-04-20260727",
+  "type": "FACTORY_REQUEST_BATCH",
+  "currentChainingTraceId": "trace-planner-wave-imp-prov-04-20260727",
+  "works": [
+    {
+      "name": "pss-imp-prov-04-cursor-opencode-adapters",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "PSS IMP-PROV-04: migrate Cursor and OpenCode into Providers-owned execution adapters",
+        "program": "Packaged Service Structure / Standardized Providers",
+        "packetId": "IMP-PROV-04",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "priority": "P0 serialized concrete provider adapter group after terminal IMP-PROV-03",
+        "dependsOnEvidence": [
+          "IMP-PROV-02 accepted: Providers Execution registry/conductor absorbed (PR #1385)",
+          "IMP-PROV-03 Codex/Claude adapters Factory-terminal: idea/plan/task/review complete; PR #1427 merged as ae0c9baa48",
+          "Adapter groups remain serial: do not start IMP-PROV-05/06 or LWR-PROV in this packet",
+          "IMP-PSES-02 Cursor reader is historical-session ownership and must not be reopened as live execution work"
+        ],
+        "changedPathOwnership": [
+          "pkg/services/providers/internal/services/execution/** private Cursor and OpenCode adapter modules",
+          "Providers execution registry bindings for Cursor and OpenCode catalog identities",
+          "focused Providers conformance plus root.BuildProcess functional evidence for Cursor/OpenCode",
+          "deletion of only aggregate legacy Cursor/OpenCode execution branches actually superseded by this cutover",
+          "shared coverage/ownership/package-target manifests only as required by adapter registration and legacy deletion"
+        ],
+        "excludePaths": [
+          "IMP-PROV-05 Gemini/Kiro/Pi adapter paths",
+          "IMP-PROV-06 Agy/PTY adapter paths",
+          "LWR-PROV and Providers HTTP/CLI/MCP protocol adapters",
+          "pkg/wire, pkg/root, pkg/initializer",
+          "top-level CLI root/manifest/Cobra composition (PSS-I03)",
+          "authored OpenAPI and generated clients except unavoidable regenerations owned by a later PSS-I02 fan-in",
+          "Provider Sessions Codex/Cursor reader packages (IMP-PSES-01/02)",
+          "Automations fold/DEL and Recordings/PSES fold/DEL",
+          "Workers fold/DEL and IMP-WRK-07",
+          "Factory Runtime durability (IMP-RUN-04)"
+        ],
+        "objective": "Deliver the next serialized concrete provider adapter group after accepted IMP-PROV-03. Move Cursor and OpenCode live execution behind private Providers Execution adapters that implement the accepted Providers root protocol and shared conformance suite. Preserve observable invocation, streaming/final-result, negotiation/fallback where applicable, cancellation, timeout, safe diagnostics, provider-session reference, and failure behavior while deleting only the superseded Cursor/OpenCode legacy branches.",
+        "scope": [
+          "Use pkg/services/providers as the standalone owner and keep concrete implementations parent-private under Execution.",
+          "Cursor and OpenCode each load identity/capability metadata from the Providers-owned catalog and register through the accepted execution registry.",
+          "Preserve Cursor Windows prompt/stream/session/failure behavior and OpenCode negotiation/fallback/decode/session/failure behavior with observable parity.",
+          "Prove canonical request mapping, ordered progress/tool/message drafts, exactly one terminal result, cancellation/timeout normalization, safe diagnostics, and provider-session metadata through shared conformance and focused functional tests entered through root.BuildProcess.",
+          "Delete only Cursor/OpenCode aggregate execution, decoding, failure, timeout, and session branches that are actually replaced; do not add a new provider switch or duplicate catalog.",
+          "Do not edit top-level CLI/Cobra composition, authored OpenAPI/generation, Packaged Factory catalog ownership, Provider Sessions readers, Models, Automations wire folds, or unrelated providers (Gemini/Kiro/Pi/Agy).",
+          "Treat shared coverage, ownership, and package-target manifest churn as accepted integration work; rebase and reconcile it through delivery."
+        ],
+        "acceptanceCriteria": [
+          "Cursor and OpenCode execute only through their Providers-owned private adapters and the accepted Providers execution registry.",
+          "Each adapter passes the shared provider conformance protocol plus focused public functional tests entered through root.BuildProcess.",
+          "Streaming, final selection, tool correlation, negotiation/fallback where applicable, cancellation, timeout, normalized failures, and detached Provider Session references retain observable parity.",
+          "No shared orchestration switch gains a Cursor or OpenCode case, and replaced legacy branches are removed in the same slice.",
+          "Required focused tests, package-boundary/file-count checks, relevant functional gates, and repository verification pass."
+        ],
+        "deliveryContract": "Continue the implementation and review loop until every required CI check is terminal and passing, every blocking PR conversation comment is addressed, merge conflicts are resolved, and the PR is merged. Only then may Factory work complete. Opening a PR, making it review-ready, or obtaining green CI without merge is not completion. Shared-file churn is not an admission blocker; rebase and reconcile shared files as part of this delivery loop.",
+        "requestedOutcome": "Implement IMP-PROV-04 by migrating Cursor and OpenCode live execution into parent-private Providers Execution adapters bound through the accepted catalog-backed execution registry. Preserve observable Cursor and OpenCode request, stream, negotiation/fallback, tool/message correlation, final-result, cancellation, timeout, diagnostics, failure, and detached Provider Session reference behavior. Remove only aggregate legacy Cursor/OpenCode branches superseded by the cutover. Do not admit IMP-PROV-05/06, LWR-PROV, Workers fold/DEL, Automations/Recordings/PSES wire folds, OpenAPI fan-in, or PSS-I03. Explicitly loop through implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete the Factory work."
+      }
+    },
+    {
+      "name": "planner-loopback-imp-prov-04",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Reconcile IMP-PROV-04 Cursor/OpenCode adapters",
+        "objective": "Re-enter the meta-planner only after IMP-PROV-04 is terminal. First reconcile failed, blocked, stranded, recoverable, or duplicate work. Inspect implementation, changed paths, tests, exact-head CI, blocking PR conversations, conflicts, merge evidence, queue/session health, Automations pkg/wire lease, Runtime CUT leases, and current customer/program plans. Then explicitly proceed, revise/split/reorder, submit a newly discovered batch, or hold. Do not advance a prewritten queue solely because this loopback fired. Keep concrete provider adapter groups serialized: do not admit IMP-PROV-05 until IMP-PROV-04 is terminal; hold LWR-PROV while concrete IMP-PROV adapter groups remain non-terminal.",
+        "requestedOutcome": "After pss-imp-prov-04-cursor-opencode-adapters reaches Factory complete, reconcile queue/session/PR/CI evidence and repair any stranded merged tasks. Prefer IMP-PROV-05 only after IMP-PROV-04 is terminal; hold LWR-PROV while later adapter groups remain open; admit Recordings/PSES fold→DEL only after Automations DEL clears pkg/wire; hold CUT-VIS-RUN while Runtime CUTs/CLN remain live; hold CUT-SES-WRK / Workers fold while Sessions/Workers Runtime CUT or Automations wire leases overlap; hold IMP-WRK-07 / IMP-RUN-04 / PSS-I0*. Refill maximum safe throughput toward executor-slot capacity 16 from the live ready set."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-imp-prov-04",
+      "targetWorkName": "pss-imp-prov-04-cursor-opencode-adapters",
+      "requiredState": "complete"
+    }
+  ]
+}

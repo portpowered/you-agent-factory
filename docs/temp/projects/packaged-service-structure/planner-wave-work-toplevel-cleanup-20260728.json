@@ -1,0 +1,284 @@
+{
+  "requestId": "planner-wave-work-toplevel-cleanup-20260728",
+  "type": "FACTORY_REQUEST_BATCH",
+  "currentChainingTraceId": "trace-planner-wave-work-toplevel-cleanup-20260728",
+  "works": [
+    {
+      "name": "pss-inv-work-toplevel",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "INV-WORK-TOPLEVEL: inventory and remap Work unexpected top-level debt",
+        "program": "Packaged Service Structure",
+        "packetId": "INV-WORK-TOPLEVEL",
+        "sourcePath": "docs/temp/customer-ask.md",
+        "currentProgress": [
+          "Work IMP-WORK-01..04, LWR-WORK, and HTTP/CLI/MCP-WORK adapters are Factory-terminal.",
+          "CUT-WORK-REC is Factory-terminal; CUT-SES-WORK may still be live but is a Sessions consumer edge, not Work-internal fold ownership.",
+          "Live pkg/services/work still has unexpected top-level dirs beside wire/, internal/, and transports/: service/ and stateaccessrecordings/ (plus testdata/ if INV treats it as non-canonical public debt).",
+          "package-target-manifest already marks work/service move→work/internal and work/stateaccessrecordings move→work/internal/services/state_access, but the public packages still exist and must be inventoried/confirmed before fold.",
+          "Work root still hosts a large excess .go contract/helper cluster (arguments, dependency_graph, request_*, primary_result, query_*, lineage, visualization helpers, etc.) beyond a thin root contract."
+        ],
+        "requestedOutcome": "Inventory every live top-level child under pkg/services/work/ and every root-level contract surface that is not the committed thin Work root contract. Confirm or correct package-target-manifest and ownership-inventory dispositions for service/ and stateaccessrecordings/ (and any other INV discovers excluding wire/, internal/, transports/, and legitimate testdata if retained as test-only) to disposition move or delete with explicit destinations under work/internal or work/internal/services/{content_staging,content_materialization,state_access}. Remap excess root .go contract clusters as fold/consolidation targets into thin root + private subservices. Regenerate package-target + ownership inventories. Prove with generator/unit tests that retain→work is rejected for unexpected public siblings. Do not fold or delete packages in this packet. Do not invent Work protocol adapters or reopen accepted Schema-Driven/Clean CLI UX. Delivery contract: loop implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete Factory work.",
+        "changedPathLease": [
+          "cmd/packagetargetmanifestcheck/**",
+          "internal/ownershipinventory/**",
+          "docs/internal/packaged-service-structure/package-target-manifest.json",
+          "docs/internal/baselines/ownership-inventory.json",
+          "docs/internal/baselines/package-structure-baseline.json only if inventory rows must change",
+          "exclude package folds/deletes under pkg/services/work/**",
+          "exclude Work HTTP/CLI/MCP adapter invention",
+          "exclude Schema-Driven/Clean CLI UX reopen"
+        ],
+        "acceptanceCriteria": [
+          "Every unexpected Work top-level package is move or delete with an explicit destination (not retain→work)",
+          "Destinations name work/internal or work/internal/services/{content_staging,content_materialization,state_access} (or INV-recorded equivalents)",
+          "Excess root .go contract clusters are inventoried as fold/consolidation targets into thin root + private subservices",
+          "Generator/unit tests lock the new mapping and reject retain on those siblings",
+          "Typecheck, lint, and required CI are terminal green; PR merged before Factory completion"
+        ],
+        "antiPatterns": [
+          "Leaving disposition retain on unexpected Work top-level packages",
+          "Folding or deleting Work packages in the inventory packet",
+          "Inventing Work protocol adapters or reopening accepted CLI UX",
+          "Treating existing internal/services/* presence as proof that public siblings are already migrated",
+          "Editing unrelated owners under this inventory lease"
+        ]
+      }
+    },
+    {
+      "name": "pss-cln-work-fold-service",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "CLN-WORK-FOLD-SERVICE: fold work/service into internal",
+        "program": "Packaged Service Structure",
+        "packetId": "CLN-WORK-FOLD-SERVICE",
+        "sourcePath": "docs/temp/customer-ask.md",
+        "currentProgress": [
+          "INV-WORK-TOPLEVEL remaps work/service as move→work/internal (or the destination INV records).",
+          "Public pkg/services/work/service remains a transitional composed root beside wire/ and internal/.",
+          "work/wire and root pkg/wire may still construct through transitional Work surfaces; shared pkg/wire churn is reconciled in the PR merge loop, not a planner hold."
+        ],
+        "requestedOutcome": "Fold transitional pkg/services/work/service implementation into pkg/services/work/internal (keeping planned parent-private subservices under internal/services/{content_staging,content_materialization,state_access}). Retarget work/wire so it is the sole public construction bridge returning the Work root from internal implementation. Retarget the narrow root pkg/wire Work construction call away from work/service so it uses work/wire only. Prefer zero remaining production imports of work/service. Do not delete the emptied path yet (DEL-WORK). Do not fold stateaccessrecordings in this packet (CLN-WORK-LEGACY-PACKAGES). Do not invent Work protocol adapters or reopen accepted CLI UX. Prove with focused Work root-contract and behavioral proofs that observable Work admission/query/content/state-access behavior is preserved. Delivery contract: loop implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn (including pkg/wire) are reconciled, the PR is merged, and only then complete Factory work.",
+        "changedPathLease": [
+          "pkg/services/work/service/**",
+          "pkg/services/work/internal/**",
+          "pkg/services/work/wire/**",
+          "pkg/wire Work construction only",
+          "shared coverage/ownership/package-target manifests as required by the fold",
+          "exclude stateaccessrecordings package moves (later CLN)",
+          "exclude Work protocol adapter invention"
+        ],
+        "acceptanceCriteria": [
+          "work/wire constructs the Work root from internal implementation without exporting internal types on the peer surface",
+          "Root pkg/wire no longer imports pkg/services/work/service",
+          "No production package outside the Work owner imports work/service",
+          "Observable Work admission/query/content/state-access behavior is preserved (behavioral)",
+          "Typecheck, lint, and required CI are terminal green; PR merged before Factory completion"
+        ],
+        "antiPatterns": [
+          "Facade wrappers that leave work/service as the real implementation",
+          "Claiming fold complete while production imports still hit work/service",
+          "Deleting work/service in this packet",
+          "Moving stateaccessrecordings under this service-fold lease",
+          "Holding the PR open waiting for another owner; rebase pkg/wire instead"
+        ]
+      }
+    },
+    {
+      "name": "pss-cln-work-legacy-packages",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "CLN-WORK-LEGACY-PACKAGES: fold Work public sibling packages",
+        "program": "Packaged Service Structure",
+        "packetId": "CLN-WORK-LEGACY-PACKAGES",
+        "sourcePath": "docs/temp/customer-ask.md",
+        "currentProgress": [
+          "INV-WORK-TOPLEVEL enumerates unexpected siblings stateaccessrecordings/ (and any INV discovers).",
+          "CLN-WORK-FOLD-SERVICE removes the composed service/ bridge; remaining siblings must move into the committed private tree."
+        ],
+        "requestedOutcome": "Move remaining unexpected Work top-level packages into the destinations recorded by INV-WORK-TOPLEVEL (work/internal/services/state_access for stateaccessrecordings, or INV-recorded equivalents). Retarget Work-owned callers and work/wire so production and peer packages stop importing those transitional public paths; peer consumers must use the Work service root contract only. Do not delete emptied public dirs yet (DEL-WORK). Do not invent Work protocol adapters or reopen accepted CLI UX. Prove with focused boundary/behavior tests that Work root behavior is preserved after the moves. Delivery contract: loop implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete Factory work.",
+        "changedPathLease": [
+          "pkg/services/work/stateaccessrecordings/** and any other INV-named unexpected siblings",
+          "pkg/services/work/wire/** composition",
+          "pkg/services/work/internal/services/state_access/** destination tree",
+          "peer import retargets only where they still reach those transitional Work paths",
+          "pkg/wire Work construction only if still required after fold",
+          "exclude Work protocol adapter invention",
+          "exclude DEL baseline deletion"
+        ],
+        "acceptanceCriteria": [
+          "Unexpected Work sibling packages no longer have production importers outside the recorded destinations",
+          "No external consumer imports work/stateaccessrecordings implementation packages",
+          "Work root behavioral proofs still pass",
+          "Typecheck, lint, and required CI are terminal green; PR merged before Factory completion"
+        ],
+        "antiPatterns": [
+          "Leaving transitional siblings as retain",
+          "Deleting packages in this fold packet",
+          "Inventing Work protocol adapters or reopening accepted CLI UX",
+          "Meta-only inventory tests without behavioral Work proofs"
+        ]
+      }
+    },
+    {
+      "name": "pss-cln-work-contract-roots",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "CLN-WORK-CONTRACT-ROOTS: consolidate excess Work root contracts",
+        "program": "Packaged Service Structure",
+        "packetId": "CLN-WORK-CONTRACT-ROOTS",
+        "sourcePath": "docs/temp/customer-ask.md",
+        "currentProgress": [
+          "INV-WORK-TOPLEVEL enumerates excess Work root .go contract/helper clusters beyond the thin public root.",
+          "Private subservices already exist under work/internal/services/{content_staging,content_materialization,state_access}."
+        ],
+        "requestedOutcome": "Consolidate INV-named excess Work root contract/helper implementation into thin Work root contracts plus parent-private subservices under work/internal/services/*. Keep only the committed thin public Work root surface at pkg/services/work. Do not delete emptied transitional dirs yet when DEL-WORK owns deletion. Do not invent Work protocol adapters. Prove with root-contract and behavioral tests that public Work operations remain equivalent. Delivery contract: loop implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete Factory work.",
+        "changedPathLease": [
+          "pkg/services/work/*.go root contract/helper files named by INV",
+          "pkg/services/work/internal/** destinations for consolidated helpers",
+          "pkg/services/work root contract characterization tests",
+          "exclude Work protocol adapter invention",
+          "exclude deleting emptied service/stateaccessrecordings dirs (DEL-WORK)"
+        ],
+        "acceptanceCriteria": [
+          "Work public root is limited to the thin committed contract surface plus tests",
+          "Excess helper/implementation clusters live under internal/services/* destinations",
+          "Public Work behavioral proofs still pass",
+          "Typecheck, lint, and required CI are terminal green; PR merged before Factory completion"
+        ],
+        "antiPatterns": [
+          "Leaving large implementation bodies on the public Work root after claiming thin-root complete",
+          "Deleting service/ or stateaccessrecordings in this contract-roots packet",
+          "Inventing Work protocol adapters",
+          "Broad functional-test topology rewrites unrelated to Work root consolidation"
+        ]
+      }
+    },
+    {
+      "name": "pss-del-work",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "DEL-WORK: delete emptied Work transitional top-level packages",
+        "program": "Packaged Service Structure",
+        "packetId": "DEL-WORK",
+        "sourcePath": "docs/temp/customer-ask.md",
+        "currentProgress": [
+          "CLN-WORK-FOLD-SERVICE, CLN-WORK-LEGACY-PACKAGES, and CLN-WORK-CONTRACT-ROOTS have moved implementation out of transitional public Work siblings.",
+          "Emptied work/service and work/stateaccessrecordings (and any INV-named emptied siblings) remain only as delete targets."
+        ],
+        "requestedOutcome": "Delete emptied transitional Work top-level packages named by INV/CLN (at minimum work/service and work/stateaccessrecordings when empty). Update package-structure baselines, ownership inventory, and package-target rows so deleted paths cannot reappear as retain debt. Prove with packaged root-shape and import-boundary tests that Work root children are only wire/, internal/, transports/ (plus legitimate testdata if retained). Do not delete internal/services/* private subservices. Do not invent Work protocol adapters. Prefer leaving FUN-work as a follow-on packet after DEL Factory-complete rather than bundling public-process proof here. Delivery contract: loop implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete Factory work.",
+        "changedPathLease": [
+          "pkg/services/work/service/** deletion only when emptied",
+          "pkg/services/work/stateaccessrecordings/** deletion only when emptied",
+          "docs/internal baselines/package-target/ownership rows for deleted Work paths",
+          "pkg/services/work packaged root-shape / import-boundary tests",
+          "exclude deleting work/internal/services/*",
+          "exclude FUN-work public-process proof expansion beyond root-shape locks",
+          "exclude Work protocol adapter invention"
+        ],
+        "acceptanceCriteria": [
+          "Emptied transitional Work public siblings are deleted from the tree",
+          "Baselines/inventories no longer reintroduce retain debt for deleted paths",
+          "Packaged Work root shape is wire/, internal/, transports/ (+ legitimate testdata if retained)",
+          "make pkg-structure / ownership checks pass with reduced debt",
+          "Typecheck, lint, and required CI are terminal green; PR merged before Factory completion"
+        ],
+        "antiPatterns": [
+          "Deleting internal/services/* private subservices",
+          "Marking DEL complete while importers of deleted paths remain",
+          "Leaving baseline rows that reintroduce retain debt",
+          "Bundling FUN-work public-process proof into DEL without explicit FUN packet when still required"
+        ]
+      }
+    },
+    {
+      "name": "planner-loopback-work-toplevel-cleanup",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Meta-planner follow-up after Work top-level cleanup wave",
+        "sourcePath": "docs/temp/customer-ask.md",
+        "requestedOutcome": "After INV-WORK-TOPLEVEL, CLN-WORK-FOLD-SERVICE, CLN-WORK-LEGACY-PACKAGES, CLN-WORK-CONTRACT-ROOTS, and DEL-WORK reach Factory complete, reconcile inventories and changed paths. Prefer FUN-work when prerequisites are clear. Prefer remaining WRK/REC/PSES/SET/RUN CLN/DEL progress and FUN-models/FUN-visualization when those owners are adapter-complete and shaped. Hold CUT-RUN-REC while Runtime CLN-RUN-FOLD-SERVICE/ENGINE own factory_runtime implementation leases. Hold IMP-PROV-05/06 / LWR-PROV while IMP-PROV-04 is non-terminal; hold IMP-WRK-07 while hosted_logic remains polling-only; hold PSS-I0*. Do not invent WRK protocol adapters or reopen accepted CLI UX. Refill maximum safe throughput toward executor-slot capacity 16 from the live ready set."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "pss-cln-work-fold-service",
+      "targetWorkName": "pss-inv-work-toplevel",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "pss-cln-work-legacy-packages",
+      "targetWorkName": "pss-inv-work-toplevel",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "pss-cln-work-legacy-packages",
+      "targetWorkName": "pss-cln-work-fold-service",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "pss-cln-work-contract-roots",
+      "targetWorkName": "pss-inv-work-toplevel",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "pss-cln-work-contract-roots",
+      "targetWorkName": "pss-cln-work-legacy-packages",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "pss-del-work",
+      "targetWorkName": "pss-cln-work-fold-service",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "pss-del-work",
+      "targetWorkName": "pss-cln-work-legacy-packages",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "pss-del-work",
+      "targetWorkName": "pss-cln-work-contract-roots",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-work-toplevel-cleanup",
+      "targetWorkName": "pss-inv-work-toplevel",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-work-toplevel-cleanup",
+      "targetWorkName": "pss-cln-work-fold-service",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-work-toplevel-cleanup",
+      "targetWorkName": "pss-cln-work-legacy-packages",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-work-toplevel-cleanup",
+      "targetWorkName": "pss-cln-work-contract-roots",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-work-toplevel-cleanup",
+      "targetWorkName": "pss-del-work",
+      "requiredState": "complete"
+    }
+  ]
+}

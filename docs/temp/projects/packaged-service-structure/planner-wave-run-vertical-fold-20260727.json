@@ -1,0 +1,290 @@
+{
+  "requestId": "planner-wave-run-vertical-fold-20260727",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "pss-cln-run-petri-root-retirement",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "CLN-RUN-PETRI-ROOT: retire Petri-shaped Factory Runtime root contracts",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "packetId": "CLN-RUN-PETRI-ROOT",
+        "currentProgress": [
+          "CTR-RUN published factory_runtime.Service with Observe/PlanDispatch/AcceptDispatchResult/checkpoint slices.",
+          "IMP-RUN-01/02/03 and LWR-RUN are Factory-terminal; CLI-RUN and MCP-RUN are terminal; HTTP-RUN is still in Factory review.",
+          "Root still exports Petri-typed StateSnapshot (EngineStateSnapshot[MarkingSnapshot,*state.Net]), APIFactory.GetEngineStateSnapshot, and legacy Factory/hosting seams.",
+          "PSS plan sequence step 1 (Petri retirement) was never packetized; this closes that planning gap."
+        ],
+        "requestedOutcome": "Retire Petri-shaped and migration-only observation surfaces from the Factory Runtime package root and public peer contracts. Make Observe (and other Service methods) the sole cross-service observation/control path. Remove or unexport StateSnapshot Petri aliases, APIFactory.GetEngineStateSnapshot as a peer requirement, and root imports of petri.MarkingSnapshot / state.Net from public contract files. Preserve authored orchestrator.kind=PETRI as a Factory Definition concern. Do not fold engine/runtime/state packages in this packet; do not delete factory_runtime/service; do not implement IMP-RUN-04 checkpoints; do not open PSS-I01/I02/I03. Update focused unit/functional tests that asserted Petri snapshots to assert Service.Observe / public events instead. Delivery contract: loop implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts are resolved, the PR is merged, and only then complete Factory work.",
+        "changedPathLease": [
+          "pkg/services/factory_runtime/*.go (root contract files only)",
+          "pkg/services/factory_runtime/internal/rootobservation/**",
+          "peer/test call sites that must stop using GetEngineStateSnapshot or Petri StateSnapshot",
+          "exclude pkg/services/factory_runtime/service fold/delete",
+          "exclude pkg/services/factory_runtime/engine|runtime|state|subsystems|scheduler|build package moves",
+          "exclude pkg/services/factory_runtime/transports/** except if a test import must retarget",
+          "exclude IMP-RUN-04 checkpoint store implementation"
+        ],
+        "acceptanceCriteria": [
+          "No public factory_runtime root type aliases Petri MarkingSnapshot or *state.Net for peer observation",
+          "Cross-service peers use Service.Observe (or other Service methods), not GetEngineStateSnapshot",
+          "Focused tests prove orchestrator-neutral observation without manufacturing Petri nets/markings",
+          "Typecheck, lint, and tests pass; required CI green; PR merged before Factory completion"
+        ]
+      }
+    },
+    {
+      "name": "pss-cut-ses-run",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "CUT-SES-RUN: Factory Sessions consumes Factory Runtime root only",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "packetId": "CUT-SES-RUN",
+        "currentProgress": [
+          "Factory Sessions IMP/LWR/adapters are largely terminal; Runtime Service root exists.",
+          "CUT-SES-RUN is the Sessions→Runtime consumer-edge packet from the PSS plan.",
+          "CUT-REC-RUN is already submitted separately; do not duplicate Recordings edges here."
+        ],
+        "requestedOutcome": "Lease only Factory Sessions call sites that still reach Factory Runtime through non-root paths (engine, runtime, service/host, javascript, hosting bundles, or other implementation packages). Retarget those imports/call sites to the Factory Runtime service root contract so Sessions no longer depends on Runtime implementation packages or secondary JavaScript/host surfaces. Do not fold or delete factory_runtime packages; do not edit root pkg/wire construction beyond Sessions→Runtime import retargets if unavoidable; do not open shared integrators. Prove with focused Sessions/Runtime boundary tests. Delivery contract: loop implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts are resolved, the PR is merged, and only then complete Factory work.",
+        "changedPathLease": [
+          "pkg/services/factory_sessions/** (consumer Runtime-edge call sites only)",
+          "exclude pkg/services/factory_runtime/** except through Runtime root contract imports",
+          "exclude factory_runtime fold/delete packets",
+          "exclude pkg/wire except narrow Sessions→Runtime import retarget if required"
+        ],
+        "acceptanceCriteria": [
+          "Factory Sessions production code imports Factory Runtime only through the Runtime service root contract",
+          "No new Sessions imports of Runtime implementation packages (engine/runtime/service/javascript/hosting)",
+          "Focused tests prove Runtime control/observation through the root boundary",
+          "Typecheck, lint, and tests pass; required CI green; PR merged before Factory completion"
+        ]
+      }
+    },
+    {
+      "name": "pss-cut-run-wrk",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "CUT-RUN-WRK: Factory Runtime consumes Workers root only",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "packetId": "CUT-RUN-WRK",
+        "currentProgress": [
+          "IMP-RUN-03 dispatch_planning and Workers foundation runners are Factory-terminal.",
+          "Runtime still owns transitional worker_pool and may reach Workers through non-root paths.",
+          "CUT-RUN-WRK is the Runtime→Workers consumer-edge packet from the PSS plan."
+        ],
+        "requestedOutcome": "Lease only Factory Runtime call sites that still reach Workers through non-root paths or keep Workers execution mechanics inside Runtime (for example runtime/worker_pool ownership that belongs to Workers). Retarget Runtime to consume the Workers service root for execution/dispatch/result boundaries while Runtime retains dispatch planning/outbox ownership. Do not move Automations sidecars; do not implement hosted runner IMP-WRK-07; do not fold engine packages in this packet. Prove with focused Runtime/Workers boundary tests. Delivery contract: loop implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts are resolved, the PR is merged, and only then complete Factory work.",
+        "changedPathLease": [
+          "pkg/services/factory_runtime/** (Workers-edge call sites and worker_pool ownership moves only)",
+          "pkg/services/workers/** only if a narrow Workers-root-facing seam must accept relocated pool ownership",
+          "exclude Automations packages",
+          "exclude factory_runtime/service full fold/delete",
+          "exclude IMP-RUN-04"
+        ],
+        "acceptanceCriteria": [
+          "Factory Runtime production code imports Workers only through the Workers service root contract",
+          "Worker pool / dispatch execution ownership that belongs to Workers is no longer a Runtime peer leak",
+          "Focused tests prove dispatch/result boundary through Workers root + Runtime PlanDispatch/AcceptDispatchResult",
+          "Typecheck, lint, and tests pass; required CI green; PR merged before Factory completion"
+        ]
+      }
+    },
+    {
+      "name": "pss-cln-run-fold-service",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "CLN-RUN-FOLD-SERVICE: fold factory_runtime/service into internal",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "packetId": "CLN-RUN-FOLD-SERVICE",
+        "currentProgress": [
+          "Private Runtime subservices exist under internal/services/{orchestration,instance_host,dispatch_planning}.",
+          "Public pkg/services/factory_runtime/service (+ service/host) remains the composed implementation; factory_runtime/wire and root pkg/wire still construct through it.",
+          "package-target-manifest marks factory_runtime/service as disposition move → factory_runtime/internal.",
+          "Automations vertical fold/DEL may still own the shared pkg/wire construction lease; reconcile that lease before overlapping Wire edits.",
+          "HTTP-RUN (pss-http-run-adapter) was still in Factory review when this batch was submitted; do not begin shared Runtime package edits until that idea/task/review is Factory-complete.",
+          "Batch relations cannot DEPENDS_ON cross-request work names, so the HTTP-RUN gate is an explicit pre-start hold in this payload."
+        ],
+        "requestedOutcome": "After CLN-RUN-PETRI-ROOT is Factory-complete AND pss-http-run-adapter has reached Factory complete (merged PR + consumed idea/task/review), fold transitional pkg/services/factory_runtime/service (including service/host) into pkg/services/factory_runtime/internal. Retarget factory_runtime/wire so it is the sole public construction bridge returning factory_runtime.Service from internal implementation. Retarget the narrow root pkg/wire Runtime construction call away from factory_runtime/service so it uses factory_runtime/wire only. If Automations fold/DEL still holds pkg/wire, wait or take the smallest non-conflicting Runtime-only Wire edit after rebasing. Do not move engine/runtime/scheduler/state/subsystems/build in this packet (that is CLN-RUN-FOLD-ENGINE-PIPELINE). Do not delete the emptied path baselines (that is DEL-RUN). Do not implement IMP-RUN-04. Delivery contract: loop implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts are resolved, the PR is merged, and only then complete Factory work.",
+        "changedPathLease": [
+          "pkg/services/factory_runtime/service/**",
+          "pkg/services/factory_runtime/internal/**",
+          "pkg/services/factory_runtime/wire/**",
+          "pkg/wire Factory Runtime construction only",
+          "docs/internal baselines only if required for non-deletion path moves"
+        ],
+        "acceptanceCriteria": [
+          "factory_runtime/wire constructs the Runtime root from internal implementation without exporting internal types on the peer surface",
+          "Root pkg/wire no longer imports pkg/services/factory_runtime/service",
+          "No production package outside the factory_runtime owner imports factory_runtime/service",
+          "Observable Runtime control/observation/dispatch-plan behavior is preserved",
+          "Typecheck, lint, and tests pass; required CI green; PR merged before Factory completion"
+        ]
+      }
+    },
+    {
+      "name": "pss-cln-run-fold-engine-pipeline",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "CLN-RUN-FOLD-ENGINE-PIPELINE: move engine/runtime/state pipeline under internal",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "packetId": "CLN-RUN-FOLD-ENGINE-PIPELINE",
+        "currentProgress": [
+          "Structure baseline lists factory_runtime/{build,engine,runtime,scheduler,state,subsystems,javascript,token,...} as service-root-unexpected-directory debt.",
+          "nestedOwnerMoveRules currently remaps only javascript/ and internal/orchestrators/; engine pipeline packages are still wrongly retain-shaped in inventory until this fold.",
+          "Plan treats engine/tick, scheduler, and subsystems as plain private implementation under Runtime, not peer packages."
+        ],
+        "requestedOutcome": "After CLN-RUN-FOLD-SERVICE, move transitional top-level Factory Runtime implementation packages into pkg/services/factory_runtime/internal (and orchestration for javascript/orchestrators/tooling as already mapped). Primary moves: build, engine, runtime, runtime/buffers, scheduler, state, state/validation, subsystems, token, token_transformer, throttle, checkpointstore, checkpointsummary, context, definitionmapping, metrics, orchestrationowner, orchestratorcontract, replayhooks, runtimecontract, javascript, tooling/javascript. Update packagetargetmanifestcheck nestedOwnerMoveRules and ownership MapPackage rules so these paths are disposition move (not retain), then regenerate inventories. Ensure no peer service imports these packages after the move; only factory_runtime/internal and factory_runtime/wire may. Do not delete baselines for emptied public paths beyond what the move requires (DEL-RUN finishes deletion/baseline burn-down). Do not implement IMP-RUN-04 checkpoint_recovery subservice. Delivery contract: loop implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts are resolved, the PR is merged, and only then complete Factory work.",
+        "changedPathLease": [
+          "pkg/services/factory_runtime/build/**",
+          "pkg/services/factory_runtime/engine/**",
+          "pkg/services/factory_runtime/runtime/**",
+          "pkg/services/factory_runtime/scheduler/**",
+          "pkg/services/factory_runtime/state/**",
+          "pkg/services/factory_runtime/subsystems/**",
+          "pkg/services/factory_runtime/token/**",
+          "pkg/services/factory_runtime/token_transformer/**",
+          "pkg/services/factory_runtime/throttle/**",
+          "pkg/services/factory_runtime/checkpointstore/**",
+          "pkg/services/factory_runtime/checkpointsummary/**",
+          "pkg/services/factory_runtime/context/**",
+          "pkg/services/factory_runtime/definitionmapping/**",
+          "pkg/services/factory_runtime/metrics/**",
+          "pkg/services/factory_runtime/orchestrationowner/**",
+          "pkg/services/factory_runtime/orchestratorcontract/**",
+          "pkg/services/factory_runtime/replayhooks/**",
+          "pkg/services/factory_runtime/runtimecontract/**",
+          "pkg/services/factory_runtime/javascript/**",
+          "pkg/services/factory_runtime/tooling/**",
+          "pkg/services/factory_runtime/internal/**",
+          "cmd/packagetargetmanifestcheck/owners.go nestedOwnerMoveRules",
+          "internal/ownershipinventory/map.go if required",
+          "docs/internal package-target-manifest and ownership-inventory regenerations"
+        ],
+        "acceptanceCriteria": [
+          "Listed transitional top-level Runtime implementation packages no longer exist as public peer-importable paths (moved under internal)",
+          "Manifest/ownership rules mark former paths as move/delete debt rather than retain",
+          "No production peer imports of the moved packages remain",
+          "factory_runtime root children trend toward only wire/, internal/, transports/ plus contract files",
+          "Typecheck, lint, and tests pass; required CI green; PR merged before Factory completion"
+        ]
+      }
+    },
+    {
+      "name": "pss-del-run",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "DEL-RUN: delete superseded Factory Runtime public packages and lower baselines",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "packetId": "DEL-RUN",
+        "currentProgress": [
+          "CLN-RUN-PETRI-ROOT, CUT-SES-RUN, CUT-RUN-WRK, CLN-RUN-FOLD-SERVICE, and CLN-RUN-FOLD-ENGINE-PIPELINE are submitted ahead of this packet.",
+          "package-structure-baseline already records many factory_runtime/* unexpected directories as deletion-only debt.",
+          "IMP-RUN-04 checkpoint_recovery remains intentionally held until the Runtime/Recordings durability decision; DEL-RUN must not invent that subservice."
+        ],
+        "requestedOutcome": "After the Runtime Petri retirement, Sessions/Workers CUTs, service fold, and engine-pipeline fold are merged and Factory-consumed, delete any emptied superseded public factory_runtime packages/aliases that remain (especially factory_runtime/service and any leftover public dirs emptied by the folds). Lower exact package-structure, ownership-inventory, package-target-manifest, and coverage baseline rows so those paths cannot return as retain. Confirm factory_runtime root children are only wire/, internal/, and transports/ plus contract files (testkit/testdata/exhaustiontests may remain only if architecture explicitly allows test support under internal or approved exceptions—prefer moving test support under internal and deleting public testkit if still unexpected). Do not implement IMP-RUN-04. Do not open unrelated owner deletions. Delivery contract: loop implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts are resolved, the PR is merged, and only then complete Factory work.",
+        "changedPathLease": [
+          "pkg/services/factory_runtime/** (deletion of superseded public packages only)",
+          "docs/internal/baselines/package-structure-baseline.json",
+          "docs/internal/baselines/ownership-inventory.json",
+          "docs/internal/packaged-service-structure/package-target-manifest.json",
+          "related coverage baseline rows for deleted packages only"
+        ],
+        "acceptanceCriteria": [
+          "Superseded public factory_runtime implementation packages listed by the fold packets no longer exist",
+          "No production or test imports of deleted packages remain",
+          "Structure/ownership/package-target baselines no longer list those paths as retain debt",
+          "make pkg-structure / ownership checks pass with reduced debt",
+          "Typecheck, lint, and tests pass; required CI green; PR merged before Factory completion"
+        ]
+      }
+    },
+    {
+      "name": "planner-loopback-run-vertical-fold",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Meta-planner follow-up after Factory Runtime vertical fold/CUT/DEL chunk",
+        "sourcePath": "docs/temp/meta.md",
+        "requestedOutcome": "After CLN-RUN-PETRI-ROOT, CUT-SES-RUN, CUT-RUN-WRK, CLN-RUN-FOLD-SERVICE, CLN-RUN-FOLD-ENGINE-PIPELINE, and DEL-RUN reach Factory complete, reconcile inventories and changed paths. Prefer FUN-runtime when prerequisites are clear. Keep IMP-RUN-04 held until an explicit Runtime/Recordings durability decision packet exists. Update nestedOwnerMoveRules/living shape inventory for any residual Runtime debt. Choose the next vertical deletion owner or gated work without inventing horizontal adapters for adapter-complete owners."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "pss-cln-run-fold-service",
+      "targetWorkName": "pss-cln-run-petri-root-retirement",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "pss-cln-run-fold-engine-pipeline",
+      "targetWorkName": "pss-cln-run-fold-service",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "pss-del-run",
+      "targetWorkName": "pss-cln-run-petri-root-retirement",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "pss-del-run",
+      "targetWorkName": "pss-cut-ses-run",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "pss-del-run",
+      "targetWorkName": "pss-cut-run-wrk",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "pss-del-run",
+      "targetWorkName": "pss-cln-run-fold-service",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "pss-del-run",
+      "targetWorkName": "pss-cln-run-fold-engine-pipeline",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-run-vertical-fold",
+      "targetWorkName": "pss-cln-run-petri-root-retirement",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-run-vertical-fold",
+      "targetWorkName": "pss-cut-ses-run",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-run-vertical-fold",
+      "targetWorkName": "pss-cut-run-wrk",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-run-vertical-fold",
+      "targetWorkName": "pss-cln-run-fold-service",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-run-vertical-fold",
+      "targetWorkName": "pss-cln-run-fold-engine-pipeline",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-run-vertical-fold",
+      "targetWorkName": "pss-del-run",
+      "requiredState": "complete"
+    }
+  ]
+}

@@ -1,0 +1,68 @@
+{
+  "requestId": "planner-wave-fun-ses-20260728",
+  "type": "FACTORY_REQUEST_BATCH",
+  "currentChainingTraceId": "trace-planner-wave-fun-ses-20260728",
+  "works": [
+    {
+      "name": "pss-fun-sessions",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "FUN-sessions: public-process proof for Factory Sessions after LWR + adapters + CUTs",
+        "program": "Packaged Service Structure",
+        "packetId": "FUN-sessions",
+        "sourcePath": "docs/temp/customer-ask.md",
+        "currentProgress": [
+          "Factory Sessions LWR-SES, HTTP-SES/CLI-SES/MCP-SES adapters, CUT-SES-RUN, CUT-SES-WRK (#1555), and CUT-SES-WORK (#1546 / c9f3771b2) are Factory-terminal.",
+          "Live pkg/services/factory_sessions root directories are already only wire/, internal/, and transports/ plus root contract/test files; no transitional service/ sibling remains to fold/delete.",
+          "CUT-SES-WORK removed Work-owned consumer edges from Sessions; Sessions peers must reach Work through the Work service root only.",
+          "FUN-sessions closes the Sessions vertical with explicit public-process proof through root.BuildProcess after adapters and consumer cuts.",
+          "This packet must stay lease-disjoint from live Work residual cleanup, Runtime folds, provider adapters, Settings/Workers/Recordings/PSES CLN/DEL chains, and PSS-I0* integrators."
+        ],
+        "requestedOutcome": "Prove Factory Sessions as a packaged service through public process composition only: root.BuildProcess, public Sessions protocol surfaces (CLI/HTTP/MCP adapters already terminal), and edges.Edges effect replacement. Extend or add focused functional proofs under tests/functional/sessions (and owner-local root contract tests if needed) so session lifecycle/runtime-opening/work-admission/response-stream surfaces remain inert until runtime lifecycle starts, then exercise public Sessions behavior without importing factory_sessions/internal or factory_sessions/wire implementation details from outside the owner. Confirm no production peer reaches Sessions through transitional packages, and Sessions no longer reaches Work through retired consumer edges (Work root only). Do not fold or delete packages. Do not invent additional Sessions protocol adapters or reopen accepted Schema-Driven/Clean CLI UX. Do not open PSS-I0* shared integrators. Do not reopen CUT-SES-* consumer edges beyond proof that they remain closed. Delivery contract: loop implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete Factory work.",
+        "changedPathLease": [
+          "tests/functional/sessions/**",
+          "pkg/services/factory_sessions/** root contract/characterization tests only when required for public-process proof",
+          "exclude package folds/deletes under pkg/services/factory_sessions/**",
+          "exclude Sessions HTTP/CLI/MCP adapter invention",
+          "exclude PSS-I01/I02/I03/I04 shared integrators",
+          "exclude Work residual CLN/DEL leases under pkg/services/work/**",
+          "exclude Runtime CLN-RUN-FOLD-SERVICE/ENGINE implementation leases",
+          "exclude provider adapter packages under workers/provider/** and providers adapters"
+        ],
+        "acceptanceCriteria": [
+          "Functional proofs construct Sessions only through root.BuildProcess and edges.Edges (behavioral)",
+          "Session lifecycle/runtime-opening/work-admission/response-stream remain inert before runtime lifecycle and activate through public Sessions surfaces after lifecycle (behavioral)",
+          "No new test or production imports of factory_sessions/internal from outside the Sessions owner",
+          "Sessions does not reach Work through retired consumer edges; Work peer access uses the Work service root only (behavioral)",
+          "Packaged Sessions root shape remains wire/, internal/, transports/ plus thin root contracts",
+          "Typecheck, lint, and required CI are terminal green; PR merged before Factory completion"
+        ],
+        "antiPatterns": [
+          "Treating LWR-SES/adapter/CUT merge alone as FUN-sessions complete without public-process proof",
+          "Reaching Sessions through wire/internal from outside the owner in functional proofs",
+          "Inventing protocol adapters or reopening accepted CLI UX under a FUN lease",
+          "Folding or deleting Sessions packages in this packet",
+          "Reopening CUT-SES-WORK/CUT-SES-WRK/CUT-SES-RUN consumer edges",
+          "Touching live Work residual or Runtime fold leases under a FUN lease"
+        ]
+      }
+    },
+    {
+      "name": "planner-loopback-fun-ses",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Meta-planner follow-up after FUN-sessions",
+        "sourcePath": "docs/temp/customer-ask.md",
+        "requestedOutcome": "After FUN-sessions reaches Factory complete, reconcile inventories, functional coverage, and queue/session/PR/CI evidence and repair any stranded merged tasks. Prefer FUN-work after Work DEL, FUN-settings after Settings DEL, FUN-workers after Workers DEL, FUN-recordings after Recordings DEL, and FUN-provider-sessions after PSES DEL when prerequisites clear. Hold CUT-RUN-REC while Runtime CLN-RUN-FOLD-SERVICE/ENGINE own factory_runtime implementation leases. Hold IMP-PROV-06 / LWR-PROV while IMP-PROV-05 is non-terminal; hold IMP-WRK-07 while hosted_logic remains polling-only; hold PSS-I0*. After CLN-RUN-FOLD-SERVICE Factory-complete, ensure DEL-RUN-SERVICE proceeds (PRE-START HOLD clears); do not revive monolithic pss-del-run. Refill maximum safe throughput toward executor-slot capacity 16 from the live ready set without inventing protocol adapters or reopening accepted CLI UX."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-fun-ses",
+      "targetWorkName": "pss-fun-sessions",
+      "requiredState": "complete"
+    }
+  ]
+}

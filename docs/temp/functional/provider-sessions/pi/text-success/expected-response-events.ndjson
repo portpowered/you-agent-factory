@@ -1,2 +1,0 @@
-{"eventId":"08b7b314-24bd-4287-8dad-111f98014ec2","factorySessionId":"9eabd575-a269-4b1e-8c80-f13c29029d39","itemId":"msg-snapshot","runId":"6d8d2d78-ce56-4b9f-bb96-45c8c2dd55d9","text":"draft text","type":"message.delta"}
-{"eventId":"ffe01a27-0aab-4b38-8438-abfe7c923170","factorySessionId":"9eabd575-a269-4b1e-8c80-f13c29029d39","finishReason":"stop","itemId":"msg-snapshot","runId":"6d8d2d78-ce56-4b9f-bb96-45c8c2dd55d9","text":"authoritative text COMPLETE","type":"message.completed"}

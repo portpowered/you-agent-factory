@@ -1,5 +1,0 @@
-{
-  "prompt": "Run the fixture lookup and answer.",
-  "model": "fixture-model",
-  "session_id": "session_fixture_codex_success"
-}

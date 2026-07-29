@@ -1,0 +1,64 @@
+{
+  "requestId": "packaged-service-structure-ctr-wrk-20260724",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "pss-ctr-wrk-root-contract",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "CTR-WRK: Publish additive Workers root contract slices",
+        "sourcePaths": [
+          "docs/temp/projects/packaged-service-structure/plan.md",
+          "docs/temp/projects/packaged-service-structure/checklist.md",
+          "docs/architecture/packaged-structure.md"
+        ],
+        "programs": [
+          "Packaged Service Structure Phase 1"
+        ],
+        "planStory": "CTR-WRK",
+        "exclusiveLease": "direct Go files in pkg/services/workers root contract (not provider/* migration paths)",
+        "prerequisiteEvidence": [
+          "Neutral conductor (PR #1267 / 44dd330bb) is terminal and accepted, clearing the prior workers-construction hold that blocked CTR-WRK.",
+          "Gemini/Kiro migrations own provider/* and aggregate dispatch/failure hotspots; this packet stays on Workers root runtime-build / workstation-dispatch / Runner-neutral contracts only."
+        ],
+        "requestedOutcome": "Publish additive Workers root-contract slices for runtime build, workstation dispatch, and Runner-neutral request/result contracts on one named Workers root. Unblock IMP-WRK-* and dependent SES/RUN packets without taking provider migration, CLI-manifest, Wire/root, or CTR-PROV leases.",
+        "behavioralAcceptanceCriteria": [
+          "Workers exposes one named root interface with plain request/result/value/typed-error contracts for runtime build, workstation dispatch, and Runner-neutral execution vocabulary.",
+          "Published contracts do not expose provider-native command/decode/session types, Petri/JavaScript internals, or concrete provider identity switches.",
+          "A fake peer can implement the published slices; representative success and typed failure characterization tests pass.",
+          "Scope stays on Workers root contract files; provider/gemini, provider/kiro, provider_behavior aggregate migration paths, and conductor package internals are untouched.",
+          "Typecheck/lint and focused Workers root-contract characterization tests pass."
+        ],
+        "scopeBoundaries": [
+          "Root contract slices only; do not complete nested IMP-WRK runner/subservice moves in this packet.",
+          "Do not edit pkg/services/workers/provider/** migration paths owned by Gemini/Kiro Story 6.",
+          "Do not revise the accepted neutral conductor package except indirectly via already-published root vocabulary.",
+          "Do not take Wire/root, CLI-manifest (#1262), CTR-PROV, or Packaged Factory materialization leases.",
+          "Do not change public OpenAPI solely for package motion."
+        ],
+        "verification": [
+          "focused Workers root-contract characterization tests",
+          "make verify-fast",
+          "make lint"
+        ]
+      }
+    },
+    {
+      "name": "packaged-service-structure-ctr-wrk-loopback",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Review CTR-WRK before IMP-WRK fan-out",
+        "sourcePath": "docs/temp/packaged-service-structure-ctr-wrk-20260724.json",
+        "requestedOutcome": "Reconcile queue and session health; inspect CTR-WRK root-contract evidence, review findings, changed paths, tests, CI, merge, and Factory consumption; then decide whether to release IMP-WRK packets, revise CTR-WRK, submit another disjoint PSS slice, or hold."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "packaged-service-structure-ctr-wrk-loopback",
+      "targetWorkName": "pss-ctr-wrk-root-contract",
+      "requiredState": "complete"
+    }
+  ]
+}

@@ -1,0 +1,102 @@
+{
+  "requestId": "packaged-service-structure-ctr-wave-05-20260724",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "pss-ctr-pses-root-contract",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "CTR-PSES: Publish additive Provider Sessions root contract slices",
+        "sourcePaths": [
+          "docs/temp/projects/packaged-service-structure/plan.md",
+          "docs/temp/projects/packaged-service-structure/checklist.md",
+          "docs/architecture/packaged-structure.md"
+        ],
+        "programs": [
+          "Packaged Service Structure Phase 1"
+        ],
+        "planStory": "CTR-PSES",
+        "exclusiveLease": "direct Go files in pkg/services/provider_sessions root contract",
+        "requestedOutcome": "Publish additive Provider Sessions root-contract slices for detached providers.SessionRef inspection and provider-independent transcript/reasoning/tool/parse/usage detail. Unblock IMP-PSES-* after CTR-PROV lands; do not absorb Standardized Providers catalog/execution or the live neutral-conductor workers lease.",
+        "behavioralAcceptanceCriteria": [
+          "Provider Sessions exposes one named root interface with plain request/result/value/typed-error contracts for detached-ref validation/inspection and normalized transcript/detail projection.",
+          "Public contracts accept a typed providers.SessionRef identity without importing provider execution, enumeration, availability, capability, or Workers selection policy.",
+          "No peer implementation, filesystem/SQL/OS effect types, or private Codex/Cursor reader types appear in the published root contract.",
+          "A fake peer can implement the published slices; representative success and typed failure characterization tests pass.",
+          "Typecheck/lint and focused Provider Sessions contract tests pass."
+        ],
+        "scopeBoundaries": [
+          "Root contract slices only; do not complete IMP-PSES nested reader cuts in this packet.",
+          "Do not take CTR-PROV/IMP-PROV, Standardized Providers conductor/migration, or CLI-manifest leases.",
+          "Do not edit pkg/services/workers construction paths owned by the live neutral-conductor lane.",
+          "Do not change public OpenAPI solely for package motion.",
+          "Do not import or reimplement Providers catalog/execution behavior."
+        ],
+        "verification": [
+          "focused Provider Sessions contract characterization tests",
+          "make verify-fast",
+          "make lint"
+        ]
+      }
+    },
+    {
+      "name": "pss-ctr-vis-root-contract",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "CTR-VIS: Publish additive Factory Visualization root contract slices",
+        "sourcePaths": [
+          "docs/temp/projects/packaged-service-structure/plan.md",
+          "docs/temp/projects/packaged-service-structure/checklist.md",
+          "docs/architecture/packaged-structure.md"
+        ],
+        "programs": [
+          "Packaged Service Structure Phase 1"
+        ],
+        "planStory": "CTR-VIS",
+        "exclusiveLease": "direct Go files in pkg/services/factory_visualization root contract",
+        "requestedOutcome": "Publish additive Factory Visualization root-contract slices for request-activated lifecycle, live projection, and presentation/drain coordination. Unblock IMP-VIS-* owner-local packets without making transports own subscriptions, queues, backpressure, or final-write policy.",
+        "behavioralAcceptanceCriteria": [
+          "Factory Visualization exposes one named root interface with plain contracts for activation, live projection, and presentation/drain slices.",
+          "Construction remains inert by default; visualization activates only through explicit request parameters.",
+          "Public contracts do not expose Recordings ledger storage, Runtime Petri/JavaScript internals, or transport codec/writer types.",
+          "A fake peer can implement the published slices; representative success and typed failure characterization tests pass.",
+          "Typecheck/lint and focused Factory Visualization contract tests pass."
+        ],
+        "scopeBoundaries": [
+          "Root contract slices only; nested IMP-VIS packets remain separate.",
+          "Do not take Wire/root, CLI-manifest, provider-conductor, or Packaged Factory materialization leases.",
+          "Do not change public OpenAPI solely for package motion.",
+          "Do not move transport HTTP/CLI/MCP presentation ownership into this packet."
+        ],
+        "verification": [
+          "focused Factory Visualization contract characterization tests",
+          "make verify-fast",
+          "make lint"
+        ]
+      }
+    },
+    {
+      "name": "packaged-service-structure-ctr-wave-05-loopback",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Meta-planner follow-up after PSS CTR wave 05",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/checklist.md",
+        "requestedOutcome": "After CTR-PSES and CTR-VIS reach terminal accepted merge/consumption, reconcile queue/CI/ownership evidence and decide whether to release CTR-WRK (if conductor cleared), owner-local IMP packets for accepted contracts, or hold on remaining portfolio gates."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "packaged-service-structure-ctr-wave-05-loopback",
+      "targetWorkName": "pss-ctr-pses-root-contract",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "packaged-service-structure-ctr-wave-05-loopback",
+      "targetWorkName": "pss-ctr-vis-root-contract",
+      "requiredState": "complete"
+    }
+  ]
+}

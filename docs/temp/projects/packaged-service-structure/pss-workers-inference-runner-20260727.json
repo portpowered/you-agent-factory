@@ -1,0 +1,39 @@
+{
+  "requestId": "pss-workers-inference-runner-20260727",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "pss-imp-wrk-06-inference-runner",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "Migrate model inference behind the private Workers Runner contract",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "currentProgress": [
+          "Schema-Driven CLI and Clean CLI UX reached definition of done: Session PR #1346 merged as e7d951e5d, docs/legacy/evidence closure PR #1348 merged as 9851a8b68 with all six closure stories accepted, and both stranded Factory tasks were repaired to terminal complete after their paired ideas were lost from the live session.",
+          "IMP-WRK-01 runtime assembly, IMP-WRK-02 workstations, IMP-WRK-03 runner registry/conformance, and IMP-WRK-05 script runner are terminal and accepted. The private runners tree already hosts script under pkg/services/workers/internal/services/runners/internal/script.",
+          "CTR-MOD and IMP-MOD-01/02 are terminal, so the Models root and catalog prerequisites for IMP-WRK-06 are satisfied. Models assets/host/lease packets remain out of scope for this runner leaf.",
+          "CTR-PROV and IMP-WRK-04 agent runner remain gated; provider catalog/execution still lives under transitional pkg/services/workers/provider and must not be relocated by this packet.",
+          "No active CLI owner remains. Free executor capacity may now admit Workers parent-private work. Shared Wire/root/OpenAPI/CLI-manifest leases stay excluded."
+        ],
+        "requestedOutcome": "Implement IMP-WRK-06 as the parent-private inference Runner under pkg/services/workers/internal/services/runners/internal/inference, matching the accepted script-runner nesting used by IMP-WRK-05. Adapt existing Workers model-inference execution to the accepted common Runner contract and private immutable registry without creating a peer-facing inference service or a second execution contract. Invoke Models only through the accepted Models root for scoped model binding, readiness, and inference; preserve lease/capacity, unavailable-model, timeout, cancellation, and normalized success/failure outcomes already owned by Models and Workers. Register and resolve the inference strategy through the private runner registry and prove it with the reusable runner conformance kit plus focused binding/readiness/failure-edge tests. Keep model-runtime and process effects injected; construction and registry resolution must remain inert. Retire or narrow only inference-specific Workers legacy facades after behavioral parity is proven. Do not implement agent or hosted runners, do not create or move pkg/services/providers, do not change provider adapters/catalog/conductor/session behavior, do not expand Models into assets/host/lease packets, and do not change OpenAPI or generated API artifacts, CLI manifests/root/run/server behavior, pkg/root, pkg/wire, pkg/initializer, UI code, or broad functional-test topology. Any minimal Workers-root vocabulary addition must remain Runner-neutral, typed, detached, and backward-compatible. Require focused unit/integration tests, lease/capacity and cancellation failure proof, race-safe result behavior where applicable, gofmt, vet/lint, architecture/ownership checks, and the narrow existing inference functional evidence."
+      }
+    },
+    {
+      "name": "pss-workers-inference-runner-loopback",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Reassess Workers and Providers successors after inference runner migration",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "requestedOutcome": "Review the accepted IMP-WRK-06 implementation, Factory review, changed paths, tests and CI, then reconcile the queue. Compare owner-disjoint successors against live leases: IMP-WRK-07 hosted runner, IMP-RUN-03 Factory Runtime dispatch planning, IMP-SES-06 runtime opening, IMP-MOD-03 assets, and CTR-PROV for the standalone Providers root. Keep IMP-WRK-04 gated until CTR-PROV is accepted. Prefer the smallest Workers or high-unlock Providers contract packet that does not collide with active ownership."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "pss-workers-inference-runner-loopback",
+      "targetWorkName": "pss-imp-wrk-06-inference-runner",
+      "requiredState": "complete"
+    }
+  ]
+}

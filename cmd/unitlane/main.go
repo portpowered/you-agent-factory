@@ -31,6 +31,8 @@ var discoverUnitPackages = discoverPackages
 var stderrWriter io.Writer = os.Stderr
 var exitFunc = os.Exit
 
+const maxGoTestCommandLen = 24000
+
 func main() {
 	if err := executeUnitLane(); err != nil {
 		fmt.Fprintf(stderrWriter, "%v\n", err)
@@ -118,6 +120,46 @@ func discoverPackagesUnder(rootDir, importPrefix string) ([]string, error) {
 }
 
 func runUnitTests(cfg config, packages []string) error {
+	baseArgs := baseGoTestArgs(cfg)
+	baseLen := commandArgLen(baseArgs)
+	for len(packages) > 0 {
+		batch := make([]string, 0, len(packages))
+		currentLen := baseLen
+		for len(packages) > 0 {
+			next := packages[0]
+			nextLen := len(next)
+			if len(batch) > 0 {
+				nextLen++
+			}
+			if currentLen+nextLen > maxGoTestCommandLen && len(batch) > 0 {
+				break
+			}
+			if currentLen+nextLen > maxGoTestCommandLen {
+				return fmt.Errorf("go test command too long for package %q", next)
+			}
+			batch = append(batch, next)
+			currentLen += nextLen
+			packages = packages[1:]
+		}
+		if err := runGoTest(cfg, batch); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func commandArgLen(args []string) int {
+	total := 0
+	for i, arg := range args {
+		if i > 0 {
+			total++
+		}
+		total += len(arg)
+	}
+	return total
+}
+
+func baseGoTestArgs(cfg config) []string {
 	args := []string{"test", fmt.Sprintf("-p=%d", cfg.jobs)}
 	if !cfg.vet {
 		args = append(args, "-vet=off")
@@ -125,6 +167,11 @@ func runUnitTests(cfg config, packages []string) error {
 	if cfg.short {
 		args = append(args, "-short")
 	}
+	return args
+}
+
+func runGoTest(cfg config, packages []string) error {
+	args := baseGoTestArgs(cfg)
 	args = append(args, packages...)
 	if cfg.count > 0 {
 		args = append(args, fmt.Sprintf("-count=%d", cfg.count))

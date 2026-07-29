@@ -1,0 +1,207 @@
+{
+  "requestId": "planner-wave-set-boot-vis-20260727",
+  "type": "FACTORY_REQUEST_BATCH",
+  "currentChainingTraceId": "trace-planner-wave-set-boot-vis-20260727",
+  "works": [
+    {
+      "name": "pss-imp-set-01-document",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "PSS IMP-SET-01: package Operator Settings document load/update/atomic persist",
+        "program": "Packaged Service Structure",
+        "packetId": "IMP-SET-01",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "priority": "P0 backend Settings refactoring",
+        "dependsOnEvidence": [
+          "CTR-SET accepted: PR #1454 merged exact head 25fe0ca6b as 6b859170d; Factory idea/plan/task/review complete"
+        ],
+        "changedPathOwnership": [
+          "pkg/services/operator_settings/internal/services/document/**",
+          "focused Operator Settings document load/update/atomic-persist call sites",
+          "focused malformed/conflict/failed-write preservation proof"
+        ],
+        "requestedOutcome": "Implement IMP-SET-01 as the parent-private Operator Settings document owner. Provide strict load/update/atomic persist with deterministic malformed, conflict, and failed-write preservation while keeping construction inert and codecs/filesystem effects injected. Do not absorb resolution/precedence ownership, Providers catalog facts, CLI root/manifest composition, or System Bootstrap workflow. Shared coverage, ownership, and package-target manifest edits are allowed. Explicitly loop through implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete the Factory work."
+      }
+    },
+    {
+      "name": "pss-imp-boot-01-initialize-rollback",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "PSS IMP-BOOT-01: package System Bootstrap initialize and rollback workflow",
+        "program": "Packaged Service Structure",
+        "packetId": "IMP-BOOT-01",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "priority": "P0 backend Bootstrap refactoring",
+        "dependsOnEvidence": [
+          "CTR-BOOT accepted: PR #1450 merged exact head 8b69196a5 as 7061b6559; Factory idea/plan/task/review complete",
+          "CTR-SET accepted: PR #1454 merged exact head 25fe0ca6b as 6b859170d; Factory idea/plan/task/review complete",
+          "CTR-DEF accepted (#1277) so Bootstrap commands Definitions through the published root"
+        ],
+        "changedPathOwnership": [
+          "pkg/services/system_initialization/internal/** workflow paths owned by Initialize/rollback",
+          "focused Bootstrap initialize/idempotent-repeat/partial-failure/rollback-fact proof",
+          "shared coverage/ownership/package-target manifests only as required by package registration"
+        ],
+        "requestedOutcome": "Implement IMP-BOOT-01 as the System Bootstrap internal initialize and rollback workflow. Preserve one Initialize command with typed results, repeat-invocation idempotency, partial-failure rollback facts, and no ownership of Operator Settings or Factory Definition state. Command Settings and Definitions only through their accepted roots. Do not redesign Clean CLI init UX, edit top-level CLI composition beyond service-local adapters if required, or couple to pkg/initializer lifecycle. Shared coverage, ownership, and package-target manifest edits are allowed. Explicitly loop through implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete the Factory work."
+      }
+    },
+    {
+      "name": "pss-imp-vis-01-activation-lifecycle",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "PSS IMP-VIS-01: package Visualization activation lifecycle",
+        "program": "Packaged Service Structure",
+        "packetId": "IMP-VIS-01",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "priority": "P0 backend Visualization refactoring",
+        "dependsOnEvidence": [
+          "CTR-VIS accepted: PR #1447 merged exact head e183f7dd4 as a28c43f8b; Factory idea/plan/task/review complete",
+          "CTR-SES accepted (#1269) so activation can bind selected session/runtime through published Session contracts"
+        ],
+        "changedPathOwnership": [
+          "pkg/services/factory_visualization/internal/services/activation_lifecycle/**",
+          "focused Visualization activation Start/Stop/Wait/cleanup call sites",
+          "focused default-inert and explicit request-activation proof"
+        ],
+        "requestedOutcome": "Implement IMP-VIS-01 as the parent-private Visualization activation_lifecycle owner. Keep visualization default-inert and activate only on explicit request, with deterministic Start/Stop/Wait/cleanup while construction remains inert. Do not absorb live_view_projection or response_event_presentation ownership. Do not expose factoryruntime.StateSnapshot or Definition-owned event types. Shared coverage, ownership, and package-target manifest edits are allowed. Explicitly loop through implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete the Factory work."
+      }
+    },
+    {
+      "name": "pss-imp-vis-02-live-view-projection",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "PSS IMP-VIS-02: package Visualization live view projection",
+        "program": "Packaged Service Structure",
+        "packetId": "IMP-VIS-02",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "priority": "P0 backend Visualization refactoring",
+        "dependsOnEvidence": [
+          "CTR-VIS accepted: PR #1447 merged exact head e183f7dd4 as a28c43f8b; Factory idea/plan/task/review complete",
+          "CTR-REC and CTR-RUN accepted so projection consumes Recordings query/projection and sanitized Runtime observations through published roots"
+        ],
+        "changedPathOwnership": [
+          "pkg/services/factory_visualization/internal/services/live_view_projection/**",
+          "focused retained-then-live cursor/subscribe and Visualization-owned View emission paths",
+          "focused retained-to-live cursor continuity proof"
+        ],
+        "requestedOutcome": "Implement IMP-VIS-02 as the parent-private Visualization live_view_projection owner. Retain cursor/events, subscribe retained-then-live, consume sanitized Runtime observations and Recordings query/projection through accepted roots, and emit a Visualization-owned View with retained-to-live cursor continuity. Do not absorb activation_lifecycle or response_event_presentation ownership. Do not leak Runtime StateSnapshot or Definition event types. Shared coverage, ownership, and package-target manifest edits are allowed. Explicitly loop through implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete the Factory work."
+      }
+    },
+    {
+      "name": "pss-imp-vis-03-response-event-presentation",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "PSS IMP-VIS-03: package Visualization response/event presentation",
+        "program": "Packaged Service Structure",
+        "packetId": "IMP-VIS-03",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "priority": "P0 backend Visualization refactoring",
+        "dependsOnEvidence": [
+          "CTR-VIS accepted: PR #1447 merged exact head e183f7dd4 as a28c43f8b; Factory idea/plan/task/review complete"
+        ],
+        "changedPathOwnership": [
+          "pkg/services/factory_visualization/internal/services/response_event_presentation/**",
+          "focused best-effort/lossless queue, drop/backpressure, drain, and exclusive final-write paths",
+          "focused bounded queue, drops, drain, and final-write race proof"
+        ],
+        "requestedOutcome": "Implement IMP-VIS-03 as the parent-private Visualization response_event_presentation owner. Provide bounded queue, drop/backpressure, drain, exclusive final-write, and Factory-event serialization coordination with race proof. Do not absorb activation_lifecycle or live_view_projection ownership. Do not start presentation goroutines from Wire/root construction. Shared coverage, ownership, and package-target manifest edits are allowed. Explicitly loop through implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete the Factory work."
+      }
+    },
+    {
+      "name": "pss-imp-set-02-resolution",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "PSS IMP-SET-02: package Operator Settings resolution scopes/env/presets/overrides",
+        "program": "Packaged Service Structure",
+        "packetId": "IMP-SET-02",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "priority": "P1 backend Settings refactoring",
+        "dependsOnEvidence": [
+          "CTR-SET accepted: PR #1454 merged exact head 25fe0ca6b as 6b859170d; Factory idea/plan/task/review complete",
+          "CTR-PROV accepted: PR #1350 merged as dd63993ea so resolution may query Providers without forking catalog facts"
+        ],
+        "changedPathOwnership": [
+          "pkg/services/operator_settings/internal/services/resolution/**",
+          "focused scopes/env/presets/overrides precedence resolution paths",
+          "focused deterministic precedence without cached availability proof"
+        ],
+        "requestedOutcome": "Implement IMP-SET-02 as the parent-private Operator Settings resolution owner. Provide deterministic scopes/env/presets/overrides precedence without caching Providers availability, querying Providers only for semantic validation/canonicalization. Do not absorb document load/update/persist ownership, redesign Clean CLI init UX, or introduce a reverse Providers-to-Settings dependency. Shared coverage, ownership, and package-target manifest edits are allowed. Explicitly loop through implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete the Factory work."
+      }
+    },
+    {
+      "name": "pss-lwr-ses-service-wire",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "PSS LWR-SES: package Factory Sessions service-local Wire",
+        "program": "Packaged Service Structure",
+        "packetId": "LWR-SES",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "priority": "P1 backend Sessions composition",
+        "dependsOnEvidence": [
+          "CTR-SES accepted (#1269)",
+          "Owner-local Sessions IMP packets are terminal including IMP-SES-02 (PR #1420) and IMP-SES-03 (PR #1434); runtime_opening and sibling Session owners already consumed",
+          "LWR-PSES accepted (PR #1451 / ba6840ce9) established the service-local Wire pattern"
+        ],
+        "changedPathOwnership": [
+          "pkg/services/factory_sessions/wire/** or the owner-local Factory Sessions Wire composition path",
+          "focused inert construction proof that returns only the Factory Sessions root interface and starts nothing",
+          "shared coverage/ownership/package-target manifests only as required by Wire package registration"
+        ],
+        "requestedOutcome": "Implement LWR-SES as the Factory Sessions service-local Wire packet. Compose the accepted Sessions root from parent-private Session owners through an inert Wire path that returns only the root interface and starts no lifecycle. Do not edit pkg/wire, pkg/root, pkg/initializer, OpenAPI generation, CLI root/manifest composition, or other services' Wire. Do not expand into HTTP/CLI/MCP adapters or reopen IMP-SES ownership. Shared coverage, ownership, and package-target manifest edits are allowed. Explicitly loop through implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete the Factory work."
+      }
+    },
+    {
+      "name": "planner-loopback-set-boot-vis",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Meta-planner follow-up after SET/BOOT/VIS refill wave",
+        "sourcePath": "docs/temp/customer-ask.md",
+        "requestedOutcome": "Reconcile queue/session/PR evidence after IMP-SET-01, IMP-BOOT-01, IMP-VIS-01/02/03, IMP-SET-02, and LWR-SES complete. Prefer IMP-PROV-04 only after terminal IMP-PROV-03, IMP-MOD-06 only after terminal IMP-MOD-05, IMP-WORK-03 only after accepted IMP-WORK-02, and hold IMP-WRK-07 while hosted_logic remains polling-only. Refill remaining free executor slots with dependency-ready lease-disjoint packets or record why no new work is appropriate."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-set-boot-vis",
+      "targetWorkName": "pss-imp-set-01-document",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-set-boot-vis",
+      "targetWorkName": "pss-imp-boot-01-initialize-rollback",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-set-boot-vis",
+      "targetWorkName": "pss-imp-vis-01-activation-lifecycle",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-set-boot-vis",
+      "targetWorkName": "pss-imp-vis-02-live-view-projection",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-set-boot-vis",
+      "targetWorkName": "pss-imp-vis-03-response-event-presentation",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-set-boot-vis",
+      "targetWorkName": "pss-imp-set-02-resolution",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-set-boot-vis",
+      "targetWorkName": "pss-lwr-ses-service-wire",
+      "requiredState": "complete"
+    }
+  ]
+}

@@ -1,5 +1,0 @@
-{
-  "model": "claude-sonnet-4",
-  "prompt": "Trigger the Claude timeout golden.",
-  "sessionId": "claude-golden-timeout-session"
-}

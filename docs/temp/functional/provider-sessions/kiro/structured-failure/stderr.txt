@@ -1,1 +1,0 @@
-{"type":"error","statusCode":422,"error":{"code":"ValidationException","message":"private customer request detail"}}

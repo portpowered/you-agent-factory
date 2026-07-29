@@ -1,3 +1,0 @@
-{"type":"system","subtype":"init","session_id":"session_fixture_cursor_process_failure"}
-{"type":"assistant","timestamp_ms":1,"message":{"role":"assistant","content":[{"type":"text","text":"working"}]},"session_id":"session_fixture_cursor_process_failure"}
-{"type":"result","subtype":"authentication_error","is_error":true,"result":"Please sign in to Cursor","session_id":"session_fixture_cursor_process_failure"}

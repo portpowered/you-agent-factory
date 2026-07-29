@@ -1,0 +1,209 @@
+{
+  "requestId": "packaged-service-structure-fnd-wave-02-20260724",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "pss-fnd-04-provider-effect-ownership",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "FND-04: Normative provider-effect ownership",
+        "sourcePaths": [
+          "docs/temp/projects/packaged-service-structure/plan.md",
+          "docs/temp/projects/packaged-service-structure/checklist.md"
+        ],
+        "programs": [
+          "Packaged Service Structure Phase 0"
+        ],
+        "planStory": "FND-04",
+        "exclusiveLease": "standards and matching checker rule",
+        "requestedOutcome": "Update normative provider-effect ownership so Providers leaf effects are canonical and edges aggregates them unchanged. This unlocks later IMP-PROV-06 but must absorb Standardized Providers rather than fork catalog/execution while the neutral conductor lane is live.",
+        "behavioralAcceptanceCriteria": [
+          "Providers leaf effect is canonical in standards and checker fixtures.",
+          "edges aggregates provider effects unchanged as the root/test override bag.",
+          "No competing provider catalog or execution abstraction is introduced.",
+          "Typecheck/lint and focused checker tests pass."
+        ],
+        "scopeBoundaries": [
+          "Standards and checker rule only; do not implement Providers service migration.",
+          "Do not race the live standardized-provider-neutral-conductor task on composition paths.",
+          "Do not change CLI manifest generation."
+        ],
+        "verification": [
+          "focused provider-effect ownership checker tests",
+          "make verify-fast",
+          "make lint"
+        ]
+      }
+    },
+    {
+      "name": "pss-fnd-05-hosted-source-runner-ownership",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "FND-05: Hosted-source vs hosted-runner ownership rules",
+        "sourcePaths": [
+          "docs/temp/projects/packaged-service-structure/plan.md",
+          "docs/temp/projects/packaged-service-structure/checklist.md"
+        ],
+        "programs": [
+          "Packaged Service Structure Phase 0"
+        ],
+        "planStory": "FND-05",
+        "exclusiveLease": "standards and matching checker rule",
+        "requestedOutcome": "Update hosted-source versus hosted-runner ownership rules so Automation polling and Workers hosted execution are distinguished mechanically. This unlocks later IMP-AUTO-05.",
+        "behavioralAcceptanceCriteria": [
+          "Automation polling and Workers hosted execution are distinguished by mechanical ownership rules/fixtures.",
+          "Normative standards no longer assign hosted polling to Workers where Automation owns it.",
+          "Typecheck/lint and focused checker tests pass."
+        ],
+        "scopeBoundaries": [
+          "Standards and checker rule only; do not move hosted_logic or automation packages yet.",
+          "Do not take Wire/root or provider-conductor leases.",
+          "Do not change public CLI/OpenAPI contracts."
+        ],
+        "verification": [
+          "focused hosted-ownership checker tests",
+          "make verify-fast",
+          "make lint"
+        ]
+      }
+    },
+    {
+      "name": "pss-fnd-06-narrow-edges-imports",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "FND-06: Audit and narrow edges.Edges imports",
+        "sourcePaths": [
+          "docs/temp/projects/packaged-service-structure/plan.md",
+          "docs/temp/projects/packaged-service-structure/checklist.md"
+        ],
+        "programs": [
+          "Packaged Service Structure Phase 0"
+        ],
+        "planStory": "FND-06",
+        "exclusiveLease": "pkg/services/edges",
+        "requestedOutcome": "Audit and narrow edges.Edges imports without removing the edges exception. Root and functional-test overrides must remain compatible while implementation imports of the broad bag disappear from constructed services.",
+        "behavioralAcceptanceCriteria": [
+          "Root/functional overrides remain compatible.",
+          "Constructed service implementation imports of broad edges.Edges disappear or are rejected by enforcement.",
+          "edges remains the documented architecture exception and is not deleted or generalized into a service locator.",
+          "Typecheck/lint and focused edges/import tests pass."
+        ],
+        "scopeBoundaries": [
+          "Lease is pkg/services/edges and direct import-narrowing only.",
+          "Do not redesign Wire/root beyond import narrowing required by this packet.",
+          "Do not migrate provider or CLI surfaces."
+        ],
+        "verification": [
+          "focused edges import and override tests",
+          "make verify-fast",
+          "make lint"
+        ]
+      }
+    },
+    {
+      "name": "pss-fnd-07-petri-public-surface-prohibition",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "FND-07: Add Petri-public-surface prohibition",
+        "sourcePaths": [
+          "docs/temp/projects/packaged-service-structure/plan.md",
+          "docs/temp/projects/packaged-service-structure/checklist.md"
+        ],
+        "programs": [
+          "Packaged Service Structure Phase 0"
+        ],
+        "planStory": "FND-07",
+        "exclusiveLease": "architecture checker and fixtures",
+        "requestedOutcome": "Add the Petri-public-surface prohibition so raw nets, markings, tokens, transitions, and engine snapshots fail outside Runtime internals. This unlocks later IMP-RUN-01.",
+        "behavioralAcceptanceCriteria": [
+          "Raw nets/markings/tokens fail checker fixtures outside Runtime internals.",
+          "Public API, transports, integration contracts, and functional-test fixtures are covered by the prohibition fixtures.",
+          "Typecheck/lint and focused Petri-boundary checker tests pass."
+        ],
+        "scopeBoundaries": [
+          "Architecture checker and fixtures only; do not perform Runtime orchestration migration here.",
+          "Do not change customer-facing CLI/OpenAPI contracts solely for package motion.",
+          "Do not take provider-conductor or CLI-manifest leases."
+        ],
+        "verification": [
+          "focused Petri-public-surface checker tests",
+          "make verify-fast",
+          "make lint"
+        ]
+      }
+    },
+    {
+      "name": "pss-fnd-08-factory-event-ownership-inventory",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "FND-08: Freeze Factory Event ownership and schema inventory",
+        "sourcePaths": [
+          "docs/temp/projects/packaged-service-structure/plan.md",
+          "docs/temp/projects/packaged-service-structure/checklist.md"
+        ],
+        "programs": [
+          "Packaged Service Structure Phase 0"
+        ],
+        "planStory": "FND-08",
+        "exclusiveLease": "event-contract paths",
+        "requestedOutcome": "Freeze canonical Factory Event ownership and schema inventory so producers and consumers compile against one Recordings-owned vocabulary. This unlocks later IMP-REC-01 and informs PSS-I05.",
+        "behavioralAcceptanceCriteria": [
+          "Producers and consumers compile against one Recordings-owned event vocabulary inventory.",
+          "Event-contract ownership is explicit and stable-sorted for later deletion-only debt tracking.",
+          "Typecheck/lint and focused event-inventory/contract tests pass."
+        ],
+        "scopeBoundaries": [
+          "Event-contract inventory and ownership freeze only; do not migrate Recordings implementation packages yet.",
+          "Do not change public event payload shapes solely to ease package motion.",
+          "Do not take CLI-manifest or provider-conductor leases."
+        ],
+        "verification": [
+          "focused event ownership/inventory tests",
+          "make verify-fast",
+          "make lint"
+        ]
+      }
+    },
+    {
+      "name": "packaged-service-structure-fnd-wave-02-loopback",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Review PSS foundation wave 02 before next refill",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/checklist.md",
+        "requestedOutcome": "Reconcile queue and session health; inspect evidence for FND-04/05/06/07/08; update checklist/meta/progress; then submit remaining foundation packets, first non-colliding CTR stewards, revise packet shape, or hold on portfolio contention."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "packaged-service-structure-fnd-wave-02-loopback",
+      "targetWorkName": "pss-fnd-04-provider-effect-ownership",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "packaged-service-structure-fnd-wave-02-loopback",
+      "targetWorkName": "pss-fnd-05-hosted-source-runner-ownership",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "packaged-service-structure-fnd-wave-02-loopback",
+      "targetWorkName": "pss-fnd-06-narrow-edges-imports",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "packaged-service-structure-fnd-wave-02-loopback",
+      "targetWorkName": "pss-fnd-07-petri-public-surface-prohibition",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "packaged-service-structure-fnd-wave-02-loopback",
+      "targetWorkName": "pss-fnd-08-factory-event-ownership-inventory",
+      "requiredState": "complete"
+    }
+  ]
+}

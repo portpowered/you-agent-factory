@@ -1,5 +1,0 @@
-{"type":"session","id":"pi-session-snapshot"}
-{"type":"message_start","message":{"id":"msg-snapshot","role":"assistant","content":[]}}
-{"type":"message_update","message":{"id":"msg-snapshot","role":"assistant","content":[]},"assistantMessageEvent":{"type":"text_delta","delta":"draft text","contentIndex":0}}
-{"type":"message_end","message":{"id":"msg-snapshot","role":"assistant","content":[{"type":"text","text":"authoritative text COMPLETE"}],"stopReason":"stop"}}
-{"type":"message_end","message":{"id":"msg-snapshot","role":"assistant","content":[{"type":"text","text":"authoritative text COMPLETE"}],"stopReason":"stop"}}

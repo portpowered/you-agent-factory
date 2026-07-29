@@ -1,0 +1,108 @@
+{
+  "requestId": "planner-wave-fun-mod-vis-20260728",
+  "type": "FACTORY_REQUEST_BATCH",
+  "currentChainingTraceId": "trace-planner-wave-fun-mod-vis-20260728",
+  "works": [
+    {
+      "name": "pss-fun-models",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "FUN-models: public-process proof for Models after LWR + adapters",
+        "program": "Packaged Service Structure",
+        "packetId": "FUN-models",
+        "sourcePath": "docs/temp/customer-ask.md",
+        "currentProgress": [
+          "Models IMP-MOD packets through IMP-MOD-06, LWR-MOD, and HTTP-MOD/CLI-MOD/MCP-MOD adapters are Factory-terminal (CLI-MOD #1507 / ae211bc64).",
+          "Live pkg/services/models root directories are already only wire/, internal/, and transports/ plus root contract/test files; no transitional service/ sibling remains to fold/delete.",
+          "Existing tests/functional/models cover model_list and model_invoke surfaces; FUN-models closes the Models vertical with explicit public-process proof through root.BuildProcess.",
+          "This packet must stay lease-disjoint from live Work residual cleanup, Runtime folds, provider adapters, and PSS-I0* integrators."
+        ],
+        "requestedOutcome": "Prove Models as a packaged service through public process composition only: root.BuildProcess, public Models protocol surfaces (CLI/HTTP/MCP adapters already terminal), and edges.Edges effect replacement. Extend or add focused functional proofs under tests/functional/models (and owner-local root contract tests if needed) so catalog/readiness/host/assets/inference remain inert until runtime lifecycle starts, then exercise public Models discovery/invoke behavior without importing models/internal or models/wire implementation details from outside the owner. Confirm no production peer reaches Models through transitional packages. Do not fold or delete packages. Do not invent additional Models protocol adapters or reopen accepted Schema-Driven/Clean CLI UX. Do not open PSS-I0* shared integrators. Delivery contract: loop implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete Factory work.",
+        "changedPathLease": [
+          "tests/functional/models/**",
+          "pkg/services/models/** root contract/characterization tests only when required for public-process proof",
+          "exclude package folds/deletes under pkg/services/models/**",
+          "exclude Models HTTP/CLI/MCP adapter invention",
+          "exclude PSS-I01/I02/I03/I04 shared integrators",
+          "exclude unrelated owner functional suites except shared support helpers required by BuildProcess"
+        ],
+        "acceptanceCriteria": [
+          "Functional proofs construct Models only through root.BuildProcess and edges.Edges (behavioral)",
+          "Catalog/readiness/host/assets/inference remain inert before runtime lifecycle and activate through public Models surfaces after lifecycle (behavioral)",
+          "No new test or production imports of models/internal from outside the Models owner",
+          "Packaged Models root shape remains wire/, internal/, transports/ plus thin root contracts",
+          "Typecheck, lint, and required CI are terminal green; PR merged before Factory completion"
+        ],
+        "antiPatterns": [
+          "Treating LWR-MOD/adapter merge alone as FUN-models complete without public-process proof",
+          "Reaching Models through wire/internal from outside the owner in functional proofs",
+          "Inventing protocol adapters or reopening accepted CLI UX under a FUN lease",
+          "Folding or deleting Models packages in this packet",
+          "Broad functional-test topology rewrites unrelated to Models"
+        ]
+      }
+    },
+    {
+      "name": "pss-fun-visualization",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "FUN-visualization: public-process proof for Factory Visualization after LWR + adapters",
+        "program": "Packaged Service Structure",
+        "packetId": "FUN-visualization",
+        "sourcePath": "docs/temp/customer-ask.md",
+        "currentProgress": [
+          "Visualization IMP-VIS-01/02/03, LWR-VIS, and HTTP/CLI/MCP-VIS adapters are Factory-terminal.",
+          "CUT-VIS-RUN and CUT-VIS-REC are Factory-terminal; live pkg/services/factory_visualization root directories are already only wire/, internal/, and transports/ plus root contract/test files.",
+          "FUN-visualization closes the Visualization vertical with explicit public-process proof through root.BuildProcess after consumer cuts and adapters.",
+          "This packet must stay lease-disjoint from live Work residual cleanup, Runtime folds, Recordings folds, and PSS-I0* integrators."
+        ],
+        "requestedOutcome": "Prove Factory Visualization as a packaged service through public process composition only: root.BuildProcess, public Visualization protocol surfaces, and edges.Edges effect replacement. Extend or add focused functional proofs under tests/functional (Visualization-owned suite paths) and owner-local root contract tests so activation/live-view/response-presentation remain inert until runtime lifecycle starts, then exercise public Visualization projection/presentation behavior without importing factory_visualization/internal or factory_visualization/wire implementation details from outside the owner. Confirm no production peer reaches Visualization through transitional packages or retired Runtime/Recordings internals. Do not fold or delete packages. Do not invent additional Visualization protocol adapters or reopen accepted CLI UX. Do not open PSS-I0* shared integrators. Delivery contract: loop implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete Factory work.",
+        "changedPathLease": [
+          "tests/functional/** Visualization-owned suites only (create tests/functional/factory_visualization/** if needed)",
+          "pkg/services/factory_visualization/** root contract/characterization tests only when required for public-process proof",
+          "exclude package folds/deletes under pkg/services/factory_visualization/**",
+          "exclude Visualization HTTP/CLI/MCP adapter invention",
+          "exclude PSS-I01/I02/I03/I04 shared integrators",
+          "exclude Runtime/Recordings implementation folds owned by live CLN packets"
+        ],
+        "acceptanceCriteria": [
+          "Functional proofs construct Visualization only through root.BuildProcess and edges.Edges (behavioral)",
+          "Activation/live-view/response-presentation remain inert before runtime lifecycle and activate through public Visualization surfaces after lifecycle (behavioral)",
+          "No new test or production imports of factory_visualization/internal from outside the Visualization owner",
+          "Packaged Visualization root shape remains wire/, internal/, transports/ plus thin root contracts",
+          "Typecheck, lint, and required CI are terminal green; PR merged before Factory completion"
+        ],
+        "antiPatterns": [
+          "Treating LWR-VIS/adapter/CUT merge alone as FUN-visualization complete without public-process proof",
+          "Reaching Visualization through wire/internal from outside the owner in functional proofs",
+          "Inventing protocol adapters or reopening accepted CLI UX under a FUN lease",
+          "Folding or deleting Visualization packages in this packet",
+          "Touching live Runtime/Recordings fold leases under a FUN lease"
+        ]
+      }
+    },
+    {
+      "name": "planner-loopback-fun-mod-vis",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Meta-planner follow-up after FUN-models and FUN-visualization",
+        "sourcePath": "docs/temp/customer-ask.md",
+        "requestedOutcome": "After FUN-models and FUN-visualization reach Factory complete, reconcile inventories, functional coverage, and queue/session evidence. Prefer FUN-work after Work DEL, FUN-settings after Settings DEL, FUN-workers after Workers DEL, and FUN-recordings after Recordings DEL when prerequisites clear. Hold CUT-RUN-REC while Runtime folds own factory_runtime implementation leases. Hold IMP-PROV-05/06 / LWR-PROV while IMP-PROV-04 is non-terminal; hold IMP-WRK-07 while hosted_logic remains polling-only; hold PSS-I0*. Refill maximum safe throughput toward executor-slot capacity 16 from the live ready set without inventing protocol adapters or reopening accepted CLI UX."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-fun-mod-vis",
+      "targetWorkName": "pss-fun-models",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-fun-mod-vis",
+      "targetWorkName": "pss-fun-visualization",
+      "requiredState": "complete"
+    }
+  ]
+}

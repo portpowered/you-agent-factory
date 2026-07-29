@@ -1,0 +1,123 @@
+{
+  "requestId": "planner-wave-ses-work-rec-vis-cuts-20260727",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "pss-cut-ses-work",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "CUT-SES-WORK: Factory Sessions consumes Work root only",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "packetId": "CUT-SES-WORK",
+        "currentProgress": [
+          "Work IMP packets, LWR-WORK, and HTTP/CLI/MCP-WORK adapters are Factory-terminal.",
+          "CUT-SES-WORK was held while Work protocol adapters owned Work transport paths; those adapters are now consumed.",
+          "Live leases remain on Settings adapters, Models CLI adapter, Automations CUT, Runtime CUTs/CLN, DEF repair IMPs/CUTs, PROV-03, and PSES CUT; this packet stays on Sessions→Work consumer edges only."
+        ],
+        "requestedOutcome": "Lease only Factory Sessions call sites that still reach Work through non-root paths or loose Work surfaces. Retarget those imports/call sites to the Work service root contract so Sessions no longer depends on Work implementation packages. Do not fold or delete sessions/service; do not edit root pkg/wire; do not open PSS-I01/I02/I03/I04 shared integrators; do not touch Automations, Runtime CUTs, Settings adapters, or Workers. Prove with focused Sessions/Work boundary tests that Sessions constructs Work requests only through the Work root. Delivery contract: loop implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts are resolved, the PR is merged, and only then complete Factory work.",
+        "changedPathLease": [
+          "pkg/services/factory_sessions/** or Sessions package paths (consumer Work-edge call sites only)",
+          "exclude sessions/service fold/delete",
+          "exclude pkg/wire",
+          "exclude pkg/services/work/** except through Work root contract imports",
+          "exclude pkg/services/automations/**",
+          "exclude pkg/services/factory_runtime/**",
+          "exclude Settings/Models/Providers adapter paths"
+        ],
+        "acceptanceCriteria": [
+          "Factory Sessions production code imports Work only through the Work service root contract",
+          "No new Sessions imports of Work implementation packages",
+          "Focused tests prove Work request construction through the root boundary",
+          "Typecheck, lint, and tests pass; required CI green; PR merged before Factory completion"
+        ]
+      }
+    },
+    {
+      "name": "pss-cut-work-rec",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "CUT-WORK-REC: Work consumes Recordings root only",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "packetId": "CUT-WORK-REC",
+        "currentProgress": [
+          "Work HTTP/CLI/MCP adapters are Factory-terminal.",
+          "CUT-REC-RUN and CUT-REC-WRK are Factory-terminal; Recordings fold/DEL remains held for Automations pkg/wire.",
+          "CUT-WORK-REC is the Work→Recordings consumer-edge packet and is lease-disjoint from Sessions→Work and Visualization→Recordings CUTs."
+        ],
+        "requestedOutcome": "Lease only Work call sites that still reach Recordings through non-root paths or loose Recordings surfaces. Retarget those imports/call sites to the Recordings service root contract so Work no longer depends on Recordings implementation packages. Do not fold or delete work/service or recordings/service; do not edit root pkg/wire; do not open shared integrators; do not reopen Work adapters. Prove with focused Work/Recordings boundary tests. Delivery contract: loop implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts are resolved, the PR is merged, and only then complete Factory work.",
+        "changedPathLease": [
+          "pkg/services/work/** (consumer Recordings-edge call sites only)",
+          "exclude work/service fold/delete",
+          "exclude pkg/services/recordings/service fold/delete",
+          "exclude pkg/wire",
+          "exclude pkg/services/recordings/** except through Recordings root contract imports",
+          "exclude Work HTTP/CLI/MCP adapter reopening"
+        ],
+        "acceptanceCriteria": [
+          "Work production code imports Recordings only through the Recordings service root contract",
+          "No new Work imports of Recordings implementation packages",
+          "Focused tests prove Recordings request construction through the root boundary",
+          "Typecheck, lint, and tests pass; required CI green; PR merged before Factory completion"
+        ]
+      }
+    },
+    {
+      "name": "pss-cut-vis-rec",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "CUT-VIS-REC: Visualization consumes Recordings root only",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "packetId": "CUT-VIS-REC",
+        "currentProgress": [
+          "Visualization IMP packets, LWR-VIS, and HTTP/CLI/MCP-VIS adapters are Factory-terminal.",
+          "CUT-REC-RUN and CUT-REC-WRK are Factory-terminal, clearing the Recordings consumer-edge hold for Vis→Recordings.",
+          "CUT-VIS-RUN remains held while Runtime CUTs/CLN are live; this packet is Recordings-edge only and lease-disjoint from Runtime."
+        ],
+        "requestedOutcome": "Lease only Visualization call sites that still reach Recordings through non-root paths or loose Recordings surfaces. Retarget those imports/call sites to the Recordings service root contract so Visualization no longer depends on Recordings implementation packages. Do not fold or delete visualization/service or recordings/service; do not edit root pkg/wire; do not admit CUT-VIS-RUN while Runtime CUTs remain live; do not open shared integrators. Prove with focused Visualization/Recordings boundary tests. Delivery contract: loop implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts are resolved, the PR is merged, and only then complete Factory work.",
+        "changedPathLease": [
+          "pkg/services/factory_visualization/** or Visualization package paths (consumer Recordings-edge call sites only)",
+          "exclude visualization/service fold/delete",
+          "exclude pkg/services/recordings/service fold/delete",
+          "exclude pkg/wire",
+          "exclude pkg/services/factory_runtime/**",
+          "exclude pkg/services/recordings/** except through Recordings root contract imports"
+        ],
+        "acceptanceCriteria": [
+          "Visualization production code imports Recordings only through the Recordings service root contract",
+          "No new Visualization imports of Recordings implementation packages",
+          "Focused tests prove Recordings request construction through the root boundary",
+          "Typecheck, lint, and tests pass; required CI green; PR merged before Factory completion"
+        ]
+      }
+    },
+    {
+      "name": "planner-loopback-ses-work-rec-vis-cuts",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Meta-planner follow-up after SES-WORK / WORK-REC / VIS-REC CUTs",
+        "sourcePath": "docs/temp/customer-ask.md",
+        "requestedOutcome": "After CUT-SES-WORK, CUT-WORK-REC, and CUT-VIS-REC reach Factory complete, reconcile queue/session/PR/CI evidence and repair any stranded merged tasks. Prefer remaining lease-disjoint CUTs (CUT-VIS-RUN only after Runtime CUTs clear; CUT-SES-WRK when Sessions/Workers leases are free) and vertical fold/DEL for adapter-complete owners when Automations releases pkg/wire. Hold IMP-PROV-04 while IMP-PROV-03 is non-terminal; hold LWR-PROV, IMP-WRK-07, IMP-RUN-04, and PSS-I0*. Refill maximum safe throughput toward executor-slot capacity 16 from the live ready set."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-ses-work-rec-vis-cuts",
+      "targetWorkName": "pss-cut-ses-work",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-ses-work-rec-vis-cuts",
+      "targetWorkName": "pss-cut-work-rec",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-ses-work-rec-vis-cuts",
+      "targetWorkName": "pss-cut-vis-rec",
+      "requiredState": "complete"
+    }
+  ]
+}

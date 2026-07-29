@@ -1,0 +1,110 @@
+{
+  "requestId": "pss-root-contract-wave-06-20260725",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "pss-ctr-mod-root-contract",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "Publish the Model Runtime root service contract",
+        "sourcePaths": [
+          "docs/temp/projects/packaged-service-structure/plan.md",
+          "docs/architecture/packaged-structure.md",
+          "docs/architecture/structures.md"
+        ],
+        "packet": "CTR-MOD",
+        "requestedOutcome": "Create the additive public root contract at pkg/services/models for opaque runtime scopes, catalog, assets, supervised runtime hosting/readiness, nested leases, and inference. Keep implementation, storage, lifecycle, and concrete runtime types private. Characterize current behavior and prove a fake peer can implement the published contract.",
+        "acceptanceCriteria": [
+          "The Models root exposes one coherent service boundary with typed operations/results for runtime scopes, catalog/readiness, asset lifecycle, host lifecycle, lease-backed invocation, cancellation, and normalized failures.",
+          "No HTTP, CLI, MCP, Wire, Factory Session, Worker, or concrete-runtime migration is included; this packet publishes only the additive root contract and focused contract tests.",
+          "A fake peer implementation compiles against the root contract, and focused tests prove no deferred service construction or concrete implementation types leak across the boundary.",
+          "The changed paths are limited to Models root-contract and focused-test/documentation surfaces; do not edit canonical CLI manifest/generated/OpenAPI files."
+        ],
+        "verification": [
+          "focused pkg/services/models tests",
+          "package-boundary/import checks relevant to Models",
+          "make verify-fast"
+        ]
+      }
+    },
+    {
+      "name": "pss-ctr-auto-root-contract",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "Publish the Automation root service contract",
+        "sourcePaths": [
+          "docs/temp/projects/packaged-service-structure/plan.md",
+          "docs/architecture/packaged-structure.md",
+          "docs/architecture/structures.md"
+        ],
+        "packet": "CTR-AUTO",
+        "requestedOutcome": "Create the additive public root contract at pkg/services/automations for reconciliation, trigger/source lifecycle, cursor/status, and generated Work Requests. Keep cron, poller, watcher, hosted-source, concrete scheduling, and storage implementations private. Characterize the contract and prove a fake peer can implement it.",
+        "acceptanceCriteria": [
+          "The Automations root exposes typed reconciliation, desired/observed status, source lifecycle, cursor, cancellation, and Work-request outcomes without importing Work or Runtime implementations.",
+          "The contract is additive and inert at construction; cron/poller/watcher implementation extraction and Work-command integration remain out of scope.",
+          "A fake peer implementation compiles against the contract, and focused tests cover restart, idempotency, and status convergence semantics at the boundary.",
+          "The changed paths are limited to Automations root-contract and focused-test/documentation surfaces; do not edit shared CLI/OpenAPI/Wire surfaces."
+        ],
+        "verification": [
+          "focused pkg/services/automations tests",
+          "package-boundary/import checks relevant to Automations",
+          "make verify-fast"
+        ]
+      }
+    },
+    {
+      "name": "pss-ctr-rec-root-contract",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "Publish the Recordings root service contract",
+        "sourcePaths": [
+          "docs/temp/projects/packaged-service-structure/plan.md",
+          "docs/architecture/packaged-structure.md",
+          "docs/architecture/structures.md"
+        ],
+        "packet": "CTR-REC",
+        "requestedOutcome": "Create the additive public root contract at pkg/services/recordings for canonical append/subscribe, query, records, replay, and artifacts/export. Keep ledger, projection, replay, persistence, and artifact implementations private, preserving a single Recordings family for canonical event facts. Characterize the contract and prove a fake peer can implement it.",
+        "acceptanceCriteria": [
+          "The Recordings root exposes typed append/order/subscription, query, record/replay, and artifact/export operations with detached facts and no implementation, datastore, Petri, or transport leakage.",
+          "The contract makes canonical Factory-event ownership explicit while remaining additive; do not perform event-producer/consumer cutovers, broad functional-topology changes, or HTTP/CLI/MCP/Wire fan-in.",
+          "A fake peer implementation compiles against the root contract, and focused tests characterize ordering, replay equivalence, subscriber gaps/backpressure, and portable artifact facts as applicable to the published surface.",
+          "The changed paths are limited to Recordings root-contract and focused-test/documentation surfaces; do not edit shared CLI/OpenAPI/generated files."
+        ],
+        "verification": [
+          "focused pkg/services/recordings tests",
+          "package-boundary/import checks relevant to Recordings",
+          "make verify-fast"
+        ]
+      }
+    },
+    {
+      "name": "pss-root-contract-wave-06-loopback",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Reconcile Models, Automations, and Recordings contract wave",
+        "sourcePath": "docs/temp/packaged-service-structure-root-contract-wave-06-20260725.json",
+        "requestedOutcome": "After the three root-contract ideas complete, inspect their changed paths, contract/fake-peer proof, CI, review, merge, and Factory consumption. Recompute ready PSS implementation packets and submit only lease-disjoint successors; retain shared Wire, OpenAPI, CLI, provider, and settings/bootstrap gates."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "pss-root-contract-wave-06-loopback",
+      "targetWorkName": "pss-ctr-mod-root-contract",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "pss-root-contract-wave-06-loopback",
+      "targetWorkName": "pss-ctr-auto-root-contract",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "pss-root-contract-wave-06-loopback",
+      "targetWorkName": "pss-ctr-rec-root-contract",
+      "requiredState": "complete"
+    }
+  ]
+}

@@ -1,2 +1,0 @@
-{"type":"message","item_id":"item_fixture_1","delta":"Hello"}
-{"type":"result","session_id":"session_fixture_load_smoke","finish_reason":"stop","usage":{"input_tokens":4,"output_tokens":1}}

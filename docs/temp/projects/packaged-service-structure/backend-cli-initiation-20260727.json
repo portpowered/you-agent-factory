@@ -1,0 +1,60 @@
+{
+  "requestId": "backend-cli-initiation-20260727",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "pss-i03-session-models-cli-fanin",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "Converge Sessions and Models CLI composition through service-owned adapters",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "priority": "P0 CLI package-structure continuation",
+        "changedPathOwnership": [
+          "pkg/transports/cli top-level root and family composition files",
+          "pkg/transports/cli/climanifestcobra focused bindings only when required",
+          "focused root-built CLI composition and parity tests"
+        ],
+        "requestedOutcome": "Implement the next PSS-I03 CLI composition slice over the accepted pkg/services/factory_sessions/transports/cli and pkg/services/models/transports/cli adapters. Replace flattened top-level behavioral function injection for those two families with typed injected adapter composition while keeping top-level CLI responsible for Cobra tree, flags, completion, and invocation-local presentation. Preserve commands, flags, precedence, help, output, symbolic errors, exits, cancellation, generated CLI schema, and Factory invocation-signature behavior exactly. Do not move another service family, change public API/OpenAPI, regenerate shared CLI artifacts, or modify Wire/runtime opening. Prove root.BuildProcess and focused Sessions/Models command parity. Explicitly loop through implementation and review until required CI is terminal green, blocking PR conversation feedback is addressed, conflicts and shared-file churn are reconciled, the PR is merged, and only then complete the Factory work."
+      }
+    },
+    {
+      "name": "pss-imp-ses-06-runtime-opening-flatten-start",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "Begin flattening Factory Sessions runtime opening over process-scoped roots",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "priority": "P0 backend construction flattening",
+        "changedPathOwnership": [
+          "pkg/services/factory_sessions/internal/runtimeopening/**",
+          "pkg/services/factory_sessions/internal/applicationopening/** and executionopening/** only as required",
+          "pkg/services/factory_sessions root opening contracts only as required",
+          "pkg/wire and pkg/root runtime-opener assembly exclusively when required"
+        ],
+        "requestedOutcome": "Implement the first independently reviewable IMP-SES-06 behavioral flattening slice in the existing runtimeopening package. Wire/process construction must continue to create each process-scoped service root exactly once. Selecting a Factory may resolve immutable definition data, open opaque owner scopes, bind runtime/session instances, and return explicit lifecycle handles, but must not construct peer services, return a second Service graph, use constructor bags, private downcasts, or depend on Initializer. Replace the smallest coherent service-returning or peer-factory segment with typed request/result binding and prove inert construction plus reverse-order cleanup on partial failure. Preserve CLI/API behavior and avoid the PSS-I03 top-level CLI lease. Shared coverage, ownership, and package-target manifest churn is allowed when required. Explicitly loop through implementation and review until required CI is terminal green, blocking PR conversation feedback is addressed, conflicts and shared-file churn are reconciled, the PR is merged, and only then complete the Factory work."
+      }
+    },
+    {
+      "name": "backend-cli-initiation-loopback",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Review the backend and CLI initiation wave and refill safe capacity",
+        "sourcePath": "docs/temp/checklist.md",
+        "requestedOutcome": "After both initiation ideas complete, inspect implementation, review, tests, exact changed paths, live queue health, and verified PR merges. Reconcile any failed or stranded Work. Then refill toward the 8-lane maximum with dependency-ready PSS packets; prefer IMP-PROV-02 after Catalog acceptance and compare IMP-RUN-03, the next IMP-SES-06 slice, IMP-MOD-03, IMP-AUTO-01, and IMP-REC-03. Shared coverage, ownership, and package-target manifest churn is not an admission blocker; require rebase and reconciliation through CI and merge. Do not duplicate active work or create competing semantic owners for the same behavior."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "backend-cli-initiation-loopback",
+      "targetWorkName": "pss-i03-session-models-cli-fanin",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "backend-cli-initiation-loopback",
+      "targetWorkName": "pss-imp-ses-06-runtime-opening-flatten-start",
+      "requiredState": "complete"
+    }
+  ]
+}

@@ -1,0 +1,91 @@
+{
+  "requestId": "planner-wave-fun-settings-20260728",
+  "type": "FACTORY_REQUEST_BATCH",
+  "currentChainingTraceId": "trace-planner-wave-fun-settings-20260728",
+  "works": [
+    {
+      "name": "pss-fun-settings",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "FUN-settings: public-process proof for Operator Settings after INV→CLN→DEL vertical completion",
+        "program": "Packaged Service Structure",
+        "packetId": "FUN-settings",
+        "sourcePath": "docs/temp/customer-ask.md",
+        "ask": "After INV-SET-TOPLEVEL, CLN-SET-FOLD-SERVICEWIRE, CLN-SET-LEGACY-PACKAGES, CLN-SET-CONTRACT-ROOTS, and DEL-SET Factory completion, prove from an external-user perspective that Operator Settings still works: operator-config document load/defaults resolution, identity/input inventory surfaces, HTTP/CLI/MCP Settings transports, and Bootstrap/runtime consumers of the Settings root remain inert until runtime lifecycle, then activate through public Operator Settings protocol surfaces constructed only via root.BuildProcess and edges.Edges—without inventing root/wire test subsystems or peer-importing operator_settings/internal or deleted transitional Settings packages (servicewire/, identityinventory/, testlink/, testproviders/).",
+        "systemShapeRequirements": [
+          "Keep packaged Operator Settings root as wire/, internal/, transports/ plus thin root contracts; do not fold or delete packages in this packet (residual public testdata/ is inventory debt, not this packet's deletion scope)",
+          "Do not invent new pkg/root or pkg/wire Operator Settings helper APIs solely for tests",
+          "Functional proofs construct the process only through root.BuildProcess and replace effects only via edges.Edges",
+          "Do not invent Settings HTTP/CLI/MCP adapters (HTTP-SET/CLI-SET/MCP-SET already Factory-terminal) or reopen accepted Schema-Driven/Clean CLI UX",
+          "Do not revive deleted operator_settings transitional siblings (servicewire/, identityinventory/, testlink/, testproviders/) or reopen CLN-SET / DEL-SET deletion leases",
+          "Do not reopen CUT-SET-PROV / BOOT-SET consumer cuts"
+        ],
+        "testCoverageRequirements": [
+          "Own proofs under tests/functional/operator_settings (existing configcore/ suite is the primary home; post-DEL servicewire/ suite paths must be validated and retargeted only if they still import deleted packages or miss public-process coverage)",
+          "First validate whether existing functional proofs already cover inert construction and post-lifecycle activation for operator-config/defaults resolution, identity/input inventory, and HTTP/CLI/MCP Settings transports; add only missing external proofs",
+          "Do not substitute packaged_root_shape, del_set_* gate tests, peer-import scanners, or unit-only thin-root proofs for external behavior proof",
+          "Do not invent a new peer/root/wire Operator Settings test subsystem or a second suite topology outside tests/functional/operator_settings"
+        ],
+        "acceptanceCriteria": [
+          "Operator-config/defaults resolution and Settings HTTP/CLI/MCP transport surfaces have external functional proof of inert construction and post-lifecycle activation through public Operator Settings surfaces (behavioral)",
+          "No functional-suite or production peer import of deleted Settings transitional packages (servicewire/, identityinventory/, testlink/, testproviders/) or operator_settings/internal from outside the Operator Settings owner",
+          "Packaged Operator Settings root remains wire/, internal/, transports/ plus thin root contracts (testdata/ may remain as committed unexpected move debt only)",
+          "Typecheck, lint, and required CI are terminal green; PR merged before Factory completion"
+        ],
+        "outOfScope": [
+          "New Settings HTTP/CLI/MCP adapters",
+          "New pkg/root or pkg/wire Operator Settings composition helpers created only to make tests compile",
+          "Package fold/delete under pkg/services/operator_settings/** (including testdata/ burn-down)",
+          "PSS-I0* shared integrators",
+          "FUN-workers / FUN-recordings / FUN-definitions / FUN-work (separate owner gates)",
+          "IMP-WRK-07 hosted_logic / polling-only Workers adapters",
+          "Reopening CLN-SET, DEL-SET, CUT-SET-PROV, or BOOT-SET"
+        ],
+        "antiPatterns": [
+          "Treating DEL-SET merge alone as FUN-settings complete without public-process proof",
+          "Building a root/wire 'OperatorSettingsRootFromEdges' subsystem because tests asked for public composition",
+          "Treating packaged_root_shape or del_set_* unit gates as sufficient FUN proof without external lifecycle behavior",
+          "Peer-importing operator_settings/internal or deleted transitional Settings packages from functional suites",
+          "Leaving tests/functional/operator_settings/servicewire importing deleted servicewire/ without retargeting to public Settings surfaces",
+          "Inventing protocol adapters or reopening accepted CLI UX under a FUN lease",
+          "Folding/deleting testdata/ or other residual dirs under a FUN lease",
+          "Touching live WRK-CONTRACT / DEL-WRK / DEL-REC / DEL-DEF-RESIDUAL / RET-DEF-ROOT-WIRE / FUN-work / PSS-I0* under a FUN lease"
+        ],
+        "currentProgress": [
+          "INV-SET-TOPLEVEL, CLN-SET-FOLD-SERVICEWIRE, CLN-SET-LEGACY-PACKAGES, CLN-SET-CONTRACT-ROOTS, and DEL-SET are Factory-terminal (DEL-SET PR #1646 merged 869e22efb; idea/plan/task/review complete).",
+          "Live pkg/services/operator_settings public directories are wire/, internal/, transports/, plus residual unexpected testdata/; servicewire/, identityinventory/, testlink/, and testproviders/ are gone; packaged_root_shape / del_set_* gates lock the deletion.",
+          "Settings HTTP/CLI/MCP adapters (HTTP-SET/CLI-SET/MCP-SET), CUT-SET-PROV, and BOOT-SET are already Factory-terminal; FUN closes the vertical with explicit public-process proof.",
+          "Existing tests/functional/operator_settings has configcore/ and legacy servicewire/ suite dirs; FUN must validate/extend public-process inertness + lifecycle and retarget any proofs still bound to deleted packages, not invent a second suite topology.",
+          "Customer ask after SET toplevel cleanup prefers FUN-settings when prerequisites are clear; free executor capacity exists while WRK-CONTRACT, DEL-REC, DEL-DEF-RESIDUAL, FUN-work, and RET-DEF lanes progress naturally."
+        ],
+        "changedPathLease": [
+          "tests/functional/operator_settings/**",
+          "pkg/services/operator_settings/** root contract/characterization tests only when required for public-process proof gaps",
+          "exclude package folds/deletes under pkg/services/operator_settings/**",
+          "exclude Settings HTTP/CLI/MCP adapter invention",
+          "exclude PSS-I01/I02/I03/I04 shared integrators",
+          "exclude WRK-CONTRACT / DEL-WRK / DEL-REC / DEL-DEF-RESIDUAL / RET-DEF-ROOT-WIRE / FUN-work implementation leases except shared-file rebase",
+          "exclude CUT-SET-PROV / BOOT-SET reopen"
+        ],
+        "requestedOutcome": "Prove Operator Settings as a packaged service through public process composition only: root.BuildProcess, public Operator Settings protocol surfaces (HTTP/CLI/MCP adapters already terminal), and edges.Edges effect replacement. Validate and, only where needed, extend focused functional proofs under tests/functional/operator_settings so operator-config/defaults resolution, identity/input inventory, and Settings transports remain inert until runtime lifecycle starts, then exercise public Operator Settings behavior without importing operator_settings/internal or deleted transitional Settings packages (servicewire/, identityinventory/, testlink/, testproviders/) from outside the owner and without inventing pkg/root or pkg/wire test-only composition helpers. Retarget any remaining functional proofs still bound to deleted servicewire/ paths onto public Settings surfaces. Confirm no production peer reaches Operator Settings through deleted transitional packages. Do not fold or delete packages (including residual testdata/). Do not invent Settings protocol adapters or reopen accepted Schema-Driven/Clean CLI UX. Do not open PSS-I0* shared integrators. Delivery contract: loop implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete Factory work."
+      }
+    },
+    {
+      "name": "planner-loopback-fun-settings",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Meta-planner follow-up after FUN-settings",
+        "sourcePath": "docs/temp/customer-ask.md",
+        "requestedOutcome": "After FUN-settings reaches Factory complete, reconcile inventories, functional coverage, and queue/session/PR/CI evidence and repair any stranded merged tasks. Prefer FUN-workers after Workers DEL, FUN-recordings after Recordings DEL, and FUN-definitions after DEL-DEF-RESIDUAL when prerequisites clear. Prefer remaining WRK-CONTRACT→DEL-WRK, DEL-REC, DEL-DEF-RESIDUAL, FUN-work, and RET-DEF-ROOT-WIRE progress. Prefer FUN-work loopback outcomes when that terminal lands. Hold IMP-WRK-07 while hosted_logic remains polling-only; hold PSS-I0*. Do not invent WRK protocol adapters or reopen accepted CLI UX. Do not revive deleted Settings transitional packages. Refill maximum safe throughput toward executor-slot capacity 16 from the live ready set."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-fun-settings",
+      "targetWorkName": "pss-fun-settings",
+      "requiredState": "complete"
+    }
+  ]
+}

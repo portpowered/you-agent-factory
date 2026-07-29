@@ -1,3 +1,0 @@
-{not json}
-{"type":"system","subtype":"init","session_id":"session_fixture_cursor_malformed"}
-{"type":"assistant","timestamp_ms":1,"message":{"role":"assistant","content":[{"type":"text","text":"working"}]},"session_id":"session_fixture_cursor_malformed"}

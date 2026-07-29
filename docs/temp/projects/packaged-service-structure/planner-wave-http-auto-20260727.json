@@ -1,0 +1,58 @@
+{
+  "requestId": "planner-wave-http-auto-20260727",
+  "type": "FACTORY_REQUEST_BATCH",
+  "currentChainingTraceId": "trace-planner-wave-http-auto-20260727",
+  "works": [
+    {
+      "name": "pss-http-auto-adapter",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "PSS HTTP-AUTO: package Automations owner-local HTTP adapter",
+        "program": "Packaged Service Structure",
+        "packetId": "HTTP-AUTO",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "priority": "P1 backend Automations transport adapter",
+        "dependsOnEvidence": [
+          "CTR-AUTO accepted",
+          "Owner-local Automations IMP packets are terminal including IMP-AUTO-01 (PR #1378), IMP-AUTO-02 (PR #1422), IMP-AUTO-03 (PR #1421 / 91d0fb70b), IMP-AUTO-04, and IMP-AUTO-05",
+          "LWR-AUTO accepted: PR #1482 merged as c83794a73; Factory idea/plan/task/review complete",
+          "HTTP-SES/HTTP-DEF/HTTP-REC/HTTP-PSES/HTTP-VIS/HTTP-RUN may be live or terminal; this packet must stay on Automations HTTP paths only"
+        ],
+        "changedPathOwnership": [
+          "pkg/services/automations/transports/http/** or the owner-local Automations HTTP adapter path",
+          "focused fake-root parity for mapping, typed errors, and cancel/timeout behavior",
+          "shared coverage/ownership/package-target manifests only as required by adapter package registration"
+        ],
+        "excludePaths": [
+          "api/openapi-main.yaml and api/components/** shared OpenAPI authorship",
+          "generated OpenAPI/Go/TS clients except unavoidable regenerations owned by a later PSS-I02 fan-in",
+          "pkg/wire",
+          "pkg/root",
+          "pkg/initializer",
+          "top-level CLI root/manifest composition (PSS-I03)",
+          "other services' HTTP adapters",
+          "CLI/MCP Automations adapter paths",
+          "IMP-AUTO / LWR-AUTO ownership reopen"
+        ],
+        "requestedOutcome": "Implement HTTP-AUTO as the Automations service-owned HTTP adapter. Decode/map Automations HTTP requests through the accepted Automations root, translate typed errors, and prove fake-root parity for mapping and cancel/timeout behavior without importing Automations internals or owning canonical state. Do not author shared OpenAPI or perform PSS-I02 route/client fan-in. Do not edit pkg/wire, pkg/root, pkg/initializer, top-level CLI composition, or reopen Automations IMP/LWR ownership. Shared coverage, ownership, and package-target manifest edits are allowed and must be rebased through the merge loop. Explicitly loop through implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete the Factory work."
+      }
+    },
+    {
+      "name": "planner-loopback-http-auto",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Meta-planner follow-up after HTTP-AUTO",
+        "sourcePath": "docs/temp/customer-ask.md",
+        "requestedOutcome": "After HTTP-AUTO completes, reconcile queue/session/PR/CI evidence, repair any stranded merged tasks, admit LWR-SET only after IMP-SET-01 is terminal, admit CLI-BOOT only after LWR-BOOT Factory consumption is terminal, admit IMP-PROV-04 only after IMP-PROV-03 is terminal, admit Models adapters (HTTP-MOD/CLI-MOD/MCP-MOD) only after LWR-MOD is terminal, admit HTTP/CLI/MCP Work and Workers adapters only after LWR-WORK/LWR-WRK terminals, hold IMP-WRK-07 while hosted_logic remains polling-only and IMP-RUN-04 while durability remains open, prefer remaining lease-disjoint Phase-3 packets from the live ready set, and refill maximum safe throughput toward executor-slot capacity 16."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-http-auto",
+      "targetWorkName": "pss-http-auto-adapter",
+      "requiredState": "complete"
+    }
+  ]
+}

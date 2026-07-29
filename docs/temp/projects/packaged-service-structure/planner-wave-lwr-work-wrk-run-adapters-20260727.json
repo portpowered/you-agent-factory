@@ -1,0 +1,248 @@
+{
+  "requestId": "planner-wave-lwr-work-wrk-run-adapters-20260727",
+  "type": "FACTORY_REQUEST_BATCH",
+  "currentChainingTraceId": "trace-planner-wave-lwr-work-wrk-run-adapters-20260727",
+  "works": [
+    {
+      "name": "pss-lwr-work-service-wire",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "PSS LWR-WORK: package Work service-local Wire",
+        "program": "Packaged Service Structure",
+        "packetId": "LWR-WORK",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "priority": "P1 backend Work composition",
+        "dependsOnEvidence": [
+          "CTR-WORK accepted (PR #1272)",
+          "Owner-local Work IMP packets are terminal including IMP-WORK-01, IMP-WORK-02 (PR #1456 / 2b1e2073c), IMP-WORK-03 (PR #1478 merged as 139beff0b; Factory idea/plan/task/review complete), and IMP-WORK-04 (post-ingress eight terminal)",
+          "LWR-SES / LWR-DEF / LWR-RUN / LWR-REC / LWR-VIS accepted and establish the service-local Wire pattern"
+        ],
+        "changedPathOwnership": [
+          "pkg/services/work/wire/** or the owner-local Work Wire composition path",
+          "focused inert construction proof that returns only the Work root interface and starts nothing",
+          "shared coverage/ownership/package-target manifests only as required by Wire package registration"
+        ],
+        "excludePaths": [
+          "pkg/wire",
+          "pkg/root",
+          "pkg/initializer",
+          "OpenAPI generation and top-level CLI root/manifest composition",
+          "other services' Wire paths",
+          "HTTP/CLI/MCP Work adapters"
+        ],
+        "requestedOutcome": "Implement LWR-WORK as the Work service-local Wire packet. Compose the accepted Work root from parent-private admission/content_staging/content_materialization/state_access owners through an inert Wire path that returns only the root interface and starts no lifecycle. Do not edit pkg/wire, pkg/root, pkg/initializer, OpenAPI generation, CLI root/manifest composition, or other services' Wire. Do not expand into HTTP/CLI/MCP adapters or reopen IMP-WORK ownership. Shared coverage, ownership, and package-target manifest edits are allowed and must be rebased through the merge loop. Explicitly loop through implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete the Factory work."
+      }
+    },
+    {
+      "name": "pss-lwr-wrk-service-wire",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "PSS LWR-WRK: package Workers service-local Wire",
+        "program": "Packaged Service Structure",
+        "packetId": "LWR-WRK",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "priority": "P1 backend Workers composition",
+        "dependsOnEvidence": [
+          "CTR-WRK accepted",
+          "Owner-local Workers IMP packets are terminal including IMP-WRK-01 runtime assembly, IMP-WRK-02 workstations, IMP-WRK-03 runners, IMP-WRK-04 agent runner (PR #1423 merged as ec6fbebd3; Factory idea/plan/task/review complete), IMP-WRK-05 script runner (PR #1328 / 9059512d2), and IMP-WRK-06 inference runner (PR #1349 / f57510b64)",
+          "IMP-WRK-07 hosted runner remains held while hosted_logic is polling-only and is out of scope",
+          "LWR-SES / LWR-RUN / LWR-VIS accepted and establish the service-local Wire pattern"
+        ],
+        "changedPathOwnership": [
+          "pkg/services/workers/wire/** or the owner-local Workers Wire composition path",
+          "focused inert construction proof that returns only the Workers root interface and starts nothing",
+          "shared coverage/ownership/package-target manifests only as required by Wire package registration"
+        ],
+        "excludePaths": [
+          "pkg/wire",
+          "pkg/root",
+          "pkg/initializer",
+          "OpenAPI generation and top-level CLI root/manifest composition",
+          "other services' Wire paths",
+          "HTTP/CLI/MCP Workers adapters",
+          "IMP-WRK-07 hosted runner ownership"
+        ],
+        "requestedOutcome": "Implement LWR-WRK as the Workers service-local Wire packet. Compose the accepted Workers root from parent-private runtime_assembly/workstations/runners (agent/script/inference) owners through an inert Wire path that returns only the root interface and starts no lifecycle. Do not implement hosted runner (IMP-WRK-07). Do not edit pkg/wire, pkg/root, pkg/initializer, OpenAPI generation, CLI root/manifest composition, or other services' Wire. Do not expand into HTTP/CLI/MCP adapters or reopen IMP-WRK ownership. Shared coverage, ownership, and package-target manifest edits are allowed and must be rebased through the merge loop. Explicitly loop through implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete the Factory work."
+      }
+    },
+    {
+      "name": "pss-http-run-adapter",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "PSS HTTP-RUN: package Factory Runtime owner-local HTTP adapter",
+        "program": "Packaged Service Structure",
+        "packetId": "HTTP-RUN",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "priority": "P1 backend Runtime transport adapter",
+        "dependsOnEvidence": [
+          "CTR-RUN accepted (PR #1282 / 462057893)",
+          "Owner-local Runtime IMP packets are terminal including IMP-RUN-01/02/03; IMP-RUN-04 remains held for the open durability decision",
+          "LWR-RUN accepted: PR #1471 merged as 213f5941c; Factory idea/plan/task/review complete",
+          "HTTP-SES/HTTP-DEF/HTTP-REC/HTTP-PSES/HTTP-VIS may be live or terminal; this packet must stay on Factory Runtime HTTP paths only"
+        ],
+        "changedPathOwnership": [
+          "pkg/services/factory_runtime/transports/http/** or the owner-local Factory Runtime HTTP adapter path",
+          "focused fake-root parity for mapping, typed errors, and cancel/timeout behavior",
+          "shared coverage/ownership/package-target manifests only as required by adapter package registration"
+        ],
+        "excludePaths": [
+          "api/openapi-main.yaml and api/components/** shared OpenAPI authorship",
+          "generated OpenAPI/Go/TS clients except unavoidable regenerations owned by a later PSS-I02 fan-in",
+          "pkg/wire",
+          "pkg/root",
+          "pkg/initializer",
+          "top-level CLI root/manifest composition (PSS-I03)",
+          "other services' HTTP adapters",
+          "CLI-RUN / MCP-RUN adapter paths",
+          "IMP-RUN-04 checkpoint_recovery ownership"
+        ],
+        "requestedOutcome": "Implement HTTP-RUN as the Factory Runtime service-owned HTTP adapter. Decode/map Runtime HTTP requests through the accepted Runtime root, translate typed errors, and prove fake-root parity for mapping and cancel/timeout behavior without importing Runtime internals or owning canonical state. Do not author shared OpenAPI or perform PSS-I02 route/client fan-in. Do not edit pkg/wire, pkg/root, pkg/initializer, top-level CLI composition, or reopen Runtime IMP/LWR ownership. Shared coverage, ownership, and package-target manifest edits are allowed and must be rebased through the merge loop. Explicitly loop through implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete the Factory work."
+      }
+    },
+    {
+      "name": "pss-cli-run-adapter",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "PSS CLI-RUN: move Factory Runtime CLI behavior behind a service-owned adapter",
+        "program": "Packaged Service Structure / CLI package-structure migration",
+        "packetId": "CLI-RUN",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "priority": "P1 CLI package-structure Runtime adapter",
+        "dependsOnEvidence": [
+          "LWR-RUN accepted: PR #1471 merged as 213f5941c; Factory idea/plan/task/review complete",
+          "CLI-SES accepted (PR #1467 / e15a7899c) and CLI-DEF accepted (PR #1481); accepted Clean CLI UX/schema remain frozen",
+          "CLI-REC and CLI-VIS may still be live; this packet must stay on Factory Runtime CLI paths only and must not perform PSS-I03 top-level fan-in"
+        ],
+        "changedPathOwnership": [
+          "pkg/services/factory_runtime/transports/cli/** or the owner-local Factory Runtime CLI adapter path",
+          "focused human/JSON/quiet/NDJSON parity and symbolic-error/exit proof through the accepted Runtime root",
+          "shared coverage/ownership/package-target manifests only as required by adapter package registration"
+        ],
+        "excludePaths": [
+          "pkg/transports/cli/root*",
+          "pkg/transports/cli/commandregistry",
+          "pkg/transports/cli/climanifest*",
+          "generated CLI artifacts and authored CLI manifest ownership (PSS-I03)",
+          "pkg/wire",
+          "pkg/root",
+          "pkg/initializer",
+          "HTTP-RUN / MCP-RUN adapter paths",
+          "other services' CLI adapters"
+        ],
+        "requestedOutcome": "Implement CLI-RUN as the Factory Runtime service-owned CLI adapter. Move or delegate Runtime-facing CLI behavior behind the service-owned adapter while preserving accepted Clean CLI human/JSON/quiet/NDJSON output, diagnostics, symbolic errors, exits, and cancellation. Keep any top-level transport path as a narrow compatibility/delegation surface so this packet does not edit root/manifest/Cobra composition (PSS-I03). Do not reopen accepted Clean CLI UX/schema design. Shared coverage, ownership, and package-target manifest edits are allowed and must be rebased through the merge loop. Explicitly loop through implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete the Factory work."
+      }
+    },
+    {
+      "name": "pss-mcp-run-adapter",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "PSS MCP-RUN: package Factory Runtime owner-local MCP adapter",
+        "program": "Packaged Service Structure",
+        "packetId": "MCP-RUN",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "priority": "P1 backend Runtime transport adapter",
+        "dependsOnEvidence": [
+          "CTR-RUN accepted (PR #1282 / 462057893)",
+          "Owner-local Runtime IMP packets are terminal including IMP-RUN-01/02/03; IMP-RUN-04 remains held",
+          "LWR-RUN accepted: PR #1471 merged as 213f5941c; Factory idea/plan/task/review complete",
+          "MCP-SES terminal; MCP-DEF/MCP-REC may still be live; this packet must stay on Factory Runtime MCP paths only and must not touch PSS-I04 shared MCP registry fan-in"
+        ],
+        "changedPathOwnership": [
+          "pkg/services/factory_runtime/transports/mcp/** or the owner-local Factory Runtime MCP adapter path",
+          "focused tool discovery/result/error parity through the accepted Runtime root",
+          "shared coverage/ownership/package-target manifests only as required by adapter package registration"
+        ],
+        "excludePaths": [
+          "shared MCP server/registry/discovery catalog composition (PSS-I04)",
+          "pkg/wire",
+          "pkg/root",
+          "pkg/initializer",
+          "top-level CLI root/manifest composition (PSS-I03)",
+          "HTTP-RUN / CLI-RUN adapter paths",
+          "other services' MCP adapters",
+          "IMP-RUN-04 checkpoint_recovery ownership"
+        ],
+        "requestedOutcome": "Implement MCP-RUN as the Factory Runtime service-owned MCP adapter. Expose Runtime tools through the accepted Runtime root with discovery/result/error parity, without importing Runtime internals or owning canonical state. Do not edit shared MCP registry/server composition (PSS-I04), pkg/wire, pkg/root, pkg/initializer, top-level CLI composition, or reopen Runtime IMP/LWR/HTTP/CLI ownership. Shared coverage, ownership, and package-target manifest edits are allowed and must be rebased through the merge loop. Explicitly loop through implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete the Factory work."
+      }
+    },
+    {
+      "name": "pss-mcp-vis-adapter",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "PSS MCP-VIS: package Factory Visualization owner-local MCP adapter",
+        "program": "Packaged Service Structure",
+        "packetId": "MCP-VIS",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "priority": "P1 backend Visualization transport adapter",
+        "dependsOnEvidence": [
+          "CTR-VIS accepted (PR #1447 / a28c43f8b)",
+          "IMP-VIS-01/02/03 terminal (PRs #1457/#1462/#1465)",
+          "LWR-VIS accepted: PR #1480 merged; Factory idea/plan/task/review complete",
+          "HTTP-VIS and CLI-VIS may still be live; this packet must stay on Visualization MCP paths only and must not touch PSS-I04 shared MCP registry fan-in"
+        ],
+        "changedPathOwnership": [
+          "pkg/services/factory_visualization/transports/mcp/** or the owner-local Visualization MCP adapter path",
+          "focused tool discovery/result/error parity through the accepted Visualization root",
+          "shared coverage/ownership/package-target manifests only as required by adapter package registration"
+        ],
+        "excludePaths": [
+          "shared MCP server/registry/discovery catalog composition (PSS-I04)",
+          "pkg/wire",
+          "pkg/root",
+          "pkg/initializer",
+          "top-level CLI root/manifest composition (PSS-I03)",
+          "HTTP-VIS / CLI-VIS adapter paths",
+          "other services' MCP adapters"
+        ],
+        "requestedOutcome": "Implement MCP-VIS as the Factory Visualization service-owned MCP adapter. Expose Visualization tools through the accepted Visualization root with discovery/result/error parity, without importing Visualization internals or owning canonical state. Do not edit shared MCP registry/server composition (PSS-I04), pkg/wire, pkg/root, pkg/initializer, top-level CLI composition, or reopen Visualization IMP/LWR/HTTP/CLI ownership. Shared coverage, ownership, and package-target manifest edits are allowed and must be rebased through the merge loop. Explicitly loop through implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete the Factory work."
+      }
+    },
+    {
+      "name": "planner-loopback-lwr-work-wrk-run-adapters",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Meta-planner follow-up after LWR-WORK/LWR-WRK/Runtime adapters/MCP-VIS refill",
+        "sourcePath": "docs/temp/customer-ask.md",
+        "requestedOutcome": "After this wave completes, reconcile queue/session/PR/CI evidence, repair any stranded merged tasks, admit LWR-SET only after IMP-SET-01 is terminal, admit IMP-PROV-04 only after IMP-PROV-03 is terminal, admit CLI-BOOT/HTTP-AUTO and Models adapters (HTTP-MOD/CLI-MOD/MCP-MOD) only after matching LWR terminals, admit HTTP/CLI/MCP Work and Workers adapters only after LWR-WORK/LWR-WRK terminals, hold IMP-WRK-07 while hosted_logic remains polling-only and IMP-RUN-04 while durability remains open, prefer remaining lease-disjoint Phase-3 packets from the live ready set, and refill maximum safe throughput toward executor-slot capacity 16."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-lwr-work-wrk-run-adapters",
+      "targetWorkName": "pss-lwr-work-service-wire",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-lwr-work-wrk-run-adapters",
+      "targetWorkName": "pss-lwr-wrk-service-wire",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-lwr-work-wrk-run-adapters",
+      "targetWorkName": "pss-http-run-adapter",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-lwr-work-wrk-run-adapters",
+      "targetWorkName": "pss-cli-run-adapter",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-lwr-work-wrk-run-adapters",
+      "targetWorkName": "pss-mcp-run-adapter",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-lwr-work-wrk-run-adapters",
+      "targetWorkName": "pss-mcp-vis-adapter",
+      "requiredState": "complete"
+    }
+  ]
+}

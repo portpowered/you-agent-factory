@@ -1,0 +1,129 @@
+{
+  "requestId": "planner-wave-mod05-vis-work02-20260727",
+  "type": "FACTORY_REQUEST_BATCH",
+  "currentChainingTraceId": "trace-planner-wave-mod05-vis-work02-20260727",
+  "works": [
+    {
+      "name": "pss-imp-mod-05-runtime-host-leases",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "PSS IMP-MOD-05: package Models runtime-host capacity leases and holders",
+        "program": "Packaged Service Structure",
+        "packetId": "IMP-MOD-05",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "priority": "P0 backend Models refactoring",
+        "dependsOnEvidence": [
+          "IMP-MOD-04 accepted: PR #1425 merged exact head 69269d07d as 72d2a1ae5; Factory idea/task/review complete"
+        ],
+        "changedPathOwnership": [
+          "pkg/services/models/internal/services/runtime_host/internal/services/leases/**",
+          "focused Models lease capacity/holder call sites under runtime_host",
+          "focused contention, expiry, release, cancel, and race proof"
+        ],
+        "requestedOutcome": "Implement IMP-MOD-05 as the parent-private Models runtime_host leases owner. Provide capacity and holder semantics with deterministic contention, expiry, release, cancel, and race proof while keeping construction inert and effects injected. Do not absorb runtime_scopes, catalog, assets, runtime_host supervision itself, or inference ownership. Shared coverage, ownership, and package-target manifest edits are allowed. Explicitly loop through implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete the Factory work."
+      }
+    },
+    {
+      "name": "pss-ctr-vis-root-contract",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "PSS CTR-VIS: publish the Factory Visualization root contract",
+        "program": "Packaged Service Structure",
+        "packetId": "CTR-VIS",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "resume": {
+          "reason": "Factory reconstruction dropped the idea/task tokens while the named worktree and remote branch retained implementation commits. Requeue with the exact same work name so setup-workspace reuses `.claude/worktrees/pss-ctr-vis-root-contract` and branch `pss-ctr-vis-root-contract`.",
+          "existingHead": "09b8d5746",
+          "existingStories": [
+            "001 Freeze the singular Factory Visualization root interface seam",
+            "002 Publish request-activated lifecycle root-contract slice",
+            "003 Publish live projection root-contract slice",
+            "004 Publish presentation and drain root-contract slice"
+          ],
+          "nextSteps": "Continue from the existing branch: finish remaining characterization/seal work, open or update the PR, clear CI/review/conflicts, merge, and only then complete Factory work. Do not recreate already-landed story commits."
+        },
+        "objective": "Publish the singular Factory Visualization root contract for activation lifecycle, live projection, and presentation/drain without relocating implementation packages yet. Characterize the slice, prove a fake peer can implement it, and keep implementation/storage/lifecycle types out of the root surface.",
+        "scope": [
+          "Own pkg/services/factory_visualization root contracts and characterization tests only.",
+          "Cover request-activated lifecycle, live projection, and presentation/drain seams.",
+          "Keep construction inert; do not start visualization lifecycle from Wire/root construction.",
+          "Do not admit IMP-VIS-* successors in this packet; do not edit OpenAPI generation, CLI root/manifest composition, or unrelated service roots.",
+          "Treat shared coverage, ownership, and package-target manifest churn as accepted integration work; rebase and reconcile it through delivery."
+        ],
+        "acceptanceCriteria": [
+          "Factory Visualization exposes one root contract covering activation, live projection, and presentation/drain.",
+          "Characterization and fake-peer proof demonstrate the contract without leaking implementation types.",
+          "Process construction remains inert with respect to visualization activation.",
+          "Required focused tests and repository verification gates pass."
+        ],
+        "deliveryContract": "Continue the implementation and review loop until every required CI check is terminal and passing, every blocking PR conversation comment is addressed, merge conflicts are resolved, and the PR is merged. Only then may Factory work complete. Opening a PR, making it review-ready, or obtaining green CI without merge is not completion. Shared-file churn is not an admission blocker; rebase and reconcile shared files as part of this delivery loop."
+      }
+    },
+    {
+      "name": "pss-imp-work-02-content-staging",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "PSS IMP-WORK-02: package Work content staging secure references and cleanup",
+        "program": "Packaged Service Structure",
+        "packetId": "IMP-WORK-02",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "resume": {
+          "reason": "Factory reconstruction dropped the idea/task tokens while the named worktree and remote branch retained implementation commits. Requeue with the exact same work name so setup-workspace reuses `.claude/worktrees/pss-imp-work-02-content-staging` and branch `pss-imp-work-02-content-staging`.",
+          "existingHead": "f8015fa1f",
+          "existingStories": [
+            "001 Nest content_staging and issue secure staged references",
+            "002 Reject tampered and expired staged references",
+            "003 Clean up staged content and partial stages",
+            "004 Preserve prepare and validation behavior at the Work root seam"
+          ],
+          "nextSteps": "Continue from the existing branch: finish remaining seam tests and delivery evidence, open or update the PR, clear CI/review/conflicts, merge, and only then complete Factory work. Do not recreate already-landed story commits. Do not expand into IMP-WORK-03 materialization."
+        },
+        "objective": "Deliver the parent-private Work content_staging owner for secure staged references, expiry, and cleanup while preserving prepare/validation behavior at the Work root seam.",
+        "scope": [
+          "Own pkg/services/work/internal/services/content_staging/** and focused Work root seam call sites for staging.",
+          "Prove tamper, expiry, and partial-stage cleanup behavior with focused tests.",
+          "Keep admission, materialization, and state_access ownership out of scope.",
+          "Do not edit OpenAPI generation, CLI root/manifest composition, Runtime Petri surfaces, or unrelated Work subservices beyond required seam preservation.",
+          "Treat shared coverage, ownership, and package-target manifest churn as accepted integration work; rebase and reconcile it through delivery."
+        ],
+        "acceptanceCriteria": [
+          "Content staging issues secure references and rejects tampered/expired inputs.",
+          "Partial stages and staged content clean up deterministically.",
+          "Prepare/validation behavior at the Work root seam is preserved.",
+          "Focused unit and public functional evidence prove behavior without constructing a peer service graph.",
+          "Required package-boundary and repository verification gates pass."
+        ],
+        "deliveryContract": "Continue the implementation and review loop until every required CI check is terminal and passing, every blocking PR conversation comment is addressed, merge conflicts are resolved, and the PR is merged. Only then may Factory work complete. Opening a PR, making it review-ready, or obtaining green CI without merge is not completion. Shared-file churn is not an admission blocker; rebase and reconcile shared files as part of this delivery loop."
+      }
+    },
+    {
+      "name": "planner-loopback-mod05-vis-work02",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Meta-planner follow-up after MOD-05, CTR-VIS resume, and WORK-02 resume",
+        "sourcePath": "docs/temp/customer-ask.md",
+        "requestedOutcome": "Reconcile queue/session/PR evidence after the three ideas complete. Accept or repair each terminal lane from merge/review evidence. Compare IMP-MOD-06 only after MOD-05 terminal; compare IMP-VIS-* only after CTR-VIS terminal; compare IMP-WORK-03 only after WORK-02 terminal; keep IMP-PROV-04 serialized behind live/terminal PROV-03; refill remaining free executor slots with dependency-ready lease-disjoint packets or hold with recorded rationale."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-mod05-vis-work02",
+      "targetWorkName": "pss-imp-mod-05-runtime-host-leases",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-mod05-vis-work02",
+      "targetWorkName": "pss-ctr-vis-root-contract",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-mod05-vis-work02",
+      "targetWorkName": "pss-imp-work-02-content-staging",
+      "requiredState": "complete"
+    }
+  ]
+}

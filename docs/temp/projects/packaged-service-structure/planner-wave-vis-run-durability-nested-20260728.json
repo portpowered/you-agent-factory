@@ -1,0 +1,158 @@
+{
+  "requestId": "planner-wave-vis-run-durability-nested-20260728",
+  "type": "FACTORY_REQUEST_BATCH",
+  "currentChainingTraceId": "trace-planner-wave-vis-run-durability-nested-20260728",
+  "works": [
+    {
+      "name": "pss-cut-vis-run",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "CUT-VIS-RUN: Visualization consumes Factory Runtime root only",
+        "program": "Packaged Service Structure",
+        "packetId": "CUT-VIS-RUN",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "currentProgress": [
+          "Visualization IMP/LWR and HTTP/CLI/MCP-VIS adapters are Factory-terminal.",
+          "CUT-SES-RUN and CUT-RUN-WRK are Factory-terminal; CLN-RUN-PETRI-ROOT is Factory-terminal (#1523 / merged on main).",
+          "CLN-RUN-FOLD-SERVICE is now live after Petri clearance; this packet leases Visualization consumer edges only and must not fold Runtime packages.",
+          "CUT-VIS-REC is still an active executor task; keep this packet on Visualization→Runtime edges only and do not reopen Recordings edges.",
+          "CUT-RUN-REC remains held while Runtime service/engine folds own factory_runtime implementation paths."
+        ],
+        "requestedOutcome": "Lease only Factory Visualization call sites that still reach Factory Runtime through non-root paths (service/host, engine, runtime, javascript, hosting bundles, GetEngineStateSnapshot, or other implementation packages). Retarget those imports/call sites to the Factory Runtime service root contract (Service.Observe / root control surfaces) so Visualization no longer depends on Runtime implementation packages or Petri-shaped observation helpers. Do not fold or delete visualization or factory_runtime packages. Do not edit root pkg/wire except a narrow Visualization→Runtime import retarget if unavoidable. Do not open CUT-RUN-REC, IMP-RUN-04, or shared integrators. Prove with focused Visualization/Runtime boundary tests that observation/control goes through the Runtime root. Delivery contract: loop implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete Factory work.",
+        "changedPathLease": [
+          "pkg/services/factory_visualization/** (consumer Runtime-edge call sites only)",
+          "exclude pkg/services/factory_runtime/** except through Runtime root contract imports",
+          "exclude factory_runtime/service fold/delete and engine-pipeline moves",
+          "exclude pkg/wire except narrow Visualization→Runtime import retarget if required",
+          "exclude CUT-VIS-REC / Recordings edge rewrites",
+          "exclude IMP-RUN-04 checkpoint implementation"
+        ],
+        "acceptanceCriteria": [
+          "Visualization production code imports Factory Runtime only through the Runtime service root contract",
+          "No new Visualization imports of Runtime implementation packages (service/engine/runtime/javascript/hosting)",
+          "No Visualization production dependency on Petri-shaped GetEngineStateSnapshot / StateSnapshot aliases",
+          "Focused tests prove Runtime observation/control through the root boundary (behavioral)",
+          "Observable Visualization activation/view behavior is preserved (behavioral)",
+          "Typecheck, lint, and required CI are terminal green; PR merged before Factory completion"
+        ],
+        "antiPatterns": [
+          "Folding or deleting factory_runtime or visualization packages under a CUT lease",
+          "Editing Runtime internals to satisfy Visualization imports",
+          "Reopening CUT-VIS-REC or Recordings edges",
+          "Admitting CUT-RUN-REC or IMP-RUN-04 inside this packet",
+          "Opening PSS-I01/I02/I03/I04 shared integrators"
+        ]
+      }
+    },
+    {
+      "name": "pss-dec-run-rec-durability",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "DEC-RUN-REC-DURABILITY: decide Runtime checkpoint vs Recordings history ownership",
+        "program": "Packaged Service Structure",
+        "packetId": "DEC-RUN-REC-DURABILITY",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "currentProgress": [
+          "PSS plan Runtime sequence step 7 requires an explicit Runtime-checkpoint versus Recordings-history ownership decision before Checkpoint/Recovery implementation.",
+          "IMP-RUN-04 (checkpoint_recovery) has been held indefinitely without an owning decision packet; customer ask requires progress rather than permanent hold.",
+          "CTR-RUN and CTR-REC are Factory-terminal; IMP-RUN-01..03 and IMP-REC-* foundations exist; Recordings durable log/cursor/retention is still a later Recordings sequence step.",
+          "Plan keeps Checkpoint Service non-top-level and treats Checkpoint/Recovery as a Runtime private subservice after the durability decision."
+        ],
+        "requestedOutcome": "Publish an explicit, checked-in durability decision that unblocks IMP-RUN-04 without waiting for a future Recordings durable-log deployment split. Required decision content: (1) Runtime owns opaque strategy checkpoint capture/load/compatibility/restore inside internal/services/checkpoint_recovery; checkpoints are versioned opaque blobs plus Runtime-owned codec selection, never Petri/JS internals on the peer surface. (2) Recordings remains the durable history/artifact authority for canonical events, replay artifacts, and any future durable checkpoint byte storage; Runtime must not become a second event ledger. (3) IMP-RUN-04 may proceed now against a Runtime-owned opaque CheckpointStore port with a process-local/default adapter sufficient for compatible restore and corrupt-checkpoint proofs; a Recordings-backed durable store adapter is an explicit follow-on after Recordings durable log/cursor/retention exists and is not a gate for starting IMP-RUN-04. (4) Sessions durable_execution continues to coordinate resume identity through Recordings + Runtime root contracts rather than importing checkpoint internals. Write the decision into docs/temp/projects/packaged-service-structure/ (decision note + checklist/plan cross-links) and update planner meta hold text so IMP-RUN-04 becomes dependency-ready after this packet is Factory-complete. Do not implement checkpoint_recovery code in this packet. Do not invent a top-level Checkpoint service. Do not change Runtime/Recordings public package layout beyond docs/checklist/meta. Delivery contract: loop implementation and review until required CI is terminal green (docs/checklist verification jobs as applicable), every blocking PR conversation comment is addressed, merge conflicts are reconciled, the PR is merged, and only then complete Factory work.",
+        "changedPathLease": [
+          "docs/temp/projects/packaged-service-structure/** (decision note, checklist, plan cross-links)",
+          "docs/temp/meta.md hold text for IMP-RUN-04 only if the PR includes planner-state guidance the repo tracks",
+          "exclude pkg/services/factory_runtime/** implementation",
+          "exclude pkg/services/recordings/** implementation",
+          "exclude creating a top-level Checkpoint service"
+        ],
+        "acceptanceCriteria": [
+          "A checked-in decision artifact states Runtime owns opaque checkpoint_recovery and Recordings owns durable history/artifact authority",
+          "Decision explicitly authorizes IMP-RUN-04 to start with a Runtime opaque CheckpointStore port + process-local/default adapter",
+          "Decision explicitly defers Recordings-backed durable checkpoint storage to a follow-on after Recordings durable log work",
+          "Checklist/plan/meta no longer describe IMP-RUN-04 as blocked solely by a missing decision owner",
+          "No checkpoint_recovery implementation ships in this packet",
+          "Typecheck/lint/docs checks required by CI are terminal green; PR merged before Factory completion"
+        ],
+        "antiPatterns": [
+          "Leaving IMP-RUN-04 blocked with no owning decision artifact",
+          "Implementing checkpoint_recovery or Recordings durable log inside the decision packet",
+          "Promoting a top-level Checkpoint service",
+          "Making Runtime a second canonical event ledger",
+          "Requiring full Recordings durable-log completion before any IMP-RUN-04 admission"
+        ]
+      }
+    },
+    {
+      "name": "pss-inv-nested-owner-move-rules",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "INV-NESTED-OWNER-MOVE-RULES: complete nestedOwnerMoveRules and kill false retain mappings",
+        "program": "Packaged Service Structure",
+        "packetId": "INV-NESTED-OWNER-MOVE-RULES",
+        "sourcePath": "docs/temp/projects/packaged-service-structure/plan.md",
+        "currentProgress": [
+          "Customer ask: nestedOwnerMoveRules are incomplete for various top-level packages, and transitional Runtime packages were wrongly marked retain.",
+          "cmd/packagetargetmanifestcheck/owners.go nestedOwnerMoveRules currently covers partial maps for factory_sessions, factory_runtime (javascript/orchestrators only), work/materialize, workers/services runners, provider_sessions readers, models internal/* moves, recordings legacy dirs, automations/timework, and factory_definitions many dirs.",
+          "Live tree still has unexpected public siblings that lack complete move rules: factory_runtime/{build,engine,runtime,scheduler,state,subsystems,token,...}, workers/{construction,diagnostics,execution,...}, recordings/{artifacts,events,...} (INV-REC remapped but rules must stay consistent), operator_settings/{identityinventory,servicewire,testlink}, work/stateaccessrecordings, automations/service, provider_sessions/service, factory_definitions residual dirs.",
+          "Owner-local INV-WRK/INV-REC/INV-PSES and CLN-RUN-FOLD-ENGINE-PIPELINE already touch subsets; this packet is the cross-owner rules/inventory completion pass and must not perform package folds/deletes."
+        ],
+        "requestedOutcome": "Inventory every live product-owner top-level child under pkg/services/* that is not wire/, internal/, or transports/, plus excess root contract clusters. For each unexpected path, ensure nestedOwnerMoveRules (and mirrored ownershipinventory mapping helpers) encode disposition move or delete with an explicit destination under <owner>/internal or <owner>/internal/services/<subservice> matching the PSS plan tree. Reject retain on transitional non-(wire/internal/transports) public packages for product owners. Regenerate package-target-manifest and ownership-inventory. Add/extend generator and unit tests that fail when a listed unexpected sibling is mapped retain→owner. Do not fold or delete packages in this packet (owner CLN/DEL packets remain responsible). Do not reopen provider adapter groups or shared integrators. Coordinate with live INV-WRK/INV-REC/INV-PSES/CLN-RUN-FOLD-ENGINE by rebasing shared manifest files in the merge loop rather than waiting. Delivery contract: loop implementation and review until required CI is terminal green, every blocking PR conversation comment is addressed, merge conflicts and shared-file churn are reconciled, the PR is merged, and only then complete Factory work.",
+        "changedPathLease": [
+          "cmd/packagetargetmanifestcheck/**",
+          "internal/ownershipinventory/**",
+          "docs/internal/packaged-service-structure/package-target-manifest.json",
+          "docs/internal/baselines/ownership-inventory.json",
+          "docs/internal/baselines/package-structure-baseline.json only if inventory rows must change",
+          "exclude package folds/deletes under pkg/services/**",
+          "exclude provider adapter implementation",
+          "exclude PSS-I01/I02/I03/I04 shared integrator cutovers"
+        ],
+        "acceptanceCriteria": [
+          "Every unexpected product-owner top-level public sibling has nestedOwnerMoveRules (or explicit delete disposition) with a concrete destination",
+          "Transitional factory_runtime engine/runtime/state/scheduler/subsystems/token/build-class paths are not retain-shaped",
+          "Generator/unit tests reject retain on the inventoried unexpected siblings",
+          "Regenerated package-target and ownership inventories match the new rules",
+          "No package fold/delete is performed in this packet",
+          "Typecheck, lint, and required CI are terminal green; PR merged before Factory completion"
+        ],
+        "antiPatterns": [
+          "Leaving transitional public packages as retain→owner",
+          "Folding or deleting packages inside the inventory/rules packet",
+          "Inventing new protocol adapters",
+          "Blocking on live owner INV/CLN packets instead of rebasing shared manifests",
+          "Opening shared Wire/OpenAPI/CLI integrator cutovers"
+        ]
+      }
+    },
+    {
+      "name": "planner-loopback-vis-run-durability-nested",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Meta-planner follow-up after CUT-VIS-RUN + durability decision + nested move-rules INV",
+        "sourcePath": "docs/temp/customer-ask.md",
+        "requestedOutcome": "After CUT-VIS-RUN, DEC-RUN-REC-DURABILITY, and INV-NESTED-OWNER-MOVE-RULES reach Factory complete, reconcile queue/session/PR/CI evidence and repair stranded work. If DEC is terminal, prefer admitting IMP-RUN-04 when CTR-RUN/CTR-REC remain terminal and capacity exists. Prefer CUT-RUN-REC only after Runtime CLN-RUN-FOLD-SERVICE/ENGINE are no longer owning factory_runtime implementation leases. Before monolithic pss-del-run starts, replace it with subpackage DEL packets (DEL-RUN-SERVICE, DEL-RUN-ENGINE-PIPELINE slices) per customer ask. Prefer Settings residual INV→fold→DEL after CUT-SET-PROV/BOOT-SET terminal; prefer FUN-automations after DEL-AUTO; hold IMP-PROV-05/06 / LWR-PROV while IMP-PROV-04 is live; hold IMP-WRK-07 / PSS-I0*. Refill toward executor-slot capacity 16 from the live ready set."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-vis-run-durability-nested",
+      "targetWorkName": "pss-cut-vis-run",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-vis-run-durability-nested",
+      "targetWorkName": "pss-dec-run-rec-durability",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-loopback-vis-run-durability-nested",
+      "targetWorkName": "pss-inv-nested-owner-move-rules",
+      "requiredState": "complete"
+    }
+  ]
+}
