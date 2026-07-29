@@ -12,8 +12,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/mattn/go-shellwords"
-
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -21,6 +19,7 @@ import (
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerinference "github.com/portpowered/infinite-you/pkg/services/providers/inference"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
+	acpwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp/wire"
 	builtinswire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/builtins/wire"
 	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
@@ -244,12 +243,12 @@ func newRoot(
 		workersCommandRunner = workers.AdaptCommandRunner(commandRunner)
 	}
 	registrations := executionserviceRegistrations(workersCommandRunner, cursorPlatform, agyPTYPlatform)
+	acpService, err := acpwire.NewService(acpIntegrations, commandFactory, executableLocator)
+	if err != nil {
+		return nil, err
+	}
 	for _, integration := range acpIntegrations {
-		parts, err := shellwords.Parse(integration.Command)
-		if err != nil || len(parts) == 0 {
-			return nil, fmt.Errorf("construct ACP provider %q: invalid command", integration.Name)
-		}
-		registrations = append(registrations, executionwire.NewACPRegistration(integration.Name, parts[0], parts[1:], commandFactory, executableLocator))
+		registrations = append(registrations, executionwire.NewACPRegistration(integration.Name, acpService))
 	}
 	for _, registration := range externalRegistrations {
 		for _, existing := range registrations {

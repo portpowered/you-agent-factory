@@ -1,5 +1,5 @@
-// Package acp owns the parent-private Agent Client Protocol execution adapter.
-package acp
+// Package service implements the parent-private Agent Client Protocol service.
+package service
 
 import (
 	"bytes"
@@ -16,7 +16,7 @@ import (
 	acpsdk "github.com/coder/acp-go-sdk"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
+	acp "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp"
 )
 
 // Command is one configured stdio ACP launch command.
@@ -25,23 +25,48 @@ type Command struct {
 	Args []string
 }
 
-// NewRegistration binds one configured ACP command to a canonical Providers ID.
-func NewRegistration(id providers.ID, command Command, newCommand platformprocess.CommandFactory, locator platformprocess.ExecutableLocator) execution.Registration {
-	return execution.Registration{Provider: id, Attempt: newAttempt(id, command, newCommand, locator)}
+// Service owns configured ACP commands. A later lifecycle step upgrades these
+// entries to retained daemons without changing the parent contract.
+type Service struct {
+	commands   map[providers.ID]Command
+	newCommand platformprocess.CommandFactory
+	locator    platformprocess.ExecutableLocator
 }
 
-func newAttempt(id providers.ID, command Command, newCommand platformprocess.CommandFactory, locator platformprocess.ExecutableLocator) execution.Attempt {
-	return func(ctx context.Context, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
-		if newCommand == nil || strings.TrimSpace(command.Name) == "" {
-			return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: "ACP command is unavailable"}
+var _ acp.Service = (*Service)(nil)
+
+func New(commands map[providers.ID]Command, newCommand platformprocess.CommandFactory, locator platformprocess.ExecutableLocator) (acp.Service, error) {
+	detached := make(map[providers.ID]Command, len(commands))
+	for id, command := range commands {
+		if err := id.Validate(); err != nil {
+			return nil, fmt.Errorf("construct ACP service: %w", err)
 		}
-		if locator != nil {
-			if _, err := locator.LookPath(command.Name); err != nil {
-				return providers.ExecuteResult{}, dependencyFailure(fmt.Sprintf("ACP executable %q is unavailable", command.Name))
-			}
+		if strings.TrimSpace(command.Name) == "" {
+			return nil, fmt.Errorf("construct ACP service %q: command is required", id)
 		}
-		return execute(ctx, id, command, newCommand, request)
+		detached[id] = Command{Name: command.Name, Args: append([]string(nil), command.Args...)}
 	}
+	return &Service{commands: detached, newCommand: newCommand, locator: locator}, nil
+}
+
+func (service *Service) Execute(ctx context.Context, id providers.ID, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
+	if service.newCommand == nil {
+		return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: "ACP command is unavailable"}
+	}
+	command, ok := service.commands[id]
+	if !ok {
+		return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: fmt.Sprintf("ACP provider %q is unavailable", id)}
+	}
+	if service.locator != nil {
+		if _, err := service.locator.LookPath(command.Name); err != nil {
+			return providers.ExecuteResult{}, dependencyFailure(fmt.Sprintf("ACP executable %q is unavailable", command.Name))
+		}
+	}
+	return execute(ctx, id, command, service.newCommand, request)
+}
+
+func (*Service) Close(context.Context) error {
+	return nil
 }
 
 func execute(ctx context.Context, id providers.ID, command Command, newCommand platformprocess.CommandFactory, request providers.ExecuteRequest) (providers.ExecuteResult, error) {

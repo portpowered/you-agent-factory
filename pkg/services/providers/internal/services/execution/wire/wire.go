@@ -2,14 +2,16 @@
 package wire
 
 import (
+	"context"
+
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	acp "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp"
 	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
-	acpadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/acp"
 	agyadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty"
 	claudeadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude"
@@ -38,9 +40,15 @@ func NewService(
 	return executionservice.New(catalogService, registrations...)
 }
 
-// NewACPRegistration binds one configured ACP command at the execution boundary.
-func NewACPRegistration(id providers.ID, name string, args []string, factory platformprocess.CommandFactory, locator platformprocess.ExecutableLocator) execution.Registration {
-	return acpadapter.NewRegistration(id, acpadapter.Command{Name: name, Args: append([]string(nil), args...)}, factory, locator)
+// NewACPRegistration delegates one configured ACP identity to the already
+// constructed parent-private ACP service.
+func NewACPRegistration(id providers.ID, service acp.Service) execution.Registration {
+	return execution.Registration{
+		Provider: id,
+		Attempt: func(ctx context.Context, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
+			return service.Execute(ctx, id, request)
+		},
+	}
 }
 
 // NewBuiltInService constructs an inert execution service with the native
