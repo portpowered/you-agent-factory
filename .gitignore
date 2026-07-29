@@ -28,7 +28,6 @@ factory/inputs/**
 !factory/inputs/BATCH/
 !factory/inputs/BATCH/default/
 !factory/inputs/BATCH/default/.gitkeep
-!factory/inputs/BATCH/default/factory-batch-local-agent-cli-runtime.json
 !factory/inputs/idea/
 !factory/inputs/idea/default/
 !factory/inputs/idea/default/.gitkeep
