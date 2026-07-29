@@ -6,11 +6,10 @@ import (
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 )
 
 type singleRunRunner struct {
-	result workerprocess.CommandResult
+	result workers.CommandResult
 	err    error
 }
 
@@ -27,7 +26,7 @@ func TestRunAttemptCapturesUnsupportedFormatRejection(t *testing.T) {
 	rejection := []byte("error: unknown option '--format'\n")
 	effect := commandEffect{
 		runner: &singleRunRunner{
-			result: workerprocess.CommandResult{Stderr: rejection, ExitCode: 2},
+			result: workers.CommandResult{Stderr: rejection, ExitCode: 2},
 		},
 		mode: ModeStructured,
 	}
@@ -43,7 +42,7 @@ func TestRunAttemptCapturesUnsupportedFormatRejection(t *testing.T) {
 }
 
 type sequenceRunner struct {
-	attempts []workerprocess.CommandResult
+	attempts []workers.CommandResult
 }
 
 func (runner *sequenceRunner) Run(
@@ -61,11 +60,11 @@ func (runner *sequenceRunner) Run(
 func (runner *sequenceRunner) RunStreaming(
 	ctx context.Context,
 	request workers.CommandRequest,
-	observe workerprocess.OutputChunkObserver,
+	observe workers.OutputChunkObserver,
 ) (workers.CommandResult, error) {
 	result, err := runner.Run(ctx, request)
 	if observe != nil && len(result.Stdout) > 0 {
-		observe(workerprocess.OutputStreamStdout, result.Stdout)
+		observe(workers.OutputStreamStdout, result.Stdout)
 	}
 	return result, err
 }
@@ -76,7 +75,7 @@ func TestRunAttemptCapturesStreamingUnsupportedFormatRejection(t *testing.T) {
 	rejection := []byte("error: unknown option '--format'\n")
 	effect := commandEffect{
 		runner: &sequenceRunner{
-			attempts: []workerprocess.CommandResult{{Stderr: rejection, ExitCode: 2}},
+			attempts: []workers.CommandResult{{Stderr: rejection, ExitCode: 2}},
 		},
 		mode: ModeStructured,
 	}
@@ -96,7 +95,7 @@ func TestNewAttemptFallsBackThroughNegotiatingEffect(t *testing.T) {
 
 	rejection := []byte("error: unknown option '--format'\n")
 	runner := &sequenceRunner{
-		attempts: []workerprocess.CommandResult{
+		attempts: []workers.CommandResult{
 			{Stderr: rejection, ExitCode: 2},
 			{Stdout: []byte("fallback answer")},
 		},

@@ -98,7 +98,7 @@ func committedMisplacedGuards() []MisplacedGuardEntry {
 			CurrentOwnerClaim: "workers",
 			MisplacedConcern:  MisplacedConcernProviderInference,
 			ReplacementOwner:  "providers",
-			Note:              "Package-boundary leaf-effect allowlist still treats pkg/services/workers/provider/inferencecontract as the Workers-owned provider inference port.",
+			Note:              "Package-boundary leaf-effect allowlist still treats pkg/services/providers/internal/services/execution/internal/provider/inferencecontract as the Workers-owned provider inference port.",
 		},
 		{
 			ID:                "baseline:architecture:workers-and-providers-row",
@@ -143,7 +143,7 @@ func committedMisplacedGuards() []MisplacedGuardEntry {
 			CurrentOwnerClaim: "workers",
 			MisplacedConcern:  MisplacedConcernProviderInference,
 			ReplacementOwner:  "providers",
-			Note:              "convergedServiceSubpackageRoots still assigns pkg/services/workers/provider to workers.",
+			Note:              "convergedServiceSubpackageRoots still assigns pkg/services/providers/internal/services/execution/internal/provider to workers.",
 		},
 		{
 			ID:                "standard:general-backend-standards:hosted-polling",
@@ -161,7 +161,7 @@ func committedMisplacedGuards() []MisplacedGuardEntry {
 			CurrentOwnerClaim: "workers",
 			MisplacedConcern:  MisplacedConcernProviderInference,
 			ReplacementOwner:  "providers",
-			Note:              "Normative backend standard still names pkg/services/workers/provider/inferencecontract as the provider inference leaf-effect owner.",
+			Note:              "Normative backend standard still names pkg/services/providers/internal/services/execution/internal/provider/inferencecontract as the provider inference leaf-effect owner.",
 		},
 	}
 }
@@ -171,7 +171,7 @@ func committedPublicSurfaces() []PublicSurfaceEntry {
 		{
 			ID:               "behavior_test:provider-functionaltests",
 			Kind:             PublicSurfaceKindBehaviorTest,
-			SurfacePath:      "pkg/services/workers/provider/functionaltests",
+			SurfacePath:      "pkg/services/providers/internal/services/execution/internal/provider/functionaltests",
 			ReplacementOwner: "providers",
 			Note:             "Provider compatibility/behavior tests follow the Providers Execution successor after cutover.",
 		},
@@ -279,3 +279,4 @@ func compareOwnedRoles(a, b OwnedRoleEntry) int {
 	}
 	return strings.Compare(a.ID, b.ID)
 }
+

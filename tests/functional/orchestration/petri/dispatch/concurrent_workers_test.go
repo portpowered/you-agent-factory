@@ -11,7 +11,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
+	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/inference"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -495,3 +495,4 @@ func assertResourceAvailability(t *testing.T, session factoryapi.FactorySession,
 	}
 	t.Errorf("session usage missing resource %q", name)
 }
+

@@ -9,14 +9,11 @@ import (
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
-	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
 	workersinternal "github.com/portpowered/infinite-you/pkg/services/workers/internal"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
-	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
+	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
 	"go.uber.org/zap"
 )
 
@@ -30,15 +27,16 @@ type CurrentRuntimeResolver = workersinternal.CurrentRuntimeResolver
 func NewRuntimeWithSelection(
 	sessions CurrentRuntimeResolver,
 	modelService models.Service,
+	providersService providers.Service,
 	modelsScope models.RuntimeScopeRef,
 	providerCommandRunner workers.CommandRunner,
 	scriptCommandRunner workers.CommandRunner,
-	allocator agypty.PTYAllocator,
+	allocator workers.PTYAllocator,
 	logger *zap.Logger,
 	verbose bool,
 	factoryRunnerID string,
 	invocationSkipPermissionsOverride *bool,
-	providerOverride workerprovider.Provider,
+	providerOverride workers.Provider,
 	now func() time.Time,
 	processEnvironment func() []string,
 	currentWorkingDirectory func() (string, error),
@@ -59,12 +57,13 @@ func NewRuntimeWithSelection(
 	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
 	providerCommandInjected bool,
 	scriptCommandInjected bool,
-	providerRegistry *providerregistry.Registry,
+	providerRegistry workers.ProviderRegistry,
 	providerRegistryRebinder ProviderRegistryRebinder,
 ) (workers.RuntimeService, error) {
 	return workersinternal.NewRuntimeWithSelection(
 		sessions,
 		modelService,
+		providersService,
 		modelsScope,
 		providerCommandRunner,
 		scriptCommandRunner,
@@ -152,9 +151,10 @@ func LocalRuntimeHooks() models.LocalRuntimeHooks {
 
 // NewInvocation constructs the narrow direct-invocation role.
 func NewInvocation(
+	providersService providers.Service,
 	commandRunner workers.CommandRunner,
-	commandClock workerprocess.Clock,
-	allocator agypty.PTYAllocator,
+	commandClock workers.Clock,
+	allocator workers.PTYAllocator,
 	resolveSymlinks workers.ResolveExecutableSymlinks,
 	executableLocator platformprocess.ExecutableLocator,
 	executableInspector platformfilesystem.PathInspector,
@@ -163,6 +163,7 @@ func NewInvocation(
 	temporaryFileSystems ...platformfilesystem.TemporaryFileSystem,
 ) (workers.InvocationExecutor, error) {
 	return workersinternal.NewInvocation(
+		providersService,
 		commandRunner,
 		commandClock,
 		allocator,
@@ -177,9 +178,10 @@ func NewInvocation(
 
 // NewInvocationWithProgress constructs direct invocation with provider progress publishing.
 func NewInvocationWithProgress(
+	providersService providers.Service,
 	commandRunner workers.CommandRunner,
-	commandClock workerprocess.Clock,
-	allocator agypty.PTYAllocator,
+	commandClock workers.Clock,
+	allocator workers.PTYAllocator,
 	resolveSymlinks workers.ResolveExecutableSymlinks,
 	executableLocator platformprocess.ExecutableLocator,
 	executableInspector platformfilesystem.PathInspector,
@@ -189,6 +191,7 @@ func NewInvocationWithProgress(
 	temporaryFileSystems ...platformfilesystem.TemporaryFileSystem,
 ) (workers.InvocationExecutor, error) {
 	return workersinternal.NewInvocationWithProgress(
+		providersService,
 		commandRunner,
 		commandClock,
 		allocator,
@@ -204,10 +207,10 @@ func NewInvocationWithProgress(
 
 // NewConductorInvocationWithProgress routes external integrations through the conductor.
 func NewConductorInvocationWithProgress(
-	registry *providerregistry.Registry,
+	providersService providers.Service,
 	commandRunner workers.CommandRunner,
-	commandClock workerprocess.Clock,
-	allocator agypty.PTYAllocator,
+	commandClock workers.Clock,
+	allocator workers.PTYAllocator,
 	resolveSymlinks workers.ResolveExecutableSymlinks,
 	executableLocator platformprocess.ExecutableLocator,
 	executableInspector platformfilesystem.PathInspector,
@@ -217,7 +220,7 @@ func NewConductorInvocationWithProgress(
 	temporaryFileSystems ...platformfilesystem.TemporaryFileSystem,
 ) (workers.InvocationExecutor, error) {
 	return workersinternal.NewConductorInvocationWithProgress(
-		registry,
+		providersService,
 		commandRunner,
 		commandClock,
 		allocator,
@@ -233,27 +236,18 @@ func NewConductorInvocationWithProgress(
 
 // NewProviderFromCommandRunner constructs one provider-backed worker from a command runner.
 func NewProviderFromCommandRunner(
+	providersService providers.Service,
 	commandRunner workers.CommandRunner,
-	commandClock workerprocess.Clock,
-	allocator agypty.PTYAllocator,
+	commandClock workers.Clock,
+	allocator workers.PTYAllocator,
 	resolveSymlinks workers.ResolveExecutableSymlinks,
 	executableLocator platformprocess.ExecutableLocator,
 	executableInspector platformfilesystem.PathInspector,
 	executableFiles platformfilesystem.ReadOpener,
 	operatingSystem workers.OperatingSystem,
 	temporaryFileSystems ...platformfilesystem.TemporaryFileSystem,
-) (workerprovider.Provider, error) {
-	return workersinternal.NewProviderFromCommandRunner(
-		commandRunner,
-		commandClock,
-		allocator,
-		resolveSymlinks,
-		executableLocator,
-		executableInspector,
-		executableFiles,
-		operatingSystem,
-		temporaryFileSystems...,
-	)
+) (workers.Provider, error) {
+	return workersinternal.NewProviderFromService(providersService)
 }
 
 // ResolveTemplateFields exposes the Workers-owned template resolver for composition.

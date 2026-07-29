@@ -13,9 +13,9 @@ import (
 	"time"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	agy "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
-	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
+	agy "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy"
+	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty"
 )
 
 const privatePrompt = "run; rm -rf / | cat"
@@ -110,9 +110,9 @@ func TestPTYEffectBuildsArgvWorkspaceAndEnvironment(t *testing.T) {
 	}
 	mock := &stubAllocator{result: agypty.SessionResult{ExitCode: 0, CleanedText: "ok"}}
 	effect := agy.NewPTYEffect(agy.PTYEffectOptions{
-		FactoryRoot: factoryRoot,
-		Allocator:   mock,
-		Executable:  executable,
+		FactoryRoot:            factoryRoot,
+		Allocator:              mock,
+		Executable:             executable,
 		ExecutableDependencies: executableDependencies(nil, executable),
 	})
 	if effect == nil {

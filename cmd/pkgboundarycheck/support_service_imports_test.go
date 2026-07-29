@@ -28,7 +28,7 @@ var SessionContract sessions.Service
 `)
 	writeGoSourceFile(t, repoRoot, "internal/testutil/edge_fake.go", `package testutil
 
-import inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
+import inference "github.com/portpowered/infinite-you/pkg/services/providers/inference"
 
 var ProviderEdge inference.Provider
 `)
@@ -234,3 +234,4 @@ func writeSupportServiceBaseline(t *testing.T, repoRoot string, baseline support
 		t.Fatalf("write reusable support baseline: %v", err)
 	}
 }
+

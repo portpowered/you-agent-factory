@@ -219,7 +219,7 @@ Repository package-boundary policy:
   Maintainers **MUST NOT** introduce a second Providers catalog, registry,
   conductor, or execution-contract family beside that absorbed model while the
   neutral-conductor lane remains live. Code still living under
-  `pkg/services/workers/provider/` (including `inferencecontract` and
+  `pkg/services/providers/internal/services/execution/internal/provider/` (including `inferencecontract` and
   `registry`) is migration debt that hosts the absorbed Standardized Providers
   surfaces until later Providers packets land; those Workers paths are not a
   license to fork a parallel catalog or execution abstraction. The
@@ -459,3 +459,4 @@ These standards are intentionally general, but the current repository stack sugg
 - Use `tests/functional_test/` for high-value system behavior, not for replacing package-level unit coverage.
 - Use `tests/stress/` and similar suites for concurrency, throughput, and resource-boundary risks.
 - Treat dependency-heavy flows as observability-critical and ensure timeout, retry, and failure behavior is testable.
+

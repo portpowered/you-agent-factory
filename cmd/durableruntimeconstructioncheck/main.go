@@ -19,7 +19,7 @@ const (
 	storeDirectoryName     = "DirForProjectRoot"
 	persistenceBooleanName = "PersistSessions"
 	providerInferenceName  = "Infer"
-	providerPackagePath    = "github.com/portpowered/infinite-you/pkg/services/workers/provider"
+	providerPackagePath    = "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider"
 )
 
 var canonicalEventOwnerCalls = map[string]struct{}{
@@ -244,3 +244,4 @@ func ignoredDirectory(name string) bool {
 		return false
 	}
 }
+

@@ -2,13 +2,16 @@
 package wire
 
 import (
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	acpadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/acp"
 	agyadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy"
+	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty"
 	claudeadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude"
 	codexadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex"
 	cursoradapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/cursor"
@@ -18,9 +21,13 @@ import (
 	piadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/pi"
 	executionservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 )
+
+// NewAgyPTYAllocator constructs the Providers-owned PTY implementation behind
+// the Workers root allocation port.
+func NewAgyPTYAllocator(host platformpty.Host, clock platformclock.Source) (workers.PTYAllocator, error) {
+	return agypty.NewAllocator(host, clock)
+}
 
 // NewService constructs an inert execution service over the supplied canonical
 // catalog and private adapter registrations.
@@ -56,7 +63,7 @@ func BuiltInRegistrations(dependencies ...executionservice.BuiltInDependencies) 
 func BuiltInDependenciesFromRunner(
 	runner platformprocess.CommandRunner,
 ) executionservice.BuiltInDependencies {
-	return BuiltInDependenciesFromWorkersRunner(workerprocess.AdaptCommandRunner(runner))
+	return BuiltInDependenciesFromWorkersRunner(workers.AdaptCommandRunner(runner))
 }
 
 // CursorPlatformDependencies are platform facts required for oversized Windows

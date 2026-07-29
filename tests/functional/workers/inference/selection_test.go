@@ -12,7 +12,7 @@ import (
 	modelproviders "github.com/portpowered/infinite-you/packages/model-providers"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
+	inference "github.com/portpowered/infinite-you/pkg/services/providers/inference"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -300,3 +300,4 @@ func externalProviderManifest(t *testing.T, identity, alias string) inference.Ma
 	manifest.MaximumResponseFidelityCapabilities = inference.ResponseFidelityCapabilities{}
 	return manifest
 }
+

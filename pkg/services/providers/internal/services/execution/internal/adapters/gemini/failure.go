@@ -19,9 +19,9 @@ const (
 	throttleFailureMessage = "The provider is rate limited; retry after capacity becomes available."
 	// TimeoutFailureMessage is the canonical Gemini timeout outcome.
 	TimeoutFailureMessage = "Gemini request timed out."
-	timeoutFailureMessage   = TimeoutFailureMessage
-	serverFailureMessage   = "Gemini encountered a temporary server error."
-	unknownFailureMessage  = "Gemini invocation failed."
+	timeoutFailureMessage = TimeoutFailureMessage
+	serverFailureMessage  = "Gemini encountered a temporary server error."
+	unknownFailureMessage = "Gemini invocation failed."
 )
 
 type failureReason string

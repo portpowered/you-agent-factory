@@ -11,16 +11,15 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/prompting"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 )
 
-type CommandRunner = workerprocess.CommandRunner
-type CommandRequest = workerprocess.CommandRequest
-type CommandResult = workerprocess.CommandResult
+type CommandRunner = workerexecution.CommandRunner
+type CommandRequest = workerexecution.CommandRequest
+type CommandResult = workerexecution.CommandResult
 type ExecCommandRunner = workerprocess.ExecCommandRunner
 type LoggingCommandRunner = workerprocess.LoggingCommandRunner
 
-type ProviderError = workerprovider.ProviderError
+type ProviderError = workerexecution.ProviderError
 
 const (
 	providerSessionKindSessionID       = "session_id"

@@ -13,7 +13,6 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 )
 
 func TestAgentExecutor_ModelOperationOutputUsesCanonicalWorkContent(t *testing.T) {
@@ -62,7 +61,7 @@ func TestAgentExecutor_ModelOperationOutputUsesCanonicalWorkContent(t *testing.T
 
 func TestAgentExecutor_RetryableFailureRetriesWithPreservedSession(t *testing.T) {
 	const sessionID = "675f9238-5f05-456c-9a9f-f8fe486f49e4"
-	throttleErr := workerprovider.NewProviderErrorWithSession(
+	throttleErr := workerexecution.NewProviderErrorWithSession(
 		workerexecution.WorkFailureTypeThrottled,
 		"temporarily unavailable",
 		nil,

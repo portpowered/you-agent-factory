@@ -14,7 +14,7 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
+	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/inference"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -918,3 +918,4 @@ func (p *fanInSecondFinisherGateProvider) starterCallCount() int {
 	defer p.mu.Unlock()
 	return p.starterCalls
 }
+

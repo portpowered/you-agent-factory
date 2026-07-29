@@ -95,7 +95,7 @@ func TestMapResidualPackageSkipsOwnerAndEdgesPackages(t *testing.T) {
 
 	for _, path := range []string{
 		"pkg/services/work",
-		"pkg/services/workers/provider",
+		"pkg/services/providers/internal/services/execution/internal/provider",
 		"pkg/services/edges",
 	} {
 		if _, ok := mapResidualPackage(path); ok {
@@ -236,3 +236,4 @@ func TestCommittedManifestMapsResidualsWithoutReopeningOwners(t *testing.T) {
 		t.Fatalf("destination vocabulary productOwners changed; residual mapping must not reopen the 13-owner tree")
 	}
 }
+

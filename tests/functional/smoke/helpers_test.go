@@ -10,7 +10,7 @@ import (
 	"time"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	providercontract "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
+	providercontract "github.com/portpowered/infinite-you/pkg/services/providers/inference"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -98,3 +98,4 @@ func runFactoryThroughCustomerProcess(
 	daemon.Stop(t)
 	return status
 }
+

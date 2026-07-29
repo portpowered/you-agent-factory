@@ -112,7 +112,7 @@ func TestCheckFunctionalCompositionTreeAcceptsProviderPublicContracts(t *testing
 	for _, importPath := range []string{
 		"github.com/portpowered/infinite-you/pkg/services/edges",
 		"github.com/portpowered/infinite-you/pkg/services/models",
-		"github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract",
+		"github.com/portpowered/infinite-you/pkg/services/providers/inference",
 	} {
 		t.Run(importPath, func(t *testing.T) {
 			root, _ := writeProviderFunctionalSource(t, "package codex\nimport _ \""+importPath+"\"\n")
@@ -348,3 +348,4 @@ func writeFunctionalSourceAtRoot(t *testing.T, root, relativePath, source string
 	}
 	return path
 }
+

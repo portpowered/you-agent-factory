@@ -11,8 +11,8 @@ import (
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
-	runnerwire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
+	runnerwire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire"
 )
 
 // ScriptExecutor adapts the common Runner result onto the workstation result
@@ -79,7 +79,7 @@ func (f *ScriptFactory) New(
 	if f == nil {
 		return nil, errors.New("construct script worker: factory is required")
 	}
-	commandRunner := workerprocess.CommandRunnerWithLogging(
+	commandRunner := workers.CommandRunnerWithLogging(
 		f.commandRunner,
 		logger,
 		f.commandClock,

@@ -19,7 +19,7 @@ func TestForImportPathAssignsPrimaryLanes(t *testing.T) {
 		{name: "packaged Factory source boundary", importPath: ModulePath + "/packages/packaged-factories", want: LaneMaintenance, wantOK: true},
 		{name: "model-provider publication boundary", importPath: ModulePath + "/packages/model-providers", want: LaneMaintenance, wantOK: true},
 		{name: "nested contract", importPath: ModulePath + "/pkg/transports/http/contracttests", want: LaneContract, wantOK: true},
-		{name: "provider compatibility", importPath: ModulePath + "/pkg/services/workers/provider/functionaltests", want: LaneContract, wantOK: true},
+		{name: "provider compatibility", importPath: ModulePath + "/pkg/services/providers/internal/services/execution/internal/provider/functionaltests", want: LaneContract, wantOK: true},
 		{name: "nested integration", importPath: ModulePath + "/pkg/example/integrationtests/case", want: LaneIntegration, wantOK: true},
 		{name: "server integration", importPath: ModulePath + "/pkg/transports/http/servertests/factorysessionsse", want: LaneIntegration, wantOK: true},
 		{name: "repository guard", importPath: ModulePath + "/pkg/services/factory_runtime/internal/exhaustiontests", want: LaneMaintenance, wantOK: true},

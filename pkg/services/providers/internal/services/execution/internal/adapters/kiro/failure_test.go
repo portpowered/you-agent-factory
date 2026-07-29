@@ -8,8 +8,8 @@ import (
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	kiro "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/kiro"
+	providertestdata "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/testdata"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	providertestdata "github.com/portpowered/infinite-you/pkg/services/workers/provider/testdata"
 )
 
 func knownKiroMessage(reason workers.WorkFailureType) string {

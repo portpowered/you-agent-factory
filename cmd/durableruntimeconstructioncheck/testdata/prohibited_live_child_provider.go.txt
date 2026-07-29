@@ -4,9 +4,10 @@ import (
 	"context"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
-	"github.com/portpowered/infinite-you/pkg/services/workers/provider"
+	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider"
 )
 
 func executeDirectly(ctx context.Context, live provider.Provider) {
 	_, _ = live.Infer(ctx, interfaces.ProviderInferenceRequest{})
 }
+

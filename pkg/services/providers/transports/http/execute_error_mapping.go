@@ -10,16 +10,16 @@ import (
 )
 
 const (
-	executeInvalidRequestMessage      = "invalid provider execution request"
-	executeFailedMessage              = "provider execution failed"
-	executeCanceledMessage            = "provider execution canceled"
-	executeTimeoutMessage             = "provider execution timed out"
-	executeErrorCodeCanceled          = "PROVIDER_EXECUTION_CANCELED"
-	executeErrorCodeTimeout           = "PROVIDER_EXECUTION_TIMEOUT"
-	executeErrorCodeAuthentication    = "PROVIDER_EXECUTION_AUTHENTICATION"
-	executeErrorCodeThrottled         = "PROVIDER_EXECUTION_THROTTLED"
-	executeErrorCodeDependency        = "PROVIDER_EXECUTION_DEPENDENCY"
-	executeErrorCodeFailed            = "PROVIDER_EXECUTION_FAILED"
+	executeInvalidRequestMessage   = "invalid provider execution request"
+	executeFailedMessage           = "provider execution failed"
+	executeCanceledMessage         = "provider execution canceled"
+	executeTimeoutMessage          = "provider execution timed out"
+	executeErrorCodeCanceled       = "PROVIDER_EXECUTION_CANCELED"
+	executeErrorCodeTimeout        = "PROVIDER_EXECUTION_TIMEOUT"
+	executeErrorCodeAuthentication = "PROVIDER_EXECUTION_AUTHENTICATION"
+	executeErrorCodeThrottled      = "PROVIDER_EXECUTION_THROTTLED"
+	executeErrorCodeDependency     = "PROVIDER_EXECUTION_DEPENDENCY"
+	executeErrorCodeFailed         = "PROVIDER_EXECUTION_FAILED"
 )
 
 // ExecuteRootErrorResponse maps typed Providers execute root failures and

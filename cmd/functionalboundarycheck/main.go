@@ -50,14 +50,14 @@ var forbiddenCompositionImports = []string{
 }
 
 var forbiddenProviderImplementationImports = []string{
-	"github.com/portpowered/infinite-you/pkg/services/workers/provider/agy",
-	"github.com/portpowered/infinite-you/pkg/services/workers/provider/claude",
-	"github.com/portpowered/infinite-you/pkg/services/workers/provider/codex",
-	"github.com/portpowered/infinite-you/pkg/services/workers/provider/cursor",
-	"github.com/portpowered/infinite-you/pkg/services/workers/provider/gemini",
-	"github.com/portpowered/infinite-you/pkg/services/workers/provider/kiro",
-	"github.com/portpowered/infinite-you/pkg/services/workers/provider/opencode",
-	"github.com/portpowered/infinite-you/pkg/services/workers/provider/pi",
+	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/agy",
+	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/claude",
+	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/codex",
+	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/cursor",
+	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/gemini",
+	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/kiro",
+	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/opencode",
+	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/pi",
 }
 
 // Provider scenarios may import service-root contracts and these exact public
@@ -70,8 +70,8 @@ var forbiddenProviderImplementationImports = []string{
 // inferencecontract remains migration debt until later Providers packets land.
 var providerPublicEffectContractImports = map[string]struct{}{
 	"github.com/portpowered/infinite-you/pkg/services/providers/execution/inferencecontract": {},
-	"github.com/portpowered/infinite-you/pkg/services/workers/agypty":                        {},
-	"github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":    {},
+	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty":                        {},
+	"github.com/portpowered/infinite-you/pkg/services/providers/inference":    {},
 	"github.com/portpowered/infinite-you/pkg/services/automations":         {},
 }
 
@@ -404,3 +404,5 @@ func prohibitedInternalImportError(path, importPath string) error {
 		filepath.ToSlash(path),
 	)
 }
+
+

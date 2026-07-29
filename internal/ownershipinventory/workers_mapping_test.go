@@ -157,9 +157,9 @@ func TestMapPackageWorkersMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/workers/provider/codex",
+			path: "pkg/services/providers/internal/services/execution/internal/provider/codex",
 			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/workers/provider/codex",
+				PackagePath:       "pkg/services/providers/internal/services/execution/internal/provider/codex",
 				Disposition:       ownershipinventory.DispositionMove,
 				Destination:       "providers",
 				DestinationKind:   ownershipinventory.DestinationKindOwner,
@@ -168,9 +168,9 @@ func TestMapPackageWorkersMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/workers/agypty",
+			path: "pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty",
 			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/workers/agypty",
+				PackagePath:       "pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty",
 				Disposition:       ownershipinventory.DispositionMove,
 				Destination:       "providers",
 				DestinationKind:   ownershipinventory.DestinationKindOwner,
@@ -190,9 +190,9 @@ func TestMapPackageWorkersMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/workers/provider_test",
+			path: "pkg/services/providers/internal/services/execution/internal/provider_test",
 			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/workers/provider_test",
+				PackagePath:       "pkg/services/providers/internal/services/execution/internal/provider_test",
 				Disposition:       ownershipinventory.DispositionMove,
 				Destination:       "providers",
 				DestinationKind:   ownershipinventory.DestinationKindOwner,
@@ -201,9 +201,9 @@ func TestMapPackageWorkersMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/workers/provider/registry",
+			path: "pkg/services/providers/internal/services/execution/internal/provider/registry",
 			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/workers/provider/registry",
+				PackagePath:       "pkg/services/providers/internal/services/execution/internal/provider/registry",
 				Disposition:       ownershipinventory.DispositionMove,
 				Destination:       "providers",
 				DestinationKind:   ownershipinventory.DestinationKindOwner,
@@ -300,3 +300,5 @@ func isWorkersProvidersExtractionRest(rest string) bool {
 		return false
 	}
 }
+
+

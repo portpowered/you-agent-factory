@@ -5,18 +5,17 @@ import (
 	"context"
 
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 )
 
 // Executor adapts the public Provider contract to one Worker invocation
 // attempt.
 type Executor struct {
-	provider workerprovider.Provider
+	provider workers.Provider
 }
 
 // NewExecutor constructs the concrete Workers invocation adapter selected by
 // Wire and same-owner Workers constituents.
-func NewExecutor(provider workerprovider.Provider) workers.InvocationExecutor {
+func NewExecutor(provider workers.Provider) workers.InvocationExecutor {
 	if provider == nil {
 		return nil
 	}
@@ -25,7 +24,7 @@ func NewExecutor(provider workerprovider.Provider) workers.InvocationExecutor {
 
 // NewProviderExecutor constructs the concrete adapter without narrowing its
 // return type. It is useful in same-owner tests that exercise adapter details.
-func NewProviderExecutor(provider workerprovider.Provider) *Executor {
+func NewProviderExecutor(provider workers.Provider) *Executor {
 	return &Executor{provider: provider}
 }
 

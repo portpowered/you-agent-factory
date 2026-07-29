@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
+	workers "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func mockAcceptStdout(command string, text string) string {
@@ -51,7 +51,7 @@ func mockClaudeAcceptStdout(text string) string {
 	return strings.Join(records, "\n") + "\n"
 }
 
-func mockRejectResult(command string, cfg *MockWorkerRejectConfig) workerprocess.CommandResult {
+func mockRejectResult(command string, cfg *MockWorkerRejectConfig) workers.CommandResult {
 	result := rejectResult(cfg)
 	switch strings.TrimSpace(command) {
 	case "codex":

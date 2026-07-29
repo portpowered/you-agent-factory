@@ -7,13 +7,13 @@ import (
 )
 
 const (
-	modulePrefix              = "github.com/portpowered/infinite-you/"
-	providersWirePackage      = modulePrefix + "pkg/services/providers/wire"
-	catalogWireImport         = modulePrefix + "pkg/services/providers/internal/services/catalog/wire"
-	executionWireImport       = modulePrefix + "pkg/services/providers/internal/services/execution/wire"
-	rootServiceImport         = modulePrefix + "pkg/services/providers/internal/service"
-	executionAdaptersPrefix   = modulePrefix + "pkg/services/providers/internal/services/execution/internal/adapters/"
-	executionInternalService  = modulePrefix + "pkg/services/providers/internal/services/execution/internal/service"
+	modulePrefix             = "github.com/portpowered/infinite-you/"
+	providersWirePackage     = modulePrefix + "pkg/services/providers/wire"
+	catalogWireImport        = modulePrefix + "pkg/services/providers/internal/services/catalog/wire"
+	executionWireImport      = modulePrefix + "pkg/services/providers/internal/services/execution/wire"
+	rootServiceImport        = modulePrefix + "pkg/services/providers/internal/service"
+	executionAdaptersPrefix  = modulePrefix + "pkg/services/providers/internal/services/execution/internal/adapters/"
+	executionInternalService = modulePrefix + "pkg/services/providers/internal/services/execution/internal/service"
 )
 
 // TestWireConstructionComposesCatalogAndExecutionOwners seals the sole

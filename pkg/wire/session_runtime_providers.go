@@ -35,10 +35,6 @@ import (
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
-	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 	"go.uber.org/zap"
@@ -67,6 +63,7 @@ func provideConfiguredProvidersService(
 		providerswire.WithCommandFactory(providePlatformProcessCommandFactory(edges)),
 		providerswire.WithExecutableLocator(edges.ProvidersExecutableLocator),
 		providerswire.WithACPIntegrations(projectACPIntegrations(integrations)...),
+		providerswire.WithRegistrations(edges.ProviderRegistrations...),
 	}
 	if workersRunner != nil {
 		options = append(options, providerswire.WithWorkersCommandRunner(workersRunner))
@@ -96,7 +93,11 @@ func projectACPIntegrations(integrations []operatorsettings.ACPIntegration) []pr
 }
 
 func provideProvidersFactory(edges serviceedges.Edges) providers.Factory {
-	return providerswire.NewFactory(providePlatformProcessCommandFactory(edges), providerswire.WithExecutableLocator(edges.ProvidersExecutableLocator))
+	return providerswire.NewFactory(
+		providePlatformProcessCommandFactory(edges),
+		providerswire.WithExecutableLocator(edges.ProvidersExecutableLocator),
+		providerswire.WithRegistrations(edges.ProviderRegistrations...),
+	)
 }
 
 func providePlatformProcessCommandFactory(edges serviceedges.Edges) platformprocess.CommandFactory {
@@ -107,110 +108,54 @@ func providePlatformProcessCommandFactory(edges serviceedges.Edges) platformproc
 }
 
 func provideProviderRegistry(
-	edges serviceedges.Edges,
+	_ serviceedges.Edges,
 	providersService providers.Service,
-) (*providerregistry.Registry, error) {
-	return buildProviderRegistry(edges, providersService)
+) (workers.ProviderRegistry, error) {
+	return providerswire.NewWorkersRegistry(context.Background(), providersService)
 }
 
 func buildProviderRegistry(
-	edges serviceedges.Edges,
+	_ serviceedges.Edges,
 	providersService providers.Service,
-) (*providerregistry.Registry, error) {
-	return buildProviderRegistryWithACP(edges, providersService, nil)
+) (workers.ProviderRegistry, error) {
+	return providerswire.NewWorkersRegistry(context.Background(), providersService)
 }
 
 func buildProviderRegistryWithACP(
-	edges serviceedges.Edges,
+	_ serviceedges.Edges,
 	providersService providers.Service,
-	configured []operatorsettings.ACPIntegration,
-) (*providerregistry.Registry, error) {
-	commandRunner, err := provideWorkersProviderCommandRunner(edges)
-	if err != nil {
-		return nil, err
-	}
-	builtIns, err := providerregistry.BuiltInRegistrations(providerregistry.BuiltInDependencies{
-		CommandRunner:    commandRunner,
-		OperatingSystem:  string(resolveWorkersOperatingSystem(edges)),
-		TemporaryFiles:   provideWorkersProviderTemporaryFileSystem(edges),
-		ProvidersService: providersService,
-	})
-	if err != nil {
-		return nil, err
-	}
-	registrations := append([]providerregistry.Registration(nil), builtIns...)
-	acpIDs := []string{"cursor-acp", "kiro-acp", "opencode-acp"}
-	for _, integration := range configured {
-		acpIDs = append(acpIDs, integration.Name)
-	}
-	registrations = append(registrations, acpRegistryRegistrations(providersService, acpIDs...)...)
-	for _, addition := range edges.ProviderRegistrations {
-		registrations = append(
-			registrations,
-			providerregistry.ExternalRegistration(addition.Manifest, addition.Integration),
-		)
-	}
-	return providerregistry.New(registrations...)
+	_ []operatorsettings.ACPIntegration,
+) (workers.ProviderRegistry, error) {
+	return providerswire.NewWorkersRegistry(context.Background(), providersService)
 }
 
 func provideProviderRegistryRebinder(
 	edges serviceedges.Edges,
 ) (workerswire.ProviderRegistryRebinder, error) {
-	operatingSystem := string(resolveWorkersOperatingSystem(edges))
-	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
 	agyPTYPlatform, err := provideProvidersAgyPTYPlatform(edges)
 	if err != nil {
 		return nil, err
 	}
-	externalRegistrations := append(
-		[]providerregistry.Registration(nil),
-		externalProviderRegistrations(edges)...,
-	)
-	return func(providerRunner workers.CommandRunner) (*providerregistry.Registry, error) {
+	return func(providerRunner workers.CommandRunner) (workers.ProviderRegistry, error) {
 		if providerRunner == nil {
 			return nil, fmt.Errorf("provider registry rebind requires command runner")
-		}
-		platformRunner := workerprocess.ProjectPlatformCommandRunner(providerRunner)
-		if platformRunner == nil {
-			return nil, fmt.Errorf("provider registry rebind requires platform command runner")
 		}
 		providersService, err := providerswire.NewService(
 			providerswire.WithWorkersCommandRunner(providerRunner),
 			providerswire.WithCursorPlatform(providerswire.CursorPlatformDependencies{
-				OperatingSystem: operatingSystem,
-				TemporaryFiles:  temporaryFiles,
+				OperatingSystem: string(resolveWorkersOperatingSystem(edges)),
+				TemporaryFiles:  provideWorkersProviderTemporaryFileSystem(edges),
 			}),
 			providerswire.WithAgyPTY(agyPTYPlatform),
 			providerswire.WithCommandFactory(providePlatformProcessCommandFactory(edges)),
 			providerswire.WithExecutableLocator(edges.ProvidersExecutableLocator),
+			providerswire.WithRegistrations(edges.ProviderRegistrations...),
 		)
 		if err != nil {
 			return nil, err
 		}
-		builtIns, err := providerregistry.BuiltInRegistrations(providerregistry.BuiltInDependencies{
-			CommandRunner:    providerRunner,
-			OperatingSystem:  operatingSystem,
-			TemporaryFiles:   temporaryFiles,
-			ProvidersService: providersService,
-		})
-		if err != nil {
-			return nil, err
-		}
-		registrations := append(builtIns, acpRegistryRegistrations(providersService, "cursor-acp", "kiro-acp", "opencode-acp")...)
-		registrations = append(registrations, externalRegistrations...)
-		return providerregistry.New(registrations...)
+		return providerswire.NewWorkersRegistry(context.Background(), providersService)
 	}, nil
-}
-
-func externalProviderRegistrations(edges serviceedges.Edges) []providerregistry.Registration {
-	registrations := make([]providerregistry.Registration, 0, len(edges.ProviderRegistrations))
-	for _, addition := range edges.ProviderRegistrations {
-		registrations = append(
-			registrations,
-			providerregistry.ExternalRegistration(addition.Manifest, addition.Integration),
-		)
-	}
-	return registrations
 }
 
 func resolveWorkersOperatingSystem(edges serviceedges.Edges) workers.OperatingSystem {
@@ -226,17 +171,17 @@ func resolveWorkersOperatingSystem(edges serviceedges.Edges) workers.OperatingSy
 // adapted once for both ownership boundaries.
 func provideWorkersProviderCommandRunner(edges serviceedges.Edges) (workers.CommandRunner, error) {
 	if edges.ProviderCommandRunner != nil {
-		return workerprocess.AdaptCommandRunner(edges.ProviderCommandRunner), nil
+		return workers.AdaptCommandRunner(edges.ProviderCommandRunner), nil
 	}
 	defaultCommandRunner, err := providePlatformProcessCommandRunner(edges)
 	if err != nil {
 		return nil, err
 	}
-	return workerprocess.AdaptCommandRunner(defaultCommandRunner), nil
+	return workers.AdaptCommandRunner(defaultCommandRunner), nil
 }
 
 func provideFactorySessionProviderIdentityResolver(
-	providers *providerregistry.Registry,
+	providers workers.ProviderRegistry,
 ) factorysessions.ProviderIdentityResolver {
 	return providers.CanonicalIdentity
 }
@@ -449,7 +394,6 @@ func provideFactoryScaffoldInitializer(
 		return initialize(factorydefinitions.ScaffoldConfig{Dir: factoryDir})
 	}
 }
-
 func provideEditableFactoryValidator(
 	validator factorydefinitions.DefinitionValidationOperation,
 	loader *factorydefinitionswire.Loader,
@@ -593,9 +537,9 @@ func provideFactorySessionExecutionFactory(
 	responseEventIDs factorysessions.ResponseEventIDGenerator,
 	responseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits,
 	invocationWithProgress factorysessionwire.WorkerInvocationWithProgressFactory,
-	allocator agypty.PTYAllocator,
+	allocator workers.PTYAllocator,
 	adaptRunner factorysessionwire.WorkerCommandRunnerAdapter,
-	registry *providerregistry.Registry,
+	registry workers.ProviderRegistry,
 	registryRebinder workerswire.ProviderRegistryRebinder,
 	workersMockCommandRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
 	conductorInvocationWithProgress factorysessionwire.ConductorInvocationWithProgressFactory,
@@ -604,7 +548,7 @@ func provideFactorySessionExecutionFactory(
 	return func(
 		projectRoot string,
 		persistencePolicy factorysessions.PersistencePolicy,
-		provider workerprovider.Provider,
+		provider workers.Provider,
 		clock factoryruntime.Clock,
 		workerPresetIDs map[string]struct{},
 		workerSettings factoryruntime.JavaScriptWorkerSettings,
@@ -639,7 +583,7 @@ func provideFactorySessionExecutionFactory(
 				workersMockCommandRunnerFactory != nil &&
 				conductorInvocationWithProgress != nil {
 				runner = workersMockCommandRunnerFactory(mockWorkers, nil, runner)
-				var reboundRegistry *providerregistry.Registry
+				var reboundRegistry workers.ProviderRegistry
 				if len(acpIntegrations) > 0 {
 					configuredProviders, configuredErr := provideConfiguredProvidersService(edges, acpIntegrations, runner)
 					if configuredErr != nil {
@@ -793,7 +737,7 @@ func provideReplayExecutionFactory() recordings.ReplayExecutionFactory {
 	return func(
 		artifact *factorydefinitions.ReplayArtifact,
 	) (
-		workerprovider.Provider,
+		workers.Provider,
 		workers.CommandRunner,
 		[]recordings.ReplayHook,
 		recordings.CompletionDeliveryPlanner,
@@ -811,6 +755,7 @@ func provideReplayExecutionFactory() recordings.ReplayExecutionFactory {
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 // pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func provideWorkersRuntimeFactory(
+	providersService providers.Service,
 	interpolation factorydefinitions.InvocationInterpolationService,
 	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
 	workstationExecution factorydefinitions.WorkstationExecutionPolicyService,
@@ -819,13 +764,13 @@ func provideWorkersRuntimeFactory(
 	retryRandom platformrandom.Source,
 	workstationFiles platformfilesystem.ReadFileInspector,
 	temporaryFiles platformfilesystem.TemporaryFileSystem,
-	defaultAllocator agypty.PTYAllocator,
+	defaultAllocator workers.PTYAllocator,
 	edges serviceedges.Edges,
-	providerRegistry *providerregistry.Registry,
+	providerRegistry workers.ProviderRegistry,
 	providerRegistryRebinder workerswire.ProviderRegistryRebinder,
 ) (factorysessionwire.WorkersRuntimeFactory, error) {
 	if defaultAllocator == nil {
-		return nil, agypty.ErrHostRequired
+		return nil, workers.ErrPTYHostRequired
 	}
 	factoryDocsFileSystem := provideWorkersFactoryDocsFileSystem(edges)
 	factoryDocs, err := workerswire.NewFactoryDocsLoader(factoryDocsFileSystem)
@@ -877,12 +822,12 @@ func provideWorkersRuntimeFactory(
 		modelsScope models.RuntimeScopeRef,
 		providerCommandRunner workers.CommandRunner,
 		scriptCommandRunner workers.CommandRunner,
-		allocator agypty.PTYAllocator,
+		allocator workers.PTYAllocator,
 		logger *zap.Logger,
 		verbose bool,
 		factoryRunnerID string,
 		invocationSkipPermissionsOverride *bool,
-		providerOverride workerprovider.Provider,
+		providerOverride workers.Provider,
 		now func() time.Time,
 		contentMaterializer work.ContentMaterializer,
 		acpIntegrations []operatorsettings.ACPIntegration,
@@ -894,26 +839,28 @@ func provideWorkersRuntimeFactory(
 			return nil, err
 		}
 		if providerCommandRunner == nil {
-			providerCommandRunner = workerprocess.AdaptCommandRunner(defaultCommandRunner)
+			providerCommandRunner = workers.AdaptCommandRunner(defaultCommandRunner)
 		}
 		if scriptCommandRunner == nil {
-			scriptCommandRunner = workerprocess.AdaptCommandRunner(defaultCommandRunner)
+			scriptCommandRunner = workers.AdaptCommandRunner(defaultCommandRunner)
 		}
 		if allocator == nil {
 			allocator = defaultAllocator
 		}
 		runtimeRegistry := providerRegistry
+		runtimeProviders := providersService
 		runtimeRebinder := providerRegistryRebinder
 		if len(acpIntegrations) > 0 {
 			configuredProviders, configuredErr := provideConfiguredProvidersService(edges, acpIntegrations, providerCommandRunner)
 			if configuredErr != nil {
 				return nil, fmt.Errorf("construct configured Providers service for Workers runtime: %w", configuredErr)
 			}
+			runtimeProviders = configuredProviders
 			runtimeRegistry, configuredErr = buildProviderRegistryWithACP(edges, configuredProviders, acpIntegrations)
 			if configuredErr != nil {
 				return nil, fmt.Errorf("construct configured provider registry for Workers runtime: %w", configuredErr)
 			}
-			runtimeRebinder = func(runner workers.CommandRunner) (*providerregistry.Registry, error) {
+			runtimeRebinder = func(runner workers.CommandRunner) (workers.ProviderRegistry, error) {
 				reboundProviders, reboundErr := provideConfiguredProvidersService(edges, acpIntegrations, runner)
 				if reboundErr != nil {
 					return nil, reboundErr
@@ -924,6 +871,7 @@ func provideWorkersRuntimeFactory(
 		return workerswire.NewRuntimeWithSelection(
 			sessions,
 			modelService,
+			runtimeProviders,
 			modelsScope,
 			providerCommandRunner,
 			scriptCommandRunner,
@@ -1034,7 +982,10 @@ func provideWorkersLocalRuntimeHooksFactory() factorysessionwire.WorkersLocalRun
 	return workerswire.LocalRuntimeHooks
 }
 
-func provideWorkerInvocationWithProgressFactory(edges serviceedges.Edges) factorysessionwire.WorkerInvocationWithProgressFactory {
+func provideWorkerInvocationWithProgressFactory(
+	providersService providers.Service,
+	edges serviceedges.Edges,
+) factorysessionwire.WorkerInvocationWithProgressFactory {
 	commandClock := edges.Clock
 	if commandClock == nil {
 		commandClock = platformclock.Real{}
@@ -1057,17 +1008,17 @@ func provideWorkerInvocationWithProgressFactory(edges serviceedges.Edges) factor
 	}
 	operatingSystem := resolveWorkersOperatingSystem(edges)
 	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
-	return func(runner workers.CommandRunner, allocator agypty.PTYAllocator, publisher workers.ProgressPublisher) (workers.InvocationExecutor, error) {
+	return func(runner workers.CommandRunner, allocator workers.PTYAllocator, publisher workers.ProgressPublisher) (workers.InvocationExecutor, error) {
 		return workerswire.NewInvocationWithProgress(
-			runner, commandClock, allocator, resolveSymlinks,
+			providersService, runner, commandClock, allocator, resolveSymlinks,
 			executableLocator, executableInspector, executableFiles, operatingSystem, publisher, temporaryFiles,
 		)
 	}
 }
 
 func provideWorkerInvocationFactory(
+	providersService providers.Service,
 	edges serviceedges.Edges,
-	registry *providerregistry.Registry,
 ) factorysessionwire.WorkerInvocationFactory {
 	commandClock := edges.Clock
 	if commandClock == nil {
@@ -1091,15 +1042,18 @@ func provideWorkerInvocationFactory(
 	}
 	operatingSystem := resolveWorkersOperatingSystem(edges)
 	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
-	return func(runner workers.CommandRunner, allocator agypty.PTYAllocator) (workers.InvocationExecutor, error) {
-		return workerswire.NewConductorInvocationWithProgress(
-			registry, runner, commandClock, allocator, resolveSymlinks,
-			executableLocator, executableInspector, executableFiles, operatingSystem, nil, temporaryFiles,
+	return func(runner workers.CommandRunner, allocator workers.PTYAllocator) (workers.InvocationExecutor, error) {
+		return workerswire.NewInvocation(
+			providersService, runner, commandClock, allocator, resolveSymlinks,
+			executableLocator, executableInspector, executableFiles, operatingSystem, temporaryFiles,
 		)
 	}
 }
 
-func provideConductorInvocationWithProgressFactory(edges serviceedges.Edges) factorysessionwire.ConductorInvocationWithProgressFactory {
+func provideConductorInvocationWithProgressFactory(
+	providersService providers.Service,
+	edges serviceedges.Edges,
+) factorysessionwire.ConductorInvocationWithProgressFactory {
 	commandClock := edges.Clock
 	if commandClock == nil {
 		commandClock = platformclock.Real{}
@@ -1123,21 +1077,13 @@ func provideConductorInvocationWithProgressFactory(edges serviceedges.Edges) fac
 	operatingSystem := resolveWorkersOperatingSystem(edges)
 	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
 	return func(
-		registry workers.ProviderRegistry,
+		_ workers.ProviderRegistry,
 		runner workers.CommandRunner,
 		allocator workers.PTYAllocator,
 		publisher workers.ProgressPublisher,
 	) (workers.InvocationExecutor, error) {
-		var concreteRegistry *providerregistry.Registry
-		if registry != nil {
-			typed, ok := registry.(*providerregistry.Registry)
-			if !ok {
-				return nil, fmt.Errorf("conductor invocation requires concrete provider registry")
-			}
-			concreteRegistry = typed
-		}
 		return workerswire.NewConductorInvocationWithProgress(
-			concreteRegistry,
+			providersService,
 			runner,
 			commandClock,
 			allocator,
@@ -1153,8 +1099,9 @@ func provideConductorInvocationWithProgressFactory(edges serviceedges.Edges) fac
 }
 
 func provideProviderFromCommandRunnerFactory(
+	providersService providers.Service,
 	edges serviceedges.Edges,
-	allocator agypty.PTYAllocator,
+	allocator workers.PTYAllocator,
 ) factorysessionwire.ProviderFromCommandRunnerFactory {
 	commandClock := edges.Clock
 	if commandClock == nil {
@@ -1178,9 +1125,9 @@ func provideProviderFromCommandRunnerFactory(
 	}
 	operatingSystem := resolveWorkersOperatingSystem(edges)
 	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
-	return func(runner workers.CommandRunner) (workerprovider.Provider, error) {
+	return func(runner workers.CommandRunner) (workers.Provider, error) {
 		return workerswire.NewProviderFromCommandRunner(
-			runner, commandClock, allocator, resolveSymlinks,
+			providersService, runner, commandClock, allocator, resolveSymlinks,
 			executableLocator, executableInspector, executableFiles, operatingSystem, temporaryFiles,
 		)
 	}

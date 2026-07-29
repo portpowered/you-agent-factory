@@ -12,17 +12,12 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
 	workerconstruction "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/construction"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
-	providerconductor "github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
-	providercontract "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
-	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/skippermissions"
 	"go.uber.org/zap"
 
@@ -35,7 +30,7 @@ type Service struct {
 	sessions                          CurrentRuntimeResolver
 	models                            models.Service
 	modelsScope                       models.RuntimeScopeRef
-	providerFactory                   *workerprovider.Factory
+	providers                         providers.Service
 	scriptFactory                     *workerexecutor.ScriptFactory
 	executorBuilder                   workerconstruction.Builder
 	providerCommandRunner             workers.CommandRunner
@@ -46,7 +41,7 @@ type Service struct {
 	verbose                           bool
 	factoryRunnerID                   string
 	invocationSkipPermissionsOverride *bool
-	providerOverride                  providercontract.Provider
+	providerOverride                  workers.Provider
 	clock                             func() time.Time
 	processEnvironment                func() []string
 	currentWorkingDirectory           func() (string, error)
@@ -61,9 +56,8 @@ type Service struct {
 	workstationFiles                  platformfilesystem.ReadFileInspector
 	temporaryFiles                    platformfilesystem.TemporaryFileSystem
 	executableLocator                 platformprocess.ExecutableLocator
-	providerRegistry                  *providerregistry.Registry
+	providerRegistry                  workers.ProviderRegistry
 	providerRegistryRebinder          ProviderRegistryRebinder
-	invocationConductor               *providerconductor.Conductor
 	agentDispatchUsesRegisteredRunner bool
 }
 
@@ -90,14 +84,15 @@ type workflowContextProvider interface {
 func New(
 	sessions CurrentRuntimeResolver,
 	modelService models.Service,
+	providersService providers.Service,
 	providerCommandRunner workers.CommandRunner,
 	scriptCommandRunner workers.CommandRunner,
-	agyPTYAllocator agypty.PTYAllocator,
+	agyPTYAllocator workers.PTYAllocator,
 	logger *zap.Logger,
 	verbose bool,
 	factoryRunnerID string,
 	invocationSkipPermissionsOverride *bool,
-	providerOverride providercontract.Provider,
+	providerOverride workers.Provider,
 	clock func() time.Time,
 	processEnvironment func() []string,
 	currentWorkingDirectory func() (string, error),
@@ -123,6 +118,9 @@ func New(
 	}
 	if modelService == nil {
 		return nil, fmt.Errorf("construct Worker execution service: Models service is required")
+	}
+	if providersService == nil && providerOverride == nil {
+		return nil, fmt.Errorf("construct Worker execution service: Providers service is required")
 	}
 	if logger == nil {
 		return nil, fmt.Errorf("construct Worker execution service: logger is required")
@@ -151,18 +149,17 @@ func New(
 	if temporaryFiles == nil {
 		return nil, fmt.Errorf("construct Worker execution service: provider temporary filesystem is required")
 	}
-	providerFactory, scriptFactory, providerRunner, scriptRunner, err := buildExecutionFactories(
-		providerCommandRunner, scriptCommandRunner, workerprocess.ClockFunc(clock), agyPTYAllocator,
+	scriptFactory, providerRunner, scriptRunner, err := buildExecutionFactories(
+		providerCommandRunner, scriptCommandRunner, workers.ClockFunc(clock), agyPTYAllocator,
 		factoryDocs, resolveSymlinks, executableLocator, executableInspector, executableFiles, operatingSystem,
 		temporaryFiles,
 	)
 	if err != nil {
 		return nil, err
 	}
-	providerFactory = providerFactory.WithContentMaterializer(contentMaterializer)
 	decisionEnvelopeService := firstDecisionEnvelopeService(decisionEnvelopes)
 	executorBuilder := workerconstruction.New(
-		providerFactory,
+		providersService,
 		scriptFactory,
 		interpolation,
 		executionPolicy,
@@ -176,7 +173,7 @@ func New(
 	return &Service{
 		sessions:                          sessions,
 		models:                            modelService,
-		providerFactory:                   providerFactory,
+		providers:                         providersService,
 		scriptFactory:                     scriptFactory,
 		executorBuilder:                   executorBuilder,
 		providerCommandRunner:             providerRunner,

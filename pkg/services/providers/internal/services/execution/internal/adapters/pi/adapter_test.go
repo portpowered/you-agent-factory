@@ -165,7 +165,7 @@ func piSuccessStream() []byte {
 			"type": "message_end",
 			"message": map[string]any{
 				"id": "msg-production", "role": "assistant",
-				"content": []map[string]any{{"type": "text", "text": "authoritative answer"}},
+				"content":    []map[string]any{{"type": "text", "text": "authoritative answer"}},
 				"stopReason": "stop",
 			},
 		},

@@ -14,12 +14,10 @@ import (
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerinvocation "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/invocation"
-	providercontract "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 	runnerinference "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/inference"
 )
 
@@ -42,7 +40,7 @@ var _ WorkstationRequestExecutor = (*AgentExecutor)(nil)
 // NewAgentExecutor creates an AgentExecutor from runtime-loaded config and a Provider.
 func NewAgentExecutor(
 	runtimeConfig interfaces.RuntimeDefinitionLookup,
-	provider providercontract.Provider,
+	provider workerexecution.Provider,
 	logger logging.Logger,
 	clock func() time.Time,
 	decisionEnvelopes ...interfaces.DecisionEnvelopeService,
@@ -271,8 +269,8 @@ func missingWorkerWorkResult(dispatch work.WorkDispatch, workerType string, dura
 }
 
 func inferenceErrorWorkResult(dispatch work.WorkDispatch, err error, diagnostics *workerexecution.WorkDiagnostics, retryCount int, start time.Time, clock func() time.Time) workerexecution.WorkResult {
-	providerErr := workerprovider.NormalizeProviderExecutionError(err)
-	failureMetadata := workerprovider.WorkFailureMetadataFromError(providerErr)
+	providerErr := workerexecution.NormalizeProviderExecutionError(err)
+	failureMetadata := workerexecution.WorkFailureMetadataFromProviderError(providerErr)
 	return workerexecution.WorkResult{
 		DispatchID:      dispatch.DispatchID,
 		TransitionID:    dispatch.TransitionID,
@@ -427,14 +425,14 @@ func inferenceWorkstationType(request workerexecution.WorkstationExecutionReques
 	return request.Dispatch.WorkstationName
 }
 
-func providerSessionFromError(providerErr *workerprovider.ProviderError) *workerexecution.ProviderSessionMetadata {
+func providerSessionFromError(providerErr *workerexecution.ProviderError) *workerexecution.ProviderSessionMetadata {
 	if providerErr == nil {
 		return nil
 	}
 	return workerexecution.CloneProviderSessionMetadata(providerErr.ProviderSession)
 }
 
-func providerDiagnosticsFromError(providerErr *workerprovider.ProviderError) *workerexecution.WorkDiagnostics {
+func providerDiagnosticsFromError(providerErr *workerexecution.ProviderError) *workerexecution.WorkDiagnostics {
 	if providerErr == nil {
 		return nil
 	}
@@ -442,7 +440,7 @@ func providerDiagnosticsFromError(providerErr *workerprovider.ProviderError) *wo
 }
 
 func formatAgentProviderError(err error) string {
-	var providerErr *workerprovider.ProviderError
+	var providerErr *workerexecution.ProviderError
 	if errors.As(err, &providerErr) {
 		message := strings.TrimSpace(providerErr.Message)
 		if providerErr.Type == workerexecution.WorkFailureTypeTimeout && message == "execution timeout" {
@@ -463,7 +461,7 @@ func (ae *AgentExecutor) inferWithRetry(
 	logger := logging.EnsureLogger(ae.logger)
 	retryCount := 0
 	if ae.providerExecutor == nil {
-		return workerexecution.InferenceResponse{}, retryCount, workerprovider.NewProviderError(
+		return workerexecution.InferenceResponse{}, retryCount, workerexecution.NewProviderError(
 			workerexecution.WorkFailureTypeMisconfigured,
 			"provider execution requires a provider",
 			nil,
@@ -479,12 +477,12 @@ func (ae *AgentExecutor) inferWithRetry(
 			return result.Response, retryCount, nil
 		}
 
-		providerErr := workerprovider.NormalizeProviderExecutionError(err)
+		providerErr := workerexecution.NormalizeProviderExecutionError(err)
 		if providerErr == nil {
 			return workerexecution.InferenceResponse{}, retryCount, err
 		}
 
-		decision := workerprovider.WorkFailureDecisionFromProviderError(providerErr)
+		decision := workerexecution.WorkFailureDecisionFromProviderError(providerErr)
 		if !decision.Retryable || retryCount >= ae.retryConfig.maxRetries {
 			return workerexecution.InferenceResponse{}, retryCount, providerErr
 		}
@@ -597,7 +595,7 @@ func (ae *AgentExecutor) inferOnce(
 	req workerexecution.ProviderInferenceRequest,
 ) (workerexecution.InferenceResponse, int, error) {
 	if ae.providerExecutor == nil {
-		return workerexecution.InferenceResponse{}, 0, workerprovider.NewProviderError(
+		return workerexecution.InferenceResponse{}, 0, workerexecution.NewProviderError(
 			workerexecution.WorkFailureTypeMisconfigured,
 			"provider execution requires a provider",
 			nil,
@@ -623,7 +621,7 @@ type runnerProviderAdapter struct {
 
 func (a runnerProviderAdapter) Infer(ctx context.Context, request workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	if a.inner == nil {
-		return workerexecution.InferenceResponse{}, workerprovider.NewProviderError(
+		return workerexecution.InferenceResponse{}, workerexecution.NewProviderError(
 			workerexecution.WorkFailureTypeMisconfigured,
 			"runner requires an implementation",
 			nil,
@@ -634,13 +632,13 @@ func (a runnerProviderAdapter) Infer(ctx context.Context, request workerexecutio
 
 // RunnerFromProvider adapts a legacy provider implementation onto the shared
 // runner execution contract.
-func RunnerFromProvider(provider providercontract.Provider) workerexecution.Runner {
+func RunnerFromProvider(provider workerexecution.Provider) workerexecution.Runner {
 	return providerRunnerAdapter{executor: workerinvocation.NewExecutor(provider)}
 }
 
 func (a providerRunnerAdapter) Execute(ctx context.Context, request workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
 	if a.executor == nil {
-		return workerexecution.RunnerExecutionResult{}, workerprovider.NewProviderError(
+		return workerexecution.RunnerExecutionResult{}, workerexecution.NewProviderError(
 			workerexecution.WorkFailureTypeMisconfigured,
 			"runner requires a provider implementation",
 			nil,
@@ -698,7 +696,7 @@ func (ae *AgentExecutor) evaluateOutcome(resp workerexecution.InferenceResponse,
 		ae.logger.Info("no stop token configured; defaulting to ACCEPTED outcome")
 		return workerexecution.OutcomeAccepted
 	}
-	if workerprovider.ContainsStopToken(resp.Content, workerDef.StopToken) {
+	if workerexecution.ContainsStopToken(resp.Content, workerDef.StopToken) {
 		ae.logger.Info("stop token found in output; returning ACCEPTED outcome", "stop_token", workerDef.StopToken)
 		return workerexecution.OutcomeAccepted
 	}

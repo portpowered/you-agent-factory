@@ -27,6 +27,21 @@ func TestContextLineReaderReadsBoundedLines(t *testing.T) {
 	}
 }
 
+func TestContextLineReaderReadsFinalLineWithoutNewline(t *testing.T) {
+	reader, err := NewContextLineReader(strings.NewReader("final line"), 1)
+	if err != nil {
+		t.Fatalf("NewContextLineReader() error = %v", err)
+	}
+
+	got, err := reader.ReadLine(context.Background())
+	if err != nil {
+		t.Fatalf("ReadLine() error = %v", err)
+	}
+	if got != "final line" {
+		t.Fatalf("ReadLine() = %q, want %q", got, "final line")
+	}
+}
+
 func TestContextLineReaderStopsWaitingOnCancellation(t *testing.T) {
 	input, output := io.Pipe()
 	t.Cleanup(func() {

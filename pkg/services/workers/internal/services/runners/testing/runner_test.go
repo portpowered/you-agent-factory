@@ -13,7 +13,7 @@ import (
 	runtimefixtures "github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
+	workers "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 type staticRuntimeConfig = runtimefixtures.RuntimeConfigLookupFixture
@@ -29,7 +29,7 @@ func TestMockWorkerCommandRunner_DefaultAcceptIncludesConfiguredStopToken(t *tes
 		Next: failCommandRunner{t: t},
 	}
 
-	result, err := runner.Run(context.Background(), workerprocess.CommandRequest{
+	result, err := runner.Run(context.Background(), workers.CommandRequest{
 		WorkerType: "worker",
 	})
 	if err != nil {
@@ -58,7 +58,7 @@ func TestMockWorkerCommandRunner_RejectConfigPreservesObservableOutput(t *testin
 		Next: failCommandRunner{t: t},
 	}
 
-	result, err := runner.Run(context.Background(), workerprocess.CommandRequest{
+	result, err := runner.Run(context.Background(), workers.CommandRequest{
 		WorkerType: "worker",
 	})
 	if err != nil {
@@ -87,7 +87,7 @@ func TestMockWorkerCommandRunner_RejectConfigWithZeroExitCodeStillFails(t *testi
 		Next: failCommandRunner{t: t},
 	}
 
-	result, err := runner.Run(context.Background(), workerprocess.CommandRequest{
+	result, err := runner.Run(context.Background(), workers.CommandRequest{
 		WorkerType: "worker",
 	})
 	if err != nil {
@@ -117,7 +117,7 @@ func TestMockWorkerCommandRunner_UnmatchedDispatchPassthroughUsesNextRunner(t *t
 		Next: next,
 	}
 
-	req := workerprocess.CommandRequest{
+	req := workers.CommandRequest{
 		WorkerType:      "other-worker",
 		WorkstationName: "process",
 	}
@@ -148,7 +148,7 @@ func TestMockWorkerCommandRunner_UnmatchedDispatchDefaultAcceptSkipsNextRunner(t
 		Next: failCommandRunner{t: t},
 	}
 
-	result, err := runner.Run(context.Background(), workerprocess.CommandRequest{
+	result, err := runner.Run(context.Background(), workers.CommandRequest{
 		WorkerType: "other-worker",
 	})
 	if err != nil {
@@ -186,7 +186,7 @@ func TestMockWorkerCommandRunner_SelectsByWorkerWorkstationAndInput(t *testing.T
 		Next: failCommandRunner{t: t},
 	}
 
-	result, err := runner.Run(context.Background(), workerprocess.CommandRequest{
+	result, err := runner.Run(context.Background(), workers.CommandRequest{
 		WorkerType:      "worker",
 		WorkstationName: "process",
 		InputBindings: map[string][]string{
@@ -215,7 +215,7 @@ func TestMockWorkerCommandRunner_NilConfigPassthroughUsesNextRunner(t *testing.T
 	next := &recordingCommandRunner{}
 	runner := &MockWorkerCommandRunner{Next: next}
 
-	req := workerprocess.CommandRequest{WorkerType: "worker"}
+	req := workers.CommandRequest{WorkerType: "worker"}
 	result, err := runner.Run(context.Background(), req)
 	if err != nil {
 		t.Fatalf("Run returned error: %v", err)
@@ -249,7 +249,7 @@ func TestMockWorkerCommandRunner_ScriptConfigTransformsRequest(t *testing.T) {
 		Next: next,
 	}
 
-	_, err := runner.Run(context.Background(), workerprocess.CommandRequest{
+	_, err := runner.Run(context.Background(), workers.CommandRequest{
 		WorkerType: "worker",
 		Command:    "ignored",
 		Args:       []string{"ignored"},
@@ -298,7 +298,7 @@ func TestMockWorkerCommandRunner_ScriptConfigWithoutOverridesKeepsOriginalWorkdi
 		Next: next,
 	}
 
-	_, err := runner.Run(context.Background(), workerprocess.CommandRequest{
+	_, err := runner.Run(context.Background(), workers.CommandRequest{
 		WorkerType: "worker",
 		WorkDir:    "/original",
 	})
@@ -314,7 +314,7 @@ func TestMockWorkerCommandRunner_ScriptConfigWithoutOverridesKeepsOriginalWorkdi
 }
 
 func TestMockWorkerCommandRunner_ScriptConfigMissingReturnsFailureResult(t *testing.T) {
-	result, err := (&MockWorkerCommandRunner{}).runScript(context.Background(), workerprocess.CommandRequest{}, nil)
+	result, err := (&MockWorkerCommandRunner{}).runScript(context.Background(), workers.CommandRequest{}, nil)
 	if err != nil {
 		t.Fatalf("runScript returned error: %v", err)
 	}
@@ -327,7 +327,7 @@ func TestMockWorkerCommandRunner_ScriptConfigMissingReturnsFailureResult(t *test
 }
 
 func TestMockWorkerCommandRunner_ScriptConfigInvalidTimeoutReturnsFailureResult(t *testing.T) {
-	result, err := (&MockWorkerCommandRunner{}).runScript(context.Background(), workerprocess.CommandRequest{}, &MockWorkerScriptConfig{
+	result, err := (&MockWorkerCommandRunner{}).runScript(context.Background(), workers.CommandRequest{}, &MockWorkerScriptConfig{
 		Command: "mock-script",
 		Timeout: "definitely-not-a-duration",
 	})
@@ -343,7 +343,7 @@ func TestMockWorkerCommandRunner_ScriptConfigInvalidTimeoutReturnsFailureResult(
 }
 
 func TestMockWorkerCommandRunner_RunNextFailsClosedWhenNextMissing(t *testing.T) {
-	_, err := (&MockWorkerCommandRunner{}).runNext(context.Background(), workerprocess.CommandRequest{})
+	_, err := (&MockWorkerCommandRunner{}).runNext(context.Background(), workers.CommandRequest{})
 	if err == nil || !strings.Contains(err.Error(), "next command runner is required") {
 		t.Fatalf("runNext error = %v, want required injected runner", err)
 	}
@@ -377,7 +377,7 @@ func TestRejectResultNilConfigDefaultsToExitCodeOne(t *testing.T) {
 
 func TestCommandRequestInputTokensDecodesStructuredAndSkipsInvalid(t *testing.T) {
 	timestamp := time.Unix(1700000000, 0).UTC()
-	tokens := commandRequestInputTokens(workerprocess.CommandRequest{
+	tokens := commandRequestInputTokens(workers.CommandRequest{
 		InputTokens: []any{
 			factoryruntime.RuntimeToken{
 				ID:      "token-direct",
@@ -514,29 +514,29 @@ type failCommandRunner struct {
 	t *testing.T
 }
 
-func (r failCommandRunner) Run(context.Context, workerprocess.CommandRequest) (workerprocess.CommandResult, error) {
+func (r failCommandRunner) Run(context.Context, workers.CommandRequest) (workers.CommandResult, error) {
 	r.t.Fatal("next command runner should not be called")
-	return workerprocess.CommandResult{}, nil
+	return workers.CommandResult{}, nil
 }
 
 type recordingCommandRunner struct {
-	requests []workerprocess.CommandRequest
+	requests []workers.CommandRequest
 }
 
-func (r *recordingCommandRunner) Run(_ context.Context, req workerprocess.CommandRequest) (workerprocess.CommandResult, error) {
+func (r *recordingCommandRunner) Run(_ context.Context, req workers.CommandRequest) (workers.CommandResult, error) {
 	r.requests = append(r.requests, req)
-	return workerprocess.CommandResult{Stdout: []byte("passthrough")}, nil
+	return workers.CommandResult{Stdout: []byte("passthrough")}, nil
 }
 
 type inspectingCommandRunner struct {
-	req         workerprocess.CommandRequest
+	req         workers.CommandRequest
 	hasDeadline bool
 }
 
-func (r *inspectingCommandRunner) Run(ctx context.Context, req workerprocess.CommandRequest) (workerprocess.CommandResult, error) {
+func (r *inspectingCommandRunner) Run(ctx context.Context, req workers.CommandRequest) (workers.CommandResult, error) {
 	r.req = req
 	_, r.hasDeadline = ctx.Deadline()
-	return workerprocess.CommandResult{}, nil
+	return workers.CommandResult{}, nil
 }
 
 func inputTokens(tokens ...factoryruntime.RuntimeToken) []any {

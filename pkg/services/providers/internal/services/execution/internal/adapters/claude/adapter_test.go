@@ -73,7 +73,7 @@ func TestClaudeStreamDeltaPreservesWhitespace(t *testing.T) {
 		map[string]any{
 			"type": "stream_event", "session_id": "claude-session-delta",
 			"event": map[string]any{
-				"type": "message_start",
+				"type":    "message_start",
 				"message": map[string]any{"id": "msg_delta", "role": "assistant", "content": []any{}},
 			},
 		},
@@ -286,7 +286,7 @@ func claudeSuccessStream() []byte {
 		map[string]any{
 			"type": "stream_event", "session_id": "claude-session-42",
 			"event": map[string]any{
-				"type": "message_start",
+				"type":    "message_start",
 				"message": map[string]any{"id": "msg_claude_1", "role": "assistant", "content": []any{}},
 			},
 		},
@@ -363,7 +363,7 @@ func claudeToolStream() []byte {
 		map[string]any{
 			"type": "stream_event", "session_id": "claude-session-tool",
 			"event": map[string]any{
-				"type": "message_start",
+				"type":    "message_start",
 				"message": map[string]any{"id": "msg_tool", "role": "assistant", "content": []any{}},
 			},
 		},

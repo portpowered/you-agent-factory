@@ -14,10 +14,10 @@ import (
 const delWrkDeleteReadyInventoryManifestRel = "docs/internal/processes/del-wrk-delete-ready-inventory.json"
 
 type delWrkDeleteReadyInventoryManifest struct {
-	DeleteReadyRelativeDirs []string                `json:"delete_ready_relative_dirs"`
-	HeldBack                []delWrkHeldBackEntry   `json:"held_back"`
-	ExcludedFromDelete      []delWrkExcludedEntry   `json:"excluded_from_delete"`
-	Gates                   map[string]delWrkGate   `json:"gates"`
+	DeleteReadyRelativeDirs []string              `json:"delete_ready_relative_dirs"`
+	HeldBack                []delWrkHeldBackEntry `json:"held_back"`
+	ExcludedFromDelete      []delWrkExcludedEntry `json:"excluded_from_delete"`
+	Gates                   map[string]delWrkGate `json:"gates"`
 }
 
 type delWrkHeldBackEntry struct {
@@ -26,8 +26,8 @@ type delWrkHeldBackEntry struct {
 }
 
 type delWrkExcludedEntry struct {
-	RelativeDir      string `json:"relative_dir"`
-	ExclusionReason  string `json:"exclusion_reason"`
+	RelativeDir     string `json:"relative_dir"`
+	ExclusionReason string `json:"exclusion_reason"`
 }
 
 type delWrkGate struct {
@@ -182,18 +182,18 @@ func TestDelWrkDeleteReadyInventoryGate_ServiceCompileShimHeldBack(t *testing.T)
 	}
 }
 
-func TestDelWrkDeleteReadyInventoryGate_ProvidersExtractionSourcesExcluded(t *testing.T) {
+func TestDelWrkDeleteReadyInventoryGate_ProvidersExtractionSourcesRemoved(t *testing.T) {
 	t.Parallel()
 
 	manifest := loadDelWrkDeleteReadyInventoryManifest(t)
 	workersDir := workersRootDir(t)
 
 	for _, relative := range providersExtractionTopLevelDirs {
-		if !delWrkManifestExcludesRelativeDir(manifest, relative) {
-			t.Fatalf("manifest must exclude Providers extraction source %q from delete set", relative)
+		if delWrkManifestExcludesRelativeDir(manifest, relative) {
+			t.Fatalf("manifest must not exclude migrated Providers source %q", relative)
 		}
-		if _, err := os.Stat(filepath.Join(workersDir, relative)); err != nil {
-			t.Fatalf("Providers extraction source %q must remain at workers top level: %v", relative, err)
+		if _, err := os.Stat(filepath.Join(workersDir, relative)); !os.IsNotExist(err) {
+			t.Fatalf("Providers extraction source %q must be removed: %v", relative, err)
 		}
 	}
 }

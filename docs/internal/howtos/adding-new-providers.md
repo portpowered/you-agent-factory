@@ -1,7 +1,7 @@
 # Implementing a model provider integration
 
 The customer-implementable provider inference boundary is
-`pkg/services/workers/provider/inferencecontract`. It is deliberately separate
+`pkg/services/providers/internal/services/execution/internal/provider/inferencecontract`. It is deliberately separate
 from built-in provider registration and Factory Session publication. This
 guide covers implementing and validating that public Go contract; wiring a new
 built-in provider into production is a separate migration.
@@ -102,7 +102,7 @@ before buffered terminal drafts reach orchestration.
 
 ## 3. Run the reusable conformance suites
 
-Use `pkg/services/workers/provider/inferencecontract/testkit` with deterministic,
+Use `pkg/services/providers/internal/services/execution/internal/provider/inferencecontract/testkit` with deterministic,
 sanitized fixtures. `testkit.Run` requires fresh integration factories for
 final-only, streaming, and correlated tool-lifecycle success. Supply at least
 two distinct valid identities to prove behavior is identity-neutral:
@@ -147,3 +147,4 @@ composition.
 - Focused package tests and race-enabled protocol tests pass.
 - No built-in provider switch, generated API, Factory Session ownership, or
   production registration migration was added as part of the contract work.
+

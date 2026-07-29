@@ -22,8 +22,8 @@ var knownRuntimeEmissionAnchors = map[recordings.FactoryEventType]string{
 	recordings.FactoryEventTypeFactoryStateResponse:          "pkg/services/recordings/internal/services/canonical_ledger/events/event_history.go RecordFactoryStateChange",
 	recordings.FactoryEventTypeRunResponse:                   "pkg/services/recordings/internal/services/canonical_ledger/events/event_history.go RecordRunResponse",
 	recordings.FactoryEventTypeWorkStateChange:               "pkg/services/recordings/internal/services/canonical_ledger/events/event_history.go RecordWorkStateChange",
-	recordings.FactoryEventTypeInferenceRequest:              "pkg/services/workers/provider/recording_provider.go",
-	recordings.FactoryEventTypeInferenceResponse:             "pkg/services/workers/provider/recording_provider.go",
+	recordings.FactoryEventTypeInferenceRequest:              "pkg/services/providers/internal/services/execution/internal/provider/recording_provider.go",
+	recordings.FactoryEventTypeInferenceResponse:             "pkg/services/providers/internal/services/execution/internal/provider/recording_provider.go",
 	recordings.FactoryEventTypeModelRequest:                  "pkg/services/workers/internal/services/workstations/execution/recording/model.go",
 	recordings.FactoryEventTypeModelResponse:                 "pkg/services/workers/internal/services/workstations/execution/recording/model.go",
 	recordings.FactoryEventTypeScriptRequest:                 "pkg/services/workers/internal/services/workstations/executor/script.go",
@@ -117,3 +117,4 @@ func TestExcludedNonPublicFactoryEventKinds_HasEvidenceForEveryEntry(t *testing.
 		seen[key] = struct{}{}
 	}
 }
+

@@ -52,7 +52,7 @@ func TestClassifyServicePackageRootVsNonRootForDistinctOwners(t *testing.T) {
 		{path: "pkg/services/factory_sessions", owner: "factory_sessions", surface: surfaceRoot},
 		{path: "pkg/services/factory_sessions/internal/execution", owner: "factory_sessions", surface: surfaceNonRoot},
 		{path: "pkg/services/workers", owner: "workers", surface: surfaceRoot},
-		{path: "pkg/services/workers/provider", owner: "workers", surface: surfaceNonRoot},
+		{path: "pkg/services/providers/internal/services/execution/internal/provider", owner: "workers", surface: surfaceNonRoot},
 		{path: "pkg/platform/logging", owner: "", surface: surfaceNone},
 	}
 	for _, tc := range cases {
@@ -115,7 +115,7 @@ func TestServiceImplementationImportUsesOwnerInventory(t *testing.T) {
 		"pkg/initializer/runtime.go": `package initializer
 import (
   sessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-  provider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
+  provider "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider"
   novelty "github.com/portpowered/infinite-you/pkg/services/workers/never_listed_before"
 )
 var (
@@ -135,3 +135,4 @@ var (
 		}
 	}
 }
+

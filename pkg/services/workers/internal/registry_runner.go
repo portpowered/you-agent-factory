@@ -2,20 +2,19 @@ package internal
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
-	"github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
-	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
-	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 )
 
+// registryCapabilityRunner enforces the selection facts exposed through the
+// Workers root contract before delegating execution. Provider invocation is
+// owned by providers.Service; this adapter intentionally does not translate
+// through the former provider conductor protocol.
 type registryCapabilityRunner struct {
 	next      workers.Runner
-	providers *providerregistry.Registry
+	providers workers.ProviderRegistry
 }
 
 func (r registryCapabilityRunner) Execute(
@@ -29,7 +28,7 @@ func (r registryCapabilityRunner) Execute(
 }
 
 func validateRequestedRunnerCapabilities(
-	providers *providerregistry.Registry,
+	providers workers.ProviderRegistry,
 	request workers.RunnerExecutionRequest,
 ) error {
 	if providers == nil {
@@ -54,208 +53,4 @@ func validateRequestedRunnerCapabilities(
 		)
 	}
 	return nil
-}
-
-// conductorInvocationRunner routes registry-selected external integrations
-// through the provider-neutral conductor while preserving the retained
-// provider-native runner path for bundled built-ins and ProviderOverride.
-type conductorInvocationRunner struct {
-	next      workers.Runner
-	conductor *conductor.Conductor
-	providers *providerregistry.Registry
-	publish   workers.ProgressPublisher
-}
-
-func (r conductorInvocationRunner) Execute(
-	ctx context.Context,
-	request workers.RunnerExecutionRequest,
-) (workers.RunnerExecutionResult, error) {
-	identity, err := r.resolveConductorIdentity(request)
-	if err != nil {
-		return workers.RunnerExecutionResult{}, mapConductorInvocationError(err)
-	}
-	if r.conductor == nil || r.providers == nil || r.providers.UsesNativeRunner(identity) {
-		if r.next == nil {
-			return workers.RunnerExecutionResult{}, workerprovider.NewProviderError(
-				workers.WorkFailureTypeMisconfigured,
-				"runner requires an implementation",
-				nil,
-			)
-		}
-		return r.next.Execute(ctx, request)
-	}
-	destination := &conductorCollectingDestination{
-		dispatchID: request.Dispatch.DispatchID,
-		publish:    r.publish,
-	}
-	err = r.conductor.Invoke(ctx, identity, invocationRequestFromRunner(request), destination)
-	if err != nil {
-		return workers.RunnerExecutionResult{}, mapConductorInvocationError(err)
-	}
-	return destination.result()
-}
-
-func (r conductorInvocationRunner) resolveConductorIdentity(
-	request workers.RunnerExecutionRequest,
-) (string, error) {
-	identity := strings.TrimSpace(request.RunnerID)
-	if identity != "" {
-		return identity, nil
-	}
-	if r.providers == nil {
-		return "", nil
-	}
-	selection, err := r.providers.ResolveRunnerSelection("", "", request.ModelProvider)
-	if err != nil {
-		return "", err
-	}
-	return selection.RunnerID, nil
-}
-
-func invocationRequestFromRunner(request workers.RunnerExecutionRequest) inference.InvocationRequest {
-	invocationID := strings.TrimSpace(request.Dispatch.DispatchID)
-	if invocationID == "" {
-		invocationID = "conductor-invocation"
-	}
-	return inference.NewInvocationRequest(inference.InvocationInput{
-		InvocationID: invocationID,
-		Model:        request.Model,
-		SystemPrompt: request.SystemPrompt,
-		UserMessage:  request.UserMessage,
-		OutputSchema: request.OutputSchema,
-		Required:     requiredCapabilitiesFromRunner(request),
-		Execution:    request,
-	})
-}
-
-func requiredCapabilitiesFromRunner(request workers.RunnerExecutionRequest) inference.CapabilitySet {
-	capabilities := []inference.Capability{inference.CapabilityPromptSubmission}
-	for _, required := range request.RequiredOptionalCapabilities {
-		switch required {
-		case workers.RunnerOptionalCapabilityImageInput:
-			capabilities = append(capabilities, inference.CapabilityImageInput)
-		case workers.RunnerOptionalCapabilitySessionResume:
-			capabilities = append(capabilities, inference.CapabilitySessionResume)
-		case workers.RunnerOptionalCapabilityStructuredOutput:
-			capabilities = append(capabilities, inference.CapabilityStructuredOutput)
-		}
-	}
-	return inference.NewCapabilitySet(capabilities...)
-}
-
-func mapConductorInvocationError(err error) error {
-	if err == nil {
-		return nil
-	}
-	var rejection *conductor.Rejection
-	if errors.As(err, &rejection) {
-		return workerprovider.NewProviderError(
-			workers.WorkFailureTypePermanentBadRequest,
-			rejection.Error(),
-			rejection,
-		)
-	}
-	return workerprovider.NewProviderError(
-		workers.WorkFailureTypeUnknown,
-		err.Error(),
-		err,
-	)
-}
-
-type conductorCollectingDestination struct {
-	completion *inference.Completion
-	dispatchID string
-	publish    workers.ProgressPublisher
-}
-
-func (d *conductorCollectingDestination) WriteEvent(_ context.Context, event inference.EventDraft) error {
-	if d != nil && d.publish != nil {
-		draft := event.Draft()
-		draft.DispatchID = d.dispatchID
-		d.publish(workerprovider.CanonicalDraftFragment(draft.DispatchID, draft))
-	}
-	return nil
-}
-
-func (d *conductorCollectingDestination) Close(_ context.Context, completion inference.Completion) error {
-	clone := completion
-	d.completion = &clone
-	return nil
-}
-
-func (d *conductorCollectingDestination) result() (workers.RunnerExecutionResult, error) {
-	if d == nil || d.completion == nil {
-		return workers.RunnerExecutionResult{}, workerprovider.NewProviderError(
-			workers.WorkFailureTypeUnknown,
-			"provider invocation completed without a safe terminal outcome",
-			nil,
-		)
-	}
-	if failure := d.completion.Failure(); failure != nil {
-		return workers.RunnerExecutionResult{}, providerErrorFromConductorFailure(*failure)
-	}
-	response := d.completion.Response()
-	if response == nil {
-		return workers.RunnerExecutionResult{}, workerprovider.NewProviderError(
-			workers.WorkFailureTypeUnknown,
-			"provider invocation completed without a safe terminal outcome",
-			nil,
-		)
-	}
-	return workers.RunnerExecutionResult{
-		Content:         response.Content(),
-		ProviderSession: providerSessionFromConductor(response.ProviderSession()),
-	}, nil
-}
-
-func providerErrorFromConductorFailure(failure inference.Failure) error {
-	providerErr := workerprovider.NewProviderErrorWithSession(
-		workFailureTypeFromConductorFailure(failure),
-		failure.Message(),
-		fmt.Errorf("conductor failure: %s", failure.Kind()),
-		providerSessionFromConductor(failure.ProviderSession()),
-	)
-	if diagnostics := failure.Diagnostics(); len(diagnostics) > 0 {
-		providerErr.Diagnostics = &workers.WorkDiagnostics{Metadata: diagnostics}
-	}
-	return providerErr
-}
-
-func workFailureTypeFromConductorFailure(failure inference.Failure) workers.WorkFailureType {
-	switch failure.Diagnostics()["work-failure-type"] {
-	case string(workers.WorkFailureTypeMissingExecutable):
-		return workers.WorkFailureTypeMissingExecutable
-	case string(workers.WorkFailureTypeMisconfigured):
-		return workers.WorkFailureTypeMisconfigured
-	}
-	switch failure.Kind() {
-	case inference.FailureTimeout:
-		return workers.WorkFailureTypeTimeout
-	case inference.FailureThrottled:
-		return workers.WorkFailureTypeThrottled
-	case inference.FailureAuthentication:
-		return workers.WorkFailureTypeAuthFailure
-	case inference.FailureInvalidRequest, inference.FailureMalformedOutput:
-		return workers.WorkFailureTypePermanentBadRequest
-	case inference.FailureDependency:
-		return workers.WorkFailureTypeMisconfigured
-	case inference.FailureCanceled:
-		return workers.WorkFailureTypeUnknown
-	default:
-		if failure.Retryable() {
-			return workers.WorkFailureTypeInternalServerError
-		}
-		return workers.WorkFailureTypeUnknown
-	}
-}
-
-func providerSessionFromConductor(session *inference.ProviderSession) *workers.ProviderSessionMetadata {
-	if session == nil {
-		return nil
-	}
-	return &workers.ProviderSessionMetadata{
-		Provider: session.Provider(),
-		Kind:     session.Kind(),
-		ID:       session.ID(),
-	}
 }

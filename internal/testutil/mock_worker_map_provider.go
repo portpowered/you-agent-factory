@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 )
 
 // MockProvider implements provider.Provider for testing. It returns
@@ -120,4 +119,4 @@ func (m *MockWorkerMapProvider) LastCall(workerType string) workerexecution.Prov
 }
 
 // Compile-time check.
-var _ workerprovider.Provider = (*MockWorkerMapProvider)(nil)
+var _ workerexecution.Provider = (*MockWorkerMapProvider)(nil)

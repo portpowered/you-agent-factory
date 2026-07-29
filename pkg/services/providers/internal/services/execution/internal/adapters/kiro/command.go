@@ -7,13 +7,12 @@ import (
 	"time"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/commanddispatch"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
+	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/commanddispatch"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 )
 
-var commandAutomationDefaults = []workerprocess.CommandEnvEntry{
+var commandAutomationDefaults = []workers.CommandEnvEntry{
 	{Name: "GIT_EDITOR", Value: "true"},
 	{Name: "GIT_SEQUENCE_EDITOR", Value: "true"},
 	{Name: "GIT_MERGE_AUTOEDIT", Value: "no"},
@@ -110,9 +109,9 @@ func validateKiroOptionalCapabilities(request providers.ExecuteRequest) error {
 }
 
 func buildCommandEnv(processEnvironment []string, envVars map[string]string) []string {
-	return workerprocess.MergeCommandEnv(
+	return workers.MergeCommandEnv(
 		processEnvironment,
-		workerprocess.CommandEnvEntriesFromMap(envVars),
+		workers.CommandEnvEntriesFromMap(envVars),
 		commandAutomationDefaults,
 	)
 }

@@ -68,7 +68,7 @@ var allowedServiceValueConstructionSymbols = map[string]map[string]struct{}{
 		"NewEmptyMockWorkersConfig": {},
 		"NewProviderError":          {},
 	},
-	"github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract": {
+	"github.com/portpowered/infinite-you/pkg/services/providers/inference": {
 		"NewCapabilitySet": {},
 	},
 }
@@ -102,7 +102,7 @@ var transportPrivateServiceSubpackages = []string{
 	"pkg/services/factory_sessions/internal/sessionservice",
 	"pkg/services/recordings/events",
 	"pkg/services/recordings/internal/services/canonical_ledger/events",
-	"pkg/services/workers/provider",
+	"pkg/services/providers/internal/services/execution/internal/provider",
 	"pkg/services/workers/runner",
 	"pkg/services/workers/service",
 	"pkg/services/workers/services",
@@ -173,10 +173,10 @@ var convergedServiceSubpackageRoots = map[string]string{
 	"pkg/services/recordings/artifacts":                                                "recordings",
 	"pkg/services/recordings/replay":                            "recordings",
 	"pkg/services/recordings/service":                           "recordings",
-	"pkg/services/workers/agypty":                               "workers",
+	"pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty":                               "workers",
 	"pkg/services/workers/invocation":                           "workers",
 	"pkg/services/workers/prompting":                            "workers",
-	"pkg/services/workers/provider":                             "workers",
+	"pkg/services/providers/internal/services/execution/internal/provider":                             "workers",
 	"pkg/services/automations/internal/services/hosted_sources": "automations",
 	"pkg/services/workers/services/testing":                     "workers",
 }
@@ -250,17 +250,17 @@ var approvedApplicationGraphImporters = []string{
 // provider/inferencecontract entries remain only as migration debt until later
 // Providers packets land; they are not the durable normative owner.
 var approvedPeerServiceContractImports = map[string]struct{}{
-	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/workers/agypty":                                                        {},
-	"pkg/platform/pty\x00github.com/portpowered/infinite-you/pkg/services/workers/agypty":                                                          {},
+	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty":                                                        {},
+	"pkg/platform/pty\x00github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty":                                                          {},
 	"pkg/services/edges\x00" + providersLeafEffectContractImport:                                                                                   {},
-	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":                                    {},
+	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/providers/inference":                                    {},
 	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/automations":                                         {},
 	"pkg/wire\x00github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/wire": {},
-	"pkg/services/factory_runtime\x00github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":                          {},
-	"pkg/services/factory_runtime/internal/services/instance_host/build\x00github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":                    {},
-	"pkg/services/recordings\x00github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":                               {},
-	"pkg/services/recordings/internal/services/artifacts_export/artifacts\x00github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract": {},
-	"pkg/services/recordings/internal/services/replay/replay\x00github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract": {},
+	"pkg/services/factory_runtime\x00github.com/portpowered/infinite-you/pkg/services/providers/inference":                          {},
+	"pkg/services/factory_runtime/internal/services/instance_host/build\x00github.com/portpowered/infinite-you/pkg/services/providers/inference":                    {},
+	"pkg/services/recordings\x00github.com/portpowered/infinite-you/pkg/services/providers/inference":                               {},
+	"pkg/services/recordings/internal/services/artifacts_export/artifacts\x00github.com/portpowered/infinite-you/pkg/services/providers/inference": {},
+	"pkg/services/recordings/internal/services/replay/replay\x00github.com/portpowered/infinite-you/pkg/services/providers/inference": {},
 }
 
 // publicExternalEffectContractImports are intentionally declared beside the
@@ -271,8 +271,8 @@ var approvedPeerServiceContractImports = map[string]struct{}{
 // the durable public effect port.
 var publicExternalEffectContractImports = map[string]struct{}{
 	providersLeafEffectContractImport:                                                       {},
-	"github.com/portpowered/infinite-you/pkg/services/workers/agypty":                       {},
-	"github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":   {},
+	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty":                       {},
+	"github.com/portpowered/infinite-you/pkg/services/providers/inference":   {},
 	"github.com/portpowered/infinite-you/pkg/services/automations":        {},
 }
 
@@ -2609,3 +2609,5 @@ func writeHandwrittenGeneratedFindings(writer io.Writer, findings []handwrittenG
 		fmt.Fprintln(writer, "  remediation: move handwritten mapping or policy to pkg/transports/http or pkg/transports/mapping.")
 	}
 }
+
+

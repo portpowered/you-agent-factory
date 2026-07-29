@@ -12,7 +12,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 )
 
 // AgentRunExecutor executes AGENT_RUN workstations through a go-agent-harness adapter.
@@ -227,7 +226,7 @@ func evaluateAgentRunOutcome(output string, workerDef *interfaces.FactoryWorkerC
 	if workerDef == nil || workerDef.StopToken == "" {
 		return workerexecution.OutcomeAccepted
 	}
-	if workerprovider.ContainsStopToken(output, workerDef.StopToken) {
+	if workerexecution.ContainsStopToken(output, workerDef.StopToken) {
 		return workerexecution.OutcomeAccepted
 	}
 	if strings.Contains(output, "<CONTINUE>") {

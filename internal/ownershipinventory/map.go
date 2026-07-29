@@ -86,12 +86,12 @@ func MapPackage(packagePath string) (PackageRow, error) {
 func explicitPackageMapping(packagePath string) (PackageRow, bool) {
 	switch {
 	case
-		packagePath == "pkg/services/workers/provider" ||
-			strings.HasPrefix(packagePath, "pkg/services/workers/provider/") ||
-			packagePath == "pkg/services/workers/provider_test" ||
-			strings.HasPrefix(packagePath, "pkg/services/workers/provider_test/") ||
-			packagePath == "pkg/services/workers/agypty" ||
-			strings.HasPrefix(packagePath, "pkg/services/workers/agypty/"):
+		packagePath == "pkg/services/providers/internal/services/execution/internal/provider" ||
+			strings.HasPrefix(packagePath, "pkg/services/providers/internal/services/execution/internal/provider/") ||
+			packagePath == "pkg/services/providers/internal/services/execution/internal/provider_test" ||
+			strings.HasPrefix(packagePath, "pkg/services/providers/internal/services/execution/internal/provider_test/") ||
+			packagePath == "pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty" ||
+			strings.HasPrefix(packagePath, "pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty/"):
 		return moveRow(
 			packagePath,
 			"providers",
@@ -187,3 +187,5 @@ func BuildInventory(root string, packages []string) (Inventory, error) {
 		Packages:                rows,
 	}, nil
 }
+
+

@@ -1,6 +1,16 @@
 package workers
 
-import providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+import (
+	"strings"
+
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+)
+
+// CanonicalDraftFragment carries one provider-native canonical response draft
+// through the Workers-owned progress publication contract.
+func CanonicalDraftFragment(dispatchID string, draft any) ProgressFragment {
+	return ProgressFragment{DispatchID: strings.TrimSpace(dispatchID), CanonicalDraft: draft}
+}
 
 const (
 	ProgressFragmentKind  = "PROGRESS_FRAGMENT"

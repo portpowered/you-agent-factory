@@ -276,7 +276,7 @@ primary-result behavior.
   Initializer; the embedded publication package and catalog must not acquire
   either responsibility.
 - The customer-implementable provider inference contract currently lives in
-  `pkg/services/workers/provider/inferencecontract/` as migration debt. Durable
+  `pkg/services/providers/internal/services/execution/internal/provider/inferencecontract/` as migration debt. Durable
   ownership belongs to the Providers Execution leaf
   (`pkg/services/providers/execution/inferencecontract`); `cmd/pkgboundarycheck`
   encodes that ownership with deliberate fixtures, while Workers continues to
@@ -397,7 +397,7 @@ primary-result behavior.
   both streaming/progress and final-only/failure-oriented implementations so
   the harness cannot encode one provider-native protocol.
 - The provider-neutral invocation conductor lives in
-  `pkg/services/workers/provider/conductor/`. Factory Sessions and worker
+  `pkg/services/providers/internal/services/execution/internal/provider/conductor/`. Factory Sessions and worker
   executors should enter registry-selected integrations through that conductor
   rather than calling Discover, request-sensitive Capabilities, or Invoke
   directly. Before any of those provider I/O paths, the conductor validates
@@ -450,7 +450,7 @@ primary-result behavior.
   `go run ./cmd/ownershipinventoryfreeze` when Workers provider integration
   packages replace deleted adapter subtrees.
 - The authoritative manifest-to-Integration join belongs in
-  `pkg/services/workers/provider/registry/`. Catalog registrations name only
+  `pkg/services/providers/internal/services/execution/internal/provider/registry/`. Catalog registrations name only
   the canonical embedded identity; external registrations carry one detached
   public inference-contract manifest. Keep generated OpenAPI types out of this
   Workers domain boundary: parse the exact bytes from
@@ -1598,7 +1598,7 @@ response-stream output.
   boundary must preserve provider input validation before starting either
   runner. When migrating a built-in out of aggregate `provider_behavior`, move
   argv construction, optional-capability rejection, and
-  `BuildCommandRequest`/env assembly into `pkg/services/workers/provider/<name>`
+  `BuildCommandRequest`/env assembly into `pkg/services/providers/internal/services/execution/internal/provider/<name>`
   first (see Gemini `BuildArgs`/`BuildCommandRequest`/`Adapter.BuildCommand`);
   keep only a thin aggregate delegate until the later legacy-branch deletion
   story. After the migrated provider is registry+conductor exclusive, delete
@@ -1702,10 +1702,10 @@ response-stream output.
   invocation primary-result byte fixtures live in
   `pkg/work/invocation/testdata/primary_result_regression/` and are asserted by
   `primary_result_regression_test.go` without wiring the mapper into selection.
-  Provider-native typed adapters live under `pkg/services/workers/provider/<provider>`
+  Provider-native typed adapters live under `pkg/services/providers/internal/services/execution/internal/provider/<provider>`
   and emit validated `responseevents.Draft` values. Sanitized cross-provider
   parity transcripts and the terminal harness are Workers-owned, same-package
-  test support under `pkg/services/workers/provider/paritytests`, with
+  test support under `pkg/services/providers/internal/services/execution/internal/provider/paritytests`, with
   fidelity-class fixtures under `testdata/`; extend that catalog for CLI/API
   parity proofs instead of inventing parallel fixture trees. Use
   `RunTransportParity` plus `AssertCLIAPITransportParity` and
@@ -1720,7 +1720,7 @@ response-stream output.
   terminal `InvocationResponse` outcomes for the same fixture run. Consolidated
   Batch 09 parity proofs live in `AssertCrossProviderParityCatalog`
   and `AssertCrossProviderParityForFixture`; run them from
-  `pkg/services/workers/provider/paritytests/suite_test.go`
+  `pkg/services/providers/internal/services/execution/internal/provider/paritytests/suite_test.go`
   (`TestCrossProviderParitySuite_Catalog`). Maintainer lanes:
   `make provider-parity-smoke` (also invoked by `make api-smoke`) and
   `make response-stream-stress-smoke` for response-event backpressure/race proofs.
@@ -2536,3 +2536,4 @@ response-stream output.
   registered parent-private Agent Runner over `providersroot.NewService` and
   skips conductor/registry-capability runner decorators. Retire executor-level
   `inferWithRetry`; caller-owned retry remains outside the Runner boundary.
+

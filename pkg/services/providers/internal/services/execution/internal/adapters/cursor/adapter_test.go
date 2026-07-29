@@ -169,31 +169,31 @@ func cursorSuccessStream() []byte {
 		map[string]any{
 			"type": "assistant", "timestamp_ms": 1, "session_id": "cursor-session-42",
 			"message": map[string]any{
-				"role": "assistant",
+				"role":    "assistant",
 				"content": []map[string]any{{"type": "text", "text": "draft "}},
 			},
 		},
 		map[string]any{
 			"type": "assistant", "timestamp_ms": 2, "session_id": "cursor-session-42",
 			"message": map[string]any{
-				"role": "assistant",
+				"role":    "assistant",
 				"content": []map[string]any{{"type": "text", "text": "updated"}},
 			},
 		},
 		map[string]any{
 			"type": "tool_call", "subtype": "started", "call_id": "call-read-1",
 			"session_id": "cursor-session-42",
-			"tool_call": map[string]any{"readToolCall": map[string]any{"args": map[string]any{"path": "README.md"}}},
+			"tool_call":  map[string]any{"readToolCall": map[string]any{"args": map[string]any{"path": "README.md"}}},
 		},
 		map[string]any{
 			"type": "tool_call", "subtype": "completed", "call_id": "call-read-1",
 			"session_id": "cursor-session-42",
-			"tool_call": map[string]any{"readToolCall": map[string]any{"result": map[string]any{"success": map[string]any{}}}},
+			"tool_call":  map[string]any{"readToolCall": map[string]any{"result": map[string]any{"success": map[string]any{}}}},
 		},
 		map[string]any{
 			"type": "assistant", "timestamp_ms": 3, "session_id": "cursor-session-42",
 			"message": map[string]any{
-				"role": "assistant",
+				"role":    "assistant",
 				"content": []map[string]any{{"type": "text", "text": " final"}},
 			},
 		},

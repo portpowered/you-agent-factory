@@ -164,7 +164,7 @@ flowchart LR
     subgraph currentWorkers[Worker execution]
         currentWorkerService[[pkg/services/workers/service\nworker invocation]]
         currentWorkerExecutor[[pkg/services/workers/executor]]
-        currentProviderAdapters[[pkg/services/workers/provider adapters]]
+        currentProviderAdapters[[pkg/services/providers/internal/services/execution/internal/provider adapters]]
         currentHostedWorkers[[pkg/services/workers/services/hosted_logic]]
         currentWorktrees[[pkg/services/workers/worktree]]
 
@@ -711,3 +711,4 @@ cmd/factory
 -> pkg/root
 -> pkg/wire
 -> pkg/initializer
+

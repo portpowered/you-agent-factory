@@ -6,6 +6,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -21,6 +22,10 @@ func (wireTestProvider) Infer(context.Context, workers.ProviderInferenceRequest)
 type wireTestProviderRegistry struct{}
 
 func (wireTestProviderRegistry) UsesNativeRunner(string) bool { return false }
+func (wireTestProviderRegistry) CanonicalIdentity(identity string) (string, error) {
+	return identity, nil
+}
+func (wireTestProviderRegistry) RunnerIdentities() []string { return nil }
 
 func (wireTestProviderRegistry) RunnerMetadata(string) (workers.RunnerMetadata, error) {
 	return workers.RunnerMetadata{}, nil
@@ -28,6 +33,9 @@ func (wireTestProviderRegistry) RunnerMetadata(string) (workers.RunnerMetadata, 
 
 func (wireTestProviderRegistry) ResolveRunnerSelection(string, string, string) (workers.ResolvedRunnerSelection, error) {
 	return workers.ResolvedRunnerSelection{}, nil
+}
+func (wireTestProviderRegistry) ValidateRunnerPrerequisites(platformprocess.ExecutableLocator, string) error {
+	return nil
 }
 
 func TestProvideConductorInvocationWithProgressFactory_AcceptsWorkersProviderRegistry(t *testing.T) {
@@ -49,7 +57,7 @@ func TestProvideConductorInvocationWithProgressFactory_AcceptsWorkersProviderReg
 		t.Fatalf("provideAgyPTYAllocator() error = %v", err)
 	}
 	adaptRunner := provideWorkerCommandRunnerAdapter()
-	factory := provideConductorInvocationWithProgressFactory(edges)
+	factory := provideConductorInvocationWithProgressFactory(providersService, edges)
 	executor, err := factory(registry, adaptRunner(edges.ProviderCommandRunner), allocator, nil)
 	if err != nil {
 		t.Fatalf("factory() error = %v", err)
@@ -59,21 +67,24 @@ func TestProvideConductorInvocationWithProgressFactory_AcceptsWorkersProviderReg
 	}
 }
 
-func TestProvideConductorInvocationWithProgressFactory_RejectsNonConcreteRegistry(t *testing.T) {
+func TestProvideConductorInvocationWithProgressFactory_AcceptsRootRegistry(t *testing.T) {
 	t.Parallel()
 
 	edges := serviceedges.Edges{
 		ProviderCommandRunner: testutil.NewProviderCommandRunner(),
+	}
+	providersService, err := provideProvidersService(edges)
+	if err != nil {
+		t.Fatalf("provideProvidersService() error = %v", err)
 	}
 	allocator, err := provideAgyPTYAllocator(edges)
 	if err != nil {
 		t.Fatalf("provideAgyPTYAllocator() error = %v", err)
 	}
 	adaptRunner := provideWorkerCommandRunnerAdapter()
-	factory := provideConductorInvocationWithProgressFactory(edges)
-	_, err = factory(wireTestProviderRegistry{}, adaptRunner(edges.ProviderCommandRunner), allocator, nil)
-	if err == nil {
-		t.Fatal("factory() error = nil, want non-concrete registry rejection")
+	factory := provideConductorInvocationWithProgressFactory(providersService, edges)
+	if _, err = factory(wireTestProviderRegistry{}, adaptRunner(edges.ProviderCommandRunner), allocator, nil); err != nil {
+		t.Fatalf("factory() error = %v", err)
 	}
 }
 
@@ -109,14 +120,14 @@ func TestProvideFactorySessionExecutionFactory_BuildsLiveChildInvocation(t *test
 	sessionIDs := provideFactorySessionIDGenerator(edges)
 	responseEventIDs := provideFactorySessionResponseEventIDGenerator(edges)
 	responseEventRetentionLimits := provideFactorySessionResponseEventRetentionLimits(edges)
-	invocationWithProgress := provideWorkerInvocationWithProgressFactory(edges)
+	invocationWithProgress := provideWorkerInvocationWithProgressFactory(providersService, edges)
 	allocator, err := provideAgyPTYAllocator(edges)
 	if err != nil {
 		t.Fatalf("provideAgyPTYAllocator() error = %v", err)
 	}
 	adaptRunner := provideWorkerCommandRunnerAdapter()
 	mockRunnerFactory := provideWorkersMockCommandRunnerFactory()
-	conductorInvocation := provideConductorInvocationWithProgressFactory(edges)
+	conductorInvocation := provideConductorInvocationWithProgressFactory(providersService, edges)
 	factory := provideFactorySessionExecutionFactory(
 		workflows,
 		provideOrchestrationJavaScriptExecution(provideFactoryRuntimeIDGenerator(edges), workflows),

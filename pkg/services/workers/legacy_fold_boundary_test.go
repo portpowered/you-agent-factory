@@ -37,15 +37,9 @@ var allowedFoldedLegacyImporterPrefixes = []string{
 	modulePrefix + "pkg/services/providers",
 }
 
-var foldedLegacyShimPackageDirs = []string{
-	"executor/agentrun",
-	"process",
-}
+var foldedLegacyShimPackageDirs = []string{}
 
-var providersExtractionTopLevelDirs = []string{
-	"provider",
-	"agypty",
-}
+var providersExtractionTopLevelDirs = []string{"provider", "agypty", "provider_test"}
 
 // TestProductionPackagesDoNotImportFoldedLegacyWorkersPackages seals the folded
 // legacy import boundary: only documented delete-ready shims, owner-private
@@ -71,8 +65,8 @@ func TestProductionPackagesDoNotImportFoldedLegacyWorkersPackages(t *testing.T) 
 	}
 }
 
-// TestFoldedLegacyShimPackagesAreDeleteReady proves each transitional public
-// package path contains only the delete-ready shim source for DEL-WRK.
+// TestFoldedLegacyShimPackagesAreDeleteReady proves no transitional public
+// shim packages remain after the final migration.
 func TestFoldedLegacyShimPackagesAreDeleteReady(t *testing.T) {
 	t.Parallel()
 
@@ -93,15 +87,15 @@ func TestFoldedLegacyShimPackagesAreDeleteReady(t *testing.T) {
 	}
 }
 
-// TestProvidersExtractionSourcesRemainOutsideWorkersInternal proves Providers
-// extraction sources were not falsely claimed as Workers-internal completions.
-func TestProvidersExtractionSourcesRemainOutsideWorkersInternal(t *testing.T) {
+// TestProvidersExtractionSourcesMovedOutOfWorkers proves the final Providers
+// extraction left no peer-owned implementation below Workers.
+func TestProvidersExtractionSourcesMovedOutOfWorkers(t *testing.T) {
 	t.Parallel()
 
 	workersDir := workersRootDir(t)
 	for _, relative := range providersExtractionTopLevelDirs {
-		if _, err := os.Stat(filepath.Join(workersDir, relative)); err != nil {
-			t.Fatalf("providers extraction source %q must remain at workers top level: %v", relative, err)
+		if _, err := os.Stat(filepath.Join(workersDir, relative)); !os.IsNotExist(err) {
+			t.Fatalf("providers extraction source %q must be absent after final migration: %v", relative, err)
 		}
 	}
 

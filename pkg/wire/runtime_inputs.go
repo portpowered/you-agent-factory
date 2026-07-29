@@ -19,12 +19,11 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	"go.uber.org/zap"
 )
@@ -197,7 +196,7 @@ func provideSessionExecutionOpeningFactory(
 	artifactRoots factoryruntime.RuntimeArtifactRootResolver,
 	adaptRunner factorysessionwire.WorkerCommandRunnerAdapter,
 	paths factorysessionwire.ExecutionOpeningFileSystem,
-	allocator agypty.PTYAllocator,
+	allocator workers.PTYAllocator,
 	logger *zap.Logger,
 ) (*factorysessionwire.ExecutionOpeningFactory, error) {
 	workerEdges, err := withStandaloneWorkerProductionEdges(edges)
@@ -277,7 +276,7 @@ func withStandaloneWorkerProductionEdges(overrides serviceedges.Edges) (servicee
 	}, overrides), nil
 }
 
-func provideAgyPTYAllocator(edges serviceedges.Edges) (agypty.PTYAllocator, error) {
+func provideAgyPTYAllocator(edges serviceedges.Edges) (workers.PTYAllocator, error) {
 	clock := edges.AgyPTYClock
 	if clock == nil {
 		clock = platformclock.Real{}
@@ -286,11 +285,11 @@ func provideAgyPTYAllocator(edges serviceedges.Edges) (agypty.PTYAllocator, erro
 	if host == nil {
 		host = platformpty.NewHost()
 	}
-	return agypty.NewAllocator(host, clock)
+	return providerswire.NewAgyPTYAllocator(host, clock)
 }
 
 func provideWorkerCommandRunnerAdapter() factorysessionwire.WorkerCommandRunnerAdapter {
-	return workerprocess.AdaptCommandRunner
+	return workers.AdaptCommandRunner
 }
 
 func provideWorkRequestIDGenerator(edges serviceedges.Edges) work.RequestIDGenerator {

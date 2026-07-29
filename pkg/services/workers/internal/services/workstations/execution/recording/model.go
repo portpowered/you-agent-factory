@@ -17,7 +17,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 )
 
 const (
@@ -276,7 +275,7 @@ func Diagnostics(success *workerexecution.WorkDiagnostics, executionErr error) j
 	if success != nil {
 		safe = workerexecution.SafeWorkDiagnosticsFromWorkDiagnostics(success)
 	} else {
-		var providerErr *workerprovider.ProviderError
+		var providerErr *workers.ProviderError
 		if errors.As(executionErr, &providerErr) {
 			safe = workerexecution.SafeWorkDiagnosticsFromWorkDiagnostics(providerErr.Diagnostics)
 		}

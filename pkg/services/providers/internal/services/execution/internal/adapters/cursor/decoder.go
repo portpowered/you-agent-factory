@@ -24,21 +24,21 @@ const (
 var safeCursorSessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
 type decoder struct {
-	pending         []byte
-	discardLine     bool
-	flushed         bool
-	sessionID       string
-	emittedResponse string
-	finalContent    string
-	finalSessionID  string
-	hasResult       bool
+	pending              []byte
+	discardLine          bool
+	flushed              bool
+	sessionID            string
+	emittedResponse      string
+	finalContent         string
+	finalSessionID       string
+	hasResult            bool
 	unsafeSuccessSession bool
 
-	progress         []providers.ExecuteProgress
-	declaredFailure  *providers.ExecuteFailure
-	decodeErr        error
-	messageStarted   bool
-	runStarted       bool
+	progress        []providers.ExecuteProgress
+	declaredFailure *providers.ExecuteFailure
+	decodeErr       error
+	messageStarted  bool
+	runStarted      bool
 }
 
 type nativeEnvelope struct {
@@ -55,8 +55,8 @@ type nativeEnvelope struct {
 }
 
 type nativeMessage struct {
-	Role    string         `json:"role"`
-	Content []nativeBlock  `json:"content"`
+	Role    string        `json:"role"`
+	Content []nativeBlock `json:"content"`
 }
 
 type nativeBlock struct {

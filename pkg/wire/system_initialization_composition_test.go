@@ -6,9 +6,9 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	systeminitialization "github.com/portpowered/infinite-you/pkg/services/system_initialization"
 )
 

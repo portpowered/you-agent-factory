@@ -18,6 +18,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
+	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
@@ -25,12 +26,11 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	providersessionswire "github.com/portpowered/infinite-you/pkg/services/provider_sessions/wire"
+	providercontract "github.com/portpowered/infinite-you/pkg/services/providers/inference"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	systeminitialization "github.com/portpowered/infinite-you/pkg/services/system_initialization"
-	"github.com/portpowered/infinite-you/pkg/services/automations"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	providercontract "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 )
 
 // Edges aggregates replaceable external-effect ports for process construction
@@ -126,21 +126,21 @@ type Edges struct {
 	SystemInitializationInspectPath                 systeminitialization.InspectPath
 	SystemInitializationMigrationFileSystem         systeminitialization.LegacyFactoryMigrationFileSystem
 
-	Clock                     platformclock.Source
-	SubmissionRecorder        recordings.SubmissionRecorder
-	DispatchRecorder          recordings.DispatchRecorder
-	RecordingMakeDirectories  recordings.RecordingMakeDirectories
-	RecordingCreateTempFile   recordings.RecordingCreateTemporaryFile
-	RecordingRemovePath       recordings.RecordingRemovePath
-	RecordingRenamePath       recordings.RecordingRenamePath
-	APIServerStarter          platformhttpserver.Starter
-	BrowserOpener             platformbrowser.Opener
-	InvocationMetricsRecorder factorysessions.InvocationMetricsRecorder
-	RuntimeHostObserver                factorysessions.RuntimeHostObserver
-	FactoryVisualizationSink           factoryvisualization.Sink
-	FactoryVisualizationRootObserver   factoryvisualization.RootObserver
-	ModelPullMetricsRecorder  models.PullMetricsRecorder
-	ProviderOverride          providercontract.Provider
+	Clock                            platformclock.Source
+	SubmissionRecorder               recordings.SubmissionRecorder
+	DispatchRecorder                 recordings.DispatchRecorder
+	RecordingMakeDirectories         recordings.RecordingMakeDirectories
+	RecordingCreateTempFile          recordings.RecordingCreateTemporaryFile
+	RecordingRemovePath              recordings.RecordingRemovePath
+	RecordingRenamePath              recordings.RecordingRenamePath
+	APIServerStarter                 platformhttpserver.Starter
+	BrowserOpener                    platformbrowser.Opener
+	InvocationMetricsRecorder        factorysessions.InvocationMetricsRecorder
+	RuntimeHostObserver              factorysessions.RuntimeHostObserver
+	FactoryVisualizationSink         factoryvisualization.Sink
+	FactoryVisualizationRootObserver factoryvisualization.RootObserver
+	ModelPullMetricsRecorder         models.PullMetricsRecorder
+	ProviderOverride                 providercontract.Provider
 	providercontract.ProviderRegistrations
 	WorkersFactoryDocsFileSystem       platformfilesystem.ReadFileTree
 	WorkersResolveSymlinks             workers.ResolveExecutableSymlinks

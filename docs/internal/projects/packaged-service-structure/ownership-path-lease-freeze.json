@@ -46,9 +46,8 @@
     {
       "id": "provider-conductor",
       "paths": [
-        "pkg/services/workers/provider/",
-        "pkg/services/workers/cliprovider/",
-        "pkg/services/workers/agypty/"
+        "pkg/services/providers/internal/services/execution/internal/provider/",
+        "pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty/"
       ],
       "note": "Standardized Providers neutral-conductor lane owns provider composition; do not claim those holds in this freeze."
     }

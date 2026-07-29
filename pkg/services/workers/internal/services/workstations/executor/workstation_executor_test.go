@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"io/fs"
@@ -17,13 +18,10 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
-	modelproviders "github.com/portpowered/infinite-you/packages/model-providers"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	inferencecontract "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
-	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 )
 
 type workstationRuntimeToken = factoryruntime.RuntimeToken
@@ -100,14 +98,7 @@ func TestWorkstationExecutorPreservesExecutorProviderInDetachedRequest(t *testin
 func TestWorkstationExecutorCarriesCanonicalLegacyProviderThroughInference(t *testing.T) {
 	t.Parallel()
 
-	registrations, err := providerregistry.BuiltInRegistrations()
-	if err != nil {
-		t.Fatalf("BuiltInRegistrations() error = %v", err)
-	}
-	providers, err := providerregistry.New(registrations...)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+	providers := providerRegistryWithExternalFixture(t)
 
 	for _, tc := range []struct {
 		alias     string
@@ -548,66 +539,47 @@ func TestWorkstationExecutor_RejectsInterpolatedProviderBeforeExecutionIO(t *tes
 	}
 }
 
-func providerRegistryWithExternalFixture(t *testing.T) *providerregistry.Registry {
+func providerRegistryWithExternalFixture(t *testing.T) *selectionTestCatalog {
 	t.Helper()
-	registrations, err := providerregistry.BuiltInRegistrations()
-	if err != nil {
-		t.Fatalf("BuiltInRegistrations() error = %v", err)
-	}
-	var catalog struct {
-		Providers []providerregistry.Manifest `json:"providers"`
-	}
-	if err := json.Unmarshal(modelproviders.CatalogJSON(), &catalog); err != nil {
-		t.Fatalf("decode provider catalog: %v", err)
-	}
-	manifest := catalog.Providers[0]
-	manifest.ID = "customer.provider"
-	manifest.Aliases = []string{"customer"}
-	manifest.ImplementationAvailability = providerregistry.ImplementationExternallySupplied
-	manifest.TechnicalSupportLevel = providerregistry.SupportProduction
-	manifest.Deprecation = nil
-	manifest.MaximumExecutionCapabilities = providerregistry.ExecutionCapabilities{
-		PromptSubmission: true,
-	}
-	manifest.MaximumResponseFidelityCapabilities = providerregistry.ResponseFidelityCapabilities{}
-	registrations = append(registrations, providerregistry.ExternalRegistration(
-		manifest,
-		executorTestIntegration{},
-	))
-	providers, err := providerregistry.New(registrations...)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-	return providers
+	return &selectionTestCatalog{}
 }
 
-type executorTestIntegration struct{}
+type selectionTestCatalog struct{}
 
-func (executorTestIntegration) Identity() inferencecontract.Identity {
-	return "customer.provider"
+func (*selectionTestCatalog) CanonicalIdentity(identity string) (string, error) {
+	normalized := strings.TrimSpace(identity)
+	if normalized == "" || normalized != strings.ToLower(normalized) || strings.Contains(normalized, "_") {
+		return "", fmt.Errorf("provider %q is invalid", identity)
+	}
+	aliases := map[string]string{
+		"openai": "codex", "anthropic": "claude", "agent": "cursor",
+		"kiro-cli": "kiro", "customer": "customer.provider",
+	}
+	if canonical, ok := aliases[normalized]; ok {
+		return canonical, nil
+	}
+	known := map[string]bool{
+		"agy": true, "claude": true, "codex": true, "cursor": true,
+		"gemini": true, "kiro": true, "opencode": true, "pi": true,
+		"customer.provider": true,
+	}
+	if !known[normalized] {
+		return "", fmt.Errorf("provider %q is unknown", identity)
+	}
+	return normalized, nil
 }
 
-func (executorTestIntegration) MaximumCapabilities() inferencecontract.CapabilitySet {
-	return inferencecontract.NewCapabilitySet(inferencecontract.CapabilityPromptSubmission)
-}
-
-func (executorTestIntegration) Discover(context.Context) (inferencecontract.Discovery, error) {
-	panic("provider discovery must not run during provider selection")
-}
-
-func (executorTestIntegration) Capabilities(
-	context.Context,
-	inferencecontract.InvocationRequest,
-) (inferencecontract.CapabilitySet, error) {
-	panic("provider capability I/O must not run during provider selection")
-}
-
-func (executorTestIntegration) Invoke(
-	context.Context,
-	inferencecontract.InvocationRequest,
-	inferencecontract.ResponseWriter,
-) error {
-	panic("provider invocation must not run during provider selection")
+func (catalog *selectionTestCatalog) ResolveRunnerSelection(workstation, factory, model string) (workerexecution.ResolvedRunnerSelection, error) {
+	selection := workerexecution.ResolveRunnerSelection(workstation, factory, model)
+	if workstation == "" && factory == "" && strings.TrimSpace(model) != "" {
+		canonical, err := catalog.CanonicalIdentity(model)
+		if err != nil {
+			return workerexecution.ResolvedRunnerSelection{}, err
+		}
+		selection.RunnerID = canonical
+		selection.Source = workerexecution.RunnerSelectionSourceLegacyProvider
+	}
+	return selection, nil
 }
 
 func interpolatedProviderExecutor(

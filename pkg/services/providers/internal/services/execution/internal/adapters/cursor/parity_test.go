@@ -7,10 +7,10 @@ import (
 	"testing"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
 	cursor "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/cursor"
 	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
-	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 )
 
 func TestCursorRootRejectsUnsafeSessionRefAndOmitsPromptFromDiagnostics(t *testing.T) {
@@ -165,7 +165,7 @@ func cursorUnsafeSessionStream(secretPrompt string) []byte {
 		map[string]any{
 			"type": "assistant", "timestamp_ms": 1, "session_id": "bad session id",
 			"message": map[string]any{
-				"role": "assistant",
+				"role":    "assistant",
 				"content": []map[string]any{{"type": "text", "text": secretPrompt}},
 			},
 		},
@@ -183,24 +183,24 @@ func cursorPartialStream() []byte {
 		map[string]any{
 			"type": "assistant", "timestamp_ms": 1, "session_id": "cursor-session-partial",
 			"message": map[string]any{
-				"role": "assistant",
+				"role":    "assistant",
 				"content": []map[string]any{{"type": "text", "text": "draft"}},
 			},
 		},
 		map[string]any{
 			"type": "tool_call", "subtype": "started", "call_id": "call-partial-1",
 			"session_id": "cursor-session-partial",
-			"tool_call": map[string]any{"readToolCall": map[string]any{}},
+			"tool_call":  map[string]any{"readToolCall": map[string]any{}},
 		},
 		map[string]any{
 			"type": "tool_call", "subtype": "completed", "call_id": "call-partial-1",
 			"session_id": "cursor-session-partial",
-			"tool_call": map[string]any{"readToolCall": map[string]any{}},
+			"tool_call":  map[string]any{"readToolCall": map[string]any{}},
 		},
 		map[string]any{
 			"type": "assistant", "timestamp_ms": 2, "session_id": "cursor-session-partial",
 			"message": map[string]any{
-				"role": "assistant",
+				"role":    "assistant",
 				"content": []map[string]any{{"type": "text", "text": " tail"}},
 			},
 		},

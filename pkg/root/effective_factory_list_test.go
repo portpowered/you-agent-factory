@@ -16,7 +16,7 @@ import (
 
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
+	inference "github.com/portpowered/infinite-you/pkg/services/providers/inference"
 )
 
 func TestBuildProcessFactoryListProjectsEffectiveCatalogWithoutRuntimeOrWrites(t *testing.T) {
@@ -427,3 +427,4 @@ func rootListTreeSnapshot(t *testing.T, roots ...string) map[string]string {
 	}
 	return snapshot
 }
+

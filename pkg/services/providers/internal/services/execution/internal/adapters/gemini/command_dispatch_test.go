@@ -9,8 +9,6 @@ import (
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	gemini "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/gemini"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
-	mockworker "github.com/portpowered/infinite-you/pkg/services/workers/services/testing"
 )
 
 func TestCommandEffectRoutesDispatchContextThroughMockWorkerRunner(t *testing.T) {
@@ -19,7 +17,7 @@ func TestCommandEffectRoutesDispatchContextThroughMockWorkerRunner(t *testing.T)
 	platformRunner := testutil.NewProviderCommandRunner(
 		platformprocess.CommandResult{Stdout: []byte("live provider should not run")},
 	)
-	effect := gemini.NewCommandEffect(&mockworker.MockWorkerCommandRunner{
+	effect := gemini.NewCommandEffect(&workers.MockWorkerCommandRunner{
 		Config: &workers.MockWorkersConfig{
 			MockWorkers: []workers.MockWorkerConfig{{
 				WorkerName:      "mocked-worker",
@@ -27,7 +25,7 @@ func TestCommandEffectRoutesDispatchContextThroughMockWorkerRunner(t *testing.T)
 				RunType:         workers.MockWorkerRunTypeAccept,
 			}},
 		},
-		Next: workerprocess.AdaptCommandRunner(platformRunner),
+		Next: workers.AdaptCommandRunner(platformRunner),
 	})
 	if effect == nil {
 		t.Fatal("NewCommandEffect() returned nil")

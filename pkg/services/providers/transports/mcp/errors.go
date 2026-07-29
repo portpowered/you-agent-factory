@@ -9,11 +9,11 @@ import (
 )
 
 const (
-	errorCodeBadRequest         = "BAD_REQUEST"
-	errorCodeServiceUnavailable    = "provider.service.unavailable"
-	errorCodeIdentityInvalid       = "provider.identity.invalid"
-	errorCodeCatalogUnknown        = "provider.catalog.unknown"
-	errorCodeCatalogUnavailable    = "provider.catalog.unavailable"
+	errorCodeBadRequest                 = "BAD_REQUEST"
+	errorCodeServiceUnavailable         = "provider.service.unavailable"
+	errorCodeIdentityInvalid            = "provider.identity.invalid"
+	errorCodeCatalogUnknown             = "provider.catalog.unknown"
+	errorCodeCatalogUnavailable         = "provider.catalog.unavailable"
 	errorCodeInternalExecution          = "provider.execution.internal"
 	errorCodeExecutionCanceled          = "provider.execution.canceled"
 	errorCodeExecutionTimedOut          = "provider.execution.timed_out"

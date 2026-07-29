@@ -134,8 +134,8 @@ func defaultPortfolioHoldExclusions() []PortfolioHoldExclusion {
 		{
 			ID: "provider-conductor",
 			Paths: []string{
-				"pkg/services/workers/provider/",
-				"pkg/services/workers/agypty/",
+				"pkg/services/providers/internal/services/execution/internal/provider/",
+				"pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty/",
 			},
 			Note: "Standardized Providers neutral-conductor lane owns provider composition; do not claim those holds in this freeze.",
 		},
@@ -281,3 +281,5 @@ func freezePathPrefix(prefix, path string) bool {
 	remainder := path[len(prefix):]
 	return strings.HasPrefix(remainder, "/")
 }
+
+

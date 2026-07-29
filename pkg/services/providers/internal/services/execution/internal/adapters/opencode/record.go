@@ -19,16 +19,16 @@ type structuredRecord struct {
 }
 
 type structuredPart struct {
-	ID        string            `json:"id"`
-	MessageID string            `json:"messageID"`
-	SessionID string            `json:"sessionID"`
-	CallID    string            `json:"callID"`
-	Type      string            `json:"type"`
-	Text      string            `json:"text"`
-	Tool      string            `json:"tool"`
-	Time      structuredTime    `json:"time"`
-	State     structuredState   `json:"state"`
-	Tokens    structuredUsage   `json:"tokens"`
+	ID        string          `json:"id"`
+	MessageID string          `json:"messageID"`
+	SessionID string          `json:"sessionID"`
+	CallID    string          `json:"callID"`
+	Type      string          `json:"type"`
+	Text      string          `json:"text"`
+	Tool      string          `json:"tool"`
+	Time      structuredTime  `json:"time"`
+	State     structuredState `json:"state"`
+	Tokens    structuredUsage `json:"tokens"`
 }
 
 type structuredTime struct {

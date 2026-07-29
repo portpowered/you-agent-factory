@@ -6,7 +6,7 @@ import (
 	"unicode/utf8"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
+	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty"
 )
 
 const maxPublishedTextBytes = 256 * 1024

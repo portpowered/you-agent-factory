@@ -18,7 +18,6 @@ import (
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	agypkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/agy"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -27,6 +26,7 @@ const (
 	agyFinalOnlySuccessGoldenCase  = "final-only-success"
 	agyStructuredFailureGoldenCase = "structured-failure"
 	agyTimeoutGoldenCase           = "timeout"
+	agyTimeoutFailureMessage       = "Agy request timed out."
 )
 
 // TestAgyGoldenFinalOnlySuccess replays a sanitized Agy final-only-success
@@ -391,11 +391,11 @@ func assertAgyGoldenTimeoutResponseStream(
 		if payload.Code != "" && payload.Code != "timeout" {
 			t.Fatalf("terminal response error code = %q, want timeout", payload.Code)
 		}
-		if payload.Message != agypkg.TimeoutFailureMessage {
+		if payload.Message != agyTimeoutFailureMessage {
 			t.Fatalf(
 				"terminal response error message = %q, want %q",
 				payload.Message,
-				agypkg.TimeoutFailureMessage,
+				agyTimeoutFailureMessage,
 			)
 		}
 	}

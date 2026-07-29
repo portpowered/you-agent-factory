@@ -300,12 +300,12 @@ func (f *promptFileSystem) Remove(path string) error {
 }
 
 type promptTemporaryFile struct {
-	mu        sync.Mutex
-	path      string
-	content   string
-	writeErr  error
-	closeErr  error
-	closes    int
+	mu       sync.Mutex
+	path     string
+	content  string
+	writeErr error
+	closeErr error
+	closes   int
 }
 
 func (f *promptTemporaryFile) Name() string { return f.path }
@@ -342,8 +342,8 @@ func newTerminalContext() *terminalContext {
 }
 
 func (c *terminalContext) Deadline() (time.Time, bool) { return time.Time{}, false }
-func (c *terminalContext) Done() <-chan struct{}         { return c.done }
-func (c *terminalContext) Value(any) any                 { return nil }
+func (c *terminalContext) Done() <-chan struct{}       { return c.done }
+func (c *terminalContext) Value(any) any               { return nil }
 func (c *terminalContext) Err() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()

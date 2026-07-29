@@ -5,20 +5,18 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerconstruction "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/construction"
-	providerconductor "github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
-	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 )
 
 // ProviderRegistryRebinder reconstructs the provider registry so migrated
 // Codex and Claude integrations execute through the same runtime command edge
 // as the Workers provider factories.
-type ProviderRegistryRebinder func(workers.CommandRunner) (*providerregistry.Registry, error)
+type ProviderRegistryRebinder func(workers.CommandRunner) (workers.ProviderRegistry, error)
 
 func rebindProviderRegistry(
-	current *providerregistry.Registry,
+	current workers.ProviderRegistry,
 	runner workers.CommandRunner,
 	rebind ProviderRegistryRebinder,
-) (*providerregistry.Registry, error) {
+) (workers.ProviderRegistry, error) {
 	if current == nil || rebind == nil || runner == nil {
 		return current, nil
 	}
@@ -29,12 +27,11 @@ func rebindProviderRegistry(
 	return rebound, nil
 }
 
-func applyReboundProviderRegistry(service *Service, registry *providerregistry.Registry) error {
+func applyReboundProviderRegistry(service *Service, registry workers.ProviderRegistry) error {
 	if service == nil || registry == nil {
 		return nil
 	}
 	service.providerRegistry = registry
-	service.invocationConductor = providerconductor.New(registry)
 	assembly, err := newRuntimeAssembly(registry)
 	if err != nil {
 		return err

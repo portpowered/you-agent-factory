@@ -43,36 +43,15 @@
     "services/agents",
     "services/inference",
     "skippermissions",
-    "workstationpool"
+    "workstationpool",
+    "process",
+    "services/testing"
   ],
-  "held_back": [
-    {
-      "relative_dir": "process",
-      "hold_reason": "production imports remain in pkg/wire, pkg/services/workers/provider/*, and pkg/services/providers/*"
-    },
-    {
-      "relative_dir": "services/testing",
-      "hold_reason": "test imports remain in pkg/services/workers/provider and pkg/services/providers adapter tests"
-    }
-
-  ],
+  "held_back": [],
   "excluded_from_delete": [
-    {
-      "relative_dir": "agypty",
-      "exclusion_reason": "Providers extraction source still required for IMP-PROV-04+"
-    },
-
     {
       "relative_dir": "internal",
       "exclusion_reason": "owner-private Workers implementation tree including internal/services/* subservices"
-    },
-    {
-      "relative_dir": "provider",
-      "exclusion_reason": "Providers extraction source still required for IMP-PROV-04+"
-    },
-    {
-      "relative_dir": "provider_test",
-      "exclusion_reason": "Providers extraction test support still required for IMP-PROV-04+"
     },
     {
       "relative_dir": "wire",
@@ -80,3 +59,4 @@
     }
   ]
 }
+

@@ -126,9 +126,9 @@ func emitPiConformanceStream(
 	record, _ := json.Marshal(map[string]any{
 		"type": "message_end",
 		"message": map[string]any{
-			"id":      "conformance-message",
-			"role":    "assistant",
-			"content": []map[string]any{{"type": "text", "text": result.Content}},
+			"id":         "conformance-message",
+			"role":       "assistant",
+			"content":    []map[string]any{{"type": "text", "text": result.Content}},
 			"stopReason": "stop",
 		},
 	})

@@ -4,22 +4,17 @@ import (
 	"context"
 	"errors"
 	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
+	mockworker "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/testing"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
-	mockworker "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/testing"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 )
 
 func TestWithAgentRunnerCutoverPreservesRunnerSelectionWiring(t *testing.T) {
@@ -41,23 +36,10 @@ func TestWithAgentRunnerCutoverPreservesRunnerSelectionWiring(t *testing.T) {
 }
 
 func TestServiceBuildWithAgentRunnerCutoverExposesDispatchAndDirect(t *testing.T) {
-	factory, err := workerprovider.NewFactory(
-		&mockworker.MockWorkerCommandRunner{},
-		workerprocess.ClockFunc(testClock),
-		&agypty.MockAllocator{},
-		filepath.EvalSymlinks,
-		platformprocess.HostExecutableLocator{},
-		platformfilesystem.Local{},
-		platformfilesystem.Local{},
-		"linux",
-		platformfilesystem.Local{},
-	)
-	if err != nil {
-		t.Fatalf("NewFactory() error = %v", err)
-	}
+	factory := &cutoverProvidersFake{}
 	scriptFactory, err := workerexecutor.NewScriptFactory(
 		&mockworker.MockWorkerCommandRunner{},
-		workerprocess.ClockFunc(testClock),
+		workers.ClockFunc(testClock),
 		testFactoryDocs,
 	)
 	if err != nil {
@@ -106,20 +88,7 @@ func TestServiceBuildWithAgentRunnerCutoverExposesDispatchAndDirect(t *testing.T
 }
 
 func TestServiceBuildWithAgentRunnerCutoverAndNilProgressPublisher(t *testing.T) {
-	factory, err := workerprovider.NewFactory(
-		&mockworker.MockWorkerCommandRunner{},
-		workerprocess.ClockFunc(testClock),
-		&agypty.MockAllocator{},
-		filepath.EvalSymlinks,
-		platformprocess.HostExecutableLocator{},
-		platformfilesystem.Local{},
-		platformfilesystem.Local{},
-		"linux",
-		platformfilesystem.Local{},
-	)
-	if err != nil {
-		t.Fatalf("NewFactory() error = %v", err)
-	}
+	factory := &cutoverProvidersFake{}
 	service := New(
 		factory,
 		nil,
@@ -132,7 +101,7 @@ func TestServiceBuildWithAgentRunnerCutoverAndNilProgressPublisher(t *testing.T)
 		platformfilesystem.Local{},
 	).WithAgentRunnerCutover(true)
 
-	_, err = service.Build(
+	_, err := service.Build(
 		runtimefixtures.RuntimeConfigLookupFixture{
 			Workers: map[string]*interfaces.FactoryWorkerConfig{
 				"model": {Name: "model", Type: interfaces.WorkerTypeModel},

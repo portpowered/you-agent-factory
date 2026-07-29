@@ -20,9 +20,9 @@ import (
 )
 
 const (
-	kiroFailureSecret   = "prompt-secret-that-must-not-escape"
-	kiroResumedSession  = "675f9238-5f05-456c-9a9f-f8fe486f49e4"
-	kiroEmittedSession  = "f2946a26-3735-4b08-8d05-c928010302d5"
+	kiroFailureSecret  = "prompt-secret-that-must-not-escape"
+	kiroResumedSession = "675f9238-5f05-456c-9a9f-f8fe486f49e4"
+	kiroEmittedSession = "f2946a26-3735-4b08-8d05-c928010302d5"
 )
 
 func TestKiroAdapterConformance(t *testing.T) {

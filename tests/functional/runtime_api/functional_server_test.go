@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
+	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/inference"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -98,3 +98,4 @@ func StartFunctionalServer(
 	t.Helper()
 	return StartFunctionalServerWithArgs(t, factoryDir, useMockWorkers, nil, runtimeOptions...)
 }
+

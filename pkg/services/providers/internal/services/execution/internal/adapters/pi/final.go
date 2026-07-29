@@ -20,7 +20,6 @@ type nativeRecord struct {
 	Messages []nativeMessage `json:"messages"`
 }
 
-
 type piTerminalError struct{ message string }
 
 func (e *piTerminalError) Error() string { return e.message }

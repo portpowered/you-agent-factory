@@ -3,16 +3,15 @@ package executor
 import (
 	"context"
 	"errors"
-	"testing"
-	"time"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	"testing"
+	"time"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 )
 
 type agentMockProvider struct {
@@ -308,7 +307,7 @@ func TestAgentExecutor_ErrorDiagnosticsStayDetachedFromProviderMutation(t *testi
 		Metadata: map[string]string{"phase": "initial"},
 	}
 	provider := &agentMockProvider{
-		err: workerprovider.NewProviderError(workerexecution.WorkFailureTypeInternalServerError, "provider 500", nil),
+		err: workerexecution.NewProviderError(workerexecution.WorkFailureTypeInternalServerError, "provider 500", nil),
 	}
 	var providerErr *ProviderError
 	if !errors.As(provider.err, &providerErr) {
@@ -526,7 +525,7 @@ func TestAgentExecutor_SuccessfulResponse_PreservesProviderSession(t *testing.T)
 
 func TestAgentExecutor_CodexWindowsExitCode4294967295_ReturnsRetryableProviderMetadata(t *testing.T) {
 	provider := &agentMockProvider{
-		err: workerprovider.NewProviderErrorWithSession(
+		err: workerexecution.NewProviderErrorWithSession(
 			workerexecution.WorkFailureTypeInternalServerError,
 			"Codex encountered a temporary server error.",
 			nil,
@@ -542,7 +541,6 @@ func TestAgentExecutor_CodexWindowsExitCode4294967295_ReturnsRetryableProviderMe
 			"worker-a": {Model: "gpt-5.3-codex-spark", ModelProvider: string(modelprovider.ProviderCodex)},
 		},
 	}, provider, nil, time.Now)
-
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
 		work.WorkDispatch{
@@ -571,7 +569,7 @@ func TestAgentExecutor_CodexWindowsExitCode4294967295_ReturnsRetryableProviderMe
 	if result.FailureMetadata.Family != workerexecution.WorkFailureFamilyRetryable {
 		t.Fatalf("failure metadata family = %q, want %q", result.FailureMetadata.Family, workerexecution.WorkFailureFamilyRetryable)
 	}
-	decision := workerprovider.WorkFailureDecisionFromMetadata(result.FailureMetadata)
+	decision := workerexecution.WorkFailureDecisionFromMetadata(result.FailureMetadata)
 	if !decision.Retryable || decision.Terminal || decision.TriggersThrottlePause {
 		t.Fatalf("WorkFailureDecisionFromMetadata(%#v) = %#v, want retryable non-terminal non-throttle", result.FailureMetadata, decision)
 	}
@@ -586,7 +584,7 @@ func TestAgentExecutor_CodexWindowsExitCode4294967295_ReturnsRetryableProviderMe
 func TestAgentExecutor_TerminalProviderError_DoesNotRetry(t *testing.T) {
 	provider := &agentMockProvider{
 		errors: []error{
-			workerprovider.NewProviderErrorWithSession(
+			workerexecution.NewProviderErrorWithSession(
 				workerexecution.WorkFailureTypeAuthFailure,
 				"auth failed",
 				nil,
@@ -603,7 +601,6 @@ func TestAgentExecutor_TerminalProviderError_DoesNotRetry(t *testing.T) {
 			"worker-a": {Model: "test-model"},
 		},
 	}, provider, nil, time.Now)
-
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
 		work.WorkDispatch{
@@ -641,7 +638,7 @@ func TestAgentExecutor_TerminalProviderError_DoesNotRetry(t *testing.T) {
 func TestAgentExecutor_ClaudeProviderError_PreservesConfiguredSessionID(t *testing.T) {
 	provider := &agentMockProvider{
 		errors: []error{
-			workerprovider.NewProviderErrorWithSession(
+			workerexecution.NewProviderErrorWithSession(
 				workerexecution.WorkFailureTypeAuthFailure,
 				"auth failed",
 				nil,
@@ -684,5 +681,3 @@ func TestAgentExecutor_ClaudeProviderError_PreservesConfiguredSessionID(t *testi
 		t.Fatalf("provider session id = %q, want %q", result.ProviderSession.ID, "claude-session-123")
 	}
 }
-
-

@@ -11,8 +11,6 @@ import (
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerinvocation "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/invocation"
-
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 )
 
 func TestProviderExecutorExecuteMapsCanonicalSuccessMetadata(t *testing.T) {
@@ -48,7 +46,7 @@ func TestProviderExecutorExecuteMapsCanonicalSuccessMetadata(t *testing.T) {
 }
 
 func TestProviderExecutorExecuteMapsCanonicalProviderFailure(t *testing.T) {
-	providerErr := workerprovider.NewProviderErrorWithSession(
+	providerErr := workerexecution.NewProviderErrorWithSession(
 		workerexecution.WorkFailureTypeThrottled,
 		"Provider capacity is temporarily unavailable.",
 		errors.New("exit status 1"),
@@ -109,7 +107,7 @@ func TestProviderExecutorExecuteClassifiesDeadline(t *testing.T) {
 
 func TestProviderExecutorExecuteBoundsAndRedactsFailureDiagnostics(t *testing.T) {
 	secret := "token=super-secret " + strings.Repeat("x", 2048)
-	providerErr := workerprovider.NewProviderErrorWithSession(
+	providerErr := workerexecution.NewProviderErrorWithSession(
 		workerexecution.WorkFailureTypePermanentBadRequest,
 		secret,
 		errors.New(secret),
@@ -144,7 +142,7 @@ func TestProviderExecutorExecuteUsesReasonAllowlistForAllPersistedFailures(t *te
 	}
 	for _, tc := range tests {
 		t.Run(string(tc.reason), func(t *testing.T) {
-			providerErr := workerprovider.NewProviderError(tc.reason, sensitive, errors.New(sensitive))
+			providerErr := workerexecution.NewProviderError(tc.reason, sensitive, errors.New(sensitive))
 			result, _ := workerinvocation.NewProviderExecutor(&executionTestProvider{err: providerErr}).Execute(context.Background(), workerexecution.InvocationInput{})
 			if result.FailureDetail == nil || result.FailureDetail.Message != tc.message {
 				t.Fatalf("failure detail = %#v, want message %q", result.FailureDetail, tc.message)

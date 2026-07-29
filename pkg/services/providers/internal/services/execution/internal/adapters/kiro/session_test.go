@@ -16,11 +16,11 @@ func TestSessionRefFromOutputNormalizesProviderSessions(t *testing.T) {
 		ID:       kiroResumedSession,
 	}
 	testCases := []struct {
-		name      string
-		stdout    []byte
-		stderr    []byte
-		resume    *providers.SessionRef
-		wantID    string
+		name   string
+		stdout []byte
+		stderr []byte
+		resume *providers.SessionRef
+		wantID string
 	}{
 		{
 			name:   "new session",

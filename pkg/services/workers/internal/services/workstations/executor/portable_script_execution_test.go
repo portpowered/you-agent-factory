@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -206,10 +207,10 @@ func (runner completeOutputTestCommandRunner) RunStreaming(
 ) (CommandResult, error) {
 	result, err := runner.Run(ctx, request)
 	if observer != nil && len(result.Stdout) > 0 {
-		observer(workerprocess.OutputStreamStdout, append([]byte(nil), result.Stdout...))
+		observer(platformprocess.OutputStreamStdout, append([]byte(nil), result.Stdout...))
 	}
 	if observer != nil && len(result.Stderr) > 0 {
-		observer(workerprocess.OutputStreamStderr, append([]byte(nil), result.Stderr...))
+		observer(platformprocess.OutputStreamStderr, append([]byte(nil), result.Stderr...))
 	}
 	return result, err
 }

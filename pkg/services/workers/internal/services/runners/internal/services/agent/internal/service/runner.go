@@ -120,6 +120,7 @@ func providerRequest(request workers.RunnerExecutionRequest) providers.ExecuteRe
 		WorkerType:         request.WorkerType,
 		WorkstationName:    request.WorkstationType,
 		Model:              request.Model,
+		SkipPermissions:    request.SkipPermissions,
 		SystemPrompt:       request.SystemPrompt,
 		UserMessage:        request.UserMessage,
 		InputTokens:        cloneInputTokens(request.InputTokens),

@@ -7,10 +7,9 @@ import (
 	"time"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/commanddispatch"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
+	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/commanddispatch"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 )
 
 // CommandEffectOptions configure one built-in OpenCode command effect.
@@ -18,7 +17,7 @@ type CommandEffectOptions struct {
 	Mode Mode
 }
 
-var commandAutomationDefaults = []workerprocess.CommandEnvEntry{
+var commandAutomationDefaults = []workers.CommandEnvEntry{
 	{Name: "GIT_EDITOR", Value: "true"},
 	{Name: "GIT_SEQUENCE_EDITOR", Value: "true"},
 	{Name: "GIT_MERGE_AUTOEDIT", Value: "no"},
@@ -152,9 +151,9 @@ func validateOpenCodeOptionalCapabilities(request providers.ExecuteRequest) erro
 }
 
 func buildCommandEnv(processEnvironment []string, envVars map[string]string) []string {
-	return workerprocess.MergeCommandEnv(
+	return workers.MergeCommandEnv(
 		processEnvironment,
-		workerprocess.CommandEnvEntriesFromMap(envVars),
+		workers.CommandEnvEntriesFromMap(envVars),
 		commandAutomationDefaults,
 	)
 }
@@ -166,10 +165,10 @@ func runStreaming(
 	observe func([]byte) error,
 ) (workers.CommandResult, error) {
 	if streaming, ok := runner.(interface {
-		RunStreaming(context.Context, workers.CommandRequest, workerprocess.OutputChunkObserver) (workers.CommandResult, error)
+		RunStreaming(context.Context, workers.CommandRequest, workers.OutputChunkObserver) (workers.CommandResult, error)
 	}); ok {
 		return streaming.RunStreaming(ctx, command, func(stream string, chunk []byte) {
-			if strings.TrimSpace(stream) == workerprocess.OutputStreamStdout {
+			if strings.TrimSpace(stream) == workers.OutputStreamStdout {
 				_ = observe(chunk)
 			}
 		})

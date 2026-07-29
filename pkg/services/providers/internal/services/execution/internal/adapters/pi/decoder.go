@@ -24,11 +24,11 @@ type decoder struct {
 	pending []byte
 	flushed bool
 
-	sessionID   string
-	turnSequence int
-	turnID      string
-	messageID   string
-	messageText strings.Builder
+	sessionID     string
+	turnSequence  int
+	turnID        string
+	messageID     string
+	messageText   strings.Builder
 	completedText map[string]string
 	toolNames     map[string]string
 	toolSummaries map[string]string
@@ -78,10 +78,10 @@ type nativeEnvelope struct {
 
 func newDecoder(attemptID string) *decoder {
 	return &decoder{
-		attemptID:       attemptID,
-		completedText:   make(map[string]string),
-		toolNames:       make(map[string]string),
-		toolSummaries:   make(map[string]string),
+		attemptID:     attemptID,
+		completedText: make(map[string]string),
+		toolNames:     make(map[string]string),
+		toolSummaries: make(map[string]string),
 	}
 }
 
@@ -593,4 +593,3 @@ func sessionIDFromStdout(stdout []byte) string {
 	})
 	return sessionID
 }
-

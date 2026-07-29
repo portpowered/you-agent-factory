@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	workerinferencefailure "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/inferencefailure"
@@ -191,6 +192,36 @@ func NormalizeProviderExecutionError(err error) *ProviderError {
 		return NewProviderError(WorkFailureTypeTimeout, "execution timeout", err)
 	}
 	return nil
+}
+
+func NewProviderErrorWithSession(
+	failureType WorkFailureType,
+	message string,
+	cause error,
+	session *ProviderSessionMetadata,
+) *ProviderError {
+	err := NewProviderError(failureType, message, cause)
+	err.ProviderSession = CloneProviderSessionMetadata(session)
+	return err
+}
+
+func WorkFailureMetadataFromProviderError(err *ProviderError) *WorkFailureMetadata {
+	if err == nil {
+		return nil
+	}
+	return &WorkFailureMetadata{Family: providerFailureFamily(err.Type), Type: err.Type}
+}
+
+func WorkFailureDecisionFromProviderError(err *ProviderError) WorkFailureDecision {
+	return FailureDecisionFromMetadata(WorkFailureMetadataFromProviderError(err))
+}
+
+func WorkFailureDecisionFromMetadata(metadata *WorkFailureMetadata) WorkFailureDecision {
+	return FailureDecisionFromMetadata(metadata)
+}
+
+func ContainsStopToken(output, stopToken string) bool {
+	return stopToken != "" && strings.Contains(output, stopToken)
 }
 
 func providerFailureFamily(failureType WorkFailureType) WorkFailureFamily {

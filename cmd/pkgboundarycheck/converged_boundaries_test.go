@@ -57,9 +57,9 @@ func TestRunAllowsEdgeAggregatorToImportPublishedEffectContracts(t *testing.T) {
 	repoRoot := t.TempDir()
 	for index, importPath := range []string{
 		"github.com/portpowered/infinite-you/pkg/services/models",
-		"github.com/portpowered/infinite-you/pkg/services/workers/agypty",
+		"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty",
 		providersLeafEffectContractImport,
-		"github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract",
+		"github.com/portpowered/infinite-you/pkg/services/providers/inference",
 		"github.com/portpowered/infinite-you/pkg/services/automations",
 	} {
 		writeGoImportFile(
@@ -96,7 +96,7 @@ func TestRunAllowsPeerServicesToImportExactProviderInferenceContract(t *testing.
 			repoRoot,
 			fmt.Sprintf("pkg/services/%s/provider_contract_%d.go", owner.path, index),
 			owner.pkgName,
-			"github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract",
+			"github.com/portpowered/infinite-you/pkg/services/providers/inference",
 		)
 	}
 
@@ -115,7 +115,7 @@ func TestRunRejectsInitializerImportingWorkersPTYImplementation(t *testing.T) {
 		repoRoot,
 		"pkg/initializer/application/session_execution.go",
 		"application",
-		"github.com/portpowered/infinite-you/pkg/services/workers/agypty",
+		"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty",
 	)
 
 	stderr := &bytes.Buffer{}
@@ -424,3 +424,5 @@ func TestPeerServiceImportBaselineRejectsWildcardAndUnrecognizedMigrationContrac
 		t.Fatalf("validate migration contract error = %v, want exact stage rejection", err)
 	}
 }
+
+

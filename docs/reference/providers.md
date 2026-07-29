@@ -50,11 +50,7 @@ Use a stable lowercase provider identity and pass the complete launch command
 as one `--argument` value:
 
 ```bash
-you workers acp add \
-  --name company-cursor \
-  --transport stdio \
-  --argument "cursor-agent acp"
-
+you workers acp add --name company-cursor --transport stdio --argument "cursor-agent acp"
 you workers acp list
 ```
 
@@ -124,10 +120,7 @@ stream visible until it reaches a terminal result:
 
 ```bash
 you factory config validate ./factory
-you run --factory ./factory/factory.json \
-  --skip-permissions \
-  --output response-stream \
-  "Add one table-driven test and run the focused test command."
+you run --factory ./factory/factory.json --skip-permissions --output response-stream "Add one table-driven test and run the focused test command."
 ```
 
 `--skip-permissions` is invocation-only. Omit it when the ACP agent should ask
@@ -146,18 +139,17 @@ For a portable JSON or YAML Factory, set the same identity on its worker:
 
 ## Use ACP with a packaged Factory
 
-Packaged Factories materialize under
-`~/.you-agent-factory/factories` and remain editable. Materialize the catalog,
-locate the package, set `executorProvider` on the agent worker, validate it, and
-run it by name:
+Packaged Factories materialize lazily under
+`~/.you-agent-factory/factories` and remain editable. Inspect the catalog, ask
+for the named Factory's generated help to materialize it without executing
+work, set `executorProvider` on the agent worker, validate it, and run it by
+name:
 
 ```bash
 you factory list
+you run --named @you/goal --help
 you factory config validate ~/.you-agent-factory/factories/@you/goal
-you run --named @you/goal \
-  --skip-permissions \
-  --output response-stream \
-  "Add a simple unit test, run it, and finish the goal."
+you run --named @you/goal --skip-permissions --output response-stream "Add a simple unit test, run it, and finish the goal."
 ```
 
 For `@you/goal`, add `"executorProvider": "cursor-acp"` to the

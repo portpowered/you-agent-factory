@@ -295,8 +295,8 @@ func (decoder *decoder) decodeUsage(record structuredRecord) {
 		return
 	}
 	metadata := map[string]string{
-		"input_tokens":    fmt.Sprintf("%d", usage.Input),
-		"output_tokens":   fmt.Sprintf("%d", usage.Output),
+		"input_tokens":     fmt.Sprintf("%d", usage.Input),
+		"output_tokens":    fmt.Sprintf("%d", usage.Output),
 		"reasoning_tokens": fmt.Sprintf("%d", usage.Reasoning),
 	}
 	if validCorrelation(record.Part.ID) {

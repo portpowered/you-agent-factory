@@ -33,7 +33,7 @@ var workersInternalSubservices = []string{
 	"workstations",
 }
 
-var providersExtractionTopLevelDirsWithTests = []string{
+var migratedProvidersTopLevelDirs = []string{
 	"agypty",
 	"provider",
 	"provider_test",
@@ -95,11 +95,11 @@ func TestDelWrkRootShape_CompletionInvariants(t *testing.T) {
 		}
 	})
 
-	t.Run("providers_extraction_sources_remain", func(t *testing.T) {
+	t.Run("providers_extraction_sources_absent", func(t *testing.T) {
 		t.Parallel()
-		for _, relative := range providersExtractionTopLevelDirsWithTests {
-			if _, err := os.Stat(filepath.Join(workersDir, relative)); err != nil {
-				t.Fatalf("Providers extraction source %q must remain at workers top level: %v", relative, err)
+		for _, relative := range migratedProvidersTopLevelDirs {
+			if _, err := os.Stat(filepath.Join(workersDir, relative)); !os.IsNotExist(err) {
+				t.Fatalf("Providers extraction source %q must be absent after final migration: %v", relative, err)
 			}
 		}
 	})

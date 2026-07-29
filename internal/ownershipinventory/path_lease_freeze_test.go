@@ -134,7 +134,7 @@ func TestValidatePathLeaseFreezeRejectsProviderConductorClaims(t *testing.T) {
 		if freeze.Packets[i].PacketID == "PSS-F02" {
 			freeze.Packets[i].ExclusivePaths = append(
 				freeze.Packets[i].ExclusivePaths,
-				"pkg/services/workers/provider/",
+				"pkg/services/providers/internal/services/execution/internal/provider/",
 			)
 		}
 	}
@@ -181,7 +181,7 @@ func TestPathLeaseFreezeUnblocksPSSF02WithoutOverlappingF01(t *testing.T) {
 		if strings.Contains(path, "cmd/climanifestgen") ||
 			strings.Contains(path, "contracts/cli") ||
 			strings.Contains(path, "cmd/factory/") ||
-			strings.Contains(path, "pkg/services/workers/provider") {
+			strings.Contains(path, "pkg/services/providers/internal/services/execution/internal/provider") {
 			t.Fatalf("PSS-F01 exclusive path %q claims a live portfolio hold", path)
 		}
 	}
@@ -218,3 +218,4 @@ func packetByID(t *testing.T, freeze ownershipinventory.PathLeaseFreeze, packetI
 	t.Fatalf("packet %q not found", packetID)
 	return psslease.Packet{}
 }
+

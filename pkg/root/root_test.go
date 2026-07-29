@@ -20,7 +20,7 @@ import (
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
-	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
+	inference "github.com/portpowered/infinite-you/pkg/services/providers/inference"
 )
 
 func TestMain(m *testing.M) {
@@ -618,3 +618,4 @@ func assertProviderLookup(
 		t.Fatalf("CanonicalIdentity(%q) = %q, want %q", identity, canonical, want)
 	}
 }
+

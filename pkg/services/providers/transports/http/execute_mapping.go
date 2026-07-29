@@ -50,20 +50,20 @@ type ExecuteResponse struct {
 // ExecuteRequestBody is the adapter-owned HTTP request body for one provider
 // execute attempt.
 type ExecuteRequestBody struct {
-	AttemptID          string             `json:"attemptId"`
-	WorkerType         string             `json:"workerType,omitempty"`
-	WorkstationName    string             `json:"workstationName,omitempty"`
-	Model              string             `json:"model,omitempty"`
-	SkipPermissions    bool               `json:"skipPermissions,omitempty"`
-	SystemPrompt       string             `json:"systemPrompt,omitempty"`
-	UserMessage        string             `json:"userMessage,omitempty"`
-	InputTokens        []any              `json:"inputTokens,omitempty"`
-	OutputSchema       string             `json:"outputSchema,omitempty"`
+	AttemptID          string              `json:"attemptId"`
+	WorkerType         string              `json:"workerType,omitempty"`
+	WorkstationName    string              `json:"workstationName,omitempty"`
+	Model              string              `json:"model,omitempty"`
+	SkipPermissions    bool                `json:"skipPermissions,omitempty"`
+	SystemPrompt       string              `json:"systemPrompt,omitempty"`
+	UserMessage        string              `json:"userMessage,omitempty"`
+	InputTokens        []any               `json:"inputTokens,omitempty"`
+	OutputSchema       string              `json:"outputSchema,omitempty"`
 	ResumeSession      *SessionRefResponse `json:"resumeSession,omitempty"`
-	WorkingDirectory   string             `json:"workingDirectory,omitempty"`
-	Worktree           string             `json:"worktree,omitempty"`
-	EnvVars            map[string]string  `json:"envVars,omitempty"`
-	ProcessEnvironment []string           `json:"processEnvironment,omitempty"`
+	WorkingDirectory   string              `json:"workingDirectory,omitempty"`
+	Worktree           string              `json:"worktree,omitempty"`
+	EnvVars            map[string]string   `json:"envVars,omitempty"`
+	ProcessEnvironment []string            `json:"processEnvironment,omitempty"`
 }
 
 // ExecuteInput carries decoded HTTP inputs for one execute operation owned by

@@ -13,7 +13,6 @@ import (
 	opencode "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/opencode"
 	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 )
 
 const (
@@ -26,8 +25,8 @@ func TestOpenCodeRootFallsBackOnceOnUnsupportedStructuredFormat(t *testing.T) {
 
 	rejection := []byte("error: unknown option '--format'\n")
 	runner := &sequenceStreamingRunner{attempts: []streamingAttempt{
-		{result: workerprocess.CommandResult{Stderr: rejection, ExitCode: 2}},
-		{result: workerprocess.CommandResult{Stdout: []byte("fallback answer")}},
+		{result: workers.CommandResult{Stderr: rejection, ExitCode: 2}},
+		{result: workers.CommandResult{Stdout: []byte("fallback answer")}},
 	}}
 	root := newOpenCodeCommandRoot(t, runner)
 
@@ -43,9 +42,9 @@ func TestOpenCodeRootCachesFinalOnlyAfterFallback(t *testing.T) {
 
 	rejection := []byte("error: unknown option '--format'\n")
 	runner := &sequenceStreamingRunner{attempts: []streamingAttempt{
-		{result: workerprocess.CommandResult{Stderr: rejection, ExitCode: 2}},
-		{result: workerprocess.CommandResult{Stdout: []byte("fallback answer")}},
-		{result: workerprocess.CommandResult{Stdout: []byte("cached answer")}},
+		{result: workers.CommandResult{Stderr: rejection, ExitCode: 2}},
+		{result: workers.CommandResult{Stdout: []byte("fallback answer")}},
+		{result: workers.CommandResult{Stdout: []byte("cached answer")}},
 	}}
 	root := newOpenCodeCommandRoot(t, runner)
 
@@ -78,9 +77,9 @@ func TestOpenCodeStructuredFallbackRejectsUnsafeOutcomes(t *testing.T) {
 			name: "provider activity",
 			attempt: streamingAttempt{
 				observations: []streamObservation{
-					{stream: workerprocess.OutputStreamStdout, chunk: []byte(`{"type":"step_start","sessionID":"ses_1"}` + "\n")},
+					{stream: workers.OutputStreamStdout, chunk: []byte(`{"type":"step_start","sessionID":"ses_1"}` + "\n")},
 				},
-				result: workerprocess.CommandResult{
+				result: workers.CommandResult{
 					Stdout:   []byte(`{"type":"step_start","sessionID":"ses_1"}` + "\n"),
 					Stderr:   []byte("unknown option --format"),
 					ExitCode: 2,
@@ -90,7 +89,7 @@ func TestOpenCodeStructuredFallbackRejectsUnsafeOutcomes(t *testing.T) {
 		{
 			name: "ambiguous process rejection",
 			attempt: streamingAttempt{
-				result: workerprocess.CommandResult{
+				result: workers.CommandResult{
 					Stderr:   []byte("format initialization failed"),
 					ExitCode: 2,
 				},
@@ -100,9 +99,9 @@ func TestOpenCodeStructuredFallbackRejectsUnsafeOutcomes(t *testing.T) {
 			name: "malformed stdout",
 			attempt: streamingAttempt{
 				observations: []streamObservation{
-					{stream: workerprocess.OutputStreamStdout, chunk: []byte("not-json")},
+					{stream: workers.OutputStreamStdout, chunk: []byte("not-json")},
 				},
-				result: workerprocess.CommandResult{
+				result: workers.CommandResult{
 					Stdout:   []byte("not-json"),
 					Stderr:   []byte("unknown option --format"),
 					ExitCode: 2,
@@ -113,9 +112,9 @@ func TestOpenCodeStructuredFallbackRejectsUnsafeOutcomes(t *testing.T) {
 			name: "explicit provider failure",
 			attempt: streamingAttempt{
 				observations: []streamObservation{
-					{stream: workerprocess.OutputStreamStdout, chunk: []byte(`{"type":"error","error":{"name":"AuthError","data":{"status":401}}}`)},
+					{stream: workers.OutputStreamStdout, chunk: []byte(`{"type":"error","error":{"name":"AuthError","data":{"status":401}}}`)},
 				},
-				result: workerprocess.CommandResult{
+				result: workers.CommandResult{
 					Stdout:   []byte(`{"type":"error","error":{"name":"AuthError","data":{"status":401}}}`),
 					Stderr:   []byte("unknown option --format"),
 					ExitCode: 2,
@@ -125,21 +124,21 @@ func TestOpenCodeStructuredFallbackRejectsUnsafeOutcomes(t *testing.T) {
 		{
 			name: "cancellation",
 			attempt: streamingAttempt{
-				result: workerprocess.CommandResult{Stderr: []byte("unknown option --format"), ExitCode: 2},
+				result: workers.CommandResult{Stderr: []byte("unknown option --format"), ExitCode: 2},
 				err:    context.Canceled,
 			},
 		},
 		{
 			name: "timeout",
 			attempt: streamingAttempt{
-				result: workerprocess.CommandResult{Stderr: []byte("unknown option --format"), ExitCode: 2},
+				result: workers.CommandResult{Stderr: []byte("unknown option --format"), ExitCode: 2},
 				err:    context.DeadlineExceeded,
 			},
 		},
 		{
 			name: "ambiguous process error",
 			attempt: streamingAttempt{
-				result: workerprocess.CommandResult{Stderr: []byte("unknown option --format"), ExitCode: 2},
+				result: workers.CommandResult{Stderr: []byte("unknown option --format"), ExitCode: 2},
 				err:    errors.New("process transport failed"),
 			},
 		},
@@ -164,7 +163,7 @@ func TestOpenCodeRequiredStructuredStreamRejectsUnsupportedModeWithoutFallback(t
 
 	rejection := []byte("unknown option: --format")
 	runner := &sequenceStreamingRunner{attempts: []streamingAttempt{
-		{result: workerprocess.CommandResult{Stderr: rejection, ExitCode: 2}},
+		{result: workers.CommandResult{Stderr: rejection, ExitCode: 2}},
 	}}
 	root := newOpenCodeCommandRootWithOptions(t, runner, opencode.RegistrationOptions{
 		RequireStructuredStream: true,
@@ -191,8 +190,8 @@ func TestOpenCodeFallbackAttemptNeverRecurses(t *testing.T) {
 
 	rejection := []byte("unknown option: --format")
 	runner := &sequenceStreamingRunner{attempts: []streamingAttempt{
-		{result: workerprocess.CommandResult{Stderr: rejection, ExitCode: 2}},
-		{result: workerprocess.CommandResult{Stderr: rejection, ExitCode: 2}},
+		{result: workers.CommandResult{Stderr: rejection, ExitCode: 2}},
+		{result: workers.CommandResult{Stderr: rejection, ExitCode: 2}},
 	}}
 	root := newOpenCodeCommandRoot(t, runner)
 
@@ -320,7 +319,7 @@ type streamObservation struct {
 
 type streamingAttempt struct {
 	observations []streamObservation
-	result       workerprocess.CommandResult
+	result       workers.CommandResult
 	err          error
 }
 
@@ -339,7 +338,7 @@ func (runner *sequenceStreamingRunner) Run(
 func (runner *sequenceStreamingRunner) RunStreaming(
 	ctx context.Context,
 	request workers.CommandRequest,
-	observe workerprocess.OutputChunkObserver,
+	observe workers.OutputChunkObserver,
 ) (workers.CommandResult, error) {
 	return runner.runAttempt(ctx, request, observe)
 }
@@ -347,7 +346,7 @@ func (runner *sequenceStreamingRunner) RunStreaming(
 func (runner *sequenceStreamingRunner) runAttempt(
 	ctx context.Context,
 	request workers.CommandRequest,
-	observe workerprocess.OutputChunkObserver,
+	observe workers.OutputChunkObserver,
 ) (workers.CommandResult, error) {
 	runner.requests = append(runner.requests, request)
 	if len(runner.attempts) == 0 {
@@ -360,7 +359,7 @@ func (runner *sequenceStreamingRunner) runAttempt(
 			observe(observation.stream, observation.chunk)
 		}
 		if len(attempt.observations) == 0 && len(attempt.result.Stdout) > 0 {
-			observe(workerprocess.OutputStreamStdout, attempt.result.Stdout)
+			observe(workers.OutputStreamStdout, attempt.result.Stdout)
 		}
 	}
 	return attempt.result, attempt.err

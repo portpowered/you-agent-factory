@@ -37,14 +37,14 @@ func TestCommandEffectBuildsKiroArgvEnvironmentAndResume(t *testing.T) {
 		t.Fatal("NewCommandEffect() returned nil")
 	}
 	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
-		Provider:        providers.IDKiro,
-		AttemptID:       "dispatch-kiro-cmd",
-		SystemPrompt:    "You are a careful reviewer.",
-		UserMessage:     "review the workspace",
-		SkipPermissions: true,
+		Provider:         providers.IDKiro,
+		AttemptID:        "dispatch-kiro-cmd",
+		SystemPrompt:     "You are a careful reviewer.",
+		UserMessage:      "review the workspace",
+		SkipPermissions:  true,
 		WorkingDirectory: "workspace",
-		WorkerType:      "agent-worker",
-		WorkstationName: "review-work",
+		WorkerType:       "agent-worker",
+		WorkstationName:  "review-work",
 		ResumeSession: &providers.SessionRef{
 			Provider: providers.IDKiro,
 			Kind:     providers.SessionIDKind,

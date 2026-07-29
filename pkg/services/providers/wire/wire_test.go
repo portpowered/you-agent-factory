@@ -17,7 +17,6 @@ import (
 	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
 )
 
 func TestNewServiceConstructsPublishedRoot(t *testing.T) {
@@ -247,7 +246,7 @@ func TestNewServiceInjectsPlatformDependenciesThroughWireOptions(t *testing.T) {
 	cursorTempFiles := newRecordingTemporaryFileSystem(`C:\cursor-temp\cursor_prompt_fixture.md`)
 	workersRunner := &recordingWorkersCommandRunner{}
 	agyAllocator := &recordingPTYAllocator{
-		result: agypty.SessionResult{ExitCode: 0, CleanedText: "agy via wire"},
+		result: workers.PTYSessionResult{ExitCode: 0, CleanedText: "agy via wire"},
 	}
 	agyPath := filepath.Join(t.TempDir(), "agy")
 	agyLocator := fakeExecutableLocator{string(providers.IDAgy): agyPath}
@@ -564,9 +563,9 @@ type inertPTYAllocator struct {
 
 func (a *inertPTYAllocator) Allocate(
 	_ context.Context,
-	_ agypty.ProcessLaunch,
-	_ agypty.SessionConfig,
-) (agypty.PTYSession, error) {
+	_ workers.PTYProcessLaunch,
+	_ workers.PTYSessionConfig,
+) (workers.PTYSession, error) {
 	a.calls++
 	panic("agy PTY allocation during inert construction")
 }
@@ -669,23 +668,23 @@ func (f *recordingTemporaryFile) Close() error {
 
 type recordingPTYAllocator struct {
 	calls  int
-	result agypty.SessionResult
+	result workers.PTYSessionResult
 }
 
 func (a *recordingPTYAllocator) Allocate(
 	_ context.Context,
-	_ agypty.ProcessLaunch,
-	_ agypty.SessionConfig,
-) (agypty.PTYSession, error) {
+	_ workers.PTYProcessLaunch,
+	_ workers.PTYSessionConfig,
+) (workers.PTYSession, error) {
 	a.calls++
 	return &recordingPTYSession{result: a.result}, nil
 }
 
 type recordingPTYSession struct {
-	result agypty.SessionResult
+	result workers.PTYSessionResult
 }
 
-func (s *recordingPTYSession) Run(context.Context) (agypty.SessionResult, error) {
+func (s *recordingPTYSession) Run(context.Context) (workers.PTYSessionResult, error) {
 	return s.result, nil
 }
 

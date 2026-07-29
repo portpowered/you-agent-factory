@@ -11,7 +11,7 @@ import (
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	agy "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy"
-	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
+	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty"
 )
 
 func TestPTYEffectClassifiesDistinctExecutionOutcomes(t *testing.T) {
@@ -26,26 +26,26 @@ func TestPTYEffectClassifiesDistinctExecutionOutcomes(t *testing.T) {
 		wantMessage string
 	}{
 		{
-			name: "missing executable",
+			name:      "missing executable",
 			allocator: &stubAllocator{result: agypty.SessionResult{}},
 			setup: func(t *testing.T) (string, agy.ExecutableDependencies) {
 				factoryRoot := t.TempDir()
 				missing := filepath.Join(factoryRoot, "missing-agy")
 				return missing, executableDependencies(nil)
 			},
-			wantKind: providers.ExecuteFailureKindDependency,
+			wantKind:    providers.ExecuteFailureKindDependency,
 			wantMessage: "Agy executable could not be found.",
 		},
 		{
-			name: "pty allocation failure",
-			allocator: &errorAllocator{err: fmt.Errorf("allocate: %w", agypty.ErrPTYAllocationFailed)},
-			wantKind: providers.ExecuteFailureKindDependency,
+			name:        "pty allocation failure",
+			allocator:   &errorAllocator{err: fmt.Errorf("allocate: %w", agypty.ErrPTYAllocationFailed)},
+			wantKind:    providers.ExecuteFailureKindDependency,
 			wantMessage: "Agy PTY allocation failed.",
 		},
 		{
-			name: "unsupported platform",
-			allocator: &errorAllocator{err: agypty.ErrUnsupportedPlatform},
-			wantKind: providers.ExecuteFailureKindDependency,
+			name:        "unsupported platform",
+			allocator:   &errorAllocator{err: agypty.ErrUnsupportedPlatform},
+			wantKind:    providers.ExecuteFailureKindDependency,
 			wantMessage: "Agy PTY allocation is not supported on this platform.",
 		},
 		{
@@ -53,7 +53,7 @@ func TestPTYEffectClassifiesDistinctExecutionOutcomes(t *testing.T) {
 			allocator: &failureStubAllocator{result: agypty.SessionResult{
 				ExitCode: 1, CleanedText: "Error: authentication failed: invalid api key",
 			}, runErr: fmt.Errorf("%w: exit code 1", agypty.ErrNonzeroExit)},
-			wantKind: providers.ExecuteFailureKindAuthentication,
+			wantKind:    providers.ExecuteFailureKindAuthentication,
 			wantMessage: "Agy authentication failed.",
 		},
 		{
@@ -61,18 +61,18 @@ func TestPTYEffectClassifiesDistinctExecutionOutcomes(t *testing.T) {
 			allocator: &failureStubAllocator{result: agypty.SessionResult{
 				ExitCode: 124, TimedOut: true, CleanedText: "partial answer before timeout",
 			}, runErr: agypty.ErrSessionTimedOut},
-			wantKind: providers.ExecuteFailureKindTimeout,
+			wantKind:    providers.ExecuteFailureKindTimeout,
 			wantMessage: agy.TimeoutFailureMessage,
 		},
 		{
-			name: "context deadline exceeded",
+			name:      "context deadline exceeded",
 			allocator: &blockingAllocator{},
 			ctx: func() context.Context {
 				ctx, cancel := context.WithTimeout(context.Background(), 0)
 				cancel()
 				return ctx
 			}(),
-			wantKind: providers.ExecuteFailureKindTimeout,
+			wantKind:    providers.ExecuteFailureKindTimeout,
 			wantMessage: agy.TimeoutFailureMessage,
 		},
 		{
@@ -80,7 +80,7 @@ func TestPTYEffectClassifiesDistinctExecutionOutcomes(t *testing.T) {
 			allocator: &failureStubAllocator{result: agypty.SessionResult{
 				ExitCode: 2, CleanedText: "provider crashed unexpectedly",
 			}, runErr: fmt.Errorf("%w: exit code 2", agypty.ErrNonzeroExit)},
-			wantKind: providers.ExecuteFailureKindUnknown,
+			wantKind:    providers.ExecuteFailureKindUnknown,
 			wantMessage: "Agy execution exited with code 2.",
 		},
 	}
@@ -146,9 +146,9 @@ func TestPTYEffectMissingExecutableViaExecNotFound(t *testing.T) {
 	factoryRoot := t.TempDir()
 	missingExecutable := filepath.Join(factoryRoot, "missing-agy")
 	effect := agy.NewPTYEffect(agy.PTYEffectOptions{
-		FactoryRoot: factoryRoot,
-		Allocator:   &stubAllocator{result: agypty.SessionResult{ExitCode: 0, CleanedText: "ok"}},
-		Executable:  missingExecutable,
+		FactoryRoot:            factoryRoot,
+		Allocator:              &stubAllocator{result: agypty.SessionResult{ExitCode: 0, CleanedText: "ok"}},
+		Executable:             missingExecutable,
 		ExecutableDependencies: executableDependencies(nil),
 	})
 	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
