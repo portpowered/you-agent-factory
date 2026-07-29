@@ -271,7 +271,7 @@ func TestCLIQuietModeSuppressesNonResultNoise(t *testing.T) {
 		}
 		for _, forbidden := range []string{
 			quietPrimaryResultSeparator,
-			"Factory Session started",
+			"factory started",
 			"work accepted",
 		} {
 			if strings.Contains(quietResult.Stdout, forbidden) {
@@ -409,8 +409,8 @@ func containsHumanLifecycleNoise(stdout string) bool {
 		for _, prefix := range []string{
 			"work accepted",
 			"work moved",
-			"Factory Session started",
-			"Factory Session completed",
+			"factory started",
+			"factory completed",
 			"workstation queued",
 			"workstation started",
 			"workstation completed",

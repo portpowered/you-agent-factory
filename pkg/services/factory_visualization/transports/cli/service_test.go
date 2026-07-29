@@ -3,6 +3,7 @@ package cli_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"strings"
@@ -79,7 +80,7 @@ func TestBuildVisualizationSink_PresentsSimpleDashboard(t *testing.T) {
 		t.Fatal("sink = nil, want dashboard sink")
 	}
 	sink.PresentFactoryView(factoryvisualization.View{
-		Runtime: factoryvisualization.RuntimeObservation{TickCount: 3},
+		Runtime:    factoryvisualization.RuntimeObservation{TickCount: 3},
 		ObservedAt: time.Unix(1, 0),
 	})
 	if got := output.String(); !strings.Contains(got, "Tick: 3") {
@@ -140,8 +141,8 @@ func TestOpenFactoryEventRenderer_HumanStreamUsesPresentationCollaborator(t *tes
 	renderer.PresentFactoryEvents([]interfaces.FactoryEvent{{
 		Type: interfaces.FactoryEventTypeSessionStarted,
 		Context: interfaces.FactoryEventContext{
-			Sequence:         1,
-			SessionSequence:  intPtr(1),
+			Sequence:        1,
+			SessionSequence: intPtr(1),
 		},
 	}})
 	if err := renderer.WriteFinalInvocationResult(apisurface.FactoryInvocationResult{
@@ -153,11 +154,43 @@ func TestOpenFactoryEventRenderer_HumanStreamUsesPresentationCollaborator(t *tes
 	if !presentation.openedBestEffortStream {
 		t.Fatal("presentation collaborator was not used for human stream")
 	}
-	if !strings.Contains(output.String(), "Factory Session started") {
+	if !strings.Contains(output.String(), "factory started") {
 		t.Fatalf("output = %q, want human Factory Event line", output.String())
 	}
 	if !strings.Contains(output.String(), "done") {
 		t.Fatalf("output = %q, want terminal primary result", output.String())
+	}
+}
+
+func TestFormatHumanWorkAccepted_UsesContentForGeneratedWorkName(t *testing.T) {
+	payload, err := json.Marshal(work.WorkRequestEventPayload{
+		Works: []work.WorkRequestEventWork{{
+			Name:   "work-1",
+			WorkID: "request-work-1",
+			Content: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeText,
+				Text: "Add a focused ACP regression test",
+			}},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	presentation := factoryvisualization.NewResponsePresentation()
+	service := visualizationcli.New(nil, presentation)
+	var output bytes.Buffer
+	renderer, err := service.OpenFactoryEventRenderer(visualizationcli.FactoryEventRendererConfig{
+		Output: &output, InvocationOutputMode: visualizationcli.InvocationOutputResponseStream,
+	})
+	if err != nil {
+		t.Fatalf("open renderer: %v", err)
+	}
+	renderer.PresentFactoryEvents([]interfaces.FactoryEvent{{
+		Type: interfaces.FactoryEventTypeWorkRequest, Payload: payload,
+	}})
+	renderer.StopProgressRendering()
+	if got, want := strings.TrimSpace(output.String()), "[0] work accepted: Add a focused ACP regression test"; got != want {
+		t.Fatalf("output = %q, want %q", got, want)
 	}
 }
 
@@ -185,7 +218,7 @@ func TestOpenFactoryEventRenderer_JSONStreamUsesLosslessPresentation(t *testing.
 		Payload: []byte(`{}`),
 	}})
 	if err := renderer.WriteFinalInvocationResult(apisurface.FactoryInvocationResult{
-		Status: interfaces.InvocationTerminalStatusCompleted,
+		Status:        interfaces.InvocationTerminalStatusCompleted,
 		PrimaryResult: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "ok"}},
 	}); err != nil {
 		t.Fatalf("WriteFinalInvocationResult: %v", err)

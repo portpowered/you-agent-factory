@@ -261,7 +261,7 @@ func formatHumanFactoryEvent(event interfaces.FactoryEvent) ([]byte, bool) {
 	case interfaces.FactoryEventTypeWorkRequest:
 		message = formatHumanWorkAccepted(event)
 	case interfaces.FactoryEventTypeSessionStarted:
-		message = "Factory Session started"
+		message = "factory started"
 	case interfaces.FactoryEventTypeSessionCompleted:
 		message = formatHumanSessionCompleted(event)
 	case interfaces.FactoryEventTypeDispatchQueued:
@@ -301,18 +301,32 @@ func formatHumanWorkAccepted(event interfaces.FactoryEvent) string {
 		return fmt.Sprintf("work accepted: %d items", len(payload.Works))
 	}
 	subject := payload.Works[0].Name
-	if strings.TrimSpace(subject) == "" {
+	if content := workContentSummary(payload.Works[0].Content); content != "" &&
+		(strings.TrimSpace(subject) == "" || subject == payload.Works[0].WorkID || strings.HasPrefix(subject, "work-")) {
+		subject = content
+	} else if strings.TrimSpace(subject) == "" {
 		subject = payload.Works[0].WorkID
 	}
 	return withHumanLifecycleSubject("work accepted", subject)
 }
 
+func workContentSummary(parts []work.WorkContentPart) string {
+	for _, part := range parts {
+		if part.Type.Normalized() == work.WorkContentPartTypeText {
+			if text := boundedHumanProgressPayload(part.Text); text != "" {
+				return text
+			}
+		}
+	}
+	return ""
+}
+
 func formatHumanSessionCompleted(event interfaces.FactoryEvent) string {
 	payload, ok := decodeFactoryEventPayload[interfaces.FactorySessionCompletedEventPayload](event)
 	if !ok || payload.FinalStatus == "" {
-		return "Factory Session completed"
+		return "factory completed"
 	}
-	message := "Factory Session completed: " + string(payload.FinalStatus)
+	message := "factory completed: " + string(payload.FinalStatus)
 	if payload.FailureDetail != nil {
 		message = withHumanLifecycleFailure(message, payload.FailureDetail.Message)
 	}
