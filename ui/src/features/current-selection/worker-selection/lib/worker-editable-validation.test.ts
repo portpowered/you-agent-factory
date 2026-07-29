@@ -225,7 +225,7 @@ describe("mergeEditableWorkerContractValidationErrors", () => {
         0,
       ),
     ).toEqual({
-      modelProvider: `${messages.editableConfigurationContractInvalidPrefix} factory.workers[0].modelProvider must be one of CLAUDE, CODEX, CURSOR, GEMINI, KIRO, OPENCODE.`,
+      modelProvider: `${messages.editableConfigurationContractInvalidPrefix} factory.workers[0].modelProvider must be a valid provider identity or one of CLAUDE, CODEX, CURSOR, GEMINI, KIRO, OPENCODE.`,
     });
   });
 
