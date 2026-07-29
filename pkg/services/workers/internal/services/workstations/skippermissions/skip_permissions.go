@@ -34,6 +34,11 @@ func AgentWorkerSupportsSkipPermissions(worker *interfaces.FactoryWorkerConfig) 
 	if worker == nil || !interfaces.IsAgentWorkerType(worker.Type) {
 		return true
 	}
+	// ACP applies the same invocation policy at the protocol permission callback,
+	// rather than translating it into a harness-specific command-line flag.
+	if interfaces.StrictPublicFactoryWorkerProvider(worker.ExecutorProvider) == "ACP" {
+		return true
+	}
 	if interfaces.UsesModelhostLease(worker.Type, worker.ModelLocality) {
 		return false
 	}

@@ -166,6 +166,15 @@ func TestAgentWorkerSupportsSkipPermissions(t *testing.T) {
 			want: true,
 		},
 		{
+			name: "ACPProviderUsesProtocolPermissionCallback",
+			worker: &interfaces.FactoryWorkerConfig{
+				Type:             interfaces.WorkerTypeAgent,
+				ExecutorProvider: "ACP",
+				ModelProvider:    "cursor-acp",
+			},
+			want: true,
+		},
+		{
 			name: "LocalManagedAgentWorker",
 			worker: &interfaces.FactoryWorkerConfig{
 				Type:          interfaces.WorkerTypeAgent,
@@ -217,6 +226,11 @@ func TestValidateInvocationSkipPermissionsForWorker(t *testing.T) {
 		Type:          interfaces.WorkerTypeAgent,
 		ModelProvider: string(modelprovider.ProviderClaude),
 	}
+	supportedACPAgent := &interfaces.FactoryWorkerConfig{
+		Type:             interfaces.WorkerTypeAgent,
+		ExecutorProvider: "ACP",
+		ModelProvider:    "cursor-acp",
+	}
 	localManagedAgent := &interfaces.FactoryWorkerConfig{
 		Type:          interfaces.WorkerTypeAgent,
 		Model:         "OMNIVOICE_Q4_K_M",
@@ -239,6 +253,9 @@ func TestValidateInvocationSkipPermissionsForWorker(t *testing.T) {
 	}
 	if err := ValidateInvocationSkipPermissionsForWorker(supportedAgent, &overrideTrue); err != nil {
 		t.Fatalf("supported agent: %v", err)
+	}
+	if err := ValidateInvocationSkipPermissionsForWorker(supportedACPAgent, &overrideTrue); err != nil {
+		t.Fatalf("supported ACP agent: %v", err)
 	}
 	if err := ValidateInvocationSkipPermissionsForWorker(agent, &overrideTrue); err == nil {
 		t.Fatal("expected unsupported provider to fail when override is set")
