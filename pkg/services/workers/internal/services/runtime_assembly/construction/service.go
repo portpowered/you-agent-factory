@@ -5,7 +5,6 @@ package construction
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -321,7 +320,7 @@ func (s *Service) agentRunner(
 	providerOverride workers.Provider,
 	inferenceProgressPublisher workers.ProgressPublisher,
 ) (workers.Runner, error) {
-	usesNamedExecutorProvider := def != nil && strings.TrimSpace(def.ExecutorProvider) != "" && !strings.EqualFold(strings.TrimSpace(def.ExecutorProvider), "SCRIPT_WRAP")
+	usesNamedExecutorProvider := def != nil && workers.UsesNamedProvider(def.ExecutorProvider, def.ModelProvider)
 	if providerOverride != nil && !usesNamedExecutorProvider {
 		return workerexecutor.RunnerFromProvider(providerOverride), nil
 	}
@@ -481,4 +480,3 @@ func workstationResult(
 		},
 	}
 }
-

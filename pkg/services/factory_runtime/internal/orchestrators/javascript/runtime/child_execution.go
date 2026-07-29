@@ -84,7 +84,13 @@ func ResolveChildWorkerSettings(req ChildExecutionRequest, agents map[string]int
 	req.ModelProvider = firstWorkerValue(req.ModelProvider, preset.ModelProvider, config.DefaultModelProvider)
 	req.Model = firstWorkerValue(req.Model, preset.Model, config.DefaultModel)
 	req.ReasoningEffort = firstWorkerValue(req.ReasoningEffort, preset.ReasoningEffort)
-	if provider, ok := interfaces.CanonicalizeOperatorWorkerModelProviderInput(req.ModelProvider); req.ModelProvider != "" {
+	if strings.EqualFold(strings.TrimSpace(req.ExecutorProvider), workerexecution.ExecutorProviderACP) {
+		if _, err := workerexecution.RunnerIdentityForWorker(req.ExecutorProvider, req.ModelProvider); err != nil {
+			return ChildExecutionRequest{}, fmt.Errorf("agent.run() has invalid ACP provider selection: %w", err)
+		}
+		req.ExecutorProvider = workerexecution.ExecutorProviderACP
+		req.ModelProvider = strings.TrimSpace(req.ModelProvider)
+	} else if provider, ok := interfaces.CanonicalizeOperatorWorkerModelProviderInput(req.ModelProvider); req.ModelProvider != "" {
 		if !ok || interfaces.IsSymbolicWorkerModelProviderDefault(provider) {
 			return ChildExecutionRequest{}, fmt.Errorf("agent.run() has unsupported effective modelProvider %q", req.ModelProvider)
 		}

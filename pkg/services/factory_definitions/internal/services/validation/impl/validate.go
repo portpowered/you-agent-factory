@@ -67,6 +67,16 @@ func workerModelProviderTargets(cfg *factorydefinitions.FactoryConfig) []Target 
 			continue
 		}
 		provider := strings.TrimSpace(worker.ModelProvider)
+		if strings.EqualFold(strings.TrimSpace(worker.ExecutorProvider), "ACP") && provider == "" {
+			targets = append(targets, Target{
+				Code:     CodeWorkerACPModelProviderRequired,
+				Severity: SeverityError,
+				Message:  "worker executorProvider ACP requires modelProvider to name an ACP integration",
+				Subject:  Subject{Type: SubjectTypeWorker, ID: worker.Name, Location: SubjectLocationDefinition},
+				Path:     fmt.Sprintf("%s.workers[%d](%s).modelProvider", validationRoot, workerIndex, worker.Name),
+			})
+			continue
+		}
 		if provider == "" || factorydefinitions.IsSymbolicWorkerModelProviderDefault(provider) || invocationParameterInterpolation(cfg.InvocationSignature, provider) {
 			continue
 		}

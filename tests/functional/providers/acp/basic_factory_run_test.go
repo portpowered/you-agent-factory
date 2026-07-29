@@ -49,6 +49,25 @@ func TestFactoryRunRoutesExecutorProviderThroughACPAdapter(t *testing.T) {
 	assertACPProviderSession(t, events)
 }
 
+func TestFactoryRunRetainsLegacyNamedExecutorProviderCompatibility(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"legacy ACP spelling"}`))
+	writeLegacyACPWorker(t, dir, "cursor-acp")
+	t.Setenv(acpHelperEnvironment, "1")
+
+	var processStarts atomic.Int32
+	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
+		PlatformProcessCommandFactory: acpHelperCommandFactory(&processStarts),
+		ProvidersExecutableLocator:    availableExecutableLocator{},
+	}, 20*time.Second)
+	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
+		t.Fatalf("completed work = %d, want 1", got)
+	}
+	if got := processStarts.Load(); got != 1 {
+		t.Fatalf("ACP process starts = %d, want 1", got)
+	}
+}
+
 func TestFactoryRunProjectsOperatorConfiguredACPIntegrationIntoInvocationCatalog(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"configured ACP provider"}`))
@@ -117,7 +136,7 @@ func TestRootConstructionDoesNotStartACPProcess(t *testing.T) {
 func TestUnknownExecutorProviderFailsBeforeACPProcessStart(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"unknown ACP provider"}`))
-	writeACPWorker(t, dir, "missing-acp")
+	writeLegacyACPWorker(t, dir, "missing-acp")
 
 	var processStarts atomic.Int32
 	fallback := &legacyProvider{response: workers.InferenceResponse{Content: "legacy COMPLETE"}}
@@ -140,7 +159,7 @@ func TestUnknownExecutorProviderFailsBeforeACPProcessStart(t *testing.T) {
 func TestScriptWrapExecutorProviderRetainsLegacyProviderRoute(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"script wrap compatibility"}`))
-	writeACPWorker(t, dir, "SCRIPT_WRAP")
+	writeLegacyACPWorker(t, dir, "SCRIPT_WRAP")
 
 	var processStarts atomic.Int32
 	fallback := &legacyProvider{response: workers.InferenceResponse{Content: "legacy route COMPLETE"}}
@@ -164,13 +183,28 @@ func writeACPWorker(t *testing.T, factoryDir, providerID string) {
 	t.Helper()
 	path := filepath.Join(factoryDir, "workers", "worker", "AGENTS.md")
 	content := "---\n" +
-		"executorProvider: " + providerID + "\n" +
+		"executorProvider: ACP\n" +
+		"modelProvider: " + providerID + "\n" +
 		"model: test-model\n" +
 		"stopToken: COMPLETE\n" +
 		"type: MODEL_WORKER\n" +
 		"---\n\nTest ACP worker.\n"
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatalf("write ACP worker: %v", err)
+	}
+}
+
+func writeLegacyACPWorker(t *testing.T, factoryDir, providerID string) {
+	t.Helper()
+	path := filepath.Join(factoryDir, "workers", "worker", "AGENTS.md")
+	content := "---\n" +
+		"executorProvider: " + providerID + "\n" +
+		"model: test-model\n" +
+		"stopToken: COMPLETE\n" +
+		"type: MODEL_WORKER\n" +
+		"---\n\nLegacy ACP worker.\n"
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write legacy ACP worker: %v", err)
 	}
 }
 

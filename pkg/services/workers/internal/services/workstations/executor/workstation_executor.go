@@ -428,8 +428,11 @@ func (we *WorkstationExecutor) applyCodexFactoryWorktreePreparation(
 	start time.Time,
 ) *workerexecution.WorkResult {
 	selectionIdentity := workstationDef.Runner
-	if executorProvider := strings.TrimSpace(workerDef.ExecutorProvider); executorProvider != "" && !strings.EqualFold(executorProvider, "SCRIPT_WRAP") {
-		selectionIdentity = executorProvider
+	if identity, identityErr := workerexecution.RunnerIdentityForWorker(workerDef.ExecutorProvider, workerDef.ModelProvider); identityErr != nil {
+		failed := worktree.FailedWorkResultFromPreparation(dispatch.DispatchID, dispatch.TransitionID, we.Now().Sub(start), identityErr)
+		return &failed
+	} else if identity != "" {
+		selectionIdentity = identity
 	}
 	selection, err := we.resolveRunnerSelection(selectionIdentity, workerDef.ModelProvider)
 	if err != nil {

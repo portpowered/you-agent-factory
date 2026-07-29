@@ -4,8 +4,8 @@ import (
 	"strings"
 
 	catalogresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/resource"
-	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
 	workertaxonomy "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/taxonomy"
+	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -164,6 +164,7 @@ var publicFactoryWorkerModelProviderAliases = map[string]string{
 }
 
 var publicFactoryWorkerProviderAliases = map[string]string{
+	publicFactoryWorkerProviderACP:        publicFactoryWorkerProviderACP,
 	publicFactoryWorkerProviderScriptWrap: publicFactoryWorkerProviderScriptWrap,
 }
 
@@ -298,6 +299,7 @@ const (
 	publicFactoryWorkerModelProviderPi       = "PI"
 	publicFactoryWorkerModelProviderAgy      = "AGY"
 	publicFactoryWorkerProviderScriptWrap    = "SCRIPT_WRAP"
+	publicFactoryWorkerProviderACP           = "ACP"
 )
 
 // WorkerModelProviderDefault is the symbolic operator-config model provider value
@@ -333,6 +335,8 @@ var internalFactoryWorkerModelProviderAliases = map[string]string{
 }
 
 var internalFactoryWorkerProviderAliases = map[string]string{
+	"ACP":          publicFactoryWorkerProviderACP,
+	"acp":          publicFactoryWorkerProviderACP,
 	"ANTHROPIC":    publicFactoryWorkerProviderScriptWrap,
 	"CLAUDE":       publicFactoryWorkerProviderScriptWrap,
 	"CLAUDE_CLI":   publicFactoryWorkerProviderScriptWrap,

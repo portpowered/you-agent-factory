@@ -6,8 +6,8 @@ import (
 	"slices"
 	"strings"
 
-	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
 )
 
 const (
@@ -17,6 +17,7 @@ const (
 	CodeDanglingResourceReference                                = "factory.resource.danglingReference"
 	CodeWorkerWorkstationIncompatibleBehavior                    = "factory.workstation.incompatibleWorkerBehavior"
 	CodeWorkerUnsupportedModelProvider                           = "factory.worker.unsupportedModelProvider"
+	CodeWorkerACPModelProviderRequired                           = "factory.worker.acpModelProviderRequired"
 	CodeWorkstationMissingOutputRoutes                           = "factory.workstation.missingOutputRoutes"
 	CodeWorkstationMissingFailureRoute                           = "factory.workstation.missingFailureRoute"
 	CodeWorkstationMissingRejectionRoute                         = "factory.workstation.missingRejectionRoute"

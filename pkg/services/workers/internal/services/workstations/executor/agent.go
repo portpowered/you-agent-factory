@@ -347,8 +347,8 @@ func inferenceRequestForExecutionRequest(request workerexecution.WorkstationExec
 	if workerDef != nil {
 		if executorProvider := strings.TrimSpace(workerDef.ExecutorProvider); executorProvider != "" {
 			req.ExecutorProvider = executorProvider
-			if !strings.EqualFold(executorProvider, "SCRIPT_WRAP") {
-				req.RunnerID = executorProvider
+			if identity, err := workerexecution.RunnerIdentityForWorker(executorProvider, workerDef.ModelProvider); err == nil && identity != "" {
+				req.RunnerID = identity
 			}
 		}
 		req.Model = workerDef.Model

@@ -73,7 +73,10 @@ func (e *ProviderChildExecutor) Execute(ctx context.Context, req workflowresult.
 
 	dispatchID, childIndex := e.childDispatchIdentity(req)
 	providerName, providerSessionRef := "", ""
-	runnerID := strings.TrimSpace(req.ExecutorProvider)
+	runnerID, selectionErr := workerexecution.RunnerIdentityForWorker(req.ExecutorProvider, req.ModelProvider)
+	if selectionErr != nil {
+		return workflowresult.JavaScriptChildExecutionResult{}, selectionErr
+	}
 	if runnerID == "" {
 		runnerID = strings.TrimSpace(req.Command)
 	}
@@ -234,7 +237,7 @@ func providerInferenceRequestFromChild(
 		}
 	}
 	preset := strings.TrimSpace(req.Preset)
-	runnerID := strings.TrimSpace(req.ExecutorProvider)
+	runnerID, _ := workerexecution.RunnerIdentityForWorker(req.ExecutorProvider, req.ModelProvider)
 	if runnerID == "" {
 		runnerID = strings.TrimSpace(req.Command)
 	}
