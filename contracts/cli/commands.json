@@ -11682,7 +11682,7 @@
           "normalization": "",
           "completion": "none",
           "binding": "",
-          "visibility": "visible",
+          "visibility": "hidden",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.run.flag.runtime-log-compress",
@@ -11706,7 +11706,7 @@
           "normalization": "",
           "completion": "none",
           "binding": "",
-          "visibility": "visible",
+          "visibility": "hidden",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.run.flag.runtime-log-dir",
@@ -11730,7 +11730,7 @@
           "normalization": "",
           "completion": "none",
           "binding": "",
-          "visibility": "visible",
+          "visibility": "hidden",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.run.flag.runtime-log-max-age-days",
@@ -11754,7 +11754,7 @@
           "normalization": "",
           "completion": "none",
           "binding": "",
-          "visibility": "visible",
+          "visibility": "hidden",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.run.flag.runtime-log-max-backups",
@@ -11778,7 +11778,7 @@
           "normalization": "",
           "completion": "none",
           "binding": "",
-          "visibility": "visible",
+          "visibility": "hidden",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.run.flag.runtime-log-max-size-mb",
@@ -11802,7 +11802,7 @@
           "normalization": "",
           "completion": "none",
           "binding": "",
-          "visibility": "visible",
+          "visibility": "hidden",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.run.flag.runtime-metrics-compress",
@@ -11826,7 +11826,7 @@
           "normalization": "",
           "completion": "none",
           "binding": "",
-          "visibility": "visible",
+          "visibility": "hidden",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.run.flag.runtime-metrics-dir",
@@ -11850,7 +11850,7 @@
           "normalization": "",
           "completion": "none",
           "binding": "",
-          "visibility": "visible",
+          "visibility": "hidden",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.run.flag.runtime-metrics-max-age-days",
@@ -11874,7 +11874,7 @@
           "normalization": "",
           "completion": "none",
           "binding": "",
-          "visibility": "visible",
+          "visibility": "hidden",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.run.flag.runtime-metrics-max-backups",
@@ -11898,7 +11898,7 @@
           "normalization": "",
           "completion": "none",
           "binding": "",
-          "visibility": "visible",
+          "visibility": "hidden",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.run.flag.runtime-metrics-max-size-mb",
