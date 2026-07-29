@@ -188,7 +188,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	v27, err := provideProviderRegistryRebinder(edges2)
+	v27, err := provideProviderRegistryRebinder(providersService)
 	if err != nil {
 		return nil, err
 	}
@@ -472,8 +472,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	providersFactory := provideProvidersFactory(edges2)
-	acpService := provideACPCLIService(configDocumentService, providersFactory, operatorsettingsIDGenerator)
+	acpService := provideACPCLIService(configDocumentService, providersService, operatorsettingsIDGenerator)
 	commandOperations := cli.CommandOperations{
 		ObserveCLI:                        cliObserver,
 		NamedFactoryCatalog:               v,
@@ -569,7 +568,6 @@ var apiSet = wire3.NewSet(composition.NewWorkAPI, composition.NewHTTPBinder, api
 var servicesSet = wire3.NewSet(
 	provideProvidersService,
 	provideApplicationProcessLifecycle,
-	provideProvidersFactory,
 	provideProviderRegistry,
 	provideProviderRegistryRebinder, wire3.Bind(new(application.ProviderRegistry), new(workers.ProviderRegistry)), provideFactorySessionProviderIdentityResolver, wire2.NewRequestPreparation, provideFactorySessionHTTPRequestPreparation, factory.NewFactoryStatusProjector, factory.NewSessionResultProjectionOperation, provideOperatorSettingsFileSystem,
 	provideOperatorSettingsCreateTemporaryFile,

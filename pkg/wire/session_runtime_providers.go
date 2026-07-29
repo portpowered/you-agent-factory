@@ -101,14 +101,6 @@ func projectACPIntegrations(integrations []operatorsettings.ACPIntegration) []pr
 	return result
 }
 
-func provideProvidersFactory(edges serviceedges.Edges) providers.Factory {
-	return providerswire.NewFactory(
-		providePlatformProcessCommandFactory(edges),
-		providerswire.WithExecutableLocator(edges.ProvidersExecutableLocator),
-		providerswire.WithRegistrations(edges.ProviderRegistrations...),
-	)
-}
-
 func providePlatformProcessCommandFactory(edges serviceedges.Edges) platformprocess.CommandFactory {
 	if edges.PlatformProcessCommandFactory != nil {
 		return edges.PlatformProcessCommandFactory
@@ -130,38 +122,12 @@ func buildProviderRegistry(
 	return providerswire.NewWorkersRegistry(context.Background(), providersService)
 }
 
-func buildProviderRegistryWithACP(
-	_ serviceedges.Edges,
-	providersService providers.Service,
-	_ []operatorsettings.ACPIntegration,
-) (workers.ProviderRegistry, error) {
-	return providerswire.NewWorkersRegistry(context.Background(), providersService)
-}
-
 func provideProviderRegistryRebinder(
-	edges serviceedges.Edges,
+	providersService providers.Service,
 ) (workerswire.ProviderRegistryRebinder, error) {
-	agyPTYPlatform, err := provideProvidersAgyPTYPlatform(edges)
-	if err != nil {
-		return nil, err
-	}
 	return func(providerRunner workers.CommandRunner) (workers.ProviderRegistry, error) {
 		if providerRunner == nil {
 			return nil, fmt.Errorf("provider registry rebind requires command runner")
-		}
-		providersService, err := providerswire.NewService(
-			providerswire.WithWorkersCommandRunner(providerRunner),
-			providerswire.WithCursorPlatform(providerswire.CursorPlatformDependencies{
-				OperatingSystem: string(resolveWorkersOperatingSystem(edges)),
-				TemporaryFiles:  provideWorkersProviderTemporaryFileSystem(edges),
-			}),
-			providerswire.WithAgyPTY(agyPTYPlatform),
-			providerswire.WithCommandFactory(providePlatformProcessCommandFactory(edges)),
-			providerswire.WithExecutableLocator(edges.ProvidersExecutableLocator),
-			providerswire.WithRegistrations(edges.ProviderRegistrations...),
-		)
-		if err != nil {
-			return nil, err
 		}
 		return providerswire.NewWorkersRegistry(context.Background(), providersService)
 	}, nil
@@ -575,16 +541,6 @@ func provideFactorySessionExecutionFactory(
 			}
 			runner := commandRunner
 			runtimeRegistry := registry
-			if len(acpIntegrations) > 0 {
-				configuredProviders, err := provideConfiguredProvidersService(edges, acpIntegrations, runner)
-				if err != nil {
-					return nil, fmt.Errorf("construct configured Providers service for live child invocation: %w", err)
-				}
-				runtimeRegistry, err = buildProviderRegistryWithACP(edges, configuredProviders, acpIntegrations)
-				if err != nil {
-					return nil, fmt.Errorf("construct configured provider registry for live child invocation: %w", err)
-				}
-			}
 			if mockWorkers != nil &&
 				mockWorkers.UnmatchedDispatchPolicy.PassthroughUnmatched() &&
 				runtimeRegistry != nil &&
@@ -593,15 +549,7 @@ func provideFactorySessionExecutionFactory(
 				conductorInvocationWithProgress != nil {
 				runner = workersMockCommandRunnerFactory(mockWorkers, nil, runner)
 				var reboundRegistry workers.ProviderRegistry
-				if len(acpIntegrations) > 0 {
-					configuredProviders, configuredErr := provideConfiguredProvidersService(edges, acpIntegrations, runner)
-					if configuredErr != nil {
-						return nil, fmt.Errorf("rebind configured Providers service for live child invocation: %w", configuredErr)
-					}
-					reboundRegistry, err = buildProviderRegistryWithACP(edges, configuredProviders, acpIntegrations)
-				} else {
-					reboundRegistry, err = registryRebinder(runner)
-				}
+				reboundRegistry, err = registryRebinder(runner)
 				if err != nil {
 					return nil, fmt.Errorf("rebind provider registry for live child invocation: %w", err)
 				}
@@ -859,22 +807,9 @@ func provideWorkersRuntimeFactory(
 		runtimeRegistry := providerRegistry
 		runtimeProviders := providersService
 		runtimeRebinder := providerRegistryRebinder
-		if len(acpIntegrations) > 0 {
-			configuredProviders, configuredErr := provideConfiguredProvidersService(edges, acpIntegrations, providerCommandRunner)
-			if configuredErr != nil {
-				return nil, fmt.Errorf("construct configured Providers service for Workers runtime: %w", configuredErr)
-			}
-			runtimeProviders = configuredProviders
-			runtimeRegistry, configuredErr = buildProviderRegistryWithACP(edges, configuredProviders, acpIntegrations)
-			if configuredErr != nil {
-				return nil, fmt.Errorf("construct configured provider registry for Workers runtime: %w", configuredErr)
-			}
-			runtimeRebinder = func(runner workers.CommandRunner) (workers.ProviderRegistry, error) {
-				reboundProviders, reboundErr := provideConfiguredProvidersService(edges, acpIntegrations, runner)
-				if reboundErr != nil {
-					return nil, reboundErr
-				}
-				return buildProviderRegistryWithACP(edges, reboundProviders, acpIntegrations)
+		if configurator, ok := providersService.(providers.ACPConfiguration); ok {
+			if configuredErr := configurator.ConfigureACPIntegrations(context.Background(), projectACPIntegrations(acpIntegrations)); configuredErr != nil {
+				return nil, fmt.Errorf("configure ACP integrations for Workers runtime: %w", configuredErr)
 			}
 		}
 		return workerswire.NewRuntimeWithSelection(

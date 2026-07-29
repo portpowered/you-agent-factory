@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"text/tabwriter"
 
@@ -23,16 +24,53 @@ func productionWorkersCommand(options CommandFactory) *cobra.Command {
 		return command.Name, command.Documentation.Documentation.Title.CanonicalEnglish
 	}
 	workersName, workersHelp := record("you.workers")
+	listName, listHelp := record("you.workers.list")
 	acpName, acpHelp := record("you.workers.acp")
 	workers := &cobra.Command{Use: workersName, Short: workersHelp}
 	acp := &cobra.Command{Use: acpName, Short: acpHelp}
+	listWorkers := newWorkersListCommand(options)
+	listWorkers.Use, listWorkers.Short = listName, listHelp
 	list, add, deleteCommand := newACPListCommand(options), newACPAddCommand(options), newACPDeleteCommand(options)
 	list.Use, list.Short = record("you.workers.acp.list")
 	add.Use, add.Short = record("you.workers.acp.add")
 	deleteCommand.Use, deleteCommand.Short = record("you.workers.acp.delete")
 	acp.AddCommand(list, add, deleteCommand)
-	workers.AddCommand(acp)
+	workers.AddCommand(listWorkers, acp)
 	return workers
+}
+
+func newWorkersListCommand(options CommandFactory) *cobra.Command {
+	return &cobra.Command{
+		Use: "list", Short: "List worker integrations", Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			home, err := resolveProcessHomeDir(options)
+			if err != nil {
+				return err
+			}
+			catalog, err := options.acp.ListWorkers(cmd.Context(), home)
+			if err != nil {
+				return err
+			}
+			sort.Slice(catalog.Providers, func(i, j int) bool { return catalog.Providers[i].ID < catalog.Providers[j].ID })
+			writer := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 4, 2, ' ', 0)
+			if _, err := fmt.Fprintln(writer, "NAME\tTYPE\tAVAILABILITY\tSOURCE"); err != nil {
+				return err
+			}
+			for _, provider := range catalog.Providers {
+				kind, source := "AGENT", "built-in"
+				if catalog.ACP[provider.ID] {
+					kind = "AGENT-ACP"
+				}
+				if catalog.Custom[provider.ID] {
+					source = "custom"
+				}
+				if _, err := fmt.Fprintf(writer, "%s\t%s\t%s\t%s\n", provider.ID, kind, provider.Readiness, source); err != nil {
+					return err
+				}
+			}
+			return writer.Flush()
+		},
+	}
 }
 
 func newACPListCommand(options CommandFactory) *cobra.Command {
@@ -77,7 +115,7 @@ func newACPAddCommand(options CommandFactory) *cobra.Command {
 			if err := options.acp.Add(cmd.Context(), home, strings.TrimSpace(name), strings.ToLower(strings.TrimSpace(transport)), strings.TrimSpace(command)); err != nil {
 				return err
 			}
-			_, err = fmt.Fprintf(cmd.OutOrStdout(), "installed ACP provider %s\n", strings.TrimSpace(name))
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "install succeeded: %s\n", strings.TrimSpace(name))
 			return err
 		},
 	}

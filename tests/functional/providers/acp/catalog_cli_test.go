@@ -24,8 +24,14 @@ func TestRootBuiltACPCommandsAddListDeleteOneSettingsBackedCatalogEntry(t *testi
 		"workers", "acp", "add",
 		"--name", "custom-acp", "--transport", "stdio", "--argument", `custom-agent --profile "team alpha" acp`,
 	)
-	if !strings.Contains(add, "installed ACP provider custom-acp") {
+	if !strings.Contains(add, "install succeeded: custom-acp") {
 		t.Fatalf("add output = %q", add)
+	}
+	unified := executeACPCommand(t, process, home, working, "workers", "list")
+	for _, want := range []string{"NAME", "TYPE", "codex", "AGENT", "cursor-acp", "AGENT-ACP", "custom-acp", "custom"} {
+		if !strings.Contains(unified, want) {
+			t.Fatalf("unified workers list omitted %q: %q", want, unified)
+		}
 	}
 
 	listed := executeACPCommand(t, process, home, working, "workers", "acp", "list")
@@ -41,6 +47,10 @@ func TestRootBuiltACPCommandsAddListDeleteOneSettingsBackedCatalogEntry(t *testi
 	listed = executeACPCommand(t, process, home, working, "workers", "acp", "list")
 	if strings.Contains(listed, "custom-acp") {
 		t.Fatalf("list after delete retained configured provider: %q", listed)
+	}
+	unified = executeACPCommand(t, process, home, working, "workers", "list")
+	if strings.Contains(unified, "custom-acp") {
+		t.Fatalf("unified list after delete retained configured provider: %q", unified)
 	}
 
 	configPath := filepath.Join(home, ".you-agent-factory", "config.json")

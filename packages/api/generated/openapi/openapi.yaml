@@ -6802,6 +6802,8 @@ components:
           $ref: '#/components/schemas/WorkContent'
         diagnostics:
           $ref: '#/components/schemas/SafeWorkDiagnostics'
+        providerSession:
+          $ref: '#/components/schemas/ProviderSessionMetadata'
         failureDetail:
           $ref: '#/components/schemas/FailureDetail'
     InferenceRequestEventPayload:

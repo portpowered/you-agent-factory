@@ -11,12 +11,14 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	acpsdk "github.com/coder/acp-go-sdk"
+	"github.com/mattn/go-shellwords"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	acp "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp"
@@ -30,47 +32,145 @@ type Command struct {
 
 // Service owns one retained daemon per configured ACP integration.
 type Service struct {
-	daemons map[providers.ID]*daemon
+	mu           sync.RWMutex
+	daemons      map[providers.ID]*daemon
+	integrations map[providers.ID]providers.ACPIntegration
+	aliases      map[string]providers.ID
+	newCommand   platformprocess.CommandFactory
+	locator      platformprocess.ExecutableLocator
 }
 
 var _ acp.Service = (*Service)(nil)
 
-func New(commands map[providers.ID]Command, newCommand platformprocess.CommandFactory, locator platformprocess.ExecutableLocator) (acp.Service, error) {
-	daemons := make(map[providers.ID]*daemon, len(commands))
-	for id, command := range commands {
-		if err := id.Validate(); err != nil {
-			return nil, fmt.Errorf("construct ACP service: %w", err)
-		}
-		if strings.TrimSpace(command.Name) == "" {
-			return nil, fmt.Errorf("construct ACP service %q: command is required", id)
-		}
-		daemons[id] = &daemon{
-			command:    Command{Name: command.Name, Args: append([]string(nil), command.Args...)},
-			newCommand: newCommand,
-			locator:    locator,
-			gate:       make(chan struct{}, 1),
-		}
-		daemons[id].gate <- struct{}{}
+func New(integrations []providers.ACPIntegration, newCommand platformprocess.CommandFactory, locator platformprocess.ExecutableLocator) (acp.Service, error) {
+	service := &Service{newCommand: newCommand, locator: locator}
+	if err := service.Configure(context.Background(), integrations); err != nil {
+		return nil, err
 	}
-	return &Service{daemons: daemons}, nil
+	return service, nil
 }
 
 func (service *Service) Execute(ctx context.Context, id providers.ID, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
-	daemon, ok := service.daemons[id]
+	service.mu.RLock()
+	canonical, ok := service.resolveLocked(id)
+	daemon := service.daemons[canonical]
+	service.mu.RUnlock()
 	if !ok {
 		return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: fmt.Sprintf("ACP provider %q is unavailable", id)}
 	}
-	return daemon.execute(ctx, id, request)
+	return daemon.execute(ctx, canonical, request)
 }
 
 func (service *Service) Close(ctx context.Context) error {
+	service.mu.Lock()
+	daemons := service.daemons
+	service.daemons = map[providers.ID]*daemon{}
+	service.integrations = map[providers.ID]providers.ACPIntegration{}
+	service.aliases = map[string]providers.ID{}
+	service.mu.Unlock()
 	var first error
-	for id, daemon := range service.daemons {
+	for id, daemon := range daemons {
 		if err := daemon.close(ctx); err != nil && first == nil {
 			first = fmt.Errorf("close ACP provider %q: %w", id, err)
 		}
 	}
 	return first
+}
+
+func (service *Service) Configure(ctx context.Context, integrations []providers.ACPIntegration) error {
+	commands := make(map[providers.ID]Command, len(integrations))
+	values := make(map[providers.ID]providers.ACPIntegration, len(integrations))
+	aliases := make(map[string]providers.ID, len(integrations))
+	for _, integration := range integrations {
+		integration = integration.Clone()
+		if err := integration.Name.Validate(); err != nil {
+			return fmt.Errorf("configure ACP service: %w", err)
+		}
+		if integration.Transport != "stdio" {
+			return fmt.Errorf("configure ACP provider %q: unsupported transport %q", integration.Name, integration.Transport)
+		}
+		parts, err := shellwords.Parse(integration.Command)
+		if err != nil || len(parts) == 0 {
+			return fmt.Errorf("configure ACP provider %q: invalid command", integration.Name)
+		}
+		if _, exists := values[integration.Name]; exists {
+			return fmt.Errorf("configure ACP provider %q: duplicate identity", integration.Name)
+		}
+		commands[integration.Name] = Command{Name: parts[0], Args: append([]string(nil), parts[1:]...)}
+		values[integration.Name] = integration
+		aliases[strings.ToLower(integration.Name.String())] = integration.Name
+		for _, alias := range integration.Aliases {
+			alias = strings.ToLower(strings.TrimSpace(alias))
+			if alias == "" {
+				return fmt.Errorf("configure ACP provider %q: invalid blank alias", integration.Name)
+			}
+			if existing, exists := aliases[alias]; exists && existing != integration.Name {
+				return fmt.Errorf("configure ACP provider %q: alias %q collides with %q", integration.Name, alias, existing)
+			}
+			aliases[alias] = integration.Name
+		}
+	}
+
+	service.mu.Lock()
+	next := make(map[providers.ID]*daemon, len(commands))
+	retired := make(map[providers.ID]*daemon)
+	for id, command := range commands {
+		if current, ok := service.daemons[id]; ok && current.matches(command) {
+			next[id] = current
+			continue
+		}
+		next[id] = newDaemon(command, service.newCommand, service.locator)
+		if current := service.daemons[id]; current != nil {
+			retired[id] = current
+		}
+	}
+	for id, current := range service.daemons {
+		if _, kept := next[id]; !kept {
+			retired[id] = current
+		}
+	}
+	service.daemons, service.integrations, service.aliases = next, values, aliases
+	service.mu.Unlock()
+
+	var first error
+	for id, daemon := range retired {
+		if err := daemon.close(ctx); err != nil && first == nil {
+			first = fmt.Errorf("drain ACP provider %q: %w", id, err)
+		}
+	}
+	return first
+}
+
+func (service *Service) Integrations() []providers.ACPIntegration {
+	service.mu.RLock()
+	defer service.mu.RUnlock()
+	result := make([]providers.ACPIntegration, 0, len(service.integrations))
+	for _, integration := range service.integrations {
+		result = append(result, integration.Clone())
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].Name < result[j].Name })
+	return result
+}
+
+func (service *Service) Resolve(id providers.ID) (providers.ID, bool) {
+	service.mu.RLock()
+	defer service.mu.RUnlock()
+	return service.resolveLocked(id)
+}
+
+func (service *Service) resolveLocked(id providers.ID) (providers.ID, bool) {
+	canonical, ok := service.aliases[strings.ToLower(strings.TrimSpace(id.String()))]
+	return canonical, ok
+}
+
+func newDaemon(command Command, newCommand platformprocess.CommandFactory, locator platformprocess.ExecutableLocator) *daemon {
+	daemon := &daemon{command: Command{Name: command.Name, Args: append([]string(nil), command.Args...)}, newCommand: newCommand, locator: locator, gate: make(chan struct{}, 1)}
+	daemon.gate <- struct{}{}
+	return daemon
+}
+
+func (daemon *daemon) matches(command Command) bool {
+	return daemon.command.Name == command.Name && slices.Equal(daemon.command.Args, command.Args)
 }
 
 type daemon struct {

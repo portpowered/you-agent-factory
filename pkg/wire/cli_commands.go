@@ -141,10 +141,10 @@ func provideConfigureInitOperation(
 
 func provideACPCLIService(
 	settings operatorsettings.ConfigDocumentService,
-	providersFactory providers.Factory,
+	providersService providers.Service,
 	generateID operatorsettings.IDGenerator,
 ) acpcli.Service {
-	return acpcli.Service{Settings: settings, ProvidersFactory: providersFactory, GenerateID: generateID}
+	return acpcli.Service{Settings: settings, Providers: providersService, GenerateID: generateID}
 }
 
 func provideQueryFactoryOperation(transport standardCLIHTTPProtocol) cli.QueryFactoryOperation {

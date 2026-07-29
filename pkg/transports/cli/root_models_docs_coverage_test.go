@@ -979,7 +979,7 @@ func TestWorkersACPCommandsValidateAndRouteRequests(t *testing.T) {
 		want     string
 		canceled bool
 	}{
-		{name: "list requires providers factory", args: []string{"acp", "list"}, want: "Providers factory is required"},
+		{name: "list requires providers service", args: []string{"acp", "list"}, want: "Providers service is required"},
 		{name: "add validates transport", args: []string{"acp", "add", "--name", "custom-acp", "--transport", "http", "--argument", "agent acp"}, want: "transport must be stdio"},
 		{name: "add routes to service", args: []string{"acp", "add", "--name", "custom-acp", "--argument", "agent acp"}, want: "ID generator is required"},
 		{name: "delete routes to service", args: []string{"acp", "delete", "--name", "custom-acp"}, want: "context canceled", canceled: true},

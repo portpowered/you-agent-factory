@@ -102,7 +102,7 @@ func TestProvideFactorySessionExecutionFactory_BuildsLiveChildInvocation(t *test
 	if err != nil {
 		t.Fatalf("provideProviderRegistry() error = %v", err)
 	}
-	registryRebinder, err := provideProviderRegistryRebinder(edges)
+	registryRebinder, err := provideProviderRegistryRebinder(providersService)
 	if err != nil {
 		t.Fatalf("provideProviderRegistryRebinder() error = %v", err)
 	}

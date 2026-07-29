@@ -71,7 +71,7 @@ func TestFactoryRunProjectsOperatorConfiguredACPIntegrationIntoInvocationCatalog
 	})
 
 	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
-		t.Fatalf("completed work = %d, want 1", got)
+		t.Fatalf("completed work = %d, want 1; events=%#v", got, events)
 	}
 	if got := processStarts.Load(); got != 1 {
 		t.Fatalf("configured ACP process starts = %d, want 1", got)

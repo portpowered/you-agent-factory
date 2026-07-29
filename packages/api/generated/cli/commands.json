@@ -8920,6 +8920,28 @@
       "runnable": false,
       "usage": {"line": "workers"}
     },
+    "you.workers.list": {
+      "id": "you.workers.list",
+      "name": "list",
+      "path": "you workers list",
+      "aliases": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.workers.list",
+        "documentation": {
+          "title": {"id": "you.workers.list.title", "canonicalEnglish": "List worker integrations"},
+          "description": {"id": "you.workers.list.description", "canonicalEnglish": "List all selectable built-in and operator-configured worker integrations."}
+        },
+        "examples": ["you workers list"],
+        "visibility": "public",
+        "sourceHash": "de337db29cafe8cc0ef433569f086c6a8d844036cbc576377c480980804ec19c"
+      },
+      "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.workers.list", "since": "1.0.0", "state": "active"},
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {"line": "list"},
+      "handler": {"id": "you.workers.list.handler"}
+    },
     "you.workers.acp": {
       "id": "you.workers.acp",
       "name": "acp",

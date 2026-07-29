@@ -72,6 +72,7 @@ var WorkFamilyCommandIDs = []string{
 // worker integration management.
 var WorkersFamilyCommandIDs = []string{
 	"you.workers",
+	"you.workers.list",
 	"you.workers.acp",
 	"you.workers.acp.list",
 	"you.workers.acp.add",

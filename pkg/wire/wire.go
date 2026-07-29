@@ -45,7 +45,6 @@ var apiSet = wire.NewSet(
 var servicesSet = wire.NewSet(
 	provideProvidersService,
 	provideApplicationProcessLifecycle,
-	provideProvidersFactory,
 	provideProviderRegistry,
 	provideProviderRegistryRebinder,
 	wire.Bind(new(initializerapplication.ProviderRegistry), new(workers.ProviderRegistry)),

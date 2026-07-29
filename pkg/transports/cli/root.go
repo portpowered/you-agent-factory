@@ -16,10 +16,10 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionscli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
-	factorydefinitionscli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	acpcli "github.com/portpowered/infinite-you/pkg/transports/cli/acp"
@@ -156,29 +156,29 @@ type CommandFactory struct {
 	resolveOperatorDefaults           operatorconfig.DefaultsResolver
 	loadOperatorConfig                operatorconfig.ConfigLoader
 
-	SubmitWork            func(submitcli.SubmitConfig) error
-	SubmitBatch           func(submitcli.BatchConfig) error
-	SessionsCLI           sessioncli.Service
-	BuildExecution        ExecutionServiceBuilder
-	ModelsCLI             modelscli.Service
-	FlattenFactoryConfig  func(configcli.FactoryConfigFlattenConfig) error
-	ExpandFactoryConfig   func(configcli.FactoryConfigExpandConfig) error
-	InitFactory           interfaces.ScaffoldInitializer
-	ConfigureInit         func(initsetup.Config) error
+	SubmitWork             func(submitcli.SubmitConfig) error
+	SubmitBatch            func(submitcli.BatchConfig) error
+	SessionsCLI            sessioncli.Service
+	BuildExecution         ExecutionServiceBuilder
+	ModelsCLI              modelscli.Service
+	FlattenFactoryConfig   func(configcli.FactoryConfigFlattenConfig) error
+	ExpandFactoryConfig    func(configcli.FactoryConfigExpandConfig) error
+	InitFactory            interfaces.ScaffoldInitializer
+	ConfigureInit          func(initsetup.Config) error
 	InstallPackagedFactory func(factorydefinitionscli.InstallPackagedFactoryConfig) error
-	QueryFactory          func(factorycli.QueryConfig) error
-	ListFactories         func(factorycli.ListConfig) error
-	ValidateFactory       func(factorycli.ValidateConfig) error
-	CreateFactoryFromFile func(factorycli.CreateFromFileConfig) error
-	ReplaceFactoryCurrent func(factorycli.ReplaceCurrentConfig) error
-	UpdateFactoryFromFile func(factorycli.UpdateFromFileConfig) error
-	DeleteFactory         func(factorycli.DeleteConfig) error
-	ListWork              func(workcli.ListConfig) error
-	ShowWork              func(workcli.ShowConfig) error
-	MoveWork              func(workcli.MoveConfig) error
-	VisualizeWork         func(workcli.VisualizeConfig) error
-	openRunSelection      runcli.SelectionFactory
-	acp                   acpcli.Service
+	QueryFactory           func(factorycli.QueryConfig) error
+	ListFactories          func(factorycli.ListConfig) error
+	ValidateFactory        func(factorycli.ValidateConfig) error
+	CreateFactoryFromFile  func(factorycli.CreateFromFileConfig) error
+	ReplaceFactoryCurrent  func(factorycli.ReplaceCurrentConfig) error
+	UpdateFactoryFromFile  func(factorycli.UpdateFromFileConfig) error
+	DeleteFactory          func(factorycli.DeleteConfig) error
+	ListWork               func(workcli.ListConfig) error
+	ShowWork               func(workcli.ShowConfig) error
+	MoveWork               func(workcli.MoveConfig) error
+	VisualizeWork          func(workcli.VisualizeConfig) error
+	openRunSelection       runcli.SelectionFactory
+	acp                    acpcli.Service
 }
 
 // NewCommandFactory copies the Wire-built graph without installing defaults.
@@ -381,6 +381,9 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 		}
 		if loadErr == nil {
 			cfg.ACPIntegrations = append([]operatorconfig.ACPIntegration(nil), operatorConfig.Workers.ACP.Integrations...)
+			if err := rootOptions.acp.Configure(cmd.Context(), operatorConfig.Workers.ACP.Integrations); err != nil {
+				return err
+			}
 		}
 	}
 	modelCacheDir, _, err := lookupProcessEnvironment(
