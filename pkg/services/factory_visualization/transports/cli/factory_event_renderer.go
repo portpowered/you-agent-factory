@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"io"
 
-	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
@@ -14,6 +14,7 @@ import (
 type FactoryEventRendererConfig struct {
 	Output               io.Writer
 	JSON                 bool
+	Color                bool
 	InvocationOutputMode string
 }
 
@@ -38,7 +39,7 @@ func (s *service) OpenFactoryEventRenderer(cfg FactoryEventRendererConfig) (Fact
 	if cfg.JSON {
 		return newJSONFactoryEventRenderer(cfg.Output, s.presentation), nil
 	}
-	return newHumanFactoryEventRenderer(cfg.Output, s.presentation), nil
+	return newHumanFactoryEventRenderer(cfg.Output, s.presentation, cfg.Color), nil
 }
 
 func isResponseStreamOutputMode(mode string) bool {
@@ -58,10 +59,15 @@ type humanFactoryEventRenderer struct {
 func newHumanFactoryEventRenderer(
 	output io.Writer,
 	presentation factoryvisualization.ResponsePresentation,
+	color bool,
 ) *humanFactoryEventRenderer {
+	formatter := formatHumanFactoryEvent
+	if color {
+		formatter = formatColorHumanFactoryEvent
+	}
 	return &humanFactoryEventRenderer{stream: presentation.OpenBestEffortFactoryEventStream(
 		output,
-		formatHumanFactoryEvent,
+		formatter,
 	)}
 }
 

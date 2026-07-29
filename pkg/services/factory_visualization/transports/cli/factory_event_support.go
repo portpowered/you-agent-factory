@@ -292,6 +292,48 @@ func formatHumanFactoryEvent(event interfaces.FactoryEvent) ([]byte, bool) {
 	return []byte(fmt.Sprintf("[%d] %s", sequence, message)), true
 }
 
+func formatColorHumanFactoryEvent(event interfaces.FactoryEvent) ([]byte, bool) {
+	line, ok := formatHumanFactoryEvent(event)
+	if !ok {
+		return nil, false
+	}
+	code := humanFactoryEventColor(event)
+	if code == "" {
+		return line, true
+	}
+	return []byte("\x1b[" + code + "m" + string(line) + "\x1b[0m"), true
+}
+
+func humanFactoryEventColor(event interfaces.FactoryEvent) string {
+	switch event.Type {
+	case interfaces.FactoryEventTypeWorkRequest:
+		return "33"
+	case interfaces.FactoryEventTypeSessionStarted:
+		return "36"
+	case interfaces.FactoryEventTypeSessionCompleted:
+		return "32"
+	case interfaces.FactoryEventTypeDispatchQueued,
+		interfaces.FactoryEventTypeDispatchRequest,
+		interfaces.FactoryEventTypeDispatchResponse,
+		interfaces.FactoryEventTypeDispatchInterrupted,
+		interfaces.FactoryEventTypeInferenceRequest,
+		interfaces.FactoryEventTypeInferenceResponse:
+		return stableWorkstationColor(stringPointerValue(event.Context.DispatchID))
+	default:
+		return ""
+	}
+}
+
+func stableWorkstationColor(identity string) string {
+	palette := [...]string{"34", "35", "36", "94", "95", "96"}
+	var hash uint32 = 2166136261
+	for _, value := range []byte(identity) {
+		hash ^= uint32(value)
+		hash *= 16777619
+	}
+	return palette[hash%uint32(len(palette))]
+}
+
 func formatHumanWorkAccepted(event interfaces.FactoryEvent) string {
 	payload, ok := decodeFactoryEventPayload[work.WorkRequestEventPayload](event)
 	if !ok || len(payload.Works) == 0 {

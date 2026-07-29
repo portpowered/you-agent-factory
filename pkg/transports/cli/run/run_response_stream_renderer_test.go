@@ -402,7 +402,7 @@ func TestHumanFactoryEventRenderer_FailuresAreUnderstandable(t *testing.T) {
 	}
 }
 
-func TestInvocationFactoryEventRenderer_HumanModeDoesNotDependOnStdoutTTY(t *testing.T) {
+func TestInvocationFactoryEventRenderer_ColorsOnlyTTYHumanOutput(t *testing.T) {
 	t.Parallel()
 
 	outputs := make([]string, 0, 2)
@@ -425,7 +425,17 @@ func TestInvocationFactoryEventRenderer_HumanModeDoesNotDependOnStdoutTTY(t *tes
 		}
 		outputs = append(outputs, output.String())
 	}
-	if outputs[0] != outputs[1] {
-		t.Fatalf("TTY and redirected human output differ:\ntty=%q\nredirected=%q", outputs[0], outputs[1])
+	if !strings.Contains(outputs[0], "\x1b[") {
+		t.Fatalf("TTY human output omitted terminal colors: %q", outputs[0])
+	}
+	if strings.Contains(outputs[1], "\x1b[") {
+		t.Fatalf("redirected human output contained terminal colors: %q", outputs[1])
+	}
+	plainTTY := strings.NewReplacer(
+		"\x1b[32m", "", "\x1b[33m", "", "\x1b[34m", "", "\x1b[35m", "",
+		"\x1b[36m", "", "\x1b[94m", "", "\x1b[95m", "", "\x1b[96m", "", "\x1b[0m", "",
+	).Replace(outputs[0])
+	if plainTTY != outputs[1] {
+		t.Fatalf("TTY colors changed human content:\ntty=%q\nredirected=%q", outputs[0], outputs[1])
 	}
 }
