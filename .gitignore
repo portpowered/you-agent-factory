@@ -13,22 +13,9 @@ ui/dist/
 ui/dist_embed_generated.go
 ui/dist_stamp.go
 
-## do not include temporary working files
+## AGENTS: !!MUST NOT include temporary working files
 docs/temp/**
-# Provider-session golden fixtures must remain versioned for functional CI.
-!docs/temp/functional/
-!docs/temp/functional/provider-sessions/
-!docs/temp/functional/provider-sessions/**
-## Wave 0 functional-tests-expansion planning authority (durable)
-!docs/temp/functional-tests-expansion/
-!docs/temp/functional-tests-expansion/**
-## PSS planner decision and checklist authority (durable)
-!docs/temp/projects/
-!docs/temp/projects/packaged-service-structure/
-!docs/temp/projects/packaged-service-structure/**
-## Planner meta hold text (IMP-RUN-04 admission guidance tracked with DEC packet)
-!docs/temp/meta.md
-## Do not include temporary files in general for worktree progress
+## MUST NOT include temporary files in general for worktree progress
 prd.json
 prd.md
 progress.md
