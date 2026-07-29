@@ -164,7 +164,8 @@ func (service *Service) resolveLocked(id providers.ID) (providers.ID, bool) {
 }
 
 func newDaemon(command Command, newCommand platformprocess.CommandFactory, locator platformprocess.ExecutableLocator) *daemon {
-	daemon := &daemon{command: Command{Name: command.Name, Args: append([]string(nil), command.Args...)}, newCommand: newCommand, locator: locator, gate: make(chan struct{}, 1)}
+	lifecycle, cancelLifecycle := context.WithCancel(context.Background())
+	daemon := &daemon{command: Command{Name: command.Name, Args: append([]string(nil), command.Args...)}, newCommand: newCommand, locator: locator, gate: make(chan struct{}, 1), lifecycle: lifecycle, cancelLifecycle: cancelLifecycle}
 	daemon.gate <- struct{}{}
 	return daemon
 }
@@ -174,10 +175,12 @@ func (daemon *daemon) matches(command Command) bool {
 }
 
 type daemon struct {
-	gate       chan struct{}
-	command    Command
-	newCommand platformprocess.CommandFactory
-	locator    platformprocess.ExecutableLocator
+	gate            chan struct{}
+	lifecycle       context.Context
+	cancelLifecycle context.CancelFunc
+	command         Command
+	newCommand      platformprocess.CommandFactory
+	locator         platformprocess.ExecutableLocator
 
 	cmd         *exec.Cmd
 	stdin       io.WriteCloser
@@ -190,6 +193,13 @@ type daemon struct {
 }
 
 func (daemon *daemon) execute(ctx context.Context, id providers.ID, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
+	executionCtx, cancelExecution := context.WithCancel(ctx)
+	stopLifecycleWatch := context.AfterFunc(daemon.lifecycle, cancelExecution)
+	defer func() {
+		stopLifecycleWatch()
+		cancelExecution()
+	}()
+	ctx = executionCtx
 	if err := ctx.Err(); err != nil {
 		return providers.ExecuteResult{}, nativeFailure(err)
 	}
@@ -215,6 +225,7 @@ func (daemon *daemon) execute(ctx context.Context, id providers.ID, request prov
 		return providers.ExecuteResult{}, err
 	}
 	daemon.client.reset(request.SkipPermissions)
+	client := daemon.client
 	connection := daemon.connection
 	initialized := daemon.initialized
 
@@ -240,9 +251,9 @@ func (daemon *daemon) execute(ctx context.Context, id providers.ID, request prov
 			cancel()
 		}
 		daemon.invalidateDisconnected(context.Background())
-		return providers.ExecuteResult{}, withPartial(rpcFailure(ctx, "session/prompt", id, err, daemon.stderr.String(), request), daemon.client)
+		return providers.ExecuteResult{}, withPartial(rpcFailure(ctx, "session/prompt", id, err, daemon.stderr.String(), request), client)
 	}
-	return providers.ExecuteResult{Content: daemon.client.content(), SessionRef: &providers.SessionRef{Provider: id, Kind: providers.SessionIDKind, ID: string(session.SessionId)}, Diagnostics: &providers.ExecuteDiagnostics{Progress: completedPromptProgress(daemon.client.progressFacts()), Metadata: map[string]string{"execution_kind": "acp", "protocol_version": fmt.Sprint(initialized.ProtocolVersion), "model_config": modelConfig}}}, nil
+	return providers.ExecuteResult{Content: client.content(), SessionRef: &providers.SessionRef{Provider: id, Kind: providers.SessionIDKind, ID: string(session.SessionId)}, Diagnostics: &providers.ExecuteDiagnostics{Progress: completedPromptProgress(client.progressFacts()), Metadata: map[string]string{"execution_kind": "acp", "protocol_version": fmt.Sprint(initialized.ProtocolVersion), "model_config": modelConfig}}}, nil
 }
 
 func completedPromptProgress(updates []providers.ExecuteProgress) []providers.ExecuteProgress {
@@ -369,6 +380,7 @@ func (daemon *daemon) invalidateDisconnected(ctx context.Context) {
 }
 
 func (daemon *daemon) close(ctx context.Context) error {
+	daemon.cancelLifecycle()
 	select {
 	case <-ctx.Done():
 		return ctx.Err()

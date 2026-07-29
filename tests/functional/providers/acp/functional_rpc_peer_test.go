@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 )
 
 // functionalRPCPeer is deliberately an ACP implementation at the process
@@ -84,7 +85,7 @@ func (p *functionalRPCPeer) serve() error {
 			}
 			p.sessions++
 			sessionID := p.sessionID
-			if p.mode == "persistent" {
+			if p.mode == "persistent" || p.mode == "serialize" {
 				sessionID = fmt.Sprintf("acp-session-functional-1-%d", p.sessions)
 			}
 			p.sessionID = sessionID
@@ -107,7 +108,7 @@ func (p *functionalRPCPeer) serve() error {
 			if err := p.prompt(request); err != nil {
 				return err
 			}
-			if p.mode != "persistent" {
+			if p.mode != "persistent" && p.mode != "serialize" {
 				return nil
 			}
 		case "$/cancel_request", "session/cancel":
@@ -123,6 +124,31 @@ func (p *functionalRPCPeer) serve() error {
 }
 
 func (p *functionalRPCPeer) prompt(request rpcEnvelope) error {
+	if p.mode == "crash-once" {
+		marker := os.Getenv("YOU_TEST_ACP_CRASH_MARKER")
+		if _, err := os.Stat(marker); os.IsNotExist(err) {
+			if err := os.WriteFile(marker, []byte("crashed"), 0o600); err != nil {
+				return err
+			}
+			return fmt.Errorf("intentional ACP peer crash")
+		}
+	}
+	if p.mode == "serialize" && p.sessions == 1 {
+		if signal := os.Getenv("YOU_TEST_ACP_PROMPT_SIGNAL"); signal != "" {
+			_ = os.WriteFile(signal, []byte("first-prompt-started"), 0o600)
+		}
+		release := os.Getenv("YOU_TEST_ACP_RELEASE_SIGNAL")
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			if _, err := os.Stat(release); err == nil {
+				break
+			}
+			if time.Now().After(deadline) {
+				return fmt.Errorf("timed out waiting for first prompt release")
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
 	if p.mode == "block" {
 		if signal := os.Getenv("YOU_TEST_ACP_PROMPT_SIGNAL"); signal != "" {
 			_ = os.WriteFile(signal, []byte("prompt-started"), 0o600)
