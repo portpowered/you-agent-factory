@@ -78,7 +78,7 @@ func TestYouInitMaterializesPackagedACPDefaultsAndPreservesCustomEntries(t *test
 		ProvidersExecutableLocator:  availableExecutableLocator{},
 	})
 
-	executeACPCommand(t, process, home, working, "init", "--provider", "codex", "--model", "")
+	executeACPCommand(t, process, home, working, "init", "--provider", "codex")
 	configPath := filepath.Join(home, ".you-agent-factory", "config.json")
 	data, err := os.ReadFile(configPath)
 	if err != nil {
