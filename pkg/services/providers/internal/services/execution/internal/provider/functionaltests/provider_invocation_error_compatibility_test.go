@@ -29,6 +29,7 @@ func TestInvocationErrorCompatibility_SupportedCorpusEntriesPreserveStableWorkFa
 			entry.Provider == modelprovider.ProviderClaude ||
 			entry.Provider == modelprovider.ProviderGemini ||
 			entry.Provider == modelprovider.ProviderKiro ||
+			entry.Provider == modelprovider.ProviderOpenCode ||
 			entry.Provider == modelprovider.ProviderPi {
 			continue
 		}

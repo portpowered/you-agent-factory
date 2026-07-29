@@ -79,24 +79,6 @@ func (service Service) Delete(ctx context.Context, home, name string) error {
 	return service.configure(ctx, document)
 }
 
-func (service Service) List(ctx context.Context, home string) (providers.ListProvidersResult, error) {
-	if service.Providers == nil {
-		return providers.ListProvidersResult{}, fmt.Errorf("Providers service is required")
-	}
-	document, err := service.Settings.Load(operatorsettings.DefaultConfigPath(home))
-	if err != nil {
-		return providers.ListProvidersResult{}, err
-	}
-	if err := service.configure(ctx, document); err != nil {
-		return providers.ListProvidersResult{}, err
-	}
-	result, err := service.Providers.ListProviders(ctx, providers.ListProvidersRequest{})
-	if err != nil {
-		return providers.ListProvidersResult{}, err
-	}
-	return filterACPProviders(result, document.FileConfig().Workers.ACP.Integrations), nil
-}
-
 func (service Service) configure(ctx context.Context, document operatorsettings.ConfigDocument) error {
 	return service.configureIntegrations(ctx, document.FileConfig().Workers.ACP.Integrations)
 }

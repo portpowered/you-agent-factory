@@ -12,11 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/claude"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/codex"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/cursor"
-	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/gemini"
 	inference "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/inferencecontract"
-	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/kiro"
-	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/opencode"
-	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/pi"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -131,35 +127,7 @@ func migratedBuiltInIntegration(
 		return cursor.NewIntegration(cursor.IntegrationDependencies{
 			ProvidersService: dependencies.ProvidersService,
 		})
-	case "opencode":
-		if dependencies.ProvidersService == nil {
-			return opencode.NewIntegration()
-		}
-		return opencode.NewIntegration(opencode.IntegrationDependencies{
-			ProvidersService: dependencies.ProvidersService,
-		})
-	case "gemini":
-		if dependencies.ProvidersService == nil {
-			return gemini.NewIntegration()
-		}
-		return gemini.NewIntegration(gemini.IntegrationDependencies{
-			ProvidersService: dependencies.ProvidersService,
-		})
-	case "kiro":
-		if dependencies.ProvidersService == nil {
-			return kiro.NewIntegration()
-		}
-		return kiro.NewIntegration(kiro.IntegrationDependencies{
-			ProvidersService: dependencies.ProvidersService,
-		})
-	case "pi":
-		if dependencies.ProvidersService == nil {
-			return pi.NewIntegration()
-		}
-		return pi.NewIntegration(pi.IntegrationDependencies{
-			ProvidersService: dependencies.ProvidersService,
-		})
-	case "agy":
+	case "antigravity":
 		if dependencies.ProvidersService == nil {
 			return agy.NewIntegration()
 		}

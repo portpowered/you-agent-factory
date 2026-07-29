@@ -8849,9 +8849,6 @@ components:
         skipPermissions:
           type: boolean
           description: When true, bypasses permission checks for providers that support permission gating.
-        openCodeAgent:
-          type: string
-          description: Optional OpenCode agent profile name for model workers that dispatch through the OpenCode runner. When set, OpenCode dispatches invoke `opencode run --agent <name>`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/).
         auth:
           allOf:
             - $ref: '#/components/schemas/HostedWorkerAuth'
@@ -8902,16 +8899,12 @@ components:
         - CLAUDE
         - CODEX
         - CURSOR
-        - GEMINI
-        - KIRO
-        - OPENCODE
-        - PI
-        - AGY
+        - ANTIGRAVITY
     ProviderIdentity:
       type: string
       minLength: 1
       maxLength: 128
-      pattern: ^(?:[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*|AGY|ANTHROPIC|CLAUDE|CODEX|CURSOR|CURSOR_AGENT|GEMINI|KIRO|OPENAI|OPENCODE|PI)$
+      pattern: ^(?:[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*|ANTIGRAVITY|ANTHROPIC|CLAUDE|CODEX|CURSOR|OPENAI)$
       description: Open provider identity used by authored modelProvider fields. Extension identities use lowercase letters and digits separated by dots or hyphens. Built-in identities and documented legacy aliases remain accepted compatibility spellings. For example, `customer.provider` is a valid extension identity.
     ProviderCatalog:
       type: object
@@ -9262,11 +9255,9 @@ components:
       description: Stable built-in runner identifiers supported by factory and workstation runner selection.
       enum:
         - codex
-        - gemini
-        - kiro
+        - claude
         - cursor-cli
-        - opencode
-        - pi
+        - antigravity
     RunnerSelectionSource:
       type: string
       description: Configuration layer that supplied the resolved built-in runner selection for a dispatch.
@@ -9323,9 +9314,6 @@ components:
           allOf:
             - $ref: '#/components/schemas/RunnerID'
           description: Optional workstation-specific runner override. When omitted, dispatch falls back to the factory runner, then worker modelProvider compatibility when no explicit runner is configured, then the default codex runner.
-        openCodeAgent:
-          type: string
-          description: Optional OpenCode agent profile override for this workstation. When set, overrides the worker default for OpenCode dispatches and invokes `opencode run --agent <name>`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/).
         promptFile:
           type: string
           description: Path to a prompt template file loaded for model-oriented workstation execution.
@@ -10158,7 +10146,7 @@ components:
     GlobalConfigWorkerPresetModelProvider:
       type: string
       description: Canonical provider identity or built-in compatibility alias; surrounding whitespace is trimmed, and symbolic DEFAULT is not accepted for presets.
-      pattern: "^[\t-\r \N\_  - \L\P  　]*(?:[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*|AGY|ANTHROPIC|CLAUDE|CODEX|CURSOR|CURSOR_AGENT|GEMINI|KIRO|OPENAI|OPENCODE|PI)[\t-\r \N\_  - \L\P  　]*$"
+      pattern: "^[\t-\r \N\_  - \L\P  　]*(?:[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*|ANTIGRAVITY|ANTHROPIC|CLAUDE|CODEX|CURSOR|OPENAI)[\t-\r \N\_  - \L\P  　]*$"
     GlobalConfigWorkerPresetReasoningEffort:
       type: string
       description: Optional reasoning effort; surrounding whitespace and letter case are normalized, and an empty value is treated as unspecified.

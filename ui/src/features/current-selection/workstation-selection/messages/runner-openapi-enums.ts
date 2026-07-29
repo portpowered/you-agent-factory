@@ -8,11 +8,9 @@ export type ApiRunnerSelectionSource =
 /** OpenAPI RunnerID enum order from the generated contract. */
 export const OPENAPI_RUNNER_IDS = [
   "codex",
-  "gemini",
-  "kiro",
+  "claude",
   "cursor-cli",
-  "opencode",
-  "pi",
+  "antigravity",
 ] as const satisfies readonly ApiRunnerID[];
 
 type RunnerSelectionSourceLabelCatalog =

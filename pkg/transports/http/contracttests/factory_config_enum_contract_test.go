@@ -209,8 +209,8 @@ func assertCanonicalFactoryTopLevelEnums(t *testing.T, factory generated.Factory
 	if factory.Guards == nil || len(*factory.Guards) != 1 {
 		t.Fatalf("canonical factory guards = %#v, want one enum-backed factory guard", factory.Guards)
 	}
-	if factory.Runner == nil || *factory.Runner != generated.RunnerIDGemini {
-		t.Fatalf("canonical factory runner = %#v, want gemini", factory.Runner)
+	if factory.Runner == nil || *factory.Runner != generated.RunnerIDAntigravity {
+		t.Fatalf("canonical factory runner = %#v, want antigravity", factory.Runner)
 	}
 	if (*factory.Guards)[0].Type != generated.FactoryGuardTypeInferenceThrottle {
 		t.Fatalf("canonical factory guard type = %q, want INFERENCE_THROTTLE_GUARD", (*factory.Guards)[0].Type)

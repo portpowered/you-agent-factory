@@ -312,15 +312,15 @@ describe("resolveWorkstationSummaryRunnerValue", () => {
           draft: {
             behavior: "STANDARD",
             prompt: "Review",
-            runnerName: "gemini",
+            runnerName: "antigravity",
             workerName: "reviewer",
           },
           initialValues: {
             ...readyEditableConfigurationState.initialValues,
             factoryRunnerName: "codex",
-            runnerName: "gemini",
+            runnerName: "antigravity",
             resolvedRunnerSelection: {
-              runnerId: "gemini",
+              runnerId: "antigravity",
               source: "workstation",
             },
             runnerSelectionSource: "workstation",
@@ -330,7 +330,7 @@ describe("resolveWorkstationSummaryRunnerValue", () => {
         getWorkstationDetailMessages("en"),
         modelWorkstationNode,
       ),
-    ).toBe("Gemini (Workstation)");
+    ).toBe("Antigravity (Workstation)");
   });
 
   it("uses legacy_provider when inheriting from worker modelProvider", () => {
@@ -371,7 +371,7 @@ describe("resolveWorkstationSummaryRunnerValue", () => {
           draft: {
             behavior: "STANDARD",
             prompt: "Review",
-            runnerName: "claude",
+            runnerName: "pi",
             workerName: "reviewer",
           },
           initialValues: readyEditableConfigurationState.initialValues,

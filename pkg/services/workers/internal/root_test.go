@@ -4,10 +4,10 @@ import (
 	"context"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workersinternal "github.com/portpowered/infinite-you/pkg/services/workers/internal"
 	runtimeassembly "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly"
 	workstationswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/wire"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 type recordingRuntimeAssembly struct {
@@ -58,7 +58,7 @@ func TestNewRootBuildRuntimeDelegatesWithoutLifecycle(t *testing.T) {
 
 	want := workers.RuntimeBuildResult{
 		RunnerSelection: workers.ResolvedRunnerSelection{
-			RunnerID: workers.RunnerIDAgy,
+			RunnerID: workers.RunnerIDAntigravity,
 			Source:   workers.RunnerSelectionSourceFactory,
 		},
 	}
@@ -69,7 +69,7 @@ func TestNewRootBuildRuntimeDelegatesWithoutLifecycle(t *testing.T) {
 	}
 
 	got, err := root.BuildRuntime(t.Context(), workers.RuntimeBuildRequest{
-		RunnerID: workers.RunnerIDAgy,
+		RunnerID: workers.RunnerIDAntigravity,
 		Roles: []workers.RuntimeBuildRoleRequest{{
 			Name: "writer",
 			Kind: workers.RuntimeBuildRoleKindWorker,

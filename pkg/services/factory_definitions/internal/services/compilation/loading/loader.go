@@ -824,7 +824,6 @@ func hasInlineRuntimeDefinitions(factoryConfig *factorydefinitions.FactoryConfig
 			strings.TrimSpace(worker.Command) != "" ||
 			strings.TrimSpace(worker.Timeout) != "" ||
 			strings.TrimSpace(worker.StopToken) != "" ||
-			strings.TrimSpace(worker.OpenCodeAgent) != "" ||
 			strings.TrimSpace(worker.Body) != "" ||
 			len(worker.Args) > 0 ||
 			len(worker.Resources) > 0 ||
@@ -848,7 +847,6 @@ func workstationHasInlineRuntimeDefinitionFields(
 ) bool {
 	if strings.TrimSpace(workstation.Type) == factorydefinitions.WorkstationTypeLogical &&
 		workstation.Runner == "" &&
-		workstation.OpenCodeAgent == "" &&
 		workstation.PromptFile == "" &&
 		workstation.OutputSchema == "" &&
 		workstation.Timeout == "" &&
@@ -869,7 +867,6 @@ func workstationHasRuntimeFields(
 ) bool {
 	return strings.TrimSpace(workstation.Type) != "" ||
 		workstation.Runner != "" ||
-		workstation.OpenCodeAgent != "" ||
 		workstation.PromptFile != "" ||
 		workstation.OutputSchema != "" ||
 		workstation.Timeout != "" ||

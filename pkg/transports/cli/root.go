@@ -56,8 +56,8 @@ type cliGlobalOptions struct {
 }
 
 type cliOperatorDefaultsOptions struct {
-	defaultWorkerModelProvider string
-	defaultWorkerModel         string
+	providerOverride string
+	modelOverride    string
 }
 
 type SubmitWorkOperation func(submitcli.SubmitConfig) error
@@ -412,19 +412,14 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 		return err
 	}
 
-	resolvedOperatorDefaults, err := resolveOperatorDefaults(cmd, operatorDefaults, rootOptions, homeDir)
+	runOperatorDefaults := *operatorDefaults
+	runOperatorDefaults.providerOverride = cfg.ProviderOverride
+	runOperatorDefaults.modelOverride = cfg.ModelOverride
+	resolvedOperatorDefaults, err := resolveOperatorDefaults(cmd, &runOperatorDefaults, rootOptions, homeDir)
 	if err != nil {
 		return err
 	}
 	cfg.OperatorDefaults = resolvedOperatorDefaults
-	if provider := strings.TrimSpace(cfg.ProviderOverride); provider != "" {
-		cfg.OperatorDefaults.WorkerModelProvider = provider
-		cfg.OperatorDefaults.WorkerModelProviderSource = operatorconfig.SourceFlag
-	}
-	if model := strings.TrimSpace(cfg.ModelOverride); model != "" {
-		cfg.OperatorDefaults.WorkerModel = model
-		cfg.OperatorDefaults.WorkerModelSource = operatorconfig.SourceFlag
-	}
 	cfg.Stdin = cmd.InOrStdin()
 	cfg.StdinIsTTY = func() bool { return startupcli.StdinIsTTY(cmd.Context()) }
 	cfg.OutputIsTTY = startupcli.StdoutIsTTY(cmd.Context())
@@ -503,7 +498,7 @@ func runInvocationModes(cmd *cobra.Command, cfg runcli.RunConfig) (cleanInvocati
 	return cleanInvocation, textInvocation
 }
 
-func resolveOperatorDefaults(cmd *cobra.Command, operatorDefaults *cliOperatorDefaultsOptions, rootOptions CommandFactory, homeDir string) (operatorconfig.ResolvedDefaults, error) {
+func resolveOperatorDefaults(_ *cobra.Command, options *cliOperatorDefaultsOptions, rootOptions CommandFactory, homeDir string) (operatorconfig.ResolvedDefaults, error) {
 	if rootOptions.resolveOperatorDefaults == nil {
 		return operatorconfig.ResolvedDefaults{}, fmt.Errorf("Operator Settings defaults resolver is required")
 	}
@@ -523,20 +518,12 @@ func resolveOperatorDefaults(cmd *cobra.Command, operatorDefaults *cliOperatorDe
 	if err != nil {
 		return operatorconfig.ResolvedDefaults{}, err
 	}
-	return rootOptions.resolveOperatorDefaults(homeDir, environment, operatorconfig.FlagOverrides{
-		WorkerModelProvider: resolvedPersistentStringIfCLI(
-			cmd,
-			"you.flag.default-worker-model-provider",
-			"default-worker-model-provider",
-			operatorDefaults.defaultWorkerModelProvider,
-		),
-		WorkerModel: resolvedPersistentStringIfCLI(
-			cmd,
-			"you.flag.default-worker-model",
-			"default-worker-model",
-			operatorDefaults.defaultWorkerModel,
-		),
-	})
+	flags := operatorconfig.FlagOverrides{}
+	if options != nil {
+		flags.WorkerModelProvider = strings.TrimSpace(options.providerOverride)
+		flags.WorkerModel = strings.TrimSpace(options.modelOverride)
+	}
+	return rootOptions.resolveOperatorDefaults(homeDir, environment, flags)
 }
 
 func resolveProcessHomeDir(options CommandFactory) (string, error) {

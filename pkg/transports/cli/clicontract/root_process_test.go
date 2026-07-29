@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/root"
@@ -75,40 +76,18 @@ func (operatorConfigFileSystem) Rename(string, string) error {
 }
 
 func TestProductionRootResolvesOperatorConfigWithManifestPrecedence(t *testing.T) {
-	tests := []operatorConfigResolutionCase{
-		{
-			name:       "operator config",
-			args:       []string{"you", "docs", "agents"},
-			wantValue:  "file-model",
-			wantSource: resolvedinput.SourceOperatorConfig,
-		},
-		{
-			name: "environment overrides operator config",
-			args: []string{"you", "docs", "agents"},
-			environment: []string{
-				operatorsettings.EnvDefaultWorkerModel + "=environment-model",
-			},
-			wantValue:  "environment-model",
-			wantSource: resolvedinput.SourceEnvironment,
-		},
-		{
-			name: "CLI overrides environment and operator config",
-			args: []string{
-				"you", "docs", "agents",
-				"--default-worker-model", "cli-model",
-			},
-			environment: []string{
-				operatorsettings.EnvDefaultWorkerModel + "=environment-model",
-			},
-			wantValue:  "cli-model",
-			wantSource: resolvedinput.SourceCLIFlag,
-		},
+	home := t.TempDir()
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
+	if err != nil {
+		t.Fatalf("BuildProcess: %v", err)
 	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			assertOperatorConfigResolution(t, test)
-		})
+	err = process.Execute(root.Input{
+		Args:             []string{"you", "docs", "agents", "--default-worker-model", "cli-model"},
+		Env:              append(os.Environ(), "HOME="+home, "USERPROFILE="+home),
+		WorkingDirectory: home, Stdout: io.Discard, Stderr: io.Discard,
+	})
+	if err == nil || !strings.Contains(err.Error(), "unknown flag") {
+		t.Fatalf("removed default model flag error = %v, want unknown flag", err)
 	}
 }
 

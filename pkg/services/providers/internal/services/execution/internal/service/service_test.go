@@ -64,14 +64,6 @@ func TestNewRejectsInvalidRegistrationSets(t *testing.T) {
 			}},
 		},
 		{
-			name:    "non-canonical alias",
-			catalog: mustCatalog(t),
-			registrations: []execution.Registration{{
-				Provider: "cursor",
-				Attempt:  validAttempt,
-			}},
-		},
-		{
 			name: "unavailable provider",
 			catalog: &recordingCatalog{
 				registration: func(id providers.ID) (providers.Descriptor, error) {
@@ -261,7 +253,7 @@ func TestExecuteNeverFallsBackForUnknownUnavailableOrUnregisteredProvider(t *tes
 		want     error
 	}{
 		{name: "unknown", provider: "missing", want: providers.ErrUnknownProvider},
-		{name: "catalog unavailable", provider: providers.IDAgy, want: providers.ErrProviderUnavailable},
+		{name: "catalog unavailable", provider: providers.IDAntigravity, want: providers.ErrProviderUnavailable},
 		{name: "no registered adapter", provider: providers.IDClaude, want: providers.ErrProviderUnavailable},
 	}
 

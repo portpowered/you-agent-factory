@@ -114,9 +114,6 @@ func applyWorkerRuntimeDefinition(
 	if runtimeDefinition.SkipPermissions {
 		worker.SkipPermissions = true
 	}
-	if runtimeDefinition.OpenCodeAgent != "" {
-		worker.OpenCodeAgent = runtimeDefinition.OpenCodeAgent
-	}
 	if runtimeDefinition.Auth != nil {
 		worker.Auth = runtimeDefinition.Auth
 	}
@@ -172,9 +169,6 @@ func applyWorkstationRuntimeDefinition(
 	}
 	if runtimeDefinition.Runner != "" {
 		workstation.Runner = runtimeDefinition.Runner
-	}
-	if runtimeDefinition.OpenCodeAgent != "" {
-		workstation.OpenCodeAgent = runtimeDefinition.OpenCodeAgent
 	}
 	applyWorkstationRuntimeTopology(workstation, runtimeDefinition)
 	applyWorkstationRuntimeTemplate(workstation, runtimeDefinition, baseStopWords)

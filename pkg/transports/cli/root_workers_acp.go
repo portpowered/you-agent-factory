@@ -27,14 +27,16 @@ func productionWorkersCommand(options CommandFactory) *cobra.Command {
 	listName, listHelp := record("you.workers.list")
 	acpName, acpHelp := record("you.workers.acp")
 	workers := &cobra.Command{Use: workersName, Short: workersHelp}
-	acp := &cobra.Command{Use: acpName, Short: acpHelp}
+	acp := &cobra.Command{
+		Use: acpName, Short: acpHelp, Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() },
+	}
 	listWorkers := newWorkersListCommand(options)
 	listWorkers.Use, listWorkers.Short = listName, listHelp
-	list, add, deleteCommand := newACPListCommand(options), newACPAddCommand(options), newACPDeleteCommand(options)
-	list.Use, list.Short = record("you.workers.acp.list")
+	add, deleteCommand := newACPAddCommand(options), newACPDeleteCommand(options)
 	add.Use, add.Short = record("you.workers.acp.add")
 	deleteCommand.Use, deleteCommand.Short = record("you.workers.acp.delete")
-	acp.AddCommand(list, add, deleteCommand)
+	acp.AddCommand(add, deleteCommand)
 	workers.AddCommand(listWorkers, acp)
 	return workers
 }
@@ -65,31 +67,6 @@ func newWorkersListCommand(options CommandFactory) *cobra.Command {
 					source = "custom"
 				}
 				if _, err := fmt.Fprintf(writer, "%s\t%s\t%s\t%s\n", provider.ID, kind, provider.Readiness, source); err != nil {
-					return err
-				}
-			}
-			return writer.Flush()
-		},
-	}
-}
-
-func newACPListCommand(options CommandFactory) *cobra.Command {
-	return &cobra.Command{
-		Use:   "list",
-		Short: "List ACP provider integrations and availability",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			home, err := resolveProcessHomeDir(options)
-			if err != nil {
-				return err
-			}
-			response, err := options.acp.List(cmd.Context(), home)
-			if err != nil {
-				return err
-			}
-			writer := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 4, 2, ' ', 0)
-			for _, provider := range response.Providers {
-				if _, err := fmt.Fprintf(writer, "%s\tACP\t%s\n", provider.ID, provider.Availability); err != nil {
 					return err
 				}
 			}

@@ -3011,6 +3011,9 @@
           "description": "Worker-declared model locality, such as LOCAL or CLOUD.",
           "type": "string"
         },
+        "providerSession": {
+          "$ref": "#/$defs/ProviderSessionMetadata"
+        },
         "resourceAcquired": {
           "description": "Whether the invocation acquired the required local model resources.",
           "type": "boolean"
@@ -3207,7 +3210,7 @@
       "description": "Open provider identity used by authored modelProvider fields. Extension identities use lowercase letters and digits separated by dots or hyphens. Built-in identities and documented legacy aliases remain accepted compatibility spellings. For example, `customer.provider` is a valid extension identity.",
       "maxLength": 128,
       "minLength": 1,
-      "pattern": "^(?:[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*|AGY|ANTHROPIC|CLAUDE|CODEX|CURSOR|CURSOR_AGENT|GEMINI|KIRO|OPENAI|OPENCODE|PI)$",
+      "pattern": "^(?:[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*|ANTIGRAVITY|ANTHROPIC|CLAUDE|CODEX|CURSOR|OPENAI)$",
       "type": "string"
     },
     "ProviderSessionMetadata": {
@@ -3488,11 +3491,9 @@
       "description": "Stable built-in runner identifiers supported by factory and workstation runner selection.",
       "enum": [
         "codex",
-        "gemini",
-        "kiro",
+        "claude",
         "cursor-cli",
-        "opencode",
-        "pi"
+        "antigravity"
       ],
       "type": "string"
     },
@@ -4500,7 +4501,7 @@
               "$ref": "#/$defs/WorkerProvider"
             }
           ],
-          "description": "Canonical Providers catalog identity used to select worker execution, an exact invocation-parameter placeholder, or the retained `SCRIPT_WRAP` compatibility value. ACP-backed identities use names such as `cursor-acp`; the Providers catalog determines their private execution kind."
+          "description": "Execution mechanism. Use `ACP` for ACP-backed workers and put the configured integration identity (for example `cursor-acp`) in modelProvider. `SCRIPT_WRAP` remains the command-wrapper compatibility value; legacy named executor identities remain accepted during migration."
         },
         "id": {
           "description": "Optional durable public identifier for this worker. When present, graph and layout references should use this id instead of the mutable name.",
@@ -4527,7 +4528,7 @@
           "description": "Provider locality for this model capability declaration. Use `LOCAL` for embedded or host-managed inference and `CLOUD` for remote provider execution."
         },
         "modelProvider": {
-          "description": "Canonical model-provider identity used for model routing and provider diagnostics, or an exact invocation-parameter placeholder such as `${modelProvider}`. Extension identities use lowercase standardized syntax; built-in values such as `CLAUDE` and `CODEX` remain compatibility conveniences.",
+          "description": "Canonical provider identity used for model routing and provider diagnostics, or an exact invocation-parameter placeholder such as `${modelProvider}`. For `executorProvider: ACP`, this names the configured ACP integration, such as `cursor-acp`. Extension identities use lowercase standardized syntax; built-in values such as `CLAUDE` and `CODEX` remain compatibility conveniences.",
           "oneOf": [
             {
               "$ref": "#/$defs/ProviderIdentity"
@@ -4540,10 +4541,6 @@
         },
         "name": {
           "description": "Worker name referenced by Workstation.worker.",
-          "type": "string"
-        },
-        "openCodeAgent": {
-          "description": "Optional OpenCode agent profile name for model workers that dispatch through the OpenCode runner. When set, OpenCode dispatches invoke `opencode run --agent \u003cname\u003e`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/).",
           "type": "string"
         },
         "operations": {
@@ -4603,10 +4600,10 @@
       "type": "string"
     },
     "WorkerProvider": {
-      "description": "Built-in worker-provider compatibility values. Authored executorProvider fields also accept extensible lowercase Providers catalog identities.",
+      "description": "Worker execution mechanism. Canonical values are ACP and SCRIPT_WRAP; extensible lowercase identities remain accepted for compatibility with existing factories.",
       "maxLength": 128,
       "minLength": 1,
-      "pattern": "^(?:SCRIPT_WRAP|\\$\\{[A-Za-z0-9_.-]+\\}|[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*)$",
+      "pattern": "^(?:ACP|SCRIPT_WRAP|\\$\\{[A-Za-z0-9_.-]+\\}|[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*)$",
       "type": "string"
     },
     "WorkerType": {
@@ -4722,10 +4719,6 @@
             "$ref": "#/$defs/WorkstationIO"
           },
           "type": "array"
-        },
-        "openCodeAgent": {
-          "description": "Optional OpenCode agent profile override for this workstation. When set, overrides the worker default for OpenCode dispatches and invokes `opencode run --agent \u003cname\u003e`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/).",
-          "type": "string"
         },
         "operation": {
           "allOf": [

@@ -54,10 +54,6 @@ var forbiddenProviderImplementationImports = []string{
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/claude",
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/codex",
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/cursor",
-	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/gemini",
-	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/kiro",
-	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/opencode",
-	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/pi",
 }
 
 // Provider scenarios may import service-root contracts and these exact public
@@ -69,10 +65,10 @@ var forbiddenProviderImplementationImports = []string{
 // Providers Execution leaf is the durable provider-effect owner; Workers
 // inferencecontract remains migration debt until later Providers packets land.
 var providerPublicEffectContractImports = map[string]struct{}{
-	"github.com/portpowered/infinite-you/pkg/services/providers/execution/inferencecontract": {},
-	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty":                        {},
-	"github.com/portpowered/infinite-you/pkg/services/providers/inference":    {},
-	"github.com/portpowered/infinite-you/pkg/services/automations":         {},
+	"github.com/portpowered/infinite-you/pkg/services/providers/execution/inferencecontract":                              {},
+	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty": {},
+	"github.com/portpowered/infinite-you/pkg/services/providers/inference":                                                {},
+	"github.com/portpowered/infinite-you/pkg/services/automations":                                                        {},
 }
 
 var forbiddenCompositionCalls = map[string]struct{}{
@@ -103,21 +99,21 @@ var forbiddenFunctionalConfigFields = map[string]struct{}{
 // tests may remain runnable while they migrate, but new tests belong in a
 // dedicated provider or provider-domain package.
 var grandfatheredAggregateProviderTestFiles = map[string]struct{}{
-	"cli_script_executor_test.go":                        {},
-	"cli_script_executor_timeout_long_test.go":           {},
-	"cli_template_resolution_long_test.go":               {},
-	"cli_timeout_cleanup_process_unix_test.go":           {},
-	"cli_timeout_cleanup_process_windows_test.go":        {},
-	"cli_timeout_cleanup_smoke_test.go":                  {},
-	"cli_timeout_companion_smoke_long_test.go":           {},
-	"helpers_long_test.go":                               {},
-	"helpers_test.go":                                    {},
-	"mock_workers_agent_test.go":            {},
-	"mock_workers_end_to_end_smoke_test.go": {},
-	"mock_workers_script_test.go":                        {},
-	"mock_workers_service_runner_test.go":                {},
-	"packaged_script_runtime_test.go":                    {},
-	"runtime_logging_smoke_test.go":                      {},
+	"cli_script_executor_test.go":                 {},
+	"cli_script_executor_timeout_long_test.go":    {},
+	"cli_template_resolution_long_test.go":        {},
+	"cli_timeout_cleanup_process_unix_test.go":    {},
+	"cli_timeout_cleanup_process_windows_test.go": {},
+	"cli_timeout_cleanup_smoke_test.go":           {},
+	"cli_timeout_companion_smoke_long_test.go":    {},
+	"helpers_long_test.go":                        {},
+	"helpers_test.go":                             {},
+	"mock_workers_agent_test.go":                  {},
+	"mock_workers_end_to_end_smoke_test.go":       {},
+	"mock_workers_script_test.go":                 {},
+	"mock_workers_service_runner_test.go":         {},
+	"packaged_script_runtime_test.go":             {},
+	"runtime_logging_smoke_test.go":               {},
 }
 
 type config struct {
@@ -404,5 +400,3 @@ func prohibitedInternalImportError(path, importPath string) error {
 		filepath.ToSlash(path),
 	)
 }
-
-

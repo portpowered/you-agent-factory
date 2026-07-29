@@ -668,7 +668,6 @@ func invocationWorkerInterpolationFieldTargets(workers []workerconfig.Config) []
 		fields = appendInterpolationField(fields, SubjectTypeWorker, subjectID, SubjectLocationDefinition, basePath+".command", worker.Command, false, "worker.command")
 		fields = appendInterpolationField(fields, SubjectTypeWorker, subjectID, SubjectLocationDefinition, basePath+".timeout", worker.Timeout, false, "worker.timeout")
 		fields = appendInterpolationField(fields, SubjectTypeWorker, subjectID, SubjectLocationDefinition, basePath+".stopToken", worker.StopToken, false, "worker.stopToken")
-		fields = appendInterpolationField(fields, SubjectTypeWorker, subjectID, SubjectLocationDefinition, basePath+".openCodeAgent", worker.OpenCodeAgent, false, "worker.openCodeAgent")
 		fields = appendInterpolationField(fields, SubjectTypeWorker, subjectID, SubjectLocationDefinition, basePath+".body", worker.Body, false, "worker body")
 		for argIndex, arg := range worker.Args {
 			fields = appendInterpolationField(fields, SubjectTypeWorker, subjectID, SubjectLocationDefinition, fmt.Sprintf("%s.args[%d]", basePath, argIndex), arg, false, "worker.args entry")
@@ -684,7 +683,6 @@ func invocationWorkstationInterpolationFieldTargets(workstations []factorydefini
 		basePath := fmt.Sprintf("%s.workstations[%d](%s)", validationRoot, workstationIndex, workstation.Name)
 		fields = appendInterpolationField(fields, SubjectTypeWorkstation, subjectID, SubjectLocationDefinition, basePath+".worker", workstation.WorkerTypeName, false, "workstation.worker")
 		fields = appendInterpolationField(fields, SubjectTypeWorkstation, subjectID, SubjectLocationDefinition, basePath+".runner", workstation.Runner, false, "workstation.runner")
-		fields = appendInterpolationField(fields, SubjectTypeWorkstation, subjectID, SubjectLocationDefinition, basePath+".openCodeAgent", workstation.OpenCodeAgent, false, "workstation.openCodeAgent")
 		fields = appendInterpolationField(fields, SubjectTypeWorkstation, subjectID, SubjectLocationDefinition, basePath+".promptFile", workstation.PromptFile, false, "workstation.promptFile")
 		fields = appendInterpolationField(fields, SubjectTypeWorkstation, subjectID, SubjectLocationDefinition, basePath+".outputSchema", workstation.OutputSchema, false, "workstation.outputSchema")
 		fields = appendInterpolationField(fields, SubjectTypeWorkstation, subjectID, SubjectLocationDefinition, basePath+".timeout", workstation.Timeout, false, "workstation.timeout")

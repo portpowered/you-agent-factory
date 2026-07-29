@@ -13,25 +13,17 @@ const BUILT_IN_RUNNER_METADATA: Record<ApiRunnerID, RunnerMetadata> = {
     displayName: "Codex",
     id: "codex",
   },
-  gemini: {
-    displayName: "Gemini",
-    id: "gemini",
-  },
-  kiro: {
-    displayName: "Kiro",
-    id: "kiro",
+  claude: {
+    displayName: "Claude",
+    id: "claude",
   },
   "cursor-cli": {
     displayName: "Cursor CLI",
     id: "cursor-cli",
   },
-  opencode: {
-    displayName: "OpenCode",
-    id: "opencode",
-  },
-  pi: {
-    displayName: "Pi",
-    id: "pi",
+  antigravity: {
+    displayName: "Antigravity",
+    id: "antigravity",
   },
 };
 

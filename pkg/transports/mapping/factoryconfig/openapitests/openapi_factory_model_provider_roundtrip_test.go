@@ -17,11 +17,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_ModelProviderRoundTripsAllSupportedPubl
 		{factoryapi.WorkerModelProviderClaude, modelprovider.ProviderClaude},
 		{factoryapi.WorkerModelProviderCodex, modelprovider.ProviderCodex},
 		{factoryapi.WorkerModelProviderCursor, modelprovider.ProviderCursor},
-		{factoryapi.WorkerModelProviderGemini, modelprovider.ProviderGemini},
-		{factoryapi.WorkerModelProviderKiro, modelprovider.ProviderKiro},
-		{factoryapi.WorkerModelProviderOpenCode, modelprovider.ProviderOpenCode},
-		{factoryapi.WorkerModelProviderPi, modelprovider.ProviderPi},
-		{factoryapi.WorkerModelProviderAgy, modelprovider.ProviderAgy},
+		{factoryapi.WorkerModelProviderAntigravity, modelprovider.ProviderAntigravity},
 	}
 
 	for _, tc := range cases {
@@ -58,11 +54,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_ModelProviderAliasesRetainCompatibility
 		{authored: "ANTHROPIC", public: factoryapi.WorkerModelProviderClaude, internal: modelprovider.ProviderClaude},
 		{authored: "openai", public: factoryapi.WorkerModelProviderCodex, internal: modelprovider.ProviderCodex},
 		{authored: "OPENAI", public: factoryapi.WorkerModelProviderCodex, internal: modelprovider.ProviderCodex},
-		{authored: "agent", public: factoryapi.WorkerModelProviderCursor, internal: modelprovider.ProviderCursor},
-		{authored: "cursor-agent", public: factoryapi.WorkerModelProviderCursor, internal: modelprovider.ProviderCursor},
-		{authored: "CURSOR_AGENT", public: factoryapi.WorkerModelProviderCursor, internal: modelprovider.ProviderCursor},
-		{authored: "kiro-cli", public: factoryapi.WorkerModelProviderKiro, internal: modelprovider.ProviderKiro},
-		{authored: "antigravity", public: factoryapi.WorkerModelProviderAgy, internal: modelprovider.ProviderAgy},
+		{authored: "antigravity", public: factoryapi.WorkerModelProviderAntigravity, internal: modelprovider.ProviderAntigravity},
 	}
 
 	for _, tc := range cases {

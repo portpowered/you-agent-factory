@@ -144,18 +144,10 @@ func modelProviderForProviderIdentity(providerID string) string {
 		return string(modelprovider.ProviderCodex)
 	case string(modelprovider.ProviderClaude):
 		return string(modelprovider.ProviderClaude)
-	case workers.RunnerIDGemini:
-		return string(modelprovider.ProviderGemini)
-	case workers.RunnerIDKiro:
-		return string(modelprovider.ProviderKiro)
 	case "cursor", workers.RunnerIDCursorCLI:
 		return string(modelprovider.ProviderCursor)
-	case workers.RunnerIDOpenCode:
-		return string(modelprovider.ProviderOpenCode)
-	case workers.RunnerIDPi:
-		return string(modelprovider.ProviderPi)
-	case workers.RunnerIDAgy:
-		return string(modelprovider.ProviderAgy)
+	case workers.RunnerIDAntigravity:
+		return string(modelprovider.ProviderAntigravity)
 	default:
 		return providerID
 	}

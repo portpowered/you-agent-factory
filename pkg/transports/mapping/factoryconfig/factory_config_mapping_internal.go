@@ -648,22 +648,7 @@ func WorkerConfigFromOpenAPI(worker factoryapi.Worker) (interfaces.FactoryWorker
 		return interfaces.FactoryWorkerConfig{}, err
 	}
 	cfg.Description = description
-	openCodeAgent, err := openCodeAgentInternalFromAPI(worker.OpenCodeAgent, fmt.Sprintf("factory.workers[%q]", worker.Name))
-	if err != nil {
-		return interfaces.FactoryWorkerConfig{}, err
-	}
-	cfg.OpenCodeAgent = openCodeAgent
 	return cfg, nil
-}
-
-func openCodeAgentInternalFromAPI(agent *string, fieldPath string) (string, error) {
-	if agent == nil {
-		return "", nil
-	}
-	if err := validateOpenCodeAgentField(fieldPath, *agent); err != nil {
-		return "", err
-	}
-	return *agent, nil
 }
 
 func hostedWorkerAuthInternalFromAPI(auth *factoryapi.HostedWorkerAuth) *interfaces.HostedWorkerAuthConfig {
@@ -753,10 +738,6 @@ func workstationInternalFromAPI(workstation factoryapi.Workstation, fieldPath st
 	if err != nil {
 		return interfaces.FactoryWorkstationConfig{}, err
 	}
-	openCodeAgent, err := openCodeAgentInternalFromAPI(workstation.OpenCodeAgent, fieldPath)
-	if err != nil {
-		return interfaces.FactoryWorkstationConfig{}, err
-	}
 	cfg := interfaces.FactoryWorkstationConfig{
 		ID:                    stringValue(workstation.Id),
 		Name:                  workstation.Name,
@@ -784,7 +765,6 @@ func workstationInternalFromAPI(workstation factoryapi.Workstation, fieldPath st
 		WorkingDirectory:      stringValue(workstation.WorkingDirectory),
 		Worktree:              stringValue(workstation.Worktree),
 		Env:                   stringMapValue(workstation.Env),
-		OpenCodeAgent:         openCodeAgent,
 	}
 	description, err := nameValueInternalFromAPI(workstation.Description, fieldPath+".description")
 	if err != nil {

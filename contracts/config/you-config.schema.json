@@ -446,7 +446,7 @@
       "defaults.workerModelProvider": {
         "inventoryId": "defaults.workerModelProvider",
         "jsonPath": "defaults.workerModelProvider",
-        "defaultEmptyBehavior": "missing or whitespace-only value is unset until env/flag layers apply; symbolic DEFAULT resolves through lower-precedence concrete provider",
+        "defaultEmptyBehavior": "missing or whitespace-only value is unset until the environment layer applies; symbolic DEFAULT resolves through lower-precedence concrete provider",
         "parseOwner": "operator_settings",
         "persistenceOwner": "operator_settings",
         "strictness": "operator_settings generated GlobalConfig strict decode (unknown fields and trailing JSON rejected)",
@@ -483,11 +483,9 @@
           "itemId": "config.defaults.worker-model-provider",
           "layers": [
             "file",
-            "env",
-            "flag"
+            "env"
           ],
-          "environmentVariable": "YOU_DEFAULT_WORKER_MODEL_PROVIDER",
-          "flagName": "--default-worker-model-provider"
+          "environmentVariable": "YOU_DEFAULT_WORKER_MODEL_PROVIDER"
         },
         "sensitivity": {
           "formatVersion": "1.0.0",
@@ -498,7 +496,7 @@
       "defaults.workerModel": {
         "inventoryId": "defaults.workerModel",
         "jsonPath": "defaults.workerModel",
-        "defaultEmptyBehavior": "missing or whitespace-only value is unset until env/flag layers apply",
+        "defaultEmptyBehavior": "missing or whitespace-only value is unset until the environment layer applies",
         "parseOwner": "operator_settings",
         "persistenceOwner": "operator_settings",
         "strictness": "operator_settings generated GlobalConfig strict decode (unknown fields and trailing JSON rejected)",
@@ -512,7 +510,7 @@
             },
             "description": {
               "id": "config.defaults.worker-model.description",
-              "canonicalEnglish": "Default model name for workers when not overridden per preset or invocation. Missing or whitespace-only values remain unset until env/flag layers apply."
+              "canonicalEnglish": "Default model name for workers when not overridden per preset or invocation. Missing or whitespace-only values remain unset until the environment layer applies."
             }
           },
           "examples": [
@@ -533,11 +531,9 @@
           "itemId": "config.defaults.worker-model",
           "layers": [
             "file",
-            "env",
-            "flag"
+            "env"
           ],
-          "environmentVariable": "YOU_DEFAULT_WORKER_MODEL",
-          "flagName": "--default-worker-model"
+          "environmentVariable": "YOU_DEFAULT_WORKER_MODEL"
         },
         "sensitivity": {
           "formatVersion": "1.0.0",

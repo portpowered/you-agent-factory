@@ -10,11 +10,9 @@ describe("runner OpenAPI enum localization", () => {
   it("exposes the generated RunnerID enum set in contract order", () => {
     expect(OPENAPI_RUNNER_IDS).toEqual([
       "codex",
-      "gemini",
-      "kiro",
+      "claude",
       "cursor-cli",
-      "opencode",
-      "pi",
+      "antigravity",
     ]);
   });
 
@@ -34,9 +32,9 @@ describe("runner OpenAPI enum localization", () => {
   it("validates built-in RunnerID membership", () => {
     expect(isOpenApiRunnerID("cursor-cli")).toBe(true);
     expect(isOpenApiRunnerID(" CURSOR-CLI ")).toBe(true);
-    expect(isOpenApiRunnerID("pi")).toBe(true);
-    expect(isOpenApiRunnerID(" PI ")).toBe(true);
-    expect(isOpenApiRunnerID("claude")).toBe(false);
+    expect(isOpenApiRunnerID("antigravity")).toBe(true);
+    expect(isOpenApiRunnerID(" ANTIGRAVITY ")).toBe(true);
+    expect(isOpenApiRunnerID("pi")).toBe(false);
   });
 
   it("normalizes runner IDs before persistence checks", () => {

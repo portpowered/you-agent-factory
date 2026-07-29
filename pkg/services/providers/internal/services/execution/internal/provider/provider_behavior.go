@@ -106,17 +106,10 @@ type codexProviderBehavior struct {
 	logger logging.Logger
 }
 
-type openCodeProviderBehavior struct {
-	sharedNonCodexProviderBehavior
-	logger logging.Logger
-}
-
 func providerBehaviorFor(provider string, logger logging.Logger) providerBehavior {
 	switch provider {
 	case string(modelprovider.ProviderCodex):
 		return codexProviderBehavior{logger: logger}
-	case string(modelprovider.ProviderOpenCode):
-		return openCodeProviderBehavior{logger: logger}
 	default:
 		return claudeProviderBehavior{logger: logger}
 	}
@@ -213,30 +206,6 @@ func BuildCodexStructuredCommand(
 	return behavior.BuildCommandRequest(req, args), cleanup, nil
 }
 
-func (b openCodeProviderBehavior) BuildArgs(_ context.Context, req workerexecution.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {
-	if err := validateOpenCodeOptionalCapabilities(req); err != nil {
-		return nil, err
-	}
-	args := []string{"run"}
-	if req.Model != "" {
-		args = append(args, "--model", req.Model)
-	}
-	if req.OpenCodeAgent != "" {
-		args = append(args, "--agent", req.OpenCodeAgent)
-	}
-	if req.SessionID != "" {
-		args = append(args, "--session", req.SessionID)
-	}
-	if req.WorkingDirectory != "" {
-		args = append(args, "--dir", req.WorkingDirectory)
-	}
-	if skipPermissions {
-		args = append(args, "--dangerously-skip-permissions")
-	}
-	args = append(args, req.UserMessage)
-	return args, nil
-}
-
 func validateCodexOptionalCapabilities(req workerexecution.ProviderInferenceRequest) error {
 	for _, capability := range req.RequiredOptionalCapabilities {
 		if capability == workerexecution.RunnerOptionalCapabilityWorktree {
@@ -245,19 +214,6 @@ func validateCodexOptionalCapabilities(req workerexecution.ProviderInferenceRequ
 	}
 	if req.Worktree != "" && req.WorkingDirectory == "" {
 		return errors.New("worktree selection is not supported by the codex runner in v1")
-	}
-	return nil
-}
-
-func validateOpenCodeOptionalCapabilities(req workerexecution.ProviderInferenceRequest) error {
-	unsupported := map[workerexecution.RunnerOptionalCapability]string{
-		workerexecution.RunnerOptionalCapabilityImageInput: "image input is not supported by the opencode runner in v1",
-		workerexecution.RunnerOptionalCapabilityWorktree:   "worktree selection is not supported by the opencode runner in v1",
-	}
-	for _, capability := range req.RequiredOptionalCapabilities {
-		if message, blocked := unsupported[capability]; blocked {
-			return errors.New(message)
-		}
 	}
 	return nil
 }

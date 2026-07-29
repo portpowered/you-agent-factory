@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/namevalue"
 	factoryresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/resource"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/namevalue"
 )
 
 type Config struct {
@@ -26,7 +26,6 @@ type Config struct {
 	Timeout          string                    `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 	StopToken        string                    `json:"stopToken,omitempty" yaml:"stopToken,omitempty"`
 	SkipPermissions  bool                      `json:"skipPermissions,omitempty" yaml:"skipPermissions,omitempty"`
-	OpenCodeAgent    string                    `json:"openCodeAgent,omitempty" yaml:"openCodeAgent,omitempty"`
 	Auth             *HostedWorkerAuthConfig   `json:"auth,omitempty" yaml:"auth,omitempty"`
 	Linear           *HostedLinearWorkerConfig `json:"linear,omitempty" yaml:"linear,omitempty"`
 	AgentTools       *AgentToolsConfig         `json:"agentTools,omitempty" yaml:"agentTools,omitempty"`

@@ -15,16 +15,10 @@ func TestLoadRuntimeConfig_ResolvesPublicWorkerModelProviderToCLICommand(t *test
 		{name: "CLAUDE", public: "CLAUDE", internal: modelprovider.ProviderClaude},
 		{name: "CODEX", public: "CODEX", internal: modelprovider.ProviderCodex},
 		{name: "CURSOR", public: "CURSOR", internal: modelprovider.ProviderCursor},
-		{name: "GEMINI", public: "GEMINI", internal: modelprovider.ProviderGemini},
-		{name: "KIRO", public: "KIRO", internal: modelprovider.ProviderKiro},
-		{name: "OPENCODE", public: "OPENCODE", internal: modelprovider.ProviderOpenCode},
-		{name: "PI", public: "PI", internal: modelprovider.ProviderPi},
-		{name: "AGY", public: "AGY", internal: modelprovider.ProviderAgy},
+		{name: "ANTIGRAVITY", public: "ANTIGRAVITY", internal: modelprovider.ProviderAntigravity},
 		{name: "anthropic alias", public: "anthropic", internal: modelprovider.ProviderClaude},
 		{name: "openai alias", public: "openai", internal: modelprovider.ProviderCodex},
-		{name: "cursor-agent alias", public: "cursor-agent", internal: modelprovider.ProviderCursor},
-		{name: "kiro-cli alias", public: "kiro-cli", internal: modelprovider.ProviderKiro},
-		{name: "antigravity alias", public: "antigravity", internal: modelprovider.ProviderAgy},
+		{name: "antigravity alias", public: "antigravity", internal: modelprovider.ProviderAntigravity},
 	}
 
 	for _, tc := range cases {

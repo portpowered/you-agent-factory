@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	workertaxonomy "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -211,88 +210,6 @@ func TestCodexProviderBehavior_BuildArgs_MaterializesLocalFileURLWithoutCopy(t *
 	assertStringSlicesEqual(t, want, args)
 }
 
-func TestOpenCodeProviderBehavior_BuildArgs(t *testing.T) {
-	t.Parallel()
-	testCases := []struct {
-		name            string
-		req             workerexecution.ProviderInferenceRequest
-		skipPermissions bool
-		want            []string
-	}{
-		{
-			name: "BasicPrompt",
-			req: workerexecution.ProviderInferenceRequest{
-				ModelProvider: string(modelprovider.ProviderOpenCode),
-				UserMessage:   "summarize the workspace",
-			},
-			want: []string{"run", "summarize the workspace"},
-		},
-		{
-			name: "WithModelSessionWorkingDirectoryAndSkipPermissions",
-			req: workerexecution.ProviderInferenceRequest{
-				ModelProvider:    string(modelprovider.ProviderOpenCode),
-				Model:            "openai/gpt-5",
-				SessionID:        "opencode-session-123",
-				WorkingDirectory: "/tmp/project",
-				UserMessage:      "run the tests",
-			},
-			skipPermissions: true,
-			want:            []string{"run", "--model", "openai/gpt-5", "--session", "opencode-session-123", "--dir", "/tmp/project", "--dangerously-skip-permissions", "run the tests"},
-		},
-		{
-			name: "WithOpenCodeAgent",
-			req: workerexecution.ProviderInferenceRequest{
-				ModelProvider: string(modelprovider.ProviderOpenCode),
-				OpenCodeAgent: "implementer",
-				UserMessage:   "summarize the workspace",
-			},
-			want: []string{"run", "--agent", "implementer", "summarize the workspace"},
-		},
-		{
-			name: "WithOpenCodeAgentModelSessionWorkingDirectoryAndSkipPermissions",
-			req: workerexecution.ProviderInferenceRequest{
-				ModelProvider:    string(modelprovider.ProviderOpenCode),
-				Model:            "openai/gpt-5",
-				OpenCodeAgent:    "implementer",
-				SessionID:        "opencode-session-123",
-				WorkingDirectory: "/tmp/project",
-				UserMessage:      "run the tests",
-			},
-			skipPermissions: true,
-			want:            []string{"run", "--model", "openai/gpt-5", "--agent", "implementer", "--session", "opencode-session-123", "--dir", "/tmp/project", "--dangerously-skip-permissions", "run the tests"},
-		},
-	}
-
-	behavior := openCodeProviderBehavior{logger: logging.NoopLogger{}}
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			args, err := behavior.BuildArgs(context.Background(), tc.req, tc.skipPermissions, nil)
-			if err != nil {
-				t.Fatalf("BuildArgs returned error: %v", err)
-			}
-			assertStringSlicesEqual(t, tc.want, args)
-		})
-	}
-}
-
-func TestOpenCodeProviderBehavior_BuildArgs_AcceptsNegotiatedStructuredCapability(t *testing.T) {
-	t.Parallel()
-	behavior := openCodeProviderBehavior{logger: logging.NoopLogger{}}
-	args, err := behavior.BuildArgs(context.Background(), workerexecution.ProviderInferenceRequest{
-		ModelProvider: string(modelprovider.ProviderOpenCode),
-		UserMessage:   "summarize the workspace",
-		RequiredOptionalCapabilities: []workerexecution.RunnerOptionalCapability{
-			workerexecution.RunnerOptionalCapabilityStructuredOutput,
-		},
-	}, false, nil)
-	if err != nil {
-		t.Fatalf("BuildArgs error = %v", err)
-	}
-	if len(args) != 2 || args[0] != "run" || args[1] != "summarize the workspace" {
-		t.Fatalf("BuildArgs() = %#v", args)
-	}
-}
-
 func TestNonCodexProviderBehavior_BuildCommandRequest(t *testing.T) {
 	t.Parallel()
 	for _, tc := range nonCodexCommandRequestTestCases() {
@@ -388,43 +305,6 @@ func nonCodexCommandRequestTestCases() []nonCodexCommandRequestTestCase {
 			args:    []string{"run", "review this"},
 			wantEnv: "AGENT_FACTORY_PROVIDER=opencode",
 		},
-	}
-}
-
-func TestWorkDiagnosticsForInferenceRequest_IncludesOpenCodeAgentWhenConfigured(t *testing.T) {
-	t.Parallel()
-	diagnostics := workDiagnosticsForInferenceRequest(workerexecution.ProviderInferenceRequest{
-		ModelProvider: string(modelprovider.ProviderOpenCode),
-		Model:         "openai/gpt-5",
-		OpenCodeAgent: "implementer",
-		WorkerType:    workertaxonomy.WorkerTypeModel,
-	})
-	if got := diagnostics.Provider.RequestMetadata["opencode_agent"]; got != "implementer" {
-		t.Fatalf("opencode_agent = %q, want implementer", got)
-	}
-}
-
-func TestWorkDiagnosticsForInferenceRequest_OmitsOpenCodeAgentWhenUnset(t *testing.T) {
-	t.Parallel()
-	diagnostics := workDiagnosticsForInferenceRequest(workerexecution.ProviderInferenceRequest{
-		ModelProvider: string(modelprovider.ProviderOpenCode),
-		Model:         "openai/gpt-5",
-		WorkerType:    workertaxonomy.WorkerTypeModel,
-	})
-	if _, ok := diagnostics.Provider.RequestMetadata["opencode_agent"]; ok {
-		t.Fatalf("request metadata = %#v, want opencode_agent omitted", diagnostics.Provider.RequestMetadata)
-	}
-}
-
-func TestWorkDiagnosticsForInferenceRequest_SafeProjectionPreservesOpenCodeAgent(t *testing.T) {
-	t.Parallel()
-	diagnostics := workDiagnosticsForInferenceRequest(workerexecution.ProviderInferenceRequest{
-		ModelProvider: string(modelprovider.ProviderOpenCode),
-		OpenCodeAgent: "implementer",
-	})
-	safe := workerexecution.SafeWorkDiagnosticsFromWorkDiagnostics(diagnostics)
-	if got := safe.Provider.RequestMetadata["opencode_agent"]; got != "implementer" {
-		t.Fatalf("safe opencode_agent = %q, want implementer", got)
 	}
 }
 

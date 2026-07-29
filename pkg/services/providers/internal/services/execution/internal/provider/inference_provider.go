@@ -19,7 +19,6 @@ import (
 	provideradapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/adapter"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/commandenv"
 	providercontract "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/inferencecontract"
-	opencodepkg "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/opencode"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
@@ -223,10 +222,7 @@ func isConductorRoutedProvider(provider string) bool {
 	case string(modelprovider.ProviderCodex),
 		string(modelprovider.ProviderClaude),
 		string(modelprovider.ProviderCursor),
-		"cursor",
-		string(modelprovider.ProviderOpenCode),
-		string(modelprovider.ProviderPi),
-		string(modelprovider.ProviderAgy):
+		string(modelprovider.ProviderAntigravity):
 		return true
 	default:
 		return false
@@ -361,24 +357,9 @@ func providerErrorFromAdapterFailure(
 	}
 }
 
-func parseOpenCodeProviderExitFailure(result CommandResult) ProviderFailureResult {
-	parsed := opencodepkg.ParseProviderFailure(opencodepkg.FailureInput{
-		Stdout:   result.Stdout,
-		Stderr:   result.Stderr,
-		ExitCode: result.ExitCode,
-	})
-	return ProviderFailureResult{Reason: parsed.Reason, Message: parsed.Message}
-}
-
 func parseProviderExitFailure(provider string, result CommandResult) parsedProviderFailure {
 	normalizedProvider := strings.ToLower(strings.TrimSpace(provider))
-	switch normalizedProvider {
-	case string(modelprovider.ProviderOpenCode):
-		failure := parseOpenCodeProviderExitFailure(result)
-		return parsedProviderFailure{failure: failure}
-	default:
-		return parsedProviderFailure{failure: parseUnknownProviderFailure(normalizedProvider, result)}
-	}
+	return parsedProviderFailure{failure: parseUnknownProviderFailure(normalizedProvider, result)}
 }
 
 func parseUnknownProviderFailure(provider string, result CommandResult) ProviderFailureResult {
@@ -527,7 +508,7 @@ func effectiveProviderSession(req workerexecution.ProviderInferenceRequest, resu
 	if session != nil {
 		return session
 	}
-	if (req.ModelProvider == string(modelprovider.ProviderClaude) || req.ModelProvider == string(modelprovider.ProviderOpenCode) || req.ModelProvider == string(modelprovider.ProviderPi) || req.ModelProvider == string(modelprovider.ProviderAgy)) && req.SessionID != "" {
+	if (req.ModelProvider == string(modelprovider.ProviderClaude) || req.ModelProvider == string(modelprovider.ProviderAntigravity)) && req.SessionID != "" {
 		return &workerexecution.ProviderSessionMetadata{
 			Provider: workerexecution.CanonicalProviderSessionProvider(req.ModelProvider),
 			Kind:     providerSessionKindSessionID,

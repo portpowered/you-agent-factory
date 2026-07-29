@@ -20,6 +20,7 @@ type NamedFactoryRoots struct {
 	Global  string
 }
 
+// TODO: remove the legacy factory names support completely.
 // LegacyNamedFactoriesRoot returns the retired global catalog root used only
 // for lossless initialization-time migration.
 func LegacyNamedFactoriesRoot(homeDir string) string {
@@ -51,6 +52,7 @@ func ProjectFactoriesRootForWorkingDir(workingDir string) (string, error) {
 	return ProjectFactoriesRoot(trimmed), nil
 }
 
+// TODO: this shouldn't be visible to anyone but the factory definitions.
 // ResolveNamedFactoryRoots derives both catalog roots from explicit process
 // edges. The project root remains first in lookup order.
 func ResolveNamedFactoryRoots(homeDir, workingDir string) (NamedFactoryRoots, error) {

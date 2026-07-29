@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/namevalue"
 	catalogresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/resource"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/namevalue"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -535,7 +535,6 @@ type FactoryWorkstationConfig struct {
 	OperationBindings     []ModelOperationBinding     `json:"operationBindings,omitempty" yaml:"operationBindings,omitempty"`
 	WorkerTypeName        string                      `json:"worker" yaml:"worker,omitempty"`
 	Runner                string                      `json:"runner,omitempty" yaml:"runner,omitempty"`
-	OpenCodeAgent         string                      `json:"openCodeAgent,omitempty" yaml:"openCodeAgent,omitempty"`
 	PromptFile            string                      `json:"prompt_file,omitempty" yaml:"promptFile,omitempty"`
 	OutputSchema          string                      `json:"output_schema,omitempty" yaml:"outputSchema,omitempty"`
 	Timeout               string                      `json:"timeout,omitempty" yaml:"timeout,omitempty"`

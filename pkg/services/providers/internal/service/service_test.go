@@ -62,8 +62,8 @@ func TestRootDelegatesListAndGetToCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListProviders() = %v", err)
 	}
-	if len(list.Providers) != 8 {
-		t.Fatalf("len(Providers) = %d, want 8", len(list.Providers))
+	if len(list.Providers) != 4 {
+		t.Fatalf("len(Providers) = %d, want 4", len(list.Providers))
 	}
 
 	got, err := root.GetProvider(context.Background(), providers.GetProviderRequest{ID: providers.IDCodex})
@@ -79,7 +79,7 @@ func TestRootDelegatesListAndGetToCatalog(t *testing.T) {
 		t.Fatalf("GetProvider(cursor) = %v", err)
 	}
 	if byAlias.Provider.ID != providers.IDCursor {
-		t.Fatalf("GetProvider(cursor).Provider.ID = %q, want agent", byAlias.Provider.ID)
+		t.Fatalf("GetProvider(cursor).Provider.ID = %q, want cursor", byAlias.Provider.ID)
 	}
 }
 
@@ -180,7 +180,7 @@ func TestRootCatalogTypedFailuresMatchPrivateCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListProviders() = %v", err)
 	}
-	agy, ok := indexProviders(list.Providers)[providers.IDAgy]
+	agy, ok := indexProviders(list.Providers)[providers.IDAntigravity]
 	if !ok {
 		t.Fatal("ListProviders() missing agy provider")
 	}

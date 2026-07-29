@@ -100,8 +100,8 @@ func canonicalProvidersID(manifestID string) providers.ID {
 	switch strings.ToLower(strings.TrimSpace(manifestID)) {
 	case "cursor":
 		return providers.IDCursor
-	case "kiro":
-		return providers.IDKiro
+	case "antigravity":
+		return providers.IDAntigravity
 	default:
 		return providers.ID(manifestID)
 	}

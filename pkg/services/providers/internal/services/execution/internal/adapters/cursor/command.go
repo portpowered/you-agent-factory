@@ -23,7 +23,7 @@ type CommandEffectOptions struct {
 }
 
 const (
-	cursorAgentCommand       = "agent"
+	cursorAgentCommand       = "cursor"
 	cursorOutputFormatStream = "stream-json"
 )
 

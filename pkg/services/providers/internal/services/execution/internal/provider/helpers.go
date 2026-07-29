@@ -559,9 +559,6 @@ func workDiagnosticsForInferenceRequest(req workerexecution.ProviderInferenceReq
 		"session_id":        req.SessionID,
 		"output_schema":     req.OutputSchema,
 	}
-	if req.OpenCodeAgent != "" {
-		requestMetadata["opencode_agent"] = req.OpenCodeAgent
-	}
 	return &workerexecution.WorkDiagnostics{
 		RenderedPrompt: &workerexecution.RenderedPromptDiagnostic{
 			SystemPromptHash: hashText(req.SystemPrompt),

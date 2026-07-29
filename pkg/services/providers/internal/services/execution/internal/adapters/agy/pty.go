@@ -41,7 +41,7 @@ func NewPTYEffect(options PTYEffectOptions) Effect {
 	}
 	executable := strings.TrimSpace(options.Executable)
 	if executable == "" {
-		executable = string(providers.IDAgy)
+		executable = "agy"
 	}
 	sessionConfig := options.SessionConfig
 	if sessionConfig == (agypty.SessionConfig{}) {
@@ -167,7 +167,7 @@ func resolveExecutable(
 	}
 	executable = strings.TrimSpace(executable)
 	if executable == "" {
-		executable = string(providers.IDAgy)
+		executable = "agy"
 	}
 	executable = filepath.Clean(executable)
 	if executable == "" || executable == "." {

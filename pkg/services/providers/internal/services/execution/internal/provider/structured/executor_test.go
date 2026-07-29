@@ -45,8 +45,7 @@ func TestExecutorRejectsConductorRoutedProvidersAtScriptWrapBoundary(t *testing.
 		string(modelprovider.ProviderClaude),
 		string(modelprovider.ProviderCodex),
 		string(modelprovider.ProviderCursor),
-		string(modelprovider.ProviderOpenCode),
-		string(modelprovider.ProviderPi),
+		string(modelprovider.ProviderAntigravity),
 	} {
 		_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
 			Dispatch:      work.WorkDispatch{DispatchID: "dispatch-cutover"},

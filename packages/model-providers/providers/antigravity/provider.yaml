@@ -1,23 +1,23 @@
-id: gemini
+id: antigravity
 aliases: []
 displayName:
   type: LOCALIZABLE_ASSET
-  value: Gemini CLI
+  value: Antigravity
 description:
   type: LOCALIZABLE_ASSET
-  value: Google Gemini CLI integration.
+  value: Antigravity terminal-agent integration.
 documentation:
-  - kind: setup
-    url: https://geminicli.com/docs/get-started/installation/
+  - kind: homepage
+    url: https://agylabs.github.io/agy-demos/
 technicalSupportLevel: experimental
 implementationAvailability: bundled
 maximumExecutionCapabilities:
   promptSubmission: true
   imageInput: false
-  sessionResume: false
+  sessionResume: true
   structuredOutput: false
   toolExecution: true
-  workingDirectory: false
+  workingDirectory: true
   worktree: false
 maximumResponseFidelityCapabilities:
   nativeStreaming: false
@@ -33,7 +33,7 @@ maximumResponseFidelityCapabilities:
   providerReconnect: false
 discovery:
   executableNames:
-    - gemini
+    - agy
   endpointKinds:
     - stdio
   configurationKeys: []

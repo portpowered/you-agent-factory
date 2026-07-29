@@ -35,7 +35,7 @@ func RunTerminal(ctx context.Context, fixture Fixture) (TerminalResult, error) {
 	if err := ValidateSanitized(transcript); err != nil {
 		return TerminalResult{}, fmt.Errorf("fixture %q: %w", fixture.ID, err)
 	}
-	if fixture.Provider != adapter.Identity(modelprovider.ProviderAgy) {
+	if fixture.Provider != adapter.Identity(modelprovider.ProviderAntigravity) {
 		return TerminalResult{}, fmt.Errorf("unsupported parity provider %q", fixture.Provider)
 	}
 	if fixture.AgyFinalOnly {

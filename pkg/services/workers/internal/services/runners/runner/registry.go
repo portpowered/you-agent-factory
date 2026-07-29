@@ -21,24 +21,16 @@ var builtInRunnerStatus = map[string]Status{
 		Metadata:  mustBuiltInRunnerMetadata(workerexecution.RunnerIDCodex),
 		Available: true,
 	},
-	workerexecution.RunnerIDGemini: {
-		Metadata:  mustBuiltInRunnerMetadata(workerexecution.RunnerIDGemini),
-		Available: true,
-	},
-	workerexecution.RunnerIDKiro: {
-		Metadata:  mustBuiltInRunnerMetadata(workerexecution.RunnerIDKiro),
+	workerexecution.RunnerIDClaude: {
+		Metadata:  mustBuiltInRunnerMetadata(workerexecution.RunnerIDClaude),
 		Available: true,
 	},
 	workerexecution.RunnerIDCursorCLI: {
 		Metadata:  mustBuiltInRunnerMetadata(workerexecution.RunnerIDCursorCLI),
 		Available: true,
 	},
-	workerexecution.RunnerIDOpenCode: {
-		Metadata:  mustBuiltInRunnerMetadata(workerexecution.RunnerIDOpenCode),
-		Available: true,
-	},
-	workerexecution.RunnerIDPi: {
-		Metadata:  mustBuiltInRunnerMetadata(workerexecution.RunnerIDPi),
+	workerexecution.RunnerIDAntigravity: {
+		Metadata:  mustBuiltInRunnerMetadata(workerexecution.RunnerIDAntigravity),
 		Available: true,
 	},
 }
@@ -81,16 +73,12 @@ func builtInRunnerCommand(id string) string {
 	switch NormalizeRunnerID(id) {
 	case workerexecution.RunnerIDCodex:
 		return string(modelprovider.ProviderCodex)
-	case workerexecution.RunnerIDGemini:
-		return string(modelprovider.ProviderGemini)
-	case workerexecution.RunnerIDKiro:
-		return string(modelprovider.ProviderKiro)
+	case workerexecution.RunnerIDClaude:
+		return string(modelprovider.ProviderClaude)
 	case workerexecution.RunnerIDCursorCLI:
 		return string(modelprovider.ProviderCursor)
-	case workerexecution.RunnerIDOpenCode:
-		return string(modelprovider.ProviderOpenCode)
-	case workerexecution.RunnerIDPi:
-		return string(modelprovider.ProviderPi)
+	case workerexecution.RunnerIDAntigravity:
+		return "agy"
 	default:
 		return ""
 	}

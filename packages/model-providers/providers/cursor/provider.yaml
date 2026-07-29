@@ -1,6 +1,5 @@
 id: cursor
-aliases:
-  - agent
+aliases: []
 displayName:
   type: LOCALIZABLE_ASSET
   value: Cursor CLI
@@ -34,7 +33,7 @@ maximumResponseFidelityCapabilities:
   providerReconnect: false
 discovery:
   executableNames:
-    - agent
+    - cursor
   endpointKinds:
     - stdio
   configurationKeys: []

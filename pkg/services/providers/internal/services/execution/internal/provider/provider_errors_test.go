@@ -13,23 +13,7 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	opencodepkg "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/opencode"
 )
-
-const (
-	opencodeThrottleFailureMessage   = opencodepkg.ThrottleFailureMessage
-	opencodeTimeoutFailureMessage    = opencodepkg.TimeoutFailureMessage
-	opencodeServerFailureMessage     = "OpenCode encountered a temporary server error."
-	opencodeBadRequestFailureMessage = opencodepkg.BadRequestFailureMessage
-	opencodeFailureMessageBytes      = 512
-)
-
-func ParseOpenCodeProviderFailure(result CommandResult) ProviderFailureResult {
-	parsed := opencodepkg.ParseProviderFailure(opencodepkg.FailureInput{
-		Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
-	})
-	return ProviderFailureResult{Reason: parsed.Reason, Message: parsed.Message}
-}
 
 func loadProviderErrorCorpusForTest(t *testing.T) ProviderErrorCorpus {
 	t.Helper()
@@ -457,17 +441,12 @@ func TestParseProviderExitFailure_RoutesOwnedProviderPackages(t *testing.T) {
 			want:     workerexecution.WorkFailureTypeAuthFailure,
 		},
 		{
-			provider: string(modelprovider.ProviderOpenCode),
-			result:   CommandResult{ExitCode: 1, Stderr: []byte(`{"error":{"type":"invalid_request_error","message":"bad model"}}`)},
-			want:     workerexecution.WorkFailureTypePermanentBadRequest,
-		},
-		{
 			provider: string(modelprovider.ProviderCodex),
 			result:   CommandResult{ExitCode: 1, Stderr: []byte("ERROR: unexpected status 429\n")},
 			want:     workerexecution.WorkFailureTypeThrottled,
 		},
 		{
-			provider: string(modelprovider.ProviderKiro),
+			provider: string(modelprovider.ProviderCursor),
 			result:   CommandResult{ExitCode: 124},
 			want:     workerexecution.WorkFailureTypeTimeout,
 		},
@@ -492,7 +471,7 @@ func TestNormalizeProviderExecutionError_UsesExitFailureParserForNonZeroExitCode
 	t.Parallel()
 
 	providerErr := normalizeProviderExecutionError(
-		string(modelprovider.ProviderKiro),
+		string(modelprovider.ProviderCursor),
 		CommandResult{ExitCode: 124},
 		errors.New("command failed"),
 		nil,

@@ -246,13 +246,10 @@ func runtimeAssemblyRegistrations(
 	}
 
 	identities := []string{
-		workers.RunnerIDAgy,
+		workers.RunnerIDAntigravity,
+		workers.RunnerIDClaude,
 		workers.RunnerIDCodex,
 		workers.RunnerIDCursorCLI,
-		workers.RunnerIDGemini,
-		workers.RunnerIDKiro,
-		workers.RunnerIDOpenCode,
-		workers.RunnerIDPi,
 	}
 	registrations := make([]runners.Registration, 0, len(identities))
 	for _, identity := range identities {

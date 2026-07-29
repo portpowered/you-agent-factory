@@ -176,8 +176,8 @@ func TestModelProviderForExecutionProjectsCanonicalCursorIdentityToNativeCommand
 		RunnerID: workerexecution.RunnerIDCodex,
 		Source:   workerexecution.RunnerSelectionSourceDefault,
 	})
-	if got != "agent" {
-		t.Fatalf("modelProviderForExecution(cursor) = %q, want agent", got)
+	if got != "cursor" {
+		t.Fatalf("modelProviderForExecution(cursor) = %q, want cursor", got)
 	}
 }
 

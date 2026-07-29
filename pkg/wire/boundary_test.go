@@ -32,12 +32,12 @@ func TestProvideProviderRegistryComposesBuiltIns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("provideProviderRegistry() error = %v", err)
 	}
-	canonical, err := providers.CanonicalIdentity("agent")
+	canonical, err := providers.CanonicalIdentity("cursor")
 	if err != nil {
-		t.Fatalf("CanonicalIdentity(agent) error = %v", err)
+		t.Fatalf("CanonicalIdentity(cursor) error = %v", err)
 	}
 	if canonical != "cursor" {
-		t.Fatalf("CanonicalIdentity(agent) = %q, want cursor", canonical)
+		t.Fatalf("CanonicalIdentity(cursor) = %q, want cursor", canonical)
 	}
 }
 

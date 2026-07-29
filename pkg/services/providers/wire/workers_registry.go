@@ -56,9 +56,7 @@ func (registry *workersRegistry) refresh(ctx context.Context) error {
 	// Preserve the legacy public aliases at the composition boundary.
 	aliases["openai"] = workers.RunnerIDCodex
 	aliases["anthropic"] = "claude"
-	aliases["agent"] = workers.RunnerIDCursorCLI
 	aliases["cursor"] = workers.RunnerIDCursorCLI
-	aliases["kiro-cli"] = workers.RunnerIDKiro
 	registry.mu.Lock()
 	registry.descriptors, registry.aliases = descriptors, aliases
 	registry.mu.Unlock()
@@ -174,8 +172,8 @@ func runnerIdentity(identity string) string {
 	switch strings.ToLower(strings.TrimSpace(identity)) {
 	case providers.IDCursor.String():
 		return workers.RunnerIDCursorCLI
-	case providers.IDKiro.String():
-		return workers.RunnerIDKiro
+	case providers.IDAntigravity.String():
+		return workers.RunnerIDAntigravity
 	default:
 		return strings.ToLower(strings.TrimSpace(identity))
 	}

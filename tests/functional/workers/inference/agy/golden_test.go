@@ -64,7 +64,7 @@ func TestAgyGoldenFinalOnlySuccess(t *testing.T) {
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", strings.Replace(
-		support.BuildModelWorkerConfig(modelprovider.ProviderAgy, request.Model),
+		support.BuildModelWorkerConfig(modelprovider.ProviderAntigravity, request.Model),
 		"stopToken: COMPLETE",
 		"skipPermissions: true\nstopToken: COMPLETE",
 		1,
@@ -165,7 +165,7 @@ func TestAgyGoldenTimeout(t *testing.T) {
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", strings.Replace(
-		support.BuildModelWorkerConfig(modelprovider.ProviderAgy, request.Model),
+		support.BuildModelWorkerConfig(modelprovider.ProviderAntigravity, request.Model),
 		"stopToken: COMPLETE",
 		"skipPermissions: true\nstopToken: COMPLETE",
 		1,
@@ -215,8 +215,8 @@ func TestAgyGoldenTimeout(t *testing.T) {
 	if inferencePayload.ProviderSession == nil || inferencePayload.ProviderSession.Provider == nil {
 		t.Fatal("inference response missing provider session metadata")
 	}
-	if got := support.StringPointerValue(inferencePayload.ProviderSession.Provider); got != string(modelprovider.ProviderAgy) {
-		t.Fatalf("provider session provider = %q, want %q", got, modelprovider.ProviderAgy)
+	if got := support.StringPointerValue(inferencePayload.ProviderSession.Provider); got != string(modelprovider.ProviderAntigravity) {
+		t.Fatalf("provider session provider = %q, want %q", got, modelprovider.ProviderAntigravity)
 	}
 	assertAgyFailureDoesNotLeakSensitiveOutput(t, events, responseEvents)
 	assertAgyGoldenTimeoutResponseStream(t, responseEvents)
@@ -236,7 +236,7 @@ func runAgyFailureGoldenCase(
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", strings.Replace(
-		support.BuildModelWorkerConfig(modelprovider.ProviderAgy, request.Model),
+		support.BuildModelWorkerConfig(modelprovider.ProviderAntigravity, request.Model),
 		"stopToken: COMPLETE",
 		"skipPermissions: true\nstopToken: COMPLETE",
 		1,
@@ -290,8 +290,8 @@ func runAgyFailureGoldenCase(
 	if inferencePayload.ProviderSession == nil || inferencePayload.ProviderSession.Provider == nil {
 		t.Fatal("inference response missing provider session metadata")
 	}
-	if got := support.StringPointerValue(inferencePayload.ProviderSession.Provider); got != string(modelprovider.ProviderAgy) {
-		t.Fatalf("provider session provider = %q, want %q", got, modelprovider.ProviderAgy)
+	if got := support.StringPointerValue(inferencePayload.ProviderSession.Provider); got != string(modelprovider.ProviderAntigravity) {
+		t.Fatalf("provider session provider = %q, want %q", got, modelprovider.ProviderAntigravity)
 	}
 	assertAgyFailureDoesNotLeakSensitiveOutput(t, events, responseEvents)
 
@@ -588,7 +588,7 @@ func observeAgyProviderSessionGolden(
 	if payload.Outcome == factoryapi.InferenceOutcomeSucceeded {
 		status = "completed"
 	}
-	provider := string(modelprovider.ProviderAgy)
+	provider := string(modelprovider.ProviderAntigravity)
 	sessionID := ""
 	if payload.ProviderSession != nil {
 		if payload.ProviderSession.Provider != nil {

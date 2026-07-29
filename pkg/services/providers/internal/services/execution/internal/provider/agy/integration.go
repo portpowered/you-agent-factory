@@ -37,7 +37,7 @@ func NewIntegration(deps ...IntegrationDependencies) *Integration {
 }
 
 func (*Integration) Identity() inference.Identity {
-	return inference.Identity(modelprovider.ProviderAgy)
+	return inference.Identity(modelprovider.ProviderAntigravity)
 }
 
 func (*Integration) MaximumCapabilities() inference.CapabilitySet {
@@ -99,7 +99,7 @@ func (i *Integration) Invoke(
 func executeRequestFromInvocation(request inference.InvocationRequest) providers.ExecuteRequest {
 	execution := request.Execution()
 	executeRequest := providers.ExecuteRequest{
-		Provider:           providers.IDAgy,
+		Provider:           providers.IDAntigravity,
 		AttemptID:          request.InvocationID(),
 		Model:              request.Model(),
 		SkipPermissions:    execution.SkipPermissions,
@@ -135,17 +135,17 @@ func workstationNameFromExecution(execution workers.ProviderInferenceRequest) st
 
 func requestedSession(request inference.InvocationRequest) *providers.SessionRef {
 	if session := request.ProviderSession(); session != nil &&
-		workers.CanonicalProviderSessionProvider(session.Provider()) == string(modelprovider.ProviderAgy) &&
+		workers.CanonicalProviderSessionProvider(session.Provider()) == string(modelprovider.ProviderAntigravity) &&
 		strings.TrimSpace(session.Kind()) == providers.SessionIDKind {
 		return &providers.SessionRef{
-			Provider: providers.IDAgy,
+			Provider: providers.IDAntigravity,
 			Kind:     providers.SessionIDKind,
 			ID:       strings.TrimSpace(session.ID()),
 		}
 	}
 	if sessionID := strings.TrimSpace(request.Execution().SessionID); sessionID != "" {
 		return &providers.SessionRef{
-			Provider: providers.IDAgy,
+			Provider: providers.IDAntigravity,
 			Kind:     providers.SessionIDKind,
 			ID:       sessionID,
 		}

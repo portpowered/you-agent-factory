@@ -27,8 +27,6 @@ a broad, data-backed stdio catalog. Representative entries are:
 | `cursor-acp` | `cursor-agent acp` |
 | `kiro-acp` | `kiro-cli-chat acp` |
 | `opencode-acp` | `npx -y opencode-ai acp` |
-| `codex-acp` | `npx -y @agentclientprotocol/codex-acp` |
-| `claude-acp` | `npx -y @agentclientprotocol/claude-agent-acp` |
 | `gemini-acp` | `gemini --acp` |
 
 For Cursor, confirm that the command is installed and that the account is

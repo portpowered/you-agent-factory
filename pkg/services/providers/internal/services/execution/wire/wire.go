@@ -17,10 +17,6 @@ import (
 	claudeadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude"
 	codexadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex"
 	cursoradapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/cursor"
-	geminiadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/gemini"
-	kiroadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/kiro"
-	opencodeadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/opencode"
-	piadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/pi"
 	executionservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -108,7 +104,7 @@ func BuiltInDependenciesFromWorkersRunner(
 		deps = platform[0]
 	}
 	return executionservice.BuiltInDependencies{
-		Agy: agyadapter.NewPTYEffect(agyadapter.PTYEffectOptions{
+		Antigravity: agyadapter.NewPTYEffect(agyadapter.PTYEffectOptions{
 			Allocator: deps.AgyPTY.Allocator,
 			ExecutableDependencies: agyadapter.ExecutableDependencies{
 				Locator:   deps.AgyPTY.Locator,
@@ -122,9 +118,5 @@ func BuiltInDependenciesFromWorkersRunner(
 			TemporaryDir:    deps.Cursor.TemporaryDir,
 			TemporaryFiles:  deps.Cursor.TemporaryFiles,
 		}),
-		Gemini:   geminiadapter.NewCommandEffect(runner),
-		Kiro:     kiroadapter.NewCommandEffect(runner),
-		OpenCode: opencodeadapter.NewCommandEffect(runner),
-		Pi:       piadapter.NewCommandEffect(runner),
 	}
 }

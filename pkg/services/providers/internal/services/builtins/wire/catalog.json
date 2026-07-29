@@ -2,8 +2,6 @@
   "acp": [
     {"name":"pi-acp","transport":"stdio","command":"npx pi-acp"},
     {"name":"openclaw-acp","transport":"stdio","command":"openclaw acp"},
-    {"name":"codex-acp","transport":"stdio","command":"npx -y @agentclientprotocol/codex-acp"},
-    {"name":"claude-acp","transport":"stdio","command":"npx -y @agentclientprotocol/claude-agent-acp"},
     {"name":"gemini-acp","transport":"stdio","command":"gemini --acp"},
     {"name":"cursor-acp","transport":"stdio","command":"cursor-agent acp"},
     {"name":"copilot-acp","transport":"stdio","command":"copilot --acp --stdio"},

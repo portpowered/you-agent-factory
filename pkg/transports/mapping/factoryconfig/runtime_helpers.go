@@ -1,18 +1,10 @@
 package factoryconfig
 
 import (
-	"fmt"
 	"strings"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
-
-func validateOpenCodeAgentField(path, agent string) error {
-	if strings.TrimSpace(agent) == "" {
-		return fmt.Errorf("%s.openCodeAgent must be a non-empty string", path)
-	}
-	return nil
-}
 
 func mergeStopWords(base []string, extra []string) []string {
 	if len(base) == 0 {

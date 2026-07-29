@@ -42,7 +42,7 @@ func Catalog() []Fixture {
 		{
 			ID:             FixtureAgyFinalOnly,
 			FidelityClass:  FidelityFinalOnly,
-			Provider:       adapter.Identity(modelprovider.ProviderAgy),
+			Provider:       adapter.Identity(modelprovider.ProviderAntigravity),
 			TranscriptFile: "testdata/agy_final_only.txt",
 			Request: workerexecution.ProviderInferenceRequest{
 				Dispatch: work.WorkDispatch{DispatchID: "dispatch-parity-agy-final-only"},

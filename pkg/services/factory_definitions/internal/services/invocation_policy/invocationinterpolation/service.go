@@ -100,9 +100,6 @@ func InterpolateWorkerConfig(worker workerconfig.Config, args *work.InvocationAr
 	if next.StopToken, err = interpolateInvocationField(next.StopToken, args, "worker.stopToken", false, readFile); err != nil {
 		return workerconfig.Config{}, err
 	}
-	if next.OpenCodeAgent, err = interpolateInvocationField(next.OpenCodeAgent, args, "worker.openCodeAgent", false, readFile); err != nil {
-		return workerconfig.Config{}, err
-	}
 	if next.Body, err = interpolateInvocationField(next.Body, args, "worker body", false, readFile); err != nil {
 		return workerconfig.Config{}, err
 	}
@@ -123,9 +120,6 @@ func InterpolateWorkstationConfig(workstation factorydefinitions.FactoryWorkstat
 		return factorydefinitions.FactoryWorkstationConfig{}, err
 	}
 	if next.Runner, err = interpolateInvocationField(next.Runner, args, "workstation.runner", false, readFile); err != nil {
-		return factorydefinitions.FactoryWorkstationConfig{}, err
-	}
-	if next.OpenCodeAgent, err = interpolateInvocationField(next.OpenCodeAgent, args, "workstation.openCodeAgent", false, readFile); err != nil {
 		return factorydefinitions.FactoryWorkstationConfig{}, err
 	}
 	if next.PromptFile, err = interpolateInvocationField(next.PromptFile, args, "workstation.promptFile", false, readFile); err != nil {

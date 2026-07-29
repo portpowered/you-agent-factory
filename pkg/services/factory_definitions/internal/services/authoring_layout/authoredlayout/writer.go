@@ -490,7 +490,6 @@ func workstationHasRuntimeFields(
 ) bool {
 	return strings.TrimSpace(workstation.Type) != "" ||
 		workstation.Runner != "" ||
-		workstation.OpenCodeAgent != "" ||
 		workstation.PromptFile != "" ||
 		workstation.OutputSchema != "" ||
 		workstation.Timeout != "" ||

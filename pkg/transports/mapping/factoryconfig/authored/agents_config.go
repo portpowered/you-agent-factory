@@ -64,13 +64,9 @@ func ParseWorkerConfig(data []byte, sourcePath string) (*factorydefinitions.Fact
 		Timeout:          parsed.Timeout,
 		StopToken:        parsed.StopToken,
 		SkipPermissions:  parsed.SkipPermissions,
-		OpenCodeAgent:    parsed.OpenCodeAgent,
 		Auth:             cloneHostedWorkerAuthConfig(parsed.Auth),
 		Linear:           cloneHostedLinearWorkerConfig(parsed.Linear),
 		Body:             body,
-	}
-	if err := validateOpenCodeAgentInFrontmatter(rawFrontmatter, "frontmatter"); err != nil {
-		return nil, fmt.Errorf("validate worker frontmatter in %s: %w", sourcePath, err)
 	}
 	if cfg.Provider != "" {
 		cfg.Provider = internalFactoryHostedWorkerProviderFromPublic(cfg.Provider)
@@ -98,28 +94,8 @@ type workerFrontmatterInput struct {
 	Timeout          string                                       `yaml:"timeout,omitempty"`
 	StopToken        string                                       `yaml:"stopToken,omitempty"`
 	SkipPermissions  bool                                         `yaml:"skipPermissions,omitempty"`
-	OpenCodeAgent    string                                       `yaml:"openCodeAgent,omitempty"`
 	Auth             *factorydefinitions.HostedWorkerAuthConfig   `yaml:"auth,omitempty"`
 	Linear           *factorydefinitions.HostedLinearWorkerConfig `yaml:"linear,omitempty"`
-}
-
-func validateOpenCodeAgentInFrontmatter(frontmatter map[string]any, path string) error {
-	raw, ok := frontmatter["openCodeAgent"]
-	if !ok {
-		return nil
-	}
-	agent, ok := raw.(string)
-	if !ok {
-		return fmt.Errorf("%s.openCodeAgent must be a string", path)
-	}
-	return validateOpenCodeAgentField(path, agent)
-}
-
-func validateOpenCodeAgentField(path, agent string) error {
-	if strings.TrimSpace(agent) == "" {
-		return fmt.Errorf("%s.openCodeAgent must be a non-empty string", path)
-	}
-	return nil
 }
 
 func cloneHostedWorkerAuthConfig(cfg *factorydefinitions.HostedWorkerAuthConfig) *factorydefinitions.HostedWorkerAuthConfig {
@@ -169,10 +145,6 @@ func ParseWorkstationConfig(data []byte, sourcePath string) (*factorydefinitions
 	}
 	normalizeWorkstationPublicEnums(&cfg)
 	NormalizeWorkstationExecutionLimit(&cfg)
-	if err := validateOpenCodeAgentInFrontmatter(rawFrontmatter, "frontmatter"); err != nil {
-		return nil, fmt.Errorf("validate workstation frontmatter in %s: %w", sourcePath, err)
-	}
-
 	cfg.Body = body
 	if cfg.PromptFile == "" {
 		cfg.PromptTemplate = body
@@ -311,7 +283,6 @@ type workerFrontmatter struct {
 	Timeout          string                                       `yaml:"timeout,omitempty"`
 	StopToken        string                                       `yaml:"stopToken,omitempty"`
 	SkipPermissions  bool                                         `yaml:"skipPermissions,omitempty"`
-	OpenCodeAgent    string                                       `yaml:"openCodeAgent,omitempty"`
 	Auth             *factorydefinitions.HostedWorkerAuthConfig   `yaml:"auth,omitempty"`
 	Linear           *factorydefinitions.HostedLinearWorkerConfig `yaml:"linear,omitempty"`
 }
@@ -323,7 +294,6 @@ type workstationFrontmatter struct {
 	Type             string                              `yaml:"type,omitempty"`
 	Worker           string                              `yaml:"worker,omitempty"`
 	Runner           string                              `yaml:"runner,omitempty"`
-	OpenCodeAgent    string                              `yaml:"openCodeAgent,omitempty"`
 	PromptFile       string                              `yaml:"promptFile,omitempty"`
 	OutputSchema     string                              `yaml:"outputSchema,omitempty"`
 	Limits           workstationLimitsFrontmatter        `yaml:"limits,omitempty"`
@@ -385,7 +355,6 @@ func workstationFrontmatterForExpansion(def factorydefinitions.FactoryWorkstatio
 		Type:             def.Type,
 		Worker:           def.WorkerTypeName,
 		Runner:           def.Runner,
-		OpenCodeAgent:    def.OpenCodeAgent,
 		PromptFile:       def.PromptFile,
 		OutputSchema:     def.OutputSchema,
 		Limits:           workstationLimitsFrontmatter{MaxRetries: def.Limits.MaxRetries, MaxExecutionTime: def.Limits.MaxExecutionTime},
@@ -448,7 +417,6 @@ func workerFrontmatterForExpansion(def factorydefinitions.FactoryWorkerConfig) w
 		Timeout:          def.Timeout,
 		StopToken:        def.StopToken,
 		SkipPermissions:  def.SkipPermissions,
-		OpenCodeAgent:    def.OpenCodeAgent,
 		Auth:             cloneHostedWorkerAuthConfig(def.Auth),
 		Linear:           cloneHostedLinearWorkerConfig(def.Linear),
 	}

@@ -165,11 +165,7 @@ func TestOpenAPIContract_GeneratedWorkerModelProviderConstantsMatchOpenAPIEnum(t
 		factoryapi.WorkerModelProviderClaude,
 		factoryapi.WorkerModelProviderCodex,
 		factoryapi.WorkerModelProviderCursor,
-		factoryapi.WorkerModelProviderGemini,
-		factoryapi.WorkerModelProviderKiro,
-		factoryapi.WorkerModelProviderOpenCode,
-		factoryapi.WorkerModelProviderPi,
-		factoryapi.WorkerModelProviderAgy,
+		factoryapi.WorkerModelProviderAntigravity,
 	}
 	values := make([]string, 0, len(generated))
 	for _, provider := range generated {
@@ -183,11 +179,7 @@ func publicWorkerModelProviderValues() []string {
 		"CLAUDE",
 		"CODEX",
 		"CURSOR",
-		"GEMINI",
-		"KIRO",
-		"OPENCODE",
-		"PI",
-		"AGY",
+		"ANTIGRAVITY",
 	}
 }
 
@@ -294,14 +286,10 @@ func TestProviderManifestContract_FirstPartyCatalogIsEvidenceConservative(t *tes
 	t.Parallel()
 
 	wantPosture := map[string]providerPublicationPosture{
-		"agy":      {factoryapi.ProviderTechnicalSupportLevelNotSupported, factoryapi.ProviderImplementationAvailabilityBundled},
-		"claude":   {factoryapi.ProviderTechnicalSupportLevelExperimental, factoryapi.ProviderImplementationAvailabilityBundled},
-		"codex":    {factoryapi.ProviderTechnicalSupportLevelProduction, factoryapi.ProviderImplementationAvailabilityBundled},
-		"cursor":   {factoryapi.ProviderTechnicalSupportLevelExperimental, factoryapi.ProviderImplementationAvailabilityBundled},
-		"gemini":   {factoryapi.ProviderTechnicalSupportLevelExperimental, factoryapi.ProviderImplementationAvailabilityBundled},
-		"kiro":     {factoryapi.ProviderTechnicalSupportLevelExperimental, factoryapi.ProviderImplementationAvailabilityBundled},
-		"opencode": {factoryapi.ProviderTechnicalSupportLevelExperimental, factoryapi.ProviderImplementationAvailabilityBundled},
-		"pi":       {factoryapi.ProviderTechnicalSupportLevelExperimental, factoryapi.ProviderImplementationAvailabilityBundled},
+		"antigravity": {factoryapi.ProviderTechnicalSupportLevelExperimental, factoryapi.ProviderImplementationAvailabilityBundled},
+		"claude":      {factoryapi.ProviderTechnicalSupportLevelExperimental, factoryapi.ProviderImplementationAvailabilityBundled},
+		"codex":       {factoryapi.ProviderTechnicalSupportLevelProduction, factoryapi.ProviderImplementationAvailabilityBundled},
+		"cursor":      {factoryapi.ProviderTechnicalSupportLevelExperimental, factoryapi.ProviderImplementationAvailabilityBundled},
 	}
 	doc := loadValidatedOpenAPIContract(t)
 	schema := doc.Components.Schemas["ProviderManifest"].Value
@@ -342,7 +330,7 @@ func TestProviderManifestContract_FirstPartyCatalogIsEvidenceConservative(t *tes
 	}
 
 	sort.Strings(ids)
-	wantIDs := []string{"agy", "claude", "codex", "cursor", "gemini", "kiro", "opencode", "pi"}
+	wantIDs := []string{"antigravity", "claude", "codex", "cursor"}
 	if !reflect.DeepEqual(ids, wantIDs) {
 		t.Fatalf("first-party provider ids = %v, want %v", ids, wantIDs)
 	}

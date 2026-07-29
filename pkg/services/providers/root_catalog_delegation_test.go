@@ -37,7 +37,7 @@ func TestRootCatalogDelegation_FulfillsPublishedListAndGet(t *testing.T) {
 
 	assertGetErrorIs(t, root, providers.GetProviderRequest{}, providers.ErrInvalidID)
 
-	agy, err := root.GetProvider(context.Background(), providers.GetProviderRequest{ID: providers.IDAgy})
+	agy, err := root.GetProvider(context.Background(), providers.GetProviderRequest{ID: providers.IDAntigravity})
 	if err != nil {
 		t.Fatalf("GetProvider(agy) = %v", err)
 	}

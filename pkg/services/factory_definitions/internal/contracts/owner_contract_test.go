@@ -68,11 +68,9 @@ const (
 	RelationDependsOn                         = work.RelationDependsOn
 	RelationParentChild                       = work.RelationParentChild
 	RunnerIDCodex                             = workerexecution.RunnerIDCodex
+	RunnerIDClaude                            = workerexecution.RunnerIDClaude
 	RunnerIDCursorCLI                         = workerexecution.RunnerIDCursorCLI
-	RunnerIDGemini                            = workerexecution.RunnerIDGemini
-	RunnerIDKiro                              = workerexecution.RunnerIDKiro
-	RunnerIDOpenCode                          = workerexecution.RunnerIDOpenCode
-	RunnerIDPi                                = workerexecution.RunnerIDPi
+	RunnerIDAntigravity                       = workerexecution.RunnerIDAntigravity
 	RunnerOptionalCapabilityImageInput        = workerexecution.RunnerOptionalCapabilityImageInput
 	RunnerOptionalCapabilitySessionResume     = workerexecution.RunnerOptionalCapabilitySessionResume
 	RunnerOptionalCapabilityStructuredOutput  = workerexecution.RunnerOptionalCapabilityStructuredOutput

@@ -12,7 +12,7 @@ func TestPackagedACPCatalogIsExactAndDetached(t *testing.T) {
 	}
 	first := service.ACPIntegrations()
 	want := []string{
-		"pi-acp", "openclaw-acp", "codex-acp", "claude-acp", "gemini-acp",
+		"pi-acp", "openclaw-acp", "gemini-acp",
 		"cursor-acp", "copilot-acp", "droid-acp", "fast-agent-acp",
 		"grok-build-acp", "iflow-acp", "kilocode-acp", "kimi-acp", "kiro-acp",
 		"mux-acp", "opencode-acp", "pool-acp", "qoder-acp", "qwen-acp",
@@ -25,12 +25,12 @@ func TestPackagedACPCatalogIsExactAndDetached(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("packaged ACP identities = %#v, want %#v", got, want)
 	}
-	if len(first[7].Aliases) != 2 || first[7].Aliases[0] != "factory-droid" || first[7].Aliases[1] != "factorydroid" {
-		t.Fatalf("droid aliases = %#v", first[7].Aliases)
+	if len(first[5].Aliases) != 2 || first[5].Aliases[0] != "factory-droid" || first[5].Aliases[1] != "factorydroid" {
+		t.Fatalf("droid aliases = %#v", first[5].Aliases)
 	}
-	first[7].Aliases[0] = "mutated"
+	first[5].Aliases[0] = "mutated"
 	second := service.ACPIntegrations()
-	if second[7].Aliases[0] != "factory-droid" {
-		t.Fatalf("catalog retained caller mutation: %#v", second[7].Aliases)
+	if second[5].Aliases[0] != "factory-droid" {
+		t.Fatalf("catalog retained caller mutation: %#v", second[5].Aliases)
 	}
 }

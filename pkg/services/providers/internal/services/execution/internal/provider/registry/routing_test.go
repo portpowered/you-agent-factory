@@ -36,18 +36,11 @@ func TestResolveRunnerSelectionUsesRegistryIdentityAndPrecedence(t *testing.T) {
 	}{
 		{
 			name:        "manifest alias",
-			workstation: " AGENT ",
-			factory:     "gemini",
+			workstation: " CURSOR ",
+			factory:     "antigravity",
 			worker:      "claude",
 			wantID:      workers.RunnerIDCursorCLI,
 			wantSource:  workers.RunnerSelectionSourceWorkstation,
-		},
-		{
-			name:       "published alias",
-			factory:    "kiro-cli",
-			worker:     "claude",
-			wantID:     workers.RunnerIDKiro,
-			wantSource: workers.RunnerSelectionSourceFactory,
 		},
 		{
 			name:       "legacy public model provider alias",
@@ -105,7 +98,6 @@ func TestCompatibilityAliasesUseRegistryIdentityAuthority(t *testing.T) {
 	}{
 		{alias: "anthropic", wantCanonical: "claude", wantRunner: "claude"},
 		{alias: workers.RunnerIDCursorCLI, wantCanonical: "cursor", wantRunner: workers.RunnerIDCursorCLI},
-		{alias: "kiro-cli", wantCanonical: "kiro", wantRunner: workers.RunnerIDKiro},
 		{alias: "openai", wantCanonical: "codex", wantRunner: workers.RunnerIDCodex},
 	}
 	for _, test := range tests {
@@ -183,14 +175,8 @@ func TestResolveRunnerSelectionUsesExternalIntegrationCanonicalIdentity(t *testi
 	if providers.UsesNativeRunner("claude") {
 		t.Fatal("UsesNativeRunner(claude) = true, want conductor route")
 	}
-	if providers.UsesNativeRunner("gemini") {
-		t.Fatal("UsesNativeRunner(gemini) = true, want conductor route for migrated Gemini")
-	}
 	if providers.UsesNativeRunner("cursor") || providers.UsesNativeRunner(workers.RunnerIDCursorCLI) {
 		t.Fatal("UsesNativeRunner(cursor) = true, want conductor route for migrated Cursor")
-	}
-	if providers.UsesNativeRunner(workers.RunnerIDPi) {
-		t.Fatal("UsesNativeRunner(pi) = true, want conductor route for migrated Pi")
 	}
 	if _, err := providers.Integration("customer"); err != nil {
 		t.Fatalf("Integration(external) error = %v", err)
@@ -226,15 +212,15 @@ func TestRunnerMetadataUsesManifestCapabilities(t *testing.T) {
 		workers.RunnerOptionalCapabilityStatusSupported,
 	)
 
-	gemini, err := providers.RunnerMetadata("gemini")
+	cursor, err := providers.RunnerMetadata("cursor")
 	if err != nil {
-		t.Fatalf("RunnerMetadata(gemini) error = %v", err)
+		t.Fatalf("RunnerMetadata(cursor) error = %v", err)
 	}
 	assertOptionalCapabilityStatus(
 		t,
-		gemini,
+		cursor,
 		workers.RunnerOptionalCapabilitySessionResume,
-		workers.RunnerOptionalCapabilityStatusUnsupported,
+		workers.RunnerOptionalCapabilityStatusSupported,
 	)
 }
 
@@ -243,17 +229,17 @@ func TestValidateRunnerPrerequisitesUsesManifestExecutableAndAlias(t *testing.T)
 	providers := newBuiltInRegistry(t)
 	locator := &recordingExecutableLocator{}
 
-	if err := providers.ValidateRunnerPrerequisites(locator, "agent"); err != nil {
+	if err := providers.ValidateRunnerPrerequisites(locator, "cursor"); err != nil {
 		t.Fatalf("ValidateRunnerPrerequisites() error = %v", err)
 	}
-	if !reflect.DeepEqual(locator.commands, []string{"agent"}) {
+	if !reflect.DeepEqual(locator.commands, []string{"cursor"}) {
 		t.Fatalf("commands = %#v, want manifest executable", locator.commands)
 	}
 
-	locator.missing = "kiro-cli"
-	err := providers.ValidateRunnerPrerequisites(locator, "kiro")
-	if err == nil || !strings.Contains(err.Error(), `requires "kiro-cli" on PATH`) {
-		t.Fatalf("ValidateRunnerPrerequisites(kiro) error = %v", err)
+	locator.missing = "agy"
+	err := providers.ValidateRunnerPrerequisites(locator, "antigravity")
+	if err == nil || !strings.Contains(err.Error(), `requires "agy" on PATH`) {
+		t.Fatalf("ValidateRunnerPrerequisites(antigravity) error = %v", err)
 	}
 }
 

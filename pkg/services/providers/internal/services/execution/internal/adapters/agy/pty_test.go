@@ -119,7 +119,7 @@ func TestPTYEffectBuildsArgvWorkspaceAndEnvironment(t *testing.T) {
 		t.Fatal("NewPTYEffect() returned nil")
 	}
 	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
-		Provider:         providers.IDAgy,
+		Provider:         providers.IDAntigravity,
 		AttemptID:        "dispatch-agy",
 		Model:            "gemini-pro",
 		UserMessage:      privatePrompt,
@@ -127,7 +127,7 @@ func TestPTYEffectBuildsArgvWorkspaceAndEnvironment(t *testing.T) {
 		WorkerType:       "agent-worker",
 		WorkstationName:  "review-work",
 		ResumeSession: &providers.SessionRef{
-			Provider: providers.IDAgy,
+			Provider: providers.IDAntigravity,
 			Kind:     providers.SessionIDKind,
 			ID:       "session-1",
 		},
@@ -172,13 +172,13 @@ func TestPTYEffectExecutesThroughInjectedNativePTY(t *testing.T) {
 	const prompt = "summarize this; preserve argv boundaries"
 	var observed []byte
 	result, err := effect.Execute(context.Background(), providers.ExecuteRequest{
-		Provider:         providers.IDAgy,
+		Provider:         providers.IDAntigravity,
 		AttemptID:        "dispatch-agy-contract",
 		Model:            "gemini-pro",
 		UserMessage:      prompt,
 		WorkingDirectory: ".",
 		ResumeSession: &providers.SessionRef{
-			Provider: providers.IDAgy,
+			Provider: providers.IDAntigravity,
 			Kind:     providers.SessionIDKind,
 			ID:       "session-agy-contract",
 		},
@@ -213,7 +213,7 @@ func TestPTYEffectPreservesPromptMetacharactersInArgv(t *testing.T) {
 		ExecutableDependencies: executableDependencies(nil),
 	})
 	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
-		Provider:         providers.IDAgy,
+		Provider:         providers.IDAntigravity,
 		AttemptID:        "dispatch-agy-42",
 		WorkingDirectory: ".",
 		UserMessage:      privatePrompt,
@@ -243,7 +243,7 @@ func TestPTYEffectTimeoutCleansCaptureBeforeObserve(t *testing.T) {
 		ExecutableDependencies: executableDependencies(nil),
 	})
 	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
-		Provider:    providers.IDAgy,
+		Provider:    providers.IDAntigravity,
 		AttemptID:   "dispatch-agy-timeout",
 		UserMessage: "hello",
 	}, func([]byte) error {
@@ -286,7 +286,7 @@ func TestPTYEffectFailsClosedWithoutExecutableEffects(t *testing.T) {
 		Executable:  "agy",
 	})
 	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
-		Provider:    providers.IDAgy,
+		Provider:    providers.IDAntigravity,
 		AttemptID:   "dispatch-agy-missing-effects",
 		UserMessage: "hello",
 	}, func([]byte) error { return nil })
@@ -311,7 +311,7 @@ func TestPTYEffectResolvesBareExecutableThroughInjectedSearchPath(t *testing.T) 
 		ExecutableDependencies: executableDependencies(map[string]string{"agy": resolved}, resolved),
 	})
 	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
-		Provider:         providers.IDAgy,
+		Provider:         providers.IDAntigravity,
 		AttemptID:        "dispatch-agy-path",
 		WorkingDirectory: ".",
 		UserMessage:      "hello",
@@ -345,7 +345,7 @@ func TestPTYEffectDispatchContextIsPreservedInLaunch(t *testing.T) {
 		ExecutableDependencies: executableDependencies(nil),
 	})
 	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
-		Provider:        providers.IDAgy,
+		Provider:        providers.IDAntigravity,
 		AttemptID:       "dispatch-agy-context",
 		WorkerType:      "agent-worker",
 		WorkstationName: "review-work",

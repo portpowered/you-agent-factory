@@ -362,17 +362,6 @@ func inferenceRequestForExecutionRequest(request workerexecution.WorkstationExec
 			req.RequiredOptionalCapabilities = append(req.RequiredOptionalCapabilities, workerexecution.RunnerOptionalCapabilitySessionResume)
 		}
 	}
-	if req.ModelProvider == string(modelprovider.ProviderOpenCode) {
-		workstationAgent := ""
-		workerAgent := ""
-		if workstationDef != nil {
-			workstationAgent = workstationDef.OpenCodeAgent
-		}
-		if workerDef != nil {
-			workerAgent = workerDef.OpenCodeAgent
-		}
-		req.OpenCodeAgent = workerrunner.ResolveOpenCodeAgent(workstationAgent, workerAgent)
-	}
 	return req
 }
 
@@ -403,16 +392,10 @@ func modelProviderForRunnerID(runnerID string) string {
 		return string(modelprovider.ProviderCodex)
 	case string(modelprovider.ProviderClaude):
 		return string(modelprovider.ProviderClaude)
-	case workerexecution.RunnerIDGemini:
-		return string(modelprovider.ProviderGemini)
-	case workerexecution.RunnerIDKiro:
-		return string(modelprovider.ProviderKiro)
 	case "cursor", workerexecution.RunnerIDCursorCLI:
 		return string(modelprovider.ProviderCursor)
-	case workerexecution.RunnerIDOpenCode:
-		return string(modelprovider.ProviderOpenCode)
-	case workerexecution.RunnerIDPi:
-		return string(modelprovider.ProviderPi)
+	case workerexecution.RunnerIDAntigravity:
+		return string(modelprovider.ProviderAntigravity)
 	default:
 		return ""
 	}

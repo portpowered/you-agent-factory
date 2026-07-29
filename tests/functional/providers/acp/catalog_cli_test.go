@@ -12,7 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
-func TestRootBuiltACPCommandsAddListDeleteOneSettingsBackedCatalogEntry(t *testing.T) {
+func TestRootBuiltACPCommandsAddDeleteAndUnifiedListOneSettingsBackedCatalogEntry(t *testing.T) {
 	home := t.TempDir()
 	working := t.TempDir()
 	process := support.BuildProcess(t, serviceedges.Edges{
@@ -34,19 +34,9 @@ func TestRootBuiltACPCommandsAddListDeleteOneSettingsBackedCatalogEntry(t *testi
 		}
 	}
 
-	listed := executeACPCommand(t, process, home, working, "workers", "acp", "list")
-	if !strings.Contains(listed, "custom-acp") || !strings.Contains(listed, "ACP") || !strings.Contains(listed, "selectable") {
-		data, _ := os.ReadFile(filepath.Join(home, ".you-agent-factory", "config.json"))
-		t.Fatalf("list output omitted configured provider facts: %q; config=%s", listed, data)
-	}
-
 	deleted := executeACPCommand(t, process, home, working, "workers", "acp", "delete", "--name", "custom-acp")
 	if !strings.Contains(deleted, "deleted ACP provider custom-acp") {
 		t.Fatalf("delete output = %q", deleted)
-	}
-	listed = executeACPCommand(t, process, home, working, "workers", "acp", "list")
-	if strings.Contains(listed, "custom-acp") {
-		t.Fatalf("list after delete retained configured provider: %q", listed)
 	}
 	unified = executeACPCommand(t, process, home, working, "workers", "list")
 	if strings.Contains(unified, "custom-acp") {
@@ -65,7 +55,6 @@ func TestRootBuiltACPCommandsAddListDeleteOneSettingsBackedCatalogEntry(t *testi
 		t,
 		"cli/you.workers.acp.add",
 		"cli/you.workers.acp.delete",
-		"cli/you.workers.acp.list",
 		"cli/you.workers.list",
 	)
 }

@@ -20,12 +20,14 @@ var ErrInvalidSessionRef = errors.New("provider session ref is invalid")
 type ID string
 
 const (
-	IDAgy      ID = "agy"
-	IDClaude   ID = "claude"
-	IDCodex    ID = "codex"
-	IDCursor   ID = "agent"
+	IDAntigravity ID = "antigravity"
+	IDClaude      ID = "claude"
+	IDCodex       ID = "codex"
+	IDCursor      ID = "cursor"
+	// Retired identities remain typed for persisted-data decoding and errors,
+	// but are not present in the built-in catalog or execution registry.
 	IDGemini   ID = "gemini"
-	IDKiro     ID = "kiro-cli"
+	IDKiro     ID = "kiro"
 	IDOpenCode ID = "opencode"
 	IDPi       ID = "pi"
 )

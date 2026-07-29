@@ -603,10 +603,10 @@ func TestResolve_CanonicalizesProviderAliases(t *testing.T) {
 	}{
 		{alias: "anthropic", canonical: "CLAUDE"},
 		{alias: "openai", canonical: "CODEX"},
-		{alias: "agent", canonical: "CURSOR"},
-		{alias: "cursor-agent", canonical: "CURSOR"},
+		{alias: "agent", canonical: "agent"},
+		{alias: "cursor-agent", canonical: "cursor-agent"},
 		{alias: "kiro-cli", canonical: "KIRO"},
-		{alias: "antigravity", canonical: "AGY"},
+		{alias: "antigravity", canonical: "ANTIGRAVITY"},
 	} {
 		test := test
 		t.Run(test.alias, func(t *testing.T) {

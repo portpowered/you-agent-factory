@@ -124,7 +124,7 @@ func TestBuildProcessComposesDetachedExternalProviderWithBuiltInsInertly(t *test
 	assertProviderLookup(t, process.ProviderRegistry(), "customer.provider", "customer.provider")
 	assertProviderLookup(t, process.ProviderRegistry(), "customer", "customer.provider")
 	assertProviderLookup(t, process.ProviderRegistry(), "claude", "claude")
-	assertProviderLookup(t, process.ProviderRegistry(), "agent", "cursor")
+	assertProviderLookup(t, process.ProviderRegistry(), "cursor", "cursor")
 	if apiStarts != 0 || integration.discoverCalls != 0 ||
 		integration.capabilityCalls != 0 || integration.invokeCalls != 0 {
 		t.Fatalf(
@@ -618,4 +618,3 @@ func assertProviderLookup(
 		t.Fatalf("CanonicalIdentity(%q) = %q, want %q", identity, canonical, want)
 	}
 }
-

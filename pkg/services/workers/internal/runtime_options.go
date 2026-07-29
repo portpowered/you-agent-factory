@@ -275,9 +275,9 @@ func validateConfiguredWorkstationRunners(cfg *interfaces.FactoryConfig, factory
 			workstation = *configured
 		}
 		worker, _ := runtimeCfg.Worker(workstation.WorkerTypeName)
-		modelProvider, openCodeAgent := "", ""
+		modelProvider := ""
 		if worker != nil {
-			modelProvider, openCodeAgent = worker.ModelProvider, worker.OpenCodeAgent
+			modelProvider = worker.ModelProvider
 		}
 		selection, selectionErr := resolveRuntimeRunnerSelection(
 			providers,
@@ -287,9 +287,6 @@ func validateConfiguredWorkstationRunners(cfg *interfaces.FactoryConfig, factory
 		)
 		if selectionErr != nil {
 			return fmt.Errorf("workstations[%d](%s).runner: %w", index, workstation.Name, selectionErr)
-		}
-		if err := workerrunner.ValidateOpenCodeAgentForRunnerSelection(workstation.OpenCodeAgent, openCodeAgent, selection); err != nil {
-			return fmt.Errorf("workstations[%d](%s).openCodeAgent: %w", index, workstation.Name, err)
 		}
 		if selection.Source == workerexecution.RunnerSelectionSourceDefault {
 			continue

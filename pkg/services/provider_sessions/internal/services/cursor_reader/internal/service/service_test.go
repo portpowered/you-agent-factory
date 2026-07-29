@@ -30,7 +30,7 @@ func TestReadDiscoversOnlyCanonicalContainedSession(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	detail, err := reader.Read(context.Background(),providers.SessionRef{
+	detail, err := reader.Read(context.Background(), providers.SessionRef{
 		Provider: providers.IDCursor,
 		Kind:     providers.SessionIDKind,
 		ID:       sessionID,
@@ -71,11 +71,11 @@ func TestReadReconstructsDeterministicDetachedNormalizedDetail(t *testing.T) {
 		ID:       sessionID,
 	}
 
-	first, err := reader.Read(context.Background(),ref)
+	first, err := reader.Read(context.Background(), ref)
 	if err != nil {
 		t.Fatalf("first Read: %v", err)
 	}
-	second, err := reader.Read(context.Background(),ref)
+	second, err := reader.Read(context.Background(), ref)
 	if err != nil {
 		t.Fatalf("second Read: %v", err)
 	}
@@ -89,7 +89,7 @@ func TestReadReconstructsDeterministicDetachedNormalizedDetail(t *testing.T) {
 	*first.Parse.TokenUsage.InputTokens = 999
 	first.Transcript = append(first.Transcript, providersessions.TranscriptEntry{})
 
-	third, err := reader.Read(context.Background(),ref)
+	third, err := reader.Read(context.Background(), ref)
 	if err != nil {
 		t.Fatalf("third Read: %v", err)
 	}
@@ -213,7 +213,7 @@ func TestReadRejectsInvalidReferencesBeforeStorageIO(t *testing.T) {
 		},
 		{
 			name: "legacy cursor alias is not canonical",
-			ref:  providers.SessionRef{Provider: providers.ID("cursor"), Kind: providers.SessionIDKind, ID: "session-1"},
+			ref:  providers.SessionRef{Provider: providers.ID("agent"), Kind: providers.SessionIDKind, ID: "session-1"},
 			want: providersessions.ErrUnsupportedProvider,
 		},
 		{
@@ -239,7 +239,7 @@ func TestReadRejectsInvalidReferencesBeforeStorageIO(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if _, err := reader.Read(context.Background(),test.ref); !errors.Is(err, test.want) {
+			if _, err := reader.Read(context.Background(), test.ref); !errors.Is(err, test.want) {
 				t.Fatalf("Read error = %v, want %v", err, test.want)
 			}
 		})
@@ -293,7 +293,7 @@ func TestReadMissingAndAmbiguousSessionsNeverOpenDatabase(t *testing.T) {
 			if err != nil {
 				t.Fatalf("New: %v", err)
 			}
-			_, err = reader.Read(context.Background(),providers.SessionRef{
+			_, err = reader.Read(context.Background(), providers.SessionRef{
 				Provider: providers.IDCursor,
 				Kind:     providers.SessionIDKind,
 				ID:       "same-session",
@@ -344,7 +344,7 @@ func TestReadRejectsCandidateResolvedOutsideRootBeforeDatabaseOpen(t *testing.T)
 		t.Fatalf("New: %v", err)
 	}
 
-	_, err = reader.Read(context.Background(),providers.SessionRef{
+	_, err = reader.Read(context.Background(), providers.SessionRef{
 		Provider: providers.IDCursor,
 		Kind:     providers.SessionIDKind,
 		ID:       sessionID,

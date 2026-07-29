@@ -53,13 +53,15 @@ type RunnerMetadata struct {
 }
 
 const (
-	RunnerIDCodex     = "codex"
-	RunnerIDGemini    = "gemini"
-	RunnerIDKiro      = "kiro"
-	RunnerIDCursorCLI = "cursor-cli"
-	RunnerIDOpenCode  = "opencode"
-	RunnerIDPi        = "pi"
-	RunnerIDAgy       = "agy"
+	RunnerIDCodex       = "codex"
+	RunnerIDClaude      = "claude"
+	RunnerIDCursorCLI   = "cursor-cli"
+	RunnerIDAntigravity = "antigravity"
+	// Retired runner IDs remain available for persisted-data decoding only.
+	RunnerIDGemini   = "gemini"
+	RunnerIDKiro     = "kiro"
+	RunnerIDOpenCode = "opencode"
+	RunnerIDPi       = "pi"
 )
 
 type RunnerSelectionSource string
@@ -150,7 +152,6 @@ type ProviderInferenceRequest struct {
 	ModelProvider                string                          `json:"model_provider,omitempty"`
 	ModelLocality                string                          `json:"model_locality,omitempty"`
 	SessionID                    string                          `json:"session_id,omitempty"`
-	OpenCodeAgent                string                          `json:"open_code_agent,omitempty"`
 	// SkipPermissions is the invocation-effective worker policy. Construction
 	// resolves persisted configuration and invocation overrides before the
 	// request reaches either the native runner or neutral conductor.

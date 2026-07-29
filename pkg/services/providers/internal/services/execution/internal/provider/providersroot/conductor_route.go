@@ -5,7 +5,6 @@ import (
 	"errors"
 	"strings"
 
-	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/conductor"
@@ -48,12 +47,8 @@ func conductorIdentity(providerID string) string {
 	switch normalized {
 	case workers.RunnerIDCursorCLI, "cursor":
 		return "cursor"
-	case workers.RunnerIDKiro, string(modelprovider.ProviderKiro):
-		return "kiro"
-	case workers.RunnerIDGemini:
-		return "gemini"
-	case workers.RunnerIDAgy:
-		return "agy"
+	case workers.RunnerIDAntigravity:
+		return "antigravity"
 	default:
 		return normalized
 	}

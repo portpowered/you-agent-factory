@@ -98,7 +98,7 @@ func selectedCommandName(args []string) string {
 
 func globalFlagConsumesValue(arg string) bool {
 	switch arg {
-	case "--server", "--default-worker-model-provider", "--default-worker-model":
+	case "--server":
 		return true
 	default:
 		return false

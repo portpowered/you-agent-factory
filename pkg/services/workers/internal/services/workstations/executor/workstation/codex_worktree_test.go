@@ -171,8 +171,8 @@ func TestWorkstationExecutor_LegacyClaudeWorktree_SkipsCodexFactoryPreparation(t
 	if mock.dispatch.Worktree != "my-feature-branch" {
 		t.Fatalf("worktree = %q, want my-feature-branch", mock.dispatch.Worktree)
 	}
-	if mock.dispatch.RunnerID != workerexecution.RunnerIDCodex {
-		t.Fatalf("runner = %q, want default codex runner id", mock.dispatch.RunnerID)
+	if mock.dispatch.RunnerID != workerexecution.RunnerIDClaude {
+		t.Fatalf("runner = %q, want claude runner id", mock.dispatch.RunnerID)
 	}
 	if _, err := os.Stat(filepath.Join(factoryRoot, ".worktrees", "my-feature-branch")); !os.IsNotExist(err) {
 		t.Fatal("expected factory-managed worktree not to be created for legacy Claude provider")

@@ -88,12 +88,12 @@ func TestPackagedReviewRejectionHonorsMaterializedAndFlaggedProviderSettings(t *
 			},
 		},
 		{
-			name:             "model_provider_flags",
-			expectedProvider: "gemini",
-			expectedModel:    "flag-gemini-model",
+			name:             "run_provider_model_flags",
+			expectedProvider: "codex",
+			expectedModel:    "flag-codex-model",
 			operatorArgs: []string{
-				"--default-worker-model-provider", "GEMINI",
-				"--default-worker-model", "flag-gemini-model",
+				"--provider", "CODEX",
+				"--model", "flag-codex-model",
 			},
 		},
 	} {

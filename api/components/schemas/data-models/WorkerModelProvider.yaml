@@ -7,8 +7,4 @@ enum:
   - CLAUDE
   - CODEX
   - CURSOR
-  - GEMINI
-  - KIRO
-  - OPENCODE
-  - PI
-  - AGY
+  - ANTIGRAVITY

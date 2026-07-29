@@ -9,12 +9,12 @@ import (
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
-func TestBuiltInRegistrationsSelectDistinctAgyCodexClaudeCursorGeminiKiroAndOpenCodeAdapters(t *testing.T) {
+func TestBuiltInRegistrationsSelectOnlyAntigravityCodexClaudeAndCursorAdapters(t *testing.T) {
 	t.Parallel()
 
 	registrations := BuiltInRegistrations()
-	if len(registrations) != 8 {
-		t.Fatalf("registration count = %d, want 8", len(registrations))
+	if len(registrations) != 4 {
+		t.Fatalf("registration count = %d, want 4", len(registrations))
 	}
 
 	byID := make(map[providers.ID]string, len(registrations))
@@ -40,19 +40,7 @@ func TestBuiltInRegistrationsSelectDistinctAgyCodexClaudeCursorGeminiKiroAndOpen
 	if !strings.Contains(byID[providers.IDCursor], "Cursor") {
 		t.Fatalf("Cursor adapter message = %q", byID[providers.IDCursor])
 	}
-	if !strings.Contains(byID[providers.IDOpenCode], "OpenCode") {
-		t.Fatalf("OpenCode adapter message = %q", byID[providers.IDOpenCode])
-	}
-	if !strings.Contains(byID[providers.IDGemini], "Gemini") {
-		t.Fatalf("Gemini adapter message = %q", byID[providers.IDGemini])
-	}
-	if !strings.Contains(byID[providers.IDKiro], "Kiro") {
-		t.Fatalf("Kiro adapter message = %q", byID[providers.IDKiro])
-	}
-	if !strings.Contains(byID[providers.IDPi], "Pi") {
-		t.Fatalf("Pi adapter message = %q", byID[providers.IDPi])
-	}
-	if !strings.Contains(byID[providers.IDAgy], "Agy") {
-		t.Fatalf("Agy adapter message = %q", byID[providers.IDAgy])
+	if !strings.Contains(byID[providers.IDAntigravity], "Antigravity") {
+		t.Fatalf("Antigravity adapter message = %q", byID[providers.IDAntigravity])
 	}
 }

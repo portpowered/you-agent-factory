@@ -193,7 +193,6 @@ const WORKER_KEYS = new Set([
   "id",
   "provider",
   "resources",
-  "openCodeAgent",
   "operations",
   "skipPermissions",
   "stopToken",
@@ -226,7 +225,6 @@ const WORKSTATION_KEYS = new Set([
   "onContinue",
   "onFailure",
   "onRejection",
-  "openCodeAgent",
   "operation",
   "operationBindings",
   "outputSchema",
@@ -300,13 +298,11 @@ const WORKER_MODEL_PROVIDER_VALUES = new Set<FactoryWorkerModelProvider>([
   "CLAUDE",
   "CODEX",
   "CURSOR",
-  "GEMINI",
-  "KIRO",
-  "OPENCODE",
+  "ANTIGRAVITY",
 ]);
 const EXACT_INVOCATION_PLACEHOLDER_PATTERN = /^\$\{([A-Za-z0-9_.-]+)\}$/;
 const PROVIDER_IDENTITY_PATTERN =
-  /^(?:[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*|AGY|ANTHROPIC|CLAUDE|CODEX|CURSOR|CURSOR_AGENT|GEMINI|KIRO|OPENAI|OPENCODE|PI)$/;
+  /^(?:[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*|ANTIGRAVITY|ANTHROPIC|CLAUDE|CODEX|CURSOR|OPENAI)$/;
 const WORKER_PROVIDER_VALUES = new Set<
   NonNullable<FactoryWorker["executorProvider"]>
 >(["ACP", "SCRIPT_WRAP"]);
@@ -318,11 +314,9 @@ const HOSTED_WORKER_PROVIDER_VALUES = new Set<
 >(["LINEAR"]);
 const RUNNER_ID_VALUES = new Set<FactoryRunnerID>([
   "codex",
-  "gemini",
-  "kiro",
+  "claude",
   "cursor-cli",
-  "opencode",
-  "pi",
+  "antigravity",
 ]);
 const WORKSTATION_BEHAVIOR_VALUES = new Set<
   NonNullable<FactoryWorkstation["behavior"]>
@@ -853,11 +847,6 @@ function decodeWorker(
   const timeout = readOptionalString(record, "timeout", path);
   const stopToken = readOptionalString(record, "stopToken", path);
   const skipPermissions = readOptionalBoolean(record, "skipPermissions", path);
-  const openCodeAgent = readOptionalNonEmptyString(
-    record,
-    "openCodeAgent",
-    path,
-  );
   const auth = readOptionalObject(record, "auth", path, decodeHostedWorkerAuth);
   const linear = readOptionalObject(
     record,
@@ -914,9 +903,6 @@ function decodeWorker(
   }
   if (skipPermissions !== undefined) {
     worker.skipPermissions = skipPermissions;
-  }
-  if (openCodeAgent !== undefined) {
-    worker.openCodeAgent = openCodeAgent;
   }
   if (auth !== undefined) {
     worker.auth = auth;
@@ -1401,11 +1387,6 @@ function decodeWorkstation(value: unknown, path: string): FactoryWorkstation {
   const worktree = readOptionalString(record, "worktree", path);
   const env = readOptionalStringMap(record, "env", path);
   const runner = readOptionalEnum(record, "runner", path, RUNNER_ID_VALUES);
-  const openCodeAgent = readOptionalNonEmptyString(
-    record,
-    "openCodeAgent",
-    path,
-  );
   const operation = readOptionalString(record, "operation", path);
   const operationBindings = readOptionalArray(
     record,
@@ -1479,9 +1460,6 @@ function decodeWorkstation(value: unknown, path: string): FactoryWorkstation {
   }
   if (runner !== undefined) {
     workstation.runner = runner;
-  }
-  if (openCodeAgent !== undefined) {
-    workstation.openCodeAgent = openCodeAgent;
   }
   if (operation !== undefined) {
     workstation.operation = operation;

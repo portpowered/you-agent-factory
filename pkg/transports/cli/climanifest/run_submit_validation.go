@@ -14,7 +14,7 @@ var runSubmitFamilySpecs = []struct {
 	{
 		id: "you.run", path: "you run",
 		flags: []string{
-			"continuously", "debug", "default-worker-model", "default-worker-model-provider", "dir",
+			"continuously", "debug", "dir",
 			"factory", "json", "model", "named", "no-record", "output", "port", "provider", "quiet", "record", "replay",
 			"runtime-log-compress", "runtime-log-dir", "runtime-log-max-age-days", "runtime-log-max-backups",
 			"runtime-log-max-size-mb", "runtime-metrics-compress", "runtime-metrics-dir",
@@ -24,15 +24,15 @@ var runSubmitFamilySpecs = []struct {
 	},
 	{
 		id: "you.server", path: "you server",
-		flags: []string{"debug", "default-worker-model", "default-worker-model-provider", "json", "server", "verbose"},
+		flags: []string{"debug", "json", "server", "verbose"},
 	},
 	{
 		id: "you.submit", path: "you submit", operationID: "submitWorkBySessionId",
-		flags: []string{"debug", "default-worker-model", "default-worker-model-provider", "json", "name", "payload", "port", "server", "session", "verbose", "work-type-name"},
+		flags: []string{"debug", "json", "name", "payload", "port", "server", "session", "verbose", "work-type-name"},
 	},
 	{
 		id: "you.submit.batch", path: "you submit batch", operationID: "upsertWorkRequestBySessionId",
-		flags: []string{"debug", "default-worker-model", "default-worker-model-provider", "dry-run", "file", "json", "port", "server", "session", "verbose"},
+		flags: []string{"debug", "dry-run", "file", "json", "port", "server", "session", "verbose"},
 	},
 }
 

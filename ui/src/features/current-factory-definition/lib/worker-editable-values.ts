@@ -27,9 +27,7 @@ export const EDITABLE_MODEL_PROVIDERS: ModelProvider[] = [
   "CLAUDE",
   "CODEX",
   "CURSOR",
-  "GEMINI",
-  "KIRO",
-  "OPENCODE",
+  "ANTIGRAVITY",
 ];
 
 export const EDITABLE_MODEL_LOCALITIES: ModelLocality[] = ["LOCAL", "CLOUD"];

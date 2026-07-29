@@ -29,7 +29,7 @@ func writeFinalOnlyProgress(
 }
 
 func finalOnlyProgressEvents(runID, content string) ([]inference.EventDraft, error) {
-	provider := string(modelprovider.ProviderAgy)
+	provider := string(modelprovider.ProviderAntigravity)
 	started, err := finalOnlyRunEvent(runID, provider, workerexecution.PhaseStarted)
 	if err != nil {
 		return nil, err
@@ -115,7 +115,7 @@ func writeFailureProgress(
 			Delivery:        workerexecution.DeliverySynthesized,
 			Fidelity:        workerexecution.FidelityLifecycleOnly,
 			NativeEventType: "provider_failure",
-			Provider:        string(modelprovider.ProviderAgy),
+			Provider:        string(modelprovider.ProviderAntigravity),
 			Representation:  workerexecution.RepresentationNotification,
 		},
 	})

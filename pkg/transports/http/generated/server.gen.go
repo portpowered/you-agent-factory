@@ -848,12 +848,10 @@ const (
 
 // Defines values for RunnerID.
 const (
-	RunnerIDCodex     RunnerID = "codex"
-	RunnerIDCursorCLI RunnerID = "cursor-cli"
-	RunnerIDGemini    RunnerID = "gemini"
-	RunnerIDKiro      RunnerID = "kiro"
-	RunnerIDOpenCode  RunnerID = "opencode"
-	RunnerIDPi        RunnerID = "pi"
+	RunnerIDAntigravity RunnerID = "antigravity"
+	RunnerIDClaude      RunnerID = "claude"
+	RunnerIDCodex       RunnerID = "codex"
+	RunnerIDCursorCLI   RunnerID = "cursor-cli"
 )
 
 // Defines values for RunnerSelectionSource.
@@ -970,14 +968,10 @@ const (
 
 // Defines values for WorkerModelProvider.
 const (
-	WorkerModelProviderAgy      WorkerModelProvider = "AGY"
-	WorkerModelProviderClaude   WorkerModelProvider = "CLAUDE"
-	WorkerModelProviderCodex    WorkerModelProvider = "CODEX"
-	WorkerModelProviderCursor   WorkerModelProvider = "CURSOR"
-	WorkerModelProviderGemini   WorkerModelProvider = "GEMINI"
-	WorkerModelProviderKiro     WorkerModelProvider = "KIRO"
-	WorkerModelProviderOpenCode WorkerModelProvider = "OPENCODE"
-	WorkerModelProviderPi       WorkerModelProvider = "PI"
+	WorkerModelProviderAntigravity WorkerModelProvider = "ANTIGRAVITY"
+	WorkerModelProviderClaude      WorkerModelProvider = "CLAUDE"
+	WorkerModelProviderCodex       WorkerModelProvider = "CODEX"
+	WorkerModelProviderCursor      WorkerModelProvider = "CURSOR"
 )
 
 // Defines values for WorkerType.
@@ -6531,9 +6525,6 @@ type Worker struct {
 	// Name Worker name referenced by Workstation.worker.
 	Name string `json:"name"`
 
-	// OpenCodeAgent Optional OpenCode agent profile name for model workers that dispatch through the OpenCode runner. When set, OpenCode dispatches invoke `opencode run --agent <name>`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/).
-	OpenCodeAgent *string `json:"openCodeAgent,omitempty"`
-
 	// Operations Provider-agnostic model operations that this worker can execute, including named input and output slots.
 	Operations *[]ModelOperation `json:"operations,omitempty"`
 
@@ -6731,9 +6722,6 @@ type Workstation struct {
 
 	// OnRejection Optional destination emitted when the worker rejects the current work without a hard failure. Classifier workstations must not declare onRejection.
 	OnRejection *[]WorkstationIO `json:"onRejection,omitempty"`
-
-	// OpenCodeAgent Optional OpenCode agent profile override for this workstation. When set, overrides the worker default for OpenCode dispatches and invokes `opencode run --agent <name>`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/).
-	OpenCodeAgent *string `json:"openCodeAgent,omitempty"`
 
 	// Operation Uppercase provider-agnostic operation requested by `MODEL_INVOKE` workstations, such as `TTS`.
 	Operation *ModelOperationName `json:"operation,omitempty"`

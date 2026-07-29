@@ -177,5 +177,5 @@ func unsupportedWorkerModelProviderError(value string) error {
 var errUnresolvedSymbolicDefaultProvider = errors.New(
 	"worker model provider DEFAULT requires a concrete provider from file or environment; " +
 		"set defaults.workerModelProvider, YOU_DEFAULT_WORKER_MODEL_PROVIDER, or " +
-		"--default-worker-model-provider to a supported provider",
+		"you run --provider to a supported provider",
 )

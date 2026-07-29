@@ -284,9 +284,9 @@ func TestProjectRejectsInvalidIdentifierAndPropagatesTypedFailures(t *testing.T)
 	}
 }
 
-func TestDetailsNormalizesCursorAliasesAndWrapsLookupContext(t *testing.T) {
+func TestDetailsUsesCanonicalCursorAndWrapsLookupContext(t *testing.T) {
 	root := t.TempDir()
-	for _, provider := range []string{"cursor", "agent", "cursor-agent"} {
+	for _, provider := range []string{"cursor"} {
 		t.Run(provider, func(t *testing.T) {
 			_, err := newServiceForRoots(t, t.TempDir(), string(root)).Details(provider, "session_id", "missing-session")
 			if !errors.Is(err, providersessions.ErrSessionNotFound) {
@@ -300,6 +300,11 @@ func TestDetailsNormalizesCursorAliasesAndWrapsLookupContext(t *testing.T) {
 				t.Fatalf("lookup error = %#v, want normalized cursor root context", lookupErr)
 			}
 		})
+	}
+	for _, provider := range []string{"agent", "cursor-agent"} {
+		if _, err := newServiceForRoots(t, t.TempDir(), string(root)).Details(provider, "session_id", "missing-session"); !errors.Is(err, providersessions.ErrUnsupportedProvider) {
+			t.Fatalf("Details(%q) error = %v, want ErrUnsupportedProvider", provider, err)
+		}
 	}
 }
 
@@ -316,7 +321,9 @@ func TestDetailsRejectsUnsupportedProviderAndKind(t *testing.T) {
 func TestGetProviderSessionDetails_LegacyAgentCursorNotFoundIsDistinguishable(t *testing.T) {
 	root := t.TempDir()
 	_, err := newServiceForRoots(t, t.TempDir(), root).Details("agent", "session_id", "missing-session")
-	assertCursorLookupContext(t, err, root)
+	if !errors.Is(err, providersessions.ErrUnsupportedProvider) {
+		t.Fatalf("error = %v, want ErrUnsupportedProvider", err)
+	}
 }
 
 func TestGetProviderSessionDetails_RejectsUnsupportedProviderOrKindByContract(t *testing.T) {
@@ -332,7 +339,9 @@ func TestGetProviderSessionDetails_RejectsUnsupportedProviderOrKindByContract(t 
 func TestGetProviderSessionDetails_LoadsLegacyAgentCursorSessionFromConfiguredRoot(t *testing.T) {
 	root := t.TempDir()
 	_, err := newServiceForRoots(t, t.TempDir(), root).Details("agent", "session_id", "missing-session")
-	assertCursorLookupContext(t, err, root)
+	if !errors.Is(err, providersessions.ErrUnsupportedProvider) {
+		t.Fatalf("error = %v, want ErrUnsupportedProvider", err)
+	}
 }
 
 func TestGetProviderSessionDetails_RegressionLoadsCodexAndCursorFromConfiguredRoots(t *testing.T) {
@@ -354,7 +363,6 @@ func TestGetProviderSessionDetails_EventRefRoundTripLoadsCursorAndCodex(t *testi
 	}{
 		{"codex", providersessions.ProviderCodex, ""},
 		{"cursor", providersessions.ProviderCursor, cursorRoot},
-		{"agent", providersessions.ProviderCursor, cursorRoot},
 	} {
 		_, err := service.Details(test.provider, "session_id", "missing-session")
 		assertLookupContext(t, err, test.want, test.root)

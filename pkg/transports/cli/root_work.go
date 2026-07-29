@@ -151,14 +151,6 @@ func applyRepresentativeResolvedInputs(
 	if err != nil {
 		return err
 	}
-	defaultWorkerModel, err := inputs.String("you.flag.default-worker-model")
-	if err != nil {
-		return err
-	}
-	defaultWorkerModelProvider, err := inputs.String("you.flag.default-worker-model-provider")
-	if err != nil {
-		return err
-	}
 	jsonOutput, err := inputs.Bool("you.flag.json")
 	if err != nil {
 		return err
@@ -173,8 +165,6 @@ func applyRepresentativeResolvedInputs(
 	}
 
 	diagnostics.debug = debug
-	operatorDefaults.defaultWorkerModel = defaultWorkerModel
-	operatorDefaults.defaultWorkerModelProvider = defaultWorkerModelProvider
 	globals.json = jsonOutput
 	globals.server = server
 	diagnostics.verbose = verbose

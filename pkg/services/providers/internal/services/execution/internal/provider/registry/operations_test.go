@@ -43,7 +43,7 @@ func TestRegistryStaticQueriesAreNormalizedDeterministicDetachedAndInert(t *test
 	t.Parallel()
 
 	registry, recordings := newRecordingRegistry(t)
-	entry, err := registry.Lookup("  AGENT  ")
+	entry, err := registry.Lookup("  CURSOR  ")
 	if err != nil {
 		t.Fatalf("Lookup(alias) error = %v", err)
 	}
@@ -55,8 +55,8 @@ func TestRegistryStaticQueriesAreNormalizedDeterministicDetachedAndInert(t *test
 	if !slices.IsSorted(identities) {
 		t.Fatalf("Entries() identities = %v, want canonical order", identities)
 	}
-	if len(entries) != 8 {
-		t.Fatalf("Entries() count = %d, want 8", len(entries))
+	if len(entries) != 4 {
+		t.Fatalf("Entries() count = %d, want 4", len(entries))
 	}
 
 	cursorEntry := findEntry(t, entries, "cursor")
@@ -67,20 +67,17 @@ func TestRegistryStaticQueriesAreNormalizedDeterministicDetachedAndInert(t *test
 		!slices.IsSorted(cursorEntry.DiscoveryPrerequisites().ExecutableNames) {
 		t.Fatal("entry slice projections are not in canonical order")
 	}
-	manifest.Aliases[0] = "mutated"
-	aliases := entry.Aliases()
-	aliases[0] = "mutated"
+	manifest.Discovery.ExecutableNames[0] = "mutated"
 	prerequisites := entry.DiscoveryPrerequisites()
 	prerequisites.ExecutableNames[0] = "mutated"
 	maximum := entry.MaximumCapabilities().Values()
 	maximum[0] = inference.CapabilityUsage
 
-	again, err := registry.Lookup("agent")
+	again, err := registry.Lookup("cursor")
 	if err != nil {
 		t.Fatalf("Lookup(alias again) error = %v", err)
 	}
-	if again.Aliases()[0] == "mutated" ||
-		again.DiscoveryPrerequisites().ExecutableNames[0] == "mutated" ||
+	if again.DiscoveryPrerequisites().ExecutableNames[0] == "mutated" ||
 		!again.MaximumCapabilities().Has(inference.CapabilityPromptSubmission) {
 		t.Fatal("caller mutation changed later registry results")
 	}
@@ -132,7 +129,7 @@ func TestRegistryDiagnosticsDistinguishStaticAvailabilityWithoutDiscovery(t *tes
 	for _, diagnostic := range fullRegistry.SupportedProviders() {
 		availability[diagnostic.Entry().Identity()] = diagnostic.Availability()
 	}
-	if availability["agy"] != AvailabilitySelectable ||
+	if availability["antigravity"] != AvailabilitySelectable ||
 		availability["claude"] != AvailabilitySelectable {
 		t.Fatalf("availability = %v", availability)
 	}
@@ -149,7 +146,7 @@ func TestRegistryExplicitOperationsDelegateOnlyToResolvedIntegration(t *testing.
 	assertNegotiatedCapabilityOperation(t, registry, request)
 	assertDiscoveryOperation(t, registry)
 	assertInvocationAccess(t, registry, request)
-	if _, err := registry.MaximumCapabilities("agent"); err != nil {
+	if _, err := registry.MaximumCapabilities("cursor"); err != nil {
 		t.Fatalf("MaximumCapabilities() error = %v", err)
 	}
 	assertOnlyCursorReceivedExplicitCalls(t, recordings)
@@ -161,7 +158,7 @@ func assertNegotiatedCapabilityOperation(
 	request inference.InvocationRequest,
 ) {
 	t.Helper()
-	capabilities, err := registry.Capabilities(context.Background(), "agent", request)
+	capabilities, err := registry.Capabilities(context.Background(), "cursor", request)
 	if err != nil || !capabilities.Has(inference.CapabilityPromptSubmission) {
 		t.Fatalf("Capabilities() = %v, %v", capabilities.Values(), err)
 	}
@@ -183,7 +180,7 @@ func assertDiscoveryOperation(t *testing.T, registry *Registry) {
 
 func assertInvocationAccess(t *testing.T, registry *Registry, request inference.InvocationRequest) {
 	t.Helper()
-	integration, err := registry.Integration(" AGENT ")
+	integration, err := registry.Integration(" CURSOR ")
 	if err != nil || integration.Identity() != "cursor" {
 		t.Fatalf("Integration() identity = %q, %v", integration.Identity(), err)
 	}

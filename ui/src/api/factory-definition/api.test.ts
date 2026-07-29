@@ -229,7 +229,7 @@ describe("normalizeFactoryDefinition", () => {
         },
         name: "agent-factory",
         resources: [{ capacity: 3, name: "gpu" }],
-        runner: "gemini",
+        runner: "antigravity",
         sourceDirectory: "/tmp/source-factory",
         supportingFiles: {
           scripts: {
@@ -335,7 +335,7 @@ describe("normalizeFactoryDefinition", () => {
       },
       name: "agent-factory",
       resources: [{ capacity: 3, name: "gpu" }],
-      runner: "gemini",
+      runner: "antigravity",
       sourceDirectory: "/tmp/source-factory",
       supportingFiles: {
         scripts: {
@@ -850,7 +850,7 @@ describe("normalizeFactoryDefinition", () => {
       }),
     ).toThrowError(
       new FactoryDefinitionAPIError(
-        "factory.guards[0].modelProvider must be one of CLAUDE, CODEX, CURSOR, GEMINI, KIRO, OPENCODE.",
+        "factory.guards[0].modelProvider must be one of CLAUDE, CODEX, CURSOR, ANTIGRAVITY.",
       ),
     );
   });
@@ -1159,9 +1159,7 @@ const SUPPORTED_WORKER_MODEL_PROVIDERS = [
   "CLAUDE",
   "CODEX",
   "CURSOR",
-  "GEMINI",
-  "KIRO",
-  "OPENCODE",
+  "ANTIGRAVITY",
 ] as const;
 
 describe("worker modelProvider validation", () => {
@@ -1294,71 +1292,6 @@ describe("normalizeFactoryDefinition work type handlingBehavior", () => {
         "factory.workTypes[0].handlingBehavior[0] must be one of DEFAULT.",
       ),
     );
-  });
-});
-
-describe("normalizeFactoryDefinition openCodeAgent", () => {
-  it("accepts non-empty openCodeAgent on workers and workstations", () => {
-    const normalized = normalizeFactoryDefinition({
-      name: "opencode-agent-factory",
-      workTypes: [
-        {
-          name: "story",
-          states: [
-            { name: "init", type: "INITIAL" },
-            { name: "complete", type: "TERMINAL" },
-          ],
-        },
-      ],
-      workers: [
-        {
-          name: "executor",
-          type: "MODEL_WORKER",
-          modelProvider: "OPENCODE",
-          openCodeAgent: "reviewer",
-        },
-      ],
-      workstations: [
-        {
-          name: "execute-story",
-          worker: "executor",
-          openCodeAgent: "implementer",
-          inputs: [{ workType: "story", state: "init" }],
-          outputs: [{ workType: "story", state: "complete" }],
-        },
-      ],
-    });
-
-    expect(normalized.workers?.[0]?.openCodeAgent).toBe("reviewer");
-    expect(normalized.workstations?.[0]?.openCodeAgent).toBe("implementer");
-  });
-
-  it("rejects blank openCodeAgent values", () => {
-    expect(() =>
-      normalizeFactoryDefinition({
-        name: "opencode-agent-factory",
-        workTypes: [
-          {
-            name: "story",
-            states: [
-              { name: "init", type: "INITIAL" },
-              { name: "complete", type: "TERMINAL" },
-            ],
-          },
-        ],
-        workers: [
-          { name: "executor", type: "MODEL_WORKER", openCodeAgent: "   " },
-        ],
-        workstations: [
-          {
-            name: "execute-story",
-            worker: "executor",
-            inputs: [{ workType: "story", state: "init" }],
-            outputs: [{ workType: "story", state: "complete" }],
-          },
-        ],
-      }),
-    ).toThrow(/openCodeAgent must be a non-empty string/);
   });
 });
 

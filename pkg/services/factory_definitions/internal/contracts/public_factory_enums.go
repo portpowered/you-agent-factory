@@ -15,14 +15,16 @@ import (
 type ModelProvider string
 
 const (
-	ModelProviderClaude   ModelProvider = "claude"
-	ModelProviderCodex    ModelProvider = "codex"
+	ModelProviderClaude      ModelProvider = "claude"
+	ModelProviderCodex       ModelProvider = "codex"
+	ModelProviderCursor      ModelProvider = "cursor"
+	ModelProviderAntigravity ModelProvider = "antigravity"
+	// Retired values remain typed for persisted Factory decoding, but are not
+	// returned by SupportedModelProviders or accepted as built-ins.
 	ModelProviderGemini   ModelProvider = "gemini"
 	ModelProviderKiro     ModelProvider = "kiro-cli"
-	ModelProviderCursor   ModelProvider = "agent"
 	ModelProviderOpenCode ModelProvider = "opencode"
 	ModelProviderPi       ModelProvider = "pi"
-	ModelProviderAgy      ModelProvider = "agy"
 )
 
 // SupportedModelProviders returns the canonical internal model provider commands
@@ -31,24 +33,16 @@ func SupportedModelProviders() []ModelProvider {
 	return []ModelProvider{
 		ModelProviderClaude,
 		ModelProviderCodex,
-		ModelProviderGemini,
-		ModelProviderKiro,
 		ModelProviderCursor,
-		ModelProviderOpenCode,
-		ModelProviderPi,
-		ModelProviderAgy,
+		ModelProviderAntigravity,
 	}
 }
 
 var internalModelProviderToPublicWorkerModelProvider = map[ModelProvider]string{
-	ModelProviderClaude:   publicFactoryWorkerModelProviderClaude,
-	ModelProviderCodex:    publicFactoryWorkerModelProviderCodex,
-	ModelProviderCursor:   publicFactoryWorkerModelProviderCursor,
-	ModelProviderGemini:   publicFactoryWorkerModelProviderGemini,
-	ModelProviderKiro:     publicFactoryWorkerModelProviderKiro,
-	ModelProviderOpenCode: publicFactoryWorkerModelProviderOpenCode,
-	ModelProviderPi:       publicFactoryWorkerModelProviderPi,
-	ModelProviderAgy:      publicFactoryWorkerModelProviderAgy,
+	ModelProviderClaude:      publicFactoryWorkerModelProviderClaude,
+	ModelProviderCodex:       publicFactoryWorkerModelProviderCodex,
+	ModelProviderCursor:      publicFactoryWorkerModelProviderCursor,
+	ModelProviderAntigravity: publicFactoryWorkerModelProviderAntigravity,
 }
 
 // PublicWorkerModelProviderFromInternal maps a canonical provider command to
@@ -68,16 +62,8 @@ func InternalModelProviderFromPublicWorkerModelProvider(value string) (ModelProv
 		return ModelProviderCodex, true
 	case publicFactoryWorkerModelProviderCursor:
 		return ModelProviderCursor, true
-	case publicFactoryWorkerModelProviderGemini:
-		return ModelProviderGemini, true
-	case publicFactoryWorkerModelProviderKiro:
-		return ModelProviderKiro, true
-	case publicFactoryWorkerModelProviderOpenCode:
-		return ModelProviderOpenCode, true
-	case publicFactoryWorkerModelProviderPi:
-		return ModelProviderPi, true
-	case publicFactoryWorkerModelProviderAgy:
-		return ModelProviderAgy, true
+	case publicFactoryWorkerModelProviderAntigravity:
+		return ModelProviderAntigravity, true
 	default:
 		return "", false
 	}
@@ -153,14 +139,10 @@ func ProjectWorkerBehaviorClass(workerType string) string {
 }
 
 var publicFactoryWorkerModelProviderAliases = map[string]string{
-	publicFactoryWorkerModelProviderClaude:   publicFactoryWorkerModelProviderClaude,
-	publicFactoryWorkerModelProviderCodex:    publicFactoryWorkerModelProviderCodex,
-	publicFactoryWorkerModelProviderCursor:   publicFactoryWorkerModelProviderCursor,
-	publicFactoryWorkerModelProviderGemini:   publicFactoryWorkerModelProviderGemini,
-	publicFactoryWorkerModelProviderKiro:     publicFactoryWorkerModelProviderKiro,
-	publicFactoryWorkerModelProviderOpenCode: publicFactoryWorkerModelProviderOpenCode,
-	publicFactoryWorkerModelProviderPi:       publicFactoryWorkerModelProviderPi,
-	publicFactoryWorkerModelProviderAgy:      publicFactoryWorkerModelProviderAgy,
+	publicFactoryWorkerModelProviderClaude:      publicFactoryWorkerModelProviderClaude,
+	publicFactoryWorkerModelProviderCodex:       publicFactoryWorkerModelProviderCodex,
+	publicFactoryWorkerModelProviderCursor:      publicFactoryWorkerModelProviderCursor,
+	publicFactoryWorkerModelProviderAntigravity: publicFactoryWorkerModelProviderAntigravity,
 }
 
 var publicFactoryWorkerProviderAliases = map[string]string{
@@ -262,12 +244,10 @@ func ProjectWorkstationBehaviorClass(workstationType string, kind WorkstationKin
 }
 
 var publicFactoryRunnerIDAliases = map[string]string{
-	workerexecution.RunnerIDCodex:     workerexecution.RunnerIDCodex,
-	workerexecution.RunnerIDGemini:    workerexecution.RunnerIDGemini,
-	workerexecution.RunnerIDKiro:      workerexecution.RunnerIDKiro,
-	workerexecution.RunnerIDCursorCLI: workerexecution.RunnerIDCursorCLI,
-	workerexecution.RunnerIDOpenCode:  workerexecution.RunnerIDOpenCode,
-	workerexecution.RunnerIDPi:        workerexecution.RunnerIDPi,
+	workerexecution.RunnerIDCodex:       workerexecution.RunnerIDCodex,
+	workerexecution.RunnerIDClaude:      workerexecution.RunnerIDClaude,
+	workerexecution.RunnerIDCursorCLI:   workerexecution.RunnerIDCursorCLI,
+	workerexecution.RunnerIDAntigravity: workerexecution.RunnerIDAntigravity,
 }
 
 // WorkstationOutcomeFormatDecisionEnvelope routes agent output through the
@@ -290,16 +270,12 @@ var publicFactoryWorkTypeHandlingBehaviorAliases = map[string]string{
 }
 
 const (
-	publicFactoryWorkerModelProviderClaude   = "CLAUDE"
-	publicFactoryWorkerModelProviderCodex    = "CODEX"
-	publicFactoryWorkerModelProviderCursor   = "CURSOR"
-	publicFactoryWorkerModelProviderGemini   = "GEMINI"
-	publicFactoryWorkerModelProviderKiro     = "KIRO"
-	publicFactoryWorkerModelProviderOpenCode = "OPENCODE"
-	publicFactoryWorkerModelProviderPi       = "PI"
-	publicFactoryWorkerModelProviderAgy      = "AGY"
-	publicFactoryWorkerProviderScriptWrap    = "SCRIPT_WRAP"
-	publicFactoryWorkerProviderACP           = "ACP"
+	publicFactoryWorkerModelProviderClaude      = "CLAUDE"
+	publicFactoryWorkerModelProviderCodex       = "CODEX"
+	publicFactoryWorkerModelProviderCursor      = "CURSOR"
+	publicFactoryWorkerModelProviderAntigravity = "ANTIGRAVITY"
+	publicFactoryWorkerProviderScriptWrap       = "SCRIPT_WRAP"
+	publicFactoryWorkerProviderACP              = "ACP"
 )
 
 // WorkerModelProviderDefault is the symbolic operator-config model provider value
@@ -307,31 +283,24 @@ const (
 const WorkerModelProviderDefault = "DEFAULT"
 
 var internalFactoryWorkerModelProviderAliases = map[string]string{
-	"ANTHROPIC":    publicFactoryWorkerModelProviderClaude,
-	"CLAUDE":       publicFactoryWorkerModelProviderClaude,
-	"CODEX":        publicFactoryWorkerModelProviderCodex,
-	"CURSOR":       publicFactoryWorkerModelProviderCursor,
-	"CURSOR_AGENT": publicFactoryWorkerModelProviderCursor,
-	"GEMINI":       publicFactoryWorkerModelProviderGemini,
-	"KIRO":         publicFactoryWorkerModelProviderKiro,
-	"OPENCODE":     publicFactoryWorkerModelProviderOpenCode,
-	"PI":           publicFactoryWorkerModelProviderPi,
-	"OPENAI":       publicFactoryWorkerModelProviderCodex,
-	"agent":        publicFactoryWorkerModelProviderCursor,
-	"anthropic":    publicFactoryWorkerModelProviderClaude,
-	"claude":       publicFactoryWorkerModelProviderClaude,
-	"codex":        publicFactoryWorkerModelProviderCodex,
-	"cursor":       publicFactoryWorkerModelProviderCursor,
-	"cursor-agent": publicFactoryWorkerModelProviderCursor,
-	"gemini":       publicFactoryWorkerModelProviderGemini,
-	"kiro":         publicFactoryWorkerModelProviderKiro,
-	"kiro-cli":     publicFactoryWorkerModelProviderKiro,
-	"openai":       publicFactoryWorkerModelProviderCodex,
-	"opencode":     publicFactoryWorkerModelProviderOpenCode,
-	"pi":           publicFactoryWorkerModelProviderPi,
-	"agy":          publicFactoryWorkerModelProviderAgy,
-	"AGY":          publicFactoryWorkerModelProviderAgy,
-	"antigravity":  publicFactoryWorkerModelProviderAgy,
+	"ANTHROPIC":   publicFactoryWorkerModelProviderClaude,
+	"CLAUDE":      publicFactoryWorkerModelProviderClaude,
+	"CODEX":       publicFactoryWorkerModelProviderCodex,
+	"CURSOR":      publicFactoryWorkerModelProviderCursor,
+	"ANTIGRAVITY": publicFactoryWorkerModelProviderAntigravity,
+	"OPENAI":      publicFactoryWorkerModelProviderCodex,
+	"anthropic":   publicFactoryWorkerModelProviderClaude,
+	"claude":      publicFactoryWorkerModelProviderClaude,
+	"codex":       publicFactoryWorkerModelProviderCodex,
+	"cursor":      publicFactoryWorkerModelProviderCursor,
+	"openai":      publicFactoryWorkerModelProviderCodex,
+	"antigravity": publicFactoryWorkerModelProviderAntigravity,
+	// Retired native providers remain canonicalized as open extension identities
+	// when decoding existing operator settings; they are not built-ins.
+	"gemini":   "GEMINI",
+	"kiro-cli": "KIRO",
+	"opencode": "OPENCODE",
+	"pi":       "PI",
 }
 
 var internalFactoryWorkerProviderAliases = map[string]string{

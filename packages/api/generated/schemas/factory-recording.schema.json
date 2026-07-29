@@ -3745,7 +3745,7 @@
       "description": "Open provider identity used by authored modelProvider fields. Extension identities use lowercase letters and digits separated by dots or hyphens. Built-in identities and documented legacy aliases remain accepted compatibility spellings. For example, `customer.provider` is a valid extension identity.",
       "maxLength": 128,
       "minLength": 1,
-      "pattern": "^(?:[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*|AGY|ANTHROPIC|CLAUDE|CODEX|CURSOR|CURSOR_AGENT|GEMINI|KIRO|OPENAI|OPENCODE|PI)$",
+      "pattern": "^(?:[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*|ANTIGRAVITY|ANTHROPIC|CLAUDE|CODEX|CURSOR|OPENAI)$",
       "type": "string"
     },
     "ProviderSessionMetadata": {
@@ -4026,11 +4026,9 @@
       "description": "Stable built-in runner identifiers supported by factory and workstation runner selection.",
       "enum": [
         "codex",
-        "gemini",
-        "kiro",
+        "claude",
         "cursor-cli",
-        "opencode",
-        "pi"
+        "antigravity"
       ],
       "type": "string"
     },
@@ -5080,10 +5078,6 @@
           "description": "Worker name referenced by Workstation.worker.",
           "type": "string"
         },
-        "openCodeAgent": {
-          "description": "Optional OpenCode agent profile name for model workers that dispatch through the OpenCode runner. When set, OpenCode dispatches invoke `opencode run --agent \u003cname\u003e`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/).",
-          "type": "string"
-        },
         "operations": {
           "description": "Provider-agnostic model operations that this worker can execute, including named input and output slots.",
           "items": {
@@ -5260,10 +5254,6 @@
             "$ref": "#/$defs/WorkstationIO"
           },
           "type": "array"
-        },
-        "openCodeAgent": {
-          "description": "Optional OpenCode agent profile override for this workstation. When set, overrides the worker default for OpenCode dispatches and invokes `opencode run --agent \u003cname\u003e`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/).",
-          "type": "string"
         },
         "operation": {
           "allOf": [

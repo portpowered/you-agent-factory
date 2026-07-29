@@ -333,8 +333,8 @@ The materialized factory is editable at
 the standard agent-worker fields, including `modelProvider` (`CODEX` or
 `CLAUDE`) and `model`, either in `factory.json` or their split `AGENTS.md`
 front matter. Omit them to use normal operator defaults; `YOU_DEFAULT_WORKER_MODEL_PROVIDER`,
-`YOU_DEFAULT_WORKER_MODEL`, and the global `--default-worker-model-provider` /
-`--default-worker-model` flags retain the documented `file < env < flag`
+`YOU_DEFAULT_WORKER_MODEL`, and run-scoped `you run --provider` / `--model`
+flags retain the documented `file < env < run flag`
 precedence for omitted worker values. Configure both roles when they must use
 the same provider/model, or configure them independently when the reviewer
 needs a different model. Unsupported provider values are rejected by normal

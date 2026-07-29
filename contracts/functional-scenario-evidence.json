@@ -2,11 +2,10 @@
   "formatVersion": 1,
   "declarations": [
     {
-      "test": "tests/functional/providers/acp/catalog_cli_test.go::TestRootBuiltACPCommandsAddListDeleteOneSettingsBackedCatalogEntry",
+      "test": "tests/functional/providers/acp/catalog_cli_test.go::TestRootBuiltACPCommandsAddDeleteAndUnifiedListOneSettingsBackedCatalogEntry",
       "stableIds": [
         "cli/you.workers.acp.add",
         "cli/you.workers.acp.delete",
-        "cli/you.workers.acp.list",
         "cli/you.workers.list"
       ]
     },

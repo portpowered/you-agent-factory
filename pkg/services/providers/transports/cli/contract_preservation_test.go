@@ -216,8 +216,8 @@ func TestAcceptedCLIContract_ListPreservesAcceptedHumanAndJSONOutput(t *testing.
 	}
 	wantHuman := strings.Join([]string{
 		"ID\tDISPLAY NAME\tAVAILABILITY\tREADINESS\tALIASES",
-		"agent\tCursor\tsupported-but-unavailable\tunavailable\tnone",
 		"codex\tCodex\tselectable\tready\topenai-codex",
+		"cursor\tCursor\tsupported-but-unavailable\tunavailable\tnone",
 		"",
 	}, "\n")
 	if human.String() != wantHuman {
@@ -248,19 +248,19 @@ func TestAcceptedCLIContract_ListPreservesAcceptedHumanAndJSONOutput(t *testing.
 	if len(got.Providers) != 2 {
 		t.Fatalf("providers = %d, want 2", len(got.Providers))
 	}
-	if got.Providers[0].ID != "agent" || got.Providers[1].ID != "codex" {
-		t.Fatalf("providers order = %#v, want agent then codex", got.Providers)
+	if got.Providers[0].ID != "codex" || got.Providers[1].ID != "cursor" {
+		t.Fatalf("providers order = %#v, want codex then cursor", got.Providers)
 	}
-	if got.Providers[1].DisplayName != "Codex" ||
-		got.Providers[1].Availability != "selectable" ||
-		got.Providers[1].Readiness != "ready" {
-		t.Fatalf("codex entry = %#v", got.Providers[1])
+	if got.Providers[0].DisplayName != "Codex" ||
+		got.Providers[0].Availability != "selectable" ||
+		got.Providers[0].Readiness != "ready" {
+		t.Fatalf("codex entry = %#v", got.Providers[0])
 	}
-	if len(got.Providers[1].Capabilities) != 2 {
-		t.Fatalf("codex capabilities = %#v, want two entries", got.Providers[1].Capabilities)
+	if len(got.Providers[0].Capabilities) != 2 {
+		t.Fatalf("codex capabilities = %#v, want two entries", got.Providers[0].Capabilities)
 	}
-	if got.Providers[0].Availability != "supported-but-unavailable" {
-		t.Fatalf("agent availability = %q", got.Providers[0].Availability)
+	if got.Providers[1].Availability != "supported-but-unavailable" {
+		t.Fatalf("cursor availability = %q", got.Providers[1].Availability)
 	}
 }
 
@@ -302,7 +302,7 @@ func TestAcceptedCLIContract_ShowTypedFailuresPreserveAcceptedErrors(t *testing.
 
 	assertShowErrorIs(t, service, "", providers.ErrInvalidID)
 	assertShowErrorIs(t, service, "claude", providers.ErrUnknownProvider)
-	assertShowErrorIs(t, service, "agent", providers.ErrProviderUnavailable)
+	assertShowErrorIs(t, service, "cursor", providers.ErrProviderUnavailable)
 }
 
 func assertShowErrorIs(

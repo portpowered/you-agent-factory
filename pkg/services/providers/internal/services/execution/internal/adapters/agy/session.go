@@ -16,7 +16,7 @@ func sessionRefFromRequest(resume *providers.SessionRef) *providers.SessionRef {
 	}
 	provider := resume.Provider
 	if strings.TrimSpace(string(provider)) == "" {
-		provider = providers.IDAgy
+		provider = providers.IDAntigravity
 	}
 	kind := strings.TrimSpace(resume.Kind)
 	if kind == "" {

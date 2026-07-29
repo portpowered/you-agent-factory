@@ -105,7 +105,7 @@ func TestPTYEffectClassifiesDistinctExecutionOutcomes(t *testing.T) {
 				ExecutableDependencies: deps,
 			})
 			_, err := effect.Execute(ctx, providers.ExecuteRequest{
-				Provider:    providers.IDAgy,
+				Provider:    providers.IDAntigravity,
 				AttemptID:   "attempt-failure",
 				UserMessage: "deterministic failure prompt",
 			}, func([]byte) error { return nil })
@@ -130,7 +130,7 @@ func TestPTYEffectDeadlineTimeoutOutranksOutputDetail(t *testing.T) {
 		ExecutableDependencies: executableDependencies(nil),
 	})
 	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
-		Provider:    providers.IDAgy,
+		Provider:    providers.IDAntigravity,
 		AttemptID:   "attempt-timeout",
 		UserMessage: "deterministic failure prompt",
 	}, func([]byte) error { return nil })
@@ -152,7 +152,7 @@ func TestPTYEffectMissingExecutableViaExecNotFound(t *testing.T) {
 		ExecutableDependencies: executableDependencies(nil),
 	})
 	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
-		Provider:         providers.IDAgy,
+		Provider:         providers.IDAntigravity,
 		AttemptID:        "attempt-missing",
 		UserMessage:      "hello",
 		WorkingDirectory: ".",
@@ -172,7 +172,7 @@ func TestPTYEffectTimeoutDoesNotTreatPartialOutputAsSuccess(t *testing.T) {
 		ExecutableDependencies: executableDependencies(nil),
 	})
 	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
-		Provider:    providers.IDAgy,
+		Provider:    providers.IDAntigravity,
 		AttemptID:   "dispatch-agy-timeout",
 		UserMessage: "plan the goal",
 	}, func(chunk []byte) error {
@@ -269,7 +269,7 @@ func TestPTYEffectClassifiesExecErrNotFoundAsMissingExecutable(t *testing.T) {
 		),
 	})
 	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
-		Provider:         providers.IDAgy,
+		Provider:         providers.IDAntigravity,
 		AttemptID:        "attempt-exec-not-found",
 		UserMessage:      "hello",
 		WorkingDirectory: ".",

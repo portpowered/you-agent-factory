@@ -19,29 +19,29 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-func TestBuiltInRegistrySelectsAgyThroughAuthoritativeManifestIdentity(t *testing.T) {
+func TestBuiltInRegistrySelectsAntigravityThroughAuthoritativeManifestIdentity(t *testing.T) {
 	t.Parallel()
 
 	providers := newProductionAgyRegistry(t)
-	entry, err := providers.Lookup(" AGY ")
+	entry, err := providers.Lookup(" ANTIGRAVITY ")
 	if err != nil {
-		t.Fatalf("Lookup(agy) error = %v", err)
+		t.Fatalf("Lookup(antigravity) error = %v", err)
 	}
-	if entry.Identity() != inference.Identity(modelprovider.ProviderAgy) {
-		t.Fatalf("Lookup identity = %q, want agy", entry.Identity())
+	if entry.Identity() != inference.Identity(modelprovider.ProviderAntigravity) {
+		t.Fatalf("Lookup identity = %q, want antigravity", entry.Identity())
 	}
-	integration, err := providers.Integration(string(modelprovider.ProviderAgy))
+	integration, err := providers.Integration(string(modelprovider.ProviderAntigravity))
 	if err != nil {
 		t.Fatalf("Integration(agy) error = %v", err)
 	}
-	if integration.Identity() != inference.Identity(modelprovider.ProviderAgy) {
+	if integration.Identity() != inference.Identity(modelprovider.ProviderAntigravity) {
 		t.Fatalf("Integration identity = %q, want agy", integration.Identity())
 	}
 	maximum := integration.MaximumCapabilities()
 	if !maximum.Has(inference.CapabilityPromptSubmission) || !maximum.Has(inference.CapabilityMessageSnapshots) {
 		t.Fatalf("MaximumCapabilities() = %v, want prompt_submission and message_snapshots", maximum.Values())
 	}
-	if providers.UsesNativeRunner(string(modelprovider.ProviderAgy)) {
+	if providers.UsesNativeRunner(string(modelprovider.ProviderAntigravity)) {
 		t.Fatal("UsesNativeRunner(agy) = true, want conductor route for migrated Agy")
 	}
 }
@@ -57,7 +57,7 @@ func TestConductorInvokesAgyWithoutConcreteProviderSwitch(t *testing.T) {
 
 	err := conductor.New(providers).Invoke(
 		context.Background(),
-		string(modelprovider.ProviderAgy),
+		string(modelprovider.ProviderAntigravity),
 		inference.NewInvocationRequest(inference.InvocationInput{
 			InvocationID: "inv-agy-conductor",
 			Model:        "agy-default",
@@ -97,7 +97,7 @@ func TestConductorRejectsAgyCapabilityEscalationBeforeProviderIO(t *testing.T) {
 
 	err := conductor.New(providers).Invoke(
 		context.Background(),
-		string(modelprovider.ProviderAgy),
+		string(modelprovider.ProviderAntigravity),
 		inference.NewInvocationRequest(inference.InvocationInput{
 			InvocationID: "inv-agy-escalate",
 			UserMessage:  "hello",
@@ -143,7 +143,7 @@ func TestConductorClassifiesAgyNativeFailureSafely(t *testing.T) {
 
 	err := conductor.New(providers).Invoke(
 		context.Background(),
-		string(modelprovider.ProviderAgy),
+		string(modelprovider.ProviderAntigravity),
 		inference.NewInvocationRequest(inference.InvocationInput{
 			InvocationID: "inv-agy-failure",
 			UserMessage:  "private prompt",

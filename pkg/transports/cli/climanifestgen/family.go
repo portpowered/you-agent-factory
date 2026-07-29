@@ -74,7 +74,6 @@ var WorkersFamilyCommandIDs = []string{
 	"you.workers",
 	"you.workers.list",
 	"you.workers.acp",
-	"you.workers.acp.list",
 	"you.workers.acp.add",
 	"you.workers.acp.delete",
 }

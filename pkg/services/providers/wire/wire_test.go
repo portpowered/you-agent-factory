@@ -226,7 +226,7 @@ func TestNewServiceAgyExecuteFailsClosedWithoutInjectedPTY(t *testing.T) {
 	}
 
 	result, executeErr := root.Execute(context.Background(), providers.ExecuteRequest{
-		Provider:  providers.IDAgy,
+		Provider:  providers.IDAntigravity,
 		AttemptID: "agy-without-pty-effects",
 	})
 	if !reflectDeepZeroExecuteResult(result) {
@@ -235,9 +235,9 @@ func TestNewServiceAgyExecuteFailsClosedWithoutInjectedPTY(t *testing.T) {
 	var failure providers.ExecuteFailure
 	if !errors.As(executeErr, &failure) ||
 		failure.Kind != providers.ExecuteFailureKindDependency ||
-		!strings.Contains(failure.Message, "Agy") {
+		!strings.Contains(failure.Message, "Antigravity") {
 		t.Fatalf(
-			"Execute(agy) error = %#v, want Agy dependency-normalized failure without injected PTY effects",
+			"Execute(antigravity) error = %#v, want Antigravity dependency-normalized failure without injected PTY effects",
 			executeErr,
 		)
 	}
@@ -252,7 +252,7 @@ func TestNewServiceInjectsPlatformDependenciesThroughWireOptions(t *testing.T) {
 		result: workers.PTYSessionResult{ExitCode: 0, CleanedText: "agy via wire"},
 	}
 	agyPath := filepath.Join(t.TempDir(), "agy")
-	agyLocator := fakeExecutableLocator{string(providers.IDAgy): agyPath}
+	agyLocator := fakeExecutableLocator{string(providers.IDAntigravity): agyPath}
 	agyInspector := fakeExecutableInspector{agyPath: fakeExecutableInfo{directory: false}}
 
 	root, err := NewService(
@@ -300,7 +300,7 @@ func TestNewServiceInjectsPlatformDependenciesThroughWireOptions(t *testing.T) {
 	}
 
 	agyResult, agyErr := root.Execute(context.Background(), providers.ExecuteRequest{
-		Provider:         providers.IDAgy,
+		Provider:         providers.IDAntigravity,
 		AttemptID:        "agy-platform-injection",
 		WorkingDirectory: t.TempDir(),
 		UserMessage:      "hello through wire",
@@ -342,14 +342,10 @@ func TestNewServiceServesPublishedCatalogAndExecuteCompositionForMigratedIdentit
 		t.Fatalf("ListProviders() = %v", err)
 	}
 	wantMigratedIDs := []providers.ID{
-		providers.IDAgy,
+		providers.IDAntigravity,
 		providers.IDClaude,
 		providers.IDCodex,
 		providers.IDCursor,
-		providers.IDGemini,
-		providers.IDKiro,
-		providers.IDOpenCode,
-		providers.IDPi,
 	}
 	byID := indexProvidersByID(list.Providers)
 	for _, id := range wantMigratedIDs {
@@ -380,11 +376,7 @@ func TestNewServiceServesPublishedCatalogAndExecuteCompositionForMigratedIdentit
 		{id: providers.IDCodex, name: "Codex"},
 		{id: providers.IDClaude, name: "Claude"},
 		{id: providers.IDCursor, name: "Cursor"},
-		{id: providers.IDAgy, name: "Agy"},
-		{id: providers.IDGemini, name: "Gemini"},
-		{id: providers.IDKiro, name: "Kiro"},
-		{id: providers.IDOpenCode, name: "OpenCode"},
-		{id: providers.IDPi, name: "Pi"},
+		{id: providers.IDAntigravity, name: "Antigravity"},
 	}
 	for _, test := range executeTests {
 		_, executeErr := root.Execute(context.Background(), providers.ExecuteRequest{

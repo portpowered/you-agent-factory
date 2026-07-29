@@ -21,11 +21,9 @@ func TestBuiltInRunnerCommand_MatchesInternalModelProviderCLI(t *testing.T) {
 		command  string
 	}{
 		{workerexecution.RunnerIDCodex, string(modelprovider.ProviderCodex)},
-		{workerexecution.RunnerIDGemini, string(modelprovider.ProviderGemini)},
-		{workerexecution.RunnerIDKiro, string(modelprovider.ProviderKiro)},
+		{workerexecution.RunnerIDClaude, string(modelprovider.ProviderClaude)},
 		{workerexecution.RunnerIDCursorCLI, string(modelprovider.ProviderCursor)},
-		{workerexecution.RunnerIDOpenCode, string(modelprovider.ProviderOpenCode)},
-		{workerexecution.RunnerIDPi, string(modelprovider.ProviderPi)},
+		{workerexecution.RunnerIDAntigravity, "agy"},
 	}
 
 	for _, tc := range cases {
@@ -46,11 +44,9 @@ func TestValidateBuiltInRunnerPrerequisites_UsesExpectedCommand(t *testing.T) {
 
 	for _, runnerID := range []string{
 		workerexecution.RunnerIDCodex,
-		workerexecution.RunnerIDGemini,
-		workerexecution.RunnerIDKiro,
+		workerexecution.RunnerIDClaude,
 		workerexecution.RunnerIDCursorCLI,
-		workerexecution.RunnerIDOpenCode,
-		workerexecution.RunnerIDPi,
+		workerexecution.RunnerIDAntigravity,
 	} {
 		if err := ValidateBuiltInRunnerPrerequisites(locator, runnerID); err != nil {
 			t.Fatalf("ValidateBuiltInRunnerPrerequisites(%q): %v", runnerID, err)
@@ -59,11 +55,9 @@ func TestValidateBuiltInRunnerPrerequisites_UsesExpectedCommand(t *testing.T) {
 
 	want := []string{
 		string(modelprovider.ProviderCodex),
-		string(modelprovider.ProviderGemini),
-		string(modelprovider.ProviderKiro),
+		string(modelprovider.ProviderClaude),
 		string(modelprovider.ProviderCursor),
-		string(modelprovider.ProviderOpenCode),
-		string(modelprovider.ProviderPi),
+		"agy",
 	}
 	if len(commands) != len(want) {
 		t.Fatalf("lookPath calls = %#v, want %#v", commands, want)
@@ -84,7 +78,7 @@ func TestValidateBuiltInRunnerPrerequisites_ReportsMissingBinary(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected missing binary validation error")
 	}
-	if !strings.Contains(err.Error(), `Cursor CLI runner requires "agent" on PATH`) {
+	if !strings.Contains(err.Error(), `Cursor CLI runner requires "cursor" on PATH`) {
 		t.Fatalf("error = %q, want runner-specific PATH guidance", err.Error())
 	}
 }

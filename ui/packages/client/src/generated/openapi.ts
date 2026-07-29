@@ -3309,6 +3309,7 @@ export interface components {
       outputPreview?: string;
       outputContent?: components["schemas"]["WorkContent"];
       diagnostics?: components["schemas"]["SafeWorkDiagnostics"];
+      providerSession?: components["schemas"]["ProviderSessionMetadata"];
       failureDetail?: components["schemas"]["FailureDetail"];
     };
     /** @description Request details captured immediately before a model-worker provider attempt is invoked. FactoryEvent.context owns dispatch, request, trace, and work identity, and the matching dispatch-request event owns the transition identifier. Prompt content is intentionally present and should be treated as sensitive in recordings and diagnostics. */
@@ -4380,11 +4381,11 @@ export interface components {
       provider?: components["schemas"]["HostedWorkerProvider"];
       /** @description Model identifier to request from the configured model provider when this worker uses model execution. */
       model?: string;
-      /** @description Canonical model-provider identity used for model routing and provider diagnostics, or an exact invocation-parameter placeholder such as `${modelProvider}`. Extension identities use lowercase standardized syntax; built-in values such as `CLAUDE` and `CODEX` remain compatibility conveniences. */
+      /** @description Canonical provider identity used for model routing and provider diagnostics, or an exact invocation-parameter placeholder such as `${modelProvider}`. For `executorProvider: ACP`, this names the configured ACP integration, such as `cursor-acp`. Extension identities use lowercase standardized syntax; built-in values such as `CLAUDE` and `CODEX` remain compatibility conveniences. */
       modelProvider?: components["schemas"]["ProviderIdentity"] | string;
       /** @description Provider locality for this model capability declaration. Use `LOCAL` for embedded or host-managed inference and `CLOUD` for remote provider execution. */
       modelLocality?: components["schemas"]["WorkerModelLocality"];
-      /** @description Canonical Providers catalog identity used to select worker execution, an exact invocation-parameter placeholder, or the retained `SCRIPT_WRAP` compatibility value. ACP-backed identities use names such as `cursor-acp`; the Providers catalog determines their private execution kind. */
+      /** @description Execution mechanism. Use `ACP` for ACP-backed workers and put the configured integration identity (for example `cursor-acp`) in modelProvider. `SCRIPT_WRAP` remains the command-wrapper compatibility value; legacy named executor identities remain accepted during migration. */
       executorProvider?: components["schemas"]["WorkerProvider"];
       /** @description Provider-agnostic model operations that this worker can execute, including named input and output slots. */
       operations?: components["schemas"]["ModelOperation"][];
@@ -4400,8 +4401,6 @@ export interface components {
       stopToken?: string;
       /** @description When true, bypasses permission checks for providers that support permission gating. */
       skipPermissions?: boolean;
-      /** @description Optional OpenCode agent profile name for model workers that dispatch through the OpenCode runner. When set, OpenCode dispatches invoke `opencode run --agent <name>`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/). */
-      openCodeAgent?: string;
       /** @description Hosted-worker authentication contract. V1 hosted workers accept only auth.secretRef. */
       auth?: components["schemas"]["HostedWorkerAuth"];
       /** @description Provider-specific configuration for the built-in hosted LINEAR worker. */
@@ -4575,7 +4574,7 @@ export interface components {
      * @enum {string}
      */
     WorkerModelLocality: WorkerModelLocality;
-    /** @description Built-in worker-provider compatibility values. Authored executorProvider fields also accept extensible lowercase Providers catalog identities. */
+    /** @description Worker execution mechanism. Canonical values are ACP and SCRIPT_WRAP; extensible lowercase identities remain accepted for compatibility with existing factories. */
     WorkerProvider: string;
     /** @description One provider-agnostic operation exposed by a model worker, such as `TTS`. */
     ModelOperation: {
@@ -4629,8 +4628,6 @@ export interface components {
       worker: string;
       /** @description Optional workstation-specific runner override. When omitted, dispatch falls back to the factory runner, then worker modelProvider compatibility when no explicit runner is configured, then the default codex runner. */
       runner?: components["schemas"]["RunnerID"];
-      /** @description Optional OpenCode agent profile override for this workstation. When set, overrides the worker default for OpenCode dispatches and invokes `opencode run --agent <name>`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/). */
-      openCodeAgent?: string;
       /** @description Path to a prompt template file loaded for model-oriented workstation execution. */
       promptFile?: string;
       /** @description JSON schema string used to validate or parse structured model output when configured. */
@@ -7239,6 +7236,8 @@ export const ErrorResponseCode = {
   STALE_FACTORY_VERSION: "STALE_FACTORY_VERSION",
   // Operator move requestId was already applied for this session.
   MOVE_WORK_REQUEST_ALREADY_APPLIED: "MOVE_WORK_REQUEST_ALREADY_APPLIED",
+  // The HTTP method is not allowed for the requested route.
+  METHOD_NOT_ALLOWED: "METHOD_NOT_ALLOWED",
   // Durable execution requestId was reused with materially different inputs.
   EXECUTION_REQUEST_ID_CONFLICT: "EXECUTION_REQUEST_ID_CONFLICT",
   // Lifecycle control requestId was already applied with different control inputs.
@@ -8064,11 +8063,7 @@ export const WorkerModelProvider = {
   CLAUDE: "CLAUDE",
   CODEX: "CODEX",
   CURSOR: "CURSOR",
-  GEMINI: "GEMINI",
-  KIRO: "KIRO",
-  OPENCODE: "OPENCODE",
-  PI: "PI",
-  AGY: "AGY",
+  ANTIGRAVITY: "ANTIGRAVITY",
 } as const;
 export type WorkerModelProvider =
   (typeof WorkerModelProvider)[keyof typeof WorkerModelProvider];
@@ -8130,11 +8125,9 @@ export type ModelOperationContentType =
   (typeof ModelOperationContentType)[keyof typeof ModelOperationContentType];
 export const RunnerID = {
   codex: "codex",
-  gemini: "gemini",
-  kiro: "kiro",
+  claude: "claude",
   cursor_cli: "cursor-cli",
-  opencode: "opencode",
-  pi: "pi",
+  antigravity: "antigravity",
 } as const;
 export type RunnerID = (typeof RunnerID)[keyof typeof RunnerID];
 export const RunnerSelectionSource = {
