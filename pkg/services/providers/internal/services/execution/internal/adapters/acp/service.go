@@ -82,6 +82,7 @@ func execute(ctx context.Context, id providers.ID, command Command, newCommand p
 	finished := make(chan error, 1)
 	go func() { finished <- cmd.Wait() }()
 	defer func() {
+		//TODO: needs logs.
 		_ = stdin.Close()
 		select {
 		case <-finished:

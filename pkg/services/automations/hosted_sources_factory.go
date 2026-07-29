@@ -11,6 +11,8 @@ import (
 	"go.uber.org/zap"
 )
 
+// TODO: now that the service contracts are abstracted, we should reinject the whole hosted poller abstraction as a separate executing subservice
+// That way we don't have to reinject the adapter back into the runtime session instance.
 type hostedPollersRootAdapter struct {
 	inner hostedsources.HostedPollers
 }

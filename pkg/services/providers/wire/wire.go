@@ -11,6 +11,7 @@ package wire
 import (
 	"context"
 	"fmt"
+
 	"github.com/mattn/go-shellwords"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
