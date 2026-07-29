@@ -170,14 +170,6 @@ func TestMapCommittedOwnerPackageWorkersProvidersExtractionMoves(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/workers/cliprovider",
-			want: PackageMapping{
-				PackagePath: "pkg/services/workers/cliprovider",
-				Disposition: DispositionMove,
-				Destination: "providers/internal/services/execution",
-			},
-		},
-		{
 			path: "pkg/services/workers/provider",
 			want: PackageMapping{
 				PackagePath: "pkg/services/workers/provider",

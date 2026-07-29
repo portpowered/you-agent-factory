@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"time"
@@ -35,14 +36,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
-	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/executor/agentrun"
-	workerinvocation "github.com/portpowered/infinite-you/pkg/services/workers/invocation"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
-	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/prompting"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
-	workerworktree "github.com/portpowered/infinite-you/pkg/services/workers/worktree"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 	"go.uber.org/zap"
 )
@@ -67,7 +64,7 @@ func provideConfiguredProvidersService(
 	options := []providerswire.Option{
 		providerswire.WithCursorPlatform(cursorPlatform),
 		providerswire.WithAgyPTY(agyPTYPlatform),
-		providerswire.WithCommandFactory(edges.PlatformProcessCommandFactory),
+		providerswire.WithCommandFactory(providePlatformProcessCommandFactory(edges)),
 		providerswire.WithExecutableLocator(edges.ProvidersExecutableLocator),
 		providerswire.WithACPIntegrations(projectACPIntegrations(integrations)...),
 	}
@@ -99,7 +96,14 @@ func projectACPIntegrations(integrations []operatorsettings.ACPIntegration) []pr
 }
 
 func provideProvidersFactory(edges serviceedges.Edges) providers.Factory {
-	return providerswire.NewFactory(edges.PlatformProcessCommandFactory, providerswire.WithExecutableLocator(edges.ProvidersExecutableLocator))
+	return providerswire.NewFactory(providePlatformProcessCommandFactory(edges), providerswire.WithExecutableLocator(edges.ProvidersExecutableLocator))
+}
+
+func providePlatformProcessCommandFactory(edges serviceedges.Edges) platformprocess.CommandFactory {
+	if edges.PlatformProcessCommandFactory != nil {
+		return edges.PlatformProcessCommandFactory
+	}
+	return exec.Command
 }
 
 func provideProviderRegistry(
@@ -177,7 +181,7 @@ func provideProviderRegistryRebinder(
 				TemporaryFiles:  temporaryFiles,
 			}),
 			providerswire.WithAgyPTY(agyPTYPlatform),
-			providerswire.WithCommandFactory(edges.PlatformProcessCommandFactory),
+			providerswire.WithCommandFactory(providePlatformProcessCommandFactory(edges)),
 			providerswire.WithExecutableLocator(edges.ProvidersExecutableLocator),
 		)
 		if err != nil {
@@ -607,7 +611,7 @@ func provideFactorySessionExecutionFactory(
 		mockWorkers *workers.MockWorkersConfig,
 		acpIntegrations []operatorsettings.ACPIntegration,
 	) (factorysessions.ExecutionService, error) {
-		executor := workerinvocation.NewExecutor(provider)
+		executor := workerswire.NewExecutor(provider)
 		var liveChildInvocation factorysessionwire.LiveChildInvocationFactory
 		usesConfiguredACP := len(acpIntegrations) > 0
 		usesInjectedProviderRunner := edges.ProviderCommandRunner != nil
@@ -824,7 +828,7 @@ func provideWorkersRuntimeFactory(
 		return nil, agypty.ErrHostRequired
 	}
 	factoryDocsFileSystem := provideWorkersFactoryDocsFileSystem(edges)
-	factoryDocs, err := workerprompting.NewFactoryDocsLoader(factoryDocsFileSystem)
+	factoryDocs, err := workerswire.NewFactoryDocsLoader(factoryDocsFileSystem)
 	if err != nil {
 		return nil, err
 	}
@@ -855,18 +859,18 @@ func provideWorkersRuntimeFactory(
 		if err != nil {
 			return nil, err
 		}
-		adapter, err := workerworktree.NewPlatformGitCommander(processRunner)
+		adapter, err := workerswire.NewPlatformGitCommander(processRunner)
 		if err != nil {
 			return nil, err
 		}
 		worktreeGit = adapter
 	}
-	worktreePreparer, err := workerworktree.New(worktreeFileSystem, worktreeGit)
+	worktreePreparer, err := workerswire.NewWorktree(worktreeFileSystem, worktreeGit)
 	if err != nil {
 		return nil, err
 	}
 	agentToolFileSystem := provideWorkersAgentToolFileSystem(edges)
-	agentRunHarness := workeragentrun.NewLibraryHarnessAdapter(agentToolFileSystem)
+	agentRunHarness := workerswire.NewLibraryHarnessAdapter(agentToolFileSystem)
 	return func(
 		sessions factorysessionwire.CurrentRuntimeResolver,
 		modelService models.Service,

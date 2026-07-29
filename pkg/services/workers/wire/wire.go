@@ -13,11 +13,21 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+
+	workersinternal "github.com/portpowered/infinite-you/pkg/services/workers/internal"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 	runnerswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire"
 	runtimeassemblywire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/wire"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/invocation"
 	workstationswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/wire"
-	workersinternal "github.com/portpowered/infinite-you/pkg/services/workers/internal"
+
+	worktree "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/worktree"
+)
+
+var (
+	NewWorktree             = worktree.New
+	NewPlatformGitCommander = worktree.NewPlatformGitCommander
 )
 
 // NewService constructs an inert Workers root from construction ports. It
@@ -150,3 +160,8 @@ func defaultBindingAssembler(
 		RunnerSelection: selection,
 	}, nil
 }
+
+var NewFactoryDocsLoader = workstationswire.NewFactoryDocsLoader
+
+var NewExecutor = invocation.NewExecutor
+var NewLibraryHarnessAdapter = agentrun.NewLibraryHarnessAdapter

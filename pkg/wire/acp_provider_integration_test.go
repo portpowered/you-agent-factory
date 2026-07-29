@@ -2,6 +2,7 @@ package wire
 
 import (
 	"context"
+	"os/exec"
 	"testing"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -15,6 +16,20 @@ import (
 type failingACPProvidersService struct{ failure providers.ExecuteFailure }
 
 type successfulACPProvidersService struct{}
+
+func TestProvidePlatformProcessCommandFactoryDefaultsAndPreservesOverride(t *testing.T) {
+	t.Parallel()
+
+	if command := providePlatformProcessCommandFactory(serviceedges.Edges{})("go", "version"); command == nil {
+		t.Fatal("production command factory returned nil")
+	}
+	override := func(string, ...string) *exec.Cmd { return nil }
+	if command := providePlatformProcessCommandFactory(serviceedges.Edges{
+		PlatformProcessCommandFactory: override,
+	})("ignored"); command != nil {
+		t.Fatal("injected command factory was not preserved")
+	}
+}
 
 func (s failingACPProvidersService) ListProviders(context.Context, providers.ListProvidersRequest) (providers.ListProvidersResult, error) {
 	return providers.ListProvidersResult{}, nil

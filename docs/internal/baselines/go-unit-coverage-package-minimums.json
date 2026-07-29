@@ -1915,30 +1915,6 @@
       "minimum": 89.65
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/cliprovider",
-      "minimum": 89.77
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/envdiagnostics",
-      "exception": {
-        "kind": "measurement",
-        "justification": "The active unit coverage profile contains no measurable statements for this package.",
-        "owner": "backend-quality",
-        "deadline": "2027-07-15",
-        "removalGate": "The unit coverage profile reports at least one measurable statement for this package."
-      }
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/workers/executor/agentrun",
-      "exception": {
-        "kind": "measurement",
-        "justification": "The active unit coverage profile contains no measurable statements for this package.",
-        "owner": "backend-quality",
-        "deadline": "2027-07-15",
-        "removalGate": "The unit coverage profile reports at least one measurable statement for this package."
-      }
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal",
       "minimum": 71.65
     },

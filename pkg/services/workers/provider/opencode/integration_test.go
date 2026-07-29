@@ -3,6 +3,8 @@ package opencode_test
 import (
 	"context"
 	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
@@ -15,8 +17,7 @@ import (
 func TestIntegrationGoldenTimeoutStdout(t *testing.T) {
 	t.Parallel()
 
-	repoRoot := testutil.MustRepoRoot(t)
-	stdoutPath := repoRoot + "/docs/temp/functional/provider-sessions/opencode/timeout/stdout.jsonl"
+	stdoutPath := mustTestdataPath(t, "timeout/stdout.jsonl")
 	stdout, err := os.ReadFile(stdoutPath)
 	if err != nil {
 		t.Fatalf("read stdout: %v", err)
@@ -53,8 +54,7 @@ func TestIntegrationGoldenTimeoutStdout(t *testing.T) {
 func TestIntegrationGoldenStructuredSnapshotStdout(t *testing.T) {
 	t.Parallel()
 
-	repoRoot := testutil.MustRepoRoot(t)
-	stdoutPath := repoRoot + "/docs/temp/functional/provider-sessions/opencode/structured-snapshot-success/stdout.jsonl"
+	stdoutPath := mustTestdataPath(t, "structured-snapshot-success/stdout.jsonl")
 	stdout, err := os.ReadFile(stdoutPath)
 	if err != nil {
 		t.Fatalf("read stdout: %v", err)
@@ -82,6 +82,16 @@ func TestIntegrationGoldenStructuredSnapshotStdout(t *testing.T) {
 	if got := destination.completion.Response().Content(); got != "Hello world COMPLETE" {
 		t.Fatalf("terminal content = %q", got)
 	}
+}
+
+func mustTestdataPath(t testing.TB, rel string) string {
+	t.Helper()
+
+	_, callerFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("cannot determine caller file path")
+	}
+	return filepath.Join(filepath.Dir(callerFile), "testdata", filepath.FromSlash(rel))
 }
 
 func TestIntegrationRoutesThroughProvidersRoot(t *testing.T) {

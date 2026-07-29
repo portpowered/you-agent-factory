@@ -14,7 +14,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
-	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/runner"
 )
 
 func TestNewServiceConstructsPublishedRoot(t *testing.T) {
@@ -79,19 +78,6 @@ func TestNewServiceAssignsRuntimeRolesWithoutLifecycle(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func TestRunnerSelectionAvailableThroughPublishedRootShim(t *testing.T) {
-	t.Parallel()
-
-	selection := workerrunner.ResolveRunnerSelection(" opencode ", workers.RunnerIDGemini, workers.RunnerIDCodex)
-	if selection.RunnerID != workers.RunnerIDOpenCode || selection.Source != workers.RunnerSelectionSourceWorkstation {
-		t.Fatalf("selection = %#v, want opencode from workstation override", selection)
-	}
-	metadata, ok := workerrunner.BuiltInRunnerMetadata(selection.RunnerID)
-	if !ok || metadata.ID != workers.RunnerIDOpenCode {
-		t.Fatalf("metadata = %#v, %v", metadata, ok)
 	}
 }
 

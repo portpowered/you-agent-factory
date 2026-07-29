@@ -92,7 +92,9 @@ See `you docs workstations` for the matching `INFERENCE_RUN`, `AGENT_RUN`,
 - Optional `openCodeAgent` selects a named OpenCode agent profile when the
   resolved runner is `opencode`. Omit it to keep today's default `opencode run`
   behavior without `--agent`.
-- The current public `executorProvider` value is `SCRIPT_WRAP`.
+- `executorProvider` accepts `SCRIPT_WRAP` and canonical Providers catalog
+  identities such as `cursor-acp`. See `you docs providers` for ACP setup and
+  lifecycle commands.
 - Older snake_case and alias frontmatter keys are compatibility-only inputs.
   New docs and authored configs should use canonical camelCase fields.
 

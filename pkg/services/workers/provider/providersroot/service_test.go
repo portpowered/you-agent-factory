@@ -8,19 +8,21 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
-	mockworker "github.com/portpowered/infinite-you/pkg/services/workers/services/testing"
+	mockworkers "github.com/portpowered/infinite-you/pkg/services/workers/internal/interface"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
+	mockworker "github.com/portpowered/infinite-you/pkg/services/workers/services/testing"
 )
 
 func TestExecutePreservesWorkerContextForNativeProviders(t *testing.T) {
 	runner := &mockworker.MockWorkerCommandRunner{
-		Config: &mockworker.MockWorkersConfig{
-			MockWorkers: []mockworker.MockWorkerConfig{{
+		Config: &workers.MockWorkersConfig{
+			MockWorkers: []workers.MockWorkerConfig{{
 				WorkerName:      "goal-executor",
 				WorkstationName: "execute-goal",
-				RunType:         mockworker.MockWorkerRunTypeAccept,
+				RunType:         mockworkers.MockWorkerRunTypeAccept,
 			}},
 		},
 	}

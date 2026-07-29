@@ -47,13 +47,17 @@ For custom install locations or pinned versions, see the [install script](./scri
 
 ## Quick start
 
-Normal startup materializes packaged/default Factories under
-`~/.you-agent-factory/factories` and uses the current Factory. It does not
-create a project-local `./factory` scaffold:
+Packaged Factories resolve by name and materialize lazily under
+`~/.you-agent-factory/factories` when first used. The CLI requires an explicit
+run or server command; bare `you` prints command help and does not create a
+project-local `./factory` scaffold:
 
 1. Run `you init --provider codex` to configure the default model provider.
-2. Run `you` to initialize the packaged Factories, start the current Factory, and print the dashboard URL (usually `http://localhost:7437/dashboard/ui`).
-3. Submit a task from the dashboard (for example, “write a report on my codebase to TEST.md”) and wait for completion.
+2. Run `you factory list` to inspect the available packaged Factories.
+3. From the project you want the agent to work in, run
+   `you run --named @you/goal --with-site "write a report on my codebase to TEST.md"`.
+   The command opens the dashboard, executes the goal, and exits after its
+   terminal result.
 
 To author a Factory, follow [Authoring factories](./docs/reference/authoring-factories.md)
 and persist it with `you factory create <name> --from ./factory.json`. For CLI
@@ -68,7 +72,8 @@ model-backed workers. It does not scaffold a Factory:
 you init --provider claude --model claude-sonnet-4-5
 ```
 
-Run `you` to materialize the packaged/default Factories. To author your own,
+Run `you factory list` to inspect the packaged Factories; selecting one with
+`you run --named <name>` materializes it on first use. To author your own,
 follow [Authoring factories](./docs/reference/authoring-factories.md), then
 persist a reusable definition with
 `you factory create <name> --from ./factory.json`.
@@ -87,6 +92,7 @@ Deeper product documentation:
 
 - [Authoring factories](./docs/reference/authoring-factories.md) — factory topology, workstations, workers, and customization workflow
 - [CLI reference topics](./docs/reference/README.md) — `you docs <topic>` for config, work, sessions, workstations, and related guides
+- [Providers and ACP agents](./docs/reference/providers.md) — configure Cursor and other ACP agents, select them from workers or JavaScript, and verify a real run
 - [Architecture overview](./docs/architecture/architecture.md) and [data model](./docs/architecture/data-model.md) — how factories, work, and runtime state fit together
 - [Runnable examples](./examples/) — example factory directories and mock-worker inputs under `docs/examples/`
 

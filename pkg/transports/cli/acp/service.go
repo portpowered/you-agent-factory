@@ -51,7 +51,32 @@ func (service Service) List(ctx context.Context, home string) (providers.ListPro
 	if err != nil {
 		return providers.ListProvidersResult{}, err
 	}
-	return root.ListProviders(ctx, providers.ListProvidersRequest{})
+	result, err := root.ListProviders(ctx, providers.ListProvidersRequest{})
+	if err != nil {
+		return providers.ListProvidersResult{}, err
+	}
+	return filterACPProviders(result, configured), nil
+}
+
+func filterACPProviders(
+	result providers.ListProvidersResult,
+	configured []operatorsettings.ACPIntegration,
+) providers.ListProvidersResult {
+	identities := map[providers.ID]struct{}{
+		"cursor-acp":   {},
+		"kiro-acp":     {},
+		"opencode-acp": {},
+	}
+	for _, integration := range configured {
+		identities[providers.ID(integration.Name)] = struct{}{}
+	}
+	filtered := make([]providers.Descriptor, 0, len(identities))
+	for _, descriptor := range result.Providers {
+		if _, ok := identities[descriptor.ID]; ok {
+			filtered = append(filtered, descriptor)
+		}
+	}
+	return providers.ListProvidersResult{Providers: filtered}
 }
 
 func ValidateAdd(name, transport, command string) error {

@@ -135,7 +135,6 @@ func defaultPortfolioHoldExclusions() []PortfolioHoldExclusion {
 			ID: "provider-conductor",
 			Paths: []string{
 				"pkg/services/workers/provider/",
-				"pkg/services/workers/cliprovider/",
 				"pkg/services/workers/agypty/",
 			},
 			Note: "Standardized Providers neutral-conductor lane owns provider composition; do not claim those holds in this freeze.",

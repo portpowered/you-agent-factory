@@ -92,9 +92,6 @@ var productOwnerTopLevelSpecs = map[string]ownerTopLevelSpec{
 		expectedRetain: []string{"internal", "wire"},
 		unexpected: []string{
 			"agypty",
-			"cliprovider",
-			"envdiagnostics",
-			"executor",
 			"invocation",
 			"process",
 			"prompting",

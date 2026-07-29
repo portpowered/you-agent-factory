@@ -85,14 +85,13 @@ func MapPackage(packagePath string) (PackageRow, error) {
 
 func explicitPackageMapping(packagePath string) (PackageRow, bool) {
 	switch {
-	case packagePath == "pkg/services/workers/cliprovider" ||
-		strings.HasPrefix(packagePath, "pkg/services/workers/cliprovider/") ||
+	case
 		packagePath == "pkg/services/workers/provider" ||
-		strings.HasPrefix(packagePath, "pkg/services/workers/provider/") ||
-		packagePath == "pkg/services/workers/provider_test" ||
-		strings.HasPrefix(packagePath, "pkg/services/workers/provider_test/") ||
-		packagePath == "pkg/services/workers/agypty" ||
-		strings.HasPrefix(packagePath, "pkg/services/workers/agypty/"):
+			strings.HasPrefix(packagePath, "pkg/services/workers/provider/") ||
+			packagePath == "pkg/services/workers/provider_test" ||
+			strings.HasPrefix(packagePath, "pkg/services/workers/provider_test/") ||
+			packagePath == "pkg/services/workers/agypty" ||
+			strings.HasPrefix(packagePath, "pkg/services/workers/agypty/"):
 		return moveRow(
 			packagePath,
 			"providers",
@@ -170,14 +169,14 @@ func BuildInventory(root string, packages []string) (Inventory, error) {
 		return Inventory{}, err
 	}
 	return Inventory{
-		Version:                1,
-		Stage:                  "pss-f01-ownership-inventory",
-		SortKey:                SortKeyDescription,
-		FND01SeedPath:          FND01SeedRelativePath,
-		Destinations:           defaultDestinationVocabulary(),
-		ProcessEdgesException:  defaultProcessEdgesException(),
-		SeedServices:           append([]SeedService(nil), StructuresSeedServices...),
-		AdditionalCurrentRoots: append([]string(nil), AdditionalCurrentRoots...),
+		Version:                 1,
+		Stage:                   "pss-f01-ownership-inventory",
+		SortKey:                 SortKeyDescription,
+		FND01SeedPath:           FND01SeedRelativePath,
+		Destinations:            defaultDestinationVocabulary(),
+		ProcessEdgesException:   defaultProcessEdgesException(),
+		SeedServices:            append([]SeedService(nil), StructuresSeedServices...),
+		AdditionalCurrentRoots:  append([]string(nil), AdditionalCurrentRoots...),
 		OwnerRationales:         BuildOwnerRationales(),
 		ResponsibilityClusters:  BuildResponsibilityClusters(),
 		CrossServiceEdges:       edges,

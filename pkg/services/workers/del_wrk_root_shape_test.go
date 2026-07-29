@@ -35,7 +35,6 @@ var workersInternalSubservices = []string{
 
 var providersExtractionTopLevelDirsWithTests = []string{
 	"agypty",
-	"cliprovider",
 	"provider",
 	"provider_test",
 }
@@ -50,7 +49,6 @@ func TestDelWrkRootShape_CompletionInvariants(t *testing.T) {
 	t.Run("deleted_transitional_packages_absent", func(t *testing.T) {
 		t.Parallel()
 		for _, relative := range manifest.DeleteReadyRelativeDirs {
-			relative := relative
 			t.Run(relative, func(t *testing.T) {
 				t.Parallel()
 

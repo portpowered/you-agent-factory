@@ -108,14 +108,6 @@ func TestMapCommittedOwnerPackageUsesPlanNestedDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/workers/cliprovider",
-			want: PackageMapping{
-				PackagePath: "pkg/services/workers/cliprovider",
-				Disposition: DispositionMove,
-				Destination: "providers/internal/services/execution",
-			},
-		},
-		{
 			path: "pkg/services/provider_sessions/cursor",
 			want: PackageMapping{
 				PackagePath: "pkg/services/provider_sessions/cursor",

@@ -38,20 +38,13 @@ var allowedFoldedLegacyImporterPrefixes = []string{
 }
 
 var foldedLegacyShimPackageDirs = []string{
-	"process",
-	"runner",
 	"executor/agentrun",
-	"invocation",
-	"prompting",
-	"envdiagnostics",
-	"worktree",
-	"services/testing",
+	"process",
 }
 
 var providersExtractionTopLevelDirs = []string{
 	"provider",
 	"agypty",
-	"cliprovider",
 }
 
 // TestProductionPackagesDoNotImportFoldedLegacyWorkersPackages seals the folded
@@ -85,7 +78,6 @@ func TestFoldedLegacyShimPackagesAreDeleteReady(t *testing.T) {
 
 	workersDir := workersRootDir(t)
 	for _, relative := range foldedLegacyShimPackageDirs {
-		relative := relative
 		t.Run(relative, func(t *testing.T) {
 			t.Parallel()
 

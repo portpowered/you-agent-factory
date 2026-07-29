@@ -1459,12 +1459,6 @@
     },
     {
       "fromOwner": "providers",
-      "toOwner": "models",
-      "class": "command",
-      "evidence": "pkg/services/workers/cliprovider -\u003e pkg/services/models"
-    },
-    {
-      "fromOwner": "providers",
       "toOwner": "platform",
       "class": "external_effect",
       "evidence": "pkg/services/providers/internal/services/execution/internal/adapters/acp -\u003e pkg/platform/process"
@@ -1870,12 +1864,6 @@
           "destination": "providers",
           "disposition": "move",
           "note": "Agy/PTY adapter packages move into Providers native adapters under the singular Providers root."
-        },
-        {
-          "packagePrefix": "pkg/services/workers/cliprovider",
-          "destination": "providers",
-          "disposition": "move",
-          "note": "CLI provider registry/enumeration packages move into Providers Catalog; no CLI-specific competing registry remains."
         },
         {
           "packagePrefix": "pkg/services/workers/provider",
@@ -4833,14 +4821,6 @@
     },
     {
       "packagePath": "pkg/services/workers/agypty",
-      "disposition": "move",
-      "destination": "providers",
-      "destinationKind": "owner",
-      "successor": "pkg/services/providers",
-      "deletionCondition": "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)"
-    },
-    {
-      "packagePath": "pkg/services/workers/cliprovider",
       "disposition": "move",
       "destination": "providers",
       "destinationKind": "owner",

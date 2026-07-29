@@ -3,6 +3,8 @@ package cursor_test
 import (
 	"context"
 	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
@@ -16,8 +18,7 @@ import (
 func TestIntegrationGoldenStdoutReplay(t *testing.T) {
 	t.Parallel()
 
-	repoRoot := testutil.MustRepoRoot(t)
-	stdoutPath := repoRoot + "/docs/temp/functional/provider-sessions/cursor/success/stdout.jsonl"
+	stdoutPath := mustTestdataPath(t, "success/stdout.jsonl")
 	stdout, err := os.ReadFile(stdoutPath)
 	if err != nil {
 		t.Fatalf("read stdout: %v", err)
@@ -48,6 +49,16 @@ func TestIntegrationGoldenStdoutReplay(t *testing.T) {
 	if got := destination.completion.Response().Content(); got != "Cursor fixture answer COMPLETE" {
 		t.Fatalf("terminal content = %q", got)
 	}
+}
+
+func mustTestdataPath(t testing.TB, rel string) string {
+	t.Helper()
+
+	_, callerFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("cannot determine caller file path")
+	}
+	return filepath.Join(filepath.Dir(callerFile), "testdata", filepath.FromSlash(rel))
 }
 
 func TestIntegrationRoutesThroughProvidersRoot(t *testing.T) {
