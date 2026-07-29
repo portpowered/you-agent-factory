@@ -1,0 +1,26 @@
+{
+  "acp": [
+    {"name":"pi-acp","transport":"stdio","command":"npx pi-acp"},
+    {"name":"openclaw-acp","transport":"stdio","command":"openclaw acp"},
+    {"name":"codex-acp","transport":"stdio","command":"npx -y @agentclientprotocol/codex-acp"},
+    {"name":"claude-acp","transport":"stdio","command":"npx -y @agentclientprotocol/claude-agent-acp"},
+    {"name":"gemini-acp","transport":"stdio","command":"gemini --acp"},
+    {"name":"cursor-acp","transport":"stdio","command":"cursor-agent acp"},
+    {"name":"copilot-acp","transport":"stdio","command":"copilot --acp --stdio"},
+    {"name":"droid-acp","aliases":["factory-droid","factorydroid"],"transport":"stdio","command":"droid exec --output-format acp"},
+    {"name":"fast-agent-acp","transport":"stdio","command":"uvx fast-agent-mcp acp"},
+    {"name":"grok-build-acp","transport":"stdio","command":"grok agent stdio"},
+    {"name":"iflow-acp","transport":"stdio","command":"iflow --experimental-acp"},
+    {"name":"kilocode-acp","transport":"stdio","command":"npx -y @kilocode/cli acp"},
+    {"name":"kimi-acp","transport":"stdio","command":"kimi acp"},
+    {"name":"kiro-acp","transport":"stdio","command":"kiro-cli-chat acp"},
+    {"name":"mux-acp","transport":"stdio","command":"mux acp"},
+    {"name":"opencode-acp","transport":"stdio","command":"npx -y opencode-ai acp"},
+    {"name":"pool-acp","transport":"stdio","command":"pool acp"},
+    {"name":"qoder-acp","transport":"stdio","command":"qodercli --acp"},
+    {"name":"qwen-acp","transport":"stdio","command":"qwen --acp"},
+    {"name":"reasonix-acp","transport":"stdio","command":"reasonix acp"},
+    {"name":"trae-acp","transport":"stdio","command":"traecli acp serve"},
+    {"name":"zeroclaw-acp","transport":"stdio","command":"zeroclaw acp"}
+  ]
+}

@@ -21,6 +21,7 @@ import (
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerinference "github.com/portpowered/infinite-you/pkg/services/providers/inference"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
+	builtinswire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/builtins/wire"
 	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
@@ -195,7 +196,11 @@ func NewService(options ...Option) (providers.Service, error) {
 			option.apply(&config)
 		}
 	}
-	acp := effectiveACPIntegrations(config.acpIntegrations)
+	packaged, err := builtinswire.NewService()
+	if err != nil {
+		return nil, err
+	}
+	acp := effectiveACPIntegrations(packaged.ACPIntegrations(), config.acpIntegrations)
 	descriptors := make([]providers.Descriptor, 0, len(acp))
 	for _, integration := range acp {
 		descriptors = append(descriptors, acpDescriptor(integration))
@@ -358,30 +363,29 @@ func executionserviceRegistrations(workersCommandRunner workers.CommandRunner, c
 	))
 }
 
-func effectiveACPIntegrations(configured []providers.ACPIntegration) []providers.ACPIntegration {
-	values := []providers.ACPIntegration{
-		{ID: "cursor-acp", Name: "cursor-acp", Transport: "stdio", Command: "cursor-agent acp"},
-		{ID: "kiro-acp", Name: "kiro-acp", Transport: "stdio", Command: "kiro-cli acp"},
-		{ID: "opencode-acp", Name: "opencode-acp", Transport: "stdio", Command: "opencode acp"},
+func effectiveACPIntegrations(packaged, configured []providers.ACPIntegration) []providers.ACPIntegration {
+	values := make([]providers.ACPIntegration, len(packaged))
+	for index, value := range packaged {
+		values[index] = value.Clone()
 	}
 	for _, value := range configured {
 		found := false
 		for i := range values {
 			if values[i].Name == value.Name {
-				values[i] = value
+				values[i] = value.Clone()
 				found = true
 				break
 			}
 		}
 		if !found {
-			values = append(values, value)
+			values = append(values, value.Clone())
 		}
 	}
 	return values
 }
 
 func acpDescriptor(integration providers.ACPIntegration) providers.Descriptor {
-	return providers.Descriptor{ID: integration.Name, DisplayName: integration.Name.String(), Availability: providers.AvailabilitySelectable, Readiness: providers.ReadinessReady, Capabilities: []providers.Capability{providers.CapabilityPromptSubmission, providers.CapabilityImageInput, providers.CapabilitySessionResume, providers.CapabilityNativeStreaming, providers.CapabilityMessageDeltas, providers.CapabilityReasoningSummaries, providers.CapabilityToolLifecycle, providers.CapabilityFileChanges, providers.CapabilityPlans, providers.CapabilityUsage}}
+	return providers.Descriptor{ID: integration.Name, Aliases: append([]string(nil), integration.Aliases...), DisplayName: integration.Name.String(), Availability: providers.AvailabilitySelectable, Readiness: providers.ReadinessReady, Capabilities: []providers.Capability{providers.CapabilityPromptSubmission, providers.CapabilityImageInput, providers.CapabilitySessionResume, providers.CapabilityNativeStreaming, providers.CapabilityMessageDeltas, providers.CapabilityReasoningSummaries, providers.CapabilityToolLifecycle, providers.CapabilityFileChanges, providers.CapabilityPlans, providers.CapabilityUsage}}
 }
 
 // NewFactory returns an inert constructor used for operator-configured ACP catalogs.

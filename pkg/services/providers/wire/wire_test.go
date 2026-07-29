@@ -112,8 +112,11 @@ func TestACPWireOptionsComposeConfiguredCatalogAndValidateCommands(t *testing.T)
 		t.Fatalf("GetProvider(custom-acp) = (%#v, %v)", got, err)
 	}
 
-	replaced := effectiveACPIntegrations([]providers.ACPIntegration{{ID: "replacement", Name: "cursor-acp", Transport: "stdio", Command: "replacement acp"}})
-	if len(replaced) != 3 || replaced[0].ID != "replacement" {
+	replaced := effectiveACPIntegrations(
+		[]providers.ACPIntegration{{ID: "cursor-acp", Name: "cursor-acp", Transport: "stdio", Command: "cursor-agent acp"}},
+		[]providers.ACPIntegration{{ID: "replacement", Name: "cursor-acp", Transport: "stdio", Command: "replacement acp"}},
+	)
+	if len(replaced) != 1 || replaced[0].ID != "replacement" {
 		t.Fatalf("effectiveACPIntegrations(replacement) = %#v", replaced)
 	}
 

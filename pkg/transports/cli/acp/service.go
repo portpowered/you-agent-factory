@@ -62,17 +62,14 @@ func filterACPProviders(
 	result providers.ListProvidersResult,
 	configured []operatorsettings.ACPIntegration,
 ) providers.ListProvidersResult {
-	identities := map[providers.ID]struct{}{
-		"cursor-acp":   {},
-		"kiro-acp":     {},
-		"opencode-acp": {},
-	}
+	identities := make(map[providers.ID]struct{}, len(configured))
 	for _, integration := range configured {
 		identities[providers.ID(integration.Name)] = struct{}{}
 	}
-	filtered := make([]providers.Descriptor, 0, len(identities))
+	filtered := make([]providers.Descriptor, 0, len(result.Providers))
 	for _, descriptor := range result.Providers {
-		if _, ok := identities[descriptor.ID]; ok {
+		_, configuredProvider := identities[descriptor.ID]
+		if configuredProvider || strings.HasSuffix(descriptor.ID.String(), "-acp") {
 			filtered = append(filtered, descriptor)
 		}
 	}
