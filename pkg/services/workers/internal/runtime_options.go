@@ -2,6 +2,7 @@ package internal
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -237,7 +238,35 @@ func validateWorkerLoadPreflight(cfg *interfaces.FactoryConfig, factoryRunnerID 
 	if err := validateConfiguredWorkstationRunners(cfg, factoryRunnerID, runtimeCfg, executableLocator, preflight, providers); err != nil {
 		return err
 	}
-	return skippermissions.ValidateInvocationSkipPermissionsWorkers(cfg, runtimeCfg, invocationSkipPermissionsOverride)
+	return validateInvocationSkipPermissionsWorkers(cfg, runtimeCfg, invocationSkipPermissionsOverride, providers)
+}
+
+func validateInvocationSkipPermissionsWorkers(
+	cfg *interfaces.FactoryConfig,
+	runtimeCfg interfaces.RuntimeConfigLookup,
+	invocationOverride *bool,
+	providers workers.ProviderRegistry,
+) error {
+	if invocationOverride == nil || !*invocationOverride || cfg == nil || runtimeCfg == nil {
+		return nil
+	}
+	for _, workerCfg := range cfg.Workers {
+		worker, ok := runtimeCfg.Worker(workerCfg.Name)
+		if !ok || worker == nil || worker.Type == "" {
+			continue
+		}
+		if err := skippermissions.ValidateInvocationSkipPermissionsForWorker(worker, invocationOverride); err != nil {
+			// A configured Providers-catalog integration (currently ACP) applies
+			// this policy at its protocol boundary, not through a known CLI flag.
+			if providers != nil && strings.TrimSpace(worker.ModelProvider) != "" {
+				if _, selectionErr := providers.ResolveRunnerSelection("", "", worker.ModelProvider); selectionErr == nil {
+					continue
+				}
+			}
+			return fmt.Errorf("worker %q: %w", workerCfg.Name, err)
+		}
+	}
+	return nil
 }
 
 func validateConfiguredWorkstationRunners(cfg *interfaces.FactoryConfig, factoryRunnerID string, runtimeCfg interfaces.RuntimeConfigLookup, executableLocator platformprocess.ExecutableLocator, preflight runnerSelectionPreflight, providers workers.ProviderRegistry) error {

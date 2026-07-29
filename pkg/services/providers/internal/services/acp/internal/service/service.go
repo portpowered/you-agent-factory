@@ -219,6 +219,7 @@ func (daemon *daemon) execute(ctx context.Context, id providers.ID, request prov
 		prompt = append(prompt, acpsdk.TextBlock("System instructions:\n"+text))
 	}
 	prompt = append(prompt, acpsdk.TextBlock(request.UserMessage))
+	prompt = append(prompt, inputWorkBlocks(request.InputTokens, request.UserMessage)...)
 	prompt = append(prompt, resourceLinks(request.InputTokens, request.UserMessage)...)
 
 	if err := daemon.ensureStarted(ctx, id, cwd, requestEnvironment(request), request); err != nil {
@@ -542,6 +543,66 @@ func safeRPCMessage(err error) string {
 }
 
 var renderedURL = regexp.MustCompile(`https?://[^\s\]\)]+`)
+
+func inputWorkBlocks(values []any, renderedPrompt string) []acpsdk.ContentBlock {
+	blocks := make([]acpsdk.ContentBlock, 0)
+	seen := map[string]struct{}{}
+	for _, value := range values {
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			continue
+		}
+		var token struct {
+			Color struct {
+				Name    string `json:"name"`
+				WorkID  string `json:"work_id"`
+				Payload []byte `json:"payload"`
+				Content []struct {
+					Type string `json:"type"`
+					Text string `json:"text"`
+				} `json:"content"`
+			} `json:"color"`
+		}
+		if json.Unmarshal(encoded, &token) != nil {
+			continue
+		}
+		name := strings.TrimSpace(token.Color.Name)
+		if name == "" {
+			name = strings.TrimSpace(token.Color.WorkID)
+		}
+		for _, content := range token.Color.Content {
+			text := strings.TrimSpace(content.Text)
+			if !strings.EqualFold(content.Type, "text") || text == "" || strings.Contains(renderedPrompt, text) {
+				continue
+			}
+			key := name + "\x00" + text
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			if name != "" {
+				text = "Input work " + name + ":\n" + text
+			} else {
+				text = "Input work:\n" + text
+			}
+			blocks = append(blocks, acpsdk.TextBlock(text))
+		}
+		payload := strings.TrimSpace(string(token.Color.Payload))
+		if payload != "" && !strings.Contains(renderedPrompt, payload) {
+			key := name + "\x00" + payload
+			if _, ok := seen[key]; !ok {
+				seen[key] = struct{}{}
+				if name != "" {
+					payload = "Input work " + name + ":\n" + payload
+				} else {
+					payload = "Input work:\n" + payload
+				}
+				blocks = append(blocks, acpsdk.TextBlock(payload))
+			}
+		}
+	}
+	return blocks
+}
 
 func resourceLinks(values []any, renderedPrompt string) []acpsdk.ContentBlock {
 	var blocks []acpsdk.ContentBlock

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -177,6 +178,23 @@ func (p *functionalRPCPeer) prompt(request rpcEnvelope) error {
 		}
 		if !found {
 			return p.respondError(request.ID, -32603, "Internal error", map[string]any{"error": "ACP prompt omitted canonical resource link"})
+		}
+	}
+	if p.mode == "content" {
+		var params struct {
+			Prompt []map[string]any `json:"prompt"`
+		}
+		if err := json.Unmarshal(request.Params, &params); err != nil {
+			return fmt.Errorf("decode content prompt: %w", err)
+		}
+		want := os.Getenv("YOU_TEST_ACP_CONTENT_SENTINEL")
+		found := false
+		for _, block := range params.Prompt {
+			text, _ := block["text"].(string)
+			found = found || strings.Contains(text, want)
+		}
+		if want == "" || !found {
+			return p.respondError(request.ID, -32603, "Internal error", map[string]any{"error": "ACP prompt omitted input Work content"})
 		}
 	}
 	if p.mode == "model" && !p.modelSet {
