@@ -66,6 +66,7 @@ func TestRootBuiltACPCommandsAddListDeleteOneSettingsBackedCatalogEntry(t *testi
 		"cli/you.workers.acp.add",
 		"cli/you.workers.acp.delete",
 		"cli/you.workers.acp.list",
+		"cli/you.workers.list",
 	)
 }
 

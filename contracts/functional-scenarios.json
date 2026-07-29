@@ -481,6 +481,21 @@
       ]
     },
     {
+      "stableId": "cli/you.workers.list",
+      "name": "you workers list",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "covered",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/providers/acp/catalog_cli_test.go::TestRootBuiltACPCommandsAddListDeleteOneSettingsBackedCatalogEntry",
+          "boundary": "cli"
+        }
+      ]
+    },
+    {
       "stableId": "mcp/mcp.tool.you.factory_session.control",
       "name": "you.factory_session.control",
       "interface": "mcp",
