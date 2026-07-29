@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jonboulle/clockwork"
+	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
@@ -39,6 +40,14 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 	"go.uber.org/zap"
 )
+
+func provideApplicationProcessLifecycle(service providers.Service) (initializerapplication.ProcessLifecycle, error) {
+	lifecycle, ok := service.(providers.Lifecycle)
+	if !ok {
+		return nil, fmt.Errorf("construct application process: Providers lifecycle is required")
+	}
+	return lifecycle, nil
+}
 
 func provideProvidersService(edges serviceedges.Edges) (providers.Service, error) {
 	return provideConfiguredProvidersService(edges, nil, nil)

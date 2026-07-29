@@ -86,10 +86,10 @@ func assertACPProviderSession(t *testing.T, events []factoryapi.FactoryEvent) {
 func assertProviderSession(t *testing.T, events []factoryapi.FactoryEvent, provider string) {
 	t.Helper()
 	for _, event := range events {
-		if event.Type != factoryapi.FactoryEventTypeInferenceResponse {
+		if event.Type != factoryapi.FactoryEventTypeModelResponse {
 			continue
 		}
-		payload, err := event.Payload.AsInferenceResponseEventPayload()
+		payload, err := event.Payload.AsModelResponseEventPayload()
 		if err != nil {
 			t.Fatalf("decode inference response: %v", err)
 		}
@@ -201,7 +201,7 @@ func (p *legacyProvider) Infer(context.Context, workers.ProviderInferenceRequest
 
 func TestACPAgentHelperProcess(t *testing.T) {
 	mode := os.Getenv(acpHelperEnvironment)
-	if mode != "1" && mode != "fail" && mode != "auth" && mode != "model" && mode != "resource" && mode != "version" && mode != "init-fail" && mode != "stderr" && mode != "malformed" && mode != "eof" && mode != "block" && mode != "isolate" && mode != "unsupported" {
+	if mode != "1" && mode != "fail" && mode != "auth" && mode != "model" && mode != "resource" && mode != "version" && mode != "init-fail" && mode != "stderr" && mode != "malformed" && mode != "eof" && mode != "block" && mode != "isolate" && mode != "unsupported" && mode != "persistent" {
 		return
 	}
 	if err := runFunctionalRPCPeer(mode, os.Stdin, os.Stdout, os.Stderr); err != nil {

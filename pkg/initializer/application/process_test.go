@@ -217,7 +217,7 @@ func newProcessForTest(
 	initializer startupcli.Initializer,
 ) *Process {
 	t.Helper()
-	process, err := NewProcess(factory, initializer, processTestProviderRegistry{})
+	process, err := NewProcess(factory, initializer, processTestProviderRegistry{}, processTestLifecycle{})
 	if err != nil {
 		t.Fatalf("NewProcess() error = %v", err)
 	}
@@ -227,7 +227,7 @@ func newProcessForTest(
 func TestProcessRequiresAndExposesProviderRegistry(t *testing.T) {
 	t.Parallel()
 
-	if process, err := NewProcess(nil, nil, nil); err == nil || process != nil {
+	if process, err := NewProcess(nil, nil, nil, nil); err == nil || process != nil {
 		t.Fatalf("NewProcess(nil registry) = (%#v, %v), want construction failure", process, err)
 	}
 	if registry := (*Process)(nil).ProviderRegistry(); registry != nil {
@@ -235,7 +235,7 @@ func TestProcessRequiresAndExposesProviderRegistry(t *testing.T) {
 	}
 
 	want := processTestProviderRegistry{}
-	process, err := NewProcess(nil, nil, want)
+	process, err := NewProcess(nil, nil, want, processTestLifecycle{})
 	if err != nil {
 		t.Fatalf("NewProcess() error = %v", err)
 	}
@@ -245,6 +245,10 @@ func TestProcessRequiresAndExposesProviderRegistry(t *testing.T) {
 }
 
 type processTestProviderRegistry struct{}
+
+type processTestLifecycle struct{}
+
+func (processTestLifecycle) Close(context.Context) error { return nil }
 
 func (processTestProviderRegistry) CanonicalIdentity(identity string) (string, error) {
 	return identity, nil

@@ -7,8 +7,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -25,18 +28,15 @@ type Command struct {
 	Args []string
 }
 
-// Service owns configured ACP commands. A later lifecycle step upgrades these
-// entries to retained daemons without changing the parent contract.
+// Service owns one retained daemon per configured ACP integration.
 type Service struct {
-	commands   map[providers.ID]Command
-	newCommand platformprocess.CommandFactory
-	locator    platformprocess.ExecutableLocator
+	daemons map[providers.ID]*daemon
 }
 
 var _ acp.Service = (*Service)(nil)
 
 func New(commands map[providers.ID]Command, newCommand platformprocess.CommandFactory, locator platformprocess.ExecutableLocator) (acp.Service, error) {
-	detached := make(map[providers.ID]Command, len(commands))
+	daemons := make(map[providers.ID]*daemon, len(commands))
 	for id, command := range commands {
 		if err := id.Validate(); err != nil {
 			return nil, fmt.Errorf("construct ACP service: %w", err)
@@ -44,35 +44,62 @@ func New(commands map[providers.ID]Command, newCommand platformprocess.CommandFa
 		if strings.TrimSpace(command.Name) == "" {
 			return nil, fmt.Errorf("construct ACP service %q: command is required", id)
 		}
-		detached[id] = Command{Name: command.Name, Args: append([]string(nil), command.Args...)}
+		daemons[id] = &daemon{
+			command:    Command{Name: command.Name, Args: append([]string(nil), command.Args...)},
+			newCommand: newCommand,
+			locator:    locator,
+			gate:       make(chan struct{}, 1),
+		}
+		daemons[id].gate <- struct{}{}
 	}
-	return &Service{commands: detached, newCommand: newCommand, locator: locator}, nil
+	return &Service{daemons: daemons}, nil
 }
 
 func (service *Service) Execute(ctx context.Context, id providers.ID, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
-	if service.newCommand == nil {
-		return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: "ACP command is unavailable"}
-	}
-	command, ok := service.commands[id]
+	daemon, ok := service.daemons[id]
 	if !ok {
 		return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: fmt.Sprintf("ACP provider %q is unavailable", id)}
 	}
-	if service.locator != nil {
-		if _, err := service.locator.LookPath(command.Name); err != nil {
-			return providers.ExecuteResult{}, dependencyFailure(fmt.Sprintf("ACP executable %q is unavailable", command.Name))
+	return daemon.execute(ctx, id, request)
+}
+
+func (service *Service) Close(ctx context.Context) error {
+	var first error
+	for id, daemon := range service.daemons {
+		if err := daemon.close(ctx); err != nil && first == nil {
+			first = fmt.Errorf("close ACP provider %q: %w", id, err)
 		}
 	}
-	return execute(ctx, id, command, service.newCommand, request)
+	return first
 }
 
-func (*Service) Close(context.Context) error {
-	return nil
+type daemon struct {
+	gate       chan struct{}
+	command    Command
+	newCommand platformprocess.CommandFactory
+	locator    platformprocess.ExecutableLocator
+
+	cmd         *exec.Cmd
+	stdin       io.WriteCloser
+	connection  *acpsdk.ClientSideConnection
+	client      *client
+	initialized acpsdk.InitializeResponse
+	finished    chan error
+	tree        platformprocess.SubprocessTree
+	stderr      bytes.Buffer
 }
 
-func execute(ctx context.Context, id providers.ID, command Command, newCommand platformprocess.CommandFactory, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
+func (daemon *daemon) execute(ctx context.Context, id providers.ID, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
 	if err := ctx.Err(); err != nil {
 		return providers.ExecuteResult{}, nativeFailure(err)
 	}
+	select {
+	case <-ctx.Done():
+		return providers.ExecuteResult{}, nativeFailure(ctx.Err())
+	case <-daemon.gate:
+	}
+	defer func() { daemon.gate <- struct{}{} }()
+
 	cwd, err := absoluteWorkingDirectory(request.WorkingDirectory)
 	if err != nil {
 		return providers.ExecuteResult{}, invalidFailure(err)
@@ -84,68 +111,213 @@ func execute(ctx context.Context, id providers.ID, command Command, newCommand p
 	prompt = append(prompt, acpsdk.TextBlock(request.UserMessage))
 	prompt = append(prompt, resourceLinks(request.InputTokens, request.UserMessage)...)
 
-	cmd := newCommand(command.Name, command.Args...)
-	if cmd == nil {
-		return providers.ExecuteResult{}, dependencyFailure("ACP command factory returned nil")
+	if err := daemon.ensureStarted(ctx, id, cwd, requestEnvironment(request), request); err != nil {
+		return providers.ExecuteResult{}, err
 	}
-	cmd.Dir, cmd.Env = cwd, requestEnvironment(request)
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		return providers.ExecuteResult{}, dependencyFailure(err.Error())
-	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return providers.ExecuteResult{}, dependencyFailure(err.Error())
-	}
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	platformprocess.ConfigureSubprocessTree(cmd)
-	if err := cmd.Start(); err != nil {
-		return providers.ExecuteResult{}, dependencyFailure(fmt.Sprintf("start ACP provider %q: %v", id, err))
-	}
-	tree, _ := platformprocess.AttachSubprocessTree(cmd)
-	finished := make(chan error, 1)
-	go func() { finished <- cmd.Wait() }()
-	defer func() {
-		//TODO: needs logs.
-		_ = stdin.Close()
-		select {
-		case <-finished:
-		case <-time.After(500 * time.Millisecond):
-			if cmd.Process != nil {
-				_ = platformprocess.TerminateSubprocessTree(cmd, tree)
-			}
-			<-finished
-		}
-		platformprocess.CloseSubprocessTree(cmd, tree)
-	}()
+	daemon.client.reset(request.SkipPermissions)
+	connection := daemon.connection
+	initialized := daemon.initialized
 
-	client := &client{skipPermissions: request.SkipPermissions}
-	connection := acpsdk.NewClientSideConnection(client, stdin, stdout)
-	initialized, err := connection.Initialize(ctx, acpsdk.InitializeRequest{ProtocolVersion: acpsdk.ProtocolVersionNumber, ClientCapabilities: acpsdk.ClientCapabilities{}})
-	if err != nil {
-		return providers.ExecuteResult{}, rpcFailure(ctx, "initialize", id, err, stderr.String(), request)
-	}
-	if initialized.ProtocolVersion != acpsdk.ProtocolVersionNumber {
-		return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindMisconfigured, Message: fmt.Sprintf("ACP provider %q negotiated unsupported protocol version %v", id, initialized.ProtocolVersion)}
-	}
 	session, err := connection.NewSession(ctx, acpsdk.NewSessionRequest{Cwd: cwd, McpServers: []acpsdk.McpServer{}})
 	if err != nil {
 		var requestErr *acpsdk.RequestError
 		if errors.As(err, &requestErr) && requestErr.Code == -32000 {
 			return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindAuthentication, Message: "ACP authentication required" + authenticationMethodHint(initialized.AuthMethods)}
 		}
-		return providers.ExecuteResult{}, rpcFailure(ctx, "session/new", id, err, stderr.String(), request)
+		daemon.invalidateDisconnected(ctx)
+		return providers.ExecuteResult{}, rpcFailure(ctx, "session/new", id, err, daemon.stderr.String(), request)
 	}
-	client.setSessionID(string(session.SessionId))
+	daemon.client.setSessionID(string(session.SessionId))
 	modelConfig, err := applyAdvertisedModel(ctx, connection, session, request.Model)
 	if err != nil {
-		return providers.ExecuteResult{}, rpcFailure(ctx, "session/set_config_option", id, err, stderr.String(), request)
+		daemon.invalidateDisconnected(ctx)
+		return providers.ExecuteResult{}, rpcFailure(ctx, "session/set_config_option", id, err, daemon.stderr.String(), request)
 	}
 	if _, err := connection.Prompt(ctx, acpsdk.PromptRequest{SessionId: session.SessionId, Prompt: prompt}); err != nil {
-		return providers.ExecuteResult{}, withPartial(rpcFailure(ctx, "session/prompt", id, err, stderr.String(), request), client)
+		if ctx.Err() != nil {
+			cancelCtx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+			_ = connection.Cancel(cancelCtx, acpsdk.CancelNotification{SessionId: session.SessionId})
+			cancel()
+		}
+		daemon.invalidateDisconnected(context.Background())
+		return providers.ExecuteResult{}, withPartial(rpcFailure(ctx, "session/prompt", id, err, daemon.stderr.String(), request), daemon.client)
 	}
-	return providers.ExecuteResult{Content: client.content(), SessionRef: &providers.SessionRef{Provider: id, Kind: providers.SessionIDKind, ID: string(session.SessionId)}, Diagnostics: &providers.ExecuteDiagnostics{Progress: client.progressFacts(), Metadata: map[string]string{"execution_kind": "acp", "protocol_version": fmt.Sprint(initialized.ProtocolVersion), "model_config": modelConfig}}}, nil
+	return providers.ExecuteResult{Content: daemon.client.content(), SessionRef: &providers.SessionRef{Provider: id, Kind: providers.SessionIDKind, ID: string(session.SessionId)}, Diagnostics: &providers.ExecuteDiagnostics{Progress: completedPromptProgress(daemon.client.progressFacts()), Metadata: map[string]string{"execution_kind": "acp", "protocol_version": fmt.Sprint(initialized.ProtocolVersion), "model_config": modelConfig}}}, nil
+}
+
+func completedPromptProgress(updates []providers.ExecuteProgress) []providers.ExecuteProgress {
+	result := []providers.ExecuteProgress{{Phase: "started", Metadata: map[string]string{"kind": "run", "native_type": "session/prompt"}}}
+	started := map[string]bool{}
+	items := map[string]map[string]bool{}
+	content := map[string]map[string]string{}
+	for _, update := range updates {
+		kind, itemID := update.Metadata["kind"], update.Metadata["item_id"]
+		if (kind == "message" || kind == "reasoning") && !started[kind] {
+			result = append(result, providers.ExecuteProgress{Phase: "started", Metadata: map[string]string{
+				"kind": kind, "item_id": itemID, "native_type": "acp/synthetic_start",
+			}})
+			started[kind] = true
+		}
+		if kind != "" && itemID != "" {
+			if items[kind] == nil {
+				items[kind] = map[string]bool{}
+			}
+			if content[kind] == nil {
+				content[kind] = map[string]string{}
+			}
+			items[kind][itemID] = update.Phase == "completed"
+			content[kind][itemID] += update.Detail
+		}
+		result = append(result, update)
+	}
+	for _, kind := range []string{"reasoning", "tool", "session", "message"} {
+		ids := make([]string, 0, len(items[kind]))
+		for itemID := range items[kind] {
+			ids = append(ids, itemID)
+		}
+		sort.Strings(ids)
+		for _, itemID := range ids {
+			completed := items[kind][itemID]
+			if completed {
+				continue
+			}
+			result = append(result, providers.ExecuteProgress{Phase: "completed", Detail: content[kind][itemID], Metadata: map[string]string{
+				"kind": kind, "item_id": itemID, "native_type": "session/prompt",
+			}})
+		}
+	}
+	return append(result, providers.ExecuteProgress{Phase: "completed", Metadata: map[string]string{"kind": "run", "native_type": "session/prompt"}})
+}
+
+func (daemon *daemon) ensureStarted(ctx context.Context, id providers.ID, cwd string, environment []string, request providers.ExecuteRequest) error {
+	if daemon.connection != nil {
+		select {
+		case <-daemon.finished:
+			daemon.clearProcess()
+		default:
+			return nil
+		}
+	}
+	if daemon.newCommand == nil {
+		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindDependency, Message: "ACP command is unavailable"}
+	}
+	if daemon.locator != nil {
+		if _, err := daemon.locator.LookPath(daemon.command.Name); err != nil {
+			return providers.ExecuteFailure{
+				Kind:    providers.ExecuteFailureKindDependency,
+				Message: fmt.Sprintf("ACP executable %q is unavailable", daemon.command.Name),
+				Diagnostics: &providers.ExecuteDiagnostics{Metadata: map[string]string{
+					"work-failure-type": "missing_executable",
+				}},
+			}
+		}
+	}
+	cmd := daemon.newCommand(daemon.command.Name, daemon.command.Args...)
+	if cmd == nil {
+		return dependencyFailure("ACP command factory returned nil")
+	}
+	cmd.Dir, cmd.Env = cwd, append([]string(nil), environment...)
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return dependencyFailure(err.Error())
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return dependencyFailure(err.Error())
+	}
+	daemon.stderr.Reset()
+	cmd.Stderr = &daemon.stderr
+	platformprocess.ConfigureSubprocessTree(cmd)
+	if err := cmd.Start(); err != nil {
+		return dependencyFailure(fmt.Sprintf("start ACP provider %q: %v", id, err))
+	}
+	tree, _ := platformprocess.AttachSubprocessTree(cmd)
+	finished := make(chan error, 1)
+	go func() { finished <- cmd.Wait() }()
+	client := &client{}
+	connection := acpsdk.NewClientSideConnection(client, stdin, stdout)
+	initialized, err := connection.Initialize(ctx, acpsdk.InitializeRequest{ProtocolVersion: acpsdk.ProtocolVersionNumber, ClientCapabilities: acpsdk.ClientCapabilities{}})
+	if err != nil {
+		daemon.cmd, daemon.stdin, daemon.finished, daemon.tree = cmd, stdin, finished, tree
+		_ = daemon.stopLocked(context.Background())
+		return rpcFailure(ctx, "initialize", id, err, daemon.stderr.String(), request)
+	}
+	if initialized.ProtocolVersion != acpsdk.ProtocolVersionNumber {
+		daemon.cmd, daemon.stdin, daemon.finished, daemon.tree = cmd, stdin, finished, tree
+		_ = daemon.stopLocked(context.Background())
+		return providers.ExecuteFailure{Kind: providers.ExecuteFailureKindMisconfigured, Message: fmt.Sprintf("ACP provider %q negotiated unsupported protocol version %v", id, initialized.ProtocolVersion)}
+	}
+	daemon.cmd = cmd
+	daemon.stdin = stdin
+	daemon.connection = connection
+	daemon.client = client
+	daemon.initialized = initialized
+	daemon.finished = finished
+	daemon.tree = tree
+	return nil
+}
+
+func (daemon *daemon) invalidateDisconnected(ctx context.Context) {
+	if daemon.connection == nil {
+		return
+	}
+	select {
+	case <-daemon.connection.Done():
+		_ = daemon.stopLocked(ctx)
+	default:
+	}
+}
+
+func (daemon *daemon) close(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-daemon.gate:
+	}
+	defer func() { daemon.gate <- struct{}{} }()
+	return daemon.stopLocked(ctx)
+}
+
+func (daemon *daemon) stopLocked(ctx context.Context) error {
+	if daemon.cmd == nil {
+		return nil
+	}
+	cmd, tree, finished := daemon.cmd, daemon.tree, daemon.finished
+	_ = daemon.stdin.Close()
+	var stopErr error
+	exited := false
+	select {
+	case <-finished:
+		exited = true
+	case <-ctx.Done():
+		stopErr = ctx.Err()
+		_ = platformprocess.TerminateSubprocessTree(cmd, tree)
+	case <-time.After(500 * time.Millisecond):
+		_ = platformprocess.TerminateSubprocessTree(cmd, tree)
+	}
+	if !exited {
+		select {
+		case <-finished:
+		case <-time.After(2 * time.Second):
+			if stopErr == nil {
+				stopErr = errors.New("ACP process did not exit after termination")
+			}
+		}
+	}
+	daemon.clearProcess()
+	return stopErr
+}
+
+func (daemon *daemon) clearProcess() {
+	if daemon.cmd != nil {
+		platformprocess.CloseSubprocessTree(daemon.cmd, daemon.tree)
+	}
+	daemon.cmd = nil
+	daemon.stdin = nil
+	daemon.connection = nil
+	daemon.client = nil
+	daemon.finished = nil
+	daemon.tree = platformprocess.SubprocessTree{}
 }
 
 func requestEnvironment(request providers.ExecuteRequest) []string {
@@ -238,7 +410,12 @@ func rpcFailure(ctx context.Context, method string, id providers.ID, err error, 
 			kind = providers.ExecuteFailureKindMisconfigured
 		}
 	}
-	return providers.ExecuteFailure{Kind: kind, Message: message}
+	return providers.ExecuteFailure{Kind: kind, Message: message, Diagnostics: &providers.ExecuteDiagnostics{Progress: []providers.ExecuteProgress{{
+		Phase: "failed", Detail: message, Metadata: map[string]string{
+			"kind": "error", "native_type": method,
+			"error_code": "ACP_" + strings.ToUpper(strings.ReplaceAll(method, "session/", "")) + "_FAILED",
+		},
+	}}}}
 }
 func safeRPCMessage(err error) string {
 	var requestErr *acpsdk.RequestError
@@ -337,10 +514,32 @@ func nativeFailure(err error) error {
 func withPartial(err error, c *client) error {
 	var f providers.ExecuteFailure
 	if errors.As(err, &f) {
-		f.Diagnostics = &providers.ExecuteDiagnostics{Progress: c.progressFacts(), Metadata: map[string]string{"partial_content": c.content()}}
+		var failureProgress []providers.ExecuteProgress
+		if f.Diagnostics != nil {
+			for _, progress := range f.Diagnostics.Progress {
+				failureProgress = append(failureProgress, progress.Clone())
+			}
+		}
+		progress := failedPromptProgress(c.progressFacts())
+		progress = append(progress, failureProgress...)
+		f.Diagnostics = &providers.ExecuteDiagnostics{Progress: progress, Metadata: map[string]string{"partial_content": c.content()}}
 		return f
 	}
 	return err
+}
+
+func failedPromptProgress(updates []providers.ExecuteProgress) []providers.ExecuteProgress {
+	progress := completedPromptProgress(updates)
+	if len(progress) > 0 {
+		progress = progress[:len(progress)-1]
+	}
+	for index := range progress {
+		if progress[index].Phase != "completed" || progress[index].Metadata["kind"] != "message" {
+			continue
+		}
+		progress[index].Metadata["partial"] = "true"
+	}
+	return progress
 }
 func safeACPStderr(value string, env map[string]string) string {
 	for name, secret := range env {
@@ -370,6 +569,15 @@ type client struct {
 	text            strings.Builder
 	sessionID       string
 	progress        []providers.ExecuteProgress
+}
+
+func (c *client) reset(skipPermissions bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.skipPermissions = skipPermissions
+	c.text.Reset()
+	c.sessionID = ""
+	c.progress = nil
 }
 
 func (c *client) SessionUpdate(_ context.Context, n acpsdk.SessionNotification) error {
@@ -428,9 +636,12 @@ func mapSessionUpdate(update acpsdk.SessionUpdate) ([]providers.ExecuteProgress,
 		}
 		if update.ToolCallUpdate.Status != nil {
 			metadata["status"] = string(*update.ToolCallUpdate.Status)
+			if *update.ToolCallUpdate.Status == acpsdk.ToolCallStatusCompleted {
+				phase = "completed"
+			}
 		}
 		encodeMetadata(metadata, "raw_output", update.ToolCallUpdate.RawOutput)
-		progress := []providers.ExecuteProgress{{Phase: phase, Detail: detail, Metadata: metadata}}
+		progress := []providers.ExecuteProgress{}
 		for _, content := range update.ToolCallUpdate.Content {
 			if content.Diff == nil {
 				continue

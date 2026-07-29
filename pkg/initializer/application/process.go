@@ -1,6 +1,7 @@
 package application
 
 import (
+	"context"
 	"fmt"
 
 	processcontract "github.com/portpowered/infinite-you/pkg/initializer/process"
@@ -13,6 +14,12 @@ type ProviderRegistry interface {
 	CanonicalIdentity(string) (string, error)
 }
 
+// ProcessLifecycle is the exact application-owned cleanup role for inert
+// services that retain resources lazily while commands execute.
+type ProcessLifecycle interface {
+	Close(context.Context) error
+}
+
 // Process is the inert, behavior-bearing process entrypoint assembled by
 // Wire. It retains only its command/lifecycle roles and immutable provider
 // authority, not runtime configuration, service graphs, or edge bundles; the
@@ -21,21 +28,36 @@ type Process struct {
 	commandFactory processcontract.CommandFactory
 	initializer    processcontract.Initializer
 	providers      ProviderRegistry
+	lifecycle      ProcessLifecycle
 }
 
 func NewProcess(
 	commandFactory processcontract.CommandFactory,
 	initializer processcontract.Initializer,
 	providers ProviderRegistry,
+	lifecycle ProcessLifecycle,
 ) (*Process, error) {
 	if providers == nil {
 		return nil, fmt.Errorf("construct application process: provider registry is required")
+	}
+	if lifecycle == nil {
+		return nil, fmt.Errorf("construct application process: lifecycle is required")
 	}
 	return &Process{
 		commandFactory: commandFactory,
 		initializer:    initializer,
 		providers:      providers,
+		lifecycle:      lifecycle,
 	}, nil
+}
+
+// Close releases resources retained by services during prior Execute calls.
+// It is safe to call more than once after active command invocations stop.
+func (p *Process) Close(ctx context.Context) error {
+	if p == nil || p.lifecycle == nil {
+		return nil
+	}
+	return p.lifecycle.Close(ctx)
 }
 
 // ProviderRegistry returns the immutable provider authority composed for this

@@ -106,10 +106,10 @@ func TestUnavailableACPExecutableFailsBeforeStartWithMissingExecutableClass(t *t
 func assertFactoryFailureReason(t *testing.T, events []factoryapi.FactoryEvent, want factoryapi.WorkFailureType) {
 	t.Helper()
 	for _, event := range events {
-		if event.Type != factoryapi.FactoryEventTypeInferenceResponse {
+		if event.Type != factoryapi.FactoryEventTypeModelResponse {
 			continue
 		}
-		payload, err := event.Payload.AsInferenceResponseEventPayload()
+		payload, err := event.Payload.AsModelResponseEventPayload()
 		if err != nil {
 			t.Fatalf("decode inference response: %v", err)
 		}

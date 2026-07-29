@@ -4882,7 +4882,8 @@ type ModelResponseEventPayload struct {
 	OutputPreview *string `json:"outputPreview,omitempty"`
 
 	// ProviderLocality Worker-declared model locality, such as LOCAL or CLOUD.
-	ProviderLocality string `json:"providerLocality"`
+	ProviderLocality string                   `json:"providerLocality"`
+	ProviderSession  *ProviderSessionMetadata `json:"providerSession,omitempty"`
 
 	// ResourceAcquired Whether the invocation acquired the required local model resources.
 	ResourceAcquired *bool `json:"resourceAcquired,omitempty"`

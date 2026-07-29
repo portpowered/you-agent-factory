@@ -294,7 +294,8 @@ func compactionFragmentFidelity() responseevents.Fidelity {
 }
 
 func mapProgressFragment(ctx Context, fragment responsestream.Event) (responseevents.FactoryResponseEvent, error) {
-	payload, err := json.Marshal(progressPayloadFromFragment(fragment))
+	kind, phase, payloadValue := semanticProgress(fragment)
+	payload, err := json.Marshal(payloadValue)
 	if err != nil {
 		return responseevents.FactoryResponseEvent{}, fmt.Errorf("marshal progress payload: %w", err)
 	}
@@ -306,19 +307,110 @@ func mapProgressFragment(ctx Context, fragment responsestream.Event) (responseev
 		RecordedAt:       fragment.RecordedAt,
 		FactorySessionID: strings.TrimSpace(ctx.FactorySessionID),
 		RunID:            strings.TrimSpace(ctx.RunID),
-		Kind:             responseevents.KindProgress,
-		Phase:            responseevents.PhaseUpdated,
+		Kind:             kind,
+		Phase:            phase,
 		Provenance: responseevents.Provenance{
 			Provider:        fragmentProvider(fragment),
 			NativeEventType: fragmentNativeEventType(fragment),
 			Delivery:        responseevents.DeliverySynthesized,
-			Representation:  responseevents.RepresentationNotification,
+			Representation:  semanticProgressRepresentation(kind, phase),
 			Fidelity:        progressFragmentFidelity(fragment),
 		},
 		Payload:            payload,
 		DispatchID:         strings.TrimSpace(fragment.DispatchID),
+		ItemID:             strings.TrimSpace(fragment.Metadata["item_id"]),
 		ProviderSessionRef: providerSessionRefString(fragment.ProviderSessionRef),
 	}, nil
+}
+
+func semanticProgress(fragment responsestream.Event) (responseevents.Kind, responseevents.Phase, any) {
+	metadata := fragment.Metadata
+	kind := strings.ToLower(strings.TrimSpace(metadata["kind"]))
+	phase := semanticPhase(fragment.Type)
+	switch kind {
+	case "run":
+		return responseevents.KindRun, phase, responseevents.RunPayload{Status: strings.ToLower(string(phase))}
+	case "session":
+		return responseevents.KindSession, phase, responseevents.SessionPayload{Status: strings.ToLower(string(phase))}
+	case "message":
+		if phase == responseevents.PhaseDelta {
+			return responseevents.KindMessage, phase, responseevents.MessageDeltaPayload{ContentBlockIndex: 0, ContentBlockKind: responseevents.ContentBlockText, TextDelta: fragment.Payload}
+		}
+		return responseevents.KindMessage, phase, responseevents.MessagePayload{
+			Role:          "assistant",
+			ContentBlocks: []responseevents.ContentBlock{{Kind: responseevents.ContentBlockText, Text: fragment.Payload}},
+			Partial:       strings.EqualFold(strings.TrimSpace(metadata["partial"]), "true"),
+		}
+	case "reasoning":
+		payload := responseevents.ReasoningPayload{Summary: fragment.Payload}
+		if phase == responseevents.PhaseDelta {
+			payload, payload.SummaryDelta = responseevents.ReasoningPayload{}, fragment.Payload
+		}
+		return responseevents.KindReasoning, phase, payload
+	case "tool":
+		toolID := strings.TrimSpace(metadata["item_id"])
+		name := strings.TrimSpace(fragment.Payload)
+		if name == "" {
+			name = "ACP tool"
+		}
+		payload := responseevents.ToolPayload{ToolCallID: toolID, ToolName: name, Status: metadata["status"]}
+		if raw := json.RawMessage(metadata["raw_input"]); json.Valid(raw) {
+			payload.ArgumentsSummary = raw
+		}
+		if raw := json.RawMessage(metadata["raw_output"]); json.Valid(raw) {
+			payload.ResultSummary = raw
+		}
+		return responseevents.KindTool, phase, payload
+	case "file_change":
+		return responseevents.KindFileChange, responseevents.PhaseUpdated, responseevents.FileChangePayload{Path: metadata["path"], Operation: metadata["operation"], Summary: fragment.Payload}
+	case "plan":
+		return responseevents.KindPlan, responseevents.PhaseUpdated, responseevents.PlanPayload{Summary: firstNonEmptyProgress(fragment.Payload, "ACP plan updated")}
+	case "usage":
+		return responseevents.KindUsage, responseevents.PhaseUpdated, responseevents.UsagePayload{TotalTokens: parseProgressInt64(metadata["used_tokens"])}
+	case "error":
+		return responseevents.KindError, responseevents.PhaseFailed, responseevents.ErrorPayload{Code: firstNonEmptyProgress(metadata["error_code"], "provider_failure"), Message: firstNonEmptyProgress(fragment.Payload, "provider execution failed")}
+	default:
+		return responseevents.KindProgress, responseevents.PhaseUpdated, progressPayloadFromFragment(fragment)
+	}
+}
+
+func semanticProgressRepresentation(kind responseevents.Kind, phase responseevents.Phase) responseevents.Representation {
+	if kind == responseevents.KindMessage && phase == responseevents.PhaseCompleted {
+		return responseevents.RepresentationSnapshot
+	}
+	return responseevents.RepresentationNotification
+}
+
+func semanticPhase(value responsestream.EventType) responseevents.Phase {
+	switch strings.ToLower(strings.TrimSpace(string(value))) {
+	case "started", "start":
+		return responseevents.PhaseStarted
+	case "delta":
+		return responseevents.PhaseDelta
+	case "completed", "complete":
+		return responseevents.PhaseCompleted
+	case "failed":
+		return responseevents.PhaseFailed
+	case "canceled", "cancelled":
+		return responseevents.PhaseCanceled
+	default:
+		return responseevents.PhaseUpdated
+	}
+}
+
+func parseProgressInt64(value string) int64 {
+	var parsed int64
+	_, _ = fmt.Sscan(strings.TrimSpace(value), &parsed)
+	return parsed
+}
+
+func firstNonEmptyProgress(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 func progressPayloadFromFragment(fragment responsestream.Event) responseevents.ProgressPayload {
@@ -372,6 +464,9 @@ func fragmentProvider(fragment responsestream.Event) string {
 func fragmentNativeEventType(fragment responsestream.Event) string {
 	if external := strings.TrimSpace(fragment.ExternalEventType); external != "" {
 		return external
+	}
+	if native := strings.TrimSpace(fragment.Metadata["native_type"]); native != "" {
+		return native
 	}
 	if typed := strings.TrimSpace(string(fragment.Type)); typed != "" {
 		return typed

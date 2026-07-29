@@ -269,7 +269,7 @@ func newRoot(
 	if err != nil {
 		return nil, err
 	}
-	return providerservice.New(catalogService, executionService)
+	return providerservice.New(catalogService, executionService, acpService)
 }
 
 func registrationDescriptor(manifest providerinference.Manifest) providers.Descriptor {

@@ -10,8 +10,8 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/inference"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -207,6 +207,12 @@ func runFactoryToCompletionWithHome(
 		responseEvents = GetFactoryResponseEventsAt(t, baseURL, session.Id)
 	}
 	daemon.Stop(t)
+	closeCtx, cancelClose := context.WithTimeout(context.Background(), processCommandStopTimeout)
+	defer cancelClose()
+	if closer, ok := process.(interface{ Close(context.Context) error }); ok {
+		if err := closer.Close(closeCtx); err != nil {
+			t.Fatalf("close application process: %v", err)
+		}
+	}
 	return session, work, events, responseEvents
 }
-

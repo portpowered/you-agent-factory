@@ -45,10 +45,10 @@ func TestYouRunUsesPinnedACPWireGoldensAndProjectsTerminalOutput(t *testing.T) {
 func assertGoldenProviderSession(t *testing.T, events []factoryapi.FactoryEvent) {
 	t.Helper()
 	for _, event := range events {
-		if event.Type != factoryapi.FactoryEventTypeInferenceResponse {
+		if event.Type != factoryapi.FactoryEventTypeModelResponse {
 			continue
 		}
-		payload, err := event.Payload.AsInferenceResponseEventPayload()
+		payload, err := event.Payload.AsModelResponseEventPayload()
 		if err != nil {
 			t.Fatalf("decode inference response: %v", err)
 		}

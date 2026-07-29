@@ -96,10 +96,10 @@ func TestACPAuthenticationRequiredMapsToCanonicalWorkerFailure(t *testing.T) {
 		t.Fatalf("failed work = %d, want 1", got)
 	}
 	for _, event := range factoryEvents {
-		if event.Type != factoryapi.FactoryEventTypeInferenceResponse {
+		if event.Type != factoryapi.FactoryEventTypeModelResponse {
 			continue
 		}
-		payload, err := event.Payload.AsInferenceResponseEventPayload()
+		payload, err := event.Payload.AsModelResponseEventPayload()
 		if err != nil {
 			t.Fatalf("decode inference response: %v", err)
 		}

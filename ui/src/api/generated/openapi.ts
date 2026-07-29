@@ -3303,6 +3303,7 @@ export interface components {
       outputPreview?: string;
       outputContent?: components["schemas"]["WorkContent"];
       diagnostics?: components["schemas"]["SafeWorkDiagnostics"];
+      providerSession?: components["schemas"]["ProviderSessionMetadata"];
       failureDetail?: components["schemas"]["FailureDetail"];
     };
     /** @description Request details captured immediately before a model-worker provider attempt is invoked. FactoryEvent.context owns dispatch, request, trace, and work identity, and the matching dispatch-request event owns the transition identifier. Prompt content is intentionally present and should be treated as sensitive in recordings and diagnostics. */

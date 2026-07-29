@@ -155,6 +155,7 @@ type ModelResponseEventPayload struct {
 	Outcome            InferenceOutcome                 `json:"outcome"`
 	OutputContent      *[]work.WorkContentPart          `json:"outputContent,omitempty"`
 	OutputPreview      *string                          `json:"outputPreview,omitempty"`
+	ProviderSession    *ProviderSessionMetadata         `json:"providerSession,omitempty"`
 	ProviderLocality   string                           `json:"providerLocality"`
 	ResourceAcquired   *bool                            `json:"resourceAcquired,omitempty"`
 	ResourceWaitMillis *int64                           `json:"resourceWaitMillis,omitempty"`

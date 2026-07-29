@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/root"
 	"github.com/portpowered/infinite-you/pkg/services/edges"
@@ -34,6 +35,9 @@ var runProcess = func() int {
 				Stderr: os.Stderr, Context: ctx, WorkingDirectory: workingDirectory,
 				StdinIsTTY: &stdinIsTTY, StdoutIsTTY: &stdoutIsTTY,
 			})
+			closeCtx, cancelClose := context.WithTimeout(context.Background(), 5*time.Second)
+			err = errors.Join(err, process.Close(closeCtx))
+			cancelClose()
 		}
 	}
 	return processExitCode(err, ctx.Err(), os.Args)

@@ -20,6 +20,7 @@ type functionalRPCPeer struct {
 	stderr     io.Writer
 	modelSet   bool
 	sessionID  string
+	sessions   int
 	nextCallID int
 }
 
@@ -81,7 +82,13 @@ func (p *functionalRPCPeer) serve() error {
 			if p.mode == "model" {
 				config = `[{"type":"select","id":"model","name":"Model","category":"model","currentValue":"default","options":[{"name":"Test model","value":"test-model"}]}]`
 			}
-			result := json.RawMessage(fmt.Sprintf(`{"sessionId":%q,"configOptions":%s}`, p.sessionID, config))
+			p.sessions++
+			sessionID := p.sessionID
+			if p.mode == "persistent" {
+				sessionID = fmt.Sprintf("acp-session-functional-1-%d", p.sessions)
+			}
+			p.sessionID = sessionID
+			result := json.RawMessage(fmt.Sprintf(`{"sessionId":%q,"configOptions":%s}`, sessionID, config))
 			if err := p.respond(request.ID, result); err != nil {
 				return err
 			}
@@ -100,7 +107,9 @@ func (p *functionalRPCPeer) serve() error {
 			if err := p.prompt(request); err != nil {
 				return err
 			}
-			return nil
+			if p.mode != "persistent" {
+				return nil
+			}
 		case "$/cancel_request", "session/cancel":
 			return nil
 		default:
