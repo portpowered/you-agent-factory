@@ -20,7 +20,7 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const parallelDAG = `{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"task-a","workTypeName":"planned-task"},{"name":"task-b","workTypeName":"planned-task"},{"name":"task-c","workTypeName":"planned-task"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"task-c","targetWorkName":"task-a"},{"type":"DEPENDS_ON","sourceWorkName":"task-c","targetWorkName":"task-b"}]}}`
+const parallelDAG = `{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"task-a","workTypeName":"planned-task","payload":"TASK_A_UNIQUE_OBJECTIVE"},{"name":"task-b","workTypeName":"planned-task","payload":"TASK_B_UNIQUE_OBJECTIVE"},{"name":"task-c","workTypeName":"planned-task","payload":"TASK_C_UNIQUE_OBJECTIVE"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"task-c","targetWorkName":"task-a"},{"type":"DEPENDS_ON","sourceWorkName":"task-c","targetWorkName":"task-b"}]}}`
 
 func TestPackagedPlanParallelExecutesReadyDAGConcurrentlyAndMerges(t *testing.T) {
 	runner := newPlanParallelRunner(parallelDAG)
@@ -39,6 +39,7 @@ func TestPackagedPlanParallelExecutesReadyDAGConcurrentlyAndMerges(t *testing.T)
 	if runner.executionCount() != 3 || runner.mergeCount() != 1 {
 		t.Fatalf("executor calls = %d, merge calls = %d; want 3 and 1", runner.executionCount(), runner.mergeCount())
 	}
+	assertPlanParallelPromptsContainInputs(t, runner.requestsSnapshot())
 	for index, request := range runner.requestsSnapshot() {
 		if request.Command != "codex" || !planParallelHasArgPair(request.Args, "--model", "operator-model") ||
 			!planParallelHasArg(request.Args, "--dangerously-bypass-approvals-and-sandbox") {
@@ -54,6 +55,41 @@ func TestPackagedPlanParallelExecutesReadyDAGConcurrentlyAndMerges(t *testing.T)
 	}
 	assertPlanParallelGeneratedDAGEvent(t, events)
 	assertPlanParallelRetainedReplay(t, server, events)
+}
+
+func assertPlanParallelPromptsContainInputs(t *testing.T, requests []platformprocess.CommandRequest) {
+	t.Helper()
+	executorPrompts := make([]string, 0, 3)
+	var mergerPrompt string
+	for _, request := range requests {
+		prompt := string(request.Stdin)
+		switch {
+		case strings.Contains(prompt, "Plan an executable Work DAG"):
+		case strings.Contains(prompt, "Treat the original request and all completed generated Work inputs"):
+			mergerPrompt = prompt
+		default:
+			executorPrompts = append(executorPrompts, prompt)
+		}
+	}
+	if len(executorPrompts) != 3 {
+		t.Fatalf("executor prompts = %d, want 3", len(executorPrompts))
+	}
+	markers := []string{"TASK_A_UNIQUE_OBJECTIVE", "TASK_B_UNIQUE_OBJECTIVE", "TASK_C_UNIQUE_OBJECTIVE"}
+	for index, prompt := range executorPrompts {
+		matches := 0
+		for _, marker := range markers {
+			if strings.Contains(prompt, marker) {
+				matches++
+			}
+		}
+		if matches != 1 || strings.Contains(prompt, "implement three dependent tasks") {
+			t.Fatalf("executor prompt[%d] did not isolate exactly one assigned payload: %q", index, prompt)
+		}
+	}
+	if mergerPrompt == "" || !strings.Contains(mergerPrompt, "implement three dependent tasks") ||
+		strings.Count(mergerPrompt, "planned task completed") != 3 {
+		t.Fatalf("merger prompt does not contain the parent request and all three child results: %q", mergerPrompt)
+	}
 }
 
 func assertPlanParallelGeneratedDAGEvent(t *testing.T, events []factoryapi.FactoryEvent) {

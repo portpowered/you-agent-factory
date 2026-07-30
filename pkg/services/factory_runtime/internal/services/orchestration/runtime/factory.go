@@ -900,6 +900,7 @@ func (a *schedulerAdapter) Select(enabled []interfaces.EnabledTransition, snapsh
 	for i, r := range results {
 		decisions[i] = interfaces.FiringDecision{
 			TransitionID:  r.TransitionID,
+			InputTokens:   r.InputTokens,
 			ConsumeTokens: r.ConsumeTokens,
 			WorkerType:    r.WorkerType,
 			InputBindings: r.InputBindings,

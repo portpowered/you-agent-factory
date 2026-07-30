@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"strings"
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -156,6 +157,37 @@ func TestFIFOScheduler_CardinalityAllMultipleTokens(t *testing.T) {
 	}
 	if len(decisions[0].ConsumeTokens) != 2 {
 		t.Errorf("tr-1 should consume 2 tokens, got %d", len(decisions[0].ConsumeTokens))
+	}
+}
+
+func TestFIFOScheduler_IncludesObservedBindingsWithoutConsumingThem(t *testing.T) {
+	sched := NewFIFOScheduler()
+	parent := factorytoken.Token{ID: "parent", PlaceID: "parent:waiting"}
+	childA := factorytoken.Token{ID: "child-a", PlaceID: "child:complete"}
+	childB := factorytoken.Token{ID: "child-b", PlaceID: "child:complete"}
+
+	decisions := sched.Select([]interfaces.EnabledTransition{{
+		TransitionID: "merge",
+		WorkerType:   "merger",
+		Bindings: map[string][]factorytoken.Token{
+			"parent":   {parent},
+			"children": {childA, childB},
+		},
+		ArcModes: map[string]interfaces.ArcMode{"children": interfaces.ArcModeObserve},
+	}}, nil)
+
+	if len(decisions) != 1 {
+		t.Fatalf("decisions = %d, want 1", len(decisions))
+	}
+	decision := decisions[0]
+	if strings.Join(decision.InputTokens, ",") != "child-a,child-b,parent" {
+		t.Fatalf("input tokens = %v, want observed children and consumed parent", decision.InputTokens)
+	}
+	if strings.Join(decision.ConsumeTokens, ",") != "parent" {
+		t.Fatalf("consume tokens = %v, want only parent", decision.ConsumeTokens)
+	}
+	if strings.Join(decision.InputBindings["children"], ",") != "child-a,child-b" {
+		t.Fatalf("child input bindings = %v, want both observed children", decision.InputBindings["children"])
 	}
 }
 

@@ -10,8 +10,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factory_context "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/context"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
+	factory_context "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/context"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
@@ -153,21 +153,30 @@ func (d *DispatcherSubsystem) dispatchRecordFromDecision(snapshot *interfaces.En
 	if !ok {
 		return interfaces.DispatchRecord{}, false
 	}
-	consumeMutations := consumeMutationsForDecision(decision.TransitionID, inputTokens, claimedTokens)
+	consumeMutations := consumeMutationsForDecision(decision.TransitionID, decision.ConsumeTokens, inputTokens, claimedTokens)
 	dispatch := d.buildWorkDispatch(snapshot, decision, tr, inputTokens)
 	d.logDispatch(decision, inputTokens, dispatch)
 	return interfaces.DispatchRecord{Dispatch: dispatch, Mutations: consumeMutations}, true
 }
 
 func (d *DispatcherSubsystem) collectDecisionTokens(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], decision interfaces.FiringDecision, claimedTokens map[string]bool) ([]factorytoken.Token, bool) {
-	inputTokens := make([]factorytoken.Token, 0, len(decision.ConsumeTokens))
-	seenTokens := make(map[string]bool)
+	tokenIDs := decision.InputTokens
+	if len(tokenIDs) == 0 {
+		tokenIDs = decision.ConsumeTokens
+	}
+	inputTokens := make([]factorytoken.Token, 0, len(tokenIDs))
+	consumeTokenIDs := make(map[string]struct{}, len(decision.ConsumeTokens))
 	for _, tokenID := range decision.ConsumeTokens {
+		consumeTokenIDs[tokenID] = struct{}{}
+	}
+	seenTokens := make(map[string]bool)
+	for _, tokenID := range tokenIDs {
 		if seenTokens[tokenID] {
 			continue
 		}
 		seenTokens[tokenID] = true
-		if claimedTokens[tokenID] {
+		_, consumed := consumeTokenIDs[tokenID]
+		if consumed && claimedTokens[tokenID] {
 			d.logger.Warn("dispatcher: skipping decision due to duplicate token claim",
 				"transitionID", decision.TransitionID,
 				"tokenID", tokenID,
@@ -187,9 +196,16 @@ func (d *DispatcherSubsystem) collectDecisionTokens(snapshot *interfaces.EngineS
 	return inputTokens, true
 }
 
-func consumeMutationsForDecision(transitionID string, inputTokens []factorytoken.Token, claimedTokens map[string]bool) []interfaces.MarkingMutation {
-	consumeMutations := make([]interfaces.MarkingMutation, 0, len(inputTokens))
+func consumeMutationsForDecision(transitionID string, consumeTokenIDs []string, inputTokens []factorytoken.Token, claimedTokens map[string]bool) []interfaces.MarkingMutation {
+	consumeSet := make(map[string]struct{}, len(consumeTokenIDs))
+	for _, tokenID := range consumeTokenIDs {
+		consumeSet[tokenID] = struct{}{}
+	}
+	consumeMutations := make([]interfaces.MarkingMutation, 0, len(consumeTokenIDs))
 	for _, token := range inputTokens {
+		if _, consume := consumeSet[token.ID]; !consume {
+			continue
+		}
 		consumeMutations = append(consumeMutations, interfaces.MarkingMutation{
 			Type:      interfaces.MutationConsume,
 			TokenID:   token.ID,

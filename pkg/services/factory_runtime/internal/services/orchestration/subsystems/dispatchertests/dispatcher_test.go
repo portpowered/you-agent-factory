@@ -10,8 +10,8 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
-	factory_context "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/context"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
+	factory_context "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/context"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/subsystems"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
@@ -307,6 +307,57 @@ func TestDispatcher_PreservesCanonicalChainingLineageWhenLegacyTraceDiffers(t *t
 	}
 	if dispatch.Execution.TraceID != "trace-1" {
 		t.Fatalf("execution trace ID = %q, want legacy trace-1 compatibility", dispatch.Execution.TraceID)
+	}
+}
+
+func TestDispatcher_ForwardsObservedInputsWithoutConsumingThem(t *testing.T) {
+	n := &state.Net{
+		Places: map[string]*petri.Place{
+			"parent:waiting": {ID: "parent:waiting"},
+			"child:complete": {ID: "child:complete"},
+		},
+		Transitions: map[string]*petri.Transition{
+			"merge": {
+				ID: "merge", Name: "merge", WorkerType: "agent",
+				InputArcs: []petri.Arc{
+					{ID: "parent-input", Name: "parent", PlaceID: "parent:waiting", Direction: petri.ArcInput, Mode: interfaces.ArcModeConsume},
+					{ID: "child-input", Name: "children", PlaceID: "child:complete", Direction: petri.ArcInput, Mode: interfaces.ArcModeObserve},
+				},
+			},
+		},
+	}
+	sched := &mockScheduler{decisions: []interfaces.FiringDecision{{
+		TransitionID:  "merge",
+		InputTokens:   []string{"parent", "child"},
+		ConsumeTokens: []string{"parent"},
+		WorkerType:    "agent",
+		InputBindings: map[string][]string{"parent": {"parent"}, "children": {"child"}},
+	}}}
+	dispatcher := subsystems.NewDispatcher(n, sched, nil, nil, nil, time.Now, testDispatchID)
+	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
+			"parent": {ID: "parent", PlaceID: "parent:waiting", Color: factorytoken.Color{WorkID: "work-parent", WorkTypeID: "parent", DataType: factorytoken.DataTypeWork}},
+			"child":  {ID: "child", PlaceID: "child:complete", Color: factorytoken.Color{WorkID: "work-child", WorkTypeID: "child", DataType: factorytoken.DataTypeWork, Payload: []byte("child result")}},
+		}),
+	}
+
+	result, err := dispatcher.Execute(context.Background(), &snapshot)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result == nil || len(result.Dispatches) != 1 {
+		t.Fatalf("dispatches = %#v, want one", result)
+	}
+	inputs := result.Dispatches[0].Dispatch.InputTokens
+	if len(inputs) != 2 {
+		t.Fatalf("dispatch inputs = %#v, want parent and observed child result", inputs)
+	}
+	child, ok := inputs[1].(factorytoken.Token)
+	if !ok || string(child.Color.Payload) != "child result" {
+		t.Fatalf("dispatch inputs = %#v, want parent and observed child result", inputs)
+	}
+	if len(result.Dispatches[0].Mutations) != 1 || result.Dispatches[0].Mutations[0].TokenID != "parent" {
+		t.Fatalf("mutations = %#v, want only parent consumed", result.Dispatches[0].Mutations)
 	}
 }
 

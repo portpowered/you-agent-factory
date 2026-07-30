@@ -75,6 +75,15 @@ code, documents, recordings, and patches are experiment evidence first. Promote
 an output to a production branch only after an independent review and the
 repository's normal verification and delivery process.
 
+### Advance the campaign from the latest accepted root
+
+Every live trial must use a newly created, uniquely named Git worktree branched
+from the latest accepted root commit. When a trial exposes a Factory or runtime
+defect, reproduce it with the narrowest deterministic test, implement and verify
+the fix on the root branch, and commit that fix before creating the next trial
+worktree. Later trials therefore exercise all previously accepted improvements.
+Do not reuse a dirty or earlier trial worktree as the base for another Factory.
+
 ### Pin inputs and preserve evidence
 
 Every result must identify the repository base, Factory version, model roles,
@@ -161,8 +170,9 @@ without encoding model or commit choices into the identifier.
 - Run `you run --named <factory> --help` and save the effective signature.
 - Confirm each configured provider and model is available.
 - Record known baseline failures before the trial.
-- Create a uniquely named trial branch and isolated worktree from the pinned
-  base commit.
+- Confirm all accepted fixes from prior trials are committed on the root branch.
+- Create a uniquely named trial branch and isolated worktree from that latest
+  root commit, then record the commit as the pinned base for the trial.
 - Ensure the trial worktree is clean before invocation.
 
 ### 2. Invoke
@@ -198,6 +208,9 @@ Record the behavior relevant to the Factory, including:
 ### 5. Iterate or promote
 
 - Classify the failure before changing anything.
+- Add or strengthen deterministic tests that reproduce a confirmed contract,
+  topology, prompt-input, permission, or runtime defect before the next live
+  trial whenever the behavior can be tested without a model.
 - Commit every Factory, runtime, schema, or prompt change separately with the
   experiment IDs that motivated it.
 - Rerun the failed workload from the same pinned base where possible.
@@ -309,7 +322,7 @@ multiple experiment IDs to cover all goals.
 | `@you/goal` | TBD | TBD | TBD | UNVALIDATED | |
 | `@you/loop` | TBD | TBD | TBD | UNVALIDATED | |
 | `@you/plan-execute` | TBD | TBD | TBD | UNVALIDATED | |
-| `@you/plan-parallel` | `BOOT-PLAN-PARALLEL-001` (passed twice) | executor-contract holdout required | deterministic DAG invocation coverage plus frozen repeat | NEEDS_ITERATION | The simplified holdout proved two-task parallel fan-out and terminal merger gating, but child agents returned control/specification text instead of evidence. Executor prompts now forbid unrelated nested contracts and require substantive results. |
+| `@you/plan-parallel` | `BOOT-PLAN-PARALLEL-001` (passed twice) | payload-and-fan-in holdout required | deterministic DAG, assigned-payload, observed-result fan-in, and frozen-repeat coverage | NEEDS_ITERATION | `BOOT-PLAN-PARALLEL-004` proved that prompt hardening alone could not help: non-empty workstation templates omitted assigned Work payloads, and observed child results were discarded before merger dispatch. Both boundaries now have regression coverage; a fresh-worktree holdout must prove the live outcome. |
 | `@you/quorum` | `BOOT-QUORUM-002-R02` | `BOOT-QUORUM-002-R01` | deterministic parallel-branch, merge-gating, and insufficient-member failure coverage | MEETS_EXPECTATIONS | Both live cases ran independent branches then gated merge. One transient provider failure and one disputed peripheral defect label remain documented. |
 | `@you/review` | `BOOT-REVIEW-001-R01` | `BOOT-REVIEW-001-R02` | rejection feedback and bounded correction-loop coverage | MEETS_EXPECTATIONS | Independent review correctly disproved the seeded defect with traced code and a passing focused test; live approval occurred on the first review. |
 | `@you/spawn` | TBD | TBD | TBD | UNVALIDATED | |
