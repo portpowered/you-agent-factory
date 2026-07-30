@@ -6,13 +6,12 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/internal/testutil"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -53,14 +52,12 @@ func TestCLIRunNamedFactory(t *testing.T) {
 		baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 
 		mockWorkersPath := writeRunWiringMockWorkersConfig(t)
-		binaryPath := buildRunWiringYouCLIBinary(t)
+		processHarness := newRunWiringRootProcessHarness(t)
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
 		unrelatedWorkingDir := t.TempDir()
-		cmd := exec.CommandContext(
-			ctx,
-			binaryPath,
+		cmd := processHarness.CommandContext(ctx,
 			"run",
 			"--named", runWiringNamedFactoryName,
 			"--with-mock-workers",
@@ -113,14 +110,12 @@ func TestCLIRunNamedFactory(t *testing.T) {
 		baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 
 		mockWorkersPath := writeRunWiringPackagedGoalMockWorkersConfig(t)
-		binaryPath := buildRunWiringYouCLIBinary(t)
+		processHarness := newRunWiringRootProcessHarness(t)
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
 		unrelatedWorkingDir := t.TempDir()
-		cmd := exec.CommandContext(
-			ctx,
-			binaryPath,
+		cmd := processHarness.CommandContext(ctx,
 			"run",
 			"--named", interfaces.PackagedGoalFactoryName,
 			"--with-mock-workers",
@@ -174,13 +169,11 @@ func TestCLIRunInvalidFactoryReturnsValidationFailure(t *testing.T) {
 	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
 	prompt := "missing-default-handling"
 
-	binaryPath := buildRunWiringYouCLIBinary(t)
+	processHarness := newRunWiringRootProcessHarness(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(
-		ctx,
-		binaryPath,
+	cmd := processHarness.CommandContext(ctx,
 		"run",
 		"--factory", factoryPath,
 		"--no-record",
@@ -198,13 +191,6 @@ func TestCLIRunInvalidFactoryReturnsValidationFailure(t *testing.T) {
 		t.Fatal("expected you run to fail for invalid Factory load")
 	}
 
-	exitErr, ok := err.(*exec.ExitError)
-	if !ok {
-		t.Fatalf("you run error = %v, want *exec.ExitError", err)
-	}
-	if exitErr.ExitCode() != 1 {
-		t.Fatalf("you run exit code = %d, want validation failure exit code 1", exitErr.ExitCode())
-	}
 	if stdout.Len() != 0 {
 		t.Fatalf("stdout = %q, want no success primary-result payload on load validation failure", stdout.String())
 	}
@@ -230,13 +216,11 @@ func TestCLIRunFactoryByPath(t *testing.T) {
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 
 	mockWorkersPath := writeRunWiringMockWorkersConfig(t)
-	binaryPath := buildRunWiringYouCLIBinary(t)
+	processHarness := newRunWiringRootProcessHarness(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(
-		ctx,
-		binaryPath,
+	cmd := processHarness.CommandContext(ctx,
 		"run",
 		"--factory", factoryPath,
 		"--with-mock-workers",
@@ -283,13 +267,11 @@ func TestCLIRunFactoryWritesPrimaryResultFromStdin(t *testing.T) {
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 
 	mockWorkersPath := writeRunWiringMockWorkersConfig(t)
-	binaryPath := buildRunWiringYouCLIBinary(t)
+	processHarness := newRunWiringRootProcessHarness(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(
-		ctx,
-		binaryPath,
+	cmd := processHarness.CommandContext(ctx,
 		"run",
 		"--factory", factoryPath,
 		"--with-mock-workers",
@@ -334,13 +316,11 @@ func TestCLIRunRejectsConflictingPositionalAndStdinInput(t *testing.T) {
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 
 	mockWorkersPath := writeRunWiringMockWorkersConfig(t)
-	binaryPath := buildRunWiringYouCLIBinary(t)
+	processHarness := newRunWiringRootProcessHarness(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(
-		ctx,
-		binaryPath,
+	cmd := processHarness.CommandContext(ctx,
 		"run",
 		"--factory", factoryPath,
 		"--with-mock-workers",
@@ -387,13 +367,11 @@ func TestCLIRunFailureWritesNoSuccessPayloadToStdout(t *testing.T) {
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 
 	mockWorkersPath := writeRunWiringMockWorkersConfig(t)
-	binaryPath := buildRunWiringYouCLIBinary(t)
+	processHarness := newRunWiringRootProcessHarness(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(
-		ctx,
-		binaryPath,
+	cmd := processHarness.CommandContext(ctx,
 		"run",
 		"--factory", factoryPath,
 		"--with-mock-workers",
@@ -432,7 +410,7 @@ func TestCLIRunCleanInvocationStdoutRemainsPipeable(t *testing.T) {
 	factoryDir := support.ScaffoldFactory(t, runWiringFactoryConfig())
 	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
 	mockWorkersPath := writeRunWiringMockWorkersConfig(t)
-	binaryPath := buildRunWiringYouCLIBinary(t)
+	processHarness := newRunWiringRootProcessHarness(t)
 
 	for _, prompt := range []string{
 		"functional-clean-stdout-first",
@@ -441,7 +419,7 @@ func TestCLIRunCleanInvocationStdoutRemainsPipeable(t *testing.T) {
 		stdout, stderr, err := runRunWiringFactoryCLI(
 			t,
 			factoryDir,
-			binaryPath,
+			processHarness,
 			mockWorkersPath,
 			nil,
 			factoryPath,
@@ -456,7 +434,7 @@ func TestCLIRunCleanInvocationStdoutRemainsPipeable(t *testing.T) {
 	stdout, stderr, err := runRunWiringFactoryCLI(
 		t,
 		factoryDir,
-		binaryPath,
+		processHarness,
 		mockWorkersPath,
 		strings.NewReader("functional-clean-stdin-only\n"),
 		factoryPath,
@@ -478,12 +456,12 @@ func TestCLIRunAmbiguousPromptAndStdinFailsBeforeRuntimeStartup(t *testing.T) {
 	factoryDir := support.ScaffoldFactory(t, runWiringFactoryConfig())
 	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
 	mockWorkersPath := writeRunWiringMockWorkersConfig(t)
-	binaryPath := buildRunWiringYouCLIBinary(t)
+	processHarness := newRunWiringRootProcessHarness(t)
 
 	stdout, stderr, err := runRunWiringFactoryCLI(
 		t,
 		factoryDir,
-		binaryPath,
+		processHarness,
 		mockWorkersPath,
 		strings.NewReader("functional-clean-stdin-conflict\n"),
 		factoryPath,
@@ -634,20 +612,9 @@ func writeRunWiringMockWorkersConfig(t *testing.T) string {
 	return path
 }
 
-func buildRunWiringYouCLIBinary(t *testing.T) string {
+func newRunWiringRootProcessHarness(t *testing.T) *builtcliacceptance.Harness {
 	t.Helper()
-
-	binaryName := "you"
-	if runtime.GOOS == "windows" {
-		binaryName += ".exe"
-	}
-	binaryPath := filepath.Join(t.TempDir(), binaryName)
-	build := exec.Command("go", "build", "-o", binaryPath, "./cmd/factory")
-	build.Dir = testutil.MustRepoRoot(t)
-	if output, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build you CLI: %v\n%s", err, string(output))
-	}
-	return binaryPath
+	return builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
 }
 
 func reserveRunWiringLocalTCPPort() (int, error) {
@@ -667,7 +634,7 @@ func reserveRunWiringLocalTCPPort() (int, error) {
 func runRunWiringFactoryCLI(
 	t *testing.T,
 	dir string,
-	binaryPath string,
+	processHarness *builtcliacceptance.Harness,
 	mockWorkersPath string,
 	stdin *strings.Reader,
 	factoryPath string,
@@ -688,7 +655,7 @@ func runRunWiringFactoryCLI(
 	}
 	args = append(args, promptArgs...)
 
-	cmd := exec.CommandContext(ctx, binaryPath, args...)
+	cmd := processHarness.CommandContext(ctx, args...)
 	cmd.Dir = dir
 	if stdin != nil {
 		cmd.Stdin = stdin

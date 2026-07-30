@@ -145,8 +145,10 @@ const emptyTrend: WorkChartModel = {
 
 const RESIZABLE_WORK_OUTCOME_LAYOUT: AgentBentoLayoutItem[] = [
   {
-    h: 3,
+    h: 4,
     id: "work-outcome-chart",
+    minH: 4,
+    minW: 4,
     widgetType: "work-outcome-chart",
     w: 6,
     x: 0,

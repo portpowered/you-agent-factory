@@ -1152,16 +1152,16 @@ export const allowlistedCrossFeatureBoundaryViolations = [
   },
   {
     relativeFilePath:
-      "src/features/header/components/dashboard-header-session-controls.tsx",
-    importSpecifiers: ["../../export/messages/export-dialog"],
+      "src/features/bento/components/session-controls-widget.tsx",
+    importSpecifiers: [
+      "../../export/state/exportDialogStore",
+      "../../header/components/dashboard-session-controls",
+      "../../header/components/tick-slider-control",
+      "../../header/hooks/use-dashboard-session-tabs-state",
+      "../../header/messages/header-controls",
+    ],
     reason:
-      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-  },
-  {
-    relativeFilePath: "src/features/header/components/dashboard-header.tsx",
-    importSpecifiers: ["../../export/state/exportDialogStore"],
-    reason:
-      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
+      "Session controls reuse the active dashboard session model and export dialog state from their existing feature owners.",
   },
   {
     relativeFilePath:

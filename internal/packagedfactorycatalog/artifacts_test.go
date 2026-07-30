@@ -33,8 +33,8 @@ func TestGenerateArtifactsProducesEquivalentSelfContainedPairsForCompleteInvento
 	if err != nil {
 		t.Fatalf("GenerateArtifacts: %v", err)
 	}
-	if len(artifacts) != 7 {
-		t.Fatalf("artifacts = %d, want 7", len(artifacts))
+	if len(artifacts) != 14 {
+		t.Fatalf("artifacts = %d, want 14", len(artifacts))
 	}
 
 	bySlug := make(map[string]packagedfactorycatalog.ArtifactPair, len(artifacts))
@@ -49,7 +49,10 @@ func TestGenerateArtifactsProducesEquivalentSelfContainedPairsForCompleteInvento
 		t.Fatal("fusion artifact did not preserve invocation-interpolated provider")
 	}
 	assertInlineAsset(t, bySlug["goal"].JSON, "workers", "goal-executor", "body", "You are executing goal work")
-	assertBundledFile(t, bySlug["deep-research"].JSON, "factory/scripts/deep-research.workflow.js", "SCRIPT", "return (async function")
+	if !strings.Contains(string(bySlug["deep-research"].JSON), `"inlineSource"`) ||
+		!strings.Contains(string(bySlug["deep-research"].JSON), `@you-factory-meta`) {
+		t.Fatal("deep-research artifact did not inline its standalone factory.js source")
+	}
 	assertExamplesPreserved(t, bySlug["subagent"])
 }
 

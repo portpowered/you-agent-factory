@@ -68,7 +68,11 @@ workTypes:
           type: FAILED
 workers:
     - body: |
-        Complete the requested work carefully.
+        You are the producing stage of an independent produce-and-review workflow. You
+        have no prior conversation or hidden project context. Read the complete request
+        below and, when it concerns a workspace, first inspect contributor instructions,
+        relevant architecture, source, tests, and current working-tree state. Preserve
+        unrelated user changes and verify important assumptions before acting.
 
         Request:
         {{ (index .Inputs 0).Payload }}
@@ -81,13 +85,21 @@ workers:
         {{ (index .Inputs 0).RejectionFeedback }}
 
         {{ end -}}
-        Return the completed work as your final response. Do not claim it is reviewed.
+        Deliver a self-contained candidate that directly answers the request. Include
+        the reasoning, artifacts, or verification evidence the reviewer needs to judge
+        correctness. If this is a revision, address every item of feedback and re-check
+        affected behavior rather than merely editing the wording. Return the complete
+        candidate as your final response, and do not claim it has already been reviewed.
       model: ${writerModel}
       modelProvider: ${writerProvider}
       name: review-work-executor
       type: AGENT_WORKER
     - body: |
-        Independently review the candidate work against the original request.
+        You are the independent review stage. Assume zero context beyond the original
+        request, candidate, and any repository state available in the workspace. Read
+        the complete inputs. When the candidate changes code or configuration, inspect
+        the actual diff, contributor instructions, affected implementation, tests, and
+        verification evidence instead of trusting the candidate's claims.
 
         Original request:
         {{ (index .Inputs 0).Payload }}
@@ -95,17 +107,27 @@ workers:
         Candidate work:
         {{ (index .Inputs 0).PreviousOutput }}
 
-        Return only a JSON object. If the candidate is acceptable, return
+        Check correctness, completeness, edge and failure cases, compatibility,
+        security implications, architecture fit, preservation of unrelated work, and
+        test adequacy. Feedback must identify the concrete defect, the required change,
+        and why it matters. Do not reject for personal style preferences.
+
+        Return only a JSON object. If every material requirement is satisfied, return
         {"decision":"ACCEPTED","output":"the complete approved candidate work"}.
         If it needs revision, return {"decision":"REJECTED","feedback":"specific actionable feedback"}.
-        Do not approve without including the approved candidate in `output`.
+        Do not approve without including the complete approved candidate in `output`,
+        and do not approve when verification evidence needed for the request is absent.
       model: ${reviewerModel}
       modelProvider: ${reviewerProvider}
       name: review-work-reviewer
       type: AGENT_WORKER
 workstations:
     - body: |
-        Complete the requested work carefully.
+        You are the producing stage of an independent produce-and-review workflow. You
+        have no prior conversation or hidden project context. Read the complete request
+        below and, when it concerns a workspace, first inspect contributor instructions,
+        relevant architecture, source, tests, and current working-tree state. Preserve
+        unrelated user changes and verify important assumptions before acting.
 
         Request:
         {{ (index .Inputs 0).Payload }}
@@ -118,7 +140,11 @@ workstations:
         {{ (index .Inputs 0).RejectionFeedback }}
 
         {{ end -}}
-        Return the completed work as your final response. Do not claim it is reviewed.
+        Deliver a self-contained candidate that directly answers the request. Include
+        the reasoning, artifacts, or verification evidence the reviewer needs to judge
+        correctness. If this is a revision, address every item of feedback and re-check
+        affected behavior rather than merely editing the wording. Return the complete
+        candidate as your final response, and do not claim it has already been reviewed.
       inputs:
         - state: init
           workType: reviewable-work
@@ -135,7 +161,11 @@ workstations:
         mode: PRESERVE_INPUT
       worker: review-work-executor
     - body: |
-        Independently review the candidate work against the original request.
+        You are the independent review stage. Assume zero context beyond the original
+        request, candidate, and any repository state available in the workspace. Read
+        the complete inputs. When the candidate changes code or configuration, inspect
+        the actual diff, contributor instructions, affected implementation, tests, and
+        verification evidence instead of trusting the candidate's claims.
 
         Original request:
         {{ (index .Inputs 0).Payload }}
@@ -143,10 +173,16 @@ workstations:
         Candidate work:
         {{ (index .Inputs 0).PreviousOutput }}
 
-        Return only a JSON object. If the candidate is acceptable, return
+        Check correctness, completeness, edge and failure cases, compatibility,
+        security implications, architecture fit, preservation of unrelated work, and
+        test adequacy. Feedback must identify the concrete defect, the required change,
+        and why it matters. Do not reject for personal style preferences.
+
+        Return only a JSON object. If every material requirement is satisfied, return
         {"decision":"ACCEPTED","output":"the complete approved candidate work"}.
         If it needs revision, return {"decision":"REJECTED","feedback":"specific actionable feedback"}.
-        Do not approve without including the approved candidate in `output`.
+        Do not approve without including the complete approved candidate in `output`,
+        and do not approve when verification evidence needed for the request is absent.
       inputs:
         - state: in-review
           workType: reviewable-work

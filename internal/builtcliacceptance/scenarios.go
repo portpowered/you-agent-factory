@@ -1,6 +1,6 @@
 package builtcliacceptance
 
-// Scenario documents one S24 built-CLI acceptance scenario and the focused
+// Scenario documents one S24 root-process acceptance scenario and the focused
 // test that asserts its documented customer outcome.
 type Scenario struct {
 	ID                string
@@ -9,7 +9,7 @@ type Scenario struct {
 	TestName          string
 }
 
-// S24Scenarios returns the cross-surface built-CLI acceptance matrix in
+// S24Scenarios returns the cross-surface root-process acceptance matrix in
 // stable priority order. Each entry maps one customer scenario to the focused
 // acceptance test that proves the documented outcome from the built you CLI.
 func S24Scenarios() []Scenario {
@@ -44,7 +44,7 @@ func S24Scenarios() []Scenario {
 		{
 			ID:    "s24-terminal-failure-exit",
 			Title: "Terminal invocation failure",
-			DocumentedOutcome: "A terminal invocation failure exits the built CLI with a non-zero operating-system status, " +
+			DocumentedOutcome: "A terminal invocation failure exits the root process with a non-zero operating-system status, " +
 				"writes diagnostics to stderr, and leaves stdout free of a false primary result.",
 			TestName: "TestCLIFailureWritesDiagnosticToStderr",
 		},

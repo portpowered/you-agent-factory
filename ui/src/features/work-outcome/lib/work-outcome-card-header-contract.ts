@@ -43,6 +43,9 @@ export function expectSingleWorkOutcomeCardHeader(
     });
     expect(headerTools).toBeTruthy();
     expect(headerTools?.contains(headerAction)).toBe(true);
+    expect(headerTools?.className).toContain("ml-auto");
+    expect(headerTools?.className).not.toContain("w-full");
+    expect(headerTools?.className).not.toContain("flex-wrap");
     expect(titleHeading.compareDocumentPosition(headerAction)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );

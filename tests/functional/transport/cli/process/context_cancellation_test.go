@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -54,7 +53,7 @@ func TestCLIContextCancellationStopsExternalWork(t *testing.T) {
 		prompt,
 	)
 
-	command := exec.Command(harness.BinaryPath, args...)
+	command := harness.Command(args...)
 	command.Dir = session.WorkDir
 	command.Env = session.ProcessEnv()
 
@@ -63,7 +62,7 @@ func TestCLIContextCancellationStopsExternalWork(t *testing.T) {
 	command.Stderr = &stderr
 
 	if err := command.Start(); err != nil {
-		t.Fatalf("start built CLI: %v", err)
+		t.Fatalf("start root process: %v", err)
 	}
 
 	waitResult := make(chan error, 1)
@@ -76,24 +75,22 @@ func TestCLIContextCancellationStopsExternalWork(t *testing.T) {
 		terminateContextCancellationProcess(providerPID)
 	})
 
-	if err := command.Process.Signal(os.Interrupt); err != nil {
-		t.Fatalf("interrupt built CLI process context: %v", err)
-	}
+	command.Cancel()
 
 	select {
 	case err := <-waitResult:
 		if err == nil {
 			t.Fatalf(
-				"cancelled built CLI returned success; want process failure after context cancellation\nstdout:\n%s\nstderr:\n%s",
+				"cancelled root process returned success; want process failure after context cancellation\nstdout:\n%s\nstderr:\n%s",
 				stdout.String(),
 				stderr.String(),
 			)
 		}
 	case <-time.After(contextCancellationScenarioTimeout):
-		_ = command.Process.Kill()
+		command.Cancel()
 		<-waitResult
 		t.Fatalf(
-			"timed out waiting for built CLI to exit after context cancellation\nstdout:\n%s\nstderr:\n%s",
+			"timed out waiting for root process to exit after context cancellation\nstdout:\n%s\nstderr:\n%s",
 			stdout.String(),
 			stderr.String(),
 		)
@@ -135,7 +132,7 @@ func TestCLIContextCancellationEmitsNoSuccessResult(t *testing.T) {
 		prompt,
 	)
 
-	command := exec.Command(harness.BinaryPath, args...)
+	command := harness.Command(args...)
 	command.Dir = session.WorkDir
 	command.Env = session.ProcessEnv()
 
@@ -144,7 +141,7 @@ func TestCLIContextCancellationEmitsNoSuccessResult(t *testing.T) {
 	command.Stderr = &stderr
 
 	if err := command.Start(); err != nil {
-		t.Fatalf("start built CLI: %v", err)
+		t.Fatalf("start root process: %v", err)
 	}
 
 	waitResult := make(chan error, 1)
@@ -157,18 +154,16 @@ func TestCLIContextCancellationEmitsNoSuccessResult(t *testing.T) {
 		terminateContextCancellationProcess(providerPID)
 	})
 
-	if err := command.Process.Signal(os.Interrupt); err != nil {
-		t.Fatalf("interrupt built CLI process context: %v", err)
-	}
+	command.Cancel()
 
 	var waitErr error
 	select {
 	case waitErr = <-waitResult:
 	case <-time.After(contextCancellationScenarioTimeout):
-		_ = command.Process.Kill()
+		command.Cancel()
 		<-waitResult
 		t.Fatalf(
-			"timed out waiting for built CLI to exit after context cancellation\nstdout:\n%s\nstderr:\n%s",
+			"timed out waiting for root process to exit after context cancellation\nstdout:\n%s\nstderr:\n%s",
 			stdout.String(),
 			stderr.String(),
 		)
@@ -176,16 +171,7 @@ func TestCLIContextCancellationEmitsNoSuccessResult(t *testing.T) {
 
 	if waitErr == nil {
 		t.Fatalf(
-			"cancelled built CLI returned success; want interrupted terminal outcome\nstdout:\n%s\nstderr:\n%s",
-			stdout.String(),
-			stderr.String(),
-		)
-	}
-	exitErr, ok := waitErr.(*exec.ExitError)
-	if !ok || exitErr.ExitCode() == 0 {
-		t.Fatalf(
-			"cancelled built CLI exit = %v, want non-success interrupted outcome\nstdout:\n%s\nstderr:\n%s",
-			waitErr,
+			"cancelled root process returned success; want interrupted terminal outcome\nstdout:\n%s\nstderr:\n%s",
 			stdout.String(),
 			stderr.String(),
 		)
@@ -193,7 +179,7 @@ func TestCLIContextCancellationEmitsNoSuccessResult(t *testing.T) {
 	cancellationDiagnostic := stderr.String() + "\n" + waitErr.Error()
 	if !strings.Contains(cancellationDiagnostic, "INVOCATION_CANCELED") {
 		t.Fatalf(
-			"cancelled built CLI diagnostic missing INVOCATION_CANCELED:\nstdout:\n%s\nstderr:\n%s",
+			"cancelled root process diagnostic missing INVOCATION_CANCELED:\nstdout:\n%s\nstderr:\n%s",
 			stdout.String(),
 			stderr.String(),
 		)

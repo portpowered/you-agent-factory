@@ -11,7 +11,7 @@
 - Independent functional coverage report: `make test-functional-coverage` (runs `functional-boundary-check` first; coverage-only local rerun)
 - Independent backend unit coverage report: `make test-unit-coverage`
 - Inventory-plus-coverage Markdown catalog (boundary → one coverage run → viz): `make functional-test-viz` (fail-closed; keeps already-written `.artifacts/functional-test-viz/` diagnostics on later-step failure). Required CI Backend Functional Coverage runs this target with `FUNCTIONAL_TEST_VIZ_DIR=.artifacts/backend-functional-coverage` and uploads `functional-tests.md`, `coverage-summary.json`, `coverage.out`, and `command.log` on success and failure when present. Wiring is covered by stubbed/dry-run Make contract smoke under `tests/functional/observability/coverage/functional_test_viz_contract_test.go` (does not run the full functional suite).
-- Built-CLI S24 acceptance lane (also run by `make verify-pr`): `make test-built-cli-acceptance`
+- Root-process S24 acceptance lane (also run by `make verify-pr`): `make test-root-process-acceptance`
 - Opt-in long lane: `make test-functional-long`
 - Real local-inference lane: `make long-tests`
 
@@ -33,30 +33,18 @@ builds the real `ServeurpersoCom/omnivoice.cpp` `omnivoice-tts` backend from a
 pinned commit before building the repo-owned `cmd/omnivoice-llamacpp` adapter
 that speaks the shared subprocess contract used by the service and long tests.
 
-The default lane runs one repository-owned package-discovery command through
-`make test-functional`: `go run ./cmd/functionallane` uses
-`go list ./tests/functional/...` to discover the behavior packages, excludes
-`tests/functional/internal/support`, and then executes one explicit
-`go test -p 2 -short ...` command over that discovered package list. That
-keeps the full behavior tree on package discovery without hard-coded package
-names, stays portable across environments, and avoids the slow Windows
-wildcard `./tests/functional/...` path. The long lane runs the full behavior
-tree plus any `functionallong`-tagged files, so broad or slow scenarios stay
-available without widening the default feedback loop.
-
-The default and functional-coverage lanes share their runnable-package policy
-from `internal/testlanes`. Both lanes still execute every package returned by
-discovery rather than selecting from an allowlist. The same policy verifies
-that the provider contract, all eight built-in providers, script, mock-worker,
-and observability destinations remain present; a missing required destination
-fails discovery with the omitted import path.
+The default lane runs `go run ./cmd/functionallane`, which passes
+`./tests/functional/...` directly to one `go test -p 8 -short` command. It does
+not run a separate `go list` package-discovery or package-structure validation
+step. The long lane runs the full behavior tree plus any `functionallong`-tagged
+files, so broad or slow scenarios stay available without widening the default
+feedback loop.
 
 The coverage lanes intentionally use separate profiles. The
 `make test-functional-coverage` command executes only the maintained non-long
 functional packages while measuring backend-owned `cmd/factory` and `pkg/...`.
-It uses the same bounded `go test -p 2` package concurrency as the default
-functional lane so coverage instrumentation does not increase cross-package
-resource contention.
+It uses bounded package concurrency so coverage instrumentation does not
+increase cross-package resource contention.
 Its total and per-package percentages come from the functional-only profile;
 packages untouched by those functional flows are shown at `0.0%` even when
 their package-local unit tests have higher coverage.

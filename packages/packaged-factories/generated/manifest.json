@@ -8,11 +8,11 @@
       "slug": "classify",
       "json": {
         "locator": "generated/factories/classify/factory.json",
-        "sha256": "e98a458b5384d69be83622218b7eb88d0d7d4628f02c784883f8c33224cde401"
+        "sha256": "9550334debcb7c157047f44d04e7c59e1e80a070d5528ce1c7a9aa35632071a0"
       },
       "yaml": {
         "locator": "generated/factories/classify/factory.yaml",
-        "sha256": "3c1e8bc5c7511e84e06b5b10a8cd832b55e483511792d2b074d8f0be4848f95b"
+        "sha256": "ad8733c2a285a62154339d4b306e2f2fd0f9b4acb433bd07c395f1c3bd21f071"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",
@@ -37,11 +37,11 @@
       "slug": "deep-research",
       "json": {
         "locator": "generated/factories/deep-research/factory.json",
-        "sha256": "e905204d593e3c46ae7b39e6c5b044caad98d90baf55909e57234128b05bc65c"
+        "sha256": "affcef0f446c978e17667f1d341e45b75d0ffce6bb6d65d04363dfb22d2c4936"
       },
       "yaml": {
         "locator": "generated/factories/deep-research/factory.yaml",
-        "sha256": "81f9d92c76cfd773ed83591c078b5c31aae3d6dd6460ad5e897c4070808745fd"
+        "sha256": "bf62105abeb5038f2b5f02df3169f44363b6b1582dec37e2dd5100bd4bf5d61a"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",
@@ -76,11 +76,11 @@
       "slug": "full-flow",
       "json": {
         "locator": "generated/factories/full-flow/factory.json",
-        "sha256": "875f247c5f48845aaf9023f4ca5de9415a47e77044f2918f33d378b243d1b24b"
+        "sha256": "b96b8fcc77f1961df56126ea6599ff44cd295b6d630dfe2da018c3899936d48d"
       },
       "yaml": {
         "locator": "generated/factories/full-flow/factory.yaml",
-        "sha256": "72087f8025138c6cc01f02d9628536483ff8b400918edee7ff71343b3cb60ca3"
+        "sha256": "7170e45666cc9b0b21337ee0b45a221eae1805695483bb68ec53ce987424610b"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",
@@ -107,11 +107,11 @@
       "slug": "fusion",
       "json": {
         "locator": "generated/factories/fusion/factory.json",
-        "sha256": "b31d85e1fe015b4fb5e254d268972ebd849dfd0b051ee2a2409e423da206adcc"
+        "sha256": "6168250b8ac392a763c4a96822708c73bb9860c8d02f3fcfe730f2e01b8b5208"
       },
       "yaml": {
         "locator": "generated/factories/fusion/factory.yaml",
-        "sha256": "b2ffad66111d14e7bec669cb54d594ac7990b74ed7df7920c3a630731985fb18"
+        "sha256": "93627ba07f40590d481d9dd70b94428a43ff5f1014e8c9502dd0ff6d5bc0b74c"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",
@@ -151,11 +151,11 @@
       "slug": "goal",
       "json": {
         "locator": "generated/factories/goal/factory.json",
-        "sha256": "9e4e8346783e0e5c63b46cd0d461c0f35e78fd6de72b74f77093eb308da43649"
+        "sha256": "0767993c72f3993f22b74a15e79fccf0bb2d2d0949739af8662a121d567a49a7"
       },
       "yaml": {
         "locator": "generated/factories/goal/factory.yaml",
-        "sha256": "6cf22114b7eea711b1fbc2277fa04c1f5a9c2822e6a869701f891eff8c9b8f5e"
+        "sha256": "00f23a3e0605e1e5b9d17d7c2ad905df1a4329823f11317fb254af4d03f04014"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",
@@ -180,11 +180,11 @@
       "slug": "loop",
       "json": {
         "locator": "generated/factories/loop/factory.json",
-        "sha256": "63a3129b4a0b70437fdf007dc1f2038bc5d9c5f26603d75621081f778d80ef77"
+        "sha256": "6b279ab69898321bf3d05524a2cbfbabd71405f3b41bdbe0bc47c52ec08086cd"
       },
       "yaml": {
         "locator": "generated/factories/loop/factory.yaml",
-        "sha256": "729171722443950ea29f8873590480bc9f6fd663deb1854109da83640618406e"
+        "sha256": "bb7e0927e14bddf53d4c7e3bbdaa2d6cc681f4f19c08d47636eb4b20ea96027c"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",
@@ -210,22 +210,22 @@
       "slug": "plan-execute",
       "json": {
         "locator": "generated/factories/plan-execute/factory.json",
-        "sha256": "cf18cd1f40f4fa058833f57707b465f727ab7b3a979bd24dbe5cbb169c9f7ff0"
+        "sha256": "64a7d8bcb1abc6b96251581dcd6e5dc25a50bbedd3745847bef68872bb4548f6"
       },
       "yaml": {
         "locator": "generated/factories/plan-execute/factory.yaml",
-        "sha256": "6b9f63ed4506e44f6065803be4951efa532ea8162993c4bad3e7cb8546b44b4a"
+        "sha256": "a21da3f32efa52474f8478e85baa7413abe2cb26ee84a5a7334c8522e41d7594"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",
-        "value": "Writes a Markdown and JSON PRD, prepares an isolated worktree, and executes the PRD through implementation, review, CI, and merge."
+        "value": "Writes a Markdown and JSON PRD for a project request, then executes that plan in the current workspace."
       },
       "examples": [
         {
-          "name": "deliver-feature",
+          "name": "plan-and-implement",
           "description": {
             "type": "LOCALIZABLE_ASSET",
-            "value": "Plan and deliver a feature through an isolated worktree."
+            "value": "Produce a durable PRD and implement it in the current repository."
           },
           "args": {
             "request": "Implement and verify the requested feature"
@@ -239,11 +239,11 @@
       "slug": "plan-parallel",
       "json": {
         "locator": "generated/factories/plan-parallel/factory.json",
-        "sha256": "f3cbb0a67ba2b41757ae490ee5fe2c660f5e17b024d6d4bce07f125f78ebb829"
+        "sha256": "f32e5a78e4189bee1473fff66a2ab53b3314e07068f336aefef1e814864b1b56"
       },
       "yaml": {
         "locator": "generated/factories/plan-parallel/factory.yaml",
-        "sha256": "629f973489a13f20ce0d023c1bd98fe881527b2b3101de8593d83f250fd75d0a"
+        "sha256": "8b3a260ec7966e049e61afc863f5f5f43388baeb92607dc1de013b8d58e77f86"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",
@@ -268,11 +268,11 @@
       "slug": "quorum",
       "json": {
         "locator": "generated/factories/quorum/factory.json",
-        "sha256": "b6e3b5bb93a24ce5f46bf83297474bdc8088695956e7c8d0ff49f769a5711439"
+        "sha256": "1327dd67afa1953e2e7f84351941f0021f64fd6bd706fc9ba4cfba20cc28646f"
       },
       "yaml": {
         "locator": "generated/factories/quorum/factory.yaml",
-        "sha256": "7f156409fc7273d67a52282c6e490a5737ba84802f87c3bd77b4112b162dbeb8"
+        "sha256": "7d40d0fa2ec9f629f074cd0b0e4f1d1a14d6b6d6b7a55591555a0a3d232d2f12"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",
@@ -311,11 +311,11 @@
       "slug": "review",
       "json": {
         "locator": "generated/factories/review/factory.json",
-        "sha256": "474443a2e7aaa9dbbfe76949cfff859032e372d1b6fe3c02dc367300677c76b8"
+        "sha256": "c9c31b39b1bd682dbcad82917a9ac5e91ed22ac5448f96dad80fe99e0763a0d9"
       },
       "yaml": {
         "locator": "generated/factories/review/factory.yaml",
-        "sha256": "5b2a67fc3662bb184b413b779f61e73dc76bd22653fc5cbd944709c6a68c72d2"
+        "sha256": "71bd357375b4d17a586369351f36c63e921e9429be728afe8e911304a96f838b"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",
@@ -340,11 +340,11 @@
       "slug": "spawn",
       "json": {
         "locator": "generated/factories/spawn/factory.json",
-        "sha256": "c0b17b0e2c9ab0a3c2d3bcb8e592695b19b4a32fda4ae20410714ef0a04b9352"
+        "sha256": "d4d31bb9926d5eb6663e9a12201a44c5065466f2fa68e4ad6974acbf8dd9e2c0"
       },
       "yaml": {
         "locator": "generated/factories/spawn/factory.yaml",
-        "sha256": "bb77d509863bd51ec87500e80a1ba2db7ce5a7821f53331539acca8cc7bd30ae"
+        "sha256": "6ac2582d526cb3dd4d61cc7ba05f284fd54a0a9d4fe720eea40b739333eb4347"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",
@@ -370,11 +370,11 @@
       "slug": "subagent",
       "json": {
         "locator": "generated/factories/subagent/factory.json",
-        "sha256": "3534f5e18e23a90ee69098017e445891189910da793767162124f72b7182a2a2"
+        "sha256": "aae853272d312aedf5b0f907bd5aa47ba9a54ad7829136db8ada1df7d5fa5e13"
       },
       "yaml": {
         "locator": "generated/factories/subagent/factory.yaml",
-        "sha256": "845d31e6dba4728854d8901b49319e721678595badeda1c1e5ff0c1e88e42465"
+        "sha256": "e4fd40d8ef9a7fb02b6f1729bdc7d5469a2402074fb83c8867cf6b1336979e7e"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",
@@ -409,11 +409,11 @@
       "slug": "tournament",
       "json": {
         "locator": "generated/factories/tournament/factory.json",
-        "sha256": "11b4eebf79d291a943bf861329ae2aafa2f183943a23dbcaa1098565942092a6"
+        "sha256": "8fc93ad2fb94aa536b376278b06087a9262979ff6395ca345e097019b235a716"
       },
       "yaml": {
         "locator": "generated/factories/tournament/factory.yaml",
-        "sha256": "215cbfda33a2e2010145c4e01fa61b27749141d046c204b2eda56aee190b6bf2"
+        "sha256": "d76a9b07d3d9e6be250e4c85949ac37ef3331ff8961f12123b31a055f680129f"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",
@@ -439,11 +439,11 @@
       "slug": "tts",
       "json": {
         "locator": "generated/factories/tts/factory.json",
-        "sha256": "0e344973d282e88434b943877f31de4e4db7d611ee5985590adfc84ceb9ed3c4"
+        "sha256": "074de7745359dee76441a8a579d367103f5e858be1b59a0308599376b1ca97c7"
       },
       "yaml": {
         "locator": "generated/factories/tts/factory.yaml",
-        "sha256": "52de7ee50a8b84da79d3ddab8098926bcf3999624569b40437ed00dde3194ae5"
+        "sha256": "32c6baaf349be27e18d03a17d5ab67a433fcbbc83de705672f6aa01eb96272f7"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",

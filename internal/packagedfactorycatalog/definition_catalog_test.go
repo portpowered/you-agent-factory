@@ -16,12 +16,19 @@ import (
 )
 
 var publishedCatalogNames = []string{
+	"@you/classify",
 	"@you/deep-research",
+	"@you/full-flow",
 	"@you/fusion",
 	"@you/goal",
+	"@you/loop",
+	"@you/plan-execute",
+	"@you/plan-parallel",
 	"@you/quorum",
 	"@you/review",
+	"@you/spawn",
 	"@you/subagent",
+	"@you/tournament",
 	"@you/tts",
 }
 
@@ -189,7 +196,7 @@ func TestLoadDefinitionCatalogRejectsUnsafeMissingDuplicateAndMismatchedEntries(
 					manifest.Factories[0].JSON.Locator = "../factory.json"
 				})
 			},
-			wantErrors: []string{"@you/deep-research", "JSON", "unsafe package-public locator"},
+			wantErrors: []string{"@you/classify", "JSON", "unsafe package-public locator"},
 		},
 		{
 			name: "locator does not match slug",
@@ -198,7 +205,7 @@ func TestLoadDefinitionCatalogRejectsUnsafeMissingDuplicateAndMismatchedEntries(
 					manifest.Factories[0].JSON.Locator = manifest.Factories[1].JSON.Locator
 				})
 			},
-			wantErrors: []string{"does not resolve", "deep-research"},
+			wantErrors: []string{"does not resolve", "classify"},
 		},
 		{
 			name: "missing artifact",
@@ -206,7 +213,7 @@ func TestLoadDefinitionCatalogRejectsUnsafeMissingDuplicateAndMismatchedEntries(
 				manifest := readFixtureManifest(t, fixture)
 				delete(fixture, manifest.Factories[0].YAML.Locator)
 			},
-			wantErrors: []string{"@you/deep-research", "YAML", "read", "file does not exist"},
+			wantErrors: []string{"@you/classify", "YAML", "read", "file does not exist"},
 		},
 		{
 			name: "duplicate public name",
@@ -215,7 +222,7 @@ func TestLoadDefinitionCatalogRejectsUnsafeMissingDuplicateAndMismatchedEntries(
 					manifest.Factories[1] = manifest.Factories[0]
 				})
 			},
-			wantErrors: []string{"duplicate public name", "@you/deep-research"},
+			wantErrors: []string{"duplicate public name", "@you/classify"},
 		},
 		{
 			name: "duplicate project",
@@ -224,22 +231,22 @@ func TestLoadDefinitionCatalogRejectsUnsafeMissingDuplicateAndMismatchedEntries(
 					manifest.Factories[1].Project = manifest.Factories[0].Project
 				})
 			},
-			wantErrors: []string{"duplicate project", "builtin-deep-research"},
+			wantErrors: []string{"duplicate project", "builtin-classify"},
 		},
 		{
 			name: "case-insensitive duplicate slug",
 			mutate: func(t *testing.T, fixture fstest.MapFS) {
 				mutateManifest(t, fixture, func(manifest *packagedfactorycatalog.Manifest) {
 					duplicate := manifest.Factories[0]
-					duplicate.PublicName = "@you/Deep-Research"
-					duplicate.Project = "builtin-deep-research-copy"
-					duplicate.Slug = "Deep-Research"
-					duplicate.JSON.Locator = "generated/factories/Deep-Research/factory.json"
-					duplicate.YAML.Locator = "generated/factories/Deep-Research/factory.yaml"
+					duplicate.PublicName = "@you/Classify"
+					duplicate.Project = "builtin-classify-copy"
+					duplicate.Slug = "Classify"
+					duplicate.JSON.Locator = "generated/factories/Classify/factory.json"
+					duplicate.YAML.Locator = "generated/factories/Classify/factory.yaml"
 					manifest.Factories[1] = duplicate
 				})
 			},
-			wantErrors: []string{"duplicate slug", "Deep-Research"},
+			wantErrors: []string{"duplicate slug", "Classify"},
 		},
 		{
 			name: "public name disagrees with slug",
@@ -248,7 +255,7 @@ func TestLoadDefinitionCatalogRejectsUnsafeMissingDuplicateAndMismatchedEntries(
 					manifest.Factories[0].PublicName = "@you/other"
 				})
 			},
-			wantErrors: []string{"public name", "does not agree", "deep-research"},
+			wantErrors: []string{"public name", "does not agree", "classify"},
 		},
 	}
 
@@ -315,7 +322,7 @@ func TestLoadDefinitionCatalogRejectsIntegrityDecodeIdentityAndValidationFailure
 				payload := marshalJSON(t, document)
 				replaceArtifactAndHash(t, fixture, 0, "JSON", payload)
 			},
-			wantErrors: []string{"decoded identity", `name="other"`, `slug="deep-research"`},
+			wantErrors: []string{"decoded identity", `name="other"`, `slug="classify"`},
 		},
 		{
 			name: "Factory Definitions validation failure",

@@ -2,7 +2,7 @@
 
 ---
 author: andreas abdi
-last modified: 2026, july, 29
+last modified: 2026, july, 30
 doc-id: STD-017
 ---
 
@@ -17,12 +17,15 @@ Every contributor who changes backend logic, APIs, runtime behavior, persistence
 ## Quick Rules
 
 - Prefer small, deeply understandable modules over large, clever ones.
-- Keep state explicit, local, and minimal; prefer stateless functions and referentially transparent logic whenever practical.
+- Expose backend operations as methods on injected service implementations; reserve package-level functions for constructors, pure value operations, and private implementation helpers.
+- Inject each service and external-effect dependency directly, once, through the canonical `pkg/wire` graph.
+- Do not hide dependencies in parameter bags, service locators, secondary injectors, runtime factories, or lazy constructors.
+- Keep state explicit, local, and minimal; keep pure computation referentially transparent whenever practical.
 - Separate pure domain logic from transport, IO, time, filesystem, environment, and process boundaries.
 - Reject unexplained magic values, oversized functions, oversized files, and hidden side effects.
 - Use linting, static checks, and CI gates to enforce backend quality rather than relying on reviewer memory alone.
 - Favor a healthy test pyramid: few fast unit tests, majority integration tests, targeted functional tests, and explicit stress coverage where concurrency or scale matters.
-- Instrument systems so logs, metrics, traces, and operational diagnostics make failures understandable.
+- Log service operations and important outcomes with structured, safe context; add metrics, traces, and operational diagnostics where the path warrants them.
 - Design dependency calls with explicit latency, timeout, retry, and backoff behavior.
 - Test performance, load, and failure modes intentionally rather than assuming correctness implies resilience.
 - Keep public contracts, generated code, and handwritten domain logic clearly separated.
@@ -33,6 +36,9 @@ Every contributor who changes backend logic, APIs, runtime behavior, persistence
 Before approval, reviewers **SHOULD** confirm:
 
 - The change fits the repository's package boundaries and dependency direction.
+- Operational behavior is exposed through a service interface and implemented by an injectable struct rather than a floating function.
+- Services and external effects are injected directly once; no dependency bag, service locator, secondary injector, runtime factory, or hidden constructor was added.
+- Production `New...` construction remains in the owning service's `wire/` provider or the canonical `pkg/wire` graph.
 - State and side effects are intentional, isolated, and no broader than necessary.
 - Pure logic is testable without live IO, clocks, processes, or network dependencies.
 - Magic literals, hidden policies, and unexplained special cases are avoided or named clearly.
@@ -40,6 +46,7 @@ Before approval, reviewers **SHOULD** confirm:
 - The change includes the right mix of unit, integration, functional, and stress evidence.
 - Network dependency behavior is explicit about timeout, retry, failure, and observability strategy.
 - Operational signals are sufficient to diagnose latency, failures, and degraded dependency behavior.
+- Service operations log their start or accepted intent, terminal outcome, and relevant identifiers at appropriate levels without leaking sensitive payloads.
 - CI and lint surfaces would catch the class of failure introduced by this area in the future.
 - Public contracts, generated artifacts, and runtime behavior remain aligned.
 
@@ -69,18 +76,48 @@ Rules:
   Standards **MUST NOT** duplicate migration inventories, temporary package
   exceptions, or planned target paths as permanent architecture rules.
 
-### 2. Statefulness and Functional Style
+### 2. Services, Dependency Injection, and Construction
+
+Backend behavior **MUST** be exposed through explicit service contracts and assembled through one dependency-injection graph.
+
+#### Service operations
+
+- Product and orchestration operations **MUST** be methods on concrete service structs that implement interfaces exposed by the owning service root.
+- Cross-service callers **MUST** depend on the narrow public interface of the owning service and **MUST NOT** call its internal implementation, constructor, or package-level operational helpers.
+- Operational dependencies **MUST** be stored explicitly on the receiving service struct and supplied at construction time. A method **MUST NOT** discover collaborators from global state, context values, registries, or service locators.
+- Exported package-level functions **MUST** be limited to focused construction providers in `wire/`, pure value operations where a receiver is not meaningful, and language- or framework-required adapters. They **MUST NOT** provide an alternate operational API beside the service interface.
+- Unexported pure helpers **MAY** remain package-level when they have no injected dependencies or side effects. Helpers that require collaborators, IO, mutable lifecycle state, or operational policy **MUST** become methods on the owning implementation struct.
+- Request, result, option, and domain-value structs **MAY** group operation data. They **MUST NOT** be used as disguised dependency containers.
+
+#### Direct, single injection
+
+- `pkg/wire` **MUST** construct the complete inert application graph once, construct each service once, and pass that same service instance directly to every consumer that needs it.
+- A service **MUST** receive the specific peer-service interfaces and external-effect ports it consumes. It **MUST NOT** receive a broad bundle, `Dependencies`, `Deps`, `Params`, `Options`, `Services`, or similar grab-bag constructor struct merely to shorten a constructor signature.
+- A constructor parameter struct **MAY** represent one cohesive configuration value, but it **MUST NOT** mix configuration with services, loggers, clocks, stores, clients, runners, or other behavioral dependencies.
+- Services, transports, initializers, and runtime methods **MUST NOT** perform secondary injection, invoke child injectors, assemble another application graph, or create factories that defer service selection or dependency construction until an operation runs.
+- `pkg/initializer` **MUST** activate and unwind roles already built by `pkg/wire`; it **MUST NOT** construct product services or behave as a second composition root.
+- Session- or request-scoped domain state **MAY** be created during an operation. That creation **MUST** use the already-injected services and **MUST NOT** become another dependency-injection pass.
+
+#### Constructor ownership
+
+- Production calls to service and infrastructure constructors named `New...` **MUST** occur only in the owning service's focused `wire/` provider or in the canonical `pkg/wire` composition graph.
+- Non-`wire` production code **MUST NOT** call `New...` to acquire a service, infrastructure adapter, client, store, runner, logger, clock, or other injectable collaborator. Those dependencies **MUST** be constructor-injected into the receiving service.
+- Pure domain-value constructors, request/result builders, standard-library value creation, allocation through Go's built-in `new`, and test fixture construction are not dependency construction and **MAY** remain outside `wire/`.
+- A `wire/` provider **MUST** construct only its focused implementation from explicit parameters. It **MUST NOT** hide a secondary graph, return a service bag for later lookup, or make runtime policy decisions.
+- Tests **SHOULD** construct the implementation under test directly with explicit fakes. Application and functional tests **MUST** use the canonical `root.BuildProcess` and `pkg/wire` path described in Section 7.
+
+### 3. Statefulness and Functional Style
 
 Backend systems **MUST** prefer explicit data flow over hidden mutable state.
 
 Rules:
 
-- Stateless designs are the default.
-- Pure functions **SHOULD** be preferred for parsing, validation, mapping, planning, selection, reduction, and rule evaluation.
+- Stateless service implementations are preferred when lifecycle state is unnecessary.
+- Pure computation **SHOULD** be preferred for parsing, validation, mapping, planning, selection, reduction, and rule evaluation, whether expressed as value methods or private helpers.
 - Referential transparency **SHOULD** be preserved whenever a function can reasonably be made deterministic from its inputs.
 - Mutable shared state **MUST** be justified and narrowly scoped.
 - Package-level mutable state **SHOULD NOT** be introduced except for well-understood infrastructure needs with clear lifecycle control.
-- Side effects **MUST** be isolated behind interfaces or boundary functions.
+- Side effects **MUST** be isolated behind injected service or external-effect interfaces and invoked from service methods or transport adapters.
 - Time, randomness, environment reads, filesystem access, process execution, and network calls **SHOULD** be injected or wrapped so logic remains testable.
 - State transitions **MUST** be explicit in code and easy to trace in tests.
 
@@ -88,10 +125,10 @@ Preferred pattern:
 
 - compute or validate in pure helpers
 - translate at the boundary
-- perform side effects in a thin orchestration layer
+- perform side effects through injected service or external-effect interfaces in a thin service method
 - return explicit results and errors
 
-### 3. Complexity Management and Ousterhout Preferences
+### 4. Complexity Management and Ousterhout Preferences
 
 Backend code **MUST** optimize for lower cognitive load, lower change amplification, and simpler reasoning.
 
@@ -111,7 +148,7 @@ Review questions:
 - Are invariants obvious from the interface and comments?
 - Is there a simpler design with fewer branches, modes, or policy flags?
 
-### 4. Linting, Static Analysis, and Code Shape
+### 5. Linting, Static Analysis, and Code Shape
 
 Backend quality **MUST** be enforced mechanically wherever possible.
 
@@ -119,6 +156,7 @@ Rules:
 
 - Formatting, linting, vetting, and dead-code checks **MUST** pass before merge.
 - The repository **SHOULD** maintain static rules for prohibited patterns rather than relying on tribal knowledge.
+- Repository checks **SHOULD** enforce constructor placement, prohibit dependency-container grab bags, and detect operational package-level functions as these rules become mechanically identifiable.
 - Magic values **SHOULD NOT** appear inline when a named constant, type, or helper would communicate intent better.
 - Sentinel strings, status literals, retry counts, timeout durations, buffer sizes, and policy values **SHOULD** be named and scoped appropriately.
 - Functions **SHOULD** remain short enough to understand in one pass.
@@ -142,7 +180,7 @@ Repository package-size policy:
 - Run `make pkg-file-count` for the focused package-size check, or `make lint` before review for the full backend lint path that includes this gate.
 
 
-### 5. Error Handling and Contracts
+### 6. Error Handling and Contracts
 
 Backend systems **MUST** communicate failure clearly and preserve contract correctness.
 
@@ -155,7 +193,7 @@ Rules:
 - Contract drift between schemas, generated code, and runtime behavior **MUST** be guarded by automated checks.
 - Backward compatibility expectations **MUST** be documented when public behavior changes.
 
-### 6. Testing Strategy and Test Pyramid
+### 7. Testing Strategy and Test Pyramid
 
 Backend changes **MUST** include evidence at the correct testing layer.
 
@@ -229,7 +267,7 @@ Minimum expectations for non-trivial backend changes:
 - Concurrency-sensitive behavior has race, stress, or repeat-run coverage where relevant.
 - Public contract changes have contract or smoke coverage.
 
-### 7. CI/CD and Automated Enforcement
+### 8. CI/CD and Automated Enforcement
 
 Best practices **MUST** be enforced by CI/CD, not only by documentation.
 
@@ -251,7 +289,7 @@ Recommended CI shape:
 - unit and integration tests next
 - functional and stress coverage in the appropriate lanes
 
-### 8. Concurrency, Runtime Safety, and Resource Use
+### 9. Concurrency, Runtime Safety, and Resource Use
 
 Backend runtime behavior **MUST** remain safe under concurrent and adverse conditions.
 
@@ -270,7 +308,7 @@ Verification:
 - Race or stress coverage **SHOULD** exist where concurrency is core to the feature.
 - High-risk runtime behavior **SHOULD** include repeated-run or soak-style verification when appropriate.
 
-### 9. Network Traffic and Dependency Behavior
+### 10. Network Traffic and Dependency Behavior
 
 Backend systems **MUST** treat network and dependency interactions as failure-prone boundaries.
 
@@ -300,13 +338,16 @@ Verification:
 - Integration or functional tests **SHOULD** cover dependency timeout and failure paths.
 - Retry behavior **SHOULD** be verified so it does not create duplicate side effects or retry storms.
 
-### 10. Observability, Logging, Metrics, and Tracing
+### 11. Observability, Logging, Metrics, and Tracing
 
 Backend systems **SHOULD** be diagnosable when they fail in production-like environments.
 
 Rules:
 
-- Logs **SHOULD** provide enough structured context to trace failures and important state transitions.
+- Public service operations and operationally significant background actions **MUST** emit structured logs at appropriate levels.
+- Operation logs **MUST** make the accepted intent or start, terminal outcome, relevant stable identifiers, duration when useful, and actionable error context observable. High-frequency paths **MAY** sample or aggregate successful-operation logs when per-operation logging would create harmful volume.
+- Logs **MUST** use the repository's injected logging abstraction. Services **MUST NOT** construct or discover their own logger.
+- Logs **SHOULD** provide enough structured context to trace failures and important state transitions across service boundaries.
 - Metrics **SHOULD** exist for throughput, latency, failures, saturation, retries, and queue or backlog pressure where relevant.
 - Tracing **SHOULD** exist for requests or workflows that cross important subsystem or dependency boundaries.
 - Observability **MUST** cover both local failures and downstream dependency failures.
@@ -322,7 +363,7 @@ Recommended observability outcomes:
 - Latency regressions are detectable before they become outages.
 - Retry storms, queue buildup, and resource exhaustion become visible quickly.
 
-### 11. Performance, Load, Stress, and Failure Modes
+### 12. Performance, Load, Stress, and Failure Modes
 
 Backend systems **MUST** be evaluated for resilience under realistic traffic and failure conditions.
 
@@ -347,12 +388,14 @@ Verification:
 Before merge, authors **SHOULD** confirm:
 
 - Package boundaries and dependency direction remain clear.
+- Operations are methods on injectable service implementations and cross-service calls use service-root interfaces.
+- Dependencies are injected directly once, without grab-bag parameter structs, service lookup, secondary injection, runtime factories, or out-of-`wire` service construction.
 - Stateful behavior is minimized and explicit.
 - Pure logic is separated from side effects where practical.
 - Magic values, oversized functions, and oversized files were addressed.
 - Appropriate tests exist at unit, integration, functional, contract, and stress layers as needed.
 - Dependency calls define timeout, retry, failure, and backoff behavior explicitly.
-- Logs, metrics, traces, and diagnostics are sufficient for the affected operational path.
+- Service operations emit structured, safe, actionable logs; metrics, traces, and diagnostics are sufficient for the affected operational path.
 - Performance, load, and failure-mode behavior were considered for the affected runtime path.
 - CI enforces the important invariants for this area.
 - Public contracts and generated artifacts remain aligned.

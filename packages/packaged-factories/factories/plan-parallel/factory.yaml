@@ -1,0 +1,185 @@
+name: "@you/plan-parallel"
+id: builtin-plan-parallel
+description:
+  type: LOCALIZABLE_ASSET
+  value: Plans a dependency graph of Work, executes ready tasks concurrently, and merges the completed results.
+invocationReturn:
+  policy: EXPLICIT
+  workTypeName: parallel-plan
+  terminalState: complete
+invocationSignature:
+  parameters:
+    - name: request
+      description: Request to plan into a dependency-aware Work graph.
+      externalName: to
+      required: true
+      bindings:
+        - kind: POSITIONAL
+          position: 1
+        - kind: STDIN
+        - kind: NAMED
+    - name: plannerProvider
+      description: Model provider for the planner; omitted values use operator defaults.
+      externalName: planner-provider
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+    - name: plannerModel
+      description: Model for the planner; omitted values use operator defaults.
+      externalName: planner-model
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+    - name: executorProvider
+      description: Model provider for planned tasks; omitted values use operator defaults.
+      externalName: executor-provider
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+    - name: executorModel
+      description: Model for planned tasks; omitted values use operator defaults.
+      externalName: executor-model
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+    - name: mergeProvider
+      description: Model provider for final synthesis; omitted values use operator defaults.
+      externalName: merge-provider
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+    - name: mergeModel
+      description: Model for final synthesis; omitted values use operator defaults.
+      externalName: merge-model
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+examples:
+  - name: parallel-implementation-plan
+    description:
+      type: LOCALIZABLE_ASSET
+      value: Plan and execute a dependency-aware implementation.
+    args:
+      request: Implement and test the requested feature
+workTypes:
+  - name: parallel-plan
+    handlingBehavior:
+      - DEFAULT
+    states:
+      - name: init
+        type: INITIAL
+      - name: waiting
+        type: PROCESSING
+      - name: complete
+        type: TERMINAL
+      - name: failed
+        type: FAILED
+  - name: planned-task
+    states:
+      - name: init
+        type: INITIAL
+      - name: complete
+        type: TERMINAL
+      - name: failed
+        type: FAILED
+resources:
+  - name: parallel-executor-slots
+    capacity: 8
+workers:
+  - name: parallel-planner
+    type: AGENT_WORKER
+    modelProvider: ${plannerProvider}
+    model: ${plannerModel}
+    body: |-
+      You are a dependency-aware planner with no prior conversation or repository context. Inspect the supplied request and, when the request concerns a workspace, read its contributor instructions, relevant architecture, source, tests, and current state before decomposing work. Produce one canonical FACTORY_REQUEST_BATCH with 1-12 self-contained planned-task items. Each item must tell a fresh executor what outcome to deliver, what context and constraints matter, what dependencies it may rely on, and how to verify success. Use unique safe names and only acyclic DEPENDS_ON relationships. Return no prose outside the batch envelope.
+  - name: parallel-executor
+    type: AGENT_WORKER
+    modelProvider: ${executorProvider}
+    model: ${executorModel}
+    body: |-
+      You are an isolated task executor with zero conversational context. Read the complete assigned Work payload, all dependency outputs supplied by the runtime, and relevant workspace instructions and source before acting. Complete only this task without undoing unrelated work. Validate assumptions against the current workspace, run proportional positive and failure-case tests, and return a self-contained result describing the outcome, changes, evidence, and any limitation needed by downstream tasks.
+  - name: parallel-merger
+    type: AGENT_WORKER
+    modelProvider: ${mergeProvider}
+    model: ${mergeModel}
+    body: |-
+      You are the final synthesizer with no knowledge beyond the original request and completed child Work supplied as inputs. Reconstruct the requested outcome from every child result, preserve material evidence and disagreements, distinguish verified facts from assumptions, and return one complete customer-facing answer. Do not invent missing task results or silently claim failed verification passed.
+workstations:
+  - name: plan-parallel-work
+    type: AGENT_RUN
+    worker: parallel-planner
+    workPropagation:
+      mode: PRESERVE_INPUT
+    limits:
+      maxGeneratedWorkItems: 12
+    inputs:
+      - workType: parallel-plan
+        state: init
+    outputs:
+      - workType: parallel-plan
+        state: waiting
+    onFailure:
+      - workType: parallel-plan
+        state: failed
+    body: |-
+      Start from zero context. Read the original request below and inspect any repository instructions, architecture, relevant implementation, tests, and working-tree state available to you. Plan an executable Work DAG rather than a prose checklist. Use workTypeName `planned-task` and state `init`. Every generated Work payload must be standalone: explain its objective, observed context, boundaries, dependency assumptions, acceptance criteria, expected artifacts, and exact verification. Keep independent tasks independent so the runtime can execute them concurrently; add DEPENDS_ON only when one task truly requires another task's completed result. Return only one canonical FACTORY_REQUEST_BATCH with 1-12 uniquely named items and an acyclic relationship set.
+
+      Request:
+      ${request}
+  - name: execute-planned-task
+    type: AGENT_RUN
+    worker: parallel-executor
+    resources:
+      - name: parallel-executor-slots
+        capacity: 1
+    inputs:
+      - workType: planned-task
+        state: init
+    outputs:
+      - workType: planned-task
+        state: complete
+    onFailure:
+      - workType: planned-task
+        state: failed
+    body: |-
+      Treat this dispatch as a fresh session with no shared conversation. Read the assigned Work payload and every available dependency result in full. If the task concerns code, read repository instructions and inspect the relevant source and tests before editing. Complete exactly the assigned outcome, preserve unrelated changes, exercise stated acceptance and failure cases, and report concrete verification commands and results. Return enough context for dependent executors and the final merger to use the result without guessing.
+  - name: merge-plan-results
+    type: AGENT_RUN
+    worker: parallel-merger
+    inputs:
+      - workType: parallel-plan
+        state: waiting
+      - workType: planned-task
+        state: complete
+        guards:
+          - type: ALL_CHILDREN_COMPLETE
+            parentInput: parallel-plan
+            spawnedBy: plan-parallel-work
+    outputs:
+      - workType: parallel-plan
+        state: complete
+    onFailure:
+      - workType: parallel-plan
+        state: failed
+    body: |-
+      Treat the original request and all completed generated Work inputs as your entire context. Read every result, reconcile overlaps, and synthesize one final answer that directly satisfies the original request. Preserve important disagreements, caveats, artifacts, and verification evidence. State any inference explicitly and never imply that an omitted or failed check succeeded.
+  - name: fail-plan-from-child
+    type: LOGICAL_MOVE
+    inputs:
+      - workType: parallel-plan
+        state: waiting
+      - workType: planned-task
+        state: failed
+        guards:
+          - type: ANY_CHILD_FAILED
+            parentInput: parallel-plan
+            spawnedBy: plan-parallel-work
+    outputs:
+      - workType: parallel-plan
+        state: failed

@@ -1,0 +1,207 @@
+name: "@you/quorum"
+id: builtin-quorum
+description:
+  type: LOCALIZABLE_ASSET
+  value: Runs independent assessments in parallel and merges them into one final answer.
+invocationReturn:
+  policy: EXPLICIT
+  workTypeName: quorum-merge
+  terminalState: complete
+invocationSignature:
+  parameters:
+    - name: input
+      description: Text request evaluated by the quorum workers.
+      externalName: to
+      required: true
+      bindings:
+        - kind: POSITIONAL
+          position: 1
+        - kind: STDIN
+        - kind: NAMED
+    - name: branchProvider
+      description: Provider for both independent quorum branch workers; omitted values use operator defaults.
+      externalName: branch-provider
+      aliases:
+        - bp
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+    - name: branchModel
+      description: Model for both independent quorum branch workers; omitted values use operator defaults.
+      externalName: branch-model
+      aliases:
+        - bm
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+    - name: mergeProvider
+      description: Provider for the final quorum merge worker; omitted values use operator defaults.
+      externalName: merge-provider
+      aliases:
+        - mp
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+    - name: mergeModel
+      description: Model for the final quorum merge worker; omitted values use operator defaults.
+      externalName: merge-model
+      aliases:
+        - mm
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+examples:
+  - name: default-quorum
+    description:
+      type: LOCALIZABLE_ASSET
+      value: Compare release plans with the default quorum.
+    args:
+      input: Compare the two proposed release plans.
+  - name: role-specific-models
+    description:
+      type: LOCALIZABLE_ASSET
+      value: Compare release plans with role-specific providers and models.
+    args:
+      input: Compare the two proposed release plans.
+      branchProvider: CODEX
+      branchModel: gpt-5
+      mergeProvider: CLAUDE
+      mergeModel: claude-sonnet-4-20250514
+workTypes:
+  - name: task
+    handlingBehavior:
+      - DEFAULT
+    states:
+      - name: init
+        type: INITIAL
+      - name: quorum-context
+        type: PROCESSING
+      - name: complete
+        type: TERMINAL
+      - name: failed
+        type: FAILED
+  - name: quorum-branch-a
+    states:
+      - name: init
+        type: INITIAL
+      - name: complete
+        type: TERMINAL
+      - name: failed
+        type: FAILED
+  - name: quorum-branch-b
+    states:
+      - name: init
+        type: INITIAL
+      - name: complete
+        type: TERMINAL
+      - name: failed
+        type: FAILED
+  - name: quorum-merge
+    states:
+      - name: init
+        type: INITIAL
+      - name: complete
+        type: TERMINAL
+      - name: failed
+        type: FAILED
+resources: []
+workers:
+  - name: quorum-branch-a
+    type: AGENT_WORKER
+    modelProvider: ${branchProvider}
+    model: ${branchModel}
+    body: "You are quorum branch A. Assume zero prior context, investigate the complete request independently, use available workspace evidence, and return a standalone proposed answer with assumptions and verification."
+  - name: quorum-branch-b
+    type: AGENT_WORKER
+    modelProvider: ${branchProvider}
+    model: ${branchModel}
+    body: "You are quorum branch B. Assume zero prior context, independently challenge likely assumptions in the complete request, use available workspace evidence, and return a standalone proposed answer with risks and verification."
+  - name: quorum-merge
+    type: AGENT_WORKER
+    modelProvider: ${mergeProvider}
+    model: ${mergeModel}
+    body: "You are the quorum merger. Treat the original request and two branch results as complete context, reconcile them against evidence, preserve material disagreements, and return one self-contained final answer."
+workstations:
+  - name: split-quorum
+    type: LOGICAL_MOVE
+    workPropagation:
+      mode: PRESERVE_INPUT
+    inputs:
+      - workType: task
+        state: init
+    outputs:
+      - workType: task
+        state: quorum-context
+      - workType: quorum-branch-a
+        state: init
+      - workType: quorum-branch-b
+        state: init
+    onFailure:
+      - workType: task
+        state: failed
+    body: "Preserve the complete original request without summarizing or dropping context, and create exactly two independent quorum branch Work items whose names and lineage remain traceable to the original Work."
+  - name: run-quorum-branch-a
+    type: AGENT_RUN
+    worker: quorum-branch-a
+    inputs:
+      - workType: quorum-branch-a
+        state: init
+    outputs:
+      - workType: quorum-branch-a
+        state: complete
+    onFailure:
+      - workType: quorum-branch-a
+        state: failed
+    body: |-
+      You have no shared conversation with any other branch. Read the original request in full and inspect relevant workspace instructions, source, tests, or other evidence when available. Produce branch A's independent solution, covering all requirements, bounded assumptions, edge cases, and verification. Make the result self-contained for a merger that cannot infer your reasoning.
+
+      Original request:
+      {{ range (index .Inputs 0).Content }}{{ .Text }}{{ end }}
+  - name: run-quorum-branch-b
+    type: AGENT_RUN
+    worker: quorum-branch-b
+    inputs:
+      - workType: quorum-branch-b
+        state: init
+    outputs:
+      - workType: quorum-branch-b
+        state: complete
+    onFailure:
+      - workType: quorum-branch-b
+        state: failed
+    body: |-
+      You have no shared conversation with any other branch. Read the original request in full and inspect relevant workspace instructions, source, tests, or other evidence when available. Produce branch B's independent solution with special attention to alternative interpretations, hidden risks, failure cases, and verification. Make the result self-contained for a merger that cannot infer your reasoning.
+
+      Original request:
+      {{ range (index .Inputs 0).Content }}{{ .Text }}{{ end }}
+  - name: merge-quorum
+    type: AGENT_RUN
+    worker: quorum-merge
+    inputs:
+      - workType: task
+        state: quorum-context
+      - workType: quorum-branch-a
+        state: complete
+      - workType: quorum-branch-b
+        state: complete
+    outputs:
+      - workType: quorum-merge
+        state: complete
+    onFailure:
+      - workType: quorum-merge
+        state: failed
+    body: |-
+      Start from zero context. The inputs are ordered as original request, branch A, then branch B. Read all three completely. Reconcile the proposals against the request and available evidence, select the strongest supported conclusions, preserve consequential disagreements or caveats, and synthesize one complete customer-facing response. Do not invent missing evidence or silently treat consensus as proof.
+
+      Original request:
+      {{ range (index .Inputs 0).Content }}{{ .Text }}{{ end }}
+
+      Branch A output:
+      {{ (index .Inputs 1).Payload }}
+
+      Branch B output:
+      {{ (index .Inputs 2).Payload }}

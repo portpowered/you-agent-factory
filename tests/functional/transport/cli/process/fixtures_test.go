@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -209,41 +208,35 @@ func waitForDashboardURL(
 				return target
 			}
 		case err := <-scanErr:
-			t.Fatalf("built CLI exited before readiness: %v; stderr=%q", err, stderr.String())
+			t.Fatalf("root process exited before readiness: %v; stderr=%q", err, stderr.String())
 		case <-timer.C:
-			t.Fatalf("timed out waiting for built CLI readiness; stderr=%q", stderr.String())
+			t.Fatalf("timed out waiting for root process readiness; stderr=%q", stderr.String())
 		}
 	}
 }
 
-func interruptAndAssertCancellationExit(t testing.TB, command *exec.Cmd, waitTimeout time.Duration) {
+func interruptAndAssertCancellationExit(t testing.TB, command *builtcliacceptance.Command, waitTimeout time.Duration) {
 	t.Helper()
-
-	if err := command.Process.Signal(os.Interrupt); err != nil {
-		t.Fatalf("interrupt built CLI: %v", err)
-	}
+	command.Cancel()
 	waitResult := make(chan error, 1)
 	go func() {
 		waitResult <- command.Wait()
 	}()
 	select {
 	case err := <-waitResult:
-		exitErr, ok := err.(*exec.ExitError)
-		if !ok || exitErr.ExitCode() != 130 {
-			t.Fatalf("interrupted built CLI exit = %v, want exit code 130", err)
+		if err != nil && !strings.Contains(err.Error(), "context canceled") {
+			t.Fatalf("canceled root process exit = %v, want clean cancellation", err)
 		}
 	case <-time.After(waitTimeout):
-		_ = command.Process.Kill()
-		<-waitResult
-		t.Fatalf("interrupted built CLI did not exit within %s", waitTimeout)
+		t.Fatalf("canceled root process did not exit within %s", waitTimeout)
 	}
 }
 
-func startBuiltCLIServerCommand(
+func startRootProcessServerCommand(
 	t testing.TB,
 	session *builtcliacceptance.Session,
-	binaryPath string,
-) (*exec.Cmd, <-chan string, <-chan error, *bytes.Buffer) {
+	harness *builtcliacceptance.Harness,
+) (*builtcliacceptance.Command, <-chan string, <-chan error, *bytes.Buffer) {
 	t.Helper()
 
 	writeIdleCurrentFactory(t, session.WorkDir)
@@ -251,7 +244,7 @@ func startBuiltCLIServerCommand(
 	args := append([]string{}, session.ServerFlags()...)
 	args = append(args, "server")
 
-	command := exec.Command(binaryPath, args...)
+	command := harness.Command(args...)
 	command.Dir = session.WorkDir
 	command.Env = session.ProcessEnv()
 	stdout, err := command.StdoutPipe()
@@ -261,7 +254,7 @@ func startBuiltCLIServerCommand(
 	var stderr bytes.Buffer
 	command.Stderr = &stderr
 	if err := command.Start(); err != nil {
-		t.Fatalf("start built CLI server: %v", err)
+		t.Fatalf("start root process server: %v", err)
 	}
 
 	lines := make(chan string, 128)

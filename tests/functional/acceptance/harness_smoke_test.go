@@ -46,7 +46,7 @@ func initializeConfig(t testing.TB, ctx context.Context, session *builtcliaccept
 	}
 }
 
-func TestBuiltCLIHarness_IsolatesHomeAndLogDirectoriesAcrossSessions(t *testing.T) {
+func TestRootProcessHarness_IsolatesHomeAndLogDirectoriesAcrossSessions(t *testing.T) {
 	t.Parallel()
 
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
@@ -93,7 +93,7 @@ func TestBuiltCLIHarness_IsolatesHomeAndLogDirectoriesAcrossSessions(t *testing.
 	}
 }
 
-func TestBuiltCLIHarness_NonZeroExitIncludesDiagnostics(t *testing.T) {
+func TestRootProcessHarness_NonZeroExitIncludesDiagnostics(t *testing.T) {
 	t.Parallel()
 
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
@@ -124,13 +124,13 @@ func TestBuiltCLIHarness_NonZeroExitIncludesDiagnostics(t *testing.T) {
 		t.Fatalf("failure paths = home %q log %q, want home %q log %q",
 			failure.HomeDir, failure.LogDir, session.HomeDir, session.LogDir)
 	}
-	if failure.BinaryPath != harness.BinaryPath {
-		t.Fatalf("failure binary = %q, want %q", failure.BinaryPath, harness.BinaryPath)
+	if failure.ProcessBoundary != "root.BuildProcess" {
+		t.Fatalf("failure process boundary = %q, want root.BuildProcess", failure.ProcessBoundary)
 	}
 }
 
-// TestBuiltCLI_HelpPrintsUsageAndExitsSuccessfully proves the built CLI exposes usable root help.
-func TestBuiltCLI_HelpPrintsUsageAndExitsSuccessfully(t *testing.T) {
+// TestRootProcess_HelpPrintsUsageAndExitsSuccessfully proves the root process exposes usable root help.
+func TestRootProcess_HelpPrintsUsageAndExitsSuccessfully(t *testing.T) {
 	t.Parallel()
 
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
@@ -145,24 +145,24 @@ func TestBuiltCLI_HelpPrintsUsageAndExitsSuccessfully(t *testing.T) {
 	}
 }
 
-// TestBuiltCLI_ConfigAndFactoryAuthoringUseAcceptedInputs proves the built
+// TestRootProcess_ConfigAndFactoryAuthoringUseAcceptedInputs proves the built
 // executable accepts canonical config and Factory-authoring inputs.
-func TestBuiltCLI_ConfigAndFactoryAuthoringUseAcceptedInputs(t *testing.T) {
+func TestRootProcess_ConfigAndFactoryAuthoringUseAcceptedInputs(t *testing.T) {
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
 	session := harness.NewSession(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	assertBuiltCLIInitContract(t, ctx, session)
+	assertRootProcessInitContract(t, ctx, session)
 	sourcePath := testutil.MustRepoPath(
 		t,
 		"tests/release/testdata/cli_smoke_factory/factory.json",
 	)
-	createdPath := assertBuiltCLIFactoryAuthoring(t, ctx, session, sourcePath)
-	assertBuiltCLIFactoryConfigTransforms(t, ctx, session, sourcePath, createdPath)
+	createdPath := assertRootProcessFactoryAuthoring(t, ctx, session, sourcePath)
+	assertRootProcessFactoryConfigTransforms(t, ctx, session, sourcePath, createdPath)
 }
 
-func assertBuiltCLIInitContract(
+func assertRootProcessInitContract(
 	t *testing.T,
 	ctx context.Context,
 	session *builtcliacceptance.Session,
@@ -209,7 +209,7 @@ func assertBuiltCLIInitContract(
 	}
 }
 
-func assertBuiltCLIFactoryAuthoring(
+func assertRootProcessFactoryAuthoring(
 	t *testing.T,
 	ctx context.Context,
 	session *builtcliacceptance.Session,
@@ -245,7 +245,7 @@ func assertBuiltCLIFactoryAuthoring(
 	return createdPath
 }
 
-func assertBuiltCLIFactoryConfigTransforms(
+func assertRootProcessFactoryConfigTransforms(
 	t *testing.T,
 	ctx context.Context,
 	session *builtcliacceptance.Session,
@@ -297,7 +297,7 @@ func assertBuiltCLIFactoryConfigTransforms(
 	}
 }
 
-func TestBuiltCLIHarness_WithNoExternalServerReservesUnusedPort(t *testing.T) {
+func TestRootProcessHarness_WithNoExternalServerReservesUnusedPort(t *testing.T) {
 	t.Parallel()
 
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))

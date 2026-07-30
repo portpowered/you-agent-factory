@@ -1,0 +1,116 @@
+name: "@you/plan-execute"
+id: builtin-plan-execute
+description:
+  type: LOCALIZABLE_ASSET
+  value: Writes a Markdown and JSON PRD for a project request, then executes that plan in the current workspace.
+invocationReturn:
+  policy: EXPLICIT
+  workTypeName: planned-request
+  terminalState: complete
+invocationSignature:
+  parameters:
+    - name: request
+      description: Project request to investigate, express as a complete PRD, and implement in the current workspace.
+      externalName: to
+      required: true
+      bindings:
+        - kind: POSITIONAL
+          position: 1
+        - kind: STDIN
+        - kind: NAMED
+    - name: plannerProvider
+      description: Optional model provider override for the planner; when omitted, the operator's default provider is used.
+      externalName: planner-provider
+      defaultValues: [""]
+      bindings:
+        - kind: NAMED
+    - name: plannerModel
+      description: Optional model override for the planner; when omitted, the operator's default model is used.
+      externalName: planner-model
+      defaultValues: [""]
+      bindings:
+        - kind: NAMED
+    - name: executorProvider
+      description: Optional model provider override for the executor; when omitted, the operator's default provider is used.
+      externalName: executor-provider
+      defaultValues: [""]
+      bindings:
+        - kind: NAMED
+    - name: executorModel
+      description: Optional model override for the executor; when omitted, the operator's default model is used.
+      externalName: executor-model
+      defaultValues: [""]
+      bindings:
+        - kind: NAMED
+examples:
+  - name: plan-and-implement
+    description:
+      type: LOCALIZABLE_ASSET
+      value: Produce a durable PRD and implement it in the current repository.
+    args:
+      request: Implement and verify the requested feature
+resources:
+  - name: plan-execute-agent-slot
+    capacity: 1
+workTypes:
+  - name: planned-request
+    handlingBehavior: [DEFAULT]
+    states:
+      - name: init
+        type: INITIAL
+      - name: planned
+        type: PROCESSING
+      - name: complete
+        type: TERMINAL
+      - name: failed
+        type: FAILED
+workers:
+  - name: prd-planner
+    type: AGENT_WORKER
+    modelProvider: ${plannerProvider}
+    model: ${plannerModel}
+    skipPermissions: true
+    stopToken: <COMPLETE>
+    promptFile: prompts/planner.md
+  - name: prd-executor
+    type: AGENT_WORKER
+    modelProvider: ${executorProvider}
+    model: ${executorModel}
+    skipPermissions: true
+    stopToken: <COMPLETE>
+    promptFile: prompts/executor.md
+workstations:
+  - name: plan-request
+    type: AGENT_RUN
+    worker: prd-planner
+    resources:
+      - name: plan-execute-agent-slot
+        capacity: 1
+    workPropagation:
+      mode: PRESERVE_INPUT
+    inputs:
+      - workType: planned-request
+        state: init
+    outputs:
+      - workType: planned-request
+        state: planned
+    onFailure:
+      - workType: planned-request
+        state: failed
+    promptFile: prompts/planner.md
+  - name: execute-plan
+    type: AGENT_RUN
+    worker: prd-executor
+    resources:
+      - name: plan-execute-agent-slot
+        capacity: 1
+    inputs:
+      - workType: planned-request
+        state: planned
+    outputs:
+      - workType: planned-request
+        state: complete
+    onFailure:
+      - workType: planned-request
+        state: failed
+    promptFile: prompts/executor.md

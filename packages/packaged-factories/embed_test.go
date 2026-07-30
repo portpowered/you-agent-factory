@@ -30,8 +30,8 @@ func TestSourceReadsAuthoredFactoryAndAsset(t *testing.T) {
 
 	source := packagedfactories.Source()
 	for _, path := range []string{
-		"factories/deep-research/factory.json",
-		"factories/deep-research/scripts/deep-research.workflow.js",
+		"factories/deep-research/factory.js",
+		"factories/plan-parallel/factory.yaml",
 	} {
 		path := path
 		t.Run(path, func(t *testing.T) {
@@ -43,6 +43,25 @@ func TestSourceReadsAuthoredFactoryAndAsset(t *testing.T) {
 			}
 			if len(content) == 0 {
 				t.Fatalf("embedded source %q is empty", path)
+			}
+		})
+	}
+}
+
+func TestAuthoredJavaScriptFactoriesAreSingleFilePackages(t *testing.T) {
+	t.Parallel()
+
+	source := packagedfactories.Source()
+	for _, slug := range []string{"deep-research", "spawn", "tournament"} {
+		slug := slug
+		t.Run(slug, func(t *testing.T) {
+			t.Parallel()
+			entries, err := fs.ReadDir(source, "factories/"+slug)
+			if err != nil {
+				t.Fatalf("read authored JavaScript factory %q: %v", slug, err)
+			}
+			if len(entries) != 1 || entries[0].IsDir() || entries[0].Name() != "factory.js" {
+				t.Fatalf("authored JavaScript factory %q entries = %#v, want only factory.js", slug, entries)
 			}
 		})
 	}

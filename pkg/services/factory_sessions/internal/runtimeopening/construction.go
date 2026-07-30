@@ -180,6 +180,7 @@ func NewDurableExecution(
 	loadOperatorConfig operatorconfig.ConfigLoader,
 	definitionRequest factorydefinitions.RuntimeOpeningRequest,
 	sessionRequest factorysessions.SessionRuntimeOpeningRequest,
+	resolvedDefaults operatorconfig.ResolvedDefaults,
 	root RuntimeRoot,
 	clock factoryruntime.Clock,
 	providerOverride workers.Provider,
@@ -220,7 +221,7 @@ func NewDurableExecution(
 			ReasoningEffort: preset.ReasoningEffort,
 		}
 	}
-	defaultProvider := operatorConfig.Defaults.WorkerModelProvider
+	defaultProvider := firstNonEmpty(resolvedDefaults.WorkerModelProvider, operatorConfig.Defaults.WorkerModelProvider)
 	if strings.TrimSpace(defaultProvider) != "" {
 		defaultProvider, err = providerIdentities(defaultProvider)
 		if err != nil {
@@ -239,7 +240,7 @@ func NewDurableExecution(
 		factoryruntime.JavaScriptWorkerSettings{
 			Presets:              workerPresets,
 			DefaultModelProvider: defaultProvider,
-			DefaultModel:         operatorConfig.Defaults.WorkerModel,
+			DefaultModel:         firstNonEmpty(resolvedDefaults.WorkerModel, operatorConfig.Defaults.WorkerModel),
 		},
 		mockWorkersConfig,
 		append([]operatorconfig.ACPIntegration(nil), operatorConfig.Workers.ACP.Integrations...),

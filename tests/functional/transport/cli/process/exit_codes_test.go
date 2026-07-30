@@ -102,11 +102,11 @@ func TestCLIInterruptedExitCode(t *testing.T) {
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
 	session := harness.NewSession(t).WithNoExternalServer(t)
 
-	command, lines, scanErr, stderr := startBuiltCLIServerCommand(t, session, harness.BinaryPath)
+	command, lines, scanErr, stderr := startRootProcessServerCommand(t, session, harness)
 	stopped := false
 	defer func() {
 		if !stopped {
-			_ = command.Process.Kill()
+			command.Cancel()
 			_ = command.Wait()
 		}
 	}()

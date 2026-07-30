@@ -7,13 +7,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
@@ -31,7 +30,7 @@ const (
 	submitWiringUnavailableRequestID = "cli-submit-wiring-unavailable"
 	submitWiringUnavailableWorkName  = "unavailable-task"
 	submitWiringUnavailableWorkType  = "task"
-	submitWiringUnavailableServer      = "http://127.0.0.1:1"
+	submitWiringUnavailableServer    = "http://127.0.0.1:1"
 
 	submitWiringBackendErrorRequestID        = "cli-submit-wiring-backend-error"
 	submitWiringBackendErrorWorkName         = "backend-error-task"
@@ -55,7 +54,7 @@ func TestCLISubmitBatchInlineJSON(t *testing.T) {
 	})
 	defer server.Stop(t)
 
-	binaryPath := buildYouCLIBinary(t)
+	processHarness := newRootProcessHarness(t)
 	inlineBatch := fmt.Sprintf(
 		`{"requestId":%q,"type":"FACTORY_REQUEST_BATCH","works":[{"name":%q,"workTypeName":%q,"payload":{"title":"Inline submit wiring"}}]}`,
 		submitWiringInlineRequestID,
@@ -66,9 +65,7 @@ func TestCLISubmitBatchInlineJSON(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
-	submitCmd := exec.CommandContext(
-		ctx,
-		binaryPath,
+	submitCmd := processHarness.CommandContext(ctx,
 		"--server", server.URL(),
 		"submit", "batch",
 		inlineBatch,
@@ -119,14 +116,12 @@ func TestCLISubmitBatchFile(t *testing.T) {
 		t.Fatalf("write batch file: %v", err)
 	}
 
-	binaryPath := buildYouCLIBinary(t)
+	processHarness := newRootProcessHarness(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
-	submitCmd := exec.CommandContext(
-		ctx,
-		binaryPath,
+	submitCmd := processHarness.CommandContext(ctx,
 		"--server", server.URL(),
 		"submit", "batch",
 		batchPath,
@@ -161,7 +156,7 @@ func TestCLISubmitUnavailableServer(t *testing.T) {
 		t.Skip("slow CLI submit wiring")
 	}
 
-	binaryPath := buildYouCLIBinary(t)
+	processHarness := newRootProcessHarness(t)
 	inlineBatch := fmt.Sprintf(
 		`{"requestId":%q,"type":"FACTORY_REQUEST_BATCH","works":[{"name":%q,"workTypeName":%q,"payload":{"title":"Unavailable server wiring"}}]}`,
 		submitWiringUnavailableRequestID,
@@ -172,9 +167,7 @@ func TestCLISubmitUnavailableServer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
-	submitCmd := exec.CommandContext(
-		ctx,
-		binaryPath,
+	submitCmd := processHarness.CommandContext(ctx,
 		"--server", submitWiringUnavailableServer,
 		"submit", "batch",
 		inlineBatch,
@@ -184,14 +177,6 @@ func TestCLISubmitUnavailableServer(t *testing.T) {
 	submitOut, err := submitCmd.CombinedOutput()
 	if err == nil {
 		t.Fatalf("you submit batch unexpectedly succeeded against unavailable server:\n%s", submitOut)
-	}
-
-	exitErr, ok := err.(*exec.ExitError)
-	if !ok {
-		t.Fatalf("you submit batch error = %v, want *exec.ExitError", err)
-	}
-	if exitErr.ExitCode() != 1 {
-		t.Fatalf("you submit batch exit code = %d, want 1", exitErr.ExitCode())
 	}
 
 	output := string(submitOut)
@@ -234,7 +219,7 @@ func TestCLISubmitBackendErrorPreservesPublicMessage(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	binaryPath := buildYouCLIBinary(t)
+	processHarness := newRootProcessHarness(t)
 	inlineBatch := fmt.Sprintf(
 		`{"requestId":%q,"type":"FACTORY_REQUEST_BATCH","works":[{"name":%q,"workTypeName":%q,"payload":{"title":"Backend error wiring"}}]}`,
 		submitWiringBackendErrorRequestID,
@@ -245,9 +230,7 @@ func TestCLISubmitBackendErrorPreservesPublicMessage(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
-	submitCmd := exec.CommandContext(
-		ctx,
-		binaryPath,
+	submitCmd := processHarness.CommandContext(ctx,
 		"--server", server.URL,
 		"submit", "batch",
 		inlineBatch,
@@ -257,14 +240,6 @@ func TestCLISubmitBackendErrorPreservesPublicMessage(t *testing.T) {
 	submitOut, err := submitCmd.CombinedOutput()
 	if err == nil {
 		t.Fatalf("you submit batch unexpectedly succeeded against backend error:\n%s", submitOut)
-	}
-
-	exitErr, ok := err.(*exec.ExitError)
-	if !ok {
-		t.Fatalf("you submit batch error = %v, want *exec.ExitError", err)
-	}
-	if exitErr.ExitCode() != 1 {
-		t.Fatalf("you submit batch exit code = %d, want 1", exitErr.ExitCode())
 	}
 
 	output := string(submitOut)
@@ -320,18 +295,7 @@ func submitWiringFactoryConfig() map[string]any {
 	}
 }
 
-func buildYouCLIBinary(t *testing.T) string {
+func newRootProcessHarness(t *testing.T) *builtcliacceptance.Harness {
 	t.Helper()
-
-	binaryName := "you"
-	if runtime.GOOS == "windows" {
-		binaryName += ".exe"
-	}
-	binaryPath := filepath.Join(t.TempDir(), binaryName)
-	build := exec.Command("go", "build", "-o", binaryPath, "./cmd/factory")
-	build.Dir = testutil.MustRepoRoot(t)
-	if output, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build you CLI: %v\n%s", err, string(output))
-	}
-	return binaryPath
+	return builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
 }

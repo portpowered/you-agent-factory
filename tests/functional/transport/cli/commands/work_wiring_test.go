@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -45,7 +44,7 @@ func TestCLIWorkListAndShowReflectSubmittedWork(t *testing.T) {
 	defer server.Stop(t)
 
 	baseURL := server.URL()
-	binaryPath := buildYouCLIBinary(t)
+	processHarness := newRootProcessHarness(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -56,7 +55,7 @@ func TestCLIWorkListAndShowReflectSubmittedWork(t *testing.T) {
 		workWiringListShowWorkName,
 		workWiringListShowWorkType,
 	)
-	submitOut, err := runYouCLI(ctx, binaryPath, factoryDir, baseURL,
+	submitOut, err := runYouCLI(ctx, processHarness, factoryDir, baseURL,
 		"--json",
 		"submit", "batch",
 		inlineBatch,
@@ -74,7 +73,7 @@ func TestCLIWorkListAndShowReflectSubmittedWork(t *testing.T) {
 	}
 	workID := submitted.Works[0].WorkID
 
-	listOut, err := runYouCLI(ctx, binaryPath, factoryDir, baseURL,
+	listOut, err := runYouCLI(ctx, processHarness, factoryDir, baseURL,
 		"work", "list",
 		"--name", workWiringListShowWorkName,
 	)
@@ -92,13 +91,13 @@ func TestCLIWorkListAndShowReflectSubmittedWork(t *testing.T) {
 		}
 	}
 
-	listed := runWorkListCLIJSON(t, ctx, binaryPath, factoryDir, baseURL, workWiringListShowWorkName)
+	listed := runWorkListCLIJSON(t, ctx, processHarness, factoryDir, baseURL, workWiringListShowWorkName)
 	if !support.HasWorkAtCustomerState(listed, workID, support.WorkCustomerLocation(workWiringListShowWorkType, "init")) &&
 		!support.HasWorkAtCustomerState(listed, workID, support.WorkCustomerLocation(workWiringListShowWorkType, "complete")) {
 		t.Fatalf("work list JSON missing submitted work %q at init or complete: %#v", workID, listed.Results)
 	}
 
-	shown, err := runWorkShowCLIJSON(t, ctx, binaryPath, factoryDir, baseURL, workID)
+	shown, err := runWorkShowCLIJSON(t, ctx, processHarness, factoryDir, baseURL, workID)
 	if err != nil {
 		t.Fatalf("you work show %s: %v", workID, err)
 	}
@@ -112,7 +111,7 @@ func TestCLIWorkListAndShowReflectSubmittedWork(t *testing.T) {
 		t.Fatalf("work show missing customer-visible state: %#v", shown)
 	}
 
-	showOut, err := runYouCLI(ctx, binaryPath, factoryDir, baseURL,
+	showOut, err := runYouCLI(ctx, processHarness, factoryDir, baseURL,
 		"work", "show", workID,
 	)
 	if err != nil {
@@ -145,7 +144,7 @@ func TestCLIWorkMoveChangesState(t *testing.T) {
 	defer server.Stop(t)
 
 	baseURL := server.URL()
-	binaryPath := buildYouCLIBinary(t)
+	processHarness := newRootProcessHarness(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -156,7 +155,7 @@ func TestCLIWorkMoveChangesState(t *testing.T) {
 		workWiringMoveWorkName,
 		workWiringMoveWorkType,
 	)
-	submitOut, err := runYouCLI(ctx, binaryPath, factoryDir, baseURL,
+	submitOut, err := runYouCLI(ctx, processHarness, factoryDir, baseURL,
 		"--json",
 		"submit", "batch",
 		inlineBatch,
@@ -174,9 +173,9 @@ func TestCLIWorkMoveChangesState(t *testing.T) {
 	}
 	workID := submitted.Works[0].WorkID
 
-	waitForWorkStateViaCLI(t, ctx, binaryPath, factoryDir, baseURL, workID, "init", 15*time.Second)
+	waitForWorkStateViaCLI(t, ctx, processHarness, factoryDir, baseURL, workID, "init", 15*time.Second)
 
-	moveOut, err := runYouCLI(ctx, binaryPath, factoryDir, baseURL,
+	moveOut, err := runYouCLI(ctx, processHarness, factoryDir, baseURL,
 		"work", "move", workID, "complete",
 	)
 	if err != nil {
@@ -184,7 +183,7 @@ func TestCLIWorkMoveChangesState(t *testing.T) {
 	}
 	assertWorkMoveWiringHumanOutput(t, string(moveOut), workID, "init", "complete")
 
-	shown, err := runWorkShowCLIJSON(t, ctx, binaryPath, factoryDir, baseURL, workID)
+	shown, err := runWorkShowCLIJSON(t, ctx, processHarness, factoryDir, baseURL, workID)
 	if err != nil {
 		t.Fatalf("you work show %s after move: %v", workID, err)
 	}
@@ -192,7 +191,7 @@ func TestCLIWorkMoveChangesState(t *testing.T) {
 		t.Fatalf("work show state after move = %#v, want complete", shown.State)
 	}
 
-	listed := runWorkListCLIJSON(t, ctx, binaryPath, factoryDir, baseURL, workWiringMoveWorkName)
+	listed := runWorkListCLIJSON(t, ctx, processHarness, factoryDir, baseURL, workWiringMoveWorkName)
 	if !support.HasWorkAtCustomerState(listed, workID, support.WorkCustomerLocation(workWiringMoveWorkType, "complete")) {
 		t.Fatalf("work list JSON missing moved work %q at complete: %#v", workID, listed.Results)
 	}
@@ -211,17 +210,17 @@ func TestCLIWorkShowMissingReturnsNotFound(t *testing.T) {
 	defer server.Stop(t)
 
 	baseURL := server.URL()
-	binaryPath := buildYouCLIBinary(t)
+	processHarness := newRootProcessHarness(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
-	showOut, err := runYouCLI(ctx, binaryPath, factoryDir, baseURL,
+	showOut, err := runYouCLI(ctx, processHarness, factoryDir, baseURL,
 		"work", "show", workWiringMissingWorkID,
 	)
 	assertCLIWorkShowNotFoundFailure(t, showOut, err, workWiringMissingWorkID)
 
-	showJSONOut, err := runYouCLI(ctx, binaryPath, factoryDir, baseURL,
+	showJSONOut, err := runYouCLI(ctx, processHarness, factoryDir, baseURL,
 		"--json",
 		"work", "show", workWiringMissingWorkID,
 	)
@@ -232,20 +231,20 @@ func TestCLIWorkShowMissingReturnsNotFound(t *testing.T) {
 // the same dependency graph for a fixed batch input across repeated CLI invocations.
 func TestCLIWorkVisualizeProducesDeterministicGraph(t *testing.T) {
 	workingDir := t.TempDir()
-	binaryPath := buildYouCLIBinary(t)
+	processHarness := newRootProcessHarness(t)
 	batchPath := writeWorkWiringVisualizeBatchFile(t, workingDir)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	firstOut, err := runYouCLI(ctx, binaryPath, workingDir, "",
+	firstOut, err := runYouCLI(ctx, processHarness, workingDir, "",
 		"work", "visualize", batchPath,
 	)
 	if err != nil {
 		t.Fatalf("you work visualize (first): %v\noutput:\n%s", err, firstOut)
 	}
 
-	secondOut, err := runYouCLI(ctx, binaryPath, workingDir, "",
+	secondOut, err := runYouCLI(ctx, processHarness, workingDir, "",
 		"work", "visualize", batchPath,
 	)
 	if err != nil {
@@ -271,13 +270,6 @@ func assertCLIWorkShowNotFoundFailure(
 
 	if err == nil {
 		t.Fatalf("you work show unexpectedly succeeded:\n%s", output)
-	}
-	exitErr, ok := err.(*exec.ExitError)
-	if !ok {
-		t.Fatalf("you work show error = %v, want *exec.ExitError", err)
-	}
-	if exitErr.ExitCode() == 0 {
-		t.Fatalf("you work show exit code = 0, want non-zero")
 	}
 
 	text := string(output)

@@ -1,4 +1,5 @@
 import { Dialog } from "@you-agent-factory/components/overlays";
+import { Button, Text } from "@you-agent-factory/components/primitives";
 import {
   type DragEvent as ReactDragEvent,
   useEffect,
@@ -9,7 +10,6 @@ import {
 import type { DashboardStreamState } from "../../../api/dashboard/types";
 import type { FactorySessionSummary } from "../../../api/factory-sessions";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
-import { Button, Text } from "@you-agent-factory/components/primitives";
 import { AlertPanel } from "../../../components/ui/alert-panel";
 import { useDashboardStreamStore } from "../../dashboard/state/dashboardStreamStore";
 import {
@@ -247,11 +247,11 @@ function SessionTabsContent({
     <>
       <nav
         aria-label={messages.sessionTabsLabel}
-        className="min-w-0 max-w-full overflow-x-auto overscroll-x-contain"
+        className="flex min-w-0 flex-1"
       >
         <div
           aria-orientation="horizontal"
-          className="inline-flex h-full min-w-max items-stretch gap-1 pr-1"
+          className="flex h-full min-w-0 flex-1 items-stretch gap-1 pr-1"
           role="tablist"
         >
           {sessions.map((session, index) => (

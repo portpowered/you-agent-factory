@@ -38,11 +38,11 @@ describe("useDashboardLayout factory-session widget placement", () => {
       w: 4,
       widgetType: DASHBOARD_WIDGET_IDS.factorySession,
       x: 8,
-      y: 27,
+      y: 29,
     });
     expect(addWidgetCard).toMatchObject({
       x: 0,
-      y: 27,
+      y: 29,
     });
   });
 });

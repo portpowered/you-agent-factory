@@ -2,6 +2,8 @@ import type { AgentBentoLayoutItem } from "../components/agent-bento";
 
 const PRIMARY_WIDGET_INSTANCE_SLOT = "primary";
 const INLINE_ADD_WIDGET_INSTANCE_SLOT = "inline-add";
+export const WORK_OUTCOME_CHART_MIN_GRID_HEIGHT = 4;
+export const WORK_OUTCOME_CHART_MIN_GRID_WIDTH = 4;
 
 export const DASHBOARD_LAYOUT_STORAGE_KEY = "agent-factory.dashboard.layout.v2";
 
@@ -10,6 +12,7 @@ export const DASHBOARD_WIDGET_IDS = {
   currentSelection: "current-selection",
   factorySession: "factory-session",
   providerSession: "provider-session",
+  sessionControls: "session-controls",
   submitWork: "submit-work",
   terminalWork: "terminal-work",
   trace: "trace",
@@ -40,6 +43,10 @@ export const DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS = {
   ),
   providerSession: createDashboardWidgetInstanceID(
     DASHBOARD_WIDGET_IDS.providerSession,
+    PRIMARY_WIDGET_INSTANCE_SLOT,
+  ),
+  sessionControls: createDashboardWidgetInstanceID(
+    DASHBOARD_WIDGET_IDS.sessionControls,
     PRIMARY_WIDGET_INSTANCE_SLOT,
   ),
   submitWork: createDashboardWidgetInstanceID(
@@ -77,13 +84,23 @@ export const DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID =
 const DEFAULT_DASHBOARD_LAYOUT_ITEMS = [
   dashboardLayoutItem({
     h: 2,
+    id: DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.sessionControls,
+    minH: 2,
+    minW: 4,
+    w: 12,
+    widgetType: DASHBOARD_WIDGET_IDS.sessionControls,
+    x: 0,
+    y: 0,
+  }),
+  dashboardLayoutItem({
+    h: 2,
     id: DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.workTotals,
     minH: 1,
     minW: 1,
     w: 12,
     widgetType: DASHBOARD_WIDGET_IDS.workTotals,
     x: 0,
-    y: 0,
+    y: 2,
   }),
   dashboardLayoutItem({
     h: 8,
@@ -93,7 +110,7 @@ const DEFAULT_DASHBOARD_LAYOUT_ITEMS = [
     w: 12,
     widgetType: DASHBOARD_WIDGET_IDS.workGraph,
     x: 0,
-    y: 2,
+    y: 4,
   }),
   dashboardLayoutItem({
     h: 5,
@@ -103,7 +120,7 @@ const DEFAULT_DASHBOARD_LAYOUT_ITEMS = [
     w: 4,
     widgetType: DASHBOARD_WIDGET_IDS.currentSelection,
     x: 0,
-    y: 10,
+    y: 12,
   }),
   dashboardLayoutItem({
     h: 5,
@@ -113,7 +130,7 @@ const DEFAULT_DASHBOARD_LAYOUT_ITEMS = [
     w: 4,
     widgetType: DASHBOARD_WIDGET_IDS.providerSession,
     x: 4,
-    y: 10,
+    y: 12,
   }),
   dashboardLayoutItem({
     h: 5,
@@ -123,17 +140,17 @@ const DEFAULT_DASHBOARD_LAYOUT_ITEMS = [
     w: 4,
     widgetType: DASHBOARD_WIDGET_IDS.terminalWork,
     x: 8,
-    y: 10,
+    y: 12,
   }),
   dashboardLayoutItem({
-    h: 6,
+    h: WORK_OUTCOME_CHART_MIN_GRID_HEIGHT,
     id: DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.workOutcomeChart,
-    minH: 1,
-    minW: 1,
-    w: 4,
+    minH: WORK_OUTCOME_CHART_MIN_GRID_HEIGHT,
+    minW: WORK_OUTCOME_CHART_MIN_GRID_WIDTH,
+    w: WORK_OUTCOME_CHART_MIN_GRID_WIDTH,
     widgetType: DASHBOARD_WIDGET_IDS.workOutcomeChart,
     x: 8,
-    y: 15,
+    y: 17,
   }),
   dashboardLayoutItem({
     h: 6,
@@ -153,7 +170,7 @@ const DEFAULT_DASHBOARD_LAYOUT_ITEMS = [
     w: 8,
     widgetType: DASHBOARD_WIDGET_IDS.trace,
     x: 0,
-    y: 15,
+    y: 17,
   }),
   dashboardLayoutItem({
     h: 4,
@@ -228,6 +245,8 @@ export function getPrimaryInstanceIDForWidgetType(widgetType: string): string {
       return DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.factorySession;
     case DASHBOARD_WIDGET_IDS.providerSession:
       return DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.providerSession;
+    case DASHBOARD_WIDGET_IDS.sessionControls:
+      return DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.sessionControls;
     case DASHBOARD_WIDGET_IDS.submitWork:
       return DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.submitWork;
     case DASHBOARD_WIDGET_IDS.terminalWork:

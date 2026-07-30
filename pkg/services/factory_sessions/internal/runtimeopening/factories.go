@@ -117,6 +117,7 @@ type DurableExecution struct {
 type DurableExecutionFactory func(
 	factorydefinitions.RuntimeOpeningRequest,
 	factorysessions.SessionRuntimeOpeningRequest,
+	operatorsettings.ResolvedDefaults,
 	RuntimeRoot,
 	factoryruntime.Clock,
 	workers.Provider,

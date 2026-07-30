@@ -398,6 +398,7 @@ func (failure *openingCoordinatorFailure) openWorkerExecution(
 func openingCoordinatorDurableExecution(
 	_ factorydefinitions.RuntimeOpeningRequest,
 	_ factorysessions.SessionRuntimeOpeningRequest,
+	_ operatorconfig.ResolvedDefaults,
 	_ RuntimeRoot,
 	_ factoryruntime.Clock,
 	_ workers.Provider,

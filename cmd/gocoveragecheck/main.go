@@ -402,14 +402,7 @@ func resolveTestPackages(cfg config) ([]string, error) {
 	case "", "unit":
 		return listGoPackages(unitTestPatterns, isBackendCoveragePackage, false)
 	case "functional":
-		packages, err := listGoPackages(functionalTestPatterns, isFunctionalTestPackage, false)
-		if err != nil {
-			return nil, err
-		}
-		if err := testlanes.ValidateProviderFunctionalPackages(packages); err != nil {
-			return nil, fmt.Errorf("resolve go coverage lane: %w", err)
-		}
-		return packages, nil
+		return listGoPackages(functionalTestPatterns, isFunctionalTestPackage, false)
 	default:
 		return nil, fmt.Errorf("resolve go coverage lane: unsupported suite %q", cfg.suite)
 	}

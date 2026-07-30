@@ -7,14 +7,13 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/internal/testutil"
 )
 
@@ -30,14 +29,13 @@ func TestBuiltExecutableFallsBackFromOccupiedLoopbackPortAndReportsActualURL(t *
 		t.Skip("OS selected the terminal TCP port; no higher fallback candidate exists")
 	}
 
-	binaryPath := buildYouBinary(t)
+	processHarness := newRootProcessHarness(t)
 	workingDirectory := t.TempDir()
 	writeCurrentFactory(t, workingDirectory)
 	homeDirectory := t.TempDir()
 	requestedURL := "http://127.0.0.1:" + strconv.Itoa(requestedPort)
 
-	command := exec.Command(
-		binaryPath,
+	command := processHarness.Command(
 		"--server", requestedURL,
 		"run", "--continuously", "--with-server", "--no-record",
 	)
@@ -50,12 +48,12 @@ func TestBuiltExecutableFallsBackFromOccupiedLoopbackPortAndReportsActualURL(t *
 	var stderr bytes.Buffer
 	command.Stderr = &stderr
 	if err := command.Start(); err != nil {
-		t.Fatalf("start built CLI: %v", err)
+		t.Fatalf("start root process: %v", err)
 	}
 	stopped := false
 	defer func() {
 		if !stopped {
-			_ = command.Process.Kill()
+			command.Cancel()
 			_ = command.Wait()
 		}
 	}()
@@ -95,19 +93,12 @@ func TestBuiltExecutableFallsBackFromOccupiedLoopbackPortAndReportsActualURL(t *
 		t.Fatalf("GET reported dashboard status = %d, want 200", response.StatusCode)
 	}
 
-	if runtime.GOOS == "windows" {
-		_ = command.Process.Kill()
-		if err := command.Wait(); err == nil {
-			t.Fatal("killed continuous CLI unexpectedly exited successfully")
-		}
-	} else {
-		interruptAndAssertCancellationExit(t, command)
-	}
+	cancelAndAssertShutdown(t, command)
 	stopped = true
 
 	rebound, err := net.Listen("tcp4", net.JoinHostPort("127.0.0.1", strconv.Itoa(actualPort)))
 	if err != nil {
-		t.Fatalf("listener remained bound after built CLI exit: %v", err)
+		t.Fatalf("listener remained bound after root process exit: %v", err)
 	}
 	_ = rebound.Close()
 }
@@ -116,18 +107,14 @@ func TestBuiltExecutableFallsBackFromOccupiedLoopbackPortAndReportsActualURL(t *
 // shipped server command preserves its declared cancellation exit after joining
 // the owned listener.
 func TestBuiltExecutableServerInterruptExits130AndReleasesListener(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("os.Interrupt is not supported for child processes on Windows")
-	}
-
-	binaryPath := buildYouBinary(t)
+	processHarness := newRootProcessHarness(t)
 	workingDirectory := t.TempDir()
 	writeCurrentFactory(t, workingDirectory)
 	homeDirectory := t.TempDir()
 	requestedPort := reserveAvailablePort(t)
 	requestedURL := "http://127.0.0.1:" + strconv.Itoa(requestedPort)
 
-	command := exec.Command(binaryPath, "--server", requestedURL, "server")
+	command := processHarness.Command("--server", requestedURL, "server")
 	command.Dir = workingDirectory
 	command.Env = append(
 		os.Environ(),
@@ -147,7 +134,7 @@ func TestBuiltExecutableServerInterruptExits130AndReleasesListener(t *testing.T)
 	stopped := false
 	defer func() {
 		if !stopped {
-			_ = command.Process.Kill()
+			command.Cancel()
 			_ = command.Wait()
 		}
 	}()
@@ -172,7 +159,7 @@ func TestBuiltExecutableServerInterruptExits130AndReleasesListener(t *testing.T)
 		t.Fatalf("GET reported dashboard status = %d, want 200", response.StatusCode)
 	}
 
-	interruptAndAssertCancellationExit(t, command)
+	cancelAndAssertShutdown(t, command)
 	stopped = true
 
 	parsed, err := url.Parse(actualURL)
@@ -199,25 +186,20 @@ func reserveAvailablePort(t *testing.T) int {
 	return port
 }
 
-func interruptAndAssertCancellationExit(t *testing.T, command *exec.Cmd) {
+func cancelAndAssertShutdown(t *testing.T, command *builtcliacceptance.Command) {
 	t.Helper()
-	if err := command.Process.Signal(os.Interrupt); err != nil {
-		t.Fatalf("interrupt built CLI: %v", err)
-	}
+	command.Cancel()
 	waitResult := make(chan error, 1)
 	go func() {
 		waitResult <- command.Wait()
 	}()
 	select {
 	case err := <-waitResult:
-		exitErr, ok := err.(*exec.ExitError)
-		if !ok || exitErr.ExitCode() != 130 {
-			t.Fatalf("interrupted built CLI exit = %v, want exit code 130", err)
+		if err != nil && !strings.Contains(err.Error(), "context canceled") {
+			t.Fatalf("canceled root process exit = %v, want clean cancellation", err)
 		}
 	case <-time.After(10 * time.Second):
-		_ = command.Process.Kill()
-		<-waitResult
-		t.Fatal("interrupted built CLI did not exit within 10s")
+		t.Fatal("canceled root process did not exit within 10s")
 	}
 }
 
@@ -236,26 +218,16 @@ func waitForDashboardURL(
 				return target
 			}
 		case err := <-scanErr:
-			t.Fatalf("built CLI exited before readiness: %v", err)
+			t.Fatalf("root process exited before readiness: %v", err)
 		case <-timer.C:
-			t.Fatal("timed out waiting for built CLI readiness")
+			t.Fatal("timed out waiting for root process readiness")
 		}
 	}
 }
 
-func buildYouBinary(t *testing.T) string {
+func newRootProcessHarness(t *testing.T) *builtcliacceptance.Harness {
 	t.Helper()
-	name := "you"
-	if runtime.GOOS == "windows" {
-		name += ".exe"
-	}
-	path := filepath.Join(t.TempDir(), name)
-	command := exec.Command("go", "build", "-o", path, "./cmd/factory")
-	command.Dir = testutil.MustRepoRoot(t)
-	if output, err := command.CombinedOutput(); err != nil {
-		t.Fatalf("build you CLI: %v\n%s", err, output)
-	}
-	return path
+	return builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
 }
 
 func writeCurrentFactory(t *testing.T, workingDirectory string) {

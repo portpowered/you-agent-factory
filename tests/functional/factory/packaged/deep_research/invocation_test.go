@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -312,15 +311,21 @@ func startPackagedDeepResearchInvocation(
 	t.Helper()
 
 	factory := support.GetJSON[factoryapi.Factory](t, server.URL()+"/factory-sessions/~default/factory")
-	workflowFile := filepath.Join(factoryDir, "scripts", "deep-research.workflow.js")
+	_ = factoryDir
+	javascript := factory.Orchestrator.Javascript
 	return postJSON[factoryapi.FactorySessionSyncExecutionResponse](
 		t,
 		server.URL()+"/factory-sessions/sync",
 		factoryapi.FactorySessionExecutionRequest{
 			RequestId: requestID,
 			Source: factoryapi.FactorySessionExecutionSource{
-				Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowFile,
-				WorkflowFile: &workflowFile,
+				Kind: factoryapi.FactorySessionExecutionSourceKindInlineWorkflow,
+				InlineWorkflow: &factoryapi.FactorySessionExecutionInlineWorkflow{
+					Dialect:      javascript.Dialect,
+					Entrypoint:   javascript.Entrypoint,
+					InlineSource: *javascript.InlineSource,
+					Metadata:     javascript.Metadata,
+				},
 			},
 			Args:         &args,
 			Orchestrator: factory.Orchestrator,

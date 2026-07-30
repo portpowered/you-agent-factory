@@ -41,15 +41,15 @@ func TestProcessEnvForIsolatedHome_ReplacesHomeVariables(t *testing.T) {
 
 func TestScenarioFailure_ErrorIncludesDiagnostics(t *testing.T) {
 	failure := &ScenarioFailure{
-		Scenario:   "invalid-goal",
-		Phase:      "run_process",
-		Message:    "exit status 2",
-		ExitCode:   2,
-		StdoutTail: "primary only",
-		StderrTail: "invalid goal syntax",
-		HomeDir:    "/tmp/home",
-		LogDir:     "/tmp/logs",
-		BinaryPath: "/tmp/you",
+		Scenario:        "invalid-goal",
+		Phase:           "run_process",
+		Message:         "exit status 2",
+		ExitCode:        2,
+		StdoutTail:      "primary only",
+		StderrTail:      "invalid goal syntax",
+		HomeDir:         "/tmp/home",
+		LogDir:          "/tmp/logs",
+		ProcessBoundary: "root.BuildProcess",
 	}
 
 	got := failure.Error()

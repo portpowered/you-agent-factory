@@ -37,7 +37,7 @@ func TestPackagedTournamentRunsCompetitorsAndJudgeThroughPersistentACPStdio(t *t
 		},
 	})
 	factory := support.GetJSON[factoryapi.Factory](t, server.URL()+"/factory-sessions/~default/factory")
-	workflowFile := filepath.Join(factoryDir, "scripts", "tournament.workflow.js")
+	javascript := factory.Orchestrator.Javascript
 	args := map[string]any{
 		"request": "propose a launch strategy", "rounds": 1,
 		"executorProvider": "ACP", "modelProvider": "cursor-acp",
@@ -46,7 +46,11 @@ func TestPackagedTournamentRunsCompetitorsAndJudgeThroughPersistentACPStdio(t *t
 	request := factoryapi.FactorySessionExecutionRequest{
 		RequestId: "packaged-tournament-acp-stdio",
 		Source: factoryapi.FactorySessionExecutionSource{
-			Kind: factoryapi.FactorySessionExecutionSourceKindWorkflowFile, WorkflowFile: &workflowFile,
+			Kind: factoryapi.FactorySessionExecutionSourceKindInlineWorkflow,
+			InlineWorkflow: &factoryapi.FactorySessionExecutionInlineWorkflow{
+				Dialect: javascript.Dialect, Entrypoint: javascript.Entrypoint,
+				InlineSource: *javascript.InlineSource, Metadata: javascript.Metadata,
+			},
 		},
 		Args: &args, Orchestrator: factory.Orchestrator,
 	}

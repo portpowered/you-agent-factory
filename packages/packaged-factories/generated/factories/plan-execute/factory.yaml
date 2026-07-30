@@ -1,18 +1,18 @@
 description:
     type: LOCALIZABLE_ASSET
-    value: Writes a Markdown and JSON PRD, prepares an isolated worktree, and executes the PRD through implementation, review, CI, and merge.
+    value: Writes a Markdown and JSON PRD for a project request, then executes that plan in the current workspace.
 examples:
     - args:
         request: Implement and verify the requested feature
       description:
         type: LOCALIZABLE_ASSET
-        value: Plan and deliver a feature through an isolated worktree.
-      name: deliver-feature
+        value: Produce a durable PRD and implement it in the current repository.
+      name: plan-and-implement
 id: builtin-plan-execute
 invocationReturn:
     policy: EXPLICIT
     terminalState: complete
-    workTypeName: idea
+    workTypeName: planned-request
 invocationSignature:
     parameters:
         - bindings:
@@ -20,369 +20,262 @@ invocationSignature:
               position: 1
             - kind: STDIN
             - kind: NAMED
-          description: Project request to plan and deliver.
+          description: Project request to investigate, express as a complete PRD, and implement in the current workspace.
           externalName: to
           name: request
           required: true
         - bindings:
             - kind: NAMED
-          description: Safe branch and worktree identity.
-          externalName: branch-name
-          name: branchName
-        - bindings:
-            - kind: NAMED
           defaultValues:
             - ""
-          description: Model provider for planning and review; omitted values use operator defaults.
+          description: Optional model provider override for the planner; when omitted, the operator's default provider is used.
           externalName: planner-provider
           name: plannerProvider
         - bindings:
             - kind: NAMED
           defaultValues:
             - ""
-          description: Model for planning and review; omitted values use operator defaults.
+          description: Optional model override for the planner; when omitted, the operator's default model is used.
           externalName: planner-model
           name: plannerModel
         - bindings:
             - kind: NAMED
           defaultValues:
             - ""
-          description: Model provider for implementation; omitted values use operator defaults.
+          description: Optional model provider override for the executor; when omitted, the operator's default provider is used.
           externalName: executor-provider
           name: executorProvider
         - bindings:
             - kind: NAMED
           defaultValues:
             - ""
-          description: Model for implementation; omitted values use operator defaults.
+          description: Optional model override for the executor; when omitted, the operator's default model is used.
           externalName: executor-model
           name: executorModel
-        - bindings:
-            - kind: NAMED
-          defaultValues:
-            - ""
-          description: Model provider for final review; omitted values use operator defaults.
-          externalName: reviewer-provider
-          name: reviewerProvider
-        - bindings:
-            - kind: NAMED
-          defaultValues:
-            - ""
-          description: Model for final review; omitted values use operator defaults.
-          externalName: reviewer-model
-          name: reviewerModel
 name: plan-execute
 resources:
-    - capacity: 8
-      name: delivery-slots
     - capacity: 1
-      name: planner-slot
-supportingFiles:
-    bundledFiles:
-        - content:
-            encoding: utf-8
-            inline: |
-                #!/usr/bin/env python3
-                """Prepare the isolated PRD worktree used by @you/plan-execute."""
-                import json
-                import re
-                import shutil
-                import subprocess
-                import sys
-                from pathlib import Path
-
-                SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,79}$")
-
-                def git(root, *args):
-                    result = subprocess.run(["git", *args], cwd=root, text=True, capture_output=True)
-                    if result.returncode:
-                        raise RuntimeError(result.stderr.strip() or result.stdout.strip())
-                    return result.stdout.strip()
-
-                def main():
-                    if len(sys.argv) not in (2, 3) or not SAFE_NAME.fullmatch(sys.argv[1]) or ".." in sys.argv[1]:
-                        raise RuntimeError("a safe PRD/worktree name is required")
-                    name = sys.argv[1]
-                    branch = sys.argv[2].strip() if len(sys.argv) == 3 else ""
-                    if not branch:
-                        branch = name
-                    if not SAFE_NAME.fullmatch(branch) or ".." in branch:
-                        raise RuntimeError("a safe branch name is required")
-                    root = Path(git(None, "rev-parse", "--show-toplevel"))
-                    source = root / "tasks" / "todo" / f"{name}.json"
-                    markdown = source.with_suffix(".md")
-                    if not source.is_file() or not markdown.is_file():
-                        raise RuntimeError(f"matching Markdown and JSON PRDs are required for {name}")
-                    document = json.loads(source.read_text(encoding="utf-8"))
-                    if not isinstance(document.get("stories"), list) or not document["stories"]:
-                        raise RuntimeError("PRD JSON must contain non-empty stories")
-                    worktree = root / ".claude" / "worktrees" / name.replace("/", "-")
-                    branch_exists = subprocess.run(["git", "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"], cwd=root).returncode == 0
-                    if not (worktree / ".git").exists():
-                        worktree.parent.mkdir(parents=True, exist_ok=True)
-                        args = ["worktree", "add", str(worktree), branch] if branch_exists else ["worktree", "add", "-b", branch, str(worktree), "HEAD"]
-                        git(root, *args)
-                    shutil.copy2(source, worktree / "prd.json")
-                    shutil.copy2(markdown, worktree / "prd.md")
-                    (worktree / "progress.txt").touch(exist_ok=True)
-                    print(json.dumps({"status":"ready","branch":branch,"worktree":str(worktree)}))
-
-                if __name__ == "__main__":
-                    try:
-                        main()
-                    except Exception as error:
-                        print(f"workspace setup failed: {error}", file=sys.stderr)
-                        raise SystemExit(1)
-          id: factory/scripts/setup-workspace.py
-          targetPath: factory/scripts/setup-workspace.py
-          type: SCRIPT
+      name: plan-execute-agent-slot
 workTypes:
     - handlingBehavior:
         - DEFAULT
-      name: idea
+      name: planned-request
       states:
         - name: init
           type: INITIAL
-        - name: to-complete
+        - name: planned
           type: PROCESSING
-        - name: complete
-          type: TERMINAL
-        - name: failed
-          type: FAILED
-    - name: plan
-      states:
-        - name: init
-          type: INITIAL
-        - name: complete
-          type: TERMINAL
-        - name: failed
-          type: FAILED
-    - name: task
-      states:
-        - name: init
-          type: INITIAL
-        - name: in-review
-          type: PROCESSING
-        - name: to-complete
-          type: PROCESSING
-        - name: complete
-          type: TERMINAL
-        - name: failed
-          type: FAILED
-    - name: review
-      states:
-        - name: init
-          type: INITIAL
         - name: complete
           type: TERMINAL
         - name: failed
           type: FAILED
 workers:
     - body: |
-        Create both `tasks/todo/{{ (index .Inputs 0).Name }}.md` and
-        `tasks/todo/{{ (index .Inputs 0).Name }}.json` for this request: ${request}.
-        The Work name is `{{ (index .Inputs 0).Name }}` and must be used exactly for
-        those filenames. The invocation-supplied branch identity is
-        `${branchName}`. When it is non-empty, record that exact safe value as
-        `branchName`; otherwise derive a safe, unique branch name from the request.
+        You are the planning stage of a two-stage plan-and-execute workflow. Assume you
+        have no prior knowledge of the repository, the request, its conventions, or its
+        current state beyond what is available in the working directory and the Work
+        payload below. Your only job in this stage is to investigate and write a plan;
+        do not implement product changes.
 
-        The Markdown PRD must cover context, goals, non-goals, technical design,
-        vertically sliced stories, behavioral acceptance criteria, tests, and a
-        delivery loop. The JSON PRD must contain project, branchName, description,
-        context, project acceptance criteria, ordered stories with stable sequential
-        IDs and priorities, `passes: false`, and empty notes. End with `<COMPLETE>`
-        only after both files exist and agree.
+        First read the repository's contributor instructions and architecture,
+        standards, configuration, relevant source, existing tests, and current working
+        tree status. Preserve all pre-existing user changes. Resolve ambiguity by
+        examining the code and documenting bounded assumptions. The plan must be
+        specific enough that a different executor with zero conversational context can
+        implement it without asking what you meant.
+
+        Original request:
+        ${request}
+
+        Current Work name:
+        {{ (index .Inputs 0).Name }}
+
+        Create both of these files, using the Work name exactly and creating the
+        directory if needed:
+
+        - `tasks/todo/{{ (index .Inputs 0).Name }}.md`
+        - `tasks/todo/{{ (index .Inputs 0).Name }}.json`
+
+        The Markdown PRD must explain the observed repository context, problem, goals,
+        non-goals, user-visible behavior, technical design, affected boundaries,
+        dependencies, risks, migration or compatibility concerns, and verification
+        strategy. Decompose delivery into ordered, vertically sliced stories. For each
+        story, identify exact likely files or package boundaries, behavioral acceptance
+        criteria, failure cases, and tests. Include a final checklist that covers
+        focused tests, functional tests, generation or contract checks, lint/static
+        analysis, and documentation when applicable.
+
+        The JSON PRD must be valid JSON and contain at least `project`, `description`,
+        `context`, `acceptanceCriteria`, and an ordered `stories` array. Every story
+        must have a stable sequential `id`, numeric `priority`, standalone description,
+        behavioral `acceptanceCriteria`, explicit `tests`, `passes: false`, and an empty
+        `notes` value. The JSON and Markdown files must describe the same plan.
+
+        Read both files back before finishing. End with `<COMPLETE>` only after they
+        exist, parse correctly, agree with the repository evidence, and give the next
+        agent all context required to execute from scratch.
       model: ${plannerModel}
       modelProvider: ${plannerProvider}
       name: prd-planner
       skipPermissions: true
       stopToken: <COMPLETE>
       type: AGENT_WORKER
-    - args:
-        - factory/scripts/setup-workspace.py
-        - '{{ (index .Inputs 0).Name }}'
-        - ${branchName}
-      command: python
-      name: workspace-setup
-      type: SCRIPT_WORKER
     - body: |
-        Read `prd.json`, `prd.md`, and `progress.txt`. Implement only the highest
-        priority story whose `passes` value is false. Run proportional tests, append
-        evidence and reusable learnings to `progress.txt`, and mark the story passed
-        only after its behavioral criteria hold. Commit reviewable product changes and
-        continue until every story passes, CI is terminal and green, blocking feedback
-        and conflicts are resolved, and the pull request is actually merged. Return
-        `<CONTINUE>` while work remains and `<COMPLETE>` only at that terminal state.
+        You are the execution stage of a two-stage plan-and-execute workflow. You have
+        no access to the planner's conversation and must treat the repository and the
+        two PRD files as your complete source of truth. Work directly in the current
+        workspace. Do not create a worktree, add a review stage, run a merge workflow,
+        or wait for another agent to finish the implementation.
+
+        Original request:
+        ${request}
+
+        Current Work name:
+        {{ (index .Inputs 0).Name }}
+
+        Before changing anything, read all repository contributor instructions, inspect
+        the working tree, and read these complete files:
+
+        - `tasks/todo/{{ (index .Inputs 0).Name }}.md`
+        - `tasks/todo/{{ (index .Inputs 0).Name }}.json`
+
+        Validate that the PRDs agree and that the JSON is well formed. Then execute the
+        entire plan in priority order. Re-check repository evidence when the plan's
+        assumptions are stale, and make the smallest coherent adjustment needed while
+        recording the reason in the affected story's `notes`. Preserve unrelated user
+        changes and follow existing package, API-generation, documentation, and testing
+        conventions.
+
+        For every story, implement the behavior, exercise its stated positive and
+        failure cases, and run proportional focused tests before setting `passes` to
+        true. Record concise verification evidence in `notes`. After all stories pass,
+        run the broadest relevant repository checks from the PRD and inspect the final
+        diff for accidental or generated drift. Never mark a story passed merely
+        because code was written, and never hide a failing check.
+
+        Return a self-contained delivery summary listing implemented behavior, files or
+        boundaries changed, verification commands and outcomes, and any genuine
+        remaining limitations. End with `<COMPLETE>` only when every story is marked
+        passed and the requested implementation is complete.
       model: ${executorModel}
       modelProvider: ${executorProvider}
       name: prd-executor
       skipPermissions: true
       stopToken: <COMPLETE>
       type: AGENT_WORKER
-    - body: |
-        Review `prd.json`, `prd.md`, `progress.txt`, the full diff, test evidence,
-        required CI, and pull-request conversation. Reject with actionable feedback
-        when any acceptance criterion, test, feedback item, conflict, or merge remains.
-        Return `<COMPLETE>` only after the PR is actually merged.
-      model: ${reviewerModel}
-      modelProvider: ${reviewerProvider}
-      name: prd-reviewer
-      skipPermissions: true
-      stopToken: <COMPLETE>
-      type: AGENT_WORKER
 workstations:
     - body: |
-        Create both `tasks/todo/{{ (index .Inputs 0).Name }}.md` and
-        `tasks/todo/{{ (index .Inputs 0).Name }}.json` for this request: ${request}.
-        The Work name is `{{ (index .Inputs 0).Name }}` and must be used exactly for
-        those filenames. The invocation-supplied branch identity is
-        `${branchName}`. When it is non-empty, record that exact safe value as
-        `branchName`; otherwise derive a safe, unique branch name from the request.
+        You are the planning stage of a two-stage plan-and-execute workflow. Assume you
+        have no prior knowledge of the repository, the request, its conventions, or its
+        current state beyond what is available in the working directory and the Work
+        payload below. Your only job in this stage is to investigate and write a plan;
+        do not implement product changes.
 
-        The Markdown PRD must cover context, goals, non-goals, technical design,
-        vertically sliced stories, behavioral acceptance criteria, tests, and a
-        delivery loop. The JSON PRD must contain project, branchName, description,
-        context, project acceptance criteria, ordered stories with stable sequential
-        IDs and priorities, `passes: false`, and empty notes. End with `<COMPLETE>`
-        only after both files exist and agree.
+        First read the repository's contributor instructions and architecture,
+        standards, configuration, relevant source, existing tests, and current working
+        tree status. Preserve all pre-existing user changes. Resolve ambiguity by
+        examining the code and documenting bounded assumptions. The plan must be
+        specific enough that a different executor with zero conversational context can
+        implement it without asking what you meant.
+
+        Original request:
+        ${request}
+
+        Current Work name:
+        {{ (index .Inputs 0).Name }}
+
+        Create both of these files, using the Work name exactly and creating the
+        directory if needed:
+
+        - `tasks/todo/{{ (index .Inputs 0).Name }}.md`
+        - `tasks/todo/{{ (index .Inputs 0).Name }}.json`
+
+        The Markdown PRD must explain the observed repository context, problem, goals,
+        non-goals, user-visible behavior, technical design, affected boundaries,
+        dependencies, risks, migration or compatibility concerns, and verification
+        strategy. Decompose delivery into ordered, vertically sliced stories. For each
+        story, identify exact likely files or package boundaries, behavioral acceptance
+        criteria, failure cases, and tests. Include a final checklist that covers
+        focused tests, functional tests, generation or contract checks, lint/static
+        analysis, and documentation when applicable.
+
+        The JSON PRD must be valid JSON and contain at least `project`, `description`,
+        `context`, `acceptanceCriteria`, and an ordered `stories` array. Every story
+        must have a stable sequential `id`, numeric `priority`, standalone description,
+        behavioral `acceptanceCriteria`, explicit `tests`, `passes: false`, and an empty
+        `notes` value. The JSON and Markdown files must describe the same plan.
+
+        Read both files back before finishing. End with `<COMPLETE>` only after they
+        exist, parse correctly, agree with the repository evidence, and give the next
+        agent all context required to execute from scratch.
       inputs:
         - state: init
-          workType: idea
-      name: plan-prd
+          workType: planned-request
+      name: plan-request
       onFailure:
         - state: failed
-          workType: idea
+          workType: planned-request
       outputs:
-        - state: to-complete
-          workType: idea
-        - state: init
-          workType: plan
+        - state: planned
+          workType: planned-request
       promptFile: prompts/planner.md
       resources:
         - capacity: 1
-          name: planner-slot
+          name: plan-execute-agent-slot
       type: AGENT_RUN
       workPropagation:
         mode: PRESERVE_INPUT
       worker: prd-planner
-    - inputs:
-        - state: init
-          workType: plan
-      name: setup-workspace
+    - body: |
+        You are the execution stage of a two-stage plan-and-execute workflow. You have
+        no access to the planner's conversation and must treat the repository and the
+        two PRD files as your complete source of truth. Work directly in the current
+        workspace. Do not create a worktree, add a review stage, run a merge workflow,
+        or wait for another agent to finish the implementation.
+
+        Original request:
+        ${request}
+
+        Current Work name:
+        {{ (index .Inputs 0).Name }}
+
+        Before changing anything, read all repository contributor instructions, inspect
+        the working tree, and read these complete files:
+
+        - `tasks/todo/{{ (index .Inputs 0).Name }}.md`
+        - `tasks/todo/{{ (index .Inputs 0).Name }}.json`
+
+        Validate that the PRDs agree and that the JSON is well formed. Then execute the
+        entire plan in priority order. Re-check repository evidence when the plan's
+        assumptions are stale, and make the smallest coherent adjustment needed while
+        recording the reason in the affected story's `notes`. Preserve unrelated user
+        changes and follow existing package, API-generation, documentation, and testing
+        conventions.
+
+        For every story, implement the behavior, exercise its stated positive and
+        failure cases, and run proportional focused tests before setting `passes` to
+        true. Record concise verification evidence in `notes`. After all stories pass,
+        run the broadest relevant repository checks from the PRD and inspect the final
+        diff for accidental or generated drift. Never mark a story passed merely
+        because code was written, and never hide a failing check.
+
+        Return a self-contained delivery summary listing implemented behavior, files or
+        boundaries changed, verification commands and outcomes, and any genuine
+        remaining limitations. End with `<COMPLETE>` only when every story is marked
+        passed and the requested implementation is complete.
+      inputs:
+        - state: planned
+          workType: planned-request
+      name: execute-plan
       onFailure:
         - state: failed
-          workType: plan
+          workType: planned-request
       outputs:
         - state: complete
-          workType: plan
-        - state: init
-          workType: task
-      type: SCRIPT_RUN
-      worker: workspace-setup
-    - behavior: REPEATER
-      body: |
-        Read `prd.json`, `prd.md`, and `progress.txt`. Implement only the highest
-        priority story whose `passes` value is false. Run proportional tests, append
-        evidence and reusable learnings to `progress.txt`, and mark the story passed
-        only after its behavioral criteria hold. Commit reviewable product changes and
-        continue until every story passes, CI is terminal and green, blocking feedback
-        and conflicts are resolved, and the pull request is actually merged. Return
-        `<CONTINUE>` while work remains and `<COMPLETE>` only at that terminal state.
-      inputs:
-        - state: init
-          workType: task
-      name: process-prd-story
-      onContinue:
-        - state: init
-          workType: task
-      onFailure:
-        - state: failed
-          workType: task
-      onRejection:
-        - state: init
-          workType: task
-      outputs:
-        - state: in-review
-          workType: task
-        - state: init
-          workType: review
+          workType: planned-request
       promptFile: prompts/executor.md
       resources:
         - capacity: 1
-          name: delivery-slots
+          name: plan-execute-agent-slot
       type: AGENT_RUN
       worker: prd-executor
-      workingDirectory: .claude/worktrees/{{ (index .Inputs 0).Name }}
-    - body: |
-        Review `prd.json`, `prd.md`, `progress.txt`, the full diff, test evidence,
-        required CI, and pull-request conversation. Reject with actionable feedback
-        when any acceptance criterion, test, feedback item, conflict, or merge remains.
-        Return `<COMPLETE>` only after the PR is actually merged.
-      inputs:
-        - state: in-review
-          workType: task
-        - state: init
-          workType: review
-      name: review-prd
-      onFailure:
-        - state: failed
-          workType: task
-        - state: failed
-          workType: review
-      onRejection:
-        - state: init
-          workType: task
-      outputs:
-        - state: to-complete
-          workType: task
-        - state: complete
-          workType: review
-      promptFile: prompts/reviewer.md
-      resources:
-        - capacity: 1
-          name: delivery-slots
-      type: AGENT_RUN
-      worker: prd-reviewer
-      workingDirectory: .claude/worktrees/{{ (index .Inputs 0).Name }}
-    - inputs:
-        - guards:
-            - matchInput: task
-              type: SAME_NAME
-          state: to-complete
-          workType: idea
-        - state: to-complete
-          workType: task
-      name: complete-delivery
-      outputs:
-        - state: complete
-          workType: idea
-        - state: complete
-          workType: task
-      type: LOGICAL_MOVE
-      worker: ""
-    - guards:
-        - maxVisits: 50
-          type: VISIT_COUNT
-          workstation: process-prd-story
-      inputs:
-        - state: init
-          workType: task
-      name: executor-loop-breaker
-      outputs:
-        - state: failed
-          workType: task
-      type: LOGICAL_MOVE
-      worker: ""
-    - guards:
-        - maxVisits: 10
-          type: VISIT_COUNT
-          workstation: review-prd
-      inputs:
-        - state: in-review
-          workType: task
-      name: review-loop-breaker
-      outputs:
-        - state: failed
-          workType: task
-      type: LOGICAL_MOVE
-      worker: ""

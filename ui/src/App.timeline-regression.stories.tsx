@@ -1,4 +1,4 @@
-import { expect, fireEvent, userEvent, waitFor, within } from "storybook/test";
+import { expect, fireEvent, userEvent, within } from "storybook/test";
 
 import { App } from "./App";
 import {
@@ -7,9 +7,9 @@ import {
 } from "./components/dashboard/fixtures";
 import { semanticWorkflowDashboardSnapshot } from "./components/dashboard/test-fixtures";
 import { AgentBentoLayout } from "./features/bento/components/agent-bento";
+import { SessionControlsWidget } from "./features/bento/components/session-controls-widget";
 import { useExportDialogStore } from "./features/export/state/exportDialogStore";
 import { DashboardHeader } from "./features/header/components/dashboard-header";
-import { WorkTotalsWidget } from "./features/work-totals/components/work-totals-widget";
 import {
   activeStoryTrace,
   currentSelectionCard,
@@ -132,60 +132,48 @@ export const HeaderActionButtonsVerification = {
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
     try {
-      const toolbar = await canvas.findByRole("region", {
+      const header = await canvas.findByRole("region", {
         name: "dashboard summary",
       });
-      const exportButton = within(toolbar).getByRole("button", {
-        name: "Export PNG",
-      });
-      const sessionButton = within(toolbar).getByRole("button", {
-        name: "Open another session",
+      const languageButton = within(header).getByRole("button", {
+        name: "Change language",
       });
 
-      await expect(exportButton).toHaveAttribute(
+      await expect(languageButton).toHaveAttribute(
         "data-dashboard-header-action",
         "neutral",
       );
-      await expect(sessionButton).toHaveAttribute("aria-haspopup", "dialog");
       expect(
-        within(toolbar).queryByRole("button", {
-          name: "Return to current tick",
-        }),
+        within(header).queryByRole("slider", { name: "Timeline tick" }),
+      ).toBeNull();
+      expect(
+        within(header).queryByRole("button", { name: "Export PNG" }),
       ).toBeNull();
 
-      const slider = await canvas.findByRole<HTMLInputElement>("slider", {
-        name: "Timeline tick",
+      const controlsCard = await canvas.findByRole("article", {
+        name: "Session controls",
       });
+      const exportButton = within(controlsCard).getByRole("button", {
+        name: "Export PNG",
+      });
+      const slider = within(controlsCard).getByRole<HTMLInputElement>(
+        "slider",
+        {
+          name: "Timeline tick",
+        },
+      );
       fireEvent.change(slider, { target: { value: "2" } });
 
       await expect(await canvas.findByText("2/5")).toBeVisible();
-      sessionButton.focus();
-      await expect(sessionButton).toHaveFocus();
+      languageButton.focus();
+      await expect(languageButton).toHaveFocus();
       fireEvent.change(slider, { target: { value: "5" } });
       await expect(await canvas.findByText("5/5")).toBeVisible();
 
-      exportButton.focus();
-      await userEvent.keyboard("{Enter}");
-      const dialog = await within(canvasElement.ownerDocument.body).findByRole(
-        "dialog",
-        {
-          name: "Export factory",
-        },
+      await userEvent.click(exportButton);
+      await expect(useExportDialogStore.getState().isExportDialogOpen).toBe(
+        true,
       );
-      await expect(dialog).toBeVisible();
-
-      const cancelButton = within(dialog).getByRole("button", {
-        name: "Cancel",
-      });
-      cancelButton.focus();
-      await userEvent.keyboard("{Enter}");
-      await waitFor(() => {
-        expect(
-          within(canvasElement.ownerDocument.body).queryByRole("dialog", {
-            name: "Export factory",
-          }),
-        ).toBeNull();
-      });
     } finally {
       useExportDialogStore.setState({ isExportDialogOpen: false });
     }
@@ -199,19 +187,17 @@ function HeaderActionButtonsVerificationStory() {
       <AgentBentoLayout
         cards={[
           {
-            children: (
-              <WorkTotalsWidget snapshot={semanticWorkflowDashboardSnapshot} />
-            ),
-            id: "work-totals-verification",
-            widgetType: "workTotals",
+            children: <SessionControlsWidget />,
+            id: "session-controls-verification",
+            widgetType: "session-controls",
           },
         ]}
         layout={[
           {
-            h: 3,
-            id: "work-totals-verification",
+            h: 2,
+            id: "session-controls-verification",
             w: 12,
-            widgetType: "workTotals",
+            widgetType: "session-controls",
             x: 0,
             y: 0,
           },

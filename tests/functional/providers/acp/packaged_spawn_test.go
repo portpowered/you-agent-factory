@@ -39,7 +39,7 @@ func TestPackagedSpawnRunsPlannerChildrenAndMergerThroughPersistentACPStdio(t *t
 		},
 	})
 	factory := support.GetJSON[factoryapi.Factory](t, server.URL()+"/factory-sessions/~default/factory")
-	workflowFile := filepath.Join(factoryDir, "scripts", "spawn.workflow.js")
+	javascript := factory.Orchestrator.Javascript
 	args := map[string]any{
 		"request": "research the best places to travel", "count": 2,
 		"executorProvider": "ACP", "modelProvider": "cursor-acp",
@@ -47,7 +47,11 @@ func TestPackagedSpawnRunsPlannerChildrenAndMergerThroughPersistentACPStdio(t *t
 	request := factoryapi.FactorySessionExecutionRequest{
 		RequestId: "packaged-spawn-acp-stdio",
 		Source: factoryapi.FactorySessionExecutionSource{
-			Kind: factoryapi.FactorySessionExecutionSourceKindWorkflowFile, WorkflowFile: &workflowFile,
+			Kind: factoryapi.FactorySessionExecutionSourceKindInlineWorkflow,
+			InlineWorkflow: &factoryapi.FactorySessionExecutionInlineWorkflow{
+				Dialect: javascript.Dialect, Entrypoint: javascript.Entrypoint,
+				InlineSource: *javascript.InlineSource, Metadata: javascript.Metadata,
+			},
 		},
 		Args: &args, Orchestrator: factory.Orchestrator,
 	}

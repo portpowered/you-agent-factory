@@ -284,7 +284,6 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
     name: "U",
     exact: true,
   });
-  const slider = page.getByRole("slider", { name: "Timeline tick" });
   const sessionTabs = page.getByRole("navigation", {
     name: "factory sessions",
   });
@@ -293,24 +292,27 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
   const languageButton = page.getByRole("button", {
     name: "Change language",
   });
-  const sessionStreamToggle = page.getByRole("button", {
-    name: /(Pause|Resume) .* updates/,
-  });
-  const exportButton = page.getByRole("button", { name: "Export PNG" });
   const globalActions = page.getByRole("group", {
     name: "Dashboard actions",
   });
-  const timelineStatus = page.getByText(/^\d+\/\d+$/);
 
   await expectVisible(heading, "Dashboard heading");
   await expectVisible(sessionTabs, "Session tabs navigation");
   await expectVisible(rootTab, "Default session tab");
-  await expectVisible(slider, "Timeline slider");
-  await expectVisible(timelineStatus, "Timeline status");
   await expectVisible(languageButton, "Language menu button");
-  await expectVisible(sessionStreamToggle, "Dashboard session stream toggle");
-  await expectVisible(exportButton, "Export PNG button");
   await expectVisible(globalActions, "Global header actions");
+
+  if ((await page.getByRole("slider", { name: "Timeline tick" }).count()) > 0) {
+    throw new Error("Dashboard header still rendered the timeline slider.");
+  }
+  if (
+    (await page
+      .getByRole("button", { name: /(Pause|Resume) .* updates/ })
+      .count()) > 0 ||
+    (await page.getByRole("button", { name: "Export PNG" }).count()) > 0
+  ) {
+    throw new Error("Dashboard header still rendered session controls.");
+  }
 
   if ((await page.getByRole("status", { name: /Event stream/i }).count()) > 0) {
     throw new Error(
@@ -342,10 +344,6 @@ export async function verifyDashboardHeader(page, _dialog, viewport) {
     await expectOrderedLeftEdges(
       [heading, sessionTabs, languageButton],
       "Dashboard header desktop primary-row controls",
-    );
-    await expectOrderedLeftEdges(
-      [slider, timelineStatus],
-      "Dashboard header desktop timeline controls",
     );
   }
   await expectNoHorizontalOverflow(

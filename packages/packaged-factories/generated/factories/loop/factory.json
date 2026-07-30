@@ -151,12 +151,12 @@
   ],
   "workers": [
     {
-      "body": "Preserve the controller request and emit one scheduled execution.",
+      "body": "At each configured trigger, preserve the complete controller request and create exactly one traceable scheduled execution without rewriting, summarizing, or losing its context.",
       "name": "loop-trigger",
       "type": "AGENT_WORKER"
     },
     {
-      "body": "Execute the scheduled request exactly once and report the result.",
+      "body": "Assume zero prior context. Read the complete scheduled request, inspect any relevant workspace instructions and current state, execute it exactly once for this trigger, verify the outcome, and return a timestamp-independent self-contained result.",
       "model": "${executorModel}",
       "modelProvider": "${executorProvider}",
       "name": "loop-executor",
@@ -198,7 +198,7 @@
       "worker": "loop-trigger"
     },
     {
-      "body": "Execute this recurring request exactly once.\n\n${request}",
+      "body": "This is one isolated occurrence of a recurring request. You have no memory of prior triggers unless their results are explicitly present in the Work input. Read the complete request below, inspect current workspace instructions and state when applicable, and execute it exactly once. Do not create your own timer or loop. Preserve unrelated changes, verify the outcome for this occurrence, and return a self-contained result that states what was done, what evidence was observed, and what could not be completed.\n\n${request}",
       "inputs": [
         {
           "state": "init",

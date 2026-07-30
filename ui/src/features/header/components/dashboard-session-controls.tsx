@@ -1,30 +1,30 @@
+import { DashboardActionButton } from "../../../components/ui/dashboard-action-button";
 import { getExportDialogMessages } from "../../export/messages/export-dialog";
 import type { DashboardSessionTabsState } from "../hooks/use-dashboard-session-tabs-state";
 import { sessionStreamToggleLabel } from "../lib/dashboard-session-tabs-utils";
 import { getHeaderControlsMessages } from "../messages/header-controls";
-import { DashboardHeaderActionButton } from "./dashboard-header-action-button";
 
-interface DashboardHeaderSessionControlsProps {
+interface DashboardSessionControlsProps {
   isExportDialogOpen: boolean;
   locale: string;
   onOpenExportDialog: () => void;
   sessionTabsState: DashboardSessionTabsState;
 }
 
-export function DashboardHeaderSessionControls({
+export function DashboardSessionControls({
   isExportDialogOpen,
   locale,
   onOpenExportDialog,
   sessionTabsState,
-}: DashboardHeaderSessionControlsProps) {
+}: DashboardSessionControlsProps) {
   const activeSession = sessionTabsState.activeSession;
   const exportMessages = getExportDialogMessages(locale);
   const headerMessages = getHeaderControlsMessages(locale);
 
   return (
-    <div className="ml-auto flex shrink-0 items-center gap-1.5 pr-2">
+    <div className="ml-auto flex shrink-0 items-center gap-1.5">
       {activeSession ? (
-        <DashboardHeaderActionButton
+        <DashboardActionButton
           aria-label={sessionStreamToggleLabel(
             activeSession,
             sessionTabsState.isSessionStreamPaused(activeSession.id),
@@ -33,25 +33,27 @@ export function DashboardHeaderSessionControls({
           aria-pressed={sessionTabsState.isSessionStreamPaused(
             activeSession.id,
           )}
-          compact
+          iconOnly
           onClick={() => {
             sessionTabsState.toggleSessionStreamPaused(activeSession.id);
           }}
+          tone="outline"
         >
           <SessionStreamToggleIcon
             paused={sessionTabsState.isSessionStreamPaused(activeSession.id)}
           />
-        </DashboardHeaderActionButton>
+        </DashboardActionButton>
       ) : null}
-      <DashboardHeaderActionButton
+      <DashboardActionButton
         aria-expanded={isExportDialogOpen}
         aria-haspopup="dialog"
         aria-label={exportMessages.triggerLabel}
-        compact
+        iconOnly
         onClick={onOpenExportDialog}
+        tone="outline"
       >
         <ExportButtonIcon />
-      </DashboardHeaderActionButton>
+      </DashboardActionButton>
     </div>
   );
 }

@@ -9,13 +9,13 @@ BUN_BIN     := $(shell where.exe bun >NUL 2>NUL && echo bun)
 else
 BUN_BIN     := $(shell command -v bun 2>/dev/null)
 endif
-BUN_INSTALL := $(BUN_BIN) install --frozen-lockfile
+BUN_INSTALL := $(BUN_BIN) install
 BUN_PACKAGE_DIRS := ui/packages/components ui
 UI_SCRIPT   := $(if $(BUN_BIN),$(BUN_BIN) run,$(NPM) run)
 UI_EXEC     := $(if $(BUN_BIN),$(BUN_BIN) x,$(NPM) exec)
-UI_INSTALL  := $(if $(BUN_BIN),$(BUN_BIN) install --frozen-lockfile,$(NPM) install --no-package-lock)
+UI_INSTALL  := $(if $(BUN_BIN),$(BUN_BIN) install,$(NPM) install --no-package-lock)
 FUNCTIONAL_DEFAULT_PACKAGES := ./tests/functional/...
-FUNCTIONAL_DEFAULT_JOBS ?= 2
+FUNCTIONAL_DEFAULT_JOBS ?= 8
 UNIT_DEFAULT_JOBS ?= 32
 FUNCTIONAL_LONG_TAGS ?= functionallong
 FUNCTIONAL_LONG_PACKAGES := ./tests/functional/...
@@ -39,8 +39,8 @@ CONFIG_CONTRACT_SMOKE_TIMEOUT ?= 120s
 JAVASCRIPT_RUNTIME_REGRESSION_TESTS ?= ^(TestCallBehavior_WorkflowFinalInventoryMatchesExecution|TestCallBehavior_AgentRunInventoryMatchesExecution|TestRun_ProgressPrimitives_EmitsOrderedRuntimeRecords|TestRun_PolicyDeniedChildOperations_ReturnStableDiagnostics|TestCallBehavior_WorkflowResumeStateInventoryMatchesExecution)$$
 RESPONSE_STREAM_STRESS_SMOKE_TEST := TestSessionResponseEventStore_Backpressure
 RESPONSE_STREAM_STRESS_SMOKE_TIMEOUT ?= 120s
-BUILT_CLI_ACCEPTANCE_PACKAGES := ./tests/functional/acceptance ./tests/functional/transport/cli/process
-BUILT_CLI_ACCEPTANCE_TIMEOUT ?= 300s
+ROOT_PROCESS_ACCEPTANCE_PACKAGES := ./tests/functional/acceptance ./tests/functional/transport/cli/process
+ROOT_PROCESS_ACCEPTANCE_TIMEOUT ?= 300s
 
 ifeq ($(OS),Windows_NT)
 	BINARY_NAME := you.exe
@@ -122,7 +122,7 @@ endef
 .PHONY: test-functional test-functional-long test-backend-functional functional-boundary-check functional-test-viz
 .PHONY: test-ui-browser-integration test-ui-storybook-integration test-ui-durable-session-real-backend test-ui-performance ui-component-test
 .PHONY: test-unit-coverage test-functional-coverage test-backend-coverage test-coverage-go test-race
-.PHONY: test-backend-verification test-built-cli-acceptance long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval
+.PHONY: test-backend-verification test-root-process-acceptance long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval
 
 .PHONY: verify-fast verify-pr verify-pr-inference verify-extended verify-build verify-lint verify-api
 .PHONY: verify-build-contracts verify-tests run-concurrent-ui-verification-lanes verify test-ui-coverage
@@ -425,9 +425,8 @@ test-release:
 test-functional-long:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) $(FUNCTIONAL_LONG_PACKAGES) -count=1 -timeout $(GO_TEST_TIMEOUT)
 
-test-built-cli-acceptance:
-	$(MAKE) build
-	$(GO) test $(BUILT_CLI_ACCEPTANCE_PACKAGES) -count=1 -timeout $(BUILT_CLI_ACCEPTANCE_TIMEOUT)
+test-root-process-acceptance:
+	$(GO) test $(ROOT_PROCESS_ACCEPTANCE_PACKAGES) -count=1 -timeout $(ROOT_PROCESS_ACCEPTANCE_TIMEOUT)
 
 verify-fast:
 	$(info Running fast verification tier: typecheck + MCP contract boundary + short UI/unit suite + short Go suite)
@@ -646,12 +645,12 @@ run-concurrent-ui-verification-lanes:
 	./scripts/ci/run-concurrent-ui-verification-lanes.sh
 
 verify-tests:
-	$(info Running required CI-equivalent test lanes: maintenance + integration + contract + release surface + built-CLI S24 acceptance + concurrent UI coverage/browser integration + Storybook + UI backend integration + independent backend unit and functional coverage)
+	$(info Running required CI-equivalent test lanes: maintenance + integration + contract + release surface + root-process S24 acceptance + concurrent UI coverage/browser integration + Storybook + UI backend integration + independent backend unit and functional coverage)
 	$(call run_verification_step,test-maintenance,Backend Maintenance lane)
 	$(call run_verification_step,test-integration,Backend Integration lane)
 	$(call run_verification_step,test-contract,Backend Contract lane)
 	$(call run_verification_step,release-surface-smoke,Release surface smoke lane)
-	$(call run_verification_step,test-built-cli-acceptance,Built-CLI S24 acceptance lane)
+	$(call run_verification_step,test-root-process-acceptance,Root-process S24 acceptance lane)
 	$(call run_verification_step,run-concurrent-ui-verification-lanes,Concurrent UI Coverage + UI Browser Integration lanes)
 	$(call run_verification_step,test-ui-storybook-integration,UI Storybook Integration lane)
 	$(call run_verification_step,test-ui-durable-session-real-backend,UI Backend Integration lane)
@@ -687,7 +686,7 @@ ci-verify-tests: ci-verify-build-contracts
 	$(MAKE) test-integration
 	$(MAKE) test-contract
 	$(MAKE) release-surface-smoke
-	$(MAKE) test-built-cli-acceptance
+	$(MAKE) test-root-process-acceptance
 	$(MAKE) run-concurrent-ui-verification-lanes
 	$(MAKE) test-unit-coverage
 	$(MAKE) test-functional-coverage
@@ -858,4 +857,3 @@ ui-public-package-publish-prepare:
 clean:
 	$(GO) clean ./...
 	rm -rf $(BIN_DIR)
-

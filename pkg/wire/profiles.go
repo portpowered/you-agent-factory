@@ -385,6 +385,7 @@ func provideDurableExecutionFactory(loadOperatorConfig operatorsettings.ConfigLo
 	return func(
 		definition factorydefinitions.RuntimeOpeningRequest,
 		session factorysessions.SessionRuntimeOpeningRequest,
+		defaults operatorsettings.ResolvedDefaults,
 		root factorysessionwire.RuntimeRoot,
 		clock factoryruntime.Clock,
 		provider workers.Provider,
@@ -396,6 +397,7 @@ func provideDurableExecutionFactory(loadOperatorConfig operatorsettings.ConfigLo
 			loadOperatorConfig,
 			definition,
 			session,
+			defaults,
 			root,
 			clock,
 			provider,

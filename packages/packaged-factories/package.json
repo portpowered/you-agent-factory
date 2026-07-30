@@ -13,7 +13,7 @@
   "files": [
     "README.md",
     "LICENSE.md",
-    "factories/goal/factory.json",
+    "factories",
     "generated/manifest.json",
     "generated/factories",
     "schemas/factory.schema.json",

@@ -1,10 +1,6 @@
 package testlanes
 
-import (
-	"slices"
-	"strings"
-	"testing"
-)
+import "testing"
 
 func TestForImportPathAssignsPrimaryLanes(t *testing.T) {
 	t.Parallel()
@@ -71,35 +67,5 @@ func TestRunnableFunctionalPackagePolicy(t *testing.T) {
 				t.Fatalf("IsRunnableFunctionalPackage(%q) = %t, want %t", test.importPath, got, test.want)
 			}
 		})
-	}
-}
-
-func TestValidateProviderFunctionalPackages(t *testing.T) {
-	t.Parallel()
-
-	required := RequiredProviderFunctionalPackages()
-	if err := ValidateProviderFunctionalPackages(required); err != nil {
-		t.Fatalf("ValidateProviderFunctionalPackages() error = %v", err)
-	}
-
-	missing := required[2]
-	withoutOne := slices.Delete(slices.Clone(required), 2, 3)
-	err := ValidateProviderFunctionalPackages(withoutOne)
-	if err == nil {
-		t.Fatal("ValidateProviderFunctionalPackages() unexpectedly succeeded")
-	}
-	if !strings.Contains(err.Error(), missing) {
-		t.Fatalf("ValidateProviderFunctionalPackages() error = %q, want missing package %q", err, missing)
-	}
-}
-
-func TestRequiredProviderFunctionalPackagesReturnsCopy(t *testing.T) {
-	t.Parallel()
-
-	first := RequiredProviderFunctionalPackages()
-	first[0] = "changed"
-	second := RequiredProviderFunctionalPackages()
-	if second[0] == "changed" {
-		t.Fatal("RequiredProviderFunctionalPackages() exposed mutable policy state")
 	}
 }

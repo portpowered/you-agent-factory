@@ -99,29 +99,29 @@ workTypes:
         - name: failed
           type: FAILED
 workers:
-    - body: 'Return exactly one plain-text label: small, medium, or large.'
+    - body: 'Assess a request from first principles using scope, ambiguity, dependency count, risk, and verification cost. Return exactly one plain-text label: small, medium, or large.'
       model: ${classifierModel}
       modelProvider: ${classifierProvider}
       name: complexity-classifier
       type: AGENT_WORKER
-    - body: Execute a small request directly and concisely.
+    - body: Assume no prior context. Read the complete request and relevant workspace instructions, complete the bounded low-risk task, verify the outcome, and return a concise self-contained result.
       model: ${smallModel}
       modelProvider: ${smallProvider}
       name: small-executor
       type: AGENT_WORKER
-    - body: Execute a medium request with appropriate analysis and verification.
+    - body: Assume no prior context. Investigate the request and relevant workspace before acting, implement the multi-step outcome while preserving unrelated work, test positive and failure behavior, and return a self-contained result with evidence.
       model: ${mediumModel}
       modelProvider: ${mediumProvider}
       name: medium-executor
       type: AGENT_WORKER
-    - body: Execute a large request with careful decomposition and verification.
+    - body: Assume no prior context. Reconstruct the problem from the request and workspace, inspect architecture and constraints, decompose and complete the high-risk work coherently, run proportional broad verification, and report outcomes, evidence, and limitations.
       model: ${largeModel}
       modelProvider: ${largeProvider}
       name: large-executor
       type: AGENT_WORKER
 workstations:
     - body: |-
-        Classify the request as small, medium, or large. Return only that label.
+        You have no prior context. Classify the complete request below by total execution complexity, not by its word count. Use `small` for one bounded, low-risk action with obvious verification; `medium` for several related steps or moderate ambiguity/risk; and `large` for broad architecture, many dependencies, substantial unknowns, or costly verification. Return only one lowercase label: small, medium, or large.
 
         Request:
         ${request}
@@ -150,7 +150,7 @@ workstations:
         mode: PRESERVE_INPUT
       worker: complexity-classifier
     - body: |-
-        Complete this small request.
+        Begin with zero context. Read the entire small request below. If a workspace is involved, inspect its contributor instructions and the exact relevant files before acting. Complete the bounded outcome, preserve unrelated changes, run the narrow verification that proves it works, and return a self-contained answer with concrete evidence.
 
         ${request}
       inputs:
@@ -166,7 +166,7 @@ workstations:
       type: AGENT_RUN
       worker: small-executor
     - body: |-
-        Complete this medium request.
+        Begin with zero context. Read the entire medium request below. Inspect applicable workspace instructions, architecture, implementation, tests, and current state before changing anything. Complete all related steps, check important edge cases, run proportional tests, and return a self-contained answer describing the outcome and evidence.
 
         ${request}
       inputs:
@@ -182,7 +182,7 @@ workstations:
       type: AGENT_RUN
       worker: medium-executor
     - body: |-
-        Complete this large request.
+        Begin with zero context. Read the entire large request below and independently reconstruct its requirements. Inspect applicable contributor instructions, architecture, implementation boundaries, tests, generated contracts, and current working state. Decompose the work internally, deliver the coherent requested outcome without discarding unrelated changes, exercise important failure paths, run broad proportional verification, and return a self-contained summary with evidence and honest limitations.
 
         ${request}
       inputs:

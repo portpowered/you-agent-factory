@@ -3,12 +3,16 @@
 package packagedfactorycatalog
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"path"
 	"sort"
+	"strconv"
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -138,7 +142,7 @@ func resolveRootDocument(source fs.FS, directory string) (string, error) {
 	sort.Strings(unsupported)
 	if len(unsupported) > 0 {
 		return "", fmt.Errorf(
-			"%s has unsupported root Factory candidate(s) %s; supported roots are factory.json, factory.yaml, and factory.yml",
+			"%s has unsupported root Factory candidate(s) %s; supported roots are factory.json, factory.yaml, factory.yml, and factory.js",
 			directory,
 			strings.Join(unsupported, ", "),
 		)
@@ -148,7 +152,8 @@ func resolveRootDocument(source fs.FS, directory string) (string, error) {
 		sort.Strings(candidates)
 		if len(candidates) == 0 {
 			return "", fmt.Errorf(
-				"%s has no root Factory document; expected exactly one of %s/factory.json, %s/factory.yaml, or %s/factory.yml",
+				"%s has no root Factory document; expected exactly one of %s/factory.json, %s/factory.yaml, %s/factory.yml, or %s/factory.js",
+				directory,
 				directory,
 				directory,
 				directory,
@@ -167,7 +172,7 @@ func resolveRootDocument(source fs.FS, directory string) (string, error) {
 
 func isSupportedRootName(name string) bool {
 	switch name {
-	case "factory.json", "factory.yaml", "factory.yml":
+	case "factory.json", "factory.yaml", "factory.yml", "factory.js":
 		return true
 	default:
 		return false
@@ -199,6 +204,9 @@ func decodeCanonicalFactory(
 	sourcePath string,
 	payload []byte,
 ) (*factorydefinitions.FactoryConfig, error) {
+	if path.Ext(sourcePath) == ".js" {
+		return decodeJavaScriptFactory(sourcePath, payload)
+	}
 	jsonPayload := payload
 	switch path.Ext(sourcePath) {
 	case ".yaml", ".yml":
@@ -228,6 +236,83 @@ func decodeCanonicalFactory(
 		return nil, fmt.Errorf("%s: decode and map canonical Factory: %w", sourcePath, err)
 	}
 	return cfg, nil
+}
+
+// javascriptFactoryMetadata keeps a standalone packaged JavaScript Factory
+// self-describing. A leading comment keeps the metadata inert when the same
+// file is executed directly by the JavaScript runtime. The authored source is
+// the only file needed; catalog generation projects it into portable artifacts.
+type javascriptFactoryMetadata struct {
+	Name                string                                        `json:"name"`
+	Version             int                                           `json:"version"`
+	ID                  string                                        `json:"id"`
+	Description         *factorydefinitions.NameValueConfig           `json:"description,omitempty"`
+	InvocationSignature *factorydefinitions.InvocationSignatureConfig `json:"invocationSignature,omitempty"`
+	Examples            []factorydefinitions.InvocationExampleConfig  `json:"examples,omitempty"`
+	ArgsSchema          json.RawMessage                               `json:"argsSchema,omitempty"`
+	DefaultPolicy       json.RawMessage                               `json:"defaultPolicy,omitempty"`
+}
+
+func decodeJavaScriptFactory(sourcePath string, payload []byte) (*factorydefinitions.FactoryConfig, error) {
+	metadata, err := decodeJavaScriptFactoryMetadata(payload)
+	if err != nil {
+		return nil, fmt.Errorf("%s: decode @you-factory-meta metadata: %w", sourcePath, err)
+	}
+	if strings.TrimSpace(metadata.Name) == "" || strings.TrimSpace(metadata.ID) == "" || metadata.Version < 1 {
+		return nil, fmt.Errorf("%s: @you-factory-meta requires non-empty name and id plus a positive version", sourcePath)
+	}
+	return &factorydefinitions.FactoryConfig{
+		Name:                metadata.Name,
+		Project:             metadata.ID,
+		Description:         metadata.Description,
+		InvocationSignature: metadata.InvocationSignature,
+		Examples:            metadata.Examples,
+		Orchestrator: &factorydefinitions.FactoryOrchestratorConfig{
+			Kind: factorydefinitions.OrchestratorKindJavaScript,
+			JavaScript: &factorydefinitions.FactoryOrchestratorJavaScriptConfig{
+				InlineSource: &factorydefinitions.FactoryOrchestratorJavaScriptInlineSource{
+					Encoding: factorydefinitions.OrchestratorInlineEncoding,
+					Inline:   string(payload),
+				},
+				Metadata: map[string]string{
+					"name":    metadata.Name,
+					"version": strconv.Itoa(metadata.Version),
+				},
+				ArgsSchema:    append(json.RawMessage(nil), metadata.ArgsSchema...),
+				DefaultPolicy: append(json.RawMessage(nil), metadata.DefaultPolicy...),
+			},
+		},
+		WorkTypes:    []factorydefinitions.WorkTypeConfig{},
+		Resources:    nil,
+		Workers:      nil,
+		Workstations: nil,
+	}, nil
+}
+
+func decodeJavaScriptFactoryMetadata(payload []byte) (javascriptFactoryMetadata, error) {
+	const (
+		prefix = "/* @you-factory-meta\n"
+		suffix = "\n*/"
+	)
+	trimmed := bytes.TrimSpace(payload)
+	if !bytes.HasPrefix(trimmed, []byte(prefix)) {
+		return javascriptFactoryMetadata{}, errors.New("standalone packaged JavaScript source must begin with an @you-factory-meta JSON comment")
+	}
+	end := bytes.Index(trimmed[len(prefix):], []byte(suffix))
+	if end < 0 {
+		return javascriptFactoryMetadata{}, errors.New("@you-factory-meta JSON comment must end with */ on its own line")
+	}
+	metadataPayload := trimmed[len(prefix) : len(prefix)+end]
+	decoder := json.NewDecoder(bytes.NewReader(metadataPayload))
+	decoder.DisallowUnknownFields()
+	var metadata javascriptFactoryMetadata
+	if err := decoder.Decode(&metadata); err != nil {
+		return javascriptFactoryMetadata{}, err
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return javascriptFactoryMetadata{}, errors.New("@you-factory-meta comment must contain exactly one JSON object")
+	}
+	return metadata, nil
 }
 
 func identityDiagnostics(entries []Entry) []string {

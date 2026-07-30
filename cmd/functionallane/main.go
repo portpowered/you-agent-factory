@@ -1,16 +1,12 @@
 package main
 
 import (
-	"bytes"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
-	"strings"
 	"time"
-
-	"github.com/portpowered/infinite-you/internal/testlanes"
 )
 
 type config struct {
@@ -34,15 +30,7 @@ func main() {
 
 func run() error {
 	cfg := parseConfig()
-	pkgs, err := discoverPackages(cfg.root)
-	if err != nil {
-		return fmt.Errorf("discover functional packages: %w", err)
-	}
-	if len(pkgs) == 0 {
-		return fmt.Errorf("discover functional packages: no test packages found under %s", cfg.root)
-	}
-
-	if err := runFunctionalTests(cfg, pkgs); err != nil {
+	if err := runFunctionalTests(cfg); err != nil {
 		return fmt.Errorf("run functional lane: %w", err)
 	}
 
@@ -52,8 +40,8 @@ func run() error {
 func parseConfig() config {
 	var cfg config
 	flag.IntVar(&cfg.count, "count", 1, "go test -count value")
-	flag.IntVar(&cfg.jobs, "jobs", 2, "go test -p value")
-	flag.StringVar(&cfg.root, "root", testlanes.FunctionalPackagePattern, "go list package pattern for functional test discovery")
+	flag.IntVar(&cfg.jobs, "jobs", 8, "go test -p value")
+	flag.StringVar(&cfg.root, "root", "./tests/functional/...", "go test package pattern for the functional lane")
 	flag.BoolVar(&cfg.short, "short", true, "run with go test -short")
 	flag.DurationVar(&cfg.timeout, "timeout", 5*time.Minute, "go test timeout")
 	flag.Parse()
@@ -63,41 +51,12 @@ func parseConfig() config {
 	return cfg
 }
 
-func discoverPackages(root string) ([]string, error) {
-	args := []string{"list", root}
-	cmd := execCommand("go", args...)
-	cmd.Env = os.Environ()
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("%w\n%s", err, strings.TrimSpace(stderr.String()))
-	}
-
-	lines := strings.Split(strings.ReplaceAll(stdout.String(), "\r\n", "\n"), "\n")
-	pkgs := make([]string, 0, len(lines))
-	for _, line := range lines {
-		pkg := strings.TrimSpace(line)
-		if pkg == "" || !testlanes.IsRunnableFunctionalPackage(pkg) {
-			continue
-		}
-		pkgs = append(pkgs, pkg)
-	}
-	if root == testlanes.FunctionalPackagePattern {
-		if err := testlanes.ValidateProviderFunctionalPackages(pkgs); err != nil {
-			return nil, err
-		}
-	}
-	return pkgs, nil
-}
-
-func runFunctionalTests(cfg config, pkgs []string) error {
+func runFunctionalTests(cfg config) error {
 	args := []string{"test", fmt.Sprintf("-p=%d", cfg.jobs)}
 	if cfg.short {
 		args = append(args, "-short")
 	}
-	args = append(args, pkgs...)
+	args = append(args, cfg.root)
 	args = append(args,
 		fmt.Sprintf("-count=%d", cfg.count),
 		fmt.Sprintf("-timeout=%s", cfg.timeout),

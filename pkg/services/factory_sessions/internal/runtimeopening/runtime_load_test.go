@@ -191,6 +191,7 @@ func TestNewDurableExecutionCanonicalizesOperatorDefaultsAndPresets(t *testing.T
 		},
 		factorydefinitions.RuntimeOpeningRequest{Directory: t.TempDir()},
 		factorysessions.SessionRuntimeOpeningRequest{SystemConfigHome: t.TempDir()},
+		operatorconfig.ResolvedDefaults{WorkerModelProvider: "CODEX", WorkerModel: "operator-model"},
 		RuntimeRoot{FactoryRootDir: t.TempDir()},
 		nil,
 		nil,
@@ -198,6 +199,8 @@ func TestNewDurableExecutionCanonicalizesOperatorDefaultsAndPresets(t *testing.T
 		executionFactory,
 		factorysessions.ProviderIdentityResolver(func(identity string) (string, error) {
 			switch identity {
+			case "CODEX":
+				return "codex", nil
 			case "customer":
 				return "customer.provider", nil
 			case "agent":
@@ -210,8 +213,8 @@ func TestNewDurableExecutionCanonicalizesOperatorDefaultsAndPresets(t *testing.T
 	if err != nil {
 		t.Fatalf("NewDurableExecution: %v", err)
 	}
-	if got.DefaultModelProvider != "customer.provider" {
-		t.Fatalf("default provider = %q, want canonical extension identity", got.DefaultModelProvider)
+	if got.DefaultModelProvider != "codex" || got.DefaultModel != "operator-model" {
+		t.Fatalf("resolved defaults = %#v, want codex/operator-model", got)
 	}
 	if preset := got.Presets["review"]; preset.ModelProvider != "cursor" {
 		t.Fatalf("review preset = %#v, want canonical cursor identity", preset)

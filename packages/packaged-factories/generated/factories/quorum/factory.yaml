@@ -109,23 +109,23 @@ workTypes:
         - name: failed
           type: FAILED
 workers:
-    - body: First independent quorum branch for @you/quorum.
+    - body: You are quorum branch A. Assume zero prior context, investigate the complete request independently, use available workspace evidence, and return a standalone proposed answer with assumptions and verification.
       model: ${branchModel}
       modelProvider: ${branchProvider}
       name: quorum-branch-a
       type: AGENT_WORKER
-    - body: Second independent quorum branch for @you/quorum.
+    - body: You are quorum branch B. Assume zero prior context, independently challenge likely assumptions in the complete request, use available workspace evidence, and return a standalone proposed answer with risks and verification.
       model: ${branchModel}
       modelProvider: ${branchProvider}
       name: quorum-branch-b
       type: AGENT_WORKER
-    - body: Final merge worker for @you/quorum.
+    - body: You are the quorum merger. Treat the original request and two branch results as complete context, reconcile them against evidence, preserve material disagreements, and return one self-contained final answer.
       model: ${mergeModel}
       modelProvider: ${mergeProvider}
       name: quorum-merge
       type: AGENT_WORKER
 workstations:
-    - body: Preserve the original request and create two independent quorum branch Work items.
+    - body: Preserve the complete original request without summarizing or dropping context, and create exactly two independent quorum branch Work items whose names and lineage remain traceable to the original Work.
       inputs:
         - state: init
           workType: task
@@ -145,7 +145,7 @@ workstations:
         mode: PRESERVE_INPUT
       worker: ""
     - body: |-
-        Produce branch A's independent assessment of the request.
+        You have no shared conversation with any other branch. Read the original request in full and inspect relevant workspace instructions, source, tests, or other evidence when available. Produce branch A's independent solution, covering all requirements, bounded assumptions, edge cases, and verification. Make the result self-contained for a merger that cannot infer your reasoning.
 
         Original request:
         {{ range (index .Inputs 0).Content }}{{ .Text }}{{ end }}
@@ -162,7 +162,7 @@ workstations:
       type: AGENT_RUN
       worker: quorum-branch-a
     - body: |-
-        Produce branch B's independent assessment of the request.
+        You have no shared conversation with any other branch. Read the original request in full and inspect relevant workspace instructions, source, tests, or other evidence when available. Produce branch B's independent solution with special attention to alternative interpretations, hidden risks, failure cases, and verification. Make the result self-contained for a merger that cannot infer your reasoning.
 
         Original request:
         {{ range (index .Inputs 0).Content }}{{ .Text }}{{ end }}
@@ -179,7 +179,7 @@ workstations:
       type: AGENT_RUN
       worker: quorum-branch-b
     - body: |-
-        Synthesize the two quorum assessments into one final response. The inputs are ordered as original request, branch A, then branch B.
+        Start from zero context. The inputs are ordered as original request, branch A, then branch B. Read all three completely. Reconcile the proposals against the request and available evidence, select the strongest supported conclusions, preserve consequential disagreements or caveats, and synthesize one complete customer-facing response. Do not invent missing evidence or silently treat consensus as proof.
 
         Original request:
         {{ range (index .Inputs 0).Content }}{{ .Text }}{{ end }}

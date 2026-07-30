@@ -6,6 +6,14 @@ Implementation and feature-owned verification are complete. Repository-wide
 lint baseline debt and the unavailable optional browser backend are recorded in
 the completion audit rather than misrepresented as feature failures.
 
+The 2026-07-30 implementation correction supersedes older plan-execute and
+source-layout language later in this historical plan: graph families are
+authored as `factory.yaml`; JavaScript families are self-contained `factory.js`
+files with inert `@you-factory-meta` JSON comment headers for catalog metadata; and `@you/plan-execute` contains only
+the planner and executor stages. It does not create a worktree or dispatch a
+script, reviewer, CI, or merge stage. Every agent instruction is written for a
+fresh worker with no assumed conversational or repository context.
+
 ## Completion Checklist
 
 Every box remains unchecked until the implementation and the cited evidence
@@ -38,8 +46,9 @@ Cursor ACP and Codex multi-agent runs.
 - [x] `@you/subagent` passes bounded read-only invocation and result tests.
 - [x] `@you/tts` passes its existing automated regression coverage; no manual
   ACP/Codex execution is required.
-- [x] `@you/plan-execute` passes PRD Markdown/JSON, worktree, story execution,
-  review, CI, conflict repair, and actual merge tests.
+- [x] `@you/plan-execute` passes Markdown/JSON PRD creation, direct executor
+  handoff, story execution, and exact two-dispatch tests without a script or
+  reviewer stage.
 - [x] `@you/plan-parallel` passes generated DAG, dependency readiness,
   concurrent execution, failure fan-in, replay, and merge-result tests.
 - [x] `@you/classify` passes small/medium/large routing, invalid-label, and
@@ -96,8 +105,10 @@ Evidence recorded on 2026-07-29:
   failure exhaustion, resumed sequence continuity, durable controller recovery,
   and no duplicate trigger-at-start. Plan-parallel and full-flow functional
   tests assert retained replay and generated Work relationships directly.
-- Focused plan-execute tests create Markdown/JSON PRDs and real Git worktrees,
-  repair review conflicts, execute stories, and verify the actual merge.
+- Focused plan-execute tests create matching Markdown/JSON PRDs, dispatch only
+  planner then executor, execute the plan in the current workspace, update
+  story evidence, and prove both workers inherit operator provider/model
+  defaults when role-specific configuration is omitted.
 - Installed-provider manual runs used `cursor-agent 2026.07.23-e383d2b` and
   `codex-cli 0.144.1`. Cursor ACP completed deep-research, fusion, goal,
   quorum, review, subagent, classify, plan-parallel, spawn, tournament, and
@@ -134,8 +145,10 @@ arguments, and direct behavioral test coverage. Use the graph orchestrator for
 stateful Work scheduling and the existing sandboxed JavaScript orchestrator for
 families whose topology is intentionally dynamic. In particular:
 
-- `@you/plan-execute` must use the same PRD-to-worktree execution model as the
-  checked-in `factory/factory.json`, not a two-prompt approximation.
+- `@you/plan-execute` must use a two-stage PRD contract: one planner writes the
+  Markdown and JSON PRDs and one fresh executor reads and implements them in the
+  current workspace. It must not add script, review, CI, merge, or worktree
+  stages.
 - `@you/plan-parallel` must let a planner emit canonical Work and Work
   relationships, then let the Factory runtime schedule dependency-ready Work
   concurrently.
@@ -179,8 +192,8 @@ global `you run` flags or separate top-level commands.
 
 - Publish all named packaged families using the appropriate graph or
   JavaScript orchestrator.
-- Make `@you/plan-execute` reproduce the checked-in PRD, worktree, executor,
-  review, CI, and merge lifecycle.
+- Make `@you/plan-execute` expose exactly the PRD planner and direct executor
+  lifecycle, with the two PRD files as their durable handoff.
 - Make `@you/plan-parallel` use canonical generated Work batches,
   `DEPENDS_ON`, parent-child lineage, runtime concurrency, and guarded fan-in.
 - Make `@you/classify` route through `CLASSIFIER_WORKSTATION`.
@@ -271,7 +284,7 @@ Proposed canonical English descriptions:
 | `@you/deep-research` | Breaks a research question into bounded specialist investigations and synthesizes their findings. |
 | `@you/fusion` | Produces an initial answer with one worker and refines it with a second worker. |
 | `@you/goal` | Repeatedly works a goal until the executor reports completion or the Factory reaches a failure bound. |
-| `@you/plan-execute` | Writes a Markdown and JSON PRD, prepares an isolated worktree, and executes the PRD through implementation, review, CI, and merge. |
+| `@you/plan-execute` | Writes matching Markdown and JSON PRDs, then gives them to one fresh executor that implements the complete plan in the current workspace. |
 | `@you/plan-parallel` | Plans a dependency graph of Work, executes ready tasks concurrently, and merges the completed results. |
 | `@you/quorum` | Runs independent assessments in parallel and merges them into one final answer. |
 | `@you/review` | Produces candidate work and repeats independent review until approval or a bounded failure. |
@@ -390,74 +403,52 @@ sleep or wait for wall-clock time.
 
 ### `@you/plan-execute`: PRD-driven execution
 
-This family follows the checked-in `factory/factory.json` lifecycle rather
-than behaving like `@you/fusion`.
+This family is deliberately a two-stage graph rather than a complete delivery
+pipeline. The PRD files are the explicit handoff between agents that share no
+conversation.
 
 #### Observable workflow
 
-1. The invocation creates one named idea/request Work item.
-2. The planner reads repository standards and the customer request.
+1. The invocation creates one named `planned-request` Work item.
+2. The planner begins with zero context, reads repository instructions,
+   architecture, relevant code and tests, working-tree state, and the customer
+   request.
 3. The planner writes `tasks/todo/<work-name>.md` and
    `tasks/todo/<work-name>.json` in the target repository.
 4. The Markdown PRD describes context, goals, non-goals, technical design,
    vertically sliced user stories, behavioral acceptance criteria, test
    evidence, and the delivery loop.
 5. The JSON PRD is a mechanistic implementation manifest containing project,
-   branch name, description, context, project acceptance criteria, ordered
-   stories, `passes: false`, and empty notes.
-6. A packaged workspace setup script creates or reuses an isolated worktree,
-   using the PRD/work item name as branch identity.
-7. The setup step copies the two planned files into the worktree root as
-   `prd.md` and `prd.json` and initializes `progress.txt` when absent.
-8. The executor runs in that worktree, reads `prd.json`, `prd.md`, and
-   `progress.txt`, and implements one highest-priority failing story per pass.
-9. Each executor pass runs story-proportional verification, updates PRD state
-   and progress, commits only reviewable product changes, pushes, and updates
-   or opens the PR.
-10. The reviewer checks the PRD acceptance criteria, diff, test evidence, and
-    PR conversation feedback. Rejection routes back to the executor.
-11. Guarded loop breakers bound executor and reviewer attempts.
-12. The Factory reaches successful terminal Work only after all PRD stories
-    pass, required CI is terminal and green, blocking feedback is addressed,
-    conflicts are resolved, and the PR is merged.
+   description, context, project acceptance criteria, ordered standalone
+   stories, explicit tests, `passes: false`, and empty notes.
+6. A different executor begins with zero context, reads repository instructions
+   and both PRDs from `tasks/todo/`, validates that they agree, and implements
+   the complete plan directly in the current workspace.
+7. The executor runs story-proportional positive and failure-path verification,
+   marks a story passed only with evidence in `notes`, and runs the relevant
+   broad checks after every story passes.
+8. The Factory reaches successful terminal Work after that executor completes.
+   Review, CI, merge, script execution, and worktree lifecycle are outside this
+   packaged Factory.
 
 #### Factory topology
 
 ```text
-idea:init
-  -> plan-prd
-  -> idea:to-complete + plan:init
-
-plan:init
-  -> setup-workspace
-  -> plan:complete + task:init
-
-task:init
-  -> process-prd-story (REPEATER)
-  -> task:in-review + review:init
-
-task:in-review + review:init
-  -> review-prd
-  -> task:to-complete + review:complete
-  -> rejection returns task:init
-
-idea:to-complete + task:to-complete, matched by Work name
-  -> invocation:complete
+planned-request:init
+  -> plan-request
+  -> planned-request:planned
+  -> execute-plan
+  -> planned-request:complete
 ```
 
-The packaged definition should reuse the checked-in Factory's `SAME_NAME`
-join, executor/reviewer visit-count loop breakers, isolated working directory,
-and package-owned setup script. Package assets must include planner, executor,
-reviewer, and workspace prompts/scripts; the packaged Factory cannot depend on
-the repository's `factory/` directory being present.
+The package owns verbose planner and executor prompts. There is no setup script,
+reviewer prompt, isolated working directory, join, or retry loop.
 
 Invocation parameters:
 
 - `to`
-- optional `branch-name`, validated as a safe git branch/worktree identity
 - `planner-provider`, `planner-model`
 - `executor-provider`, `executor-model`
-- `reviewer-provider`, `reviewer-model`
 
 `@you/fusion` remains the lighter draft/refine family and is not an alias for
 this lifecycle.
@@ -736,10 +727,10 @@ Acceptance criteria:
   changes.
 - Unit, projection/replay, API contract, and focused functional tests pass.
 
-### PF-FAMILIES-004: Package the PRD planner and workspace handoff
+### PF-FAMILIES-004: Package the standalone PRD planner
 
-Implement the first half of `@you/plan-execute`: PRD authoring and isolated
-workspace preparation.
+Implement the first stage of `@you/plan-execute`: evidence-based PRD authoring
+for a future executor with zero shared context.
 
 Acceptance criteria:
 
@@ -750,42 +741,34 @@ Acceptance criteria:
   completion rule.
 - JSON story IDs are stable and sequential, priorities are ordered,
   `passes` starts false, and notes start empty.
-- The workspace step creates or safely reuses the requested branch/worktree,
-  copies the files to worktree-root `prd.md` and `prd.json`, and initializes
-  `progress.txt` without overwriting existing progress.
-- Unsafe branch names, missing/malformed PRD JSON, git failures, and copy
-  failures route plan Work to a terminal failure with a useful diagnostic.
-- Script unit tests use temporary git repositories and do not require network
-  or GitHub access.
+- Every story is standalone and includes context, boundaries, behavioral
+  acceptance criteria, failure cases, and explicit tests.
+- Missing, malformed, or inconsistent PRD files prevent successful planner
+  completion with a useful diagnostic.
 - A root-built functional test with an injected provider command runner proves
-  planner-to-workspace handoff without touching the user's real worktrees.
+  the planner creates both files without touching Git branches or worktrees.
 - Typecheck and tests pass.
 
-### PF-FAMILIES-005: Complete PRD execution, review, and merge lifecycle
+### PF-FAMILIES-005: Execute the complete PRD directly
 
-Implement the executor/reviewer half of `@you/plan-execute` using the checked-in
-Factory's one-story-per-pass and guarded review model.
+Implement the second and final stage of `@you/plan-execute` as one executor that
+works in the invocation's current workspace.
 
 Acceptance criteria:
 
-- The executor reads `prd.json`, `prd.md`, and `progress.txt` from the prepared
-  worktree and selects the highest-priority story with `passes: false`.
-- One executor pass changes at most one unfinished story except for narrowly
-  documented mergeability work after all stories pass.
-- Successful passes run story-proportional tests, record progress, mark the
-  story passed, and keep PRD/progress artifacts out of product-review commits.
-- Reviewer rejection returns the same task to executor with actionable
-  feedback; reviewer approval advances only when project criteria and required
-  evidence pass.
-- Executor and reviewer visit-count guards produce a terminal failed outcome
-  instead of an infinite loop.
-- The invocation cannot report success merely because a PR exists or is green;
-  success requires all stories passed, required CI complete and passing,
-  blocking feedback addressed, conflicts resolved, and the PR merged.
-- Functional tests use injected provider/process edges and a fake GitHub/`gh`
-  boundary; they cover happy path, one rejected review followed by approval,
-  CI failure/continue, merge conflict/continue, retry exhaustion, and final
-  merged completion.
+- The executor reads the matching Markdown and JSON PRDs from `tasks/todo/`,
+  re-reads repository instructions and current state, and validates the handoff
+  before editing.
+- It implements every story in priority order, preserves unrelated work, and
+  records test evidence before setting `passes: true`.
+- It performs the relevant broad verification and returns a self-contained
+  delivery summary.
+- The graph contains exactly two AGENT_RUN workstations and two AGENT_WORKER
+  definitions: planner and executor. It contains no script worker, reviewer,
+  worktree, CI, merge, or loop-breaker stage.
+- Root-built functional coverage uses a provider command-runner edge mock,
+  asserts dispatch order `planner,executor`, proves the durable PRD handoff, and
+  proves both roles inherit operator provider/model defaults without role args.
 - Typecheck and tests pass.
 
 ### PF-FAMILIES-006: Implement dependency-aware `@you/plan-parallel`
@@ -1037,9 +1020,9 @@ Each packaged family receives focused coverage for:
 
 Additional high-risk cells:
 
-- Plan-execute: real temporary git worktree handoff, PRD file contents,
-  one-story iteration, review rejection, CI continuation, merge continuation,
-  and merged completion using fake provider and GitHub/process boundaries.
+- Plan-execute: matching PRD file contents, exact planner-to-executor handoff,
+  executor story completion/evidence, no extra dispatch stage, and operator
+  provider/model inheritance using the command-runner boundary.
 - Plan-parallel: independent readiness, dependency blocking, parallel dispatch
   capacity, guarded fan-in, child failure, invalid/cyclic/oversized batches,
   lineage, replay, and merge result.
@@ -1116,8 +1099,9 @@ depend on them. Avoid combining unrelated cleanup with a family behavior.
 
 - All fourteen planned families resolve from the packaged catalog and execute
   through their documented graph or JavaScript orchestrator.
-- `@you/plan-execute` creates Markdown and JSON PRDs, prepares an isolated
-  worktree, and executes/reviews the PRD through actual merge completion.
+- `@you/plan-execute` creates Markdown and JSON PRDs and passes them directly to
+  one executor in the current workspace, with no script, worktree, reviewer,
+  CI, or merge stage.
 - `@you/plan-parallel` expresses planner output as canonical Work and
   relationships, uses runtime dependency scheduling and concurrency, and
   returns a guarded merged result.
@@ -1135,8 +1119,10 @@ depend on them. Avoid combining unrelated cleanup with a family behavior.
   npm manifest data, and dashboard discovery.
 - Every family has direct happy-path, failure-path, invocation, provider/model,
   and primary-result test evidence proportional to its risk.
-- Authored definitions, generated JSON/YAML, manifest hashes, OpenAPI-derived
-  artifacts, docs, and runtime behavior remain aligned.
+- Graph families use readable authored `factory.yaml` definitions. JavaScript
+  families use one self-contained authored `factory.js` each and no sidecar
+  `factory.json`; generated portable JSON/YAML, manifest hashes,
+  OpenAPI-derived artifacts, docs, and runtime behavior remain aligned.
 - Required typecheck, lint, unit, functional, contract, package, documentation,
   and browser checks pass for their affected surfaces.
 - Delivery continues through blocking review feedback, required CI, conflict

@@ -27,15 +27,17 @@ async function verifyViewport(browser, viewport) {
     const header = page.locator("[data-dashboard-panel-shell='panel']");
     await header.waitFor({ state: "visible" });
     await page.getByRole("tablist").waitFor({ state: "visible" });
-    await page.getByRole("slider", { name: "Timeline tick" }).waitFor({
-      state: "visible",
-    });
-    const sliderBounds = await page
-      .getByRole("slider", { name: "Timeline tick" })
-      .boundingBox();
-    if (!sliderBounds || sliderBounds.width < 40 || sliderBounds.height < 40) {
+    const headerClassName = await header.getAttribute("class");
+    if (!headerClassName?.includes("sticky")) {
       throw new Error(
-        `Timeline slider did not retain a 40px touch target at ${viewport.width}px.`,
+        `Header was not fixed at the dashboard top at ${viewport.width}px.`,
+      );
+    }
+    if (
+      (await page.getByRole("slider", { name: "Timeline tick" }).count()) > 0
+    ) {
+      throw new Error(
+        `Timeline controls remained in the fixed header at ${viewport.width}px.`,
       );
     }
 
@@ -64,46 +66,31 @@ async function verifyViewport(browser, viewport) {
       clientWidth: element.clientWidth,
       scrollWidth: element.scrollWidth,
     }));
-    if (viewport.width <= 375) {
-      if (navigationMetrics.scrollWidth <= navigationMetrics.clientWidth) {
-        throw new Error(
-          `Session tabs did not form a reachable strip at ${viewport.width}px.`,
-        );
-      }
-      await navigation.evaluate((element) => {
-        element.scrollLeft = element.scrollWidth;
-      });
-      if ((await navigation.evaluate((element) => element.scrollLeft)) === 0) {
-        throw new Error(
-          `Session tabs could not scroll at ${viewport.width}px.`,
-        );
-      }
+    if (navigationMetrics.scrollWidth > navigationMetrics.clientWidth) {
+      throw new Error(
+        `Session tabs overflowed instead of sharing the available width at ${viewport.width}px.`,
+      );
+    }
+    if ((await navigation.evaluate((element) => element.scrollLeft)) !== 0) {
+      throw new Error(
+        `Session tabs unexpectedly retained a horizontal scroll position at ${viewport.width}px.`,
+      );
     }
 
     const regions = await page.evaluate(() => {
       const top = document.querySelector("[data-dashboard-header-top-region]");
       const tabs = document.querySelector("[data-dashboard-header-tab-region]");
-      const controls = document.querySelector(
-        "[data-dashboard-header-control-region]",
-      );
-      if (!top || !tabs || !controls) {
-        throw new Error("Expected compact header regions were not rendered.");
+      if (!top || !tabs) {
+        throw new Error("Expected fixed header regions were not rendered.");
       }
       return {
-        controlsTop: controls.getBoundingClientRect().top,
         tabsTop: tabs.getBoundingClientRect().top,
         topBottom: top.getBoundingClientRect().bottom,
       };
     });
-    if (
-      viewport.width <= 375 &&
-      !(
-        regions.tabsTop >= regions.topBottom &&
-        regions.controlsTop > regions.tabsTop
-      )
-    ) {
+    if (viewport.width <= 375 && !(regions.tabsTop >= regions.topBottom)) {
       throw new Error(
-        `Header regions were not stacked compactly at ${viewport.width}px.`,
+        `Header tab strip was not stacked below the top actions at ${viewport.width}px.`,
       );
     }
   } finally {

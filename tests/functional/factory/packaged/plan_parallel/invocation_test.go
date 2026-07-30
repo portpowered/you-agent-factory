@@ -39,6 +39,11 @@ func TestPackagedPlanParallelExecutesReadyDAGConcurrentlyAndMerges(t *testing.T)
 	if runner.executionCount() != 3 || runner.mergeCount() != 1 {
 		t.Fatalf("executor calls = %d, merge calls = %d; want 3 and 1", runner.executionCount(), runner.mergeCount())
 	}
+	for index, request := range runner.requestsSnapshot() {
+		if request.Command != "codex" || !planParallelHasArgPair(request.Args, "--model", "operator-model") {
+			t.Fatalf("provider request[%d] = command %q args %#v, want operator defaults", index, request.Command, request.Args)
+		}
+	}
 
 	events := server.GetFactoryEvents(t)
 	dispatches := support.ObserveDispatchEvents(t, events)
@@ -153,6 +158,7 @@ type planParallelRunner struct {
 	merges         int
 	failExecutors  bool
 	readyExecutors chan struct{}
+	requests       []platformprocess.CommandRequest
 }
 
 func newPlanParallelRunner(plannerOutput string) *planParallelRunner {
@@ -160,11 +166,14 @@ func newPlanParallelRunner(plannerOutput string) *planParallelRunner {
 }
 
 func (runner *planParallelRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	runner.mu.Lock()
+	runner.requests = append(runner.requests, request)
+	runner.mu.Unlock()
 	prompt := string(request.Stdin)
 	switch {
 	case strings.Contains(prompt, "Plan an executable Work DAG"):
 		return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout(runner.plannerOutput)}, nil
-	case strings.Contains(prompt, "Merge the completed generated task results"):
+	case strings.Contains(prompt, "Treat the original request and all completed generated Work inputs"):
 		runner.mu.Lock()
 		runner.merges++
 		runner.mu.Unlock()
@@ -200,6 +209,21 @@ func (runner *planParallelRunner) Run(ctx context.Context, request platformproce
 		runner.mu.Unlock()
 		return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("planned task completed")}, nil
 	}
+}
+
+func (runner *planParallelRunner) requestsSnapshot() []platformprocess.CommandRequest {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return append([]platformprocess.CommandRequest(nil), runner.requests...)
+}
+
+func planParallelHasArgPair(args []string, name, value string) bool {
+	for index := 0; index+1 < len(args); index++ {
+		if args[index] == name && args[index+1] == value {
+			return true
+		}
+	}
+	return false
 }
 
 func (runner *planParallelRunner) maxConcurrentExecutors() int {

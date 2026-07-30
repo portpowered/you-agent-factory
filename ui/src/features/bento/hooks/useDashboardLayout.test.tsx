@@ -1,3 +1,4 @@
+// biome-ignore lint/style/noExcessiveLinesPerFile: layout migrations need regression fixtures beside their persisted-layout assertions.
 import "../../../testing/vitest-dom-capabilities.setup";
 
 import { act, renderHook } from "@testing-library/react";
@@ -22,7 +23,7 @@ function resetDashboardLayoutStorage() {
 describe("useDashboardLayout default layout", () => {
   beforeEach(resetDashboardLayoutStorage);
 
-  it("includes the provider-session widget in the default dashboard layout", () => {
+  it("includes the session-controls and provider-session widgets in the default dashboard layout", () => {
     const { result } = renderHook(() => useDashboardLayout());
 
     expect(result.current.dashboardLayout).toEqual(DEFAULT_DASHBOARD_LAYOUT);
@@ -34,7 +35,27 @@ describe("useDashboardLayout default layout", () => {
       w: 4,
       widgetType: DASHBOARD_WIDGET_IDS.providerSession,
       x: 4,
-      y: 10,
+      y: 12,
+    });
+    expect(result.current.dashboardLayout).toContainEqual({
+      h: 2,
+      id: DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.sessionControls,
+      minH: 2,
+      minW: 4,
+      w: 12,
+      widgetType: DASHBOARD_WIDGET_IDS.sessionControls,
+      x: 0,
+      y: 0,
+    });
+    expect(result.current.dashboardLayout).toContainEqual({
+      h: 4,
+      id: DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.workOutcomeChart,
+      minH: 4,
+      minW: 4,
+      w: 4,
+      widgetType: DASHBOARD_WIDGET_IDS.workOutcomeChart,
+      x: 8,
+      y: 17,
     });
     expect(result.current.dashboardLayout).toContainEqual(
       expect.objectContaining({
@@ -132,6 +153,16 @@ describe("useDashboardLayout persisted layout merging", () => {
           x: 0,
           y: 15,
         },
+        {
+          h: 1,
+          id: DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.workOutcomeChart,
+          minH: 1,
+          minW: 1,
+          w: 1,
+          widgetType: DASHBOARD_WIDGET_IDS.workOutcomeChart,
+          x: 11,
+          y: 17,
+        },
       ]),
     );
 
@@ -158,6 +189,12 @@ describe("useDashboardLayout persisted layout merging", () => {
       minH: 1,
       minW: 1,
     });
+    expect(
+      result.current.dashboardLayout.find(
+        (item) =>
+          item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.workOutcomeChart,
+      ),
+    ).toMatchObject({ h: 4, minH: 4, minW: 4, w: 4, x: 8 });
   });
 
   it("preserves the inline add-widget layout entry when persisting only rendered widgets", () => {
@@ -197,6 +234,73 @@ describe("useDashboardLayout persisted layout merging", () => {
   });
 });
 
+describe("useDashboardLayout work-outcome chart sizing", () => {
+  beforeEach(resetDashboardLayoutStorage);
+
+  it("shrinks the saved default work-outcome card to its content minimum", () => {
+    window.localStorage.setItem(
+      DASHBOARD_LAYOUT_STORAGE_KEY,
+      JSON.stringify([
+        {
+          h: 2,
+          id: DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.sessionControls,
+          w: 12,
+          widgetType: DASHBOARD_WIDGET_IDS.sessionControls,
+          x: 0,
+          y: 0,
+        },
+        {
+          h: 6,
+          id: DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.workOutcomeChart,
+          w: 4,
+          widgetType: DASHBOARD_WIDGET_IDS.workOutcomeChart,
+          x: 8,
+          y: 17,
+        },
+        {
+          h: 6,
+          id: DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.submitWork,
+          w: 4,
+          widgetType: DASHBOARD_WIDGET_IDS.submitWork,
+          x: 8,
+          y: 23,
+        },
+        {
+          h: 4,
+          id: DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
+          w: 4,
+          widgetType: DASHBOARD_WIDGET_IDS.addWidget,
+          x: 8,
+          y: 29,
+        },
+      ]),
+    );
+
+    act(() => {
+      reloadDashboardLayoutFromStorage();
+    });
+
+    const { result } = renderHook(() => useDashboardLayout());
+
+    expect(
+      result.current.dashboardLayout.find(
+        (item) =>
+          item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.workOutcomeChart,
+      ),
+    ).toMatchObject({ h: 4, minH: 4, minW: 4, x: 8, y: 17 });
+    expect(
+      result.current.dashboardLayout.find(
+        (item) => item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.submitWork,
+      ),
+    ).toMatchObject({ x: 8, y: 21 });
+    expect(
+      result.current.dashboardLayout.find(
+        (item) => item.id === DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
+      ),
+    ).toMatchObject({ x: 8, y: 27 });
+  });
+});
+
 describe("useDashboardLayout migration-specific layout compaction", () => {
   beforeEach(resetDashboardLayoutStorage);
 
@@ -224,25 +328,25 @@ describe("useDashboardLayout migration-specific layout compaction", () => {
       migratedLayout.find(
         (item) => item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.workGraph,
       ),
-    ).toMatchObject({ h: 8, y: 2 });
+    ).toMatchObject({ h: 8, y: 4 });
     expect(
       migratedLayout.find(
         (item) =>
           item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.currentSelection,
       ),
-    ).toMatchObject({ y: 10 });
+    ).toMatchObject({ y: 12 });
     expect(
       migratedLayout.find(
         (item) =>
           item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.terminalWork,
       ),
-    ).toMatchObject({ x: 8, y: 10 });
+    ).toMatchObject({ x: 8, y: 12 });
     expect(
       migratedLayout.find(
         (item) =>
           item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.workOutcomeChart,
       ),
-    ).toMatchObject({ y: 15 });
+    ).toMatchObject({ h: 4, minH: 4, minW: 4, y: 17 });
     expect(
       migratedLayout.find(
         (item) => item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.submitWork,
@@ -252,7 +356,7 @@ describe("useDashboardLayout migration-specific layout compaction", () => {
       migratedLayout.find(
         (item) => item.id === DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.trace,
       ),
-    ).toMatchObject({ y: 15 });
+    ).toMatchObject({ y: 17 });
     expect(
       migratedLayout.find(
         (item) =>
@@ -312,14 +416,14 @@ describe("useDashboardLayout migration-specific layout compaction", () => {
       w: 8,
       widgetType: DASHBOARD_WIDGET_IDS.trace,
       x: 0,
-      y: 15,
+      y: 17,
     });
     expect(duplicateTrace).toMatchObject({
       id: "trace::instance-1",
       widgetType: DASHBOARD_WIDGET_IDS.trace,
       w: 8,
       x: 0,
-      y: 15,
+      y: 17,
     });
   });
 });

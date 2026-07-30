@@ -168,6 +168,7 @@ func openRuntime(
 	durableExecution, err := durableExecutionFactory(
 		configured.Definition,
 		configured.Session,
+		configured.OperatorDefaults,
 		root,
 		clock,
 		providerForDurable,

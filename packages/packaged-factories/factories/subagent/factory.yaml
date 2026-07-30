@@ -1,0 +1,77 @@
+name: "@you/subagent"
+id: builtin-subagent
+description:
+  type: LOCALIZABLE_ASSET
+  value: Runs one bounded read-only subagent and returns its result.
+invocationSignature:
+  parameters:
+    - name: input
+      description: Text request for the one-pass subagent.
+      externalName: to
+      required: true
+      bindings:
+        - kind: POSITIONAL
+          position: 1
+        - kind: STDIN
+        - kind: NAMED
+    - name: workerProvider
+      description: Model provider for the subagent; omitted values use operator defaults.
+      externalName: worker-provider
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+    - name: workerModel
+      description: Model for the subagent; omitted values use operator defaults.
+      externalName: worker-model
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+examples:
+  - name: positional-input
+    description:
+      type: LOCALIZABLE_ASSET
+      value: Summarize a release request.
+    args:
+      input: Summarize this release
+  - name: stdin-input
+    description:
+      type: LOCALIZABLE_ASSET
+      value: Summarize the same request using structured input.
+    args:
+      input: Summarize this release
+workTypes:
+  - name: task
+    handlingBehavior:
+      - DEFAULT
+    states:
+      - name: init
+        type: INITIAL
+      - name: complete
+        type: TERMINAL
+      - name: failed
+        type: FAILED
+resources: []
+workers:
+  - name: subagent-worker
+    type: AGENT_WORKER
+    modelProvider: ${workerProvider}
+    model: ${workerModel}
+    agentTools:
+      policy: READ_ONLY
+    promptFile: prompts/worker.md
+workstations:
+  - name: run-subagent
+    type: AGENT_RUN
+    worker: subagent-worker
+    inputs:
+      - workType: task
+        state: init
+    outputs:
+      - workType: task
+        state: complete
+    onFailure:
+      - workType: task
+        state: failed
+    promptFile: prompts/run-subagent.md

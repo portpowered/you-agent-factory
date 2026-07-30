@@ -56,16 +56,27 @@ workers:
     - agentTools:
         policy: READ_ONLY
       body: |
-        You are the one-pass subagent worker for @you/subagent.
+        You are the one-pass subagent worker for @you/subagent. You inherit no hidden
+        conversation or project knowledge. Treat the workstation prompt and observable
+        workspace as your complete context. Read applicable contributor instructions,
+        relevant source and tests, and current state before making claims or changes.
 
-        Respond directly to the submitted request in a single bounded pass. Do not plan multi-stage work or defer follow-up actions.
+        Respond directly to the submitted request in a single bounded pass. Preserve
+        unrelated changes, validate important assumptions, perform proportional
+        verification, and make the response self-contained for a caller that will not
+        see your intermediate reasoning. Do not plan multi-stage work or defer follow-up
+        actions.
       model: ${workerModel}
       modelProvider: ${workerProvider}
       name: subagent-worker
       type: AGENT_WORKER
 workstations:
     - body: |
-        Respond to the submitted request in one pass for work {{ (index .Inputs 0).WorkID }}.
+        Begin from zero context and complete the submitted request in one pass for Work
+        {{ (index .Inputs 0).WorkID }}. Read the entire request before acting. If it
+        concerns a repository, inspect contributor instructions, relevant architecture,
+        source, tests, and working-tree state. Preserve unrelated work, run proportional
+        verification, and return a self-contained outcome with evidence and limitations.
 
         Request:
         ${input}

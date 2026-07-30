@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -24,14 +23,10 @@ func TestPackagedTournamentRunsOneOnOneBracketThroughCodexCommandRunner(t *testi
 	)
 	response := invokeJavaScriptFactory(t, javascriptInvocation{
 		factoryName: factorydefinitions.PackagedTournamentFactoryName,
-		scriptName:  "tournament.workflow.js",
 		requestID:   "packaged-tournament-codex-1v1",
 		args: map[string]any{
-			"request":          "Propose a launch strategy",
-			"rounds":           1,
-			"executorProvider": "SCRIPT_WRAP",
-			"modelProvider":    "CODEX",
-			"model":            "gpt-5",
+			"request": "Propose a launch strategy",
+			"rounds":  1,
 		},
 		runner: runner,
 	})
@@ -45,8 +40,8 @@ func TestPackagedTournamentRunsOneOnOneBracketThroughCodexCommandRunner(t *testi
 		t.Fatalf("provider calls = %d, want two competitors plus one judge", len(requests))
 	}
 	for index, request := range requests {
-		if request.Command != "codex" {
-			t.Fatalf("provider request[%d] command = %q, want codex", index, request.Command)
+		if request.Command != "codex" || !containsArgPair(request.Args, "--model", "operator-js-model") {
+			t.Fatalf("provider request[%d] = %#v, want inherited codex/operator-js-model defaults", index, request)
 		}
 	}
 	if !strings.Contains(string(requests[2].Stdin), "Candidate A") &&
@@ -64,11 +59,9 @@ func TestPackagedSpawnPlansExactCountRunsChildrenAndMergesThroughCodexCommandRun
 	)
 	response := invokeJavaScriptFactory(t, javascriptInvocation{
 		factoryName: factorydefinitions.PackagedSpawnFactoryName,
-		scriptName:  "spawn.workflow.js",
 		requestID:   "packaged-spawn-codex-exact-count",
 		args: map[string]any{
 			"request": "research the best places to travel", "count": 2,
-			"executorProvider": "SCRIPT_WRAP", "modelProvider": "CODEX", "model": "gpt-5",
 		},
 		runner: runner,
 	})
@@ -76,6 +69,11 @@ func TestPackagedSpawnPlansExactCountRunsChildrenAndMergesThroughCodexCommandRun
 	requests := runner.Requests()
 	if len(requests) != 4 {
 		t.Fatalf("provider calls = %d, want planner, exactly two tasks, and merger", len(requests))
+	}
+	for index, request := range requests {
+		if request.Command != "codex" || !containsArgPair(request.Args, "--model", "operator-js-model") {
+			t.Fatalf("provider request[%d] = %#v, want inherited codex/operator-js-model defaults", index, request)
+		}
 	}
 	mergeInput := string(requests[3].Stdin) + " " + strings.Join(requests[3].Args, " ")
 	firstIndex, secondIndex := strings.Index(mergeInput, `"index":1`), strings.Index(mergeInput, `"index":2`)
@@ -86,7 +84,6 @@ func TestPackagedSpawnPlansExactCountRunsChildrenAndMergesThroughCodexCommandRun
 
 type javascriptInvocation struct {
 	factoryName string
-	scriptName  string
 	requestID   string
 	args        map[string]any
 	runner      *testutil.ProviderCommandRunner
@@ -102,17 +99,26 @@ func invokeJavaScriptFactory(t *testing.T, invocation javascriptInvocation) fact
 		Edges: serviceedges.Edges{
 			ProviderCommandRunner: invocation.runner,
 		},
+		Args: []string{"--provider", "CODEX", "--model", "operator-js-model"},
 	})
 	factory := support.GetJSON[factoryapi.Factory](t, server.URL()+"/factory-sessions/~default/factory")
-	workflowFile := filepath.Join(factoryDir, "scripts", invocation.scriptName)
+	if factory.Orchestrator == nil || factory.Orchestrator.Javascript == nil || factory.Orchestrator.Javascript.InlineSource == nil {
+		t.Fatalf("installed JavaScript factory %q does not carry inline source", invocation.factoryName)
+	}
+	javascript := factory.Orchestrator.Javascript
 	response := postJSON[factoryapi.FactorySessionSyncExecutionResponse](
 		t,
 		server.URL()+"/factory-sessions/sync",
 		factoryapi.FactorySessionExecutionRequest{
 			RequestId: invocation.requestID,
 			Source: factoryapi.FactorySessionExecutionSource{
-				Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowFile,
-				WorkflowFile: &workflowFile,
+				Kind: factoryapi.FactorySessionExecutionSourceKindInlineWorkflow,
+				InlineWorkflow: &factoryapi.FactorySessionExecutionInlineWorkflow{
+					Dialect:      javascript.Dialect,
+					Entrypoint:   javascript.Entrypoint,
+					InlineSource: *javascript.InlineSource,
+					Metadata:     javascript.Metadata,
+				},
 			},
 			Args:         &invocation.args,
 			Orchestrator: factory.Orchestrator,
@@ -128,6 +134,15 @@ func invokeJavaScriptFactory(t *testing.T, invocation javascriptInvocation) fact
 		}
 	}
 	return response
+}
+
+func containsArgPair(args []string, name, value string) bool {
+	for index := 0; index+1 < len(args); index++ {
+		if args[index] == name && args[index+1] == value {
+			return true
+		}
+	}
+	return false
 }
 
 func assertSucceededPrimaryContains(t *testing.T, response factoryapi.FactorySessionSyncExecutionResponse, fragments ...string) {

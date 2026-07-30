@@ -287,7 +287,7 @@ func runPackagedWorkflowWithPolicy(
 	executor factory.JavaScriptChildExecutor,
 ) factory.JavaScriptRuntimeOutcome {
 	t.Helper()
-	source, err := fs.ReadFile(packagedfactories.Source(), "factories/"+slug+"/scripts/"+script)
+	source, err := fs.ReadFile(packagedfactories.Source(), "factories/"+slug+"/factory.js")
 	if err != nil {
 		t.Fatalf("read packaged workflow: %v", err)
 	}

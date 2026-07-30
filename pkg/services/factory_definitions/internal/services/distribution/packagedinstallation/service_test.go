@@ -144,9 +144,9 @@ func TestInstallPackagedFactory_MaterializesPortableEditableFormats(t *testing.T
 	if err != nil {
 		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
 	}
-	definition, ok := catalog.Lookup("@you/deep-research")
+	definition, ok := catalog.Lookup("@you/full-flow")
 	if !ok {
-		t.Fatal("published catalog is missing @you/deep-research")
+		t.Fatal("published catalog is missing @you/full-flow")
 	}
 	tests := []struct {
 		format   factorydefinitions.PackagedFactoryFormat
@@ -176,9 +176,9 @@ func TestInstallPackagedFactory_MaterializesPortableEditableFormats(t *testing.T
 				t.Fatalf("InstallPackagedFactory() = %#v", result)
 			}
 			assertSingleAuthoredRoot(t, result.FactoryDir, test.rootFile)
-			assertDeepResearchScript(t, definition, result.FactoryDir)
+			assertBundledAssets(t, definition, result.FactoryDir)
 			assertPortableMaterializedContent(t, result.FactoryDir)
-			assertCustomerEditIsLoaded(t, result.FactoryDir, test.rootFile)
+			assertCustomerEditIsLoaded(t, result.FactoryDir, test.rootFile, "full-flow")
 		})
 	}
 }
@@ -545,7 +545,7 @@ func assertSingleAuthoredRoot(t *testing.T, factoryDir, want string) {
 	}
 }
 
-func assertDeepResearchScript(
+func assertBundledAssets(
 	t *testing.T,
 	definition factorydefinitions.PackagedDefinition,
 	factoryDir string,
@@ -610,7 +610,7 @@ func assertPortableMaterializedContent(t *testing.T, factoryDir string) {
 	}
 }
 
-func assertCustomerEditIsLoaded(t *testing.T, factoryDir, rootFile string) {
+func assertCustomerEditIsLoaded(t *testing.T, factoryDir, rootFile, originalName string) {
 	t.Helper()
 	path := filepath.Join(factoryDir, rootFile)
 	content, err := os.ReadFile(path)
@@ -621,14 +621,14 @@ func assertCustomerEditIsLoaded(t *testing.T, factoryDir, rootFile string) {
 	if rootFile == "factory.json" {
 		edited = []byte(strings.Replace(
 			string(content),
-			`"name": "deep-research"`,
+			`"name": "`+originalName+`"`,
 			`"name": "customer-edited"`,
 			1,
 		))
 	} else {
 		edited = []byte(strings.Replace(
 			string(content),
-			"\nname: deep-research\n",
+			"\nname: "+originalName+"\n",
 			"\nname: customer-edited\n",
 			1,
 		))

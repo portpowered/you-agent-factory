@@ -1895,7 +1895,7 @@ response-stream output.
 - `internal/releasesmoke/harness.go` isolates spawned `you run` smoke processes from
   the developer's real `HOME` so `tests/release` stays hermetic through
   `make test`.
-- `internal/builtcliacceptance` owns the hermetic built-CLI acceptance harness for
+- `internal/builtcliacceptance` owns the hermetic root-process acceptance harness for
   the S24 cross-surface matrix: `NewHarness` builds `./cmd/factory`, `NewSession`
   allocates isolated home/log/work directories, `ProcessEnvForIsolatedHome` redirects
   profile env vars, `WithNoExternalServer` reserves a loopback `--server` URL without
@@ -1903,10 +1903,10 @@ response-stream output.
   tails for scenario mismatches. Focused harness proof lives in
   `tests/functional/acceptance/harness_smoke_test.go`; fresh/migrated install
   customer outcomes are asserted in
-  `tests/functional/acceptance/install_outcomes_test.go` via built-CLI
+  `tests/functional/acceptance/install_outcomes_test.go` via root-process
   `config init` against isolated homes; provider absent/configured/discovered
   postures are asserted in
-  `tests/functional/acceptance/provider_outcomes_test.go` via built-CLI
+  `tests/functional/acceptance/provider_outcomes_test.go` via root-process
   operator-default resolution and named `@you/goal` mock-worker runs; invalid-goal
   process exit status and unrelated invalid-topology guidance are asserted in
   `tests/functional/acceptance/invalid_quiet_outcomes_test.go`, while terminal
@@ -1916,14 +1916,14 @@ response-stream output.
   event shapes are intentionally owned by the raw Factory-run suites. Local-model
   invoke and goal-repeat customer outcomes are asserted in
   `tests/functional/acceptance/invoke_repeat_subagent_outcomes_test.go` via
-  built-CLI `models invoke` bootstrap readiness failures, repeated named
+  root-process `models invoke` bootstrap readiness failures, repeated named
   `@you/goal` JSON invocations with distinct `requestId`/`traceId` and stable
   installed-factory reuse, and the unrelated packaged `@you/subagent` primary
   JSON outcome. S24 scenario-to-outcome documentation is canonical in
   `internal/builtcliacceptance/scenarios.go` (`S24Scenarios`); observable
   behavior is proved by the focused acceptance scenarios rather than
   inventory-only test-name assertions.
-  PR verification runs the focused suite through `make test-built-cli-acceptance`
+  PR verification runs the focused suite through `make test-root-process-acceptance`
   inside `make verify-tests`.
   Later S24 scenario stories should compose scenario assertions on top of this
   package rather than re-building binary/home/log wiring in each test file.
@@ -2005,7 +2005,7 @@ response-stream output.
   `tests/functional/factory/packaged/subagent/invocation_test.go` for child
   primary-result return, child Factory Response Event streaming, and stable child
   failure through public CLI/API boundaries with mock workers. The mapped
-  `test-built-cli-acceptance` specialty binding for
+  `test-root-process-acceptance` specialty binding for
   `TestSubagentInvocation_SuccessfulNamedRun_ReturnsAuthoritativePrimaryResultJSON`
   remains in `tests/functional/acceptance/invoke_repeat_subagent_outcomes_test.go`.
 - Hermetic no-server named `@you/subagent` package proof also lives in
@@ -2097,7 +2097,7 @@ response-stream output.
   (`TestPackagedFactoryCLIAndAPIPrimaryOutcomeShapesAgree`).
 - Packaged `@you/goal` CLI-started run inspectability through the public API
   lives in `tests/functional/factory/packaged/cross/package_cli_api_test.go`
-  (`TestPackagedFactoryInvokedByCLICanBeInspectedByAPI`). Drive the built CLI
+  (`TestPackagedFactoryInvokedByCLICanBeInspectedByAPI`). Drive the root process
   through `you run --with-server --json` on a `support.NewProcessAPIServer`
   harness, poll `GET /factory-sessions/~default`, `GET /status`, and
   `GET /factory-sessions/~default/work` while the run-scoped server is live
@@ -2134,7 +2134,7 @@ response-stream output.
   transitioner and topology-level routing proofs.
 - Named `@you/review` CLI invocation coverage lives in
   `tests/functional/smoke/cli_named_review_invocation_smoke_test.go`. Materialize
-  the package beneath an isolated home, run the built CLI with scripted mock
+  the package beneath an isolated home, run the root process with scripted mock
   workers, and use a durable reviewer counter to prove a rejection precedes
   approval. Run the same gate for default configuration, edited materialized
   worker configuration, and `--default-worker-model-provider` /
