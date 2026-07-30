@@ -30,6 +30,7 @@ invocationSignature:
       externalName: max-cycles
       typeHint: NUMBER_STRING
       defaultValue: "4"
+      choices: ["1", "2", "3", "4", "5", "6", "7", "8"]
       bindings:
         - kind: NAMED
     - name: maxTasksPerCycle
@@ -37,6 +38,7 @@ invocationSignature:
       externalName: max-tasks-per-cycle
       typeHint: NUMBER_STRING
       defaultValue: "4"
+      choices: ["1", "2", "3", "4", "5", "6", "7", "8"]
       bindings:
         - kind: NAMED
     - name: plannerProvider
@@ -196,6 +198,8 @@ workstations:
       mode: PRESERVE_INPUT
     limits:
       maxGeneratedWorkItems: 9
+      maxGeneratedWorkItemsArgument: maxTasksPerCycle
+      maxGeneratedWorkItemsArgumentOffset: 1
     inputs:
       - workType: project
         state: init
@@ -395,6 +399,7 @@ workstations:
       - type: VISIT_COUNT
         workstation: assess-project
         maxVisits: 8
+        maxVisitsArgument: maxCycles
     inputs:
       - workType: project
         state: init

@@ -4684,8 +4684,12 @@ export interface components {
       maxRetries?: number;
       /** @description Go duration limit for one dispatch attempt before it times out. */
       maxExecutionTime?: string;
-      /** @description Maximum number of Work items one accepted worker-emitted FACTORY_REQUEST_BATCH may contain. */
+      /** @description Fixed maximum number of Work items one accepted worker-emitted FACTORY_REQUEST_BATCH may contain. */
       maxGeneratedWorkItems?: number;
+      /** @description Optional invocation argument whose positive integer value tightens the fixed generated-Work ceiling. */
+      maxGeneratedWorkItemsArgument?: string;
+      /** @description Offset added to the invocation argument before applying the generated-Work ceiling. */
+      maxGeneratedWorkItemsArgumentOffset?: number;
     };
     /**
      * @description Scheduling kind for a workstation, which determines how the engine schedules and dispatches work to it. Standard workstations are scheduled as soon as their inputs are ready, and can have multiple work items in-flight at the same time.  Repeater workstations are triggered whenever their inputs change, and will reloop the outputs on rejection back to the initial place. Cron workstations create internal time work and dispatch their configured worker when time and input guards are satisfied. Poller workstations bind a poller-capable worker that the service runtime supervises as a long-lived ingress loop.
@@ -4735,8 +4739,10 @@ export interface components {
       type: components["schemas"]["GuardType"];
       /** @description For `VISIT_COUNT` guards, the workstation whose visits are counted. */
       workstation?: string;
-      /** @description For `VISIT_COUNT` guards, the visit threshold. */
+      /** @description For `VISIT_COUNT` guards, the fixed visit ceiling. */
       maxVisits?: number;
+      /** @description Optional invocation argument whose positive integer value tightens the fixed visit ceiling. */
+      maxVisitsArgument?: string;
       /** @description For `MATCHES_FIELDS` guards, the field-selector configuration used to compare candidate inputs. */
       matchConfig?: components["schemas"]["GuardMatchConfig"];
       /** @description For parent-aware input guards, the parent workType name from another input in the same workstation. */
@@ -5520,8 +5526,10 @@ export interface components {
       type: components["schemas"]["WorkstationGuardType"];
       /** @description For `VISIT_COUNT` guards, the workstation whose visits are counted. */
       workstation?: string;
-      /** @description For `VISIT_COUNT` guards, the visit threshold. */
+      /** @description For `VISIT_COUNT` guards, the fixed visit ceiling. */
       maxVisits?: number;
+      /** @description Optional invocation argument whose positive integer value tightens the fixed visit ceiling. */
+      maxVisitsArgument?: string;
       /** @description For `MATCHES_FIELDS` guards, the field-selector configuration used to compare candidate inputs. */
       matchConfig?: components["schemas"]["GuardMatchConfig"];
       /** @description For parent-aware input guards, the parent workType name from another input in the same workstation. */

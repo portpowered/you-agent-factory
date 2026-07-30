@@ -518,13 +518,46 @@ func TestTransitioner_WorkerEmittedFactoryRequestBatchHonorsGeneratedWorkLimit(t
 	}
 }
 
-type generatedWorkLimitRuntime struct{ maximum int }
+func TestTransitioner_WorkerEmittedFactoryRequestBatchHonorsInvocationArgumentLimit(t *testing.T) {
+	now := time.Date(2026, time.July, 30, 17, 0, 0, 0, time.UTC)
+	net := workerBatchTestNet()
+	net.Transitions["t1"].Name = "generate"
+	transitioner := NewTransitioner(
+		net, nil, func() time.Time { return now }, testTokenTransformer(net),
+		generatedWorkLimitRuntime{maximum: 9, argument: "maxTasks", offset: 1}, nil, nil, testWorkPropagationPolicy(),
+	)
+	snapshot := workerBatchSnapshot(`{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"first","workTypeName":"child"},{"name":"second","workTypeName":"child"},{"name":"control","workTypeName":"child"}]}}`)
+	snapshot.Dispatches["dispatch-1"].ConsumedTokens[0].Color.InvocationArguments = &work.InvocationArguments{
+		Arguments: map[string]work.InvocationArgument{"maxTasks": {Values: []string{"1"}}},
+	}
+
+	result, err := transitioner.Execute(context.Background(), snapshot)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	completed := result.CompletedDispatches[0]
+	if completed.Outcome != workerexecution.OutcomeFailed ||
+		!strings.Contains(completed.Reason, "contains 3 Work items, exceeding workstation limit 2") {
+		t.Fatalf("completed dispatch = %#v, want caller-selected generated-work limit failure", completed)
+	}
+	if len(result.GeneratedBatches) != 0 {
+		t.Fatalf("generated batches = %#v, want atomic rejection", result.GeneratedBatches)
+	}
+}
+
+type generatedWorkLimitRuntime struct {
+	maximum  int
+	argument string
+	offset   int
+}
 
 func (runtime generatedWorkLimitRuntime) Workstation(name string) (*interfaces.FactoryWorkstationConfig, bool) {
 	return &interfaces.FactoryWorkstationConfig{
 		Name: name,
 		Limits: interfaces.WorkstationLimits{
-			MaxGeneratedWorkItems: runtime.maximum,
+			MaxGeneratedWorkItems:               runtime.maximum,
+			MaxGeneratedWorkItemsArgument:       runtime.argument,
+			MaxGeneratedWorkItemsArgumentOffset: runtime.offset,
 		},
 	}, true
 }

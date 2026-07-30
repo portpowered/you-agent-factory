@@ -312,9 +312,11 @@ type workstationFrontmatter struct {
 }
 
 type workstationLimitsFrontmatter struct {
-	MaxRetries            int    `yaml:"maxRetries,omitempty"`
-	MaxExecutionTime      string `yaml:"maxExecutionTime,omitempty"`
-	MaxGeneratedWorkItems int    `yaml:"maxGeneratedWorkItems,omitempty"`
+	MaxRetries                          int    `yaml:"maxRetries,omitempty"`
+	MaxExecutionTime                    string `yaml:"maxExecutionTime,omitempty"`
+	MaxGeneratedWorkItems               int    `yaml:"maxGeneratedWorkItems,omitempty"`
+	MaxGeneratedWorkItemsArgument       string `yaml:"maxGeneratedWorkItemsArgument,omitempty"`
+	MaxGeneratedWorkItemsArgumentOffset int    `yaml:"maxGeneratedWorkItemsArgumentOffset,omitempty"`
 }
 
 type cronFrontmatter struct {
@@ -339,10 +341,11 @@ type inputGuardFrontmatter struct {
 }
 
 type guardFrontmatter struct {
-	Type        factorydefinitions.GuardType         `yaml:"type"`
-	Workstation string                               `yaml:"workstation,omitempty"`
-	MaxVisits   int                                  `yaml:"maxVisits,omitempty"`
-	MatchConfig *factorydefinitions.GuardMatchConfig `yaml:"matchConfig,omitempty"`
+	Type              factorydefinitions.GuardType         `yaml:"type"`
+	Workstation       string                               `yaml:"workstation,omitempty"`
+	MaxVisits         int                                  `yaml:"maxVisits,omitempty"`
+	MaxVisitsArgument string                               `yaml:"maxVisitsArgument,omitempty"`
+	MatchConfig       *factorydefinitions.GuardMatchConfig `yaml:"matchConfig,omitempty"`
 }
 
 func workstationFrontmatterForExpansion(def factorydefinitions.FactoryWorkstationConfig) workstationFrontmatter {
@@ -361,7 +364,9 @@ func workstationFrontmatterForExpansion(def factorydefinitions.FactoryWorkstatio
 		OutputSchema: def.OutputSchema,
 		Limits: workstationLimitsFrontmatter{
 			MaxRetries: def.Limits.MaxRetries, MaxExecutionTime: def.Limits.MaxExecutionTime,
-			MaxGeneratedWorkItems: def.Limits.MaxGeneratedWorkItems,
+			MaxGeneratedWorkItems:               def.Limits.MaxGeneratedWorkItems,
+			MaxGeneratedWorkItemsArgument:       def.Limits.MaxGeneratedWorkItemsArgument,
+			MaxGeneratedWorkItemsArgumentOffset: def.Limits.MaxGeneratedWorkItemsArgumentOffset,
 		},
 		Inputs:           ioFrontmatterSlice(def.Inputs),
 		Outputs:          ioFrontmatterSlice(def.Outputs),
@@ -447,10 +452,11 @@ func guardFrontmatterSlice(configs []factorydefinitions.GuardConfig) []guardFron
 	out := make([]guardFrontmatter, len(configs))
 	for i := range configs {
 		out[i] = guardFrontmatter{
-			Type:        factorydefinitions.GuardType(publicFactoryGuardTypeStringFromInternal(configs[i].Type)),
-			Workstation: configs[i].Workstation,
-			MaxVisits:   configs[i].MaxVisits,
-			MatchConfig: factorydefinitions.CloneGuardMatchConfig(configs[i].MatchConfig),
+			Type:              factorydefinitions.GuardType(publicFactoryGuardTypeStringFromInternal(configs[i].Type)),
+			Workstation:       configs[i].Workstation,
+			MaxVisits:         configs[i].MaxVisits,
+			MaxVisitsArgument: configs[i].MaxVisitsArgument,
+			MatchConfig:       factorydefinitions.CloneGuardMatchConfig(configs[i].MatchConfig),
 		}
 	}
 	return out

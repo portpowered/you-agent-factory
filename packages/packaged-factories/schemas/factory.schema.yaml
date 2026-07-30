@@ -1622,9 +1622,12 @@ $defs:
                 description: For `SAME_NAME` and `SAME_TRACE_ID` input guards, the peer input workType name from another input in the same workstation.
                 type: string
             maxVisits:
-                description: For `VISIT_COUNT` guards, the visit threshold.
+                description: For `VISIT_COUNT` guards, the fixed visit ceiling.
                 minimum: 1
                 type: integer
+            maxVisitsArgument:
+                description: Optional invocation argument whose positive integer value tightens the fixed visit ceiling.
+                type: string
             parentInput:
                 description: For parent-aware input guards, the parent workType name from another input in the same workstation.
                 type: string
@@ -1683,8 +1686,15 @@ $defs:
                 description: Go duration limit for one dispatch attempt before it times out.
                 type: string
             maxGeneratedWorkItems:
-                description: Maximum number of Work items one accepted worker-emitted FACTORY_REQUEST_BATCH may contain.
+                description: Fixed maximum number of Work items one accepted worker-emitted FACTORY_REQUEST_BATCH may contain.
                 minimum: 1
+                type: integer
+            maxGeneratedWorkItemsArgument:
+                description: Optional invocation argument whose positive integer value tightens the fixed generated-Work ceiling.
+                type: string
+            maxGeneratedWorkItemsArgumentOffset:
+                description: Offset added to the invocation argument before applying the generated-Work ceiling.
+                minimum: 0
                 type: integer
             maxRetries:
                 description: Maximum number of retry attempts after a failed dispatch before the workstation gives up.

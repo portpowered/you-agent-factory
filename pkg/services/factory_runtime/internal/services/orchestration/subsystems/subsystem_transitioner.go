@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"strconv"
 	"strings"
 	"time"
 
@@ -179,15 +180,17 @@ func (t *TransitionerSubsystem) mapToCorrespondingTokenMutations(snapshot *inter
 			resolved.outcome = workerexecution.OutcomeFailed
 			resolved.err = batchErr.Error()
 		} else if detectedBatch {
-			if workstation, ok := runtimeWorkstation(currentTransition.Name, t.runtimeConfig); ok &&
-				workstation.Limits.MaxGeneratedWorkItems > 0 &&
-				len(generatedBatch.submits) > workstation.Limits.MaxGeneratedWorkItems {
-				resolved.outcome = workerexecution.OutcomeFailed
-				resolved.err = fmt.Sprintf(
-					"worker-emitted work request batch contains %d Work items, exceeding workstation limit %d",
-					len(generatedBatch.submits), workstation.Limits.MaxGeneratedWorkItems,
-				)
-			} else {
+			if workstation, ok := runtimeWorkstation(currentTransition.Name, t.runtimeConfig); ok {
+				limit := effectiveGeneratedWorkItemLimit(workstation.Limits, inputColors)
+				if limit > 0 && len(generatedBatch.submits) > limit {
+					resolved.outcome = workerexecution.OutcomeFailed
+					resolved.err = fmt.Sprintf(
+						"worker-emitted work request batch contains %d Work items, exceeding workstation limit %d",
+						len(generatedBatch.submits), limit,
+					)
+				}
+			}
+			if resolved.outcome == workerexecution.OutcomeAccepted {
 				generatedBatches = []work.GeneratedSubmissionBatch{{
 					Request:     generatedBatch.request,
 					Metadata:    generatedBatch.metadata,
@@ -245,6 +248,31 @@ func (t *TransitionerSubsystem) mapToCorrespondingTokenMutations(snapshot *inter
 
 	t.logger.Info("releasing tokens", "transition", result.TransitionID, "outcome", resolved.outcome, "mutation_count", len(mutations))
 	return mutations, t.buildCompletedDispatch(snapshot, result, resolved, consumedTokens, mutations, now), generatedBatches, nil
+}
+
+func effectiveGeneratedWorkItemLimit(limits interfaces.WorkstationLimits, inputColors []factorytoken.Color) int {
+	maximum := limits.MaxGeneratedWorkItems
+	argumentName := strings.TrimSpace(limits.MaxGeneratedWorkItemsArgument)
+	if maximum <= 0 || argumentName == "" {
+		return maximum
+	}
+	source := firstNonResourceInput(inputColors)
+	if source == nil || source.InvocationArguments == nil {
+		return maximum
+	}
+	argument, ok := source.InvocationArguments.Arguments[argumentName]
+	if !ok || len(argument.Values) != 1 {
+		return maximum
+	}
+	value, err := strconv.Atoi(strings.TrimSpace(argument.Values[0]))
+	if err != nil || value <= 0 {
+		return maximum
+	}
+	value += limits.MaxGeneratedWorkItemsArgumentOffset
+	if value <= 0 || value > maximum {
+		return maximum
+	}
+	return value
 }
 
 func (t *TransitionerSubsystem) buildCompletedDispatch(

@@ -786,9 +786,11 @@ func workstationLimitsInternalFromAPI(limits *factoryapi.WorkstationLimits) inte
 		return interfaces.WorkstationLimits{}
 	}
 	return interfaces.WorkstationLimits{
-		MaxRetries:            intValue(limits.MaxRetries),
-		MaxExecutionTime:      stringValue(limits.MaxExecutionTime),
-		MaxGeneratedWorkItems: intValue(limits.MaxGeneratedWorkItems),
+		MaxRetries:                          intValue(limits.MaxRetries),
+		MaxExecutionTime:                    stringValue(limits.MaxExecutionTime),
+		MaxGeneratedWorkItems:               intValue(limits.MaxGeneratedWorkItems),
+		MaxGeneratedWorkItemsArgument:       stringValue(limits.MaxGeneratedWorkItemsArgument),
+		MaxGeneratedWorkItemsArgumentOffset: intValue(limits.MaxGeneratedWorkItemsArgumentOffset),
 	}
 }
 
@@ -954,10 +956,11 @@ func workstationGuardsInternalFromAPI(guards *[]factoryapi.WorkstationGuard) []i
 	values := make([]interfaces.GuardConfig, len(*guards))
 	for i, guard := range *guards {
 		values[i] = interfaces.GuardConfig{
-			Type:        internalFactoryGuardTypeFromPublicWorkstationGuard(guard.Type),
-			Workstation: stringValue(guard.Workstation),
-			MaxVisits:   intValue(guard.MaxVisits),
-			MatchConfig: guardMatchConfigInternalFromAPI(guard.MatchConfig),
+			Type:              internalFactoryGuardTypeFromPublicWorkstationGuard(guard.Type),
+			Workstation:       stringValue(guard.Workstation),
+			MaxVisits:         intValue(guard.MaxVisits),
+			MaxVisitsArgument: stringValue(guard.MaxVisitsArgument),
+			MatchConfig:       guardMatchConfigInternalFromAPI(guard.MatchConfig),
 		}
 	}
 	return values

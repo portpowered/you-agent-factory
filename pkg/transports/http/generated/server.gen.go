@@ -4191,8 +4191,11 @@ type Guard struct {
 	// MatchInput For `SAME_NAME` and `SAME_TRACE_ID` input guards, the peer input workType name from another input in the same workstation.
 	MatchInput *string `json:"matchInput,omitempty"`
 
-	// MaxVisits For `VISIT_COUNT` guards, the visit threshold.
+	// MaxVisits For `VISIT_COUNT` guards, the fixed visit ceiling.
 	MaxVisits *int `json:"maxVisits,omitempty"`
+
+	// MaxVisitsArgument Optional invocation argument whose positive integer value tightens the fixed visit ceiling.
+	MaxVisitsArgument *string `json:"maxVisitsArgument,omitempty"`
 
 	// ParentInput For parent-aware input guards, the parent workType name from another input in the same workstation.
 	ParentInput *string `json:"parentInput,omitempty"`
@@ -6798,8 +6801,11 @@ type WorkstationGuard struct {
 	// MatchInput For `SAME_NAME` and `SAME_TRACE_ID` input guards, the peer input workType name from another input in the same workstation.
 	MatchInput *string `json:"matchInput,omitempty"`
 
-	// MaxVisits For `VISIT_COUNT` guards, the visit threshold.
+	// MaxVisits For `VISIT_COUNT` guards, the fixed visit ceiling.
 	MaxVisits *int `json:"maxVisits,omitempty"`
+
+	// MaxVisitsArgument Optional invocation argument whose positive integer value tightens the fixed visit ceiling.
+	MaxVisitsArgument *string `json:"maxVisitsArgument,omitempty"`
 
 	// ParentInput For parent-aware input guards, the parent workType name from another input in the same workstation.
 	ParentInput *string `json:"parentInput,omitempty"`
@@ -6837,8 +6843,14 @@ type WorkstationLimits struct {
 	// MaxExecutionTime Go duration limit for one dispatch attempt before it times out.
 	MaxExecutionTime *string `json:"maxExecutionTime,omitempty"`
 
-	// MaxGeneratedWorkItems Maximum number of Work items one accepted worker-emitted FACTORY_REQUEST_BATCH may contain.
+	// MaxGeneratedWorkItems Fixed maximum number of Work items one accepted worker-emitted FACTORY_REQUEST_BATCH may contain.
 	MaxGeneratedWorkItems *int `json:"maxGeneratedWorkItems,omitempty"`
+
+	// MaxGeneratedWorkItemsArgument Optional invocation argument whose positive integer value tightens the fixed generated-Work ceiling.
+	MaxGeneratedWorkItemsArgument *string `json:"maxGeneratedWorkItemsArgument,omitempty"`
+
+	// MaxGeneratedWorkItemsArgumentOffset Offset added to the invocation argument before applying the generated-Work ceiling.
+	MaxGeneratedWorkItemsArgumentOffset *int `json:"maxGeneratedWorkItemsArgumentOffset,omitempty"`
 
 	// MaxRetries Maximum number of retry attempts after a failed dispatch before the workstation gives up.
 	MaxRetries *int `json:"maxRetries,omitempty"`

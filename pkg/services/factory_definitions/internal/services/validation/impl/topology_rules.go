@@ -157,6 +157,40 @@ func ruleGuards(cfg *factorydefinitions.FactoryConfig) []Finding {
 	return findings
 }
 
+func ruleInvocationBoundLimits(cfg *factorydefinitions.FactoryConfig) []Finding {
+	parameterTypes := make(map[string]string)
+	if cfg.InvocationSignature != nil {
+		for _, parameter := range cfg.InvocationSignature.Parameters {
+			parameterTypes[strings.TrimSpace(parameter.Name)] = strings.TrimSpace(parameter.TypeHint)
+		}
+	}
+	var findings []Finding
+	for wi, workstation := range cfg.Workstations {
+		basePath := fmt.Sprintf("workstations[%d](%s)", wi, workstation.Name)
+		argumentName := strings.TrimSpace(workstation.Limits.MaxGeneratedWorkItemsArgument)
+		if argumentName != "" {
+			if workstation.Limits.MaxGeneratedWorkItems <= 0 {
+				findings = append(findings, Finding{Severity: SeverityError, Path: basePath + ".limits", Message: "invocation-bound generated Work limit requires a positive fixed ceiling", Rule: "workstation-limit-invocation-bound-ceiling"})
+			}
+			if parameterTypes[argumentName] != factorydefinitions.InvocationParameterTypeHintNumberString {
+				findings = append(findings, Finding{Severity: SeverityError, Path: basePath + ".limits.maxGeneratedWorkItemsArgument", Message: fmt.Sprintf("invocation-bound generated Work limit requires NUMBER_STRING parameter %q", argumentName), Rule: "workstation-limit-invocation-bound-parameter"})
+			}
+			if workstation.Limits.MaxGeneratedWorkItemsArgumentOffset < 0 {
+				findings = append(findings, Finding{Severity: SeverityError, Path: basePath + ".limits.maxGeneratedWorkItemsArgumentOffset", Message: "invocation-bound generated Work limit offset cannot be negative", Rule: "workstation-limit-invocation-bound-offset"})
+			}
+		} else if workstation.Limits.MaxGeneratedWorkItemsArgumentOffset != 0 {
+			findings = append(findings, Finding{Severity: SeverityError, Path: basePath + ".limits.maxGeneratedWorkItemsArgumentOffset", Message: "generated Work limit offset requires maxGeneratedWorkItemsArgument", Rule: "workstation-limit-invocation-bound-offset"})
+		}
+		for gi, guard := range workstation.Guards {
+			argumentName = strings.TrimSpace(guard.MaxVisitsArgument)
+			if argumentName != "" && parameterTypes[argumentName] != factorydefinitions.InvocationParameterTypeHintNumberString {
+				findings = append(findings, Finding{Severity: SeverityError, Path: fmt.Sprintf("%s.guards[%d].maxVisitsArgument", basePath, gi), Message: fmt.Sprintf("invocation-bound visit limit requires NUMBER_STRING parameter %q", argumentName), Rule: "guard-visit-count-invocation-bound-parameter"})
+			}
+		}
+	}
+	return findings
+}
+
 // --- Rule: workstation kind validation ---
 
 func ruleWorkstationKind(cfg *factorydefinitions.FactoryConfig) []Finding {

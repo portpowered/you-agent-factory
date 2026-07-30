@@ -11,4 +11,11 @@ properties:
   maxGeneratedWorkItems:
     type: integer
     minimum: 1
-    description: Maximum number of Work items one accepted worker-emitted FACTORY_REQUEST_BATCH may contain.
+    description: Fixed maximum number of Work items one accepted worker-emitted FACTORY_REQUEST_BATCH may contain.
+  maxGeneratedWorkItemsArgument:
+    type: string
+    description: Optional invocation argument whose positive integer value tightens the fixed generated-Work ceiling.
+  maxGeneratedWorkItemsArgumentOffset:
+    type: integer
+    minimum: 0
+    description: Offset added to the invocation argument before applying the generated-Work ceiling.

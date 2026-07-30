@@ -435,6 +435,49 @@ func TestVisitCountGuard_BelowThreshold(t *testing.T) {
 	}
 }
 
+func TestVisitCountGuard_InvocationArgumentTightensFixedCeiling(t *testing.T) {
+	candidates := []factorytoken.Token{{
+		ID: "tok-1",
+		Color: factorytoken.Color{InvocationArguments: &work.InvocationArguments{
+			Arguments: map[string]work.InvocationArgument{
+				"maxCycles": {Values: []string{"2"}},
+			},
+		}},
+		History: factorytoken.History{TotalVisits: map[string]int{"planning": 2}},
+	}}
+	guard := &VisitCountGuard{
+		TransitionID:      "planning",
+		MaxVisits:         8,
+		MaxVisitsArgument: "maxCycles",
+	}
+
+	matched, ok := guard.Evaluate(candidates, nil, nil)
+	if !ok || len(matched) != 1 {
+		t.Fatalf("dynamic visit guard = (%#v, %v), want candidate at caller-selected bound", matched, ok)
+	}
+}
+
+func TestVisitCountGuard_InvalidInvocationArgumentUsesFixedCeiling(t *testing.T) {
+	candidates := []factorytoken.Token{{
+		ID: "tok-1",
+		Color: factorytoken.Color{InvocationArguments: &work.InvocationArguments{
+			Arguments: map[string]work.InvocationArgument{
+				"maxCycles": {Values: []string{"99"}},
+			},
+		}},
+		History: factorytoken.History{TotalVisits: map[string]int{"planning": 2}},
+	}}
+	guard := &VisitCountGuard{
+		TransitionID:      "planning",
+		MaxVisits:         8,
+		MaxVisitsArgument: "maxCycles",
+	}
+
+	if matched, ok := guard.Evaluate(candidates, nil, nil); ok || len(matched) != 0 {
+		t.Fatalf("dynamic visit guard = (%#v, %v), want fixed-ceiling fallback", matched, ok)
+	}
+}
+
 func TestVisitCountGuard_NoVisitHistory(t *testing.T) {
 	candidates := []factorytoken.Token{
 		{ID: "tok-1", History: factorytoken.History{}},

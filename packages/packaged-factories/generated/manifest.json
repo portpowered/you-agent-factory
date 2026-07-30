@@ -76,11 +76,11 @@
       "slug": "full-flow",
       "json": {
         "locator": "generated/factories/full-flow/factory.json",
-        "sha256": "8d1f3a0461ab1e4982c9c56193b25bc797da0d34543c33ace71b5bedce5013e3"
+        "sha256": "c75360ced2370d07c73a902071be1aa81102b39118a1180d9c36c9fee82e7d79"
       },
       "yaml": {
         "locator": "generated/factories/full-flow/factory.yaml",
-        "sha256": "a1dd5b13e382f3ace95eb29e57c40a9d0b487f415add2a0af670bb4609093c93"
+        "sha256": "678e3b7d89dee35957bfb6cd3c77405f1958111a3b263321c2a18a7fa5375e07"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",

@@ -14,7 +14,10 @@ properties:
   maxVisits:
     type: integer
     minimum: 1
-    description: For `VISIT_COUNT` guards, the visit threshold.
+    description: For `VISIT_COUNT` guards, the fixed visit ceiling.
+  maxVisitsArgument:
+    type: string
+    description: Optional invocation argument whose positive integer value tightens the fixed visit ceiling.
   matchConfig:
     allOf:
       - $ref: './GuardMatchConfig.yaml'

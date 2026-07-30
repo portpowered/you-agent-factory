@@ -104,6 +104,48 @@ func TestRuleGuards_VisitCountZeroMaxVisits(t *testing.T) {
 	assertFindingExists(t, findings, "guard-visit-count-max-visits")
 }
 
+func TestRuleInvocationBoundLimitsAcceptsNumberStringParameters(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.InvocationSignature = &factorydefinitions.InvocationSignatureConfig{Parameters: []factorydefinitions.InvocationParameterConfig{
+		{Name: "maxCycles", TypeHint: factorydefinitions.InvocationParameterTypeHintNumberString},
+		{Name: "maxTasks", TypeHint: factorydefinitions.InvocationParameterTypeHintNumberString},
+	}}
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
+		Name: "planner",
+		Limits: factorydefinitions.WorkstationLimits{
+			MaxGeneratedWorkItems: 9, MaxGeneratedWorkItemsArgument: "maxTasks", MaxGeneratedWorkItemsArgumentOffset: 1,
+		},
+		Guards: []factorydefinitions.GuardConfig{{
+			Type: factorydefinitions.GuardTypeVisitCount, Workstation: "planner", MaxVisits: 8, MaxVisitsArgument: "maxCycles",
+		}},
+	}}
+
+	if findings := ruleInvocationBoundLimits(cfg); len(findings) != 0 {
+		t.Fatalf("ruleInvocationBoundLimits() = %#v, want no findings", findings)
+	}
+}
+
+func TestRuleInvocationBoundLimitsRejectsMissingOrNonNumericParameters(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.InvocationSignature = &factorydefinitions.InvocationSignatureConfig{Parameters: []factorydefinitions.InvocationParameterConfig{
+		{Name: "maxTasks", TypeHint: factorydefinitions.InvocationParameterTypeHintString},
+	}}
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
+		Name: "planner",
+		Limits: factorydefinitions.WorkstationLimits{
+			MaxGeneratedWorkItems: 9, MaxGeneratedWorkItemsArgument: "maxTasks", MaxGeneratedWorkItemsArgumentOffset: -1,
+		},
+		Guards: []factorydefinitions.GuardConfig{{
+			Type: factorydefinitions.GuardTypeVisitCount, Workstation: "planner", MaxVisits: 8, MaxVisitsArgument: "maxCycles",
+		}},
+	}}
+
+	findings := ruleInvocationBoundLimits(cfg)
+	assertFindingExists(t, findings, "workstation-limit-invocation-bound-parameter")
+	assertFindingExists(t, findings, "workstation-limit-invocation-bound-offset")
+	assertFindingExists(t, findings, "guard-visit-count-invocation-bound-parameter")
+}
+
 func TestRuleGuards_MatchesFieldsMissingMatchConfig(t *testing.T) {
 	cfg := testBaseConfig()
 	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{

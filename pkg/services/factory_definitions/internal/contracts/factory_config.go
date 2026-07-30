@@ -497,9 +497,11 @@ type BundledFileContentConfig struct {
 
 // WorkstationLimits holds execution limits from workstation configuration.
 type WorkstationLimits struct {
-	MaxRetries            int    `json:"max_retries,omitempty" yaml:"maxRetries,omitempty"`
-	MaxExecutionTime      string `json:"max_execution_time,omitempty" yaml:"maxExecutionTime,omitempty"`
-	MaxGeneratedWorkItems int    `json:"max_generated_work_items,omitempty" yaml:"maxGeneratedWorkItems,omitempty"`
+	MaxRetries                          int    `json:"max_retries,omitempty" yaml:"maxRetries,omitempty"`
+	MaxExecutionTime                    string `json:"max_execution_time,omitempty" yaml:"maxExecutionTime,omitempty"`
+	MaxGeneratedWorkItems               int    `json:"max_generated_work_items,omitempty" yaml:"maxGeneratedWorkItems,omitempty"`
+	MaxGeneratedWorkItemsArgument       string `json:"max_generated_work_items_argument,omitempty" yaml:"maxGeneratedWorkItemsArgument,omitempty"`
+	MaxGeneratedWorkItemsArgumentOffset int    `json:"max_generated_work_items_argument_offset,omitempty" yaml:"maxGeneratedWorkItemsArgumentOffset,omitempty"`
 }
 
 // WorkPropagationMode selects how downstream work receives payload content.
@@ -658,10 +660,11 @@ type GuardMatchConfig struct {
 
 // GuardConfig declares a guard on a workstation using customer-facing names.
 type GuardConfig struct {
-	Type        GuardType         `json:"type" yaml:"type"`
-	Workstation string            `json:"workstation,omitempty" yaml:"workstation,omitempty"`
-	MaxVisits   int               `json:"max_visits,omitempty" yaml:"maxVisits,omitempty"`
-	MatchConfig *GuardMatchConfig `json:"match_config,omitempty" yaml:"matchConfig,omitempty"`
+	Type              GuardType         `json:"type" yaml:"type"`
+	Workstation       string            `json:"workstation,omitempty" yaml:"workstation,omitempty"`
+	MaxVisits         int               `json:"max_visits,omitempty" yaml:"maxVisits,omitempty"`
+	MaxVisitsArgument string            `json:"max_visits_argument,omitempty" yaml:"maxVisitsArgument,omitempty"`
+	MatchConfig       *GuardMatchConfig `json:"match_config,omitempty" yaml:"matchConfig,omitempty"`
 }
 
 type IOConfig struct {

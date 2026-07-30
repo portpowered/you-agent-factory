@@ -60,6 +60,16 @@
             "kind": "NAMED"
           }
         ],
+        "choices": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8"
+        ],
         "defaultValue": "4",
         "description": "Maximum planning cycles from 1 through 8.",
         "externalName": "max-cycles",
@@ -71,6 +81,16 @@
           {
             "kind": "NAMED"
           }
+        ],
+        "choices": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8"
         ],
         "defaultValue": "4",
         "description": "Maximum tasks in one wave from 1 through 8.",
@@ -337,7 +357,9 @@
         }
       ],
       "limits": {
-        "maxGeneratedWorkItems": 9
+        "maxGeneratedWorkItems": 9,
+        "maxGeneratedWorkItemsArgument": "maxTasksPerCycle",
+        "maxGeneratedWorkItemsArgumentOffset": 1
       },
       "name": "assess-project",
       "onFailure": [
@@ -726,6 +748,7 @@
       "guards": [
         {
           "maxVisits": 8,
+          "maxVisitsArgument": "maxCycles",
           "type": "VISIT_COUNT",
           "workstation": "assess-project"
         }

@@ -1295,13 +1295,16 @@ func modelOperationContentTypesAPIFromInternal(contentTypes []string) []factorya
 }
 
 func workstationLimitsAPIFromInternal(limits interfaces.WorkstationLimits) *factoryapi.WorkstationLimits {
-	if limits.MaxRetries == 0 && limits.MaxExecutionTime == "" && limits.MaxGeneratedWorkItems == 0 {
+	if limits.MaxRetries == 0 && limits.MaxExecutionTime == "" && limits.MaxGeneratedWorkItems == 0 &&
+		limits.MaxGeneratedWorkItemsArgument == "" && limits.MaxGeneratedWorkItemsArgumentOffset == 0 {
 		return nil
 	}
 	return &factoryapi.WorkstationLimits{
-		MaxExecutionTime:      stringPtrIfNotEmpty(limits.MaxExecutionTime),
-		MaxRetries:            intPtrIfNonZero(limits.MaxRetries),
-		MaxGeneratedWorkItems: intPtrIfNonZero(limits.MaxGeneratedWorkItems),
+		MaxExecutionTime:                    stringPtrIfNotEmpty(limits.MaxExecutionTime),
+		MaxRetries:                          intPtrIfNonZero(limits.MaxRetries),
+		MaxGeneratedWorkItems:               intPtrIfNonZero(limits.MaxGeneratedWorkItems),
+		MaxGeneratedWorkItemsArgument:       stringPtrIfNotEmpty(limits.MaxGeneratedWorkItemsArgument),
+		MaxGeneratedWorkItemsArgumentOffset: intPtrIfNonZero(limits.MaxGeneratedWorkItemsArgumentOffset),
 	}
 }
 
@@ -1428,10 +1431,11 @@ func workstationGuardsAPIFromInternal(guards []interfaces.GuardConfig) *[]factor
 	values := make([]factoryapi.WorkstationGuard, len(guards))
 	for i, guard := range guards {
 		values[i] = factoryapi.WorkstationGuard{
-			Type:        publicWorkstationGuardTypeFromInternal(guard.Type),
-			Workstation: stringPtrIfNotEmpty(guard.Workstation),
-			MaxVisits:   intPtrIfNonZero(guard.MaxVisits),
-			MatchConfig: guardMatchConfigAPIFromInternal(guard.MatchConfig),
+			Type:              publicWorkstationGuardTypeFromInternal(guard.Type),
+			Workstation:       stringPtrIfNotEmpty(guard.Workstation),
+			MaxVisits:         intPtrIfNonZero(guard.MaxVisits),
+			MaxVisitsArgument: stringPtrIfNotEmpty(guard.MaxVisitsArgument),
+			MatchConfig:       guardMatchConfigAPIFromInternal(guard.MatchConfig),
 		}
 	}
 	return &values

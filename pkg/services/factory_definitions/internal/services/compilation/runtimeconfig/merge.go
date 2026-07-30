@@ -298,6 +298,12 @@ func mergeWorkstationLimits(
 	if runtime.MaxGeneratedWorkItems != 0 {
 		merged.MaxGeneratedWorkItems = runtime.MaxGeneratedWorkItems
 	}
+	if runtime.MaxGeneratedWorkItemsArgument != "" {
+		merged.MaxGeneratedWorkItemsArgument = runtime.MaxGeneratedWorkItemsArgument
+	}
+	if runtime.MaxGeneratedWorkItemsArgumentOffset != 0 {
+		merged.MaxGeneratedWorkItemsArgumentOffset = runtime.MaxGeneratedWorkItemsArgumentOffset
+	}
 	return merged
 }
 

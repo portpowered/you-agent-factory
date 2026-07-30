@@ -167,6 +167,54 @@ func TestPackagedFullFlowBoundsImplementationContinueLoopAndFailsProject(t *test
 	}
 }
 
+func TestPackagedFullFlowEnforcesCallerSelectedTaskBound(t *testing.T) {
+	repository := initializeFullFlowRepository(t)
+	home := t.TempDir()
+	factoryDir := support.InstallPackagedFactory(t, home, factorydefinitions.PackagedFullFlowFactoryName)
+	runner := &fullFlowRunner{repository: repository}
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: factoryDir, WorkingDirectory: repository, WaitForServiceModeRuntime: true,
+		Args:  []string{"--provider", "CODEX", "--model", "gpt-5"},
+		Edges: serviceedges.Edges{ProviderCommandRunner: runner},
+	})
+
+	response := invokeFullFlow(t, server, map[string]any{
+		"request": "Reject a planner wave above the caller bound", "baseBranch": "main",
+		"maxCycles": "3", "maxTasksPerCycle": "1",
+	})
+	if response.Status != factoryapi.InvocationTerminalStatusFailed {
+		t.Fatalf("response = %#v, want over-budget planner wave failure", response)
+	}
+	planners, _, merges, implementationCalls := runner.Observations()
+	if planners != 1 || implementationCalls != 0 || len(merges) != 0 {
+		t.Fatalf("observations = planners %d implementations %d merges %v, want atomic rejection before task execution", planners, implementationCalls, merges)
+	}
+}
+
+func TestPackagedFullFlowEnforcesCallerSelectedCycleBound(t *testing.T) {
+	repository := initializeFullFlowRepository(t)
+	home := t.TempDir()
+	factoryDir := support.InstallPackagedFactory(t, home, factorydefinitions.PackagedFullFlowFactoryName)
+	runner := &fullFlowRunner{repository: repository}
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: factoryDir, WorkingDirectory: repository, WaitForServiceModeRuntime: true,
+		Args:  []string{"--provider", "CODEX", "--model", "gpt-5"},
+		Edges: serviceedges.Edges{ProviderCommandRunner: runner},
+	})
+
+	response := invokeFullFlow(t, server, map[string]any{
+		"request": "Stop after one incomplete delivery cycle", "baseBranch": "main",
+		"maxCycles": "1", "maxTasksPerCycle": "2",
+	})
+	if response.Status != factoryapi.InvocationTerminalStatusFailed {
+		t.Fatalf("response = %#v, want caller-selected cycle exhaustion", response)
+	}
+	planners, _, merges, _ := runner.Observations()
+	if planners != 1 || len(merges) != 2 {
+		t.Fatalf("observations = planners %d merges %v, want one completed wave and no second plan", planners, merges)
+	}
+}
+
 type fullFlowRunner struct {
 	mu                  sync.Mutex
 	repository          string
