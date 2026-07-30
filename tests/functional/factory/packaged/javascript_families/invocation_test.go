@@ -65,7 +65,14 @@ func TestPackagedSpawnPlansExactCountRunsChildrenAndMergesThroughCodexCommandRun
 		},
 		runner: runner,
 	})
-	assertSucceededPrimaryContains(t, response, `"count":2`, "research climate", "climate findings", "cost findings", "merged travel answer")
+	assertSucceededPrimaryContains(t, response, "merged travel answer")
+	part, err := (*response.Result.PrimaryResult)[0].AsWorkTextContentPart()
+	if err != nil {
+		t.Fatalf("primary result is not CLI-renderable text: %v", err)
+	}
+	if part.Text != "merged travel answer" {
+		t.Fatalf("primary result text = %q, want only the merged answer", part.Text)
+	}
 	requests := runner.Requests()
 	if len(requests) != 4 {
 		t.Fatalf("provider calls = %d, want planner, exactly two tasks, and merger", len(requests))

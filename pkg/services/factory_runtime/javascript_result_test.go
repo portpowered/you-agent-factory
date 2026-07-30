@@ -183,6 +183,21 @@ func TestProjectPrimaryResult_MapsJSONAndArtifactBackedOutputs(t *testing.T) {
 	}
 }
 
+func TestProjectPrimaryResult_MapsStringToPlainText(t *testing.T) {
+	t.Parallel()
+	raw, err := json.Marshal("merged answer")
+	if err != nil {
+		t.Fatalf("marshal fixture: %v", err)
+	}
+	parts, validation := factory.ProjectPrimaryResult("session-fixture", factory.TypedValue{JSON: raw}, nil)
+	if validation.HasIssues() {
+		t.Fatalf("projection validation = %#v", validation.Issues)
+	}
+	if len(parts) != 1 || parts[0].Type != work.WorkContentPartTypeText || parts[0].Text != "merged answer" {
+		t.Fatalf("text parts = %#v", parts)
+	}
+}
+
 func TestProjectPrimaryResult_RejectsCrossSessionArtifactURI(t *testing.T) {
 	t.Parallel()
 	sessionID := "session-fixture"

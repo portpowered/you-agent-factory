@@ -340,11 +340,11 @@
       "slug": "spawn",
       "json": {
         "locator": "generated/factories/spawn/factory.json",
-        "sha256": "999ff687553091cf1af193673117ef16c8a526406c50d7954ab1548cec255075"
+        "sha256": "0218bc1d3d8ccbcc08bf01a87b73e53bc0b5dce3f7afa2467b77c0525a987e83"
       },
       "yaml": {
         "locator": "generated/factories/spawn/factory.yaml",
-        "sha256": "a9ba2920ddb370c672feef2094a17439dc11308526bc6798c14786c025e06eb7"
+        "sha256": "92e44c5088041e8f89f360e891d9680f4a5d2d099d4c59a63b60de827e0839ed"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",

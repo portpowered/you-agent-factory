@@ -216,11 +216,9 @@ return (async function () {
     throw "spawn merger failed";
   }
 
-  return {
-    request: args.request,
-    count: args.count,
-    tasks: tasks,
-    findings: findings,
-    merged: merged.output,
-  };
+  const mergedText = merged.output.text.trim();
+  if (!mergedText) {
+    throw "spawn merger returned an empty result";
+  }
+  return mergedText;
 })();
