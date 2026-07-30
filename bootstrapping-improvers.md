@@ -309,7 +309,7 @@ multiple experiment IDs to cover all goals.
 | `@you/goal` | TBD | TBD | TBD | UNVALIDATED | |
 | `@you/loop` | TBD | TBD | TBD | UNVALIDATED | |
 | `@you/plan-execute` | TBD | TBD | TBD | UNVALIDATED | |
-| `@you/plan-parallel` | `BOOT-PLAN-PARALLEL-001` (passed twice) | TBD | deterministic DAG invocation coverage plus frozen repeat | NEEDS_ITERATION | Live DAG, concurrency, dependency gating, fan-in, and merge quality passed. Run a distinct holdout after fixing shared-runtime busy-wait and preserving the customer's normal tool environment. |
+| `@you/plan-parallel` | `BOOT-PLAN-PARALLEL-001` (passed twice) | simplified-graph holdout required | deterministic DAG invocation coverage plus frozen repeat | NEEDS_ITERATION | The first holdout completed four parallel evidence tasks but redundantly generated a synthesis child that failed before the dedicated merger. Planner prompts now reserve terminal synthesis for the merger. |
 | `@you/quorum` | `BOOT-QUORUM-002-R02` | `BOOT-QUORUM-002-R01` | deterministic parallel-branch, merge-gating, and insufficient-member failure coverage | MEETS_EXPECTATIONS | Both live cases ran independent branches then gated merge. One transient provider failure and one disputed peripheral defect label remain documented. |
 | `@you/review` | `BOOT-REVIEW-001-R01` | `BOOT-REVIEW-001-R02` | rejection feedback and bounded correction-loop coverage | MEETS_EXPECTATIONS | Independent review correctly disproved the seeded defect with traced code and a passing focused test; live approval occurred on the first review. |
 | `@you/spawn` | TBD | TBD | TBD | UNVALIDATED | |

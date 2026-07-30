@@ -60,7 +60,19 @@ func TestGenerateArtifactsProducesEquivalentSelfContainedPairsForCompleteInvento
 	}
 	assertExamplesPreserved(t, bySlug["subagent"])
 	assertMetaPlannerContract(t, bySlug["plan-parallel"], "parallel-planner")
+	assertPlanParallelDelegatesTerminalSynthesisToMerger(t, bySlug["plan-parallel"])
 	assertMetaPlannerContract(t, bySlug["full-flow"], "full-flow-planner")
+}
+
+func assertPlanParallelDelegatesTerminalSynthesisToMerger(t *testing.T, artifact packagedfactorycatalog.ArtifactPair) {
+	t.Helper()
+	const required = "Do not create a catch-all synthesis, summary, merge, or final-answer planned task"
+	for _, worker := range artifact.Factory.Workers {
+		if worker.Name == "parallel-planner" && strings.Contains(worker.Body, required) {
+			return
+		}
+	}
+	t.Fatalf("packaged Factory %q planner does not reserve terminal synthesis for its merger", artifact.PublicName)
 }
 
 func assertMetaPlannerContract(t *testing.T, artifact packagedfactorycatalog.ArtifactPair, workerName string) {
