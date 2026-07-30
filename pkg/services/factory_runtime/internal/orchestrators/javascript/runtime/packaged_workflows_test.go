@@ -51,6 +51,20 @@ func TestPackagedDeepResearchWorkflowDefaultsEveryChildToSkipPermissions(t *test
 	}
 }
 
+func TestPackagedDeepResearchWorkflowRetriesOneFailedSpecialistAndSynthesizes(t *testing.T) {
+	executor := &packagedWorkflowChildExecutor{failLabel: "research-specialist-technical"}
+	outcome := runPackagedWorkflow(t, "deep-research", "deep-research.workflow.js", map[string]any{
+		"topic": "compare the current runtime architecture and its operational tradeoffs",
+	}, executor)
+	if !outcome.OK {
+		t.Fatalf("deep-research failure = %#v; calls = %#v", outcome.Failure, executor.labels())
+	}
+	labels := executor.labels()
+	if len(labels) != 4 || labels[2] != "research-specialist-technical-retry" || labels[3] != "lead-research-synthesis" {
+		t.Fatalf("child labels = %#v, want two specialists, bounded technical retry, and lead synthesis", labels)
+	}
+}
+
 func TestPackagedTournamentWorkflowRunsBoundedMultiRoundBracket(t *testing.T) {
 	executor := &packagedWorkflowChildExecutor{}
 	outcome := runPackagedWorkflow(t, "tournament", "tournament.workflow.js", map[string]any{

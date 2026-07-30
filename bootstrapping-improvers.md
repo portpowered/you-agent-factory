@@ -303,15 +303,15 @@ multiple experiment IDs to cover all goals.
 | Factory | Canary experiment | Representative experiment | Holdout/repeat evidence | Goal status | Open limitations |
 | --- | --- | --- | --- | --- | --- |
 | `@you/classify` | `BOOT-CLASSIFY-001-R01` | `BOOT-CLASSIFY-001-R02` | deterministic three-lane and invalid-label coverage | MEETS_EXPECTATIONS | Live small and medium requests selected the appropriate lanes and returned source-grounded results. |
-| `@you/deep-research` | TBD | TBD | TBD | UNVALIDATED | |
+| `@you/deep-research` | `BOOT-DEEP-RESEARCH-001-R02` | post-fix holdout required | bounded delegation and synthesis coverage; bounded retry regression | NEEDS_ITERATION | Lead-only canary passed. Repeated specialist provider failures exposed the need for bounded retry and explicit degraded evidence; the fix requires a fresh representative worktree. |
 | `@you/full-flow` | TBD | TBD | deterministic full-flow invocation tests | NEEDS_ITERATION | Caller-selected bounds are not independently enforced below fixed topology ceilings. |
-| `@you/fusion` | TBD | TBD | TBD | UNVALIDATED | |
+| `@you/fusion` | `BOOT-FUSION-001-R01` | `BOOT-FUSION-001-R03` | deterministic draft-then-refine coverage | MEETS_EXPECTATIONS | Both stages produced a useful migration decision. One provider flake and one disputed peripheral defect label remain documented. |
 | `@you/goal` | TBD | TBD | TBD | UNVALIDATED | |
 | `@you/loop` | TBD | TBD | TBD | UNVALIDATED | |
 | `@you/plan-execute` | TBD | TBD | TBD | UNVALIDATED | |
 | `@you/plan-parallel` | `BOOT-PLAN-PARALLEL-001` (passed twice) | TBD | deterministic DAG invocation coverage plus frozen repeat | NEEDS_ITERATION | Live DAG, concurrency, dependency gating, fan-in, and merge quality passed. Run a distinct holdout after fixing shared-runtime busy-wait and preserving the customer's normal tool environment. |
 | `@you/quorum` | `BOOT-QUORUM-002-R02` | `BOOT-QUORUM-002-R01` | deterministic parallel-branch, merge-gating, and insufficient-member failure coverage | MEETS_EXPECTATIONS | Both live cases ran independent branches then gated merge. One transient provider failure and one disputed peripheral defect label remain documented. |
-| `@you/review` | TBD | TBD | TBD | UNVALIDATED | |
+| `@you/review` | `BOOT-REVIEW-001-R01` | `BOOT-REVIEW-001-R02` | rejection feedback and bounded correction-loop coverage | MEETS_EXPECTATIONS | Independent review correctly disproved the seeded defect with traced code and a passing focused test; live approval occurred on the first review. |
 | `@you/spawn` | TBD | TBD | TBD | UNVALIDATED | |
 | `@you/subagent` | `BOOT-SUBAGENT-003-R05` | `BOOT-SUBAGENT-003-R04` | deterministic invocation coverage | MEETS_EXPECTATIONS | Current published artifact passes repository-read and cross-file analysis cases. Named trials must report resolution because an older editable global install is intentionally not replaced. |
 | `@you/tournament` | TBD | TBD | TBD | UNVALIDATED | |

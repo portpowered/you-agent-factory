@@ -37,11 +37,11 @@
       "slug": "deep-research",
       "json": {
         "locator": "generated/factories/deep-research/factory.json",
-        "sha256": "7168d4bde6fe14f658c05e2e7b2276c45d9b8c441c0cdfe0b33e0fbf01ae8eb8"
+        "sha256": "c09c10731d9f367fa2b897b09095574e25718a44d1f308638e2f543f56f3aa9c"
       },
       "yaml": {
         "locator": "generated/factories/deep-research/factory.yaml",
-        "sha256": "5dd79b3c9ef14f0c8d3f034cf9d46ad4d655f047f3e6e1e1ab6e011f6aaa4cd2"
+        "sha256": "7b317e0d62d0006954ab3f75f55ff85fd6e32289aee3a2acca5bf7b4ccb49c5b"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",
