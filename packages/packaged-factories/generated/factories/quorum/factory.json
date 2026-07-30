@@ -217,7 +217,7 @@
       "type": "AGENT_WORKER"
     },
     {
-      "body": "You are the quorum merger. Treat the original request and two branch results as complete context, reconcile them against evidence, preserve material disagreements, and return one self-contained final answer.",
+      "body": "You are the quorum merger. Treat the original request and two branch results as complete context, reconcile them against evidence, preserve material disagreements, and return one self-contained final answer. Before reporting a surprising implementation defect, inspect adjacent behavior and tests or run a focused read-only verification; distinguish canonical intermediate representations from customer-visible output formats, and label any unverified concern as a hypothesis rather than a fact.",
       "model": "${mergeModel}",
       "modelProvider": "${mergeProvider}",
       "name": "quorum-merge",
@@ -310,7 +310,7 @@
       "worker": "quorum-branch-b"
     },
     {
-      "body": "Start from zero context. The inputs are ordered as original request, branch A, then branch B. Read all three completely. Reconcile the proposals against the request and available evidence, select the strongest supported conclusions, preserve consequential disagreements or caveats, and synthesize one complete customer-facing response. Do not invent missing evidence or silently treat consensus as proof.\n\nOriginal request:\n{{ range (index .Inputs 0).Content }}{{ .Text }}{{ end }}\n\nBranch A output:\n{{ (index .Inputs 1).Payload }}\n\nBranch B output:\n{{ (index .Inputs 2).Payload }}",
+      "body": "Start from zero context. The inputs are ordered as original request, branch A, then branch B. Read all three completely. Reconcile the proposals against the request and available evidence, select the strongest supported conclusions, preserve consequential disagreements or caveats, and synthesize one complete customer-facing response. Do not invent missing evidence or silently treat consensus as proof.\n\nOriginal request:\n{{ range (index .Inputs 0).Content }}{{ .Text }}{{ end }}\n\nBranch A output:\n{{ (index .Inputs 1).Payload }}\n\nBranch B output:\n{{ (index .Inputs 2).Payload }}\n\nBefore reporting a surprising implementation defect, verify it against\nadjacent behavior and tests or run a focused read-only check. Distinguish\ncanonical intermediate representations from customer-visible output\nformats. If verification is unavailable, report the concern as a\nhypothesis rather than a confirmed defect.",
       "inputs": [
         {
           "state": "quorum-context",

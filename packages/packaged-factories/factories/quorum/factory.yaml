@@ -127,7 +127,7 @@ workers:
     skipPermissions: true
     modelProvider: ${mergeProvider}
     model: ${mergeModel}
-    body: "You are the quorum merger. Treat the original request and two branch results as complete context, reconcile them against evidence, preserve material disagreements, and return one self-contained final answer."
+    body: "You are the quorum merger. Treat the original request and two branch results as complete context, reconcile them against evidence, preserve material disagreements, and return one self-contained final answer. Before reporting a surprising implementation defect, inspect adjacent behavior and tests or run a focused read-only verification; distinguish canonical intermediate representations from customer-visible output formats, and label any unverified concern as a hypothesis rather than a fact."
 workstations:
   - name: split-quorum
     type: LOGICAL_MOVE
@@ -208,3 +208,9 @@ workstations:
 
       Branch B output:
       {{ (index .Inputs 2).Payload }}
+
+      Before reporting a surprising implementation defect, verify it against
+      adjacent behavior and tests or run a focused read-only check. Distinguish
+      canonical intermediate representations from customer-visible output
+      formats. If verification is unavailable, report the concern as a
+      hypothesis rather than a confirmed defect.

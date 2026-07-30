@@ -268,11 +268,11 @@
       "slug": "quorum",
       "json": {
         "locator": "generated/factories/quorum/factory.json",
-        "sha256": "b40216f9ec13451eb64277badc169fe8cfd192f663184ac181a3c1ebd487eb14"
+        "sha256": "f4b9c59d4481955b051a2d36768ba664878879bacd7ffcb9891a02fcb3c83281"
       },
       "yaml": {
         "locator": "generated/factories/quorum/factory.yaml",
-        "sha256": "a2c7a0a5aaccc6213a640040284a8cbf55bfc78aab7ed4a1bd89e29777aea7c7"
+        "sha256": "2c177c48674769503f3c051774904d44610f5c08c356e4945f5eeb370dbebb67"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",
