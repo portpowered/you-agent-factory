@@ -303,7 +303,7 @@ multiple experiment IDs to cover all goals.
 | Factory | Canary experiment | Representative experiment | Holdout/repeat evidence | Goal status | Open limitations |
 | --- | --- | --- | --- | --- | --- |
 | `@you/classify` | `BOOT-CLASSIFY-001-R01` | `BOOT-CLASSIFY-001-R02` | deterministic three-lane and invalid-label coverage | MEETS_EXPECTATIONS | Live small and medium requests selected the appropriate lanes and returned source-grounded results. |
-| `@you/deep-research` | `BOOT-DEEP-RESEARCH-001-R02` | post-fix holdout required | bounded delegation and synthesis coverage; bounded retry regression | NEEDS_ITERATION | Lead-only canary passed. Repeated specialist provider failures exposed the need for bounded retry and explicit degraded evidence; the fix requires a fresh representative worktree. |
+| `@you/deep-research` | `BOOT-DEEP-RESEARCH-002-R02` | `BOOT-DEEP-RESEARCH-002-R01` | bounded delegation and synthesis coverage; bounded retry regression | MEETS_EXPECTATIONS | The holdout completed technical research, recovered a rejected trade-off specialist through one bounded retry, then produced a source-grounded lead synthesis with explicit specialist statuses. |
 | `@you/full-flow` | TBD | TBD | deterministic full-flow invocation tests | NEEDS_ITERATION | Caller-selected bounds are not independently enforced below fixed topology ceilings. |
 | `@you/fusion` | `BOOT-FUSION-001-R01` | `BOOT-FUSION-001-R03` | deterministic draft-then-refine coverage | MEETS_EXPECTATIONS | Both stages produced a useful migration decision. One provider flake and one disputed peripheral defect label remain documented. |
 | `@you/goal` | TBD | TBD | TBD | UNVALIDATED | |
