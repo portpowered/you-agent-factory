@@ -61,7 +61,24 @@ func TestGenerateArtifactsProducesEquivalentSelfContainedPairsForCompleteInvento
 	assertExamplesPreserved(t, bySlug["subagent"])
 	assertMetaPlannerContract(t, bySlug["plan-parallel"], "parallel-planner")
 	assertPlanParallelDelegatesTerminalSynthesisToMerger(t, bySlug["plan-parallel"])
+	assertPlanParallelExecutorsReturnSubstantiveResults(t, bySlug["plan-parallel"])
 	assertMetaPlannerContract(t, bySlug["full-flow"], "full-flow-planner")
+}
+
+func assertPlanParallelExecutorsReturnSubstantiveResults(t *testing.T, artifact packagedfactorycatalog.ArtifactPair) {
+	t.Helper()
+	for _, worker := range artifact.Factory.Workers {
+		if worker.Name != "parallel-executor" {
+			continue
+		}
+		for _, required := range []string{"Execute the one assigned Work item", "Never return a bare control token", "substantive evidence report"} {
+			if !strings.Contains(worker.Body, required) {
+				t.Fatalf("packaged Factory %q executor body does not contain %q", artifact.PublicName, required)
+			}
+		}
+		return
+	}
+	t.Fatalf("packaged Factory %q does not contain parallel-executor", artifact.PublicName)
 }
 
 func assertPlanParallelDelegatesTerminalSynthesisToMerger(t *testing.T, artifact packagedfactorycatalog.ArtifactPair) {
