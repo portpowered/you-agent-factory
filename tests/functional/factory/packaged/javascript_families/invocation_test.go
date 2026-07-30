@@ -34,7 +34,15 @@ func TestPackagedTournamentRunsOneOnOneBracketThroughCodexCommandRunner(t *testi
 		t.Logf("provider command calls before tournament failure: %d", runner.CallCount())
 	}
 
-	assertSucceededPrimaryContains(t, response, `"entrant":2`, "more complete")
+	assertSucceededPrimaryContains(t, response, "Tournament decision trail", "more complete")
+	part, err := (*response.Result.PrimaryResult)[0].AsWorkTextContentPart()
+	if err != nil {
+		t.Fatalf("primary result is not CLI-renderable text: %v", err)
+	}
+	if !strings.HasPrefix(part.Text, "candidate A\n\nTournament decision trail:") &&
+		!strings.HasPrefix(part.Text, "candidate B\n\nTournament decision trail:") {
+		t.Fatalf("primary result text = %q, want a candidate followed by decision trail", part.Text)
+	}
 	requests := runner.Requests()
 	if len(requests) != 3 {
 		t.Fatalf("provider calls = %d, want two competitors plus one judge", len(requests))

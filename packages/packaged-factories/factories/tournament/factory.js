@@ -243,22 +243,30 @@ return (async function () {
       if (decision.winner !== "A" && decision.winner !== "B") {
         throw "tournament judge must select A or B at round " + round + " match " + (match + 1);
       }
+      if (typeof decision.rationale !== "string" || decision.rationale.trim() === "") {
+        throw "tournament judge must provide a rationale at round " + round + " match " + (match + 1);
+      }
       const winner = decision.winner === "A" ? bracket[match * 2] : bracket[match * 2 + 1];
       winner.rationale.push({
         round: round,
         match: match + 1,
         selected: decision.winner,
-        rationale: decision.rationale || "",
+        rationale: decision.rationale.trim(),
       });
       advanced.push(winner);
     }
     bracket = advanced;
   }
 
-  return {
-    request: args.request,
-    rounds: args.rounds,
-    entrantCount: entrantCount,
-    champion: bracket[0],
-  };
+  const champion = bracket[0];
+  const championAnswer = champion.answer.trim();
+  if (!championAnswer) {
+    throw "tournament champion returned an empty result";
+  }
+  const decisionTrail = [];
+  for (let index = 0; index < champion.rationale.length; index += 1) {
+    const decision = champion.rationale[index];
+    decisionTrail.push("Round " + decision.round + ", match " + decision.match + ": " + decision.rationale);
+  }
+  return championAnswer + "\n\nTournament decision trail:\n" + decisionTrail.join("\n");
 })();

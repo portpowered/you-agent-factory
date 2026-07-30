@@ -409,11 +409,11 @@
       "slug": "tournament",
       "json": {
         "locator": "generated/factories/tournament/factory.json",
-        "sha256": "ee98f969dbb2575d73f8fa35d9e1afb7e491cf1286d70273f14fc17ca727ce57"
+        "sha256": "f0a65b5e43ede28243358d7843a18d6fefb28fe9072ad8eb380f7b81d7d63ebd"
       },
       "yaml": {
         "locator": "generated/factories/tournament/factory.yaml",
-        "sha256": "e75232398ae09df36c0f220ab0b846312f8d9f7504434b05b6a4cfc49c053d77"
+        "sha256": "b7840559ab8519bf1b2d61772289c77902bdad6eaf6396da3c6bb571684b343a"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",

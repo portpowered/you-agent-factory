@@ -70,11 +70,17 @@ func TestPackagedTournamentRunsCompetitorsAndJudgeThroughPersistentACPStdio(t *t
 	if result.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		t.Fatalf("packaged tournament status = %q, want SUCCEEDED; result=%#v", result.Status, result)
 	}
-	encoded, _ := json.Marshal(result.Result)
-	for _, want := range []string{`"rounds":1`, `"entrantCount":2`, `"entrant":2`, "candidate two is stronger"} {
-		if !strings.Contains(string(encoded), want) {
-			t.Fatalf("packaged tournament result = %s, want %q", encoded, want)
-		}
+	if result.Result == nil || result.Result.PrimaryResult == nil || len(*result.Result.PrimaryResult) != 1 {
+		t.Fatalf("packaged tournament primary result = %#v, want one champion text part", result.Result)
+	}
+	part, err := (*result.Result.PrimaryResult)[0].AsWorkTextContentPart()
+	if err != nil {
+		t.Fatalf("packaged tournament primary result is not CLI-renderable text: %v", err)
+	}
+	if (!strings.HasPrefix(part.Text, "candidate one\n\nTournament decision trail:") &&
+		!strings.HasPrefix(part.Text, "candidate two\n\nTournament decision trail:")) ||
+		!strings.Contains(part.Text, "candidate two is stronger") {
+		t.Fatalf("packaged tournament primary result = %q, want champion and judge rationale", part.Text)
 	}
 	if starts.Load() != 1 {
 		t.Fatalf("ACP process starts = %d, want one persistent stdio peer for three agents", starts.Load())

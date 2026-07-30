@@ -13,6 +13,7 @@ import (
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/javascript/runtime"
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 func TestPackagedTournamentWorkflowRunsOneOnOneJudging(t *testing.T) {
@@ -81,10 +82,10 @@ func TestPackagedTournamentWorkflowRunsBoundedMultiRoundBracket(t *testing.T) {
 	if !firstRound["tournament-judge-r1-m1"] || !firstRound["tournament-judge-r1-m2"] || labels[6] != "tournament-judge-r2-m1" {
 		t.Fatalf("judge labels = %#v, want deterministic two-round bracket", labels[4:])
 	}
-	projected := projectPrimaryJSON(t, "packaged-tournament", outcome.Value)
-	champion, ok := projected["champion"].(map[string]any)
-	if !ok || champion["entrant"] != float64(4) {
-		t.Fatalf("champion = %#v, want deterministic entrant 4 after B wins each match", projected["champion"])
+	projected := projectPrimaryText(t, "packaged-tournament", outcome.Value)
+	if !strings.Contains(projected, "result for tournament-competitor-4") ||
+		strings.Count(projected, "candidate B wins") != 2 {
+		t.Fatalf("champion result = %q, want entrant 4 and both winning rationales", projected)
 	}
 }
 
@@ -99,10 +100,10 @@ func TestPackagedTournamentWorkflowRunsMaximumBracketWithinPolicy(t *testing.T) 
 	if labels := executor.labels(); len(labels) != 15 {
 		t.Fatalf("maximum bracket child labels = %#v, want eight competitors and seven judges", labels)
 	}
-	projected := projectPrimaryJSON(t, "packaged-tournament-max", outcome.Value)
-	champion, ok := projected["champion"].(map[string]any)
-	if !ok || champion["entrant"] != float64(8) {
-		t.Fatalf("maximum bracket champion = %#v, want entrant 8", projected["champion"])
+	projected := projectPrimaryText(t, "packaged-tournament-max", outcome.Value)
+	if !strings.Contains(projected, "result for tournament-competitor-8") ||
+		strings.Count(projected, "candidate B wins") != 3 {
+		t.Fatalf("maximum bracket champion = %q, want entrant 8 and three winning rationales", projected)
 	}
 }
 
@@ -140,10 +141,19 @@ func TestPackagedTournamentWorkflowAcceptsFencedJudgeJSON(t *testing.T) {
 	if !outcome.OK {
 		t.Fatalf("tournament failure = %#v", outcome.Failure)
 	}
-	projected := projectPrimaryJSON(t, "packaged-tournament-fenced", outcome.Value)
-	champion := projected["champion"].(map[string]any)
-	if champion["entrant"] != float64(1) {
-		t.Fatalf("champion = %#v, want candidate A from fenced judgment", champion)
+	projected := projectPrimaryText(t, "packaged-tournament-fenced", outcome.Value)
+	if !strings.Contains(projected, "result for tournament-competitor-1") || !strings.Contains(projected, "clearer") {
+		t.Fatalf("champion = %q, want candidate A and fenced judgment rationale", projected)
+	}
+}
+
+func TestPackagedTournamentWorkflowRejectsEmptyJudgeRationaleWithProvenance(t *testing.T) {
+	executor := &packagedWorkflowChildExecutor{judgeText: `{"winner":"A","rationale":""}`}
+	outcome := runPackagedWorkflow(t, "tournament", "tournament.workflow.js", map[string]any{
+		"request": "choose a strategy", "rounds": 1,
+	}, executor)
+	if outcome.OK || !strings.Contains(outcome.Failure.Message, "provide a rationale at round 1 match 1") {
+		t.Fatalf("tournament outcome = %#v, want empty-rationale provenance", outcome)
 	}
 }
 
@@ -403,4 +413,16 @@ func (e *packagedWorkflowChildExecutor) labels() []string {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return append([]string(nil), e.called...)
+}
+
+func projectPrimaryText(t *testing.T, sessionID string, value factory.TypedValue) string {
+	t.Helper()
+	parts, projection := factory.ProjectPrimaryResult(sessionID, value, nil)
+	if projection.HasIssues() {
+		t.Fatalf("project primary result: %#v", projection.Issues)
+	}
+	if len(parts) != 1 || parts[0].Type != work.WorkContentPartTypeText {
+		t.Fatalf("primary result parts = %#v, want one text part", parts)
+	}
+	return parts[0].Text
 }
