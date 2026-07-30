@@ -7,7 +7,8 @@ import sys
 import time
 from pathlib import Path
 
-SAFE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$")
+SAFE_TASK = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$")
+SAFE_BRANCH = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,79}$")
 
 def run(root, *args):
     result = subprocess.run(["git", *args], cwd=root, text=True, capture_output=True)
@@ -33,7 +34,7 @@ def persist_longpaths(root):
     raise RuntimeError(last_error or "could not persist core.longpaths")
 
 def main():
-    if len(sys.argv) != 3 or not SAFE.fullmatch(sys.argv[1]) or not SAFE.fullmatch(sys.argv[2]) or ".." in sys.argv[1] or ".." in sys.argv[2]:
+    if len(sys.argv) != 3 or not SAFE_TASK.fullmatch(sys.argv[1]) or not SAFE_BRANCH.fullmatch(sys.argv[2]) or ".." in sys.argv[1] or ".." in sys.argv[2]:
         raise RuntimeError("safe task and base branch names are required")
     task, base = sys.argv[1], sys.argv[2]
     root = Path(run(None, "rev-parse", "--show-toplevel"))

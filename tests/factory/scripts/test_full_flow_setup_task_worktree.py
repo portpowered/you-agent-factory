@@ -47,9 +47,9 @@ class FullFlowWorktreeSetupTest(unittest.TestCase):
     def tearDown(self):
         self.temporary_directory.cleanup()
 
-    def run_script(self, task):
+    def run_script(self, task, base="main"):
         return subprocess.run(
-            ["python", str(SCRIPT_PATH), task, "main"],
+            ["python", str(SCRIPT_PATH), task, base],
             cwd=self.repository,
             check=False,
             capture_output=True,
@@ -72,6 +72,19 @@ class FullFlowWorktreeSetupTest(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("safe task and base branch names are required", result.stderr)
         self.assertFalse((self.repository / ".claude" / "worktrees").exists())
+
+    def test_accepts_slash_in_base_branch_without_changing_task_directory(self):
+        git(self.repository, "branch", "bootstrap/full-flow", "main")
+
+        result = self.run_script("task-a", "bootstrap/full-flow")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["base"], "bootstrap/full-flow")
+        self.assertEqual(
+            Path(payload["worktree"]),
+            self.repository / ".claude" / "worktrees" / "task-a",
+        )
 
     def test_concurrent_setups_persist_config_and_create_both_worktrees(self):
         commands = [
