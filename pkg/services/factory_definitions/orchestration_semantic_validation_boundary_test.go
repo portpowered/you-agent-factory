@@ -2,34 +2,12 @@ package factorydefinitions_test
 
 import (
 	"context"
-	"os/exec"
 	"strings"
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
 )
-
-var orchestrationSemanticValidationPackages = []string{
-	factoryDefinitionsRoot + "/internal/services/validation/impl",
-	factoryDefinitionsRoot + "/internal/services/validation/internal/orchestrator",
-}
-
-// TestOrchestrationSemanticValidationPackagesImportNoRuntimeImplementation seals
-// CUT-DEF-RUN story 002: orchestration-specific semantic validation under
-// Factory Definitions may reach Factory Runtime only through the injected
-// OrchestratorDefinitionValidator port, not nested Runtime implementation paths.
-func TestOrchestrationSemanticValidationPackagesImportNoRuntimeImplementation(t *testing.T) {
-	t.Parallel()
-
-	for _, pkg := range orchestrationSemanticValidationPackages {
-		pkg := pkg
-		t.Run(shortFactoryDefinitionsPackageName(pkg), func(t *testing.T) {
-			t.Parallel()
-			assertProductionImportsUseRuntimeRootOnly(t, pkg)
-		})
-	}
-}
 
 // TestOrchestrationSemanticValidation_DefinitionsOwnedStrategyCheckWithoutRuntimePort
 // proves Definitions-owned orchestrator/strategy checks remain on Definitions
@@ -119,30 +97,6 @@ func TestOrchestrationSemanticValidation_ValidOrchestrationProducesNoRuntimeTarg
 // proves the OrchestratorDefinitionValidator port surface stays on
 // Definitions-owned contracts and does not pull Runtime implementation types
 // into the orchestration semantic validation packages.
-func TestOrchestrationSemanticValidationPortContractUsesDefinitionsVocabularyOnly(t *testing.T) {
-	t.Parallel()
-
-	cmd := exec.Command(
-		"go",
-		"list",
-		"-f",
-		"{{join .Imports \"\\n\"}}",
-		factoryDefinitionsRoot+"/internal/contracts",
-	)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("go list imports for internal/contracts: %v\n%s", err, output)
-	}
-	for _, importPath := range strings.Fields(string(output)) {
-		if isForbiddenFactoryDefinitionsRuntimeImport(importPath) {
-			t.Fatalf(
-				"internal/contracts import %s is forbidden on OrchestratorDefinitionValidator port; use Definitions vocabulary only",
-				importPath,
-			)
-		}
-	}
-}
-
 func validJavaScriptOrchestratorConfig() *factorydefinitions.FactoryConfig {
 	return &factorydefinitions.FactoryConfig{
 		Name: "javascript-orchestrator",

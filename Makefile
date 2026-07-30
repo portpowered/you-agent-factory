@@ -130,6 +130,7 @@ endef
 .PHONY: backend-dependency-graph
 
 .PHONY: generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api generate-wire
+.PHONY: interfaces-api-bundle interfaces-go interfaces-contracts interfaces-ui-openapi interfaces-ui-client interfaces-ui-emulator interfaces-ui interfaces-all
 
 .PHONY: wire-smoke api-smoke api-package-pack-smoke api-package-verify packaged-factory-package-smoke packaged-factory-package-verify packaged-factory-package-script-test packaged-factory-package-pack-check packaged-factory-package-candidate-dry-run packaged-factory-package-consumer-smoke model-provider-package-smoke model-provider-package-verify model-provider-reference-input-smoke
 .PHONY: public-release-package-smoke
@@ -153,6 +154,7 @@ endef
 .PHONY: ui-test-storybook ui-components-typecheck ui-components-test ui-components-storybook ui-components-boundary ui-components-dependency-direction ui-components-verify ui-verify-fresh-npm-install
 .PHONY: ui-public-package-release ui-public-package-publish-prepare
 .PHONY: ui-storybook  ui-deadcode
+.PHONY: ui-package-client-build ui-package-components-build ui-package-emulator-build ui-package-replay-build ui-package-visualizers-build ui-packages-build ui-dashboard-build ui-build-all build-all
 
 
 default:
@@ -184,6 +186,34 @@ generate-go-client-api:
 
 generate-ui-api:
 	cd ui && node ./scripts/generate-openapi-types.mjs ../api/openapi.yaml src/api/generated/openapi.ts
+
+# Interface generation is split by consumer so callers can refresh only UI
+# artifacts or all generated interfaces without relying on prerequisite order.
+interfaces-api-bundle:
+	$(MAKE) bundle-api
+
+interfaces-go: interfaces-api-bundle
+	$(MAKE) generate-go-api
+
+interfaces-contracts:
+	$(MAKE) contracts-generate
+
+interfaces-ui-openapi: interfaces-api-bundle ui-deps
+	$(MAKE) generate-ui-api
+
+interfaces-ui-client: interfaces-contracts interfaces-ui-openapi
+	cd ui/packages/client && $(UI_SCRIPT) generate
+
+interfaces-ui-emulator: ui-deps
+	cd ui/packages/factory-emulator && $(UI_SCRIPT) generate
+
+# Regenerates the dashboard and UI-package interface artifacts without emitting
+# the generated Go HTTP server/client interfaces.
+interfaces-ui: interfaces-ui-client interfaces-ui-emulator
+
+# Regenerates every public interface artifact: bundled OpenAPI, Go HTTP
+# interfaces, contract schemas, and UI-facing generated artifacts.
+interfaces-all: interfaces-go interfaces-ui
 
 generate-wire:
 	$(GO) generate ./pkg/...
@@ -714,6 +744,38 @@ ifeq ($(BUN_BIN),)
 else
 	cd ui && $(UI_SCRIPT) build
 endif
+
+# Build each publishable UI package once, in dependency order. The dashboard
+# consumes package source during its Vite build, while package dist/ artifacts
+# are required for local package consumers and release checks.
+ui-package-client-build: interfaces-ui-client
+	cd ui/packages/client && $(UI_SCRIPT) build
+
+ui-package-components-build: ui-deps
+	cd ui/packages/components && $(UI_SCRIPT) build
+
+ui-package-emulator-build: interfaces-ui-emulator ui-package-client-build
+	cd ui/packages/factory-emulator && $(UI_SCRIPT) build
+
+ui-package-replay-build: ui-package-client-build
+	cd ui/packages/factory-replay && $(UI_SCRIPT) build
+
+ui-package-visualizers-build: ui-package-client-build ui-package-components-build ui-package-replay-build
+	cd ui/packages/factory-visualizers && $(UI_SCRIPT) build:current
+
+ui-packages-build: ui-package-client-build ui-package-components-build ui-package-emulator-build ui-package-replay-build ui-package-visualizers-build
+
+ui-dashboard-build: interfaces-ui
+	$(MAKE) ui-build
+
+# Rebuilds every UI artifact: generated contracts, package dist/ outputs, and
+# the dashboard's distributable Vite bundle.
+ui-build-all: ui-packages-build ui-dashboard-build
+
+# Produces the complete application from canonical interface sources before
+# compiling both the dashboard and the Go CLI.
+build-all: interfaces-all ui-build-all
+	$(MAKE) build
 
 ui-test:
 	cd ui && $(UI_SCRIPT) test:unit

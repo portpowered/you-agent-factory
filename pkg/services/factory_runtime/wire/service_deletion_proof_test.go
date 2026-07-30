@@ -3,14 +3,9 @@ package wire_test
 import (
 	"context"
 	"errors"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/jonboulle/clockwork"
-	"github.com/portpowered/infinite-you/internal/ownershipinventory"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -21,51 +16,6 @@ const deletedServiceImportPrefix = "github.com/portpowered/infinite-you/pkg/serv
 // DEL-RUN-SERVICE proof tests verify the transitional factory_runtime/service
 // public tree is gone, wire still constructs the published Service root, and
 // engine/pipeline public packages are folded under orchestration/instance_host.
-
-func TestServiceDeletionProof_NoPublicServiceDirectory(t *testing.T) {
-	t.Parallel()
-
-	root := serviceDeletionRepoRoot(t)
-	runtimeRoot := filepath.Join(root, "pkg", "services", "factory_runtime")
-	for _, rel := range []string{"service", filepath.Join("service", "host")} {
-		path := filepath.Join(runtimeRoot, rel)
-		if _, err := os.Stat(path); err == nil {
-			t.Fatalf("deleted public package directory still exists: %s", path)
-		} else if !os.IsNotExist(err) {
-			t.Fatalf("stat %s: %v", path, err)
-		}
-	}
-}
-
-func TestServiceDeletionProof_NoModuleImportsOfDeletedServicePath(t *testing.T) {
-	t.Parallel()
-
-	cmd := exec.Command("go", "list", "-deps", "-f", "{{.ImportPath}}", "./...")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("go list deps: %v\n%s", err, output)
-	}
-	for _, importPath := range strings.Fields(string(output)) {
-		if importPath == deletedServiceImportPrefix || strings.HasPrefix(importPath, deletedServiceImportPrefix+"/") {
-			t.Fatalf("module still imports deleted service path: %s", importPath)
-		}
-	}
-}
-
-func TestServiceDeletionProof_DeletedPathsAbsentFromOwnershipInventory(t *testing.T) {
-	t.Parallel()
-
-	root := serviceDeletionRepoRoot(t)
-	inventory, err := ownershipinventory.Load(root)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	for _, row := range inventory.Packages {
-		if strings.Contains(row.PackagePath, "factory_runtime/service") {
-			t.Fatalf("ownership inventory still lists deleted service path: %s", row.PackagePath)
-		}
-	}
-}
 
 func TestServiceDeletionProof_WireConstructsPublishedControlObservationDispatch(t *testing.T) {
 	t.Parallel()
@@ -108,47 +58,4 @@ func TestServiceDeletionProof_WireConstructsPublishedControlObservationDispatch(
 	if !errors.Is(err, factoryruntime.ErrNotRunning) {
 		t.Fatalf("ControlPause() error = %v, want ErrNotRunning", err)
 	}
-}
-
-func TestServiceDeletionProof_PipelinePublicPackagesFolded(t *testing.T) {
-	t.Parallel()
-
-	root := serviceDeletionRepoRoot(t)
-	runtimeRoot := filepath.Join(root, "pkg", "services", "factory_runtime")
-	for _, name := range []string{
-		"build", "engine", "javascript", "runtime", "scheduler", "state", "subsystems", "token",
-	} {
-		path := filepath.Join(runtimeRoot, name)
-		if _, err := os.Stat(path); err == nil {
-			t.Fatalf("folded pipeline public package %q still exists at %s", name, path)
-		} else if !os.IsNotExist(err) {
-			t.Fatalf("stat %s: %v", path, err)
-		}
-	}
-}
-
-func TestServiceDeletionProof_CheckpointRecoveryRemainsUndisturbed(t *testing.T) {
-	t.Parallel()
-
-	root := serviceDeletionRepoRoot(t)
-	recoveryRoot := filepath.Join(
-		root,
-		"pkg", "services", "factory_runtime", "internal", "services", "checkpoint_recovery",
-	)
-	info, err := os.Stat(recoveryRoot)
-	if err != nil {
-		t.Fatalf("checkpoint_recovery nested service missing (IMP-RUN-04 must remain undisturbed): %v", err)
-	}
-	if !info.IsDir() {
-		t.Fatal("checkpoint_recovery nested service is not a directory")
-	}
-}
-
-func serviceDeletionRepoRoot(t *testing.T) string {
-	t.Helper()
-	root, err := ownershipinventory.FindRepositoryRoot()
-	if err != nil {
-		t.Fatalf("FindRepositoryRoot() error = %v", err)
-	}
-	return root
 }

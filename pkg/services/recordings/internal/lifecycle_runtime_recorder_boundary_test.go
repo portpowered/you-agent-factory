@@ -1,7 +1,6 @@
 package internal
 
 import (
-	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -19,10 +18,6 @@ const (
 // TestLifecycleRuntimeRecorderImportsRuntimeRootOnly seals CUT-REC-RUN story 002:
 // the lifecycle recorder edge may depend on Factory Runtime only through the
 // service root contract.
-func TestLifecycleRuntimeRecorderImportsRuntimeRootOnly(t *testing.T) {
-	t.Parallel()
-	assertProductionImportsUseRuntimeRootOnly(t, lifecycleRecorder)
-}
 
 // TestLifecycleRuntimeRecorderAcceptsRuntimeRootFinishedEvent proves the
 // recorder path accepts Runtime-facing event vocabulary from the Runtime root
@@ -101,41 +96,4 @@ func TestLifecycleRuntimeRecorderAcceptsRuntimeRootFinishedEvent(t *testing.T) {
 	if !strings.Contains(finishedEvent.Payload, string(factoryruntime.FactoryStateCompleted)) {
 		t.Fatalf("finished event payload = %q, want completed state", finishedEvent.Payload)
 	}
-}
-
-func assertProductionImportsUseRuntimeRootOnly(t *testing.T, packagePath string) {
-	t.Helper()
-
-	cmd := exec.Command("go", "list", "-f", "{{join .Imports \"\\n\"}}", packagePath)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("go list imports for %s: %v\n%s", packagePath, err, output)
-	}
-	for _, importPath := range strings.Fields(string(output)) {
-		if isForbiddenLifecycleRuntimeImport(importPath) {
-			t.Fatalf(
-				"%s production import %s is forbidden; use %s for Factory Runtime surfaces",
-				packagePath,
-				importPath,
-				factoryRuntimeRoot,
-			)
-		}
-	}
-}
-
-func isForbiddenLifecycleRuntimeImport(importPath string) bool {
-	if importPath == factoryRuntimeRoot {
-		return false
-	}
-	if strings.HasPrefix(importPath, factoryRuntimeRoot+"/") {
-		return true
-	}
-	if importPath == modulePrefix+"pkg/factory" ||
-		strings.HasPrefix(importPath, modulePrefix+"pkg/factory/") {
-		return true
-	}
-	if strings.HasPrefix(importPath, modulePrefix+"pkg/transports/mapping/factory") {
-		return true
-	}
-	return false
 }

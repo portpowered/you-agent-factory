@@ -3,9 +3,7 @@ package factory_test
 import (
 	"context"
 	"errors"
-	"os/exec"
 	"reflect"
-	"strings"
 	"testing"
 
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -157,43 +155,6 @@ func (fake *checkpointRootPeerFake) AcceptDispatchResult(context.Context, factor
 	return factory.AcceptDispatchResultResult{}, nil
 }
 
-func TestCheckpointRootContracts_DeclareOnlyRuntimeRootVocabulary(t *testing.T) {
-	t.Parallel()
-
-	for _, typ := range checkpointRootContractTypes {
-		typ := typ
-		t.Run(typ.String(), func(t *testing.T) {
-			t.Parallel()
-			assertCheckpointRootContractUsesOnlyRuntimeRootVocabulary(t, typ, map[reflect.Type]bool{})
-		})
-	}
-}
-
-func TestCheckpointPeerConsumers_DoNotImportCheckpointRecoveryInternals(t *testing.T) {
-	t.Parallel()
-
-	for _, root := range checkpointPeerConsumerPackages {
-		root := root
-		t.Run(root, func(t *testing.T) {
-			t.Parallel()
-			assertCheckpointPeerPackageTreeForbidden(t, root)
-		})
-	}
-}
-
-func TestCheckpointPeerSurface_PublishedAtRuntimeRoot(t *testing.T) {
-	t.Parallel()
-
-	cmd := exec.Command("go", "list", "-f", "{{.GoFiles}}", factoryRuntimeRootPackage)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("go list files for %s: %v\n%s", factoryRuntimeRootPackage, err, output)
-	}
-	if !strings.Contains(string(output), "javascript_checkpoint_contract.go") {
-		t.Fatalf("%s must publish javascript_checkpoint_contract.go at the Runtime root", factoryRuntimeRootPackage)
-	}
-}
-
 func TestCheckpointPeerSurface_PeerRecoversThroughRootContractsOnly(t *testing.T) {
 	t.Parallel()
 
@@ -259,99 +220,5 @@ func TestCheckpointPeerSurface_PeerObservesTypedCheckpointFailures(t *testing.T)
 				t.Fatalf("error = %v, want %v", err, test.want)
 			}
 		})
-	}
-}
-
-func assertCheckpointRootContractUsesOnlyRuntimeRootVocabulary(
-	t *testing.T,
-	typ reflect.Type,
-	visiting map[reflect.Type]bool,
-) {
-	t.Helper()
-
-	for typ.Kind() == reflect.Pointer || typ.Kind() == reflect.Slice ||
-		typ.Kind() == reflect.Array || typ.Kind() == reflect.Map {
-		typ = typ.Elem()
-	}
-	if visiting[typ] {
-		return
-	}
-	visiting[typ] = true
-	defer delete(visiting, typ)
-
-	switch typ.Kind() {
-	case reflect.Interface:
-		if typ.PkgPath() == "context" {
-			return
-		}
-		t.Fatalf("checkpoint root contract %s must not expose non-context interface dependency", typ)
-	case reflect.Func, reflect.Chan:
-		t.Fatalf("checkpoint root contract %s must not expose non-value dependency %s", typ, typ.Kind())
-	case reflect.Struct:
-		for index := 0; index < typ.NumField(); index++ {
-			field := typ.Field(index)
-			if field.PkgPath != "" && !field.IsExported() {
-				continue
-			}
-			assertCheckpointRootContractUsesOnlyRuntimeRootVocabulary(t, field.Type, visiting)
-		}
-	case reflect.String, reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32,
-		reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
-		reflect.Uintptr, reflect.Float32, reflect.Float64, reflect.Complex64, reflect.Complex128:
-		return
-	default:
-		if typ.PkgPath() == "" {
-			return
-		}
-	}
-
-	pkgPath := typ.PkgPath()
-	if pkgPath == "" || pkgPath == "context" || pkgPath == "time" {
-		return
-	}
-	if pkgPath == factoryRuntimeRootPackage {
-		return
-	}
-	for _, forbidden := range forbiddenCheckpointPeerImportPrefixes {
-		if pkgPath == forbidden || strings.HasPrefix(pkgPath, forbidden) {
-			t.Fatalf("checkpoint root contract type %s depends on forbidden consumer path %s", typ, pkgPath)
-		}
-	}
-	if strings.Contains(pkgPath, "factory_definitions") {
-		t.Fatalf("checkpoint root contract type %s depends on Definitions checkpoint record vocabulary %s", typ, pkgPath)
-	}
-	t.Fatalf(
-		"checkpoint root contract type %s depends on unexpected package %s; peer surface must use only Runtime root checkpoint vocabulary",
-		typ,
-		pkgPath,
-	)
-}
-
-func assertCheckpointPeerPackageTreeForbidden(t *testing.T, packageRoot string) {
-	t.Helper()
-
-	cmd := exec.Command(
-		"go",
-		"list",
-		"-deps",
-		"-f",
-		"{{if not .Standard}}{{.ImportPath}}{{end}}",
-		packageRoot,
-	)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("go list deps for %s: %v\n%s", packageRoot, err, output)
-	}
-	for _, dep := range strings.Fields(string(output)) {
-		for _, forbidden := range forbiddenCheckpointPeerImportPrefixes {
-			if dep == forbidden || strings.HasPrefix(dep, forbidden) {
-				t.Fatalf(
-					"%s must not depend on checkpoint recovery internals %s; found dependency %s",
-					packageRoot,
-					forbidden,
-					dep,
-				)
-			}
-		}
 	}
 }

@@ -4704,7 +4704,7 @@ export interface components {
      * @enum {string}
      */
     WorkstationType: WorkstationType;
-    /** @description Trigger timing for scheduled workstations. Provide either a five-field cron schedule or a positive duration in every. */
+    /** @description Trigger timing for scheduled workstations. Provide exactly one of a five-field cron schedule or a positive duration in every; Factory validation enforces the exclusive choice. */
     WorkstationCron: {
       /** @description Standard five-field cron expression used to produce internal time work while the factory service is running. */
       schedule?: string;
@@ -4719,7 +4719,7 @@ export interface components {
       jitter?: string;
       /** @description Positive Go duration after due_at before a stale cron time token expires and can be consumed by the system expiry transition. Defaults to the duration until the next scheduled cron fire when omitted. */
       expiryWindow?: string;
-    } & (unknown | unknown);
+    };
     /** @description Optional workstation policy for how downstream work receives payload content after this workstation completes. When omitted, downstream work uses the workstation output payload. */
     WorkPropagation: {
       /** @description Propagation mode for downstream work payload selection after this workstation succeeds. */

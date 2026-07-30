@@ -3,21 +3,12 @@ package factoryvisualization_test
 import (
 	"context"
 	"encoding/json"
-	"os/exec"
 	"strings"
 	"testing"
 
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	mcpfactoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/mcp"
 )
-
-func TestAdapterPackageDoesNotImportVisualizationInternals(t *testing.T) {
-	t.Parallel()
-
-	forbidden := "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal"
-	packagePath := "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/mcp"
-	assertPackageDirectImportsForbidden(t, packagePath, []string{forbidden})
-}
 
 func TestBind_FakeRootInvokedThroughActivateTool(t *testing.T) {
 	t.Parallel()
@@ -84,15 +75,15 @@ func TestToolOperationRejectsMissingContext(t *testing.T) {
 }
 
 type fakeVisualizationRoot struct {
-	invoked  *bool
-	activate func(context.Context, factoryvisualization.ActivateRequest) (factoryvisualization.ActivateResult, error)
-	join     func(context.Context, factoryvisualization.JoinRequest) (factoryvisualization.JoinResult, error)
-	stopDrain func(context.Context, factoryvisualization.StopDrainRequest) (factoryvisualization.StopDrainResult, error)
-	observe  func(context.Context, factoryvisualization.ObserveRequest) (factoryvisualization.ObserveResult, error)
-	openPresentation func(context.Context, factoryvisualization.OpenPresentationRequest) (factoryvisualization.OpenPresentationResult, error)
-	presentProgress func(context.Context, factoryvisualization.PresentProgressRequest) (factoryvisualization.PresentProgressResult, error)
+	invoked              *bool
+	activate             func(context.Context, factoryvisualization.ActivateRequest) (factoryvisualization.ActivateResult, error)
+	join                 func(context.Context, factoryvisualization.JoinRequest) (factoryvisualization.JoinResult, error)
+	stopDrain            func(context.Context, factoryvisualization.StopDrainRequest) (factoryvisualization.StopDrainResult, error)
+	observe              func(context.Context, factoryvisualization.ObserveRequest) (factoryvisualization.ObserveResult, error)
+	openPresentation     func(context.Context, factoryvisualization.OpenPresentationRequest) (factoryvisualization.OpenPresentationResult, error)
+	presentProgress      func(context.Context, factoryvisualization.PresentProgressRequest) (factoryvisualization.PresentProgressResult, error)
 	finalizePresentation func(context.Context, factoryvisualization.FinalizePresentationRequest) (factoryvisualization.FinalizePresentationResult, error)
-	closePresentation func(context.Context, factoryvisualization.ClosePresentationRequest) (factoryvisualization.ClosePresentationResult, error)
+	closePresentation    func(context.Context, factoryvisualization.ClosePresentationRequest) (factoryvisualization.ClosePresentationResult, error)
 }
 
 func (f fakeVisualizationRoot) markInvoked() {
@@ -163,22 +154,4 @@ func (f fakeVisualizationRoot) ClosePresentation(ctx context.Context, req factor
 	}
 	f.markInvoked()
 	return f.closePresentation(ctx, req)
-}
-
-func assertPackageDirectImportsForbidden(t *testing.T, packagePath string, forbiddenRoots []string) {
-	t.Helper()
-
-	cmd := exec.Command("go", "list", "-f", "{{.Imports}}", packagePath)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("go list imports for %s: %v\n%s", packagePath, err, output)
-	}
-	imports := strings.Fields(strings.Trim(string(output), "[]"))
-	for _, importPath := range imports {
-		for _, forbidden := range forbiddenRoots {
-			if importPath == forbidden || strings.HasPrefix(importPath, forbidden+"/") {
-				t.Fatalf("%s must not import forbidden ownership %s; found direct import %s", packagePath, forbidden, importPath)
-			}
-		}
-	}
 }

@@ -2320,19 +2320,7 @@
     },
     "WorkstationCron": {
       "additionalProperties": false,
-      "description": "Trigger timing for scheduled workstations. Provide either a five-field cron schedule or a positive duration in every.",
-      "oneOf": [
-        {
-          "required": [
-            "schedule"
-          ]
-        },
-        {
-          "required": [
-            "every"
-          ]
-        }
-      ],
+      "description": "Trigger timing for scheduled workstations. Provide exactly one of a five-field cron schedule or a positive duration in every; Factory validation enforces the exclusive choice.",
       "properties": {
         "every": {
           "description": "Positive Go duration interval, such as 30s, 5m, 1h, or 1h30m, used instead of schedule.",

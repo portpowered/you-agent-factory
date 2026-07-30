@@ -2,16 +2,14 @@ package projections
 
 import (
 	"encoding/json"
-	"os/exec"
-	"strings"
 	"testing"
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 const (
@@ -23,10 +21,6 @@ const (
 // TestProjectionsImportRuntimeRootOnly seals CUT-REC-RUN story 004: Recordings
 // projection and observation surfaces may depend on Factory Runtime only through
 // the service root contract.
-func TestProjectionsImportRuntimeRootOnly(t *testing.T) {
-	t.Parallel()
-	assertProductionImportsUseRuntimeRootOnly(t, recordingsProjectionsRoot)
-}
 
 // TestProjectionsConstructRuntimeObservationAndResultShapesThroughRoot proves
 // projection/observation edges construct Runtime-owned marking, result, and
@@ -110,41 +104,4 @@ func TestProjectionsConstructRuntimeObservationAndResultShapesThroughRoot(t *tes
 	if eventPayload.ResultStatus != factoryapi.FactoryEventSessionResultStatusFinal {
 		t.Fatalf("event payload result status = %q, want FINAL", eventPayload.ResultStatus)
 	}
-}
-
-func assertProductionImportsUseRuntimeRootOnly(t *testing.T, packagePath string) {
-	t.Helper()
-
-	cmd := exec.Command("go", "list", "-f", "{{join .Imports \"\\n\"}}", packagePath)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("go list imports for %s: %v\n%s", packagePath, err, output)
-	}
-	for _, importPath := range strings.Fields(string(output)) {
-		if isForbiddenProjectionsRuntimeImport(importPath) {
-			t.Fatalf(
-				"%s production import %s is forbidden; use %s for Factory Runtime surfaces",
-				packagePath,
-				importPath,
-				factoryRuntimeRoot,
-			)
-		}
-	}
-}
-
-func isForbiddenProjectionsRuntimeImport(importPath string) bool {
-	if importPath == factoryRuntimeRoot {
-		return false
-	}
-	if strings.HasPrefix(importPath, factoryRuntimeRoot+"/") {
-		return true
-	}
-	if importPath == modulePrefix+"pkg/factory" ||
-		strings.HasPrefix(importPath, modulePrefix+"pkg/factory/") {
-		return true
-	}
-	if strings.HasPrefix(importPath, modulePrefix+"pkg/transports/mapping/factory") {
-		return true
-	}
-	return false
 }

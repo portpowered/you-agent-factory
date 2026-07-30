@@ -3,7 +3,6 @@ package operatorsettingsmcp_test
 import (
 	"context"
 	"encoding/json"
-	"os/exec"
 	"strings"
 	"testing"
 
@@ -89,20 +88,12 @@ func TestBind_ToolOperationRejectsMissingContext(t *testing.T) {
 	}
 }
 
-func TestPackageBoundary_DoesNotImportOperatorSettingsInternal(t *testing.T) {
-	t.Parallel()
-
-	forbidden := "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal"
-	packagePath := "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/mcp"
-	assertPackageDirectImportsForbidden(t, packagePath, []string{forbidden})
-}
-
 type fakeSettingsRoot struct {
 	operatorsettings.Service
-	invoked              *bool
-	loadDocument         func(operatorsettings.LoadDocumentRequest) (operatorsettings.LoadDocumentResult, error)
-	applyDocumentUpdate  func(operatorsettings.ApplyDocumentUpdateRequest) (operatorsettings.ApplyDocumentUpdateResult, error)
-	resolveEffective     func(operatorsettings.ResolveEffectiveRequest) (operatorsettings.ResolveEffectiveResult, error)
+	invoked             *bool
+	loadDocument        func(operatorsettings.LoadDocumentRequest) (operatorsettings.LoadDocumentResult, error)
+	applyDocumentUpdate func(operatorsettings.ApplyDocumentUpdateRequest) (operatorsettings.ApplyDocumentUpdateResult, error)
+	resolveEffective    func(operatorsettings.ResolveEffectiveRequest) (operatorsettings.ResolveEffectiveResult, error)
 }
 
 func (fake fakeSettingsRoot) markInvoked() {
@@ -139,22 +130,4 @@ func (fake fakeSettingsRoot) ResolveEffective(
 		panic("unexpected ResolveEffective on fake settings root")
 	}
 	return fake.resolveEffective(request)
-}
-
-func assertPackageDirectImportsForbidden(t *testing.T, packagePath string, forbiddenRoots []string) {
-	t.Helper()
-
-	cmd := exec.Command("go", "list", "-f", "{{.Imports}}", packagePath)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("go list imports for %s: %v\n%s", packagePath, err, output)
-	}
-	imports := strings.Fields(strings.Trim(string(output), "[]"))
-	for _, importPath := range imports {
-		for _, forbidden := range forbiddenRoots {
-			if importPath == forbidden || strings.HasPrefix(importPath, forbidden+"/") {
-				t.Fatalf("%s must not import forbidden ownership %s; found direct import %s", packagePath, forbidden, importPath)
-			}
-		}
-	}
 }

@@ -32,7 +32,8 @@
     "./examples/support-playback.factory-recording.v1.json": "./examples/support-playback.factory-recording.v1.json"
   },
   "scripts": {
-    "build": "node scripts/build-package.mjs",
+    "build": "bun run prepare:dependencies && bun run build:current",
+    "build:current": "node scripts/build-package.mjs",
     "build-storybook": "storybook build --loglevel warn",
     "check:installed-consumer": "node scripts/verify-installed-consumer.mjs",
     "check:pack": "node scripts/verify-package-pack.mjs",

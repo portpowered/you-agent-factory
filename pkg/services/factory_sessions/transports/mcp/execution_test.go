@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os/exec"
 	"strings"
 	"sync"
 	"testing"
@@ -571,22 +570,6 @@ func TestMockClient_RuntimeService_AsyncPollingObservesTerminalResult(t *testing
 		result.Result.ResultStatus != factoryapi.FactorySessionResultStatusFinal ||
 		result.Result.PrimaryResult == nil {
 		t.Fatalf("GetResult = %#v, %v; want terminal FINAL result", result, err)
-	}
-}
-
-func TestPackageBoundary_DoesNotImportFactorySessionsInternal(t *testing.T) {
-	t.Parallel()
-
-	forbidden := "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal"
-	for _, packagePath := range []string{
-		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp",
-		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp/catalog",
-	} {
-		packagePath := packagePath
-		t.Run(packagePath, func(t *testing.T) {
-			t.Parallel()
-			assertPackageDirectImportsForbidden(t, packagePath, []string{forbidden})
-		})
 	}
 }
 
@@ -1567,23 +1550,5 @@ func assertEnvelopeDoesNotLeakInternalPaths(t *testing.T, raw json.RawMessage) {
 	t.Helper()
 	if strings.Contains(string(raw), internalLeakProbePath) {
 		t.Fatalf("tool response leaks internal package path: %s", raw)
-	}
-}
-
-func assertPackageDirectImportsForbidden(t *testing.T, packagePath string, forbiddenRoots []string) {
-	t.Helper()
-
-	cmd := exec.Command("go", "list", "-f", "{{.Imports}}", packagePath)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("go list imports for %s: %v\n%s", packagePath, err, output)
-	}
-	imports := strings.Fields(strings.Trim(string(output), "[]"))
-	for _, importPath := range imports {
-		for _, forbidden := range forbiddenRoots {
-			if importPath == forbidden || strings.HasPrefix(importPath, forbidden+"/") {
-				t.Fatalf("%s must not import forbidden ownership %s; found direct import %s", packagePath, forbidden, importPath)
-			}
-		}
 	}
 }

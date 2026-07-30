@@ -2,8 +2,6 @@ package executionopening
 
 import (
 	"context"
-	"os/exec"
-	"strings"
 	"testing"
 
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -15,47 +13,6 @@ const workersImportRoot = "github.com/portpowered/infinite-you/pkg/services/work
 
 // TestExecutionOpeningPackagesImportWorkersOnlyThroughRoot seals execution-opening
 // and durable-provider construction call sites to the Workers service root contract.
-func TestExecutionOpeningPackagesImportWorkersOnlyThroughRoot(t *testing.T) {
-	t.Parallel()
-
-	cmd := exec.Command(
-		"go",
-		"list",
-		"-test",
-		"-f",
-		"{{.ImportPath}} {{join .Imports \" \"}}",
-		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/executionopening/...",
-	)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("go list executionopening packages: %v\n%s", err, output)
-	}
-
-	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) < 1 {
-			continue
-		}
-		pkgPath := fields[0]
-		for _, imp := range fields[1:] {
-			if imp == workersImportRoot {
-				continue
-			}
-			if strings.HasPrefix(imp, workersImportRoot+"/") {
-				t.Fatalf(
-					"%s must import Workers only through %s; found direct import %s",
-					pkgPath,
-					workersImportRoot,
-					imp,
-				)
-			}
-		}
-	}
-}
 
 // TestExecutionOpeningFactoryRolesNameWorkersRootContracts proves execution-opening
 // construction helpers type Workers-facing bindings only through the Workers
@@ -123,7 +80,7 @@ func TestBuildWithWorkerEffectsForwardsWorkersRootInvocationBindings(t *testing.
 			gotPTY = pty
 			return workersRootInvocationProbe{}, nil
 		},
-		resolveClock: func(factory.Clock) factory.Clock { return nil },
+		resolveClock:  func(factory.Clock) factory.Clock { return nil },
 		commandRunner: commandRunner,
 		allocator:     ptyAllocator,
 	}

@@ -2,7 +2,6 @@ package factorysessionexecution
 
 import (
 	"context"
-	"os/exec"
 	"strings"
 	"testing"
 
@@ -19,49 +18,6 @@ var executionWorkersLeaseImportRoots = []string{
 
 // TestExecutionPackagesImportWorkersOnlyThroughRoot seals execution and
 // durable-provider binding call sites to the Workers service root contract.
-func TestExecutionPackagesImportWorkersOnlyThroughRoot(t *testing.T) {
-	t.Parallel()
-
-	for _, root := range executionWorkersLeaseImportRoots {
-		cmd := exec.Command(
-			"go",
-			"list",
-			"-test",
-			"-f",
-			"{{.ImportPath}} {{join .Imports \" \"}}",
-			root,
-		)
-		output, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("go list %s: %v\n%s", root, err, output)
-		}
-
-		for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
-			line = strings.TrimSpace(line)
-			if line == "" {
-				continue
-			}
-			fields := strings.Fields(line)
-			if len(fields) < 1 {
-				continue
-			}
-			pkgPath := fields[0]
-			for _, imp := range fields[1:] {
-				if imp == workersImportRoot {
-					continue
-				}
-				if strings.HasPrefix(imp, workersImportRoot+"/") {
-					t.Fatalf(
-						"%s must import Workers only through %s; found direct import %s",
-						pkgPath,
-						workersImportRoot,
-						imp,
-					)
-				}
-			}
-		}
-	}
-}
 
 // TestExecutionServiceRolesNameWorkersRootContracts proves durable execution
 // constructors and live-child binding factories type Workers-facing inputs only

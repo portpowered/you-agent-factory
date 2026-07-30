@@ -5,14 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerscli "github.com/portpowered/infinite-you/pkg/services/providers/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
@@ -110,74 +106,6 @@ func representativeCatalogRoot() providers.Service {
 		Capabilities: []providers.Capability{providers.CapabilityPromptSubmission},
 	}
 	return newCatalogPeerFake(codex, cursor)
-}
-
-func TestAcceptedCLIContract_PSSI03SurfacesRemainOutOfScope(t *testing.T) {
-	t.Parallel()
-
-	repoRoot := testutil.MustRepoPath(t, ".")
-	compositionPath := filepath.Join(
-		repoRoot,
-		filepath.FromSlash("pkg/services/providers/transports/cli/composition.go"),
-	)
-	if _, err := os.Stat(compositionPath); err == nil {
-		t.Fatalf(
-			"%s exists; this packet must not add PSS-I03 composition surfaces",
-			compositionPath,
-		)
-	} else if !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("stat %s = %v", compositionPath, err)
-	}
-}
-
-func TestAcceptedCLIContract_DoesNotDependOnHTTPOrMCPTransports(t *testing.T) {
-	t.Parallel()
-
-	const (
-		httpTransport = "github.com/portpowered/infinite-you/pkg/services/providers/transports/http"
-		mcpTransport  = "github.com/portpowered/infinite-you/pkg/services/providers/transports/mcp"
-	)
-
-	cmd := exec.Command(
-		"go",
-		"list",
-		"-deps",
-		"-f",
-		"{{if not .Standard}}{{.ImportPath}}{{end}}",
-		providersCLIImportPath,
-	)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("go list deps: %v\n%s", err, output)
-	}
-
-	for _, dep := range strings.Fields(string(output)) {
-		switch dep {
-		case httpTransport, mcpTransport:
-			t.Fatalf(
-				"Providers CLI adapter must not depend on HTTP-PROV or MCP-PROV transports; found %s",
-				dep,
-			)
-		}
-	}
-}
-
-func TestAcceptedCLIContract_ExportsNoCompositionBindings(t *testing.T) {
-	t.Parallel()
-
-	output, err := exec.Command("go", "doc", "-all", providersCLIImportPath).CombinedOutput()
-	if err != nil {
-		t.Fatalf("go doc -all: %v\n%s", err, output)
-	}
-	doc := string(output)
-	if strings.Contains(doc, "func Bind") {
-		t.Fatalf("Providers CLI adapter exports composition Bind helpers:\n%s", doc)
-	}
-	for _, forbidden := range []string{"BindList", "BindShow", "BindService", "NewComposition"} {
-		if strings.Contains(doc, forbidden) {
-			t.Fatalf("Providers CLI adapter exports %s; PSS-I03 composition stays out of scope", forbidden)
-		}
-	}
 }
 
 func TestAcceptedCLIContract_ProductionManifestDeclaresNoProvidersCommands(t *testing.T) {

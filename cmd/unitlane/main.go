@@ -31,7 +31,10 @@ var discoverUnitPackages = discoverPackages
 var stderrWriter io.Writer = os.Stderr
 var exitFunc = os.Exit
 
-const maxGoTestCommandLen = 24000
+// Windows permits a 32,767-character CreateProcess command line. Keep enough
+// headroom for the executable and quoting while allowing the current unit
+// package inventory to run in one scheduler wave.
+const maxGoTestCommandLen = 30000
 
 func main() {
 	if err := executeUnitLane(); err != nil {
@@ -120,6 +123,7 @@ func discoverPackagesUnder(rootDir, importPrefix string) ([]string, error) {
 }
 
 func runUnitTests(cfg config, packages []string) error {
+	packages = localPackageArguments(packages)
 	baseArgs := baseGoTestArgs(cfg)
 	baseLen := commandArgLen(baseArgs)
 	for len(packages) > 0 {
@@ -146,6 +150,18 @@ func runUnitTests(cfg config, packages []string) error {
 		}
 	}
 	return nil
+}
+
+func localPackageArguments(packages []string) []string {
+	local := make([]string, len(packages))
+	for index, pkg := range packages {
+		if strings.HasPrefix(pkg, modulePath+"/") {
+			local[index] = "." + strings.TrimPrefix(pkg, modulePath)
+			continue
+		}
+		local[index] = pkg
+	}
+	return local
 }
 
 func commandArgLen(args []string) int {

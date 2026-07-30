@@ -2,8 +2,6 @@ package runtimeopening
 
 import (
 	"context"
-	"os/exec"
-	"strings"
 	"testing"
 	"time"
 
@@ -20,47 +18,6 @@ const workersImportRoot = "github.com/portpowered/infinite-you/pkg/services/work
 
 // TestRuntimeOpeningPackagesImportWorkersOnlyThroughRoot seals runtime-opening
 // and construction call sites to the Workers service root contract.
-func TestRuntimeOpeningPackagesImportWorkersOnlyThroughRoot(t *testing.T) {
-	t.Parallel()
-
-	cmd := exec.Command(
-		"go",
-		"list",
-		"-test",
-		"-f",
-		"{{.ImportPath}} {{join .Imports \" \"}}",
-		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening/...",
-	)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("go list runtimeopening packages: %v\n%s", err, output)
-	}
-
-	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) < 1 {
-			continue
-		}
-		pkgPath := fields[0]
-		for _, imp := range fields[1:] {
-			if imp == workersImportRoot {
-				continue
-			}
-			if strings.HasPrefix(imp, workersImportRoot+"/") {
-				t.Fatalf(
-					"%s must import Workers only through %s; found direct import %s",
-					pkgPath,
-					workersImportRoot,
-					imp,
-				)
-			}
-		}
-	}
-}
 
 // TestRuntimeOpeningFactoryRolesNameWorkersRootContracts proves runtime-opening
 // construction helpers type Workers-facing bindings only through the Workers

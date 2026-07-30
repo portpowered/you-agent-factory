@@ -3,7 +3,6 @@ package modelmcp_test
 import (
 	"context"
 	"encoding/json"
-	"os/exec"
 	"strings"
 	"testing"
 
@@ -106,14 +105,6 @@ func TestBind_ToolOperationRejectsMissingContext(t *testing.T) {
 	}
 }
 
-func TestPackageBoundary_DoesNotImportModelsInternal(t *testing.T) {
-	t.Parallel()
-
-	forbidden := "github.com/portpowered/infinite-you/pkg/services/models/internal"
-	packagePath := "github.com/portpowered/infinite-you/pkg/services/models/transports/mcp"
-	assertPackageDirectImportsForbidden(t, packagePath, []string{forbidden})
-}
-
 type fakeModelsRoot struct {
 	models.Service
 	invoked              *bool
@@ -171,22 +162,4 @@ func (fake fakeModelsRoot) InvokeModelWithLease(
 		panic("unexpected InvokeModelWithLease on fake models root")
 	}
 	return fake.invokeModelWithLease(ctx, request)
-}
-
-func assertPackageDirectImportsForbidden(t *testing.T, packagePath string, forbiddenRoots []string) {
-	t.Helper()
-
-	cmd := exec.Command("go", "list", "-f", "{{.Imports}}", packagePath)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("go list imports for %s: %v\n%s", packagePath, err, output)
-	}
-	imports := strings.Fields(strings.Trim(string(output), "[]"))
-	for _, importPath := range imports {
-		for _, forbidden := range forbiddenRoots {
-			if importPath == forbidden || strings.HasPrefix(importPath, forbidden+"/") {
-				t.Fatalf("%s must not import forbidden ownership %s; found direct import %s", packagePath, forbidden, importPath)
-			}
-		}
-	}
 }

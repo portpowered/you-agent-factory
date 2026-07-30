@@ -63,9 +63,25 @@ func TestRunExecutesOnlyDiscoveredUnitPackages(t *testing.T) {
 		t.Fatalf("read captured args: %v", err)
 	}
 	got := strings.Split(strings.TrimSpace(string(gotBytes)), "\n")
-	want := []string{"test", "-p=3", "-vet=off", "-short", modulePath + "/pkg/factory", "-count=2", "-timeout=2m0s"}
+	want := []string{"test", "-p=3", "-vet=off", "-short", "./pkg/factory", "-count=2", "-timeout=2m0s"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("run() go test args = %v, want %v", got, want)
+	}
+}
+
+func TestLocalPackageArgumentsShortensRepositoryImports(t *testing.T) {
+	t.Parallel()
+
+	got := localPackageArguments([]string{
+		modulePath + "/pkg/services/work",
+		"example.com/external/package",
+	})
+	want := []string{
+		"./pkg/services/work",
+		"example.com/external/package",
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("localPackageArguments() = %v, want %v", got, want)
 	}
 }
 
