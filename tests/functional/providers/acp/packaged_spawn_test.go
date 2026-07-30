@@ -78,11 +78,15 @@ func TestPackagedSpawnRunsPlannerChildrenAndMergerThroughPersistentACPStdio(t *t
 		}
 		t.Fatalf("packaged spawn status = %q, want SUCCEEDED; result=%#v", result.Status, result)
 	}
-	encoded, _ := json.Marshal(result.Result)
-	for _, want := range []string{`"count":2`, "research climate", "climate findings", "merged travel answer"} {
-		if !strings.Contains(string(encoded), want) {
-			t.Fatalf("packaged spawn result = %s, want %q", encoded, want)
-		}
+	if result.Result == nil || result.Result.PrimaryResult == nil || len(*result.Result.PrimaryResult) != 1 {
+		t.Fatalf("packaged spawn primary result = %#v, want one merged text part", result.Result)
+	}
+	part, err := (*result.Result.PrimaryResult)[0].AsWorkTextContentPart()
+	if err != nil {
+		t.Fatalf("packaged spawn primary result is not CLI-renderable text: %v", err)
+	}
+	if part.Text != "merged travel answer" {
+		t.Fatalf("packaged spawn primary result = %q, want merged travel answer", part.Text)
 	}
 	if starts.Load() != 1 {
 		t.Fatalf("ACP process starts = %d, want one persistent stdio peer for four agents", starts.Load())
