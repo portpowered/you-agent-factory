@@ -416,7 +416,7 @@ func writeCursorInspectionUnknownRecordStore(t *testing.T, homeDir, sessionID st
 		_, err := db.Exec(`
 INSERT INTO blobs (key, value) VALUES ('known', '{"bubbleId":"bubble-known","text":"known message","timestamp":1000,"type":1}');
 INSERT INTO blobs (key, value) VALUES ('unknown', '{"type":"cursor-unknown-native-record","payload":"secret-prompt"}');
-INSERT INTO meta (key, value) VALUES ('0', '{"agentId":"`+sessionID+`","createdAt":1000}');
+INSERT INTO meta (key, value) VALUES ('0', '{"agentId":"` + sessionID + `","createdAt":1000}');
 `)
 		return err
 	})

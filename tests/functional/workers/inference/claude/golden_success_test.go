@@ -21,7 +21,7 @@ import (
 // response events, Provider Session metadata, and the terminal invocation
 // result expose streaming text deltas and a truthful final snapshot.
 //
-//golden: docs/temp/functional/provider-sessions/claude/full-stream-text-success/manifest.json
+// golden: tests/functional/internal/support/testdata/provider-sessions/claude/full-stream-text-success/manifest.json
 func TestClaudeGoldenFullStreamTextSuccess(t *testing.T) {
 	support.SkipLongFunctional(t, "slow Claude golden full-stream replay")
 
@@ -36,7 +36,7 @@ func TestClaudeGoldenFullStreamTextSuccess(t *testing.T) {
 // invocation result expose tool start/completion lifecycle plus the stable
 // Provider Session identity supplied by the golden transcript.
 //
-//golden: docs/temp/functional/provider-sessions/claude/tool-lifecycle-session-identity/manifest.json
+// golden: tests/functional/internal/support/testdata/provider-sessions/claude/tool-lifecycle-session-identity/manifest.json
 func TestClaudeGoldenToolLifecycleAndSessionIdentity(t *testing.T) {
 	support.SkipLongFunctional(t, "slow Claude golden tool lifecycle replay")
 
@@ -119,7 +119,7 @@ func observeProviderSessionGoldens(
 	}
 
 	return support.ProviderSessionObservedGoldens{
-		ProviderSession:   providerSessionRaw,
+		ProviderSession:  providerSessionRaw,
 		ResponseEvents:   responseEventRecords,
 		InvocationResult: invocationResult,
 	}

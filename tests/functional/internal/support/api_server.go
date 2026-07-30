@@ -17,28 +17,31 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	providercontract "github.com/portpowered/infinite-you/pkg/services/providers/inference"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-const functionalServerReadyTimeout = 5 * time.Second
+// Functional servers may be started concurrently by separate Go test
+// packages. A larger ceiling prevents scheduler and antivirus variance on
+// Windows from becoming a test failure without slowing the success path.
+const functionalServerReadyTimeout = 15 * time.Second
 
 // FunctionalAPIServerConfig describes customer process inputs and replaceable
 // external boundaries. Product/runtime configuration is supplied through Args
 // exactly as it is for a real CLI invocation.
 type FunctionalAPIServerConfig struct {
-	FactoryDir                string
-	FactoryConfigPath         string
-	WorkingDirectory          string
-	UseMockWorkers            bool
-	MockWorkersConfig         *workers.MockWorkersConfig
-	WaitForServiceModeRuntime bool
+	FactoryDir                   string
+	FactoryConfigPath            string
+	WorkingDirectory             string
+	UseMockWorkers               bool
+	MockWorkersConfig            *workers.MockWorkersConfig
+	WaitForServiceModeRuntime    bool
 	ResponseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits
-	Args                      []string
-	Env                       []string
-	ProviderOverride          providercontract.Provider
-	Edges                     serviceedges.Edges
+	Args                         []string
+	Env                          []string
+	ProviderOverride             providercontract.Provider
+	Edges                        serviceedges.Edges
 }
 
 // FunctionalAPIServer owns one daemon invocation on a reusable root Process.
@@ -499,23 +502,20 @@ func GetFactoryResponseEventsAt(
 	var collected []factoryapi.FactoryResponseEvent
 	deadline := time.NewTimer(functionalServerReadyTimeout)
 	defer deadline.Stop()
-	var quiet *time.Timer
-	var quietC <-chan time.Time
+	quiet := time.NewTimer(25 * time.Millisecond)
+	defer quiet.Stop()
+	quietC := quiet.C
 	for {
 		select {
 		case event := <-events:
 			collected = append(collected, event)
-			if quiet == nil {
-				quiet = time.NewTimer(25 * time.Millisecond)
-			} else {
-				if !quiet.Stop() {
-					select {
-					case <-quiet.C:
-					default:
-					}
+			if !quiet.Stop() {
+				select {
+				case <-quiet.C:
+				default:
 				}
-				quiet.Reset(25 * time.Millisecond)
 			}
+			quiet.Reset(25 * time.Millisecond)
 			quietC = quiet.C
 		case err := <-errs:
 			t.Fatalf("read factory response events: %v", err)
@@ -526,4 +526,3 @@ func GetFactoryResponseEventsAt(
 		}
 	}
 }
-

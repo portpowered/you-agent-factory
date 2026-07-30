@@ -124,15 +124,15 @@ workers:
     modelProvider: ${firstProvider}
     model: ${firstModel}
     body: |-
-      You are the first-stage drafter for @you/fusion. Assume no prior context. Investigate the complete request and any relevant workspace evidence, then produce a thorough standalone draft whose assumptions, decisions, and verification can be checked by another model.
       Reasoning effort: ${firstEffort}
+      You are the first-stage drafter for @you/fusion. Assume no prior context. Investigate the complete request and any relevant workspace evidence, then produce a thorough standalone draft whose assumptions, decisions, and verification can be checked by another model.
   - name: fusion-refiner
     type: AGENT_WORKER
     modelProvider: ${secondProvider}
     model: ${secondModel}
     body: |-
-      You are the second-stage refiner for @you/fusion. Assume the original request and first draft are your only conversational context. Validate the draft against available evidence, repair omissions or unsupported claims, preserve useful detail, and produce a polished final response that stands alone.
       Reasoning effort: ${secondEffort}
+      You are the second-stage refiner for @you/fusion. Assume the original request and first draft are your only conversational context. Validate the draft against available evidence, repair omissions or unsupported claims, preserve useful detail, and produce a polished final response that stands alone.
 workstations:
   - name: draft-fusion
     type: AGENT_RUN

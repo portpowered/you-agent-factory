@@ -1,15 +1,14 @@
 package execution_test
 
 import (
-	"encoding/json"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -43,7 +42,7 @@ func TestCLIInvocationIsVisibleThroughAPISessionAndWorkReads(t *testing.T) {
 
 	observationsReady := make(chan error, 1)
 	var (
-		sessionDuring        factoryapi.FactorySession
+		sessionDuring         factoryapi.FactorySession
 		workVisibleDuringHost bool
 	)
 	go func() {
@@ -91,10 +90,7 @@ func TestCLIInvocationIsVisibleThroughAPISessionAndWorkReads(t *testing.T) {
 		}
 	}
 
-	var cliResponse factoryapi.InvocationResponse
-	if err := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stdout())), &cliResponse); err != nil {
-		t.Fatalf("decode CLI invocation response: %v\nstdout:\n%s", err, inputs.Stdout())
-	}
+	cliResponse := support.DecodeInvocationResponseJSON(t, inputs.Stdout())
 	assertInvocationPrimaryResultText(t, cliResponse, terminalSuccessPrimaryResult)
 
 	if strings.TrimSpace(cliResponse.TraceId) == "" {
@@ -161,9 +157,5 @@ func runHostedInvocationCLIJSON(
 		)
 	}
 
-	var cliResponse factoryapi.InvocationResponse
-	if err := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stdout())), &cliResponse); err != nil {
-		t.Fatalf("decode CLI invocation response: %v\nstdout:\n%s", err, inputs.Stdout())
-	}
-	return cliResponse
+	return support.DecodeInvocationResponseJSON(t, inputs.Stdout())
 }

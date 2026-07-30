@@ -37,8 +37,8 @@ const (
   return { child };
 })();`
 
-	multiDispatchFirstChildLabel  = "association-multi-first"
-	multiDispatchFirstChildPrompt = "associate-multi-first-provider-session"
+	multiDispatchFirstChildLabel   = "association-multi-first"
+	multiDispatchFirstChildPrompt  = "associate-multi-first-provider-session"
 	multiDispatchSecondChildLabel  = "association-multi-second"
 	multiDispatchSecondChildPrompt = "associate-multi-second-provider-session"
 	multiDispatchWorkflow          = `return (async function () {

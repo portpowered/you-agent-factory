@@ -8,7 +8,9 @@ import (
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream/fragmentmap"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
+	responsestream "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -72,6 +74,17 @@ func (s *JavaScriptRuntimeService) sessionProgressPublisher(sessionID string, st
 				ParentItemID:       draft.ParentItemID,
 				ProviderSessionRef: draft.ProviderSessionRef,
 			})
+			return
+		}
+		mapped, err := fragmentmap.MapFragment(
+			fragmentmap.Context{FactorySessionID: sessionID, RunID: fragment.DispatchID},
+			responsestream.MapProgressFragment(fragment),
+		)
+		if err != nil {
+			return
+		}
+		for _, event := range mapped {
+			_, _ = state.responseEvents.Publish(event)
 		}
 	}
 }

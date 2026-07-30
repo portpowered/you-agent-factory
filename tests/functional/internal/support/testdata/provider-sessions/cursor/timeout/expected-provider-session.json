@@ -1,0 +1,6 @@
+{
+  "fidelityClass": "partial-stream",
+  "provider": "cursor",
+  "providerSessionId": "session_fixture_cursor_timeout",
+  "status": "failed"
+}

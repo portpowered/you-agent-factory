@@ -8,19 +8,19 @@ import (
 	"testing"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const (
-	wantPrimaryResult                 = "deterministic workers primary COMPLETE"
-	deterministicProviderFailureExit  = 7
+	wantPrimaryResult                  = "deterministic workers primary COMPLETE"
+	deterministicProviderFailureExit   = 7
 	deterministicProviderFailureStderr = "deterministic provider rejection"
-	factoryEventRecordType            = "factory_event"
-	invocationResultType              = "invocation_result"
+	factoryEventRecordType             = "factory_event"
+	invocationResultType               = "invocation_result"
 )
 
 // TestCLIRunSuccessPrimaryResultTextJSONAndNDJSON proves a successful public
@@ -35,9 +35,9 @@ func TestCLIRunSuccessPrimaryResultTextJSONAndNDJSON(t *testing.T) {
 		assertSuccessfulRunStderrEmpty(t, result.stderr)
 	})
 
-	t.Run("single JSON InvocationResponse", func(t *testing.T) {
+	t.Run("default JSON response stream", func(t *testing.T) {
 		result := executeSuccessfulRun(t, []string{"--json"}, nil)
-		response := decodeSingleInvocationResponse(t, result.stdout)
+		response := decodeTerminalNDJSONInvocationResult(t, result.stdout).Response
 		if response.Status != factoryapi.InvocationTerminalStatusCompleted {
 			t.Fatalf("status = %q, want %q", response.Status, factoryapi.InvocationTerminalStatusCompleted)
 		}
@@ -77,12 +77,12 @@ func TestCLIRunFailureOmitsFalseSuccessPrimaryResult(t *testing.T) {
 		}
 	})
 
-	t.Run("single JSON failed InvocationResponse", func(t *testing.T) {
+	t.Run("default JSON failed response stream", func(t *testing.T) {
 		result, err := executeFailedRun(t, []string{"--json"}, nil)
 		if err == nil {
 			t.Fatal("Process.Execute error = nil, want terminal invocation failure")
 		}
-		response := decodeSingleInvocationResponse(t, result.stdout)
+		response := decodeTerminalNDJSONInvocationResult(t, result.stdout).Response
 		assertFailedInvocationResponse(t, response)
 		assertFailedRunErrorResponse(t, result.stderr, response)
 		if invocationPrimaryResultPresent(response) {
@@ -205,19 +205,6 @@ func assertSuccessfulRunStderrEmpty(t *testing.T, stderr string) {
 	if stderr != "" {
 		t.Fatalf("stderr = %q, want empty successful-run stderr", stderr)
 	}
-}
-
-func decodeSingleInvocationResponse(t *testing.T, stdout string) factoryapi.InvocationResponse {
-	t.Helper()
-	decoder := json.NewDecoder(strings.NewReader(stdout))
-	var response factoryapi.InvocationResponse
-	if err := decoder.Decode(&response); err != nil {
-		t.Fatalf("decode InvocationResponse: %v\nstdout:\n%s", err, stdout)
-	}
-	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		t.Fatalf("stdout contains data after InvocationResponse: %v\nstdout:\n%s", err, stdout)
-	}
-	return response
 }
 
 type ndjsonTerminalInvocationResult struct {

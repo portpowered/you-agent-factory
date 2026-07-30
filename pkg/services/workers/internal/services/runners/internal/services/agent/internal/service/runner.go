@@ -50,19 +50,97 @@ func (s *service) Execute(
 	if err != nil {
 		if failure, ok := providerFailure(err); ok {
 			response := runnerFailureResult(failure, request)
+			normalizedErr := normalizeProviderFailure(ctx, failure, err, response)
 			s.publishFailureProgress(
 				request.Dispatch.DispatchID,
 				failure,
 				response.ProviderSession,
 			)
-			return response, normalizeProviderFailure(ctx, failure, err, response)
+			s.publishTerminalFailure(
+				request.Dispatch.DispatchID,
+				normalizedErr,
+				response.ProviderSession,
+				failure.Message,
+			)
+			return response, normalizedErr
 		}
-		return workers.RunnerExecutionResult{}, normalizeExecutionError(ctx, err)
+		normalizedErr := normalizeExecutionError(ctx, err)
+		s.publishTerminalFailure(request.Dispatch.DispatchID, normalizedErr, nil, "")
+		return workers.RunnerExecutionResult{}, normalizedErr
 	}
 	result = result.Clone()
-	response := runnerResult(result, providers.ID(request.RunnerID))
+	response := runnerResult(result, providerIDForRunner(request.RunnerID))
+	if response.ProviderSession == nil && strings.TrimSpace(request.SessionID) != "" {
+		response.ProviderSession = &workers.ProviderSessionMetadata{
+			Provider: workers.CanonicalProviderSessionProvider(providerIDForRunner(request.RunnerID).String()),
+			Kind:     providers.SessionIDKind,
+			ID:       request.SessionID,
+		}
+	}
 	s.publishProgress(request.Dispatch.DispatchID, result, response.ProviderSession)
+	if !hasTerminalRunProgress(result.Diagnostics) {
+		s.publish(workers.ProgressFragment{
+			DispatchID:         request.Dispatch.DispatchID,
+			Kind:               workers.CompletedFragmentKind,
+			Type:               "COMPLETED",
+			ProviderSessionRef: workers.CloneProviderSessionMetadata(response.ProviderSession),
+			ExternalEventType:  "STREAM_COMPLETED",
+		})
+	}
 	return response, nil
+}
+
+func hasTerminalRunProgress(diagnostics *providers.ExecuteDiagnostics) bool {
+	if diagnostics == nil {
+		return false
+	}
+	for _, progress := range diagnostics.Progress {
+		switch strings.ToLower(strings.TrimSpace(progress.Phase)) {
+		case "run.completed", "turn.completed":
+			return true
+		}
+	}
+	return false
+}
+
+func (s *service) publishTerminalFailure(
+	dispatchID string,
+	err error,
+	session *workers.ProviderSessionMetadata,
+	providerMessage string,
+) {
+	eventType := "FAILED"
+	message := "provider invocation failed"
+	metadata := make(map[string]string, 2)
+	if errors.Is(err, context.Canceled) {
+		eventType = "CANCELED"
+		message = agentCanceledFailureMessage
+	}
+	var providerErr *workers.ProviderError
+	if errors.As(err, &providerErr) {
+		metadata["work_failure_type"] = string(providerErr.Type)
+		if providerErr.Family == workers.WorkFailureFamilyRetryable {
+			metadata["retryable"] = "true"
+		}
+		if strings.TrimSpace(providerErr.Message) != "" {
+			message = providerErr.Message
+		}
+	}
+	if strings.TrimSpace(providerMessage) != "" && !errors.Is(err, context.Canceled) {
+		message = providerMessage
+	}
+	if len(metadata) == 0 {
+		metadata = nil
+	}
+	s.publish(workers.ProgressFragment{
+		DispatchID:         dispatchID,
+		Kind:               workers.FailedFragmentKind,
+		Type:               eventType,
+		Payload:            boundedFailureMessage(message),
+		ProviderSessionRef: workers.CloneProviderSessionMetadata(session),
+		ExternalEventType:  "STREAM_FAILED",
+		Metadata:           metadata,
+	})
 }
 
 func (s *service) publishFailureProgress(
@@ -83,19 +161,42 @@ func (s *service) publishProgress(
 	result providers.ExecuteResult,
 	session *workers.ProviderSessionMetadata,
 ) {
-	if result.Diagnostics == nil {
-		return
+	var terminalMessages []providers.ExecuteProgress
+	if result.Diagnostics != nil {
+		for _, progress := range result.Diagnostics.Progress {
+			if strings.EqualFold(strings.TrimSpace(progress.Phase), "message.completed") {
+				terminalMessages = append(terminalMessages, progress)
+				continue
+			}
+			s.publishProviderProgress(dispatchID, progress, session)
+		}
 	}
-	for _, progress := range result.Diagnostics.Progress {
-		s.publish(workers.ProgressFragment{
-			DispatchID:         dispatchID,
-			Kind:               workers.ProgressFragmentKind,
-			Type:               progress.Phase,
-			Payload:            progress.Detail,
-			ProviderSessionRef: workers.CloneProviderSessionMetadata(session),
-			Metadata:           cloneMetadata(progress.Metadata),
+	if len(terminalMessages) == 0 && strings.TrimSpace(result.Content) != "" {
+		terminalMessages = append(terminalMessages, providers.ExecuteProgress{
+			Phase:  "message.completed",
+			Detail: result.Content,
 		})
 	}
+	// Publish authoritative completed messages after provider run/turn lifecycle
+	// completion so all transports observe the same terminal ordering.
+	for _, progress := range terminalMessages {
+		s.publishProviderProgress(dispatchID, progress, session)
+	}
+}
+
+func (s *service) publishProviderProgress(
+	dispatchID string,
+	progress providers.ExecuteProgress,
+	session *workers.ProviderSessionMetadata,
+) {
+	s.publish(workers.ProgressFragment{
+		DispatchID:         dispatchID,
+		Kind:               workers.ProgressFragmentKind,
+		Type:               progress.Phase,
+		Payload:            progress.Detail,
+		ProviderSessionRef: workers.CloneProviderSessionMetadata(session),
+		Metadata:           cloneMetadata(progress.Metadata),
+	})
 }
 
 func validateRequest(request workers.RunnerExecutionRequest) error {
@@ -113,7 +214,7 @@ func validateRequest(request workers.RunnerExecutionRequest) error {
 }
 
 func providerRequest(request workers.RunnerExecutionRequest) providers.ExecuteRequest {
-	providerID := providers.ID(request.RunnerID)
+	providerID := providerIDForRunner(request.RunnerID)
 	result := providers.ExecuteRequest{
 		Provider:           providerID,
 		AttemptID:          request.Dispatch.DispatchID,
@@ -138,6 +239,18 @@ func providerRequest(request workers.RunnerExecutionRequest) providers.ExecuteRe
 		}
 	}
 	return result
+}
+
+// providerIDForRunner translates stable Workers runner identities at the
+// Providers boundary. Most built-in IDs intentionally match their provider,
+// while cursor-cli names the runner without changing Cursor's provider ID.
+func providerIDForRunner(runnerID string) providers.ID {
+	switch workers.NormalizeRunnerID(runnerID) {
+	case workers.RunnerIDCursorCLI:
+		return providers.IDCursor
+	default:
+		return providers.ID(workers.NormalizeRunnerID(runnerID))
+	}
 }
 
 func runnerResult(
@@ -182,7 +295,7 @@ func runnerFailureResult(
 	response := runnerResult(providers.ExecuteResult{
 		SessionRef:  failure.SessionRef,
 		Diagnostics: failure.Diagnostics,
-	}, providers.ID(request.RunnerID))
+	}, providerIDForRunner(request.RunnerID))
 	if response.ProviderSession == nil && failure.SessionRef != nil {
 		response.ProviderSession = &workers.ProviderSessionMetadata{
 			Provider: workers.CanonicalProviderSessionProvider(
@@ -231,7 +344,7 @@ func normalizeProviderFailure(
 ) error {
 	interruption := ctx.Err()
 	if errors.Is(interruption, context.Canceled) {
-		return errors.Join(context.Canceled, cause)
+		return canceledProviderError(errors.Join(context.Canceled, cause), result)
 	}
 	if interruption == nil {
 		switch failure.Kind {
@@ -242,7 +355,7 @@ func normalizeProviderFailure(
 		}
 	}
 	if failure.Kind == providers.ExecuteFailureKindCanceled {
-		return errors.Join(interruption, cause)
+		return canceledProviderError(errors.Join(interruption, cause), result)
 	}
 	failureType := failureTypeForProviderKind(failure.Kind)
 	if failure.Diagnostics != nil {
@@ -268,13 +381,24 @@ func normalizeProviderFailure(
 	return normalized
 }
 
+func canceledProviderError(cause error, result workers.RunnerExecutionResult) *workers.ProviderError {
+	normalized := workers.NewProviderError(
+		workers.WorkFailureTypeUnknown,
+		agentCanceledFailureMessage,
+		cause,
+	)
+	normalized.ProviderSession = workers.CloneProviderSessionMetadata(result.ProviderSession)
+	normalized.Diagnostics = workers.CloneWorkDiagnostics(result.Diagnostics)
+	return normalized
+}
+
 func normalizeExecutionError(ctx context.Context, err error) error {
 	if contextErr := ctx.Err(); contextErr != nil {
 		return errors.Join(contextErr, err)
 	}
 	return workers.NewProviderError(
 		workers.WorkFailureTypeInternalServerError,
-		"agent provider execution failed",
+		boundedFailureMessage(err.Error()),
 		err,
 	)
 }
@@ -303,7 +427,8 @@ func failureTypeForProviderKind(
 const failureMessageRuneLimit = 512
 
 const (
-	agentTimeoutFailureMessage = "provider invocation timed out"
+	agentTimeoutFailureMessage  = "provider invocation timed out"
+	agentCanceledFailureMessage = "provider invocation was canceled"
 )
 
 func canonicalAgentFailureMessage(
@@ -312,10 +437,6 @@ func canonicalAgentFailureMessage(
 ) string {
 	switch failureType {
 	case workers.WorkFailureTypeTimeout:
-		if msg := strings.TrimSpace(providerMessage); msg != "" &&
-			msg != "execution timeout" {
-			return msg
-		}
 		return agentTimeoutFailureMessage
 	case workers.WorkFailureTypeUnknown:
 		if strings.TrimSpace(providerMessage) == "" {

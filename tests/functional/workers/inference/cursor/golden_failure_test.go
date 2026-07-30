@@ -27,7 +27,7 @@ const cursorMalformedRecordLeakProbe = "{not json}"
 // malformed-record golden through the customer process boundary and proves public
 // surfaces expose a stable malformed-record diagnostic rather than silent success,
 // timeout classification, or unsanitized private payload leakage.
-//golden: docs/temp/functional/provider-sessions/cursor/malformed-record/manifest.json
+// golden: tests/functional/internal/support/testdata/provider-sessions/cursor/malformed-record/manifest.json
 func TestCursorGoldenMalformedRecordReturnsStableDiagnostic(t *testing.T) {
 	repoRoot := testutil.MustRepoRoot(t)
 	caseDir := filepath.Join(
@@ -127,7 +127,7 @@ func TestCursorGoldenMalformedRecordReturnsStableDiagnostic(t *testing.T) {
 	}
 
 	observed := support.ProviderSessionObservedGoldens{
-		ProviderSession:   observeCursorProviderSessionGolden(inferencePayload, loaded.Manifest),
+		ProviderSession:  observeCursorProviderSessionGolden(inferencePayload, loaded.Manifest),
 		ResponseEvents:   observeCursorResponseEventGoldens(responseEvents),
 		InvocationResult: observeCursorFailedInvocationResultGolden(inferencePayload),
 	}
@@ -144,8 +144,8 @@ func TestCursorGoldenMalformedRecordReturnsStableDiagnostic(t *testing.T) {
 // process-failure and timeout goldens through the customer process boundary and
 // proves those public failure classes remain distinct on Provider Session,
 // FactoryResponseEvent, and invocation-result surfaces.
-//golden: docs/temp/functional/provider-sessions/cursor/process-failure/manifest.json
-//golden: docs/temp/functional/provider-sessions/cursor/timeout/manifest.json
+// golden: tests/functional/internal/support/testdata/provider-sessions/cursor/process-failure/manifest.json
+// golden: tests/functional/internal/support/testdata/provider-sessions/cursor/timeout/manifest.json
 func TestCursorGoldenProcessFailureAndTimeoutRemainDistinct(t *testing.T) {
 	t.Run("process-failure", func(t *testing.T) {
 		runCursorFailureGoldenCase(
@@ -274,7 +274,7 @@ func runCursorFailureGoldenCase(
 	}
 
 	observed := support.ProviderSessionObservedGoldens{
-		ProviderSession:   observeCursorProviderSessionGolden(inferencePayload, loaded.Manifest),
+		ProviderSession:  observeCursorProviderSessionGolden(inferencePayload, loaded.Manifest),
 		ResponseEvents:   observeCursorResponseEventGoldens(responseEvents),
 		InvocationResult: observeCursorFailedInvocationResultGolden(inferencePayload),
 	}
@@ -327,10 +327,10 @@ func cursorGoldenFailedInferenceObservationWithReason(
 		foundInference   bool
 	)
 	for _, event := range events {
-		if event.Type != factoryapi.FactoryEventTypeInferenceResponse {
+		if event.Type != factoryapi.FactoryEventTypeModelResponse {
 			continue
 		}
-		payload, err := event.Payload.AsInferenceResponseEventPayload()
+		payload, err := support.AsInferenceResponseObservation(event)
 		if err != nil {
 			t.Fatalf("decode inference response: %v", err)
 		}

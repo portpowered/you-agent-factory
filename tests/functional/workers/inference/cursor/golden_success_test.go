@@ -27,7 +27,7 @@ const cursorGoldenExpectedProviderSessionDetailFile = "expected-provider-session
 // TestCursorGoldenTextSuccessAndSessionIdentity replays the sanitized Cursor text-success
 // golden through the public process boundary and proves successful text output,
 // stable Provider Session identity, and matching public metadata goldens.
-//golden: docs/temp/functional/provider-sessions/cursor/success/manifest.json
+// golden: tests/functional/internal/support/testdata/provider-sessions/cursor/success/manifest.json
 func TestCursorGoldenTextSuccessAndSessionIdentity(t *testing.T) {
 	repoRoot := testutil.MustRepoRoot(t)
 	caseDir := filepath.Join(repoRoot, filepath.FromSlash(support.ProviderSessionFixturePath("cursor", "success")))
@@ -108,7 +108,7 @@ func TestCursorGoldenTextSuccessAndSessionIdentity(t *testing.T) {
 	}
 
 	observed := support.ProviderSessionObservedGoldens{
-		ProviderSession:   observeCursorProviderSessionGolden(inferencePayload, loaded.Manifest),
+		ProviderSession:  observeCursorProviderSessionGolden(inferencePayload, loaded.Manifest),
 		ResponseEvents:   observeCursorResponseEventGoldens(responseEvents),
 		InvocationResult: observeCursorInvocationResultGolden(inferencePayload, dispatchOutput),
 	}
@@ -124,7 +124,7 @@ func TestCursorGoldenTextSuccessAndSessionIdentity(t *testing.T) {
 // TestCursorGoldenReadableProviderSessionDetails replays the sanitized Cursor success
 // golden through the public process boundary and proves Provider Session details are
 // readable on the public lookup surface for the success session identity.
-//golden: docs/temp/functional/provider-sessions/cursor/success/manifest.json
+// golden: tests/functional/internal/support/testdata/provider-sessions/cursor/success/manifest.json
 func TestCursorGoldenReadableProviderSessionDetails(t *testing.T) {
 	repoRoot := testutil.MustRepoRoot(t)
 	caseDir := filepath.Join(repoRoot, filepath.FromSlash(support.ProviderSessionFixturePath("cursor", "success")))
@@ -167,7 +167,7 @@ func TestCursorGoldenReadableProviderSessionDetails(t *testing.T) {
 		dir,
 		homeDir,
 		serviceedges.Edges{
-			ProviderCommandRunner:                 runner,
+			ProviderCommandRunner:               runner,
 			ProviderSessionResolveHomeDirectory: func() (string, error) { return homeDir, nil },
 		},
 		20*time.Second,
@@ -452,8 +452,8 @@ func cursorGoldenInferenceObservation(
 	)
 	for _, event := range events {
 		switch event.Type {
-		case factoryapi.FactoryEventTypeInferenceResponse:
-			payload, err := event.Payload.AsInferenceResponseEventPayload()
+		case factoryapi.FactoryEventTypeModelResponse:
+			payload, err := support.AsInferenceResponseObservation(event)
 			if err != nil {
 				t.Fatalf("decode inference response: %v", err)
 			}

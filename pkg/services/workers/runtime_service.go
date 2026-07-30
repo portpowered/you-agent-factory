@@ -1,6 +1,8 @@
 package workers
 
 import (
+	"context"
+
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 )
 
@@ -31,6 +33,7 @@ type AgentRunEventRecorder func(AgentRunResponseEvent)
 type RuntimeService interface {
 	Service
 
+	Close(context.Context) error
 	WithCommandRunners(CommandRunner, CommandRunner) (RuntimeService, error)
 	WithProgressPublisher(
 		CommandRunner,

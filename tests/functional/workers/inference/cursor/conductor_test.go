@@ -34,8 +34,8 @@ func TestCursorCommandCancellationThroughRootBuildProcessIsCanonical(t *testing.
 	if runner.calls != 1 {
 		t.Fatalf("cursor command runner calls = %d, want 1", runner.calls)
 	}
-	if runner.lastRequest.Command != "agent" {
-		t.Fatalf("command = %q, want agent", runner.lastRequest.Command)
+	if runner.lastRequest.Command != "cursor" {
+		t.Fatalf("command = %q, want cursor", runner.lastRequest.Command)
 	}
 	encoded, err := json.Marshal(events)
 	if err != nil {

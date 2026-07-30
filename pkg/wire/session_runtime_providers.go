@@ -124,13 +124,18 @@ func buildProviderRegistry(
 
 func provideProviderRegistryRebinder(
 	providersService providers.Service,
+	edges serviceedges.Edges,
 ) (workerswire.ProviderRegistryRebinder, error) {
 	return func(providerRunner workers.CommandRunner) (workers.ProviderRegistry, providers.Service, error) {
 		if providerRunner == nil {
 			return nil, nil, fmt.Errorf("provider registry rebind requires command runner")
 		}
-		registry, err := providerswire.NewWorkersRegistry(context.Background(), providersService)
-		return registry, providersService, err
+		rebound, err := provideConfiguredProvidersService(edges, nil, providerRunner)
+		if err != nil {
+			return nil, nil, err
+		}
+		registry, err := providerswire.NewWorkersRegistry(context.Background(), rebound)
+		return registry, rebound, err
 	}, nil
 }
 
@@ -533,7 +538,9 @@ func provideFactorySessionExecutionFactory(
 	) (factorysessions.ExecutionService, error) {
 		executor := workerswire.NewExecutor(provider)
 		var liveChildInvocation factorysessionwire.LiveChildInvocationFactory
-		if adaptRunner != nil && allocator != nil {
+		// An explicit process provider is already the complete invocation edge.
+		// Do not construct a second registered-provider path that would bypass it.
+		if edges.ProviderOverride == nil && adaptRunner != nil && allocator != nil {
 			commandRunner, err := provideWorkersProviderCommandRunner(edges)
 			if err != nil {
 				return nil, fmt.Errorf("resolve provider runner for live child invocation: %w", err)
@@ -547,19 +554,19 @@ func provideFactorySessionExecutionFactory(
 				workersMockCommandRunnerFactory != nil &&
 				conductorInvocationWithProgress != nil {
 				runner = workersMockCommandRunnerFactory(mockWorkers, nil, runner)
-				var reboundRegistry workers.ProviderRegistry
-				reboundRegistry, _, err = registryRebinder(runner)
+				var reboundProviders providers.Service
+				_, reboundProviders, err = registryRebinder(runner)
 				if err != nil {
 					return nil, fmt.Errorf("rebind provider registry for live child invocation: %w", err)
 				}
 				liveChildInvocation = func(publisher workers.ProgressPublisher) (workers.InvocationExecutor, error) {
-					return conductorInvocationWithProgress(reboundRegistry, runner, allocator, publisher)
+					return conductorInvocationWithProgress(reboundProviders, runner, allocator, publisher)
 				}
 			} else if mockWorkers == nil &&
 				runtimeRegistry != nil &&
 				conductorInvocationWithProgress != nil {
 				liveChildInvocation = func(publisher workers.ProgressPublisher) (workers.InvocationExecutor, error) {
-					return conductorInvocationWithProgress(runtimeRegistry, runner, allocator, publisher)
+					return conductorInvocationWithProgress(nil, runner, allocator, publisher)
 				}
 			} else if mockWorkers == nil && invocationWithProgress != nil {
 				liveChildInvocation = func(publisher workers.ProgressPublisher) (workers.InvocationExecutor, error) {
@@ -809,9 +816,22 @@ func provideWorkersRuntimeFactory(
 				return nil, fmt.Errorf("configure ACP integrations for Workers runtime: %w", configuredErr)
 			}
 		}
-		runtimeRegistry, runtimeProviders, runtimeRebinder, err := provideRuntimeProviderBindings(edges, acpIntegrations, providerCommandRunner)
+		runtimeProviders := providersService
+		runtimeRegistry, err := providerswire.NewWorkersRegistry(context.Background(), runtimeProviders)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("construct runtime provider registry: %w", err)
+		}
+		runtimeRebinder := providerRegistryRebinder
+		providersLifecycleOwned := providerInjected || len(acpIntegrations) > 0
+		if providersLifecycleOwned {
+			runtimeRegistry, runtimeProviders, runtimeRebinder, err = provideRuntimeProviderBindings(
+				edges,
+				acpIntegrations,
+				providerCommandRunner,
+			)
+			if err != nil {
+				return nil, err
+			}
 		}
 		return workerswire.NewRuntimeWithSelection(
 			sessions,
@@ -846,6 +866,7 @@ func provideWorkersRuntimeFactory(
 			decisionEnvelopes,
 			providerInjected,
 			scriptInjected,
+			providersLifecycleOwned,
 			runtimeRegistry,
 			runtimeRebinder,
 		)
@@ -1022,13 +1043,16 @@ func provideConductorInvocationWithProgressFactory(
 	operatingSystem := resolveWorkersOperatingSystem(edges)
 	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
 	return func(
-		_ workers.ProviderRegistry,
+		selectedProviders providers.Service,
 		runner workers.CommandRunner,
 		allocator workers.PTYAllocator,
 		publisher workers.ProgressPublisher,
 	) (workers.InvocationExecutor, error) {
+		if selectedProviders == nil {
+			selectedProviders = providersService
+		}
 		return workerswire.NewConductorInvocationWithProgress(
-			providersService,
+			selectedProviders,
 			runner,
 			commandClock,
 			allocator,

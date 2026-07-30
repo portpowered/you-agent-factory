@@ -109,7 +109,9 @@ func (p *functionalRPCPeer) serve() error {
 			if err := p.prompt(request); err != nil {
 				return err
 			}
-			if (p.mode == "spawn" && p.sessions >= 4) || (p.mode == "tournament" && p.sessions >= 3) {
+			if (p.mode == "spawn" && p.sessions >= 4) ||
+				(p.mode == "tournament" && p.sessions >= 3) ||
+				((p.mode == "persistent" || p.mode == "serialize") && p.sessions >= 2) {
 				return nil
 			}
 			if p.mode != "persistent" && p.mode != "serialize" && p.mode != "spawn" && p.mode != "tournament" {

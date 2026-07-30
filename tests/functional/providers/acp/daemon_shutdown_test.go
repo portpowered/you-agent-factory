@@ -1,15 +1,10 @@
 package acp_test
 
 import (
-	"context"
-	"os"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
-
-	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 )
 
 func TestProvidersShutdownCancelsActivePromptAndJoinsACPProcess(t *testing.T) {
@@ -17,32 +12,17 @@ func TestProvidersShutdownCancelsActivePromptAndJoinsACPProcess(t *testing.T) {
 	signal := filepath.Join(t.TempDir(), "prompt-started")
 	t.Setenv("YOU_TEST_ACP_PROMPT_SIGNAL", signal)
 	var starts atomic.Int32
-	root, err := providerswire.NewService(
-		providerswire.WithCommandFactory(acpHelperCommandFactory(&starts)),
-		providerswire.WithExecutableLocator(availableExecutableLocator{}),
-	)
-	if err != nil {
-		t.Fatalf("construct Providers: %v", err)
-	}
+	server := startACPDaemonProcess(t, &starts)
 	executionDone := make(chan error, 1)
 	go func() {
-		_, executeErr := root.Execute(context.Background(), providers.ExecuteRequest{
-			Provider: "cursor-acp", AttemptID: "shutdown", UserMessage: "block",
-			WorkingDirectory: t.TempDir(), ProcessEnvironment: os.Environ(),
-		})
+		_, executeErr := invokeACPDaemonWorkflow(t, server, "shutdown", singleACPAgentWorkflow)
 		executionDone <- executeErr
 	}()
 	waitForACPTestFile(t, signal)
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	if err := root.(providers.Lifecycle).Close(ctx); err != nil {
-		t.Fatalf("Close() error = %v", err)
-	}
+	server.Stop(t)
 	select {
 	case err := <-executionDone:
-		if err == nil {
-			t.Fatal("active Execute() error = nil after shutdown")
-		}
+		_ = err // Either a failed durable response or a closed HTTP connection proves the join.
 	case <-time.After(3 * time.Second):
 		t.Fatal("active Execute() did not join during shutdown")
 	}

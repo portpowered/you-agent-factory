@@ -37,7 +37,7 @@ func TestPackagedFullFlowRunsParallelWorktreesMergesAndReplansToCompletion(t *te
 		"maxCycles": "3", "maxTasksPerCycle": "2",
 	})
 	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
-		t.Fatalf("response = %#v", response)
+		t.Fatalf("response = %#v, message = %q, unexpected prompt = %q", response, optionalString(response.Message), runner.UnexpectedPrompt())
 	}
 	for _, task := range []string{"task-a", "task-b"} {
 		content, err := os.ReadFile(filepath.Join(repository, task+".txt"))
@@ -182,7 +182,7 @@ type fullFlowRunner struct {
 func (runner *fullFlowRunner) Run(_ context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	prompt := string(request.Stdin)
 	switch {
-	case strings.Contains(prompt, "Return only a canonical"):
+	case strings.Contains(prompt, "Return only one canonical"):
 		runner.mu.Lock()
 		runner.plannerCalls++
 		call := runner.plannerCalls
@@ -191,7 +191,7 @@ func (runner *fullFlowRunner) Run(_ context.Context, request platformprocess.Com
 			return fullFlowCodexResult(`{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"task-a","workTypeName":"delivery-task","payload":"implement task a"},{"name":"task-b","workTypeName":"delivery-task","payload":"implement task b"},{"name":"work-1","workTypeName":"cycle-control","payload":"continue"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"work-1","targetWorkName":"task-a","requiredState":"merged"},{"type":"DEPENDS_ON","sourceWorkName":"work-1","targetWorkName":"task-b","requiredState":"merged"}]}}`), nil
 		}
 		return fullFlowCodexResult(`{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"work-1","workTypeName":"cycle-control","payload":"complete"}]}}`), nil
-	case strings.Contains(prompt, "Implement only the assigned task"):
+	case strings.Contains(prompt, "implementation agent for one assigned delivery task"):
 		task := filepath.Base(request.WorkDir)
 		runner.mu.Lock()
 		runner.implementationCalls++
@@ -220,14 +220,14 @@ func (runner *fullFlowRunner) Run(_ context.Context, request platformprocess.Com
 		runner.active--
 		runner.mu.Unlock()
 		return fullFlowCodexResult("<COMPLETE>"), nil
-	case strings.Contains(prompt, "Review correctness"):
+	case strings.Contains(prompt, "independent reviewer with no shared conversation"):
 		return fullFlowCodexResult("<COMPLETE>"), nil
-	case strings.Contains(prompt, "Run the required focused"):
+	case strings.Contains(prompt, "verification stage for an independently reviewed task"):
 		if _, err := fullFlowGit(request.WorkDir, "diff", "--check", "HEAD^"); err != nil {
 			return platformprocess.CommandResult{}, err
 		}
 		return fullFlowCodexResult("<COMPLETE>"), nil
-	case strings.Contains(prompt, "Rebase on the evolving base"):
+	case strings.Contains(prompt, "merge stage for one verified task"):
 		task := filepath.Base(request.WorkDir)
 		if _, err := fullFlowGit(runner.repository, "merge", "--no-ff", task, "-m", "merge "+task); err != nil {
 			return platformprocess.CommandResult{}, err
@@ -236,8 +236,8 @@ func (runner *fullFlowRunner) Run(_ context.Context, request platformprocess.Com
 		runner.merges = append(runner.merges, task)
 		runner.mu.Unlock()
 		return fullFlowCodexResult("<COMPLETE>"), nil
-	case strings.Contains(prompt, "Inspect this cycle-control payload"):
-		if strings.Contains(prompt, "payload: complete") {
+	case strings.Contains(prompt, "cycle gate with zero prior context"):
+		if strings.Contains(prompt, "Payload: complete") {
 			return fullFlowCodexResult("complete"), nil
 		}
 		return fullFlowCodexResult("continue"), nil
@@ -251,6 +251,13 @@ func (runner *fullFlowRunner) Run(_ context.Context, request platformprocess.Com
 		runner.mu.Unlock()
 		return platformprocess.CommandResult{}, fmt.Errorf("unexpected full-flow prompt: %s", prompt)
 	}
+}
+
+func optionalString(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 func (runner *fullFlowRunner) UnexpectedPrompt() string {

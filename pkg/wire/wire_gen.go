@@ -188,7 +188,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	v27, err := provideProviderRegistryRebinder(providersService)
+	v27, err := provideProviderRegistryRebinder(providersService, edges2)
 	if err != nil {
 		return nil, err
 	}

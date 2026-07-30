@@ -155,9 +155,7 @@ func runPolicyDeniedJavaScriptInvocation(t *testing.T, dir string) policyDeniedI
 		policyDiagnostic: extractPolicyDiagnostic(t, inputs.Stdout(), inputs.Stderr(), err.Error()),
 	}
 	if stdout := strings.TrimSpace(inputs.Stdout()); stdout != "" {
-		if decodeErr := json.Unmarshal([]byte(stdout), &runOutcome.response); decodeErr != nil {
-			t.Fatalf("decode InvocationResponse: %v\nstdout:\n%s", decodeErr, stdout)
-		}
+		runOutcome.response = support.DecodeInvocationResponseJSON(t, stdout)
 	}
 	if stderr := strings.TrimSpace(inputs.Stderr()); stderr != "" {
 		if decodeErr := json.Unmarshal([]byte(stderr), &runOutcome.errorResponse); decodeErr != nil {

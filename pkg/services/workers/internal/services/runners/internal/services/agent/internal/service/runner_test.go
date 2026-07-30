@@ -65,6 +65,43 @@ func TestExecuteForwardsEnvThroughProviderRequest(t *testing.T) {
 	}
 }
 
+func TestExecuteMapsStableCursorRunnerIDToProviderID(t *testing.T) {
+	t.Parallel()
+
+	fake := &providersFake{}
+	runner, err := New(fake, noopPublisher)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	request := baseAgentRequest()
+	request.RunnerID = workers.RunnerIDCursorCLI
+	request.SessionID = "cursor-session-1"
+	result, err := runner.Execute(t.Context(), request)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if fake.request.Provider != providers.IDCursor {
+		t.Fatalf("Providers.ExecuteRequest.Provider = %q, want %q", fake.request.Provider, providers.IDCursor)
+	}
+	wantResume := &providers.SessionRef{
+		Provider: providers.IDCursor,
+		Kind:     providers.SessionIDKind,
+		ID:       "cursor-session-1",
+	}
+	if !reflect.DeepEqual(fake.request.ResumeSession, wantResume) {
+		t.Fatalf("Providers.ExecuteRequest.ResumeSession = %#v, want %#v", fake.request.ResumeSession, wantResume)
+	}
+	wantSession := &workers.ProviderSessionMetadata{
+		Provider: string(providers.IDCursor),
+		Kind:     providers.SessionIDKind,
+		ID:       "cursor-session-1",
+	}
+	if !reflect.DeepEqual(result.ProviderSession, wantSession) {
+		t.Fatalf("RunnerExecutionResult.ProviderSession = %#v, want %#v", result.ProviderSession, wantSession)
+	}
+}
+
 func TestExecuteCanonicalizesTimeoutAndUnknownFailureMessages(t *testing.T) {
 	t.Parallel()
 
@@ -85,6 +122,14 @@ func TestExecuteCanonicalizesTimeoutAndUnknownFailureMessages(t *testing.T) {
 			name: "timeout empty message",
 			failure: providers.ExecuteFailure{
 				Kind: providers.ExecuteFailureKindTimeout,
+			},
+			wantMsg: agentTimeoutFailureMessage,
+		},
+		{
+			name: "timeout provider-specific message",
+			failure: providers.ExecuteFailure{
+				Kind:    providers.ExecuteFailureKindTimeout,
+				Message: "Cursor request timed out.",
 			},
 			wantMsg: agentTimeoutFailureMessage,
 		},
@@ -131,8 +176,8 @@ func TestExecuteFailurePreservesSessionRefAndBoundsMessages(t *testing.T) {
 		},
 	}
 	fake := &failingProvidersFake{failure: failure}
-	var published int
-	runner, err := New(fake, func(workers.ProgressFragment) { published++ })
+	var published []workers.ProgressFragment
+	runner, err := New(fake, func(fragment workers.ProgressFragment) { published = append(published, fragment) })
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -141,8 +186,11 @@ func TestExecuteFailurePreservesSessionRefAndBoundsMessages(t *testing.T) {
 	if err == nil {
 		t.Fatal("Execute() error = nil, want provider failure")
 	}
-	if published != 0 {
-		t.Fatalf("progress publications = %d, want none without diagnostics", published)
+	if len(published) != 1 {
+		t.Fatalf("progress publications = %d, want terminal failure", len(published))
+	}
+	if published[0].Kind != workers.FailedFragmentKind || published[0].Payload != longMessage[:failureMessageRuneLimit] {
+		t.Fatalf("terminal failure publication = %#v", published[0])
 	}
 	wantSession := &workers.ProviderSessionMetadata{
 		Provider: string(providers.IDCodex),
@@ -218,9 +266,9 @@ func baseAgentRequest() workers.RunnerExecutionRequest {
 		Dispatch: work.WorkDispatch{
 			DispatchID: "dispatch-agent-1",
 		},
-		RunnerID:    string(providers.IDCodex),
+		RunnerID:     string(providers.IDCodex),
 		SystemPrompt: "system",
-		UserMessage: "user",
+		UserMessage:  "user",
 	}
 }
 

@@ -54,8 +54,8 @@ Test workstation.
 		t.Fatalf("Cursor command runner calls = %d, want 1", runner.CallCount())
 	}
 	request := runner.LastRequest()
-	if request.Command != "agent" {
-		t.Fatalf("command = %q, want agent", request.Command)
+	if request.Command != "cursor" {
+		t.Fatalf("command = %q, want cursor", request.Command)
 	}
 	assertArgPair(t, request.Args, "--model", "cursor-test-model")
 	assertArg(t, request.Args, "-f")
@@ -358,11 +358,11 @@ func assertOrderedCorrelatedCompletion(t *testing.T, events []factoryapi.Factory
 			if event.Context.DispatchId != nil {
 				dispatchID = *event.Context.DispatchId
 			}
-		case factoryapi.FactoryEventTypeInferenceRequest:
+		case factoryapi.FactoryEventTypeModelRequest:
 			if dispatchID != "" && event.Context.DispatchId != nil && *event.Context.DispatchId == dispatchID {
 				requestIndex = index
 			}
-		case factoryapi.FactoryEventTypeInferenceResponse:
+		case factoryapi.FactoryEventTypeModelResponse:
 			if dispatchID != "" && event.Context.DispatchId != nil && *event.Context.DispatchId == dispatchID {
 				responseIndex = index
 			}
@@ -447,10 +447,10 @@ func assertAttemptSessions(t *testing.T, events []factoryapi.FactoryEvent, faile
 	t.Helper()
 	var failedSession, succeededSession string
 	for _, event := range events {
-		if event.Type != factoryapi.FactoryEventTypeInferenceResponse {
+		if event.Type != factoryapi.FactoryEventTypeModelResponse {
 			continue
 		}
-		payload, err := event.Payload.AsInferenceResponseEventPayload()
+		payload, err := support.AsInferenceResponseObservation(event)
 		if err != nil {
 			t.Fatalf("decode inference response: %v", err)
 		}
@@ -475,10 +475,10 @@ func assertAttemptSessions(t *testing.T, events []factoryapi.FactoryEvent, faile
 func terminalFailureReason(t *testing.T, events []factoryapi.FactoryEvent) factoryapi.WorkFailureType {
 	t.Helper()
 	for _, event := range events {
-		if event.Type != factoryapi.FactoryEventTypeInferenceResponse {
+		if event.Type != factoryapi.FactoryEventTypeModelResponse {
 			continue
 		}
-		payload, err := event.Payload.AsInferenceResponseEventPayload()
+		payload, err := support.AsInferenceResponseObservation(event)
 		if err != nil {
 			t.Fatalf("decode inference response: %v", err)
 		}

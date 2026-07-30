@@ -104,12 +104,12 @@ Process the input task.
 				t.Fatalf("materialized checkout missing at %s: %v", wantCheckout, err)
 			}
 
-			request := requireCodexWorktreeInferenceRequestEvent(t, server.GetFactoryEvents(t))
-			if request.Worktree != workName {
-				t.Fatalf("inference request worktree = %q, want %q", request.Worktree, workName)
+			request := requireCodexWorktreeModelRequestEvent(t, server.GetFactoryEvents(t))
+			if got := support.StringPointerValue(request.Worktree); got != workName {
+				t.Fatalf("model request worktree = %q, want %q", got, workName)
 			}
-			if request.WorkingDirectory != wantCheckout {
-				t.Fatalf("inference request workingDirectory = %q, want %q", request.WorkingDirectory, wantCheckout)
+			if got := support.StringPointerValue(request.WorkingDirectory); got != wantCheckout {
+				t.Fatalf("model request workingDirectory = %q, want %q", got, wantCheckout)
 			}
 			server.Stop(t)
 		})
@@ -219,21 +219,21 @@ func assertArgsDoNotContain(t *testing.T, args []string, forbidden ...string) {
 	}
 }
 
-func requireCodexWorktreeInferenceRequestEvent(t *testing.T, events []factoryapi.FactoryEvent) factoryapi.InferenceRequestEventPayload {
+func requireCodexWorktreeModelRequestEvent(t *testing.T, events []factoryapi.FactoryEvent) factoryapi.ModelRequestEventPayload {
 	t.Helper()
 
 	for _, event := range events {
-		if event.Type != factoryapi.FactoryEventTypeInferenceRequest {
+		if event.Type != factoryapi.FactoryEventTypeModelRequest {
 			continue
 		}
-		payload, err := event.Payload.AsInferenceRequestEventPayload()
+		payload, err := event.Payload.AsModelRequestEventPayload()
 		if err != nil {
 			t.Fatalf("decode inference request payload: %v", err)
 		}
 		return payload
 	}
-	t.Fatalf("events missing %s: %v", factoryapi.FactoryEventTypeInferenceRequest, codexWorktreeEventTypes(events))
-	return factoryapi.InferenceRequestEventPayload{}
+	t.Fatalf("events missing %s: %v", factoryapi.FactoryEventTypeModelRequest, codexWorktreeEventTypes(events))
+	return factoryapi.ModelRequestEventPayload{}
 }
 
 func codexWorktreeEventTypes(events []factoryapi.FactoryEvent) []factoryapi.FactoryEventType {

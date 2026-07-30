@@ -179,7 +179,11 @@ workers:
     type: AGENT_WORKER
     modelProvider: ${plannerProvider}
     model: ${plannerModel}
-    body: "You are a cycle gate with zero prior context. Read the complete cycle-control payload and the observable results of every task it depends on. Return exactly `complete` only when the payload requests completion and the project evidence shows no required work remains; otherwise return exactly `continue`. Do not add prose or infer success from missing evidence. Payload: {{ (index .Inputs 0).Payload }}"
+    body: >-
+      You are a cycle gate with zero prior context. Read the complete cycle-control payload and the observable results of every task it depends on.
+      Return exactly `complete` only when the payload requests completion and the project evidence shows no required work remains; otherwise return exactly `continue`.
+      Do not add prose or infer success from missing evidence.
+      Payload: {{ (index .Inputs 0).Payload }}
 workstations:
   - name: assess-project
     type: AGENT_RUN

@@ -42,12 +42,18 @@ func TestAgentRunnerSuccessThroughServiceComposition(t *testing.T) {
 	if fake.calls.Load() != 1 {
 		t.Fatalf("Providers.Execute calls = %d, want 1", fake.calls.Load())
 	}
-	wantOrder := []string{"progress:first", "progress:second", "terminal:fixture output"}
+	wantOrder := []string{
+		"progress:first",
+		"progress:second",
+		"progress:fixture output",
+		"progress:",
+		"terminal:fixture output",
+	}
 	if !reflect.DeepEqual(observedOrder, wantOrder) {
 		t.Fatalf("observation order = %v, want %v", observedOrder, wantOrder)
 	}
-	if len(published) != 2 || result.Content != "fixture output" {
-		t.Fatalf("terminal outcome = content:%q progress:%d, want one success after two progress facts", result.Content, len(published))
+	if len(published) != 4 || result.Content != "fixture output" {
+		t.Fatalf("terminal outcome = content:%q progress:%d, want one success after two facts and the default terminal stream", result.Content, len(published))
 	}
 }
 
@@ -289,10 +295,12 @@ func assertServiceAgentFailureFacts(
 		!reflect.DeepEqual(providerErr.ProviderSession, wantSession) {
 		t.Fatalf("failure sessions = result:%#v error:%#v, want %#v", result.ProviderSession, providerErr.ProviderSession, wantSession)
 	}
-	if len(published) != 1 ||
+	if len(published) != 2 ||
 		published[0].DispatchID != "dispatch-agent-1" ||
-		published[0].Payload != "provider stopped" {
-		t.Fatalf("failure progress = %#v, want one correlated pre-terminal fact", published)
+		published[0].Payload != "provider stopped" ||
+		published[1].Kind != workers.FailedFragmentKind ||
+		published[1].Payload != "safe provider failure" {
+		t.Fatalf("failure progress = %#v, want one correlated fact followed by the default terminal failure stream", published)
 	}
 }
 

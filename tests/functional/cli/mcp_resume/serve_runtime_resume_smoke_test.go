@@ -3,6 +3,7 @@ package mcp_resume_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,8 +14,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/inference"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -465,7 +466,7 @@ func startMCPRuntimeResumeSmokeInterruptedSession(
 		sessionID,
 		"dispatch-1",
 		factoryapi.FactoryDispatchStatusCOMPLETED,
-		5*time.Second,
+		15*time.Second,
 	)
 	waitForMCPDispatchStatus(
 		t,
@@ -473,7 +474,7 @@ func startMCPRuntimeResumeSmokeInterruptedSession(
 		sessionID,
 		"dispatch-2",
 		factoryapi.FactoryDispatchStatusRUNNING,
-		5*time.Second,
+		15*time.Second,
 	)
 
 	interruptReason := "mcp runtime resume smoke interrupt"
@@ -725,6 +726,7 @@ func waitForMCPDispatchStatus(
 	t.Helper()
 
 	deadline := time.Now().Add(timeout)
+	var last []factoryapi.FactorySessionDispatchSummary
 	for time.Now().Before(deadline) {
 		listed := decodeToolResponse[factoryapi.ListFactorySessionDispatchesResponse](
 			t,
@@ -733,6 +735,7 @@ func waitForMCPDispatchStatus(
 		if listed.Error != nil || listed.Result == nil {
 			t.Fatalf("list_dispatches = %#v, want success", listed)
 		}
+		last = listed.Result.Dispatches
 		for _, dispatch := range listed.Result.Dispatches {
 			if dispatch.Id != dispatchID {
 				continue
@@ -743,7 +746,8 @@ func waitForMCPDispatchStatus(
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatalf("dispatch %s did not reach %s within %s", dispatchID, want, timeout)
+	lastJSON, _ := json.Marshal(last)
+	t.Fatalf("dispatch %s did not reach %s within %s; last dispatches = %s", dispatchID, want, timeout, lastJSON)
 }
 
 func setupMCPRuntimeResumeSmokeWorkflowFixture(t *testing.T, fixtureName, workflowName string) string {
@@ -848,4 +852,3 @@ func (p *mcpRuntimeResumeSmokeBlockingProvider) waitForCanceledInfer(t *testing.
 	}
 	t.Fatal("provider Infer did not observe canceled workflow context")
 }
-

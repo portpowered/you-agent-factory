@@ -418,26 +418,28 @@ func thinDispatchReplayArtifact(t *testing.T) (*interfaces.ReplayArtifact, facto
 func safeDiagnosticReductionArtifact(t *testing.T) *interfaces.ReplayArtifact {
 	t.Helper()
 
+	modelResponse := replayInferenceResponseEvent(
+		t,
+		work.WorkDispatch{
+			DispatchID: "dispatch-safe",
+			Execution: work.ExecutionMetadata{
+				RequestID: "request-safe",
+				TraceID:   "trace-safe",
+				WorkIDs:   []string{"work-safe"},
+			},
+		},
+		"dispatch-safe/inference-request/1",
+		1,
+		3,
+		"recorded provider output",
+		&workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "response_id", ID: "resp-safe-123"},
+		safeDiagnosticReductionFixture(),
+		"",
+	)
+	modelResponse.Type = factoryapi.FactoryEventTypeModelResponse
 	return testReplayArtifact(
 		t,
-		replayInferenceResponseEvent(
-			t,
-			work.WorkDispatch{
-				DispatchID: "dispatch-safe",
-				Execution: work.ExecutionMetadata{
-					RequestID: "request-safe",
-					TraceID:   "trace-safe",
-					WorkIDs:   []string{"work-safe"},
-				},
-			},
-			"dispatch-safe/inference-request/1",
-			1,
-			3,
-			"recorded provider output",
-			&workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "response_id", ID: "resp-safe-123"},
-			safeDiagnosticReductionFixture(),
-			"",
-		),
+		modelResponse,
 		replayDispatchCompletedEvent(t, "completion-safe", workerexecution.WorkResult{
 			DispatchID:   "dispatch-safe",
 			TransitionID: "transition-safe",

@@ -24,7 +24,7 @@ const (
 // response events, Provider Session metadata, and the terminal invocation result
 // expose normalized structured failure metadata rather than success or timeout.
 //
-//golden: docs/temp/functional/provider-sessions/claude/structured-failure/manifest.json
+// golden: tests/functional/internal/support/testdata/provider-sessions/claude/structured-failure/manifest.json
 func TestClaudeGoldenStructuredFailure(t *testing.T) {
 	loaded := loadClaudeGoldenCase(t, claudeGoldenStructuredFailureCase)
 	if loaded.Manifest.ID != "claude-structured-failure" {
@@ -47,7 +47,7 @@ func TestClaudeGoldenStructuredFailure(t *testing.T) {
 // stream reaches a closed terminal state without inventing a successful message,
 // invocation outcome, or other fabricated success metadata.
 //
-//golden: docs/temp/functional/provider-sessions/claude/timeout/manifest.json
+// golden: tests/functional/internal/support/testdata/provider-sessions/claude/timeout/manifest.json
 func TestClaudeGoldenTimeoutClosesResponseStream(t *testing.T) {
 	loaded := loadClaudeGoldenCase(t, claudeGoldenTimeoutCase)
 	if loaded.Manifest.ID != "claude-timeout" {
@@ -274,10 +274,10 @@ func claudeGoldenFailedInferenceObservationWithReason(
 		foundInference   bool
 	)
 	for _, event := range events {
-		if event.Type != factoryapi.FactoryEventTypeInferenceResponse {
+		if event.Type != factoryapi.FactoryEventTypeModelResponse {
 			continue
 		}
-		payload, err := event.Payload.AsInferenceResponseEventPayload()
+		payload, err := support.AsInferenceResponseObservation(event)
 		if err != nil {
 			t.Fatalf("decode INFERENCE_RESPONSE %q: %v", event.Id, err)
 		}
@@ -323,7 +323,7 @@ func observeClaudeFailedProviderSessionGoldens(
 	}
 
 	return support.ProviderSessionObservedGoldens{
-		ProviderSession:   providerSessionRaw,
+		ProviderSession:  providerSessionRaw,
 		ResponseEvents:   responseEventRecords,
 		InvocationResult: invocationResult,
 	}

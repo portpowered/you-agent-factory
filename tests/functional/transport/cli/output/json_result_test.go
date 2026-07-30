@@ -23,20 +23,12 @@ const (
 	jsonWantInvocationResultText = "mock worker accepted"
 )
 
-// TestCLIJSONSuccessDecodesToPublicInvocationResult proves a successful CLI
-// single-JSON run writes exactly one stdout InvocationResponse that decodes
-// through the public contract with completed terminal status and no trailing JSON.
+// TestCLIJSONSuccessDecodesToPublicInvocationResult proves the default JSON
+// stream ends with an InvocationResponse that decodes through the public
+// contract with completed terminal status.
 func TestCLIJSONSuccessDecodesToPublicInvocationResult(t *testing.T) {
 	stdout := runGoalSingleJSON(t)
-
-	decoder := json.NewDecoder(strings.NewReader(stdout))
-	var response factoryapi.InvocationResponse
-	if err := decoder.Decode(&response); err != nil {
-		t.Fatalf("decode InvocationResponse: %v\nstdout:\n%s", err, stdout)
-	}
-	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		t.Fatalf("stdout contains data after InvocationResponse: %v\nstdout:\n%s", err, stdout)
-	}
+	response := decodeSingleJSONInvocationResponse(t, stdout)
 	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
 		t.Fatalf("status = %q, want %q", response.Status, factoryapi.InvocationTerminalStatusCompleted)
 	}
@@ -45,10 +37,10 @@ func TestCLIJSONSuccessDecodesToPublicInvocationResult(t *testing.T) {
 	}
 }
 
-// TestCLIJSONFailureRemainsValidJSON proves CLI single-JSON failures stay
+// TestCLIJSONFailureRemainsValidJSON proves CLI JSON failures stay
 // machine-parseable: pre-terminal errors emit exactly one stderr ErrorResponse
-// with empty stdout, and terminal invocation failures emit one failed
-// InvocationResponse on stdout plus one stderr ErrorResponse.
+// with empty stdout, and terminal invocation failures end their stdout stream
+// with a failed InvocationResponse plus one stderr ErrorResponse.
 func TestCLIJSONFailureRemainsValidJSON(t *testing.T) {
 	t.Run("pre-terminal failure leaves stdout empty with one stderr ErrorResponse", func(t *testing.T) {
 		stdout, stderr, err := runSingleJSONInvocation(t, []string{
@@ -92,10 +84,9 @@ func TestCLIJSONFailureRemainsValidJSON(t *testing.T) {
 	})
 }
 
-// TestCLIJSONContainsNoPrivateRuntimeFields proves CLI single-JSON success and
-// terminal failure payloads decode through the public contract and omit private
-// runtime vocabulary such as Petri internals, retired record shapes, and
-// provider-session chunk fields.
+// TestCLIJSONContainsNoPrivateRuntimeFields proves terminal JSON success and
+// failure payloads decode through the public contract and omit private runtime
+// vocabulary such as Petri internals and provider-session chunk fields.
 func TestCLIJSONContainsNoPrivateRuntimeFields(t *testing.T) {
 	t.Run("success stdout stays on public InvocationResponse fields", func(t *testing.T) {
 		stdout := runGoalSingleJSON(t)
@@ -238,13 +229,17 @@ func runSingleJSONInvocation(
 
 func decodeSingleJSONInvocationResponse(t *testing.T, stdout string) factoryapi.InvocationResponse {
 	t.Helper()
-	decoder := json.NewDecoder(strings.NewReader(stdout))
-	var response factoryapi.InvocationResponse
-	if err := decoder.Decode(&response); err != nil {
-		t.Fatalf("decode InvocationResponse: %v\nstdout:\n%s", err, stdout)
+	records := decodeNDJSONRecords(t, stdout)
+	if len(records) == 0 {
+		t.Fatal("stdout contains no JSON records")
 	}
-	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		t.Fatalf("stdout contains data after InvocationResponse: %v\nstdout:\n%s", err, stdout)
+	record := records[len(records)-1]
+	if record.RecordType != invocationResultType {
+		t.Fatalf("terminal recordType = %q, want %q", record.RecordType, invocationResultType)
+	}
+	var response factoryapi.InvocationResponse
+	if err := json.Unmarshal(record.Payload, &response); err != nil {
+		t.Fatalf("decode InvocationResponse: %v\nstdout:\n%s", err, stdout)
 	}
 	return response
 }
@@ -271,8 +266,12 @@ var singleJSONForbiddenLiterals = []string{
 
 func assertPublicSingleJSONInvocationPayload(t *testing.T, payload, stream string) {
 	t.Helper()
+	records := decodeNDJSONRecords(t, payload)
+	if len(records) == 0 || records[len(records)-1].RecordType != invocationResultType {
+		t.Fatalf("%s has no terminal invocation_result", stream)
+	}
 	_ = decodeSingleJSONInvocationResponse(t, payload)
-	assertNoPrivateRuntimeKeysInJSON(t, payload, stream)
+	assertNoPrivateRuntimeKeysInJSON(t, string(records[len(records)-1].Payload), stream+" terminal response")
 }
 
 func assertPublicSingleJSONErrorPayload(t *testing.T, payload, stream string) {

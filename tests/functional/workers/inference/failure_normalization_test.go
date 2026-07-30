@@ -296,10 +296,10 @@ func terminalInferenceFailureObservation(t *testing.T, events []factoryapi.Facto
 	var terminal factoryapi.InferenceResponseEventPayload
 	found := false
 	for _, event := range events {
-		if event.Type != factoryapi.FactoryEventTypeInferenceResponse {
+		if event.Type != factoryapi.FactoryEventTypeModelResponse {
 			continue
 		}
-		payload, err := event.Payload.AsInferenceResponseEventPayload()
+		payload, err := support.AsInferenceResponseObservation(event)
 		if err != nil {
 			t.Fatalf("decode inference response: %v", err)
 		}
@@ -310,7 +310,7 @@ func terminalInferenceFailureObservation(t *testing.T, events []factoryapi.Facto
 		found = true
 	}
 	if !found {
-		t.Fatalf("factory events missing terminal INFERENCE_RESPONSE failure")
+		t.Fatalf("factory events missing terminal MODEL_RESPONSE failure")
 	}
 	return terminal
 }
@@ -341,8 +341,7 @@ func assertPublicProviderFailureSurfacesRedactSensitiveMaterial(
 	failureEvents := make([]factoryapi.FactoryEvent, 0, len(events))
 	for _, event := range events {
 		switch event.Type {
-		case factoryapi.FactoryEventTypeInferenceResponse,
-			factoryapi.FactoryEventTypeDispatchResponse,
+		case factoryapi.FactoryEventTypeDispatchResponse,
 			factoryapi.FactoryEventTypeModelResponse:
 			failureEvents = append(failureEvents, event)
 		}

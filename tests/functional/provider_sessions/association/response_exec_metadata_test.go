@@ -26,7 +26,7 @@ const responseExecCodexSuccessGoldenCase = "success"
 // Session and invocation-result golden metadata without mapper-generated
 // expectations.
 //
-//golden: docs/temp/functional/provider-sessions/codex/success/manifest.json
+// golden: tests/functional/internal/support/testdata/provider-sessions/codex/success/manifest.json
 func TestResponseExecGoldenMetadataSurvivesCLIProjection(t *testing.T) {
 	t.Parallel()
 
@@ -59,7 +59,7 @@ func TestResponseExecGoldenMetadataSurvivesCLIProjection(t *testing.T) {
 // and proves replay observation preserves checked-in Provider Session and
 // invocation-result golden metadata without mapper-generated expectations.
 //
-//golden: docs/temp/functional/provider-sessions/codex/success/manifest.json
+// golden: tests/functional/internal/support/testdata/provider-sessions/codex/success/manifest.json
 func TestResponseExecGoldenMetadataSurvivesReplay(t *testing.T) {
 	t.Parallel()
 
@@ -93,7 +93,7 @@ func TestResponseExecGoldenMetadataSurvivesReplay(t *testing.T) {
 // checked-in response-event golden metadata without mapper-generated
 // expectations.
 //
-//golden: docs/temp/functional/provider-sessions/codex/success/manifest.json
+// golden: tests/functional/internal/support/testdata/provider-sessions/codex/success/manifest.json
 func TestResponseExecGoldenMetadataSurvivesAPIResponseEvents(t *testing.T) {
 	t.Parallel()
 
@@ -381,10 +381,10 @@ func succeededResponseExecInferenceResponse(
 	t.Helper()
 
 	for _, event := range events {
-		if event.Type != factoryapi.FactoryEventTypeInferenceResponse {
+		if event.Type != factoryapi.FactoryEventTypeModelResponse {
 			continue
 		}
-		payload, err := event.Payload.AsInferenceResponseEventPayload()
+		payload, err := support.AsInferenceResponseObservation(event)
 		if err != nil {
 			t.Fatalf("decode INFERENCE_RESPONSE: %v", err)
 		}

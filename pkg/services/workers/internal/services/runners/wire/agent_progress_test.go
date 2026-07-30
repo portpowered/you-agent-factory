@@ -32,7 +32,9 @@ func TestAgentRunnerPublishesDetachedProviderProgressBeforeSuccess(t *testing.T)
 		Publish: func(fragment workers.ProgressFragment) {
 			published = append(published, cloneProgressFragment(fragment))
 			observedOrder = append(observedOrder, "progress:"+fragment.Payload)
-			fragment.Metadata["sequence"] = "publisher-mutated"
+			if fragment.Metadata != nil {
+				fragment.Metadata["sequence"] = "publisher-mutated"
+			}
 			fragment.ProviderSessionRef.ID = "publisher-mutated"
 		},
 	})
@@ -77,6 +79,28 @@ func TestAgentRunnerPublishesDetachedProviderProgressBeforeSuccess(t *testing.T)
 			},
 			Metadata: map[string]string{"sequence": "2"},
 		},
+		{
+			DispatchID: "dispatch-agent-1",
+			Kind:       workers.ProgressFragmentKind,
+			Type:       "message.completed",
+			Payload:    "fixture output",
+			ProviderSessionRef: &workers.ProviderSessionMetadata{
+				Provider: string(providers.IDCodex),
+				Kind:     providers.SessionIDKind,
+				ID:       "provider-session-1",
+			},
+		},
+		{
+			DispatchID: "dispatch-agent-1",
+			Kind:       workers.CompletedFragmentKind,
+			Type:       "COMPLETED",
+			ProviderSessionRef: &workers.ProviderSessionMetadata{
+				Provider: string(providers.IDCodex),
+				Kind:     providers.SessionIDKind,
+				ID:       "provider-session-1",
+			},
+			ExternalEventType: "STREAM_COMPLETED",
+		},
 	}
 	if !reflect.DeepEqual(published, want) {
 		t.Fatalf("published progress = %#v, want %#v", published, want)
@@ -84,6 +108,8 @@ func TestAgentRunnerPublishesDetachedProviderProgressBeforeSuccess(t *testing.T)
 	wantOrder := []string{
 		"progress:first",
 		"progress:second",
+		"progress:fixture output",
+		"progress:",
 		"terminal:fixture output",
 	}
 	if !reflect.DeepEqual(observedOrder, wantOrder) {

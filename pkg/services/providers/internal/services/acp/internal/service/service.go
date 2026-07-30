@@ -234,6 +234,12 @@ func (daemon *daemon) execute(ctx context.Context, id providers.ID, request prov
 	if err != nil {
 		var requestErr *acpsdk.RequestError
 		if errors.As(err, &requestErr) && requestErr.Code == -32000 {
+			// The current connection cannot serve work until the operator
+			// authenticates. No login operation is exposed through this service,
+			// so retaining the process only leaves an unusable daemon (and its
+			// working directory) alive. Close it now and let a later execution
+			// establish a fresh authenticated connection.
+			_ = daemon.stopLocked(context.Background())
 			return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindAuthentication, Message: "ACP authentication required" + authenticationMethodHint(initialized.AuthMethods)}
 		}
 		daemon.invalidateDisconnected(ctx)

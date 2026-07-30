@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -223,7 +223,7 @@ func TestAPISubmitWorkRejectsMixedTextAndImageOnUnsupportedRunner(t *testing.T) 
 		t,
 		factoryDir,
 		"worker-a",
-		support.BuildModelWorkerConfig(modelprovider.ProviderGemini, "gemini-1.5-pro"),
+		support.BuildModelWorkerConfig(modelprovider.ProviderCursor, "cursor-test-model"),
 	)
 	runner := support.NewRecordingCommandRunner("unused")
 	edges := serviceedges.Edges{}

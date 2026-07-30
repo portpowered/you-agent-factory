@@ -31,11 +31,161 @@ type fragmentMapper func(Context, responsestream.Event) (responseevents.FactoryR
 // MapFragment converts one internal response-stream event into canonical
 // FactoryResponseEvent values.
 func MapFragment(ctx Context, fragment responsestream.Event) ([]responseevents.FactoryResponseEvent, error) {
+	if fragment.Kind == responsestream.EventKindProgressFragment {
+		if event, ok, err := mapNativeProgressFragment(ctx, fragment); ok || err != nil {
+			if err != nil {
+				return nil, err
+			}
+			if err := responseevents.ValidateEvent(event); err != nil {
+				return nil, fmt.Errorf("mapped native progress event invalid: %w", err)
+			}
+			return []responseevents.FactoryResponseEvent{event}, nil
+		}
+		// A dotted value is a provider-native phase. Unsupported native phases
+		// (for example session.started or diagnostics) are intentionally omitted
+		// instead of being mislabeled as generic customer progress.
+		nativeType := strings.TrimSpace(fragment.ExternalEventType)
+		if strings.Contains(nativeType, ".") && !strings.EqualFold(nativeType, "response.progress") {
+			return nil, nil
+		}
+	}
 	mapper, label, ok := fragmentMapperForKind(fragment.Kind)
 	if !ok {
 		return nil, fmt.Errorf("%w: %q", ErrUnsupportedFragmentKind, fragment.Kind)
 	}
 	return mapValidatedFragment(mapper, label, ctx, fragment)
+}
+
+func mapNativeProgressFragment(
+	ctx Context,
+	fragment responsestream.Event,
+) (responseevents.FactoryResponseEvent, bool, error) {
+	native := strings.ToLower(strings.TrimSpace(fragment.ExternalEventType))
+	parts := strings.Split(native, ".")
+	if len(parts) != 2 {
+		return responseevents.FactoryResponseEvent{}, false, nil
+	}
+	phase, ok := nativeResponsePhase(parts[1])
+	if !ok {
+		return responseevents.FactoryResponseEvent{}, false, nil
+	}
+
+	var (
+		kind           responseevents.Kind
+		payload        []byte
+		itemID         string
+		nativeEvent    = fragment.ExternalEventType
+		representation = responseevents.RepresentationNotification
+		err            error
+	)
+	switch parts[0] {
+	case "run", "turn":
+		kind = responseevents.KindRun
+		nativeEvent = "providers_progress"
+		payload, err = json.Marshal(responseevents.RunPayload{Status: parts[1]})
+	case "message":
+		kind = responseevents.KindMessage
+		if phase == responseevents.PhaseCompleted {
+			provider := fragmentProvider(fragment)
+			if provider == "unknown" || strings.TrimSpace(provider) == "" {
+				provider = "provider"
+			}
+			itemID = provider + "-message"
+		} else {
+			itemID = nativeItemID(fragment, "message")
+		}
+		if phase == responseevents.PhaseDelta {
+			representation = responseevents.RepresentationDelta
+			payload, err = json.Marshal(responseevents.MessageDeltaPayload{
+				ContentBlockIndex: 0,
+				ContentBlockKind:  responseevents.ContentBlockText,
+				TextDelta:         fragment.Payload,
+			})
+		} else {
+			representation = responseevents.RepresentationSnapshot
+			payload, err = json.Marshal(responseevents.MessagePayload{
+				Role: "assistant",
+				ContentBlocks: []responseevents.ContentBlock{{
+					Kind: responseevents.ContentBlockText,
+					Text: fragment.Payload,
+				}},
+			})
+		}
+	case "tool":
+		kind = responseevents.KindTool
+		itemID = nativeItemID(fragment, "tool")
+		var result json.RawMessage
+		if strings.TrimSpace(fragment.Payload) != "" {
+			result, _ = json.Marshal(map[string]string{"detail": fragment.Payload})
+		}
+		payload, err = json.Marshal(responseevents.ToolPayload{
+			ToolCallID:    itemID,
+			ToolName:      strings.TrimSpace(fragment.Metadata["tool_name"]),
+			Status:        parts[1],
+			ResultSummary: result,
+		})
+	default:
+		return responseevents.FactoryResponseEvent{}, false, nil
+	}
+	if err != nil {
+		return responseevents.FactoryResponseEvent{}, true, err
+	}
+	return responseevents.FactoryResponseEvent{
+		SchemaVersion:    responseevents.SchemaVersionV1,
+		EventID:          synthesizedEventID(ctx, fragment),
+		Sequence:         fragment.Sequence,
+		RecordedAt:       fragment.RecordedAt,
+		FactorySessionID: strings.TrimSpace(ctx.FactorySessionID),
+		RunID:            firstNonEmptyString(ctx.RunID, fragment.DispatchID),
+		Kind:             kind,
+		Phase:            phase,
+		Provenance: responseevents.Provenance{
+			Provider:        fragmentProvider(fragment),
+			NativeEventType: nativeEvent,
+			Delivery:        responseevents.DeliveryNativeStream,
+			Representation:  representation,
+			Fidelity:        responseevents.FidelityNormalized,
+		},
+		Payload:            payload,
+		DispatchID:         strings.TrimSpace(fragment.DispatchID),
+		ItemID:             itemID,
+		ProviderSessionRef: providerSessionRefString(fragment.ProviderSessionRef),
+	}, true, nil
+}
+
+func nativeResponsePhase(value string) (responseevents.Phase, bool) {
+	switch value {
+	case "started":
+		return responseevents.PhaseStarted, true
+	case "delta", "updated":
+		return responseevents.PhaseDelta, true
+	case "completed":
+		return responseevents.PhaseCompleted, true
+	case "failed":
+		return responseevents.PhaseFailed, true
+	case "canceled":
+		return responseevents.PhaseCanceled, true
+	default:
+		return "", false
+	}
+}
+
+func nativeItemID(fragment responsestream.Event, fallback string) string {
+	for _, key := range []string{"correlation_id", "item_id", "message_id"} {
+		if value := strings.TrimSpace(fragment.Metadata[key]); value != "" {
+			return value
+		}
+	}
+	return fallback + "-" + strings.TrimSpace(fragment.DispatchID)
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func fragmentMapperForKind(kind responsestream.EventKind) (fragmentMapper, string, bool) {
@@ -83,7 +233,7 @@ func mapResponseFragment(ctx Context, fragment responsestream.Event) (responseev
 		Sequence:         fragment.Sequence,
 		RecordedAt:       fragment.RecordedAt,
 		FactorySessionID: strings.TrimSpace(ctx.FactorySessionID),
-		RunID:            strings.TrimSpace(ctx.RunID),
+		RunID:            firstNonEmptyString(ctx.RunID, fragment.DispatchID),
 		Kind:             responseevents.KindMessage,
 		Phase:            responseevents.PhaseDelta,
 		Provenance: responseevents.Provenance{
@@ -139,7 +289,7 @@ func mapStreamCompletedFragment(ctx Context, fragment responsestream.Event) (res
 		Sequence:         fragment.Sequence,
 		RecordedAt:       fragment.RecordedAt,
 		FactorySessionID: strings.TrimSpace(ctx.FactorySessionID),
-		RunID:            strings.TrimSpace(ctx.RunID),
+		RunID:            firstNonEmptyString(ctx.RunID, fragment.DispatchID),
 		Kind:             responseevents.KindRun,
 		Phase:            responseevents.PhaseCompleted,
 		Provenance: responseevents.Provenance{
@@ -167,7 +317,7 @@ func mapStreamFailedFragment(ctx Context, fragment responsestream.Event) (respon
 		Sequence:         fragment.Sequence,
 		RecordedAt:       fragment.RecordedAt,
 		FactorySessionID: strings.TrimSpace(ctx.FactorySessionID),
-		RunID:            strings.TrimSpace(ctx.RunID),
+		RunID:            firstNonEmptyString(ctx.RunID, fragment.DispatchID),
 		Kind:             responseevents.KindError,
 		Phase:            responseevents.PhaseFailed,
 		Provenance: responseevents.Provenance{
@@ -190,12 +340,16 @@ func errorPayloadFromFragment(fragment responsestream.Event) responseevents.Erro
 		message = "dispatch stream failed"
 	}
 	return responseevents.ErrorPayload{
-		Code:    code,
-		Message: message,
+		Code:      code,
+		Message:   message,
+		Retryable: strings.EqualFold(fragment.Metadata["retryable"], "true"),
 	}
 }
 
 func streamFailedErrorCode(fragment responsestream.Event) string {
+	if strings.EqualFold(fragment.Metadata["work_failure_type"], string(workerexecution.WorkFailureTypeTimeout)) {
+		return "timeout"
+	}
 	switch fragment.Type {
 	case responsestream.EventTypeCanceled:
 		return "stream_canceled"

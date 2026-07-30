@@ -12,7 +12,10 @@ import (
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 )
 
-const processAPIServerReadyTimeout = 5 * time.Second
+// Process construction can legitimately take longer on Windows when the
+// functional lane starts several root-built applications concurrently. Keep
+// this as a ceiling only: readiness still returns immediately on success.
+const processAPIServerReadyTimeout = 15 * time.Second
 
 // ProcessAPIServer is an HTTP transport edge for a root-built process. It owns
 // only the external server boundary and never constructs application services.

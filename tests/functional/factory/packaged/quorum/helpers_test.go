@@ -116,11 +116,11 @@ func packagedQuorumCommandPrompt(request platformprocess.CommandRequest) string 
 func packagedQuorumRequestLane(request platformprocess.CommandRequest) string {
 	prompt := packagedQuorumCommandPrompt(request)
 	switch {
-	case strings.Contains(prompt, "Produce branch A's independent assessment"):
+	case strings.Contains(prompt, "Produce branch A's independent solution"):
 		return packagedQuorumBranchAWorkstation
-	case strings.Contains(prompt, "Produce branch B's independent assessment"):
+	case strings.Contains(prompt, "Produce branch B's independent solution"):
 		return packagedQuorumBranchBWorkstation
-	case strings.Contains(prompt, "Synthesize the two quorum assessments"):
+	case strings.Contains(prompt, "synthesize one complete customer-facing response"):
 		return packagedQuorumMergeWorkstation
 	default:
 		return "unknown"

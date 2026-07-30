@@ -57,6 +57,7 @@ func NewRuntimeWithSelection(
 	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
 	providerCommandInjected bool,
 	scriptCommandInjected bool,
+	providersLifecycleOwned bool,
 	providerRegistry workers.ProviderRegistry,
 	providerRegistryRebinder ProviderRegistryRebinder,
 ) (workers.RuntimeService, error) {
@@ -93,6 +94,7 @@ func NewRuntimeWithSelection(
 		decisionEnvelopes,
 		providerCommandInjected,
 		scriptCommandInjected,
+		providersLifecycleOwned,
 		providerRegistry,
 		providerRegistryRebinder,
 	)

@@ -107,11 +107,11 @@
       "slug": "fusion",
       "json": {
         "locator": "generated/factories/fusion/factory.json",
-        "sha256": "6168250b8ac392a763c4a96822708c73bb9860c8d02f3fcfe730f2e01b8b5208"
+        "sha256": "59146159b09c09cf981a811ce27bfce508a936cd12e5ec351d324873358de1fb"
       },
       "yaml": {
         "locator": "generated/factories/fusion/factory.yaml",
-        "sha256": "93627ba07f40590d481d9dd70b94428a43ff5f1014e8c9502dd0ff6d5bc0b74c"
+        "sha256": "70f8f5a19efb9d1ca2c2455b814a00c98baf633865e4f6a266dc479139b7c119"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",

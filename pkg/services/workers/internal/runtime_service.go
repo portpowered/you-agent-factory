@@ -2,7 +2,9 @@ package internal
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -37,6 +39,7 @@ type Service struct {
 	scriptCommandRunner               workers.CommandRunner
 	providerCommandInjected           bool
 	scriptCommandInjected             bool
+	providerLifecycles                *ownedProviderLifecycles
 	logger                            *zap.Logger
 	verbose                           bool
 	factoryRunnerID                   string
@@ -62,6 +65,56 @@ type Service struct {
 }
 
 var _ workers.RuntimeService = (*Service)(nil)
+
+// Close releases a Providers lifecycle constructed specifically for this
+// Factory Runtime. Process-scoped Providers remain owned by the root process.
+func (s *Service) Close(ctx context.Context) error {
+	if s == nil || s.providerLifecycles == nil {
+		return nil
+	}
+	return s.providerLifecycles.Close(ctx)
+}
+
+type ownedProviderLifecycles struct {
+	mu         sync.Mutex
+	lifecycles []providers.Lifecycle
+	closed     bool
+}
+
+func (owned *ownedProviderLifecycles) Add(service providers.Service) {
+	if owned == nil {
+		return
+	}
+	lifecycle, ok := service.(providers.Lifecycle)
+	if !ok {
+		return
+	}
+	owned.mu.Lock()
+	defer owned.mu.Unlock()
+	if !owned.closed {
+		owned.lifecycles = append(owned.lifecycles, lifecycle)
+	}
+}
+
+func (owned *ownedProviderLifecycles) Close(ctx context.Context) error {
+	if owned == nil {
+		return nil
+	}
+	owned.mu.Lock()
+	if owned.closed {
+		owned.mu.Unlock()
+		return nil
+	}
+	owned.closed = true
+	lifecycles := append([]providers.Lifecycle(nil), owned.lifecycles...)
+	owned.lifecycles = nil
+	owned.mu.Unlock()
+	var result error
+	for index := len(lifecycles) - 1; index >= 0; index-- {
+		result = errors.Join(result, lifecycles[index].Close(ctx))
+	}
+	return result
+}
 
 type CurrentRuntimeResolver interface {
 	CurrentRuntime() *factorysessions.LiveRuntime

@@ -25,7 +25,7 @@ const (
 // transcript through the customer process boundary and proves public surfaces
 // expose normalized structured non-zero failure metadata rather than success or
 // timeout-classified outcomes.
-//golden: docs/temp/functional/provider-sessions/codex/structured-failure/manifest.json
+// golden: tests/functional/internal/support/testdata/provider-sessions/codex/structured-failure/manifest.json
 func TestCodexGoldenStructuredFailure(t *testing.T) {
 	replay := runCodexGoldenStructuredFailureReplay(t)
 
@@ -69,7 +69,7 @@ func TestCodexGoldenStructuredFailure(t *testing.T) {
 // TestCodexGoldenTimeoutHasNoFalseTerminalMessage replays a sanitized Codex timeout
 // transcript through the customer process boundary and proves public surfaces do not
 // emit a false terminal success message or invent a successful invocation outcome.
-//golden: docs/temp/functional/provider-sessions/codex/timeout/manifest.json
+// golden: tests/functional/internal/support/testdata/provider-sessions/codex/timeout/manifest.json
 func TestCodexGoldenTimeoutHasNoFalseTerminalMessage(t *testing.T) {
 	replay := runCodexGoldenTimeoutReplay(t)
 
@@ -304,10 +304,10 @@ func failedInferenceResponse(
 	var terminal factoryapi.InferenceResponseEventPayload
 	found := false
 	for _, event := range events {
-		if event.Type != factoryapi.FactoryEventTypeInferenceResponse {
+		if event.Type != factoryapi.FactoryEventTypeModelResponse {
 			continue
 		}
-		payload, err := event.Payload.AsInferenceResponseEventPayload()
+		payload, err := support.AsInferenceResponseObservation(event)
 		if err != nil {
 			t.Fatalf("decode inference response event: %v", err)
 		}
@@ -350,10 +350,10 @@ func assertCodexGoldenTimeoutHasNoFalseTerminalSuccess(
 	var lastInference factoryapi.InferenceResponseEventPayload
 	foundInference := false
 	for _, event := range replay.FactoryEvents {
-		if event.Type != factoryapi.FactoryEventTypeInferenceResponse {
+		if event.Type != factoryapi.FactoryEventTypeModelResponse {
 			continue
 		}
-		payload, err := event.Payload.AsInferenceResponseEventPayload()
+		payload, err := support.AsInferenceResponseObservation(event)
 		if err != nil {
 			t.Fatalf("decode inference response event: %v", err)
 		}

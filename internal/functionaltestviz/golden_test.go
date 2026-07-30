@@ -14,7 +14,7 @@ func TestAttachGoldenProvenanceLoadsManifestFields(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	manifestRel := "docs/temp/functional/provider-sessions/harness/load-smoke/manifest.json"
+	manifestRel := "tests/functional/internal/support/testdata/provider-sessions/harness/load-smoke/manifest.json"
 	manifestAbs := filepath.Join(root, filepath.FromSlash(manifestRel))
 	if err := os.MkdirAll(filepath.Dir(manifestAbs), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
@@ -127,7 +127,7 @@ func TestRenderCatalogMarkdownFailsClosedWithoutAttachedProvenance(t *testing.T)
 			Name:           "TestInvoke",
 			Line:           42,
 			Description:    "verifies provider replay",
-			Golden:         "docs/temp/functional/provider-sessions/openai/invoke/manifest.json",
+			Golden:         "tests/functional/internal/support/testdata/provider-sessions/openai/invoke/manifest.json",
 			Classification: functionaltestmetadata.ClassificationCustomer,
 		},
 	})

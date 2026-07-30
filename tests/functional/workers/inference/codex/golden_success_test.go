@@ -26,7 +26,7 @@ type codexGoldenReplayResult struct {
 
 // TestCodexGoldenTextAndToolSuccess replays the sanitized Codex message-tool-success
 // transcript through the public process boundary and proves public text and tool success.
-// golden: docs/temp/functional/provider-sessions/codex/success/manifest.json
+// golden: tests/functional/internal/support/testdata/provider-sessions/codex/success/manifest.json
 func TestCodexGoldenTextAndToolSuccess(t *testing.T) {
 	replay := runCodexGoldenSuccessReplay(t)
 
@@ -58,7 +58,7 @@ func TestCodexGoldenTextAndToolSuccess(t *testing.T) {
 // TestCodexGoldenDerivesProviderSessionAndResponseEvents replays the sanitized
 // Codex message-tool-success transcript and proves public Provider Session,
 // FactoryResponseEvent, and invocation-result metadata match the golden contract.
-// golden: docs/temp/functional/provider-sessions/codex/success/manifest.json
+// golden: tests/functional/internal/support/testdata/provider-sessions/codex/success/manifest.json
 func TestCodexGoldenDerivesProviderSessionAndResponseEvents(t *testing.T) {
 	replay := runCodexGoldenSuccessReplay(t)
 
@@ -164,10 +164,10 @@ func succeededInferenceResponse(
 	t.Helper()
 
 	for _, event := range events {
-		if event.Type != factoryapi.FactoryEventTypeInferenceResponse {
+		if event.Type != factoryapi.FactoryEventTypeModelResponse {
 			continue
 		}
-		payload, err := event.Payload.AsInferenceResponseEventPayload()
+		payload, err := support.AsInferenceResponseObservation(event)
 		if err != nil {
 			t.Fatalf("decode inference response event: %v", err)
 		}
@@ -385,10 +385,10 @@ func assertCodexGoldenTextAndToolSuccess(
 
 	var inferenceSucceeded bool
 	for _, event := range factoryEvents {
-		if event.Type != factoryapi.FactoryEventTypeInferenceResponse {
+		if event.Type != factoryapi.FactoryEventTypeModelResponse {
 			continue
 		}
-		payload, err := event.Payload.AsInferenceResponseEventPayload()
+		payload, err := support.AsInferenceResponseObservation(event)
 		if err != nil {
 			t.Fatalf("decode inference response event: %v", err)
 		}
@@ -410,10 +410,10 @@ func assertCodexGoldenTextAndToolSuccess(
 
 	var inferenceTranscript string
 	for _, event := range factoryEvents {
-		if event.Type != factoryapi.FactoryEventTypeInferenceResponse {
+		if event.Type != factoryapi.FactoryEventTypeModelResponse {
 			continue
 		}
-		payload, err := event.Payload.AsInferenceResponseEventPayload()
+		payload, err := support.AsInferenceResponseObservation(event)
 		if err != nil {
 			continue
 		}

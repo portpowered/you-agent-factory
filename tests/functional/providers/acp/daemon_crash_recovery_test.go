@@ -1,14 +1,11 @@
 package acp_test
 
 import (
-	"context"
-	"os"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
 
-	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestProvidersACPRestartsAfterCrashWithoutReplayingUncertainPrompt(t *testing.T) {
@@ -16,28 +13,15 @@ func TestProvidersACPRestartsAfterCrashWithoutReplayingUncertainPrompt(t *testin
 	marker := filepath.Join(t.TempDir(), "crashed")
 	t.Setenv("YOU_TEST_ACP_CRASH_MARKER", marker)
 	var starts atomic.Int32
-	root, err := providerswire.NewService(
-		providerswire.WithCommandFactory(acpHelperCommandFactory(&starts)),
-		providerswire.WithExecutableLocator(availableExecutableLocator{}),
-	)
-	if err != nil {
-		t.Fatalf("construct Providers: %v", err)
+	server := startACPDaemonProcess(t, &starts)
+	defer server.Stop(t)
+	first, err := invokeACPDaemonWorkflow(t, server, "crash", singleACPAgentWorkflow)
+	if err != nil || first.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
+		t.Fatalf("first execution = %#v, error = %v; want failed peer crash", first, err)
 	}
-	t.Cleanup(func() { _ = root.(providers.Lifecycle).Close(context.Background()) })
-	request := providers.ExecuteRequest{
-		Provider: "cursor-acp", AttemptID: "crash", UserMessage: "do not replay",
-		WorkingDirectory: t.TempDir(), ProcessEnvironment: os.Environ(),
-	}
-	if _, err := root.Execute(context.Background(), request); err == nil {
-		t.Fatal("first Execute() error = nil, want peer crash")
-	}
-	request.AttemptID = "after-crash"
-	result, err := root.Execute(context.Background(), request)
-	if err != nil {
-		t.Fatalf("second Execute() error = %v", err)
-	}
-	if result.Content == "" {
-		t.Fatal("second Execute() returned empty content")
+	result, err := invokeACPDaemonWorkflow(t, server, "after-crash", singleACPAgentWorkflow)
+	if err != nil || result.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("second execution = %#v, error = %v; want recovered success", result, err)
 	}
 	if starts.Load() != 2 {
 		t.Fatalf("ACP process starts = %d, want one crash plus one replacement", starts.Load())

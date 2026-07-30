@@ -369,7 +369,7 @@ func TestParseCapturesGoldenFromCommentDirective(t *testing.T) {
 import "testing"
 
 // TestCodexGoldenSuccess replays the sanitized success transcript.
-//golden: docs/temp/functional/provider-sessions/codex/success/manifest.json
+//golden: tests/functional/internal/support/testdata/provider-sessions/codex/success/manifest.json
 func TestCodexGoldenSuccess(t *testing.T) {}
 `,
 		"workers/inference/codex/plain_test.go": `package codex
@@ -394,7 +394,7 @@ func TestCodexPlain(t *testing.T) {}
 		byName[record.Name] = record
 	}
 
-	wantGolden := "docs/temp/functional/provider-sessions/codex/success/manifest.json"
+	wantGolden := "tests/functional/internal/support/testdata/provider-sessions/codex/success/manifest.json"
 	if got := byName["TestCodexGoldenSuccess"].Golden; got != wantGolden {
 		t.Fatalf("Golden = %q, want %q", got, wantGolden)
 	}
@@ -416,7 +416,7 @@ import "testing"
 
 // TestClaudeGoldenFailure uses a test-owned golden manifest declaration.
 func TestClaudeGoldenFailure(t *testing.T) {
-	const goldenManifest = "docs/temp/functional/provider-sessions/claude/failure/manifest.json"
+	const goldenManifest = "tests/functional/internal/support/testdata/provider-sessions/claude/failure/manifest.json"
 	_ = goldenManifest
 }
 `,
@@ -429,7 +429,7 @@ func TestClaudeGoldenFailure(t *testing.T) {
 	if len(records) != 1 {
 		t.Fatalf("Parse() returned %d records, want 1", len(records))
 	}
-	want := "docs/temp/functional/provider-sessions/claude/failure/manifest.json"
+	want := "tests/functional/internal/support/testdata/provider-sessions/claude/failure/manifest.json"
 	if records[0].Golden != want {
 		t.Fatalf("Golden = %q, want %q", records[0].Golden, want)
 	}
@@ -455,7 +455,7 @@ func TestParseNormalizesWindowsStyleGoldenPaths(t *testing.T) {
 	if len(records) != 1 {
 		t.Fatalf("Parse() returned %d records, want 1", len(records))
 	}
-	want := "docs/temp/functional/provider-sessions/cursor/success/manifest.json"
+	want := "tests/functional/internal/support/testdata/provider-sessions/cursor/success/manifest.json"
 	if records[0].Golden != want {
 		t.Fatalf("Golden = %q, want slash-normalized %q", records[0].Golden, want)
 	}

@@ -117,7 +117,8 @@ func reduceReplayEvent(
 		return applyReplayWorkRequest(reduced, event, workByID)
 	case interfaces.FactoryEventTypeRunResponse:
 		return applyReplayRunResponse(reduced, event)
-	case interfaces.FactoryEventTypeInferenceResponse:
+	case interfaces.FactoryEventTypeInferenceResponse,
+		interfaces.FactoryEventTypeModelResponse:
 		return applyReplayInferenceResponse(event, inferenceAttemptsByDispatchID)
 	}
 	switch event.Type {

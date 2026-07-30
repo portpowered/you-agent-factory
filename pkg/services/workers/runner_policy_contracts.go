@@ -94,10 +94,25 @@ func ResolveRunnerSelection(workstationRunner, factoryRunner, workerModelProvide
 	if runner := NormalizeRunnerID(factoryRunner); runner != "" {
 		return ResolvedRunnerSelection{RunnerID: runner, Source: RunnerSelectionSourceFactory}
 	}
-	if runner := NormalizeRunnerID(workerModelProvider); IsBuiltInRunnerID(runner) {
+	if runner := legacyProviderRunnerID(workerModelProvider); runner != "" {
 		return ResolvedRunnerSelection{RunnerID: runner, Source: RunnerSelectionSourceLegacyProvider}
 	}
 	return ResolvedRunnerSelection{RunnerID: RunnerIDCodex, Source: RunnerSelectionSourceDefault}
+}
+
+func legacyProviderRunnerID(provider string) string {
+	switch NormalizeRunnerID(provider) {
+	case "cursor":
+		return RunnerIDCursorCLI
+	case "agy":
+		return RunnerIDAntigravity
+	default:
+		runner := NormalizeRunnerID(provider)
+		if IsBuiltInRunnerID(runner) {
+			return runner
+		}
+		return ""
+	}
 }
 
 // NormalizeRunnerID trims operator-supplied runner IDs into the canonical

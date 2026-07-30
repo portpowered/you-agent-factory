@@ -1,55 +1,23 @@
 package acp_test
 
 import (
-	"context"
-	"errors"
-	"os"
 	"strconv"
 	"sync/atomic"
 	"testing"
-	"time"
 
-	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestProvidersACPRetainsOneOSProcessAndConnectionAcrossExecutions(t *testing.T) {
 	t.Setenv(acpHelperEnvironment, "persistent")
 	var starts atomic.Int32
-	root, err := providerswire.NewService(
-		providerswire.WithCommandFactory(acpHelperCommandFactory(&starts)),
-		providerswire.WithExecutableLocator(availableExecutableLocator{}),
-	)
-	if err != nil {
-		t.Fatalf("construct Providers: %v", err)
-	}
-	workingDirectory := t.TempDir()
-	lifecycle, ok := root.(providers.Lifecycle)
-	if !ok {
-		t.Fatal("Providers root omitted its exact lifecycle role")
-	}
-	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		if err := lifecycle.Close(ctx); err != nil {
-			t.Errorf("close Providers: %v", err)
-		}
-	})
+	server := startACPDaemonProcess(t, &starts)
+	defer server.Stop(t)
 
 	for attempt := 1; attempt <= 2; attempt++ {
-		result, executeErr := root.Execute(context.Background(), providers.ExecuteRequest{
-			Provider:           "cursor-acp",
-			AttemptID:          "persistent-attempt",
-			UserMessage:        "complete one persistent ACP turn",
-			WorkingDirectory:   workingDirectory,
-			ProcessEnvironment: os.Environ(),
-			SkipPermissions:    true,
-		})
-		if executeErr != nil {
-			t.Fatalf("Execute(%d) error = %v", attempt, executeErr)
-		}
-		if result.SessionRef == nil || result.SessionRef.ID != "acp-session-functional-1-"+strconv.Itoa(attempt) {
-			t.Fatalf("Execute(%d) session = %#v", attempt, result.SessionRef)
+		result, executeErr := invokeACPDaemonWorkflow(t, server, "persistent-attempt-"+strconv.Itoa(attempt), singleACPAgentWorkflow)
+		if executeErr != nil || result.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+			t.Fatalf("execution %d = %#v, error = %v", attempt, result, executeErr)
 		}
 	}
 	if got := starts.Load(); got != 1 {
@@ -60,19 +28,10 @@ func TestProvidersACPRetainsOneOSProcessAndConnectionAcrossExecutions(t *testing
 func TestProvidersACPRejectsIncompatibleProtocolVersionAtStdioBoundary(t *testing.T) {
 	t.Setenv(acpHelperEnvironment, "version")
 	var starts atomic.Int32
-	root, err := providerswire.NewService(
-		providerswire.WithCommandFactory(acpHelperCommandFactory(&starts)),
-		providerswire.WithExecutableLocator(availableExecutableLocator{}),
-	)
-	if err != nil {
-		t.Fatalf("construct Providers: %v", err)
-	}
-	_, executeErr := root.Execute(context.Background(), providers.ExecuteRequest{
-		Provider: "cursor-acp", AttemptID: "version-attempt", UserMessage: "reject version",
-		WorkingDirectory: t.TempDir(), ProcessEnvironment: os.Environ(),
-	})
-	var failure providers.ExecuteFailure
-	if !errors.As(executeErr, &failure) || failure.Kind != providers.ExecuteFailureKindMisconfigured {
-		t.Fatalf("Execute() error = %#v, want misconfigured", executeErr)
+	server := startACPDaemonProcess(t, &starts)
+	defer server.Stop(t)
+	result, executeErr := invokeACPDaemonWorkflow(t, server, "version-attempt", singleACPAgentWorkflow)
+	if executeErr != nil || result.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
+		t.Fatalf("version-incompatible execution = %#v, error = %v; want FAILED", result, executeErr)
 	}
 }

@@ -19,15 +19,15 @@ import (
 )
 
 const (
-	childCodexLabel    = "child-codex"
-	childClaudeLabel   = "child-claude"
-	childMockedLabel   = "child-mocked"
-	childPassthroughLabel = "child-passthrough"
+	childCodexLabel           = "child-codex"
+	childClaudeLabel          = "child-claude"
+	childMockedLabel          = "child-mocked"
+	childPassthroughLabel     = "child-passthrough"
 	unknownOverrideChildLabel = "child-unknown-override"
 
-	mockedWorkerPresetName   = "worker-a"
-	mockedChildPrompt        = "mocked child prompt"
-	passthroughChildPrompt   = "passthrough child prompt"
+	mockedWorkerPresetName       = "worker-a"
+	mockedChildPrompt            = "mocked child prompt"
+	passthroughChildPrompt       = "passthrough child prompt"
 	unknownOverrideModelProvider = "Not_A_Provider"
 
 	perChildProviderModelWorkflow = `return (async function () {

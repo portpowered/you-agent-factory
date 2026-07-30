@@ -70,6 +70,7 @@ func (s *Service) WithCommandRunners(providerRunner, scriptRunner workers.Comman
 		if err := applyReboundProviderRegistry(&clone, reboundRegistry, reboundProviders); err != nil {
 			return nil, err
 		}
+		clone.providerLifecycles.Add(reboundProviders)
 	}
 	if scriptRunner != nil {
 		clone.scriptFactory, err = s.scriptFactory.WithCommandRunner(scriptRunner)

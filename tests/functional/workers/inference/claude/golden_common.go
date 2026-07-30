@@ -86,10 +86,10 @@ func successfulInferenceResponsePayload(
 	var payload factoryapi.InferenceResponseEventPayload
 	found := false
 	for _, event := range events {
-		if event.Type != factoryapi.FactoryEventTypeInferenceResponse {
+		if event.Type != factoryapi.FactoryEventTypeModelResponse {
 			continue
 		}
-		response, err := event.Payload.AsInferenceResponseEventPayload()
+		response, err := support.AsInferenceResponseObservation(event)
 		if err != nil {
 			t.Fatalf("decode INFERENCE_RESPONSE %q: %v", event.Id, err)
 		}

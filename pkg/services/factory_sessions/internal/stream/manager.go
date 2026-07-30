@@ -196,7 +196,7 @@ func (m *Manager) inferenceProgressPublisher(
 				m.observer.ObserveResponseStreamCompaction(session, normalizedSessionID, dispatchID, summary)
 			}
 		})
-		event := mapInferenceProgressFragment(fragment)
+		event := MapProgressFragment(fragment)
 		stored := publisher.Publish(event)
 		if err := m.publishCanonicalResponseEvents(session, stored, fragment.CanonicalEventAlreadyPublished); err != nil {
 			m.observeDegraded(
