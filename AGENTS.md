@@ -14,10 +14,11 @@ and historical world state from that event stream.
 - The backend core is an event-first factory runtime. Workers and agents do not
   mutate canonical state directly; they emit outputs that re-enter the runtime
   as events.
-- Product behavior is split across definition, Factory Session, runtime, Work,
-  worker execution, Provider Session, model runtime, automation, and
-  ledger/projection services. `pkg/wire` composes these services and
-  `pkg/initializer` exclusively owns their lifecycle.
+- Product behavior is split across Factory Definitions, Factory Runtime,
+  Factory Sessions, Recordings, Work, Workers, Providers, Models, Automations,
+  Provider Sessions, Operator Settings, Factory Visualization, and System
+  Initialization services. `pkg/wire` composes these services and
+  `pkg/initializer` owns application lifecycle.
 - Public terminology is defined in
   `docs/architecture/data-model.md`: `Factory`, `Factory Session`, `Current
   Factory`, `Work`, `Work Request`, and `Provider Session`.
@@ -41,6 +42,8 @@ Read these architecture notes when the work touches their area:
 - `docs/architecture/structures.md` to understand the overall interaction of components within the system.
 - `docs/architecture/data-model.md` for public resource vocabulary and the
   customer/internal data-model split.
+- `docs/architecture/packaged-structure.md` for the current Go package families,
+  service package convention, dependency direction, and composition boundaries.
 
 ## Standards
 
@@ -73,42 +76,60 @@ the standards.
 - `examples/` contains example factory directories.
 - `factory/` contains this repository's checked-in factory scaffold and
   factory-local docs.
-- `pkg/transports/` for various API entrypoints such as CLI, MCP, REST
+- `packages/` contains publishable API, model-provider, and packaged-factory
+  sources and generated distribution artifacts. Authored packaged factories
+  live under `packages/packaged-factories/factories/`; generated package output
+  lives under `packages/packaged-factories/generated/`.
+- `pkg/` has six approved top-level package families: `initializer`, `platform`,
+  `root`, `services`, `transports`, and `wire`.
+- `pkg/root/` exposes the caller-facing `BuildProcess` construction boundary.
+  `pkg/wire/` owns the canonical application dependency graph, and
+  `pkg/initializer/` activates and unwinds already-constructed lifecycle roles.
+- `pkg/transports/` owns protocol composition for CLI, HTTP, MCP, generated
+  transport contracts and clients, and representation mapping. Service-specific
+  adapters may live under the owning service's `transports/` directory.
+- `pkg/platform/` contains policy-free cross-cutting implementations such as
+  filesystem, process, logging, metrics, replay storage, clocks, PTY, and
+  runtime-artifact support.
+- `pkg/services/` contains the product-domain service families. Service roots
+  expose public contracts and operations; private implementation belongs under
+  the owning service's `internal/` tree, focused construction providers under
+  `wire/`, and service-owned protocol adapters under `transports/`.
 - `pkg/services/factory_definitions/` owns Factory definition loading,
-  persistence, validation, packaged definitions, and effective runtime
-  projections. Representation mapping lives under
-  `pkg/transports/mapping/factoryconfig`; policy-free process configuration
-  mechanics live in focused `pkg/platform` packages.
-- `pkg/factory/` contains the core runtime engine, event history, projections,
-  requests, validation, scheduling, subsystems, runtime support, and workstation
-  config plumbing.
-- `pkg/factory/sessions/` contains live and durable session state, projections,
-  lifecycle gateways, response streams, execution contracts, and live
-  invocation orchestration.
-- `pkg/factory/contracts/` contains canonical Factory definition, runtime,
-  event, and projection value contracts shared across domain boundaries;
-  Factory Event vocabulary inventory lives under `pkg/factory/events/kinds/`,
-  and Factory Session response-event contracts live under
-  `pkg/factory/sessions/responseevents/`.
-- `pkg/work/` contains canonical Work content, materialization, query, graph,
-  time-work, and pure invocation input/return-policy behavior.
-- `pkg/models/local/` contains managed model runtime catalog, readiness,
-  lifecycle, source resolution, cache, pull, and invocation support.
+  persistence, validation, compilation, authored layout, packaged distribution,
+  catalog behavior, and invocation policy.
+- `pkg/services/factory_runtime/` owns event-first orchestration, scheduling,
+  dispatch, runtime projections, Petri execution, JavaScript workflows, and
+  checkpoint recovery.
+- `pkg/services/factory_sessions/` owns live and durable Factory Session state,
+  runtime opening, lifecycle gateways, response streams, invocation, controls,
+  and persisted execution behavior.
+- `pkg/services/recordings/` owns the canonical Factory Event ledger, recording
+  lifecycle, replay, artifacts, and read-model projections.
+- `pkg/services/work/` owns Work and Work Request contracts, admission, content,
+  materialization, staging, lineage, read behavior, and pure invocation return
+  policy.
+- `pkg/services/workers/` owns worker and workstation execution, runners,
+  prompt/output shaping, worktrees, mock-worker behavior, and worker capability
+  policy.
+- `pkg/services/providers/` owns provider identity, catalog, lifecycle, ACP
+  integration, and provider execution. Workers consume Providers through its
+  public contracts; provider implementations do not belong to Workers.
+- `pkg/services/models/` owns the managed local-model catalog, assets, runtime
+  readiness and lifecycle, host supervision, source resolution, cache, pull,
+  and local inference support.
+- `pkg/services/automations/` owns cron, filesystem watcher, script poller,
+  hosted-source, reconciliation, and invocation-schedule behavior.
+- `pkg/services/provider_sessions/` owns provider-session discovery and
+  transcript/session inspection.
+- `pkg/services/operator_settings/`, `pkg/services/factory_visualization/`, and
+  `pkg/services/system_initialization/` own settings resolution, runtime
+  presentation/projection, and system bootstrap/rollback respectively.
+- `pkg/services/edges/` aggregates the exact replaceable external-effect ports
+  accepted by `root.BuildProcess`; it is not a product service locator.
 - `pkg/services/factory_runtime/internal/orchestrators/petri/` contains internal
   Petri-net primitives. External packages consume Factory Runtime root
   contracts instead.
-- `pkg/services/` contains the cross-domain Automation and Provider Session
-  services. Dashboard rendering is an initializer-owned presentation
-  lifecycle under `pkg/initializer/dashboard`. Other domain implementations
-  remain under their defining `pkg/factory`, `pkg/work`, `pkg/workers`, and
-  `pkg/models` families.
-- `pkg/wire/` provides the sole application injector and canonical inert
-  process graph. `pkg/root.BuildProcess` is the caller-facing construction
-  boundary; tests replace only external effects through `edges.Edges`.
-- `pkg/workers/` contains worker execution, inference binding/output shaping,
-  provider integration, invocation-time worker capability policy, mock workers,
-  worktrees, and hosted workers; `pkg/factory/packages/` contains packaged
-  factory support.
 - `pkg/services/factory_runtime/internal/orchestrators/javascript/` contains
   JavaScript workflow runtime, preview, source lookup, storage, and validation
   implementations. Public orchestration contracts are exposed at
@@ -127,7 +148,11 @@ the standards.
   - `pkg/transports/http/generated/server.gen.go`
   - `pkg/transports/http/client/client.gen.go`
   - `ui/src/api/generated/openapi.ts`
-- Run `make generate-api` after OpenAPI changes.
+- Run `make generate-api` for the bundled OpenAPI and direct Go/dashboard
+  clients. Use `make interfaces-all` when a change also affects generated
+  contract schemas or publishable UI package clients; the scoped
+  `interfaces-go` and `interfaces-ui` targets are available when only one
+  consumer family changed.
 - For API surface changes, update the matching `pkg/transports/http` handlers,
   `pkg/transports/mapping` mappers/normalizers, generated clients, UI API adapters, and
   contract tests as applicable.
@@ -156,6 +181,8 @@ surface area is shared or public:
 - `make verify-fast` runs dashboard typecheck, short UI/unit tests, and short
   Go tests.
 - `make verify-pr` runs the broader PR verification tier.
+- `make build-all` regenerates public interfaces and builds the publishable UI
+  packages, dashboard, and Go CLI from canonical sources.
 - `make test-full`, `make test-functional`, `make test-ui-coverage`, and
   specialty Make targets are available for higher-risk runtime, API, or UI
   changes.

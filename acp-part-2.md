@@ -583,7 +583,7 @@ Acceptance criteria:
 
 Acceptance criteria:
 
-- The output contains both `AGENT` and `AGENT_you ACP` rows.
+- The output contains both `AGENT` and `AGENT_ACP` rows.
 - Exact-set tests fail for missing or unexpected providers.
 - List uses the live service and reflects add/delete immediately.
 

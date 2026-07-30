@@ -88,7 +88,7 @@ flowchart LR
     end
 
     subgraph currentDefinitions[Factory definition and configuration]
-        currentLoading[[pkg/services/factory_definitions/loading]]
+        currentLoading[[pkg/services/factory_definitions/internal/services/compilation/loading]]
         currentDefinition[[pkg/services/factory_definitions]]
         currentValidation[[pkg/services/factory_definitions/internal/services/validation/impl]]
         currentMappingAdapter[[pkg/transports/mapping/factoryconfig]]
@@ -162,20 +162,20 @@ flowchart LR
     end
 
     subgraph currentWorkers[Worker execution]
-        currentWorkerService[[pkg/services/workers/service\nworker invocation]]
-        currentWorkerExecutor[[pkg/services/workers/executor]]
+        currentWorkerService[[pkg/services/workers\nworker invocation]]
+        currentWorkerExecutor[[pkg/services/workers/internal/services/workstations/executor]]
         currentProviderAdapters[[pkg/services/providers/internal/services/execution/internal/provider adapters]]
-        currentHostedWorkers[[pkg/services/workers/services/hosted_logic]]
-        currentWorktrees[[pkg/services/workers/worktree]]
+        currentHostedSources[[pkg/services/automations/internal/services/hosted_sources]]
+        currentWorktrees[[pkg/services/workers/internal/services/workstations/worktree]]
 
         currentWorkerService --> currentWorkerExecutor
         currentWorkerExecutor --> currentProviderAdapters
-        currentWorkerExecutor --> currentHostedWorkers
         currentWorkerExecutor --> currentWorktrees
     end
 
     subgraph currentAutomation[Automation]
         currentAutomationService[[pkg/services/automations\ncron, poller, and watcher supervision]]
+        currentAutomationService --> currentHostedSources
         currentAutomationService --> currentWorkContent
     end
 
@@ -195,10 +195,10 @@ flowchart LR
         currentArtifacts[(Replay and artifact files)]
         currentMetrics[(Metrics and cursor state)]
         currentLogs[(Runtime log files)]
-        currentLogging[[pkg/logging]]
-        currentReplay[[pkg/replay]]
+        currentLogging[[pkg/platform/logging]]
+        currentReplay[[pkg/platform/replay]]
         currentSessionPersistence[[pkg/services/factory_sessions/internal/cursors/persistence]]
-        currentInternalPlatform[[pkg/internal/metrics and cursorstorage]]
+        currentInternalPlatform[[pkg/platform/metrics and clock]]
 
         currentLogging --> currentLogs
         currentReplay --> currentArtifacts
@@ -265,7 +265,7 @@ flowchart LR
     currentSessionGateway -->|normalizes Work content| currentWorkContent
     currentWorkContent --> currentWorkMaterialize
     currentSessionGateway -->|submits admitted Work| currentSubmissionBuffer
-    currentTimeWork --> currentWorkerService
+    currentTimeWork --> currentAutomationService
     currentDispatcher -->|in-process dispatch| currentWorkerExecutor
     currentWorkerExecutor -->|writes result| currentResultBuffer
     currentProviderAdapters --> currentClaude
@@ -275,7 +275,7 @@ flowchart LR
     currentProviderAdapters --> currentGemini
     currentProviderAdapters --> currentKiro
     currentProviderAdapters --> currentPi
-    currentHostedWorkers --> currentHosted
+    currentHostedSources --> currentHosted
     currentWorkerExecutor -->|managed inference| currentModelService
     currentWorkerService -->|submits Work Requests| currentSessionGateway
 
@@ -305,7 +305,7 @@ flowchart LR
     class currentWebsite,currentCLI,currentAgentClient,currentDashboard currentClient
     class currentHTTP,currentCLITransport,currentMCP currentInterface
     class currentCmd,currentRoot,currentWire,currentInitializer,currentSessionGateway,currentControlPlane,currentDataPlane currentControl
-    class currentFactoryRuntime,currentEngine,currentCircuitBreaker,currentDispatcher,currentHistory,currentTransitioner,currentCascadingFailure,currentTracer,currentTermination,currentWorkerService,currentWorkerExecutor,currentProviderAdapters,currentHostedWorkers,currentWorktrees,currentModelService,currentModelHost,currentLocalModels,currentModelAssets currentExecution
+    class currentFactoryRuntime,currentEngine,currentCircuitBreaker,currentDispatcher,currentHistory,currentTransitioner,currentCascadingFailure,currentTracer,currentTermination,currentWorkerService,currentWorkerExecutor,currentProviderAdapters,currentHostedSources,currentWorktrees,currentModelService,currentModelHost,currentLocalModels,currentModelAssets currentExecution
     class currentMapping,currentDefinition,currentValidation,currentWorkContent,currentWorkMaterialize,currentWorkQuery,currentWorkGraph,currentInvocation,currentTimeWork,currentExecution,currentCanonicalStream,currentResponseStream,currentProviderProjection currentDomain
     class currentConfig,currentLogging,currentReplay,currentSessionPersistence,currentInternalPlatform,currentUIAPI,currentEventHook,currentTimelineStore,currentReplayWorld,currentProjectSnapshot currentPlatform
     class currentGraph,currentFactoryFiles,currentSessionRegistry,currentSubmissionBuffer,currentResultBuffer,currentSessionRecordings,currentArtifacts,currentMetrics,currentLogs currentStore
