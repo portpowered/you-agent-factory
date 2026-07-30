@@ -302,7 +302,7 @@ multiple experiment IDs to cover all goals.
 
 | Factory | Canary experiment | Representative experiment | Holdout/repeat evidence | Goal status | Open limitations |
 | --- | --- | --- | --- | --- | --- |
-| `@you/classify` | TBD | TBD | TBD | UNVALIDATED | |
+| `@you/classify` | `BOOT-CLASSIFY-001-R01` | `BOOT-CLASSIFY-001-R02` | deterministic three-lane and invalid-label coverage | MEETS_EXPECTATIONS | Live small and medium requests selected the appropriate lanes and returned source-grounded results. |
 | `@you/deep-research` | TBD | TBD | TBD | UNVALIDATED | |
 | `@you/full-flow` | TBD | TBD | deterministic full-flow invocation tests | NEEDS_ITERATION | Caller-selected bounds are not independently enforced below fixed topology ceilings. |
 | `@you/fusion` | TBD | TBD | TBD | UNVALIDATED | |

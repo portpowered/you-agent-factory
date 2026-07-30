@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1",
   "factories": [
-    {"name":"@you/classify","contractTestPackage":"tests/functional/factory/packaged/classify","contractTests":["TestPackagedClassifyRoutesSmallMediumAndLarge"],"canaryStatus":"NOT_RUN","representativeStatus":"NOT_RUN","goalStatus":"UNVALIDATED","limitations":[]},
+    {"name":"@you/classify","contractTestPackage":"tests/functional/factory/packaged/classify","contractTests":["TestPackagedClassifyRoutesSmallMediumAndLarge"],"canaryStatus":"PASSED","representativeStatus":"PASSED","goalStatus":"MEETS_EXPECTATIONS","experimentRecords":["docs/internal/packaged-factory-validation/experiments/BOOT-CLASSIFY-001.md"],"limitations":[]},
     {"name":"@you/deep-research","contractTestPackage":"tests/functional/factory/packaged/deep_research","contractTests":["TestPackagedDeepResearchRequiredInputCompletes"],"canaryStatus":"NOT_RUN","representativeStatus":"NOT_RUN","goalStatus":"UNVALIDATED","limitations":[]},
     {"name":"@you/full-flow","contractTestPackage":"tests/functional/factory/packaged/full_flow","contractTests":["TestPackagedFullFlowRunsParallelWorktreesMergesAndReplansToCompletion","TestPackagedFullFlowBoundsImplementationContinueLoopAndFailsProject"],"canaryStatus":"NOT_RUN","representativeStatus":"NOT_RUN","goalStatus":"NEEDS_ITERATION","limitations":["Invocation maxCycles and maxTasksPerCycle values are communicated to the planner, but smaller caller-selected bounds are not independently enforced by the declarative topology."]},
     {"name":"@you/fusion","contractTestPackage":"tests/functional/factory/packaged/fusion","contractTests":["TestPackagedFusionRequiredInputCompletes"],"canaryStatus":"NOT_RUN","representativeStatus":"NOT_RUN","goalStatus":"UNVALIDATED","limitations":[]},
