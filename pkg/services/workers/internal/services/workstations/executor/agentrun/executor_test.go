@@ -452,8 +452,11 @@ func TestEvaluateAgentRunOutcome_StopTokenAndContinueSemantics(t *testing.T) {
 	t.Parallel()
 
 	worker := &interfaces.FactoryWorkerConfig{StopToken: "<COMPLETE>"}
-	if got := evaluateAgentRunOutcome("done <COMPLETE>", worker); got != workerexecution.OutcomeAccepted {
+	if got := evaluateAgentRunOutcome("done\n<COMPLETE>", worker); got != workerexecution.OutcomeAccepted {
 		t.Fatalf("stop token outcome = %s, want ACCEPTED", got)
+	}
+	if got := evaluateAgentRunOutcome("completion uses <COMPLETE>\n<CONTINUE>", worker); got != workerexecution.OutcomeContinue {
+		t.Fatalf("final continue outcome = %s, want CONTINUE", got)
 	}
 	if got := evaluateAgentRunOutcome("still working <CONTINUE>", worker); got != workerexecution.OutcomeContinue {
 		t.Fatalf("continue outcome = %s, want CONTINUE", got)

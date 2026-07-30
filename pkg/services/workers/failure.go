@@ -221,7 +221,20 @@ func WorkFailureDecisionFromMetadata(metadata *WorkFailureMetadata) WorkFailureD
 }
 
 func ContainsStopToken(output, stopToken string) bool {
-	return stopToken != "" && strings.Contains(output, stopToken)
+	if stopToken == "" {
+		return false
+	}
+	if stopToken != "<COMPLETE>" {
+		return strings.Contains(output, stopToken)
+	}
+	lines := strings.Split(strings.ReplaceAll(output, "\r\n", "\n"), "\n")
+	for index := len(lines) - 1; index >= 0; index-- {
+		line := strings.TrimSpace(lines[index])
+		if line != "" {
+			return line == stopToken
+		}
+	}
+	return false
 }
 
 func providerFailureFamily(failureType WorkFailureType) WorkFailureFamily {

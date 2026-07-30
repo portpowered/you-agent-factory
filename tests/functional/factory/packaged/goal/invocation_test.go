@@ -67,7 +67,7 @@ func TestPackagedGoalAcceptCompletesWithSummary(t *testing.T) {
 func TestPackagedGoalContinueRepeatsThenCompletes(t *testing.T) {
 	dir := scaffoldPackagedGoalBuiltInFactory(t)
 	runner := support.NewShapedProviderCommandRunner(
-		platformprocess.CommandResult{Stdout: []byte("ordinary partial progress\n<CONTINUE>")},
+		platformprocess.CommandResult{Stdout: []byte("ordinary partial progress; completion would use <COMPLETE>\n<CONTINUE>")},
 		platformprocess.CommandResult{Stdout: []byte(packagedGoalContinueThenCompleteSummary + "\n<COMPLETE>")},
 	)
 
