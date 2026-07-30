@@ -88,6 +88,24 @@ func TestPackagedGoalContinueRepeatsThenCompletes(t *testing.T) {
 	}
 }
 
+// TestPackagedGoalContinueExhaustsAtVisitBound proves the shipped loop breaker
+// fails a perpetually continuing goal after exactly twelve executor visits and
+// never launches a thirteenth attempt.
+func TestPackagedGoalContinueExhaustsAtVisitBound(t *testing.T) {
+	dir := scaffoldPackagedGoalBuiltInFactory(t)
+	results := make([]platformprocess.CommandResult, 12)
+	for index := range results {
+		results[index] = platformprocess.CommandResult{Stdout: []byte(fmt.Sprintf("partial progress %d\n<CONTINUE>", index+1))}
+	}
+	runner := support.NewShapedProviderCommandRunner(results...)
+
+	_, response := invokePackagedGoalWithProviderRunner(t, dir, runner, "invoke packaged goal through visit exhaustion")
+	assertPackagedGoalInvocationFailedWithRuntimeDetails(t, response)
+	if got := runner.CallCount(); got != 12 {
+		t.Fatalf("provider invocation count = %d, want exactly 12 before loop breaker", got)
+	}
+}
+
 // TestPackagedGoalRejectRepeatsThenCompletes proves a packaged @you/goal reject
 // decision feeds back through the public session invocation API, triggers another
 // executor dispatch on the built-in repeater workstation, and then completes with
