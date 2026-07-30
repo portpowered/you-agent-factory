@@ -228,6 +228,14 @@ An experiment cannot pass if any applicable condition occurs:
 - The result cannot be reconstructed because required experiment evidence is
   missing.
 
+Factory-runtime bookkeeping is not an agent-authored workspace mutation. A
+trial may create the documented `.you-agent-factory` session state and an
+explicitly requested recording path. Record those paths as expected runtime
+artifacts and exclude them when comparing the pre/post repository diff. The
+gate still fails if a read-only worker changes tracked source, creates any
+other unrequested workspace artifact, writes runtime state outside its
+documented root, or overwrites pre-existing user state.
+
 ## Common Scoring Rubric
 
 Score only after applicable hard gates pass.
@@ -296,16 +304,16 @@ multiple experiment IDs to cover all goals.
 | --- | --- | --- | --- | --- | --- |
 | `@you/classify` | TBD | TBD | TBD | UNVALIDATED | |
 | `@you/deep-research` | TBD | TBD | TBD | UNVALIDATED | |
-| `@you/full-flow` | TBD | TBD | TBD | UNVALIDATED | |
+| `@you/full-flow` | TBD | TBD | deterministic full-flow invocation tests | NEEDS_ITERATION | Caller-selected bounds are not independently enforced below fixed topology ceilings. |
 | `@you/fusion` | TBD | TBD | TBD | UNVALIDATED | |
 | `@you/goal` | TBD | TBD | TBD | UNVALIDATED | |
 | `@you/loop` | TBD | TBD | TBD | UNVALIDATED | |
 | `@you/plan-execute` | TBD | TBD | TBD | UNVALIDATED | |
-| `@you/plan-parallel` | TBD | TBD | TBD | UNVALIDATED | |
+| `@you/plan-parallel` | `BOOT-PLAN-PARALLEL-001` (passed twice) | TBD | deterministic DAG invocation coverage plus frozen repeat | NEEDS_ITERATION | Live DAG, concurrency, dependency gating, fan-in, and merge quality passed. Run a distinct holdout after fixing shared-runtime busy-wait and preserving the customer's normal tool environment. |
 | `@you/quorum` | TBD | TBD | TBD | UNVALIDATED | |
 | `@you/review` | TBD | TBD | TBD | UNVALIDATED | |
 | `@you/spawn` | TBD | TBD | TBD | UNVALIDATED | |
-| `@you/subagent` | TBD | TBD | TBD | UNVALIDATED | |
+| `@you/subagent` | `BOOT-SUBAGENT-001` (failed twice) | TBD | deterministic invocation coverage | NEEDS_ITERATION | Live Codex returned false-success results after repository inspection failed; provider-native read-only enforcement remains unproven. |
 | `@you/tournament` | TBD | TBD | TBD | UNVALIDATED | |
 | `@you/tts` | TBD | TBD | TBD | UNVALIDATED | |
 

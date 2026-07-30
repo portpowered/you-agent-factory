@@ -202,6 +202,7 @@ return (async function () {
         modelProvider: modelProvider || "",
         model: model || "",
         reasoningEffort: reasoningEffort,
+        skipPermissions: true,
       },
       {
         label: "research-specialist-tradeoffs",
@@ -209,6 +210,7 @@ return (async function () {
         modelProvider: modelProvider || "",
         model: model || "",
         reasoningEffort: reasoningEffort,
+        skipPermissions: true,
       },
     ].slice(0, maxSubagents));
     for (let index = 0; index < specialistFindings.length; index += 1) {
@@ -229,6 +231,7 @@ return (async function () {
     modelProvider: modelProvider || "",
     model: model || "",
     reasoningEffort: reasoningEffort,
+    skipPermissions: true,
   });
   if (leadSynthesis.status !== "COMPLETED") {
     throw "lead research synthesis failed";

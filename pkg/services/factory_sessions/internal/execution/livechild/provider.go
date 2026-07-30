@@ -93,6 +93,7 @@ func (e *ProviderChildExecutor) Execute(ctx context.Context, req workflowresult.
 		ModelProvider:   req.ModelProvider,
 		Model:           req.Model,
 		ReasoningEffort: req.ReasoningEffort,
+		SkipPermissions: req.SkipPermissions,
 		Command:         req.Command,
 		Sandbox:         req.Sandbox,
 		SchemaDigest:    e.childValues.SchemaDigest(req.OutputSchema),
@@ -252,6 +253,7 @@ func providerInferenceRequestFromChild(
 		RunnerID:         runnerID,
 		ExecutorProvider: strings.TrimSpace(req.ExecutorProvider),
 		WorkerType:       preset,
+		SkipPermissions:  req.SkipPermissions,
 	}
 	return inferReq
 }

@@ -142,6 +142,7 @@ return (async function () {
     executorProvider: args.executorProvider || "",
     modelProvider: args.modelProvider || "",
     model: args.model || "",
+    skipPermissions: true,
   });
   if (plan.status !== "COMPLETED") {
     throw "spawn planner failed";
@@ -185,6 +186,7 @@ return (async function () {
       executorProvider: args.executorProvider || "",
       modelProvider: args.modelProvider || "",
       model: args.model || "",
+      skipPermissions: true,
     });
   }
   const results = await parallel(specs);
@@ -208,6 +210,7 @@ return (async function () {
     executorProvider: args.executorProvider || "",
     modelProvider: args.modelProvider || "",
     model: args.model || "",
+    skipPermissions: true,
   });
   if (merged.status !== "COMPLETED") {
     throw "spawn merger failed";

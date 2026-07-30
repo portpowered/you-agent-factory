@@ -229,6 +229,7 @@ func TestJavaScriptWorkflowPathRecognizesSupportedExtensions(t *testing.T) {
 func TestFormatFactoryInvocationHelp_RendersTopLevelStructuredExamples(t *testing.T) {
 	data := factoryInvocationHelpData{
 		factoryName:   "example-factory",
+		description:   "Runs a structured customer workflow.",
 		selectionText: "named factory example-factory",
 		commandPrefix: "you run --named example-factory",
 		signature: &interfaces.InvocationSignatureConfig{Parameters: []interfaces.InvocationParameterConfig{
@@ -246,6 +247,7 @@ func TestFormatFactoryInvocationHelp_RendersTopLevelStructuredExamples(t *testin
 
 	output := formatFactoryInvocationHelp(data)
 	for _, want := range []string{
+		"Purpose:\n  Runs a structured customer workflow.",
 		"# Run with two tags.",
 		"you run --named example-factory 'hello world' --tag alpha --tag beta",
 	} {

@@ -26,12 +26,23 @@ type staticInferencer struct {
 }
 
 func TestAgentRunInferenceRequestFallsBackToModelProviderRunner(t *testing.T) {
+	processEnvironment := []string{"PATH=C:\\Tools", "USERPROFILE=C:\\Users\\customer"}
 	req := agentRunInferenceRequest(
-		workerexecution.WorkstationExecutionRequest{Dispatch: work.WorkDispatch{DispatchID: "dispatch"}},
+		workerexecution.WorkstationExecutionRequest{
+			Dispatch:           work.WorkDispatch{DispatchID: "dispatch"},
+			ProcessEnvironment: processEnvironment,
+		},
 		&interfaces.FactoryWorkerConfig{ModelProvider: "codex"},
 	)
 	if req.RunnerID != "codex" {
 		t.Fatalf("RunnerID = %q, want model provider fallback", req.RunnerID)
+	}
+	if len(req.ProcessEnvironment) != 2 || req.ProcessEnvironment[0] != processEnvironment[0] || req.ProcessEnvironment[1] != processEnvironment[1] {
+		t.Fatalf("ProcessEnvironment = %#v, want host execution environment", req.ProcessEnvironment)
+	}
+	processEnvironment[0] = "PATH=mutated"
+	if req.ProcessEnvironment[0] == processEnvironment[0] {
+		t.Fatal("ProcessEnvironment aliases workstation request")
 	}
 }
 

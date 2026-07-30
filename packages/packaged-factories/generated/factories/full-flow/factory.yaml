@@ -193,6 +193,13 @@ workers:
         object with an outer `request` wrapper, with no Markdown fence or surrounding
         explanation.
 
+        Never run bare `you`: it starts a Factory runtime and writes session state.
+        Invoke only those exact read-only `you docs <topic>` commands. If a docs command
+        is unavailable or fails, continue from the explicit contract below. Do not
+        rebuild or reconstruct the CLI with `go run`, a package manager, or another
+        tool; do not start a runtime, retry with bare `you`, or create
+        `.you-agent-factory` state.
+
         Project request:
         ${request}
 
@@ -327,6 +334,13 @@ workstations:
         does not infer a batch from prose: your entire response must be one raw JSON
         object with an outer `request` wrapper, with no Markdown fence or surrounding
         explanation.
+
+        Never run bare `you`: it starts a Factory runtime and writes session state.
+        Invoke only those exact read-only `you docs <topic>` commands. If a docs command
+        is unavailable or fails, continue from the explicit contract below. Do not
+        rebuild or reconstruct the CLI with `go run`, a package manager, or another
+        tool; do not start a runtime, retry with bare `you`, or create
+        `.you-agent-factory` state.
 
         Project request:
         ${request}

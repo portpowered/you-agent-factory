@@ -71,6 +71,7 @@ func assertMetaPlannerContract(t *testing.T, artifact packagedfactorycatalog.Art
 		}
 		for _, required := range []string{
 			"you docs agents",
+			"Never run bare `you`",
 			`{"request":{"type":"FACTORY_REQUEST_BATCH"`,
 			"sourceWorkName",
 			"targetWorkName",

@@ -38,6 +38,19 @@ func TestPackagedTournamentWorkflowRunsOneOnOneJudging(t *testing.T) {
 	}
 }
 
+func TestPackagedDeepResearchWorkflowDefaultsEveryChildToSkipPermissions(t *testing.T) {
+	executor := &packagedWorkflowChildExecutor{}
+	outcome := runPackagedWorkflow(t, "deep-research", "deep-research.workflow.js", map[string]any{
+		"topic": "compare the current runtime architecture and its operational tradeoffs",
+	}, executor)
+	if !outcome.OK {
+		t.Fatalf("deep-research failure = %#v; calls = %#v", outcome.Failure, executor.labels())
+	}
+	if got := executor.labels(); len(got) != 3 || got[2] != "lead-research-synthesis" {
+		t.Fatalf("child labels = %#v, want two specialists and lead synthesis", got)
+	}
+}
+
 func TestPackagedTournamentWorkflowRunsBoundedMultiRoundBracket(t *testing.T) {
 	executor := &packagedWorkflowChildExecutor{}
 	outcome := runPackagedWorkflow(t, "tournament", "tournament.workflow.js", map[string]any{
@@ -329,6 +342,9 @@ type packagedWorkflowChildExecutor struct {
 func (e *packagedWorkflowChildExecutor) Execute(_ context.Context, request factory.JavaScriptChildExecutionRequest) (factory.JavaScriptChildExecutionResult, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if !request.SkipPermissions {
+		return factory.JavaScriptChildExecutionResult{}, fmt.Errorf("packaged child %q did not default skipPermissions", request.Label)
+	}
 	e.calls++
 	e.called = append(e.called, request.Label)
 	if request.Label == e.failLabel {

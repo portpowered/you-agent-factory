@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-06-08
+last-modified: 2026-07-30
 doc-id: agent-factory/guides/orchestrators
 ---
 
@@ -110,6 +110,7 @@ argument contract is intentionally small:
 | `modelProvider` | Optional string |
 | `model` | Optional string |
 | `reasoningEffort` | Optional string |
+| `skipPermissions` | Optional boolean; set `true` only when the child is intentionally autonomous |
 
 This complete example uses every supported field:
 
@@ -120,17 +121,17 @@ const child = await agent.run({
   preset: "careful",
   executorProvider: "ACP",
   modelProvider: "cursor-acp",
-  modelProvider: "codex",
   model: "gpt-example",
   reasoningEffort: "high",
+  skipPermissions: true,
 });
 ```
 
 All other per-child properties are rejected before dispatch. In particular,
 host-access fields, output schemas, per-child concurrency or agent caps, and
-duration controls are unsupported. Configure global budgets and permissions on
-an applicable factory or Factory Session policy surface when one exists; they
-are not `agent.run` arguments.
+duration controls are unsupported. Configure global budgets on an applicable
+factory or Factory Session policy surface when one exists. The only supported
+per-child permission control is the boolean `skipPermissions` field.
 
 For example, this workflow fails validation with
 `agent.run() does not support field "writableRoots"`; the diagnostic names the

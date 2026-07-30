@@ -507,9 +507,10 @@ func TestProviderInferenceRequestFromChild_PropagatesPresetAsWorkerType(t *testi
 	t.Parallel()
 
 	req := providerInferenceRequestFromChild("dispatch-1", factory.JavaScriptChildExecutionRequest{
-		Prompt:        "mocked child prompt",
-		Preset:        "worker-a",
-		ModelProvider: "codex",
+		Prompt:          "mocked child prompt",
+		Preset:          "worker-a",
+		ModelProvider:   "codex",
+		SkipPermissions: true,
 	})
 	if req.WorkerType != "worker-a" {
 		t.Fatalf("WorkerType = %q, want worker-a", req.WorkerType)
@@ -522,5 +523,8 @@ func TestProviderInferenceRequestFromChild_PropagatesPresetAsWorkerType(t *testi
 	}
 	if req.RunnerID != "codex" {
 		t.Fatalf("RunnerID = %q, want model provider fallback for SCRIPT_WRAP child", req.RunnerID)
+	}
+	if !req.SkipPermissions {
+		t.Fatal("SkipPermissions = false, want packaged JavaScript child policy forwarded")
 	}
 }

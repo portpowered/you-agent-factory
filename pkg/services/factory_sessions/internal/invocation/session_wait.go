@@ -9,7 +9,12 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
-const sessionInvocationPollInterval = 10 * time.Millisecond
+// The invocation projection rebuild can be substantial for long-running,
+// multi-agent Factories. A 10 ms poll cadence repeatedly rebuilt the same
+// event-derived world state while providers were still working and consumed a
+// full CPU core in live packaged-factory trials. Keep cancellation responsive
+// without turning an idle synchronous invocation into a busy wait.
+const sessionInvocationPollInterval = 250 * time.Millisecond
 
 // SessionInvocationObservation is one event-derived view of invocation state.
 // Runtime adapters populate it without exposing engine or Petri-net types.

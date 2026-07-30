@@ -182,7 +182,18 @@ type fullFlowRunner struct {
 func (runner *fullFlowRunner) Run(_ context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	prompt := string(request.Stdin)
 	switch {
-	case strings.Contains(prompt, "Return only one canonical"):
+	case strings.Contains(prompt, "You are the planning stage for one bounded delivery cycle"):
+		for _, required := range []string{
+			"you docs agents",
+			"Never run bare `you`",
+			`{"request":{"type":"FACTORY_REQUEST_BATCH"`,
+			`"type":"DEPENDS_ON"`,
+			`"workTypeName":"cycle-control"`,
+		} {
+			if !strings.Contains(prompt, required) {
+				return platformprocess.CommandResult{}, fmt.Errorf("full-flow planner prompt missing required contract %q", required)
+			}
+		}
 		runner.mu.Lock()
 		runner.plannerCalls++
 		call := runner.plannerCalls

@@ -122,9 +122,29 @@ func (a *sourceAnalyzer) validateAgentRunCall(call *js.CallExpr) {
 			a.addIssue(shapeIssueCode("agent.run"), `agent.run() requires an object argument with a string "prompt" property`, call)
 			continue
 		}
+		if field == orchestratorcontract.FieldSkipPermissions {
+			if found && !isAgentRunBooleanValue(value) {
+				a.addIssue(shapeIssueCode("agent.run"), fmt.Sprintf(`agent.run() requires %q to be a boolean value`, field), call)
+			}
+			continue
+		}
 		if found && !isAgentRunStringValue(value) {
 			a.addIssue(shapeIssueCode("agent.run"), fmt.Sprintf(`agent.run() requires %q to be a string value`, field), call)
 		}
+	}
+}
+
+func isAgentRunBooleanValue(value js.IExpr) bool {
+	if !isLiteralExpr(value) {
+		return true
+	}
+	switch node := value.(type) {
+	case js.LiteralExpr:
+		return node.TokenType == js.TrueToken || node.TokenType == js.FalseToken
+	case *js.LiteralExpr:
+		return node.TokenType == js.TrueToken || node.TokenType == js.FalseToken
+	default:
+		return false
 	}
 }
 

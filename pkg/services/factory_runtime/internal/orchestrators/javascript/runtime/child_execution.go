@@ -23,6 +23,7 @@ type ChildExecutionRequest struct {
 	ModelProvider    string
 	Model            string
 	ReasoningEffort  string
+	SkipPermissions  bool
 	Command          string
 	Sandbox          string
 	WritableRoots    []string
@@ -159,6 +160,7 @@ func (e *FakeChildExecutor) Execute(ctx context.Context, req ChildExecutionReque
 		ModelProvider:      req.ModelProvider,
 		Model:              req.Model,
 		ReasoningEffort:    req.ReasoningEffort,
+		SkipPermissions:    req.SkipPermissions,
 		Command:            req.Command,
 		Sandbox:            req.Sandbox,
 		SchemaDigest:       schemaDigest(req.OutputSchema),
@@ -203,6 +205,7 @@ func (e *FakeChildExecutor) executeFailed(ctx context.Context, req ChildExecutio
 		ModelProvider:   req.ModelProvider,
 		Model:           req.Model,
 		ReasoningEffort: req.ReasoningEffort,
+		SkipPermissions: req.SkipPermissions,
 		Command:         req.Command,
 		Sandbox:         req.Sandbox,
 		SchemaDigest:    schemaDigest(req.OutputSchema),
@@ -269,6 +272,7 @@ func childExecutionRequestFromSpec(spec map[string]any, workflowName, argsSubjec
 		ModelProvider:    normalized.ModelProvider,
 		Model:            normalized.Model,
 		ReasoningEffort:  normalized.ReasoningEffort,
+		SkipPermissions:  normalized.SkipPermissions,
 		WorkflowName:     workflowName,
 		ArgsSubject:      argsSubject,
 	}, nil
@@ -340,6 +344,9 @@ func childResultValueMap(result ChildExecutionResult) map[string]any {
 	}
 	if req.ReasoningEffort != "" {
 		value["reasoningEffort"] = req.ReasoningEffort
+	}
+	if req.SkipPermissions {
+		value["skipPermissions"] = true
 	}
 	if req.Command != "" {
 		value["command"] = req.Command
