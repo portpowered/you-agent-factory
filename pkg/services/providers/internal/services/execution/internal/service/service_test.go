@@ -473,14 +473,20 @@ func TestExecuteNormalizesEveryPrivateFailureShape(t *testing.T) {
 		{
 			name:       "decode lifecycle failure",
 			attemptErr: execution.AttemptFailure{DecodeError: errors.New("decode detail")},
-			wantKind:   providers.ExecuteFailureKindInvalidRequest,
+			wantKind:   providers.ExecuteFailureKindDependency,
 			wantStage:  "decode",
 		},
 		{
 			name:       "flush lifecycle failure",
 			attemptErr: execution.AttemptFailure{FlushError: errors.New("flush detail")},
-			wantKind:   providers.ExecuteFailureKindUnknown,
+			wantKind:   providers.ExecuteFailureKindDependency,
 			wantStage:  "flush",
+		},
+		{
+			name:       "final parse lifecycle failure",
+			attemptErr: execution.AttemptFailure{FinalParseError: errors.New("final parse detail")},
+			wantKind:   providers.ExecuteFailureKindDependency,
+			wantStage:  "final_parse",
 		},
 		{
 			name:       "empty lifecycle failure",

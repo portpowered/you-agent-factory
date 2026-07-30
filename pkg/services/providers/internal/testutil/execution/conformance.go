@@ -228,7 +228,7 @@ func runParseFailure(t *testing.T, subject Subject) {
 		result,
 		err,
 		providers.ErrExecuteFailed,
-		providers.ExecuteFailureKindUnknown,
+		providers.ExecuteFailureKindDependency,
 	)
 	if failure.Diagnostics == nil ||
 		failure.Diagnostics.Metadata["failure_stage"] != "final_parse" {

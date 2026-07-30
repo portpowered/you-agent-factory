@@ -34,13 +34,13 @@ func TestClaudeRootNormalizesFailureStagesAndSuppressesResults(t *testing.T) {
 		{
 			name:      "malformed stream-json",
 			stream:    `{"type":"system","subtype":"init","secret":"` + claudeFailureSecret,
-			wantKind:  providers.ExecuteFailureKindInvalidRequest,
+			wantKind:  providers.ExecuteFailureKindDependency,
 			wantStage: "decode",
 		},
 		{
 			name:      "incomplete final state",
 			stream:    "{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"claude-session-partial\"}\n",
-			wantKind:  providers.ExecuteFailureKindUnknown,
+			wantKind:  providers.ExecuteFailureKindDependency,
 			wantStage: "final_parse",
 		},
 		{
@@ -66,7 +66,7 @@ func TestClaudeRootNormalizesFailureStagesAndSuppressesResults(t *testing.T) {
 				"{\"type\":\"stream_event\",\"session_id\":\"claude-session-tool\",\"event\":{\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_bad\",\"name\":\"lookup\",\"input\":{}}}}\n" +
 				"{\"type\":\"stream_event\",\"session_id\":\"claude-session-tool\",\"event\":{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{invalid" +
 				claudeFailureSecret + "}\"}}}\n",
-			wantKind:  providers.ExecuteFailureKindUnknown,
+			wantKind:  providers.ExecuteFailureKindDependency,
 			wantStage: "final_parse",
 		},
 	}

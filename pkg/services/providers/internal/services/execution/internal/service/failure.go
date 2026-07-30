@@ -74,9 +74,13 @@ func normalizeAttemptFailure(
 			Kind: providers.ExecuteFailureKindCanceled,
 		}, request)
 	}
-	if hasLifecycle && lifecycle.DecodeError != nil {
+	// Stream lifecycle failures describe an unusable provider response, not a
+	// caller validation failure. Classify them as dependency failures so the
+	// bounded worker retry policy can recover transient provider output faults.
+	if hasLifecycle && (lifecycle.FinalParseError != nil ||
+		lifecycle.FlushError != nil || lifecycle.DecodeError != nil) {
 		return normalizeDeclaredFailure(providers.ExecuteFailure{
-			Kind:        providers.ExecuteFailureKindInvalidRequest,
+			Kind:        providers.ExecuteFailureKindDependency,
 			Diagnostics: lifecycleStageDiagnostics(lifecycle, hasLifecycle),
 		}, request)
 	}

@@ -34,13 +34,13 @@ func TestCodexRootNormalizesFailureStagesAndSuppressesResults(t *testing.T) {
 		{
 			name:      "malformed JSONL",
 			stream:    `{"type":"item.completed","secret":"` + codexFailureSecret,
-			wantKind:  providers.ExecuteFailureKindInvalidRequest,
+			wantKind:  providers.ExecuteFailureKindDependency,
 			wantStage: "decode",
 		},
 		{
 			name:      "incomplete final state",
 			stream:    "{\"type\":\"turn.started\"}\n",
-			wantKind:  providers.ExecuteFailureKindUnknown,
+			wantKind:  providers.ExecuteFailureKindDependency,
 			wantStage: "final_parse",
 		},
 		{
