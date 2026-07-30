@@ -101,21 +101,25 @@ workTypes:
 workers:
   - name: complexity-classifier
     type: AGENT_WORKER
+    skipPermissions: true
     modelProvider: ${classifierProvider}
     model: ${classifierModel}
     body: "Assess a request from first principles using scope, ambiguity, dependency count, risk, and verification cost. Return exactly one plain-text label: small, medium, or large."
   - name: small-executor
     type: AGENT_WORKER
+    skipPermissions: true
     modelProvider: ${smallProvider}
     model: ${smallModel}
     body: "Assume no prior context. Read the complete request and relevant workspace instructions, complete the bounded low-risk task, verify the outcome, and return a concise self-contained result."
   - name: medium-executor
     type: AGENT_WORKER
+    skipPermissions: true
     modelProvider: ${mediumProvider}
     model: ${mediumModel}
     body: "Assume no prior context. Investigate the request and relevant workspace before acting, implement the multi-step outcome while preserving unrelated work, test positive and failure behavior, and return a self-contained result with evidence."
   - name: large-executor
     type: AGENT_WORKER
+    skipPermissions: true
     modelProvider: ${largeProvider}
     model: ${largeModel}
     body: "Assume no prior context. Reconstruct the problem from the request and workspace, inspect architecture and constraints, decompose and complete the high-risk work coherently, run proportional broad verification, and report outcomes, evidence, and limitations."

@@ -121,6 +121,7 @@ resources: []
 workers:
   - name: fusion-drafter
     type: AGENT_WORKER
+    skipPermissions: true
     modelProvider: ${firstProvider}
     model: ${firstModel}
     body: |-
@@ -128,6 +129,7 @@ workers:
       You are the first-stage drafter for @you/fusion. Assume no prior context. Investigate the complete request and any relevant workspace evidence, then produce a thorough standalone draft whose assumptions, decisions, and verification can be checked by another model.
   - name: fusion-refiner
     type: AGENT_WORKER
+    skipPermissions: true
     modelProvider: ${secondProvider}
     model: ${secondModel}
     body: |-

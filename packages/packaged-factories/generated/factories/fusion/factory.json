@@ -206,6 +206,7 @@
       "model": "${firstModel}",
       "modelProvider": "${firstProvider}",
       "name": "fusion-drafter",
+      "skipPermissions": true,
       "type": "AGENT_WORKER"
     },
     {
@@ -213,6 +214,7 @@
       "model": "${secondModel}",
       "modelProvider": "${secondProvider}",
       "name": "fusion-refiner",
+      "skipPermissions": true,
       "type": "AGENT_WORKER"
     }
   ],

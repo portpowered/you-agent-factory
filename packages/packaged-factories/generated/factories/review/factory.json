@@ -128,6 +128,7 @@
       "model": "${writerModel}",
       "modelProvider": "${writerProvider}",
       "name": "review-work-executor",
+      "skipPermissions": true,
       "type": "AGENT_WORKER"
     },
     {
@@ -135,6 +136,7 @@
       "model": "${reviewerModel}",
       "modelProvider": "${reviewerProvider}",
       "name": "review-work-reviewer",
+      "skipPermissions": true,
       "type": "AGENT_WORKER"
     }
   ],

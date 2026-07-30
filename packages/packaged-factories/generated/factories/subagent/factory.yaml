@@ -69,6 +69,7 @@ workers:
       model: ${workerModel}
       modelProvider: ${workerProvider}
       name: subagent-worker
+      skipPermissions: true
       type: AGENT_WORKER
 workstations:
     - body: |

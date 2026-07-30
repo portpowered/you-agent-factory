@@ -40,8 +40,9 @@ func TestPackagedPlanParallelExecutesReadyDAGConcurrentlyAndMerges(t *testing.T)
 		t.Fatalf("executor calls = %d, merge calls = %d; want 3 and 1", runner.executionCount(), runner.mergeCount())
 	}
 	for index, request := range runner.requestsSnapshot() {
-		if request.Command != "codex" || !planParallelHasArgPair(request.Args, "--model", "operator-model") {
-			t.Fatalf("provider request[%d] = command %q args %#v, want operator defaults", index, request.Command, request.Args)
+		if request.Command != "codex" || !planParallelHasArgPair(request.Args, "--model", "operator-model") ||
+			!planParallelHasArg(request.Args, "--dangerously-bypass-approvals-and-sandbox") {
+			t.Fatalf("provider request[%d] = command %q args %#v, want operator model and packaged skip-permissions default", index, request.Command, request.Args)
 		}
 	}
 
@@ -220,6 +221,15 @@ func (runner *planParallelRunner) requestsSnapshot() []platformprocess.CommandRe
 func planParallelHasArgPair(args []string, name, value string) bool {
 	for index := 0; index+1 < len(args); index++ {
 		if args[index] == name && args[index+1] == value {
+			return true
+		}
+	}
+	return false
+}
+
+func planParallelHasArg(args []string, name string) bool {
+	for _, arg := range args {
+		if arg == name {
 			return true
 		}
 	}

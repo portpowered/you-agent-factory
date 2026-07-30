@@ -41,6 +41,11 @@ func TestGenerateArtifactsProducesEquivalentSelfContainedPairsForCompleteInvento
 	for _, artifact := range artifacts {
 		bySlug[artifact.Slug] = artifact
 		assertEquivalentArtifactPair(t, artifact)
+		for _, worker := range artifact.Factory.Workers {
+			if worker.Type == "AGENT_WORKER" && !worker.SkipPermissions {
+				t.Fatalf("packaged Factory %q agent worker %q does not default skipPermissions to true", artifact.PublicName, worker.Name)
+			}
+		}
 	}
 	if bySlug["fusion"].PublicName != "@you/fusion" || bySlug["fusion"].Factory.Name != "fusion" {
 		t.Fatalf("fusion public/artifact names = %q/%q", bySlug["fusion"].PublicName, bySlug["fusion"].Factory.Name)
@@ -54,6 +59,30 @@ func TestGenerateArtifactsProducesEquivalentSelfContainedPairsForCompleteInvento
 		t.Fatal("deep-research artifact did not inline its standalone factory.js source")
 	}
 	assertExamplesPreserved(t, bySlug["subagent"])
+	assertMetaPlannerContract(t, bySlug["plan-parallel"], "parallel-planner")
+	assertMetaPlannerContract(t, bySlug["full-flow"], "full-flow-planner")
+}
+
+func assertMetaPlannerContract(t *testing.T, artifact packagedfactorycatalog.ArtifactPair, workerName string) {
+	t.Helper()
+	for _, worker := range artifact.Factory.Workers {
+		if worker.Name != workerName {
+			continue
+		}
+		for _, required := range []string{
+			"you docs agents",
+			`{"request":{"type":"FACTORY_REQUEST_BATCH"`,
+			"sourceWorkName",
+			"targetWorkName",
+			"requiredState",
+		} {
+			if !strings.Contains(worker.Body, required) {
+				t.Fatalf("packaged Factory %q planner %q body does not contain %q", artifact.PublicName, workerName, required)
+			}
+		}
+		return
+	}
+	t.Fatalf("packaged Factory %q does not contain planner worker %q", artifact.PublicName, workerName)
 }
 
 func TestGenerateArtifactsEmbedsDocumentsInputsAndPreservesMetadataExactly(t *testing.T) {

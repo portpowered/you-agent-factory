@@ -153,6 +153,7 @@
     {
       "body": "At each configured trigger, preserve the complete controller request and create exactly one traceable scheduled execution without rewriting, summarizing, or losing its context.",
       "name": "loop-trigger",
+      "skipPermissions": true,
       "type": "AGENT_WORKER"
     },
     {
@@ -160,6 +161,7 @@
       "model": "${executorModel}",
       "modelProvider": "${executorProvider}",
       "name": "loop-executor",
+      "skipPermissions": true,
       "type": "AGENT_WORKER"
     }
   ],

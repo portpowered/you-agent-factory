@@ -124,6 +124,7 @@ workers:
       model: ${firstModel}
       modelProvider: ${firstProvider}
       name: fusion-drafter
+      skipPermissions: true
       type: AGENT_WORKER
     - body: |-
         Reasoning effort: ${secondEffort}
@@ -131,6 +132,7 @@ workers:
       model: ${secondModel}
       modelProvider: ${secondProvider}
       name: fusion-refiner
+      skipPermissions: true
       type: AGENT_WORKER
 workstations:
     - body: |-

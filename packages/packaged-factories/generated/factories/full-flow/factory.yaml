@@ -187,6 +187,12 @@ workers:
         and already merged results before deciding what remains. Preserve unrelated user
         changes and never infer completion from prior prose alone.
 
+        Before planning, run `you docs agents` and read it. Also run
+        `you docs batch-inputs` and `you docs relationships` when available. The runtime
+        does not infer a batch from prose: your entire response must be one raw JSON
+        object with an outer `request` wrapper, with no Markdown fence or surrounding
+        explanation.
+
         Project request:
         ${request}
 
@@ -194,20 +200,29 @@ workers:
         maxTasksPerCycle=${maxTasksPerCycle}. The project and cycle-control Work name is
         exactly `{{ (index .Inputs 0).Name }}`.
 
-        Return only one canonical `FACTORY_REQUEST_BATCH`. If work remains, generate
-        between one and the configured maximum `delivery-task` items plus one matching
-        `cycle-control` item whose payload requests `continue`. Every task must be a
-        standalone specification for an agent with no shared context: include observed
-        repository context, objective, boundaries, relevant files, dependency
-        assumptions, acceptance criteria, tests, and merge risks. Use unique names that
-        are safe branch identities. Add a DEPENDS_ON relation from cycle-control to
-        every delivery task with requiredState `merged`, and add task dependencies only
-        when execution truly must be ordered.
+        If work remains, return raw JSON matching this exact shape:
+
+        {"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"task-a","workTypeName":"delivery-task","state":"init","payload":"Standalone implementation task with observed repository context, objective, boundaries, relevant files, dependency assumptions, acceptance criteria, tests, and merge risks."},{"name":"{{ (index .Inputs 0).Name }}","workTypeName":"cycle-control","state":"init","payload":"continue"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"{{ (index .Inputs 0).Name }}","targetWorkName":"task-a","requiredState":"merged"}]}}
+
+        Generate between one and the configured maximum `delivery-task` items plus
+        exactly one `cycle-control` item. Its name must exactly match
+        `{{ (index .Inputs 0).Name }}` and its payload must be `continue`. Every
+        delivery task must use state `init`, be a standalone specification for an agent
+        with no shared context, and have a unique name safe for a Git branch. Add a
+        DEPENDS_ON relation whose source is cycle-control and target is each delivery
+        task, with requiredState `merged`. A DEPENDS_ON source is blocked by its target.
+        Add delivery-task dependencies only when execution truly must be ordered, and
+        use requiredState `merged` for them.
 
         When direct inspection proves the entire project request and its verification
-        are complete, emit only the matching cycle-control item with a payload requesting
-        `complete`. Do not emit prose outside the canonical batch and do not declare
-        completion while required work or failing checks remain.
+        are complete, return exactly this shape instead:
+
+        {"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"{{ (index .Inputs 0).Name }}","workTypeName":"cycle-control","state":"init","payload":"complete"}],"relations":[]}}
+
+        Do not emit requestId, additional top-level fields, other work types or states,
+        cycles, self-dependencies, unknown names, PARENT_CHILD, SPAWNED_BY, comments,
+        Markdown, or prose outside the JSON object. Do not declare completion while
+        required work or failing checks remain.
       model: ${plannerModel}
       modelProvider: ${plannerProvider}
       name: full-flow-planner
@@ -297,6 +312,7 @@ workers:
       model: ${plannerModel}
       modelProvider: ${plannerProvider}
       name: cycle-decider
+      skipPermissions: true
       type: AGENT_WORKER
 workstations:
     - body: |
@@ -306,6 +322,12 @@ workstations:
         and already merged results before deciding what remains. Preserve unrelated user
         changes and never infer completion from prior prose alone.
 
+        Before planning, run `you docs agents` and read it. Also run
+        `you docs batch-inputs` and `you docs relationships` when available. The runtime
+        does not infer a batch from prose: your entire response must be one raw JSON
+        object with an outer `request` wrapper, with no Markdown fence or surrounding
+        explanation.
+
         Project request:
         ${request}
 
@@ -313,20 +335,29 @@ workstations:
         maxTasksPerCycle=${maxTasksPerCycle}. The project and cycle-control Work name is
         exactly `{{ (index .Inputs 0).Name }}`.
 
-        Return only one canonical `FACTORY_REQUEST_BATCH`. If work remains, generate
-        between one and the configured maximum `delivery-task` items plus one matching
-        `cycle-control` item whose payload requests `continue`. Every task must be a
-        standalone specification for an agent with no shared context: include observed
-        repository context, objective, boundaries, relevant files, dependency
-        assumptions, acceptance criteria, tests, and merge risks. Use unique names that
-        are safe branch identities. Add a DEPENDS_ON relation from cycle-control to
-        every delivery task with requiredState `merged`, and add task dependencies only
-        when execution truly must be ordered.
+        If work remains, return raw JSON matching this exact shape:
+
+        {"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"task-a","workTypeName":"delivery-task","state":"init","payload":"Standalone implementation task with observed repository context, objective, boundaries, relevant files, dependency assumptions, acceptance criteria, tests, and merge risks."},{"name":"{{ (index .Inputs 0).Name }}","workTypeName":"cycle-control","state":"init","payload":"continue"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"{{ (index .Inputs 0).Name }}","targetWorkName":"task-a","requiredState":"merged"}]}}
+
+        Generate between one and the configured maximum `delivery-task` items plus
+        exactly one `cycle-control` item. Its name must exactly match
+        `{{ (index .Inputs 0).Name }}` and its payload must be `continue`. Every
+        delivery task must use state `init`, be a standalone specification for an agent
+        with no shared context, and have a unique name safe for a Git branch. Add a
+        DEPENDS_ON relation whose source is cycle-control and target is each delivery
+        task, with requiredState `merged`. A DEPENDS_ON source is blocked by its target.
+        Add delivery-task dependencies only when execution truly must be ordered, and
+        use requiredState `merged` for them.
 
         When direct inspection proves the entire project request and its verification
-        are complete, emit only the matching cycle-control item with a payload requesting
-        `complete`. Do not emit prose outside the canonical batch and do not declare
-        completion while required work or failing checks remain.
+        are complete, return exactly this shape instead:
+
+        {"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"{{ (index .Inputs 0).Name }}","workTypeName":"cycle-control","state":"init","payload":"complete"}],"relations":[]}}
+
+        Do not emit requestId, additional top-level fields, other work types or states,
+        cycles, self-dependencies, unknown names, PARENT_CHILD, SPAWNED_BY, comments,
+        Markdown, or prose outside the JSON object. Do not declare completion while
+        required work or failing checks remain.
       inputs:
         - state: init
           workType: project

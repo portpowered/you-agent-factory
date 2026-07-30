@@ -103,21 +103,25 @@ workers:
       model: ${classifierModel}
       modelProvider: ${classifierProvider}
       name: complexity-classifier
+      skipPermissions: true
       type: AGENT_WORKER
     - body: Assume no prior context. Read the complete request and relevant workspace instructions, complete the bounded low-risk task, verify the outcome, and return a concise self-contained result.
       model: ${smallModel}
       modelProvider: ${smallProvider}
       name: small-executor
+      skipPermissions: true
       type: AGENT_WORKER
     - body: Assume no prior context. Investigate the request and relevant workspace before acting, implement the multi-step outcome while preserving unrelated work, test positive and failure behavior, and return a self-contained result with evidence.
       model: ${mediumModel}
       modelProvider: ${mediumProvider}
       name: medium-executor
+      skipPermissions: true
       type: AGENT_WORKER
     - body: Assume no prior context. Reconstruct the problem from the request and workspace, inspect architecture and constraints, decompose and complete the high-risk work coherently, run proportional broad verification, and report outcomes, evidence, and limitations.
       model: ${largeModel}
       modelProvider: ${largeProvider}
       name: large-executor
+      skipPermissions: true
       type: AGENT_WORKER
 workstations:
     - body: |-

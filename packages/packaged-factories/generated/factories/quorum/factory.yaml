@@ -113,16 +113,19 @@ workers:
       model: ${branchModel}
       modelProvider: ${branchProvider}
       name: quorum-branch-a
+      skipPermissions: true
       type: AGENT_WORKER
     - body: You are quorum branch B. Assume zero prior context, independently challenge likely assumptions in the complete request, use available workspace evidence, and return a standalone proposed answer with risks and verification.
       model: ${branchModel}
       modelProvider: ${branchProvider}
       name: quorum-branch-b
+      skipPermissions: true
       type: AGENT_WORKER
     - body: You are the quorum merger. Treat the original request and two branch results as complete context, reconcile them against evidence, preserve material disagreements, and return one self-contained final answer.
       model: ${mergeModel}
       modelProvider: ${mergeProvider}
       name: quorum-merge
+      skipPermissions: true
       type: AGENT_WORKER
 workstations:
     - body: Preserve the complete original request without summarizing or dropping context, and create exactly two independent quorum branch Work items whose names and lineage remain traceable to the original Work.

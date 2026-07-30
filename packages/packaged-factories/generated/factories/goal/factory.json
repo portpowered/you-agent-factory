@@ -102,6 +102,7 @@
       "model": "${executorModel}",
       "modelProvider": "${executorProvider}",
       "name": "goal-executor",
+      "skipPermissions": true,
       "stopToken": "\u003cCOMPLETE\u003e",
       "type": "AGENT_WORKER"
     }

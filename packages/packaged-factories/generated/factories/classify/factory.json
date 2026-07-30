@@ -188,6 +188,7 @@
       "model": "${classifierModel}",
       "modelProvider": "${classifierProvider}",
       "name": "complexity-classifier",
+      "skipPermissions": true,
       "type": "AGENT_WORKER"
     },
     {
@@ -195,6 +196,7 @@
       "model": "${smallModel}",
       "modelProvider": "${smallProvider}",
       "name": "small-executor",
+      "skipPermissions": true,
       "type": "AGENT_WORKER"
     },
     {
@@ -202,6 +204,7 @@
       "model": "${mediumModel}",
       "modelProvider": "${mediumProvider}",
       "name": "medium-executor",
+      "skipPermissions": true,
       "type": "AGENT_WORKER"
     },
     {
@@ -209,6 +212,7 @@
       "model": "${largeModel}",
       "modelProvider": "${largeProvider}",
       "name": "large-executor",
+      "skipPermissions": true,
       "type": "AGENT_WORKER"
     }
   ],

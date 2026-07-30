@@ -84,6 +84,7 @@ workers:
       model: ${executorModel}
       modelProvider: ${executorProvider}
       name: goal-executor
+      skipPermissions: true
       stopToken: <COMPLETE>
       type: AGENT_WORKER
 workstations:

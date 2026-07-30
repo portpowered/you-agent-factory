@@ -93,6 +93,7 @@ workers:
       model: ${writerModel}
       modelProvider: ${writerProvider}
       name: review-work-executor
+      skipPermissions: true
       type: AGENT_WORKER
     - body: |
         You are the independent review stage. Assume zero context beyond the original
@@ -120,6 +121,7 @@ workers:
       model: ${reviewerModel}
       modelProvider: ${reviewerProvider}
       name: review-work-reviewer
+      skipPermissions: true
       type: AGENT_WORKER
 workstations:
     - body: |

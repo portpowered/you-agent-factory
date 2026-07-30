@@ -205,6 +205,7 @@
       "model": "${branchModel}",
       "modelProvider": "${branchProvider}",
       "name": "quorum-branch-a",
+      "skipPermissions": true,
       "type": "AGENT_WORKER"
     },
     {
@@ -212,6 +213,7 @@
       "model": "${branchModel}",
       "modelProvider": "${branchProvider}",
       "name": "quorum-branch-b",
+      "skipPermissions": true,
       "type": "AGENT_WORKER"
     },
     {
@@ -219,6 +221,7 @@
       "model": "${mergeModel}",
       "modelProvider": "${mergeProvider}",
       "name": "quorum-merge",
+      "skipPermissions": true,
       "type": "AGENT_WORKER"
     }
   ],

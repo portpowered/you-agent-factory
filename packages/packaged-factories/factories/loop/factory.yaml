@@ -82,9 +82,11 @@ workTypes:
 workers:
   - name: loop-trigger
     type: AGENT_WORKER
+    skipPermissions: true
     body: "At each configured trigger, preserve the complete controller request and create exactly one traceable scheduled execution without rewriting, summarizing, or losing its context."
   - name: loop-executor
     type: AGENT_WORKER
+    skipPermissions: true
     modelProvider: ${executorProvider}
     model: ${executorModel}
     body: "Assume zero prior context. Read the complete scheduled request, inspect any relevant workspace instructions and current state, execute it exactly once for this trigger, verify the outcome, and return a timestamp-independent self-contained result."

@@ -112,16 +112,19 @@ resources: []
 workers:
   - name: quorum-branch-a
     type: AGENT_WORKER
+    skipPermissions: true
     modelProvider: ${branchProvider}
     model: ${branchModel}
     body: "You are quorum branch A. Assume zero prior context, investigate the complete request independently, use available workspace evidence, and return a standalone proposed answer with assumptions and verification."
   - name: quorum-branch-b
     type: AGENT_WORKER
+    skipPermissions: true
     modelProvider: ${branchProvider}
     model: ${branchModel}
     body: "You are quorum branch B. Assume zero prior context, independently challenge likely assumptions in the complete request, use available workspace evidence, and return a standalone proposed answer with risks and verification."
   - name: quorum-merge
     type: AGENT_WORKER
+    skipPermissions: true
     modelProvider: ${mergeProvider}
     model: ${mergeModel}
     body: "You are the quorum merger. Treat the original request and two branch results as complete context, reconcile them against evidence, preserve material disagreements, and return one self-contained final answer."

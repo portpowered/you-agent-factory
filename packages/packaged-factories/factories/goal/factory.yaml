@@ -55,6 +55,7 @@ workTypes:
 workers:
   - name: goal-executor
     type: AGENT_WORKER
+    skipPermissions: true
     modelProvider: ${executorProvider}
     model: ${executorModel}
     stopToken: <COMPLETE>
