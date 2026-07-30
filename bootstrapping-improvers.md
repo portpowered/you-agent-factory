@@ -310,7 +310,7 @@ multiple experiment IDs to cover all goals.
 | `@you/loop` | TBD | TBD | TBD | UNVALIDATED | |
 | `@you/plan-execute` | TBD | TBD | TBD | UNVALIDATED | |
 | `@you/plan-parallel` | `BOOT-PLAN-PARALLEL-001` (passed twice) | TBD | deterministic DAG invocation coverage plus frozen repeat | NEEDS_ITERATION | Live DAG, concurrency, dependency gating, fan-in, and merge quality passed. Run a distinct holdout after fixing shared-runtime busy-wait and preserving the customer's normal tool environment. |
-| `@you/quorum` | TBD | TBD | TBD | UNVALIDATED | |
+| `@you/quorum` | `BOOT-QUORUM-002-R02` | `BOOT-QUORUM-002-R01` | deterministic parallel-branch, merge-gating, and insufficient-member failure coverage | MEETS_EXPECTATIONS | Both live cases ran independent branches then gated merge. One transient provider failure and one disputed peripheral defect label remain documented. |
 | `@you/review` | TBD | TBD | TBD | UNVALIDATED | |
 | `@you/spawn` | TBD | TBD | TBD | UNVALIDATED | |
 | `@you/subagent` | `BOOT-SUBAGENT-003-R05` | `BOOT-SUBAGENT-003-R04` | deterministic invocation coverage | MEETS_EXPECTATIONS | Current published artifact passes repository-read and cross-file analysis cases. Named trials must report resolution because an older editable global install is intentionally not replaced. |
