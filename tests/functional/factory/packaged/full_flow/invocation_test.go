@@ -45,6 +45,10 @@ func TestPackagedFullFlowRunsParallelWorktreesMergesAndReplansToCompletion(t *te
 			t.Fatalf("merged %s = %q, %v", task, content, err)
 		}
 	}
+	longPaths, err := fullFlowGit(repository, "config", "--get", "core.longpaths")
+	if err != nil || longPaths != "true" {
+		t.Fatalf("repository core.longpaths = %q, %v, want persisted true for isolated-HOME task agents", longPaths, err)
+	}
 	planners, maximum, merges, _ := runner.Observations()
 	if planners != 2 {
 		t.Fatalf("planner calls = %d, want initial wave plus completion replan", planners)

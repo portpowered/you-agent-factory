@@ -32,7 +32,8 @@ Generate between one and the configured maximum `delivery-task` items plus
 exactly one `cycle-control` item. Its name must exactly match
 `{{ (index .Inputs 0).Name }}` and its payload must be `continue`. Every
 delivery task must use state `init`, be a standalone specification for an agent
-with no shared context, and have a unique name safe for a Git branch. Add a
+with no shared context, and have a unique Git branch name matching
+`^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$` (in particular, no slash). Add a
 DEPENDS_ON relation whose source is cycle-control and target is each delivery
 task, with requiredState `merged`. A DEPENDS_ON source is blocked by its target.
 Add delivery-task dependencies only when execution truly must be ordered, and
