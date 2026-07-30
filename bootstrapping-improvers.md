@@ -313,7 +313,7 @@ multiple experiment IDs to cover all goals.
 | `@you/quorum` | TBD | TBD | TBD | UNVALIDATED | |
 | `@you/review` | TBD | TBD | TBD | UNVALIDATED | |
 | `@you/spawn` | TBD | TBD | TBD | UNVALIDATED | |
-| `@you/subagent` | `BOOT-SUBAGENT-002` (passed after environment-forwarding fix) | TBD | deterministic invocation coverage | NEEDS_ITERATION | Frozen repository-read canary now passes without tracked mutations; distinct representative workload remains. |
+| `@you/subagent` | `BOOT-SUBAGENT-003-R05` | `BOOT-SUBAGENT-003-R04` | deterministic invocation coverage | MEETS_EXPECTATIONS | Current published artifact passes repository-read and cross-file analysis cases. Named trials must report resolution because an older editable global install is intentionally not replaced. |
 | `@you/tournament` | TBD | TBD | TBD | UNVALIDATED | |
 | `@you/tts` | TBD | TBD | TBD | UNVALIDATED | |
 

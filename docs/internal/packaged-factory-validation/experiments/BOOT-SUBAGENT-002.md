@@ -2,7 +2,7 @@
 
 ## Identity
 
-- Status: `PASSED`
+- Status: `INCONCLUSIVE`
 - Factory: `@you/subagent`
 - Workload class: contract canary
 - Repository base: `d8edfaaa2fa13702de5a7ae7457fdce5dc30af62`
@@ -32,8 +32,10 @@
 
 ## Decision
 
-- Canary status: `PASSED`.
-- The prior false-success was corrected by forwarding the parent process
-  environment through the `AGENT_RUN` inference request.
-- Keep the Factory at `NEEDS_ITERATION` until a distinct representative
-  workload passes in a new worktree.
+- This run is not accepted as current-package evidence. Debugging the distinct
+  workload showed that `--named @you/subagent` resolved an editable global
+  installation created before `skipPermissions: true` was published. The
+  successful answer did not prove that repository tools executed.
+- Preserve this result as evidence that live trials must record the resolved
+  Factory source and must not silently mix current source with an older global
+  installation.
