@@ -952,6 +952,63 @@ func TestCalculateMutations_PackagedGoalReplacesTerminalContentWithSummary(t *te
 	}
 }
 
+func TestCalculateMutations_PackagedGoalContinuePreservesRequestAndPriorOutput(t *testing.T) {
+	fixture := newCalculateMutationsFixture()
+	fixture.consumed[0].Color.Payload = nil
+	fixture.consumed[0].Color.Content = []work.WorkContentPart{{
+		Type: work.WorkContentPartTypeText,
+		Text: "original customer goal",
+	}}
+	fixture.inputColors = tokenColorsFromTokens(fixture.consumed)
+	workstation := &interfaces.FactoryWorkstationConfig{
+		Name:           "execute-goal",
+		Type:           interfaces.WorkstationTypeAgent,
+		WorkerTypeName: "goal-executor",
+		WorkPropagation: &interfaces.WorkPropagationConfig{
+			Mode: interfaces.WorkPropagationModePreserveInput,
+		},
+	}
+	workerOutput := "First-pass findings.\n<CONTINUE>"
+
+	mutations, err := calculateMutations(mutationCalculationInput{
+		workPropagation: testWorkPropagationPolicy(),
+		transition:      fixture.transition,
+		workstation:     workstation,
+		arcs: []petri.Arc{{
+			PlaceID: "goal:init",
+		}},
+		consumed:    fixture.consumed,
+		result:      resolvedWorkResult{outcome: workerexecution.OutcomeContinue, output: workerOutput},
+		now:         fixture.now,
+		history:     fixture.baseHistory,
+		inputColors: fixture.inputColors,
+		transformer: fixture.transformer,
+		outputShaping: factorydefinitionfixtures.InvocationOutputShaping{
+			FormatSummary: func(*interfaces.FactoryWorkstationConfig) bool { return true },
+			SummaryContent: func(string, string) ([]work.WorkContentPart, error) {
+				return []work.WorkContentPart{{
+					Type: work.WorkContentPartTypeText,
+					Text: "First-pass findings.",
+				}}, nil
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("calculateMutations: %v", err)
+	}
+	if len(mutations) != 1 {
+		t.Fatalf("mutation count = %d, want 1", len(mutations))
+	}
+
+	token := mutations[0].NewToken
+	if len(token.Color.Content) != 1 || token.Color.Content[0].Text != "original customer goal" {
+		t.Fatalf("continue content = %#v, want original customer goal", token.Color.Content)
+	}
+	if token.Color.Tags["_last_output"] != workerOutput {
+		t.Fatalf("last output = %q, want %q", token.Color.Tags["_last_output"], workerOutput)
+	}
+}
+
 func TestCalculateMutations_PackagedSubagentReplacesTerminalContentWithAgentResponse(t *testing.T) {
 	fixture := newCalculateMutationsFixture()
 	workstation := &interfaces.FactoryWorkstationConfig{

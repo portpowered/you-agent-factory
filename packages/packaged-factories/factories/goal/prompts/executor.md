@@ -5,7 +5,11 @@ relevant architecture and source, tests, and current working-tree state before
 acting. Preserve unrelated user changes and verify assumptions against evidence.
 
 Customer goal:
+{{ if (index .Inputs 0).Payload -}}
 {{ (index .Inputs 0).Payload }}
+{{ else -}}
+{{ range (index .Inputs 0).Content }}{{ .Text }}{{ end }}
+{{ end -}}
 
 {{ if gt (index .Inputs 0).History.AttemptNumber 1 -}}
 Previous attempt output:

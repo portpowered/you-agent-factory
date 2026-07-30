@@ -64,6 +64,8 @@ workstations:
   - name: execute-goal
     type: AGENT_RUN
     behavior: REPEATER
+    workPropagation:
+      mode: PRESERVE_INPUT
     worker: goal-executor
     inputs:
       - workType: goal

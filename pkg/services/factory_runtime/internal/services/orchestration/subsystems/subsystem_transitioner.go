@@ -736,8 +736,10 @@ func calculateMutations(in mutationCalculationInput) ([]interfaces.MarkingMutati
 			if err := applyPackagedTTSInvocationMetadata(in.outputShaping, newToken, in.workstation, in.result.output, in.inputColors, in.runtimeConfig); err != nil {
 				return nil, err
 			}
-			if err := applyPackagedGoalInvocationSummary(in.outputShaping, newToken, in.workstation, in.result.output, in.runtimeConfig); err != nil {
-				return nil, err
+			if in.result.outcome == workerexecution.OutcomeAccepted {
+				if err := applyPackagedGoalInvocationSummary(in.outputShaping, newToken, in.workstation, in.result.output, in.runtimeConfig); err != nil {
+					return nil, err
+				}
 			}
 			if err := applyPackagedSubagentInvocationResponse(in.outputShaping, newToken, in.workstation, in.result.output, in.runtimeConfig); err != nil {
 				return nil, err
