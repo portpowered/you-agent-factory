@@ -78,7 +78,7 @@ func (e *ProviderChildExecutor) Execute(ctx context.Context, req workflowresult.
 		return workflowresult.JavaScriptChildExecutionResult{}, selectionErr
 	}
 	if runnerID == "" {
-		runnerID = strings.TrimSpace(req.Command)
+		runnerID = firstLiveChildValue(req.Command, req.ModelProvider)
 	}
 	artifactID := e.records.NextChildArtifactID()
 	artifactRef := workflowresult.FormatArtifactURI(e.sessionID, artifactID)
@@ -103,7 +103,7 @@ func (e *ProviderChildExecutor) Execute(ctx context.Context, req workflowresult.
 
 	e.records.AppendChildDispatch(base, workflowresult.JavaScriptChildDispatchStatusQueued)
 
-	inferReq := providerInferenceRequestFromChild(e.sessionID, dispatchID, req)
+	inferReq := providerInferenceRequestFromChild(dispatchID, req)
 	inferReq.WorkingDirectory = e.workingDir
 	execution, err := e.executeWithRetry(ctx, inferReq, base)
 	base.Attempt = execution.Attempt
@@ -226,7 +226,6 @@ func (e *ProviderChildExecutor) childDispatchIdentity(req workflowresult.JavaScr
 }
 
 func providerInferenceRequestFromChild(
-	sessionID string,
 	dispatchID string,
 	req workflowresult.JavaScriptChildExecutionRequest,
 ) workerexecution.ProviderInferenceRequest {
@@ -239,7 +238,7 @@ func providerInferenceRequestFromChild(
 	preset := strings.TrimSpace(req.Preset)
 	runnerID, _ := workerexecution.RunnerIdentityForWorker(req.ExecutorProvider, req.ModelProvider)
 	if runnerID == "" {
-		runnerID = strings.TrimSpace(req.Command)
+		runnerID = firstLiveChildValue(req.Command, req.ModelProvider)
 	}
 	inferReq := workerexecution.ProviderInferenceRequest{
 		Dispatch: work.WorkDispatch{
@@ -250,12 +249,20 @@ func providerInferenceRequestFromChild(
 		Model:            req.Model,
 		ModelProvider:    req.ModelProvider,
 		OutputSchema:     outputSchema,
-		SessionID:        sessionID,
 		RunnerID:         runnerID,
 		ExecutorProvider: strings.TrimSpace(req.ExecutorProvider),
 		WorkerType:       preset,
 	}
 	return inferReq
+}
+
+func firstLiveChildValue(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func providerChildOutput(req workflowresult.JavaScriptChildExecutionRequest, content string) map[string]any {

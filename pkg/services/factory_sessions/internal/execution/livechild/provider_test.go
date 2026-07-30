@@ -506,14 +506,21 @@ var _ workerexecution.InvocationExecutor = (*blockingInvocationExecutor)(nil)
 func TestProviderInferenceRequestFromChild_PropagatesPresetAsWorkerType(t *testing.T) {
 	t.Parallel()
 
-	req := providerInferenceRequestFromChild("session-1", "dispatch-1", factory.JavaScriptChildExecutionRequest{
-		Prompt: "mocked child prompt",
-		Preset: "worker-a",
+	req := providerInferenceRequestFromChild("dispatch-1", factory.JavaScriptChildExecutionRequest{
+		Prompt:        "mocked child prompt",
+		Preset:        "worker-a",
+		ModelProvider: "codex",
 	})
 	if req.WorkerType != "worker-a" {
 		t.Fatalf("WorkerType = %q, want worker-a", req.WorkerType)
 	}
 	if req.Dispatch.WorkerType != "worker-a" {
 		t.Fatalf("Dispatch.WorkerType = %q, want worker-a", req.Dispatch.WorkerType)
+	}
+	if req.SessionID != "" {
+		t.Fatalf("SessionID = %q, want no provider-session resume for a new JavaScript child", req.SessionID)
+	}
+	if req.RunnerID != "codex" {
+		t.Fatalf("RunnerID = %q, want model provider fallback for SCRIPT_WRAP child", req.RunnerID)
 	}
 }

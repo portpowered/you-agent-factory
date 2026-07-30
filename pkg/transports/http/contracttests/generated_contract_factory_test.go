@@ -213,7 +213,8 @@ func assertGeneratedOpenAPISurfaceTypes(
 	triggerAtStart := true
 	workstationKind := factoryapi.WorkstationKindCron
 	workstationRuntimeType := factoryapi.WorkstationTypeModelWorkstation
-	cron := factoryapi.WorkstationCron{Schedule: "*/5 * * * *", TriggerAtStart: &triggerAtStart}
+	cronSchedule := "*/5 * * * *"
+	cron := factoryapi.WorkstationCron{Schedule: &cronSchedule, TriggerAtStart: &triggerAtStart}
 	workstation := factoryapi.Workstation{
 		Name:     "daily-refresh",
 		Behavior: &workstationKind,
@@ -287,7 +288,7 @@ func assertGeneratedWorkstationTypesUsable(
 	if workstation.Behavior == nil || workstation.Type == nil {
 		t.Fatal("generated workstation types should be usable")
 	}
-	if cron.Schedule == "" || cron.TriggerAtStart == nil {
+	if cron.Schedule == nil || *cron.Schedule == "" || cron.TriggerAtStart == nil {
 		t.Fatal("generated workstation cron types should be usable")
 	}
 }

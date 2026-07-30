@@ -53,7 +53,7 @@ run or server command; bare `you` prints command help and does not create a
 project-local `./factory` scaffold:
 
 1. Run `you init --provider codex` to configure the default model provider.
-2. Run `you factory list` to inspect the available packaged Factories.
+2. Run `you factory list` to inspect the fourteen available packaged Factories.
 3. From the project you want the agent to work in, run
    `you run --named @you/goal --with-site "write a report on my codebase to TEST.md"`.
    The command opens the dashboard, executes the goal, and exits after its
@@ -72,7 +72,7 @@ model-backed workers. It does not scaffold a Factory:
 you init --provider claude --model claude-sonnet-4-5
 ```
 
-Run `you factory list` to inspect the packaged Factories; selecting one with
+Run `you factory list` to inspect the fourteen packaged Factories; selecting one with
 `you run --named <name>` materializes it on first use. To author your own,
 follow [Authoring factories](./docs/reference/authoring-factories.md), then
 persist a reusable definition with

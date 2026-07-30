@@ -312,12 +312,14 @@ type workstationFrontmatter struct {
 }
 
 type workstationLimitsFrontmatter struct {
-	MaxRetries       int    `yaml:"maxRetries,omitempty"`
-	MaxExecutionTime string `yaml:"maxExecutionTime,omitempty"`
+	MaxRetries            int    `yaml:"maxRetries,omitempty"`
+	MaxExecutionTime      string `yaml:"maxExecutionTime,omitempty"`
+	MaxGeneratedWorkItems int    `yaml:"maxGeneratedWorkItems,omitempty"`
 }
 
 type cronFrontmatter struct {
 	Schedule       string `yaml:"schedule,omitempty"`
+	Every          string `yaml:"every,omitempty"`
 	TriggerAtStart bool   `yaml:"triggerAtStart,omitempty"`
 	Jitter         string `yaml:"jitter,omitempty"`
 	ExpiryWindow   string `yaml:"expiryWindow,omitempty"`
@@ -349,15 +351,18 @@ func workstationFrontmatterForExpansion(def factorydefinitions.FactoryWorkstatio
 		behavior = factorydefinitions.WorkstationKind(publicFactoryWorkstationKindFromInternal(def.Kind))
 	}
 	rendered := workstationFrontmatter{
-		ID:               def.ID,
-		Name:             def.Name,
-		Kind:             behavior,
-		Type:             def.Type,
-		Worker:           def.WorkerTypeName,
-		Runner:           def.Runner,
-		PromptFile:       def.PromptFile,
-		OutputSchema:     def.OutputSchema,
-		Limits:           workstationLimitsFrontmatter{MaxRetries: def.Limits.MaxRetries, MaxExecutionTime: def.Limits.MaxExecutionTime},
+		ID:           def.ID,
+		Name:         def.Name,
+		Kind:         behavior,
+		Type:         def.Type,
+		Worker:       def.WorkerTypeName,
+		Runner:       def.Runner,
+		PromptFile:   def.PromptFile,
+		OutputSchema: def.OutputSchema,
+		Limits: workstationLimitsFrontmatter{
+			MaxRetries: def.Limits.MaxRetries, MaxExecutionTime: def.Limits.MaxExecutionTime,
+			MaxGeneratedWorkItems: def.Limits.MaxGeneratedWorkItems,
+		},
 		Inputs:           ioFrontmatterSlice(def.Inputs),
 		Outputs:          ioFrontmatterSlice(def.Outputs),
 		OnContinue:       ioFrontmatterSlice(def.OnContinue),
@@ -373,6 +378,7 @@ func workstationFrontmatterForExpansion(def factorydefinitions.FactoryWorkstatio
 	if def.Cron != nil {
 		rendered.Cron = &cronFrontmatter{
 			Schedule:       def.Cron.Schedule,
+			Every:          def.Cron.Every,
 			TriggerAtStart: def.Cron.TriggerAtStart,
 			Jitter:         def.Cron.Jitter,
 			ExpiryWindow:   def.Cron.ExpiryWindow,

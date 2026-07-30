@@ -143,6 +143,16 @@ func InterpolateWorkstationConfig(workstation factorydefinitions.FactoryWorkstat
 	if next.Worktree, err = interpolateInvocationField(next.Worktree, args, "workstation.worktree", false, readFile); err != nil {
 		return factorydefinitions.FactoryWorkstationConfig{}, err
 	}
+	if next.Cron != nil {
+		cron := *next.Cron
+		if cron.Schedule, err = interpolateInvocationField(cron.Schedule, args, "workstation.cron.schedule", false, readFile); err != nil {
+			return factorydefinitions.FactoryWorkstationConfig{}, err
+		}
+		if cron.Every, err = interpolateInvocationField(cron.Every, args, "workstation.cron.every", false, readFile); err != nil {
+			return factorydefinitions.FactoryWorkstationConfig{}, err
+		}
+		next.Cron = &cron
+	}
 	for key, value := range next.Env {
 		resolved, err := interpolateInvocationField(value, args, fmt.Sprintf("workstation.env[%q]", key), false, readFile)
 		if err != nil {

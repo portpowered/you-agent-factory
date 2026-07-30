@@ -1,0 +1,103 @@
+{
+  "name": "@you/tournament",
+  "id": "builtin-tournament",
+  "description": {"type": "LOCALIZABLE_ASSET", "value": "Runs candidates through bounded 1v1 matches, uses a judge to advance each winner, and returns the champion result."},
+  "invocationSignature": {
+    "parameters": [
+      {
+        "name": "request",
+        "description": "Request that every tournament candidate attempts.",
+        "externalName": "to",
+        "required": true,
+        "bindings": [
+          {"kind": "POSITIONAL", "position": 1},
+          {"kind": "STDIN"},
+          {"kind": "NAMED"}
+        ]
+      },
+      {
+        "name": "rounds",
+        "description": "Single-elimination bracket depth from 1 through 3.",
+        "externalName": "rounds",
+        "typeHint": "NUMBER_STRING",
+        "required": true,
+        "bindings": [{"kind": "NAMED"}]
+      },
+      {
+        "name": "executorProvider",
+        "description": "Optional executor provider used by competitor agents.",
+        "externalName": "competitor-provider",
+        "bindings": [{"kind": "NAMED"}]
+      },
+      {
+        "name": "modelProvider",
+        "description": "Optional model provider used by competitor agents.",
+        "externalName": "competitor-model-provider",
+        "bindings": [{"kind": "NAMED"}]
+      },
+      {
+        "name": "model",
+        "description": "Optional model used by competitor agents.",
+        "externalName": "competitor-model",
+        "bindings": [{"kind": "NAMED"}]
+      },
+      {
+        "name": "judgeExecutorProvider",
+        "description": "Optional executor provider used by match judges.",
+        "externalName": "judge-provider",
+        "bindings": [{"kind": "NAMED"}]
+      },
+      {
+        "name": "judgeModelProvider",
+        "description": "Optional model provider used by match judges.",
+        "externalName": "judge-model-provider",
+        "bindings": [{"kind": "NAMED"}]
+      },
+      {
+        "name": "judgeModel",
+        "description": "Optional model used by match judges.",
+        "externalName": "judge-model",
+        "bindings": [{"kind": "NAMED"}]
+      }
+    ]
+  },
+  "examples": [
+    {
+      "name": "two-round-tournament",
+      "description": {"type": "LOCALIZABLE_ASSET", "value": "Compare four candidate launch strategies through two judged rounds."},
+      "args": {"request": "Propose a launch strategy", "rounds": "2"}
+    }
+  ],
+  "orchestrator": {
+    "kind": "JAVASCRIPT",
+    "javascript": {
+      "sourceRef": "scripts/tournament.workflow.js",
+      "argsSchema": {
+        "type": "object",
+        "required": ["request", "rounds"],
+        "properties": {
+          "request": {"type": "string", "minLength": 1},
+          "rounds": {"type": "integer", "minimum": 1, "maximum": 3},
+          "executorProvider": {"type": "string", "minLength": 1},
+          "modelProvider": {"type": "string", "minLength": 1},
+          "model": {"type": "string", "minLength": 1},
+          "judgeExecutorProvider": {"type": "string", "minLength": 1},
+          "judgeModelProvider": {"type": "string", "minLength": 1},
+          "judgeModel": {"type": "string", "minLength": 1}
+        },
+        "additionalProperties": false
+      },
+      "defaultPolicy": {
+        "mode": "READ_ONLY",
+        "maxAgents": 15,
+        "concurrency": 8,
+        "maxDepth": 1,
+        "maxRetries": 0,
+        "allowNetwork": false,
+        "allowConnectors": false,
+        "allowDangerFullAccess": false,
+        "writableRoots": []
+      }
+    }
+  }
+}

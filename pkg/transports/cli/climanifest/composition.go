@@ -355,12 +355,11 @@ func reservedStaticInputs(command Command) (map[int]string, string, map[string]s
 }
 
 func factorySpellings(parameter work.InvocationParameterConfig) []factorySpelling {
-	spellings := make([]factorySpelling, 0, len(parameter.Aliases)+2)
-	if name := strings.TrimSpace(parameter.Name); name != "" {
-		spellings = append(spellings, factorySpelling{path: "/name", value: name})
-	}
+	spellings := make([]factorySpelling, 0, len(parameter.Aliases)+1)
 	if externalName := strings.TrimSpace(parameter.ExternalName); externalName != "" {
 		spellings = append(spellings, factorySpelling{path: "/externalName", value: externalName})
+	} else if name := strings.TrimSpace(parameter.Name); name != "" {
+		spellings = append(spellings, factorySpelling{path: "/name", value: name})
 	}
 	for index, alias := range parameter.Aliases {
 		if trimmed := strings.TrimSpace(alias); trimmed != "" {

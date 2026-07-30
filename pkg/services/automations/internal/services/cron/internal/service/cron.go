@@ -92,12 +92,21 @@ func (s *service) ParseCronTiming(cronConfig *interfaces.CronConfig, nominalAt t
 		return croncontract.CronTiming{}, fmt.Errorf("%w: missing cron config", croncontract.ErrInvalidSchedule)
 	}
 	schedule := strings.TrimSpace(cronConfig.Schedule)
-	if schedule == "" {
-		return croncontract.CronTiming{}, fmt.Errorf("%w: schedule is required", croncontract.ErrInvalidSchedule)
-	}
-	scheduleWindow, err := s.CronScheduleWindow(schedule, nominalAt)
-	if err != nil {
-		return croncontract.CronTiming{}, err
+	every := strings.TrimSpace(cronConfig.Every)
+	var scheduleWindow time.Duration
+	var err error
+	if schedule != "" && every == "" {
+		scheduleWindow, err = s.CronScheduleWindow(schedule, nominalAt)
+		if err != nil {
+			return croncontract.CronTiming{}, err
+		}
+	} else if schedule == "" && every != "" {
+		scheduleWindow, err = time.ParseDuration(every)
+		if err != nil || scheduleWindow <= 0 {
+			return croncontract.CronTiming{}, fmt.Errorf("%w: every must be a positive duration", croncontract.ErrInvalidSchedule)
+		}
+	} else {
+		return croncontract.CronTiming{}, fmt.Errorf("%w: exactly one of schedule or every is required", croncontract.ErrInvalidSchedule)
 	}
 	jitter, err := s.ParseCronJitter(cronConfig)
 	if err != nil {

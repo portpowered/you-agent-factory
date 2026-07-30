@@ -1,0 +1,188 @@
+{
+  "description": {
+    "type": "LOCALIZABLE_ASSET",
+    "value": "Runs candidates through bounded 1v1 matches, uses a judge to advance each winner, and returns the champion result."
+  },
+  "examples": [
+    {
+      "args": {
+        "request": "Propose a launch strategy",
+        "rounds": "2"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Compare four candidate launch strategies through two judged rounds."
+      },
+      "name": "two-round-tournament"
+    }
+  ],
+  "id": "builtin-tournament",
+  "invocationSignature": {
+    "parameters": [
+      {
+        "bindings": [
+          {
+            "kind": "POSITIONAL",
+            "position": 1
+          },
+          {
+            "kind": "STDIN"
+          },
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "description": "Request that every tournament candidate attempts.",
+        "externalName": "to",
+        "name": "request",
+        "required": true
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "description": "Single-elimination bracket depth from 1 through 3.",
+        "externalName": "rounds",
+        "name": "rounds",
+        "required": true,
+        "typeHint": "NUMBER_STRING"
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "description": "Optional executor provider used by competitor agents.",
+        "externalName": "competitor-provider",
+        "name": "executorProvider"
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "description": "Optional model provider used by competitor agents.",
+        "externalName": "competitor-model-provider",
+        "name": "modelProvider"
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "description": "Optional model used by competitor agents.",
+        "externalName": "competitor-model",
+        "name": "model"
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "description": "Optional executor provider used by match judges.",
+        "externalName": "judge-provider",
+        "name": "judgeExecutorProvider"
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "description": "Optional model provider used by match judges.",
+        "externalName": "judge-model-provider",
+        "name": "judgeModelProvider"
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "description": "Optional model used by match judges.",
+        "externalName": "judge-model",
+        "name": "judgeModel"
+      }
+    ]
+  },
+  "name": "tournament",
+  "orchestrator": {
+    "javascript": {
+      "argsSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "executorProvider": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "judgeExecutorProvider": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "judgeModel": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "judgeModelProvider": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "model": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "modelProvider": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "request": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "rounds": {
+            "maximum": 3,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "request",
+          "rounds"
+        ],
+        "type": "object"
+      },
+      "defaultPolicy": {
+        "allowConnectors": false,
+        "allowDangerFullAccess": false,
+        "allowNetwork": false,
+        "concurrency": 8,
+        "maxAgents": 15,
+        "maxDepth": 1,
+        "maxRetries": 0,
+        "mode": "READ_ONLY",
+        "writableRoots": []
+      },
+      "sourceRef": "scripts/tournament.workflow.js"
+    },
+    "kind": "JAVASCRIPT"
+  },
+  "supportingFiles": {
+    "bundledFiles": [
+      {
+        "content": {
+          "encoding": "utf-8",
+          "inline": "return (async function () {\n  const entrantCount = Math.pow(2, args.rounds);\n  const requiredCalls = (entrantCount * 2) - 1;\n  const budget = workflow.budget();\n  if (requiredCalls \u003e budget.maxAgents) {\n    throw \"tournament requires \" + requiredCalls + \" agent calls but maxAgents is \" + budget.maxAgents;\n  }\n  phase(\"candidate-generation\");\n\n  const competitors = [];\n  for (let index = 0; index \u003c entrantCount; index += 1) {\n    competitors.push({\n      label: \"tournament-competitor-\" + (index + 1),\n      prompt: \"Produce candidate \" + (index + 1) + \" of \" + entrantCount +\n        \" for this request. Work independently and return only the candidate answer.\\n\\nRequest:\\n\" + args.request,\n      executorProvider: args.executorProvider || \"\",\n      modelProvider: args.modelProvider || \"\",\n      model: args.model || \"\",\n    });\n  }\n\n  const generated = await parallel(competitors);\n  let bracket = [];\n  for (let index = 0; index \u003c generated.length; index += 1) {\n    if (generated[index].status !== \"COMPLETED\") {\n      throw \"tournament competitor \" + (index + 1) + \" failed\";\n    }\n    bracket.push({\n      entrant: index + 1,\n      answer: generated[index].output.text,\n      rationale: [],\n    });\n  }\n\n  for (let round = 1; round \u003c= args.rounds; round += 1) {\n    phase(\"round-\" + round);\n    const matches = [];\n    for (let match = 0; match \u003c bracket.length / 2; match += 1) {\n      const candidateA = bracket[match * 2];\n      const candidateB = bracket[match * 2 + 1];\n      matches.push({\n        label: \"tournament-judge-r\" + round + \"-m\" + (match + 1),\n        prompt: \"Judge this 1v1 match for the original request. Select exactly candidate A or B; do not invent a replacement answer. \" +\n          \"Return only JSON shaped {\\\"winner\\\":\\\"A\\\"|\\\"B\\\",\\\"rationale\\\":\\\"...\\\"}.\\n\\nRequest:\\n\" + args.request +\n          \"\\n\\nCandidate A:\\n\" + candidateA.answer + \"\\n\\nCandidate B:\\n\" + candidateB.answer,\n        executorProvider: args.judgeExecutorProvider || args.executorProvider || \"\",\n        modelProvider: args.judgeModelProvider || args.modelProvider || \"\",\n        model: args.judgeModel || args.model || \"\",\n      });\n    }\n\n    const judgments = await parallel(matches);\n    const advanced = [];\n    for (let match = 0; match \u003c judgments.length; match += 1) {\n      if (judgments[match].status !== \"COMPLETED\") {\n        throw \"tournament judge failed at round \" + round + \" match \" + (match + 1);\n      }\n      let decision;\n      try {\n        const judgmentText = judgments[match].output.text.trim();\n        const judgmentStart = judgmentText.indexOf(\"{\");\n        const judgmentEnd = judgmentText.lastIndexOf(\"}\");\n        if (judgmentStart \u003c 0 || judgmentEnd \u003c judgmentStart) {\n          throw \"missing judgment object\";\n        }\n        decision = JSON.parse(judgmentText.slice(judgmentStart, judgmentEnd + 1));\n      } catch (_) {\n        throw \"tournament judge returned invalid JSON at round \" + round + \" match \" + (match + 1);\n      }\n      if (decision.winner !== \"A\" \u0026\u0026 decision.winner !== \"B\") {\n        throw \"tournament judge must select A or B at round \" + round + \" match \" + (match + 1);\n      }\n      const winner = decision.winner === \"A\" ? bracket[match * 2] : bracket[match * 2 + 1];\n      winner.rationale.push({\n        round: round,\n        match: match + 1,\n        selected: decision.winner,\n        rationale: decision.rationale || \"\",\n      });\n      advanced.push(winner);\n    }\n    bracket = advanced;\n  }\n\n  return {\n    request: args.request,\n    rounds: args.rounds,\n    entrantCount: entrantCount,\n    champion: bracket[0],\n  };\n})();\n"
+        },
+        "id": "factory/scripts/tournament.workflow.js",
+        "targetPath": "factory/scripts/tournament.workflow.js",
+        "type": "SCRIPT"
+      }
+    ]
+  }
+}

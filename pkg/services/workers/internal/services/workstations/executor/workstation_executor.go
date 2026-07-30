@@ -138,21 +138,22 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 	logger := logging.EnsureLogger(we.Logger)
 	invocationArgs := invocationArgumentsFromDispatch(dispatch)
 	invocationDiagnostics := invocationDiagnosticsForDispatch(we.RuntimeConfig, invocationArgs)
-	if invocationArgs != nil {
-		if we.FileSystem == nil {
-			return workerexecution.WorkResult{}, fmt.Errorf("workstation executor filesystem is required")
-		}
-		if we.Interpolation == nil {
-			return workerexecution.WorkResult{
-				DispatchID:   dispatch.DispatchID,
-				TransitionID: dispatch.TransitionID,
-				Outcome:      workerexecution.OutcomeFailed,
-				Error:        "Factory Definition invocation interpolation service is unavailable",
-				Diagnostics:  invocationDiagnostics,
-				Metrics:      workerexecution.WorkMetrics{Duration: we.Now().Sub(start)},
-			}, nil
-		}
-		interpolatedWorkstation, err := we.Interpolation.InterpolateWorkstationConfig(*workstationDef, invocationArgs, we.FileSystem.ReadFile)
+	if we.Interpolation == nil && invocationArgs != nil {
+		return workerexecution.WorkResult{
+			DispatchID:   dispatch.DispatchID,
+			TransitionID: dispatch.TransitionID,
+			Outcome:      workerexecution.OutcomeFailed,
+			Error:        "Factory Definition invocation interpolation service is unavailable",
+			Diagnostics:  invocationDiagnostics,
+			Metrics:      workerexecution.WorkMetrics{Duration: we.Now().Sub(start)},
+		}, nil
+	}
+	var readFile factorydefinitions.FileReader
+	if we.FileSystem != nil {
+		readFile = we.FileSystem.ReadFile
+	}
+	if we.Interpolation != nil {
+		interpolatedWorkstation, err := we.Interpolation.InterpolateWorkstationConfig(*workstationDef, invocationArgs, readFile)
 		if err != nil {
 			return workerexecution.WorkResult{
 				DispatchID:   dispatch.DispatchID,
@@ -176,8 +177,8 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 			Metrics:      workerexecution.WorkMetrics{Duration: we.Now().Sub(start)},
 		}, nil
 	}
-	if invocationArgs != nil {
-		interpolatedWorker, err := we.Interpolation.InterpolateWorkerConfig(*workerDef, invocationArgs, we.FileSystem.ReadFile)
+	if we.Interpolation != nil {
+		interpolatedWorker, err := we.Interpolation.InterpolateWorkerConfig(*workerDef, invocationArgs, readFile)
 		if err != nil {
 			return workerexecution.WorkResult{
 				DispatchID:   dispatch.DispatchID,
@@ -189,6 +190,12 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 			}, nil
 		}
 		workerDef = &interpolatedWorker
+		if strings.TrimSpace(workerDef.ModelProvider) == "" {
+			workerDef.ModelProvider = workerDef.RuntimeDefaultModelProvider
+		}
+		if strings.TrimSpace(workerDef.Model) == "" {
+			workerDef.Model = workerDef.RuntimeDefaultModel
+		}
 		if failed := we.resolveInvocationProvider(
 			dispatch,
 			workerDef,
@@ -643,8 +650,17 @@ func (we *WorkstationExecutor) executeInnerWorker(ctx context.Context, request w
 		defer cancel()
 	}
 
-	// Call the underlying worker executor.
-	result, err := we.Executor.Execute(executorCtx, request)
+	// Script Workers carry interpolatable command arguments, so execute from
+	// the per-dispatch definition rather than the invocation-neutral runner
+	// captured when the Factory Runtime opened.
+	var result workerexecution.WorkResult
+	if interpolated, ok := we.Executor.(interface {
+		ExecuteWithWorker(context.Context, workerexecution.WorkstationExecutionRequest, *factorydefinitions.FactoryWorkerConfig) (workerexecution.WorkResult, error)
+	}); ok {
+		result, err = interpolated.ExecuteWithWorker(executorCtx, request, workerDef)
+	} else {
+		result, err = we.Executor.Execute(executorCtx, request)
+	}
 	if err != nil {
 		if errors.Is(executorCtx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
 			return timeoutWorkResult(request.Dispatch, we.Now().Sub(start)), nil

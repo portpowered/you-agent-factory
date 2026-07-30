@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -198,6 +199,36 @@ func (se *ScriptExecutor) Execute(
 	}
 	result, executionErr := se.runner.Execute(ctx, scriptRunnerRequest(request))
 	return scriptWorkResult(request.Dispatch.DispatchID, request.Dispatch.TransitionID, result, executionErr), nil
+}
+
+// ExecuteWithWorker runs a dispatch with its invocation-interpolated Script
+// Worker definition. Script command arguments are invocation data just like
+// model/provider fields and must not remain frozen at runtime construction.
+func (se *ScriptExecutor) ExecuteWithWorker(
+	ctx context.Context,
+	request workers.WorkstationExecutionRequest,
+	definition *workerconfig.FactoryWorkerConfig,
+) (workers.WorkResult, error) {
+	if se == nil {
+		return workers.WorkResult{}, errors.New("script executor is required")
+	}
+	if definition != nil && definition.Command == se.Command && slices.Equal(definition.Args, se.Args) {
+		return se.Execute(ctx, request)
+	}
+	interpolated, err := newScriptExecutor(
+		definition,
+		se.CommandRunner,
+		se.Logger,
+		se.FactoryDir,
+		se.Publish,
+		se.recorder,
+		se.Now,
+		se.FactoryDocs,
+	)
+	if err != nil {
+		return workers.WorkResult{}, err
+	}
+	return interpolated.Execute(ctx, request)
 }
 
 func scriptRunnerRequest(request workers.WorkstationExecutionRequest) workers.RunnerExecutionRequest {

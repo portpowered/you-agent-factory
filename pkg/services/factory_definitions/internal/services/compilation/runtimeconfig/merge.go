@@ -295,6 +295,9 @@ func mergeWorkstationLimits(
 	if runtime.MaxExecutionTime != "" {
 		merged.MaxExecutionTime = runtime.MaxExecutionTime
 	}
+	if runtime.MaxGeneratedWorkItems != 0 {
+		merged.MaxGeneratedWorkItems = runtime.MaxGeneratedWorkItems
+	}
 	return merged
 }
 

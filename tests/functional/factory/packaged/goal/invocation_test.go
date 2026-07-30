@@ -72,6 +72,16 @@ func TestPackagedGoalContinueRepeatsThenCompletes(t *testing.T) {
 	)
 
 	_, response := invokePackagedGoalWithProviderRunner(t, dir, runner, "invoke packaged goal after continue")
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		errorCode, message := "", ""
+		if response.ErrorCode != nil {
+			errorCode = string(*response.ErrorCode)
+		}
+		if response.Message != nil {
+			message = *response.Message
+		}
+		t.Logf("provider invocation count before failure = %d; response errorCode=%q message=%q", runner.CallCount(), errorCode, message)
+	}
 	assertPackagedGoalCompletedWithSummary(t, response, packagedGoalContinueThenCompleteSummary)
 	if got := runner.CallCount(); got != 2 {
 		t.Fatalf("provider invocation count = %d, want 2 after continue", got)

@@ -1,22 +1,24 @@
 {
   "name": "@you/fusion",
   "id": "builtin-fusion",
+  "description": {"type": "LOCALIZABLE_ASSET", "value": "Produces an initial answer with one worker and refines it with a second worker."},
   "invocationSignature": {
     "parameters": [
       {
         "name": "input",
         "description": "Text request to run through the two-stage fusion flow.",
+        "externalName": "to",
         "required": true,
         "bindings": [
           {"kind": "POSITIONAL", "position": 1},
-          {"kind": "STDIN"}
+          {"kind": "STDIN"},
+          {"kind": "NAMED"}
         ]
       },
       {
-        "name": "output",
+        "name": "resultFile",
         "description": "Optional output-path hint for file-oriented callers.",
-        "externalName": "output",
-        "aliases": ["o"],
+        "externalName": "result-file",
         "typeHint": "FILE_PATH",
         "bindings": [
           {"kind": "NAMED"}
@@ -24,36 +26,40 @@
       },
       {
         "name": "firstProvider",
-        "description": "Optional provider override for the first fusion pass.",
+        "description": "Optional provider override for the first fusion pass; omitted values use operator defaults.",
         "externalName": "first-provider",
         "aliases": ["p1"],
+        "defaultValues": [""],
         "bindings": [
           {"kind": "NAMED"}
         ]
       },
       {
         "name": "secondProvider",
-        "description": "Optional provider override for the second fusion pass.",
+        "description": "Optional provider override for the second fusion pass; omitted values use operator defaults.",
         "externalName": "second-provider",
         "aliases": ["p2"],
+        "defaultValues": [""],
         "bindings": [
           {"kind": "NAMED"}
         ]
       },
       {
         "name": "firstModel",
-        "description": "Optional model override for the first fusion pass.",
+        "description": "Optional model override for the first fusion pass; omitted values use operator defaults.",
         "externalName": "first-model",
         "aliases": ["m1"],
+        "defaultValues": [""],
         "bindings": [
           {"kind": "NAMED"}
         ]
       },
       {
         "name": "secondModel",
-        "description": "Optional model override for the second fusion pass.",
+        "description": "Optional model override for the second fusion pass; omitted values use operator defaults.",
         "externalName": "second-model",
         "aliases": ["m2"],
+        "defaultValues": [""],
         "bindings": [
           {"kind": "NAMED"}
         ]
@@ -83,7 +89,7 @@
     ],
     "outputContract": {
       "mode": "FILE",
-      "pathParameter": "output",
+      "pathParameter": "resultFile",
       "contentType": "text/markdown",
       "fileExtension": ".md",
       "description": "When output is supplied, callers can treat the refined answer as file-oriented markdown content."
@@ -93,7 +99,7 @@
     {
       "name": "positional-input-with-provider-overrides",
       "description": {"type": "LOCALIZABLE_ASSET", "value": "Draft a release summary with provider overrides."},
-      "args": {"input": "Draft a release summary", "firstProvider": "CLAUDE", "secondProvider": "CODEX", "output": "fusion-summary.md"}
+      "args": {"input": "Draft a release summary", "firstProvider": "CLAUDE", "secondProvider": "CODEX", "resultFile": "fusion-summary.md"}
     },
     {
       "name": "stdin-input-with-model-overrides",

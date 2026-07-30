@@ -187,6 +187,7 @@ func (a *Assembly) Assemble(
 			"default runtime instance is required",
 		)
 	}
+	attachInvocationScheduleFactory(ctx, automationService, instance)
 	lifecycle, err := instancehostwire.New(instancehost.Dependencies{Clock: clock})
 	if err != nil {
 		return nil, nil, factoryruntime.SessionBuildSpec{}, nil, nil, err

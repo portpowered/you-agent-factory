@@ -101,10 +101,7 @@ func TestPackagedFactoryInvokedByCLICanBeInspectedByAPI(t *testing.T) {
 		)
 	}
 
-	var cliResponse factoryapi.InvocationResponse
-	if err := json.Unmarshal(bytes.TrimSpace([]byte(inputs.Stdout())), &cliResponse); err != nil {
-		t.Fatalf("decode CLI invocation JSON: %v\nstdout:\n%s", err, inputs.Stdout())
-	}
+	cliResponse := support.DecodeInvocationResponseJSON(t, inputs.Stdout())
 	if traceListed, traceErr := tryListDefaultSessionWorkByTrace(baseURL, cliResponse.TraceId); traceErr == nil {
 		inspection = preferStrongerPackagedGoalAPIInspection(inspection, packagedGoalAPIInspection{
 			session: inspection.session,
@@ -498,13 +495,13 @@ func fetchPackagedGoalAPIInspectionSnapshot(baseURL string) (packagedGoalAPIInsp
 	}
 
 	return packagedGoalAPIInspection{
-		session: session,
-		status:  status,
-		listed:  listed,
-		live:    true,
-		maxProcessing: status.Categories.Processing,
-		maxTerminal:   status.Categories.Terminal,
-		maxTotalTokens: status.TotalTokens,
+		session:          session,
+		status:           status,
+		listed:           listed,
+		live:             true,
+		maxProcessing:    status.Categories.Processing,
+		maxTerminal:      status.Categories.Terminal,
+		maxTotalTokens:   status.TotalTokens,
 		sawFactoryActive: status.FactoryState == "RUNNING" && status.RuntimeStatus != "",
 	}, nil
 }
@@ -572,7 +569,7 @@ func hasPackagedGoalCompleteWork(listed factoryapi.ListWorkResponse) bool {
 
 func tryGetDefaultSession(baseURL string) (factoryapi.FactorySession, error) {
 	response, err := http.Get(
-		strings.TrimSuffix(baseURL, "/")+"/factory-sessions/~default",
+		strings.TrimSuffix(baseURL, "/") + "/factory-sessions/~default",
 	)
 	if err != nil {
 		return factoryapi.FactorySession{}, err
@@ -1345,12 +1342,7 @@ func runPackagedGoalInvocationCLIWithMode(
 
 	var response factoryapi.InvocationResponse
 	if jsonMode && strings.TrimSpace(inputs.Stdout()) != "" {
-		if err := json.Unmarshal(
-			bytes.TrimSpace([]byte(inputs.Stdout())),
-			&response,
-		); err != nil {
-			t.Fatalf("decode CLI invocation response: %v\nstdout:\n%s", err, inputs.Stdout())
-		}
+		response = support.DecodeInvocationResponseJSON(t, inputs.Stdout())
 	}
 	return response, inputs.Stdout(), inputs.Stderr(), runErr
 }

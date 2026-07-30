@@ -25,6 +25,16 @@ type staticInferencer struct {
 	delay    time.Duration
 }
 
+func TestAgentRunInferenceRequestFallsBackToModelProviderRunner(t *testing.T) {
+	req := agentRunInferenceRequest(
+		workerexecution.WorkstationExecutionRequest{Dispatch: work.WorkDispatch{DispatchID: "dispatch"}},
+		&interfaces.FactoryWorkerConfig{ModelProvider: "codex"},
+	)
+	if req.RunnerID != "codex" {
+		t.Fatalf("RunnerID = %q, want model provider fallback", req.RunnerID)
+	}
+}
+
 func (s staticInferencer) Infer(ctx context.Context, _ messages.InferenceRequest) (messages.InferenceResult, error) {
 	if s.delay > 0 {
 		timer := time.NewTimer(s.delay)
@@ -368,6 +378,24 @@ func TestAgentRunExecutor_RequestModelSelectionOverridesWorkerWithoutMutation(t 
 	if worker.Model != "configured-model" || worker.ModelProvider != "configured-provider" {
 		t.Fatalf("configured worker mutated to %q/%q", worker.Model, worker.ModelProvider)
 	}
+}
+
+func TestEffectiveAgentRunWorkerDefinition_EmptyInterpolationPreservesOperatorOverride(t *testing.T) {
+	t.Run("authored placeholders resolve empty", func(t *testing.T) {
+		worker := &interfaces.FactoryWorkerConfig{Model: "${model}", ModelProvider: "${provider}"}
+		effective := effectiveAgentRunWorkerDefinition(workerexecution.WorkstationExecutionRequest{}, worker)
+		if effective.Model != "" || effective.ModelProvider != "" {
+			t.Fatalf("effective provider/model = %q/%q, want empty resolved placeholders", effective.ModelProvider, effective.Model)
+		}
+	})
+
+	t.Run("operator values survive empty invocation values", func(t *testing.T) {
+		worker := &interfaces.FactoryWorkerConfig{Model: "operator-model", ModelProvider: "CODEX"}
+		effective := effectiveAgentRunWorkerDefinition(workerexecution.WorkstationExecutionRequest{}, worker)
+		if effective.Model != worker.Model || effective.ModelProvider != worker.ModelProvider {
+			t.Fatalf("effective provider/model = %q/%q, want %q/%q", effective.ModelProvider, effective.Model, worker.ModelProvider, worker.Model)
+		}
+	})
 }
 
 type staticRuntimeConfig struct {

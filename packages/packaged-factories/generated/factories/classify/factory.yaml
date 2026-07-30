@@ -1,0 +1,199 @@
+description:
+    type: LOCALIZABLE_ASSET
+    value: Classifies a request by complexity and routes it to the configured small, medium, or large model lane.
+examples:
+    - args:
+        request: Explain and fix the failing test
+      description:
+        type: LOCALIZABLE_ASSET
+        value: Route an implementation request to the appropriate lane.
+      name: route-request
+id: builtin-classify
+invocationReturn:
+    policy: EXPLICIT
+    terminalState: complete
+    workTypeName: request
+invocationSignature:
+    parameters:
+        - bindings:
+            - kind: POSITIONAL
+              position: 1
+            - kind: STDIN
+            - kind: NAMED
+          description: Request to classify and execute.
+          externalName: to
+          name: request
+          required: true
+        - bindings:
+            - kind: NAMED
+          defaultValues:
+            - ""
+          description: Model provider for classification; omitted values use operator defaults.
+          externalName: classifier-provider
+          name: classifierProvider
+        - bindings:
+            - kind: NAMED
+          defaultValues:
+            - ""
+          description: Model for classification; omitted values use operator defaults.
+          externalName: classifier-model
+          name: classifierModel
+        - bindings:
+            - kind: NAMED
+          defaultValues:
+            - ""
+          description: Model provider for small requests; omitted values use operator defaults.
+          externalName: small-provider
+          name: smallProvider
+        - bindings:
+            - kind: NAMED
+          defaultValues:
+            - ""
+          description: Model for small requests; omitted values use operator defaults.
+          externalName: small-model
+          name: smallModel
+        - bindings:
+            - kind: NAMED
+          defaultValues:
+            - ""
+          description: Model provider for medium requests; omitted values use operator defaults.
+          externalName: medium-provider
+          name: mediumProvider
+        - bindings:
+            - kind: NAMED
+          defaultValues:
+            - ""
+          description: Model for medium requests; omitted values use operator defaults.
+          externalName: medium-model
+          name: mediumModel
+        - bindings:
+            - kind: NAMED
+          defaultValues:
+            - ""
+          description: Model provider for large requests; omitted values use operator defaults.
+          externalName: large-provider
+          name: largeProvider
+        - bindings:
+            - kind: NAMED
+          defaultValues:
+            - ""
+          description: Model for large requests; omitted values use operator defaults.
+          externalName: large-model
+          name: largeModel
+name: classify
+workTypes:
+    - handlingBehavior:
+        - DEFAULT
+      name: request
+      states:
+        - name: init
+          type: INITIAL
+        - name: small
+          type: PROCESSING
+        - name: medium
+          type: PROCESSING
+        - name: large
+          type: PROCESSING
+        - name: complete
+          type: TERMINAL
+        - name: failed
+          type: FAILED
+workers:
+    - body: 'Return exactly one plain-text label: small, medium, or large.'
+      model: ${classifierModel}
+      modelProvider: ${classifierProvider}
+      name: complexity-classifier
+      type: AGENT_WORKER
+    - body: Execute a small request directly and concisely.
+      model: ${smallModel}
+      modelProvider: ${smallProvider}
+      name: small-executor
+      type: AGENT_WORKER
+    - body: Execute a medium request with appropriate analysis and verification.
+      model: ${mediumModel}
+      modelProvider: ${mediumProvider}
+      name: medium-executor
+      type: AGENT_WORKER
+    - body: Execute a large request with careful decomposition and verification.
+      model: ${largeModel}
+      modelProvider: ${largeProvider}
+      name: large-executor
+      type: AGENT_WORKER
+workstations:
+    - body: |-
+        Classify the request as small, medium, or large. Return only that label.
+
+        Request:
+        ${request}
+      classificationRoutes:
+        - label: small
+          outputs:
+            - state: small
+              workType: request
+        - label: medium
+          outputs:
+            - state: medium
+              workType: request
+        - label: large
+          outputs:
+            - state: large
+              workType: request
+      inputs:
+        - state: init
+          workType: request
+      name: classify-request
+      onFailure:
+        - state: failed
+          workType: request
+      type: CLASSIFIER_WORKSTATION
+      workPropagation:
+        mode: PRESERVE_INPUT
+      worker: complexity-classifier
+    - body: |-
+        Complete this small request.
+
+        ${request}
+      inputs:
+        - state: small
+          workType: request
+      name: execute-small
+      onFailure:
+        - state: failed
+          workType: request
+      outputs:
+        - state: complete
+          workType: request
+      type: AGENT_RUN
+      worker: small-executor
+    - body: |-
+        Complete this medium request.
+
+        ${request}
+      inputs:
+        - state: medium
+          workType: request
+      name: execute-medium
+      onFailure:
+        - state: failed
+          workType: request
+      outputs:
+        - state: complete
+          workType: request
+      type: AGENT_RUN
+      worker: medium-executor
+    - body: |-
+        Complete this large request.
+
+        ${request}
+      inputs:
+        - state: large
+          workType: request
+      name: execute-large
+      onFailure:
+        - state: failed
+          workType: request
+      outputs:
+        - state: complete
+          workType: request
+      type: AGENT_RUN
+      worker: large-executor

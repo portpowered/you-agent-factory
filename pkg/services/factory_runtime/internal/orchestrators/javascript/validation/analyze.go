@@ -51,6 +51,9 @@ func (a *sourceAnalyzer) inspectCall(call *js.CallExpr) {
 		if !ok {
 			return
 		}
+		if rootVar, isVar := callee.X.(*js.Var); isVar && isDeclaredLocalBinding(rootVar) {
+			return
+		}
 		if msg, forbidden := forbiddenRootGlobals[root]; forbidden {
 			a.addIssue(CodeForbiddenHostAccess, msg, call)
 			return
@@ -69,6 +72,9 @@ func (a *sourceAnalyzer) inspectCall(call *js.CallExpr) {
 			}
 			a.validateSupportedPrimitiveShape(call, "agent."+member)
 		default:
+			if _, supported := supportedRootGlobals[root]; supported {
+				return
+			}
 			a.addIssue(CodeUnsupportedGlobal, fmt.Sprintf("unsupported workflow global %q", root), call)
 		}
 	default:

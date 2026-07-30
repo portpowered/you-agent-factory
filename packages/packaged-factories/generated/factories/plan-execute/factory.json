@@ -1,0 +1,527 @@
+{
+  "description": {
+    "type": "LOCALIZABLE_ASSET",
+    "value": "Writes a Markdown and JSON PRD, prepares an isolated worktree, and executes the PRD through implementation, review, CI, and merge."
+  },
+  "examples": [
+    {
+      "args": {
+        "request": "Implement and verify the requested feature"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Plan and deliver a feature through an isolated worktree."
+      },
+      "name": "deliver-feature"
+    }
+  ],
+  "id": "builtin-plan-execute",
+  "invocationReturn": {
+    "policy": "EXPLICIT",
+    "terminalState": "complete",
+    "workTypeName": "idea"
+  },
+  "invocationSignature": {
+    "parameters": [
+      {
+        "bindings": [
+          {
+            "kind": "POSITIONAL",
+            "position": 1
+          },
+          {
+            "kind": "STDIN"
+          },
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "description": "Project request to plan and deliver.",
+        "externalName": "to",
+        "name": "request",
+        "required": true
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "description": "Safe branch and worktree identity.",
+        "externalName": "branch-name",
+        "name": "branchName"
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "defaultValues": [
+          ""
+        ],
+        "description": "Model provider for planning and review; omitted values use operator defaults.",
+        "externalName": "planner-provider",
+        "name": "plannerProvider"
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "defaultValues": [
+          ""
+        ],
+        "description": "Model for planning and review; omitted values use operator defaults.",
+        "externalName": "planner-model",
+        "name": "plannerModel"
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "defaultValues": [
+          ""
+        ],
+        "description": "Model provider for implementation; omitted values use operator defaults.",
+        "externalName": "executor-provider",
+        "name": "executorProvider"
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "defaultValues": [
+          ""
+        ],
+        "description": "Model for implementation; omitted values use operator defaults.",
+        "externalName": "executor-model",
+        "name": "executorModel"
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "defaultValues": [
+          ""
+        ],
+        "description": "Model provider for final review; omitted values use operator defaults.",
+        "externalName": "reviewer-provider",
+        "name": "reviewerProvider"
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "defaultValues": [
+          ""
+        ],
+        "description": "Model for final review; omitted values use operator defaults.",
+        "externalName": "reviewer-model",
+        "name": "reviewerModel"
+      }
+    ]
+  },
+  "name": "plan-execute",
+  "resources": [
+    {
+      "capacity": 8,
+      "name": "delivery-slots"
+    },
+    {
+      "capacity": 1,
+      "name": "planner-slot"
+    }
+  ],
+  "supportingFiles": {
+    "bundledFiles": [
+      {
+        "content": {
+          "encoding": "utf-8",
+          "inline": "#!/usr/bin/env python3\n\"\"\"Prepare the isolated PRD worktree used by @you/plan-execute.\"\"\"\nimport json\nimport re\nimport shutil\nimport subprocess\nimport sys\nfrom pathlib import Path\n\nSAFE_NAME = re.compile(r\"^[A-Za-z0-9][A-Za-z0-9._/-]{0,79}$\")\n\ndef git(root, *args):\n    result = subprocess.run([\"git\", *args], cwd=root, text=True, capture_output=True)\n    if result.returncode:\n        raise RuntimeError(result.stderr.strip() or result.stdout.strip())\n    return result.stdout.strip()\n\ndef main():\n    if len(sys.argv) not in (2, 3) or not SAFE_NAME.fullmatch(sys.argv[1]) or \"..\" in sys.argv[1]:\n        raise RuntimeError(\"a safe PRD/worktree name is required\")\n    name = sys.argv[1]\n    branch = sys.argv[2].strip() if len(sys.argv) == 3 else \"\"\n    if not branch:\n        branch = name\n    if not SAFE_NAME.fullmatch(branch) or \"..\" in branch:\n        raise RuntimeError(\"a safe branch name is required\")\n    root = Path(git(None, \"rev-parse\", \"--show-toplevel\"))\n    source = root / \"tasks\" / \"todo\" / f\"{name}.json\"\n    markdown = source.with_suffix(\".md\")\n    if not source.is_file() or not markdown.is_file():\n        raise RuntimeError(f\"matching Markdown and JSON PRDs are required for {name}\")\n    document = json.loads(source.read_text(encoding=\"utf-8\"))\n    if not isinstance(document.get(\"stories\"), list) or not document[\"stories\"]:\n        raise RuntimeError(\"PRD JSON must contain non-empty stories\")\n    worktree = root / \".claude\" / \"worktrees\" / name.replace(\"/\", \"-\")\n    branch_exists = subprocess.run([\"git\", \"show-ref\", \"--verify\", \"--quiet\", f\"refs/heads/{branch}\"], cwd=root).returncode == 0\n    if not (worktree / \".git\").exists():\n        worktree.parent.mkdir(parents=True, exist_ok=True)\n        args = [\"worktree\", \"add\", str(worktree), branch] if branch_exists else [\"worktree\", \"add\", \"-b\", branch, str(worktree), \"HEAD\"]\n        git(root, *args)\n    shutil.copy2(source, worktree / \"prd.json\")\n    shutil.copy2(markdown, worktree / \"prd.md\")\n    (worktree / \"progress.txt\").touch(exist_ok=True)\n    print(json.dumps({\"status\":\"ready\",\"branch\":branch,\"worktree\":str(worktree)}))\n\nif __name__ == \"__main__\":\n    try:\n        main()\n    except Exception as error:\n        print(f\"workspace setup failed: {error}\", file=sys.stderr)\n        raise SystemExit(1)\n"
+        },
+        "id": "factory/scripts/setup-workspace.py",
+        "targetPath": "factory/scripts/setup-workspace.py",
+        "type": "SCRIPT"
+      }
+    ]
+  },
+  "workTypes": [
+    {
+      "handlingBehavior": [
+        "DEFAULT"
+      ],
+      "name": "idea",
+      "states": [
+        {
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "name": "to-complete",
+          "type": "PROCESSING"
+        },
+        {
+          "name": "complete",
+          "type": "TERMINAL"
+        },
+        {
+          "name": "failed",
+          "type": "FAILED"
+        }
+      ]
+    },
+    {
+      "name": "plan",
+      "states": [
+        {
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "name": "complete",
+          "type": "TERMINAL"
+        },
+        {
+          "name": "failed",
+          "type": "FAILED"
+        }
+      ]
+    },
+    {
+      "name": "task",
+      "states": [
+        {
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "name": "in-review",
+          "type": "PROCESSING"
+        },
+        {
+          "name": "to-complete",
+          "type": "PROCESSING"
+        },
+        {
+          "name": "complete",
+          "type": "TERMINAL"
+        },
+        {
+          "name": "failed",
+          "type": "FAILED"
+        }
+      ]
+    },
+    {
+      "name": "review",
+      "states": [
+        {
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "name": "complete",
+          "type": "TERMINAL"
+        },
+        {
+          "name": "failed",
+          "type": "FAILED"
+        }
+      ]
+    }
+  ],
+  "workers": [
+    {
+      "body": "Create both `tasks/todo/{{ (index .Inputs 0).Name }}.md` and\n`tasks/todo/{{ (index .Inputs 0).Name }}.json` for this request: ${request}.\nThe Work name is `{{ (index .Inputs 0).Name }}` and must be used exactly for\nthose filenames. The invocation-supplied branch identity is\n`${branchName}`. When it is non-empty, record that exact safe value as\n`branchName`; otherwise derive a safe, unique branch name from the request.\n\nThe Markdown PRD must cover context, goals, non-goals, technical design,\nvertically sliced stories, behavioral acceptance criteria, tests, and a\ndelivery loop. The JSON PRD must contain project, branchName, description,\ncontext, project acceptance criteria, ordered stories with stable sequential\nIDs and priorities, `passes: false`, and empty notes. End with `\u003cCOMPLETE\u003e`\nonly after both files exist and agree.\n",
+      "model": "${plannerModel}",
+      "modelProvider": "${plannerProvider}",
+      "name": "prd-planner",
+      "skipPermissions": true,
+      "stopToken": "\u003cCOMPLETE\u003e",
+      "type": "AGENT_WORKER"
+    },
+    {
+      "args": [
+        "factory/scripts/setup-workspace.py",
+        "{{ (index .Inputs 0).Name }}",
+        "${branchName}"
+      ],
+      "command": "python",
+      "name": "workspace-setup",
+      "type": "SCRIPT_WORKER"
+    },
+    {
+      "body": "Read `prd.json`, `prd.md`, and `progress.txt`. Implement only the highest\npriority story whose `passes` value is false. Run proportional tests, append\nevidence and reusable learnings to `progress.txt`, and mark the story passed\nonly after its behavioral criteria hold. Commit reviewable product changes and\ncontinue until every story passes, CI is terminal and green, blocking feedback\nand conflicts are resolved, and the pull request is actually merged. Return\n`\u003cCONTINUE\u003e` while work remains and `\u003cCOMPLETE\u003e` only at that terminal state.\n",
+      "model": "${executorModel}",
+      "modelProvider": "${executorProvider}",
+      "name": "prd-executor",
+      "skipPermissions": true,
+      "stopToken": "\u003cCOMPLETE\u003e",
+      "type": "AGENT_WORKER"
+    },
+    {
+      "body": "Review `prd.json`, `prd.md`, `progress.txt`, the full diff, test evidence,\nrequired CI, and pull-request conversation. Reject with actionable feedback\nwhen any acceptance criterion, test, feedback item, conflict, or merge remains.\nReturn `\u003cCOMPLETE\u003e` only after the PR is actually merged.\n",
+      "model": "${reviewerModel}",
+      "modelProvider": "${reviewerProvider}",
+      "name": "prd-reviewer",
+      "skipPermissions": true,
+      "stopToken": "\u003cCOMPLETE\u003e",
+      "type": "AGENT_WORKER"
+    }
+  ],
+  "workstations": [
+    {
+      "body": "Create both `tasks/todo/{{ (index .Inputs 0).Name }}.md` and\n`tasks/todo/{{ (index .Inputs 0).Name }}.json` for this request: ${request}.\nThe Work name is `{{ (index .Inputs 0).Name }}` and must be used exactly for\nthose filenames. The invocation-supplied branch identity is\n`${branchName}`. When it is non-empty, record that exact safe value as\n`branchName`; otherwise derive a safe, unique branch name from the request.\n\nThe Markdown PRD must cover context, goals, non-goals, technical design,\nvertically sliced stories, behavioral acceptance criteria, tests, and a\ndelivery loop. The JSON PRD must contain project, branchName, description,\ncontext, project acceptance criteria, ordered stories with stable sequential\nIDs and priorities, `passes: false`, and empty notes. End with `\u003cCOMPLETE\u003e`\nonly after both files exist and agree.\n",
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "idea"
+        }
+      ],
+      "name": "plan-prd",
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "idea"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "to-complete",
+          "workType": "idea"
+        },
+        {
+          "state": "init",
+          "workType": "plan"
+        }
+      ],
+      "promptFile": "prompts/planner.md",
+      "resources": [
+        {
+          "capacity": 1,
+          "name": "planner-slot"
+        }
+      ],
+      "type": "AGENT_RUN",
+      "workPropagation": {
+        "mode": "PRESERVE_INPUT"
+      },
+      "worker": "prd-planner"
+    },
+    {
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "plan"
+        }
+      ],
+      "name": "setup-workspace",
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "plan"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "complete",
+          "workType": "plan"
+        },
+        {
+          "state": "init",
+          "workType": "task"
+        }
+      ],
+      "type": "SCRIPT_RUN",
+      "worker": "workspace-setup"
+    },
+    {
+      "behavior": "REPEATER",
+      "body": "Read `prd.json`, `prd.md`, and `progress.txt`. Implement only the highest\npriority story whose `passes` value is false. Run proportional tests, append\nevidence and reusable learnings to `progress.txt`, and mark the story passed\nonly after its behavioral criteria hold. Commit reviewable product changes and\ncontinue until every story passes, CI is terminal and green, blocking feedback\nand conflicts are resolved, and the pull request is actually merged. Return\n`\u003cCONTINUE\u003e` while work remains and `\u003cCOMPLETE\u003e` only at that terminal state.\n",
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "task"
+        }
+      ],
+      "name": "process-prd-story",
+      "onContinue": [
+        {
+          "state": "init",
+          "workType": "task"
+        }
+      ],
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "task"
+        }
+      ],
+      "onRejection": [
+        {
+          "state": "init",
+          "workType": "task"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "in-review",
+          "workType": "task"
+        },
+        {
+          "state": "init",
+          "workType": "review"
+        }
+      ],
+      "promptFile": "prompts/executor.md",
+      "resources": [
+        {
+          "capacity": 1,
+          "name": "delivery-slots"
+        }
+      ],
+      "type": "AGENT_RUN",
+      "worker": "prd-executor",
+      "workingDirectory": ".claude/worktrees/{{ (index .Inputs 0).Name }}"
+    },
+    {
+      "body": "Review `prd.json`, `prd.md`, `progress.txt`, the full diff, test evidence,\nrequired CI, and pull-request conversation. Reject with actionable feedback\nwhen any acceptance criterion, test, feedback item, conflict, or merge remains.\nReturn `\u003cCOMPLETE\u003e` only after the PR is actually merged.\n",
+      "inputs": [
+        {
+          "state": "in-review",
+          "workType": "task"
+        },
+        {
+          "state": "init",
+          "workType": "review"
+        }
+      ],
+      "name": "review-prd",
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "task"
+        },
+        {
+          "state": "failed",
+          "workType": "review"
+        }
+      ],
+      "onRejection": [
+        {
+          "state": "init",
+          "workType": "task"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "to-complete",
+          "workType": "task"
+        },
+        {
+          "state": "complete",
+          "workType": "review"
+        }
+      ],
+      "promptFile": "prompts/reviewer.md",
+      "resources": [
+        {
+          "capacity": 1,
+          "name": "delivery-slots"
+        }
+      ],
+      "type": "AGENT_RUN",
+      "worker": "prd-reviewer",
+      "workingDirectory": ".claude/worktrees/{{ (index .Inputs 0).Name }}"
+    },
+    {
+      "inputs": [
+        {
+          "guards": [
+            {
+              "matchInput": "task",
+              "type": "SAME_NAME"
+            }
+          ],
+          "state": "to-complete",
+          "workType": "idea"
+        },
+        {
+          "state": "to-complete",
+          "workType": "task"
+        }
+      ],
+      "name": "complete-delivery",
+      "outputs": [
+        {
+          "state": "complete",
+          "workType": "idea"
+        },
+        {
+          "state": "complete",
+          "workType": "task"
+        }
+      ],
+      "type": "LOGICAL_MOVE",
+      "worker": ""
+    },
+    {
+      "guards": [
+        {
+          "maxVisits": 50,
+          "type": "VISIT_COUNT",
+          "workstation": "process-prd-story"
+        }
+      ],
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "task"
+        }
+      ],
+      "name": "executor-loop-breaker",
+      "outputs": [
+        {
+          "state": "failed",
+          "workType": "task"
+        }
+      ],
+      "type": "LOGICAL_MOVE",
+      "worker": ""
+    },
+    {
+      "guards": [
+        {
+          "maxVisits": 10,
+          "type": "VISIT_COUNT",
+          "workstation": "review-prd"
+        }
+      ],
+      "inputs": [
+        {
+          "state": "in-review",
+          "workType": "task"
+        }
+      ],
+      "name": "review-loop-breaker",
+      "outputs": [
+        {
+          "state": "failed",
+          "workType": "task"
+        }
+      ],
+      "type": "LOGICAL_MOVE",
+      "worker": ""
+    }
+  ]
+}

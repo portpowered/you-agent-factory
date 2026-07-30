@@ -56,8 +56,8 @@ func TestBuiltInFactoryWorkflow_AcceptsApprovedExecutionFlagsWithoutExpandingCap
 		t.Fatalf("completed child dispatches = %#v, want two specialists", children)
 	}
 	for _, child := range children {
-		if child.ModelProvider != "CODEX" || child.Model != "gpt-5" || child.ReasoningEffort != "medium" {
-			t.Fatalf("child execution selection = %#v, want approved CODEX/gpt-5/medium", child)
+		if child.ModelProvider != "codex" || child.Model != "gpt-5" || child.ReasoningEffort != "medium" {
+			t.Fatalf("child execution selection = %#v, want canonical approved codex/gpt-5/medium", child)
 		}
 	}
 	assertLeadSynthesis(t, outcome, "Compare event sourcing versus state machines for distributed workflow orchestration", 2, 2)
@@ -159,6 +159,38 @@ func TestBuiltInFactoryWorkflow_RejectsInvalidConfigurationBeforeDispatch(t *tes
 	}
 	if len(outcome.Records) != 0 {
 		t.Fatalf("runtime records = %#v, want no lead or child dispatch activity", outcome.Records)
+	}
+}
+
+func TestBuiltInFactoryWorkflow_CanceledContextStopsBeforeChildDispatch(t *testing.T) {
+	args, err := json.Marshal(map[string]any{
+		"topic": "Cancel this packaged deep-research invocation",
+	})
+	if err != nil {
+		t.Fatalf("Marshal args: %v", err)
+	}
+	resolution := factory.ResolveJavaScriptFactoryDefaultPolicy(deepResearchDefaultPolicy)
+	if len(resolution.Issues) > 0 {
+		t.Fatalf("ResolveFromFactoryDefault issues = %#v", resolution.Issues)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	outcome, err := factoryruntimetestkit.JavaScriptWorkflows().Run(ctx, factory.JavaScriptRuntimeRequest{
+		Source:     deepResearchWorkflowSource,
+		SourceRef:  "deep-research.workflow.js",
+		SessionID:  "deep-research-canceled",
+		Args:       args,
+		ArgsSchema: deepResearchArgsSchema,
+		Policy:     resolution.Policy,
+	}, factory.JavaScriptRuntimeHooks{})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if outcome.OK || outcome.Failure.Code != factory.JavaScriptRuntimeCodeCanceled {
+		t.Fatalf("workflow outcome = %#v, want canceled failure", outcome)
+	}
+	if len(completedChildDispatches(outcome.Records)) != 0 {
+		t.Fatalf("completed child dispatches = %#v, want none after cancellation", completedChildDispatches(outcome.Records))
 	}
 }
 

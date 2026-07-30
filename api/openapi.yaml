@@ -5269,6 +5269,8 @@ components:
         - name
         - project
         - slug
+        - description
+        - examples
         - json
         - yaml
       properties:
@@ -5281,6 +5283,16 @@ components:
         slug:
           type: string
           description: URL-safe Factory catalog identity.
+        description:
+          allOf:
+            - $ref: '#/components/schemas/NameValue'
+          description: Localized customer-facing explanation of what this packaged Factory does.
+        examples:
+          type: array
+          minItems: 1
+          description: Representative runnable invocations published by this packaged Factory.
+          items:
+            $ref: '#/components/schemas/FactoryInvocationExample'
         json:
           type: object
           additionalProperties: true
@@ -9428,6 +9440,10 @@ components:
         maxExecutionTime:
           type: string
           description: Go duration limit for one dispatch attempt before it times out.
+        maxGeneratedWorkItems:
+          type: integer
+          minimum: 1
+          description: Maximum number of Work items one accepted worker-emitted FACTORY_REQUEST_BATCH may contain.
     WorkstationKind:
       type: string
       default: STANDARD
@@ -9451,14 +9467,15 @@ components:
         - CLASSIFIER_WORKSTATION
     WorkstationCron:
       type: object
-      description: Trigger timing for cron workstations. Cron workstations use a schedule expression; interval triggers are not supported.
+      description: Trigger timing for scheduled workstations. Provide exactly one of a five-field cron schedule or a positive duration in every; Factory validation enforces the exclusive choice.
       additionalProperties: false
-      required:
-        - schedule
       properties:
         schedule:
           type: string
           description: Standard five-field cron expression used to produce internal time work while the factory service is running.
+        every:
+          type: string
+          description: Positive Go duration interval, such as 30s, 5m, 1h, or 1h30m, used instead of schedule.
         triggerAtStart:
           type: boolean
           default: false

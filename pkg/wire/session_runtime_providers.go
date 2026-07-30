@@ -125,11 +125,12 @@ func buildProviderRegistry(
 func provideProviderRegistryRebinder(
 	providersService providers.Service,
 ) (workerswire.ProviderRegistryRebinder, error) {
-	return func(providerRunner workers.CommandRunner) (workers.ProviderRegistry, error) {
+	return func(providerRunner workers.CommandRunner) (workers.ProviderRegistry, providers.Service, error) {
 		if providerRunner == nil {
-			return nil, fmt.Errorf("provider registry rebind requires command runner")
+			return nil, nil, fmt.Errorf("provider registry rebind requires command runner")
 		}
-		return providerswire.NewWorkersRegistry(context.Background(), providersService)
+		registry, err := providerswire.NewWorkersRegistry(context.Background(), providersService)
+		return registry, providersService, err
 	}, nil
 }
 
@@ -532,9 +533,7 @@ func provideFactorySessionExecutionFactory(
 	) (factorysessions.ExecutionService, error) {
 		executor := workerswire.NewExecutor(provider)
 		var liveChildInvocation factorysessionwire.LiveChildInvocationFactory
-		usesConfiguredACP := len(acpIntegrations) > 0
-		usesInjectedProviderRunner := edges.ProviderCommandRunner != nil
-		if adaptRunner != nil && allocator != nil && (usesConfiguredACP || usesInjectedProviderRunner) {
+		if adaptRunner != nil && allocator != nil {
 			commandRunner, err := provideWorkersProviderCommandRunner(edges)
 			if err != nil {
 				return nil, fmt.Errorf("resolve provider runner for live child invocation: %w", err)
@@ -549,7 +548,7 @@ func provideFactorySessionExecutionFactory(
 				conductorInvocationWithProgress != nil {
 				runner = workersMockCommandRunnerFactory(mockWorkers, nil, runner)
 				var reboundRegistry workers.ProviderRegistry
-				reboundRegistry, err = registryRebinder(runner)
+				reboundRegistry, _, err = registryRebinder(runner)
 				if err != nil {
 					return nil, fmt.Errorf("rebind provider registry for live child invocation: %w", err)
 				}
@@ -568,6 +567,7 @@ func provideFactorySessionExecutionFactory(
 				}
 			}
 		}
+		_ = acpIntegrations
 		return factorysessionwire.NewDurableExecution(
 			projectRoot,
 			persistencePolicy,
@@ -804,13 +804,14 @@ func provideWorkersRuntimeFactory(
 		if allocator == nil {
 			allocator = defaultAllocator
 		}
-		runtimeRegistry := providerRegistry
-		runtimeProviders := providersService
-		runtimeRebinder := providerRegistryRebinder
 		if configurator, ok := providersService.(providers.ACPConfiguration); ok {
 			if configuredErr := configurator.ConfigureACPIntegrations(context.Background(), projectACPIntegrations(acpIntegrations)); configuredErr != nil {
 				return nil, fmt.Errorf("configure ACP integrations for Workers runtime: %w", configuredErr)
 			}
+		}
+		runtimeRegistry, runtimeProviders, runtimeRebinder, err := provideRuntimeProviderBindings(edges, acpIntegrations, providerCommandRunner)
+		if err != nil {
+			return nil, err
 		}
 		return workerswire.NewRuntimeWithSelection(
 			sessions,

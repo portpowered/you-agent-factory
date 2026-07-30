@@ -1,0 +1,181 @@
+description:
+    type: LOCALIZABLE_ASSET
+    value: Plans a dependency graph of Work, executes ready tasks concurrently, and merges the completed results.
+examples:
+    - args:
+        request: Implement and test the requested feature
+      description:
+        type: LOCALIZABLE_ASSET
+        value: Plan and execute a dependency-aware implementation.
+      name: parallel-implementation-plan
+id: builtin-plan-parallel
+invocationReturn:
+    policy: EXPLICIT
+    terminalState: complete
+    workTypeName: parallel-plan
+invocationSignature:
+    parameters:
+        - bindings:
+            - kind: POSITIONAL
+              position: 1
+            - kind: STDIN
+            - kind: NAMED
+          description: Request to plan into a dependency-aware Work graph.
+          externalName: to
+          name: request
+          required: true
+        - bindings:
+            - kind: NAMED
+          defaultValues:
+            - ""
+          description: Model provider for the planner; omitted values use operator defaults.
+          externalName: planner-provider
+          name: plannerProvider
+        - bindings:
+            - kind: NAMED
+          defaultValues:
+            - ""
+          description: Model for the planner; omitted values use operator defaults.
+          externalName: planner-model
+          name: plannerModel
+        - bindings:
+            - kind: NAMED
+          defaultValues:
+            - ""
+          description: Model provider for planned tasks; omitted values use operator defaults.
+          externalName: executor-provider
+          name: executorProvider
+        - bindings:
+            - kind: NAMED
+          defaultValues:
+            - ""
+          description: Model for planned tasks; omitted values use operator defaults.
+          externalName: executor-model
+          name: executorModel
+        - bindings:
+            - kind: NAMED
+          defaultValues:
+            - ""
+          description: Model provider for final synthesis; omitted values use operator defaults.
+          externalName: merge-provider
+          name: mergeProvider
+        - bindings:
+            - kind: NAMED
+          defaultValues:
+            - ""
+          description: Model for final synthesis; omitted values use operator defaults.
+          externalName: merge-model
+          name: mergeModel
+name: plan-parallel
+resources:
+    - capacity: 8
+      name: parallel-executor-slots
+workTypes:
+    - handlingBehavior:
+        - DEFAULT
+      name: parallel-plan
+      states:
+        - name: init
+          type: INITIAL
+        - name: waiting
+          type: PROCESSING
+        - name: complete
+          type: TERMINAL
+        - name: failed
+          type: FAILED
+    - name: planned-task
+      states:
+        - name: init
+          type: INITIAL
+        - name: complete
+          type: TERMINAL
+        - name: failed
+          type: FAILED
+workers:
+    - body: Emit only one canonical FACTORY_REQUEST_BATCH containing 1-12 planned-task Work items and an acyclic set of DEPENDS_ON relationships.
+      model: ${plannerModel}
+      modelProvider: ${plannerProvider}
+      name: parallel-planner
+      type: AGENT_WORKER
+    - body: Complete exactly the assigned planned task and return its verified result.
+      model: ${executorModel}
+      modelProvider: ${executorProvider}
+      name: parallel-executor
+      type: AGENT_WORKER
+    - body: Synthesize all completed planned-task results into one answer to the original request.
+      model: ${mergeModel}
+      modelProvider: ${mergeProvider}
+      name: parallel-merger
+      type: AGENT_WORKER
+workstations:
+    - body: |-
+        Plan an executable Work DAG for this request. Use workTypeName planned-task and state init. Return only a canonical FACTORY_REQUEST_BATCH with unique safe names and acyclic DEPENDS_ON relations.
+
+        Request:
+        ${request}
+      inputs:
+        - state: init
+          workType: parallel-plan
+      limits:
+        maxGeneratedWorkItems: 12
+      name: plan-parallel-work
+      onFailure:
+        - state: failed
+          workType: parallel-plan
+      outputs:
+        - state: waiting
+          workType: parallel-plan
+      type: AGENT_RUN
+      workPropagation:
+        mode: PRESERVE_INPUT
+      worker: parallel-planner
+    - body: Complete the assigned planned task, respecting its dependency context, and report verification evidence.
+      inputs:
+        - state: init
+          workType: planned-task
+      name: execute-planned-task
+      onFailure:
+        - state: failed
+          workType: planned-task
+      outputs:
+        - state: complete
+          workType: planned-task
+      resources:
+        - capacity: 1
+          name: parallel-executor-slots
+      type: AGENT_RUN
+      worker: parallel-executor
+    - body: Merge the completed generated task results into the final response. Preserve important disagreements and verification evidence.
+      inputs:
+        - state: waiting
+          workType: parallel-plan
+        - guards:
+            - parentInput: parallel-plan
+              spawnedBy: plan-parallel-work
+              type: ALL_CHILDREN_COMPLETE
+          state: complete
+          workType: planned-task
+      name: merge-plan-results
+      onFailure:
+        - state: failed
+          workType: parallel-plan
+      outputs:
+        - state: complete
+          workType: parallel-plan
+      type: AGENT_RUN
+      worker: parallel-merger
+    - inputs:
+        - state: waiting
+          workType: parallel-plan
+        - guards:
+            - parentInput: parallel-plan
+              spawnedBy: plan-parallel-work
+              type: ANY_CHILD_FAILED
+          state: failed
+          workType: planned-task
+      name: fail-plan-from-child
+      outputs:
+        - state: failed
+          workType: parallel-plan
+      type: LOGICAL_MOVE
+      worker: ""

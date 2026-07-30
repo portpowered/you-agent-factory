@@ -1,6 +1,13 @@
 {
   "name": "@you/tts",
   "id": "builtin-tts",
+  "description": {"type": "LOCALIZABLE_ASSET", "value": "Converts submitted text to audio with the packaged local text-to-speech model."},
+  "invocationSignature": {
+    "parameters": [
+      {"name":"text","description":"Text to convert to speech.","externalName":"to","required":true,"bindings":[{"kind":"POSITIONAL","position":1},{"kind":"STDIN"},{"kind":"NAMED"}]}
+    ]
+  },
+  "examples": [{"name":"speak-release-summary","description":{"type":"LOCALIZABLE_ASSET","value":"Convert a short release summary to audio."},"args":{"text":"The release is ready."}}],
   "workTypes": [
     {
       "name": "task",

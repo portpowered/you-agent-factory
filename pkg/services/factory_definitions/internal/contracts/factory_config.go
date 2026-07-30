@@ -497,8 +497,9 @@ type BundledFileContentConfig struct {
 
 // WorkstationLimits holds execution limits from workstation configuration.
 type WorkstationLimits struct {
-	MaxRetries       int    `json:"max_retries,omitempty" yaml:"maxRetries,omitempty"`
-	MaxExecutionTime string `json:"max_execution_time,omitempty" yaml:"maxExecutionTime,omitempty"`
+	MaxRetries            int    `json:"max_retries,omitempty" yaml:"maxRetries,omitempty"`
+	MaxExecutionTime      string `json:"max_execution_time,omitempty" yaml:"maxExecutionTime,omitempty"`
+	MaxGeneratedWorkItems int    `json:"max_generated_work_items,omitempty" yaml:"maxGeneratedWorkItems,omitempty"`
 }
 
 // WorkPropagationMode selects how downstream work receives payload content.
@@ -572,6 +573,7 @@ type ClassificationRouteConfig struct {
 // and routing; this object only owns trigger timing.
 type CronConfig struct {
 	Schedule       string `json:"schedule,omitempty" yaml:"schedule,omitempty"`
+	Every          string `json:"every,omitempty" yaml:"every,omitempty"`
 	TriggerAtStart bool   `json:"triggerAtStart,omitempty" yaml:"triggerAtStart,omitempty"`
 	Jitter         string `json:"jitter,omitempty" yaml:"jitter,omitempty"`
 	ExpiryWindow   string `json:"expiryWindow,omitempty" yaml:"expiryWindow,omitempty"`
@@ -590,6 +592,7 @@ func (c *CronConfig) UnmarshalJSON(data []byte) error {
 
 	type cronConfigPayload struct {
 		Schedule       string `json:"schedule,omitempty"`
+		Every          string `json:"every,omitempty"`
 		TriggerAtStart bool   `json:"triggerAtStart,omitempty"`
 		Jitter         string `json:"jitter,omitempty"`
 		ExpiryWindow   string `json:"expiryWindow,omitempty"`
@@ -600,6 +603,7 @@ func (c *CronConfig) UnmarshalJSON(data []byte) error {
 	}
 
 	c.Schedule = payload.Schedule
+	c.Every = payload.Every
 	c.TriggerAtStart = payload.TriggerAtStart
 	c.Jitter = payload.Jitter
 	c.ExpiryWindow = payload.ExpiryWindow

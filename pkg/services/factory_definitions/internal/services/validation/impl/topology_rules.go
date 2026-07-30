@@ -360,7 +360,6 @@ func rulePollerWorkstations(cfg *factorydefinitions.FactoryConfig) []Finding {
 
 // --- Rule: cron workstation validation ---
 
-// portos:func-length-exception owner=agent-factory reason=cron-validation-rule-table review=2026-07-18 removal=split-cron-field-validators-before-adding-more-cron-options
 func ruleCronWorkstations(cfg *factorydefinitions.FactoryConfig) []Finding {
 	var findings []Finding
 
@@ -398,22 +397,7 @@ func ruleCronWorkstations(cfg *factorydefinitions.FactoryConfig) []Finding {
 			})
 		}
 
-		hasSchedule := strings.TrimSpace(ws.Cron.Schedule) != ""
-		if !hasSchedule {
-			findings = append(findings, Finding{
-				Severity: SeverityError,
-				Path:     basePath + ".cron.schedule",
-				Message:  "cron workstation requires non-empty 'schedule'",
-				Rule:     "cron-schedule",
-			})
-		} else if err := automations.ValidateCronSchedule(ws.Cron.Schedule); err != nil {
-			findings = append(findings, Finding{
-				Severity: SeverityError,
-				Path:     basePath + ".cron.schedule",
-				Message:  err.Error(),
-				Rule:     "cron-schedule",
-			})
-		}
+		findings = append(findings, validateCronTrigger(ws.Cron, basePath)...)
 		if strings.TrimSpace(ws.Cron.Jitter) != "" {
 			if _, err := automations.ParseCronJitter(ws.Cron); err != nil {
 				findings = append(findings, Finding{
@@ -453,6 +437,29 @@ func ruleCronWorkstations(cfg *factorydefinitions.FactoryConfig) []Finding {
 	}
 
 	return findings
+}
+
+func validateCronTrigger(cron *factorydefinitions.CronConfig, basePath string) []Finding {
+	hasSchedule := strings.TrimSpace(cron.Schedule) != ""
+	hasEvery := strings.TrimSpace(cron.Every) != ""
+	if hasSchedule == hasEvery {
+		return []Finding{{Severity: SeverityError, Path: basePath + ".cron", Message: "cron workstation requires exactly one of 'schedule' or 'every'", Rule: "cron-schedule"}}
+	}
+	if hasSchedule {
+		if err := automations.ValidateCronSchedule(cron.Schedule); err != nil {
+			return []Finding{{Severity: SeverityError, Path: basePath + ".cron.schedule", Message: err.Error(), Rule: "cron-schedule"}}
+		}
+		return nil
+	}
+	trimmed := strings.TrimSpace(cron.Every)
+	if strings.HasPrefix(trimmed, "${") && strings.HasSuffix(trimmed, "}") {
+		// Interpolation validates the parameter; registration validates its value.
+		return nil
+	}
+	if every, err := time.ParseDuration(cron.Every); err != nil || every < time.Second || every > 7*24*time.Hour {
+		return []Finding{{Severity: SeverityError, Path: basePath + ".cron.every", Message: "every must be a duration from 1s through 168h", Rule: "cron-every"}}
+	}
+	return nil
 }
 
 func cronWorkstationRequiresWorker(ws factorydefinitions.FactoryWorkstationConfig) bool {

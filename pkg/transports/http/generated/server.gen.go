@@ -5022,6 +5022,12 @@ type OrchestratorPhaseStatus string
 
 // PackagedFactoryCatalogEntry defines model for PackagedFactoryCatalogEntry.
 type PackagedFactoryCatalogEntry struct {
+	// Description Localized customer-facing explanation of what this packaged Factory does.
+	Description NameValue `json:"description"`
+
+	// Examples Representative runnable invocations published by this packaged Factory.
+	Examples []FactoryInvocationExample `json:"examples"`
+
 	// Json Canonical Factory JSON artifact.
 	Json map[string]interface{} `json:"json"`
 
@@ -6766,8 +6772,11 @@ type Workstation struct {
 	Worktree *string `json:"worktree,omitempty"`
 }
 
-// WorkstationCron Trigger timing for cron workstations. Cron workstations use a schedule expression; interval triggers are not supported.
+// WorkstationCron Trigger timing for scheduled workstations. Provide exactly one of a five-field cron schedule or a positive duration in every; Factory validation enforces the exclusive choice.
 type WorkstationCron struct {
+	// Every Positive Go duration interval, such as 30s, 5m, 1h, or 1h30m, used instead of schedule.
+	Every *string `json:"every,omitempty"`
+
 	// ExpiryWindow Positive Go duration after due_at before a stale cron time token expires and can be consumed by the system expiry transition. Defaults to the duration until the next scheduled cron fire when omitted.
 	ExpiryWindow *string `json:"expiryWindow,omitempty"`
 
@@ -6775,7 +6784,7 @@ type WorkstationCron struct {
 	Jitter *string `json:"jitter,omitempty"`
 
 	// Schedule Standard five-field cron expression used to produce internal time work while the factory service is running.
-	Schedule string `json:"schedule"`
+	Schedule *string `json:"schedule,omitempty"`
 
 	// TriggerAtStart When true, service startup submits one immediate internal time work item before waiting for the next scheduled cron fire.
 	TriggerAtStart *bool `json:"triggerAtStart,omitempty"`
@@ -6827,6 +6836,9 @@ type WorkstationKind string
 type WorkstationLimits struct {
 	// MaxExecutionTime Go duration limit for one dispatch attempt before it times out.
 	MaxExecutionTime *string `json:"maxExecutionTime,omitempty"`
+
+	// MaxGeneratedWorkItems Maximum number of Work items one accepted worker-emitted FACTORY_REQUEST_BATCH may contain.
+	MaxGeneratedWorkItems *int `json:"maxGeneratedWorkItems,omitempty"`
 
 	// MaxRetries Maximum number of retry attempts after a failed dispatch before the workstation gives up.
 	MaxRetries *int `json:"maxRetries,omitempty"`

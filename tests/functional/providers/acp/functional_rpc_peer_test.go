@@ -109,7 +109,10 @@ func (p *functionalRPCPeer) serve() error {
 			if err := p.prompt(request); err != nil {
 				return err
 			}
-			if p.mode != "persistent" && p.mode != "serialize" {
+			if (p.mode == "spawn" && p.sessions >= 4) || (p.mode == "tournament" && p.sessions >= 3) {
+				return nil
+			}
+			if p.mode != "persistent" && p.mode != "serialize" && p.mode != "spawn" && p.mode != "tournament" {
 				return nil
 			}
 		case "$/cancel_request", "session/cancel":
@@ -125,6 +128,9 @@ func (p *functionalRPCPeer) serve() error {
 }
 
 func (p *functionalRPCPeer) prompt(request rpcEnvelope) error {
+	if handled, err := p.respondToPackagedPrompt(request); handled {
+		return err
+	}
 	if p.mode == "crash-once" {
 		marker := os.Getenv("YOU_TEST_ACP_CRASH_MARKER")
 		if _, err := os.Stat(marker); os.IsNotExist(err) {
@@ -225,6 +231,26 @@ func (p *functionalRPCPeer) prompt(request rpcEnvelope) error {
 		}
 	}
 	return p.respond(request.ID, json.RawMessage(`{"stopReason":"end_turn"}`))
+}
+
+func (p *functionalRPCPeer) respondToPackagedPrompt(request rpcEnvelope) (bool, error) {
+	responses := map[string][]string{
+		"tournament": {"candidate one", "candidate two", `{"winner":"B","rationale":"candidate two is stronger"}`},
+		"spawn":      {`["research climate","research cost"]`, "climate findings", "cost findings", "merged travel answer"},
+	}
+	modeResponses, ok := responses[p.mode]
+	if !ok {
+		return false, nil
+	}
+	index := p.sessions - 1
+	if index < 0 || index >= len(modeResponses) {
+		message := fmt.Sprintf("unexpected packaged %s prompt", p.mode)
+		return true, p.respondError(request.ID, -32603, "Internal error", map[string]any{"error": message})
+	}
+	if err := p.update(fmt.Sprintf(`{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":%q}}`, modeResponses[index])); err != nil {
+		return true, err
+	}
+	return true, p.respond(request.ID, json.RawMessage(`{"stopReason":"end_turn"}`))
 }
 
 func (p *functionalRPCPeer) assertUnsupportedClientMethods() error {

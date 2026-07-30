@@ -77,6 +77,16 @@ func (r *RecordingCommandRunner) LastRequest() platformprocess.CommandRequest {
 	return cloneProcessCommandRequest(r.requests[len(r.requests)-1])
 }
 
+func (r *RecordingCommandRunner) Requests() []platformprocess.CommandRequest {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	requests := make([]platformprocess.CommandRequest, len(r.requests))
+	for index := range r.requests {
+		requests[index] = cloneProcessCommandRequest(r.requests[index])
+	}
+	return requests
+}
+
 func BuildModelWorkerConfig(provider modelprovider.Provider, model string) string {
 	return fmt.Sprintf(`---
 type: MODEL_WORKER

@@ -1,4 +1,8 @@
 {
+  "description": {
+    "type": "LOCALIZABLE_ASSET",
+    "value": "Runs one bounded read-only subagent and returns its result."
+  },
   "examples": [
     {
       "args": {
@@ -32,11 +36,41 @@
           },
           {
             "kind": "STDIN"
+          },
+          {
+            "kind": "NAMED"
           }
         ],
         "description": "Text request for the one-pass subagent.",
+        "externalName": "to",
         "name": "input",
         "required": true
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "defaultValues": [
+          ""
+        ],
+        "description": "Model provider for the subagent; omitted values use operator defaults.",
+        "externalName": "worker-provider",
+        "name": "workerProvider"
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "defaultValues": [
+          ""
+        ],
+        "description": "Model for the subagent; omitted values use operator defaults.",
+        "externalName": "worker-model",
+        "name": "workerModel"
       }
     ]
   },
@@ -69,6 +103,8 @@
         "policy": "READ_ONLY"
       },
       "body": "You are the one-pass subagent worker for @you/subagent.\n\nRespond directly to the submitted request in a single bounded pass. Do not plan multi-stage work or defer follow-up actions.\n",
+      "model": "${workerModel}",
+      "modelProvider": "${workerProvider}",
       "name": "subagent-worker",
       "type": "AGENT_WORKER"
     }

@@ -48,6 +48,12 @@ func (s *Server) ListPackagedFactories(w http.ResponseWriter, _ *http.Request) {
 			s.writeError(w, http.StatusInternalServerError, "failed to load packaged factory catalog", "INTERNAL_ERROR")
 			return
 		}
+		var typedDocument factoryapi.Factory
+		if err := json.Unmarshal(definition.JSON, &typedDocument); err != nil || typedDocument.Description == nil || typedDocument.Examples == nil || len(*typedDocument.Examples) == 0 {
+			s.logger.Error("decode packaged factory discovery metadata", zap.Error(err))
+			s.writeError(w, http.StatusInternalServerError, "failed to load packaged factory catalog", "INTERNAL_ERROR")
+			return
+		}
 		yamlDocument, err := yaml.Marshal(document)
 		if err != nil {
 			s.logger.Error("encode packaged factory YAML artifact", zap.Error(err))
@@ -56,7 +62,8 @@ func (s *Server) ListPackagedFactories(w http.ResponseWriter, _ *http.Request) {
 		}
 		response.Factories = append(response.Factories, factoryapi.PackagedFactoryCatalogEntry{
 			Name: definition.Name, Project: definition.Project,
-			Slug: strings.TrimPrefix(definition.Name, "@you/"), Json: document, Yaml: string(yamlDocument),
+			Slug: strings.TrimPrefix(definition.Name, "@you/"), Description: *typedDocument.Description,
+			Examples: *typedDocument.Examples, Json: document, Yaml: string(yamlDocument),
 		})
 	}
 	s.writeJSON(w, http.StatusOK, response)

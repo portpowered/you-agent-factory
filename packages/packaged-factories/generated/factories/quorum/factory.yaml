@@ -1,3 +1,6 @@
+description:
+    type: LOCALIZABLE_ASSET
+    value: Runs independent assessments in parallel and merges them into one final answer.
 examples:
     - args:
         input: Compare the two proposed release plans.
@@ -26,45 +29,45 @@ invocationSignature:
             - kind: POSITIONAL
               position: 1
             - kind: STDIN
+            - kind: NAMED
           description: Text request evaluated by the quorum workers.
+          externalName: to
           name: input
           required: true
         - aliases:
             - bp
           bindings:
             - kind: NAMED
-          choices:
-            - CLAUDE
-            - CODEX
-          defaultValue: CODEX
-          description: Provider for both independent quorum branch workers. Defaults to CODEX.
+          defaultValues:
+            - ""
+          description: Provider for both independent quorum branch workers; omitted values use operator defaults.
           externalName: branch-provider
           name: branchProvider
         - aliases:
             - bm
           bindings:
             - kind: NAMED
-          defaultValue: gpt-5
-          description: Model for both independent quorum branch workers. Defaults to gpt-5.
+          defaultValues:
+            - ""
+          description: Model for both independent quorum branch workers; omitted values use operator defaults.
           externalName: branch-model
           name: branchModel
         - aliases:
             - mp
           bindings:
             - kind: NAMED
-          choices:
-            - CLAUDE
-            - CODEX
-          defaultValue: CODEX
-          description: Provider for the final quorum merge worker. Defaults to CODEX.
+          defaultValues:
+            - ""
+          description: Provider for the final quorum merge worker; omitted values use operator defaults.
           externalName: merge-provider
           name: mergeProvider
         - aliases:
             - mm
           bindings:
             - kind: NAMED
-          defaultValue: gpt-5
-          description: Model for the final quorum merge worker. Defaults to gpt-5.
+          defaultValues:
+            - ""
+          description: Model for the final quorum merge worker; omitted values use operator defaults.
           externalName: merge-model
           name: mergeModel
 name: quorum

@@ -1295,12 +1295,13 @@ func modelOperationContentTypesAPIFromInternal(contentTypes []string) []factorya
 }
 
 func workstationLimitsAPIFromInternal(limits interfaces.WorkstationLimits) *factoryapi.WorkstationLimits {
-	if limits.MaxRetries == 0 && limits.MaxExecutionTime == "" {
+	if limits.MaxRetries == 0 && limits.MaxExecutionTime == "" && limits.MaxGeneratedWorkItems == 0 {
 		return nil
 	}
 	return &factoryapi.WorkstationLimits{
-		MaxExecutionTime: stringPtrIfNotEmpty(limits.MaxExecutionTime),
-		MaxRetries:       intPtrIfNonZero(limits.MaxRetries),
+		MaxExecutionTime:      stringPtrIfNotEmpty(limits.MaxExecutionTime),
+		MaxRetries:            intPtrIfNonZero(limits.MaxRetries),
+		MaxGeneratedWorkItems: intPtrIfNonZero(limits.MaxGeneratedWorkItems),
 	}
 }
 
@@ -1346,9 +1347,10 @@ func workstationCronAPIFromInternal(cron *interfaces.CronConfig) *factoryapi.Wor
 		return nil
 	}
 	return &factoryapi.WorkstationCron{
+		Every:          stringPtrIfNotEmpty(cron.Every),
 		ExpiryWindow:   stringPtrIfNotEmpty(cron.ExpiryWindow),
 		Jitter:         stringPtrIfNotEmpty(cron.Jitter),
-		Schedule:       cron.Schedule,
+		Schedule:       stringPtrIfNotEmpty(cron.Schedule),
 		TriggerAtStart: boolPtrIfTrue(cron.TriggerAtStart),
 	}
 }

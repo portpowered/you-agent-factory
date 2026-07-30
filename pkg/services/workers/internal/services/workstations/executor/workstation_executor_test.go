@@ -450,6 +450,104 @@ func TestWorkstationExecutor_ModelWorkstation_InterpolatesInvocationArguments(t 
 	}
 }
 
+func TestWorkstationExecutor_ModelWorkstation_InterpolatesOmittedInvocationArguments(t *testing.T) {
+	mock := &wsMockExecutor{result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}}
+	we := newTestWorkstationExecutor(
+		staticRuntimeConfig{
+			Workers: map[string]*interfaces.FactoryWorkerConfig{
+				"worker-a": {
+					Type: interfaces.WorkerTypeModel, ModelProvider: "${provider}", Model: "${model}",
+					RuntimeDefaultModelProvider: "codex", RuntimeDefaultModel: "operator-model",
+				},
+			},
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+				"standard": {Type: interfaces.WorkstationTypeModel, PromptTemplate: "Process work"},
+			},
+		},
+		mock,
+	)
+	workerInterpolated := false
+	we.Interpolation = factorydefinitionfixtures.InvocationInterpolation{
+		InterpolateWorker: func(
+			worker interfaces.FactoryWorkerConfig,
+			args *work.InvocationArguments,
+			_ interfaces.FileReader,
+		) (interfaces.FactoryWorkerConfig, error) {
+			if args != nil {
+				t.Fatalf("invocation arguments = %#v, want nil for omitted optional arguments", args)
+			}
+			workerInterpolated = true
+			worker.ModelProvider = ""
+			worker.Model = ""
+			return worker, nil
+		},
+	}
+
+	result, err := we.Execute(context.Background(), work.WorkDispatch{
+		DispatchID: "d-omitted", TransitionID: "t-omitted", WorkerType: "worker-a", WorkstationName: "standard",
+		InputTokens: InputTokens(factoryruntime.RuntimeToken{ID: "tok-1", Color: factoryruntime.RuntimeTokenColor{WorkID: "work-1"}}),
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if !workerInterpolated || !mock.called || result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("interpolated=%t called=%t result=%#v", workerInterpolated, mock.called, result)
+	}
+	if mock.dispatch.ModelProvider != "codex" || mock.dispatch.Model != "operator-model" {
+		t.Fatalf("provider/model = %q/%q, want operator fallback", mock.dispatch.ModelProvider, mock.dispatch.Model)
+	}
+}
+
+func TestWorkstationExecutor_ScriptWorkerUsesInvocationInterpolatedArguments(t *testing.T) {
+	mock := &interpolatedScriptExecutorMock{}
+	we := newTestWorkstationExecutor(staticRuntimeConfig{
+		Workers: map[string]*interfaces.FactoryWorkerConfig{
+			"script-a": {Type: interfaces.WorkerTypeScript, Command: "tool", Args: []string{"${branch}"}},
+		},
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			"script-run": {Type: interfaces.WorkstationTypeModel, WorkerTypeName: "script-a"},
+		},
+	}, mock)
+	we.Interpolation = factorydefinitionfixtures.InvocationInterpolation{
+		InterpolateWorker: func(worker interfaces.FactoryWorkerConfig, _ *work.InvocationArguments, _ interfaces.FileReader) (interfaces.FactoryWorkerConfig, error) {
+			worker.Args = []string{"feature/customer-branch"}
+			return worker, nil
+		},
+	}
+
+	result, err := we.Execute(context.Background(), work.WorkDispatch{
+		DispatchID: "d-script", TransitionID: "t-script", WorkerType: "script-a", WorkstationName: "script-run",
+		InputTokens: InputTokens(factoryruntime.RuntimeToken{ID: "tok-script", Color: factoryruntime.RuntimeTokenColor{
+			WorkID: "work-script", InvocationArguments: &work.InvocationArguments{},
+		}}),
+	})
+	if err != nil || result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("Execute() = %#v, %v", result, err)
+	}
+	if !mock.interpolatedCalled || mock.plainCalled || strings.Join(mock.worker.Args, ",") != "feature/customer-branch" {
+		t.Fatalf("script executor = %#v", mock)
+	}
+}
+
+type interpolatedScriptExecutorMock struct {
+	plainCalled        bool
+	interpolatedCalled bool
+	worker             *interfaces.FactoryWorkerConfig
+}
+
+func (mock *interpolatedScriptExecutorMock) Execute(context.Context, workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error) {
+	mock.plainCalled = true
+	return workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}, nil
+}
+
+func (mock *interpolatedScriptExecutorMock) ExecuteWithWorker(_ context.Context, _ workerexecution.WorkstationExecutionRequest, worker *interfaces.FactoryWorkerConfig) (workerexecution.WorkResult, error) {
+	mock.interpolatedCalled = true
+	clone := *worker
+	clone.Args = append([]string(nil), worker.Args...)
+	mock.worker = &clone
+	return workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}, nil
+}
+
 func TestWorkstationExecutor_ResolvesInterpolatedProviderThroughRegistryBeforeExecution(t *testing.T) {
 	t.Parallel()
 	providers := providerRegistryWithExternalFixture(t)

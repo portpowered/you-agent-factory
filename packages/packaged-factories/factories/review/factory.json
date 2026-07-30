@@ -1,17 +1,24 @@
 {
   "name": "@you/review",
   "id": "builtin-review",
+  "description": {"type": "LOCALIZABLE_ASSET", "value": "Produces candidate work and repeats independent review until approval or a bounded failure."},
   "invocationSignature": {
     "parameters": [
       {
         "name": "input",
         "description": "Work request that must be independently reviewed before it is returned.",
+        "externalName": "to",
         "required": true,
         "bindings": [
           {"kind": "POSITIONAL", "position": 1},
-          {"kind": "STDIN"}
+          {"kind": "STDIN"},
+          {"kind": "NAMED"}
         ]
-      }
+      },
+      {"name":"writerProvider","description":"Model provider for the writer; omitted values use operator defaults.","externalName":"writer-provider","defaultValues":[""],"bindings":[{"kind":"NAMED"}]},
+      {"name":"writerModel","description":"Model for the writer; omitted values use operator defaults.","externalName":"writer-model","defaultValues":[""],"bindings":[{"kind":"NAMED"}]},
+      {"name":"reviewerProvider","description":"Model provider for the reviewer; omitted values use operator defaults.","externalName":"reviewer-provider","defaultValues":[""],"bindings":[{"kind":"NAMED"}]},
+      {"name":"reviewerModel","description":"Model for the reviewer; omitted values use operator defaults.","externalName":"reviewer-model","defaultValues":[""],"bindings":[{"kind":"NAMED"}]}
     ]
   },
   "examples": [
@@ -35,8 +42,8 @@
     }
   ],
   "workers": [
-    {"name": "review-work-executor", "type": "AGENT_WORKER", "promptFile": "prompts/executor.md"},
-    {"name": "review-work-reviewer", "type": "AGENT_WORKER", "promptFile": "prompts/reviewer.md"}
+    {"name": "review-work-executor", "type": "AGENT_WORKER", "modelProvider":"${writerProvider}","model":"${writerModel}","promptFile": "prompts/executor.md"},
+    {"name": "review-work-reviewer", "type": "AGENT_WORKER", "modelProvider":"${reviewerProvider}","model":"${reviewerModel}","promptFile": "prompts/reviewer.md"}
   ],
   "workstations": [
     {
@@ -59,6 +66,7 @@
       "onRejection": [{"workType": "reviewable-work", "state": "init"}],
       "onFailure": [{"workType": "reviewable-work", "state": "failed"}],
       "promptFile": "prompts/reviewer.md"
-    }
+    },
+    {"name":"review-loop-breaker","type":"LOGICAL_MOVE","guards":[{"type":"VISIT_COUNT","workstation":"review-review-work","maxVisits":8}],"inputs":[{"workType":"reviewable-work","state":"init"}],"outputs":[{"workType":"reviewable-work","state":"failed"}]}
   ]
 }

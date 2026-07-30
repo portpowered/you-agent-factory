@@ -1,3 +1,6 @@
+description:
+    type: LOCALIZABLE_ASSET
+    value: Produces candidate work and repeats independent review until approval or a bounded failure.
 examples:
     - args:
         input: Draft the release notes
@@ -16,9 +19,39 @@ invocationSignature:
             - kind: POSITIONAL
               position: 1
             - kind: STDIN
+            - kind: NAMED
           description: Work request that must be independently reviewed before it is returned.
+          externalName: to
           name: input
           required: true
+        - bindings:
+            - kind: NAMED
+          defaultValues:
+            - ""
+          description: Model provider for the writer; omitted values use operator defaults.
+          externalName: writer-provider
+          name: writerProvider
+        - bindings:
+            - kind: NAMED
+          defaultValues:
+            - ""
+          description: Model for the writer; omitted values use operator defaults.
+          externalName: writer-model
+          name: writerModel
+        - bindings:
+            - kind: NAMED
+          defaultValues:
+            - ""
+          description: Model provider for the reviewer; omitted values use operator defaults.
+          externalName: reviewer-provider
+          name: reviewerProvider
+        - bindings:
+            - kind: NAMED
+          defaultValues:
+            - ""
+          description: Model for the reviewer; omitted values use operator defaults.
+          externalName: reviewer-model
+          name: reviewerModel
 name: review
 workTypes:
     - handlingBehavior:
@@ -49,6 +82,8 @@ workers:
 
         {{ end -}}
         Return the completed work as your final response. Do not claim it is reviewed.
+      model: ${writerModel}
+      modelProvider: ${writerProvider}
       name: review-work-executor
       type: AGENT_WORKER
     - body: |
@@ -64,6 +99,8 @@ workers:
         {"decision":"ACCEPTED","output":"the complete approved candidate work"}.
         If it needs revision, return {"decision":"REJECTED","feedback":"specific actionable feedback"}.
         Do not approve without including the approved candidate in `output`.
+      model: ${reviewerModel}
+      modelProvider: ${reviewerProvider}
       name: review-work-reviewer
       type: AGENT_WORKER
 workstations:
@@ -127,3 +164,16 @@ workstations:
       promptFile: prompts/reviewer.md
       type: AGENT_RUN
       worker: review-work-reviewer
+    - guards:
+        - maxVisits: 8
+          type: VISIT_COUNT
+          workstation: review-review-work
+      inputs:
+        - state: init
+          workType: reviewable-work
+      name: review-loop-breaker
+      outputs:
+        - state: failed
+          workType: reviewable-work
+      type: LOGICAL_MOVE
+      worker: ""

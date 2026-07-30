@@ -495,6 +495,7 @@ func workstationHasRuntimeFields(
 		workstation.Timeout != "" ||
 		workstation.Limits.MaxRetries != 0 ||
 		workstation.Limits.MaxExecutionTime != "" ||
+		workstation.Limits.MaxGeneratedWorkItems != 0 ||
 		workstation.Body != "" ||
 		workstation.PromptTemplate != "" ||
 		workstation.WorkingDirectory != "" ||

@@ -27,27 +27,7 @@ func TestPackagedFactoryCatalogConsumption_ListResolveInstallUsesPublishedCatalo
 	if err != nil {
 		t.Fatalf("ListBuiltInPackagedFactories() error = %v", err)
 	}
-	gotNames := make([]string, len(listed.Entries))
-	for index, entry := range listed.Entries {
-		gotNames[index] = entry.Name
-	}
-	wantNames := []string{
-		"@you/deep-research",
-		"@you/fusion",
-		"@you/goal",
-		"@you/quorum",
-		"@you/review",
-		"@you/subagent",
-		"@you/tts",
-	}
-	if len(gotNames) != len(wantNames) {
-		t.Fatalf("listed count = %d, want %d", len(gotNames), len(wantNames))
-	}
-	for index, wantName := range wantNames {
-		if gotNames[index] != wantName {
-			t.Fatalf("listed[%d] = %q, want %q", index, gotNames[index], wantName)
-		}
-	}
+	assertPublishedPackagedFactoryNames(t, listed)
 
 	resolved, err := catalog.ResolveBuiltInPackagedFactory(
 		t.Context(),
@@ -73,6 +53,43 @@ func TestPackagedFactoryCatalogConsumption_ListResolveInstallUsesPublishedCatalo
 		t.Fatalf("unknown resolve error = %q, want stable public inventory", err.Error())
 	}
 
+	assertPublishedPackagedFactoryInstall(t, catalog, resolved.Definition.JSON)
+}
+
+func assertPublishedPackagedFactoryNames(t *testing.T, listed factorydefinitions.ListBuiltInPackagedFactoriesResult) {
+	t.Helper()
+	gotNames := make([]string, len(listed.Entries))
+	for index, entry := range listed.Entries {
+		gotNames[index] = entry.Name
+	}
+	wantNames := []string{
+		"@you/classify",
+		"@you/deep-research",
+		"@you/full-flow",
+		"@you/fusion",
+		"@you/goal",
+		"@you/loop",
+		"@you/plan-execute",
+		"@you/plan-parallel",
+		"@you/quorum",
+		"@you/review",
+		"@you/spawn",
+		"@you/subagent",
+		"@you/tournament",
+		"@you/tts",
+	}
+	if len(gotNames) != len(wantNames) {
+		t.Fatalf("listed count = %d, want %d", len(gotNames), len(wantNames))
+	}
+	for index, wantName := range wantNames {
+		if gotNames[index] != wantName {
+			t.Fatalf("listed[%d] = %q, want %q", index, gotNames[index], wantName)
+		}
+	}
+}
+
+func assertPublishedPackagedFactoryInstall(t *testing.T, catalog factorydefinitions.PackagedFactoryCatalogOperations, resolvedJSON []byte) {
+	t.Helper()
 	var installed factorydefinitions.PackagedDefinition
 	install := factorydefinitions.NewInstallPackagedFactoryOperation(
 		catalog,
@@ -102,7 +119,7 @@ func TestPackagedFactoryCatalogConsumption_ListResolveInstallUsesPublishedCatalo
 	if err != nil {
 		t.Fatalf("InstallPackagedFactory(@you/goal) error = %v", err)
 	}
-	if !bytes.Equal(installed.JSON, resolved.Definition.JSON) {
+	if !bytes.Equal(installed.JSON, resolvedJSON) {
 		t.Fatal("install received definition bytes that differ from catalog resolve")
 	}
 	if result.Definition.Name != "@you/goal" ||

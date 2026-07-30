@@ -37,12 +37,14 @@ func TestOpenAPIContract_ContainsCoveredJSONOperations(t *testing.T) {
 	assertErrorSurfaceSchemas(t, schemas)
 }
 
-func TestOpenAPIContract_WorkstationCronIsScheduleOnly(t *testing.T) {
+func TestOpenAPIContract_WorkstationCronSupportsScheduleOrDuration(t *testing.T) {
 	doc := loadBundledOpenAPIDocument(t)
 	cronSchema := schemaObject(t, componentSchemas(t, doc), "WorkstationCron")
-	assertRequiredFields(t, cronSchema, "schedule")
+	if required, ok := cronSchema["required"]; ok {
+		t.Fatalf("WorkstationCron required = %#v, want schedule/every choice validated by the backend", required)
+	}
 	properties := schemaProperties(t, cronSchema, "WorkstationCron")
-	assertSchemaPropertiesPresent(t, properties, "WorkstationCron", "schedule", "triggerAtStart", "jitter", "expiryWindow")
+	assertSchemaPropertiesPresent(t, properties, "WorkstationCron", "schedule", "every", "triggerAtStart", "jitter", "expiryWindow")
 	assertPropertiesAbsent(t, properties, "WorkstationCron", "trigger_at_start", "expiry_window", "interval")
 }
 

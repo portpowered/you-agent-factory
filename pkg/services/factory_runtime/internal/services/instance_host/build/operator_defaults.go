@@ -24,6 +24,12 @@ func applyOperatorDefaultsToLoadedConfig(
 		if worker == nil || !isModelWorkerType(worker.Type) {
 			return nil
 		}
+		if _, ok := exactInvocationParameter(worker.ModelProvider); ok {
+			worker.RuntimeDefaultModelProvider = defaultProvider
+		}
+		if _, ok := exactInvocationParameter(worker.Model); ok {
+			worker.RuntimeDefaultModel = defaultModel
+		}
 		if strings.TrimSpace(worker.ModelProvider) == "" && defaultProvider != "" {
 			worker.ModelProvider = defaultProvider
 		}
@@ -35,6 +41,15 @@ func applyOperatorDefaultsToLoadedConfig(
 		return fmt.Errorf("apply operator defaults: %w", err)
 	}
 	return nil
+}
+
+func exactInvocationParameter(value string) (string, bool) {
+	trimmed := strings.TrimSpace(value)
+	if len(trimmed) < 4 || !strings.HasPrefix(trimmed, "${") || !strings.HasSuffix(trimmed, "}") {
+		return "", false
+	}
+	name := strings.TrimSpace(trimmed[2 : len(trimmed)-1])
+	return name, name != ""
 }
 
 func isModelWorkerType(workerType string) bool {

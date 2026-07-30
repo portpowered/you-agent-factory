@@ -1,8 +1,11 @@
+description:
+    type: LOCALIZABLE_ASSET
+    value: Produces an initial answer with one worker and refines it with a second worker.
 examples:
     - args:
         firstProvider: CLAUDE
         input: Draft a release summary
-        output: fusion-summary.md
+        resultFile: fusion-summary.md
         secondProvider: CODEX
       description:
         type: LOCALIZABLE_ASSET
@@ -23,49 +26,57 @@ invocationSignature:
         description: When output is supplied, callers can treat the refined answer as file-oriented markdown content.
         fileExtension: .md
         mode: FILE
-        pathParameter: output
+        pathParameter: resultFile
     parameters:
         - bindings:
             - kind: POSITIONAL
               position: 1
             - kind: STDIN
+            - kind: NAMED
           description: Text request to run through the two-stage fusion flow.
+          externalName: to
           name: input
           required: true
-        - aliases:
-            - o
-          bindings:
+        - bindings:
             - kind: NAMED
           description: Optional output-path hint for file-oriented callers.
-          externalName: output
-          name: output
+          externalName: result-file
+          name: resultFile
           typeHint: FILE_PATH
         - aliases:
             - p1
           bindings:
             - kind: NAMED
-          description: Optional provider override for the first fusion pass.
+          defaultValues:
+            - ""
+          description: Optional provider override for the first fusion pass; omitted values use operator defaults.
           externalName: first-provider
           name: firstProvider
         - aliases:
             - p2
           bindings:
             - kind: NAMED
-          description: Optional provider override for the second fusion pass.
+          defaultValues:
+            - ""
+          description: Optional provider override for the second fusion pass; omitted values use operator defaults.
           externalName: second-provider
           name: secondProvider
         - aliases:
             - m1
           bindings:
             - kind: NAMED
-          description: Optional model override for the first fusion pass.
+          defaultValues:
+            - ""
+          description: Optional model override for the first fusion pass; omitted values use operator defaults.
           externalName: first-model
           name: firstModel
         - aliases:
             - m2
           bindings:
             - kind: NAMED
-          description: Optional model override for the second fusion pass.
+          defaultValues:
+            - ""
+          description: Optional model override for the second fusion pass; omitted values use operator defaults.
           externalName: second-model
           name: secondModel
         - aliases:

@@ -129,11 +129,11 @@ func (s *Service) rebindProvidersCommandRunner(logger logging.Logger) error {
 		logging.EnsureLogger(logger),
 		serviceCommandClock(s),
 	)
-	reboundRegistry, err := rebindProviderRegistry(s.providerRegistry, providersRunner, s.providerRegistryRebinder)
+	reboundRegistry, reboundProviders, err := rebindProviderRegistry(s.providerRegistry, providersRunner, s.providerRegistryRebinder)
 	if err != nil {
 		return fmt.Errorf("rebind provider registry for session command logging: %w", err)
 	}
-	return applyReboundProviderRegistry(s, reboundRegistry)
+	return applyReboundProviderRegistry(s, reboundRegistry, reboundProviders)
 }
 
 func (s *Service) runtimeRunnerDecorators(
@@ -279,9 +279,19 @@ func validateConfiguredWorkstationRunners(cfg *interfaces.FactoryConfig, factory
 		if worker != nil {
 			modelProvider = worker.ModelProvider
 		}
+		// Invocation placeholders are resolved for each dispatch. They are not
+		// concrete provider identities during the invocation-neutral runtime
+		// preflight, so defer provider validation until interpolation.
+		if strings.Contains(modelProvider, "${") {
+			modelProvider = ""
+		}
+		workstationRunner := workstation.Runner
+		if strings.Contains(workstationRunner, "${") {
+			workstationRunner = ""
+		}
 		selection, selectionErr := resolveRuntimeRunnerSelection(
 			providers,
-			workstation.Runner,
+			workstationRunner,
 			factoryRunnerID,
 			modelProvider,
 		)

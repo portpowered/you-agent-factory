@@ -423,13 +423,13 @@ func invocationSignatureParameterDefaultTargets(parameter factorydefinitions.Inv
 			fmt.Sprintf("invocationSignature parameter %q only supports defaultValues for its multi-value mode", name),
 		))
 	}
-	if !invocationParameterSupportsListDefaults(valueMode) && len(parameter.DefaultValues) > 0 {
+	if !invocationParameterSupportsListDefaults(valueMode) && len(parameter.DefaultValues) > 1 {
 		targets = append(targets, invocationSignatureParameterTarget(
 			CodeInvocationSignatureInvalidDefaultShape,
 			index,
 			"defaultValues",
 			name,
-			fmt.Sprintf("invocationSignature parameter %q only supports defaultValue for its single-value mode", name),
+			fmt.Sprintf("invocationSignature parameter %q supports at most one defaultValues entry for its single-value mode", name),
 		))
 	}
 	return targets
@@ -519,9 +519,6 @@ func invocationSignatureParameterBindingShapeTargets(parameter factorydefinition
 	valueMode := strings.TrimSpace(parameter.ValueMode)
 	if parameter.Sensitive && state.hasPositionalBinding {
 		targets = append(targets, invocationSignatureParameterTarget(CodeInvocationSignatureSensitivePositional, index, "bindings", name, fmt.Sprintf("invocationSignature parameter %q is sensitive and cannot be exposed as a positional argument", name)))
-	}
-	if state.hasStdinBinding && state.hasNamedBinding {
-		targets = append(targets, invocationSignatureParameterTarget(CodeInvocationSignatureInvalidStdinRouting, index, "bindings", name, fmt.Sprintf("invocationSignature parameter %q cannot combine STDIN and NAMED bindings", name)))
 	}
 	if state.hasStdinBinding && state.hasNamedRestBinding {
 		targets = append(targets, invocationSignatureParameterTarget(CodeInvocationSignatureInvalidStdinRouting, index, "bindings", name, fmt.Sprintf("invocationSignature parameter %q cannot combine STDIN and NAMED_REST bindings", name)))
@@ -690,6 +687,10 @@ func invocationWorkstationInterpolationFieldTargets(workstations []factorydefini
 		fields = appendInterpolationField(fields, SubjectTypeWorkstation, subjectID, SubjectLocationDefinition, basePath+".promptTemplate", workstation.PromptTemplate, false, "workstation.promptTemplate")
 		fields = appendInterpolationField(fields, SubjectTypeWorkstation, subjectID, SubjectLocationDefinition, basePath+".workingDirectory", workstation.WorkingDirectory, false, "workstation.workingDirectory")
 		fields = appendInterpolationField(fields, SubjectTypeWorkstation, subjectID, SubjectLocationDefinition, basePath+".worktree", workstation.Worktree, false, "workstation.worktree")
+		if workstation.Cron != nil {
+			fields = appendInterpolationField(fields, SubjectTypeWorkstation, subjectID, SubjectLocationDefinition, basePath+".cron.schedule", workstation.Cron.Schedule, false, "workstation.cron.schedule")
+			fields = appendInterpolationField(fields, SubjectTypeWorkstation, subjectID, SubjectLocationDefinition, basePath+".cron.every", workstation.Cron.Every, false, "workstation.cron.every")
+		}
 		for key, value := range workstation.Env {
 			fields = appendInterpolationField(fields, SubjectTypeWorkstation, subjectID, SubjectLocationDefinition, fmt.Sprintf("%s.env[%q]", basePath, key), value, false, fmt.Sprintf("workstation.env[%q]", key))
 		}

@@ -240,7 +240,7 @@ func (s *Service) Build(
 			agentRunRecorder,
 			clock,
 			s.decisionEnvelopes,
-		)
+		).WithProgressPublisher(inferenceProgressPublisher)
 		direct := &workerexecutor.WorkstationBehaviorRouter{
 			RuntimeConfig: runtimeConfig, InferenceExecutor: inference, AgentRunExecutor: agentRun,
 		}

@@ -29,6 +29,87 @@ type Service interface {
 	) error
 }
 
+// InvocationScheduleService prepares duration schedules whose interval is
+// supplied by one normalized Factory invocation. Runtime hosts use this
+// optional capability to validate before admission and commit only after the
+// controller Work has been accepted.
+type InvocationScheduleService interface {
+	PrepareInvocationSchedules(context.Context, InvocationScheduleRequest) (PreparedInvocationSchedules, error)
+}
+
+const (
+	InvocationScheduleEveryTag                  = "agent_factory.schedule.every"
+	InvocationScheduleWorkstationTag            = "agent_factory.schedule.workstation"
+	InvocationScheduleTriggerAtStartTag         = "agent_factory.schedule.trigger_at_start"
+	InvocationScheduleMaxConsecutiveFailuresTag = "agent_factory.schedule.max_consecutive_failures"
+)
+
+// InvocationScheduleRequest carries the authored CRON graph, the pending
+// invocation Work, and runtime-owned effects needed by scheduled executions.
+type InvocationScheduleRequest struct {
+	FactoryDir    string
+	FactoryConfig *factorydefinitions.FactoryConfig
+	RuntimeConfig factorydefinitions.RuntimeConfigLookup
+	WorkRequest   work.WorkRequest
+	// ResumeSequence continues deterministic scheduled Work identity after a
+	// runtime has reconstructed an accepted controller from canonical state.
+	ResumeSequence int64
+	// SuppressTriggerAtStart prevents restart recovery from treating an
+	// already-admitted controller as a new invocation.
+	SuppressTriggerAtStart bool
+	Submitter              WorkRequestSubmitter
+	Observe                InvocationScheduleObserver
+	FailController         func(context.Context, string) error
+}
+
+// InvocationScheduleObservation reports whether the controller and its most
+// recent scheduled execution are active, plus consecutive terminal failures.
+type InvocationScheduleObservation struct {
+	ControllerActive    bool
+	ExecutionActive     bool
+	ConsecutiveFailures int
+}
+
+// InvocationScheduleObserver reads orchestration-neutral schedule facts from
+// the owning runtime without giving Automations mutable runtime state.
+type InvocationScheduleObserver func(context.Context, InvocationScheduleObservationRequest) (InvocationScheduleObservation, error)
+
+// InvocationScheduleObservationRequest identifies one invocation schedule.
+type InvocationScheduleObservationRequest struct {
+	ControllerWorkID  string
+	ControllerTraceID string
+	ExecutionWorkType string
+}
+
+// PreparedInvocationSchedules owns validated inert schedules. Commit starts
+// them after Work admission; Abort releases them when admission fails.
+type PreparedInvocationSchedules struct {
+	commit func(work.WorkRequestSubmitResult)
+	abort  func()
+}
+
+// NewPreparedInvocationSchedules constructs a prepared schedule result.
+func NewPreparedInvocationSchedules(
+	commit func(work.WorkRequestSubmitResult),
+	abort func(),
+) PreparedInvocationSchedules {
+	return PreparedInvocationSchedules{commit: commit, abort: abort}
+}
+
+// Commit starts all prepared schedules using accepted controller identity.
+func (prepared PreparedInvocationSchedules) Commit(result work.WorkRequestSubmitResult) {
+	if prepared.commit != nil {
+		prepared.commit(result)
+	}
+}
+
+// Abort releases all prepared schedules without starting them.
+func (prepared PreparedInvocationSchedules) Abort() {
+	if prepared.abort != nil {
+		prepared.abort()
+	}
+}
+
 // Root is the additive, implementation-neutral Automations boundary for
 // reconciliation, source lifecycle, and cursor/status operations. Operations
 // is intentionally an anonymous structural contract: existing implementations

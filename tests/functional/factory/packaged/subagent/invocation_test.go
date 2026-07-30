@@ -17,8 +17,8 @@ import (
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -167,18 +167,9 @@ func postPackagedSubagentInvocation(
 }
 
 func packagedSubagentTextInvocationRequest(requestText string) factoryapi.InvocationRequest {
-	var part factoryapi.WorkContentPart
-	if err := part.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
-		Type: factoryapi.WorkContentPartTypeText,
-		Text: requestText,
-	}); err != nil {
-		panic(fmt.Sprintf("build invocation text content: %v", err))
-	}
-	sourceKind := factoryapi.InvocationInputSourceKindText
-	content := factoryapi.WorkContent{part}
+	args := map[string]interface{}{"input": requestText}
 	return factoryapi.InvocationRequest{
-		SourceKind: &sourceKind,
-		Content:    &content,
+		Args: &args,
 	}
 }
 
@@ -203,18 +194,18 @@ func assertPackagedSubagentChildResponseEvents(
 		if *event.DispatchId != dispatchID {
 			t.Fatalf("response event[%d] dispatch = %q, want %q", index, *event.DispatchId, dispatchID)
 		}
-		if event.Kind != factoryapi.FactoryResponseEventKindMessage {
-			t.Fatalf("response event[%d] kind = %q, want MESSAGE child progress", index, event.Kind)
-		}
-		if event.Phase != factoryapi.FactoryResponseEventPhaseCompleted {
-			t.Fatalf("response event[%d] phase = %q, want COMPLETED child message", index, event.Phase)
-		}
 		if event.SchemaVersion == "" || event.EventId == "" {
 			t.Fatalf("response event[%d] = %#v, want public response-event contract fields", index, event)
 		}
 	}
 
 	finalEvent := events[len(events)-1]
+	if finalEvent.Kind != factoryapi.FactoryResponseEventKindMessage {
+		t.Fatalf("final response event kind = %q, want MESSAGE", finalEvent.Kind)
+	}
+	if finalEvent.Phase != factoryapi.FactoryResponseEventPhaseCompleted {
+		t.Fatalf("final response event phase = %q, want COMPLETED", finalEvent.Phase)
+	}
 	payload, err := finalEvent.Payload.AsFactoryResponseEventMessagePayload()
 	if err != nil {
 		t.Fatalf("decode final child response event payload: %v", err)
@@ -261,11 +252,7 @@ func runPackagedSubagentCLIJSONInvocation(t *testing.T, requestText string) fact
 		t.Fatalf("stderr = %q, want empty successful-run stderr", inputs.Stderr())
 	}
 
-	var response factoryapi.InvocationResponse
-	if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stdout())), &response); decodeErr != nil {
-		t.Fatalf("decode invocation JSON stdout: %v\nstdout:\n%s", decodeErr, inputs.Stdout())
-	}
-	return response
+	return support.DecodeInvocationResponseJSON(t, inputs.Stdout())
 }
 
 func runHermeticPackagedSubagentInvocation(t *testing.T, requestText string) (string, int) {
@@ -350,10 +337,7 @@ func runPackagedSubagentCLIJSONFailureInvocation(
 	inputs.Input.WorkingDirectory = t.TempDir()
 	execErr := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input)
 
-	var response factoryapi.InvocationResponse
-	if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stdout())), &response); decodeErr != nil {
-		t.Fatalf("decode invocation JSON stdout: %v\nstdout:\n%s", decodeErr, inputs.Stdout())
-	}
+	response := support.DecodeInvocationResponseJSON(t, inputs.Stdout())
 	return response, inputs.Stderr(), execErr
 }
 

@@ -845,6 +845,9 @@ func hasInlineRuntimeDefinitions(factoryConfig *factorydefinitions.FactoryConfig
 func workstationHasInlineRuntimeDefinitionFields(
 	workstation factorydefinitions.FactoryWorkstationConfig,
 ) bool {
+	if workstation.Kind == factorydefinitions.WorkstationKindCron && workstation.Cron != nil {
+		return false
+	}
 	if strings.TrimSpace(workstation.Type) == factorydefinitions.WorkstationTypeLogical &&
 		workstation.Runner == "" &&
 		workstation.PromptFile == "" &&
@@ -852,6 +855,7 @@ func workstationHasInlineRuntimeDefinitionFields(
 		workstation.Timeout == "" &&
 		workstation.Limits.MaxRetries == 0 &&
 		workstation.Limits.MaxExecutionTime == "" &&
+		workstation.Limits.MaxGeneratedWorkItems == 0 &&
 		workstation.Body == "" &&
 		workstation.PromptTemplate == "" &&
 		workstation.WorkingDirectory == "" &&
@@ -865,13 +869,15 @@ func workstationHasInlineRuntimeDefinitionFields(
 func workstationHasRuntimeFields(
 	workstation factorydefinitions.FactoryWorkstationConfig,
 ) bool {
-	return strings.TrimSpace(workstation.Type) != "" ||
+	return (workstation.Kind == factorydefinitions.WorkstationKindCron && workstation.Cron != nil) ||
+		strings.TrimSpace(workstation.Type) != "" ||
 		workstation.Runner != "" ||
 		workstation.PromptFile != "" ||
 		workstation.OutputSchema != "" ||
 		workstation.Timeout != "" ||
 		workstation.Limits.MaxRetries != 0 ||
 		workstation.Limits.MaxExecutionTime != "" ||
+		workstation.Limits.MaxGeneratedWorkItems != 0 ||
 		workstation.Body != "" ||
 		workstation.PromptTemplate != "" ||
 		workstation.WorkingDirectory != "" ||

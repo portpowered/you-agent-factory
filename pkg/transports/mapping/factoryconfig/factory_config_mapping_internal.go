@@ -786,8 +786,9 @@ func workstationLimitsInternalFromAPI(limits *factoryapi.WorkstationLimits) inte
 		return interfaces.WorkstationLimits{}
 	}
 	return interfaces.WorkstationLimits{
-		MaxRetries:       intValue(limits.MaxRetries),
-		MaxExecutionTime: stringValue(limits.MaxExecutionTime),
+		MaxRetries:            intValue(limits.MaxRetries),
+		MaxExecutionTime:      stringValue(limits.MaxExecutionTime),
+		MaxGeneratedWorkItems: intValue(limits.MaxGeneratedWorkItems),
 	}
 }
 
@@ -833,7 +834,8 @@ func workstationCronInternalFromAPI(cron *factoryapi.WorkstationCron) *interface
 		return nil
 	}
 	return &interfaces.CronConfig{
-		Schedule:       cron.Schedule,
+		Schedule:       stringValue(cron.Schedule),
+		Every:          stringValue(cron.Every),
 		TriggerAtStart: boolValue(cron.TriggerAtStart),
 		Jitter:         stringValue(cron.Jitter),
 		ExpiryWindow:   stringValue(cron.ExpiryWindow),

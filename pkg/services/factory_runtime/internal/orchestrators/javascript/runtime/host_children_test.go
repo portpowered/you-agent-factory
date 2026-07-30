@@ -113,10 +113,10 @@ func TestResolveChildWorkerSettings_FieldByFieldPrecedence(t *testing.T) {
 		req, want factory.JavaScriptChildExecutionRequest
 	}{
 		{"explicit fields", factory.JavaScriptChildExecutionRequest{ModelProvider: "kiro-cli", Model: "explicit-model", ReasoningEffort: "minimal"}, factory.JavaScriptChildExecutionRequest{ModelProvider: "kiro-cli", Model: "explicit-model", ReasoningEffort: "minimal"}},
-		{"child preset", factory.JavaScriptChildExecutionRequest{Preset: "child"}, factory.JavaScriptChildExecutionRequest{Preset: "child", ModelProvider: "CLAUDE", Model: "child-model", ReasoningEffort: "high"}},
-		{"factory preset", factory.JavaScriptChildExecutionRequest{AgentID: "reviewer"}, factory.JavaScriptChildExecutionRequest{AgentID: "reviewer", Preset: "factory", ModelProvider: "CODEX", Model: "factory-model", ReasoningEffort: "low"}},
-		{"mixed fields", factory.JavaScriptChildExecutionRequest{AgentID: "reviewer", Preset: "child", Model: "explicit-model"}, factory.JavaScriptChildExecutionRequest{AgentID: "reviewer", Preset: "child", ModelProvider: "CLAUDE", Model: "explicit-model", ReasoningEffort: "high"}},
-		{"scalar defaults", factory.JavaScriptChildExecutionRequest{}, factory.JavaScriptChildExecutionRequest{ModelProvider: "GEMINI", Model: "scalar-model"}},
+		{"child preset", factory.JavaScriptChildExecutionRequest{Preset: "child"}, factory.JavaScriptChildExecutionRequest{Preset: "child", ModelProvider: "claude", Model: "child-model", ReasoningEffort: "high"}},
+		{"factory preset", factory.JavaScriptChildExecutionRequest{AgentID: "reviewer"}, factory.JavaScriptChildExecutionRequest{AgentID: "reviewer", Preset: "factory", ModelProvider: "codex", Model: "factory-model", ReasoningEffort: "low"}},
+		{"mixed fields", factory.JavaScriptChildExecutionRequest{AgentID: "reviewer", Preset: "child", Model: "explicit-model"}, factory.JavaScriptChildExecutionRequest{AgentID: "reviewer", Preset: "child", ModelProvider: "claude", Model: "explicit-model", ReasoningEffort: "high"}},
+		{"scalar defaults", factory.JavaScriptChildExecutionRequest{}, factory.JavaScriptChildExecutionRequest{ModelProvider: "gemini", Model: "scalar-model"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -132,6 +132,20 @@ func TestResolveChildWorkerSettings_FieldByFieldPrecedence(t *testing.T) {
 				t.Fatalf("repeated selection = %#v, %v; want %#v", again, err, got)
 			}
 		})
+	}
+}
+
+func TestResolveChildWorkerSettings_CanonicalizesExplicitModelProvider(t *testing.T) {
+	got, err := workflowruntime.ResolveChildWorkerSettings(
+		factory.JavaScriptChildExecutionRequest{ModelProvider: " CODEX "},
+		nil,
+		factory.JavaScriptWorkerSettings{},
+	)
+	if err != nil {
+		t.Fatalf("ResolveChildWorkerSettings() error = %v", err)
+	}
+	if got.ModelProvider != "codex" {
+		t.Fatalf("modelProvider = %q, want canonical codex", got.ModelProvider)
 	}
 }
 

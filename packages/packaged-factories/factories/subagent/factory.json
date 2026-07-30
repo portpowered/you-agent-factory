@@ -1,17 +1,22 @@
 {
   "name": "@you/subagent",
   "id": "builtin-subagent",
+  "description": {"type": "LOCALIZABLE_ASSET", "value": "Runs one bounded read-only subagent and returns its result."},
   "invocationSignature": {
     "parameters": [
       {
         "name": "input",
         "description": "Text request for the one-pass subagent.",
+        "externalName": "to",
         "required": true,
         "bindings": [
           {"kind": "POSITIONAL", "position": 1},
-          {"kind": "STDIN"}
+          {"kind": "STDIN"},
+          {"kind": "NAMED"}
         ]
-      }
+      },
+      {"name":"workerProvider","description":"Model provider for the subagent; omitted values use operator defaults.","externalName":"worker-provider","defaultValues":[""],"bindings":[{"kind":"NAMED"}]},
+      {"name":"workerModel","description":"Model for the subagent; omitted values use operator defaults.","externalName":"worker-model","defaultValues":[""],"bindings":[{"kind":"NAMED"}]}
     ]
   },
   "examples": [
@@ -42,6 +47,8 @@
     {
       "name": "subagent-worker",
       "type": "AGENT_WORKER",
+      "modelProvider": "${workerProvider}",
+      "model": "${workerModel}",
       "agentTools": {
         "policy": "READ_ONLY"
       },

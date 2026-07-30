@@ -1,4 +1,8 @@
 {
+  "description": {
+    "type": "LOCALIZABLE_ASSET",
+    "value": "Runs independent assessments in parallel and merges them into one final answer."
+  },
   "examples": [
     {
       "args": {
@@ -41,9 +45,13 @@
           },
           {
             "kind": "STDIN"
+          },
+          {
+            "kind": "NAMED"
           }
         ],
         "description": "Text request evaluated by the quorum workers.",
+        "externalName": "to",
         "name": "input",
         "required": true
       },
@@ -56,12 +64,10 @@
             "kind": "NAMED"
           }
         ],
-        "choices": [
-          "CLAUDE",
-          "CODEX"
+        "defaultValues": [
+          ""
         ],
-        "defaultValue": "CODEX",
-        "description": "Provider for both independent quorum branch workers. Defaults to CODEX.",
+        "description": "Provider for both independent quorum branch workers; omitted values use operator defaults.",
         "externalName": "branch-provider",
         "name": "branchProvider"
       },
@@ -74,8 +80,10 @@
             "kind": "NAMED"
           }
         ],
-        "defaultValue": "gpt-5",
-        "description": "Model for both independent quorum branch workers. Defaults to gpt-5.",
+        "defaultValues": [
+          ""
+        ],
+        "description": "Model for both independent quorum branch workers; omitted values use operator defaults.",
         "externalName": "branch-model",
         "name": "branchModel"
       },
@@ -88,12 +96,10 @@
             "kind": "NAMED"
           }
         ],
-        "choices": [
-          "CLAUDE",
-          "CODEX"
+        "defaultValues": [
+          ""
         ],
-        "defaultValue": "CODEX",
-        "description": "Provider for the final quorum merge worker. Defaults to CODEX.",
+        "description": "Provider for the final quorum merge worker; omitted values use operator defaults.",
         "externalName": "merge-provider",
         "name": "mergeProvider"
       },
@@ -106,8 +112,10 @@
             "kind": "NAMED"
           }
         ],
-        "defaultValue": "gpt-5",
-        "description": "Model for the final quorum merge worker. Defaults to gpt-5.",
+        "defaultValues": [
+          ""
+        ],
+        "description": "Model for the final quorum merge worker; omitted values use operator defaults.",
         "externalName": "merge-model",
         "name": "mergeModel"
       }

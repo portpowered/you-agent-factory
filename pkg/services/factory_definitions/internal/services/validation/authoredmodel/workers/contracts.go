@@ -32,6 +32,11 @@ type Config struct {
 	Body             string                    `json:"body,omitempty" yaml:"-"`
 	SessionID        string                    `json:"-" yaml:"-"`
 	Concurrency      int                       `json:"-" yaml:"-"`
+	// RuntimeDefaultModelProvider and RuntimeDefaultModel retain operator
+	// fallbacks for invocation-interpolated selections. They are effective
+	// runtime metadata and never part of an authored Factory definition.
+	RuntimeDefaultModelProvider string `json:"-" yaml:"-"`
+	RuntimeDefaultModel         string `json:"-" yaml:"-"`
 }
 
 func (w *Config) TimeoutDuration() time.Duration {

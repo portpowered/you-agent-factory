@@ -179,12 +179,22 @@ func (t *TransitionerSubsystem) mapToCorrespondingTokenMutations(snapshot *inter
 			resolved.outcome = workerexecution.OutcomeFailed
 			resolved.err = batchErr.Error()
 		} else if detectedBatch {
-			generatedBatches = []work.GeneratedSubmissionBatch{{
-				Request:     generatedBatch.request,
-				Metadata:    generatedBatch.metadata,
-				Submissions: generatedBatch.submits,
-			}}
-			generatedWorkCount = len(generatedBatch.submits)
+			if workstation, ok := runtimeWorkstation(currentTransition.Name, t.runtimeConfig); ok &&
+				workstation.Limits.MaxGeneratedWorkItems > 0 &&
+				len(generatedBatch.submits) > workstation.Limits.MaxGeneratedWorkItems {
+				resolved.outcome = workerexecution.OutcomeFailed
+				resolved.err = fmt.Sprintf(
+					"worker-emitted work request batch contains %d Work items, exceeding workstation limit %d",
+					len(generatedBatch.submits), workstation.Limits.MaxGeneratedWorkItems,
+				)
+			} else {
+				generatedBatches = []work.GeneratedSubmissionBatch{{
+					Request:     generatedBatch.request,
+					Metadata:    generatedBatch.metadata,
+					Submissions: generatedBatch.submits,
+				}}
+				generatedWorkCount = len(generatedBatch.submits)
+			}
 		}
 	}
 
@@ -561,6 +571,9 @@ func enrichWorkerEmittedBatchRequest(request *work.WorkRequest, inputColors []fa
 			if source.CurrentChainingTraceID != "" {
 				request.Works[i].CurrentChainingTraceID = source.CurrentChainingTraceID
 			}
+		}
+		if request.Works[i].InvocationArguments == nil {
+			request.Works[i].InvocationArguments = work.CloneInvocationArguments(source.InvocationArguments)
 		}
 		if source.WorkID != "" {
 			request.Works[i].RuntimeRelations = appendUniqueRuntimeRelation(request.Works[i].RuntimeRelations, work.Relation{

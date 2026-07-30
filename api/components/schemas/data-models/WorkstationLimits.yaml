@@ -8,3 +8,7 @@ properties:
   maxExecutionTime:
     type: string
     description: Go duration limit for one dispatch attempt before it times out.
+  maxGeneratedWorkItems:
+    type: integer
+    minimum: 1
+    description: Maximum number of Work items one accepted worker-emitted FACTORY_REQUEST_BATCH may contain.

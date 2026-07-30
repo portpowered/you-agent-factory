@@ -574,6 +574,10 @@ func workstationKindPtr(value factoryapi.WorkstationKind) *factoryapi.Workstatio
 	return &value
 }
 
+func generatedStringPtr(value string) *string {
+	return &value
+}
+
 func boolValue(value *bool) bool {
 	return value != nil && *value
 }
@@ -586,7 +590,7 @@ func mergeGeneratedWorkstationsFixture() (*factoryapi.Factory, map[string]interf
 					Worker:   "stale-worker",
 					Behavior: workstationKindPtr(factoryapi.WorkstationKindCron),
 					Cron: &factoryapi.WorkstationCron{
-						Schedule: "0 * * * *",
+						Schedule: generatedStringPtr("0 * * * *"),
 					},
 					Inputs:  []factoryapi.WorkstationIO{{WorkType: "story", State: "stale"}},
 					Outputs: &[]factoryapi.WorkstationIO{{WorkType: "story", State: "stale-done"}},
@@ -647,7 +651,7 @@ func assertMergedGeneratedWorkstations(t *testing.T, factory *factoryapi.Factory
 	if got[0].Behavior == nil || *got[0].Behavior != factoryapi.WorkstationKindCron {
 		t.Fatalf("merged alpha behavior = %#v, want CRON", got[0].Behavior)
 	}
-	if got[0].Cron == nil || got[0].Cron.Schedule != "*/5 * * * *" || !boolValue(got[0].Cron.TriggerAtStart) || stringValue(got[0].Cron.ExpiryWindow) != "30s" {
+	if got[0].Cron == nil || stringValue(got[0].Cron.Schedule) != "*/5 * * * *" || !boolValue(got[0].Cron.TriggerAtStart) || stringValue(got[0].Cron.ExpiryWindow) != "30s" {
 		t.Fatalf("merged alpha cron = %#v, want runtime cron fields", got[0].Cron)
 	}
 	if !reflect.DeepEqual(got[0].Inputs, []factoryapi.WorkstationIO{{WorkType: "story", State: "review"}}) {

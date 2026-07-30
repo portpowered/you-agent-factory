@@ -62,7 +62,6 @@ type ChildExecutor interface {
 // highest-precedence source that supplies it. It performs no IO or mutation.
 func ResolveChildWorkerSettings(req ChildExecutionRequest, agents map[string]interfaces.FactoryOrchestratorJavaScriptAgent, config WorkerSettingsConfig) (ChildExecutionRequest, error) {
 	explicitPreset := strings.TrimSpace(req.Preset)
-	explicitProvider := strings.TrimSpace(req.ModelProvider)
 	explicitEffort := strings.TrimSpace(req.ReasoningEffort)
 	factoryPreset := ""
 	if agent, ok := agents[strings.TrimSpace(req.AgentID)]; ok {
@@ -94,8 +93,12 @@ func ResolveChildWorkerSettings(req ChildExecutionRequest, agents map[string]int
 		if !ok || interfaces.IsSymbolicWorkerModelProviderDefault(provider) {
 			return ChildExecutionRequest{}, fmt.Errorf("agent.run() has unsupported effective modelProvider %q", req.ModelProvider)
 		}
-		if explicitProvider == "" {
-			req.ModelProvider = provider
+		// Authored built-ins use public uppercase vocabulary, while provider
+		// registries use their canonical command identities.
+		if internal, builtIn := interfaces.InternalModelProviderFromPublicWorkerModelProvider(provider); builtIn {
+			req.ModelProvider = string(internal)
+		} else {
+			req.ModelProvider = strings.TrimSpace(req.ModelProvider)
 		}
 	}
 	if effort, ok := interfaces.CanonicalizeReasoningEffort(req.ReasoningEffort); req.ReasoningEffort != "" {

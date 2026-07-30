@@ -374,33 +374,9 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 		return err
 	}
 	cfg.HomeDir = homeDir
-	if rootOptions.loadOperatorConfig != nil {
-		operatorConfig, loadErr := rootOptions.loadOperatorConfig(operatorconfig.DefaultConfigPath(homeDir))
-		if loadErr != nil && !errors.Is(loadErr, syscall.ENOTDIR) {
-			return loadErr
-		}
-		if loadErr == nil {
-			cfg.ACPIntegrations = append([]operatorconfig.ACPIntegration(nil), operatorConfig.Workers.ACP.Integrations...)
-			if err := rootOptions.acp.Configure(cmd.Context(), operatorConfig.Workers.ACP.Integrations); err != nil {
-				return err
-			}
-		}
-	}
-	modelCacheDir, _, err := lookupProcessEnvironment(
-		rootOptions,
-		runcli.ModelCacheDirEnvironment,
-	)
-	if err != nil {
+	if err := configureRunEnvironment(cmd, &cfg, rootOptions, homeDir); err != nil {
 		return err
 	}
-	cfg.ModelCacheDir = modelCacheDir
-	cfg.FactoryScaffoldInitializer = rootOptions.InitFactory
-	cfg.ResolveCurrentFactoryDir = rootOptions.resolveCurrentFactoryDir
-	cfg.ResolveFactoryConfigRoot = rootOptions.resolveFactoryConfigRoot
-	cfg.LoadFactoryConfigFile = rootOptions.loadFactoryConfigFile
-	cfg.WorkRequestFileLoader = rootOptions.workRequestFileLoader
-	cfg.DirectoryCreator = rootOptions.runDirectoryCreator
-	cfg.BrowserOpener = rootOptions.browserOpener
 	if err := resolveRunFactorySelection(
 		cmd,
 		&cfg,
@@ -429,7 +405,8 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 	}
 	cleanInvocation, textInvocation := runInvocationModes(cmd, cfg)
 	invocationFactorySelected := cmd.Flags().Changed("factory") || cmd.Flags().Changed("named")
-	defaultResponseStream := textInvocation || (invocationFactorySelected && !cfg.Continuously && !cmd.Flags().Changed("work") && len(promptArgs) > 0)
+	defaultResponseStream := !cfg.SuppressDashboardRendering &&
+		(textInvocation || (invocationFactorySelected && !cfg.Continuously && !cmd.Flags().Changed("work") && len(promptArgs) > 0))
 	if defaultResponseStream && strings.TrimSpace(cfg.InvocationOutputMode) == "" && !cfg.InvocationOutputExplicit {
 		cfg.InvocationOutputMode = runcli.InvocationOutputResponseStream
 	}
@@ -454,6 +431,37 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 		return errors.New("run service initializer is required")
 	}
 	return delegateRunInitialization(cmd.Context(), cfg, defaultInvocation, rootOptions)
+}
+
+func configureRunEnvironment(cmd *cobra.Command, cfg *runcli.RunConfig, rootOptions CommandFactory, homeDir string) error {
+	if rootOptions.loadOperatorConfig != nil {
+		operatorConfig, loadErr := rootOptions.loadOperatorConfig(operatorconfig.DefaultConfigPath(homeDir))
+		if loadErr != nil && !errors.Is(loadErr, syscall.ENOTDIR) {
+			return loadErr
+		}
+		if loadErr == nil {
+			cfg.ACPIntegrations = append([]operatorconfig.ACPIntegration(nil), operatorConfig.Workers.ACP.Integrations...)
+			if err := rootOptions.acp.Configure(cmd.Context(), operatorConfig.Workers.ACP.Integrations); err != nil {
+				return err
+			}
+		}
+	}
+	modelCacheDir, _, err := lookupProcessEnvironment(
+		rootOptions,
+		runcli.ModelCacheDirEnvironment,
+	)
+	if err != nil {
+		return err
+	}
+	cfg.ModelCacheDir = modelCacheDir
+	cfg.FactoryScaffoldInitializer = rootOptions.InitFactory
+	cfg.ResolveCurrentFactoryDir = rootOptions.resolveCurrentFactoryDir
+	cfg.ResolveFactoryConfigRoot = rootOptions.resolveFactoryConfigRoot
+	cfg.LoadFactoryConfigFile = rootOptions.loadFactoryConfigFile
+	cfg.WorkRequestFileLoader = rootOptions.workRequestFileLoader
+	cfg.DirectoryCreator = rootOptions.runDirectoryCreator
+	cfg.BrowserOpener = rootOptions.browserOpener
+	return nil
 }
 
 func delegateRunInitialization(ctx context.Context, cfg runcli.RunConfig, defaultInvocation bool, options CommandFactory) error {

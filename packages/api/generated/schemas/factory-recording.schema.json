@@ -5353,8 +5353,12 @@
     },
     "WorkstationCron": {
       "additionalProperties": false,
-      "description": "Trigger timing for cron workstations. Cron workstations use a schedule expression; interval triggers are not supported.",
+      "description": "Trigger timing for scheduled workstations. Provide exactly one of a five-field cron schedule or a positive duration in every; Factory validation enforces the exclusive choice.",
       "properties": {
+        "every": {
+          "description": "Positive Go duration interval, such as 30s, 5m, 1h, or 1h30m, used instead of schedule.",
+          "type": "string"
+        },
         "expiryWindow": {
           "description": "Positive Go duration after due_at before a stale cron time token expires and can be consumed by the system expiry transition. Defaults to the duration until the next scheduled cron fire when omitted.",
           "type": "string"
@@ -5373,9 +5377,6 @@
           "type": "boolean"
         }
       },
-      "required": [
-        "schedule"
-      ],
       "type": "object"
     },
     "WorkstationGuard": {
@@ -5477,6 +5478,11 @@
         "maxExecutionTime": {
           "description": "Go duration limit for one dispatch attempt before it times out.",
           "type": "string"
+        },
+        "maxGeneratedWorkItems": {
+          "description": "Maximum number of Work items one accepted worker-emitted FACTORY_REQUEST_BATCH may contain.",
+          "minimum": 1,
+          "type": "integer"
         },
         "maxRetries": {
           "description": "Maximum number of retry attempts after a failed dispatch before the workstation gives up.",

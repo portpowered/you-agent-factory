@@ -1,0 +1,146 @@
+{
+  "description": {
+    "type": "LOCALIZABLE_ASSET",
+    "value": "Plans an exact number of independent tasks, runs them concurrently, and merges their results into one answer."
+  },
+  "examples": [
+    {
+      "args": {
+        "count": "10",
+        "request": "research the best places to travel"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Plan ten travel research tasks, execute them concurrently, and merge their findings."
+      },
+      "name": "ten-travel-researchers"
+    }
+  ],
+  "id": "builtin-spawn",
+  "invocationSignature": {
+    "parameters": [
+      {
+        "bindings": [
+          {
+            "kind": "POSITIONAL",
+            "position": 1
+          },
+          {
+            "kind": "STDIN"
+          },
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "description": "Request to decompose, execute, and merge.",
+        "externalName": "to",
+        "name": "request",
+        "required": true
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "description": "Exact number of independently executed tasks, from 1 through 14.",
+        "externalName": "count",
+        "name": "count",
+        "required": true,
+        "typeHint": "NUMBER_STRING"
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "description": "Optional executor provider for planner, task, and merge agents.",
+        "externalName": "worker-provider",
+        "name": "executorProvider"
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "description": "Optional model provider for planner, task, and merge agents.",
+        "externalName": "model-provider",
+        "name": "modelProvider"
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "description": "Optional model for planner, task, and merge agents.",
+        "externalName": "worker-model",
+        "name": "model"
+      }
+    ]
+  },
+  "name": "spawn",
+  "orchestrator": {
+    "javascript": {
+      "argsSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "maximum": 14,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "executorProvider": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "model": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "modelProvider": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "request": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "request",
+          "count"
+        ],
+        "type": "object"
+      },
+      "defaultPolicy": {
+        "allowConnectors": false,
+        "allowDangerFullAccess": false,
+        "allowNetwork": false,
+        "concurrency": 8,
+        "maxAgents": 16,
+        "maxDepth": 1,
+        "maxRetries": 0,
+        "mode": "READ_ONLY",
+        "writableRoots": []
+      },
+      "sourceRef": "scripts/spawn.workflow.js"
+    },
+    "kind": "JAVASCRIPT"
+  },
+  "supportingFiles": {
+    "bundledFiles": [
+      {
+        "content": {
+          "encoding": "utf-8",
+          "inline": "return (async function () {\n  const requiredCalls = args.count + 2;\n  const budget = workflow.budget();\n  if (requiredCalls \u003e budget.maxAgents) {\n    throw \"spawn requires \" + requiredCalls + \" agent calls but maxAgents is \" + budget.maxAgents;\n  }\n  phase(\"task-planning\");\n  const plan = await agent.run({\n    label: \"spawn-planner\",\n    prompt: \"Decompose the request into exactly \" + args.count + \" distinct, non-empty, independent tasks. \" +\n      \"Return only a JSON array of strings with exactly that length.\\n\\nRequest:\\n\" + args.request,\n    executorProvider: args.executorProvider || \"\",\n    modelProvider: args.modelProvider || \"\",\n    model: args.model || \"\",\n  });\n  if (plan.status !== \"COMPLETED\") {\n    throw \"spawn planner failed\";\n  }\n\n  let tasks;\n  try {\n    const planText = plan.output.text.trim();\n    const planStart = planText.indexOf(\"[\");\n    const planEnd = planText.lastIndexOf(\"]\");\n    if (planStart \u003c 0 || planEnd \u003c planStart) {\n      throw \"missing task array\";\n    }\n    tasks = JSON.parse(planText.slice(planStart, planEnd + 1));\n  } catch (_) {\n    throw \"spawn planner returned invalid JSON\";\n  }\n  if (!Array.isArray(tasks) || tasks.length !== args.count) {\n    throw \"spawn planner must return exactly \" + args.count + \" tasks\";\n  }\n  const seen = {};\n  for (let index = 0; index \u003c tasks.length; index += 1) {\n    if (typeof tasks[index] !== \"string\" || tasks[index].trim() === \"\") {\n      throw \"spawn planner task \" + (index + 1) + \" is empty\";\n    }\n    const key = tasks[index].trim().toLowerCase();\n    if (seen[key]) {\n      throw \"spawn planner returned duplicate tasks\";\n    }\n    seen[key] = true;\n    tasks[index] = tasks[index].trim();\n  }\n\n  phase(\"task-execution\");\n  const specs = [];\n  for (let index = 0; index \u003c tasks.length; index += 1) {\n    specs.push({\n      label: \"spawn-task-\" + (index + 1),\n      prompt: \"Complete only the assigned task and return concise findings for the merger.\\n\\nOverall request:\\n\" +\n        args.request + \"\\n\\nAssigned task \" + (index + 1) + \":\\n\" + tasks[index],\n      executorProvider: args.executorProvider || \"\",\n      modelProvider: args.modelProvider || \"\",\n      model: args.model || \"\",\n    });\n  }\n  const results = await parallel(specs);\n  const findings = [];\n  for (let index = 0; index \u003c results.length; index += 1) {\n    if (results[index].status !== \"COMPLETED\") {\n      throw \"spawn task \" + (index + 1) + \" failed\";\n    }\n    findings.push({\n      index: index + 1,\n      task: tasks[index],\n      result: results[index].output.text,\n    });\n  }\n\n  phase(\"result-merge\");\n  const merged = await agent.run({\n    label: \"spawn-merger\",\n    prompt: \"Merge every ordered task result into one complete answer to the original request. \" +\n      \"Do not omit a task and call out material disagreements.\\n\\nRequest:\\n\" + args.request +\n      \"\\n\\nOrdered results:\\n\" + JSON.stringify(findings),\n    executorProvider: args.executorProvider || \"\",\n    modelProvider: args.modelProvider || \"\",\n    model: args.model || \"\",\n  });\n  if (merged.status !== \"COMPLETED\") {\n    throw \"spawn merger failed\";\n  }\n\n  return {\n    request: args.request,\n    count: args.count,\n    tasks: tasks,\n    findings: findings,\n    merged: merged.output,\n  };\n})();\n"
+        },
+        "id": "factory/scripts/spawn.workflow.js",
+        "targetPath": "factory/scripts/spawn.workflow.js",
+        "type": "SCRIPT"
+      }
+    ]
+  }
+}

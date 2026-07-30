@@ -63,11 +63,11 @@ func (s *Service) WithCommandRunners(providerRunner, scriptRunner workers.Comman
 	if providerRunner != nil {
 		clone.providerCommandRunner = providerRunner
 		clone.providerCommandInjected = true
-		reboundRegistry, err := rebindProviderRegistry(s.providerRegistry, providerRunner, s.providerRegistryRebinder)
+		reboundRegistry, reboundProviders, err := rebindProviderRegistry(s.providerRegistry, providerRunner, s.providerRegistryRebinder)
 		if err != nil {
 			return nil, err
 		}
-		if err := applyReboundProviderRegistry(&clone, reboundRegistry); err != nil {
+		if err := applyReboundProviderRegistry(&clone, reboundRegistry, reboundProviders); err != nil {
 			return nil, err
 		}
 	}

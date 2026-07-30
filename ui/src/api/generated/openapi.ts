@@ -2592,6 +2592,10 @@ export interface components {
       project: string;
       /** @description URL-safe Factory catalog identity. */
       slug: string;
+      /** @description Localized customer-facing explanation of what this packaged Factory does. */
+      description: components["schemas"]["NameValue"];
+      /** @description Representative runnable invocations published by this packaged Factory. */
+      examples: components["schemas"]["FactoryInvocationExample"][];
       /** @description Canonical Factory JSON artifact. */
       json: {
         [key: string]: unknown;
@@ -4680,6 +4684,8 @@ export interface components {
       maxRetries?: number;
       /** @description Go duration limit for one dispatch attempt before it times out. */
       maxExecutionTime?: string;
+      /** @description Maximum number of Work items one accepted worker-emitted FACTORY_REQUEST_BATCH may contain. */
+      maxGeneratedWorkItems?: number;
     };
     /**
      * @description Scheduling kind for a workstation, which determines how the engine schedules and dispatches work to it. Standard workstations are scheduled as soon as their inputs are ready, and can have multiple work items in-flight at the same time.  Repeater workstations are triggered whenever their inputs change, and will reloop the outputs on rejection back to the initial place. Cron workstations create internal time work and dispatch their configured worker when time and input guards are satisfied. Poller workstations bind a poller-capable worker that the service runtime supervises as a long-lived ingress loop.
@@ -4692,10 +4698,12 @@ export interface components {
      * @enum {string}
      */
     WorkstationType: WorkstationType;
-    /** @description Trigger timing for cron workstations. Cron workstations use a schedule expression; interval triggers are not supported. */
+    /** @description Trigger timing for scheduled workstations. Provide exactly one of a five-field cron schedule or a positive duration in every; Factory validation enforces the exclusive choice. */
     WorkstationCron: {
       /** @description Standard five-field cron expression used to produce internal time work while the factory service is running. */
-      schedule: string;
+      schedule?: string;
+      /** @description Positive Go duration interval, such as 30s, 5m, 1h, or 1h30m, used instead of schedule. */
+      every?: string;
       /**
        * @description When true, service startup submits one immediate internal time work item before waiting for the next scheduled cron fire.
        * @default false

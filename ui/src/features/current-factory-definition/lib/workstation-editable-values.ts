@@ -66,10 +66,10 @@ type CanonicalInputGuard = NonNullable<
   CanonicalWorkstationInput["guards"]
 >[number];
 
-export type EditableWorkstationCronDraft = Pick<
-  components["schemas"]["WorkstationCron"],
-  "schedule" | "triggerAtStart"
-> & {
+export type EditableWorkstationCronDraft = {
+  /** The editor currently authors cron expressions; empty until provided. */
+  schedule: string;
+  triggerAtStart: components["schemas"]["WorkstationCron"]["triggerAtStart"];
   /** Empty when omitted from the factory definition. */
   expiryWindow: string;
   /** Empty when omitted from the factory definition. */

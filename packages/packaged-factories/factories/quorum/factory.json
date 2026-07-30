@@ -1,14 +1,15 @@
 {
   "name": "@you/quorum",
   "id": "builtin-quorum",
+  "description": {"type":"LOCALIZABLE_ASSET","value":"Runs independent assessments in parallel and merges them into one final answer."},
   "invocationReturn": {"policy":"EXPLICIT","workTypeName":"quorum-merge","terminalState":"complete"},
   "invocationSignature": {
     "parameters": [
-      {"name":"input","description":"Text request evaluated by the quorum workers.","required":true,"bindings":[{"kind":"POSITIONAL","position":1},{"kind":"STDIN"}]},
-      {"name":"branchProvider","description":"Provider for both independent quorum branch workers. Defaults to CODEX.","externalName":"branch-provider","aliases":["bp"],"choices":["CLAUDE","CODEX"],"defaultValue":"CODEX","bindings":[{"kind":"NAMED"}]},
-      {"name":"branchModel","description":"Model for both independent quorum branch workers. Defaults to gpt-5.","externalName":"branch-model","aliases":["bm"],"defaultValue":"gpt-5","bindings":[{"kind":"NAMED"}]},
-      {"name":"mergeProvider","description":"Provider for the final quorum merge worker. Defaults to CODEX.","externalName":"merge-provider","aliases":["mp"],"choices":["CLAUDE","CODEX"],"defaultValue":"CODEX","bindings":[{"kind":"NAMED"}]},
-      {"name":"mergeModel","description":"Model for the final quorum merge worker. Defaults to gpt-5.","externalName":"merge-model","aliases":["mm"],"defaultValue":"gpt-5","bindings":[{"kind":"NAMED"}]}
+      {"name":"input","description":"Text request evaluated by the quorum workers.","externalName":"to","required":true,"bindings":[{"kind":"POSITIONAL","position":1},{"kind":"STDIN"},{"kind":"NAMED"}]},
+      {"name":"branchProvider","description":"Provider for both independent quorum branch workers; omitted values use operator defaults.","externalName":"branch-provider","aliases":["bp"],"defaultValues":[""],"bindings":[{"kind":"NAMED"}]},
+      {"name":"branchModel","description":"Model for both independent quorum branch workers; omitted values use operator defaults.","externalName":"branch-model","aliases":["bm"],"defaultValues":[""],"bindings":[{"kind":"NAMED"}]},
+      {"name":"mergeProvider","description":"Provider for the final quorum merge worker; omitted values use operator defaults.","externalName":"merge-provider","aliases":["mp"],"defaultValues":[""],"bindings":[{"kind":"NAMED"}]},
+      {"name":"mergeModel","description":"Model for the final quorum merge worker; omitted values use operator defaults.","externalName":"merge-model","aliases":["mm"],"defaultValues":[""],"bindings":[{"kind":"NAMED"}]}
     ]
   },
   "examples": [

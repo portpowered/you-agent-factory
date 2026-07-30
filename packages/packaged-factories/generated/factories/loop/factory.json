@@ -1,0 +1,231 @@
+{
+  "description": {
+    "type": "LOCALIZABLE_ASSET",
+    "value": "Runs the requested task at a duration interval such as 1h for the lifetime of the Factory Session."
+  },
+  "examples": [
+    {
+      "args": {
+        "every": "1h",
+        "request": "Check dependency updates"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Check dependency updates once per hour."
+      },
+      "name": "hourly-dependency-check"
+    }
+  ],
+  "id": "builtin-loop",
+  "invocationSignature": {
+    "parameters": [
+      {
+        "bindings": [
+          {
+            "kind": "POSITIONAL",
+            "position": 1
+          },
+          {
+            "kind": "STDIN"
+          },
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "description": "Request to execute at each interval.",
+        "externalName": "to",
+        "name": "request",
+        "required": true
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "description": "Positive duration interval from 1s through 168h, such as 30s, 5m, 1h, or 1h30m.",
+        "externalName": "every",
+        "name": "every",
+        "required": true
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "defaultValue": "false",
+        "description": "Run once immediately after the controller Work is admitted.",
+        "externalName": "trigger-at-start",
+        "name": "triggerAtStart"
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "defaultValue": "0",
+        "description": "Stop scheduling after this many consecutive failed executions; zero continues indefinitely.",
+        "externalName": "max-consecutive-failures",
+        "name": "maxConsecutiveFailures",
+        "typeHint": "NUMBER_STRING"
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "defaultValues": [
+          ""
+        ],
+        "description": "Model provider for each scheduled execution; omitted values use operator defaults.",
+        "externalName": "executor-provider",
+        "name": "executorProvider"
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "defaultValues": [
+          ""
+        ],
+        "description": "Model for each scheduled execution; omitted values use operator defaults.",
+        "externalName": "executor-model",
+        "name": "executorModel"
+      }
+    ]
+  },
+  "name": "loop",
+  "resources": [
+    {
+      "capacity": 1,
+      "name": "loop-executor-slot"
+    }
+  ],
+  "workTypes": [
+    {
+      "handlingBehavior": [
+        "DEFAULT"
+      ],
+      "name": "loop-controller",
+      "states": [
+        {
+          "name": "active",
+          "type": "INITIAL"
+        },
+        {
+          "name": "stopped",
+          "type": "TERMINAL"
+        },
+        {
+          "name": "failed",
+          "type": "FAILED"
+        }
+      ]
+    },
+    {
+      "name": "scheduled-execution",
+      "states": [
+        {
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "name": "complete",
+          "type": "TERMINAL"
+        },
+        {
+          "name": "skipped",
+          "type": "TERMINAL"
+        },
+        {
+          "name": "failed",
+          "type": "FAILED"
+        }
+      ]
+    }
+  ],
+  "workers": [
+    {
+      "body": "Preserve the controller request and emit one scheduled execution.",
+      "name": "loop-trigger",
+      "type": "AGENT_WORKER"
+    },
+    {
+      "body": "Execute the scheduled request exactly once and report the result.",
+      "model": "${executorModel}",
+      "modelProvider": "${executorProvider}",
+      "name": "loop-executor",
+      "type": "AGENT_WORKER"
+    }
+  ],
+  "workstations": [
+    {
+      "behavior": "CRON",
+      "cron": {
+        "every": "${every}"
+      },
+      "inputs": [
+        {
+          "state": "active",
+          "workType": "loop-controller"
+        }
+      ],
+      "name": "schedule-loop-request",
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "loop-controller"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "active",
+          "workType": "loop-controller"
+        },
+        {
+          "state": "init",
+          "workType": "scheduled-execution"
+        }
+      ],
+      "workPropagation": {
+        "mode": "PRESERVE_INPUT"
+      },
+      "worker": "loop-trigger"
+    },
+    {
+      "body": "Execute this recurring request exactly once.\n\n${request}",
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "scheduled-execution"
+        }
+      ],
+      "name": "execute-loop-request",
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "scheduled-execution"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "complete",
+          "workType": "scheduled-execution"
+        }
+      ],
+      "resources": [
+        {
+          "capacity": 1,
+          "name": "loop-executor-slot"
+        }
+      ],
+      "type": "AGENT_RUN",
+      "worker": "loop-executor"
+    }
+  ]
+}

@@ -2,6 +2,7 @@ package wire
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
@@ -10,8 +11,14 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func codexWireTestOutput(content string) []byte {
+	item, _ := json.Marshal(map[string]any{"type": "item.completed", "item": map[string]any{"id": "message", "type": "agent_message", "text": content}})
+	return []byte("{\"type\":\"turn.started\"}\n" + string(item) + "\n{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}\n")
+}
 
 type wireTestProvider struct{}
 
@@ -67,6 +74,39 @@ func TestProvideConductorInvocationWithProgressFactory_AcceptsWorkersProviderReg
 	}
 }
 
+func TestProvideConductorInvocationWithProgressFactory_ExecutesCodexThroughInjectedRunner(t *testing.T) {
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: codexWireTestOutput("child result")})
+	edges := serviceedges.Edges{ProviderCommandRunner: runner}
+	providersService, err := provideProvidersService(edges)
+	if err != nil {
+		t.Fatalf("provideProvidersService() error = %v", err)
+	}
+	registry, err := provideProviderRegistry(edges, providersService)
+	if err != nil {
+		t.Fatalf("provideProviderRegistry() error = %v", err)
+	}
+	allocator, err := provideAgyPTYAllocator(edges)
+	if err != nil {
+		t.Fatalf("provideAgyPTYAllocator() error = %v", err)
+	}
+	executor, err := provideConductorInvocationWithProgressFactory(providersService, edges)(
+		registry, provideWorkerCommandRunnerAdapter()(runner), allocator, nil,
+	)
+	if err != nil {
+		t.Fatalf("construct invocation executor: %v", err)
+	}
+	result, err := executor.Execute(t.Context(), workers.InvocationInput{Request: workers.ProviderInferenceRequest{
+		Dispatch: work.WorkDispatch{DispatchID: "wire-codex-child"},
+		RunnerID: "codex", ModelProvider: "codex", Model: "gpt-5", UserMessage: "do work",
+	}})
+	if err != nil {
+		t.Fatalf("execute Codex child: %v; result=%#v", err, result)
+	}
+	if runner.CallCount() != 1 || result.Response.Content != "child result" {
+		t.Fatalf("runner calls=%d result=%#v", runner.CallCount(), result)
+	}
+}
+
 func TestProvideConductorInvocationWithProgressFactory_AcceptsRootRegistry(t *testing.T) {
 	t.Parallel()
 
@@ -91,9 +131,7 @@ func TestProvideConductorInvocationWithProgressFactory_AcceptsRootRegistry(t *te
 func TestProvideFactorySessionExecutionFactory_BuildsLiveChildInvocation(t *testing.T) {
 	t.Parallel()
 
-	edges := serviceedges.Edges{
-		ProviderCommandRunner: testutil.NewProviderCommandRunner(),
-	}
+	edges := serviceedges.Edges{}
 	providersService, err := provideProvidersService(edges)
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)

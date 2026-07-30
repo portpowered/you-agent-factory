@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -99,21 +101,24 @@ func TestPackagedFusionOptionalInputsReachWorkers(t *testing.T) {
 		t.TempDir(),
 		factorydefinitions.PackagedFusionFactoryName,
 	)
+	runner := support.NewRecordingCommandRunner("mock worker accepted")
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                factoryDir,
-		UseMockWorkers:            true,
 		WaitForServiceModeRuntime: true,
+		Edges: serviceedges.Edges{
+			ProviderCommandRunner: runner,
+		},
 	})
 
 	args := map[string]any{
-		"input":           input,
-		"firstProvider":   "CLAUDE",
-		"secondProvider":  "CODEX",
-		"firstModel":      "claude-sonnet-4-20250514",
-		"secondModel":     "gpt-5",
-		"firstEffort":     "low",
-		"secondEffort":    "high",
-		"output":          "fusion-optional-overrides.md",
+		"input":          input,
+		"firstProvider":  "CLAUDE",
+		"secondProvider": "CODEX",
+		"firstModel":     "claude-sonnet-4-20250514",
+		"secondModel":    "gpt-5",
+		"firstEffort":    "low",
+		"secondEffort":   "high",
+		"resultFile":     "fusion-optional-overrides.md",
 	}
 	response := startPackagedFusionInvocation(
 		t,
@@ -154,21 +159,12 @@ func TestPackagedFusionOptionalInputsReachWorkers(t *testing.T) {
 	)
 	assertFusionModelRequest(t, modelRequests, "fusion-refiner", "gpt-5")
 
-	providersByDispatch := inferenceProvidersByDispatchID(t, events)
-	assertFusionInferenceProvider(
-		t,
-		providersByDispatch,
-		dispatches[0].DispatchID,
-		"draft-fusion",
-		"claude",
-	)
-	assertFusionInferenceProvider(
-		t,
-		providersByDispatch,
-		dispatches[1].DispatchID,
-		"refine-fusion",
-		"codex",
-	)
+	providerRequests := runner.Requests()
+	if len(providerRequests) != 2 {
+		t.Fatalf("provider requests = %#v, want drafter and refiner commands", providerRequests)
+	}
+	assertFusionProviderCommand(t, providerRequests[0], "claude", "claude-sonnet-4-20250514")
+	assertFusionProviderCommand(t, providerRequests[1], "codex", "gpt-5")
 
 	effortByDispatch := agentRunSystemSummariesByDispatchID(t, events)
 	if !strings.Contains(effortByDispatch[dispatches[0].DispatchID], "Reasoning effort: low") {
@@ -298,37 +294,6 @@ func modelRequestsByWorker(
 	return requests
 }
 
-func inferenceProvidersByDispatchID(
-	t *testing.T,
-	events []factoryapi.FactoryEvent,
-) map[string]string {
-	t.Helper()
-
-	providers := make(map[string]string)
-	for _, event := range events {
-		if event.Type != factoryapi.FactoryEventTypeInferenceResponse {
-			continue
-		}
-		if event.Context.DispatchId == nil || *event.Context.DispatchId == "" {
-			continue
-		}
-		payload, err := event.Payload.AsInferenceResponseEventPayload()
-		if err != nil {
-			t.Fatalf("decode INFERENCE_RESPONSE: %v", err)
-		}
-		if payload.Diagnostics == nil || payload.Diagnostics.Provider == nil ||
-			payload.Diagnostics.Provider.Provider == nil {
-			t.Fatalf(
-				"INFERENCE_RESPONSE for dispatch %q missing provider diagnostics: %#v",
-				*event.Context.DispatchId,
-				payload,
-			)
-		}
-		providers[*event.Context.DispatchId] = *payload.Diagnostics.Provider.Provider
-	}
-	return providers
-}
-
 func agentRunSystemSummariesByDispatchID(
 	t *testing.T,
 	events []factoryapi.FactoryEvent,
@@ -386,30 +351,22 @@ func assertFusionModelRequest(
 	}
 }
 
-func assertFusionInferenceProvider(
+func assertFusionProviderCommand(
 	t *testing.T,
-	providersByDispatch map[string]string,
-	dispatchID, workstationName, wantProvider string,
+	request platformprocess.CommandRequest,
+	wantProvider, wantModel string,
 ) {
 	t.Helper()
 
-	gotProvider, ok := providersByDispatch[dispatchID]
-	if !ok {
-		t.Fatalf(
-			"inference providers = %#v, want provider diagnostics for %q dispatch %q",
-			providersByDispatch,
-			workstationName,
-			dispatchID,
-		)
+	if request.Command != wantProvider {
+		t.Fatalf("provider command = %q, want %q", request.Command, wantProvider)
 	}
-	if gotProvider != wantProvider {
-		t.Fatalf(
-			"%s inference provider = %q, want override %q",
-			workstationName,
-			gotProvider,
-			wantProvider,
-		)
+	for index := 0; index+1 < len(request.Args); index++ {
+		if request.Args[index] == "--model" && request.Args[index+1] == wantModel {
+			return
+		}
 	}
+	t.Fatalf("provider args = %#v, want --model %q", request.Args, wantModel)
 }
 
 func startPackagedFusionInvocation(

@@ -2,7 +2,6 @@ package quorum
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -211,11 +210,7 @@ func runPackagedQuorumCLIJSONInvocation(
 		t.Fatalf("stderr = %q, want empty successful-run stderr", inputs.Stderr())
 	}
 
-	var response factoryapi.InvocationResponse
-	if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stdout())), &response); decodeErr != nil {
-		t.Fatalf("decode invocation JSON stdout: %v\nstdout:\n%s", decodeErr, inputs.Stdout())
-	}
-	return response
+	return support.DecodeInvocationResponseJSON(t, inputs.Stdout())
 }
 
 func runPackagedQuorumCLIJSONFailureInvocation(
@@ -245,10 +240,7 @@ func runPackagedQuorumCLIJSONFailureInvocation(
 	})
 	execErr := process.Execute(inputs.Input)
 
-	var response factoryapi.InvocationResponse
-	if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stdout())), &response); decodeErr != nil {
-		t.Fatalf("decode invocation JSON stdout: %v\nstdout:\n%s", decodeErr, inputs.Stdout())
-	}
+	response := support.DecodeInvocationResponseJSON(t, inputs.Stdout())
 	return response, inputs.Stderr(), execErr
 }
 
