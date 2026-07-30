@@ -313,7 +313,7 @@ multiple experiment IDs to cover all goals.
 | `@you/quorum` | TBD | TBD | TBD | UNVALIDATED | |
 | `@you/review` | TBD | TBD | TBD | UNVALIDATED | |
 | `@you/spawn` | TBD | TBD | TBD | UNVALIDATED | |
-| `@you/subagent` | `BOOT-SUBAGENT-001` (failed twice) | TBD | deterministic invocation coverage | NEEDS_ITERATION | Live Codex returned false-success results after repository inspection failed; provider-native read-only enforcement remains unproven. |
+| `@you/subagent` | `BOOT-SUBAGENT-002` (passed after environment-forwarding fix) | TBD | deterministic invocation coverage | NEEDS_ITERATION | Frozen repository-read canary now passes without tracked mutations; distinct representative workload remains. |
 | `@you/tournament` | TBD | TBD | TBD | UNVALIDATED | |
 | `@you/tts` | TBD | TBD | TBD | UNVALIDATED | |
 
