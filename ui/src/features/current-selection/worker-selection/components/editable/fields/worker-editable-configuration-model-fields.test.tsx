@@ -130,7 +130,13 @@ describe("WorkerEditableConfigurationModelFields", () => {
 
   it("calls model select draft handlers when combobox values change", async () => {
     const user = userEvent.setup();
-    const state = renderModelFields();
+    const state = renderModelFields({
+      draft: {
+        executorProvider: "",
+        modelLocality: "",
+        modelProvider: "CLAUDE",
+      },
+    });
 
     await selectComboboxOption(
       user,

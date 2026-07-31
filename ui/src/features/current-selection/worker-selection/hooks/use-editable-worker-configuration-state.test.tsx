@@ -370,12 +370,12 @@ describe("useEditableWorkerConfigurationState", () => {
           type: "MODEL_WORKER",
         },
         isDirty: true,
-        overwriteFieldNames: expect.arrayContaining(["model", "modelProvider"]),
+        overwriteFieldNames: ["model"],
         status: "ready",
       });
     });
     if (result.current?.status === "ready") {
-      expect(result.current.overwriteFieldNames).toHaveLength(2);
+      expect(result.current.overwriteFieldNames).toHaveLength(1);
     }
   });
 
@@ -417,11 +417,11 @@ describe("useEditableWorkerConfigurationState", () => {
     await waitFor(() => {
       expect(result.current).toMatchObject({
         isDirty: true,
-        overwriteFieldNames: expect.arrayContaining(["model", "modelProvider"]),
+        overwriteFieldNames: ["model"],
         status: "ready",
       });
       if (result.current?.status === "ready") {
-        expect(result.current.overwriteFieldNames).toHaveLength(2);
+        expect(result.current.overwriteFieldNames).toHaveLength(1);
       }
     });
 

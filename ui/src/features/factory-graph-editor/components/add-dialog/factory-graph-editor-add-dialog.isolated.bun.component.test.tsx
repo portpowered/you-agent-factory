@@ -169,7 +169,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
     expect(screen.queryByRole("textbox", { name: "Command" })).toBeNull();
     expect(screen.queryByRole("textbox", { name: "Args" })).toBeNull();
 
-    await selectLabeledComboboxOption(user, "Model provider", "Cursor");
+    await selectLabeledComboboxOption(user, "Model provider", "Codex");
     fireEvent.change(screen.getByRole("textbox", { name: "Model" }), {
       target: { value: "gpt-5.5" },
     });

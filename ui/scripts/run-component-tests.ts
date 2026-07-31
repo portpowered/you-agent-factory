@@ -26,8 +26,10 @@ async function runLane(scriptName: string) {
 }
 
 const startedAt = performance.now();
-await runLane("test:component:bun");
-await runLane("test:component:vitest");
+await Promise.all([
+  runLane("test:component:bun"),
+  runLane("test:component:vitest"),
+]);
 
 const totalDurationMs = performance.now() - startedAt;
 const maxDurationMs = getComponentTestMaxDurationMs();

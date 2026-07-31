@@ -42,9 +42,9 @@
     "react": "^19.0.0"
   },
   "devDependencies": {
-    "@you-agent-factory/client": "file:../client",
-    "@you-agent-factory/components": "file:../components",
-    "@you-agent-factory/factory-replay": "file:../factory-replay",
+    "@you-agent-factory/client": "workspace:*",
+    "@you-agent-factory/components": "workspace:*",
+    "@you-agent-factory/factory-replay": "workspace:*",
     "@types/react": "^19.2.2",
     "@xyflow/react": "^12.10.2",
     "react": "^19.0.0",

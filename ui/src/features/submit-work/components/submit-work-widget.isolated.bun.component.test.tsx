@@ -1,6 +1,6 @@
 // Isolated because Bun module mocks are process-global.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   act,
   cleanup,
@@ -20,7 +20,6 @@ import {
   renderWithDashboardSessionTest,
 } from "../../../testing";
 import { DashboardSessionStoreTestProvider } from "../../../testing/dashboard-session-test-provider";
-import { bunVi as vi } from "../../../testing/bun/vi-compat";
 import { selectLabeledComboboxOption } from "../../../testing/select-test-helpers";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import { getSubmitWorkMessages } from "../messages/submit-work";
@@ -32,14 +31,14 @@ const useCurrentFactoryDefinitionMock = vi.fn(() => ({
   isLoading: false,
 }));
 
-mock.module(
+vi.doMock(
   "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
   () => ({
     useCurrentFactoryDefinition: useCurrentFactoryDefinitionMock,
   }),
 );
 
-mock.module("./invocation/factory-invocation-widget", () => ({
+vi.doMock("./invocation/factory-invocation-widget", () => ({
   FactoryInvocationWidget: ({
     sessionID,
   }: {

@@ -5,7 +5,9 @@
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
     "paths": {
       "@you-agent-factory/components": ["./packages/components/src/index.ts"],
-      "@you-agent-factory/components/*": ["./packages/components/src/*"],
+      "@you-agent-factory/components/*": [
+        "./packages/components/src/*/index.ts"
+      ],
       "@you-agent-factory/client": ["./packages/client/src/index.ts"],
       "@you-agent-factory/factory-emulator": [
         "./packages/factory-emulator/src/index.ts"

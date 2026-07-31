@@ -1,12 +1,11 @@
 // biome-ignore lint/style/noExcessiveLinesPerFile: graph-draft conflict notification regressions share one mocked save/notify harness.
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CurrentFactoryDocument } from "../../../../../api/current-factory-definition";
 import { installDashboardBrowserTestShims } from "../../../../../components/dashboard/test-browser-shims";
 import { semanticWorkflowDashboardSnapshot } from "../../../../../components/dashboard/test-fixtures";
 import { settleCurrentSelectionEffects } from "../../../../../testing/current-selection-test-utils";
-import { bunVi as vi } from "../../../../../testing/bun/vi-compat";
 import { selectLabeledComboboxOption } from "../../../../../testing/select-test-helpers";
 import { useStrictConsoleGuard } from "../../../../../testing/strict-console-guard";
 import { useFactoryGraphTopologyEditorBridge } from "../../../../workflow-activity/state/factory-graph-topology-editor-bridge";
@@ -44,8 +43,8 @@ const useCurrentFactoryDocument = vi.fn<
 const useFactoryDocumentSave = vi.fn();
 const useCurrentWorkstationPromptTemplateValidation = vi.fn();
 
-mock.module("sonner", () => ({ ...actualSonner, toast }));
-mock.module(
+vi.doMock("sonner", () => ({ ...actualSonner, toast }));
+vi.doMock(
   "../../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
   () => ({
     ...currentFactoryDefinitionHooks,
@@ -53,14 +52,14 @@ mock.module(
   }),
 );
 
-mock.module(
+vi.doMock(
   "../../../../current-factory-definition/hooks/useFactoryDocumentSave",
   () => ({
     useFactoryDocumentSave,
   }),
 );
 
-mock.module(
+vi.doMock(
   "../../../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation",
   () => ({
     useCurrentWorkstationPromptTemplateValidation,

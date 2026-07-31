@@ -22,6 +22,7 @@ import { bunVi } from "./vi-compat";
 mock.module("@monaco-editor/react", () => monacoReact);
 mock.module("monaco-editor/esm/vs/editor/editor.all.js", () => monacoEditorAll);
 mock.module("monaco-editor/esm/vs/editor/editor.api.js", () => monacoEditorApi);
+
 const REACT_INTERNALS_KEY =
   "__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE";
 
@@ -148,7 +149,10 @@ for (const key of [
   });
 }
 
-const domMatchers = await import("@testing-library/jest-dom/matchers");
+const {
+  default: _defaultMatchers,
+  ...domMatchers
+} = await import("@testing-library/jest-dom/matchers");
 const { cleanup, configure } = await import("@testing-library/react");
 
 expect.extend(domMatchers);

@@ -1,5 +1,5 @@
-// Isolated because Bun module mocks are process-global.
-import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+// Isolated because module mocks are process-global.
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cleanup,
   fireEvent,
@@ -10,7 +10,6 @@ import {
 import userEvent from "@testing-library/user-event";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import { installDashboardBrowserTestShims } from "../../../../components/dashboard/test-browser-shims";
-import { bunVi as vi } from "../../../../testing/bun/vi-compat";
 import { selectLabeledComboboxOption } from "../../../../testing/select-test-helpers";
 import { expectNoInlineSaveOutcomesIn } from "../../base/components/detail-card/current-selection-save-toast-test-helpers";
 import type {
@@ -26,7 +25,7 @@ const useCurrentFactoryDocumentMock = vi.fn<
   typeof currentFactoryDefinitionHooks.useCurrentFactoryDocument
 >();
 
-mock.module(
+vi.doMock(
   "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
   () => ({
     ...currentFactoryDefinitionHooks,

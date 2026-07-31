@@ -14,7 +14,7 @@ import {
 import type { getHeaderControlsMessages } from "../messages/header-controls";
 
 const SESSION_TAB_ITEM_CLASS =
-  "group relative flex h-12 min-w-0 flex-1 basis-0 items-stretch self-stretch overflow-hidden transition-[opacity,colors,box-shadow]";
+  "group relative flex h-12 min-w-40 max-w-72 flex-none items-stretch self-stretch overflow-hidden transition-[opacity,colors,box-shadow]";
 const SESSION_TAB_BUTTON_CLASS =
   "min-w-0 flex-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
 const SESSION_TAB_CLOSE_BUTTON_CLASS =

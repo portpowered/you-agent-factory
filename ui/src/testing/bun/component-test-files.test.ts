@@ -66,4 +66,17 @@ describe("classifyComponentTestSource", () => {
       ),
     ).toMatchObject({ runner: "bun" });
   });
+
+  it("routes graph-dependent features through Vitest before explicit Bun suffixes", () => {
+    expect(
+      classifyComponentTestSource(
+        "src/features/factory-graph-editor/example.bun.component.test.tsx",
+        "",
+      ),
+    ).toMatchObject({
+      reason:
+        "imports workspace graph packages that Bun resolves through declaration files",
+      runner: "vitest",
+    });
+  });
 });

@@ -1,5 +1,5 @@
-// Isolated because Bun module mocks are process-global.
-import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+// Isolated because module mocks are process-global.
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -10,7 +10,6 @@ import {
 } from "../../../../../components/dashboard/fixtures";
 import { installDashboardBrowserTestShims } from "../../../../../components/dashboard/test-browser-shims";
 import { semanticWorkflowDashboardSnapshot } from "../../../../../components/dashboard/test-fixtures";
-import { bunVi as vi } from "../../../../../testing/bun/vi-compat";
 import { selectLabeledComboboxOption } from "../../../../../testing/select-test-helpers";
 import type { CurrentSelectionState } from "../../../hooks/core/useCurrentSelection";
 import { selectWorkItemExecutionDetails } from "../../../state/executionDetails";
@@ -30,7 +29,7 @@ const useCurrentFactoryDocumentMock = vi.fn<
 const useSaveEditableWorkstationConfigurationMock = vi.fn();
 const useCurrentWorkstationPromptTemplateValidationMock = vi.fn();
 
-mock.module(
+vi.doMock(
   "../../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
   () => ({
     ...currentFactoryDefinitionHooks,
@@ -38,7 +37,7 @@ mock.module(
   }),
 );
 
-mock.module(
+vi.doMock(
   "../../../workstation-selection/hooks/use-save-editable-workstation-configuration",
   () => ({
     useSaveEditableWorkstationConfiguration:
@@ -46,7 +45,7 @@ mock.module(
   }),
 );
 
-mock.module(
+vi.doMock(
   "../../../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation",
   () => ({
     useCurrentWorkstationPromptTemplateValidation:

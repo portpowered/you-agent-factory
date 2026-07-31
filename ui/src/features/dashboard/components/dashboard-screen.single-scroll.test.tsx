@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach } from "vitest";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
@@ -422,7 +423,14 @@ describe("DashboardScreen scroll ownership", () => {
   });
 
   it("renders a tall loaded dashboard while preserving shared widget scrollports", () => {
-    render(<DashboardScreen />);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <DashboardScreen />
+      </QueryClientProvider>,
+    );
 
     const dashboardRoot = screen.getByRole("main");
     const board = screen.getByRole("region", {

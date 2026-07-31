@@ -247,11 +247,11 @@ function SessionTabsContent({
     <>
       <nav
         aria-label={messages.sessionTabsLabel}
-        className="flex min-w-0 flex-1"
+        className="min-w-0 overflow-x-auto overscroll-x-contain"
       >
         <div
           aria-orientation="horizontal"
-          className="flex h-full min-w-0 flex-1 items-stretch gap-1 pr-1"
+          className="inline-flex h-full min-w-max items-stretch gap-1 pr-1"
           role="tablist"
         >
           {sessions.map((session, index) => (
