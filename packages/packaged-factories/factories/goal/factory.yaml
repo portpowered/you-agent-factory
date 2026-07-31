@@ -2,7 +2,7 @@ name: "@you/goal"
 id: builtin-goal
 description:
   type: LOCALIZABLE_ASSET
-  value: Repeatedly works a goal until the executor reports completion or the Factory reaches a failure bound.
+  value: Persists goal progress and repeatedly works the goal until the executor classifies it complete or blocked.
 invocationSignature:
   parameters:
     - name: input
@@ -50,6 +50,8 @@ workTypes:
         type: PROCESSING
       - name: complete
         type: TERMINAL
+      - name: blocked
+        type: PROCESSING
       - name: failed
         type: FAILED
 workers:
@@ -58,27 +60,31 @@ workers:
     skipPermissions: true
     modelProvider: ${executorProvider}
     model: ${executorModel}
-    stopToken: <COMPLETE>
     promptFile: prompts/executor.md
 workstations:
   - name: execute-goal
     type: AGENT_RUN
     behavior: REPEATER
+    outcomeFormat: decision-envelope
     workPropagation:
       mode: PRESERVE_INPUT
     worker: goal-executor
     inputs:
       - workType: goal
         state: init
-    outputs:
-      - workType: goal
-        state: complete
-    onContinue:
-      - workType: goal
-        state: init
-    onRejection:
-      - workType: goal
-        state: init
+    classificationRoutes:
+      - label: accepted
+        outputs:
+          - workType: goal
+            state: complete
+      - label: needs_changes
+        outputs:
+          - workType: goal
+            state: init
+      - label: blocked
+        outputs:
+          - workType: goal
+            state: blocked
     onFailure:
       - workType: goal
         state: failed

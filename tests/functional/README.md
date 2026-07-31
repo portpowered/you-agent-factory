@@ -72,7 +72,7 @@ test results.
 | `guards_batch` | Guard evaluation, dependency gating, fan-in or batch semantics, and request-batch behavior that should fail in one narrow behavior area. |
 | `runtime_api` | Runtime projections, HTTP API behavior, event or state queries, and other externally observable runtime read models. |
 | `providers` | Legacy aggregate provider coverage that remains runnable while scenarios migrate to the dedicated packages below. `make functional-boundary-check` requires the grandfathered inventory to match the remaining root-level tests exactly, so remove a migrated file and its exception together; do not add or reintroduce scenarios here. |
-| `providers/contract` | Provider-neutral extension behavior shared across provider identities. |
+| `providers/contract` | Provider-neutral extension behavior shared across provider identities. This is an approved `pkg-structure` domain/subsection destination and is included in the functional wildcard lane. |
 | `providers/agy`, `providers/claude`, `providers/codex`, `providers/cursor`, `providers/gemini`, `providers/kiro`, `providers/opencode`, `providers/pi` | Behavior owned by the named built-in model provider. |
 | `providers/script` | Script-worker behavior, which is not model-provider behavior. |
 | `providers/mock_workers` | Mock-worker behavior, which is not model-provider behavior. |
@@ -80,6 +80,11 @@ test results.
 | `replay_contracts` | Replay, event-history, and artifact reconstruction behavior that must stay stable across recording and playback surfaces. |
 | `work/transports/cli/submit/unary_contract` | Work-owned unary `you submit` contract proofs: file and stdin payload ingress, default and explicit Factory Session targeting, and structured failure public-message preservation through `root.BuildProcess` + `Process.Execute`. |
 | `bootstrap_portability` | Init, bootstrap, portability, current-factory activation, and checked-in factory portability flows. |
+
+Provider functional scenarios belong under `providers/<subsection>/...`, including
+the provider-neutral `providers/contract` subsection. The package-structure gate
+accepts those subsection paths, while `functional-boundary-check` continues to
+reject new root-level `providers/*_test.go` aggregate files.
 
 ## Shared Support
 

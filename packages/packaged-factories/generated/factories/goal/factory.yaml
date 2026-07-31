@@ -1,6 +1,6 @@
 description:
     type: LOCALIZABLE_ASSET
-    value: Repeatedly works a goal until the executor reports completion or the Factory reaches a failure bound.
+    value: Persists goal progress and repeatedly works the goal until the executor classifies it complete or blocked.
 examples:
     - args:
         input: Implement and verify the requested change
@@ -50,11 +50,13 @@ workTypes:
           type: PROCESSING
         - name: complete
           type: TERMINAL
+        - name: blocked
+          type: PROCESSING
         - name: failed
           type: FAILED
 workers:
     - body: |
-        You are executing goal work {{ (index .Inputs 0).WorkID }} in a bounded repeated
+        You are executing persistent goal work {{ (index .Inputs 0).WorkID }} in a bounded repeated
         workflow. Assume you begin with zero conversational context. Read the complete
         goal, any prior attempt output shown below, repository contributor instructions,
         relevant architecture and source, tests, and current working-tree state before
@@ -67,6 +69,29 @@ workers:
         {{ range (index .Inputs 0).Content }}{{ .Text }}{{ end }}
         {{ end -}}
 
+        Persistent goal state file, relative to the current worker workspace:
+        .you-goals/{{ .Context.SessionID }}/{{ (index .Inputs 0).WorkID }}.json
+
+        The state file is the durable progress record for this goal. Before substantive
+        work, create it when missing or load it when present. Its JSON shape is:
+
+        ```json
+        {
+          "version": 1,
+          "goalId": "the Work ID above",
+          "objective": "the unchanged customer goal",
+          "status": "active | completed | blocked",
+          "iteration": 1,
+          "lastResult": "concise progress from the latest pass",
+          "updatedAt": "RFC3339 timestamp"
+        }
+        ```
+
+        Persist every update atomically: write valid JSON to a sibling temporary file,
+        close it, and replace the state file. Never leave partially written JSON. The
+        iteration increases once per execution pass. Do not replace the original
+        objective with a narrower task.
+
         {{ if gt (index .Inputs 0).History.AttemptNumber 1 -}}
         Previous attempt output:
         {{ (index .Inputs 0).PreviousOutput }}
@@ -78,23 +103,34 @@ workers:
         cases, and report exact verification. Do not respond with open-ended discussion
         or defer an action you can complete in this pass.
 
-        Your final non-empty line is a required machine-readable decision marker:
+        Use the state file's unchanged `objective` as authoritative on later passes,
+        even if the repeated Work payload contains only the previous pass's output.
+        Before returning, persist exactly one of these states:
 
-        - When the goal is complete, it must be exactly `<COMPLETE>`.
-        - When you made ordinary partial progress and need another pass, it must be exactly `<CONTINUE>`.
-        - Otherwise explain what must change, then end with neither marker so the attempt is rejected.
+        - `active` when useful work remains and another pass can make progress.
+        - `completed` only when the full objective is achieved and verified.
+        - `blocked` only when another pass cannot make meaningful progress without
+          user input or an external state change.
 
-        Return a concise response the customer can use, followed by the required marker on its own final line. Never omit the marker for a completed or continuing goal.
+        User or Factory Session termination is an external control. Never infer or emit
+        termination from this classifier contract.
+
+        After the atomic state-file update, return only one JSON decision envelope:
+
+        - Completed: `{"decision":"accepted","output":"concise verified final result"}`
+        - Continue: `{"decision":"needs_changes","feedback":"specific next work","output":"concise progress from this pass"}`
+        - Blocked: `{"decision":"blocked","feedback":"specific blocker","output":"concise progress and blocker"}`
+
+        Do not wrap the envelope in Markdown and do not emit any other decision label.
       model: ${executorModel}
       modelProvider: ${executorProvider}
       name: goal-executor
       skipPermissions: true
-      stopToken: <COMPLETE>
       type: AGENT_WORKER
 workstations:
     - behavior: REPEATER
       body: |
-        You are executing goal work {{ (index .Inputs 0).WorkID }} in a bounded repeated
+        You are executing persistent goal work {{ (index .Inputs 0).WorkID }} in a bounded repeated
         workflow. Assume you begin with zero conversational context. Read the complete
         goal, any prior attempt output shown below, repository contributor instructions,
         relevant architecture and source, tests, and current working-tree state before
@@ -107,6 +143,29 @@ workstations:
         {{ range (index .Inputs 0).Content }}{{ .Text }}{{ end }}
         {{ end -}}
 
+        Persistent goal state file, relative to the current worker workspace:
+        .you-goals/{{ .Context.SessionID }}/{{ (index .Inputs 0).WorkID }}.json
+
+        The state file is the durable progress record for this goal. Before substantive
+        work, create it when missing or load it when present. Its JSON shape is:
+
+        ```json
+        {
+          "version": 1,
+          "goalId": "the Work ID above",
+          "objective": "the unchanged customer goal",
+          "status": "active | completed | blocked",
+          "iteration": 1,
+          "lastResult": "concise progress from the latest pass",
+          "updatedAt": "RFC3339 timestamp"
+        }
+        ```
+
+        Persist every update atomically: write valid JSON to a sibling temporary file,
+        close it, and replace the state file. Never leave partially written JSON. The
+        iteration increases once per execution pass. Do not replace the original
+        objective with a narrower task.
+
         {{ if gt (index .Inputs 0).History.AttemptNumber 1 -}}
         Previous attempt output:
         {{ (index .Inputs 0).PreviousOutput }}
@@ -118,29 +177,46 @@ workstations:
         cases, and report exact verification. Do not respond with open-ended discussion
         or defer an action you can complete in this pass.
 
-        Your final non-empty line is a required machine-readable decision marker:
+        Use the state file's unchanged `objective` as authoritative on later passes,
+        even if the repeated Work payload contains only the previous pass's output.
+        Before returning, persist exactly one of these states:
 
-        - When the goal is complete, it must be exactly `<COMPLETE>`.
-        - When you made ordinary partial progress and need another pass, it must be exactly `<CONTINUE>`.
-        - Otherwise explain what must change, then end with neither marker so the attempt is rejected.
+        - `active` when useful work remains and another pass can make progress.
+        - `completed` only when the full objective is achieved and verified.
+        - `blocked` only when another pass cannot make meaningful progress without
+          user input or an external state change.
 
-        Return a concise response the customer can use, followed by the required marker on its own final line. Never omit the marker for a completed or continuing goal.
+        User or Factory Session termination is an external control. Never infer or emit
+        termination from this classifier contract.
+
+        After the atomic state-file update, return only one JSON decision envelope:
+
+        - Completed: `{"decision":"accepted","output":"concise verified final result"}`
+        - Continue: `{"decision":"needs_changes","feedback":"specific next work","output":"concise progress from this pass"}`
+        - Blocked: `{"decision":"blocked","feedback":"specific blocker","output":"concise progress and blocker"}`
+
+        Do not wrap the envelope in Markdown and do not emit any other decision label.
+      classificationRoutes:
+        - label: accepted
+          outputs:
+            - state: complete
+              workType: goal
+        - label: needs_changes
+          outputs:
+            - state: init
+              workType: goal
+        - label: blocked
+          outputs:
+            - state: blocked
+              workType: goal
       inputs:
         - state: init
           workType: goal
       name: execute-goal
-      onContinue:
-        - state: init
-          workType: goal
       onFailure:
         - state: failed
           workType: goal
-      onRejection:
-        - state: init
-          workType: goal
-      outputs:
-        - state: complete
-          workType: goal
+      outcomeFormat: decision-envelope
       promptFile: prompts/executor.md
       type: AGENT_RUN
       workPropagation:

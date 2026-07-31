@@ -108,6 +108,13 @@ func (r *MockWorkerCommandRunner) runNext(ctx context.Context, req workers.Comma
 
 func (r *MockWorkerCommandRunner) acceptResult(req workers.CommandRequest) workers.CommandResult {
 	output := defaultMockWorkerAcceptedOutput
+	if r.RuntimeConfig != nil && req.WorkstationName != "" {
+		if def, ok := r.RuntimeConfig.Workstation(req.WorkstationName); ok &&
+			def != nil && def.OutcomeFormat == interfaces.WorkstationOutcomeFormatDecisionEnvelope {
+			output = `{"decision":"ACCEPTED","output":"` + defaultMockWorkerAcceptedOutput + `"}`
+			return workers.CommandResult{Stdout: []byte(mockAcceptStdout(req.Command, output))}
+		}
+	}
 	if r.RuntimeConfig != nil && req.WorkerType != "" {
 		if def, ok := r.RuntimeConfig.Worker(req.WorkerType); ok && def != nil && def.StopToken != "" {
 			output += "\n" + def.StopToken
