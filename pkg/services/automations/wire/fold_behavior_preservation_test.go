@@ -183,9 +183,9 @@ func TestWireFoldPreservesHostedPollerSupervisionFailure(t *testing.T) {
 	ports := validConstructionPorts(t)
 	ports.hostedSources = func(
 		*zap.Logger,
-		workers.HostedPollerClock,
-		workers.HostedPollerHTTPDoer,
-		workers.HostedPollerSecretResolver,
+		automations.HostedLinearClock,
+		automations.HostedLinearHTTPDoer,
+		automations.HostedLinearSecretResolver,
 		string,
 	) automations.HostedPollers {
 		return hostedPollers
@@ -276,9 +276,9 @@ func TestWireFoldPreservesHostedSourcesFactoryComposition(t *testing.T) {
 	ports := validConstructionPorts(t)
 	ports.hostedSources = func(
 		logger *zap.Logger,
-		clock workers.HostedPollerClock,
-		httpClient workers.HostedPollerHTTPDoer,
-		secrets workers.HostedPollerSecretResolver,
+		clock automations.HostedLinearClock,
+		httpClient automations.HostedLinearHTTPDoer,
+		secrets automations.HostedLinearSecretResolver,
 		endpoint string,
 	) automations.HostedPollers {
 		factoryCalls++

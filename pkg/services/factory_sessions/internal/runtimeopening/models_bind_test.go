@@ -434,9 +434,9 @@ func openingCoordinatorRecorder(
 
 func openingCoordinatorHostedPollers(
 	*zap.Logger,
-	workers.HostedPollerClock,
-	workers.HostedPollerHTTPDoer,
-	workers.HostedPollerSecretResolver,
+	automations.HostedLinearClock,
+	automations.HostedLinearHTTPDoer,
+	automations.HostedLinearSecretResolver,
 	string,
 ) automations.HostedPollers {
 	return nil

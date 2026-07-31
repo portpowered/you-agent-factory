@@ -7,7 +7,6 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
-	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 )
@@ -23,7 +22,7 @@ func provideRuntimeProviderBindings(
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("construct runtime Providers service: %w", err)
 	}
-	runtimeRegistry, err := providerswire.NewWorkersRegistry(context.Background(), runtimeProviders)
+	runtimeRegistry, err := workerswire.NewProviderRegistry(context.Background(), runtimeProviders)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("construct runtime provider registry: %w", err)
 	}
@@ -32,7 +31,7 @@ func provideRuntimeProviderBindings(
 		if rebuildErr != nil {
 			return nil, nil, rebuildErr
 		}
-		reboundRegistry, registryErr := providerswire.NewWorkersRegistry(context.Background(), reboundProviders)
+		reboundRegistry, registryErr := workerswire.NewProviderRegistry(context.Background(), reboundProviders)
 		return reboundRegistry, reboundProviders, registryErr
 	})
 	return runtimeRegistry, runtimeProviders, rebinder, nil

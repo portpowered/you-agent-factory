@@ -668,8 +668,8 @@ func TestRulePollerWorkstations_RejectsUnsupportedWorkerType(t *testing.T) {
 	if findings[0].Path != "workstations[0](linear-poller).worker" {
 		t.Fatalf("expected path to name poller workstation and worker field, got %q", findings[0].Path)
 	}
-	if got := findings[0].Message; !containsAll(got, `poller workstation "linear-poller"`, `worker "planner"`, `MODEL_WORKER`) {
-		t.Fatalf("expected explicit poller/worker relationship in message, got %q", got)
+	if got := findings[0].Message; !containsAll(got, `poller workstation "linear-poller"`, `worker "planner"`, `MODEL_WORKER`, `Automations-owned`) {
+		t.Fatalf("expected explicit Automations-owned poller/worker relationship in message, got %q", got)
 	}
 }
 

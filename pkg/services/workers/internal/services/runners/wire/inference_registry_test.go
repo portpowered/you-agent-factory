@@ -69,7 +69,10 @@ func TestNewInferenceRegistryIsInertAndResolvesDetachedMetadata(t *testing.T) {
 		t.Fatalf("second metadata = %#v, want detached registry snapshot", second.Metadata)
 	}
 
-	_, err = second.Runner.Execute(t.Context(), inferenceRequest())
+	_, err = registry.Execute(t.Context(), runners.ExecuteRequest{
+		Identity: inference.Identity,
+		Attempt:  inferenceRequest(),
+	})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -104,13 +107,12 @@ func TestInferenceRunnerThroughRegistryConformsToCommonContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewInferenceRegistry() error = %v", err)
 	}
-	binding, err := registry.Resolve(runners.ResolutionRequest{Identity: inference.Identity})
-	if err != nil {
-		t.Fatalf("Resolve(inference) error = %v", err)
-	}
 
 	valid := inferenceRequest()
-	baseline, err := binding.Runner.Execute(t.Context(), valid)
+	baseline, err := registry.Execute(t.Context(), runners.ExecuteRequest{
+		Identity: inference.Identity,
+		Attempt:  valid,
+	})
 	if err != nil {
 		t.Fatalf("baseline Execute() error = %v", err)
 	}
@@ -123,8 +125,9 @@ func TestInferenceRunnerThroughRegistryConformsToCommonContract(t *testing.T) {
 	failure := workers.CloneProviderInferenceRequest(valid)
 	failure.ModelOperation = inferenceFixtureExecutionFailure
 
-	testkit.Run(t, testkit.Subject{
-		Runner:             binding.Runner,
+	testkit.RunService(t, testkit.ServiceSubject{
+		Service:            registry,
+		Identity:           inference.Identity,
 		ValidRequest:       valid,
 		InvalidRequest:     invalid,
 		UnsupportedRequest: unsupported,
@@ -160,14 +163,16 @@ func TestInferenceRegistryResolveAndExecuteConcurrently(t *testing.T) {
 		group.Add(1)
 		go func() {
 			defer group.Done()
-			binding, resolveErr := registry.Resolve(runners.ResolutionRequest{
+			if _, resolveErr := registry.Resolve(runners.ResolutionRequest{
 				Identity: inference.Identity,
-			})
-			if resolveErr != nil {
+			}); resolveErr != nil {
 				errs <- resolveErr
 				return
 			}
-			result, executeErr := binding.Runner.Execute(t.Context(), inferenceRequest())
+			result, executeErr := registry.Execute(t.Context(), runners.ExecuteRequest{
+				Identity: inference.Identity,
+				Attempt:  inferenceRequest(),
+			})
 			if executeErr != nil {
 				errs <- executeErr
 				return

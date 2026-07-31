@@ -112,14 +112,14 @@ func provideProviderRegistry(
 	_ serviceedges.Edges,
 	providersService providers.Service,
 ) (workers.ProviderRegistry, error) {
-	return providerswire.NewWorkersRegistry(context.Background(), providersService)
+	return workerswire.NewProviderRegistry(context.Background(), providersService)
 }
 
 func buildProviderRegistry(
 	_ serviceedges.Edges,
 	providersService providers.Service,
 ) (workers.ProviderRegistry, error) {
-	return providerswire.NewWorkersRegistry(context.Background(), providersService)
+	return workerswire.NewProviderRegistry(context.Background(), providersService)
 }
 
 func provideProviderRegistryRebinder(
@@ -134,7 +134,7 @@ func provideProviderRegistryRebinder(
 		if err != nil {
 			return nil, nil, err
 		}
-		registry, err := providerswire.NewWorkersRegistry(context.Background(), rebound)
+		registry, err := workerswire.NewProviderRegistry(context.Background(), rebound)
 		return registry, rebound, err
 	}, nil
 }
@@ -435,9 +435,9 @@ func provideAutomationFactory(
 	) automations.Service {
 		hostedSources := func(
 			*zap.Logger,
-			workers.HostedPollerClock,
-			workers.HostedPollerHTTPDoer,
-			workers.HostedPollerSecretResolver,
+			automations.HostedLinearClock,
+			automations.HostedLinearHTTPDoer,
+			automations.HostedLinearSecretResolver,
 			string,
 		) automations.HostedPollers {
 			return hostedPollers
@@ -817,7 +817,7 @@ func provideWorkersRuntimeFactory(
 			}
 		}
 		runtimeProviders := providersService
-		runtimeRegistry, err := providerswire.NewWorkersRegistry(context.Background(), runtimeProviders)
+		runtimeRegistry, err := workerswire.NewProviderRegistry(context.Background(), runtimeProviders)
 		if err != nil {
 			return nil, fmt.Errorf("construct runtime provider registry: %w", err)
 		}

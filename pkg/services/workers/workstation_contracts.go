@@ -254,8 +254,16 @@ var ErrIncompleteRuntimeAssembly = errors.New("Workers runtime assembly incomple
 // Service is the aggregate customer-facing Worker execution boundary.
 // Provider factories, command runners, and workstation builders remain
 // implementation details or explicit Worker subservices.
+//
+// Execute is the canonical request-scoped operation. BuildRuntime, workstation
+// pool lifecycle, and related methods remain only as temporary compatibility
+// surfaces for later cutover.
 type Service interface {
 	ModelInvoker
+
+	// Execute runs one isolated logical Worker attempt from a complete detached
+	// request without opening a Factory Runtime or Factory Session.
+	Execute(context.Context, ExecuteRequest) (ExecuteResult, error)
 
 	// BuildRuntime assembles detached execution bindings from explicit
 	// Workers-owned inputs.

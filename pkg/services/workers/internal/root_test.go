@@ -29,7 +29,7 @@ func (assembly *recordingRuntimeAssembly) Build(
 func TestNewRootConstructsPublishedWorkersService(t *testing.T) {
 	t.Parallel()
 
-	root, err := workersinternal.NewRoot(&recordingRuntimeAssembly{}, workstationswire.NewService())
+	root, err := workersinternal.NewRoot(&recordingRuntimeAssembly{}, workstationswire.NewService(), nil)
 	if err != nil {
 		t.Fatalf("NewRoot() error = %v", err)
 	}
@@ -45,10 +45,10 @@ func TestNewRootConstructsPublishedWorkersService(t *testing.T) {
 func TestNewRootRejectsMissingOwners(t *testing.T) {
 	t.Parallel()
 
-	if _, err := workersinternal.NewRoot(nil, workstationswire.NewService()); err == nil {
+	if _, err := workersinternal.NewRoot(nil, workstationswire.NewService(), nil); err == nil {
 		t.Fatal("NewRoot(nil assembly) error = nil, want missing runtime assembly")
 	}
-	if _, err := workersinternal.NewRoot(&recordingRuntimeAssembly{}, nil); err == nil {
+	if _, err := workersinternal.NewRoot(&recordingRuntimeAssembly{}, nil, nil); err == nil {
 		t.Fatal("NewRoot(nil workstations) error = nil, want missing workstations owner")
 	}
 }
@@ -63,7 +63,7 @@ func TestNewRootBuildRuntimeDelegatesWithoutLifecycle(t *testing.T) {
 		},
 	}
 	assembly := &recordingRuntimeAssembly{result: want}
-	root, err := workersinternal.NewRoot(assembly, workstationswire.NewService())
+	root, err := workersinternal.NewRoot(assembly, workstationswire.NewService(), nil)
 	if err != nil {
 		t.Fatalf("NewRoot() error = %v", err)
 	}

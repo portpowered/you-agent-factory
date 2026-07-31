@@ -70,7 +70,10 @@ func TestNewScriptRegistryIsInertAndResolvesDetachedMetadata(t *testing.T) {
 		t.Fatalf("second metadata = %#v, want detached registry snapshot", second.Metadata)
 	}
 
-	_, err = second.Runner.Execute(t.Context(), scriptRequest())
+	_, err = registry.Execute(t.Context(), runners.ExecuteRequest{
+		Identity: script.Identity,
+		Attempt:  scriptRequest(),
+	})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -105,13 +108,12 @@ func TestScriptRunnerThroughRegistryConformsToCommonContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewScriptRegistry() error = %v", err)
 	}
-	binding, err := registry.Resolve(runners.ResolutionRequest{Identity: script.Identity})
-	if err != nil {
-		t.Fatalf("Resolve(script) error = %v", err)
-	}
 
 	valid := scriptRequest()
-	baseline, err := binding.Runner.Execute(t.Context(), valid)
+	baseline, err := registry.Execute(t.Context(), runners.ExecuteRequest{
+		Identity: script.Identity,
+		Attempt:  valid,
+	})
 	if err != nil {
 		t.Fatalf("baseline Execute() error = %v", err)
 	}
@@ -124,8 +126,9 @@ func TestScriptRunnerThroughRegistryConformsToCommonContract(t *testing.T) {
 	failure := workers.CloneProviderInferenceRequest(valid)
 	failure.EnvVars["FAIL"] = "true"
 
-	testkit.Run(t, testkit.Subject{
-		Runner:             binding.Runner,
+	testkit.RunService(t, testkit.ServiceSubject{
+		Service:            registry,
+		Identity:           script.Identity,
 		ValidRequest:       valid,
 		InvalidRequest:     invalid,
 		UnsupportedRequest: unsupported,
@@ -163,14 +166,16 @@ func TestScriptRegistryResolveAndExecuteConcurrently(t *testing.T) {
 		group.Add(1)
 		go func() {
 			defer group.Done()
-			binding, resolveErr := registry.Resolve(runners.ResolutionRequest{
+			if _, resolveErr := registry.Resolve(runners.ResolutionRequest{
 				Identity: script.Identity,
-			})
-			if resolveErr != nil {
+			}); resolveErr != nil {
 				errs <- resolveErr
 				return
 			}
-			result, executeErr := binding.Runner.Execute(t.Context(), scriptRequest())
+			result, executeErr := registry.Execute(t.Context(), runners.ExecuteRequest{
+				Identity: script.Identity,
+				Attempt:  scriptRequest(),
+			})
 			if executeErr != nil {
 				errs <- executeErr
 				return

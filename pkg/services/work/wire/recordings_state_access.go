@@ -116,6 +116,13 @@ func (recordingsStateAccessService) MaterializeContentURL(
 	return "", nil, fmt.Errorf("Work recordings state access service does not support content materialization")
 }
 
+func (recordingsStateAccessService) MaterializeWorkerOutput(
+	context.Context,
+	work.MaterializeWorkerOutputRequest,
+) (work.MaterializeWorkerOutputResult, error) {
+	return work.MaterializeWorkerOutputResult{}, fmt.Errorf("Work recordings state access service does not support worker-output materialization")
+}
+
 func (recordingsStateAccessService) PrepareInvocationInput(
 	context.Context,
 	work.InvocationInputPreparationRequest,

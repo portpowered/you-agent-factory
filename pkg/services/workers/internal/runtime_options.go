@@ -90,6 +90,11 @@ func (s *Service) BuildRuntimeExecutors(
 			executors[configured.Name] = &workerexecutor.NoopExecutor{}
 			continue
 		}
+		// Poller/hosted Worker shapes are Automations-owned ingress sources.
+		// They submit Work Requests and never enter Workers executor construction.
+		if interfaces.IsPollerWorkerType(definition.Type) {
+			continue
+		}
 		result, err := s.executorBuilder.Build(
 			runtimeConfig, configured.Name, factoryRunnerID, workflowContext, logger,
 			invocationSkipPermissionsOverride, providerOverride, inferenceProgressPublisher,
@@ -99,10 +104,6 @@ func (s *Service) BuildRuntimeExecutors(
 			return nil, fmt.Errorf("construct worker %q: %w", configured.Name, err)
 		}
 		if result.Dispatch == nil {
-			if interfaces.IsPollerWorkerType(definition.Type) {
-				executors[configured.Name] = &workerexecutor.NoopExecutor{}
-				continue
-			}
 			return nil, fmt.Errorf("unsupported worker type for worker %q: %s", configured.Name, definition.Type)
 		}
 		executors[configured.Name] = result.Dispatch

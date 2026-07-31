@@ -224,11 +224,21 @@ func resolveAgentRunner(
 	if err != nil {
 		t.Fatalf("NewAgentRegistry() error = %v", err)
 	}
-	binding, err := registry.Resolve(runners.ResolutionRequest{Identity: agent.Identity})
-	if err != nil {
-		t.Fatalf("Resolve(agent) error = %v", err)
-	}
-	return binding.Runner
+	return agentRegistryStrategy{registry: registry}
+}
+
+type agentRegistryStrategy struct {
+	registry runners.Service
+}
+
+func (strategy agentRegistryStrategy) Execute(
+	ctx context.Context,
+	request workers.RunnerExecutionRequest,
+) (workers.RunnerExecutionResult, error) {
+	return strategy.registry.Execute(ctx, runners.ExecuteRequest{
+		Identity: agent.Identity,
+		Attempt:  request,
+	})
 }
 
 func providerFailureFixture(

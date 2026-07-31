@@ -41,14 +41,10 @@ func TestAgentRunnerPublishesDetachedProviderProgressBeforeSuccess(t *testing.T)
 	if err != nil {
 		t.Fatalf("NewAgentRegistry() error = %v", err)
 	}
-	binding, err := registry.Resolve(runners.ResolutionRequest{
+	result, err := registry.Execute(t.Context(), runners.ExecuteRequest{
 		Identity: agent.Identity,
+		Attempt:  agentRequest(),
 	})
-	if err != nil {
-		t.Fatalf("Resolve(agent) error = %v", err)
-	}
-
-	result, err := binding.Runner.Execute(t.Context(), agentRequest())
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}

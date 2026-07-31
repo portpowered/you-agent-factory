@@ -402,6 +402,13 @@ func (invocationPolicyServiceAdapter) MaterializeContentURL(context.Context, str
 	return "", nil, fmt.Errorf("Work invocation policy service does not support content materialization")
 }
 
+func (invocationPolicyServiceAdapter) MaterializeWorkerOutput(
+	context.Context,
+	MaterializeWorkerOutputRequest,
+) (MaterializeWorkerOutputResult, error) {
+	return MaterializeWorkerOutputResult{}, fmt.Errorf("Work invocation policy service does not support worker-output materialization")
+}
+
 func (a invocationPolicyServiceAdapter) PrepareInvocationInput(
 	ctx context.Context,
 	request InvocationInputPreparationRequest,

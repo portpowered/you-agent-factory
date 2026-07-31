@@ -112,6 +112,10 @@ func IsScriptWorkerType(workerType string) bool {
 
 // IsPollerWorkerType reports whether workerType is an accepted poller-worker taxonomy
 // value, including the legacy HOSTED_WORKER compatibility alias.
+//
+// These shapes describe Automations-owned ingress sources that submit ordinary
+// Work Requests. They are not Workers executors and must not be routed through
+// Workers runner/executor construction.
 func IsPollerWorkerType(workerType string) bool {
 	switch StrictPublicFactoryWorkerType(workerType) {
 	case WorkerTypePoller, WorkerTypeHosted:

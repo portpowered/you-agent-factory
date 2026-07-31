@@ -275,6 +275,72 @@ func TestResolveRequiresExactCanonicalIdentity(t *testing.T) {
 	}
 }
 
+func TestExecuteDispatchesThroughResolvedStrategyWithoutRetainingState(t *testing.T) {
+	spy := &runnerSpy{}
+	registry, err := New([]runners.Registration{
+		registration(workers.RunnerIDCodex, "Codex", spy),
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	result, err := registry.Execute(context.Background(), runners.ExecuteRequest{
+		Identity: workers.RunnerIDCodex,
+		Attempt: workers.RunnerExecutionRequest{
+			RunnerID:    workers.RunnerIDCodex,
+			UserMessage: "run",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if spy.calls != 1 {
+		t.Fatalf("strategy calls = %d, want 1", spy.calls)
+	}
+	if !reflect.DeepEqual(result, workers.RunnerExecutionResult{}) {
+		t.Fatalf("Execute() result = %#v, want empty detached result", result)
+	}
+
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := registry.Execute(canceled, runners.ExecuteRequest{
+		Identity: workers.RunnerIDCodex,
+		Attempt: workers.RunnerExecutionRequest{
+			RunnerID:    workers.RunnerIDCodex,
+			UserMessage: "run",
+		},
+	}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Execute(canceled) error = %v, want context.Canceled", err)
+	}
+	if spy.calls != 1 {
+		t.Fatalf("strategy calls after cancel = %d, want unchanged 1", spy.calls)
+	}
+}
+
+func TestExecuteRejectsUnknownIdentityWithoutStrategyCall(t *testing.T) {
+	spy := &runnerSpy{}
+	registry, err := New([]runners.Registration{
+		registration(workers.RunnerIDCodex, "Codex", spy),
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	_, err = registry.Execute(context.Background(), runners.ExecuteRequest{
+		Identity: "unknown",
+		Attempt: workers.RunnerExecutionRequest{
+			RunnerID:    "unknown",
+			UserMessage: "run",
+		},
+	})
+	if !errors.Is(err, workers.ErrUnknownRunnerSelection) {
+		t.Fatalf("Execute(unknown) error = %v, want unknown selection", err)
+	}
+	if spy.calls != 0 {
+		t.Fatalf("strategy calls = %d, want 0", spy.calls)
+	}
+}
+
 func TestResolveRequiresSupportedCapabilitiesWithoutExecution(t *testing.T) {
 	codex := &runnerSpy{}
 	gemini := &runnerSpy{}

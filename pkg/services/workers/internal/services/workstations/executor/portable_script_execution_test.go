@@ -165,7 +165,7 @@ func bindLegacyScriptRunner(t scriptTestTB, executor *ScriptExecutor) {
 	if docs == nil {
 		docs = func(string) (map[string]string, error) { return nil, nil }
 	}
-	binding, err := resolveScriptRunner(
+	registry, err := resolveScriptRegistry(
 		&interfaces.FactoryWorkerConfig{
 			Command: executor.Command,
 			Args:    append([]string(nil), executor.Args...),
@@ -180,7 +180,7 @@ func bindLegacyScriptRunner(t scriptTestTB, executor *ScriptExecutor) {
 	if err != nil {
 		t.Fatalf("resolve legacy test Script Runner: %v", err)
 	}
-	executor.runner = binding.Runner
+	executor.registry = registry
 }
 
 type completeOutputTestCommandRunner struct {

@@ -12,21 +12,20 @@ import (
 	hostedlinear "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/internal/linear"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // Clock is the exact time effect used by hosted-source supervision.
-type Clock = workers.HostedPollerClock
+type Clock = hostedlinear.Clock
 
 // HTTPDoer performs the Linear adapter's external network request.
-type HTTPDoer = workers.HostedPollerHTTPDoer
+type HTTPDoer = hostedlinear.HTTPDoer
 
 // HostedRuntimePaths is the minimum runtime view needed to resolve a hosted
-// worker credential.
-type HostedRuntimePaths = workers.HostedRuntimePaths
+// source credential.
+type HostedRuntimePaths = hostedlinear.RuntimePaths
 
 // SecretResolver resolves the external credential used by the Linear adapter.
-type SecretResolver = workers.HostedPollerSecretResolver
+type SecretResolver = hostedlinear.SecretResolver
 
 // CheckpointStore persists hosted Linear resume positions.
 type CheckpointStore = hostedlinear.CheckpointStore
@@ -42,7 +41,7 @@ func NewCheckpointStore(files CheckpointFileSystem) (CheckpointStore, error) {
 }
 
 // NewSecretResolver binds the exact environment and filesystem effects used to
-// resolve hosted-worker credentials.
+// resolve hosted-source credentials.
 func NewSecretResolver(
 	getenv func(string) string,
 	readFile func(string) ([]byte, error),

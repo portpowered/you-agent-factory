@@ -10,6 +10,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 )
 
 const executionFailureMessage = "fixture execution failure"
@@ -35,9 +36,10 @@ type Subject struct {
 // cancellation through only the common Workers Runner contract.
 func Run(t *testing.T, subject Subject) {
 	t.Helper()
+	execute := subject.execute
 	t.Run("success is detached", func(t *testing.T) {
 		request := workers.CloneProviderInferenceRequest(subject.ValidRequest)
-		result, err := subject.Runner.Execute(t.Context(), request)
+		result, err := execute(t.Context(), request)
 		if err != nil {
 			t.Fatalf("Execute(valid) error = %v", err)
 		}
@@ -56,7 +58,7 @@ func Run(t *testing.T, subject Subject) {
 		}
 
 		mutateResult(&result)
-		later, err := subject.Runner.Execute(t.Context(), subject.ValidRequest)
+		later, err := execute(t.Context(), subject.ValidRequest)
 		if err != nil {
 			t.Fatalf("second Execute(valid) error = %v", err)
 		}
@@ -66,7 +68,7 @@ func Run(t *testing.T, subject Subject) {
 	})
 
 	t.Run("invalid request is normalized", func(t *testing.T) {
-		_, err := subject.Runner.Execute(t.Context(), subject.InvalidRequest)
+		_, err := execute(t.Context(), subject.InvalidRequest)
 		assertProviderFailure(t, err, workers.WorkFailureTypePermanentBadRequest)
 	})
 
@@ -74,7 +76,7 @@ func Run(t *testing.T, subject Subject) {
 		if subject.SkipUnsupportedCapability {
 			t.Skip("optional capability policy is enforced outside this Runner")
 		}
-		_, err := subject.Runner.Execute(t.Context(), subject.UnsupportedRequest)
+		_, err := execute(t.Context(), subject.UnsupportedRequest)
 		if !errors.Is(err, workers.ErrUnsupportedRunnerCapability) {
 			t.Fatalf("Execute(unsupported) error = %v, want capability error", err)
 		}
@@ -83,16 +85,78 @@ func Run(t *testing.T, subject Subject) {
 	t.Run("cancellation is preserved", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		_, err := subject.Runner.Execute(ctx, subject.ValidRequest)
+		_, err := execute(ctx, subject.ValidRequest)
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("Execute(canceled) error = %v, want context.Canceled", err)
 		}
 	})
 
 	t.Run("execution failure is normalized", func(t *testing.T) {
-		_, err := subject.Runner.Execute(t.Context(), subject.FailureRequest)
+		_, err := execute(t.Context(), subject.FailureRequest)
 		assertProviderFailure(t, err, workers.WorkFailureTypeInternalServerError)
 	})
+}
+
+// ServiceSubject adapts one private runners.Service.Execute boundary into the
+// shared conformance suite for a single registered identity.
+type ServiceSubject struct {
+	Service            runners.Service
+	Identity           string
+	ValidRequest       workers.RunnerExecutionRequest
+	InvalidRequest     workers.RunnerExecutionRequest
+	UnsupportedRequest workers.RunnerExecutionRequest
+	FailureRequest     workers.RunnerExecutionRequest
+	ExpectedResult     workers.RunnerExecutionResult
+	CapturedRequest    func() (workers.RunnerExecutionRequest, bool)
+	AssertCaptured     func(*testing.T)
+	// SkipUnsupportedCapability omits the unsupported-capability subtest when
+	// optional capability policy is enforced by Resolve rather than Strategy.
+	SkipUnsupportedCapability bool
+}
+
+// RunService proves the shared contract through runners.Service.Execute.
+func RunService(t *testing.T, subject ServiceSubject) {
+	t.Helper()
+	Run(t, Subject{
+		Runner: serviceStrategy{
+			service:  subject.Service,
+			identity: subject.Identity,
+		},
+		ValidRequest:              subject.ValidRequest,
+		InvalidRequest:            subject.InvalidRequest,
+		UnsupportedRequest:        subject.UnsupportedRequest,
+		FailureRequest:            subject.FailureRequest,
+		ExpectedResult:            subject.ExpectedResult,
+		CapturedRequest:           subject.CapturedRequest,
+		AssertCaptured:            subject.AssertCaptured,
+		SkipUnsupportedCapability: subject.SkipUnsupportedCapability,
+	})
+}
+
+type serviceStrategy struct {
+	service  runners.Service
+	identity string
+}
+
+func (strategy serviceStrategy) Execute(
+	ctx context.Context,
+	request workers.RunnerExecutionRequest,
+) (workers.RunnerExecutionResult, error) {
+	return strategy.service.Execute(ctx, runners.ExecuteRequest{
+		Identity:             strategy.identity,
+		RequiredCapabilities: request.RequiredOptionalCapabilities,
+		Attempt:              request,
+	})
+}
+
+func (subject Subject) execute(
+	ctx context.Context,
+	request workers.RunnerExecutionRequest,
+) (workers.RunnerExecutionResult, error) {
+	if subject.Runner == nil {
+		return workers.RunnerExecutionResult{}, errors.New("conformance subject runner is required")
+	}
+	return subject.Runner.Execute(ctx, request)
 }
 
 func assertProviderFailure(

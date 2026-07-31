@@ -183,6 +183,9 @@ func cloneWorkIDs(workIDs []string) []string {
 // without calling any LLM or script. It is used as a fallback when no
 // AGENTS.md is configured for a worker, allowing tests to exercise the
 // petri-net topology without providing real worker configuration.
+//
+// Hosted/poller Worker shapes must not use this type: Automations owns those
+// ingress sources and they are omitted from Workers executor construction.
 type NoopExecutor struct{}
 
 // Execute implements WorkerExecutor. It propagates the first input token's

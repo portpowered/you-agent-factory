@@ -11,10 +11,13 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 
 	workersinternal "github.com/portpowered/infinite-you/pkg/services/workers/internal"
+	executeservice "github.com/portpowered/infinite-you/pkg/services/workers/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
 	runnerswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire"
 	runtimeassemblywire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/wire"
@@ -30,6 +33,15 @@ var (
 	NewPlatformGitCommander = worktree.NewPlatformGitCommander
 )
 
+// ExecuteOptions are optional process-scoped Execute edges. Omitted values use
+// inert defaults so construction remains side-effect free.
+type ExecuteOptions struct {
+	Observe  workers.ObservationSink
+	Logger   logging.Logger
+	Clock    func() time.Time
+	Worktree workers.FactoryWorktreePreparer
+}
+
 // NewService constructs an inert Workers root from construction ports. It
 // composes the accepted root through parent-private runtime_assembly,
 // workstations, and runners (agent/script/inference) owner construction
@@ -42,6 +54,7 @@ func NewService(
 	scriptDependencies runners.ScriptDependencies,
 	inferenceConfig runners.InferenceConfig,
 	inferenceDependencies runners.InferenceDependencies,
+	options ...ExecuteOptions,
 ) (workers.Service, error) {
 	if err := validateConstructionPorts(
 		agentDependencies,
@@ -72,7 +85,22 @@ func NewService(
 	if err != nil {
 		return nil, err
 	}
-	return workersinternal.NewRoot(runtimeAssembly, workstationswire.NewService())
+	executeOptions := ExecuteOptions{}
+	if len(options) > 0 {
+		executeOptions = options[0]
+	}
+	executeService, err := executeservice.New(executeservice.Dependencies{
+		Runners:   runnerRegistry,
+		Providers: agentDependencies.Providers,
+		Observe:   executeOptions.Observe,
+		Logger:    executeOptions.Logger,
+		Clock:     executeOptions.Clock,
+		Worktree:  executeOptions.Worktree,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("construct Workers: %w", err)
+	}
+	return workersinternal.NewRoot(runtimeAssembly, workstationswire.NewService(), executeService)
 }
 
 func validateConstructionPorts(

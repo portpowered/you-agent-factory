@@ -10,12 +10,20 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+// ExecuteCapability is the request-scoped Execute owner composed into the
+// Workers root. Compatibility pool and runtime-assembly surfaces remain on Root
+// until later cutover stories delete them.
+type ExecuteCapability interface {
+	Execute(context.Context, workers.ExecuteRequest) (workers.ExecuteResult, error)
+}
+
 // Root is the inert Workers root composed from parent-private runtime assembly
 // and workstation owners. It starts no lifecycle, runner execution, or
 // workstation pool admission.
 type Root struct {
 	runtimeAssembly runtimeassembly.Service
 	workstations    workstations.Service
+	execute         ExecuteCapability
 }
 
 var _ workers.Service = (*Root)(nil)
@@ -25,6 +33,7 @@ var _ workers.Service = (*Root)(nil)
 func NewRoot(
 	runtimeAssembly runtimeassembly.Service,
 	workstationsOwner workstations.Service,
+	execute ExecuteCapability,
 ) (workers.Service, error) {
 	if runtimeAssembly == nil {
 		return nil, fmt.Errorf("construct Workers: runtime assembly owner is required")
@@ -35,6 +44,7 @@ func NewRoot(
 	return &Root{
 		runtimeAssembly: runtimeAssembly,
 		workstations:    workstationsOwner,
+		execute:         execute,
 	}, nil
 }
 
@@ -60,6 +70,23 @@ func (r Root) ReplaceRuntimeAssembly(runtimeAssembly runtimeassembly.Service) Ro
 func (r Root) ReplaceWorkstations(workstationsOwner workstations.Service) Root {
 	r.workstations = workstationsOwner
 	return r
+}
+
+// ReplaceExecute returns a copy with an updated Execute capability.
+func (r Root) ReplaceExecute(execute ExecuteCapability) Root {
+	r.execute = execute
+	return r
+}
+
+// Execute delegates one isolated attempt to the request-scoped Execute owner.
+func (r *Root) Execute(
+	ctx context.Context,
+	request workers.ExecuteRequest,
+) (workers.ExecuteResult, error) {
+	if r == nil || r.execute == nil {
+		return workers.ExecuteResult{}, workers.ErrExecuteUnavailable
+	}
+	return r.execute.Execute(ctx, request)
 }
 
 // BuildRuntime delegates the singular Workers root operation to its

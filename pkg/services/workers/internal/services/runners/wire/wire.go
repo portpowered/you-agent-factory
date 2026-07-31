@@ -8,11 +8,12 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
-	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/runner"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/inference"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/mock"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/script"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/service"
 	agentwire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/services/agent/wire"
+	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/runner"
 )
 
 // NewService validates registrations into one immutable private registry.
@@ -88,6 +89,24 @@ func NewAgentRegistry(
 	service, registryErr := NewService([]runners.Registration{{
 		Identity: runners.AgentIdentity,
 		Metadata: agentMetadata(),
+		Runner:   implementation,
+	}})
+	return service, errors.Join(err, registryErr)
+}
+
+// NewMockRegistry constructs one mock Strategy for the Workers-owned testing
+// feature path. It must not be composed into production Workers wire.
+func NewMockRegistry(
+	config runners.MockConfig,
+	dependencies runners.MockDependencies,
+) (runners.Service, error) {
+	implementation, err := mock.New(
+		mock.Config{WorkersConfig: config.WorkersConfig},
+		mock.Dependencies{Next: dependencies.Next},
+	)
+	service, registryErr := NewService([]runners.Registration{{
+		Identity: runners.MockIdentity,
+		Metadata: mockMetadata(),
 		Runner:   implementation,
 	}})
 	return service, errors.Join(err, registryErr)
@@ -207,6 +226,35 @@ func agentMetadata() workers.RunnerMetadata {
 			workers.RunnerOptionalCapabilitySupport{
 				Capability: workers.RunnerOptionalCapabilityStructuredOutput,
 				Status:     workers.RunnerOptionalCapabilityStatusSupported,
+			},
+			workers.RunnerOptionalCapabilitySupport{
+				Capability: workers.RunnerOptionalCapabilityWorkingDirectory,
+				Status:     workers.RunnerOptionalCapabilityStatusSupported,
+			},
+			workers.RunnerOptionalCapabilitySupport{
+				Capability: workers.RunnerOptionalCapabilityWorktree,
+				Status:     workers.RunnerOptionalCapabilityStatusSupported,
+			},
+		),
+	}
+}
+
+func mockMetadata() workers.RunnerMetadata {
+	return workers.RunnerMetadata{
+		ID:          runners.MockIdentity,
+		DisplayName: "Mock",
+		Capabilities: workerrunner.NewCapabilities(
+			workers.RunnerOptionalCapabilitySupport{
+				Capability: workers.RunnerOptionalCapabilityImageInput,
+				Status:     workers.RunnerOptionalCapabilityStatusUnsupported,
+			},
+			workers.RunnerOptionalCapabilitySupport{
+				Capability: workers.RunnerOptionalCapabilitySessionResume,
+				Status:     workers.RunnerOptionalCapabilityStatusUnsupported,
+			},
+			workers.RunnerOptionalCapabilitySupport{
+				Capability: workers.RunnerOptionalCapabilityStructuredOutput,
+				Status:     workers.RunnerOptionalCapabilityStatusUnsupported,
 			},
 			workers.RunnerOptionalCapabilitySupport{
 				Capability: workers.RunnerOptionalCapabilityWorkingDirectory,

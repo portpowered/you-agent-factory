@@ -449,25 +449,55 @@ type wireProvidersFake struct {
 }
 
 func (fake *wireProvidersFake) Execute(
-	context.Context,
-	providers.ExecuteRequest,
+	_ context.Context,
+	request providers.ExecuteRequest,
 ) (providers.ExecuteResult, error) {
 	fake.calls.Add(1)
-	return providers.ExecuteResult{Content: "fixture"}, nil
+	result := providers.ExecuteResult{Content: "fixture"}
+	if request.ResumeSession != nil {
+		session := request.ResumeSession.Clone()
+		result.SessionRef = &session
+	} else {
+		result.SessionRef = &providers.SessionRef{
+			Provider: request.Provider,
+			Kind:     providers.SessionIDKind,
+			ID:       "session-" + request.AttemptID,
+		}
+	}
+	return result, nil
 }
 
 func (*wireProvidersFake) ListProviders(
 	context.Context,
 	providers.ListProvidersRequest,
 ) (providers.ListProvidersResult, error) {
-	return providers.ListProvidersResult{}, nil
+	return providers.ListProvidersResult{
+		Providers: []providers.Descriptor{selectableCodexDescriptor()},
+	}, nil
 }
 
 func (*wireProvidersFake) GetProvider(
-	context.Context,
-	providers.GetProviderRequest,
+	_ context.Context,
+	request providers.GetProviderRequest,
 ) (providers.GetProviderResult, error) {
-	return providers.GetProviderResult{}, nil
+	if err := request.Validate(); err != nil {
+		return providers.GetProviderResult{}, err
+	}
+	if request.ID != providers.IDCodex {
+		return providers.GetProviderResult{}, providers.ErrUnknownProvider
+	}
+	return providers.GetProviderResult{Provider: selectableCodexDescriptor()}, nil
+}
+
+func selectableCodexDescriptor() providers.Descriptor {
+	return providers.Descriptor{
+		ID:           providers.IDCodex,
+		Aliases:      []string{"openai"},
+		DisplayName:  "Codex",
+		Availability: providers.AvailabilitySelectable,
+		Readiness:    providers.ReadinessReady,
+		Capabilities: []providers.Capability{providers.CapabilityPromptSubmission},
+	}
 }
 
 type wireStreamingCommandRunner struct{}

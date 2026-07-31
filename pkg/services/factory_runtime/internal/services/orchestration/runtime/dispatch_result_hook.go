@@ -24,6 +24,7 @@ type dispatchPlanningResultHook struct {
 	net               *state.Net
 	resultBuffer      *buffers.TypedBuffer[workerexecution.WorkResult]
 	completionPlanner factory.CompletionDeliveryPlanner
+	workRequestIDs    work.RequestIDGenerator
 	factorySessionID  string
 	waitCh            chan struct{}
 	scheduled         []scheduledDispatchResult
@@ -53,12 +54,14 @@ func newCanonicalDispatchPlanningResultHook(
 	net *state.Net,
 	resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult],
 	completionPlanner factory.CompletionDeliveryPlanner,
+	workRequestIDs work.RequestIDGenerator,
 	factorySessionID string,
 ) *dispatchPlanningResultHook {
 	return &dispatchPlanningResultHook{
 		planner: planner, net: net, resultBuffer: resultBuffer,
-		completionPlanner: completionPlanner, factorySessionID: factorySessionID,
-		waitCh: make(chan struct{}, 1),
+		completionPlanner: completionPlanner, workRequestIDs: workRequestIDs,
+		factorySessionID: factorySessionID,
+		waitCh:           make(chan struct{}, 1),
 	}
 }
 
@@ -147,6 +150,7 @@ func (h *dispatchPlanningResultHook) acceptWorkersResult(
 	dispatchErr error,
 ) {
 	workResult := canonicalWorkResult(request, result, dispatchErr)
+	usedPlanned := false
 	if provider, ok := h.completionPlanner.(plannedCompletionResultProvider); ok {
 		planned, hasPlanned, err := provider.PlannedResultForDispatch(request.Execution.Dispatch)
 		if err != nil {
@@ -158,7 +162,20 @@ func (h *dispatchPlanningResultHook) acceptWorkersResult(
 			planned.DispatchID = request.Execution.Dispatch.DispatchID
 			planned.TransitionID = request.Execution.Dispatch.TransitionID
 			workResult = planned
+			usedPlanned = true
 		}
+	}
+	// Replay/planned completions already carry Work-owned OutputWork identity
+	// from the event ledger. Live Worker proposals are materialized here so
+	// invalid proposals cannot enter Runtime state.
+	if !usedPlanned {
+		workResult = materializeWorkerOutputForDispatch(
+			ctx,
+			h.net,
+			h.workRequestIDs,
+			request,
+			workResult,
+		)
 	}
 	outcome := workstationTerminalResultOutcome(result.TerminalOutcome, workResult.Outcome)
 	if _, err := h.acceptCanonicalResult(ctx, request, workResult, "", outcome); err != nil {

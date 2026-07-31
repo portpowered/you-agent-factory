@@ -433,6 +433,7 @@ func configureRuntimeDispatch(
 		cfg.net,
 		resultBuffer,
 		cfg.completionDeliveryPlanner,
+		cfg.workRequestIDs,
 		sessionIDFromFactoryConfig(cfg),
 	)
 	return resultHook, planner, workersBoundary

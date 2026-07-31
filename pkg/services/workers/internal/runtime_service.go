@@ -264,6 +264,17 @@ func firstDecisionEnvelopeService(
 	return services[0]
 }
 
+// Execute delegates one isolated attempt through the composed Execute owner.
+func (s *Service) Execute(
+	ctx context.Context,
+	request workers.ExecuteRequest,
+) (workers.ExecuteResult, error) {
+	if s == nil {
+		return workers.ExecuteResult{}, workers.ErrExecuteUnavailable
+	}
+	return s.Root.Execute(ctx, request)
+}
+
 // BuildRuntime delegates the singular Workers root operation to its
 // parent-private Runtime Assembly capability.
 func (s *Service) BuildRuntime(

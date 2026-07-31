@@ -20,7 +20,6 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	hostedlinear "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/internal/linear"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -343,7 +342,7 @@ func TestStartLinearPoller_SecretResolutionFailureSkipsSubmitAndRestarts(t *test
 	pollerCfg, runtimeCfg, workstation, worker := hostedLinearPollerFixtureForTest(t, factoryDir, server, nil)
 	pollerCfg.Logger = zap.New(logCore)
 	pollerCfg.Clock = clockwork.NewFakeClock()
-	pollerCfg.SecretResolver = func(context.Context, workers.HostedRuntimePaths, string) (string, error) {
+	pollerCfg.SecretResolver = func(context.Context, hostedlinear.RuntimePaths, string) (string, error) {
 		return "", secretErr
 	}
 
@@ -390,7 +389,7 @@ func TestStartLinearPoller_RedactsResolvedSecretFromProviderErrors(t *testing.T)
 	pollerCfg, runtimeCfg, workstation, worker := hostedLinearPollerFixtureForTest(t, factoryDir, server, nil)
 	pollerCfg.Logger = zap.New(logCore)
 	pollerCfg.Clock = clockwork.NewFakeClock()
-	pollerCfg.SecretResolver = func(context.Context, workers.HostedRuntimePaths, string) (string, error) {
+	pollerCfg.SecretResolver = func(context.Context, hostedlinear.RuntimePaths, string) (string, error) {
 		return secret, nil
 	}
 

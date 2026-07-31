@@ -7,9 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
-	"net/http"
 	"strings"
-	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
@@ -49,32 +47,6 @@ func canonicalProviderIdentifier(value string) bool {
 	return !strings.Contains(value, "..") && !strings.Contains(value, "--") &&
 		!strings.Contains(value, ".-") && !strings.Contains(value, "-.")
 }
-
-// HostedPollerClock, HostedPollerHTTPDoer, and HostedPollerSecretResolver are
-// the external-effect contracts used to construct Automation Hosted Sources
-// pollers. Cross-service consumers name these root contracts instead of
-// importing Automations hosted_sources implementation packages.
-type HostedPollerClock interface {
-	After(time.Duration) <-chan time.Time
-}
-
-type HostedPollerHTTPDoer interface {
-	Do(*http.Request) (*http.Response, error)
-}
-
-// HostedRuntimePaths is the minimum runtime view needed to resolve a hosted
-// worker credential. Factory Definition runtime lookups satisfy this contract
-// without becoming part of the Workers public dependency surface.
-type HostedRuntimePaths interface {
-	FactoryDir() string
-	RuntimeBaseDir() string
-}
-
-type HostedPollerSecretResolver func(
-	context.Context,
-	HostedRuntimePaths,
-	string,
-) (string, error)
 
 // FactoryDocsLoader loads the documentation bundled beneath one Factory root.
 // Wire selects the production filesystem implementation; tests may replace the
@@ -165,6 +137,10 @@ type WorkstationRequestExecutor interface {
 }
 
 // Runner executes one normalized Worker runner request.
+//
+// Deprecated: production execution enters through Service.Execute and the
+// private runners.Service.Execute boundary. This alias remains for transitional
+// runtime_assembly and workstation adapters until those packages are deleted.
 type Runner interface {
 	Execute(context.Context, RunnerExecutionRequest) (RunnerExecutionResult, error)
 }

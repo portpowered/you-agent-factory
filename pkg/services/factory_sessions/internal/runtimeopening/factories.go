@@ -35,9 +35,9 @@ type ExternalEffects struct {
 	RuntimeHostObserver              factorysessions.RuntimeHostObserver
 	FactoryVisualizationSink         factoryvisualization.Sink
 	FactoryVisualizationRootObserver factoryvisualization.RootObserver
-	HostedClock                      workers.HostedPollerClock
-	HostedHTTPClient                 workers.HostedPollerHTTPDoer
-	HostedSecretResolver             workers.HostedPollerSecretResolver
+	HostedClock                      automations.HostedLinearClock
+	HostedHTTPClient                 automations.HostedLinearHTTPDoer
+	HostedSecretResolver             automations.HostedLinearSecretResolver
 	HostedLinearEndpoint             string
 }
 

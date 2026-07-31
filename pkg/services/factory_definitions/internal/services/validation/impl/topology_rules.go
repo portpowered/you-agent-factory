@@ -379,7 +379,7 @@ func rulePollerWorkstations(cfg *factorydefinitions.FactoryConfig) []Finding {
 				Severity: SeverityError,
 				Path:     basePath + ".worker",
 				Message: fmt.Sprintf(
-					"poller workstation %q cannot bind worker %q of type %q; v1 pollers support only SCRIPT_WORKER, POLLER_WORKER, or legacy HOSTED_WORKER",
+					"poller workstation %q cannot bind worker %q of type %q; Automations-owned pollers support only SCRIPT_WORKER, POLLER_WORKER, or legacy HOSTED_WORKER",
 					ws.Name,
 					worker.Name,
 					worker.Type,

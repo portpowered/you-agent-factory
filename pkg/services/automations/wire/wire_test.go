@@ -25,7 +25,7 @@ type constructionPorts struct {
 	clock            clockwork.Clock
 	commandRunner    workers.CommandRunner
 	hostedSources    automations.HostedSourcesFactory
-	hostedClock      workers.HostedPollerClock
+	hostedClock      automations.HostedLinearClock
 	resolveTemplates workers.TemplateFieldResolver
 	executionPolicy  factorydefinitions.WorkstationExecutionPolicyService
 }
@@ -328,9 +328,9 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 	ports.commandRunner = recordingCommandRunner{calls: &commandRunnerCalls}
 	ports.hostedSources = func(
 		*zap.Logger,
-		workers.HostedPollerClock,
-		workers.HostedPollerHTTPDoer,
-		workers.HostedPollerSecretResolver,
+		automations.HostedLinearClock,
+		automations.HostedLinearHTTPDoer,
+		automations.HostedLinearSecretResolver,
 		string,
 	) automations.HostedPollers {
 		hostedFactoryCalls++

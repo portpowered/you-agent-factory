@@ -86,6 +86,13 @@ func (s materializationService) MaterializeContentURL(
 	return s.materializer.MaterializeContentURL(ctx, rawURL)
 }
 
+func (materializationService) MaterializeWorkerOutput(
+	ctx context.Context,
+	request MaterializeWorkerOutputRequest,
+) (MaterializeWorkerOutputResult, error) {
+	return MaterializeWorkerOutput(ctx, request)
+}
+
 func (materializationService) PrepareInvocationInput(
 	context.Context,
 	InvocationInputPreparationRequest,
@@ -192,6 +199,13 @@ func (admissionContentService) MaterializeContentURL(
 	string,
 ) (string, ContentCleanup, error) {
 	return "", nil, fmt.Errorf("Work admission content service does not support content materialization")
+}
+
+func (admissionContentService) MaterializeWorkerOutput(
+	context.Context,
+	MaterializeWorkerOutputRequest,
+) (MaterializeWorkerOutputResult, error) {
+	return MaterializeWorkerOutputResult{}, fmt.Errorf("Work admission content service does not support worker-output materialization")
 }
 
 func (admissionContentService) PrepareInvocationInput(

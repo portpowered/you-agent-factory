@@ -10,4 +10,4 @@ package workers
 //   - safe_diagnostics.go and safe_diagnostics_codec.go: dashboard-safe
 //     diagnostics projections and round-trip helpers.
 //   - execution_requests.go: runner selection and subprocess execution requests.
-//   - interfaces.go: Provider, CommandRunner, and hosted poller ports.
+//   - interfaces.go: Provider and CommandRunner ports.

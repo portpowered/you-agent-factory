@@ -10,7 +10,8 @@ import (
 )
 
 // NewProviderFromService adapts the Providers root to the retained Workers
-// Provider port used by durable Factory Session construction.
+// Provider port used by durable Factory Session construction. Execution enters
+// through the private runners.Service.Execute boundary.
 func NewProviderFromService(service providers.Service) (workers.Provider, error) {
 	if service == nil {
 		return nil, fmt.Errorf("construct Worker provider: Providers service is required")
@@ -22,9 +23,5 @@ func NewProviderFromService(service providers.Service) (workers.Provider, error)
 	if err != nil {
 		return nil, fmt.Errorf("construct Worker provider: %w", err)
 	}
-	binding, err := registry.Resolve(runners.ResolutionRequest{Identity: runners.AgentIdentity})
-	if err != nil {
-		return nil, fmt.Errorf("construct Worker provider: %w", err)
-	}
-	return runnerProvider{runner: binding.Runner}, nil
+	return registryExecuteProvider{registry: registry}, nil
 }
