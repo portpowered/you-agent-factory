@@ -7,12 +7,15 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 )
 
 func codexWireTestOutput(content string) []byte {
@@ -199,5 +202,17 @@ func TestProvideFactorySessionExecutionFactory_BuildsLiveChildInvocation(t *test
 		if execution == nil {
 			t.Fatalf("factory(mockWorkers=%#v) returned nil execution service", mockWorkers)
 		}
+	}
+}
+
+func TestOperatorSettingsHomePortCompositionUsesProcessProviderRoot(t *testing.T) {
+	t.Parallel()
+
+	service, err := settingswire.NewServiceFromHomePorts(platformfilesystem.Local{}, globalconfigmapping.Decode)
+	if err != nil {
+		t.Fatalf("NewServiceFromHomePorts() error = %v", err)
+	}
+	if service == nil {
+		t.Fatal("NewServiceFromHomePorts() = nil, want Operator Settings root")
 	}
 }
