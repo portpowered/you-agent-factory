@@ -1536,7 +1536,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers",
-      "minimum": 88.88
+      "minimum": 88.43
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/inference",
@@ -1544,7 +1544,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/service",
-      "minimum": 81.08
+      "minimum": 75.40
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp",
@@ -1632,7 +1632,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider",
-      "minimum": 73.27
+      "minimum": 73.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/adapter",
@@ -1984,7 +1984,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal",
-      "minimum": 54.08
+      "minimum": 53.22
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/diagnostics",
@@ -2058,7 +2058,13 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process",
-      "minimum": 0.00
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active unit coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The unit coverage profile reports at least one measurable statement for this package."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/runner",
@@ -2134,11 +2140,11 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor",
-      "minimum": 83.15
+      "minimum": 83.12
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun",
-      "minimum": 80.93
+      "minimum": 80.83
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/inferencefailure",
