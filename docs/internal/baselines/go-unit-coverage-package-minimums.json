@@ -1539,6 +1539,10 @@
       "minimum": 94.59
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/inference",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/service",
       "minimum": 100.00
     },
