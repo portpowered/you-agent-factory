@@ -34,14 +34,15 @@ func TestACPProtocolFailureHelperProcess(t *testing.T) {
 
 func TestProtocolFailuresMapToStableExecuteFailureKinds(t *testing.T) {
 	for _, test := range []struct {
-		mode string
-		want providers.ExecuteFailureKind
+		mode          string
+		want          providers.ExecuteFailureKind
+		wantSessionID string
 	}{
 		{mode: "version", want: providers.ExecuteFailureKindMisconfigured},
 		{mode: "init-fail", want: providers.ExecuteFailureKindUnknown},
 		{mode: "malformed", want: providers.ExecuteFailureKindUnknown},
 		{mode: "eof", want: providers.ExecuteFailureKindUnknown},
-		{mode: "fail", want: providers.ExecuteFailureKindUnknown},
+		{mode: "fail", want: providers.ExecuteFailureKindUnknown, wantSessionID: "acp-session-service-1"},
 	} {
 		t.Run(test.mode, func(t *testing.T) {
 			var starts atomic.Int32
@@ -68,6 +69,11 @@ func TestProtocolFailuresMapToStableExecuteFailureKinds(t *testing.T) {
 			}
 			if failure.Kind != test.want {
 				t.Fatalf("ExecuteFailure.Kind = %q, want %q (message=%q)", failure.Kind, test.want, failure.Message)
+			}
+			if test.wantSessionID != "" {
+				if failure.SessionRef == nil || failure.SessionRef.Provider != providers.ID("cursor-acp") || failure.SessionRef.Kind != providers.SessionIDKind || failure.SessionRef.ID != test.wantSessionID {
+					t.Fatalf("ExecuteFailure.SessionRef = %#v, want cursor-acp/%s/%s", failure.SessionRef, providers.SessionIDKind, test.wantSessionID)
+				}
 			}
 			if starts.Load() == 0 {
 				t.Fatal("ACP protocol failure did not start the Agent process")

@@ -37,12 +37,13 @@ func normalizeAttemptFailure(
 	request providers.ExecuteRequest,
 ) (normalized error) {
 	lifecycle, hasLifecycle := attemptFailureAs(attemptErr)
+	failureSession := sessionRefFromAttemptFailure(attemptErr, lifecycle, hasLifecycle)
 	defer func() {
-		if !hasLifecycle || lifecycle.SessionRef == nil || normalized == nil {
+		if failureSession == nil || normalized == nil {
 			return
 		}
 		if failure, ok := executeFailureAs(normalized); ok {
-			failure.SessionRef = lifecycle.SessionRef
+			failure.SessionRef = failureSession
 			normalized = normalizeDeclaredFailure(failure, request)
 		}
 	}()
@@ -97,6 +98,25 @@ func normalizeAttemptFailure(
 		Kind:        providers.ExecuteFailureKindUnknown,
 		Diagnostics: lifecycleStageDiagnostics(lifecycle, hasLifecycle),
 	}, request)
+}
+
+func sessionRefFromAttemptFailure(
+	attemptErr error,
+	lifecycle execution.AttemptFailure,
+	hasLifecycle bool,
+) *providers.SessionRef {
+	if hasLifecycle {
+		if lifecycle.SessionRef != nil {
+			return lifecycle.SessionRef
+		}
+		if lifecycle.Declared != nil && lifecycle.Declared.SessionRef != nil {
+			return lifecycle.Declared.SessionRef
+		}
+	}
+	if failure, ok := executeFailureAs(attemptErr); ok {
+		return failure.SessionRef
+	}
+	return nil
 }
 
 func normalizeDeclaredFailure(
