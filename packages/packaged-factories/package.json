@@ -13,7 +13,6 @@
   "files": [
     "README.md",
     "LICENSE.md",
-    "factories",
     "generated/manifest.json",
     "generated/factories",
     "schemas/factory.schema.json",

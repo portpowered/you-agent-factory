@@ -12,7 +12,6 @@ import {
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import * as domMatchers from "@testing-library/jest-dom/matchers";
 import { Window } from "happy-dom";
 import * as applicationReact from "react";
 import * as monacoEditorAll from "../mocks/monaco-editor-all";
@@ -48,13 +47,34 @@ async function shareApplicationReactDispatcher(packageReactPath: string) {
       applicationInternals,
       key,
     );
+    let sharedValue = applicationInternals[key];
+    const getSharedValue = () => sharedValue;
+    const setSharedValue = (value: unknown) => {
+      sharedValue = value;
+    };
+
+    Object.defineProperty(applicationInternals, key, {
+      configurable: true,
+      enumerable: descriptor?.enumerable ?? true,
+      get: getSharedValue,
+      set: setSharedValue,
+    });
+
+    // Bun can expose two module namespace wrappers around the same underlying
+    // React internals object. Defining the application accessor above then also
+    // changes the package view, despite the wrappers not comparing equal.
+    if (
+      Object.getOwnPropertyDescriptor(packageInternals, key)?.get ===
+      getSharedValue
+    ) {
+      continue;
+    }
+
     Object.defineProperty(packageInternals, key, {
       configurable: true,
       enumerable: descriptor?.enumerable ?? true,
-      get: () => applicationInternals[key],
-      set: (value) => {
-        applicationInternals[key] = value;
-      },
+      get: getSharedValue,
+      set: setSharedValue,
     });
   }
 }
@@ -128,9 +148,10 @@ for (const key of [
   });
 }
 
-expect.extend(domMatchers);
-
+const domMatchers = await import("@testing-library/jest-dom/matchers");
 const { cleanup, configure } = await import("@testing-library/react");
+
+expect.extend(domMatchers);
 
 Object.assign(globalThis, {
   afterAll,
