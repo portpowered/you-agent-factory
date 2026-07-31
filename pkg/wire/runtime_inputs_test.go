@@ -424,7 +424,7 @@ func TestRuntimeOpeningRequestFactoryMapsSelectionsIntoOwnerRequests(t *testing.
 		ExecutionBaseDir: "execution", RunnerID: "runner", Worktree: "feature-login",
 		HomeDir: "home", WorkFile: "work.json", BindHost: "127.0.0.1",
 		Port: 8080, AutoPort: true,
-		Continuously: true, WithServer: true, Verbose: true, RecordPath: "record.json",
+		Continuously: true, Verbose: true, RecordPath: "record.json",
 		ReplayPath: "replay.json", Workflow: "flow", ModelCacheDir: "models",
 		InvocationSkipPermissionsOverride: &skip,
 	}, mocks, func(factorysessions.RuntimeHostBinding) {})
@@ -439,7 +439,6 @@ func TestRuntimeOpeningRequestFactoryMapsSelectionsIntoOwnerRequests(t *testing.
 		t.Fatalf("Factory Runtime request = %#v", request.FactoryRuntime)
 	}
 	if request.FactorySession.SystemConfigHome != "home" ||
-		request.FactorySession.PersistencePolicy != factorysessions.PersistencePolicyEnabled ||
 		request.FactorySession.Host.Host != "127.0.0.1" ||
 		request.FactorySession.Host.Port != 8080 ||
 		!request.FactorySession.Host.AutoPort {

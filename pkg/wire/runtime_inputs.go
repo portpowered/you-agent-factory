@@ -57,14 +57,6 @@ func provideRuntimeOpeningRequestFactory() runcli.RuntimeOpeningRequestFactory {
 		if cfg.Continuously {
 			mode = factorydefinitions.RuntimeModeService
 		}
-		persistencePolicy := factorysessions.PersistencePolicyDisabled
-		if cfg.WithServer {
-			// The public Factory Session API exposes restart/resume semantics.
-			// Server-backed runs therefore opt into the durable snapshot store;
-			// ordinary local and packaged invocations remain in-memory only.
-			persistencePolicy = factorysessions.PersistencePolicyEnabled
-		}
-
 		request := &factorysessions.RuntimeOpeningRequest{
 			FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{
 				Directory:        cfg.Dir,
@@ -88,7 +80,6 @@ func provideRuntimeOpeningRequestFactory() runcli.RuntimeOpeningRequestFactory {
 			FactorySession: factorysessions.SessionRuntimeOpeningRequest{
 				SystemConfigHome: cfg.HomeDir,
 				WorkFile:         cfg.WorkFile,
-				PersistencePolicy: persistencePolicy,
 				Host: factorysessions.RuntimeHostRequest{
 					Directory:   cfg.Dir,
 					RuntimeMode: mode,
