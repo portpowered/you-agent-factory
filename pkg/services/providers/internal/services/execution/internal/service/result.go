@@ -54,25 +54,33 @@ func normalizeSuccess(
 	request providers.ExecuteRequest,
 ) (providers.ExecuteResult, error) {
 	normalized := result.Clone()
-	if normalized.SessionRef != nil {
-		if err := normalized.SessionRef.Validate(); err != nil {
-			return providers.ExecuteResult{}, fmt.Errorf(
-				"%w: adapter returned invalid session reference",
-				providers.ErrExecuteFailed,
-			)
-		}
-		if normalized.SessionRef.Provider != provider {
-			return providers.ExecuteResult{}, fmt.Errorf(
-				"%w: adapter returned session for another provider",
-				providers.ErrExecuteFailed,
-			)
-		}
+	if err := validateSessionRef(normalized.SessionRef, provider); err != nil {
+		return providers.ExecuteResult{}, err
 	}
 	if normalized.Diagnostics != nil {
 		diagnostics := normalizeDiagnostics(*normalized.Diagnostics, request)
 		normalized.Diagnostics = &diagnostics
 	}
 	return normalized, nil
+}
+
+func validateSessionRef(ref *providers.SessionRef, provider providers.ID) error {
+	if ref == nil {
+		return nil
+	}
+	if err := ref.Validate(); err != nil {
+		return fmt.Errorf(
+			"%w: adapter returned invalid session reference",
+			providers.ErrExecuteFailed,
+		)
+	}
+	if ref.Provider != provider {
+		return fmt.Errorf(
+			"%w: adapter returned session for another provider",
+			providers.ErrExecuteFailed,
+		)
+	}
+	return nil
 }
 
 func normalizeDiagnostics(

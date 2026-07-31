@@ -18,6 +18,7 @@ const (
 	conformanceContent       = "conformance success"
 	conformanceSecret        = "conformance-secret"
 	conformanceSessionID     = "session-conformance"
+	conformanceFailureID     = "session-failure-conformance"
 	conformanceProgressFacts = 130
 	conformanceProgressLimit = 128
 )
@@ -198,14 +199,37 @@ func runDeclaredFailure(t *testing.T, subject Subject) {
 	t.Helper()
 	provider := subjectProvider(subject)
 	request := conformanceRequest(provider)
+	nativeSession := &providers.SessionRef{
+		Provider: provider,
+		Kind:     providers.SessionIDKind,
+		ID:       conformanceFailureID,
+	}
+	nativeFailure := providers.ExecuteFailure{
+		Kind:       providers.ExecuteFailureKindThrottled,
+		Message:    "throttled " + conformanceSecret,
+		SessionRef: nativeSession,
+	}
 	adapter, root := newSubjectRoot(t, subject, Plan{
-		Failure: providers.ExecuteFailure{
-			Kind:    providers.ExecuteFailureKindThrottled,
-			Message: "throttled " + conformanceSecret,
-		},
+		Failure: nativeFailure,
 	})
 	result, err := root.Execute(t.Context(), request)
-	assertFailure(t, result, err, providers.ErrExecuteFailed, providers.ExecuteFailureKindThrottled)
+	failure := assertFailure(
+		t,
+		result,
+		err,
+		providers.ErrExecuteFailed,
+		providers.ExecuteFailureKindThrottled,
+	)
+	if failure.SessionRef == nil ||
+		failure.SessionRef.Provider != provider ||
+		failure.SessionRef.Kind != providers.SessionIDKind ||
+		failure.SessionRef.ID != conformanceFailureID {
+		t.Fatalf("Execute() failure SessionRef = %#v", failure.SessionRef)
+	}
+	failure.SessionRef.ID = "caller-mutated"
+	if nativeSession.ID != conformanceFailureID {
+		t.Fatalf("adapter failure SessionRef = %#v, want detached", nativeSession)
+	}
 	if strings.Contains(err.Error(), conformanceSecret) {
 		t.Fatalf("Execute() error leaked sensitive request facts: %v", err)
 	}

@@ -300,7 +300,7 @@ func runnerFailureResult(
 			ID:   failure.SessionRef.ID,
 		}
 	}
-	if strings.TrimSpace(request.SessionID) != "" {
+	if response.ProviderSession == nil && strings.TrimSpace(request.SessionID) != "" {
 		response.ProviderSession = &workers.ProviderSessionMetadata{
 			Provider: workers.CanonicalProviderSessionProvider(request.RunnerID),
 			Kind:     providers.SessionIDKind,
