@@ -1066,13 +1066,10 @@ func scanTestServiceSubpackageImports(repoRoot string) ([]testServiceImportFindi
 		if walkErr != nil {
 			return walkErr
 		}
+		if shouldSkipRepositoryWalkDirectory(repoRoot, path, entry) {
+			return filepath.SkipDir
+		}
 		if entry.IsDir() {
-			switch entry.Name() {
-			case ".git", "node_modules", "vendor":
-				if path != repoRoot {
-					return filepath.SkipDir
-				}
-			}
 			return nil
 		}
 		if !strings.HasSuffix(entry.Name(), "_test.go") {
@@ -1326,6 +1323,26 @@ func testServiceImportKey(filePath, importPath string) string {
 	return filepath.ToSlash(filePath) + "\x00" + importPath
 }
 
+func shouldSkipRepositoryWalkDirectory(repoRoot, path string, entry os.DirEntry) bool {
+	if !entry.IsDir() || path == repoRoot {
+		return false
+	}
+	switch entry.Name() {
+	case ".git", "node_modules", "vendor":
+		return true
+	}
+	relativePath, err := filepath.Rel(repoRoot, path)
+	if err != nil {
+		return false
+	}
+	switch filepath.ToSlash(relativePath) {
+	case ".worktrees", "worktrees", ".claude/worktrees":
+		return true
+	default:
+		return false
+	}
+}
+
 func scanProductServiceConstruction(repoRoot string) ([]serviceConstructionFinding, error) {
 	findingsByKey := map[string]serviceConstructionFinding{}
 	type packageNameResolution struct {
@@ -1345,13 +1362,10 @@ func scanProductServiceConstruction(repoRoot string) ([]serviceConstructionFindi
 		if walkErr != nil {
 			return walkErr
 		}
+		if shouldSkipRepositoryWalkDirectory(repoRoot, path, entry) {
+			return filepath.SkipDir
+		}
 		if entry.IsDir() {
-			switch entry.Name() {
-			case ".git", "node_modules", "vendor":
-				if path != repoRoot {
-					return filepath.SkipDir
-				}
-			}
 			return nil
 		}
 		if filepath.Ext(entry.Name()) != ".go" {
@@ -2188,13 +2202,10 @@ func scanApplicationGraphImports(repoRoot string, scanRoot string, packageRoot s
 		if walkErr != nil {
 			return walkErr
 		}
+		if shouldSkipRepositoryWalkDirectory(repoRoot, path, entry) {
+			return filepath.SkipDir
+		}
 		if entry.IsDir() {
-			switch entry.Name() {
-			case ".git", "node_modules", "vendor":
-				if path != repoRoot {
-					return filepath.SkipDir
-				}
-			}
 			return nil
 		}
 		if filepath.Ext(entry.Name()) != ".go" {
