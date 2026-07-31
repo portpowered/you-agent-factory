@@ -2899,21 +2899,6 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/work/internal/services/state_access/lineagegraph",
-      "target": "pkg/services/work/internal/services/state_access"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/work/internal/services/state_access/stateaccessquery",
-      "target": "pkg/services/work/internal/services/state_access"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/work/testdata",
-      "target": "pkg/services/work"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty",
       "target": "pkg/services/workers"
     },
@@ -3060,5 +3045,4 @@
   ],
   "violations": []
 }
-
 

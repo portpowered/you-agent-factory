@@ -23,7 +23,6 @@ var workMoveRules = []workMoveRule{
 	{exact: "internal/invocationreturnpolicy", prefix: "internal/invocationreturnpolicy/", subservice: ""},
 	{exact: "internal/requestadmission", prefix: "internal/requestadmission/", subservice: ""},
 	{exact: "materialize", prefix: "materialize/", subservice: "content_materialization"},
-	{exact: "testdata", prefix: "testdata/", subservice: ""},
 }
 
 func workMapping(packagePath string) (PackageRow, bool) {
@@ -52,6 +51,8 @@ func workMapping(packagePath string) (PackageRow, bool) {
 
 func isWorkCanonicalRetain(rest string) bool {
 	switch {
+	case rest == "internal":
+		return true
 	case rest == "wire" || strings.HasPrefix(rest, "wire/"):
 		return true
 	case rest == "transports" || strings.HasPrefix(rest, "transports/"):

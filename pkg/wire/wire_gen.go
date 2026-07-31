@@ -251,6 +251,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	quorumPolicyService := provideQuorumPolicyService(invocationPolicyPorts)
 	invocationOutputShapingService := provideInvocationOutputShapingService(invocationPolicyPorts)
 	workPropagationPolicyService := provideWorkPropagationPolicyService(invocationPolicyPorts)
+	workService := provideWorkMaterializationService(contentMaterializer)
 	runtimeLoggerFactory := provideRuntimeLoggerFactory()
 	wireRuntimeArtifactClock := provideRuntimeArtifactClock()
 	wireRuntimeArtifactIDGenerator := provideRuntimeArtifactIDGenerator()
@@ -271,7 +272,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	inputFileSystem := provideFactoryRuntimeInputs(edges2)
 	inputDirectoryWalker := provideFactoryRuntimeInputDirectoryWalker(edges2)
 	orchestrationCompilation := provideOrchestrationCompilation(idGenerator, javaScriptWorkflows)
-	v47 := wire.NewRuntimeFactory(quorumPolicyService, invocationOutputShapingService, workPropagationPolicyService, decisionEnvelopeService, runtimeLoggerFactory, runtimeLogSinkFactory, runtimeMetricsSinkFactory, idGenerator, requestIDGenerator, runtimeDirectoryFileSystem, inputFileSystem, inputDirectoryWalker, orchestrationCompilation)
+	v47 := wire.NewRuntimeFactory(quorumPolicyService, invocationOutputShapingService, workPropagationPolicyService, workService, decisionEnvelopeService, runtimeLoggerFactory, runtimeLogSinkFactory, runtimeMetricsSinkFactory, idGenerator, requestIDGenerator, runtimeDirectoryFileSystem, inputFileSystem, inputDirectoryWalker, orchestrationCompilation)
 	v48, err := wire.NewAssembly(v47)
 	if err != nil {
 		return nil, err
@@ -625,6 +626,7 @@ var servicesSet = wire3.NewSet(
 	provideWorkSubmittedFileReader,
 	provideWorkContentHostPlatform,
 	provideContentMaterializer,
+	provideWorkMaterializationService,
 	provideFactoryInvocationPolicyPorts,
 	provideDecisionEnvelopeService,
 	provideInvocationInterpolationService,

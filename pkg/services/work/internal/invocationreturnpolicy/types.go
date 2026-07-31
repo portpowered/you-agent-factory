@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/lineagegraph"
+	"github.com/portpowered/infinite-you/pkg/services/work/internal/lineagegraph"
 )
 
 var (

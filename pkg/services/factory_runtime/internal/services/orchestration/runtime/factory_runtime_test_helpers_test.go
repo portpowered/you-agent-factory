@@ -79,6 +79,7 @@ func newTestFactory(opts ...testFactoryOption) (factory.Factory, error) {
 		) interfaces.WorkPropagationMode {
 			return interfaces.WorkPropagationModeOutputAsPayload
 		}),
+		nil,
 		func() string { return fmt.Sprintf("work-request-test-id-%d", identity.Add(1)) },
 		func() string { return fmt.Sprintf("runtime-test-id-%d", identity.Add(1)) },
 	)

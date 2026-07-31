@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/lineagegraph"
+	"github.com/portpowered/infinite-you/pkg/services/work/internal/lineagegraph"
 )
 
 type SingleWorkTargetPreparation func(Request) (SingleWorkTarget, error)

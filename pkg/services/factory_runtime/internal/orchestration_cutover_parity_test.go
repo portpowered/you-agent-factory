@@ -16,11 +16,11 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factoryinternal "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal"
+	orchestration "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/definitionmapping"
 	factoryruntimejavascript "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/javascript"
-	orchestration "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration"
 	factoryruntimeorchestrationowner "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestrationowner"
-	factoryinternal "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -165,7 +165,7 @@ func TestBuildThroughOrchestrationOpensInlineJavaScriptFactory(t *testing.T) {
 	}
 	workflows := cutoverJavaScriptWorkflows()
 	bundle, err := factoryinternal.NewRuntimeFactory(
-		nil, nil, nil, nil, testRuntimeLoggerFactory, nil, nil,
+		nil, nil, nil, nil, nil, testRuntimeLoggerFactory, nil, nil,
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		factoryruntimeorchestrationowner.NewCompilation(testRuntimeID, workflows, workflows),
 	).Build(
@@ -254,9 +254,11 @@ func cutoverJavaScriptFactoryConfig(inline string) *factorydefinitions.FactoryCo
 
 type cutoverWorkflowSourceFiles struct{}
 
-func (cutoverWorkflowSourceFiles) ReadDir(path string) ([]fs.DirEntry, error) { return os.ReadDir(path) }
-func (cutoverWorkflowSourceFiles) ReadFile(path string) ([]byte, error)       { return os.ReadFile(path) }
-func (cutoverWorkflowSourceFiles) Stat(path string) (fs.FileInfo, error)      { return os.Stat(path) }
+func (cutoverWorkflowSourceFiles) ReadDir(path string) ([]fs.DirEntry, error) {
+	return os.ReadDir(path)
+}
+func (cutoverWorkflowSourceFiles) ReadFile(path string) ([]byte, error)  { return os.ReadFile(path) }
+func (cutoverWorkflowSourceFiles) Stat(path string) (fs.FileInfo, error) { return os.Stat(path) }
 
 func cutoverJavaScriptWorkflows() factory.JavaScriptWorkflows {
 	return factoryruntimejavascript.New(cutoverWorkflowSourceFiles{}, os.UserHomeDir, filepath.EvalSymlinks)

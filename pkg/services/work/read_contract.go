@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/stateaccessquery"
+	"github.com/portpowered/infinite-you/pkg/services/work/internal/stateaccessquery"
 )
 
 const (

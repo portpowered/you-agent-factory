@@ -31,6 +31,14 @@ func TestMapCommittedOwnerPackageWorkMoveDestinations(t *testing.T) {
 			retainOwner: "work",
 		},
 		{
+			path: "pkg/services/work/internal",
+			want: PackageMapping{
+				PackagePath: "pkg/services/work/internal",
+				Disposition: DispositionRetain,
+				Destination: "work",
+			},
+		},
+		{
 			path: "pkg/services/work/internal/services/state_access/wire",
 			want: PackageMapping{
 				PackagePath: "pkg/services/work/internal/services/state_access/wire",
@@ -39,17 +47,25 @@ func TestMapCommittedOwnerPackageWorkMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/work/internal/service",
+			path: "pkg/services/work/internal/lineagegraph",
 			want: PackageMapping{
-				PackagePath: "pkg/services/work/internal/service",
+				PackagePath: "pkg/services/work/internal/lineagegraph",
 				Disposition: DispositionMove,
 				Destination: "work/internal",
 			},
 		},
 		{
-			path: "pkg/services/work/testdata/primary_result_regression",
+			path: "pkg/services/work/internal/proposalmaterialization",
 			want: PackageMapping{
-				PackagePath: "pkg/services/work/testdata/primary_result_regression",
+				PackagePath: "pkg/services/work/internal/proposalmaterialization",
+				Disposition: DispositionMove,
+				Destination: "work/internal",
+			},
+		},
+		{
+			path: "pkg/services/work/internal/stateaccessquery",
+			want: PackageMapping{
+				PackagePath: "pkg/services/work/internal/stateaccessquery",
 				Disposition: DispositionMove,
 				Destination: "work/internal",
 			},
@@ -85,61 +101,16 @@ func TestWorkTopLevelUnexpectedCoveredByMoveRules(t *testing.T) {
 	t.Parallel()
 
 	spec := productOwnerTopLevelSpecs["work"]
-	wantDestination := map[string]string{
-		"testdata": "work/internal",
-	}
-	if len(spec.unexpected) != len(wantDestination) {
-		t.Fatalf("unexpected inventory drift: got %v, want keys %v", spec.unexpected, wantDestination)
-	}
-
-	for _, child := range spec.unexpected {
-		rest := child
-		want, ok := wantDestination[child]
-		if !ok {
-			t.Fatalf("unexpected sibling %q missing from confirmed inventory destinations", child)
-		}
-		destination, ok := nestedOwnerMoveDestination("work", rest)
-		if !ok {
-			t.Fatalf("nestedOwnerMoveDestination(work, %q) ok = false", rest)
-		}
-		if destination != want {
-			t.Fatalf("unexpected top-level child %q destination = %q, want %q", child, destination, want)
-		}
+	if len(spec.unexpected) != 0 {
+		t.Fatalf("unexpected inventory drift: got %v, want no unexpected siblings", spec.unexpected)
 	}
 }
 
 func TestWorkUnexpectedSiblingMoveDestinationsLocked(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
-		path            string
-		wantDestination string
-	}{
-		{
-			path:            "pkg/services/work/testdata",
-			wantDestination: "work/internal",
-		},
-	}
-
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.path, func(t *testing.T) {
-			t.Parallel()
-
-			got, ok := mapCommittedOwnerPackage(tc.path)
-			if !ok {
-				t.Fatalf("mapCommittedOwnerPackage(%q) ok = false", tc.path)
-			}
-			if mappingIsRetainToOwnerRoot(got, "work") {
-				t.Fatalf("mapCommittedOwnerPackage(%q) regressed to retain→work", tc.path)
-			}
-			if got.Disposition != DispositionMove {
-				t.Fatalf("mapCommittedOwnerPackage(%q) disposition = %q, want move", tc.path, got.Disposition)
-			}
-			if got.Destination != tc.wantDestination {
-				t.Fatalf("mapCommittedOwnerPackage(%q) destination = %q, want %q", tc.path, got.Destination, tc.wantDestination)
-			}
-		})
+	if len(productOwnerTopLevelSpecs["work"].unexpected) != 0 {
+		t.Fatal("unexpected Work siblings remain inventoried")
 	}
 }
 
@@ -180,6 +151,8 @@ func TestWorkInventoryRejectsRetainToOwnerRoot(t *testing.T) {
 
 func workCanonicalRetainRest(rest string) bool {
 	switch {
+	case rest == "internal":
+		return true
 	case rest == "wire" || strings.HasPrefix(rest, "wire/"):
 		return true
 	case rest == "transports" || strings.HasPrefix(rest, "transports/"):
@@ -191,12 +164,6 @@ func workCanonicalRetainRest(rest string) bool {
 	case strings.HasPrefix(rest, "internal/services/content_materialization"):
 		return true
 	case strings.HasPrefix(rest, "internal/services/state_access"):
-		return true
-	case rest == "internal/contenturl" || strings.HasPrefix(rest, "internal/contenturl/"):
-		return true
-	case rest == "internal/invocationreturnpolicy" || strings.HasPrefix(rest, "internal/invocationreturnpolicy/"):
-		return true
-	case rest == "internal/requestadmission" || strings.HasPrefix(rest, "internal/requestadmission/"):
 		return true
 	default:
 		return false

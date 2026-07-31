@@ -13,8 +13,8 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factoryruntimeorchestrationowner "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestrationowner"
 	factoryinternal "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal"
+	factoryruntimeorchestrationowner "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestrationowner"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
@@ -125,19 +125,19 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 		t.Fatalf("LoadRuntimeConfigFromFactoryDir: %v", err)
 	}
 	bundle, err := testRuntimeFactoryWithSinks(logDir, metricsDir).Build(
-			context.Background(), dir, dir, "~default",
-			"", interfaces.RuntimeModeBatch, false, nil, nil, nil, false, nil, nil,
-			logDir, factory.RuntimeLogStorageConfig{},
-			"", "", metricsDir, factory.RuntimeMetricsStorageConfig{},
-			loaded, zap.NewNop(), "runtime-observability", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil, nil,
-			nil,
-			newTestRuntimeLedger,
-			func(recordings.WorkerEventRecorder, *zap.Logger) (map[string]workers.WorkerExecutor, error) {
-				return nil, nil
-			},
-			testRuntimeWorkers{},
-			nil,
-		)
+		context.Background(), dir, dir, "~default",
+		"", interfaces.RuntimeModeBatch, false, nil, nil, nil, false, nil, nil,
+		logDir, factory.RuntimeLogStorageConfig{},
+		"", "", metricsDir, factory.RuntimeMetricsStorageConfig{},
+		loaded, zap.NewNop(), "runtime-observability", "", clockwork.NewFakeClock(), "", nil, nil, nil, nil, nil,
+		nil,
+		newTestRuntimeLedger,
+		func(recordings.WorkerEventRecorder, *zap.Logger) (map[string]workers.WorkerExecutor, error) {
+			return nil, nil
+		},
+		testRuntimeWorkers{},
+		nil,
+	)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -240,7 +240,7 @@ func testOrchestrationCompilation() factory.OrchestrationCompilation {
 
 func testRuntimeFactory() *factoryinternal.RuntimeFactory {
 	return factoryinternal.NewRuntimeFactory(
-		nil, nil, outputAsPayloadPolicy(), nil, testRuntimeLoggerFactory, nil, nil,
+		nil, nil, outputAsPayloadPolicy(), nil, nil, testRuntimeLoggerFactory, nil, nil,
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		testOrchestrationCompilation(),
 	)
@@ -248,7 +248,7 @@ func testRuntimeFactory() *factoryinternal.RuntimeFactory {
 
 func testRuntimeFactoryWithSinks(logDir, metricsDir string) *factoryinternal.RuntimeFactory {
 	return factoryinternal.NewRuntimeFactory(
-		nil, nil, outputAsPayloadPolicy(), nil, testRuntimeLoggerFactory,
+		nil, nil, outputAsPayloadPolicy(), nil, nil, testRuntimeLoggerFactory,
 		testRuntimeLogFactory(logDir), testRuntimeMetricsFactory(metricsDir),
 		testRuntimeID, testRuntimeID, localRuntimeFiles{}, localRuntimeFiles{}, filepath.WalkDir,
 		testOrchestrationCompilation(),

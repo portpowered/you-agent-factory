@@ -1,11 +1,11 @@
-package service_test
+package internal_test
 
 import (
 	"context"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	internalservice "github.com/portpowered/infinite-you/pkg/services/work/internal/service"
+	internalservice "github.com/portpowered/infinite-you/pkg/services/work/internal"
 )
 
 type petriMoveRuntime struct {
