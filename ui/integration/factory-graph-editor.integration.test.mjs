@@ -897,7 +897,7 @@ describe.concurrent("factory graph editor browser integration", () => {
           )
           .toBe(0);
         await browserPage.page
-          .getByRole("region", { name: "Factory topology" })
+          .getByRole("region", { name: "Work graph viewport" })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
 
         expect(saveRequests).toHaveLength(0);

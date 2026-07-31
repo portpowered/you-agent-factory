@@ -191,7 +191,7 @@ describe.sequential("maintainer phantom worker graph browser integration", () =>
               timeout: uiInteractionTimeoutMs,
             },
           )
-          .toBeNull();
+          .toBe("false");
 
         expectNoBrowserErrors(
           browserPage.pageErrors,
