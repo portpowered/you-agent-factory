@@ -30,10 +30,11 @@ var runProcess = func() int {
 		if err == nil {
 			stdinIsTTY := streamIsTerminal(os.Stdin)
 			stdoutIsTTY := streamIsTerminal(os.Stdout)
+			stderrIsTTY := streamIsTerminal(os.Stderr)
 			err = process.Execute(root.Input{
 				Args: os.Args, Env: os.Environ(), Stdin: os.Stdin, Stdout: os.Stdout,
 				Stderr: os.Stderr, Context: ctx, WorkingDirectory: workingDirectory,
-				StdinIsTTY: &stdinIsTTY, StdoutIsTTY: &stdoutIsTTY,
+				StdinIsTTY: &stdinIsTTY, StdoutIsTTY: &stdoutIsTTY, StderrIsTTY: &stderrIsTTY,
 			})
 			closeCtx, cancelClose := context.WithTimeout(context.Background(), 5*time.Second)
 			err = errors.Join(err, process.Close(closeCtx))

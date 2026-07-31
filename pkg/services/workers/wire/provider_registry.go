@@ -110,8 +110,8 @@ func (registry *providerRegistry) RunnerMetadata(identity string) (workers.Runne
 		})
 	}
 	return workers.RunnerMetadata{
-		ID:          runnerID,
-		DisplayName: descriptor.DisplayName,
+		ID:           runnerID,
+		DisplayName:  descriptor.DisplayName,
 		Capabilities: workers.NewCapabilities(optional...),
 	}, nil
 }
@@ -160,8 +160,6 @@ func (registry *providerRegistry) ResolveRunnerSelection(
 
 func runnerIdentity(identity providers.ID) string {
 	switch identity {
-	case providers.IDCursor:
-		return workers.RunnerIDCursorCLI
 	case providers.IDAntigravity:
 		return workers.RunnerIDAntigravity
 	default:

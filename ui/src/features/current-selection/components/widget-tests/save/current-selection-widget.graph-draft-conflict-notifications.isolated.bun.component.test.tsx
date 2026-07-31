@@ -101,7 +101,7 @@ function buildDetailCardWorkTypeFactoryDocument(): CurrentFactoryDocument {
     workers: [
       {
         model: "gpt-5.5",
-        modelProvider: "CURSOR",
+        modelProvider: "CODEX",
         name: "reviewer",
         type: "MODEL_WORKER",
       },
@@ -354,7 +354,7 @@ describe("CurrentSelectionWidget graph draft conflict warning boundaries", () =>
         workers: [
           {
             model: "gpt-5.5",
-            modelProvider: "CURSOR",
+            modelProvider: "CODEX",
             name: "reviewer",
             resources: [{ capacity: 1, name: "expanded-slot" }],
             type: "MODEL_WORKER",

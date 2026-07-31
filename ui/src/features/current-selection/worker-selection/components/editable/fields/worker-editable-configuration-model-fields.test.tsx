@@ -66,14 +66,14 @@ describe("WorkerEditableConfigurationModelFields", () => {
         executorProvider: "SCRIPT_WRAP",
         model: "gpt-5.5",
         modelLocality: "LOCAL",
-        modelProvider: "CURSOR",
+        modelProvider: "CODEX",
         skipPermissions: true,
       },
     });
 
     expect(
       screen.getByRole("combobox", { name: messages.modelProviderLabel }),
-    ).toHaveTextContent(messages.localizeModelProvider("CURSOR"));
+    ).toHaveTextContent(messages.localizeModelProvider("CODEX"));
     expect(
       screen.getByRole("textbox", { name: messages.modelLabel }),
     ).toHaveValue("gpt-5.5");

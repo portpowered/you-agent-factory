@@ -154,57 +154,6 @@
         "usage": true
       },
       "technicalSupportLevel": "production"
-    },
-    {
-      "aliases": [],
-      "description": {
-        "type": "LOCALIZABLE_ASSET",
-        "value": "Cursor Agent CLI integration."
-      },
-      "discovery": {
-        "configurationKeys": [],
-        "endpointKinds": [
-          "stdio"
-        ],
-        "executableNames": [
-          "cursor"
-        ]
-      },
-      "displayName": {
-        "type": "LOCALIZABLE_ASSET",
-        "value": "Cursor CLI"
-      },
-      "documentation": [
-        {
-          "kind": "reference",
-          "url": "https://docs.cursor.com/en/cli/overview"
-        }
-      ],
-      "id": "cursor",
-      "implementationAvailability": "bundled",
-      "maximumExecutionCapabilities": {
-        "imageInput": false,
-        "promptSubmission": true,
-        "sessionResume": true,
-        "structuredOutput": false,
-        "toolExecution": true,
-        "workingDirectory": true,
-        "worktree": false
-      },
-      "maximumResponseFidelityCapabilities": {
-        "fileChanges": false,
-        "messageDeltas": false,
-        "messageSnapshots": true,
-        "nativeStreaming": true,
-        "plans": false,
-        "providerReconnect": false,
-        "reasoningSummaries": false,
-        "stableItemIds": true,
-        "toolLifecycle": true,
-        "toolOutputDeltas": true,
-        "usage": true
-      },
-      "technicalSupportLevel": "experimental"
     }
   ]
 }

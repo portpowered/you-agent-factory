@@ -24,9 +24,9 @@ const (
 
 	submissionActivationHTTPUnaryWorkName = "fun-work-http-unary-task"
 
-	submissionActivationCLIUnaryWorkName = "fun-work-cli-unary-task"
-	submissionActivationCLIBatchRequestID  = "fun-work-cli-batch"
-	submissionActivationCLIBatchWorkName   = "fun-work-cli-batch-task"
+	submissionActivationCLIUnaryWorkName  = "fun-work-cli-unary-task"
+	submissionActivationCLIBatchRequestID = "fun-work-cli-batch"
+	submissionActivationCLIBatchWorkName  = "fun-work-cli-batch-task"
 )
 
 // TestWorkSubmissionAndCLISubmitActivateThroughRootBuildProcessAfterLifecycle

@@ -12,13 +12,13 @@ import (
 
 // Dependencies are the exact process-scoped edges required by Execute.
 type Dependencies struct {
-	Runners         runners.Service
-	Providers       providers.Service
-	Observe         workers.ObservationSink
-	Logger          logging.Logger
-	Clock           func() time.Time
-	Worktree        workers.FactoryWorktreePreparer
-	TemporaryFiles  TemporaryFileCleaner
+	Runners        runners.Service
+	Providers      providers.Service
+	Observe        workers.ObservationSink
+	Logger         logging.Logger
+	Clock          func() time.Time
+	Worktree       workers.FactoryWorktreePreparer
+	TemporaryFiles TemporaryFileCleaner
 }
 
 // TemporaryFileCleaner releases request-scoped temporary files created during

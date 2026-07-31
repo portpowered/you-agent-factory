@@ -39,7 +39,6 @@ const workerDetailEnumMessagesByLocale = {
         labels: {
           CLAUDE: "Claude",
           CODEX: "Codex",
-          CURSOR: "Cursor",
           ANTIGRAVITY: "Antigravity",
         },
         locale: "en",
@@ -97,7 +96,6 @@ const workerDetailEnumMessagesByLocale = {
         labels: {
           CLAUDE: "Claude",
           CODEX: "Codex",
-          CURSOR: "Cursor",
           ANTIGRAVITY: "Antigravity",
         },
         locale: "ja",
@@ -155,7 +153,6 @@ const workerDetailEnumMessagesByLocale = {
         labels: {
           CLAUDE: "Claude",
           CODEX: "Codex",
-          CURSOR: "Cursor",
           ANTIGRAVITY: "Antigravity",
         },
         locale: "ko",
@@ -213,7 +210,6 @@ const workerDetailEnumMessagesByLocale = {
         labels: {
           CLAUDE: "Claude",
           CODEX: "Codex",
-          CURSOR: "Cursor",
           ANTIGRAVITY: "Antigravity",
         },
         locale: "zh-CN",

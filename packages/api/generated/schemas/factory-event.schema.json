@@ -3210,7 +3210,7 @@
       "description": "Open provider identity used by authored modelProvider fields. Extension identities use lowercase letters and digits separated by dots or hyphens. Built-in identities and documented legacy aliases remain accepted compatibility spellings. For example, `customer.provider` is a valid extension identity.",
       "maxLength": 128,
       "minLength": 1,
-      "pattern": "^(?:[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*|ANTIGRAVITY|ANTHROPIC|CLAUDE|CODEX|CURSOR|OPENAI)$",
+      "pattern": "^(?:[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*|ANTIGRAVITY|ANTHROPIC|CLAUDE|CODEX|OPENAI)$",
       "type": "string"
     },
     "ProviderSessionMetadata": {
@@ -3492,7 +3492,6 @@
       "enum": [
         "codex",
         "claude",
-        "cursor-cli",
         "antigravity"
       ],
       "type": "string"

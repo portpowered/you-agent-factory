@@ -11,7 +11,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/agy"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/claude"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/codex"
-	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/cursor"
 	inference "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/inferencecontract"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -118,13 +117,6 @@ func migratedBuiltInIntegration(
 			return codex.NewIntegration()
 		}
 		return codex.NewIntegration(codex.IntegrationDependencies{
-			ProvidersService: dependencies.ProvidersService,
-		})
-	case "cursor":
-		if dependencies.ProvidersService == nil {
-			return cursor.NewIntegration()
-		}
-		return cursor.NewIntegration(cursor.IntegrationDependencies{
 			ProvidersService: dependencies.ProvidersService,
 		})
 	case "antigravity":

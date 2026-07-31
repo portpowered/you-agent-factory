@@ -15,8 +15,8 @@ func NewValidationOperations(
 }
 
 var (
-	ValidateFactoryDefinition = wirevalidation.ValidateFactoryDefinition
-	ValidateBlockingFactoryLoad = wirevalidation.ValidateBlockingFactoryLoad
-	ValidatePortableResourceManifestOnPathWithSourceResolver = wirevalidation.ValidatePortableResourceManifestOnPathWithSourceResolver
+	ValidateFactoryDefinition                                     = wirevalidation.ValidateFactoryDefinition
+	ValidateBlockingFactoryLoad                                   = wirevalidation.ValidateBlockingFactoryLoad
+	ValidatePortableResourceManifestOnPathWithSourceResolver      = wirevalidation.ValidatePortableResourceManifestOnPathWithSourceResolver
 	ValidatePortableBundledFilesForExpandOnPathWithSourceResolver = wirevalidation.ValidatePortableBundledFilesForExpandOnPathWithSourceResolver
 )

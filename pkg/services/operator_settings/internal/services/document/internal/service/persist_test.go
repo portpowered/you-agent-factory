@@ -11,10 +11,10 @@ import (
 	"strings"
 	"testing"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document/internal/service"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
-	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 )
 
 func TestPersistDocument_AtomicallyPublishesCompleteDocument(t *testing.T) {

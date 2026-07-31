@@ -197,7 +197,6 @@ func TestCanonicalProviderSessionProvider(t *testing.T) {
 	}{
 		{name: "empty", input: "", expected: ""},
 		{name: "cursor already canonical", input: "cursor", expected: "cursor"},
-		{name: "legacy cursor command", input: string(ModelProviderCursor), expected: "cursor"},
 		{name: "cursor alias", input: "cursor-agent", expected: "cursor"},
 		{name: "other provider unchanged", input: "codex", expected: "codex"},
 	}
@@ -743,8 +742,8 @@ func TestResolveRunnerSelection(t *testing.T) {
 		},
 		{
 			name:          "FactoryWinsWhenWorkstationUnset",
-			factoryRunner: "cursor-cli",
-			wantRunner:    RunnerIDCursorCLI,
+			factoryRunner: "claude",
+			wantRunner:    RunnerIDClaude,
 			wantSource:    RunnerSelectionSourceFactory,
 		},
 		{
@@ -771,18 +770,6 @@ func TestResolveRunnerSelection(t *testing.T) {
 				t.Fatalf("ResolveRunnerSelection(...) = %#v, want runner=%q source=%q", got, tt.wantRunner, tt.wantSource)
 			}
 		})
-	}
-}
-
-func TestBuiltInRunnerMetadata(t *testing.T) {
-	t.Parallel()
-
-	metadata, ok := BuiltInRunnerMetadata("  CURSOR-CLI ")
-	if !ok {
-		t.Fatal("expected cursor-cli metadata")
-	}
-	if metadata.ID != RunnerIDCursorCLI {
-		t.Fatalf("metadata.ID = %q, want %q", metadata.ID, RunnerIDCursorCLI)
 	}
 }
 
@@ -815,7 +802,6 @@ func TestSupportedModelProviders_IncludesAllCanonicalCommands(t *testing.T) {
 	want := []ModelProvider{
 		ModelProviderClaude,
 		ModelProviderCodex,
-		ModelProviderCursor,
 		ModelProviderAntigravity,
 	}
 	if len(got) != len(want) {
@@ -835,7 +821,6 @@ func TestModelProviderPublicInternalMapping_RoundTripsAllSupportedProviders(t *t
 	}{
 		{string(factoryapi.WorkerModelProviderClaude), ModelProviderClaude},
 		{string(factoryapi.WorkerModelProviderCodex), ModelProviderCodex},
-		{string(factoryapi.WorkerModelProviderCursor), ModelProviderCursor},
 		{string(factoryapi.WorkerModelProviderAntigravity), ModelProviderAntigravity},
 	}
 
@@ -873,7 +858,7 @@ func TestPublicWorkerModelProviderFromInternalRuntime_CanonicalizesProviderAlias
 
 func TestStrictPublicFactoryWorkerModelProvider_AcceptsAllCanonicalPublicValues(t *testing.T) {
 	for _, provider := range []string{
-		"CLAUDE", "CODEX", "CURSOR", "ANTIGRAVITY",
+		"CLAUDE", "CODEX", "ANTIGRAVITY",
 	} {
 		if got := StrictPublicFactoryWorkerModelProvider(provider); got != provider {
 			t.Fatalf("StrictPublicFactoryWorkerModelProvider(%q) = %q, want %q", provider, got, provider)

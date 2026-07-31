@@ -17,11 +17,11 @@ import (
 // Service is the private nested validation implementation behind the CTR-DEF
 // root validate slice.
 type Service struct {
-	operations        factoryroot.DefinitionValidationOperation
-	effective         factoryroot.EffectiveDefinitionValidationOperation
-	loadCanonical     factoryroot.CanonicalFactoryJSONLoader
-	requiredToolChecker     factoryroot.RequiredToolChecker
-	orchestratorValidator   factoryroot.OrchestratorDefinitionValidator
+	operations            factoryroot.DefinitionValidationOperation
+	effective             factoryroot.EffectiveDefinitionValidationOperation
+	loadCanonical         factoryroot.CanonicalFactoryJSONLoader
+	requiredToolChecker   factoryroot.RequiredToolChecker
+	orchestratorValidator factoryroot.OrchestratorDefinitionValidator
 }
 
 var _ validationservice.Service = (*Service)(nil)

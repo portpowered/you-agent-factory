@@ -15,8 +15,8 @@ type GetCurrentInput struct {
 // SaveCurrentInput is the MCP request shape for you.factory_definition.save_current.
 type SaveCurrentInput struct {
 	SessionID string                      `json:"sessionId"`
-	Mode      *factoryapi.FactorySaveMode   `json:"mode,omitempty"`
-	Factory   factoryapi.Factory            `json:"factory"`
+	Mode      *factoryapi.FactorySaveMode `json:"mode,omitempty"`
+	Factory   factoryapi.Factory          `json:"factory"`
 }
 
 // GetCurrent returns the current Factory for one Factory Session through the

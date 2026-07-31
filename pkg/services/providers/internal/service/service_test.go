@@ -62,8 +62,8 @@ func TestRootDelegatesListAndGetToCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListProviders() = %v", err)
 	}
-	if len(list.Providers) != 4 {
-		t.Fatalf("len(Providers) = %d, want 4", len(list.Providers))
+	if len(list.Providers) != 3 {
+		t.Fatalf("len(Providers) = %d, want 3", len(list.Providers))
 	}
 
 	got, err := root.GetProvider(context.Background(), providers.GetProviderRequest{ID: providers.IDCodex})
@@ -74,12 +74,9 @@ func TestRootDelegatesListAndGetToCatalog(t *testing.T) {
 		t.Fatalf("GetProvider(codex).Provider.ID = %q, want codex", got.Provider.ID)
 	}
 
-	byAlias, err := root.GetProvider(context.Background(), providers.GetProviderRequest{ID: providers.ID("cursor")})
-	if err != nil {
-		t.Fatalf("GetProvider(cursor) = %v", err)
-	}
-	if byAlias.Provider.ID != providers.IDCursor {
-		t.Fatalf("GetProvider(cursor).Provider.ID = %q, want cursor", byAlias.Provider.ID)
+	_, err = root.GetProvider(context.Background(), providers.GetProviderRequest{ID: providers.ID("cursor")})
+	if !errors.Is(err, providers.ErrUnknownProvider) {
+		t.Fatalf("GetProvider(cursor) error = %v, want ErrUnknownProvider", err)
 	}
 }
 
@@ -94,14 +91,14 @@ func TestRootDelegatesExecuteToOnePrivateExecutionAttempt(t *testing.T) {
 	executionService, err := executionwire.NewService(
 		catalogService,
 		execution.Registration{
-			Provider: providers.IDCursor,
+			Provider: providers.IDCodex,
 			Attempt: func(
 				_ context.Context,
 				request providers.ExecuteRequest,
 			) (providers.ExecuteResult, error) {
 				calls++
-				if request.Provider != providers.IDCursor {
-					t.Fatalf("adapter provider = %q, want %q", request.Provider, providers.IDCursor)
+				if request.Provider != providers.IDCodex {
+					t.Fatalf("adapter provider = %q, want %q", request.Provider, providers.IDCodex)
 				}
 				return providers.ExecuteResult{Content: "root result"}, nil
 			},
@@ -116,7 +113,7 @@ func TestRootDelegatesExecuteToOnePrivateExecutionAttempt(t *testing.T) {
 	}
 
 	result, err := root.Execute(context.Background(), providers.ExecuteRequest{
-		Provider:  providers.ID("cursor"),
+		Provider:  providers.IDCodex,
 		AttemptID: "attempt-1",
 	})
 	if err != nil {

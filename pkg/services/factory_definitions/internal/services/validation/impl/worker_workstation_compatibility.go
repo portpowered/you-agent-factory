@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
 )
 
 // WorkerWorkstationBehaviorCompatibilityTargets returns canonical validation targets

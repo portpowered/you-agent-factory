@@ -2,28 +2,28 @@ package service
 
 import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	invocationpolicyservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy"
 	invocationpolicydecisionenvelope "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope"
 	invocationpolicyinterpolation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/invocationinterpolation"
 	invocationpolicyoutput "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/invocationoutput"
+	invocationpolicyworktype "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/invocationworktype"
 	invocationpolicyquorum "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/quorumpolicy"
 	invocationpolicytts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/ttsobservability"
 	invocationpolicyworkpropagation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/workpropagation"
 	invocationpolicyworkstationexecution "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution"
-	invocationpolicyworktype "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/invocationworktype"
-	invocationpolicyservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy"
 )
 
 // Service is the private nested invocation_policy implementation behind the
 // published Definitions root policy contracts.
 type Service struct {
-	decisionEnvelope       factorydefinitions.DecisionEnvelopeService
+	decisionEnvelope        factorydefinitions.DecisionEnvelopeService
 	invocationInterpolation factorydefinitions.InvocationInterpolationService
-	invocationOutput       factorydefinitions.InvocationOutputShapingService
-	invocationWorkType     factorydefinitions.InvocationWorkTypeService
-	quorumPolicy           factorydefinitions.QuorumPolicyService
-	workPropagation        factorydefinitions.WorkPropagationPolicyService
-	workstationExecution   factorydefinitions.WorkstationExecutionPolicyService
-	ttsObservability       factorydefinitions.TTSObservabilityService
+	invocationOutput        factorydefinitions.InvocationOutputShapingService
+	invocationWorkType      factorydefinitions.InvocationWorkTypeService
+	quorumPolicy            factorydefinitions.QuorumPolicyService
+	workPropagation         factorydefinitions.WorkPropagationPolicyService
+	workstationExecution    factorydefinitions.WorkstationExecutionPolicyService
+	ttsObservability        factorydefinitions.TTSObservabilityService
 }
 
 var _ invocationpolicyservice.Service = (*Service)(nil)

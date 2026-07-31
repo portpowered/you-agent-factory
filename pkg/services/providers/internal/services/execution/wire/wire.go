@@ -16,7 +16,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty"
 	claudeadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude"
 	codexadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex"
-	cursoradapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/cursor"
 	executionservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -70,14 +69,6 @@ func BuiltInDependenciesFromRunner(
 	return BuiltInDependenciesFromWorkersRunner(workers.AdaptCommandRunner(runner))
 }
 
-// CursorPlatformDependencies are platform facts required for oversized Windows
-// Cursor prompt materialization in the built-in Providers Execution adapter.
-type CursorPlatformDependencies struct {
-	OperatingSystem string
-	TemporaryDir    string
-	TemporaryFiles  platformfilesystem.TemporaryFileSystem
-}
-
 // AgyPTYPlatformDependencies are platform facts required for the built-in Agy
 // PTY execution adapter.
 type AgyPTYPlatformDependencies struct {
@@ -89,7 +80,6 @@ type AgyPTYPlatformDependencies struct {
 // BuiltInRunnerPlatformDependencies carries optional platform facts for
 // built-in adapter effects constructed from the Workers subprocess runner.
 type BuiltInRunnerPlatformDependencies struct {
-	Cursor CursorPlatformDependencies
 	AgyPTY AgyPTYPlatformDependencies
 }
 
@@ -113,10 +103,5 @@ func BuiltInDependenciesFromWorkersRunner(
 		}),
 		Codex:  codexadapter.NewCommandEffect(runner),
 		Claude: claudeadapter.NewCommandEffect(runner),
-		Cursor: cursoradapter.NewCommandEffect(runner, cursoradapter.CommandEffectOptions{
-			OperatingSystem: deps.Cursor.OperatingSystem,
-			TemporaryDir:    deps.Cursor.TemporaryDir,
-			TemporaryFiles:  deps.Cursor.TemporaryFiles,
-		}),
 	}
 }

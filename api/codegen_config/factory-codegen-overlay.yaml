@@ -115,7 +115,6 @@ actions:
         x-enum-varnames:
             - RunnerIDCodex
             - RunnerIDClaude
-            - RunnerIDCursorCLI
             - RunnerIDAntigravity
     - target: $.components.schemas.WorkContentPartType
       update:
@@ -153,7 +152,6 @@ actions:
         x-enum-varnames:
             - WorkerModelProviderClaude
             - WorkerModelProviderCodex
-            - WorkerModelProviderCursor
             - WorkerModelProviderAntigravity
     - target: $.components.schemas.Worker.properties.modelProvider
       update:

@@ -465,7 +465,7 @@ function buildReadyEditableConfigurationState(overrides?: {
       executorProvider: null,
       model: "gpt-5.5",
       modelLocality: null,
-      modelProvider: "CURSOR",
+      modelProvider: "CODEX",
       provider: null,
       type: "MODEL_WORKER",
       workerName: "reviewer",
@@ -509,7 +509,7 @@ function buildReadyEditableConfigurationState(overrides?: {
       workers: [
         {
           model: "gpt-5.5",
-          modelProvider: "CURSOR",
+          modelProvider: "CODEX",
           name: "reviewer",
           type: "MODEL_WORKER",
         },

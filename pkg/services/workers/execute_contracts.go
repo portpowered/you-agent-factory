@@ -102,10 +102,10 @@ type OutputPolicy struct {
 // Values are request-scoped execution inputs and must not be persisted by
 // Workers diagnostics or observations.
 type EnvironmentPolicy struct {
-	Vars                 map[string]string
-	ProcessEnvironment   []string
-	WorkingDirectory     string
-	WorkingDirectorySet  bool
+	Vars                   map[string]string
+	ProcessEnvironment     []string
+	WorkingDirectory       string
+	WorkingDirectorySet    bool
 	SkipProcessInheritance bool
 }
 

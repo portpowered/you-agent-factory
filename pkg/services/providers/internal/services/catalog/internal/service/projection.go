@@ -98,8 +98,6 @@ func projectManifest(manifest publishedProviderManifest) (providers.Descriptor, 
 
 func canonicalProvidersID(manifestID string) providers.ID {
 	switch strings.ToLower(strings.TrimSpace(manifestID)) {
-	case "cursor":
-		return providers.IDCursor
 	case "antigravity":
 		return providers.IDAntigravity
 	default:

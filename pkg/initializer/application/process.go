@@ -90,6 +90,7 @@ func (p *Process) Execute(input Input) error {
 	ctx = processcontract.WithWorkingDirectory(ctx, normalized.workingDir)
 	ctx = processcontract.WithStdinTTY(ctx, normalized.stdinIsTTY)
 	ctx = processcontract.WithStdoutTTY(ctx, normalized.stdoutIsTTY)
+	ctx = processcontract.WithStderrTTY(ctx, normalized.stderrIsTTY)
 	return p.commandFactory.ExecuteCommand(processcontract.CommandInvocation{
 		Arguments: normalized.argumentsCopy(), Stdin: normalized.stdin,
 		Stdout: normalized.stdout, Stderr: normalized.stderr, Context: ctx,

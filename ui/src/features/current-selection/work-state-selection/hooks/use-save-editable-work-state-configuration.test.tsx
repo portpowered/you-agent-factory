@@ -60,7 +60,7 @@ describe("useSaveEditableWorkStateConfiguration", () => {
         name: "Current Factory",
         workers: [
           {
-            modelProvider: "CURSOR",
+            modelProvider: "CODEX",
             name: "reviewer",
             type: "MODEL_WORKER",
           },
@@ -92,7 +92,7 @@ describe("useSaveEditableWorkStateConfiguration", () => {
         },
         workers: [
           {
-            modelProvider: "CURSOR",
+            modelProvider: "CODEX",
             name: "reviewer",
             type: "MODEL_WORKER",
           },
@@ -144,7 +144,7 @@ describe("useSaveEditableWorkStateConfiguration", () => {
         name: "Current Factory",
         workers: [
           {
-            modelProvider: "CURSOR",
+            modelProvider: "CODEX",
             name: "reviewer",
             type: "MODEL_WORKER",
           },
@@ -184,7 +184,7 @@ describe("useSaveEditableWorkStateConfiguration", () => {
         name: "Current Factory",
         workers: [
           {
-            modelProvider: "CURSOR",
+            modelProvider: "CODEX",
             name: "reviewer",
             type: "MODEL_WORKER",
           },
@@ -388,7 +388,7 @@ function buildReadyEditableConfigurationState(overrides?: {
       name: "Current Factory",
       workers: [
         {
-          modelProvider: "CURSOR",
+          modelProvider: "CODEX",
           name: "reviewer",
           type: "MODEL_WORKER",
         },
@@ -408,7 +408,7 @@ function buildReadyEditableConfigurationState(overrides?: {
       name: "Current Factory",
       workers: [
         {
-          modelProvider: "CURSOR",
+          modelProvider: "CODEX",
           name: "reviewer",
           type: "MODEL_WORKER",
         },

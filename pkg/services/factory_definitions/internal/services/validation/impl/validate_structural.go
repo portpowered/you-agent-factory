@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/resource"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 func duplicateIdentifierTargets(cfg *factorydefinitions.FactoryConfig) []Target {

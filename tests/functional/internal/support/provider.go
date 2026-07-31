@@ -124,11 +124,11 @@ func ClaudeSuccessStdout(result string) []byte {
 		result = "Done. COMPLETE"
 	}
 	payload := map[string]any{
-		"type":        "result",
-		"subtype":     "success",
-		"is_error":    false,
-		"result":      result,
-		"session_id":  "claude-functional-test-session",
+		"type":       "result",
+		"subtype":    "success",
+		"is_error":   false,
+		"result":     result,
+		"session_id": "claude-functional-test-session",
 	}
 	encoded, err := json.Marshal(payload)
 	if err != nil {

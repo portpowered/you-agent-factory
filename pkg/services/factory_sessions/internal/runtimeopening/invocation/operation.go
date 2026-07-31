@@ -697,6 +697,7 @@ func (o *operation) runtimeConfig(target roles.InvocationTarget) factorysessions
 	config.FactorySession.Host.Port = 0
 	config.FactorySession.Host.RuntimeMode = factorydefinitions.RuntimeModeService
 	config.Workers.RunnerID = target.RunnerID
+	config.Workers.Worktree = target.Worktree
 	config.Workers.MockWorkers = target.MockWorkersConfig
 	config.Workers.InvocationSkipPermissionsOverride = target.SkipPermissionsOverride
 	config.Workers.SkipBuiltInPrerequisiteValidation = target.SkipRunnerPrerequisiteValidation

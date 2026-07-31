@@ -9,9 +9,9 @@ import (
 
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	compilationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
-	factorydefinitiontestcomposition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/testcomposition"
 	compilationcanonical "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/canonical"
 	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
+	factorydefinitiontestcomposition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/testcomposition"
 )
 
 func TestCompilationOwner_AuthoredDirectoryAndCanonicalBytesProduceIdenticalEffectiveOutcome(t *testing.T) {
@@ -169,11 +169,11 @@ func newCompilationServiceFromComposition(
 }
 
 type effectiveMergedFacts struct {
-	workerName          string
-	workerCommand       string
-	workstationName     string
-	workstationType     string
-	workstationWorker   string
+	workerName        string
+	workerCommand     string
+	workstationName   string
+	workstationType   string
+	workstationWorker string
 }
 
 func effectiveWorkerAndWorkstationFacts(t *testing.T, contentIdentity string) effectiveMergedFacts {

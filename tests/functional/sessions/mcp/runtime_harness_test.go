@@ -714,4 +714,3 @@ func assertAPIReadMatchesMCPSharedFactorySessionVocabulary(
 	}
 	assertFactorySessionOutputExcludesForbiddenVocabulary(t, string(encoded))
 }
-

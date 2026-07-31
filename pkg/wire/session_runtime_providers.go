@@ -58,16 +58,11 @@ func provideConfiguredProvidersService(
 	integrations []operatorsettings.ACPIntegration,
 	workersRunner workers.CommandRunner,
 ) (providers.Service, error) {
-	cursorPlatform := providerswire.CursorPlatformDependencies{
-		OperatingSystem: string(resolveWorkersOperatingSystem(edges)),
-		TemporaryFiles:  provideWorkersProviderTemporaryFileSystem(edges),
-	}
 	agyPTYPlatform, err := provideProvidersAgyPTYPlatform(edges)
 	if err != nil {
 		return nil, err
 	}
 	options := []providerswire.Option{
-		providerswire.WithCursorPlatform(cursorPlatform),
 		providerswire.WithAgyPTY(agyPTYPlatform),
 		providerswire.WithCommandFactory(providePlatformProcessCommandFactory(edges)),
 		providerswire.WithExecutableLocator(edges.ProvidersExecutableLocator),
@@ -790,6 +785,7 @@ func provideWorkersRuntimeFactory(
 		logger *zap.Logger,
 		verbose bool,
 		factoryRunnerID string,
+		runWorktree string,
 		invocationSkipPermissionsOverride *bool,
 		providerOverride workers.Provider,
 		now func() time.Time,
@@ -844,6 +840,7 @@ func provideWorkersRuntimeFactory(
 			logger,
 			verbose,
 			factoryRunnerID,
+			runWorktree,
 			invocationSkipPermissionsOverride,
 			providerOverride,
 			now,

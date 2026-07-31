@@ -851,7 +851,6 @@ const (
 	RunnerIDAntigravity RunnerID = "antigravity"
 	RunnerIDClaude      RunnerID = "claude"
 	RunnerIDCodex       RunnerID = "codex"
-	RunnerIDCursorCLI   RunnerID = "cursor-cli"
 )
 
 // Defines values for RunnerSelectionSource.
@@ -971,7 +970,6 @@ const (
 	WorkerModelProviderAntigravity WorkerModelProvider = "ANTIGRAVITY"
 	WorkerModelProviderClaude      WorkerModelProvider = "CLAUDE"
 	WorkerModelProviderCodex       WorkerModelProvider = "CODEX"
-	WorkerModelProviderCursor      WorkerModelProvider = "CURSOR"
 )
 
 // Defines values for WorkerType.

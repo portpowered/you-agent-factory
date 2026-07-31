@@ -25,7 +25,7 @@ func TestMapFragment_ProgressFragmentEmitsProgressUpdated(t *testing.T) {
 		DispatchID: "dispatch-42",
 		Payload:    "planning next step",
 		ProviderSessionRef: &workerexecution.ProviderSessionMetadata{
-			Provider: string(modelprovider.ProviderCursor),
+			Provider: string(modelprovider.ProviderCodex),
 			Kind:     "session_id",
 			ID:       "cursor-session-123",
 		},
@@ -217,7 +217,7 @@ func TestMapFragment_ResponseFragmentEmitsMessageDelta(t *testing.T) {
 		DispatchID: "dispatch-42",
 		Payload:    "hello ",
 		ProviderSessionRef: &workerexecution.ProviderSessionMetadata{
-			Provider: string(modelprovider.ProviderCursor),
+			Provider: string(modelprovider.ProviderCodex),
 			Kind:     "session_id",
 			ID:       "cursor-session-123",
 		},
@@ -426,7 +426,7 @@ func TestMapFragment_StreamCompletedEmitsRunCompleted(t *testing.T) {
 		Kind:       responsestream.EventKindStreamCompleted,
 		DispatchID: "dispatch-42",
 		ProviderSessionRef: &workerexecution.ProviderSessionMetadata{
-			Provider: string(modelprovider.ProviderCursor),
+			Provider: string(modelprovider.ProviderCodex),
 			Kind:     "session_id",
 			ID:       "cursor-session-123",
 		},
@@ -490,7 +490,7 @@ func TestMapFragment_StreamFailedEmitsErrorFailed(t *testing.T) {
 		DispatchID: "dispatch-99",
 		Payload:    "normalized provider failure",
 		ProviderSessionRef: &workerexecution.ProviderSessionMetadata{
-			Provider: string(modelprovider.ProviderCursor),
+			Provider: string(modelprovider.ProviderCodex),
 			Kind:     "session_id",
 			ID:       "cursor-session-456",
 		},
@@ -683,7 +683,7 @@ func TestMapFragment_CompactionSignalEmitsStreamGapUpdated(t *testing.T) {
 			LastDroppedSequence:   2,
 		},
 		ProviderSessionRef: &workerexecution.ProviderSessionMetadata{
-			Provider: string(modelprovider.ProviderCursor),
+			Provider: string(modelprovider.ProviderCodex),
 			Kind:     "session_id",
 			ID:       "cursor-session-123",
 		},

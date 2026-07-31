@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 func TestPackagedTTSInvocationPrimaryResult_ReturnsMetadataNotRawAudio(t *testing.T) {

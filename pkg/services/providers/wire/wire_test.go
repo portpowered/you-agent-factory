@@ -132,7 +132,6 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 	probeCalls := 0
 	platformRunner := &inertPlatformCommandRunner{}
 	workersRunner := &inertWorkersCommandRunner{}
-	cursorTempFiles := &inertTemporaryFileSystem{}
 	agyAllocator := &inertPTYAllocator{}
 	agyLocator := &inertExecutableLocator{}
 	agyInspector := &inertPathInspector{}
@@ -154,11 +153,6 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 		})),
 		WithCommandRunner(platformRunner),
 		WithWorkersCommandRunner(workersRunner),
-		WithCursorPlatform(CursorPlatformDependencies{
-			OperatingSystem: "windows",
-			TemporaryDir:    t.TempDir(),
-			TemporaryFiles:  cursorTempFiles,
-		}),
 		WithAgyPTY(AgyPTYPlatformDependencies{
 			Allocator: agyAllocator,
 			Locator:   agyLocator,
@@ -184,9 +178,6 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 	}
 	if workersRunner.calls != 0 {
 		t.Fatalf("workers command runner calls = %d, want inert construction", workersRunner.calls)
-	}
-	if cursorTempFiles.calls != 0 {
-		t.Fatalf("cursor temporary filesystem calls = %d, want inert construction", cursorTempFiles.calls)
 	}
 	if agyAllocator.calls != 0 || agyLocator.calls != 0 || agyInspector.calls != 0 {
 		t.Fatalf(
@@ -246,7 +237,6 @@ func TestNewServiceAgyExecuteFailsClosedWithoutInjectedPTY(t *testing.T) {
 func TestNewServiceInjectsPlatformDependenciesThroughWireOptions(t *testing.T) {
 	t.Parallel()
 
-	cursorTempFiles := newRecordingTemporaryFileSystem(`C:\cursor-temp\cursor_prompt_fixture.md`)
 	workersRunner := &recordingWorkersCommandRunner{}
 	agyAllocator := &recordingPTYAllocator{
 		result: workers.PTYSessionResult{ExitCode: 0, CleanedText: "agy via wire"},
@@ -257,11 +247,6 @@ func TestNewServiceInjectsPlatformDependenciesThroughWireOptions(t *testing.T) {
 
 	root, err := NewService(
 		WithWorkersCommandRunner(workersRunner),
-		WithCursorPlatform(CursorPlatformDependencies{
-			OperatingSystem: "windows",
-			TemporaryDir:    `C:\cursor-temp`,
-			TemporaryFiles:  cursorTempFiles,
-		}),
 		WithAgyPTY(AgyPTYPlatformDependencies{
 			Allocator: agyAllocator,
 			Locator:   agyLocator,
@@ -271,32 +256,12 @@ func TestNewServiceInjectsPlatformDependenciesThroughWireOptions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
-	if cursorTempFiles.created != 0 || workersRunner.calls != 0 || agyAllocator.calls != 0 {
+	if workersRunner.calls != 0 || agyAllocator.calls != 0 {
 		t.Fatalf(
-			"construction invoked platform effects (cursor create=%d runner=%d agy allocate=%d), want inert construction",
-			cursorTempFiles.created,
+			"construction invoked platform effects (runner=%d agy allocate=%d), want inert construction",
 			workersRunner.calls,
 			agyAllocator.calls,
 		)
-	}
-
-	oversizedPrompt := strings.Repeat("x", 8*1024)
-	_, cursorErr := root.Execute(context.Background(), providers.ExecuteRequest{
-		Provider:    providers.IDCursor,
-		AttemptID:   "cursor-platform-injection",
-		UserMessage: oversizedPrompt,
-	})
-	if cursorErr == nil {
-		t.Fatal("Execute(cursor) error = nil, want failure after oversized prompt materialization")
-	}
-	if cursorTempFiles.created != 1 {
-		t.Fatalf("cursor temporary creates = %d, want injected Cursor platform used on execute", cursorTempFiles.created)
-	}
-	if cursorTempFiles.file.content != oversizedPrompt {
-		t.Fatalf("cursor prompt content = %q, want oversized prompt written through injected platform", cursorTempFiles.file.content)
-	}
-	if workersRunner.calls != 1 {
-		t.Fatalf("workers runner calls = %d, want command dispatch after injected Cursor platform", workersRunner.calls)
 	}
 
 	agyResult, agyErr := root.Execute(context.Background(), providers.ExecuteRequest{
@@ -345,7 +310,6 @@ func TestNewServiceServesPublishedCatalogAndExecuteCompositionForMigratedIdentit
 		providers.IDAntigravity,
 		providers.IDClaude,
 		providers.IDCodex,
-		providers.IDCursor,
 	}
 	byID := indexProvidersByID(list.Providers)
 	for _, id := range wantMigratedIDs {
@@ -375,7 +339,6 @@ func TestNewServiceServesPublishedCatalogAndExecuteCompositionForMigratedIdentit
 	}{
 		{id: providers.IDCodex, name: "Codex"},
 		{id: providers.IDClaude, name: "Claude"},
-		{id: providers.IDCursor, name: "Cursor"},
 		{id: providers.IDAntigravity, name: "Antigravity"},
 	}
 	for _, test := range executeTests {
@@ -474,7 +437,6 @@ func TestNewServiceRejectsMissingRequiredConstructionPorts(t *testing.T) {
 					nil,
 					nil,
 					nil,
-					CursorPlatformDependencies{},
 					AgyPTYPlatformDependencies{},
 					nil,
 					nil,

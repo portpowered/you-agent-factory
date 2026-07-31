@@ -93,6 +93,7 @@ type WorkersRuntimeFactory = func(
 	*zap.Logger,
 	bool,
 	string,
+	string,
 	*bool,
 	workers.Provider,
 	func() time.Time,

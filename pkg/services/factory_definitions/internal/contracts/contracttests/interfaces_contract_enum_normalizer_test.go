@@ -175,9 +175,9 @@ func publicFactoryEnumNormalizerMiscCases() []publicFactoryEnumNormalizerCase {
 	return []publicFactoryEnumNormalizerCase{
 		{
 			name:       "runner id",
-			alias:      "cursor-cli",
+			alias:      "codex",
 			unknown:    "custom-runner",
-			want:       workerexecution.RunnerIDCursorCLI,
+			want:       workerexecution.RunnerIDCodex,
 			permissive: interfaces.PermissivePublicFactoryRunnerID,
 			strict:     interfaces.StrictPublicFactoryRunnerID,
 		},

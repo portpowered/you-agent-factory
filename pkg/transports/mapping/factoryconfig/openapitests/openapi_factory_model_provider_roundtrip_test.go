@@ -16,7 +16,6 @@ func TestGeneratedFactoryFromOpenAPIJSON_ModelProviderRoundTripsAllSupportedPubl
 	}{
 		{factoryapi.WorkerModelProviderClaude, modelprovider.ProviderClaude},
 		{factoryapi.WorkerModelProviderCodex, modelprovider.ProviderCodex},
-		{factoryapi.WorkerModelProviderCursor, modelprovider.ProviderCursor},
 		{factoryapi.WorkerModelProviderAntigravity, modelprovider.ProviderAntigravity},
 	}
 

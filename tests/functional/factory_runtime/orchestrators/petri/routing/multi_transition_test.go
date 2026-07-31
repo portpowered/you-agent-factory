@@ -36,9 +36,9 @@ func TestPetriMultiStagePipelineCompletesAtPublicTerminals(t *testing.T) {
 		terminal := support.WorkCustomerLocation("task", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{
 			terminal: 1,
-			support.WorkCustomerLocation("task", "init"):        0,
+			support.WorkCustomerLocation("task", "init"):       0,
 			support.WorkCustomerLocation("task", "processing"): 0,
-			support.WorkCustomerLocation("task", "failed"):    0,
+			support.WorkCustomerLocation("task", "failed"):     0,
 		})
 		assertTerminalWorkCorrelatesToTraceIDs(t, listed, terminal, []string{traceID})
 		assertQuiescentSession(t, session, 1, 0)
@@ -177,9 +177,9 @@ func TestPetriFailureRoutesToDocumentedFailedPlace(t *testing.T) {
 		failedTerminal := support.WorkCustomerLocation("task", "failed")
 		successTerminal := support.WorkCustomerLocation("task", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{
-			failedTerminal: 1,
+			failedTerminal:  1,
 			successTerminal: 0,
-			support.WorkCustomerLocation("task", "init"):        0,
+			support.WorkCustomerLocation("task", "init"):       0,
 			support.WorkCustomerLocation("task", "processing"): 0,
 		})
 		assertTerminalWorkCorrelatesToTraceIDs(t, listed, failedTerminal, []string{traceID})
@@ -222,11 +222,11 @@ func TestPetriFailureRoutesToDocumentedFailedPlace(t *testing.T) {
 		failedTerminal := support.WorkCustomerLocation("prd", "failed")
 		successTerminal := support.WorkCustomerLocation("prd", "complete")
 		assertWorkAtCustomerStates(t, listed, map[string]int{
-			failedTerminal: 1,
+			failedTerminal:  1,
 			successTerminal: 0,
-			support.WorkCustomerLocation("idea", "init"):        0,
-			support.WorkCustomerLocation("prd", "init"):         0,
-			support.WorkCustomerLocation("prd", "in-review"):      0,
+			support.WorkCustomerLocation("idea", "init"):     0,
+			support.WorkCustomerLocation("prd", "init"):      0,
+			support.WorkCustomerLocation("prd", "in-review"): 0,
 		})
 		assertTerminalWorkCorrelatesToTraceIDs(t, listed, failedTerminal, []string{traceID})
 		assertTraceAbsentAtCustomerState(t, listed, successTerminal, traceID)

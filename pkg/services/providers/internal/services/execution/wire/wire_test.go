@@ -36,13 +36,13 @@ func (r *recordingPlatformRunner) Run(
 	return platformprocess.CommandResult{Stdout: []byte("ok")}, nil
 }
 
-func TestBuiltInDependenciesFromWorkersRunnerConstructsCodexClaudeAndCursorEffects(t *testing.T) {
+func TestBuiltInDependenciesFromWorkersRunnerConstructsCodexAndClaudeEffects(t *testing.T) {
 	t.Parallel()
 
 	runner := &recordingWorkersRunner{}
 	deps := BuiltInDependenciesFromWorkersRunner(runner)
-	if deps.Codex == nil || deps.Claude == nil || deps.Cursor == nil {
-		t.Fatalf("built-in dependencies = %#v, want codex, claude, and cursor effects", deps)
+	if deps.Codex == nil || deps.Claude == nil {
+		t.Fatalf("built-in dependencies = %#v, want codex and claude effects", deps)
 	}
 	if deps.Antigravity != nil {
 		t.Fatalf("built-in Antigravity effect = %#v, want nil without PTY platform dependencies", deps.Antigravity)
@@ -54,8 +54,8 @@ func TestBuiltInDependenciesFromRunnerAdaptsPlatformRunner(t *testing.T) {
 
 	runner := &recordingPlatformRunner{}
 	deps := BuiltInDependenciesFromRunner(runner)
-	if deps.Codex == nil || deps.Claude == nil || deps.Cursor == nil {
-		t.Fatalf("built-in dependencies = %#v, want codex, claude, and cursor effects", deps)
+	if deps.Codex == nil || deps.Claude == nil {
+		t.Fatalf("built-in dependencies = %#v, want codex and claude effects", deps)
 	}
 	if deps.Antigravity != nil {
 		t.Fatalf("built-in Antigravity effect = %#v, want nil without PTY platform dependencies", deps.Antigravity)
@@ -93,7 +93,7 @@ func TestNewBuiltInServiceUsesWorkersRunnerDependencies(t *testing.T) {
 	if err != nil || service == nil {
 		t.Fatalf("NewBuiltInService() = (%v, %v), want execution service", service, err)
 	}
-	if got := executionservice.BuiltInRegistrations(BuiltInDependenciesFromWorkersRunner(runner)); len(got) != 4 {
-		t.Fatalf("built-in registrations = %d, want 4 antigravity/codex/claude/cursor adapters", len(got))
+	if got := executionservice.BuiltInRegistrations(BuiltInDependenciesFromWorkersRunner(runner)); len(got) != 3 {
+		t.Fatalf("built-in registrations = %d, want 3 antigravity/codex/claude adapters", len(got))
 	}
 }

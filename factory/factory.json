@@ -548,8 +548,8 @@
   ],
   "workers": [
     {
-      "executorProvider": "SCRIPT_WRAP",
-      "modelProvider": "CURSOR",
+      "executorProvider": "ACP",
+      "modelProvider": "cursor-acp",
       "model": "composer-2.5",
       "name": "processor",
       "skipPermissions": true,
@@ -567,9 +567,9 @@
       "type": "SCRIPT_WORKER"
     },
     {
-      "executorProvider": "SCRIPT_WRAP",
+      "executorProvider": "ACP",
       "id": "planner",
-      "modelProvider": "CURSOR",
+      "modelProvider": "cursor-acp",
       "model": "grok-4.5-high",
       "name": "planner",
       "skipPermissions": true,
@@ -577,9 +577,9 @@
       "type": "AGENT_WORKER"
     },
     {
-      "executorProvider": "SCRIPT_WRAP",
+      "executorProvider": "ACP",
       "id": "ideafier",
-      "modelProvider": "CURSOR",
+      "modelProvider": "cursor-acp",
       "model": "grok-4.5-medium",
       "name": "ideafier",
       "skipPermissions": true,

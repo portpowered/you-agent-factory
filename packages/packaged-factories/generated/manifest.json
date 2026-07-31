@@ -239,11 +239,11 @@
       "slug": "plan-parallel",
       "json": {
         "locator": "generated/factories/plan-parallel/factory.json",
-        "sha256": "20382efe843b325ea58c0fdf1839ae0b06f047dec6f10683a7c7acfb3445a25a"
+        "sha256": "a969c7889eb9d42c8589e0e24e5c379fdf15e953002b5c17078a66d057553be6"
       },
       "yaml": {
         "locator": "generated/factories/plan-parallel/factory.yaml",
-        "sha256": "bb82263444920344d2061d3695e86c6dc04794e0b220823b3523698f93725726"
+        "sha256": "f3bf10581f3d62a5d051363ef58a0a8a3d57c36b7a20a67138e998fd6aaabefb"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",

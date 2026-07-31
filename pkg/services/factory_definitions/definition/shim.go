@@ -16,8 +16,8 @@ import (
 )
 
 type (
-	Service       = lifecycle.Service
-	Host          = lifecycle.Host
+	Service         = lifecycle.Service
+	Host            = lifecycle.Host
 	EditableFactory = lifecycle.EditableFactory
 )
 

@@ -23,7 +23,6 @@ describe("runner-metadata", () => {
 
   it("returns display names for built-in runner ids and null for unknown ids", () => {
     expect(getRunnerDisplayName("codex")).toBe("Codex");
-    expect(getRunnerDisplayName("cursor-cli")).toBe("Cursor CLI");
     expect(getRunnerDisplayName("antigravity")).toBe("Antigravity");
     expect(getRunnerDisplayName("claude")).toBe("Claude");
     expect(getRunnerDisplayName(null)).toBeNull();

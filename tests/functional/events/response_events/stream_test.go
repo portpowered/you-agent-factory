@@ -26,11 +26,11 @@ const (
 	codexPartialStreamGoldenCase = "success"
 
 	functionalResponseEventCompletedRetentionWindow = time.Millisecond
-	functionalResponseEventMissingSessionID           = "session-missing-response-events"
+	functionalResponseEventMissingSessionID         = "session-missing-response-events"
 
-	sessionExpiryChildSessionID       = "cursor-js-session-expiry"
-	sessionExpiryChildWorkflowFile    = "session-expiry-child-progress.workflow.js"
-	sessionExpiryChildWorkflowSource  = `return (async function () {
+	sessionExpiryChildSessionID      = "cursor-js-session-expiry"
+	sessionExpiryChildWorkflowFile   = "session-expiry-child-progress.workflow.js"
+	sessionExpiryChildWorkflowSource = `return (async function () {
   const child = await agent.run({
     prompt: "summarize session expiry",
     label: "session-expiry-child",

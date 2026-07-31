@@ -72,8 +72,6 @@ func (s *Service) authorizeProviderTarget(
 
 func runnerIDForProvider(id providers.ID) string {
 	switch id {
-	case providers.IDCursor:
-		return workers.RunnerIDCursorCLI
 	case providers.IDAntigravity:
 		return workers.RunnerIDAntigravity
 	default:

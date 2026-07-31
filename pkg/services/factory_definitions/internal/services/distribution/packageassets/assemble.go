@@ -11,8 +11,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	distributionpromptassets "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/promptassets"
 	contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
+	distributionpromptassets "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/promptassets"
 )
 
 const (

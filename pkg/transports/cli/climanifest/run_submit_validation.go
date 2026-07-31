@@ -20,6 +20,7 @@ var runSubmitFamilySpecs = []struct {
 			"runtime-log-max-size-mb", "runtime-metrics-compress", "runtime-metrics-dir",
 			"runtime-metrics-max-age-days", "runtime-metrics-max-backups", "runtime-metrics-max-size-mb",
 			"server", "skip-permissions", "verbose", "with-mock-workers", "with-server", "with-site", "work",
+			"worktree",
 		},
 	},
 	{

@@ -179,7 +179,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       command: "",
       kind: "worker",
       model: "",
-      modelProvider: "CURSOR",
+      modelProvider: "CODEX",
       name: "writer",
       operations: [],
       provider: "",
@@ -213,7 +213,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
         command: "",
         kind: "worker",
         model: "gpt-5.5",
-        modelProvider: "CURSOR",
+        modelProvider: "CODEX",
         name: "runner",
         operations: [],
         provider: "",
@@ -322,7 +322,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
         command: "",
         kind: "worker",
         model: "",
-        modelProvider: "CURSOR",
+        modelProvider: "CODEX",
         name: "tts-worker",
         operations: [operation],
         provider: "",
@@ -381,7 +381,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       command: "",
       kind: "worker",
       model: "",
-      modelProvider: "CURSOR",
+      modelProvider: "CODEX",
       name: "tts-worker",
       operations: [
         {
@@ -397,7 +397,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       command: "",
       kind: "worker",
       model: "",
-      modelProvider: "CURSOR",
+      modelProvider: "CODEX",
       name: "tts-worker",
       operations: [
         {
@@ -418,7 +418,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       command: "",
       kind: "worker",
       model: "",
-      modelProvider: "CURSOR",
+      modelProvider: "CODEX",
       name: "tts-worker",
       operations: [
         {

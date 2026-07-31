@@ -399,6 +399,8 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 	cfg.Stdin = cmd.InOrStdin()
 	cfg.StdinIsTTY = func() bool { return startupcli.StdinIsTTY(cmd.Context()) }
 	cfg.OutputIsTTY = startupcli.StdoutIsTTY(cmd.Context())
+	cfg.ProgressOutput = cmd.ErrOrStderr()
+	cfg.ProgressIsTTY = startupcli.StderrIsTTY(cmd.Context())
 	if err := resolveRunFactoryPrompt(cmd, &cfg, promptArgs, rootOptions.prepareInvocationInput); err != nil {
 		runcli.ObserveInvocationRejection(logger, err)
 		return err

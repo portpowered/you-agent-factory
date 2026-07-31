@@ -45,7 +45,7 @@ describe("applyEditableWorkerDraft", () => {
         {
           body: "existing worker body",
           model: "gpt-5.4",
-          modelProvider: "CURSOR",
+          modelProvider: "CODEX",
           name: "reviewer",
           stopToken: "STOP",
           type: "MODEL_WORKER",
@@ -125,7 +125,7 @@ describe("applyEditableWorkerDraft", () => {
       workers: [
         {
           model: "gpt-5.4",
-          modelProvider: "CURSOR",
+          modelProvider: "CODEX",
           name: "reviewer",
           type: "MODEL_WORKER",
         },
@@ -304,7 +304,7 @@ describe("applyEditableWorkerDraft", () => {
       workers: [
         {
           model: "gpt-5.5",
-          modelProvider: "CURSOR",
+          modelProvider: "CODEX",
           name: "reviewer",
           type: "MODEL_WORKER",
         },
@@ -333,7 +333,7 @@ describe("applyEditableWorkerDraft", () => {
         executorProvider: null,
         model: "gpt-5.5",
         modelLocality: null,
-        modelProvider: "CURSOR",
+        modelProvider: "CODEX",
         provider: null,
         skipPermissions: null,
         stopToken: null,
@@ -356,7 +356,7 @@ describe("applyEditableWorkerDraft", () => {
       "reviewer",
       buildDraft({
         model: "gpt-5.5",
-        modelProvider: "CURSOR",
+        modelProvider: "CODEX",
         name: "senior-reviewer",
         type: "MODEL_WORKER",
       }),
@@ -364,7 +364,7 @@ describe("applyEditableWorkerDraft", () => {
 
     expect(renamedFactory?.workers?.[0]).toMatchObject({
       name: "senior-reviewer",
-      modelProvider: "CURSOR",
+      modelProvider: "CODEX",
       type: "MODEL_WORKER",
     });
     expect(renamedFactory?.workstations).toEqual([

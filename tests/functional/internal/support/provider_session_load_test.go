@@ -172,11 +172,11 @@ func writeProviderSessionLoadCase(t *testing.T, mutate func(*ProviderSessionGold
 			TimeoutCancelClass:   "none",
 			TerminalErrorClass:   "none",
 		}),
-		"stdout.jsonl":                      []byte(`{"type":"result","session_id":"session_fixture_001","finish_reason":"stop"}` + "\n"),
-		"stderr.txt":                        []byte(""),
-		"expected-provider-session.json":    []byte(`{"provider":"codex","providerSessionId":"session_fixture_001","status":"completed"}` + "\n"),
-		"expected-response-events.ndjson":   []byte(`{"type":"message.completed","itemId":"item_fixture_1"}` + "\n"),
-		"expected-invocation-result.json":   []byte(`{"ok":true,"content":"done","finishReason":"stop"}` + "\n"),
+		"stdout.jsonl":                    []byte(`{"type":"result","session_id":"session_fixture_001","finish_reason":"stop"}` + "\n"),
+		"stderr.txt":                      []byte(""),
+		"expected-provider-session.json":  []byte(`{"provider":"codex","providerSessionId":"session_fixture_001","status":"completed"}` + "\n"),
+		"expected-response-events.ndjson": []byte(`{"type":"message.completed","itemId":"item_fixture_1"}` + "\n"),
+		"expected-invocation-result.json": []byte(`{"ok":true,"content":"done","finishReason":"stop"}` + "\n"),
 	}
 	if mutate != nil {
 		mutate(&manifest, files)

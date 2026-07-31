@@ -9,7 +9,6 @@ export type ApiRunnerSelectionSource =
 export const OPENAPI_RUNNER_IDS = [
   "codex",
   "claude",
-  "cursor-cli",
   "antigravity",
 ] as const satisfies readonly ApiRunnerID[];
 

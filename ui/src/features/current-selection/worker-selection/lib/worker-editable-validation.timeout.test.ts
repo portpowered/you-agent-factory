@@ -14,7 +14,7 @@ function buildDraft(
     executorProvider: null,
     model: "gpt-5.5",
     modelLocality: null,
-    modelProvider: "CURSOR",
+    modelProvider: "CODEX",
     name: "reviewer",
     provider: null,
     skipPermissions: false,

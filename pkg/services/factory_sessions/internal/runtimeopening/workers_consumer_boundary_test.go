@@ -56,8 +56,10 @@ func TestNewWorkerExecutionForwardsWorkersRootBindings(t *testing.T) {
 	t.Parallel()
 
 	const runnerID = "session-worker-runner"
+	const runWorktree = "feature-login"
 	ptyAllocator := &workers.MockPTYAllocator{}
 	var gotRunnerID string
+	var gotWorktree string
 	var gotPTY workers.PTYAllocator
 	var gotProvider workers.Provider
 
@@ -71,6 +73,7 @@ func TestNewWorkerExecutionForwardsWorkersRootBindings(t *testing.T) {
 		_ *zap.Logger,
 		_ bool,
 		runner string,
+		worktree string,
 		_ *bool,
 		provider workers.Provider,
 		_ func() time.Time,
@@ -78,6 +81,7 @@ func TestNewWorkerExecutionForwardsWorkersRootBindings(t *testing.T) {
 		_ []operatorconfig.ACPIntegration,
 	) (workers.RuntimeService, error) {
 		gotRunnerID = runner
+		gotWorktree = worktree
 		gotPTY = pty
 		gotProvider = provider
 		return nil, nil
@@ -85,7 +89,7 @@ func TestNewWorkerExecutionForwardsWorkersRootBindings(t *testing.T) {
 
 	service, err := NewWorkerExecution(
 		factoryruntime.RuntimeOpeningRequest{},
-		workers.RuntimeOpeningRequest{RunnerID: runnerID},
+		workers.RuntimeOpeningRequest{RunnerID: runnerID, Worktree: runWorktree},
 		openingCoordinatorClock{},
 		zap.NewNop(),
 		workersRootBindingProbeRunner{},
@@ -107,6 +111,9 @@ func TestNewWorkerExecutionForwardsWorkersRootBindings(t *testing.T) {
 	}
 	if gotRunnerID != runnerID {
 		t.Fatalf("runner ID = %q, want %q", gotRunnerID, runnerID)
+	}
+	if gotWorktree != runWorktree {
+		t.Fatalf("worktree = %q, want %q", gotWorktree, runWorktree)
 	}
 	if gotPTY != ptyAllocator {
 		t.Fatalf("PTY allocator = %#v, want %#v", gotPTY, ptyAllocator)

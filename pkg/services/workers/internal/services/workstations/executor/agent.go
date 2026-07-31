@@ -392,8 +392,6 @@ func modelProviderForRunnerID(runnerID string) string {
 		return string(modelprovider.ProviderCodex)
 	case string(modelprovider.ProviderClaude):
 		return string(modelprovider.ProviderClaude)
-	case "cursor", workerexecution.RunnerIDCursorCLI:
-		return string(modelprovider.ProviderCursor)
 	case workerexecution.RunnerIDAntigravity:
 		return string(modelprovider.ProviderAntigravity)
 	default:

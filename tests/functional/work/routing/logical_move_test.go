@@ -111,12 +111,12 @@ func TestLogicalMoveMultipleOutputsCreatesEveryExpectedWork(t *testing.T) {
 		t.Fatalf("provider call count = %d, want 0 for workerless logical move fan-out", provider.CallCount())
 	}
 	assertWorkCustomerStates(t, listed, map[string]int{
-		support.WorkCustomerLocation("task", "init"):      0,
-		support.WorkCustomerLocation("task", "done"):      1,
-		support.WorkCustomerLocation("branch-a", "done"):  1,
-		support.WorkCustomerLocation("branch-b", "done"):  1,
-		support.WorkCustomerLocation("branch-a", "init"):  0,
-		support.WorkCustomerLocation("branch-b", "init"):  0,
+		support.WorkCustomerLocation("task", "init"):     0,
+		support.WorkCustomerLocation("task", "done"):     1,
+		support.WorkCustomerLocation("branch-a", "done"): 1,
+		support.WorkCustomerLocation("branch-b", "done"): 1,
+		support.WorkCustomerLocation("branch-a", "init"): 0,
+		support.WorkCustomerLocation("branch-b", "init"): 0,
 	})
 	assertNoInferenceResponses(t, events)
 	assertLogicalMoveDispatchesCompleteWithoutProviderFailure(

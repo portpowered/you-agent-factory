@@ -39,7 +39,7 @@ func TestWorkstationExecutorUsesInjectedProviderSelectionAuthority(t *testing.T)
 		) (workerexecution.ResolvedRunnerSelection, error) {
 			gotWorkstation, gotFactory, gotWorker = workstation, factory, worker
 			return workerexecution.ResolvedRunnerSelection{
-				RunnerID: workerexecution.RunnerIDCursorCLI,
+				RunnerID: workerexecution.RunnerIDCodex,
 				Source:   workerexecution.RunnerSelectionSourceWorkstation,
 			}, nil
 		},
@@ -49,7 +49,7 @@ func TestWorkstationExecutorUsesInjectedProviderSelectionAuthority(t *testing.T)
 	if err != nil {
 		t.Fatalf("resolveRunnerSelection() error = %v", err)
 	}
-	if selection.RunnerID != workerexecution.RunnerIDCursorCLI {
+	if selection.RunnerID != workerexecution.RunnerIDCodex {
 		t.Fatalf("selection = %#v", selection)
 	}
 	if gotWorkstation != "agent" || gotFactory != "factory-provider" || gotWorker != "codex" {

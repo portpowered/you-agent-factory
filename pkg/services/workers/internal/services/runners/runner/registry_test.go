@@ -22,7 +22,6 @@ func TestBuiltInRunnerCommand_MatchesInternalModelProviderCLI(t *testing.T) {
 	}{
 		{workerexecution.RunnerIDCodex, string(modelprovider.ProviderCodex)},
 		{workerexecution.RunnerIDClaude, string(modelprovider.ProviderClaude)},
-		{workerexecution.RunnerIDCursorCLI, string(modelprovider.ProviderCursor)},
 		{workerexecution.RunnerIDAntigravity, "agy"},
 	}
 
@@ -45,7 +44,6 @@ func TestValidateBuiltInRunnerPrerequisites_UsesExpectedCommand(t *testing.T) {
 	for _, runnerID := range []string{
 		workerexecution.RunnerIDCodex,
 		workerexecution.RunnerIDClaude,
-		workerexecution.RunnerIDCursorCLI,
 		workerexecution.RunnerIDAntigravity,
 	} {
 		if err := ValidateBuiltInRunnerPrerequisites(locator, runnerID); err != nil {
@@ -56,7 +54,6 @@ func TestValidateBuiltInRunnerPrerequisites_UsesExpectedCommand(t *testing.T) {
 	want := []string{
 		string(modelprovider.ProviderCodex),
 		string(modelprovider.ProviderClaude),
-		string(modelprovider.ProviderCursor),
 		"agy",
 	}
 	if len(commands) != len(want) {
@@ -74,17 +71,17 @@ func TestValidateBuiltInRunnerPrerequisites_ReportsMissingBinary(t *testing.T) {
 		return "", errors.New("executable file not found in $PATH")
 	})
 
-	err := ValidateBuiltInRunnerPrerequisites(locator, workerexecution.RunnerIDCursorCLI)
+	err := ValidateBuiltInRunnerPrerequisites(locator, workerexecution.RunnerIDCodex)
 	if err == nil {
 		t.Fatal("expected missing binary validation error")
 	}
-	if !strings.Contains(err.Error(), `Cursor CLI runner requires "cursor" on PATH`) {
+	if !strings.Contains(err.Error(), `Codex runner requires "codex" on PATH`) {
 		t.Fatalf("error = %q, want runner-specific PATH guidance", err.Error())
 	}
 }
 
 func TestValidateBuiltInRunnerPrerequisites_FailsClosedWithoutExecutableLocator(t *testing.T) {
-	err := ValidateBuiltInRunnerPrerequisites(nil, workerexecution.RunnerIDCursorCLI)
+	err := ValidateBuiltInRunnerPrerequisites(nil, workerexecution.RunnerIDCodex)
 	if err == nil || !strings.Contains(err.Error(), "executable locator is required") {
 		t.Fatalf("error = %v, want missing executable locator", err)
 	}

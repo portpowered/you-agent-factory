@@ -17,10 +17,6 @@ const BUILT_IN_RUNNER_METADATA: Record<ApiRunnerID, RunnerMetadata> = {
     displayName: "Claude",
     id: "claude",
   },
-  "cursor-cli": {
-    displayName: "Cursor CLI",
-    id: "cursor-cli",
-  },
   antigravity: {
     displayName: "Antigravity",
     id: "antigravity",

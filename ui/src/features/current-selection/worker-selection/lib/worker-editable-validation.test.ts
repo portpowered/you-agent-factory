@@ -20,7 +20,7 @@ function buildDraft(
     executorProvider: null,
     model: "gpt-5.5",
     modelLocality: null,
-    modelProvider: "CURSOR",
+    modelProvider: "CODEX",
     name: "reviewer",
     provider: null,
     skipPermissions: false,
@@ -42,7 +42,7 @@ describe("validateEditableWorkerDraft", () => {
   it("allows model workers with provider set and empty model", () => {
     expect(
       validateEditableWorkerDraft(
-        buildDraft({ model: "", modelProvider: "CURSOR" }),
+        buildDraft({ model: "", modelProvider: "CODEX" }),
         messages,
       ),
     ).toEqual({});
@@ -225,7 +225,7 @@ describe("mergeEditableWorkerContractValidationErrors", () => {
         0,
       ),
     ).toEqual({
-      modelProvider: `${messages.editableConfigurationContractInvalidPrefix} factory.workers[0].modelProvider must be a valid provider identity or one of CLAUDE, CODEX, CURSOR, ANTIGRAVITY.`,
+      modelProvider: `${messages.editableConfigurationContractInvalidPrefix} factory.workers[0].modelProvider must be a valid provider identity or one of CLAUDE, CODEX, ANTIGRAVITY.`,
     });
   });
 
@@ -343,7 +343,7 @@ describe("mergeEditableWorkerContractValidationErrors", () => {
         {
           model: "gpt-5.5",
           modelLocality: "INVALID",
-          modelProvider: "CURSOR",
+          modelProvider: "CODEX",
           name: "reviewer",
           type: "MODEL_WORKER",
         },
@@ -365,7 +365,7 @@ describe("mergeEditableWorkerContractValidationErrors", () => {
     const pendingFactoryDefinition = {
       name: "Current Factory",
       workers: [
-        { name: "reviewer", type: "MODEL_WORKER", modelProvider: "CURSOR" },
+        { name: "reviewer", type: "MODEL_WORKER", modelProvider: "CODEX" },
       ],
       workTypes: [],
     };
@@ -388,7 +388,7 @@ describe("mergeEditableWorkerContractValidationErrors", () => {
           name: "reviewer",
           skipPermissions: "yes",
           type: "MODEL_WORKER",
-          modelProvider: "CURSOR",
+          modelProvider: "CODEX",
         },
       ],
       workTypes: [],
@@ -412,7 +412,7 @@ describe("mergeEditableWorkerContractValidationErrors", () => {
           name: "reviewer",
           stopToken: 42,
           type: "MODEL_WORKER",
-          modelProvider: "CURSOR",
+          modelProvider: "CODEX",
         },
       ],
       workTypes: [],
@@ -485,7 +485,7 @@ describe("mergeEditableWorkerContractValidationErrors", () => {
           name: "reviewer",
           timeout: 42,
           type: "MODEL_WORKER",
-          modelProvider: "CURSOR",
+          modelProvider: "CODEX",
         },
       ],
       workTypes: [],

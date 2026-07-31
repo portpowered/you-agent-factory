@@ -66,7 +66,7 @@ describe("workstation editable resolution lookups", () => {
         {
           name: "writer",
           model: "gpt-5",
-          modelProvider: "CURSOR",
+          modelProvider: "CODEX",
           type: "MODEL_WORKER" as const,
         },
       ],
@@ -74,7 +74,7 @@ describe("workstation editable resolution lookups", () => {
     };
 
     expect(resolveWorkerOptions(factory)).toEqual(["writer"]);
-    expect(resolveWorkerModelProvider(factory, "writer")).toBe("CURSOR");
+    expect(resolveWorkerModelProvider(factory, "writer")).toBe("CODEX");
     expect(resolveWorkerModelProvider(factory, "missing")).toBeNull();
   });
 

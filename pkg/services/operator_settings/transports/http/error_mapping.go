@@ -11,19 +11,19 @@ import (
 const operatorSettingsInternalFailureMessage = "operator settings request failed"
 
 const (
-	operatorSettingsInvalidLoadRequestMessage           = "invalid operator settings load request"
-	operatorSettingsInvalidUpdateRequestMessage         = "invalid operator settings update request"
-	operatorSettingsDocumentMalformedMessage            = "operator document is malformed"
-	operatorSettingsDocumentNotFoundMessage             = "operator document not found"
-	operatorSettingsDocumentUnsupportedMessage          = "operator document update is unsupported"
-	operatorSettingsDocumentConflictMessage             = "operator document persist conflict"
-	operatorSettingsResolutionInvalidInputMessage       = "operator effective resolution input is invalid"
-	operatorSettingsResolutionUnsupportedOverrideMessage = "operator effective resolution override is unsupported"
-	operatorSettingsResolutionConflictMessage           = "operator effective resolution conflict"
-	operatorSettingsErrorCodeDocumentUnsupported        = "OPERATOR_DOCUMENT_UNSUPPORTED"
-	operatorSettingsErrorCodeDocumentConflict             = "OPERATOR_DOCUMENT_CONFLICT"
+	operatorSettingsInvalidLoadRequestMessage              = "invalid operator settings load request"
+	operatorSettingsInvalidUpdateRequestMessage            = "invalid operator settings update request"
+	operatorSettingsDocumentMalformedMessage               = "operator document is malformed"
+	operatorSettingsDocumentNotFoundMessage                = "operator document not found"
+	operatorSettingsDocumentUnsupportedMessage             = "operator document update is unsupported"
+	operatorSettingsDocumentConflictMessage                = "operator document persist conflict"
+	operatorSettingsResolutionInvalidInputMessage          = "operator effective resolution input is invalid"
+	operatorSettingsResolutionUnsupportedOverrideMessage   = "operator effective resolution override is unsupported"
+	operatorSettingsResolutionConflictMessage              = "operator effective resolution conflict"
+	operatorSettingsErrorCodeDocumentUnsupported           = "OPERATOR_DOCUMENT_UNSUPPORTED"
+	operatorSettingsErrorCodeDocumentConflict              = "OPERATOR_DOCUMENT_CONFLICT"
 	operatorSettingsErrorCodeResolutionUnsupportedOverride = "OPERATOR_RESOLUTION_UNSUPPORTED_OVERRIDE"
-	operatorSettingsErrorCodeResolutionConflict         = "OPERATOR_RESOLUTION_CONFLICT"
+	operatorSettingsErrorCodeResolutionConflict            = "OPERATOR_RESOLUTION_CONFLICT"
 )
 
 // RootErrorResponse maps typed Operator Settings root failures and adapter

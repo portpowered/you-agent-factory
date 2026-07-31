@@ -10,6 +10,7 @@ import (
 // opened Factory Session runtime.
 type RuntimeOpeningRequest struct {
 	RunnerID                          string
+	Worktree                          string
 	MockWorkers                       *MockWorkersConfig
 	InvocationSkipPermissionsOverride *bool
 	SkipBuiltInPrerequisiteValidation bool

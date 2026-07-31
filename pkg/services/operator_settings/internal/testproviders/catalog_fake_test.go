@@ -2,24 +2,22 @@ package testproviders_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	internaltestproviders "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
-func TestStandardCatalog_GetProviderResolvesAlias(t *testing.T) {
+func TestStandardCatalog_GetProviderRejectsRemovedCursorIdentity(t *testing.T) {
 	t.Parallel()
 
-	result, err := internaltestproviders.StandardCatalog().GetProvider(
+	_, err := internaltestproviders.StandardCatalog().GetProvider(
 		context.Background(),
 		providers.GetProviderRequest{ID: "cursor"},
 	)
-	if err != nil {
-		t.Fatalf("GetProvider(cursor) = %v", err)
-	}
-	if result.Provider.ID != providers.IDCursor {
-		t.Fatalf("provider ID = %q, want %q", result.Provider.ID, providers.IDCursor)
+	if !errors.Is(err, providers.ErrUnknownProvider) {
+		t.Fatalf("GetProvider(cursor) = %v, want ErrUnknownProvider", err)
 	}
 }
 

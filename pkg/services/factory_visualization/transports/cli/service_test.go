@@ -14,6 +14,7 @@ import (
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	visualizationcli "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
@@ -191,6 +192,81 @@ func TestFormatHumanWorkAccepted_UsesContentForGeneratedWorkName(t *testing.T) {
 	renderer.StopProgressRendering()
 	if got, want := strings.TrimSpace(output.String()), "[0] work accepted: Add a focused ACP regression test"; got != want {
 		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
+
+func TestHumanFactoryEventRenderer_PresentsBatchWorkAndDispatchWorkIDs(t *testing.T) {
+	t.Parallel()
+
+	batchPayload, err := json.Marshal(work.WorkRequestEventPayload{
+		Works: []work.WorkRequestEventWork{
+			{WorkID: "work-1", Name: "first", Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "first task"}}},
+			{WorkID: "work-2", Name: "second", Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "second task"}}},
+		},
+		Relations: []work.WorkRequestEventRelation{{
+			Type: work.WorkRelationDependsOn, SourceWorkName: "second", TargetWorkID: "work-1",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal batch payload: %v", err)
+	}
+	workIDs := []string{"work-1", "work-2"}
+	dispatchID := "dispatch-1"
+	requestPayload, err := json.Marshal(interfaces.DispatchRequestEventPayload{
+		TransitionID: "execute", Inputs: []interfaces.DispatchConsumedWorkRef{{WorkID: "work-1"}, {WorkID: "work-2"}},
+	})
+	if err != nil {
+		t.Fatalf("marshal dispatch request: %v", err)
+	}
+	responsePayload, err := json.Marshal(workerexecution.DispatchResponseEventPayload{TransitionID: "execute", Outcome: workerexecution.OutcomeAccepted})
+	if err != nil {
+		t.Fatalf("marshal dispatch response: %v", err)
+	}
+	service := visualizationcli.New(nil, factoryvisualization.NewResponsePresentation())
+	var output bytes.Buffer
+	renderer, err := service.OpenFactoryEventRenderer(visualizationcli.FactoryEventRendererConfig{
+		Output: &output, InvocationOutputMode: visualizationcli.InvocationOutputResponseStream,
+	})
+	if err != nil {
+		t.Fatalf("open renderer: %v", err)
+	}
+	renderer.PresentFactoryEvents([]interfaces.FactoryEvent{
+		{Type: interfaces.FactoryEventTypeWorkRequest, Payload: batchPayload},
+		{Type: interfaces.FactoryEventTypeDispatchRequest, Payload: requestPayload, Context: interfaces.FactoryEventContext{DispatchID: &dispatchID}},
+		{Type: interfaces.FactoryEventTypeDispatchResponse, Payload: responsePayload, Context: interfaces.FactoryEventContext{DispatchID: &dispatchID, WorkIDs: &workIDs}},
+	})
+	renderer.StopProgressRendering()
+	want := "[0] work accepted: 2 items\n- work-1 (first): first task\n- work-2 (second): second task\n- second depends on -> work-1\n" +
+		"[0] workstation started: execute (work-1, work-2)\n[0] workstation completed: execute (work-1, work-2)\n"
+	if got := output.String(); got != want {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
+
+func TestHumanFactoryEventRenderer_TTYProgressUsesInjectedTicksAndStops(t *testing.T) {
+	t.Parallel()
+
+	service := visualizationcli.New(nil, factoryvisualization.NewResponsePresentation())
+	var output, progress bytes.Buffer
+	ticks := make(chan time.Time, 1)
+	renderer, err := service.OpenFactoryEventRenderer(visualizationcli.FactoryEventRendererConfig{
+		Output: &output, ProgressOutput: &progress, ProgressIsTTY: true, ProgressTicks: ticks,
+		InvocationOutputMode: visualizationcli.InvocationOutputResponseStream,
+	})
+	if err != nil {
+		t.Fatalf("open renderer: %v", err)
+	}
+	dispatchID := "worker-a"
+	renderer.PresentFactoryEvents([]interfaces.FactoryEvent{{
+		Type: interfaces.FactoryEventTypeDispatchRequest, Context: interfaces.FactoryEventContext{DispatchID: &dispatchID},
+	}})
+	ticks <- time.Unix(1, 0)
+	renderer.PresentFactoryEvents([]interfaces.FactoryEvent{{
+		Type: interfaces.FactoryEventTypeDispatchResponse, Context: interfaces.FactoryEventContext{DispatchID: &dispatchID},
+	}})
+	renderer.StopProgressRendering()
+	if got := progress.String(); !strings.Contains(got, "\x1b[") || !strings.Contains(got, "⠋") || !strings.HasSuffix(got, "\r\x1b[2K") {
+		t.Fatalf("progress = %q, want colored spinner and terminal clear", got)
 	}
 }
 

@@ -67,7 +67,7 @@ func (recorder *factoryRuntimeEffectRecorder) edges() serviceedges.Edges {
 	return serviceedges.Edges{
 		FactoryRuntimeIDGenerator:                   recorder.recordID,
 		FactoryRuntimeDirectories:                   &factoryRuntimeDirectoryRecorder{recorder: recorder},
-		FactoryRuntimeInputs:                      &factoryRuntimeInputRecorder{recorder: recorder},
+		FactoryRuntimeInputs:                        &factoryRuntimeInputRecorder{recorder: recorder},
 		FactoryRuntimeInputDirectoryWalker:          recorder.recordInputWalk,
 		DispatchRecorder:                            recorder.recordDispatch,
 		FactoryRuntimeWorkflowSources:               &factoryRuntimeWorkflowSourceRecorder{recorder: recorder},

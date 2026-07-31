@@ -16,15 +16,19 @@ import (
 func completeDependencies() authoringlayout.Dependencies {
 	mapper := factorymapping.NewFactoryConfigMapper()
 	return authoringlayout.Dependencies{
-		Validator:            factoryvalidation.New(nil),
-		MapInput:             func([]byte) (factorydefinitions.DefinitionValidationRequest, error) { return factorydefinitions.DefinitionValidationRequest{}, nil },
-		DecodeFactory:        mapper.Expand,
-		NormalizeAuthored:    authoredmapping.AuthoredFactoryConfigForExpandedLayout,
-		EncodeFactory:        mapper.Flatten,
-		Write:                func(string, *factorydefinitions.PreparedFactoryLayoutPayload, string) error { return nil },
-		Validate:             func(string) error { return nil },
-		Flatten:              func(string) ([]byte, error) { return nil, nil },
-		Expand:               func(string) (string, factorydefinitions.LayoutExpansionReport, error) { return "", factorydefinitions.LayoutExpansionReport{}, nil },
+		Validator: factoryvalidation.New(nil),
+		MapInput: func([]byte) (factorydefinitions.DefinitionValidationRequest, error) {
+			return factorydefinitions.DefinitionValidationRequest{}, nil
+		},
+		DecodeFactory:     mapper.Expand,
+		NormalizeAuthored: authoredmapping.AuthoredFactoryConfigForExpandedLayout,
+		EncodeFactory:     mapper.Flatten,
+		Write:             func(string, *factorydefinitions.PreparedFactoryLayoutPayload, string) error { return nil },
+		Validate:          func(string) error { return nil },
+		Flatten:           func(string) ([]byte, error) { return nil, nil },
+		Expand: func(string) (string, factorydefinitions.LayoutExpansionReport, error) {
+			return "", factorydefinitions.LayoutExpansionReport{}, nil
+		},
 		FileSystem:           stubPersistenceFileSystem{},
 		RequireDefinitionDir: func(string) error { return nil },
 		Directories:          stubDirectoryReplacementStore{},
@@ -36,8 +40,8 @@ type stubPersistenceFileSystem struct{}
 func (stubPersistenceFileSystem) MkdirTemp(string, string) (string, error) { return "", nil }
 func (stubPersistenceFileSystem) RemoveAll(string) error                   { return nil }
 func (stubPersistenceFileSystem) Rename(string, string) error              { return nil }
-func (stubPersistenceFileSystem) Stat(string) (fs.FileInfo, error) { return nil, nil }
-func (stubPersistenceFileSystem) MkdirAll(string, fs.FileMode) error { return nil }
+func (stubPersistenceFileSystem) Stat(string) (fs.FileInfo, error)         { return nil, nil }
+func (stubPersistenceFileSystem) MkdirAll(string, fs.FileMode) error       { return nil }
 
 type stubDirectoryReplacementStore struct{}
 
@@ -51,9 +55,9 @@ func TestNewService_RequiresExactInjectedPorts(t *testing.T) {
 
 	complete := completeDependencies()
 	requiredFields := []struct {
-		name string
+		name   string
 		mutate func(*authoringlayout.Dependencies)
-		want string
+		want   string
 	}{
 		{
 			name:   "validator",

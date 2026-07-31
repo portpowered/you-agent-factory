@@ -25,12 +25,6 @@ func TestSelectionContract_ResolveIdentityAliasesAndCompatibility(t *testing.T) 
 			Availability: providers.AvailabilitySelectable,
 			Readiness:    providers.ReadinessReady,
 		},
-		providers.Descriptor{
-			ID:           providers.IDCursor,
-			DisplayName:  "Cursor",
-			Availability: providers.AvailabilitySelectable,
-			Readiness:    providers.ReadinessReady,
-		},
 	)
 
 	tests := []struct {
@@ -41,8 +35,6 @@ func TestSelectionContract_ResolveIdentityAliasesAndCompatibility(t *testing.T) 
 		{identity: "openai-codex", want: providers.IDCodex},
 		{identity: "openai", want: providers.IDCodex},
 		{identity: "anthropic", want: providers.IDClaude},
-		{identity: "cursor-cli", want: providers.IDCursor},
-		{identity: "agent", want: providers.IDCursor},
 	}
 	for _, test := range tests {
 		test := test

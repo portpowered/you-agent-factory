@@ -1455,7 +1455,7 @@
       "description": "Open provider identity used by authored modelProvider fields. Extension identities use lowercase letters and digits separated by dots or hyphens. Built-in identities and documented legacy aliases remain accepted compatibility spellings. For example, `customer.provider` is a valid extension identity.",
       "maxLength": 128,
       "minLength": 1,
-      "pattern": "^(?:[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*|ANTIGRAVITY|ANTHROPIC|CLAUDE|CODEX|CURSOR|OPENAI)$",
+      "pattern": "^(?:[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*|ANTIGRAVITY|ANTHROPIC|CLAUDE|CODEX|OPENAI)$",
       "type": "string"
     },
     "RequiredTool": {
@@ -1588,7 +1588,6 @@
       "enum": [
         "codex",
         "claude",
-        "cursor-cli",
         "antigravity"
       ],
       "type": "string"
@@ -2363,9 +2362,13 @@
           "type": "string"
         },
         "maxVisits": {
-          "description": "For `VISIT_COUNT` guards, the visit threshold.",
+          "description": "For `VISIT_COUNT` guards, the fixed visit ceiling.",
           "minimum": 1,
           "type": "integer"
+        },
+        "maxVisitsArgument": {
+          "description": "Optional invocation argument whose positive integer value tightens the fixed visit ceiling.",
+          "type": "string"
         },
         "parentInput": {
           "description": "For parent-aware input guards, the parent workType name from another input in the same workstation.",
@@ -2447,8 +2450,17 @@
           "type": "string"
         },
         "maxGeneratedWorkItems": {
-          "description": "Maximum number of Work items one accepted worker-emitted FACTORY_REQUEST_BATCH may contain.",
+          "description": "Fixed maximum number of Work items one accepted worker-emitted FACTORY_REQUEST_BATCH may contain.",
           "minimum": 1,
+          "type": "integer"
+        },
+        "maxGeneratedWorkItemsArgument": {
+          "description": "Optional invocation argument whose positive integer value tightens the fixed generated-Work ceiling.",
+          "type": "string"
+        },
+        "maxGeneratedWorkItemsArgumentOffset": {
+          "description": "Offset added to the invocation argument before applying the generated-Work ceiling.",
+          "minimum": 0,
           "type": "integer"
         },
         "maxRetries": {

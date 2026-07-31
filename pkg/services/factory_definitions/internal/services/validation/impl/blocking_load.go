@@ -2,7 +2,6 @@ package impl
 
 import factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 
-
 var deferredBlockingLoadOutcomeCodes = map[string]struct{}{
 	CodeWorkstationMissingFailureRoute:   {},
 	CodeWorkstationMissingRejectionRoute: {},

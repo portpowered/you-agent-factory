@@ -65,6 +65,7 @@ type WorkstationExecutor struct {
 	Parser                  OutputParser
 	Logger                  logging.Logger // optional; nil → noop
 	WorktreePreparer        workerexecution.FactoryWorktreePreparer
+	RunWorktree             string
 	FileSystem              platformfilesystem.ReadFileInspector
 	Now                     func() time.Time
 }
@@ -210,9 +211,15 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 	if failed != nil {
 		return *failed, nil
 	}
-	// TODO: we should make workers agnostic.
-	if failed := we.applyCodexFactoryWorktreePreparation(ctx, dispatch, workstationDef, workerDef, &resolvedContext, start); failed != nil {
+	if failed := we.applyRunFactoryWorktreePreparation(ctx, dispatch, &resolvedContext, start); failed != nil {
 		return *failed, nil
+	}
+	// TODO: remove this provider-specific compatibility behavior after authored
+	// workstation worktrees use the same provider-neutral materialization policy.
+	if strings.TrimSpace(we.RunWorktree) == "" {
+		if failed := we.applyCodexFactoryWorktreePreparation(ctx, dispatch, workstationDef, workerDef, &resolvedContext, start); failed != nil {
+			return *failed, nil
+		}
 	}
 
 	request, failed := we.buildWorkstationExecutionRequest(dispatch, workerName, workerDef, workstationDef, resolvedContext, start, logger)
@@ -491,6 +498,60 @@ func (we *WorkstationExecutor) applyCodexFactoryWorktreePreparation(
 	}
 	requestContext.WorkingDirectory = prepared.CheckoutPath
 	return nil
+}
+
+func (we *WorkstationExecutor) applyRunFactoryWorktreePreparation(
+	ctx context.Context,
+	dispatch work.WorkDispatch,
+	requestContext *resolvedWorkstationExecutionContext,
+	start time.Time,
+) *workerexecution.WorkResult {
+	selected := strings.TrimSpace(we.RunWorktree)
+	if selected == "" {
+		return nil
+	}
+	worktreeRoot := runWorktreeRoot(we.RuntimeConfig)
+	if worktreeRoot == "" {
+		failed := worktree.FailedWorkResultFromPreparation(
+			dispatch.DispatchID,
+			dispatch.TransitionID,
+			we.Now().Sub(start),
+			fmt.Errorf("factory directory unavailable"),
+		)
+		return &failed
+	}
+	if we.WorktreePreparer == nil {
+		failed := worktree.FailedWorkResultFromPreparation(
+			dispatch.DispatchID,
+			dispatch.TransitionID,
+			we.Now().Sub(start),
+			fmt.Errorf("worktree preparer unavailable"),
+		)
+		return &failed
+	}
+	prepared, err := we.WorktreePreparer.Prepare(ctx, worktreeRoot, selected)
+	if err != nil {
+		failed := worktree.FailedWorkResultFromPreparation(
+			dispatch.DispatchID,
+			dispatch.TransitionID,
+			we.Now().Sub(start),
+			err,
+		)
+		return &failed
+	}
+	requestContext.Worktree = selected
+	requestContext.WorkingDirectory = prepared.CheckoutPath
+	return nil
+}
+
+func runWorktreeRoot(runtimeConfig interfaces.RuntimeConfigLookup) string {
+	if runtimeConfig == nil {
+		return ""
+	}
+	if baseDir := strings.TrimSpace(runtimeConfig.RuntimeBaseDir()); baseDir != "" {
+		return baseDir
+	}
+	return strings.TrimSpace(runtimeConfig.FactoryDir())
 }
 
 func resolveRuntimePath(baseDir, value string, currentWorkingDirectory func() (string, error), fileSystem platformfilesystem.ReadFileInspector) string {

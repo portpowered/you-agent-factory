@@ -14,7 +14,6 @@ func TestLoadRuntimeConfig_ResolvesPublicWorkerModelProviderToCLICommand(t *test
 	}{
 		{name: "CLAUDE", public: "CLAUDE", internal: modelprovider.ProviderClaude},
 		{name: "CODEX", public: "CODEX", internal: modelprovider.ProviderCodex},
-		{name: "CURSOR", public: "CURSOR", internal: modelprovider.ProviderCursor},
 		{name: "ANTIGRAVITY", public: "ANTIGRAVITY", internal: modelprovider.ProviderAntigravity},
 		{name: "anthropic alias", public: "anthropic", internal: modelprovider.ProviderClaude},
 		{name: "openai alias", public: "openai", internal: modelprovider.ProviderCodex},

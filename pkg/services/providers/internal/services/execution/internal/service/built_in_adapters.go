@@ -5,7 +5,6 @@ import (
 	agyadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy"
 	claudeadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude"
 	codexadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex"
-	cursoradapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/cursor"
 )
 
 // BuiltInDependencies carries exact provider-native invocation effects.
@@ -13,7 +12,6 @@ type BuiltInDependencies struct {
 	Antigravity agyadapter.Effect
 	Codex       codexadapter.Effect
 	Claude      claudeadapter.Effect
-	Cursor      cursoradapter.Effect
 }
 
 // BuiltInRegistrations returns the immutable set of native adapters currently
@@ -31,6 +29,5 @@ func BuiltInRegistrations(
 		agyadapter.NewRegistration(effects.Antigravity),
 		codexadapter.NewRegistration(effects.Codex),
 		claudeadapter.NewRegistration(effects.Claude),
-		cursoradapter.NewRegistration(effects.Cursor),
 	}
 }

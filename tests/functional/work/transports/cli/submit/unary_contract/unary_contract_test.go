@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 

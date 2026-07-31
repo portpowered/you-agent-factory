@@ -236,7 +236,7 @@ async function enterGraphEditor(page) {
 async function addWorker(
   page,
   toolbar,
-  { model = "gpt-5-mini", modelProvider = "CURSOR", name },
+  { model = "gpt-5-mini", modelProvider = "CODEX", name },
 ) {
   await toolbar.getByRole("button", { name: "Add" }).click();
   await page

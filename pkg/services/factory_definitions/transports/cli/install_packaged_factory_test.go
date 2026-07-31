@@ -36,14 +36,14 @@ func TestInstallPackagedFactoryDelegatesToDefinitionsOperation(t *testing.T) {
 	ctx := startupcli.WithWorkingDirectory(context.Background(), "/workspace")
 	err := factorydefinitionscli.InstallPackagedFactory(
 		factorydefinitionscli.InstallPackagedFactoryConfig{
-			Context:      ctx,
-			HomeDir:      "/home/operator",
-			Package:      "@you/goal",
-			Dir:          "alternate-factories",
-			DirChanged:   true,
-			Format:       "yaml",
+			Context:       ctx,
+			HomeDir:       "/home/operator",
+			Package:       "@you/goal",
+			Dir:           "alternate-factories",
+			DirChanged:    true,
+			Format:        "yaml",
 			FormatChanged: true,
-			Output:       &output,
+			Output:        &output,
 		},
 		install,
 	)

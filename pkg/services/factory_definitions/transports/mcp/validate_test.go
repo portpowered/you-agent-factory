@@ -41,7 +41,7 @@ func TestBind_ValidateToolEncodesValidationTargetsFromFakeRoot(t *testing.T) {
 	}
 
 	var response struct {
-		Result *factoryapi.FactoryValidationResult `json:"result"`
+		Result *factoryapi.FactoryValidationResult     `json:"result"`
 		Error  *factorydefinitionmcp.ToolErrorEnvelope `json:"error"`
 	}
 	if err := json.Unmarshal(raw, &response); err != nil {
@@ -227,7 +227,7 @@ func assertTypedToolErrorEnvelope(
 	t.Helper()
 
 	var response struct {
-		Result *json.RawMessage                          `json:"result"`
+		Result *json.RawMessage                        `json:"result"`
 		Error  *factorydefinitionmcp.ToolErrorEnvelope `json:"error"`
 	}
 	if err := json.Unmarshal(raw, &response); err != nil {

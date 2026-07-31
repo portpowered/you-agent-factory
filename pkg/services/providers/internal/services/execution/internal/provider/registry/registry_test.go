@@ -39,8 +39,8 @@ func TestNewJoinsSupportedCatalogManifestsWithoutProviderSideEffects(t *testing.
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
-	if len(registry.manifests) != 4 || len(registry.integrations) != 4 {
-		t.Fatalf("joined counts = (%d manifests, %d integrations), want (4, 4)", len(registry.manifests), len(registry.integrations))
+	if len(registry.manifests) != 3 || len(registry.integrations) != 3 {
+		t.Fatalf("joined counts = (%d manifests, %d integrations), want (3, 3)", len(registry.manifests), len(registry.integrations))
 	}
 }
 
@@ -56,23 +56,12 @@ func TestBuiltInRegistrationsBuildAllSelectableBundledProviders(t *testing.T) {
 		t.Fatalf("New(BuiltInRegistrations()) error = %v", err)
 	}
 
-	want := []string{"antigravity", "claude", "codex", "cursor"}
+	want := []string{"antigravity", "claude", "codex"}
 	if got := entryIdentities(registry.Entries()); !reflect.DeepEqual(got, want) {
 		t.Fatalf("built-in manifest identities = %v, want %v", got, want)
 	}
-	cursor, err := registry.Lookup("cursor")
-	if err != nil {
-		t.Fatalf("Lookup(cursor alias) error = %v", err)
-	}
-	if cursor.Identity() != "cursor" {
-		t.Fatalf("Lookup(cursor alias) identity = %q, want cursor", cursor.Identity())
-	}
-	integration, err := registry.Integration("cursor")
-	if err != nil {
-		t.Fatalf("Integration(cursor alias) error = %v", err)
-	}
-	if integration.Identity() != "cursor" {
-		t.Fatalf("Integration(cursor alias) identity = %q, want cursor", integration.Identity())
+	if _, err := registry.Lookup("cursor"); err == nil {
+		t.Fatal("Lookup(cursor) error = nil, want retired native provider to be unknown")
 	}
 }
 
@@ -254,7 +243,7 @@ func TestNewRejectsEveryIdentityCollisionIndependentOfInputOrder(t *testing.T) {
 	base := supportedCatalogRegistrations(t)
 	first := externalManifest(t, "customer.one", "customer-alias")
 	second := externalManifest(t, "customer.two", "customer-alias")
-	third := externalManifest(t, "cursor", "third-alias")
+	third := externalManifest(t, "codex", "third-alias")
 	fourth := externalManifest(t, "customer.one", "fourth-alias")
 	additions := []Registration{
 		ExternalRegistration(first, integrationFor(first)),
@@ -280,7 +269,7 @@ func TestNewRejectsEveryIdentityCollisionIndependentOfInputOrder(t *testing.T) {
 		}
 	}
 	assertErrorContains(t, errorString(want),
-		`"cursor": identity collision between canonical "cursor", canonical "cursor"`,
+		`"codex": identity collision between canonical "codex", canonical "codex"`,
 		`"customer-alias": identity collision between alias of "customer.one", alias of "customer.two"`,
 		`"customer.one": identity collision between canonical "customer.one", canonical "customer.one"`,
 	)

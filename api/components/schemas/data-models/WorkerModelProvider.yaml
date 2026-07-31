@@ -6,5 +6,4 @@ description: >-
 enum:
   - CLAUDE
   - CODEX
-  - CURSOR
   - ANTIGRAVITY

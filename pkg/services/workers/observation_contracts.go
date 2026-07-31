@@ -14,11 +14,11 @@ type ObservationSink func(context.Context, ExecutionObservation) error
 type ExecutionObservationKind string
 
 const (
-	ExecutionObservationKindStarted    ExecutionObservationKind = "STARTED"
-	ExecutionObservationKindProgress   ExecutionObservationKind = "PROGRESS"
-	ExecutionObservationKindCompleted  ExecutionObservationKind = "COMPLETED"
-	ExecutionObservationKindFailed     ExecutionObservationKind = "FAILED"
-	ExecutionObservationKindCanceled   ExecutionObservationKind = "CANCELED"
+	ExecutionObservationKindStarted   ExecutionObservationKind = "STARTED"
+	ExecutionObservationKindProgress  ExecutionObservationKind = "PROGRESS"
+	ExecutionObservationKindCompleted ExecutionObservationKind = "COMPLETED"
+	ExecutionObservationKindFailed    ExecutionObservationKind = "FAILED"
+	ExecutionObservationKindCanceled  ExecutionObservationKind = "CANCELED"
 )
 
 // ExecutionObservation carries safe, detached progress facts for one attempt.

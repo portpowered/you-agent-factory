@@ -34,14 +34,6 @@ func NewAgyPTYAllocator(host platformpty.Host, clock platformclock.Source) (work
 	return executionwire.NewAgyPTYAllocator(host, clock)
 }
 
-// CursorPlatformDependencies are platform facts required for oversized Windows
-// Cursor prompt materialization in the built-in Providers Execution adapter.
-type CursorPlatformDependencies struct {
-	OperatingSystem string
-	TemporaryDir    string
-	TemporaryFiles  platformfilesystem.TemporaryFileSystem
-}
-
 // AgyPTYPlatformDependencies are platform facts required for the built-in Agy
 // PTY execution adapter.
 type AgyPTYPlatformDependencies struct {
@@ -59,7 +51,6 @@ type wireOptions struct {
 	catalog              []catalogwire.Option
 	commandRunner        platformprocess.CommandRunner
 	workersCommandRunner workers.CommandRunner
-	cursorPlatform       CursorPlatformDependencies
 	agyPTYPlatform       AgyPTYPlatformDependencies
 	acpIntegrations      []providers.ACPIntegration
 	commandFactory       platformprocess.CommandFactory
@@ -156,20 +147,6 @@ func WithWorkersCommandRunner(runner workers.CommandRunner) Option {
 	return workersCommandRunnerOption{runner: runner}
 }
 
-type cursorPlatformOption struct {
-	platform CursorPlatformDependencies
-}
-
-func (o cursorPlatformOption) apply(opts *wireOptions) {
-	opts.cursorPlatform = o.platform
-}
-
-// WithCursorPlatform injects the platform facts required for oversized Windows
-// Cursor prompt materialization in the built-in Providers Execution adapter.
-func WithCursorPlatform(platform CursorPlatformDependencies) Option {
-	return cursorPlatformOption{platform: platform}
-}
-
 type agyPTYPlatformOption struct {
 	platform AgyPTYPlatformDependencies
 }
@@ -216,7 +193,6 @@ func NewService(options ...Option) (providers.Service, error) {
 		catalogService,
 		config.commandRunner,
 		config.workersCommandRunner,
-		config.cursorPlatform,
 		config.agyPTYPlatform,
 		acp,
 		config.commandFactory,
@@ -240,7 +216,6 @@ func newRoot(
 	catalogService catalog.Service,
 	commandRunner platformprocess.CommandRunner,
 	workersCommandRunner workers.CommandRunner,
-	cursorPlatform CursorPlatformDependencies,
 	agyPTYPlatform AgyPTYPlatformDependencies,
 	acpIntegrations []providers.ACPIntegration,
 	commandFactory platformprocess.CommandFactory,
@@ -253,7 +228,7 @@ func newRoot(
 	if workersCommandRunner == nil && commandRunner != nil {
 		workersCommandRunner = workers.AdaptCommandRunner(commandRunner)
 	}
-	registrations := executionserviceRegistrations(workersCommandRunner, cursorPlatform, agyPTYPlatform)
+	registrations := executionserviceRegistrations(workersCommandRunner, agyPTYPlatform)
 	acpService, err := acpwire.NewService(acpIntegrations, commandFactory, executableLocator)
 	if err != nil {
 		return nil, err
@@ -355,15 +330,10 @@ func (writer *externalResponseWriter) Close(_ context.Context, completion provid
 	return nil
 }
 
-func executionserviceRegistrations(workersCommandRunner workers.CommandRunner, cursorPlatform CursorPlatformDependencies, agyPTYPlatform AgyPTYPlatformDependencies) []execution.Registration {
+func executionserviceRegistrations(workersCommandRunner workers.CommandRunner, agyPTYPlatform AgyPTYPlatformDependencies) []execution.Registration {
 	return executionwire.BuiltInRegistrations(executionwire.BuiltInDependenciesFromWorkersRunner(
 		workersCommandRunner,
 		executionwire.BuiltInRunnerPlatformDependencies{
-			Cursor: executionwire.CursorPlatformDependencies{
-				OperatingSystem: cursorPlatform.OperatingSystem,
-				TemporaryDir:    cursorPlatform.TemporaryDir,
-				TemporaryFiles:  cursorPlatform.TemporaryFiles,
-			},
 			AgyPTY: executionwire.AgyPTYPlatformDependencies{
 				Allocator: agyPTYPlatform.Allocator,
 				Locator:   agyPTYPlatform.Locator,

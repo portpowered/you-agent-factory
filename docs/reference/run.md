@@ -20,6 +20,7 @@ continuous, and mock-worker run tasks.
 | Execute a JavaScript workflow | `you run --factory <workflow.js>` |
 | Keep a local Factory Session alive while idle | Add `--continuously` |
 | Replace live worker dispatch with deterministic outcomes | Add `--with-mock-workers [config.json]` |
+| Run worker dispatches in an isolated Git checkout | Add `--worktree <name>` |
 | Serve an API only for the run lifetime | Add `--with-server` |
 | Serve the embedded dashboard and open it once | Add `--with-site` |
 | Serve the Current Factory continuously | `you server` |
@@ -167,6 +168,29 @@ you run --dir ./factory --with-mock-workers ./docs/examples/mock-workers.json --
 ```
 
 Use `you docs mock-workers` for the config contract and passthrough behavior.
+
+## Run in a Git worktree
+
+Add `--worktree <name>` to create or reuse a checkout under the invocation
+working directory's worktree parent and execute every worker dispatch from
+that checkout:
+
+```bash
+you run --named @you/goal --worktree feature-login \
+  --to "Fix the login bug and verify the focused tests"
+```
+
+The selection is run-scoped and does not modify the Factory definition. It is
+provider-neutral: Codex, ACP, Claude, script, and other worker routes receive
+the same materialized checkout as their working directory. Existing valid
+checkouts are reused. A missing Git repository, an invalid relative worktree
+name, a conflicting non-worktree path, or `git worktree add` failure stops the
+dispatch with a worktree preparation error.
+
+The name must be relative and cannot traverse outside the Factory's worktree
+parent. When a run-level worktree is selected, it overrides workstation-level
+`workingDirectory` and `worktree` templates for that run. Without the flag,
+authored workstation behavior is unchanged.
 
 ## Server and site lifecycles
 

@@ -3,8 +3,8 @@ package internal
 import (
 	"testing"
 
-	workstationswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workstationswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/wire"
 )
 
 func TestNewRootConstructsPublishedWorkersService(t *testing.T) {

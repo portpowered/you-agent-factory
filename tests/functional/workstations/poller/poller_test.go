@@ -16,13 +16,13 @@ import (
 )
 
 const (
-	pollerWorkTypeName        = "story"
-	pollerOutputStateName     = "queued"
-	pollerExternalWorkID      = "external-issue-101"
-	pollerExternalRequestID   = "poller-external-batch-1"
-	pollerScriptCommand       = "factory/scripts/poller.sh"
-	pollerWorkstationName     = "poll-tasks"
-	pollerWorkerName          = "script-poller"
+	pollerWorkTypeName      = "story"
+	pollerOutputStateName   = "queued"
+	pollerExternalWorkID    = "external-issue-101"
+	pollerExternalRequestID = "poller-external-batch-1"
+	pollerScriptCommand     = "factory/scripts/poller.sh"
+	pollerWorkstationName   = "poll-tasks"
+	pollerWorkerName        = "script-poller"
 )
 
 // TestPollerCreatesWorkFromExternalItems proves a POLLER workstation running

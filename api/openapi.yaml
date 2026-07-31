@@ -8910,13 +8910,12 @@ components:
       enum:
         - CLAUDE
         - CODEX
-        - CURSOR
         - ANTIGRAVITY
     ProviderIdentity:
       type: string
       minLength: 1
       maxLength: 128
-      pattern: ^(?:[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*|ANTIGRAVITY|ANTHROPIC|CLAUDE|CODEX|CURSOR|OPENAI)$
+      pattern: ^(?:[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*|ANTIGRAVITY|ANTHROPIC|CLAUDE|CODEX|OPENAI)$
       description: Open provider identity used by authored modelProvider fields. Extension identities use lowercase letters and digits separated by dots or hyphens. Built-in identities and documented legacy aliases remain accepted compatibility spellings. For example, `customer.provider` is a valid extension identity.
     ProviderCatalog:
       type: object
@@ -9268,7 +9267,6 @@ components:
       enum:
         - codex
         - claude
-        - cursor-cli
         - antigravity
     RunnerSelectionSource:
       type: string
@@ -10173,7 +10171,7 @@ components:
     GlobalConfigWorkerPresetModelProvider:
       type: string
       description: Canonical provider identity or built-in compatibility alias; surrounding whitespace is trimmed, and symbolic DEFAULT is not accepted for presets.
-      pattern: "^[\t-\r \N\_  - \L\P  　]*(?:[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*|ANTIGRAVITY|ANTHROPIC|CLAUDE|CODEX|CURSOR|OPENAI)[\t-\r \N\_  - \L\P  　]*$"
+      pattern: "^[\t-\r \N\_  - \L\P  　]*(?:[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*|ANTIGRAVITY|ANTHROPIC|CLAUDE|CODEX|OPENAI)[\t-\r \N\_  - \L\P  　]*$"
     GlobalConfigWorkerPresetReasoningEffort:
       type: string
       description: Optional reasoning effort; surrounding whitespace and letter case are normalized, and an empty value is treated as unspecified.

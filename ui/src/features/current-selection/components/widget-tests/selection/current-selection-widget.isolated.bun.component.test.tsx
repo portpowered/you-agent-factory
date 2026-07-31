@@ -788,7 +788,7 @@ describe("CurrentSelectionWidget", () => {
         currentSelection={buildCurrentSelection({
           selectedWorker: {
             model: "gpt-5.5",
-            modelProvider: "CURSOR",
+            modelProvider: "CODEX",
             name: "reviewer",
             type: "MODEL_WORKER",
           },
@@ -824,7 +824,7 @@ describe("CurrentSelectionWidget", () => {
       workers: [
         {
           model: "gpt-5.5",
-          modelProvider: "CURSOR",
+          modelProvider: "CODEX",
           name: "reviewer",
           resources: [{ capacity: 1, name: "agent-slot" }],
           type: "MODEL_WORKER",
@@ -891,7 +891,7 @@ describe("CurrentSelectionWidget", () => {
         currentSelection={buildCurrentSelection({
           selectedWorker: {
             model: "gpt-5.5",
-            modelProvider: "CURSOR",
+            modelProvider: "CODEX",
             name: "reviewer",
             type: "MODEL_WORKER",
           },
@@ -1289,7 +1289,7 @@ function buildEditableFactoryDefinition(overrides?: {
     workers: (overrides?.workerOptions ?? ["reviewer", "planner"]).map(
       (name, index) => ({
         model: `gpt-5.${index + 5}`,
-        modelProvider: index === 0 ? "CURSOR" : "CODEX",
+        modelProvider: index === 0 ? "CODEX" : "CODEX",
         name,
         type: "MODEL_WORKER",
       }),

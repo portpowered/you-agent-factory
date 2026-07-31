@@ -24,12 +24,12 @@ import (
 const (
 	packagedGoalFactoryName                 = "@you/goal"
 	packagedGoalPlanWorkstationName         = "plan-goal"
-	packagedGoalExecuteWorkstationName        = "execute-goal"
-	packagedGoalCheckWorkstationName          = "check-goal"
-	packagedGoalReviewWorkstationName         = "review-goal"
-	packagedGoalMockWorkerAcceptedSummary     = "mock worker accepted"
-	packagedGoalRejectThenCompleteSummary     = "finished after rejection"
-	packagedGoalContinueThenCompleteSummary   = "finished after continue"
+	packagedGoalExecuteWorkstationName      = "execute-goal"
+	packagedGoalCheckWorkstationName        = "check-goal"
+	packagedGoalReviewWorkstationName       = "review-goal"
+	packagedGoalMockWorkerAcceptedSummary   = "mock worker accepted"
+	packagedGoalRejectThenCompleteSummary   = "finished after rejection"
+	packagedGoalContinueThenCompleteSummary = "finished after continue"
 )
 
 func scaffoldPackagedGoalBuiltInFactory(t *testing.T) string {

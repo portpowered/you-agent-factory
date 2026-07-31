@@ -14,9 +14,9 @@ import (
 	"time"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -205,32 +205,32 @@ func assertSessionsInvocationPrimaryResultText(
 }
 
 type sessionWorkAdmissionResponseStreamRecorder struct {
-	home               string
-	local              platformfilesystem.Local
-	workingDirectory   atomic.Int32
-	executionGetwd     atomic.Int32
-	executionStat      atomic.Int32
-	directoryStat      atomic.Int32
-	directoryReadDir   atomic.Int32
-	resolveHome        atomic.Int32
-	resolveSymlinks    atomic.Int32
-	sessionID          atomic.Int32
-	runtimeID          atomic.Int32
-	responseEventID    atomic.Int32
-	cursorMkdirAll     atomic.Int32
-	cursorReadFile     atomic.Int32
-	cursorRemove       atomic.Int32
-	cursorRename       atomic.Int32
-	cursorTempFile     atomic.Int32
-	runtimeMkdirAll    atomic.Int32
-	runtimeReadFile    atomic.Int32
-	runtimeWriteFile   atomic.Int32
-	contractFixture    atomic.Int32
-	replayRecording    atomic.Int32
-	invocationInput    atomic.Int32
-	initialWork        atomic.Int32
-	invocationMetric   atomic.Int32
-	runtimeHost        atomic.Int32
+	home             string
+	local            platformfilesystem.Local
+	workingDirectory atomic.Int32
+	executionGetwd   atomic.Int32
+	executionStat    atomic.Int32
+	directoryStat    atomic.Int32
+	directoryReadDir atomic.Int32
+	resolveHome      atomic.Int32
+	resolveSymlinks  atomic.Int32
+	sessionID        atomic.Int32
+	runtimeID        atomic.Int32
+	responseEventID  atomic.Int32
+	cursorMkdirAll   atomic.Int32
+	cursorReadFile   atomic.Int32
+	cursorRemove     atomic.Int32
+	cursorRename     atomic.Int32
+	cursorTempFile   atomic.Int32
+	runtimeMkdirAll  atomic.Int32
+	runtimeReadFile  atomic.Int32
+	runtimeWriteFile atomic.Int32
+	contractFixture  atomic.Int32
+	replayRecording  atomic.Int32
+	invocationInput  atomic.Int32
+	initialWork      atomic.Int32
+	invocationMetric atomic.Int32
+	runtimeHost      atomic.Int32
 }
 
 func newSessionWorkAdmissionResponseStreamRecorder(t *testing.T) *sessionWorkAdmissionResponseStreamRecorder {
@@ -255,7 +255,7 @@ func (recorder *sessionWorkAdmissionResponseStreamRecorder) edges() serviceedges
 		FactorySessionReplayRecordingReader:        recorder.readReplayRecording,
 		FactorySessionInvocationInputReader:        recorder.readInvocationInput,
 		FactorySessionInitialWorkReader:            recorder.readInitialWork,
-		InvocationMetricsRecorder:                recorder,
+		InvocationMetricsRecorder:                  recorder,
 		RuntimeHostObserver:                        recorder.observeRuntimeHost,
 	}
 }

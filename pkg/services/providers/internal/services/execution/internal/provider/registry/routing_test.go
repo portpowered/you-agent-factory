@@ -35,14 +35,6 @@ func TestResolveRunnerSelectionUsesRegistryIdentityAndPrecedence(t *testing.T) {
 		wantSource  workers.RunnerSelectionSource
 	}{
 		{
-			name:        "manifest alias",
-			workstation: " CURSOR ",
-			factory:     "antigravity",
-			worker:      "claude",
-			wantID:      workers.RunnerIDCursorCLI,
-			wantSource:  workers.RunnerSelectionSourceWorkstation,
-		},
-		{
 			name:       "legacy public model provider alias",
 			worker:     "openai",
 			wantID:     workers.RunnerIDCodex,
@@ -52,12 +44,6 @@ func TestResolveRunnerSelectionUsesRegistryIdentityAndPrecedence(t *testing.T) {
 			name:       "legacy anthropic model provider alias",
 			worker:     "anthropic",
 			wantID:     "claude",
-			wantSource: workers.RunnerSelectionSourceLegacyProvider,
-		},
-		{
-			name:       "legacy cursor runner compatibility",
-			worker:     workers.RunnerIDCursorCLI,
-			wantID:     workers.RunnerIDCursorCLI,
 			wantSource: workers.RunnerSelectionSourceLegacyProvider,
 		},
 		{
@@ -97,7 +83,6 @@ func TestCompatibilityAliasesUseRegistryIdentityAuthority(t *testing.T) {
 		wantRunner    string
 	}{
 		{alias: "anthropic", wantCanonical: "claude", wantRunner: "claude"},
-		{alias: workers.RunnerIDCursorCLI, wantCanonical: "cursor", wantRunner: workers.RunnerIDCursorCLI},
 		{alias: "openai", wantCanonical: "codex", wantRunner: workers.RunnerIDCodex},
 	}
 	for _, test := range tests {
@@ -130,7 +115,7 @@ func TestResolveRunnerSelectionRejectsUnknownAndNonSelectableWithoutFallback(t *
 	t.Parallel()
 	providers := newBuiltInRegistry(t)
 
-	for _, identity := range []string{"unknown"} {
+	for _, identity := range []string{"unknown", "cursor", "cursor-cli"} {
 		identity := identity
 		t.Run(identity, func(t *testing.T) {
 			t.Parallel()
@@ -175,9 +160,6 @@ func TestResolveRunnerSelectionUsesExternalIntegrationCanonicalIdentity(t *testi
 	if providers.UsesNativeRunner("claude") {
 		t.Fatal("UsesNativeRunner(claude) = true, want conductor route")
 	}
-	if providers.UsesNativeRunner("cursor") || providers.UsesNativeRunner(workers.RunnerIDCursorCLI) {
-		t.Fatal("UsesNativeRunner(cursor) = true, want conductor route for migrated Cursor")
-	}
 	if _, err := providers.Integration("customer"); err != nil {
 		t.Fatalf("Integration(external) error = %v", err)
 	}
@@ -212,16 +194,9 @@ func TestRunnerMetadataUsesManifestCapabilities(t *testing.T) {
 		workers.RunnerOptionalCapabilityStatusSupported,
 	)
 
-	cursor, err := providers.RunnerMetadata("cursor")
-	if err != nil {
-		t.Fatalf("RunnerMetadata(cursor) error = %v", err)
+	if _, err := providers.RunnerMetadata("cursor"); err == nil {
+		t.Fatal("RunnerMetadata(cursor) error = nil, want retired native provider to be unknown")
 	}
-	assertOptionalCapabilityStatus(
-		t,
-		cursor,
-		workers.RunnerOptionalCapabilitySessionResume,
-		workers.RunnerOptionalCapabilityStatusSupported,
-	)
 }
 
 func TestValidateRunnerPrerequisitesUsesManifestExecutableAndAlias(t *testing.T) {
@@ -229,10 +204,10 @@ func TestValidateRunnerPrerequisitesUsesManifestExecutableAndAlias(t *testing.T)
 	providers := newBuiltInRegistry(t)
 	locator := &recordingExecutableLocator{}
 
-	if err := providers.ValidateRunnerPrerequisites(locator, "cursor"); err != nil {
+	if err := providers.ValidateRunnerPrerequisites(locator, "codex"); err != nil {
 		t.Fatalf("ValidateRunnerPrerequisites() error = %v", err)
 	}
-	if !reflect.DeepEqual(locator.commands, []string{"cursor"}) {
+	if !reflect.DeepEqual(locator.commands, []string{"codex"}) {
 		t.Fatalf("commands = %#v, want manifest executable", locator.commands)
 	}
 

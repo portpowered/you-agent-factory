@@ -131,8 +131,8 @@ func TestResolveEffectiveResponseToHTTP_IsStableRoundTripForSelectionFields(t *t
 
 	selection := operatorsettings.EffectiveSelection{
 		BackendScopeID:            "scope-a",
-		WorkerModelProvider:         "codex",
-		WorkerModel:                 "gpt-5",
+		WorkerModelProvider:       "codex",
+		WorkerModel:               "gpt-5",
 		WorkerModelProviderSource: operatorsettings.EffectiveLayerSourceFile,
 		WorkerModelSource:         operatorsettings.EffectiveLayerSourceFile,
 		ConfigPath:                "/tmp/config.json",

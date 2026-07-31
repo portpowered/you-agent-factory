@@ -8,8 +8,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-const legacyCursorRunnerID = workers.RunnerIDCursorCLI
-
 type compatibilityAlias struct {
 	alias     string
 	canonical string
@@ -18,7 +16,6 @@ type compatibilityAlias struct {
 func providerCompatibilityAliases() []compatibilityAlias {
 	return []compatibilityAlias{
 		{alias: "anthropic", canonical: "claude"},
-		{alias: legacyCursorRunnerID, canonical: "cursor"},
 		{alias: "openai", canonical: "codex"},
 	}
 }
@@ -74,9 +71,6 @@ func (r *Registry) selectionRunnerID(identity string) (string, error) {
 		return "", err
 	}
 	canonical := string(entry.Identity())
-	if canonical == "cursor" {
-		return legacyCursorRunnerID, nil
-	}
 	return canonical, nil
 }
 
@@ -95,9 +89,6 @@ func (r *Registry) RunnerID(identity string) (string, error) {
 			"provider %q is not available through the provider-native runner path",
 			canonical,
 		)
-	}
-	if canonical == "cursor" {
-		return legacyCursorRunnerID, nil
 	}
 	return canonical, nil
 }
@@ -138,9 +129,6 @@ func (r *Registry) RunnerMetadata(identity string) (workers.RunnerMetadata, erro
 	}
 	manifest := entry.Manifest()
 	runnerID := string(entry.Identity())
-	if runnerID == "cursor" {
-		runnerID = legacyCursorRunnerID
-	}
 	execution := manifest.MaximumExecutionCapabilities
 	return workers.RunnerMetadata{
 		ID:          runnerID,

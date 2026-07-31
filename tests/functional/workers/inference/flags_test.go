@@ -81,7 +81,7 @@ func TestUnsupportedProviderFlagReturnsCapabilityError(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 
 	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
-		modelprovider.ProviderCursor,
+		modelprovider.ProviderCodex,
 		"cursor-test-model",
 	))
 	support.WriteWorkstationConfig(t, dir, "process", `---

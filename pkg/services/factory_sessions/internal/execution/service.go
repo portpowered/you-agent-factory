@@ -258,22 +258,26 @@ type PersistenceChoice struct {
 }
 
 const (
-	PersistencePolicyEnabled  PersistencePolicy = "enabled"
-	PersistencePolicyDisabled PersistencePolicy = "disabled"
+	PersistencePolicyEnabled  = factorysessions.PersistencePolicyEnabled
+	PersistencePolicyDisabled = factorysessions.PersistencePolicyDisabled
 )
 
 // PersistenceChoiceForPolicy resolves application policy into the closed
 // persistence choice consumed by durable execution composition.
+// Ordinary runtime opening uses the zero value / disabled policy so live
+// you run and packaged-factory invocations do not create project-local
+// .you-agent-factory/durable-sessions. Explicit enabled policy preserves
+// restart/resume snapshot persistence for callers and tests that opt in.
 func PersistenceChoiceForPolicy(
 	policy PersistencePolicy,
 	projectRoot string,
 	stores func(string) (runtimepersist.Store, error),
 ) (PersistenceChoice, error) {
 	switch policy {
-	case "", PersistencePolicyEnabled:
-		return ProjectPersistence(projectRoot, stores)
-	case PersistencePolicyDisabled:
+	case "", PersistencePolicyDisabled:
 		return DisabledPersistence(), nil
+	case PersistencePolicyEnabled:
+		return ProjectPersistence(projectRoot, stores)
 	default:
 		return PersistenceChoice{}, NewValidationError(
 			"persistence.policy",

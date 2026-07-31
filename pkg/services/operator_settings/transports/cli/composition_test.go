@@ -147,7 +147,7 @@ func TestBindResolveOperatorDefaultsMatchesFreeFunctionFacade(t *testing.T) {
 }
 
 type compositionSettingsRoot struct {
-	documents   map[string]operatorsettings.Document
+	documents    map[string]operatorsettings.Document
 	configureErr error
 	resolveErr   error
 }

@@ -65,43 +65,6 @@ func TestExecuteForwardsEnvThroughProviderRequest(t *testing.T) {
 	}
 }
 
-func TestExecuteMapsStableCursorRunnerIDToProviderID(t *testing.T) {
-	t.Parallel()
-
-	fake := &providersFake{}
-	runner, err := New(fake, noopPublisher)
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-
-	request := baseAgentRequest()
-	request.RunnerID = workers.RunnerIDCursorCLI
-	request.SessionID = "cursor-session-1"
-	result, err := runner.Execute(t.Context(), request)
-	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	if fake.request.Provider != providers.IDCursor {
-		t.Fatalf("Providers.ExecuteRequest.Provider = %q, want %q", fake.request.Provider, providers.IDCursor)
-	}
-	wantResume := &providers.SessionRef{
-		Provider: providers.IDCursor,
-		Kind:     providers.SessionIDKind,
-		ID:       "cursor-session-1",
-	}
-	if !reflect.DeepEqual(fake.request.ResumeSession, wantResume) {
-		t.Fatalf("Providers.ExecuteRequest.ResumeSession = %#v, want %#v", fake.request.ResumeSession, wantResume)
-	}
-	wantSession := &workers.ProviderSessionMetadata{
-		Provider: string(providers.IDCursor),
-		Kind:     providers.SessionIDKind,
-		ID:       "cursor-session-1",
-	}
-	if !reflect.DeepEqual(result.ProviderSession, wantSession) {
-		t.Fatalf("RunnerExecutionResult.ProviderSession = %#v, want %#v", result.ProviderSession, wantSession)
-	}
-}
-
 func TestExecuteCanonicalizesTimeoutAndUnknownFailureMessages(t *testing.T) {
 	t.Parallel()
 

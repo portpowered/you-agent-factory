@@ -130,8 +130,38 @@
     "name": "packages/factory-replay/fixtures/installed-consumer/consumer.ts"
   },
   {
+    "file": "packages/factory-visualizers/src/testing/factory-recording-messages.ts",
+    "kind": "file",
+    "name": "packages/factory-visualizers/src/testing/factory-recording-messages.ts"
+  },
+  {
+    "file": "packages/factory-visualizers/src/testing/factory-recording-responsive-states.ts",
+    "kind": "file",
+    "name": "packages/factory-visualizers/src/testing/factory-recording-responsive-states.ts"
+  },
+  {
+    "file": "packages/factory-visualizers/src/testing/factory-recordings.ts",
+    "kind": "file",
+    "name": "packages/factory-visualizers/src/testing/factory-recordings.ts"
+  },
+  {
     "file": "packages/factory-visualizers/vite.build.config.ts",
     "kind": "file",
     "name": "packages/factory-visualizers/vite.build.config.ts"
+  },
+  {
+    "file": "src/features/dashboard/public/index.ts",
+    "kind": "file",
+    "name": "src/features/dashboard/public/index.ts"
+  },
+  {
+    "file": "src/features/flowchart/components/current-activity-resource-node.tsx",
+    "kind": "file",
+    "name": "src/features/flowchart/components/current-activity-resource-node.tsx"
+  },
+  {
+    "file": "src/features/flowchart/components/current-activity-workstation-node.tsx",
+    "kind": "file",
+    "name": "src/features/flowchart/components/current-activity-workstation-node.tsx"
   }
 ]

@@ -164,7 +164,6 @@ func TestOpenAPIContract_GeneratedWorkerModelProviderConstantsMatchOpenAPIEnum(t
 	generated := []factoryapi.WorkerModelProvider{
 		factoryapi.WorkerModelProviderClaude,
 		factoryapi.WorkerModelProviderCodex,
-		factoryapi.WorkerModelProviderCursor,
 		factoryapi.WorkerModelProviderAntigravity,
 	}
 	values := make([]string, 0, len(generated))
@@ -178,7 +177,6 @@ func publicWorkerModelProviderValues() []string {
 	return []string{
 		"CLAUDE",
 		"CODEX",
-		"CURSOR",
 		"ANTIGRAVITY",
 	}
 }
@@ -330,7 +328,7 @@ func TestProviderManifestContract_FirstPartyCatalogIsEvidenceConservative(t *tes
 	}
 
 	sort.Strings(ids)
-	wantIDs := []string{"antigravity", "claude", "codex", "cursor"}
+	wantIDs := []string{"antigravity", "claude", "codex"}
 	if !reflect.DeepEqual(ids, wantIDs) {
 		t.Fatalf("first-party provider ids = %v, want %v", ids, wantIDs)
 	}

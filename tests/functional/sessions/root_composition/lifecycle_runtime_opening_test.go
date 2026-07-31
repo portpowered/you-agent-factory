@@ -12,8 +12,8 @@ import (
 	"testing"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -240,28 +240,28 @@ func assertSessionsSessionNotFound(t *testing.T, baseURL, sessionID string) {
 }
 
 type sessionActivationRecorder struct {
-	home               string
-	local              platformfilesystem.Local
-	workingDirectory   atomic.Int32
-	executionGetwd     atomic.Int32
-	executionStat      atomic.Int32
-	directoryStat      atomic.Int32
-	directoryReadDir   atomic.Int32
-	resolveHome        atomic.Int32
-	resolveSymlinks    atomic.Int32
-	sessionID          atomic.Int32
-	runtimeID          atomic.Int32
-	cursorMkdirAll     atomic.Int32
-	cursorReadFile     atomic.Int32
-	cursorRemove       atomic.Int32
-	cursorRename       atomic.Int32
-	cursorTempFile     atomic.Int32
-	runtimeMkdirAll    atomic.Int32
-	runtimeReadFile    atomic.Int32
-	runtimeWriteFile   atomic.Int32
-	contractFixture    atomic.Int32
-	replayRecording    atomic.Int32
-	runtimeHost        atomic.Int32
+	home             string
+	local            platformfilesystem.Local
+	workingDirectory atomic.Int32
+	executionGetwd   atomic.Int32
+	executionStat    atomic.Int32
+	directoryStat    atomic.Int32
+	directoryReadDir atomic.Int32
+	resolveHome      atomic.Int32
+	resolveSymlinks  atomic.Int32
+	sessionID        atomic.Int32
+	runtimeID        atomic.Int32
+	cursorMkdirAll   atomic.Int32
+	cursorReadFile   atomic.Int32
+	cursorRemove     atomic.Int32
+	cursorRename     atomic.Int32
+	cursorTempFile   atomic.Int32
+	runtimeMkdirAll  atomic.Int32
+	runtimeReadFile  atomic.Int32
+	runtimeWriteFile atomic.Int32
+	contractFixture  atomic.Int32
+	replayRecording  atomic.Int32
+	runtimeHost      atomic.Int32
 }
 
 func newSessionActivationRecorder(t *testing.T) *sessionActivationRecorder {

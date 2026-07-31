@@ -221,7 +221,6 @@ func isConductorRoutedProvider(provider string) bool {
 	switch strings.ToLower(strings.TrimSpace(provider)) {
 	case string(modelprovider.ProviderCodex),
 		string(modelprovider.ProviderClaude),
-		string(modelprovider.ProviderCursor),
 		string(modelprovider.ProviderAntigravity):
 		return true
 	default:

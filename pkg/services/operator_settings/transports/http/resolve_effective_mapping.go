@@ -30,13 +30,13 @@ type ResolveEffectiveInput struct {
 // EffectiveSelectionResponse is the adapter-owned HTTP success shape for one
 // effective operator default selection.
 type EffectiveSelectionResponse struct {
-	BackendScopeID            string                              `json:"backendScopeId,omitempty"`
+	BackendScopeID            string                                `json:"backendScopeId,omitempty"`
 	WorkerPresets             []factoryapi.GlobalConfigWorkerPreset `json:"workerPresets,omitempty"`
-	WorkerModelProvider       string                              `json:"workerModelProvider,omitempty"`
-	WorkerModel               string                              `json:"workerModel,omitempty"`
-	WorkerModelProviderSource string                              `json:"workerModelProviderSource,omitempty"`
-	WorkerModelSource         string                              `json:"workerModelSource,omitempty"`
-	ConfigPath                string                              `json:"configPath,omitempty"`
+	WorkerModelProvider       string                                `json:"workerModelProvider,omitempty"`
+	WorkerModel               string                                `json:"workerModel,omitempty"`
+	WorkerModelProviderSource string                                `json:"workerModelProviderSource,omitempty"`
+	WorkerModelSource         string                                `json:"workerModelSource,omitempty"`
+	ConfigPath                string                                `json:"configPath,omitempty"`
 }
 
 // ResolveEffectiveResponse is the adapter-owned HTTP success shape for one

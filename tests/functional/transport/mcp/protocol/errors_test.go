@@ -19,15 +19,15 @@ import (
 )
 
 const (
-	jsonRPCInvalidParamsCode       = -32602
-	factorySessionNotFoundCode     = "factory_session.session.not_found"
-	missingFactorySessionID        = "dur-sess-missing-999"
-	factorySessionGetToolName      = "you.factory_session.get"
+	jsonRPCInvalidParamsCode   = -32602
+	factorySessionNotFoundCode = "factory_session.session.not_found"
+	missingFactorySessionID    = "dur-sess-missing-999"
+	factorySessionGetToolName  = "you.factory_session.get"
 )
 
 type mcpJSONRPCResponse struct {
-	JSONRPC string `json:"jsonrpc"`
-	ID      any    `json:"id"`
+	JSONRPC string              `json:"jsonrpc"`
+	ID      any                 `json:"id"`
 	Result  *mcpToolsCallResult `json:"result"`
 	Error   *struct {
 		Code    int    `json:"code"`

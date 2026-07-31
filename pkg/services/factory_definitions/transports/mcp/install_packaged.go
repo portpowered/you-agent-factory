@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 // InstallPackagedInput is the MCP request shape for you.factory_definition.install_packaged.

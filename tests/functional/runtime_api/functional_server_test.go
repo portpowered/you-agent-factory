@@ -98,4 +98,3 @@ func StartFunctionalServer(
 	t.Helper()
 	return StartFunctionalServerWithArgs(t, factoryDir, useMockWorkers, nil, runtimeOptions...)
 }
-

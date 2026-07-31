@@ -42,7 +42,7 @@ export const allowlistedOversizedFeatureFolders = [
     relativeDirectoryPath: "src/features/header/components",
   },
   {
-    maxFileCount: 20,
+    maxFileCount: 22,
     relativeDirectoryPath: "src/features/bento/components",
   },
   {

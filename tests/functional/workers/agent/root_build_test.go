@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 

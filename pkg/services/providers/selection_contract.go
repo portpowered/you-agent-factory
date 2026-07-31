@@ -69,8 +69,8 @@ func (request ValidatePrerequisitesRequest) Validate() error {
 }
 
 // ResolveIdentity canonicalizes a Providers-owned ID or accepted alias through
-// the singular Service catalog. Compatibility aliases such as openai/anthropic
-// and the cursor-cli runner synonym remain Providers-owned.
+// the singular Service catalog. Compatibility aliases such as openai and
+// anthropic remain Providers-owned.
 func ResolveIdentity(
 	ctx context.Context,
 	service Service,
@@ -194,10 +194,8 @@ func catalogAliasIndex(
 
 func compatibilityAliases() map[string]ID {
 	return map[string]ID{
-		"openai":     IDCodex,
-		"anthropic":  IDClaude,
-		"cursor-cli": IDCursor,
-		"agent":      IDCursor,
+		"openai":    IDCodex,
+		"anthropic": IDClaude,
 	}
 }
 

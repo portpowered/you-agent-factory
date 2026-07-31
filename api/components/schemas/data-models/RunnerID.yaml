@@ -3,5 +3,4 @@ description: Stable built-in runner identifiers supported by factory and worksta
 enum:
     - codex
     - claude
-    - cursor-cli
     - antigravity

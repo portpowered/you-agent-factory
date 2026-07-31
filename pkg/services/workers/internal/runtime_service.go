@@ -43,6 +43,7 @@ type Service struct {
 	logger                            *zap.Logger
 	verbose                           bool
 	factoryRunnerID                   string
+	runWorktree                       string
 	invocationSkipPermissionsOverride *bool
 	providerOverride                  workers.Provider
 	clock                             func() time.Time
@@ -144,6 +145,7 @@ func New(
 	logger *zap.Logger,
 	verbose bool,
 	factoryRunnerID string,
+	runWorktree string,
 	invocationSkipPermissionsOverride *bool,
 	providerOverride workers.Provider,
 	clock func() time.Time,
@@ -222,7 +224,7 @@ func New(
 		retryRandom,
 		workstationFiles,
 		decisionEnvelopeService,
-	)
+	).WithRunWorktree(runWorktree)
 	return &Service{
 		sessions:                          sessions,
 		models:                            modelService,
@@ -236,6 +238,7 @@ func New(
 		logger:                            logger,
 		verbose:                           verbose,
 		factoryRunnerID:                   factoryRunnerID,
+		runWorktree:                       runWorktree,
 		invocationSkipPermissionsOverride: invocationSkipPermissionsOverride,
 		providerOverride:                  providerOverride,
 		clock:                             clock,

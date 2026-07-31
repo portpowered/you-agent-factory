@@ -8072,7 +8072,6 @@ export type WorkerType = (typeof WorkerType)[keyof typeof WorkerType];
 export const WorkerModelProvider = {
   CLAUDE: "CLAUDE",
   CODEX: "CODEX",
-  CURSOR: "CURSOR",
   ANTIGRAVITY: "ANTIGRAVITY",
 } as const;
 export type WorkerModelProvider =
@@ -8136,7 +8135,6 @@ export type ModelOperationContentType =
 export const RunnerID = {
   codex: "codex",
   claude: "claude",
-  cursor_cli: "cursor-cli",
   antigravity: "antigravity",
 } as const;
 export type RunnerID = (typeof RunnerID)[keyof typeof RunnerID];

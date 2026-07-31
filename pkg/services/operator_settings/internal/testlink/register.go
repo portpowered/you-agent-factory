@@ -4,8 +4,8 @@ package testlink
 
 import (
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	settingsconstruct "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/construct"
 	settingsinternal "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal"
+	settingsconstruct "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/construct"
 	internaltestproviders "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 

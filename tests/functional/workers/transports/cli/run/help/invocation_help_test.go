@@ -6,17 +6,17 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const (
-	invocationHelpNamedFactoryName    = "invocation-help-alpha"
-	invocationHelpFactoryConfigName   = "invocation-help-portable"
-	invocationHelpWorkTypeName        = "help-task"
-	invocationHelpRequiredParameter   = "input"
-	invocationHelpOptionalParameter   = "mode"
+	invocationHelpNamedFactoryName      = "invocation-help-alpha"
+	invocationHelpFactoryConfigName     = "invocation-help-portable"
+	invocationHelpWorkTypeName          = "help-task"
+	invocationHelpRequiredParameter     = "input"
+	invocationHelpOptionalParameter     = "mode"
 	invocationHelpOptionalPathParameter = "artifact"
 )
 
@@ -281,7 +281,7 @@ func invocationHelpFactoryConfig() map[string]any {
 				map[string]any{
 					"name":         invocationHelpOptionalParameter,
 					"description":  "Execution mode for the portable factory.",
-					"choices":        []any{"fast", "safe"},
+					"choices":      []any{"fast", "safe"},
 					"defaultValue": "safe",
 					"bindings":     []any{map[string]any{"kind": "NAMED"}},
 				},

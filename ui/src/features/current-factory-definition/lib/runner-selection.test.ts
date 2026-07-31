@@ -8,8 +8,8 @@ describe("resolveRunnerSelection", () => {
       source: "workstation",
     });
 
-    expect(resolveRunnerSelection(null, "cursor-cli", "codex")).toEqual({
-      runnerId: "cursor-cli",
+    expect(resolveRunnerSelection(null, "codex", "codex")).toEqual({
+      runnerId: "codex",
       source: "factory",
     });
 

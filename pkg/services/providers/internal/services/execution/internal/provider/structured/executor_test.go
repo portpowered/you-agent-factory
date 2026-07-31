@@ -19,7 +19,7 @@ func TestExecutorSupportsNoProvidersAfterPiCutover(t *testing.T) {
 		string(modelprovider.ProviderPi),
 		string(modelprovider.ProviderClaude),
 		string(modelprovider.ProviderCodex),
-		string(modelprovider.ProviderCursor),
+		string(modelprovider.ProviderCodex),
 		string(modelprovider.ProviderOpenCode),
 		string(modelprovider.ProviderGemini),
 		string(modelprovider.ProviderKiro),
@@ -44,7 +44,7 @@ func TestExecutorRejectsConductorRoutedProvidersAtScriptWrapBoundary(t *testing.
 	for _, modelProvider := range []string{
 		string(modelprovider.ProviderClaude),
 		string(modelprovider.ProviderCodex),
-		string(modelprovider.ProviderCursor),
+		string(modelprovider.ProviderCodex),
 		string(modelprovider.ProviderAntigravity),
 	} {
 		_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{

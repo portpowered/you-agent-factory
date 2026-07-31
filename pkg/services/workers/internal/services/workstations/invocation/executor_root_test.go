@@ -17,7 +17,7 @@ func TestProviderExecutorExecuteMapsCanonicalSuccessMetadata(t *testing.T) {
 	provider := &executionTestProvider{response: workerexecution.InferenceResponse{
 		Content: "done",
 		ProviderSession: &workerexecution.ProviderSessionMetadata{
-			Provider: string(modelprovider.ProviderCursor), Kind: "session_id", ID: "sess-1",
+			Provider: string(modelprovider.ProviderCodex), Kind: "session_id", ID: "sess-1",
 		},
 		Diagnostics: &workerexecution.WorkDiagnostics{
 			Provider: &workerexecution.ProviderDiagnostic{Provider: "cursor", ResponseMetadata: map[string]string{"content_bytes": "4"}},
@@ -34,7 +34,7 @@ func TestProviderExecutorExecuteMapsCanonicalSuccessMetadata(t *testing.T) {
 	if provider.calls != 1 || result.Attempt != 3 || result.Response.Content != "done" {
 		t.Fatalf("result = %#v, calls = %d", result, provider.calls)
 	}
-	if result.ProviderSession == nil || result.ProviderSession.Provider != "cursor" || result.ProviderSession.ID != "sess-1" {
+	if result.ProviderSession == nil || result.ProviderSession.Provider != "codex" || result.ProviderSession.ID != "sess-1" {
 		t.Fatalf("provider session = %#v", result.ProviderSession)
 	}
 	if result.Diagnostics == nil || result.Diagnostics.Provider == nil || result.Diagnostics.Provider.ResponseMetadata["content_bytes"] != "4" {
@@ -50,7 +50,7 @@ func TestProviderExecutorExecuteMapsCanonicalProviderFailure(t *testing.T) {
 		workerexecution.WorkFailureTypeThrottled,
 		"Provider capacity is temporarily unavailable.",
 		errors.New("exit status 1"),
-		&workerexecution.ProviderSessionMetadata{Provider: string(modelprovider.ProviderCursor), Kind: "session_id", ID: "sess-failed"},
+		&workerexecution.ProviderSessionMetadata{Provider: string(modelprovider.ProviderCodex), Kind: "session_id", ID: "sess-failed"},
 	)
 	provider := &executionTestProvider{err: providerErr}
 
@@ -64,7 +64,7 @@ func TestProviderExecutorExecuteMapsCanonicalProviderFailure(t *testing.T) {
 	if result.FailureDetail == nil || result.FailureDetail.Message != "Provider is temporarily unavailable due to usage or capacity limits." {
 		t.Fatalf("failure detail = %#v", result.FailureDetail)
 	}
-	if result.ProviderSession == nil || result.ProviderSession.Provider != "cursor" {
+	if result.ProviderSession == nil || result.ProviderSession.Provider != "codex" {
 		t.Fatalf("provider session = %#v", result.ProviderSession)
 	}
 }

@@ -66,7 +66,7 @@ describe("applyEditableWorkerDraft runtime fields", () => {
       workers: [
         {
           model: "gpt-5.5",
-          modelProvider: "CURSOR",
+          modelProvider: "CODEX",
           name: "reviewer",
           type: "MODEL_WORKER",
         },
@@ -81,7 +81,7 @@ describe("applyEditableWorkerDraft runtime fields", () => {
       executorProvider: null,
       model: "gpt-5.5",
       modelLocality: null,
-      modelProvider: "CURSOR",
+      modelProvider: "CODEX",
       name: "reviewer",
       provider: null,
       skipPermissions: true,
@@ -99,7 +99,7 @@ describe("applyEditableWorkerDraft runtime fields", () => {
         workers: [
           {
             model: "gpt-5.5",
-            modelProvider: "CURSOR",
+            modelProvider: "CODEX",
             name: "reviewer",
             skipPermissions: true,
             type: "MODEL_WORKER",
@@ -114,7 +114,7 @@ describe("applyEditableWorkerDraft runtime fields", () => {
         executorProvider: null,
         model: "gpt-5.5",
         modelLocality: null,
-        modelProvider: "CURSOR",
+        modelProvider: "CODEX",
         name: "reviewer",
         provider: null,
         skipPermissions: false,
@@ -134,7 +134,7 @@ describe("applyEditableWorkerDraft runtime fields", () => {
       workers: [
         {
           model: "gpt-5.5",
-          modelProvider: "CURSOR",
+          modelProvider: "CODEX",
           name: "reviewer",
           type: "MODEL_WORKER",
         },
@@ -157,7 +157,7 @@ describe("applyEditableWorkerDraft runtime fields", () => {
       executorProvider: null,
       model: "gpt-5.5",
       modelLocality: null,
-      modelProvider: "CURSOR",
+      modelProvider: "CODEX",
       name: "reviewer",
       provider: null,
       skipPermissions: false,
@@ -184,7 +184,7 @@ describe("applyEditableWorkerDraft runtime fields", () => {
         executorProvider: null,
         model: "gpt-5.5",
         modelLocality: null,
-        modelProvider: "CURSOR",
+        modelProvider: "CODEX",
         name: "reviewer",
         provider: null,
         skipPermissions: false,
@@ -205,7 +205,7 @@ describe("applyEditableWorkerDraft runtime fields", () => {
       workers: [
         {
           model: "gpt-5.5",
-          modelProvider: "CURSOR",
+          modelProvider: "CODEX",
           name: "reviewer",
           skipPermissions: true,
           stopToken: "<COMPLETE>",
@@ -223,7 +223,7 @@ describe("applyEditableWorkerDraft runtime fields", () => {
       executorProvider: null,
       model: "gpt-5.5",
       modelLocality: null,
-      modelProvider: "CURSOR",
+      modelProvider: "CODEX",
       name: "reviewer",
       provider: null,
       skipPermissions: true,

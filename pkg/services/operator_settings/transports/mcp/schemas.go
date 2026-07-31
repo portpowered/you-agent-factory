@@ -124,8 +124,8 @@ func applyDocumentUpdateResultSchema() map[string]any {
 
 func resolveEffectiveInputSchema() map[string]any {
 	return objectSchema(map[string]any{
-		"documentBaseline":         documentDefaultsInputSchema(),
-		"backendScopeId":           stringProperty("Detached backend scope identifier."),
+		"documentBaseline": documentDefaultsInputSchema(),
+		"backendScopeId":   stringProperty("Detached backend scope identifier."),
 		"workerPresets": map[string]any{
 			"type":  "array",
 			"items": documentWorkerPresetInputSchema(),

@@ -5,9 +5,9 @@ import (
 	"fmt"
 
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	runtimeassembly "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly"
 	workstations "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // ExecuteCapability is the request-scoped Execute owner composed into the

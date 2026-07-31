@@ -16,7 +16,7 @@ const ProviderSessionNormalizedFieldPlaceholder = "<normalized>"
 // Callers supply these values from the system under test; comparison never
 // invokes mappers or adapters to synthesize expected output.
 type ProviderSessionObservedGoldens struct {
-	ProviderSession   json.RawMessage
+	ProviderSession  json.RawMessage
 	ResponseEvents   []json.RawMessage
 	InvocationResult json.RawMessage
 }

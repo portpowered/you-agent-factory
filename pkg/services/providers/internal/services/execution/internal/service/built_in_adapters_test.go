@@ -9,12 +9,12 @@ import (
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
-func TestBuiltInRegistrationsSelectOnlyAntigravityCodexClaudeAndCursorAdapters(t *testing.T) {
+func TestBuiltInRegistrationsSelectOnlyAntigravityCodexAndClaudeAdapters(t *testing.T) {
 	t.Parallel()
 
 	registrations := BuiltInRegistrations()
-	if len(registrations) != 4 {
-		t.Fatalf("registration count = %d, want 4", len(registrations))
+	if len(registrations) != 3 {
+		t.Fatalf("registration count = %d, want 3", len(registrations))
 	}
 
 	byID := make(map[providers.ID]string, len(registrations))
@@ -36,9 +36,6 @@ func TestBuiltInRegistrationsSelectOnlyAntigravityCodexClaudeAndCursorAdapters(t
 	}
 	if !strings.Contains(byID[providers.IDClaude], "Claude") {
 		t.Fatalf("Claude adapter message = %q", byID[providers.IDClaude])
-	}
-	if !strings.Contains(byID[providers.IDCursor], "Cursor") {
-		t.Fatalf("Cursor adapter message = %q", byID[providers.IDCursor])
 	}
 	if !strings.Contains(byID[providers.IDAntigravity], "Antigravity") {
 		t.Fatalf("Antigravity adapter message = %q", byID[providers.IDAntigravity])

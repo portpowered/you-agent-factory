@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
@@ -13,8 +14,11 @@ import (
 // stream presentation.
 type FactoryEventRendererConfig struct {
 	Output               io.Writer
+	ProgressOutput       io.Writer
 	JSON                 bool
 	Color                bool
+	ProgressIsTTY        bool
+	ProgressTicks        <-chan time.Time
 	InvocationOutputMode string
 }
 
@@ -39,7 +43,7 @@ func (s *service) OpenFactoryEventRenderer(cfg FactoryEventRendererConfig) (Fact
 	if cfg.JSON {
 		return newJSONFactoryEventRenderer(cfg.Output, s.presentation), nil
 	}
-	return newHumanFactoryEventRenderer(cfg.Output, s.presentation, cfg.Color), nil
+	return newHumanFactoryEventRenderer(cfg, s.presentation), nil
 }
 
 func isResponseStreamOutputMode(mode string) bool {
@@ -53,32 +57,34 @@ type factoryEventStream interface {
 }
 
 type humanFactoryEventRenderer struct {
-	stream factoryEventStream
+	stream   factoryEventStream
+	progress *humanWorkerProgressRenderer
 }
 
 func newHumanFactoryEventRenderer(
-	output io.Writer,
+	cfg FactoryEventRendererConfig,
 	presentation factoryvisualization.ResponsePresentation,
-	color bool,
 ) *humanFactoryEventRenderer {
 	formatter := formatHumanFactoryEvent
-	if color {
+	if cfg.Color {
 		formatter = formatColorHumanFactoryEvent
 	}
 	return &humanFactoryEventRenderer{stream: presentation.OpenBestEffortFactoryEventStream(
-		output,
+		cfg.Output,
 		formatter,
-	)}
+	), progress: newHumanWorkerProgressRenderer(cfg.ProgressOutput, cfg.ProgressIsTTY, cfg.ProgressTicks)}
 }
 
 func (renderer *humanFactoryEventRenderer) PresentFactoryEvents(events []interfaces.FactoryEvent) {
 	if renderer != nil {
 		renderer.stream.PresentFactoryEvents(events)
+		renderer.progress.PresentFactoryEvents(events)
 	}
 }
 
 func (renderer *humanFactoryEventRenderer) StopProgressRendering() {
 	if renderer != nil {
+		renderer.progress.Stop()
 		_ = renderer.stream.CloseAndDrain()
 	}
 }
@@ -89,6 +95,7 @@ func (renderer *humanFactoryEventRenderer) WriteFinalInvocationResult(
 	if renderer == nil {
 		return fmt.Errorf("Factory Event renderer is nil")
 	}
+	renderer.progress.Stop()
 	_, err := renderer.stream.Finalize(func(writer io.Writer, progressSeen bool) error {
 		if result.Status == interfaces.InvocationTerminalStatusCompleted {
 			text, textErr := invocationPrimaryResultText(result.PrimaryResult)

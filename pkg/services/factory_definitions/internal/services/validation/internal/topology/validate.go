@@ -3,8 +3,8 @@
 package topology
 
 import (
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
 )
 
 // Validate runs graph topology validation and returns Definition-owned targets

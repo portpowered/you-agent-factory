@@ -25,10 +25,6 @@ var builtInRunnerStatus = map[string]Status{
 		Metadata:  mustBuiltInRunnerMetadata(workerexecution.RunnerIDClaude),
 		Available: true,
 	},
-	workerexecution.RunnerIDCursorCLI: {
-		Metadata:  mustBuiltInRunnerMetadata(workerexecution.RunnerIDCursorCLI),
-		Available: true,
-	},
 	workerexecution.RunnerIDAntigravity: {
 		Metadata:  mustBuiltInRunnerMetadata(workerexecution.RunnerIDAntigravity),
 		Available: true,
@@ -75,8 +71,6 @@ func builtInRunnerCommand(id string) string {
 		return string(modelprovider.ProviderCodex)
 	case workerexecution.RunnerIDClaude:
 		return string(modelprovider.ProviderClaude)
-	case workerexecution.RunnerIDCursorCLI:
-		return string(modelprovider.ProviderCursor)
 	case workerexecution.RunnerIDAntigravity:
 		return "agy"
 	default:

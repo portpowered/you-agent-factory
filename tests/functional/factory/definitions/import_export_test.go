@@ -26,7 +26,7 @@ const (
 	importExportWorkstationName = "process"
 
 	importExportPortableDocPath    = "factory/docs/standards/review.md"
-	importExportPortableDocBody   = "# Review standards\n"
+	importExportPortableDocBody    = "# Review standards\n"
 	importExportPortableScriptPath = "factory/scripts/execute-task.sh"
 	importExportPortableScriptBody = "#!/bin/sh\necho 'portable script'\n"
 	importExportPortableNoteBody   = "Portable guidance remains literal."

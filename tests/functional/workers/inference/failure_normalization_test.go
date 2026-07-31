@@ -36,7 +36,7 @@ const (
 func TestProviderNonZeroExitMapsToPublicFailure(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
-		modelprovider.ProviderCursor,
+		modelprovider.ProviderCodex,
 		"cursor-test-model",
 	))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"provider non-zero exit"}`))

@@ -39,6 +39,7 @@ func NewRuntime(
 	logger *zap.Logger,
 	verbose bool,
 	factoryRunnerID string,
+	runWorktree string,
 	invocationSkipPermissionsOverride *bool,
 	providerOverride workers.Provider,
 	now func() time.Time,
@@ -70,6 +71,7 @@ func NewRuntime(
 		logger,
 		verbose,
 		factoryRunnerID,
+		runWorktree,
 		invocationSkipPermissionsOverride,
 		providerOverride,
 		now,
@@ -118,6 +120,7 @@ func NewRuntimeWithSelection(
 	logger *zap.Logger,
 	verbose bool,
 	factoryRunnerID string,
+	runWorktree string,
 	invocationSkipPermissionsOverride *bool,
 	providerOverride workers.Provider,
 	now func() time.Time,
@@ -146,7 +149,7 @@ func NewRuntimeWithSelection(
 ) (workers.RuntimeService, error) {
 	runtimeService, err := NewRuntime(
 		sessions, modelService, providersService, modelsScope, providerCommandRunner, scriptCommandRunner,
-		allocator, logger, verbose, factoryRunnerID, invocationSkipPermissionsOverride,
+		allocator, logger, verbose, factoryRunnerID, runWorktree, invocationSkipPermissionsOverride,
 		providerOverride, now, processEnvironment, currentWorkingDirectory, contentMaterializer, interpolation, executionPolicy,
 		factoryDocs, resolveSymlinks, executableLocator, executableInspector, executableFiles, operatingSystem,
 		worktreePreparer, agentRunHarness, retryRandom, workstationFiles, temporaryFiles, decisionEnvelopes,
@@ -254,7 +257,6 @@ func runtimeAssemblyRegistrations(
 		workers.RunnerIDAntigravity,
 		workers.RunnerIDClaude,
 		workers.RunnerIDCodex,
-		workers.RunnerIDCursorCLI,
 	}
 	registrations := make([]runners.Registration, 0, len(identities))
 	for _, identity := range identities {

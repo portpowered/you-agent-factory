@@ -12,8 +12,8 @@ import (
 	"time"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/inference"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -267,4 +267,3 @@ func waitForSessionInFlightDispatches(
 	session := support.GetDefaultSession(t, baseURL)
 	t.Fatalf("timed out waiting for inFlightCount=%d; session progress=%#v", want, session.Runtime.Progress)
 }
-

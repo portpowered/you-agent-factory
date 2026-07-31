@@ -290,6 +290,7 @@ func NewWorkerExecution(
 		logger,
 		runtimeRequest.Verbose,
 		workerRequest.RunnerID,
+		workerRequest.Worktree,
 		workerRequest.InvocationSkipPermissionsOverride,
 		providerOverride,
 		now,

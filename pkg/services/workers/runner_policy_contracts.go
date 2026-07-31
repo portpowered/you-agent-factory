@@ -43,17 +43,6 @@ var builtInRunnerMetadata = map[string]RunnerMetadata{
 			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilityWorktree, Status: RunnerOptionalCapabilityStatusSupported},
 		),
 	},
-	RunnerIDCursorCLI: {
-		ID:          RunnerIDCursorCLI,
-		DisplayName: "Cursor CLI",
-		Capabilities: NewCapabilities(
-			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilityImageInput, Status: RunnerOptionalCapabilityStatusUnsupported},
-			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilitySessionResume, Status: RunnerOptionalCapabilityStatusSupported},
-			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilityStructuredOutput, Status: RunnerOptionalCapabilityStatusUnsupported},
-			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilityWorkingDirectory, Status: RunnerOptionalCapabilityStatusSupported},
-			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilityWorktree, Status: RunnerOptionalCapabilityStatusUnsupported},
-		),
-	},
 	RunnerIDAntigravity: {
 		ID:          RunnerIDAntigravity,
 		DisplayName: "Antigravity",
@@ -102,8 +91,6 @@ func ResolveRunnerSelection(workstationRunner, factoryRunner, workerModelProvide
 
 func legacyProviderRunnerID(provider string) string {
 	switch NormalizeRunnerID(provider) {
-	case "cursor":
-		return RunnerIDCursorCLI
 	case "agy":
 		return RunnerIDAntigravity
 	default:

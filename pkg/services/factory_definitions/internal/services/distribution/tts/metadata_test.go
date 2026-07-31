@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 func TestMetadataContentFromWorkerOutput_ReturnsTextMetadataWithoutRawAudio(t *testing.T) {

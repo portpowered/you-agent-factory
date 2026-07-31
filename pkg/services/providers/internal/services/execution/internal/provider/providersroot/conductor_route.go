@@ -45,8 +45,6 @@ func (s *Service) executeViaConductor(
 func conductorIdentity(providerID string) string {
 	normalized := workers.NormalizeRunnerID(providerID)
 	switch normalized {
-	case workers.RunnerIDCursorCLI, "cursor":
-		return "cursor"
 	case workers.RunnerIDAntigravity:
 		return "antigravity"
 	default:

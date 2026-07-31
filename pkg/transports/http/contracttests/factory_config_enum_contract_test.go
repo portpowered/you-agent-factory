@@ -282,8 +282,8 @@ func assertCanonicalExecuteStoryBoundaryFields(t *testing.T, executeStory genera
 	if executeStory.Behavior == nil || *executeStory.Behavior != generated.WorkstationKindCron {
 		t.Fatalf("canonical workstation behavior = %#v, want CRON", executeStory.Behavior)
 	}
-	if executeStory.Runner == nil || *executeStory.Runner != generated.RunnerIDCursorCLI {
-		t.Fatalf("canonical workstation runner = %#v, want cursor-cli", executeStory.Runner)
+	if executeStory.Runner == nil || *executeStory.Runner != generated.RunnerIDCodex {
+		t.Fatalf("canonical workstation runner = %#v, want codex", executeStory.Runner)
 	}
 	if executeStory.Type == nil || *executeStory.Type != generated.WorkstationTypeModelWorkstation {
 		t.Fatalf("canonical workstation type = %#v, want MODEL_WORKSTATION", executeStory.Type)

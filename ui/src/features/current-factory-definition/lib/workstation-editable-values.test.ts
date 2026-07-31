@@ -65,7 +65,6 @@ describe("resolveEditableWorkstationValues", () => {
       runnerOptions: [
         "codex",
         "claude",
-        "cursor-cli",
         "antigravity",
       ],
       runnerSelectionSource: "default",
@@ -450,7 +449,6 @@ describe("resolveEditableWorkstationValues", () => {
       runnerOptions: [
         "codex",
         "claude",
-        "cursor-cli",
         "antigravity",
       ],
       runnerSelectionSource: "default",
@@ -632,7 +630,6 @@ describe("resolveEditableWorkstationValues", () => {
       runnerOptions: [
         "codex",
         "claude",
-        "cursor-cli",
         "antigravity",
       ],
       runnerSelectionSource: "default",

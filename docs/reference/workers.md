@@ -56,7 +56,7 @@ Public factory config names workers by behavior class:
 | `INFERENCE_WORKER` | One-shot model operations | Harnessless inference such as TTS, ASR, or typed `INFERENCE_RUN` dispatches |
 | `AGENT_WORKER` | Agent-loop model execution | Prompt-rendered `AGENT_RUN` workstations that iterate until acceptance, rejection, or failure |
 | `SCRIPT_WORKER` | Script execution | Command-backed `SCRIPT_RUN` workstations |
-| `POLLER_WORKER` | Hosted poller integration | Workstations with `behavior: "POLLER"` that ingest external work through built-in providers |
+| `POLLER_WORKER` | Automations-owned hosted poller ingress | Workstations with `behavior: "POLLER"` that admit external work as ordinary Work Requests |
 
 ### Legacy compatibility aliases
 
@@ -85,11 +85,11 @@ See `you docs workstations` for the matching `INFERENCE_RUN`, `AGENT_RUN`,
   `INFERENCE_RUN` workstations can validate compatibility before dispatch.
 - `AGENT_WORKER` supplies the model backend and shared system instructions for
   prompt-rendered `AGENT_RUN` workstations.
-- Current built-in `modelProvider` values are `CLAUDE`, `CODEX`, `CURSOR`, and
+- Current built-in `modelProvider` values are `CLAUDE`, `CODEX`, and
   `ANTIGRAVITY`.
 - Runner selection is separate from `modelProvider`. Use factory or
   workstation `runner` fields to choose the built-in runner ID: `codex`,
-  `claude`, `cursor-cli`, or `antigravity`.
+  `claude` or `antigravity`.
 - `executorProvider` accepts the canonical mechanisms `SCRIPT_WRAP` and `ACP`.
   For ACP, `modelProvider` names an integration such as `cursor-acp`. See
   `you docs providers` for ACP setup and
@@ -339,8 +339,12 @@ Use a poller worker when Infinite You should run a built-in provider
 integration instead of a custom script or model backend. V1 poller workers are
 poller-only and pair with a workstation that uses `behavior: "POLLER"`.
 
+Poller workers are Automations-owned ingress sources: the service runtime
+supervises them outside Workers execution, and each accepted observation
+becomes an ordinary Work Request. They are not persistent Worker executors.
+
 Legacy `HOSTED_WORKER` remains accepted during the migration window and
-projects to the same poller behavior.
+projects to the same Automations poller behavior.
 
 The current built-in hosted provider is `LINEAR`. Hosted workers authenticate
 through `auth.secretRef` only. Do not put inline API keys, OAuth tokens, or

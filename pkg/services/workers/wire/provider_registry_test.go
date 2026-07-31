@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/providers"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestNewProviderRegistryProjectsProvidersAuthority(t *testing.T) {
@@ -25,23 +24,16 @@ func TestNewProviderRegistryProjectsProvidersAuthority(t *testing.T) {
 		t.Fatalf("CanonicalIdentity(openai) = %q, want codex", canonical)
 	}
 
-	selection, err := registry.ResolveRunnerSelection("cursor-cli", "", "")
-	if err != nil {
-		t.Fatalf("ResolveRunnerSelection() = %v", err)
-	}
-	if selection.RunnerID != workers.RunnerIDCursorCLI {
-		t.Fatalf("ResolveRunnerSelection() = %#v, want cursor-cli", selection)
-	}
-	if selection.Source != workers.RunnerSelectionSourceWorkstation {
-		t.Fatalf("selection source = %q", selection.Source)
+	if _, err := registry.ResolveRunnerSelection("cursor-cli", "", ""); !errors.Is(err, providers.ErrUnknownProvider) {
+		t.Fatalf("ResolveRunnerSelection(cursor-cli) = %v, want ErrUnknownProvider", err)
 	}
 
 	if err := registry.ValidateRunnerPrerequisites(nil, "codex"); err != nil {
 		t.Fatalf("ValidateRunnerPrerequisites(codex) = %v", err)
 	}
 	err = registry.ValidateRunnerPrerequisites(nil, "cursor")
-	if !errors.Is(err, providers.ErrProviderUnavailable) {
-		t.Fatalf("ValidateRunnerPrerequisites(cursor) = %v, want ErrProviderUnavailable", err)
+	if !errors.Is(err, providers.ErrUnknownProvider) {
+		t.Fatalf("ValidateRunnerPrerequisites(cursor) = %v, want ErrUnknownProvider", err)
 	}
 }
 
@@ -68,17 +60,6 @@ func (*registryProvidersFake) ListProviders(
 				Readiness:    providers.ReadinessReady,
 				Capabilities: []providers.Capability{providers.CapabilityPromptSubmission},
 			},
-			{
-				ID:           providers.IDCursor,
-				DisplayName:  "Cursor",
-				Availability: providers.AvailabilitySupportedButUnavailable,
-				Readiness:    providers.ReadinessUnavailable,
-				Prerequisites: []providers.Prerequisite{{
-					Kind:   providers.PrerequisiteDependency,
-					Name:   "cursor-agent",
-					Status: providers.PrerequisiteMissing,
-				}},
-			},
 		},
 	}, nil
 }
@@ -97,8 +78,6 @@ func (*registryProvidersFake) GetProvider(
 			Availability: providers.AvailabilitySelectable,
 			Readiness:    providers.ReadinessReady,
 		}}, nil
-	case providers.IDCursor:
-		return providers.GetProviderResult{}, providers.ErrProviderUnavailable
 	default:
 		return providers.GetProviderResult{}, providers.ErrUnknownProvider
 	}

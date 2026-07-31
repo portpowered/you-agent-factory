@@ -11,8 +11,6 @@ import (
 	"testing"
 	"time"
 
-	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -284,7 +282,7 @@ func TestRecordingProvider_Infer_SuccessPreservesProviderSessionAndSafeDiagnosti
 func TestRecordingProvider_Infer_CursorSessionMetadataIsCanonicalizedInEvents(t *testing.T) {
 	t.Parallel()
 	respSession := &workerexecution.ProviderSessionMetadata{
-		Provider: string(modelprovider.ProviderCursor),
+		Provider: "cursor",
 		Kind:     "session_id",
 		ID:       "cursor-session-123",
 	}
@@ -294,7 +292,7 @@ func TestRecordingProvider_Infer_CursorSessionMetadataIsCanonicalizedInEvents(t 
 			ProviderSession: respSession,
 			Diagnostics: &workerexecution.WorkDiagnostics{
 				Provider: &workerexecution.ProviderDiagnostic{
-					Provider: string(modelprovider.ProviderCursor),
+					Provider: "cursor",
 					Model:    "gpt-5",
 				},
 			},
@@ -316,7 +314,7 @@ func TestRecordingProvider_Infer_CursorSessionMetadataIsCanonicalizedInEvents(t 
 	assertInferenceProviderDiagnostics(
 		t,
 		response.Diagnostics,
-		string(modelprovider.ProviderCursor),
+		"cursor",
 		"gpt-5",
 		map[string]string{
 			"worker_type": "worker-a",

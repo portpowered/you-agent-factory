@@ -145,6 +145,7 @@ func TestInvocationTargetCarriesOnlyBoundedRuntimeSelection(t *testing.T) {
 	target := invocationTarget(RunConfig{
 		Dir:               "/tmp/factory",
 		FactoryConfigPath: "/tmp/factory/factory.yaml",
+		Worktree:          "feature-login",
 		Port:              7437,
 	}, zap.NewNop(), nil)
 	if target.FactoryDir != "/tmp/factory" {
@@ -155,6 +156,9 @@ func TestInvocationTargetCarriesOnlyBoundedRuntimeSelection(t *testing.T) {
 			"FactorySourcePath = %q, want /tmp/factory/factory.yaml",
 			target.FactorySourcePath,
 		)
+	}
+	if target.Worktree != "feature-login" {
+		t.Fatalf("Worktree = %q, want feature-login", target.Worktree)
 	}
 }
 

@@ -14,7 +14,7 @@ describe("useWorkerDetailState", () => {
       deriveWorkerDetailState({
         worker: {
           model: "gpt-5.5",
-          modelProvider: "CURSOR",
+          modelProvider: "CODEX",
           name: "reviewer",
           type: "MODEL_WORKER",
         },
@@ -24,7 +24,7 @@ describe("useWorkerDetailState", () => {
       status: "ready",
       worker: {
         model: "gpt-5.5",
-        modelProvider: "CURSOR",
+        modelProvider: "CODEX",
         name: "reviewer",
         type: "MODEL_WORKER",
       },

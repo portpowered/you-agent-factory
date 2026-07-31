@@ -69,7 +69,6 @@ const (
 	RelationParentChild                       = work.RelationParentChild
 	RunnerIDCodex                             = workerexecution.RunnerIDCodex
 	RunnerIDClaude                            = workerexecution.RunnerIDClaude
-	RunnerIDCursorCLI                         = workerexecution.RunnerIDCursorCLI
 	RunnerIDAntigravity                       = workerexecution.RunnerIDAntigravity
 	RunnerOptionalCapabilityImageInput        = workerexecution.RunnerOptionalCapabilityImageInput
 	RunnerOptionalCapabilitySessionResume     = workerexecution.RunnerOptionalCapabilitySessionResume

@@ -110,4 +110,3 @@ func isFactoryLifecycleLine(line string) bool {
 	}
 	return false
 }
-

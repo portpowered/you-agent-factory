@@ -100,30 +100,4 @@ func TestRunParsingResolvesRunScopedProvider(t *testing.T) {
 	if root.PersistentFlags().Lookup("default-worker-model-provider") != nil {
 		t.Fatal("root still exposes --default-worker-model-provider")
 	}
-	return
-
-	var received resolvedinput.Inputs
-	run.RunE = func(cmd *cobra.Command, args []string) error {
-		if _, parseErr := parseRunCommandArgs(cmd, args); parseErr != nil {
-			return parseErr
-		}
-		if refreshErr := climanifestcobra.RefreshResolvedPersistentInputs(cmd); refreshErr != nil {
-			return refreshErr
-		}
-		var resolveErr error
-		received, resolveErr = climanifestcobra.ResolvedPersistentInputs(cmd)
-		return resolveErr
-	}
-	root.SetArgs([]string{"run", "--provider", "codex"})
-	if err := root.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	value, err := received.String("you.run.flag.provider")
-	if err != nil || value != "codex" {
-		t.Fatalf("resolved provider = (%q, %v), want codex", value, err)
-	}
-	state, ok := received.State("you.run.flag.provider")
-	if !ok || state.Provenance != resolvedinput.SourceCLIFlag || !state.Changed {
-		t.Fatalf("resolved provider state = (%#v, %t), want changed CLI provenance", state, ok)
-	}
 }

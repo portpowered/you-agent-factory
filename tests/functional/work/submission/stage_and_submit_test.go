@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	stageAndSubmitWorkName = "stage-and-submit-file-task"
-	stageAndSubmitFileName = "coverage.png"
+	stageAndSubmitWorkName  = "stage-and-submit-file-task"
+	stageAndSubmitFileName  = "coverage.png"
 	stageAndSubmitMediaType = "image/png"
 )
 

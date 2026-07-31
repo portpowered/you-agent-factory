@@ -88,7 +88,6 @@ func TestExecuteRejectsUnavailableProvider(t *testing.T) {
 	}
 	request := validExecuteRequest("dispatch-blocked", "attempt-blocked")
 	request.Target.Provider = workers.ProviderReference{ID: string(providers.IDCursor)}
-	request.Target.RunnerID = workers.RunnerIDCursorCLI
 
 	_, err = service.Execute(context.Background(), request)
 	if !errors.Is(err, workers.ErrInvalidExecuteRequest) {

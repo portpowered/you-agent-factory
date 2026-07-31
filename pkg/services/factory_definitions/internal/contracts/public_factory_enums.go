@@ -17,7 +17,6 @@ type ModelProvider string
 const (
 	ModelProviderClaude      ModelProvider = "claude"
 	ModelProviderCodex       ModelProvider = "codex"
-	ModelProviderCursor      ModelProvider = "cursor"
 	ModelProviderAntigravity ModelProvider = "antigravity"
 	// Retired values remain typed for persisted Factory decoding, but are not
 	// returned by SupportedModelProviders or accepted as built-ins.
@@ -33,7 +32,6 @@ func SupportedModelProviders() []ModelProvider {
 	return []ModelProvider{
 		ModelProviderClaude,
 		ModelProviderCodex,
-		ModelProviderCursor,
 		ModelProviderAntigravity,
 	}
 }
@@ -41,7 +39,6 @@ func SupportedModelProviders() []ModelProvider {
 var internalModelProviderToPublicWorkerModelProvider = map[ModelProvider]string{
 	ModelProviderClaude:      publicFactoryWorkerModelProviderClaude,
 	ModelProviderCodex:       publicFactoryWorkerModelProviderCodex,
-	ModelProviderCursor:      publicFactoryWorkerModelProviderCursor,
 	ModelProviderAntigravity: publicFactoryWorkerModelProviderAntigravity,
 }
 
@@ -60,8 +57,6 @@ func InternalModelProviderFromPublicWorkerModelProvider(value string) (ModelProv
 		return ModelProviderClaude, true
 	case publicFactoryWorkerModelProviderCodex:
 		return ModelProviderCodex, true
-	case publicFactoryWorkerModelProviderCursor:
-		return ModelProviderCursor, true
 	case publicFactoryWorkerModelProviderAntigravity:
 		return ModelProviderAntigravity, true
 	default:
@@ -145,7 +140,6 @@ func ProjectWorkerBehaviorClass(workerType string) string {
 var publicFactoryWorkerModelProviderAliases = map[string]string{
 	publicFactoryWorkerModelProviderClaude:      publicFactoryWorkerModelProviderClaude,
 	publicFactoryWorkerModelProviderCodex:       publicFactoryWorkerModelProviderCodex,
-	publicFactoryWorkerModelProviderCursor:      publicFactoryWorkerModelProviderCursor,
 	publicFactoryWorkerModelProviderAntigravity: publicFactoryWorkerModelProviderAntigravity,
 }
 
@@ -250,7 +244,6 @@ func ProjectWorkstationBehaviorClass(workstationType string, kind WorkstationKin
 var publicFactoryRunnerIDAliases = map[string]string{
 	workerexecution.RunnerIDCodex:       workerexecution.RunnerIDCodex,
 	workerexecution.RunnerIDClaude:      workerexecution.RunnerIDClaude,
-	workerexecution.RunnerIDCursorCLI:   workerexecution.RunnerIDCursorCLI,
 	workerexecution.RunnerIDAntigravity: workerexecution.RunnerIDAntigravity,
 }
 
@@ -276,7 +269,6 @@ var publicFactoryWorkTypeHandlingBehaviorAliases = map[string]string{
 const (
 	publicFactoryWorkerModelProviderClaude      = "CLAUDE"
 	publicFactoryWorkerModelProviderCodex       = "CODEX"
-	publicFactoryWorkerModelProviderCursor      = "CURSOR"
 	publicFactoryWorkerModelProviderAntigravity = "ANTIGRAVITY"
 	publicFactoryWorkerProviderScriptWrap       = "SCRIPT_WRAP"
 	publicFactoryWorkerProviderACP              = "ACP"
@@ -290,13 +282,11 @@ var internalFactoryWorkerModelProviderAliases = map[string]string{
 	"ANTHROPIC":   publicFactoryWorkerModelProviderClaude,
 	"CLAUDE":      publicFactoryWorkerModelProviderClaude,
 	"CODEX":       publicFactoryWorkerModelProviderCodex,
-	"CURSOR":      publicFactoryWorkerModelProviderCursor,
 	"ANTIGRAVITY": publicFactoryWorkerModelProviderAntigravity,
 	"OPENAI":      publicFactoryWorkerModelProviderCodex,
 	"anthropic":   publicFactoryWorkerModelProviderClaude,
 	"claude":      publicFactoryWorkerModelProviderClaude,
 	"codex":       publicFactoryWorkerModelProviderCodex,
-	"cursor":      publicFactoryWorkerModelProviderCursor,
 	"openai":      publicFactoryWorkerModelProviderCodex,
 	"antigravity": publicFactoryWorkerModelProviderAntigravity,
 	// Retired native providers remain canonicalized as open extension identities

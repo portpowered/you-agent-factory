@@ -35,6 +35,9 @@ func TestProcessExecuteUsesInjectedLifecycleAndInvocationInputs(t *testing.T) {
 			if !startupcli.StdoutIsTTY(cmd.Context()) {
 				return fmt.Errorf("stdout terminal classification was not propagated")
 			}
+			if !startupcli.StderrIsTTY(cmd.Context()) {
+				return fmt.Errorf("stderr terminal classification was not propagated")
+			}
 			return nil
 		}}
 	}}
@@ -43,11 +46,11 @@ func TestProcessExecuteUsesInjectedLifecycleAndInvocationInputs(t *testing.T) {
 		return context.WithValue(parent, processContextTestKey{}, "injected"), func() { stopCalls++ }
 	}}
 	process := newProcessForTest(t, factory, initializer)
-	stdinTTY, stdoutTTY := true, true
+	stdinTTY, stdoutTTY, stderrTTY := true, true, true
 	if err := process.Execute(Input{
 		Args: []string{"you"}, Env: homeEnvironmentForProcessTest(t.TempDir()),
 		Stdin: strings.NewReader(""), WorkingDirectory: wantWorkingDirectory,
-		StdinIsTTY: &stdinTTY, StdoutIsTTY: &stdoutTTY,
+		StdinIsTTY: &stdinTTY, StdoutIsTTY: &stdoutTTY, StderrIsTTY: &stderrTTY,
 	}); err != nil {
 		t.Fatalf("Process.Execute() error = %v", err)
 	}
@@ -61,6 +64,7 @@ func TestProcessExecuteHonorsExplicitTerminalEdgeOverrides(t *testing.T) {
 
 	stdinTTY := true
 	stdoutTTY := false
+	stderrTTY := false
 	factory := processCommandFactory{newCommand: func(func(string) (string, bool)) *cobra.Command {
 		return &cobra.Command{Use: "you", RunE: func(cmd *cobra.Command, _ []string) error {
 			if !startupcli.StdinIsTTY(cmd.Context()) {
@@ -69,13 +73,16 @@ func TestProcessExecuteHonorsExplicitTerminalEdgeOverrides(t *testing.T) {
 			if startupcli.StdoutIsTTY(cmd.Context()) {
 				return fmt.Errorf("stdout override was not propagated")
 			}
+			if startupcli.StderrIsTTY(cmd.Context()) {
+				return fmt.Errorf("stderr override was not propagated")
+			}
 			return nil
 		}}
 	}}
 	process := newProcessForTest(t, factory, startupcli.Functions{})
 	if err := process.Execute(Input{
 		Args: []string{"you"}, Env: homeEnvironmentForProcessTest(t.TempDir()),
-		StdinIsTTY: &stdinTTY, StdoutIsTTY: &stdoutTTY, WorkingDirectory: t.TempDir(),
+		StdinIsTTY: &stdinTTY, StdoutIsTTY: &stdoutTTY, StderrIsTTY: &stderrTTY, WorkingDirectory: t.TempDir(),
 	}); err != nil {
 		t.Fatalf("Process.Execute() error = %v", err)
 	}

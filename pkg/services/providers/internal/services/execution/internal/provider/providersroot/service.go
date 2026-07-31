@@ -144,8 +144,6 @@ func modelProviderForProviderIdentity(providerID string) string {
 		return string(modelprovider.ProviderCodex)
 	case string(modelprovider.ProviderClaude):
 		return string(modelprovider.ProviderClaude)
-	case "cursor", workers.RunnerIDCursorCLI:
-		return string(modelprovider.ProviderCursor)
 	case workers.RunnerIDAntigravity:
 		return string(modelprovider.ProviderAntigravity)
 	default:

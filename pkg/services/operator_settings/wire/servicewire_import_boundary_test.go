@@ -12,9 +12,8 @@ import (
 )
 
 const (
-	operatorSettingsOwnerRelative = "pkg/services/operator_settings"
-	operatorSettingsServicewireImport =
-		"github.com/portpowered/infinite-you/pkg/services/operator_settings/servicewire"
+	operatorSettingsOwnerRelative     = "pkg/services/operator_settings"
+	operatorSettingsServicewireImport = "github.com/portpowered/infinite-you/pkg/services/operator_settings/servicewire"
 )
 
 // TestProductionPackagesOutsideOwnerDoNotImportServicewire proves the folded

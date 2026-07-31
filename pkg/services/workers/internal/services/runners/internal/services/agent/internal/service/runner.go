@@ -242,15 +242,9 @@ func providerRequest(request workers.RunnerExecutionRequest) providers.ExecuteRe
 }
 
 // providerIDForRunner translates stable Workers runner identities at the
-// Providers boundary. Most built-in IDs intentionally match their provider,
-// while cursor-cli names the runner without changing Cursor's provider ID.
+// Providers boundary.
 func providerIDForRunner(runnerID string) providers.ID {
-	switch workers.NormalizeRunnerID(runnerID) {
-	case workers.RunnerIDCursorCLI:
-		return providers.IDCursor
-	default:
-		return providers.ID(workers.NormalizeRunnerID(runnerID))
-	}
+	return providers.ID(workers.NormalizeRunnerID(runnerID))
 }
 
 func runnerResult(

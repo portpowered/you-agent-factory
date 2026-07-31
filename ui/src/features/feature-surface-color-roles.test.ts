@@ -75,7 +75,10 @@ describe("feature surface color roles (US-009)", () => {
       "utf8",
     );
     const workstationNodeView = readFileSync(
-      join(FEATURES_ROOT, "graphs/components/workstation-node-view.tsx"),
+      join(
+        FEATURES_ROOT,
+        "../../packages/factory-graph/src/semantic-workstation-node.tsx",
+      ),
       "utf8",
     );
     const sessionTab = readFileSync(

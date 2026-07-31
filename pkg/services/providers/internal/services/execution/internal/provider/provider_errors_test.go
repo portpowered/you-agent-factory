@@ -446,7 +446,7 @@ func TestParseProviderExitFailure_RoutesOwnedProviderPackages(t *testing.T) {
 			want:     workerexecution.WorkFailureTypeThrottled,
 		},
 		{
-			provider: string(modelprovider.ProviderCursor),
+			provider: string(modelprovider.ProviderCodex),
 			result:   CommandResult{ExitCode: 124},
 			want:     workerexecution.WorkFailureTypeTimeout,
 		},
@@ -471,7 +471,7 @@ func TestNormalizeProviderExecutionError_UsesExitFailureParserForNonZeroExitCode
 	t.Parallel()
 
 	providerErr := normalizeProviderExecutionError(
-		string(modelprovider.ProviderCursor),
+		string(modelprovider.ProviderCodex),
 		CommandResult{ExitCode: 124},
 		errors.New("command failed"),
 		nil,

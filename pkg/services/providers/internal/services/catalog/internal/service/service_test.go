@@ -25,8 +25,8 @@ func TestListProvidersReturnsCompleteEnumeration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListProviders() = %v", err)
 	}
-	if len(list.Providers) != 4 {
-		t.Fatalf("len(Providers) = %d, want 4", len(list.Providers))
+	if len(list.Providers) != 3 {
+		t.Fatalf("len(Providers) = %d, want 3", len(list.Providers))
 	}
 
 	byID := indexProviders(list.Providers)
@@ -34,7 +34,6 @@ func TestListProvidersReturnsCompleteEnumeration(t *testing.T) {
 		providers.IDAntigravity,
 		providers.IDClaude,
 		providers.IDCodex,
-		providers.IDCursor,
 	} {
 		if _, ok := byID[id]; !ok {
 			t.Fatalf("Providers missing %q", id)
@@ -181,15 +180,8 @@ func TestListProvidersProjectsIdentityMetadataAndCapabilities(t *testing.T) {
 		t.Fatalf("codex capabilities = %#v, want prompt_submission", codex.Capabilities)
 	}
 
-	cursor := indexProviders(list.Providers)[providers.IDCursor]
-	if cursor.ID != providers.IDCursor {
-		t.Fatalf("cursor id = %q, want %q", cursor.ID, providers.IDCursor)
-	}
-	if len(cursor.Aliases) != 0 {
-		t.Fatalf("cursor aliases = %#v, want none", cursor.Aliases)
-	}
-	if cursor.DisplayName != "Cursor CLI" {
-		t.Fatalf("cursor display name = %q, want Cursor CLI", cursor.DisplayName)
+	if _, ok := indexProviders(list.Providers)[providers.IDCursor]; ok {
+		t.Fatal("native cursor must not be present in the selectable provider catalog")
 	}
 }
 
@@ -244,7 +236,7 @@ func TestResolveProviderIDUsesStaticCanonicalAuthority(t *testing.T) {
 		err  error
 	}{
 		{name: "canonical", id: providers.IDCodex, want: providers.IDCodex},
-		{name: "alias", id: "cursor", want: providers.IDCursor},
+		{name: "retired native cursor", id: "cursor", err: providers.ErrUnknownProvider},
 		{name: "invalid", err: providers.ErrInvalidID},
 		{name: "unknown", id: "missing", err: providers.ErrUnknownProvider},
 	}

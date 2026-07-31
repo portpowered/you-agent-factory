@@ -59,33 +59,3 @@ func TestTemplateTests_ScriptWrapCodexResolvesWorkstationExecutionTemplates(t *t
 	assertProviderStdin(t, req, executionTemplateWantPrompt(dir))
 	assertProviderExecutionFields(t, dir, req)
 }
-
-func TestTemplateTests_ScriptWrapCursorResolvesWorkstationExecutionTemplates(t *testing.T) {
-	support.SkipLongFunctional(t, "slow cursor execution-template provider smoke")
-
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
-	configureCursorExecutionTemplateWorkstation(t, dir)
-	writeNamedWorkerAgents(t, dir, "processor", buildModelWorkerConfig(modelprovider.ProviderCursor, "test-cursor-model"))
-
-	writeExecutionTemplateSeed(t, dir)
-
-	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: support.CursorProviderSuccessStdout("Done. COMPLETE")})
-	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
-		ProviderCommandRunner: runner,
-	}, 10*time.Second)
-	assertCursorProviderCompleted(t, listed)
-
-	req := runner.LastRequest()
-	if req.Command != string(modelprovider.ProviderCursor) {
-		t.Fatalf("command = %q, want %q", req.Command, modelprovider.ProviderCursor)
-	}
-	wantWorkDir := support.ResolvedRuntimePath(dir, "/workspace/execution-template-name/feature-token-branch")
-	assertCommandArgs(t, req, []string{
-		"-p",
-		"--model", "test-cursor-model",
-		"--workspace", wantWorkDir,
-		cursorExecutionTemplateWantPrompt(dir),
-	})
-	assertProviderStdin(t, req, "")
-	assertProviderExecutionFields(t, dir, req)
-}

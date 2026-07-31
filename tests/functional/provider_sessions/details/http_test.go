@@ -23,7 +23,7 @@ import (
 // support.StartFunctionalAPIServer (root.BuildProcess + edges.Edges). It loads a
 // sanitized Codex success rollout and proves identity/provider/kind plus readable
 // transcript structurally match checked-in expected Provider Session metadata.
-//golden: tests/functional/internal/support/testdata/provider-sessions/codex/success/manifest.json
+// golden: tests/functional/internal/support/testdata/provider-sessions/codex/success/manifest.json
 func TestAPIProviderSessionDetailsUseGoldenExpectedMetadata(t *testing.T) {
 	repoRoot := testutil.MustRepoRoot(t)
 	caseDir := filepath.Join(repoRoot, filepath.FromSlash(support.ProviderSessionFixturePath("codex", "success")))

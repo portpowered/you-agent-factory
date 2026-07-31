@@ -1,8 +1,8 @@
 package workerconfig
 
 import (
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/namevalue"
 	factoryresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/resource"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/namevalue"
 )
 
 // Clone returns a detached copy of a Worker definition.

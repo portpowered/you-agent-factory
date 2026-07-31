@@ -36,7 +36,6 @@ const (
 	RunnerOptionalCapabilityStatusUnsupported = workers.RunnerOptionalCapabilityStatusUnsupported
 
 	RunnerIDCodex       = workers.RunnerIDCodex
-	RunnerIDCursorCLI   = workers.RunnerIDCursorCLI
 	RunnerIDAntigravity = workers.RunnerIDAntigravity
 
 	RunnerSelectionSourceWorkstation    = workers.RunnerSelectionSourceWorkstation

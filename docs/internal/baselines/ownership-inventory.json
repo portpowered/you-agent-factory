@@ -4902,6 +4902,14 @@
       "deletionCondition": "delete transitional top-level package after CLN-WORK-FOLD-TOPLEVEL cutover proof"
     },
     {
+      "packagePath": "pkg/services/work/internal/proposalmaterialization",
+      "disposition": "move",
+      "destination": "work",
+      "destinationKind": "owner",
+      "successor": "pkg/services/work/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-WORK-FOLD-TOPLEVEL cutover proof"
+    },
+    {
       "packagePath": "pkg/services/work/internal/requestadmission",
       "disposition": "move",
       "destination": "work",
@@ -5036,6 +5044,12 @@
       "destinationKind": "owner",
       "successor": "pkg/services/workers/internal",
       "deletionCondition": "delete transitional top-level package after CLN-WRK-FOLD-TOPLEVEL cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/service",
+      "disposition": "retain",
+      "destination": "workers",
+      "destinationKind": "owner"
     },
     {
       "packagePath": "pkg/services/workers/internal/services/runners",

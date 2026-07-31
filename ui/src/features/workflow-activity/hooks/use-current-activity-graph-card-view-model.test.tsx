@@ -285,7 +285,7 @@ describe("useCurrentActivityGraphCardViewModel add placement", () => {
         draft: {
           kind: "worker",
           model: "gpt",
-          modelProvider: "CURSOR",
+          modelProvider: "CODEX",
           name: "reviewer",
           workerType: "MODEL_WORKER",
         },

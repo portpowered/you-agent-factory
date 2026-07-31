@@ -79,7 +79,7 @@ function buildFactoryDocument(
     workers: [
       {
         model: "gpt-5.5",
-        modelProvider: "CURSOR",
+        modelProvider: "CODEX",
         name: "reviewer",
         type: "MODEL_WORKER",
       },
@@ -116,7 +116,7 @@ function buildReadyWorkerConfigurationState(): EditableWorkerConfigurationState 
       executorProvider: null,
       model: "gpt-5.5",
       modelLocality: null,
-      modelProvider: "CURSOR",
+      modelProvider: "CODEX",
       name: "reviewer",
       provider: null,
       type: "MODEL_WORKER",
@@ -129,7 +129,7 @@ function buildReadyWorkerConfigurationState(): EditableWorkerConfigurationState 
       executorProvider: null,
       model: "gpt-5.5",
       modelLocality: null,
-      modelProvider: "CURSOR",
+      modelProvider: "CODEX",
       name: "reviewer",
       provider: null,
       type: "MODEL_WORKER",

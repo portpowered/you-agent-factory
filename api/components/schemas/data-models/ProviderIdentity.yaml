@@ -1,7 +1,7 @@
 type: string
 minLength: 1
 maxLength: 128
-pattern: '^(?:[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*|ANTIGRAVITY|ANTHROPIC|CLAUDE|CODEX|CURSOR|OPENAI)$'
+pattern: '^(?:[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*|ANTIGRAVITY|ANTHROPIC|CLAUDE|CODEX|OPENAI)$'
 description: >-
   Open provider identity used by authored modelProvider fields. Extension
   identities use lowercase letters and digits separated by dots or hyphens.

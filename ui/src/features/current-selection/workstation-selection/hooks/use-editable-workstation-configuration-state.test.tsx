@@ -679,7 +679,7 @@ describe("useEditableWorkstationConfigurationState", () => {
         "codex",
         "gemini",
         "kiro",
-        "cursor-cli",
+        "codex",
         "opencode",
         "pi",
       ],
@@ -914,7 +914,7 @@ describe("useEditableWorkstationConfigurationState guards and cron", () => {
         "codex",
         "gemini",
         "kiro",
-        "cursor-cli",
+        "codex",
         "opencode",
         "pi",
       ],
@@ -1307,7 +1307,7 @@ function buildEditableFactoryDefinition(overrides?: {
     triggerAtStart?: boolean;
   };
   prompt?: string;
-  runnerName?: "codex" | "gemini" | "kiro" | "cursor-cli" | "opencode" | null;
+  runnerName?: "codex" | "gemini" | "kiro" | "codex" | "opencode" | null;
   workerName?: string;
   workerOptions?: Array<{
     name: string;

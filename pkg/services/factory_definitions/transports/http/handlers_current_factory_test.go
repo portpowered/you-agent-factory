@@ -179,10 +179,10 @@ func TestSaveCurrentFactoryBySessionId_DecodesFactoryAndInvokesFakeRoot(t *testi
 type capturingCurrentFactoryRootFake struct {
 	httpDefinitionsRootFake
 
-	getInvoked    bool
-	getSessionID  string
-	getResult     factorydefinitions.EditableFactory
-	getErr        error
+	getInvoked   bool
+	getSessionID string
+	getResult    factorydefinitions.EditableFactory
+	getErr       error
 
 	saveInvoked   bool
 	saveSessionID string

@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-07-14
+last-modified: 2026-07-30
 doc-id: agent-factory/guides/sessions
 ---
 
@@ -86,6 +86,11 @@ identity for the UI.
 - Treat `Dispatch`, `FactoryArtifact`, and `FactoryEvent` as the shared
   inspection nouns across CLI, API, dashboard, and MCP surfaces. Do not
   introduce a separate workflow-run object model when comparing outputs.
+- Ordinary live `you run` and packaged-factory invocations keep Factory Session
+  durable execution in memory for now. They do not create or update
+  project-local `.you-agent-factory/durable-sessions`. Explicit restart/resume
+  snapshot persistence remains available when callers or tests opt in with
+  `PersistencePolicyEnabled`.
 
 ### Bounded operator verification matrix
 

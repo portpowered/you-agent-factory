@@ -101,7 +101,11 @@ func NewStandalone(
 		}
 		return New(execution)
 	case factorysessions.ExecutionProviderJavaScriptRuntime:
-		persistence, err := factorysessionexecution.ProjectPersistence(
+		// Standalone CLI/MCP opening follows the interim application policy:
+		// in-memory only. Callers that need restart/resume snapshots compose
+		// through NewDurable with PersistencePolicyEnabled instead.
+		persistence, err := factorysessionexecution.PersistenceChoiceForPolicy(
+			factorysessions.PersistencePolicyDisabled,
 			projectRoot,
 			adaptRuntimePersistenceStoreFactory(stores),
 		)

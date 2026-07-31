@@ -23,9 +23,9 @@ type stubLoadedSource struct {
 }
 
 func (s stubLoadedSource) FactoryConfig() *factorydefinitions.FactoryConfig { return s.cfg }
-func (s stubLoadedSource) FactoryDir() string                             { return s.dir }
-func (s stubLoadedSource) RuntimeBaseDir() string                         { return "" }
-func (s stubLoadedSource) SetRuntimeBaseDir(string)                       {}
+func (s stubLoadedSource) FactoryDir() string                               { return s.dir }
+func (s stubLoadedSource) RuntimeBaseDir() string                           { return "" }
+func (s stubLoadedSource) SetRuntimeBaseDir(string)                         {}
 func (s stubLoadedSource) PortableBundledFileReplacements() []factorydefinitions.PortableBundledFileReplacement {
 	return nil
 }

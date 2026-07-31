@@ -26,7 +26,6 @@ type HostedProvider = NonNullable<CanonicalWorker["provider"]>;
 export const EDITABLE_MODEL_PROVIDERS: ModelProvider[] = [
   "CLAUDE",
   "CODEX",
-  "CURSOR",
   "ANTIGRAVITY",
 ];
 

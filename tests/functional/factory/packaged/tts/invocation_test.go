@@ -18,9 +18,9 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	providercontract "github.com/portpowered/infinite-you/pkg/services/providers/inference"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	providercontract "github.com/portpowered/infinite-you/pkg/services/providers/inference"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -688,4 +688,3 @@ func primaryResultContainsTTSArtifactMetadata(
 	}
 	return false
 }
-

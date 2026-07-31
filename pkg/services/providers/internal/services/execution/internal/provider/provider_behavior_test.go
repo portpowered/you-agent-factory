@@ -279,19 +279,6 @@ func nonCodexCommandRequestTestCases() []nonCodexCommandRequestTestCase {
 			wantEnv: "AGENT_FACTORY_PROVIDER=claude",
 		},
 		{
-			name: "Cursor",
-			req: workerexecution.ProviderInferenceRequest{
-				ModelProvider: string(modelprovider.ProviderCursor),
-				UserMessage:   "review this",
-				EnvVars: map[string]string{
-					"AGENT_FACTORY_PROVIDER": "cursor",
-				},
-				InputTokens: InputTokens(token),
-			},
-			args:    []string{"--print", "review this", "--output-format", "text"},
-			wantEnv: "AGENT_FACTORY_PROVIDER=cursor",
-		},
-		{
 			name: "OpenCode",
 			req: workerexecution.ProviderInferenceRequest{
 				ModelProvider:    string(modelprovider.ProviderOpenCode),

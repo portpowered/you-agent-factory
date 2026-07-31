@@ -124,7 +124,7 @@ func TestBuildProcessComposesDetachedExternalProviderWithBuiltInsInertly(t *test
 	assertProviderLookup(t, process.ProviderRegistry(), "customer.provider", "customer.provider")
 	assertProviderLookup(t, process.ProviderRegistry(), "customer", "customer.provider")
 	assertProviderLookup(t, process.ProviderRegistry(), "claude", "claude")
-	assertProviderLookup(t, process.ProviderRegistry(), "cursor", "cursor")
+	assertProviderLookup(t, process.ProviderRegistry(), "codex", "codex")
 	if apiStarts != 0 || integration.discoverCalls != 0 ||
 		integration.capabilityCalls != 0 || integration.invokeCalls != 0 {
 		t.Fatalf(
@@ -214,7 +214,7 @@ func TestBuildProcessRejectsUnknownAndNonSelectableFactoryProvidersWithoutFallba
 		provider string
 		want     string
 	}{
-		{name: "unknown", provider: "unknown.provider", want: `provider "unknown.provider" is unknown`},
+		{name: "unknown", provider: "unknown.provider", want: `provider is unknown: "unknown.provider"`},
 	} {
 		test := test
 		t.Run(test.name, func(t *testing.T) {

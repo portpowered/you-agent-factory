@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"

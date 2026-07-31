@@ -19,8 +19,8 @@ func NewValidationOperations(
 }
 
 var (
-	ValidateFactoryDefinition = validationimpl.Validate
-	ValidateBlockingFactoryLoad = validationimpl.ValidateBlockingLoad
-	ValidatePortableResourceManifestOnPathWithSourceResolver = validationimpl.ValidatePortableResourceManifestOnPathWithSourceResolver
+	ValidateFactoryDefinition                                     = validationimpl.Validate
+	ValidateBlockingFactoryLoad                                   = validationimpl.ValidateBlockingLoad
+	ValidatePortableResourceManifestOnPathWithSourceResolver      = validationimpl.ValidatePortableResourceManifestOnPathWithSourceResolver
 	ValidatePortableBundledFilesForExpandOnPathWithSourceResolver = validationimpl.ValidatePortableBundledFilesForExpandOnPathWithSourceResolver
 )

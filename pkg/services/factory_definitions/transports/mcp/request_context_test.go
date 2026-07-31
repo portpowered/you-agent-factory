@@ -111,8 +111,8 @@ func TestBind_ValidateContextDeadlineExceededDuringRootReturnsDocumentedEnvelope
 }
 
 type blockingDefinitionsValidationFake struct {
-	entered       chan struct{}
-	enteredOnce   *sync.Once
+	entered     chan struct{}
+	enteredOnce *sync.Once
 }
 
 func (fake *blockingDefinitionsValidationFake) ValidateSubmittedDefinition(

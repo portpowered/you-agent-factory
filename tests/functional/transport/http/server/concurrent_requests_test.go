@@ -198,8 +198,8 @@ func scaffoldConcurrentRequestsFactory(t *testing.T) string {
 func concurrentRequestsTestConfig() map[string]any {
 	return map[string]any{
 		"workTypes": []map[string]any{{
-			"name":               "task",
-			"handlingBehavior":   []string{"DEFAULT"},
+			"name":             "task",
+			"handlingBehavior": []string{"DEFAULT"},
 			"states": []map[string]string{
 				{"name": "init", "type": "INITIAL"},
 				{"name": "complete", "type": "TERMINAL"},

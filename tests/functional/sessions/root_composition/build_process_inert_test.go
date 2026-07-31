@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -87,7 +87,7 @@ func (recorder *sessionEffectRecorder) edges() serviceedges.Edges {
 		FactorySessionInvocationInputReader:        recorder.recordInvocationInput,
 		FactorySessionReplayRecordingReader:        recorder.recordReplayRecording,
 		FactorySessionInitialWorkReader:            recorder.recordInitialWork,
-		InvocationMetricsRecorder:                recorder,
+		InvocationMetricsRecorder:                  recorder,
 		RuntimeHostObserver:                        recorder.recordRuntimeHost,
 	}
 }

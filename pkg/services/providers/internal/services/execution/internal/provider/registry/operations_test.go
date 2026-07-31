@@ -43,28 +43,28 @@ func TestRegistryStaticQueriesAreNormalizedDeterministicDetachedAndInert(t *test
 	t.Parallel()
 
 	registry, recordings := newRecordingRegistry(t)
-	entry, err := registry.Lookup("  CURSOR  ")
+	entry, err := registry.Lookup("  CODEX  ")
 	if err != nil {
 		t.Fatalf("Lookup(alias) error = %v", err)
 	}
-	if entry.Identity() != "cursor" {
-		t.Fatalf("Lookup(alias).Identity() = %q, want cursor", entry.Identity())
+	if entry.Identity() != "codex" {
+		t.Fatalf("Lookup(alias).Identity() = %q, want codex", entry.Identity())
 	}
 	entries := registry.Entries()
 	identities := entryIdentities(entries)
 	if !slices.IsSorted(identities) {
 		t.Fatalf("Entries() identities = %v, want canonical order", identities)
 	}
-	if len(entries) != 4 {
-		t.Fatalf("Entries() count = %d, want 4", len(entries))
+	if len(entries) != 3 {
+		t.Fatalf("Entries() count = %d, want 3", len(entries))
 	}
 
-	cursorEntry := findEntry(t, entries, "cursor")
-	manifest := cursorEntry.Manifest()
-	if !slices.IsSorted(cursorEntry.Aliases()) ||
-		!slices.IsSorted(cursorEntry.DiscoveryPrerequisites().ConfigurationKeys) ||
-		!slices.IsSorted(cursorEntry.DiscoveryPrerequisites().EndpointKinds) ||
-		!slices.IsSorted(cursorEntry.DiscoveryPrerequisites().ExecutableNames) {
+	codexEntry := findEntry(t, entries, "codex")
+	manifest := codexEntry.Manifest()
+	if !slices.IsSorted(codexEntry.Aliases()) ||
+		!slices.IsSorted(codexEntry.DiscoveryPrerequisites().ConfigurationKeys) ||
+		!slices.IsSorted(codexEntry.DiscoveryPrerequisites().EndpointKinds) ||
+		!slices.IsSorted(codexEntry.DiscoveryPrerequisites().ExecutableNames) {
 		t.Fatal("entry slice projections are not in canonical order")
 	}
 	manifest.Discovery.ExecutableNames[0] = "mutated"
@@ -73,7 +73,7 @@ func TestRegistryStaticQueriesAreNormalizedDeterministicDetachedAndInert(t *test
 	maximum := entry.MaximumCapabilities().Values()
 	maximum[0] = inference.CapabilityUsage
 
-	again, err := registry.Lookup("cursor")
+	again, err := registry.Lookup("codex")
 	if err != nil {
 		t.Fatalf("Lookup(alias again) error = %v", err)
 	}
@@ -146,10 +146,10 @@ func TestRegistryExplicitOperationsDelegateOnlyToResolvedIntegration(t *testing.
 	assertNegotiatedCapabilityOperation(t, registry, request)
 	assertDiscoveryOperation(t, registry)
 	assertInvocationAccess(t, registry, request)
-	if _, err := registry.MaximumCapabilities("cursor"); err != nil {
+	if _, err := registry.MaximumCapabilities("codex"); err != nil {
 		t.Fatalf("MaximumCapabilities() error = %v", err)
 	}
-	assertOnlyCursorReceivedExplicitCalls(t, recordings)
+	assertOnlyCodexReceivedExplicitCalls(t, recordings)
 }
 
 func assertNegotiatedCapabilityOperation(
@@ -158,7 +158,7 @@ func assertNegotiatedCapabilityOperation(
 	request inference.InvocationRequest,
 ) {
 	t.Helper()
-	capabilities, err := registry.Capabilities(context.Background(), "cursor", request)
+	capabilities, err := registry.Capabilities(context.Background(), "codex", request)
 	if err != nil || !capabilities.Has(inference.CapabilityPromptSubmission) {
 		t.Fatalf("Capabilities() = %v, %v", capabilities.Values(), err)
 	}
@@ -169,7 +169,7 @@ func assertNegotiatedCapabilityOperation(
 
 func assertDiscoveryOperation(t *testing.T, registry *Registry) {
 	t.Helper()
-	discovery, err := registry.Discover(context.Background(), "cursor")
+	discovery, err := registry.Discover(context.Background(), "codex")
 	if err != nil || discovery.Readiness() != inference.ReadinessReady {
 		t.Fatalf("Discover() = %#v, %v", discovery, err)
 	}
@@ -180,8 +180,8 @@ func assertDiscoveryOperation(t *testing.T, registry *Registry) {
 
 func assertInvocationAccess(t *testing.T, registry *Registry, request inference.InvocationRequest) {
 	t.Helper()
-	integration, err := registry.Integration(" CURSOR ")
-	if err != nil || integration.Identity() != "cursor" {
+	integration, err := registry.Integration(" CODEX ")
+	if err != nil || integration.Identity() != "codex" {
 		t.Fatalf("Integration() identity = %q, %v", integration.Identity(), err)
 	}
 	if err := integration.Invoke(context.Background(), request, nil); err != nil {
@@ -189,17 +189,17 @@ func assertInvocationAccess(t *testing.T, registry *Registry, request inference.
 	}
 }
 
-func assertOnlyCursorReceivedExplicitCalls(
+func assertOnlyCodexReceivedExplicitCalls(
 	t *testing.T,
 	recordings map[string]*recordingIntegration,
 ) {
 	t.Helper()
-	cursor := recordings["cursor"]
-	if cursor.capabilityCalls != 1 || cursor.discoveryCalls != 1 || cursor.invocationCalls != 1 {
-		t.Fatalf("cursor calls = capabilities %d, discovery %d, invocation %d", cursor.capabilityCalls, cursor.discoveryCalls, cursor.invocationCalls)
+	codex := recordings["codex"]
+	if codex.capabilityCalls != 1 || codex.discoveryCalls != 1 || codex.invocationCalls != 1 {
+		t.Fatalf("codex calls = capabilities %d, discovery %d, invocation %d", codex.capabilityCalls, codex.discoveryCalls, codex.invocationCalls)
 	}
 	for identity, recording := range recordings {
-		if identity != "cursor" && (recording.capabilityCalls != 0 || recording.discoveryCalls != 0 || recording.invocationCalls != 0) {
+		if identity != "codex" && (recording.capabilityCalls != 0 || recording.discoveryCalls != 0 || recording.invocationCalls != 0) {
 			t.Fatalf("%s received unexpected calls", identity)
 		}
 	}
@@ -254,7 +254,7 @@ func TestRegistryRejectsInvalidNegotiatedCapabilitiesAndDiscovery(t *testing.T) 
 				request := inference.NewInvocationRequest(inference.InvocationInput{
 					Required: inference.NewCapabilitySet(inference.CapabilityMessageSnapshots),
 				})
-				_, err := registry.Capabilities(context.Background(), "cursor", request)
+				_, err := registry.Capabilities(context.Background(), "codex", request)
 				return err
 			},
 			want: `omit required capability "message_snapshots"`,
@@ -265,7 +265,7 @@ func TestRegistryRejectsInvalidNegotiatedCapabilitiesAndDiscovery(t *testing.T) 
 				integration.discovery = inference.NewDiscovery(inference.ReadinessUnavailable)
 			},
 			call: func(registry *Registry) error {
-				_, err := registry.Discover(context.Background(), "cursor")
+				_, err := registry.Discover(context.Background(), "codex")
 				return err
 			},
 			want: `returned invalid discovery`,
@@ -276,7 +276,7 @@ func TestRegistryRejectsInvalidNegotiatedCapabilitiesAndDiscovery(t *testing.T) 
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			registry, recordings := newRecordingRegistry(t)
-			test.mutate(recordings["cursor"])
+			test.mutate(recordings["codex"])
 			err := test.call(registry)
 			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("operation error = %v, want containing %q", err, test.want)
@@ -290,12 +290,12 @@ func TestRegistryBoundsProviderOperationErrorsAndPreservesCause(t *testing.T) {
 
 	registry, recordings := newRecordingRegistry(t)
 	cause := errors.New(strings.Repeat("native provider detail ", 100))
-	recordings["cursor"].discoveryErr = cause
-	_, err := registry.Discover(context.Background(), "cursor")
+	recordings["codex"].discoveryErr = cause
+	_, err := registry.Discover(context.Background(), "codex")
 	if !errors.Is(err, cause) {
 		t.Fatalf("Discover() error = %v, want wrapped cause", err)
 	}
-	if got := err.Error(); got != `provider "cursor" discovery failed` {
+	if got := err.Error(); got != `provider "codex" discovery failed` {
 		t.Fatalf("Discover() error = %q, want bounded provider context", got)
 	}
 }
@@ -346,7 +346,7 @@ func capabilityCall(registry *Registry) error {
 	request := inference.NewInvocationRequest(inference.InvocationInput{
 		Required: inference.NewCapabilitySet(inference.CapabilityPromptSubmission),
 	})
-	_, err := registry.Capabilities(context.Background(), "cursor", request)
+	_, err := registry.Capabilities(context.Background(), "codex", request)
 	return err
 }
 

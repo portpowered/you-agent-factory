@@ -14,7 +14,6 @@ type Provider string
 const (
 	ProviderClaude      Provider = "claude"
 	ProviderCodex       Provider = "codex"
-	ProviderCursor      Provider = "cursor"
 	ProviderAntigravity Provider = "antigravity"
 	// Retired native provider values remain available for persisted-data
 	// decoding; they are not selectable built-ins.

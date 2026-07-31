@@ -12,9 +12,9 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/inference"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/inference"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -219,4 +219,3 @@ func stringPointerValue[T ~string](value *T) string {
 	}
 	return string(*value)
 }
-

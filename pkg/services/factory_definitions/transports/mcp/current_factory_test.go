@@ -47,7 +47,7 @@ func TestBind_GetCurrentToolEncodesFakeRootResult(t *testing.T) {
 	}
 
 	var response struct {
-		Result *factoryapi.Factory                      `json:"result"`
+		Result *factoryapi.Factory                     `json:"result"`
 		Error  *factorydefinitionmcp.ToolErrorEnvelope `json:"error"`
 	}
 	if err := json.Unmarshal(raw, &response); err != nil {
@@ -143,7 +143,7 @@ func TestBind_SaveCurrentToolDecodesFactoryAndInvokesFakeRoot(t *testing.T) {
 	}
 
 	var response struct {
-		Result *factoryapi.Factory                      `json:"result"`
+		Result *factoryapi.Factory                     `json:"result"`
 		Error  *factorydefinitionmcp.ToolErrorEnvelope `json:"error"`
 	}
 	if err := json.Unmarshal(raw, &response); err != nil {

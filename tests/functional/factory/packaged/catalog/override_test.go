@@ -8,18 +8,18 @@ import (
 	"strings"
 	"testing"
 
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const (
-	packagedGoalFactoryName             = "@you/goal"
-	localGoalOverrideDescription        = "customer local override for packaged goal"
-	unrelatedLocalFactoryName           = "customer-local-workshop"
-	unrelatedLocalFactoryDescription    = "unrelated project-local Factory"
-	invalidOverrideLeakProbe            = "broken-local-override-secret"
-	invalidGoalOverrideFactoryJSON      = `{"` + invalidOverrideLeakProbe + `":"do-not-expose"`
+	packagedGoalFactoryName          = "@you/goal"
+	localGoalOverrideDescription     = "customer local override for packaged goal"
+	unrelatedLocalFactoryName        = "customer-local-workshop"
+	unrelatedLocalFactoryDescription = "unrelated project-local Factory"
+	invalidOverrideLeakProbe         = "broken-local-override-secret"
+	invalidGoalOverrideFactoryJSON   = `{"` + invalidOverrideLeakProbe + `":"do-not-expose"`
 )
 
 // TestLocalFactoryOverridesPackagedFactoryWithSameName proves that when a customer

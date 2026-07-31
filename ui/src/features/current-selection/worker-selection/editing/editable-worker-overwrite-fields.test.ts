@@ -16,7 +16,7 @@ function buildDraft(
     executorProvider: "SCRIPT_WRAP",
     model: "gpt-5.5",
     modelLocality: "CLOUD",
-    modelProvider: "CURSOR",
+    modelProvider: "CODEX",
     name: "reviewer",
     provider: "LINEAR",
     skipPermissions: false,
@@ -41,7 +41,7 @@ describe("resolveEditableWorkerOverwriteFields", () => {
   it("flags model worker fields that diverged locally and on the server", () => {
     const sessionStart = buildDraft({
       model: "gpt-4",
-      modelProvider: "CURSOR",
+      modelProvider: "CODEX",
       type: "MODEL_WORKER",
     });
     const current = buildDraft({

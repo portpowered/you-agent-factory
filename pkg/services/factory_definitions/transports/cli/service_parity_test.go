@@ -222,19 +222,19 @@ func TestConstructedService_InstallPackagedFactoryDefinitionsErrorsMatchPackageC
 		wantWraps string
 	}{
 		{
-			name: "named factory already exists",
+			name:    "named factory already exists",
 			install: rejectingInstallOperation(factorydefinitions.ErrNamedFactoryAlreadyExists),
-			wantIs: factorydefinitions.ErrNamedFactoryAlreadyExists,
+			wantIs:  factorydefinitions.ErrNamedFactoryAlreadyExists,
 		},
 		{
-			name: "factory distribute failed",
+			name:    "factory distribute failed",
 			install: rejectingInstallOperation(factorydefinitions.ErrFactoryDistributeFailed),
-			wantIs: factorydefinitions.ErrFactoryDistributeFailed,
+			wantIs:  factorydefinitions.ErrFactoryDistributeFailed,
 		},
 		{
-			name: "incompatible distribute options",
+			name:    "incompatible distribute options",
 			install: rejectingInstallOperation(factorydefinitions.ErrIncompatibleFactoryDistributeOptions),
-			wantIs: factorydefinitions.ErrIncompatibleFactoryDistributeOptions,
+			wantIs:  factorydefinitions.ErrIncompatibleFactoryDistributeOptions,
 		},
 		{
 			name: "unknown packaged factory identity",

@@ -25,9 +25,9 @@ import (
 )
 
 const (
-	cursorChildSessionID               = "cursor-js-child-session"
-	phaseCheckpointWorkflowFileName    = "phase-checkpoint.workflow.js"
-	phaseCheckpointWorkflowSource      = `phase("plan");
+	cursorChildSessionID            = "cursor-js-child-session"
+	phaseCheckpointWorkflowFileName = "phase-checkpoint.workflow.js"
+	phaseCheckpointWorkflowSource   = `phase("plan");
 workflow.checkpoint({ label: "plan-ready", state: { ready: true } });
 phase("execute");
 return "hello";`
@@ -278,7 +278,7 @@ func startChildProgressWorkflowAsync(t *testing.T, serverURL, dir string) factor
 type executionObservationKind string
 
 const (
-	executionObservationResponseEvent executionObservationKind = "response_event"
+	executionObservationResponseEvent  executionObservationKind = "response_event"
 	executionObservationTerminalResult executionObservationKind = "terminal_result"
 )
 

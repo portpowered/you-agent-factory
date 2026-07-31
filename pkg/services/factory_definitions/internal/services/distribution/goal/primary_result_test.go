@@ -4,8 +4,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 func TestPackagedGoalInvocationPrimaryResult_ReturnsSummaryNotSubmittedInput(t *testing.T) {

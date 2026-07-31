@@ -152,9 +152,9 @@ func TestProcessFactoryConfigVersionChangesObservableRouting(t *testing.T) {
 		10*time.Second,
 	)
 	assertCurrentFactoryWorkCustomerStates(t, listedV1, map[string]int{
-		support.WorkCustomerLocation("task", "complete"):    1,
-		support.WorkCustomerLocation("task", "init"):        0,
-		support.WorkCustomerLocation("task", "processing"):  0,
+		support.WorkCustomerLocation("task", "complete"):   1,
+		support.WorkCustomerLocation("task", "init"):       0,
+		support.WorkCustomerLocation("task", "processing"): 0,
 	})
 	if providerV1.CallCount("processor") != 1 {
 		t.Errorf("v1 processor call count = %d, want 1", providerV1.CallCount("processor"))
@@ -178,10 +178,10 @@ func TestProcessFactoryConfigVersionChangesObservableRouting(t *testing.T) {
 		10*time.Second,
 	)
 	assertCurrentFactoryWorkCustomerStates(t, listedV2, map[string]int{
-		support.WorkCustomerLocation("task", "complete"):    1,
-		support.WorkCustomerLocation("task", "init"):        0,
-		support.WorkCustomerLocation("task", "processing"):  0,
-		support.WorkCustomerLocation("task", "in-review"):   0,
+		support.WorkCustomerLocation("task", "complete"):   1,
+		support.WorkCustomerLocation("task", "init"):       0,
+		support.WorkCustomerLocation("task", "processing"): 0,
+		support.WorkCustomerLocation("task", "in-review"):  0,
 	})
 	if providerV2.CallCount("processor") != 1 {
 		t.Errorf("v2 processor call count = %d, want 1", providerV2.CallCount("processor"))
@@ -210,9 +210,9 @@ func TestProcessRejectionLoopCompletesAfterRetry(t *testing.T) {
 		10*time.Second,
 	)
 	assertCurrentFactoryWorkCustomerStates(t, listed, map[string]int{
-		support.WorkCustomerLocation("doc", "complete"):    1,
-		support.WorkCustomerLocation("doc", "init"):        0,
-		support.WorkCustomerLocation("doc", "processing"):  0,
+		support.WorkCustomerLocation("doc", "complete"):   1,
+		support.WorkCustomerLocation("doc", "init"):       0,
+		support.WorkCustomerLocation("doc", "processing"): 0,
 	})
 	if got := provider.CallCount("drafter"); got != 2 {
 		t.Errorf("drafter call count = %d, want 2", got)
@@ -259,6 +259,6 @@ func TestProcessIndependentFactoryRootsRemainIsolated(t *testing.T) {
 	})
 	assertCurrentFactoryWorkCustomerStates(t, listedA, map[string]int{
 		support.WorkCustomerLocation("task", "complete"): 1,
-		support.WorkCustomerLocation("task", "init"):       0,
+		support.WorkCustomerLocation("task", "init"):     0,
 	})
 }

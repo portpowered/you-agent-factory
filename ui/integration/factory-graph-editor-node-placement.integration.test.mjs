@@ -271,7 +271,7 @@ async function nodeBoundingBox(page, nodeTestId) {
 async function addWorker(
   page,
   toolbar,
-  { model = "gpt-5", modelProvider = "CURSOR", name },
+  { model = "gpt-5", modelProvider = "CODEX", name },
 ) {
   await toolbar.getByRole("button", { name: "Add" }).click();
   await page

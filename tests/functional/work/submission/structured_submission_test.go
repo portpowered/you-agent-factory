@@ -223,7 +223,7 @@ func TestAPISubmitWorkRejectsMixedTextAndImageOnUnsupportedRunner(t *testing.T) 
 		t,
 		factoryDir,
 		"worker-a",
-		support.BuildModelWorkerConfig(modelprovider.ProviderCursor, "cursor-test-model"),
+		support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "codex-test-model"),
 	)
 	runner := support.NewRecordingCommandRunner("unused")
 	edges := serviceedges.Edges{}

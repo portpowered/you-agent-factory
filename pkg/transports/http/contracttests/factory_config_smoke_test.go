@@ -694,7 +694,7 @@ func factoryConfigSmokeCanonicalJSON() string {
     "behavior":"CRON",
     "type":"MODEL_WORKSTATION",
     "worker":"executor",
-    "runner":"cursor-cli",
+    "runner":"codex",
     "promptFile":"prompt.md",
     "body":"Implement {{ .WorkID }}.",
     "outputSchema":"schema.json",

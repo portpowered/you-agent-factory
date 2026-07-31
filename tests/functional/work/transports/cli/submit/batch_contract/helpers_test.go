@@ -30,13 +30,13 @@ const (
 )
 
 type batchContractSubmitJSON struct {
-	RequestID     string `json:"requestId"`
-	TraceID       string `json:"traceId"`
-	WorkCount     int    `json:"workCount"`
-	SessionID     string `json:"sessionId"`
-	EndpointPath  string `json:"endpointPath"`
-	BatchSource   string `json:"batchSource"`
-	Works         []struct {
+	RequestID    string `json:"requestId"`
+	TraceID      string `json:"traceId"`
+	WorkCount    int    `json:"workCount"`
+	SessionID    string `json:"sessionId"`
+	EndpointPath string `json:"endpointPath"`
+	BatchSource  string `json:"batchSource"`
+	Works        []struct {
 		Name         string `json:"name"`
 		WorkTypeName string `json:"workTypeName"`
 		WorkID       string `json:"workId"`

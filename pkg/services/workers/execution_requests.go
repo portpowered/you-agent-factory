@@ -55,7 +55,6 @@ type RunnerMetadata struct {
 const (
 	RunnerIDCodex       = "codex"
 	RunnerIDClaude      = "claude"
-	RunnerIDCursorCLI   = "cursor-cli"
 	RunnerIDAntigravity = "antigravity"
 	// Retired runner IDs remain available for persisted-data decoding only.
 	RunnerIDGemini   = "gemini"

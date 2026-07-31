@@ -189,7 +189,7 @@
       "type": "AGENT_WORKER"
     },
     {
-      "body": "You are the final synthesizer with no knowledge beyond the original request and completed child Work supplied as inputs.\nReconstruct the requested outcome from every child result, preserve material evidence and disagreements, distinguish verified facts from assumptions, and return one complete customer-facing answer.\n Do not invent missing task results or silently claim failed verification passed.",
+      "body": "You are the final synthesizer with no knowledge beyond the original parent request and completed generated child Work supplied as Factory inputs.\nThose Factory Work inputs are the complete evidence set. This is not an agent thread with subagents or delegated tool outputs.\nReconstruct the requested outcome from every completed child result, preserve material evidence and disagreements, distinguish verified facts from assumptions, and return one complete customer-facing answer.\nNever claim that completed generated task results are missing, that only a root agent exists, or that there are no delegated outputs when completed planned-task Factory inputs are present.\nDo not invent missing task results or silently claim failed verification passed.",
       "model": "${mergeModel}",
       "modelProvider": "${mergeProvider}",
       "name": "parallel-merger",
@@ -259,7 +259,7 @@
       "worker": "parallel-executor"
     },
     {
-      "body": "Treat the original request and all completed generated Work inputs rendered below as your entire context.\nRead every result, reconcile overlaps, and synthesize one final answer that directly satisfies the original request.\nPreserve important disagreements, caveats, artifacts, and verification evidence.\nState any inference explicitly and never imply that an omitted or failed check succeeded.\n\nFactory inputs:\n{{ range .Inputs }}\n--- {{ .Name }} ({{ .WorkTypeID }}) ---\n{{ .Payload }}\n{{ end }}",
+      "body": "Treat the original request and all completed generated Work inputs rendered below as your entire evidence set. This is not an agent thread with subagents or delegated tool outputs.\nThe first input is the original parent request (`parallel-plan`); every later `planned-task` input is one completed generated child result that must be consumed.\nRead every result, reconcile overlaps, and synthesize one final answer that directly satisfies the original request.\nPreserve important disagreements, caveats, artifacts, and verification evidence.\nState any inference explicitly and never imply that an omitted or failed check succeeded.\nNever claim that completed generated task results are missing, that only a root agent exists, or that there are no delegated outputs when any completed `planned-task` Factory input is present below.\n\nOriginal parent request and completed generated child results:\n{{ range .Inputs }}\n--- {{ .Name }} ({{ .WorkTypeID }}) ---\n{{ if .Payload -}}\n{{ .Payload }}\n{{- else if .PreviousOutput -}}\n{{ .PreviousOutput }}\n{{- else -}}\n{{ range .Content }}{{ .Text }}{{ end }}\n{{- end }}\n\n{{ end }}",
       "inputs": [
         {
           "state": "waiting",

@@ -20,21 +20,21 @@ type nestedPipelineItemResult struct {
 }
 
 type nestedCompletionEvidence struct {
-	ItemStatus                  string                   `json:"itemStatus"`
-	StageCount                  int                      `json:"stageCount"`
-	NestedParallelLabels        []string                 `json:"nestedParallelLabels"`
-	StageOneParallelDispatchIDs []string                 `json:"stageOneParallelDispatchIds"`
-	ReviewDispatchFromStageTwo  string                   `json:"reviewDispatchFromStageTwo"`
+	ItemStatus                  string                     `json:"itemStatus"`
+	StageCount                  int                        `json:"stageCount"`
+	NestedParallelLabels        []string                   `json:"nestedParallelLabels"`
+	StageOneParallelDispatchIDs []string                   `json:"stageOneParallelDispatchIds"`
+	ReviewDispatchFromStageTwo  string                     `json:"reviewDispatchFromStageTwo"`
 	Results                     []nestedPipelineItemResult `json:"results"`
 }
 
 type nestedFailureEvidence struct {
-	ItemStatus                  string                   `json:"itemStatus"`
-	NestedFailureStageIndex     int                      `json:"nestedFailureStageIndex"`
-	NestedFailureStageStatus    string                   `json:"nestedFailureStageStatus"`
-	FailedNestedChildLabel      string                   `json:"failedNestedChildLabel"`
-	FailedNestedChildStatus     string                   `json:"failedNestedChildStatus"`
-	FailedNestedChildDiagnostic string                   `json:"failedNestedChildDiagnostic"`
+	ItemStatus                  string                     `json:"itemStatus"`
+	NestedFailureStageIndex     int                        `json:"nestedFailureStageIndex"`
+	NestedFailureStageStatus    string                     `json:"nestedFailureStageStatus"`
+	FailedNestedChildLabel      string                     `json:"failedNestedChildLabel"`
+	FailedNestedChildStatus     string                     `json:"failedNestedChildStatus"`
+	FailedNestedChildDiagnostic string                     `json:"failedNestedChildDiagnostic"`
 	Results                     []nestedPipelineItemResult `json:"results"`
 }
 

@@ -98,4 +98,3 @@ func runFactoryThroughCustomerProcess(
 	daemon.Stop(t)
 	return status
 }
-

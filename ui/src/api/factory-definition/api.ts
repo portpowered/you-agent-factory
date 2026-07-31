@@ -17,7 +17,6 @@ import {
   readOptionalEnumArray,
   readOptionalFactoryVersion,
   readOptionalInteger,
-  readOptionalNonEmptyString,
   readOptionalNullableString,
   readOptionalObject,
   readOptionalString,
@@ -297,12 +296,11 @@ const WORKER_TYPE_VALUES = new Set<NonNullable<FactoryWorker["type"]>>([
 const WORKER_MODEL_PROVIDER_VALUES = new Set<FactoryWorkerModelProvider>([
   "CLAUDE",
   "CODEX",
-  "CURSOR",
   "ANTIGRAVITY",
 ]);
 const EXACT_INVOCATION_PLACEHOLDER_PATTERN = /^\$\{([A-Za-z0-9_.-]+)\}$/;
 const PROVIDER_IDENTITY_PATTERN =
-  /^(?:[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*|ANTIGRAVITY|ANTHROPIC|CLAUDE|CODEX|CURSOR|OPENAI)$/;
+  /^(?:[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*|ANTIGRAVITY|ANTHROPIC|CLAUDE|CODEX|OPENAI)$/;
 const WORKER_PROVIDER_VALUES = new Set<
   NonNullable<FactoryWorker["executorProvider"]>
 >(["ACP", "SCRIPT_WRAP"]);
@@ -315,7 +313,6 @@ const HOSTED_WORKER_PROVIDER_VALUES = new Set<
 const RUNNER_ID_VALUES = new Set<FactoryRunnerID>([
   "codex",
   "claude",
-  "cursor-cli",
   "antigravity",
 ]);
 const WORKSTATION_BEHAVIOR_VALUES = new Set<

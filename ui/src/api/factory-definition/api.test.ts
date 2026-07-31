@@ -309,7 +309,7 @@ describe("normalizeFactoryDefinition", () => {
             outputs: [{ state: "done", workType: "story" }],
             promptFile: "prompt.md",
             resources: [{ capacity: 1, name: "gpu" }],
-            runner: "cursor-cli",
+            runner: "codex",
             stopWords: ["DONE"],
             type: "MODEL_WORKSTATION",
             worker: "writer",
@@ -415,7 +415,7 @@ describe("normalizeFactoryDefinition", () => {
           outputs: [{ state: "done", workType: "story" }],
           promptFile: "prompt.md",
           resources: [{ capacity: 1, name: "gpu" }],
-          runner: "cursor-cli",
+          runner: "codex",
           stopWords: ["DONE"],
           type: "MODEL_WORKSTATION",
           worker: "writer",
@@ -850,7 +850,7 @@ describe("normalizeFactoryDefinition", () => {
       }),
     ).toThrowError(
       new FactoryDefinitionAPIError(
-        "factory.guards[0].modelProvider must be one of CLAUDE, CODEX, CURSOR, ANTIGRAVITY.",
+        "factory.guards[0].modelProvider must be one of CLAUDE, CODEX, ANTIGRAVITY.",
       ),
     );
   });
@@ -1158,7 +1158,7 @@ describe("normalizeFactoryDefinition", () => {
 const SUPPORTED_WORKER_MODEL_PROVIDERS = [
   "CLAUDE",
   "CODEX",
-  "CURSOR",
+  "CODEX",
   "ANTIGRAVITY",
 ] as const;
 

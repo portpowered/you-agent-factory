@@ -115,7 +115,7 @@
     },
     "operatorWorkerModelProvider": {
       "type": "string",
-      "pattern": "^[\\t-\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]*(?:AGY|ANTHROPIC|CLAUDE|CODEX|CURSOR|CURSOR_AGENT|GEMINI|KIRO|OPENAI|OPENCODE|PI|agent|agy|anthropic|antigravity|claude|codex|cursor|cursor-agent|gemini|kiro|kiro-cli|openai|opencode|pi)[\\t-\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]*$",
+      "pattern": "^[\\t-\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]*(?:AGY|ANTHROPIC|CLAUDE|CODEX|GEMINI|KIRO|OPENAI|OPENCODE|PI|agy|anthropic|antigravity|claude|codex|gemini|kiro|kiro-cli|openai|opencode|pi)[\\t-\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]*$",
       "description": "Required model provider canonicalized to a supported provider after surrounding whitespace is trimmed. Symbolic DEFAULT is rejected in presets."
     },
     "workerPreset": {

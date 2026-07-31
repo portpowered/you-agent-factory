@@ -114,7 +114,7 @@ func TestExecuteValidatesThenResolvesCanonicalAdapterExactlyOnce(t *testing.T) {
 	executionService, err := executionwire.NewService(
 		catalogService,
 		execution.Registration{
-			Provider: providers.IDCursor,
+			Provider: providers.IDCodex,
 			Attempt: func(
 				_ context.Context,
 				request providers.ExecuteRequest,
@@ -130,12 +130,12 @@ func TestExecuteValidatesThenResolvesCanonicalAdapterExactlyOnce(t *testing.T) {
 		t.Fatalf("NewService() = %v", err)
 	}
 	resume := &providers.SessionRef{
-		Provider: providers.IDCursor,
+		Provider: providers.IDCodex,
 		Kind:     providers.SessionIDKind,
 		ID:       "session-1",
 	}
 	request := providers.ExecuteRequest{
-		Provider:         providers.ID("cursor"),
+		Provider:         providers.IDCodex,
 		AttemptID:        "attempt-1",
 		SystemPrompt:     "system",
 		UserMessage:      "user",
@@ -156,7 +156,7 @@ func TestExecuteValidatesThenResolvesCanonicalAdapterExactlyOnce(t *testing.T) {
 		t.Fatalf("adapter calls = %d, want 1", calls)
 	}
 	want := request.Clone()
-	want.Provider = providers.IDCursor
+	want.Provider = providers.IDCodex
 	if !reflect.DeepEqual(received, want) {
 		t.Fatalf("adapter request = %#v, want %#v", received, want)
 	}

@@ -50,23 +50,6 @@ export function readOptionalString(
   return item;
 }
 
-export function readOptionalNonEmptyString(
-  value: Record<string, unknown>,
-  key: string,
-  path: string,
-): string | undefined {
-  const item = readOptionalString(value, key, path);
-  if (item === undefined) {
-    return undefined;
-  }
-  if (item.trim() === "") {
-    throw new FactoryDefinitionAPIError(
-      `${path}.${key} must be a non-empty string.`,
-    );
-  }
-  return item;
-}
-
 export function readRequiredString(
   value: Record<string, unknown>,
   key: string,

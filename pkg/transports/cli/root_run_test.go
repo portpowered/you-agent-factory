@@ -1566,6 +1566,31 @@ func TestRunCommand_SkipPermissionsFlag(t *testing.T) {
 	}
 }
 
+func TestRunCommand_WorktreeFlagMapsToRunConfig(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := newLegacyTestRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--worktree", "feature-login"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run --worktree: %v", err)
+	}
+	if got.Worktree != "feature-login" {
+		t.Fatalf("worktree = %q, want feature-login", got.Worktree)
+	}
+}
+
 func TestRunCommand_SkipPermissionsFlagMapsToRunConfig(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {
@@ -2089,6 +2114,108 @@ func TestRunCommand_WithMockWorkersFlagWithoutPathMapsToDefaultConfig(t *testing
 	}
 }
 
+func TestParseRunCommandArgs_WithMockWorkersOptionalPath(t *testing.T) {
+	tests := []struct {
+		name          string
+		args          []string
+		wantFlagValue string
+		wantRemainder []string
+	}{
+		{
+			name:          "bare flag before signature args",
+			args:          []string{"--with-mock-workers", "--to", "fix the bug"},
+			wantFlagValue: defaultMockWorkersConfigPathSentinel,
+			wantRemainder: []string{"--to", "fix the bug"},
+		},
+		{
+			name:          "bare flag after signature args",
+			args:          []string{"--to", "fix the bug", "--with-mock-workers"},
+			wantFlagValue: defaultMockWorkersConfigPathSentinel,
+			wantRemainder: []string{"--to", "fix the bug"},
+		},
+		{
+			name:          "explicit config path leaves signature args",
+			args:          []string{"--with-mock-workers", "mock-workers.json", "--to", "fix the bug"},
+			wantFlagValue: "mock-workers.json",
+			wantRemainder: []string{"--to", "fix the bug"},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := newLegacyTestRootCommand()
+			runCmd, _, err := root.Find([]string{"run"})
+			if err != nil {
+				t.Fatalf("find run command: %v", err)
+			}
+			flag := runCmd.Flags().Lookup("with-mock-workers")
+			if flag == nil {
+				t.Fatal("expected --with-mock-workers flag")
+			}
+			remainder, err := parseRunCommandArgs(runCmd, test.args)
+			if err != nil {
+				t.Fatalf("parseRunCommandArgs(%v) error = %v", test.args, err)
+			}
+			if !flag.Changed {
+				t.Fatal("expected --with-mock-workers to be marked changed")
+			}
+			if got := flag.Value.String(); got != test.wantFlagValue {
+				t.Fatalf("with-mock-workers value = %q, want %q", got, test.wantFlagValue)
+			}
+			if !reflect.DeepEqual(remainder, test.wantRemainder) {
+				t.Fatalf("remainder = %#v, want %#v", remainder, test.wantRemainder)
+			}
+		})
+	}
+}
+
+func TestRunCommand_BareWithMockWorkersDoesNotTreatSignatureFlagAsConfigPath(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "bare flag before --to",
+			args: []string{"run", "--with-mock-workers", "--to", "fix the bug"},
+		},
+		{
+			name: "bare flag after --to",
+			args: []string{"run", "--to", "fix the bug", "--with-mock-workers"},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var got runcli.RunConfig
+			runCalled := false
+			runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+				runCalled = true
+				got = cfg
+				return nil
+			}
+
+			root := newLegacyTestRootCommand()
+			root.SetOut(io.Discard)
+			root.SetErr(io.Discard)
+			root.SetArgs(test.args)
+
+			err := root.Execute()
+			if err == nil {
+				t.Fatal("expected unknown signature flag rejection")
+			}
+			if !strings.Contains(err.Error(), "unknown flag: --to") {
+				t.Fatalf("error = %q, want unknown flag: --to (not mock-workers config path)", err.Error())
+			}
+			if runCalled {
+				t.Fatalf("run started with MockWorkersConfigPath=%q; signature args must remain untouched", got.MockWorkersConfigPath)
+			}
+		})
+	}
+}
+
 func TestRunCommand_VerboseFlagMapsToRunConfig(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {
@@ -2249,42 +2376,6 @@ func TestRootCommand_DefaultWorkerModelProviderFlagMapsToRunConfig(t *testing.T)
 	if err := removedRoot.Execute(); err == nil || !strings.Contains(err.Error(), "unknown flag") {
 		t.Fatalf("removed provider flag error = %v, want unknown flag", err)
 	}
-	return
-
-	originalRunCLI := runCLI
-	defer func() {
-		runCLI = originalRunCLI
-	}()
-
-	var got runcli.RunConfig
-	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
-		got = cfg
-		return nil
-	}
-
-	root := newLegacyTestRootCommandWithOperatorDefaults(expectOperatorDefaultsResolution(
-		t,
-		operatorconfig.Defaults{},
-		operatorconfig.FlagOverrides{WorkerModelProvider: "codex"},
-		operatorconfig.ResolvedDefaults{
-			WorkerModelProvider:       "CODEX",
-			WorkerModelProviderSource: operatorconfig.SourceFlag,
-		},
-		nil,
-	))
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{"--default-worker-model-provider", "codex", "run", "--no-record"})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("execute root with default provider flag: %v", err)
-	}
-	if got.OperatorDefaults.WorkerModelProvider != "CODEX" {
-		t.Fatalf("provider = %q, want CODEX", got.OperatorDefaults.WorkerModelProvider)
-	}
-	if got.OperatorDefaults.WorkerModelProviderSource != operatorconfig.SourceFlag {
-		t.Fatalf("provider source = %q, want flag", got.OperatorDefaults.WorkerModelProviderSource)
-	}
 }
 
 func TestRootCommand_ExplicitEnvironmentIsIsolatedAndFlagsRetainPrecedence(t *testing.T) {
@@ -2390,39 +2481,6 @@ func TestRootCommand_DefaultWorkerModelFlagMapsToRunConfig(t *testing.T) {
 	if err := removedRoot.Execute(); err == nil || !strings.Contains(err.Error(), "unknown flag") {
 		t.Fatalf("removed model flag error = %v, want unknown flag", err)
 	}
-	return
-
-	originalRunCLI := runCLI
-	defer func() {
-		runCLI = originalRunCLI
-	}()
-
-	var got runcli.RunConfig
-	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
-		got = cfg
-		return nil
-	}
-
-	root := newLegacyTestRootCommandWithOperatorDefaults(expectOperatorDefaultsResolution(
-		t,
-		operatorconfig.Defaults{},
-		operatorconfig.FlagOverrides{WorkerModel: "gpt-5-codex"},
-		operatorconfig.ResolvedDefaults{WorkerModel: "gpt-5-codex", WorkerModelSource: operatorconfig.SourceFlag},
-		nil,
-	))
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{"run", "--default-worker-model", "gpt-5-codex", "--no-record"})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("execute run with default model flag: %v", err)
-	}
-	if got.OperatorDefaults.WorkerModel != "gpt-5-codex" {
-		t.Fatalf("model = %q, want gpt-5-codex", got.OperatorDefaults.WorkerModel)
-	}
-	if got.OperatorDefaults.WorkerModelSource != operatorconfig.SourceFlag {
-		t.Fatalf("model source = %q, want flag", got.OperatorDefaults.WorkerModelSource)
-	}
 }
 
 func TestRootCommand_RunProviderAndModelOverrideOperatorDefaults(t *testing.T) {
@@ -2468,48 +2526,6 @@ func TestRootCommand_ExplicitRunHonorsDefaultWorkerModelFlags(t *testing.T) {
 	if err := removedRoot.Execute(); err == nil || !strings.Contains(err.Error(), "unknown flag") {
 		t.Fatalf("removed provider flag error = %v, want unknown flag", err)
 	}
-	return
-
-	homeDir := t.TempDir()
-	t.Setenv("HOME", homeDir)
-	t.Setenv("USERPROFILE", homeDir)
-
-	originalRunCLI := runCLI
-	defer func() {
-		runCLI = originalRunCLI
-	}()
-
-	var got runcli.RunConfig
-	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
-		got = cfg
-		return nil
-	}
-
-	root := newLegacyTestRootCommandWithOperatorDefaults(expectOperatorDefaultsResolution(
-		t,
-		operatorconfig.Defaults{},
-		operatorconfig.FlagOverrides{WorkerModelProvider: "codex", WorkerModel: "gpt-5-codex"},
-		operatorconfig.ResolvedDefaults{
-			WorkerModelProvider:       "CODEX",
-			WorkerModel:               "gpt-5-codex",
-			WorkerModelProviderSource: operatorconfig.SourceFlag,
-			WorkerModelSource:         operatorconfig.SourceFlag,
-		},
-		nil,
-	))
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{"run", "--default-worker-model-provider", "codex", "--default-worker-model", "gpt-5-codex"})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("execute explicit run with default model flags: %v", err)
-	}
-	if got.OperatorDefaults.WorkerModelProvider != "CODEX" {
-		t.Fatalf("provider = %q, want CODEX", got.OperatorDefaults.WorkerModelProvider)
-	}
-	if got.OperatorDefaults.WorkerModel != "gpt-5-codex" {
-		t.Fatalf("model = %q, want gpt-5-codex", got.OperatorDefaults.WorkerModel)
-	}
 }
 
 func TestRootCommand_DefaultProviderFlagRejectsUnresolvedSymbolicDefault(t *testing.T) {
@@ -2518,30 +2534,6 @@ func TestRootCommand_DefaultProviderFlagRejectsUnresolvedSymbolicDefault(t *test
 	if err := removedRoot.Execute(); err == nil || !strings.Contains(err.Error(), "unknown flag") {
 		t.Fatalf("removed provider flag error = %v, want unknown flag", err)
 	}
-	return
-
-	homeDir := t.TempDir()
-	t.Setenv("HOME", homeDir)
-	t.Setenv("USERPROFILE", homeDir)
-
-	root := newLegacyTestRootCommandWithOperatorDefaults(expectOperatorDefaultsResolution(
-		t,
-		operatorconfig.Defaults{},
-		operatorconfig.FlagOverrides{WorkerModelProvider: "DEFAULT"},
-		operatorconfig.ResolvedDefaults{},
-		fmt.Errorf("DEFAULT requires a concrete provider"),
-	))
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{"run", "--default-worker-model-provider", "DEFAULT", "--no-record"})
-
-	err := root.Execute()
-	if err == nil {
-		t.Fatal("expected unresolved DEFAULT provider error")
-	}
-	if !strings.Contains(err.Error(), "DEFAULT requires a concrete provider") {
-		t.Fatalf("error = %q, want unresolved DEFAULT guidance", err.Error())
-	}
 }
 
 func TestRootCommand_DefaultProviderFlagResolvesSymbolicDefaultFromFile(t *testing.T) {
@@ -2549,46 +2541,6 @@ func TestRootCommand_DefaultProviderFlagResolvesSymbolicDefaultFromFile(t *testi
 	removedRoot.SetArgs([]string{"run", "--default-worker-model-provider", "DEFAULT"})
 	if err := removedRoot.Execute(); err == nil || !strings.Contains(err.Error(), "unknown flag") {
 		t.Fatalf("removed provider flag error = %v, want unknown flag", err)
-	}
-	return
-
-	homeDir := t.TempDir()
-	t.Setenv("HOME", homeDir)
-	t.Setenv("USERPROFILE", homeDir)
-
-	originalRunCLI := runCLI
-	defer func() {
-		runCLI = originalRunCLI
-	}()
-
-	var got runcli.RunConfig
-	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
-		got = cfg
-		return nil
-	}
-
-	root := newLegacyTestRootCommandWithOperatorDefaults(expectOperatorDefaultsResolution(
-		t,
-		operatorconfig.Defaults{},
-		operatorconfig.FlagOverrides{WorkerModelProvider: "DEFAULT"},
-		operatorconfig.ResolvedDefaults{
-			WorkerModelProvider:       "CODEX",
-			WorkerModelProviderSource: operatorconfig.SourceFlag,
-		},
-		nil,
-	))
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{"run", "--default-worker-model-provider", "DEFAULT", "--no-record"})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("execute run with DEFAULT provider flag: %v", err)
-	}
-	if got.OperatorDefaults.WorkerModelProvider != "CODEX" {
-		t.Fatalf("provider = %q, want CODEX", got.OperatorDefaults.WorkerModelProvider)
-	}
-	if got.OperatorDefaults.WorkerModelProviderSource != operatorconfig.SourceFlag {
-		t.Fatalf("provider source = %q, want flag", got.OperatorDefaults.WorkerModelProviderSource)
 	}
 }
 
