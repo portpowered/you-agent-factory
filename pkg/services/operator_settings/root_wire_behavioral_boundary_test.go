@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	internaltestlink "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testlink"
 	internaltestproviders "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
@@ -24,6 +25,8 @@ const rootWireIdentityFixtureRelative = "pkg/services/operator_settings/internal
 // outcomes and typed failures on the published operatorsettings.Service peer
 // surface after CLN-SET-CONTRACT-ROOTS seals the thin root.
 func TestRootWireBehavioralBoundary_PublishedServicePreservesObservables(t *testing.T) {
+	internaltestlink.RegisterComposition()
+
 	t.Run("document persist and effective resolution success", func(t *testing.T) {
 		t.Parallel()
 

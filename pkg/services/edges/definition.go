@@ -10,6 +10,10 @@
 package edges
 
 import (
+	"database/sql"
+	"io"
+	"io/fs"
+
 	platformbrowser "github.com/portpowered/infinite-you/pkg/platform/browser"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -25,7 +29,6 @@ import (
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	providersessionswire "github.com/portpowered/infinite-you/pkg/services/provider_sessions/wire"
 	providercontract "github.com/portpowered/infinite-you/pkg/services/providers/inference"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	systeminitialization "github.com/portpowered/infinite-you/pkg/services/system_initialization"
@@ -112,19 +115,22 @@ type Edges struct {
 	FactoryDefinitionAuthoredWriterFileSystem       factorydefinitions.AuthoredLayoutWriterFileSystem
 	FactoryDefinitionScaffoldFileSystem             factorydefinitions.ScaffoldFileSystem
 	FactoryDefinitionScaffoldOutput                 factorydefinitions.ScaffoldOutput
-	ProviderSessionFileSystem                       providersessionswire.FileSystem
-	ProviderSessionResolveHomeDirectory             providersessionswire.ResolveHomeDirectory
-	ProviderSessionCodexWalkDirectory               providersessionswire.CodexWalkDirectory
-	ProviderSessionCodexResolveSymlinks             providersessionswire.CodexResolveSymlinks
-	ProviderSessionCursorWalkDirectory              providersessionswire.CursorWalkDirectory
-	ProviderSessionCursorResolveSymlinks            providersessionswire.CursorResolveSymlinks
-	ProviderSessionCursorOpenDatabase               providersessionswire.CursorOpenSQLDatabase
-	ProviderSessionOperatingSystem                  providersessionswire.OperatingSystem
-	OperatorSettingsFileSystem                      operatorsettings.FileSystem
-	OperatorSettingsCreateTemporaryFile             operatorsettings.CreateTemporaryFile
-	OperatorSettingsIDGenerator                     operatorsettings.IDGenerator
-	SystemInitializationInspectPath                 systeminitialization.InspectPath
-	SystemInitializationMigrationFileSystem         systeminitialization.LegacyFactoryMigrationFileSystem
+	ProviderSessionFileSystem                       interface {
+		Open(string) (io.ReadCloser, error)
+		Stat(string) (fs.FileInfo, error)
+	}
+	ProviderSessionResolveHomeDirectory     func() (string, error)
+	ProviderSessionCodexWalkDirectory       func(string, fs.WalkDirFunc) error
+	ProviderSessionCodexResolveSymlinks     func(string) (string, error)
+	ProviderSessionCursorWalkDirectory      func(string, fs.WalkDirFunc) error
+	ProviderSessionCursorResolveSymlinks    func(string) (string, error)
+	ProviderSessionCursorOpenDatabase       func(string, string) (*sql.DB, error)
+	ProviderSessionOperatingSystem          string
+	OperatorSettingsFileSystem              operatorsettings.FileSystem
+	OperatorSettingsCreateTemporaryFile     operatorsettings.CreateTemporaryFile
+	OperatorSettingsIDGenerator             operatorsettings.IDGenerator
+	SystemInitializationInspectPath         systeminitialization.InspectPath
+	SystemInitializationMigrationFileSystem systeminitialization.LegacyFactoryMigrationFileSystem
 
 	Clock                            platformclock.Source
 	SubmissionRecorder               recordings.SubmissionRecorder

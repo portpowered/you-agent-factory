@@ -4,7 +4,7 @@ Owner-local live inventory for **INV-WRK-TOPLEVEL** (`pss-inv-wrk-toplevel`). Th
 packet records evidence-backed classification only; it does **not** move, fold,
 or delete any root-level `.go` files.
 
-**Inventory captured:** 2026-07-28 UTC from the live tree at
+**Historical inventory captured:** 2026-07-28 UTC from the live tree at
 `pkg/services/workers/*.go` (non-recursive root files only).
 
 **Baseline before CLN-WRK-CONTRACT-ROOTS moves:** **41** root-level `.go` files
@@ -19,6 +19,12 @@ or delete any root-level `.go` files.
 **After import retarget (story 005):** **32** root-level `.go` files (30 keep + 1 temporary documented keep impl + 1 impl test).
 
 **After cutover delivery proof (story 006):** **33** root-level `.go` files (31 keep + 1 temporary documented keep impl + 1 delivery seal test). Pre-cutover baseline remains **41**.
+
+**Current live reconciliation:** 2026-07-31 UTC. The live root contains **40**
+`.go` files, all retained at the current Workers contract boundary; the
+temporary `workstation_pool_boundary_impl.go` exception remains documented.
+The generator mirrors below are the authoritative exact file inventory for the
+current tree.
 
 Companion directory inventory:
 [`workers-top-level-inventory.md`](workers-top-level-inventory.md).
@@ -39,7 +45,7 @@ Private subservices already present under `workers/internal/services/*` are
 treats live root files as debt until CLN-WRK-CONTRACT-ROOTS cutover packets
 fold or delete them.
 
-## Root-level `.go` file inventory
+## Historical root-level `.go` file inventory
 
 | File | Classification | Later target / rationale |
 | --- | --- | --- |
@@ -96,6 +102,55 @@ fold or delete them.
 | `workstation_pool_boundary.go` | *(folded)* | Moved to `internal/services/workstations/poolboundary` during story 003; peers use published root contracts after story 005 retarget. |
 | `workstation_pool_boundary_test.go` | *(folded)* | Moved to internal poolboundary during story 003. |
 | `workstation_result_contract_test.go` | keep | Root-contract characterization test for `WorkstationResult` round-trip through published Workers root types. |
+
+## Current live root-level `.go` inventory
+
+The current live set is the following closed retain inventory. The older table
+above preserves the story-by-story fold evidence and includes files that were
+later deleted or renamed.
+
+```text
+command.go
+execute_boundary_test.go
+execute_contracts.go
+execute_contracts_test.go
+execution_context.go
+execution_contracts.go
+execution_requests.go
+execution_requests_test.go
+execution_tokens.go
+failure.go
+failure_test.go
+interfaces.go
+mock_worker.go
+mock_workers_contracts.go
+observation_contracts.go
+progress_observations.go
+prompt_template_contracts.go
+proposal_mappers.go
+proposal_mappers_test.go
+provider_port.go
+provider_port_test.go
+pty_contracts.go
+response_drafts.go
+runner_policy_contracts.go
+runner_process.go
+runner_process_log_context.go
+runtime_service.go
+safe_diagnostics.go
+safe_diagnostics_forward.go
+sessions_consumer_boundary_test.go
+sessions_consumer_contracts.go
+template_fields.go
+template_fields_root_test.go
+validate_draft.go
+worker_vocabulary_contract.go
+workstation_contracts.go
+workstation_pool_boundary_contracts.go
+workstation_pool_boundary_impl.go
+workstation_pool_boundary_impl_test.go
+workstation_result_contract_test.go
+```
 
 ## Keep vs move summary (after story 006 cutover seal)
 

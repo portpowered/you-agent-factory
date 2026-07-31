@@ -179,17 +179,6 @@ func TestMapPackageWorkersMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/workers/cliprovider",
-			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/workers/cliprovider",
-				Disposition:       ownershipinventory.DispositionMove,
-				Destination:       "providers",
-				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/providers",
-				DeletionCondition: "delete Workers provider packages after Providers root cutover proof (IMP-providers-*)",
-			},
-		},
-		{
 			path: "pkg/services/providers/internal/services/execution/internal/provider_test",
 			wantMove: &ownershipinventory.PackageRow{
 				PackagePath:       "pkg/services/providers/internal/services/execution/internal/provider_test",
@@ -290,8 +279,6 @@ func isWorkersProvidersExtractionRest(rest string) bool {
 	switch {
 	case rest == "agypty" || strings.HasPrefix(rest, "agypty/"):
 		return true
-	case rest == "cliprovider" || strings.HasPrefix(rest, "cliprovider/"):
-		return true
 	case rest == "provider" || strings.HasPrefix(rest, "provider/"):
 		return true
 	case rest == "provider_test" || strings.HasPrefix(rest, "provider_test/"):
@@ -300,5 +287,3 @@ func isWorkersProvidersExtractionRest(rest string) bool {
 		return false
 	}
 }
-
-

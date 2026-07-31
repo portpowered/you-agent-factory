@@ -205,7 +205,6 @@ func TestWorkersTopLevelTransitionalDebtDirectoriesMapToMove(t *testing.T) {
 		"construction",
 		"diagnostics",
 		"draftvalidation",
-		"envdiagnostics",
 		"execution",
 		"executor",
 		"inferencefailure",
@@ -233,6 +232,22 @@ func TestWorkersTopLevelTransitionalDebtDirectoriesMapToMove(t *testing.T) {
 		if got.Destination == "workers" {
 			t.Fatalf("top-level debt %q move destination = owner root, want nested plan path", path)
 		}
+	}
+}
+
+func TestDeletedWorkersCLIProviderPathIsNotMappedAsProvidersExtraction(t *testing.T) {
+	t.Parallel()
+
+	const deletedPath = "pkg/services/workers/cliprovider"
+	if _, ok := mapProvidersExtraction(deletedPath); ok {
+		t.Fatalf("mapProvidersExtraction(%q) = ok, want deleted path to be absent", deletedPath)
+	}
+	mapping, ok := mapCommittedOwnerPackage(deletedPath)
+	if !ok {
+		t.Fatalf("mapCommittedOwnerPackage(%q) ok = false, want generic Workers ownership fallback", deletedPath)
+	}
+	if mapping.Destination != "workers" || mapping.Disposition != DispositionRetain {
+		t.Fatalf("mapCommittedOwnerPackage(%q) = %#v, want Workers retain fallback", deletedPath, mapping)
 	}
 }
 
@@ -384,5 +399,3 @@ func workersCanonicalRetainRest(rest string) bool {
 		return false
 	}
 }
-
-

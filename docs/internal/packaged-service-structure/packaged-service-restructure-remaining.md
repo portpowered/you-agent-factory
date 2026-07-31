@@ -1,10 +1,10 @@
 ## Audit result
 
-The decomposition is structurally far from complete. All 13 product-service roots still violate at least one packaged-service rule. The live quality gates also show that the committed inventories no longer match the current provider/workers refactor.
+The decomposition is structurally far from complete. All 13 product-service roots still violate at least one packaged-service rule. The active Providers/Workers package-target, ownership, and boundary ledgers have since been reconciled with the live refactor; the broader service-shape debt remains.
 
 The governing rule requires exactly one named interface per service/subservice root, no exported root functions, and only `internal`, `wire`, and `transports` child directories ([general-backend-standards.md](C:/Users/andre/work/portos/infinite-you/docs/internal/standards/code/general-backend-standards.md:144)).
 
-No files were changed during this audit.
+This note was originally captured before the Providers/Workers inventory repair and was updated on 2026-07-31 UTC to record that repair and its remaining scope.
 
 ## 1. Product services still incomplete
 
@@ -13,7 +13,7 @@ These are live counts from production `.go` files, not just the stale baseline:
 | Service | Root interfaces | Root exported functions | Noncanonical root directories | Status |
 |---|---:|---:|---|---|
 | `automations` | 7 | 3 | — | Contract not sealed |
-| `factory_definitions` | 31 | 19 | `clonetests`, `definition`, `service`, `systeminitializationtests` | Major decomposition remaining |
+| `factory_definitions` | 31 | 19 | `clonetests`, `definition`, `systeminitializationtests` | Major decomposition remaining |
 | `factory_runtime` | 36 | 50 | `testdata` | Major decomposition remaining |
 | `factory_sessions` | 4 | 13 | — | Contract/transport consolidation remaining |
 | `factory_visualization` | 4 | 20 | — | Contract not sealed |
@@ -45,7 +45,6 @@ The structure checker currently reports:
 Legacy/public packages still needing removal or privatization:
 
 - `definition`
-- `service`
 - `clonetests`
 - `systeminitializationtests`
 - `internal/testcomposition`
@@ -156,15 +155,16 @@ The manifest still lists the entire legacy `execution/internal/provider` tree fo
 - `structured`
 - `agypty`
 
-But the live tree has moved again:
+The live tree has moved again, and the authoritative package-target and ownership
+ledgers now reflect that state:
 
-- The inventory is missing new `providers/internal/services/acp/**`.
-- The inventory is missing new `providers/internal/services/builtins/**`.
-- It unexpectedly finds several new `execution/internal/adapters/**` packages.
-- The public `providers/inference` directory is a new structure violation.
-- A stale named-owner rule still references the deleted `workers/cliprovider`.
+- `providers/internal/services/acp/**` and `providers/internal/services/builtins/**` are recorded under Providers.
+- Deleted provider adapter paths and the deleted `workers/cliprovider` path are no longer inventoried.
+- The remaining `execution/internal/provider/**` entries are explicit transitional Providers move rows.
+- The public `providers/inference` directory remains a structure violation and is deferred to the Providers root-contract packet.
 
-Therefore the provider inventory needs to be reconciled before further deletion or baseline updates.
+The inventory repair is complete; further provider work is root-contract sealing
+and legacy execution-tree flattening, not reclassifying the live package ledger.
 
 ### Recordings
 
@@ -222,10 +222,10 @@ The live checks found these concrete violations:
 
 1. Cross-service implementation imports:
 
-   - `pkg/services/edges/definition.go` imports `provider_sessions/wire`.
-   - `pkg/services/operator_settings/wire/register.go` imports `providers/wire`.
+   - The former `pkg/services/edges/definition.go` import of `provider_sessions/wire` has been replaced with local exact effect shapes.
+   - The former `pkg/services/operator_settings/wire/register.go` import of `providers/wire` has been moved to the canonical `pkg/wire` composition boundary; Operator Settings now accepts only the Providers root contract.
 
-   Cross-service consumers must depend on peer root contracts, not peer construction packages.
+   The remaining rule is enforced by `ownershipboundarycheck`; no deletion-only baseline entries remain.
 
 2. Petri implementation leakage:
 
@@ -239,15 +239,11 @@ The live checks found these concrete violations:
 
 4. Package-target inventory drift:
 
-   - Missing new ACP and built-in provider services.
-   - Still contains removed `factory_definitions/service`.
-   - Does not reflect the new provider-adapter layout.
+   - Repaired in this pass; `package-target-manifest-check` now holds with 515 live inventory rows.
 
 5. Ownership inventory drift:
 
-   - Missing six new ACP/builtins packages.
-   - Ten unexpected provider/factory-definition packages.
-   - One invalid named-owner rule.
+   - Repaired in this pass; `ownership-inventory-check` now holds with the frozen 546-package inventory and two path-lease packets.
 
 6. Legacy functional layout:
 
@@ -334,11 +330,14 @@ Large mapping files are not automatically misplaced, but several are too large t
 
 1. Finish and freeze the active Providers/Workers move.
 
-   Reconcile ACP, built-ins, provider adapters, deleted worker packages, and the provider-conductor portfolio hold. Do not regenerate baselines yet.
+   The ACP, built-ins, deleted provider/worker paths, authoritative inventories,
+   and ownership-boundary repairs are complete. Remaining work is the provider
+   root-contract/legacy execution flattening and the broader Workers root
+   contract.
 
 2. Repair the authoritative inventories.
 
-   Make these pass first:
+   Complete. The following gates hold:
 
    - `package-target-manifest-check`
    - `ownership-inventory-check`
@@ -388,4 +387,7 @@ Large mapping files are not automatically misplaced, but several are too large t
 
    Then run the enforcement targets defined in the [Makefile](C:/Users/andre/work/portos/infinite-you/Makefile:568), followed by `make verify-fast` and `make lint`.
 
-The immediate critical path is Providers inventory reconciliation → owner-boundary fixes → service-root contract sealing → HTTP/CLI integration cutovers. Until those are complete, baseline updates would mostly hide moving debt rather than prove decomposition.
+The inventory-reconciliation and owner-boundary portions of the immediate path
+are complete. The remaining path is service-root contract sealing → HTTP/CLI
+integration cutovers; the broader deletion-only package-structure baseline
+should remain deferred until those migrations are proven.

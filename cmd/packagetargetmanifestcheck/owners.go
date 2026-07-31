@@ -155,7 +155,6 @@ func splitServicesOwnerPath(packagePath string) (owner, rest string, ok bool) {
 func mapProvidersExtraction(packagePath string) (PackageMapping, bool) {
 	switch {
 	case packagePath == "pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty",
-		packagePath == "pkg/services/workers/cliprovider",
 		packagePath == "pkg/services/providers/internal/services/execution/internal/provider",
 		strings.HasPrefix(packagePath, "pkg/services/providers/internal/services/execution/internal/provider/"),
 		packagePath == "pkg/services/providers/internal/services/execution/internal/provider_test",
@@ -188,6 +187,9 @@ func mapKnownNestedOwnerPackage(owner, packagePath, rest string) (PackageMapping
 	}
 	if owner == "work" && rest == "internal" {
 		return moveOrRetainMapping(packagePath, owner, DispositionRetain), true
+	}
+	if owner == "workers" && rest == "internal/service" {
+		return moveOrRetainMapping(packagePath, owner+"/internal", DispositionMove), true
 	}
 	if owner == "factory_definitions" && strings.HasPrefix(rest, "internal/lifecycle") {
 		return moveOrRetainMapping(packagePath, owner+"/internal", DispositionRetain), true
