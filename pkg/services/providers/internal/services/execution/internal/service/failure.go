@@ -42,9 +42,8 @@ func normalizeAttemptFailure(
 			return
 		}
 		if failure, ok := executeFailureAs(normalized); ok {
-			session := lifecycle.SessionRef.Clone()
-			failure.SessionRef = &session
-			normalized = failure
+			failure.SessionRef = lifecycle.SessionRef
+			normalized = normalizeDeclaredFailure(failure, request)
 		}
 	}()
 	signals := []error{ctx.Err()}
@@ -103,8 +102,11 @@ func normalizeAttemptFailure(
 func normalizeDeclaredFailure(
 	failure providers.ExecuteFailure,
 	request providers.ExecuteRequest,
-) providers.ExecuteFailure {
+) error {
 	failure = failure.Clone()
+	if err := validateSessionRef(failure.SessionRef, request.Provider); err != nil {
+		return err
+	}
 	if !knownFailureKind(failure.Kind) {
 		failure.Kind = providers.ExecuteFailureKindUnknown
 	}

@@ -208,6 +208,27 @@ func TestClaudeRootFailureSuppressesPreviouslyObservedSuccess(t *testing.T) {
 	)
 }
 
+func TestClaudeRootCarriesObservedSessionOnParseFailure(t *testing.T) {
+	t.Parallel()
+
+	effect := claude.EffectFunc(func(
+		_ context.Context,
+		_ providers.ExecuteRequest,
+		observe func([]byte) error,
+	) (claude.EffectResult, error) {
+		return claude.EffectResult{}, observe([]byte(
+			`{"type":"system","subtype":"init","session_id":"claude-session-partial"}` + "\n",
+		))
+	})
+	_, err := newClaudeRoot(t, effect).Execute(t.Context(), claudeFailureRequest())
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) ||
+		failure.SessionRef == nil ||
+		failure.SessionRef.ID != "claude-session-partial" {
+		t.Fatalf("Execute() error = %#v, want observed session on parse failure", err)
+	}
+}
+
 func claudeFailureRequest() providers.ExecuteRequest {
 	return providers.ExecuteRequest{
 		Provider:     providers.IDClaude,

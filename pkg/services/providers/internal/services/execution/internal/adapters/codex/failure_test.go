@@ -224,6 +224,27 @@ func TestCodexRootFailureSuppressesPreviouslyObservedSuccess(t *testing.T) {
 	)
 }
 
+func TestCodexRootCarriesObservedSessionOnParseFailure(t *testing.T) {
+	t.Parallel()
+
+	effect := codex.EffectFunc(func(
+		_ context.Context,
+		_ providers.ExecuteRequest,
+		observe func([]byte) error,
+	) (codex.EffectResult, error) {
+		return codex.EffectResult{}, observe([]byte(
+			`{"type":"thread.started","thread_id":"codex-session-partial"}` + "\n",
+		))
+	})
+	_, err := newCodexRoot(t, effect).Execute(t.Context(), codexFailureRequest())
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) ||
+		failure.SessionRef == nil ||
+		failure.SessionRef.ID != "codex-session-partial" {
+		t.Fatalf("Execute() error = %#v, want observed session on parse failure", err)
+	}
+}
+
 func codexFailureRequest() providers.ExecuteRequest {
 	return providers.ExecuteRequest{
 		Provider:     providers.IDCodex,

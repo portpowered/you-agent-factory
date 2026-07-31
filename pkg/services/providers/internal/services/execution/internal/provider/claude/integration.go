@@ -182,6 +182,9 @@ func unsupportedImageContentError(tokens []any) error {
 func failureFromExecuteError(err error, session *inference.ProviderSession) inference.Failure {
 	var failure providers.ExecuteFailure
 	if errors.As(err, &failure) {
+		if session == nil {
+			session = sessionRefFromResult(failure.SessionRef)
+		}
 		return inference.NewFailure(inference.FailureInput{
 			Kind:            executeFailureKind(failure.Kind),
 			Message:         failure.Message,

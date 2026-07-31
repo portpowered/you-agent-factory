@@ -166,7 +166,7 @@ func attachFailureSession(
 			return failure
 		}
 	}
-	if sessionRef == nil || failure.Declared == nil {
+	if sessionRef == nil || failure.Declared == nil || failure.Declared.SessionRef != nil {
 		return failure
 	}
 	declared := failure.Declared.Clone()

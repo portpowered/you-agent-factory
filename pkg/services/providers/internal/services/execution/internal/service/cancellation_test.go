@@ -130,6 +130,46 @@ func TestExecuteNormalizesCancellationDuringCatalogLookup(t *testing.T) {
 	}
 }
 
+func TestExecutePreservesFailureSessionWhenContextEndsDuringAttempt(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	nativeSession := &providers.SessionRef{
+		Provider: providers.IDCodex,
+		Kind:     providers.SessionIDKind,
+		ID:       "canceled-failure-session",
+	}
+	executionService := mustExecutionService(t, func(
+		context.Context,
+		providers.ExecuteRequest,
+	) (providers.ExecuteResult, error) {
+		cancel()
+		return providers.ExecuteResult{}, execution.AttemptFailure{
+			SessionRef:  nativeSession,
+			NativeError: errors.New("attempt ended after session creation"),
+		}
+	})
+	defer cancel()
+
+	_, executeErr := executionService.Execute(ctx, providers.ExecuteRequest{
+		Provider:  providers.IDCodex,
+		AttemptID: "attempt-1",
+	})
+	if !errors.Is(executeErr, providers.ErrExecuteCancelled) {
+		t.Fatalf("Execute() error = %v, want cancellation", executeErr)
+	}
+	var failure providers.ExecuteFailure
+	if !errors.As(executeErr, &failure) ||
+		failure.SessionRef == nil ||
+		failure.SessionRef.ID != nativeSession.ID {
+		t.Fatalf("Execute() error = %#v, want cancellation with failure session", executeErr)
+	}
+	failure.SessionRef.ID = "caller-mutated"
+	if nativeSession.ID != "canceled-failure-session" {
+		t.Fatalf("adapter session = %#v, want unchanged", nativeSession)
+	}
+}
+
 func TestExecuteRejectsPreTerminatedContextBeforeAdapterIO(t *testing.T) {
 	t.Parallel()
 

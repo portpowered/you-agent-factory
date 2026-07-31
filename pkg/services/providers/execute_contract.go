@@ -36,6 +36,8 @@ const (
 
 // ExecuteFailure retains normalized one-attempt failure facts peers can branch
 // on with errors.Is / errors.As without importing Workers provider internals.
+// SessionRef carries an optional detached provider session established before
+// the attempt failed.
 type ExecuteFailure struct {
 	Kind        ExecuteFailureKind
 	Message     string
