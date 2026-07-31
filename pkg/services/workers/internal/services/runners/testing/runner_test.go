@@ -43,6 +43,30 @@ func TestMockWorkerCommandRunner_DefaultAcceptIncludesConfiguredStopToken(t *tes
 	}
 }
 
+func TestMockWorkerCommandRunner_DefaultAcceptUsesDecisionEnvelopeForStructuredWorkstation(t *testing.T) {
+	runner := &MockWorkerCommandRunner{
+		Config: NewEmptyMockWorkersConfig(),
+		RuntimeConfig: staticRuntimeConfig{
+			Workstations: map[string]*workerconfig.FactoryWorkstationConfig{
+				"review": {Name: "review", OutcomeFormat: workerconfig.WorkstationOutcomeFormatDecisionEnvelope},
+			},
+		},
+		Next: failCommandRunner{t: t},
+	}
+
+	result, err := runner.Run(context.Background(), workers.CommandRequest{
+		Command:         "codex",
+		WorkstationName: "review",
+	})
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if got := string(result.Stdout); !strings.Contains(got, `\"decision\":\"ACCEPTED\"`) ||
+		!strings.Contains(got, `\"output\":\"mock worker accepted\"`) {
+		t.Fatalf("Stdout = %q, want provider-shaped accepted decision envelope", got)
+	}
+}
+
 func TestMockWorkerCommandRunner_RejectConfigPreservesObservableOutput(t *testing.T) {
 	exitCode := 7
 	runner := &MockWorkerCommandRunner{

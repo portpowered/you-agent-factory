@@ -68,8 +68,8 @@ func TestPackagedGoalContinueRepeatsThenCompletes(t *testing.T) {
 	dir := scaffoldPackagedGoalBuiltInFactory(t)
 	goalText := "invoke packaged goal after continue"
 	runner := support.NewShapedProviderCommandRunner(
-		platformprocess.CommandResult{Stdout: []byte("ordinary partial progress; completion would use <COMPLETE>\n<CONTINUE>")},
-		platformprocess.CommandResult{Stdout: []byte(packagedGoalContinueThenCompleteSummary + "\n<COMPLETE>")},
+		platformprocess.CommandResult{Stdout: []byte(goalDecisionEnvelope("needs_changes", "continue with verification", "ordinary partial progress"))},
+		platformprocess.CommandResult{Stdout: []byte(goalDecisionEnvelope("accepted", "", packagedGoalContinueThenCompleteSummary))},
 	)
 
 	_, response := invokePackagedGoalWithProviderRunner(t, dir, runner, goalText)
@@ -89,8 +89,9 @@ func TestPackagedGoalContinueRepeatsThenCompletes(t *testing.T) {
 	}
 	requests := runner.Requests()
 	secondPrompt := string(requests[1].Stdin) + " " + strings.Join(requests[1].Args, " ")
-	if !strings.Contains(secondPrompt, goalText) || !strings.Contains(secondPrompt, "ordinary partial progress") {
-		t.Fatalf("second attempt prompt does not preserve goal and prior output: %s", secondPrompt)
+	if !strings.Contains(secondPrompt, "state file's unchanged `objective` as authoritative") ||
+		!strings.Contains(secondPrompt, "ordinary partial progress") {
+		t.Fatalf("second attempt prompt does not preserve the durable objective contract and prior output: %s", secondPrompt)
 	}
 }
 
@@ -101,7 +102,11 @@ func TestPackagedGoalContinueExhaustsAtVisitBound(t *testing.T) {
 	dir := scaffoldPackagedGoalBuiltInFactory(t)
 	results := make([]platformprocess.CommandResult, 12)
 	for index := range results {
-		results[index] = platformprocess.CommandResult{Stdout: []byte(fmt.Sprintf("partial progress %d\n<CONTINUE>", index+1))}
+		results[index] = platformprocess.CommandResult{Stdout: []byte(goalDecisionEnvelope(
+			"needs_changes",
+			"continue toward the visit bound",
+			fmt.Sprintf("partial progress %d", index+1),
+		))}
 	}
 	runner := support.NewShapedProviderCommandRunner(results...)
 
@@ -112,21 +117,43 @@ func TestPackagedGoalContinueExhaustsAtVisitBound(t *testing.T) {
 	}
 }
 
-// TestPackagedGoalRejectRepeatsThenCompletes proves a packaged @you/goal reject
-// decision feeds back through the public session invocation API, triggers another
-// executor dispatch on the built-in repeater workstation, and then completes with
-// the post-reject primary result.
-func TestPackagedGoalRejectRepeatsThenCompletes(t *testing.T) {
+// TestPackagedGoalNeedsChangesRepeatsThenCompletes proves the packaged goal
+// classifier's needs_changes decision feeds back into the same executor.
+func TestPackagedGoalNeedsChangesRepeatsThenCompletes(t *testing.T) {
 	dir := scaffoldPackagedGoalBuiltInFactory(t)
 	runner := support.NewShapedProviderCommandRunner(
-		platformprocess.CommandResult{Stdout: []byte("goal is not complete yet")},
-		platformprocess.CommandResult{Stdout: []byte(packagedGoalRejectThenCompleteSummary + "\n<COMPLETE>")},
+		platformprocess.CommandResult{Stdout: []byte(goalDecisionEnvelope("needs_changes", "finish the remaining work", "goal is not complete yet"))},
+		platformprocess.CommandResult{Stdout: []byte(goalDecisionEnvelope("accepted", "", packagedGoalRejectThenCompleteSummary))},
 	)
 
 	_, response := invokePackagedGoalWithProviderRunner(t, dir, runner, "invoke packaged goal after reject")
 	assertPackagedGoalCompletedWithSummary(t, response, packagedGoalRejectThenCompleteSummary)
 	if got := runner.CallCount(); got < 2 {
 		t.Fatalf("provider invocation count = %d, want at least 2 after reject-then-complete", got)
+	}
+}
+
+// TestPackagedGoalBlockedDecisionStopsInInspectableBlockedState proves blocked
+// is a classifier result while user/session termination remains a separate
+// lifecycle control.
+func TestPackagedGoalBlockedDecisionStopsInInspectableBlockedState(t *testing.T) {
+	dir := scaffoldPackagedGoalBuiltInFactory(t)
+	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: []byte(goalDecisionEnvelope("blocked", "requires operator credentials", "progress saved before blocker")),
+	})
+
+	_, response := invokePackagedGoalWithProviderRunner(t, dir, runner, "invoke blocked packaged goal")
+	if response.Status != factoryapi.InvocationTerminalStatusFailed {
+		t.Fatalf("invocation status = %q, want FAILED blocked response", response.Status)
+	}
+	if response.ErrorCode == nil || *response.ErrorCode != factoryapi.InvocationResponseErrorCode("INVOCATION_BLOCKED") {
+		t.Fatalf("invocation errorCode = %#v, want INVOCATION_BLOCKED", response.ErrorCode)
+	}
+	if response.WorkState == nil || *response.WorkState != "goal:blocked" {
+		t.Fatalf("invocation workState = %#v, want goal:blocked", response.WorkState)
+	}
+	if got := runner.CallCount(); got != 1 {
+		t.Fatalf("provider invocation count = %d, want 1 for blocked stop", got)
 	}
 }
 
