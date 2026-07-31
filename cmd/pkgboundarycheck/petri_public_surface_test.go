@@ -463,6 +463,9 @@ func writePetriPublicSurfaceTestBaseline(t *testing.T, repoRoot string, entries 
 	if err != nil {
 		t.Fatalf("marshal Petri public surface baseline: %v", err)
 	}
+	if err := os.MkdirAll(filepath.Dir(filepath.Join(repoRoot, petriPublicSurfaceBaselinePath)), 0o755); err != nil {
+		t.Fatalf("create Petri public surface baseline directory: %v", err)
+	}
 	if err := os.WriteFile(filepath.Join(repoRoot, petriPublicSurfaceBaselinePath), append(payload, '\n'), 0o644); err != nil {
 		t.Fatalf("write Petri public surface baseline: %v", err)
 	}

@@ -364,9 +364,12 @@ func writeTestServiceImportBaseline(
       "stage": "` + testServiceImportBaselineStage + `",
       "deletionGate": "` + testServiceImportDeletionGate + `"
     }
-  ]
+	  ]
 }
 `
+	if err := os.MkdirAll(filepath.Dir(filepath.Join(repoRoot, testServiceImportBaselinePath)), 0o755); err != nil {
+		t.Fatalf("create test service baseline directory: %v", err)
+	}
 	if err := os.WriteFile(filepath.Join(repoRoot, testServiceImportBaselinePath), []byte(content), 0o600); err != nil {
 		t.Fatalf("write test service baseline: %v", err)
 	}
@@ -424,5 +427,3 @@ func TestPeerServiceImportBaselineRejectsWildcardAndUnrecognizedMigrationContrac
 		t.Fatalf("validate migration contract error = %v, want exact stage rejection", err)
 	}
 }
-
-
