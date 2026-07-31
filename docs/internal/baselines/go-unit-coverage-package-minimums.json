@@ -557,10 +557,6 @@
       "minimum": 62.16
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/service",
-      "minimum": 53.84
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli",
       "minimum": 64.38
     },
@@ -2474,5 +2470,3 @@
     }
   ]
 }
-
-
