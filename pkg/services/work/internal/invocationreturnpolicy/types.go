@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	ErrInvalidInvocationInput    = errors.New("invalid invocation input")
+	ErrInvalidInvocationInput  = errors.New("invalid invocation input")
 	ErrUnsupportedReturnPolicy = errors.New("unsupported invocation return policy")
 )
 

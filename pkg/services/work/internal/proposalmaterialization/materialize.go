@@ -9,8 +9,8 @@ import (
 	"maps"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/services/work/internal/requestadmission"
 	"github.com/portpowered/infinite-you/pkg/services/work/internal/lineagegraph"
+	"github.com/portpowered/infinite-you/pkg/services/work/internal/requestadmission"
 )
 
 var (

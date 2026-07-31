@@ -54,10 +54,10 @@ func (s *Service) ListWork(
 		item = detachReadModel(item)
 		byID[item.CursorID] = item
 		items = append(items, stateaccessquery.Item{
-			ID:           item.CursorID,
-			Name:         item.Name,
-			WorkTypeName: item.WorkTypeName,
-			State: stateToQueryState(item.State),
+			ID:                     item.CursorID,
+			Name:                   item.Name,
+			WorkTypeName:           item.WorkTypeName,
+			State:                  stateToQueryState(item.State),
 			TraceID:                item.TraceID,
 			CurrentChainingTraceID: item.CurrentChainingTraceID,
 		})

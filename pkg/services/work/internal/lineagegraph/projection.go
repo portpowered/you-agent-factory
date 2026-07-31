@@ -35,7 +35,7 @@ type WorkPayloadSnapshot struct {
 	ParentSnapshotIDs    []string                `json:"parent_snapshot_ids,omitempty"`
 	ParentWorkIDs        []string                `json:"parent_work_ids,omitempty"`
 	ParentLogicalWorkIDs []string                `json:"parent_logical_work_ids,omitempty"`
-	WorkItem             WorkItem         `json:"work_item"`
+	WorkItem             WorkItem                `json:"work_item"`
 }
 
 type WorkPayloadSnapshotKind string
