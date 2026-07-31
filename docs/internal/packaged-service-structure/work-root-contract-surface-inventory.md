@@ -46,7 +46,7 @@ service_root_contract_test.go
 wire_behavioral_proof_test.go
 ```
 
-**Totals:** 26 root-level `.go` files — 26 thin committed root contract
+**Totals:** 25 root-level `.go` files — 25 thin committed root contract
 files, 0 excess fold clusters.
 
 ## Private implementation destinations
