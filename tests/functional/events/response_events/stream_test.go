@@ -28,14 +28,14 @@ const (
 	functionalResponseEventCompletedRetentionWindow = time.Millisecond
 	functionalResponseEventMissingSessionID         = "session-missing-response-events"
 
-	sessionExpiryChildSessionID      = "claude-js-session-expiry"
+	sessionExpiryChildSessionID      = "codex-js-session-expiry"
 	sessionExpiryChildWorkflowFile   = "session-expiry-child-progress.workflow.js"
 	sessionExpiryChildWorkflowSource = `return (async function () {
   const child = await agent.run({
     prompt: "summarize session expiry",
     label: "session-expiry-child",
-    modelProvider: "claude",
-    model: "claude-test-model",
+    modelProvider: "codex",
+    model: "gpt-5-codex",
   });
   return { label: "session-expiry", child: child };
 })();`
@@ -72,7 +72,7 @@ func TestAPIResponseEventStreamClosesAtDocumentedBoundary(t *testing.T) {
 
 	started := startSessionExpiryWorkflow(t, server.URL(), dir)
 	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
-		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
+		t.Fatalf("session status = %q, want SUCCEEDED; provider calls=%d result=%+v", started.Status, runner.CallCount(), started.Result)
 	}
 	sessionID := started.SessionId
 	if sessionID == "" {
@@ -153,7 +153,7 @@ func TestAPIResponseEventSessionExpiryReturnsTypedGone(t *testing.T) {
 
 	started := startSessionExpiryWorkflow(t, server.URL(), dir)
 	if started.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
-		t.Fatalf("session status = %q, want SUCCEEDED", started.Status)
+		t.Fatalf("session status = %q, want SUCCEEDED; provider calls=%d result=%+v", started.Status, runner.CallCount(), started.Result)
 	}
 	sessionID := started.SessionId
 	if sessionID == "" {
@@ -784,25 +784,17 @@ func startSessionExpiryWorkflow(
 }
 
 func sessionExpiryChildProgressStream(sessionID, result string) []byte {
-	records := []string{
-		`{"type":"system","subtype":"init","session_id":"` + sessionID + `"}`,
-		`{"type":"assistant","timestamp_ms":1,"message":{"role":"assistant","content":[{"type":"text","text":"working"}]},"session_id":"` + sessionID + `"}`,
-		`{"type":"tool_call","subtype":"started","call_id":"call-1","tool_call":{"readToolCall":{"args":{"path":"README.md"}}},"session_id":"` + sessionID + `"}`,
-		`{"type":"tool_call","subtype":"completed","call_id":"call-1","tool_call":{"readToolCall":{"result":{"success":{}}}},"session_id":"` + sessionID + `"}`,
-		string(sessionExpiryChildTerminalRecord(sessionID, result)),
-	}
-	return []byte(strings.Join(records, "\n"))
-}
-
-func sessionExpiryChildTerminalRecord(sessionID, result string) []byte {
-	encoded, err := json.Marshal(result)
+	encodedResult, err := json.Marshal(result)
 	if err != nil {
 		panic(err)
 	}
-	return []byte(
-		`{"type":"result","subtype":"success","is_error":false,"result":` +
-			string(encoded) + `,"session_id":` + strconv.Quote(sessionID) + `}`,
-	)
+	records := []string{
+		`{"type":"thread.started","thread_id":` + strconv.Quote(sessionID) + `}`,
+		`{"type":"turn.started"}`,
+		`{"type":"item.completed","item":{"id":"message-1","type":"agent_message","text":` + string(encodedResult) + `}}`,
+		`{"type":"turn.completed","usage":{"input_tokens":4,"output_tokens":3}}`,
+	}
+	return []byte(strings.Join(records, "\n"))
 }
 
 func assertResponseEventStreamExpiredError(

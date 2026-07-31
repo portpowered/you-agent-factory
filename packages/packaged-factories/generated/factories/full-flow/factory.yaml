@@ -319,7 +319,7 @@ workers:
         - factory/scripts/setup-task-worktree.py
         - '{{ (index .Inputs 0).Name }}'
         - ${baseBranch}
-      command: python
+      command: python3
       name: task-worktree-setup
       type: SCRIPT_WORKER
     - body: |
@@ -398,7 +398,7 @@ workers:
     - args:
         - factory/scripts/decide-cycle.py
         - '{{ (index .Inputs 0).Payload }}'
-      command: python
+      command: python3
       name: cycle-decider
       type: SCRIPT_WORKER
 workstations:

@@ -310,7 +310,7 @@
         "{{ (index .Inputs 0).Name }}",
         "${baseBranch}"
       ],
-      "command": "python",
+      "command": "python3",
       "name": "task-worktree-setup",
       "type": "SCRIPT_WORKER"
     },
@@ -352,7 +352,7 @@
         "factory/scripts/decide-cycle.py",
         "{{ (index .Inputs 0).Payload }}"
       ],
-      "command": "python",
+      "command": "python3",
       "name": "cycle-decider",
       "type": "SCRIPT_WORKER"
     }

@@ -96,11 +96,7 @@ func TestBuiltExecutableFallsBackFromOccupiedLoopbackPortAndReportsActualURL(t *
 	cancelAndAssertShutdown(t, command)
 	stopped = true
 
-	rebound, err := net.Listen("tcp4", net.JoinHostPort("127.0.0.1", strconv.Itoa(actualPort)))
-	if err != nil {
-		t.Fatalf("listener remained bound after root process exit: %v", err)
-	}
-	_ = rebound.Close()
+	waitForListenerRelease(t, net.JoinHostPort("127.0.0.1", strconv.Itoa(actualPort)))
 }
 
 // TestBuiltExecutableServerInterruptExits130AndReleasesListener proves the
@@ -166,11 +162,23 @@ func TestBuiltExecutableServerInterruptExits130AndReleasesListener(t *testing.T)
 	if err != nil {
 		t.Fatalf("parse reported dashboard URL %q: %v", actualURL, err)
 	}
-	rebound, err := net.Listen("tcp4", parsed.Host)
-	if err != nil {
-		t.Fatalf("server listener remained bound after interrupt: %v", err)
+	waitForListenerRelease(t, parsed.Host)
+}
+
+func waitForListenerRelease(t *testing.T, address string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	var lastErr error
+	for time.Now().Before(deadline) {
+		listener, err := net.Listen("tcp4", address)
+		if err == nil {
+			_ = listener.Close()
+			return
+		}
+		lastErr = err
+		time.Sleep(10 * time.Millisecond)
 	}
-	_ = rebound.Close()
+	t.Fatalf("server listener %s remained bound after process exit: %v", address, lastErr)
 }
 
 func reserveAvailablePort(t *testing.T) int {

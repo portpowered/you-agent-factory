@@ -22,6 +22,7 @@ type Attempt func(context.Context, providers.ExecuteRequest) (providers.ExecuteR
 // never exposes these native errors to peers.
 type AttemptFailure struct {
 	Declared        *providers.ExecuteFailure
+	SessionRef      *providers.SessionRef
 	NativeError     error
 	DecodeError     error
 	FlushError      error

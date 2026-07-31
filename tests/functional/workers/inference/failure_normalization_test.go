@@ -47,10 +47,7 @@ func TestProviderNonZeroExitMapsToPublicFailure(t *testing.T) {
 		Stdout: []byte(
 			`{"type":"thread.started","thread_id":"` + providerExitNormalizationSessionID + `"}` + "\n",
 		),
-		Stderr: []byte(
-			"session_id: " + providerExitNormalizationSessionID + "\n" +
-				"provider process crashed unexpectedly",
-		),
+		Stderr: []byte("provider process crashed unexpectedly"),
 	})
 
 	session, listed, events := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
