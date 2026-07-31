@@ -1,13 +1,6 @@
 package work
 
-import (
-	"context"
-	"errors"
-	"fmt"
-	"strings"
-
-	"github.com/portpowered/infinite-you/pkg/services/work/internal/proposalmaterialization"
-)
+import "errors"
 
 // Proposal materialization typed failures peers can distinguish on the root
 // Service worker-output materialization slice (MaterializeWorkerOutput).
@@ -68,105 +61,6 @@ type MaterializeWorkerOutputResult struct {
 	Feedback         string
 	Classification   string
 	MaterializedWork []FactoryWorkItem
-}
-
-// MaterializeWorkerOutput validates proposed Worker output and assigns
-// Work-owned canonical identity and lineage. Peers may call this package
-// function directly or through Service.MaterializeWorkerOutput.
-func MaterializeWorkerOutput(
-	ctx context.Context,
-	request MaterializeWorkerOutputRequest,
-) (MaterializeWorkerOutputResult, error) {
-	if ctx != nil {
-		if err := ctx.Err(); err != nil {
-			return MaterializeWorkerOutputResult{}, err
-		}
-	}
-	result, err := proposalmaterialization.Materialize(ctx, toInternalMaterializeRequest(request))
-	if err != nil {
-		return MaterializeWorkerOutputResult{}, mapProposalMaterializationError(err)
-	}
-	return fromInternalMaterializeResult(result), nil
-}
-
-func toInternalMaterializeRequest(
-	request MaterializeWorkerOutputRequest,
-) proposalmaterialization.Request {
-	proposed := make([]proposalmaterialization.ProposedWorkItem, len(request.ProposedWork))
-	for i, item := range request.ProposedWork {
-		proposed[i] = proposalmaterialization.ProposedWorkItem{
-			WorkTypeID: item.WorkTypeID,
-			Name:       item.Name,
-			State:      item.State,
-			Content:    workContentPartsToAdmission(item.Content),
-			Tags:       cloneStringMap(item.Tags),
-			Relations:  relationsToAdmission(item.Relations),
-		}
-	}
-	return proposalmaterialization.Request{
-		Lineage: proposalmaterialization.LineageContext{
-			DispatchID:               request.Lineage.DispatchID,
-			RequestID:                request.Lineage.RequestID,
-			SourceWorkIDs:            append([]string(nil), request.Lineage.SourceWorkIDs...),
-			CurrentChainingTraceID:   request.Lineage.CurrentChainingTraceID,
-			PreviousChainingTraceIDs: append([]string(nil), request.Lineage.PreviousChainingTraceIDs...),
-			ChainingTraceDepth:       request.Lineage.ChainingTraceDepth,
-			ParentWorkID:             request.Lineage.ParentWorkID,
-			TraceID:                  request.Lineage.TraceID,
-		},
-		Primary:           workContentPartsToAdmission(request.Primary),
-		Feedback:          request.Feedback,
-		Classification:    request.Classification,
-		ProposedWork:      proposed,
-		ValidWorkTypes:    request.ValidWorkTypes,
-		ValidStatesByType: request.ValidStatesByType,
-		DefaultWorkTypeID: request.DefaultWorkTypeID,
-		IDGenerator:       proposalmaterialization.IDGenerator(request.IDGenerator),
-	}
-}
-
-func fromInternalMaterializeResult(
-	result proposalmaterialization.Result,
-) MaterializeWorkerOutputResult {
-	items := make([]FactoryWorkItem, len(result.MaterializedWork))
-	for i, item := range result.MaterializedWork {
-		items[i] = FactoryWorkItem{
-			ID:                       item.ID,
-			WorkTypeID:               item.WorkTypeID,
-			State:                    item.State,
-			DisplayName:              item.DisplayName,
-			ChainingTraceDepth:       item.ChainingTraceDepth,
-			CurrentChainingTraceID:   item.CurrentChainingTraceID,
-			PreviousChainingTraceIDs: append([]string(nil), item.PreviousChainingTraceIDs...),
-			TraceID:                  item.TraceID,
-			Content:                  workContentPartsFromAdmission(item.Content),
-			ParentID:                 item.ParentID,
-			Tags:                     cloneStringMap(item.Tags),
-		}
-	}
-	return MaterializeWorkerOutputResult{
-		PrimaryOutput:    result.PrimaryOutput,
-		Feedback:         result.Feedback,
-		Classification:   result.Classification,
-		MaterializedWork: items,
-	}
-}
-
-func mapProposalMaterializationError(err error) error {
-	if err == nil {
-		return nil
-	}
-	switch {
-	case errors.Is(err, proposalmaterialization.ErrUnknownWorkType):
-		return fmt.Errorf("%w: %w", ErrUnknownProposedWorkType, err)
-	case errors.Is(err, proposalmaterialization.ErrInvalidProposal):
-		return fmt.Errorf("%w: %w", ErrInvalidProposedWork, err)
-	default:
-		if strings.TrimSpace(err.Error()) == "" {
-			return fmt.Errorf("%w", ErrInvalidProposedWork)
-		}
-		return fmt.Errorf("%w: %w", ErrInvalidProposedWork, err)
-	}
 }
 
 // Clone returns a detached ProposedWorkItem copy.

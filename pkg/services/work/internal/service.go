@@ -1,5 +1,5 @@
-// Package service implements the Work composed root contract.
-package service
+// Package internal implements the Work composed root contract.
+package internal
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factorysessions 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	stateaccess "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access"
 	stateaccesswire "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/wire"
@@ -188,7 +188,7 @@ func (s *applicationService) MaterializeWorkerOutput(
 	ctx context.Context,
 	request work.MaterializeWorkerOutputRequest,
 ) (work.MaterializeWorkerOutputResult, error) {
-	return work.MaterializeWorkerOutput(ctx, request)
+	return materializeWorkerOutput(ctx, request)
 }
 
 func (s *applicationService) PrepareInvocationInput(

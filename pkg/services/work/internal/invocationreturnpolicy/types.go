@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/lineagegraph"
+	"github.com/portpowered/infinite-you/pkg/services/work/internal/lineagegraph"
 )
 
 var (
-	ErrInvalidInvocationInput    = errors.New("invalid invocation input")
+	ErrInvalidInvocationInput  = errors.New("invalid invocation input")
 	ErrUnsupportedReturnPolicy = errors.New("unsupported invocation return policy")
 )
 

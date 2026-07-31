@@ -1,4 +1,4 @@
-package service_test
+package internal_test
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	internalservice "github.com/portpowered/infinite-you/pkg/services/work/internal/service"
+	internalservice "github.com/portpowered/infinite-you/pkg/services/work/internal"
 )
 
 type internalAdmissionRuntime struct {

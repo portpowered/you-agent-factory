@@ -8,7 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	stateaccess "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access"
-	"github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/stateaccessquery"
+	"github.com/portpowered/infinite-you/pkg/services/work/internal/stateaccessquery"
 )
 
 func (s *Service) ListWork(
@@ -54,10 +54,10 @@ func (s *Service) ListWork(
 		item = detachReadModel(item)
 		byID[item.CursorID] = item
 		items = append(items, stateaccessquery.Item{
-			ID:           item.CursorID,
-			Name:         item.Name,
-			WorkTypeName: item.WorkTypeName,
-			State: stateToQueryState(item.State),
+			ID:                     item.CursorID,
+			Name:                   item.Name,
+			WorkTypeName:           item.WorkTypeName,
+			State:                  stateToQueryState(item.State),
 			TraceID:                item.TraceID,
 			CurrentChainingTraceID: item.CurrentChainingTraceID,
 		})

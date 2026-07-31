@@ -15,9 +15,9 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	internalservice "github.com/portpowered/infinite-you/pkg/services/work/internal/service"
-	contentstagingwire "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_staging/wire"
+	internalservice "github.com/portpowered/infinite-you/pkg/services/work/internal"
 	contentmaterializationwire "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_materialization/wire"
+	contentstagingwire "github.com/portpowered/infinite-you/pkg/services/work/internal/services/content_staging/wire"
 )
 
 // DefaultContentMaterializationHTTPTimeout is the Work-owned outbound retrieval

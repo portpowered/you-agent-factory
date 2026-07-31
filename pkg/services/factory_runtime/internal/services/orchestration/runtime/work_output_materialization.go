@@ -15,6 +15,7 @@ import (
 // dispatch to FAILED without carrying RecordedOutputWork into mutations.
 func materializeWorkerOutputForDispatch(
 	ctx context.Context,
+	workService work.Service,
 	net *state.Net,
 	idGenerator work.RequestIDGenerator,
 	request workerexecution.WorkstationDispatchRequest,
@@ -22,6 +23,7 @@ func materializeWorkerOutputForDispatch(
 ) workerexecution.WorkResult {
 	return applyMaterializedWorkerOutput(
 		ctx,
+		workService,
 		net,
 		idGenerator,
 		request.Execution.Dispatch,
@@ -34,6 +36,7 @@ func materializeWorkerOutputForDispatch(
 // used when Runtime already holds a correlated workers.ExecuteResult.
 func materializeExecuteResultForDispatch(
 	ctx context.Context,
+	workService work.Service,
 	net *state.Net,
 	idGenerator work.RequestIDGenerator,
 	dispatch work.WorkDispatch,
@@ -42,6 +45,7 @@ func materializeExecuteResultForDispatch(
 ) workerexecution.WorkResult {
 	return applyMaterializedWorkerOutput(
 		ctx,
+		workService,
 		net,
 		idGenerator,
 		dispatch,
@@ -52,6 +56,7 @@ func materializeExecuteResultForDispatch(
 
 func applyMaterializedWorkerOutput(
 	ctx context.Context,
+	workService work.Service,
 	net *state.Net,
 	idGenerator work.RequestIDGenerator,
 	dispatch work.WorkDispatch,
@@ -62,7 +67,19 @@ func applyMaterializedWorkerOutput(
 		return result
 	}
 
-	materialized, err := work.MaterializeWorkerOutput(ctx, work.MaterializeWorkerOutputRequest{
+	if workService == nil {
+		failed := result
+		failed.Outcome = workerexecution.OutcomeFailed
+		failed.RecordedOutputWork = nil
+		if strings.TrimSpace(failed.Error) == "" {
+			failed.Error = "worker output materialization: Work service is required"
+		} else {
+			failed.Error = fmt.Sprintf("%s; worker output materialization: Work service is required", failed.Error)
+		}
+		return failed
+	}
+
+	materialized, err := workService.MaterializeWorkerOutput(ctx, work.MaterializeWorkerOutputRequest{
 		Lineage:           lineageContextFromDispatch(dispatch),
 		Primary:           proposals.Primary,
 		Feedback:          proposals.Feedback,

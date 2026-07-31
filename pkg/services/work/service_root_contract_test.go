@@ -166,10 +166,10 @@ func (f *rootServiceFake) MaterializeContentURL(
 }
 
 func (f *rootServiceFake) MaterializeWorkerOutput(
-	ctx context.Context,
-	request work.MaterializeWorkerOutputRequest,
+	context.Context,
+	work.MaterializeWorkerOutputRequest,
 ) (work.MaterializeWorkerOutputResult, error) {
-	return work.MaterializeWorkerOutput(ctx, request)
+	return work.MaterializeWorkerOutputResult{}, nil
 }
 
 func (f *rootServiceFake) PrepareInvocationInput(

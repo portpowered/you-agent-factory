@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
@@ -24,6 +25,7 @@ type dispatchPlanningResultHook struct {
 	net               *state.Net
 	resultBuffer      *buffers.TypedBuffer[workerexecution.WorkResult]
 	completionPlanner factory.CompletionDeliveryPlanner
+	workService       work.Service
 	workRequestIDs    work.RequestIDGenerator
 	factorySessionID  string
 	waitCh            chan struct{}
@@ -54,12 +56,13 @@ func newCanonicalDispatchPlanningResultHook(
 	net *state.Net,
 	resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult],
 	completionPlanner factory.CompletionDeliveryPlanner,
+	workService work.Service,
 	workRequestIDs work.RequestIDGenerator,
 	factorySessionID string,
 ) *dispatchPlanningResultHook {
 	return &dispatchPlanningResultHook{
 		planner: planner, net: net, resultBuffer: resultBuffer,
-		completionPlanner: completionPlanner, workRequestIDs: workRequestIDs,
+		completionPlanner: completionPlanner, workService: workService, workRequestIDs: workRequestIDs,
 		factorySessionID: factorySessionID,
 		waitCh:           make(chan struct{}, 1),
 	}
@@ -171,6 +174,7 @@ func (h *dispatchPlanningResultHook) acceptWorkersResult(
 	if !usedPlanned {
 		workResult = materializeWorkerOutputForDispatch(
 			ctx,
+			h.workService,
 			h.net,
 			h.workRequestIDs,
 			request,

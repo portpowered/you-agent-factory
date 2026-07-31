@@ -336,3 +336,13 @@ func provideWorkFactory(
 		return workwire.NewRuntimeService(runtimes, readFile, contentStaging, contentMaterializer)
 	}
 }
+
+// provideWorkMaterializationService supplies Runtime's canonical Worker-output
+// materialization seam without introducing a Runtime→Work implementation
+// import. Session-scoped admission/state access receives its own resolver-bound
+// Work root; this root is intentionally policy-only.
+func provideWorkMaterializationService(
+	contentMaterializer work.ContentMaterializer,
+) work.Service {
+	return workwire.NewRuntimeService(nil, nil, nil, contentMaterializer)
+}

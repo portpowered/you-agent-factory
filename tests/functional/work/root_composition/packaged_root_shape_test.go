@@ -11,7 +11,7 @@ import (
 
 const workServiceRootRelative = "pkg/services/work"
 
-var workPackagedRootDirectories = []string{"internal", "testdata", "transports", "wire"}
+var workPackagedRootDirectories = []string{"internal", "transports", "wire"}
 
 var workInternalSubservices = []string{
 	"content_materialization",
@@ -20,8 +20,8 @@ var workInternalSubservices = []string{
 }
 
 // TestWorkPackagedRootShapeMatchesCanonicalServiceLayout proves Work ships the
-// canonical packaged-service root: wire/, internal/, transports/, residual
-// testdata/, and thin root contract files after DEL-WORK transitional deletion.
+// canonical packaged-service root: wire/, internal/, transports/, and thin root
+// contract files after DEL-WORK transitional deletion.
 func TestWorkPackagedRootShapeMatchesCanonicalServiceLayout(t *testing.T) {
 	t.Parallel()
 

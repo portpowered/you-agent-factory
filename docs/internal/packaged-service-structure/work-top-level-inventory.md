@@ -24,7 +24,6 @@ live public siblings as debt until CLN/DEL cutover packets remove them.
 | Directory | Classification | Disposition | Destination |
 | --- | --- | --- | --- |
 | `internal` | Canonical | retain | `work` (private implementation tree; subservices `content_staging`, `content_materialization`, and `state_access` already exist) |
-| `testdata` | Work transitional debt | move | `work/internal` (test-only fixtures; not a canonical retain-at-root exception) |
 | `transports` | Canonical | retain | `work` |
 | `wire` | Canonical | retain | `work` |
 
@@ -32,7 +31,7 @@ live public siblings as debt until CLN/DEL cutover packets remove them.
 public paths were removed in DEL-WORK story 002; they no longer appear on disk or
 in the committed owner top-level inventory.
 
-**Totals:** 4 immediate child directories — 3 canonical, 1 Work transitional debt.
+**Totals:** 3 immediate child directories — all canonical.
 
 ## Generator mirror
 
@@ -40,10 +39,10 @@ The committed generator tables in `internal/ownershipinventory/owner_top_level.g
 and `cmd/packagetargetmanifestcheck/owner_top_level.go` mirror this inventory:
 
 - **Expected retain:** `internal`, `transports`, `wire`
-- **Unexpected move siblings:** `testdata`
+- **Unexpected move siblings:** none
 
-Move destinations align with `workMoveRules` / `nestedOwnerMoveRules` for `work`:
-`testdata` → `work/internal`. Mapping rules are confirmed in
+Move destinations align with `workMoveRules` / `nestedOwnerMoveRules` for `work`.
+Any future unexpected sibling must map to a private Work successor. Mapping rules are confirmed in
 `internal/ownershipinventory/work_mapping.go`, `cmd/packagetargetmanifestcheck/owners.go`
 (`nestedOwnerMoveRules["work"]`), and locked by
 `TestWorkTopLevelUnexpectedMoveDestinationsMatchInventory` /

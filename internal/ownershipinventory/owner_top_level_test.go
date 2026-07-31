@@ -91,9 +91,6 @@ func TestOwnerTopLevelInventoryCoversPacketGaps(t *testing.T) {
 		"workers": {
 			"envdiagnostics", "executor", "service",
 		},
-		"work": {
-			"testdata",
-		},
 		"factory_definitions": {
 			"definition",
 		},

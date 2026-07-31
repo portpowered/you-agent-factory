@@ -7,6 +7,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -16,6 +17,7 @@ func TestMaterializeWorkerOutputForDispatchAssignsWorkOwnedIDs(t *testing.T) {
 	ids := 0
 	result := materializeWorkerOutputForDispatch(
 		context.Background(),
+		testMaterializationService(),
 		&state.Net{
 			WorkTypes: map[string]*state.WorkType{
 				"review": {
@@ -84,6 +86,7 @@ func TestMaterializeWorkerOutputForDispatchRejectsUnknownTypeAsFailed(t *testing
 
 	result := materializeWorkerOutputForDispatch(
 		context.Background(),
+		testMaterializationService(),
 		&state.Net{WorkTypes: map[string]*state.WorkType{"task": {ID: "task"}}},
 		func() string { return "1" },
 		workerexecution.WorkstationDispatchRequest{
@@ -97,8 +100,8 @@ func TestMaterializeWorkerOutputForDispatchRejectsUnknownTypeAsFailed(t *testing
 		workerexecution.WorkResult{
 			Outcome: workerexecution.OutcomeAccepted,
 			RecordedOutputWork: []work.FactoryWorkItem{{
-				ID:         "agent-id",
-				WorkTypeID: "missing",
+				ID:          "agent-id",
+				WorkTypeID:  "missing",
 				DisplayName: "bad",
 			}},
 		},
@@ -125,6 +128,7 @@ func TestMaterializeWorkerOutputForDispatchNoopWithoutProposals(t *testing.T) {
 		context.Background(),
 		nil,
 		nil,
+		nil,
 		workerexecution.WorkstationDispatchRequest{},
 		original,
 	)
@@ -146,6 +150,7 @@ func TestMaterializeExecuteResultPreservesCustomerOutcomes(t *testing.T) {
 			t.Parallel()
 			result := materializeExecuteResultForDispatch(
 				context.Background(),
+				testMaterializationService(),
 				&state.Net{WorkTypes: map[string]*state.WorkType{"task": {ID: "task"}}},
 				func() string { return "id" },
 				work.WorkDispatch{
@@ -175,4 +180,8 @@ func TestMaterializeExecuteResultPreservesCustomerOutcomes(t *testing.T) {
 			}
 		})
 	}
+}
+
+func testMaterializationService() work.Service {
+	return workwire.NewRuntimeService(nil, nil, nil, nil)
 }
