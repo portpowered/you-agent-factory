@@ -11,6 +11,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -27,6 +28,7 @@ func TestPackagedPlanExecutePlansThenExecutesWithOperatorDefaults(t *testing.T) 
 	workspace := t.TempDir()
 	home := t.TempDir()
 	support.InstallPackagedFactory(t, home, factorydefinitions.PackagedPlanExecuteFactoryName)
+	assertPlanExecutePlannerBoundary(t)
 	runner := &planExecuteRunner{workspace: workspace}
 
 	args := []string{
@@ -67,7 +69,7 @@ type planExecuteRunner struct {
 }
 
 func (runner *planExecuteRunner) Run(_ context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
-	prompt := string(request.Stdin)
+	prompt := planExecuteCommandPrompt(request)
 	runner.mu.Lock()
 	runner.requests = append(runner.requests, request)
 	runner.mu.Unlock()
@@ -118,6 +120,37 @@ func (runner *planExecuteRunner) Run(_ context.Context, request platformprocess.
 	default:
 		return platformprocess.CommandResult{}, fmt.Errorf("unexpected plan-execute prompt: %s", prompt)
 	}
+}
+
+func assertPlanExecutePlannerBoundary(t *testing.T) {
+	t.Helper()
+	path := filepath.Join(
+		testutil.MustRepoRoot(t),
+		"packages", "packaged-factories", "factories", "plan-execute", "prompts", "planner.md",
+	)
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read authored planner prompt: %v", err)
+	}
+	prompt := string(payload)
+	for _, required := range []string{
+		"ends after verified implementation in the current",
+		"do not make them a story acceptance criterion",
+	} {
+		if !strings.Contains(prompt, required) {
+			t.Fatalf("planner prompt missing local delivery boundary %q", required)
+		}
+	}
+}
+
+func planExecuteCommandPrompt(request platformprocess.CommandRequest) string {
+	if len(request.Stdin) > 0 {
+		return string(request.Stdin)
+	}
+	if len(request.Args) > 0 {
+		return request.Args[len(request.Args)-1]
+	}
+	return ""
 }
 
 func (runner *planExecuteRunner) record(role string) {

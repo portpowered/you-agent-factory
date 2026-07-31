@@ -305,7 +305,7 @@ examples.
 | `@you/fusion` | Graph | Produce a draft with one worker and refine it with another. |
 | `@you/goal` | Graph | Repeat bounded work on a goal until the executor reports completion. |
 | `@you/loop` | Graph | Execute a request repeatedly at an invocation-supplied duration interval. |
-| `@you/plan-execute` | Graph | Write Markdown and JSON PRDs, then implement, review, test, and merge their stories. |
+| `@you/plan-execute` | Graph | Write matching Markdown and JSON PRDs, then execute and verify their stories in the current workspace. |
 | `@you/plan-parallel` | Graph | Plan a Work dependency graph, execute ready tasks concurrently, and merge results. |
 | `@you/quorum` | Graph | Run independent assessments concurrently and merge them. |
 | `@you/review` | Graph | Repeat writing and independent review until approval or exhaustion. |

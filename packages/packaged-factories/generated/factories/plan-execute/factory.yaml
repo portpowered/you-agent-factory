@@ -84,6 +84,13 @@ workers:
         specific enough that a different executor with zero conversational context can
         implement it without asking what you meant.
 
+        This packaged workflow ends after verified implementation in the current
+        workspace. It does not open or review a pull request, wait for remote CI, merge
+        branches, or publish changes. When repository planning standards describe
+        those later delivery steps, record them as an honest downstream handoff or
+        limitation; do not make them a story acceptance criterion or a condition for
+        this local executor to return `<COMPLETE>`.
+
         Original request:
         ${request}
 
@@ -177,6 +184,13 @@ workstations:
         examining the code and documenting bounded assumptions. The plan must be
         specific enough that a different executor with zero conversational context can
         implement it without asking what you meant.
+
+        This packaged workflow ends after verified implementation in the current
+        workspace. It does not open or review a pull request, wait for remote CI, merge
+        branches, or publish changes. When repository planning standards describe
+        those later delivery steps, record them as an honest downstream handoff or
+        limitation; do not make them a story acceptance criterion or a condition for
+        this local executor to return `<COMPLETE>`.
 
         Original request:
         ${request}
