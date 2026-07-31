@@ -8,8 +8,8 @@ import { ProviderSessionWidget } from "../../provider-session-detail/components/
 import { getProviderSessionWidgetMessages } from "../../provider-session-detail/messages/provider-session-widget";
 import { SubmitWorkCard } from "../../submit-work/components/submit-work-card";
 import { getSubmitWorkMessages } from "../../submit-work/messages/submit-work";
-import { getTerminalWorkMessages } from "../../terminal-work/messages/terminal-work";
 import { TerminalWorkWidget } from "../../terminal-work/components/terminal-work-widget";
+import { getTerminalWorkMessages } from "../../terminal-work/messages/terminal-work";
 import { TraceDrilldownWidget } from "../../trace-drilldown/components/trace-drilldown-widget";
 import { getTraceDrilldownMessages } from "../../trace-drilldown/messages/trace-drilldown";
 import { WorkChartCard } from "../../work-outcome/components/d3-information-card";
@@ -64,6 +64,9 @@ function expectSharedBentoCardHeaderSeam(
     });
     expect(headerTools).toBeTruthy();
     expect(headerTools?.contains(headerAction)).toBe(true);
+    expect(headerTools?.className).toContain("ml-auto");
+    expect(headerTools?.className).not.toContain("w-full");
+    expect(headerTools?.className).not.toContain("flex-wrap");
     expect(titleHeading.compareDocumentPosition(headerAction)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );

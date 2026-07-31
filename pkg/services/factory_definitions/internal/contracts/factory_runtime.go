@@ -229,6 +229,7 @@ const (
 // FiringDecision represents a scheduler's decision to fire a transition.
 type FiringDecision struct {
 	TransitionID  string              `json:"transition_id"`
+	InputTokens   []string            `json:"input_tokens,omitempty"`
 	ConsumeTokens []string            `json:"consume_tokens"`
 	WorkerType    string              `json:"worker_type"`
 	InputBindings map[string][]string `json:"input_bindings,omitempty"`

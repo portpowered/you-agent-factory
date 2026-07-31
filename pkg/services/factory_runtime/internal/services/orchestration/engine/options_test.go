@@ -7,17 +7,14 @@ import (
 	"testing"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/subsystems"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token_transformer"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 var testWorkRequestIdentity atomic.Uint64
@@ -59,22 +56,6 @@ func newTestFactoryEngine(
 // Option configures a FactoryEngine.
 type Option func(*FactoryEngine)
 
-// WithLogger sets the logger for the engine. Default: no-op logger.
-func WithLogger(l logging.Logger) Option {
-	return func(e *FactoryEngine) {
-		e.logger = logging.EnsureLogger(l)
-	}
-}
-
-// WithClock sets the engine time source used for submit and dispatch stamps.
-func WithClock(clock factory.Clock) Option {
-	return func(e *FactoryEngine) {
-		if clock != nil {
-			e.clock = clock
-		}
-	}
-}
-
 // WithDispatchHandler registers a callback invoked for each WorkDispatch produced
 // during a tick. The runtime uses this to forward dispatches to the WorkerPool.
 func WithDispatchHandler(fn func(work.WorkDispatch)) Option {
@@ -88,25 +69,6 @@ func WithDispatchHandler(fn func(work.WorkDispatch)) Option {
 func WithDispatchResultHook(hook factory.DispatchResultHook) Option {
 	return func(e *FactoryEngine) {
 		e.dispatchHook = hook
-	}
-}
-
-// WithTokenTransformer injects the token conversion component used for submit-time token creation.
-func WithTokenTransformer(transformer *token_transformer.Transformer) Option {
-	return func(e *FactoryEngine) {
-		if transformer != nil {
-			e.transformer = transformer
-		}
-	}
-}
-
-// WithResultBuffer sets the runtime-owned work result buffer used to collect
-// worker completions before transition processing.
-func WithResultBuffer(buffer *buffers.TypedBuffer[workerexecution.WorkResult]) Option {
-	return func(e *FactoryEngine) {
-		if buffer != nil {
-			e.runtimeState.ResultBuffer = buffer
-		}
 	}
 }
 
@@ -160,35 +122,11 @@ func WithCompletionRecorder(fn func(interfaces.FactoryCompletionRecord)) Option 
 	}
 }
 
-// WithWorkstationResponseRecorder registers a callback invoked after a worker
-// result has been routed and a completed dispatch summary is available.
-func WithWorkstationResponseRecorder(fn func(int, workerexecution.WorkResult, interfaces.CompletedDispatch)) Option {
-	return func(e *FactoryEngine) {
-		e.recordResponse = fn
-	}
-}
-
-// WithPetriMutationRecorder registers the persistence boundary invoked after
-// transition routing and before the resulting marking mutations are applied.
-func WithPetriMutationRecorder(fn func([]interfaces.TokenMutationRecord) error) Option {
-	return func(e *FactoryEngine) {
-		e.recordPetriMutations = fn
-	}
-}
-
 // WithAutomaticTicksPaused registers a predicate that suppresses automatic
 // subsystem ticks (dispatch, transition, cascade, scheduling) while returning
 // true. Operator control ingress such as MoveWork is unaffected.
 func WithAutomaticTicksPaused(paused func() bool) Option {
 	return func(e *FactoryEngine) {
 		e.automaticTicksPaused = paused
-	}
-}
-
-// WithResultBufferDrainObserver registers a callback invoked after buffered
-// worker results are drained into runtime state during a tick.
-func WithResultBufferDrainObserver(observer func(drainedCount int)) Option {
-	return func(e *FactoryEngine) {
-		e.onResultBufferDrained = observer
 	}
 }

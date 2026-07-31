@@ -1,52 +1,27 @@
-import { Background, Controls, ReactFlow } from "@xyflow/react";
-import { safeParseFactoryVisualizationLayout } from "@you-agent-factory/client";
-import type {
-  FactoryActivityProjection,
-  FactoryLoadProjection,
-  FactoryTopologyNode,
-  FactoryTopologyProjection,
-} from "@you-agent-factory/factory-replay";
-import { useEffect, useMemo, useState } from "react";
-import { projectFactoryTopologyActiveWork } from "./factory-topology-active-work";
 import {
-  type FactoryTopologyChromeConfiguration,
-  resolveFactoryTopologyChrome,
-} from "./factory-topology-chrome";
-import {
-  type FactoryTopologyFlowProjection,
-  projectFactoryTopologyFlow,
-} from "./factory-topology-flow-projection";
-import { nodeTypes } from "./factory-topology-replay-nodes";
+  FactoryGraphReplaySurface,
+  type FactoryGraphSource,
+} from "@you-agent-factory/factory-graph";
+import type { FactoryTopologyNode } from "@you-agent-factory/factory-replay";
+
 import {
   FactoryTopologyErrorBoundary,
   FactoryTopologyStateRegion,
-  useDistinctTopologyErrorReport,
 } from "./factory-topology-state";
-import {
-  normalizeFactoryVisualizerError,
-  toFactoryVisualizerError,
-} from "./visualizer-error";
-
-export type { FactoryTopologyFlowProjection } from "./factory-topology-flow-projection";
-export { projectFactoryTopologyFlow } from "./factory-topology-flow-projection";
-
 import type { FactoryTopologyReplayError } from "./visualizer-error";
 
-export interface FactoryTopologyReplayProjection {
-  activity: FactoryActivityProjection;
-  load: FactoryLoadProjection;
-  topology: FactoryTopologyProjection;
-}
-
+/**
+ * Controlled state for the canonical Factory graph. A ready graph always has
+ * the complete Factory definition and the selected-tick runtime projection.
+ */
 export type FactoryTopologyReplayState =
   | { status: "empty" }
   | { status: "failed" }
   | { status: "loading" }
-  | { projection: FactoryTopologyReplayProjection; status: "ready" };
+  | { source: FactoryGraphSource; status: "ready" };
 
 export interface FactoryTopologyReplayMessages {
   activeDispatches: (count: number) => string;
-  /** Optional fields retain compatibility for existing controlled consumers. */
   activeWorkDuration?: (durationTicks: number) => string;
   activeWorkOverflow?: (count: number) => string;
   activeWorkRegionLabel?: string;
@@ -57,7 +32,6 @@ export interface FactoryTopologyReplayMessages {
   inactiveDispatches: string;
   imageFailed: string;
   imageLoading: string;
-  /** Optional labels retain compatibility for existing controlled consumers. */
   legendActiveRoute?: string;
   legendInactiveRoute?: string;
   legendLabel?: string;
@@ -74,10 +48,6 @@ export interface FactoryTopologyReplayMessages {
 }
 
 export interface FactoryTopologyReplayProps {
-  /** Presentation-only optional chrome; it never changes the prepared projection. */
-  chrome?: FactoryTopologyChromeConfiguration;
-  /** Presentation-only input validated against the prepared canonical topology. */
-  layout?: unknown;
   messages: FactoryTopologyReplayMessages;
   onError?: (error: FactoryTopologyReplayError) => void;
   onRetry?: () => void;
@@ -86,18 +56,11 @@ export interface FactoryTopologyReplayProps {
   state: FactoryTopologyReplayState;
 }
 
-interface PreparedFlowSuccess {
-  flow: FactoryTopologyFlowProjection;
-  status: "ready";
-}
-
-interface PreparedFlowFailure {
-  error: FactoryTopologyReplayError;
-  status: "failed";
-}
-
-type PreparedFlow = PreparedFlowFailure | PreparedFlowSuccess;
-
+/**
+ * Public read-only Factory graph. Rendering is delegated to the same semantic
+ * renderer registry used by the embedded Factory graph; there is no
+ * topology-only renderer or visual fallback.
+ */
 export function FactoryTopologyReplay(props: FactoryTopologyReplayProps) {
   return (
     <FactoryTopologyErrorBoundary
@@ -113,10 +76,7 @@ export function FactoryTopologyReplay(props: FactoryTopologyReplayProps) {
 }
 
 function FactoryTopologyReplayContent({
-  chrome,
   messages,
-  onError,
-  layout,
   onRetry,
   onSelectNode,
   selectedNodeId,
@@ -126,100 +86,8 @@ function FactoryTopologyReplayContent({
     return (
       <FactoryTopologyStateRegion
         messages={messages}
+        onRetry={onRetry}
         state={state.status}
-        onRetry={onRetry}
-      />
-    );
-  }
-  return (
-    <PreparedTopology
-      chrome={chrome}
-      messages={messages}
-      onError={onError}
-      onRetry={onRetry}
-      onSelectNode={onSelectNode}
-      layout={layout}
-      projection={state.projection}
-      selectedNodeId={selectedNodeId}
-    />
-  );
-}
-
-function PreparedTopology({
-  chrome,
-  messages,
-  onError,
-  layout,
-  onRetry,
-  onSelectNode,
-  projection,
-  selectedNodeId,
-}: Omit<FactoryTopologyReplayProps, "state"> & {
-  projection: FactoryTopologyReplayProjection;
-}) {
-  const prefersReducedMotion = usePrefersReducedMotion();
-  const resolvedChrome = resolveFactoryTopologyChrome(chrome);
-  const prepared = useMemo<PreparedFlow>(() => {
-    try {
-      const parsedLayout =
-        layout === undefined
-          ? undefined
-          : safeParseFactoryVisualizationLayout(layout, {
-              canonicalNodeIds: new Set(
-                projection.topology.nodes.map((node) => node.id),
-              ),
-            });
-      if (parsedLayout && !parsedLayout.success) {
-        return {
-          error: {
-            issues: parsedLayout.issues.map(({ category, code, path }) => ({
-              category,
-              code,
-              path,
-            })),
-            kind: "layout-validation",
-            message: "The topology layout could not be prepared.",
-            recoverable: true,
-          },
-          status: "failed",
-        };
-      }
-      const flow = projectFactoryTopologyFlow(
-        projection,
-        messages,
-        selectedNodeId,
-        onSelectNode,
-        prefersReducedMotion,
-        parsedLayout?.data,
-      );
-      return flow.validEndpoints
-        ? { flow, status: "ready" }
-        : { error: toFactoryVisualizerError("endpoint"), status: "failed" };
-    } catch (error) {
-      return {
-        error: normalizeFactoryVisualizerError(error, "projection"),
-        status: "failed",
-      };
-    }
-  }, [
-    messages,
-    onSelectNode,
-    prefersReducedMotion,
-    projection,
-    layout,
-    selectedNodeId,
-  ]);
-  useDistinctTopologyErrorReport(
-    prepared.status === "failed" ? prepared.error : undefined,
-    onError,
-  );
-
-  if (prepared.status === "failed") {
-    return (
-      <FactoryTopologyStateRegion
-        messages={messages}
-        state="failed"
-        onRetry={onRetry}
       />
     );
   }
@@ -228,195 +96,21 @@ function PreparedTopology({
     <section
       aria-label={messages.regionLabel}
       className="factory-topology-replay"
-      data-endpoints-valid="true"
-      data-reduced-motion={prefersReducedMotion ? "true" : "false"}
     >
-      <FactoryTopologyErrorBoundary
-        errorKind="react-flow"
-        messages={messages}
-        onError={onError}
-        onRetry={onRetry}
-        resetKeys={[projection, messages, selectedNodeId, onSelectNode, layout]}
-        withinRegion
-      >
-        <ReactFlowCanvas
-          activity={projection.activity}
-          chrome={resolvedChrome}
-          flow={prepared.flow}
-          messages={messages}
-        />
-      </FactoryTopologyErrorBoundary>
+      <FactoryGraphReplaySurface
+        onSelectNode={
+          onSelectNode
+            ? (nodeId) => {
+                const node = state.source.runtime.topology.nodes.find(
+                  (entry) => entry.id === nodeId,
+                );
+                if (node) onSelectNode(node);
+              }
+            : undefined
+        }
+        selectedNodeId={selectedNodeId}
+        source={state.source}
+      />
     </section>
   );
-}
-
-function ReactFlowCanvas({
-  activity,
-  chrome,
-  flow,
-  messages,
-}: {
-  activity: FactoryTopologyReplayProjection["activity"];
-  chrome: ReturnType<typeof resolveFactoryTopologyChrome>;
-  flow: FactoryTopologyFlowProjection;
-  messages: FactoryTopologyReplayMessages;
-}) {
-  const chromeMessages = resolveTopologyChromeMessages(messages);
-  const [annotationsVisible, setAnnotationsVisible] = useState(true);
-  const visibleNodes = annotationsVisible
-    ? flow.nodes
-    : flow.nodes.filter((node) => node.type !== "factoryTopologyAnnotation");
-  const hasAnnotations = flow.nodes.some(
-    (node) => node.type === "factoryTopologyAnnotation",
-  );
-
-  return (
-    <>
-      <ActiveWorkSummary activity={activity} messages={messages} />
-      {chrome.legend ? <TopologyLegend messages={chromeMessages} /> : null}
-      {chrome.visibilityControls && hasAnnotations ? (
-        <button
-          aria-pressed={annotationsVisible}
-          className="factory-topology-replay__annotation-toggle"
-          onClick={() => setAnnotationsVisible((visible) => !visible)}
-          type="button"
-        >
-          {annotationsVisible
-            ? messages.annotationsVisible
-            : messages.annotationsHidden}
-        </button>
-      ) : null}
-      <ReactFlow
-        edges={flow.edges}
-        edgesFocusable={false}
-        elementsSelectable={false}
-        fitView
-        fitViewOptions={{ includeHiddenNodes: false }}
-        key={annotationsVisible ? "annotations-visible" : "annotations-hidden"}
-        nodes={visibleNodes}
-        nodesConnectable={false}
-        nodesDraggable={false}
-        nodeTypes={nodeTypes}
-        // XYFlow disables pointer events on otherwise non-interactive node
-        // wrappers. The nested GraphNodeButton remains the selection owner.
-        onNodeClick={preserveNestedNodePointerEvents}
-        panOnDrag
-        proOptions={{ hideAttribution: true }}
-      >
-        {chrome.background ? <Background /> : null}
-        {chrome.viewportControls ? (
-          <Controls
-            aria-label={chromeMessages.viewportControlsLabel}
-            showInteractive={false}
-          />
-        ) : null}
-      </ReactFlow>
-    </>
-  );
-}
-
-function ActiveWorkSummary({
-  activity,
-  messages,
-}: {
-  activity: FactoryTopologyReplayProjection["activity"];
-  messages: FactoryTopologyReplayMessages;
-}) {
-  const activeWork = projectFactoryTopologyActiveWork(activity);
-  if (activeWork.rows.length === 0) return null;
-
-  return (
-    <fieldset className="factory-topology-replay__active-work">
-      <legend>{messages.activeWorkRegionLabel ?? "Active Work"}</legend>
-      <ul>
-        {activeWork.rows.map((work) => (
-          <li key={work.id}>
-            <span>{work.id}</span>
-            <span>
-              {messages.activeWorkDuration?.(work.durationTicks) ??
-                `Active for ${work.durationTicks} ticks`}
-            </span>
-          </li>
-        ))}
-      </ul>
-      {activeWork.overflowCount > 0 ? (
-        <p>
-          {messages.activeWorkOverflow?.(activeWork.overflowCount) ??
-            `${activeWork.overflowCount} more active Work`}
-        </p>
-      ) : null}
-    </fieldset>
-  );
-}
-
-function TopologyLegend({ messages }: { messages: TopologyChromeMessages }) {
-  return (
-    <fieldset className="factory-topology-replay__legend">
-      <legend>{messages.legendLabel}</legend>
-      <ul>
-        <li>
-          <span
-            aria-hidden="true"
-            className="factory-topology-replay__legend-swatch factory-topology-replay__legend-swatch--active"
-          />
-          {messages.legendActiveRoute}
-        </li>
-        <li>
-          <span
-            aria-hidden="true"
-            className="factory-topology-replay__legend-swatch"
-          />
-          {messages.legendInactiveRoute}
-        </li>
-      </ul>
-    </fieldset>
-  );
-}
-
-interface TopologyChromeMessages {
-  legendActiveRoute: string;
-  legendInactiveRoute: string;
-  legendLabel: string;
-  viewportControlsLabel: string;
-}
-
-function resolveTopologyChromeMessages(
-  messages: FactoryTopologyReplayMessages,
-): TopologyChromeMessages {
-  return {
-    legendActiveRoute: messages.legendActiveRoute ?? "Active route",
-    legendInactiveRoute: messages.legendInactiveRoute ?? "Inactive route",
-    legendLabel: messages.legendLabel ?? "Topology legend",
-    viewportControlsLabel:
-      messages.viewportControlsLabel ?? "Topology viewport controls",
-  };
-}
-
-function preserveNestedNodePointerEvents(): void {}
-
-const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
-
-function usePrefersReducedMotion(): boolean {
-  const [prefersReducedMotion, setPrefersReducedMotion] = useState(
-    () => reducedMotionMediaQuery()?.matches ?? false,
-  );
-
-  useEffect(() => {
-    const mediaQuery = reducedMotionMediaQuery();
-    if (!mediaQuery) return;
-
-    const updatePreference = () => setPrefersReducedMotion(mediaQuery.matches);
-    updatePreference();
-    mediaQuery.addEventListener("change", updatePreference);
-    return () => mediaQuery.removeEventListener("change", updatePreference);
-  }, []);
-
-  return prefersReducedMotion;
-}
-
-function reducedMotionMediaQuery(): MediaQueryList | undefined {
-  return typeof window === "undefined" ||
-    typeof window.matchMedia !== "function"
-    ? undefined
-    : window.matchMedia(REDUCED_MOTION_QUERY);
 }

@@ -214,3 +214,34 @@ func TestWorkInQueueScheduler_FiltersCompletedAndInvalidCandidates(t *testing.T)
 		t.Fatalf("expected completed and invalid candidates filtered out, got %v", firingDecisionIDs(decisions))
 	}
 }
+
+func TestWorkInQueueScheduler_IncludesObservedBindingsWithoutConsumingThem(t *testing.T) {
+	sched := NewWorkInQueueScheduler(1, nil)
+	parent := factorytoken.Token{ID: "parent", PlaceID: "parent:waiting", Color: factorytoken.Color{WorkID: "work-parent", WorkTypeID: "parent"}}
+	childA := factorytoken.Token{ID: "child-a", PlaceID: "child:complete", Color: factorytoken.Color{WorkID: "work-a", WorkTypeID: "child"}}
+	childB := factorytoken.Token{ID: "child-b", PlaceID: "child:complete", Color: factorytoken.Color{WorkID: "work-b", WorkTypeID: "child"}}
+	enabled := []interfaces.EnabledTransition{{
+		TransitionID: "merge",
+		WorkerType:   "merger",
+		Bindings: map[string][]factorytoken.Token{
+			"parent":   {parent},
+			"children": {childA, childB},
+		},
+		ArcModes: map[string]interfaces.ArcMode{"children": interfaces.ArcModeObserve},
+	}}
+
+	decisions := sched.Select(enabled, &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Topology: &state.Net{}})
+	if len(decisions) != 1 {
+		t.Fatalf("decisions = %d, want 1", len(decisions))
+	}
+	decision := decisions[0]
+	if strings.Join(decision.InputTokens, ",") != "child-a,child-b,parent" {
+		t.Fatalf("input tokens = %v, want observed children and consumed parent", decision.InputTokens)
+	}
+	if strings.Join(decision.ConsumeTokens, ",") != "parent" {
+		t.Fatalf("consume tokens = %v, want only parent", decision.ConsumeTokens)
+	}
+	if strings.Join(decision.InputBindings["children"], ",") != "child-a,child-b" {
+		t.Fatalf("child input bindings = %v, want both observed children", decision.InputBindings["children"])
+	}
+}

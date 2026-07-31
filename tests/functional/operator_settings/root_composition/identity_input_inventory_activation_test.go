@@ -10,15 +10,15 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/root"
-	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const (
-	identityActivationGeneratedUUID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
-	identityActivationExistingScope = "local-11111111-1111-4111-8111-111111111111"
+	identityActivationGeneratedUUID   = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+	identityActivationExistingScope   = "local-11111111-1111-4111-8111-111111111111"
 	operatorConfigFixturesRelativeDir = "pkg/services/operator_settings/testdata/fixtures"
 )
 

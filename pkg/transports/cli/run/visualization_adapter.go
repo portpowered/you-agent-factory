@@ -40,7 +40,10 @@ func invocationFactoryEventRenderer(
 	}
 	return service.OpenFactoryEventRenderer(visualizationcli.FactoryEventRendererConfig{
 		Output:               cfg.Output,
+		ProgressOutput:       cfg.ProgressOutput,
 		JSON:                 cfg.JSONOutput,
+		Color:                cfg.OutputIsTTY && !cfg.JSONOutput,
+		ProgressIsTTY:        cfg.ProgressIsTTY && !cfg.JSONOutput,
 		InvocationOutputMode: cfg.InvocationOutputMode,
 	})
 }

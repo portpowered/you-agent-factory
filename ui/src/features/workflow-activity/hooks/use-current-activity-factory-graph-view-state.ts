@@ -18,17 +18,23 @@ export interface CurrentActivityFactoryGraphViewState {
 
 export function useCurrentActivityFactoryGraphViewState(
   source: CurrentActivityFactoryGraphSource,
+  snapshot: DashboardSnapshot,
 ): CurrentActivityFactoryGraphViewState {
   return useMemo(
     () => ({
       currentFactoryDefinition:
         currentActivityCardCurrentFactoryDefinition(source),
-      displayFactoryDefinition:
-        currentActivityCardDisplayFactoryDefinition(source),
+      displayFactoryDefinition: currentActivityCardDisplayFactoryDefinition(
+        source,
+        snapshot,
+      ),
       pendingFactoryDefinition:
         currentActivityCardPendingFactoryDefinition(source),
-      persistedFactoryDefinition: currentActivityCardFactoryDefinition(source),
+      persistedFactoryDefinition: currentActivityCardFactoryDefinition(
+        source,
+        snapshot,
+      ),
     }),
-    [source],
+    [snapshot, source],
   );
 }

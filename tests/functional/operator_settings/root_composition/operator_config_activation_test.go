@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/root"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
@@ -71,7 +71,7 @@ Process the input task.
 		"--server", "http://127.0.0.1:1",
 		"--quiet",
 		"--no-record",
-		"--default-worker-model", activationOverrideModel,
+		"--model", activationOverrideModel,
 	})
 	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	inputs.Input.WorkingDirectory = dir
@@ -176,12 +176,12 @@ func TestOperatorConfigDocumentUpdateActivatesThroughRootBuildProcessPublicCLISu
 }
 
 type operatorSettingsActivationRecorder struct {
-	readFile            atomic.Int32
-	mkdirAll            atomic.Int32
-	remove              atomic.Int32
-	chmod               atomic.Int32
-	rename              atomic.Int32
-	createTempCalls     atomic.Int32
+	readFile        atomic.Int32
+	mkdirAll        atomic.Int32
+	remove          atomic.Int32
+	chmod           atomic.Int32
+	rename          atomic.Int32
+	createTempCalls atomic.Int32
 }
 
 func newOperatorSettingsActivationRecorder() *operatorSettingsActivationRecorder {

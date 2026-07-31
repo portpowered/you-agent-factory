@@ -2,7 +2,6 @@ package quorum
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -117,11 +116,11 @@ func packagedQuorumCommandPrompt(request platformprocess.CommandRequest) string 
 func packagedQuorumRequestLane(request platformprocess.CommandRequest) string {
 	prompt := packagedQuorumCommandPrompt(request)
 	switch {
-	case strings.Contains(prompt, "Produce branch A's independent assessment"):
+	case strings.Contains(prompt, "Produce branch A's independent solution"):
 		return packagedQuorumBranchAWorkstation
-	case strings.Contains(prompt, "Produce branch B's independent assessment"):
+	case strings.Contains(prompt, "Produce branch B's independent solution"):
 		return packagedQuorumBranchBWorkstation
-	case strings.Contains(prompt, "Synthesize the two quorum assessments"):
+	case strings.Contains(prompt, "synthesize one complete customer-facing response"):
 		return packagedQuorumMergeWorkstation
 	default:
 		return "unknown"
@@ -211,11 +210,7 @@ func runPackagedQuorumCLIJSONInvocation(
 		t.Fatalf("stderr = %q, want empty successful-run stderr", inputs.Stderr())
 	}
 
-	var response factoryapi.InvocationResponse
-	if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stdout())), &response); decodeErr != nil {
-		t.Fatalf("decode invocation JSON stdout: %v\nstdout:\n%s", decodeErr, inputs.Stdout())
-	}
-	return response
+	return support.DecodeInvocationResponseJSON(t, inputs.Stdout())
 }
 
 func runPackagedQuorumCLIJSONFailureInvocation(
@@ -245,10 +240,7 @@ func runPackagedQuorumCLIJSONFailureInvocation(
 	})
 	execErr := process.Execute(inputs.Input)
 
-	var response factoryapi.InvocationResponse
-	if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stdout())), &response); decodeErr != nil {
-		t.Fatalf("decode invocation JSON stdout: %v\nstdout:\n%s", decodeErr, inputs.Stdout())
-	}
+	response := support.DecodeInvocationResponseJSON(t, inputs.Stdout())
 	return response, inputs.Stderr(), execErr
 }
 

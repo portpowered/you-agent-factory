@@ -582,6 +582,7 @@ func workerInternalFromAPI(worker factoryapi.Worker) interfaces.FactoryWorkerCon
 		Provider:         internalFactoryHostedWorkerProviderFromPublic(string(valueOrEmpty(worker.Provider))),
 		Model:            stringValue(worker.Model),
 		ModelProvider:    internalFactoryWorkerModelProviderFromPublic(worker.ModelProvider),
+		ReasoningEffort:  stringValue(worker.ReasoningEffort),
 		ModelLocality:    internalFactoryWorkerModelLocalityFromPublic(worker.ModelLocality),
 		ExecutorProvider: internalFactoryWorkerProviderFromPublic(worker.ExecutorProvider),
 		Operations:       modelOperationsInternalFromAPI(worker.Operations),
@@ -648,22 +649,7 @@ func WorkerConfigFromOpenAPI(worker factoryapi.Worker) (interfaces.FactoryWorker
 		return interfaces.FactoryWorkerConfig{}, err
 	}
 	cfg.Description = description
-	openCodeAgent, err := openCodeAgentInternalFromAPI(worker.OpenCodeAgent, fmt.Sprintf("factory.workers[%q]", worker.Name))
-	if err != nil {
-		return interfaces.FactoryWorkerConfig{}, err
-	}
-	cfg.OpenCodeAgent = openCodeAgent
 	return cfg, nil
-}
-
-func openCodeAgentInternalFromAPI(agent *string, fieldPath string) (string, error) {
-	if agent == nil {
-		return "", nil
-	}
-	if err := validateOpenCodeAgentField(fieldPath, *agent); err != nil {
-		return "", err
-	}
-	return *agent, nil
 }
 
 func hostedWorkerAuthInternalFromAPI(auth *factoryapi.HostedWorkerAuth) *interfaces.HostedWorkerAuthConfig {
@@ -753,10 +739,6 @@ func workstationInternalFromAPI(workstation factoryapi.Workstation, fieldPath st
 	if err != nil {
 		return interfaces.FactoryWorkstationConfig{}, err
 	}
-	openCodeAgent, err := openCodeAgentInternalFromAPI(workstation.OpenCodeAgent, fieldPath)
-	if err != nil {
-		return interfaces.FactoryWorkstationConfig{}, err
-	}
 	cfg := interfaces.FactoryWorkstationConfig{
 		ID:                    stringValue(workstation.Id),
 		Name:                  workstation.Name,
@@ -784,7 +766,6 @@ func workstationInternalFromAPI(workstation factoryapi.Workstation, fieldPath st
 		WorkingDirectory:      stringValue(workstation.WorkingDirectory),
 		Worktree:              stringValue(workstation.Worktree),
 		Env:                   stringMapValue(workstation.Env),
-		OpenCodeAgent:         openCodeAgent,
 	}
 	description, err := nameValueInternalFromAPI(workstation.Description, fieldPath+".description")
 	if err != nil {
@@ -806,8 +787,11 @@ func workstationLimitsInternalFromAPI(limits *factoryapi.WorkstationLimits) inte
 		return interfaces.WorkstationLimits{}
 	}
 	return interfaces.WorkstationLimits{
-		MaxRetries:       intValue(limits.MaxRetries),
-		MaxExecutionTime: stringValue(limits.MaxExecutionTime),
+		MaxRetries:                          intValue(limits.MaxRetries),
+		MaxExecutionTime:                    stringValue(limits.MaxExecutionTime),
+		MaxGeneratedWorkItems:               intValue(limits.MaxGeneratedWorkItems),
+		MaxGeneratedWorkItemsArgument:       stringValue(limits.MaxGeneratedWorkItemsArgument),
+		MaxGeneratedWorkItemsArgumentOffset: intValue(limits.MaxGeneratedWorkItemsArgumentOffset),
 	}
 }
 
@@ -853,7 +837,8 @@ func workstationCronInternalFromAPI(cron *factoryapi.WorkstationCron) *interface
 		return nil
 	}
 	return &interfaces.CronConfig{
-		Schedule:       cron.Schedule,
+		Schedule:       stringValue(cron.Schedule),
+		Every:          stringValue(cron.Every),
 		TriggerAtStart: boolValue(cron.TriggerAtStart),
 		Jitter:         stringValue(cron.Jitter),
 		ExpiryWindow:   stringValue(cron.ExpiryWindow),
@@ -972,10 +957,11 @@ func workstationGuardsInternalFromAPI(guards *[]factoryapi.WorkstationGuard) []i
 	values := make([]interfaces.GuardConfig, len(*guards))
 	for i, guard := range *guards {
 		values[i] = interfaces.GuardConfig{
-			Type:        internalFactoryGuardTypeFromPublicWorkstationGuard(guard.Type),
-			Workstation: stringValue(guard.Workstation),
-			MaxVisits:   intValue(guard.MaxVisits),
-			MatchConfig: guardMatchConfigInternalFromAPI(guard.MatchConfig),
+			Type:              internalFactoryGuardTypeFromPublicWorkstationGuard(guard.Type),
+			Workstation:       stringValue(guard.Workstation),
+			MaxVisits:         intValue(guard.MaxVisits),
+			MaxVisitsArgument: stringValue(guard.MaxVisitsArgument),
+			MatchConfig:       guardMatchConfigInternalFromAPI(guard.MatchConfig),
 		}
 	}
 	return values

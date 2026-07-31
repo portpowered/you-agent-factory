@@ -23,15 +23,14 @@ describe("runner-metadata", () => {
 
   it("returns display names for built-in runner ids and null for unknown ids", () => {
     expect(getRunnerDisplayName("codex")).toBe("Codex");
-    expect(getRunnerDisplayName("cursor-cli")).toBe("Cursor CLI");
-    expect(getRunnerDisplayName("pi")).toBe("Pi");
-    expect(getRunnerDisplayName("claude")).toBeNull();
+    expect(getRunnerDisplayName("antigravity")).toBe("Antigravity");
+    expect(getRunnerDisplayName("claude")).toBe("Claude");
     expect(getRunnerDisplayName(null)).toBeNull();
     expect(getRunnerDisplayName(undefined)).toBeNull();
   });
 
   it("falls back safely for unknown runner ids", () => {
-    expect(getRunnerMetadata("claude")).toBeNull();
+    expect(getRunnerMetadata("pi")).toBeNull();
     expect(getRunnerMetadata(null)).toBeNull();
     expect(getRunnerMetadata(undefined)).toBeNull();
   });

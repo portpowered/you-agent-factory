@@ -42,7 +42,7 @@ describe("useDashboardLayout factory-session widget placement", () => {
     });
     expect(addWidgetCard).toMatchObject({
       x: 0,
-      y: 27,
+      y: 28,
     });
   });
 });

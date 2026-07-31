@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )

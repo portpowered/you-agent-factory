@@ -29,7 +29,12 @@ async function runPackageBin(packageName, binName, args) {
   );
 }
 
-for (const dependency of ["client", "factory-replay", "components"]) {
+for (const dependency of [
+  "client",
+  "factory-replay",
+  "components",
+  "factory-graph",
+]) {
   await execFileAsync(
     process.execPath,
     [

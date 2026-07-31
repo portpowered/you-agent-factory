@@ -38,13 +38,14 @@ func TestAdapter_ExecuteInvokesFakeRootAndEncodesSuccess(t *testing.T) {
 
 	response, err := adapter.Execute(context.Background(), ExecuteInput{
 		ProviderID: "codex",
-		Body:       strings.NewReader(`{"attemptId":"attempt-1","userMessage":"hello"}`),
+		Body:       strings.NewReader(`{"attemptId":"attempt-1","reasoningEffort":"xhigh","userMessage":"hello"}`),
 	})
 	if err != nil {
 		t.Fatalf("Execute error = %v", err)
 	}
 	if invoked.Provider != providers.IDCodex ||
 		invoked.AttemptID != "attempt-1" ||
+		invoked.ReasoningEffort != "xhigh" ||
 		invoked.UserMessage != "hello" {
 		t.Fatalf("invoked request = %#v, want decoded execute request", invoked)
 	}

@@ -52,7 +52,8 @@ func writeACPWorkerPolicy(t *testing.T, factoryDir string, skipPermissions bool)
 	}
 	path := filepath.Join(factoryDir, "workers", "worker", "AGENTS.md")
 	content := "---\n" +
-		"executorProvider: cursor-acp\n" +
+		"executorProvider: ACP\n" +
+		"modelProvider: cursor-acp\n" +
 		"model: test-model\n" +
 		"skipPermissions: " + value + "\n" +
 		"stopToken: COMPLETE\n" +

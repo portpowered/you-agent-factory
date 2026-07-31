@@ -44,6 +44,7 @@ func Validate(cfg *factorydefinitions.FactoryConfig) Result {
 	result.Targets = append(result.Targets, PollerRunWorkstationKindTargets(cfg)...)
 	result.Targets = append(result.Targets, WorkerWorkstationBehaviorCompatibilityTargets(cfg)...)
 	result.Targets = append(result.Targets, workerModelProviderTargets(cfg)...)
+	result.Targets = append(result.Targets, workerReasoningEffortTargets(cfg)...)
 	result.Targets = append(result.Targets, InvocationReturnTargets(cfg)...)
 	result.Targets = append(result.Targets, InvocationSignatureTargets(cfg)...)
 	result.Targets = append(result.Targets, WorkPropagationTargets(cfg)...)
@@ -53,6 +54,30 @@ func Validate(cfg *factorydefinitions.FactoryConfig) Result {
 	topology := factorydefinitions.BuildPendingFactoryGraphTopology(cfg)
 	result.Targets = append(result.Targets, ValidateLayout(cfg, topology).Targets...)
 	return result
+}
+
+func workerReasoningEffortTargets(cfg *factorydefinitions.FactoryConfig) []Target {
+	if cfg == nil {
+		return nil
+	}
+	var targets []Target
+	for workerIndex, worker := range cfg.Workers {
+		effort := strings.TrimSpace(worker.ReasoningEffort)
+		if effort == "" || invocationParameterInterpolation(cfg.InvocationSignature, effort) {
+			continue
+		}
+		if _, ok := factorydefinitions.CanonicalizeReasoningEffort(effort); ok {
+			continue
+		}
+		targets = append(targets, Target{
+			Code:     CodeWorkerUnsupportedReasoningEffort,
+			Severity: SeverityError,
+			Message:  fmt.Sprintf("worker reasoningEffort %q is unsupported; accepted values are minimal, low, medium, high, xhigh, and max", worker.ReasoningEffort),
+			Subject:  Subject{Type: SubjectTypeWorker, ID: worker.Name, Location: SubjectLocationDefinition},
+			Path:     fmt.Sprintf("%s.workers[%d](%s).reasoningEffort", validationRoot, workerIndex, worker.Name),
+		})
+	}
+	return targets
 }
 
 func workerModelProviderTargets(cfg *factorydefinitions.FactoryConfig) []Target {
@@ -67,6 +92,16 @@ func workerModelProviderTargets(cfg *factorydefinitions.FactoryConfig) []Target 
 			continue
 		}
 		provider := strings.TrimSpace(worker.ModelProvider)
+		if strings.EqualFold(strings.TrimSpace(worker.ExecutorProvider), "ACP") && provider == "" {
+			targets = append(targets, Target{
+				Code:     CodeWorkerACPModelProviderRequired,
+				Severity: SeverityError,
+				Message:  "worker executorProvider ACP requires modelProvider to name an ACP integration",
+				Subject:  Subject{Type: SubjectTypeWorker, ID: worker.Name, Location: SubjectLocationDefinition},
+				Path:     fmt.Sprintf("%s.workers[%d](%s).modelProvider", validationRoot, workerIndex, worker.Name),
+			})
+			continue
+		}
 		if provider == "" || factorydefinitions.IsSymbolicWorkerModelProviderDefault(provider) || invocationParameterInterpolation(cfg.InvocationSignature, provider) {
 			continue
 		}

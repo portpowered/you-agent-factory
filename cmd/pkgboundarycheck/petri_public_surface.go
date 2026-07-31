@@ -15,15 +15,15 @@ import (
 )
 
 const (
-	petriPublicSurfaceRequiredOwner   = "Factory Runtime internals"
-	petriPublicSurfaceInternalPrefix  = "pkg/services/factory_runtime/internal/"
-	petriPublicSurfaceBaselinePath    = "petri-public-surface-baseline.json"
-	petriPublicSurfaceBaselineStage   = "imp-run-01-petri-boundary-retirement"
-	petriPublicSurfaceDeletionGate    = "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
+	petriPublicSurfaceRequiredOwner  = "Factory Runtime internals"
+	petriPublicSurfaceInternalPrefix = "pkg/services/factory_runtime/internal/"
+	petriPublicSurfaceBaselinePath   = "docs/internal/baselines/petri-public-surface-baseline.json"
+	petriPublicSurfaceBaselineStage  = "imp-run-01-petri-boundary-retirement"
+	petriPublicSurfaceDeletionGate   = "retire this exact Petri public-surface leak under Runtime Petri-boundary retirement / IMP-RUN-01, then delete this exact baseline entry"
 )
 
 type petriPublicSurfaceBaseline struct {
-	Version int                              `json:"version"`
+	Version int                               `json:"version"`
 	Entries []petriPublicSurfaceBaselineEntry `json:"entries"`
 }
 
@@ -55,8 +55,8 @@ var prohibitedPetriPublicSurfaceSymbols = map[string]string{
 }
 
 var petriPublicSurfaceWatchedImports = map[string]struct{}{
-	factoryRuntimeRootImportPath: {},
-	factoryDefinitionsImportPath: {},
+	factoryRuntimeRootImportPath:                  {},
+	factoryDefinitionsImportPath:                  {},
 	factoryDefinitionsInternalContractsImportPath: {},
 }
 
@@ -430,6 +430,9 @@ func createPetriPublicSurfaceBaseline(cfg config) error {
 		return fmt.Errorf("resolve repo root: %w", err)
 	}
 	path := filepath.Join(repoRoot, petriPublicSurfaceBaselinePath)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create Petri public surface baseline directory: %w", err)
+	}
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if err != nil {
 		return fmt.Errorf("create Petri public surface baseline: %w", err)

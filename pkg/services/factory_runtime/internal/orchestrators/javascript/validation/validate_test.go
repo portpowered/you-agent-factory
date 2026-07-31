@@ -15,6 +15,26 @@ return { ok: true };`,
 	}
 }
 
+func TestValidateAgentRunSkipPermissionsBooleanShape(t *testing.T) {
+	t.Parallel()
+
+	accepted := Validate(Request{
+		Source:    `return agent.run({ prompt: "review", skipPermissions: true });`,
+		SourceRef: "workflow.js",
+	})
+	if accepted.HasIssues() {
+		t.Fatalf("Validate(true) issues = %#v, want none", accepted.Issues)
+	}
+
+	rejected := Validate(Request{
+		Source:    `return agent.run({ prompt: "review", skipPermissions: "true" });`,
+		SourceRef: "workflow.js",
+	})
+	if !rejected.HasIssues() {
+		t.Fatal("Validate(string) issues = nil, want boolean shape error")
+	}
+}
+
 func TestValidateRemapsSyntaxErrorsToAuthoredLineNumbers(t *testing.T) {
 	t.Parallel()
 

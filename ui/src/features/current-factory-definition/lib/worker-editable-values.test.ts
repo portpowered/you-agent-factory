@@ -15,7 +15,7 @@ describe("resolveEditableWorkerValues for model workers", () => {
       workers: [
         {
           model: "gpt-5.5",
-          modelProvider: "CURSOR",
+          modelProvider: "CODEX",
           name: "reviewer",
           type: "MODEL_WORKER",
         },
@@ -35,7 +35,7 @@ describe("resolveEditableWorkerValues for model workers", () => {
       executorProvider: null,
       model: "gpt-5.5",
       modelLocality: null,
-      modelProvider: "CURSOR",
+      modelProvider: "CODEX",
       provider: null,
       skipPermissions: null,
       stopToken: null,
@@ -52,7 +52,7 @@ describe("resolveEditableWorkerValues for model workers", () => {
       workers: [
         {
           model: "gpt-5.5",
-          modelProvider: "CURSOR",
+          modelProvider: "CODEX",
           name: "reviewer",
           timeout: "5m",
           type: "MODEL_WORKER",
@@ -78,7 +78,7 @@ describe("resolveEditableWorkerValues for model workers", () => {
       workers: [
         {
           model: "gpt-5.5",
-          modelProvider: "CURSOR",
+          modelProvider: "CODEX",
           name: "reviewer",
           stopToken: "<COMPLETE>",
           type: "MODEL_WORKER",
@@ -101,7 +101,7 @@ describe("resolveEditableWorkerValues for model workers", () => {
       workers: [
         {
           model: "gpt-5.5",
-          modelProvider: "CURSOR",
+          modelProvider: "CODEX",
           name: "reviewer",
           skipPermissions: true,
           type: "MODEL_WORKER",

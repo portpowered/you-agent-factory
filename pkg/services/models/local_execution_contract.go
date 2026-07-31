@@ -12,14 +12,15 @@ import (
 type Provider string
 
 const (
-	ProviderClaude   Provider = "claude"
-	ProviderCodex    Provider = "codex"
+	ProviderClaude      Provider = "claude"
+	ProviderCodex       Provider = "codex"
+	ProviderAntigravity Provider = "antigravity"
+	// Retired native provider values remain available for persisted-data
+	// decoding; they are not selectable built-ins.
 	ProviderGemini   Provider = "gemini"
 	ProviderKiro     Provider = "kiro-cli"
-	ProviderCursor   Provider = "agent"
 	ProviderOpenCode Provider = "opencode"
 	ProviderPi       Provider = "pi"
-	ProviderAgy      Provider = "agy"
 )
 
 // ErrUnsupportedResponseMode reports that an infer/local-invocation result

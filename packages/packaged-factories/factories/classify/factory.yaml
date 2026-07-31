@@ -1,0 +1,203 @@
+name: "@you/classify"
+id: builtin-classify
+description:
+  type: LOCALIZABLE_ASSET
+  value: Classifies a request by complexity and routes it to the configured small, medium, or large model lane.
+invocationReturn:
+  policy: EXPLICIT
+  workTypeName: request
+  terminalState: complete
+invocationSignature:
+  parameters:
+    - name: request
+      description: Request to classify and execute.
+      externalName: to
+      required: true
+      bindings:
+        - kind: POSITIONAL
+          position: 1
+        - kind: STDIN
+        - kind: NAMED
+    - name: classifierProvider
+      description: Model provider for classification; omitted values use operator defaults.
+      externalName: classifier-provider
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+    - name: classifierModel
+      description: Model for classification; omitted values use operator defaults.
+      externalName: classifier-model
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+    - name: smallProvider
+      description: Model provider for small requests; omitted values use operator defaults.
+      externalName: small-provider
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+    - name: smallModel
+      description: Model for small requests; omitted values use operator defaults.
+      externalName: small-model
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+    - name: mediumProvider
+      description: Model provider for medium requests; omitted values use operator defaults.
+      externalName: medium-provider
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+    - name: mediumModel
+      description: Model for medium requests; omitted values use operator defaults.
+      externalName: medium-model
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+    - name: largeProvider
+      description: Model provider for large requests; omitted values use operator defaults.
+      externalName: large-provider
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+    - name: largeModel
+      description: Model for large requests; omitted values use operator defaults.
+      externalName: large-model
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+examples:
+  - name: route-request
+    description:
+      type: LOCALIZABLE_ASSET
+      value: Route an implementation request to the appropriate lane.
+    args:
+      request: Explain and fix the failing test
+workTypes:
+  - name: request
+    handlingBehavior:
+      - DEFAULT
+    states:
+      - name: init
+        type: INITIAL
+      - name: small
+        type: PROCESSING
+      - name: medium
+        type: PROCESSING
+      - name: large
+        type: PROCESSING
+      - name: complete
+        type: TERMINAL
+      - name: failed
+        type: FAILED
+workers:
+  - name: complexity-classifier
+    type: AGENT_WORKER
+    skipPermissions: true
+    modelProvider: ${classifierProvider}
+    model: ${classifierModel}
+    body: "Assess a request from first principles using scope, ambiguity, dependency count, risk, and verification cost. Return exactly one plain-text label: small, medium, or large."
+  - name: small-executor
+    type: AGENT_WORKER
+    skipPermissions: true
+    modelProvider: ${smallProvider}
+    model: ${smallModel}
+    body: "Assume no prior context. Read the complete request and relevant workspace instructions, complete the bounded low-risk task, verify the outcome, and return a concise self-contained result."
+  - name: medium-executor
+    type: AGENT_WORKER
+    skipPermissions: true
+    modelProvider: ${mediumProvider}
+    model: ${mediumModel}
+    body: "Assume no prior context. Investigate the request and relevant workspace before acting, implement the multi-step outcome while preserving unrelated work, test positive and failure behavior, and return a self-contained result with evidence."
+  - name: large-executor
+    type: AGENT_WORKER
+    skipPermissions: true
+    modelProvider: ${largeProvider}
+    model: ${largeModel}
+    body: "Assume no prior context. Reconstruct the problem from the request and workspace, inspect architecture and constraints, decompose and complete the high-risk work coherently, run proportional broad verification, and report outcomes, evidence, and limitations."
+workstations:
+  - name: classify-request
+    type: CLASSIFIER_WORKSTATION
+    worker: complexity-classifier
+    workPropagation:
+      mode: PRESERVE_INPUT
+    inputs:
+      - workType: request
+        state: init
+    classificationRoutes:
+      - label: small
+        outputs:
+          - workType: request
+            state: small
+      - label: medium
+        outputs:
+          - workType: request
+            state: medium
+      - label: large
+        outputs:
+          - workType: request
+            state: large
+    onFailure:
+      - workType: request
+        state: failed
+    body: |-
+      You have no prior context. Classify the complete request below by total execution complexity, not by its word count. Use `small` for one bounded, low-risk action with obvious verification; `medium` for several related steps or moderate ambiguity/risk; and `large` for broad architecture, many dependencies, substantial unknowns, or costly verification. Return only one lowercase label: small, medium, or large.
+
+      Request:
+      ${request}
+  - name: execute-small
+    type: AGENT_RUN
+    worker: small-executor
+    inputs:
+      - workType: request
+        state: small
+    outputs:
+      - workType: request
+        state: complete
+    onFailure:
+      - workType: request
+        state: failed
+    body: |-
+      Begin with zero context. Read the entire small request below. If a workspace is involved, inspect its contributor instructions and the exact relevant files before acting. Complete the bounded outcome, preserve unrelated changes, run the narrow verification that proves it works, and return a self-contained answer with concrete evidence.
+
+      ${request}
+  - name: execute-medium
+    type: AGENT_RUN
+    worker: medium-executor
+    inputs:
+      - workType: request
+        state: medium
+    outputs:
+      - workType: request
+        state: complete
+    onFailure:
+      - workType: request
+        state: failed
+    body: |-
+      Begin with zero context. Read the entire medium request below. Inspect applicable workspace instructions, architecture, implementation, tests, and current state before changing anything. Complete all related steps, check important edge cases, run proportional tests, and return a self-contained answer describing the outcome and evidence.
+
+      ${request}
+  - name: execute-large
+    type: AGENT_RUN
+    worker: large-executor
+    inputs:
+      - workType: request
+        state: large
+    outputs:
+      - workType: request
+        state: complete
+    onFailure:
+      - workType: request
+        state: failed
+    body: |-
+      Begin with zero context. Read the entire large request below and independently reconstruct its requirements. Inspect applicable contributor instructions, architecture, implementation boundaries, tests, generated contracts, and current working state. Decompose the work internally, deliver the coherent requested outcome without discarding unrelated changes, exercise important failure paths, run broad proportional verification, and return a self-contained summary with evidence and honest limitations.
+
+      ${request}

@@ -99,7 +99,7 @@ func TestArtifactFromEventStream_NormalizesLegacyCronPayloads(t *testing.T) {
 		t.Fatalf("artifact workstations = %#v, want one normalized cron workstation", factory.Workstations)
 	}
 	workstation := (*factory.Workstations)[0]
-	if workstation.Cron == nil || workstation.Cron.Schedule != legacyEventStreamCronPlaceholderSchedule {
+	if workstation.Cron == nil || stringValue(workstation.Cron.Schedule) != legacyEventStreamCronPlaceholderSchedule {
 		t.Fatalf("normalized cron = %#v, want placeholder schedule %q", workstation.Cron, legacyEventStreamCronPlaceholderSchedule)
 	}
 	generatedRunStarted := mustGeneratedReplayEvent(t, result.Artifact.Events[0])
@@ -110,7 +110,7 @@ func TestArtifactFromEventStream_NormalizesLegacyCronPayloads(t *testing.T) {
 	if runStartedPayload.Factory.Workstations == nil || len(*runStartedPayload.Factory.Workstations) != 1 {
 		t.Fatalf("run-started payload workstations = %#v, want one normalized workstation", runStartedPayload.Factory.Workstations)
 	}
-	if got := (*runStartedPayload.Factory.Workstations)[0].Cron; got == nil || got.Schedule != legacyEventStreamCronPlaceholderSchedule {
+	if got := (*runStartedPayload.Factory.Workstations)[0].Cron; got == nil || stringValue(got.Schedule) != legacyEventStreamCronPlaceholderSchedule {
 		t.Fatalf("run-started normalized cron = %#v, want placeholder schedule %q", got, legacyEventStreamCronPlaceholderSchedule)
 	}
 }

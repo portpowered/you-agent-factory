@@ -44,7 +44,7 @@ type ProviderSessionStdoutArtifact struct {
 
 // ProviderSessionExpectedGoldens holds the three expected public metadata artifacts.
 type ProviderSessionExpectedGoldens struct {
-	ProviderSession   json.RawMessage
+	ProviderSession  json.RawMessage
 	ResponseEvents   []json.RawMessage
 	InvocationResult json.RawMessage
 }
@@ -151,7 +151,7 @@ func LoadProviderSessionCase(caseDir string) (ProviderSessionCase, error) {
 		Stdout:   stdout,
 		Stderr:   string(stderrRaw),
 		Expected: ProviderSessionExpectedGoldens{
-			ProviderSession:   expectedSession,
+			ProviderSession:  expectedSession,
 			ResponseEvents:   expectedEvents,
 			InvocationResult: expectedResult,
 		},

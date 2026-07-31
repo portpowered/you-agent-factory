@@ -16,9 +16,9 @@ top-level Checkpoint service.
 | 2 | IMP-RUN-01 — Petri public-surface retirement | In progress / partial | Baseline-driven Petri boundary retirement |
 | 3 | IMP-RUN-02 — Instance Host private subservice | Planned | Depends on root contract + orchestration seams |
 | 4 | IMP-RUN-03 — Dispatch Planning private subservice | Planned | Workers command/result contract lock |
-| 5 | Orchestration fold / engine-pipeline CLN | Active | `CLN-RUN-FOLD-SERVICE`, `CLN-RUN-FOLD-ENGINE-PIPELINE` |
-| 6 | CUT-VIS-RUN / CUT-RUN-WRK / consumer-edge CUTs | Mixed | Visualization and cross-owner edges retarget to Runtime root |
-| 7 | **Checkpoint/Recovery** (`IMP-RUN-04`, `checkpoint_recovery`) | **Decision closed; implementation dependency-ready** | Durability ownership decided in [`dec-run-rec-durability.md`](dec-run-rec-durability.md) (**DEC-RUN-REC-DURABILITY**). Runtime owns opaque checkpoint capture/load/compatibility/restore; Recordings remains durable history/artifact authority. IMP-RUN-04 may start with a Runtime opaque CheckpointStore port and process-local/default adapter; Recordings-backed durable checkpoint bytes are follow-on after Recordings durable log/cursor/retention. **This packet does not ship IMP-RUN-04 implementation.** |
+| 5 | Orchestration fold / engine-pipeline CLN | **Factory-terminal** | `CLN-RUN-FOLD-SERVICE` + `CLN-RUN-FOLD-ENGINE-PIPELINE` (#1602 / `a9d50a34b`); DEL-RUN-SERVICE (`655e4167e`) + DEL-RUN-ENGINE (#1637 / `6e48c875f`) terminal |
+| 6 | CUT-VIS-RUN / CUT-RUN-WRK / consumer-edge CUTs | Mixed | CUT-VIS-RUN + CUT-RUN-WRK terminal; CUT-RUN-REC admitted with FUN-runtime (`planner-wave-fun-run-cut-run-rec-20260728`) |
+| 7 | **Checkpoint/Recovery** (`IMP-RUN-04`, `checkpoint_recovery`) | **Factory-terminal** (PR #1580) | Durability ownership decided in [`dec-run-rec-durability.md`](dec-run-rec-durability.md). Opaque CheckpointStore + process-local adapter shipped under `factory_runtime/internal/services/checkpoint_recovery`. Recordings-backed durable checkpoint bytes remain follow-on after Recordings durable log/cursor/retention. |
 
 ### Step 7 — Checkpoint/Recovery (IMP-RUN-04)
 

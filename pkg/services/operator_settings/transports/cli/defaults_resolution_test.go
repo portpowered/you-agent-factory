@@ -60,7 +60,7 @@ func TestResolveOperatorDefaults_UnresolvedDefaultPreservesDocumentedGuidance(t 
 	for _, want := range []string{
 		"DEFAULT requires a concrete provider",
 		"YOU_DEFAULT_WORKER_MODEL_PROVIDER",
-		"--default-worker-model-provider",
+		"you run --provider",
 	} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("error = %q, want documented guidance %q", err.Error(), want)

@@ -1,10 +1,9 @@
 package settingsresolution_test
 
-
 import (
-	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"context"
 	"errors"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"io"
 	"io/fs"
 	"os"
@@ -388,7 +387,9 @@ func TestConfigDocumentServiceConfigureProviderModelPrompted_InputStopsBeforePer
 		wantErr error
 	}{
 		{name: "EOF", prompt: func(context.CancelFunc) operatorsettings.ProviderModelPrompt {
-			return func(context.Context, operatorsettings.Defaults) (operatorsettings.ProviderModelUpdate, error) { return operatorsettings.ProviderModelUpdate{}, io.EOF }
+			return func(context.Context, operatorsettings.Defaults) (operatorsettings.ProviderModelUpdate, error) {
+				return operatorsettings.ProviderModelUpdate{}, io.EOF
+			}
 		}, wantErr: operatorsettings.ErrProviderModelInputCanceled},
 		{name: "cancellation", prompt: func(context.CancelFunc) operatorsettings.ProviderModelPrompt {
 			return func(context.Context, operatorsettings.Defaults) (operatorsettings.ProviderModelUpdate, error) {

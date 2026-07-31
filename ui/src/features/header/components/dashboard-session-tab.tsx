@@ -20,16 +20,14 @@ const SESSION_TAB_BUTTON_CLASS =
 const SESSION_TAB_CLOSE_BUTTON_CLASS =
   "min-h-10 min-w-10 shrink-0 px-2.5 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
 const SESSION_TAB_ACTIVE_CLASS = cn(
-  "z-10 -mb-0.5 overflow-visible rounded-t-2xl rounded-b-none bg-surface-container-low text-on-surface",
-  "before:pointer-events-none before:absolute before:-left-4 before:-bottom-0 before:h-4 before:w-4 before:bg-[radial-gradient(circle_at_top_left,transparent_1rem,var(--color-surface-container-low)_1rem)]",
-  "after:pointer-events-none after:absolute after:-right-4 after:-bottom-0 after:h-4 after:w-4 after:bg-[radial-gradient(circle_at_top_right,transparent_1rem,var(--color-surface-container-low)_1rem)]",
+  "z-10 rounded-xl bg-surface-container-low text-on-surface",
 );
 const SESSION_TAB_INACTIVE_CLASS =
-  "rounded-t-xl rounded-b-none text-on-surface-variant hover:bg-af-overlay hover:text-on-surface";
+  "rounded-xl text-on-surface-variant hover:bg-af-overlay hover:text-on-surface";
 const SESSION_TAB_ACTIVE_BUTTON_CLASS =
-  "flex min-w-0 flex-1 flex-col items-start rounded-tl-xl px-3 py-2";
+  "flex min-w-0 flex-1 flex-col items-start rounded-l-xl px-3 py-2";
 const SESSION_TAB_INACTIVE_BUTTON_CLASS =
-  "flex min-w-0 flex-1 flex-col items-start rounded-tl-xl px-3 py-2";
+  "flex min-w-0 flex-1 flex-col items-start rounded-l-xl px-3 py-2";
 const SESSION_TAB_ACTIVE_CONTROL_BUTTON_CLASS =
   "flex items-center justify-center text-on-surface-subtle transition-colors hover:text-on-surface";
 const SESSION_TAB_INACTIVE_CLOSE_BUTTON_CLASS = cn(
@@ -52,7 +50,7 @@ export function OpenSessionButton({
       aria-haspopup="dialog"
       aria-label={label}
       className={cn(
-        "flex min-h-10 min-w-10 shrink-0 self-stretch items-center rounded-t-2xl bg-transparent px-3 py-2 text-on-surface-variant transition-colors",
+        "flex min-h-10 min-w-10 shrink-0 self-stretch items-center rounded-xl bg-transparent px-3 py-2 text-on-surface-variant transition-colors",
         "hover:bg-af-overlay-subtle hover:text-on-surface",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring",
       )}
@@ -117,7 +115,6 @@ export function SessionTabButton({
           "shadow-[-2px_0_0_0_var(--color-primary)]",
         dropIndicator === "after" && "shadow-[2px_0_0_0_var(--color-primary)]",
         dragPreview && "bg-surface-container-low text-on-surface-disabled",
-        "max-w-72",
       )}
       draggable={draggable}
       onDragEnd={onDragEnd}

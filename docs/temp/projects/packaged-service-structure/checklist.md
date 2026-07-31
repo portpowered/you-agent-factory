@@ -7,9 +7,9 @@ program. Cross-links the committed decision artifacts and planner hold text.
 
 **Decision:** [`dec-run-rec-durability.md`](dec-run-rec-durability.md) (**DEC-RUN-REC-DURABILITY**)
 
-**Admission status:** **dependency-ready** after DEC-RUN-REC-DURABILITY is
-Factory-complete. The sole remaining blocker is **not** a missing durability
-decision owner.
+**Admission status:** **Factory-terminal** after IMP-RUN-04 PR #1580 merged
+(`3bf957012`). DEC-RUN-REC-DURABILITY remains the ownership decision record;
+Recordings-backed durable checkpoint bytes remain follow-on.
 
 - [x] DEC-RUN-REC-DURABILITY decision note checked in under
   `docs/temp/projects/packaged-service-structure/`
@@ -21,9 +21,10 @@ decision owner.
   Recordings durable log/cursor/retention
 - [x] Plan Runtime sequence step 7 cites DEC-RUN-REC-DURABILITY; ownership
   decision is no longer open ([`plan.md`](plan.md))
-- [ ] **IMP-RUN-04 implementation** (`factory_runtime/checkpoint_recovery`) —
-  **not shipped in DEC-RUN-REC-DURABILITY**; admit as a separate future packet
-  when executor capacity and CTR-RUN/CTR-REC prerequisites remain terminal
+- [x] **IMP-RUN-04 implementation** (`factory_runtime/checkpoint_recovery`) —
+  Factory-terminal via PR #1580 / `3bf957012` (`pss-imp-run-04-checkpoint-recovery`);
+  opaque CheckpointStore + process-local adapter shipped; Recordings-backed
+  durable checkpoint bytes remain follow-on after Recordings durable log
 
 ### IMP-RUN-04 implementation packet (future — not this decision packet)
 

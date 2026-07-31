@@ -78,5 +78,7 @@ properties:
     $ref: '../../../../openapi-main.yaml#/components/schemas/WorkContent'
   diagnostics:
     $ref: '../../../../openapi-main.yaml#/components/schemas/SafeWorkDiagnostics'
+  providerSession:
+    $ref: '../../../../openapi-main.yaml#/components/schemas/ProviderSessionMetadata'
   failureDetail:
     $ref: '../../data-models/FailureDetail.yaml'

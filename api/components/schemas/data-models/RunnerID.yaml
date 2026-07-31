@@ -2,8 +2,5 @@ type: string
 description: Stable built-in runner identifiers supported by factory and workstation runner selection.
 enum:
     - codex
-    - gemini
-    - kiro
-    - cursor-cli
-    - opencode
-    - pi
+    - claude
+    - antigravity

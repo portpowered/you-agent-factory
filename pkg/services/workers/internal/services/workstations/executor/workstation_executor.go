@@ -65,6 +65,7 @@ type WorkstationExecutor struct {
 	Parser                  OutputParser
 	Logger                  logging.Logger // optional; nil → noop
 	WorktreePreparer        workerexecution.FactoryWorktreePreparer
+	RunWorktree             string
 	FileSystem              platformfilesystem.ReadFileInspector
 	Now                     func() time.Time
 }
@@ -138,21 +139,22 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 	logger := logging.EnsureLogger(we.Logger)
 	invocationArgs := invocationArgumentsFromDispatch(dispatch)
 	invocationDiagnostics := invocationDiagnosticsForDispatch(we.RuntimeConfig, invocationArgs)
-	if invocationArgs != nil {
-		if we.FileSystem == nil {
-			return workerexecution.WorkResult{}, fmt.Errorf("workstation executor filesystem is required")
-		}
-		if we.Interpolation == nil {
-			return workerexecution.WorkResult{
-				DispatchID:   dispatch.DispatchID,
-				TransitionID: dispatch.TransitionID,
-				Outcome:      workerexecution.OutcomeFailed,
-				Error:        "Factory Definition invocation interpolation service is unavailable",
-				Diagnostics:  invocationDiagnostics,
-				Metrics:      workerexecution.WorkMetrics{Duration: we.Now().Sub(start)},
-			}, nil
-		}
-		interpolatedWorkstation, err := we.Interpolation.InterpolateWorkstationConfig(*workstationDef, invocationArgs, we.FileSystem.ReadFile)
+	if we.Interpolation == nil && invocationArgs != nil {
+		return workerexecution.WorkResult{
+			DispatchID:   dispatch.DispatchID,
+			TransitionID: dispatch.TransitionID,
+			Outcome:      workerexecution.OutcomeFailed,
+			Error:        "Factory Definition invocation interpolation service is unavailable",
+			Diagnostics:  invocationDiagnostics,
+			Metrics:      workerexecution.WorkMetrics{Duration: we.Now().Sub(start)},
+		}, nil
+	}
+	var readFile factorydefinitions.FileReader
+	if we.FileSystem != nil {
+		readFile = we.FileSystem.ReadFile
+	}
+	if we.Interpolation != nil {
+		interpolatedWorkstation, err := we.Interpolation.InterpolateWorkstationConfig(*workstationDef, invocationArgs, readFile)
 		if err != nil {
 			return workerexecution.WorkResult{
 				DispatchID:   dispatch.DispatchID,
@@ -176,8 +178,8 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 			Metrics:      workerexecution.WorkMetrics{Duration: we.Now().Sub(start)},
 		}, nil
 	}
-	if invocationArgs != nil {
-		interpolatedWorker, err := we.Interpolation.InterpolateWorkerConfig(*workerDef, invocationArgs, we.FileSystem.ReadFile)
+	if we.Interpolation != nil {
+		interpolatedWorker, err := we.Interpolation.InterpolateWorkerConfig(*workerDef, invocationArgs, readFile)
 		if err != nil {
 			return workerexecution.WorkResult{
 				DispatchID:   dispatch.DispatchID,
@@ -189,6 +191,12 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 			}, nil
 		}
 		workerDef = &interpolatedWorker
+		if strings.TrimSpace(workerDef.ModelProvider) == "" {
+			workerDef.ModelProvider = workerDef.RuntimeDefaultModelProvider
+		}
+		if strings.TrimSpace(workerDef.Model) == "" {
+			workerDef.Model = workerDef.RuntimeDefaultModel
+		}
 		if failed := we.resolveInvocationProvider(
 			dispatch,
 			workerDef,
@@ -198,14 +206,32 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 			return *failed, nil
 		}
 	}
+	effort, effortOK := factorydefinitions.CanonicalizeReasoningEffort(workerDef.ReasoningEffort)
+	if !effortOK {
+		return workerexecution.WorkResult{
+			DispatchID:   dispatch.DispatchID,
+			TransitionID: dispatch.TransitionID,
+			Outcome:      workerexecution.OutcomeFailed,
+			Error:        fmt.Sprintf("worker reasoningEffort %q is unsupported", workerDef.ReasoningEffort),
+			Diagnostics:  invocationDiagnostics,
+			Metrics:      workerexecution.WorkMetrics{Duration: we.Now().Sub(start)},
+		}, nil
+	}
+	workerDef.ReasoningEffort = effort
 
 	resolvedContext, failed := we.resolveWorkstationExecutionContext(dispatch, workstationDef, start, logger)
 	if failed != nil {
 		return *failed, nil
 	}
-	// TODO: we should make workers agnostic.
-	if failed := we.applyCodexFactoryWorktreePreparation(ctx, dispatch, workstationDef, workerDef, &resolvedContext, start); failed != nil {
+	if failed := we.applyRunFactoryWorktreePreparation(ctx, dispatch, &resolvedContext, start); failed != nil {
 		return *failed, nil
+	}
+	// TODO: remove this provider-specific compatibility behavior after authored
+	// workstation worktrees use the same provider-neutral materialization policy.
+	if strings.TrimSpace(we.RunWorktree) == "" {
+		if failed := we.applyCodexFactoryWorktreePreparation(ctx, dispatch, workstationDef, workerDef, &resolvedContext, start); failed != nil {
+			return *failed, nil
+		}
 	}
 
 	request, failed := we.buildWorkstationExecutionRequest(dispatch, workerName, workerDef, workstationDef, resolvedContext, start, logger)
@@ -428,8 +454,11 @@ func (we *WorkstationExecutor) applyCodexFactoryWorktreePreparation(
 	start time.Time,
 ) *workerexecution.WorkResult {
 	selectionIdentity := workstationDef.Runner
-	if executorProvider := strings.TrimSpace(workerDef.ExecutorProvider); executorProvider != "" && !strings.EqualFold(executorProvider, "SCRIPT_WRAP") {
-		selectionIdentity = executorProvider
+	if identity, identityErr := workerexecution.RunnerIdentityForWorker(workerDef.ExecutorProvider, workerDef.ModelProvider); identityErr != nil {
+		failed := worktree.FailedWorkResultFromPreparation(dispatch.DispatchID, dispatch.TransitionID, we.Now().Sub(start), identityErr)
+		return &failed
+	} else if identity != "" {
+		selectionIdentity = identity
 	}
 	selection, err := we.resolveRunnerSelection(selectionIdentity, workerDef.ModelProvider)
 	if err != nil {
@@ -481,6 +510,60 @@ func (we *WorkstationExecutor) applyCodexFactoryWorktreePreparation(
 	}
 	requestContext.WorkingDirectory = prepared.CheckoutPath
 	return nil
+}
+
+func (we *WorkstationExecutor) applyRunFactoryWorktreePreparation(
+	ctx context.Context,
+	dispatch work.WorkDispatch,
+	requestContext *resolvedWorkstationExecutionContext,
+	start time.Time,
+) *workerexecution.WorkResult {
+	selected := strings.TrimSpace(we.RunWorktree)
+	if selected == "" {
+		return nil
+	}
+	worktreeRoot := runWorktreeRoot(we.RuntimeConfig)
+	if worktreeRoot == "" {
+		failed := worktree.FailedWorkResultFromPreparation(
+			dispatch.DispatchID,
+			dispatch.TransitionID,
+			we.Now().Sub(start),
+			fmt.Errorf("factory directory unavailable"),
+		)
+		return &failed
+	}
+	if we.WorktreePreparer == nil {
+		failed := worktree.FailedWorkResultFromPreparation(
+			dispatch.DispatchID,
+			dispatch.TransitionID,
+			we.Now().Sub(start),
+			fmt.Errorf("worktree preparer unavailable"),
+		)
+		return &failed
+	}
+	prepared, err := we.WorktreePreparer.Prepare(ctx, worktreeRoot, selected)
+	if err != nil {
+		failed := worktree.FailedWorkResultFromPreparation(
+			dispatch.DispatchID,
+			dispatch.TransitionID,
+			we.Now().Sub(start),
+			err,
+		)
+		return &failed
+	}
+	requestContext.Worktree = selected
+	requestContext.WorkingDirectory = prepared.CheckoutPath
+	return nil
+}
+
+func runWorktreeRoot(runtimeConfig interfaces.RuntimeConfigLookup) string {
+	if runtimeConfig == nil {
+		return ""
+	}
+	if baseDir := strings.TrimSpace(runtimeConfig.RuntimeBaseDir()); baseDir != "" {
+		return baseDir
+	}
+	return strings.TrimSpace(runtimeConfig.FactoryDir())
 }
 
 func resolveRuntimePath(baseDir, value string, currentWorkingDirectory func() (string, error), fileSystem platformfilesystem.ReadFileInspector) string {
@@ -582,6 +665,7 @@ func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch work.Wo
 		ModelBindings:            modelBindings,
 		Model:                    workerDef.Model,
 		ModelProvider:            workerDef.ModelProvider,
+		ReasoningEffort:          workerDef.ReasoningEffort,
 		SystemPrompt:             workerDef.Body,
 		UserMessage:              rendered,
 		OutputSchema:             workstationDef.OutputSchema,
@@ -640,8 +724,17 @@ func (we *WorkstationExecutor) executeInnerWorker(ctx context.Context, request w
 		defer cancel()
 	}
 
-	// Call the underlying worker executor.
-	result, err := we.Executor.Execute(executorCtx, request)
+	// Script Workers carry interpolatable command arguments, so execute from
+	// the per-dispatch definition rather than the invocation-neutral runner
+	// captured when the Factory Runtime opened.
+	var result workerexecution.WorkResult
+	if interpolated, ok := we.Executor.(interface {
+		ExecuteWithWorker(context.Context, workerexecution.WorkstationExecutionRequest, *factorydefinitions.FactoryWorkerConfig) (workerexecution.WorkResult, error)
+	}); ok {
+		result, err = interpolated.ExecuteWithWorker(executorCtx, request, workerDef)
+	} else {
+		result, err = we.Executor.Execute(executorCtx, request)
+	}
 	if err != nil {
 		if errors.Is(executorCtx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
 			return timeoutWorkResult(request.Dispatch, we.Now().Sub(start)), nil

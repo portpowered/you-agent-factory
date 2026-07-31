@@ -34,71 +34,24 @@
     "execution",
     "execution/recording",
     "executor",
+    "invocation",
     "inferencefailure",
     "interface",
+    "service",
+    "prompting",
+    "runner",
     "services/agents",
     "services/inference",
     "skippermissions",
-    "workstationpool"
+    "workstationpool",
+    "process",
+    "services/testing"
   ],
-  "held_back": [
-    {
-      "relative_dir": "envdiagnostics",
-      "hold_reason": "production import remains in pkg/services/workers/command.go"
-    },
-    {
-      "relative_dir": "executor/agentrun",
-      "hold_reason": "production import remains in pkg/wire/session_runtime_providers.go"
-    },
-    {
-      "relative_dir": "invocation",
-      "hold_reason": "production import remains in pkg/wire/session_runtime_providers.go"
-    },
-    {
-      "relative_dir": "process",
-      "hold_reason": "production imports remain in pkg/wire, pkg/services/workers/provider/*, and pkg/services/providers/*"
-    },
-    {
-      "relative_dir": "prompting",
-      "hold_reason": "production import remains in pkg/wire/session_runtime_providers.go"
-    },
-    {
-      "relative_dir": "runner",
-      "hold_reason": "test imports remain in pkg/services/workers/wire/wire_test.go and internal/services/runners/runner"
-    },
-    {
-      "relative_dir": "service",
-      "hold_reason": "owner-local compile shim is not shim-only and still carries construction implementation"
-    },
-    {
-      "relative_dir": "services/testing",
-      "hold_reason": "test imports remain in pkg/services/workers/provider and pkg/services/providers adapter tests"
-    },
-    {
-      "relative_dir": "worktree",
-      "hold_reason": "production import remains in pkg/wire/session_runtime_providers.go"
-    }
-  ],
+  "held_back": [],
   "excluded_from_delete": [
-    {
-      "relative_dir": "agypty",
-      "exclusion_reason": "Providers extraction source still required for IMP-PROV-04+"
-    },
-    {
-      "relative_dir": "cliprovider",
-      "exclusion_reason": "Providers extraction source still required for IMP-PROV-04+"
-    },
     {
       "relative_dir": "internal",
       "exclusion_reason": "owner-private Workers implementation tree including internal/services/* subservices"
-    },
-    {
-      "relative_dir": "provider",
-      "exclusion_reason": "Providers extraction source still required for IMP-PROV-04+"
-    },
-    {
-      "relative_dir": "provider_test",
-      "exclusion_reason": "Providers extraction test support still required for IMP-PROV-04+"
     },
     {
       "relative_dir": "wire",
@@ -106,3 +59,4 @@
     }
   ]
 }
+

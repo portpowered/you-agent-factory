@@ -78,13 +78,13 @@ var _ = novelty.Adapter{}`,
 
 func TestApprovedPeerExceptionsRemainExactPairwiseNotPrivateRootCatalog(t *testing.T) {
 	approvedImporter := "pkg/services/edges"
-	approvedImport := modulePath + "/pkg/services/workers/agypty"
+	approvedImport := modulePath + "/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty"
 	if !isApprovedPeerServiceContractImport(approvedImporter, approvedImport) {
 		t.Fatalf("documented leaf-effect port missing from exact pairwise map")
 	}
 
 	// Sibling unlisted paths under the same peer must not inherit approval.
-	unlistedSibling := modulePath + "/pkg/services/workers/agypty/never_listed_before"
+	unlistedSibling := modulePath + "/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty/never_listed_before"
 	if isApprovedPeerServiceContractImport(approvedImporter, unlistedSibling) {
 		t.Fatalf("pairwise exception incorrectly behaves like a private-root prefix allowlist")
 	}
@@ -208,9 +208,9 @@ func TestCrossOwnerPeerRuleKeepsExactLeafEffectPortExceptions(t *testing.T) {
 	root := fixtureRepository(t, map[string]string{
 		"pkg/services/edges/doc.go":    "package edges\n",
 		"pkg/services/workers/doc.go":  "package workers\n",
-		"pkg/services/workers/agypty/doc.go": "package agypty\n",
+		"pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty/doc.go": "package agypty\n",
 		"pkg/services/edges/leaf.go": `package edges
-import agypty "github.com/portpowered/infinite-you/pkg/services/workers/agypty"
+import agypty "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty"
 var _ = agypty.Service{}`,
 	})
 
@@ -345,3 +345,4 @@ func TestCrossOwnerPeerImportDecisionAllowsPeerRootAndSameOwner(t *testing.T) {
 		})
 	}
 }
+

@@ -9,14 +9,14 @@ import (
 // InvocationPolicyPorts are the published Definitions root policy contracts
 // constructed from the nested invocation_policy owner.
 type InvocationPolicyPorts struct {
-	DecisionEnvelope       factorydefinitions.DecisionEnvelopeService
+	DecisionEnvelope        factorydefinitions.DecisionEnvelopeService
 	InvocationInterpolation factorydefinitions.InvocationInterpolationService
-	InvocationOutput       factorydefinitions.InvocationOutputShapingService
-	InvocationWorkType     factorydefinitions.InvocationWorkTypeService
-	QuorumPolicy           factorydefinitions.QuorumPolicyService
-	WorkPropagation        factorydefinitions.WorkPropagationPolicyService
-	WorkstationExecution   factorydefinitions.WorkstationExecutionPolicyService
-	TTSObservability       factorydefinitions.TTSObservabilityService
+	InvocationOutput        factorydefinitions.InvocationOutputShapingService
+	InvocationWorkType      factorydefinitions.InvocationWorkTypeService
+	QuorumPolicy            factorydefinitions.QuorumPolicyService
+	WorkPropagation         factorydefinitions.WorkPropagationPolicyService
+	WorkstationExecution    factorydefinitions.WorkstationExecutionPolicyService
+	TTSObservability        factorydefinitions.TTSObservabilityService
 }
 
 // InvocationPolicyPortsFromNestedOwner constructs published root policy contracts

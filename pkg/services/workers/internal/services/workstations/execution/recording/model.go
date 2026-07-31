@@ -17,7 +17,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 )
 
 const (
@@ -143,13 +142,14 @@ func responseEvent(request workerexecution.RunnerExecutionRequest, response work
 		Worker:           firstNonEmpty(request.WorkerType, workerName(workerDef)),
 		Model:            firstNonEmpty(request.Model, modelName(workerDef)),
 		ProviderLocality: firstNonEmpty(strings.TrimSpace(request.ModelLocality), modelLocality(workerDef)),
+		ProviderSession:  workerexecution.CloneProviderSessionMetadata(response.ProviderSession),
 		DurationMillis:   duration.Milliseconds(),
 		Resources:        resourceSummaries(factoryCfg, workerDef),
 		Bindings:         resolvedBindings(request.ModelBindings),
 	}
 	if err != nil {
 		payload.Outcome = workerexecution.InferenceOutcomeFailed
-		payload.FailureDetail = &workerexecution.FailureDetail{Reason: workerexecution.WorkFailureTypeUnknown, Message: "The model request failed without an available explanation."}
+		payload.FailureDetail = modelFailureDetail(err)
 		payload.Diagnostics = Diagnostics(nil, err)
 	} else {
 		payload.Outcome = workerexecution.InferenceOutcomeSucceeded
@@ -169,6 +169,21 @@ func responseEvent(request workerexecution.RunnerExecutionRequest, response work
 		payload.OutputPreview = stringPtr(truncate(strings.TrimSpace(response.Content), modelExecutionOutputPreviewMax))
 	}
 	return Event(request, workerexecution.ModelEventKindResponse, fmt.Sprintf("%s/%s", modelResponseEventIDPrefix, requestID), eventTime, nil, &payload)
+}
+
+func modelFailureDetail(err error) *workerexecution.FailureDetail {
+	var providerErr *workers.ProviderError
+	if errors.As(err, &providerErr) && providerErr != nil {
+		message := strings.TrimSpace(providerErr.Message)
+		if message == "" {
+			message = "The provider request failed without an available explanation."
+		}
+		return &workerexecution.FailureDetail{Reason: providerErr.Type, Message: message}
+	}
+	return &workerexecution.FailureDetail{
+		Reason:  workerexecution.WorkFailureTypeUnknown,
+		Message: "The model request failed without an available explanation.",
+	}
 }
 
 // Event constructs the canonical event envelope. It is exported for focused
@@ -276,7 +291,7 @@ func Diagnostics(success *workerexecution.WorkDiagnostics, executionErr error) j
 	if success != nil {
 		safe = workerexecution.SafeWorkDiagnosticsFromWorkDiagnostics(success)
 	} else {
-		var providerErr *workerprovider.ProviderError
+		var providerErr *workers.ProviderError
 		if errors.As(executionErr, &providerErr) {
 			safe = workerexecution.SafeWorkDiagnosticsFromWorkDiagnostics(providerErr.Diagnostics)
 		}

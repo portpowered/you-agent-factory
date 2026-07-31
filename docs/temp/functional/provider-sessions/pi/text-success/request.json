@@ -1,5 +1,0 @@
-{
-  "prompt": "Process the golden text success task.",
-  "model": "anthropic/claude-sonnet-4",
-  "session_id": "pi-session-snapshot"
-}

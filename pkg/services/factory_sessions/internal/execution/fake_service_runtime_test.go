@@ -1380,7 +1380,7 @@ func testApplicationPersistencePolicies(t *testing.T, projectRoot string) {
 		policy   PersistencePolicy
 		disabled bool
 	}{
-		{name: "default enabled"},
+		{name: "default disabled", disabled: true},
 		{name: "enabled", policy: PersistencePolicyEnabled},
 		{name: "disabled", policy: PersistencePolicyDisabled, disabled: true},
 	} {
@@ -1402,6 +1402,63 @@ func testApplicationPersistencePolicies(t *testing.T, projectRoot string) {
 		t.Fatal("PersistenceChoiceForPolicy(invalid) error = nil, want validation error")
 	} else if validation, ok := err.(*ValidationError); !ok || validation.Field != "persistence.policy" {
 		t.Fatalf("invalid policy error = %#v, want persistence.policy ValidationError", err)
+	}
+}
+
+func TestPersistenceChoiceForPolicy_DefaultDoesNotCreateProjectDurableSessions(t *testing.T) {
+	t.Parallel()
+	projectRoot := t.TempDir()
+	storeCalls := 0
+	choice, err := PersistenceChoiceForPolicy(
+		"",
+		projectRoot,
+		func(string) (runtimepersist.Store, error) {
+			storeCalls++
+			return testRuntimePersistenceStoreFactory(projectRoot)
+		},
+	)
+	if err != nil {
+		t.Fatalf("PersistenceChoiceForPolicy(default): %v", err)
+	}
+	store, err := choice.resolve()
+	if err != nil {
+		t.Fatalf("resolve default policy: %v", err)
+	}
+	if store != nil {
+		t.Fatal("default persistence policy unexpectedly configured a store")
+	}
+	if storeCalls != 0 {
+		t.Fatalf("default policy store factory calls = %d, want 0", storeCalls)
+	}
+	if _, err := os.Stat(runtimepersist.DirForProjectRoot(projectRoot)); !os.IsNotExist(err) {
+		t.Fatalf("durable persistence path stat error = %v, want not exist", err)
+	}
+}
+
+func TestPersistenceChoiceForPolicy_EnabledCreatesProjectDurableSessions(t *testing.T) {
+	t.Parallel()
+	projectRoot := t.TempDir()
+	choice, err := PersistenceChoiceForPolicy(
+		PersistencePolicyEnabled,
+		projectRoot,
+		testRuntimePersistenceStoreFactory,
+	)
+	if err != nil {
+		t.Fatalf("PersistenceChoiceForPolicy(enabled): %v", err)
+	}
+	store, err := choice.resolve()
+	if err != nil {
+		t.Fatalf("resolve enabled policy: %v", err)
+	}
+	if store == nil {
+		t.Fatal("enabled persistence policy returned a nil store")
+	}
+	sessionID := "dur-sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	if err := store.Save(sessionID, []byte(`{"sessionId":"dur-sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`)); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(runtimepersist.DirForProjectRoot(projectRoot), sessionID+".json")); err != nil {
+		t.Fatalf("enabled persistence snapshot stat error = %v, want exist", err)
 	}
 }
 

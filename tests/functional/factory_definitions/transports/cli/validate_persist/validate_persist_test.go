@@ -3,7 +3,6 @@ package validate_persist
 import (
 	"bytes"
 	"encoding/json"
-	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -18,8 +17,8 @@ import (
 )
 
 const (
-	durableBaselineFactoryName = "validate-persist-baseline"
-	persistThenRunFactoryName  = "validate-persist-run"
+	durableBaselineFactoryName  = "validate-persist-baseline"
+	persistThenRunFactoryName   = "validate-persist-run"
 	persistThenRunPrimaryResult = "persist-from-file run COMPLETE"
 )
 
@@ -48,9 +47,9 @@ const invalidFactoryWithDanglingWorker = `{
 // actionable diagnostics before runtime execution or persistence side effects.
 func TestCLIFactoryValidateRejectsInvalidDefinitionActionably(t *testing.T) {
 	for _, test := range []struct {
-		name    string
-		body    string
-		wants   []string
+		name  string
+		body  string
+		wants []string
 	}{
 		{
 			name: "semantic validation failure",
@@ -181,7 +180,7 @@ func TestCLIFactoryPersistFromFileThenRunSucceeds(t *testing.T) {
 		)
 	}
 
-	response := decodeInvocationResponse(t, inputs.Stdout())
+	response := support.DecodeInvocationResponseJSON(t, inputs.Stdout())
 	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
 		t.Fatalf("invocation status = %q, want %q", response.Status, factoryapi.InvocationTerminalStatusCompleted)
 	}
@@ -364,20 +363,6 @@ func writeFactoryFile(t *testing.T, body string) string {
 
 func customerHomeEnvironment(home string) []string {
 	return append(os.Environ(), "HOME="+home, "USERPROFILE="+home)
-}
-
-func decodeInvocationResponse(t *testing.T, stdout string) factoryapi.InvocationResponse {
-	t.Helper()
-
-	decoder := json.NewDecoder(strings.NewReader(stdout))
-	var response factoryapi.InvocationResponse
-	if err := decoder.Decode(&response); err != nil {
-		t.Fatalf("decode InvocationResponse: %v\nstdout:\n%s", err, stdout)
-	}
-	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		t.Fatalf("stdout contains data after InvocationResponse: %v\nstdout:\n%s", err, stdout)
-	}
-	return response
 }
 
 func invocationPrimaryResultText(t *testing.T, response factoryapi.InvocationResponse) string {

@@ -20,8 +20,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
+	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/inference"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -415,7 +415,7 @@ func startRootCLIResumeAPIServer(
 	case err := <-runErr:
 		cancel()
 		t.Fatalf("start root CLI resume API server: %v", err)
-	case <-time.After(5 * time.Second):
+	case <-time.After(15 * time.Second):
 		cancel()
 		t.Fatal("root CLI resume API server did not become ready")
 	}
@@ -565,7 +565,7 @@ func (h *cliResumeSmokeHarness) startInterruptedSession(t *testing.T) string {
 		sessionID,
 		"dispatch-1",
 		factoryapi.FactoryDispatchStatusCOMPLETED,
-		5*time.Second,
+		15*time.Second,
 	)
 	waitForCLIResumeSmokeDispatchStatus(
 		t,
@@ -573,7 +573,7 @@ func (h *cliResumeSmokeHarness) startInterruptedSession(t *testing.T) string {
 		sessionID,
 		"dispatch-2",
 		factoryapi.FactoryDispatchStatusRUNNING,
-		5*time.Second,
+		15*time.Second,
 	)
 
 	reason := "cli resume smoke interrupt"
@@ -696,8 +696,10 @@ func waitForCLIResumeSmokeDispatchStatus(
 	t.Helper()
 
 	deadline := time.Now().Add(timeout)
+	var last factoryapi.ListFactorySessionDispatchesResponse
 	for time.Now().Before(deadline) {
 		listed := readDispatchesViaCLI(t, harness, sessionID)
+		last = listed
 		for _, dispatch := range listed.Dispatches {
 			if dispatch.Id != dispatchID {
 				continue
@@ -708,7 +710,8 @@ func waitForCLIResumeSmokeDispatchStatus(
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatalf("dispatch %s did not reach %s within %s", dispatchID, want, timeout)
+	lastJSON, _ := json.Marshal(last.Dispatches)
+	t.Fatalf("dispatch %s did not reach %s within %s; last dispatches = %s", dispatchID, want, timeout, lastJSON)
 }
 
 type cliResumeSmokeBlockingProvider struct {

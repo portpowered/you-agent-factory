@@ -6,8 +6,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -121,7 +121,9 @@ func (recordingOperatorSettingsTemporaryFile) Name() string { return "" }
 
 func (recordingOperatorSettingsTemporaryFile) Sync() error { return errRecordingOperatorSettingsEffect }
 
-func (recordingOperatorSettingsTemporaryFile) Close() error { return errRecordingOperatorSettingsEffect }
+func (recordingOperatorSettingsTemporaryFile) Close() error {
+	return errRecordingOperatorSettingsEffect
+}
 
 var _ operatorsettings.FileSystem = (*operatorSettingsFileSystemRecorder)(nil)
 var _ operatorsettings.TemporaryFile = recordingOperatorSettingsTemporaryFile{}

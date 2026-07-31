@@ -16,7 +16,7 @@ import (
 
 func TestAgyAdapterConformance(t *testing.T) {
 	executiontest.Run(t, executiontest.Subject{
-		Provider:   providers.IDAgy,
+		Provider:   providers.IDAntigravity,
 		NewAdapter: newAgyConformanceAdapter,
 		NewRoot:    newAgyConformanceRoot,
 	})
@@ -32,7 +32,7 @@ func newAgyConformanceRoot(
 	executionService, err := executionwire.NewService(
 		catalog,
 		execution.Registration{
-			Provider: providers.IDAgy,
+			Provider: providers.IDAntigravity,
 			Attempt:  attempt,
 		},
 	)

@@ -53,8 +53,8 @@ type Row struct {
 
 // Ledger is the machine-readable migration ledger companion.
 type Ledger struct {
-	Rows     []Row `json:"rows"`
-	Summary  struct {
+	Rows    []Row `json:"rows"`
+	Summary struct {
 		CustomerTopLevelTestScenarios int `json:"customer_top_level_Test_scenarios"`
 		LaneFunctionallong            int `json:"lane_functionallong"`
 		LaneShort                     int `json:"lane_short"`
@@ -82,7 +82,7 @@ var RequiredSpecialtyTargets = []string{
 	"release-surface-smoke",
 	"docs-reference-smoke",
 	"current-factory-watcher-switch-smoke",
-	"test-built-cli-acceptance",
+	"test-root-process-acceptance",
 	"script-timeout-companion-smoke-100",
 }
 

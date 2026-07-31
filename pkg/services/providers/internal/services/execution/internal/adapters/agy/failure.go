@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
-	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
+	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // ErrMissingExecutable reports that the configured Agy binary could not be resolved.

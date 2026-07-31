@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	httpAdapterPackagePath = "pkg/services/factory_definitions/transports/http"
-	httpAdapterImportPath  = "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/http"
+	httpAdapterPackagePath  = "pkg/services/factory_definitions/transports/http"
+	httpAdapterImportPath   = "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/http"
 	factoryDefinitionsOwner = "factory_definitions"
 )
 

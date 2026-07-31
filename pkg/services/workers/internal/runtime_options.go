@@ -2,6 +2,7 @@ package internal
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -9,13 +10,11 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/runner"
 	workerconstruction "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/construction"
 	modelrecording "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution/recording"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/skippermissions"
-	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 )
 
 // BuildRuntimeExecutors constructs every configured runtime worker through the
@@ -91,6 +90,11 @@ func (s *Service) BuildRuntimeExecutors(
 			executors[configured.Name] = &workerexecutor.NoopExecutor{}
 			continue
 		}
+		// Poller/hosted Worker shapes are Automations-owned ingress sources.
+		// They submit Work Requests and never enter Workers executor construction.
+		if interfaces.IsPollerWorkerType(definition.Type) {
+			continue
+		}
 		result, err := s.executorBuilder.Build(
 			runtimeConfig, configured.Name, factoryRunnerID, workflowContext, logger,
 			invocationSkipPermissionsOverride, providerOverride, inferenceProgressPublisher,
@@ -100,10 +104,6 @@ func (s *Service) BuildRuntimeExecutors(
 			return nil, fmt.Errorf("construct worker %q: %w", configured.Name, err)
 		}
 		if result.Dispatch == nil {
-			if interfaces.IsPollerWorkerType(definition.Type) {
-				executors[configured.Name] = &workerexecutor.NoopExecutor{}
-				continue
-			}
 			return nil, fmt.Errorf("unsupported worker type for worker %q: %s", configured.Name, definition.Type)
 		}
 		executors[configured.Name] = result.Dispatch
@@ -125,16 +125,16 @@ func (s *Service) rebindProvidersCommandRunner(logger logging.Logger) error {
 	if s == nil || !s.providerCommandInjected || s.providerCommandRunner == nil || s.providerRegistryRebinder == nil {
 		return nil
 	}
-	providersRunner := workerprocess.CommandRunnerWithLogging(
+	providersRunner := workers.CommandRunnerWithLogging(
 		s.providerCommandRunner,
 		logging.EnsureLogger(logger),
 		serviceCommandClock(s),
 	)
-	reboundRegistry, err := rebindProviderRegistry(s.providerRegistry, providersRunner, s.providerRegistryRebinder)
+	reboundRegistry, reboundProviders, err := rebindProviderRegistry(s.providerRegistry, providersRunner, s.providerRegistryRebinder)
 	if err != nil {
 		return fmt.Errorf("rebind provider registry for session command logging: %w", err)
 	}
-	return applyReboundProviderRegistry(s, reboundRegistry)
+	return applyReboundProviderRegistry(s, reboundRegistry, reboundProviders)
 }
 
 func (s *Service) runtimeRunnerDecorators(
@@ -143,23 +143,13 @@ func (s *Service) runtimeRunnerDecorators(
 	recorder workers.ModelEventRecorder,
 	now func() time.Time,
 	useRegistryCapabilities bool,
-	progressPublisher workers.ProgressPublisher,
+	_ workers.ProgressPublisher,
 ) []workerconstruction.RunnerDecorator {
 	decorators := make([]workerconstruction.RunnerDecorator, 0, 4)
 	if useRegistryCapabilities && s.providerRegistry != nil {
 		decorators = append(decorators, func(inner workers.Runner, _ *interfaces.FactoryWorkerConfig) workers.Runner {
 			return registryCapabilityRunner{next: inner, providers: s.providerRegistry}
 		})
-		if s.invocationConductor != nil && !s.agentDispatchUsesRegisteredRunner {
-			decorators = append(decorators, func(inner workers.Runner, _ *interfaces.FactoryWorkerConfig) workers.Runner {
-				return conductorInvocationRunner{
-					next:      inner,
-					conductor: s.invocationConductor,
-					providers: s.providerRegistry,
-					publish:   progressPublisher,
-				}
-			})
-		}
 	}
 	return append(decorators,
 		func(inner workers.Runner, definition *interfaces.FactoryWorkerConfig) workers.Runner {
@@ -194,7 +184,7 @@ func ValidateRuntimeSelections(
 	executableLocator platformprocess.ExecutableLocator,
 	skipCommandAvailability bool,
 	invocationSkipPermissionsOverride *bool,
-	providerRegistries ...*providerregistry.Registry,
+	providerRegistries ...workers.ProviderRegistry,
 ) error {
 	if cfg == nil {
 		return fmt.Errorf("factory config is required")
@@ -202,7 +192,7 @@ func ValidateRuntimeSelections(
 	if runtimeCfg == nil {
 		return fmt.Errorf("runtime config is required")
 	}
-	var providers *providerregistry.Registry
+	var providers workers.ProviderRegistry
 	if len(providerRegistries) > 0 {
 		providers = providerRegistries[0]
 	}
@@ -226,7 +216,7 @@ func validateRuntimeSelectionsWithRegistry(
 	executableLocator platformprocess.ExecutableLocator,
 	skipCommandAvailability bool,
 	invocationSkipPermissionsOverride *bool,
-	providers *providerregistry.Registry,
+	providers workers.ProviderRegistry,
 ) error {
 	if cfg == nil {
 		return fmt.Errorf("factory config is required")
@@ -245,34 +235,69 @@ func validateRuntimeSelectionsWithRegistry(
 	)
 }
 
-func validateWorkerLoadPreflight(cfg *interfaces.FactoryConfig, factoryRunnerID string, runtimeCfg interfaces.RuntimeConfigLookup, executableLocator platformprocess.ExecutableLocator, preflight runnerSelectionPreflight, invocationSkipPermissionsOverride *bool, providers *providerregistry.Registry) error {
+func validateWorkerLoadPreflight(cfg *interfaces.FactoryConfig, factoryRunnerID string, runtimeCfg interfaces.RuntimeConfigLookup, executableLocator platformprocess.ExecutableLocator, preflight runnerSelectionPreflight, invocationSkipPermissionsOverride *bool, providers workers.ProviderRegistry) error {
 	if err := validateConfiguredWorkstationRunners(cfg, factoryRunnerID, runtimeCfg, executableLocator, preflight, providers); err != nil {
 		return err
 	}
-	return skippermissions.ValidateInvocationSkipPermissionsWorkers(cfg, runtimeCfg, invocationSkipPermissionsOverride)
+	return validateInvocationSkipPermissionsWorkers(cfg, runtimeCfg, invocationSkipPermissionsOverride, providers)
 }
 
-func validateConfiguredWorkstationRunners(cfg *interfaces.FactoryConfig, factoryRunnerID string, runtimeCfg interfaces.RuntimeConfigLookup, executableLocator platformprocess.ExecutableLocator, preflight runnerSelectionPreflight, providers *providerregistry.Registry) error {
+func validateInvocationSkipPermissionsWorkers(
+	cfg *interfaces.FactoryConfig,
+	runtimeCfg interfaces.RuntimeConfigLookup,
+	invocationOverride *bool,
+	providers workers.ProviderRegistry,
+) error {
+	if invocationOverride == nil || !*invocationOverride || cfg == nil || runtimeCfg == nil {
+		return nil
+	}
+	for _, workerCfg := range cfg.Workers {
+		worker, ok := runtimeCfg.Worker(workerCfg.Name)
+		if !ok || worker == nil || worker.Type == "" {
+			continue
+		}
+		if err := skippermissions.ValidateInvocationSkipPermissionsForWorker(worker, invocationOverride); err != nil {
+			// A configured Providers-catalog integration (currently ACP) applies
+			// this policy at its protocol boundary, not through a known CLI flag.
+			if providers != nil && strings.TrimSpace(worker.ModelProvider) != "" {
+				if _, selectionErr := providers.ResolveRunnerSelection("", "", worker.ModelProvider); selectionErr == nil {
+					continue
+				}
+			}
+			return fmt.Errorf("worker %q: %w", workerCfg.Name, err)
+		}
+	}
+	return nil
+}
+
+func validateConfiguredWorkstationRunners(cfg *interfaces.FactoryConfig, factoryRunnerID string, runtimeCfg interfaces.RuntimeConfigLookup, executableLocator platformprocess.ExecutableLocator, preflight runnerSelectionPreflight, providers workers.ProviderRegistry) error {
 	for index, workstation := range cfg.Workstations {
 		if configured, ok := runtimeCfg.Workstation(workstation.Name); ok && configured != nil {
 			workstation = *configured
 		}
 		worker, _ := runtimeCfg.Worker(workstation.WorkerTypeName)
-		modelProvider, openCodeAgent := "", ""
+		modelProvider := ""
 		if worker != nil {
-			modelProvider, openCodeAgent = worker.ModelProvider, worker.OpenCodeAgent
+			modelProvider = worker.ModelProvider
+		}
+		// Invocation placeholders are resolved for each dispatch. They are not
+		// concrete provider identities during the invocation-neutral runtime
+		// preflight, so defer provider validation until interpolation.
+		if strings.Contains(modelProvider, "${") {
+			modelProvider = ""
+		}
+		workstationRunner := workstation.Runner
+		if strings.Contains(workstationRunner, "${") {
+			workstationRunner = ""
 		}
 		selection, selectionErr := resolveRuntimeRunnerSelection(
 			providers,
-			workstation.Runner,
+			workstationRunner,
 			factoryRunnerID,
 			modelProvider,
 		)
 		if selectionErr != nil {
 			return fmt.Errorf("workstations[%d](%s).runner: %w", index, workstation.Name, selectionErr)
-		}
-		if err := workerrunner.ValidateOpenCodeAgentForRunnerSelection(workstation.OpenCodeAgent, openCodeAgent, selection); err != nil {
-			return fmt.Errorf("workstations[%d](%s).openCodeAgent: %w", index, workstation.Name, err)
 		}
 		if selection.Source == workerexecution.RunnerSelectionSourceDefault {
 			continue
@@ -290,7 +315,7 @@ func validateConfiguredWorkstationRunners(cfg *interfaces.FactoryConfig, factory
 }
 
 func resolveRuntimeRunnerSelection(
-	providers *providerregistry.Registry,
+	providers workers.ProviderRegistry,
 	workstationRunner string,
 	factoryRunnerID string,
 	modelProvider string,
@@ -301,7 +326,7 @@ func resolveRuntimeRunnerSelection(
 	return workerrunner.ResolveRunnerSelection(workstationRunner, factoryRunnerID, modelProvider), nil
 }
 
-func validateRuntimeRunnerIdentity(providers *providerregistry.Registry, runnerID string) error {
+func validateRuntimeRunnerIdentity(providers workers.ProviderRegistry, runnerID string) error {
 	if providers != nil {
 		_, err := providers.RunnerMetadata(runnerID)
 		return err
@@ -316,7 +341,7 @@ func validateRuntimeRunnerIdentity(providers *providerregistry.Registry, runnerI
 }
 
 func validateRuntimeRunnerPrerequisites(
-	providers *providerregistry.Registry,
+	providers workers.ProviderRegistry,
 	executableLocator platformprocess.ExecutableLocator,
 	runnerID string,
 ) error {

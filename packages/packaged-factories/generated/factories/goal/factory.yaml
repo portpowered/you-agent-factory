@@ -1,8 +1,43 @@
+description:
+    type: LOCALIZABLE_ASSET
+    value: Repeatedly works a goal until the executor reports completion or the Factory reaches a failure bound.
+examples:
+    - args:
+        input: Implement and verify the requested change
+      description:
+        type: LOCALIZABLE_ASSET
+        value: Pursue a bounded implementation goal.
+      name: complete-goal
 id: builtin-goal
 invocationReturn:
     policy: EXPLICIT
     terminalState: complete
     workTypeName: goal
+invocationSignature:
+    parameters:
+        - bindings:
+            - kind: POSITIONAL
+              position: 1
+            - kind: STDIN
+            - kind: NAMED
+          description: Goal to pursue until completion.
+          externalName: to
+          name: input
+          required: true
+        - bindings:
+            - kind: NAMED
+          defaultValues:
+            - ""
+          description: Model provider for the goal executor; omitted values use operator defaults.
+          externalName: executor-provider
+          name: executorProvider
+        - bindings:
+            - kind: NAMED
+          defaultValues:
+            - ""
+          description: Model for the goal executor; omitted values use operator defaults.
+          externalName: executor-model
+          name: executorModel
 name: goal
 workTypes:
     - handlingBehavior:
@@ -19,30 +54,77 @@ workTypes:
           type: FAILED
 workers:
     - body: |
-        You are executing goal work {{ (index .Inputs 0).WorkID }} at a REPEATER AGENT_RUN workstation backed by an AGENT_WORKER.
+        You are executing goal work {{ (index .Inputs 0).WorkID }} in a bounded repeated
+        workflow. Assume you begin with zero conversational context. Read the complete
+        goal, any prior attempt output shown below, repository contributor instructions,
+        relevant architecture and source, tests, and current working-tree state before
+        acting. Preserve unrelated user changes and verify assumptions against evidence.
 
-        Work the submitted goal until it is finished or you can explain what must change before another pass. Do not respond with open-ended discussion.
+        Customer goal:
+        {{ if (index .Inputs 0).Payload -}}
+        {{ (index .Inputs 0).Payload }}
+        {{ else -}}
+        {{ range (index .Inputs 0).Content }}{{ .Text }}{{ end }}
+        {{ end -}}
 
-        When the goal is complete, end your response with `<COMPLETE>` on its own line.
-        When you made ordinary partial progress and need another pass without rejection, include `<CONTINUE>` in your response.
-        Otherwise explain what must change before the goal can complete.
+        {{ if gt (index .Inputs 0).History.AttemptNumber 1 -}}
+        Previous attempt output:
+        {{ (index .Inputs 0).PreviousOutput }}
+        {{ end -}}
 
-        Return a concise final response the customer can use when you finish.
+        Work the submitted goal as far as this pass safely allows. On later attempts,
+        continue from observable workspace state and prior output; do not redo completed
+        work blindly. Implement coherent progress, exercise relevant success and failure
+        cases, and report exact verification. Do not respond with open-ended discussion
+        or defer an action you can complete in this pass.
+
+        Your final non-empty line is a required machine-readable decision marker:
+
+        - When the goal is complete, it must be exactly `<COMPLETE>`.
+        - When you made ordinary partial progress and need another pass, it must be exactly `<CONTINUE>`.
+        - Otherwise explain what must change, then end with neither marker so the attempt is rejected.
+
+        Return a concise response the customer can use, followed by the required marker on its own final line. Never omit the marker for a completed or continuing goal.
+      model: ${executorModel}
+      modelProvider: ${executorProvider}
       name: goal-executor
+      skipPermissions: true
       stopToken: <COMPLETE>
       type: AGENT_WORKER
 workstations:
     - behavior: REPEATER
       body: |
-        You are executing goal work {{ (index .Inputs 0).WorkID }} at a REPEATER AGENT_RUN workstation backed by an AGENT_WORKER.
+        You are executing goal work {{ (index .Inputs 0).WorkID }} in a bounded repeated
+        workflow. Assume you begin with zero conversational context. Read the complete
+        goal, any prior attempt output shown below, repository contributor instructions,
+        relevant architecture and source, tests, and current working-tree state before
+        acting. Preserve unrelated user changes and verify assumptions against evidence.
 
-        Work the submitted goal until it is finished or you can explain what must change before another pass. Do not respond with open-ended discussion.
+        Customer goal:
+        {{ if (index .Inputs 0).Payload -}}
+        {{ (index .Inputs 0).Payload }}
+        {{ else -}}
+        {{ range (index .Inputs 0).Content }}{{ .Text }}{{ end }}
+        {{ end -}}
 
-        When the goal is complete, end your response with `<COMPLETE>` on its own line.
-        When you made ordinary partial progress and need another pass without rejection, include `<CONTINUE>` in your response.
-        Otherwise explain what must change before the goal can complete.
+        {{ if gt (index .Inputs 0).History.AttemptNumber 1 -}}
+        Previous attempt output:
+        {{ (index .Inputs 0).PreviousOutput }}
+        {{ end -}}
 
-        Return a concise final response the customer can use when you finish.
+        Work the submitted goal as far as this pass safely allows. On later attempts,
+        continue from observable workspace state and prior output; do not redo completed
+        work blindly. Implement coherent progress, exercise relevant success and failure
+        cases, and report exact verification. Do not respond with open-ended discussion
+        or defer an action you can complete in this pass.
+
+        Your final non-empty line is a required machine-readable decision marker:
+
+        - When the goal is complete, it must be exactly `<COMPLETE>`.
+        - When you made ordinary partial progress and need another pass, it must be exactly `<CONTINUE>`.
+        - Otherwise explain what must change, then end with neither marker so the attempt is rejected.
+
+        Return a concise response the customer can use, followed by the required marker on its own final line. Never omit the marker for a completed or continuing goal.
       inputs:
         - state: init
           workType: goal
@@ -61,4 +143,19 @@ workstations:
           workType: goal
       promptFile: prompts/executor.md
       type: AGENT_RUN
+      workPropagation:
+        mode: PRESERVE_INPUT
       worker: goal-executor
+    - guards:
+        - maxVisits: 12
+          type: VISIT_COUNT
+          workstation: execute-goal
+      inputs:
+        - state: init
+          workType: goal
+      name: goal-loop-breaker
+      outputs:
+        - state: failed
+          workType: goal
+      type: LOGICAL_MOVE
+      worker: ""

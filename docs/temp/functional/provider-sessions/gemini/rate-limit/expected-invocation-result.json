@@ -1,5 +1,0 @@
-{
-  "failureReason": "throttled",
-  "message": "The provider is rate limited; retry after capacity becomes available.",
-  "ok": false
-}

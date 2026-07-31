@@ -12,10 +12,10 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/commanddispatch"
+	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/commandenv"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
-	"github.com/portpowered/infinite-you/pkg/services/workers/provider/commandenv"
 )
 
 // ExecutableDependencies are policy-free host effects used to resolve the
@@ -27,9 +27,9 @@ type ExecutableDependencies struct {
 
 // PTYEffectOptions configures the native Agy PTY execution effect.
 type PTYEffectOptions struct {
-	FactoryRoot  string
-	Allocator    agypty.PTYAllocator
-	Executable   string
+	FactoryRoot   string
+	Allocator     agypty.PTYAllocator
+	Executable    string
 	SessionConfig agypty.SessionConfig
 	ExecutableDependencies
 }
@@ -41,7 +41,7 @@ func NewPTYEffect(options PTYEffectOptions) Effect {
 	}
 	executable := strings.TrimSpace(options.Executable)
 	if executable == "" {
-		executable = string(providers.IDAgy)
+		executable = "agy"
 	}
 	sessionConfig := options.SessionConfig
 	if sessionConfig == (agypty.SessionConfig{}) {
@@ -56,10 +56,10 @@ func NewPTYEffect(options PTYEffectOptions) Effect {
 		started := time.Now()
 		sessionRef := sessionRefFromRequest(request.ResumeSession)
 		launch, err := buildPTYLaunch(request, ptyLaunchConfig{
-			factoryRoot:  factoryRoot,
-			executable:   executable,
-			locator:      options.Locator,
-			inspector:    options.Inspector,
+			factoryRoot:   factoryRoot,
+			executable:    executable,
+			locator:       options.Locator,
+			inspector:     options.Inspector,
 			sessionConfig: sessionConfig,
 		})
 		if err != nil {
@@ -95,6 +95,9 @@ func buildPTYLaunch(
 	request providers.ExecuteRequest,
 	config ptyLaunchConfig,
 ) (ptyLaunch, error) {
+	if effort, _ := providers.ReasoningEffort(request.ReasoningEffort).Canonical(); effort != "" {
+		return ptyLaunch{}, fmt.Errorf("agy does not support a separate reasoning effort")
+	}
 	executable, err := resolveExecutable(
 		config.executable,
 		config.locator,
@@ -167,7 +170,7 @@ func resolveExecutable(
 	}
 	executable = strings.TrimSpace(executable)
 	if executable == "" {
-		executable = string(providers.IDAgy)
+		executable = "agy"
 	}
 	executable = filepath.Clean(executable)
 	if executable == "" || executable == "." {

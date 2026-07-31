@@ -1,0 +1,404 @@
+name: "@you/full-flow"
+id: builtin-full-flow
+description:
+  type: LOCALIZABLE_ASSET
+  value: Plans parallel implementation waves in isolated worktrees, merges completed tasks, and replans until the project
+    is complete.
+invocationReturn:
+  policy: EXPLICIT
+  workTypeName: project
+  terminalState: complete
+invocationSignature:
+  parameters:
+    - name: request
+      description: Project to deliver through iterative implementation waves.
+      externalName: to
+      required: true
+      bindings:
+        - kind: POSITIONAL
+          position: 1
+        - kind: STDIN
+        - kind: NAMED
+    - name: baseBranch
+      description: Base branch for task worktrees.
+      externalName: base-branch
+      defaultValue: main
+      bindings:
+        - kind: NAMED
+    - name: maxCycles
+      description: Maximum planning cycles from 1 through 8.
+      externalName: max-cycles
+      typeHint: NUMBER_STRING
+      defaultValue: "4"
+      choices: ["1", "2", "3", "4", "5", "6", "7", "8"]
+      bindings:
+        - kind: NAMED
+    - name: maxTasksPerCycle
+      description: Maximum tasks in one wave from 1 through 8.
+      externalName: max-tasks-per-cycle
+      typeHint: NUMBER_STRING
+      defaultValue: "4"
+      choices: ["1", "2", "3", "4", "5", "6", "7", "8"]
+      bindings:
+        - kind: NAMED
+    - name: plannerProvider
+      description: Model provider for planning; omitted values use operator defaults.
+      externalName: planner-provider
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+    - name: plannerModel
+      description: Model for planning; omitted values use operator defaults.
+      externalName: planner-model
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+    - name: executorProvider
+      description: Model provider for implementation and merge; omitted values use operator defaults.
+      externalName: executor-provider
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+    - name: executorModel
+      description: Model for implementation and merge; omitted values use operator defaults.
+      externalName: executor-model
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+    - name: reviewerProvider
+      description: Model provider for task review; omitted values use operator defaults.
+      externalName: reviewer-provider
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+    - name: reviewerModel
+      description: Model for task review; omitted values use operator defaults.
+      externalName: reviewer-model
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+examples:
+  - name: deliver-project
+    description:
+      type: LOCALIZABLE_ASSET
+      value: Deliver a project in bounded parallel waves.
+    args:
+      request: Complete the requested project
+      maxCycles: "4"
+      maxTasksPerCycle: "4"
+resources:
+  - name: full-flow-task-slots
+    capacity: 8
+  - name: full-flow-planner-slot
+    capacity: 1
+  - name: full-flow-merge-slot
+    capacity: 1
+workTypes:
+  - name: project
+    handlingBehavior:
+      - DEFAULT
+    states:
+      - name: init
+        type: INITIAL
+      - name: waiting
+        type: PROCESSING
+      - name: complete
+        type: TERMINAL
+      - name: failed
+        type: FAILED
+  - name: delivery-task
+    states:
+      - name: init
+        type: INITIAL
+      - name: ready
+        type: PROCESSING
+      - name: in-review
+        type: PROCESSING
+      - name: ci
+        type: PROCESSING
+      - name: merge
+        type: PROCESSING
+      - name: merged
+        type: TERMINAL
+      - name: failed
+        type: FAILED
+  - name: cycle-control
+    states:
+      - name: init
+        type: INITIAL
+      - name: continue
+        type: PROCESSING
+      - name: complete
+        type: TERMINAL
+      - name: failed
+        type: FAILED
+workers:
+  - name: full-flow-planner
+    type: AGENT_WORKER
+    modelProvider: ${plannerProvider}
+    model: ${plannerModel}
+    skipPermissions: true
+    promptFile: prompts/planner.md
+  - name: task-worktree-setup
+    type: SCRIPT_WORKER
+    command: python3
+    args:
+      - factory/scripts/setup-task-worktree.py
+      - "{{ (index .Inputs 0).Name }}"
+      - ${baseBranch}
+  - name: full-flow-executor
+    type: AGENT_WORKER
+    modelProvider: ${executorProvider}
+    model: ${executorModel}
+    skipPermissions: true
+    stopToken: <COMPLETE>
+    promptFile: prompts/executor.md
+  - name: full-flow-reviewer
+    type: AGENT_WORKER
+    modelProvider: ${reviewerProvider}
+    model: ${reviewerModel}
+    skipPermissions: true
+    promptFile: prompts/reviewer.md
+  - name: full-flow-ci
+    type: AGENT_WORKER
+    modelProvider: ${executorProvider}
+    model: ${executorModel}
+    skipPermissions: true
+    promptFile: prompts/ci.md
+  - name: full-flow-merger
+    type: AGENT_WORKER
+    modelProvider: ${executorProvider}
+    model: ${executorModel}
+    skipPermissions: true
+    promptFile: prompts/merger.md
+  - name: cycle-decider
+    type: SCRIPT_WORKER
+    command: python3
+    args:
+      - factory/scripts/decide-cycle.py
+      - "{{ (index .Inputs 0).Payload }}"
+workstations:
+  - name: assess-project
+    type: AGENT_RUN
+    worker: full-flow-planner
+    resources:
+      - name: full-flow-planner-slot
+        capacity: 1
+    workPropagation:
+      mode: PRESERVE_INPUT
+    limits:
+      maxGeneratedWorkItems: 9
+      maxGeneratedWorkItemsArgument: maxTasksPerCycle
+      maxGeneratedWorkItemsArgumentOffset: 1
+    inputs:
+      - workType: project
+        state: init
+    outputs:
+      - workType: project
+        state: waiting
+    onFailure:
+      - workType: project
+        state: failed
+    promptFile: prompts/planner.md
+  - name: setup-task-worktree
+    type: SCRIPT_RUN
+    worker: task-worktree-setup
+    resources:
+      - name: full-flow-task-slots
+        capacity: 1
+    inputs:
+      - workType: delivery-task
+        state: init
+    outputs:
+      - workType: delivery-task
+        state: ready
+    onFailure:
+      - workType: delivery-task
+        state: failed
+  - name: implement-task
+    type: AGENT_RUN
+    behavior: REPEATER
+    worker: full-flow-executor
+    resources:
+      - name: full-flow-task-slots
+        capacity: 1
+    workingDirectory: .claude/worktrees/{{ (index .Inputs 0).Name }}
+    inputs:
+      - workType: delivery-task
+        state: ready
+    outputs:
+      - workType: delivery-task
+        state: in-review
+    onContinue:
+      - workType: delivery-task
+        state: ready
+    onRejection:
+      - workType: delivery-task
+        state: ready
+    onFailure:
+      - workType: delivery-task
+        state: failed
+    promptFile: prompts/executor.md
+  - name: review-task
+    type: AGENT_RUN
+    worker: full-flow-reviewer
+    workingDirectory: .claude/worktrees/{{ (index .Inputs 0).Name }}
+    inputs:
+      - workType: delivery-task
+        state: in-review
+    outputs:
+      - workType: delivery-task
+        state: ci
+    onRejection:
+      - workType: delivery-task
+        state: ready
+    onFailure:
+      - workType: delivery-task
+        state: failed
+    promptFile: prompts/reviewer.md
+  - name: verify-task-ci
+    type: AGENT_RUN
+    behavior: REPEATER
+    worker: full-flow-ci
+    workingDirectory: .claude/worktrees/{{ (index .Inputs 0).Name }}
+    inputs:
+      - workType: delivery-task
+        state: ci
+    outputs:
+      - workType: delivery-task
+        state: merge
+    onContinue:
+      - workType: delivery-task
+        state: ci
+    onRejection:
+      - workType: delivery-task
+        state: ready
+    onFailure:
+      - workType: delivery-task
+        state: failed
+    promptFile: prompts/ci.md
+  - name: merge-task
+    type: AGENT_RUN
+    behavior: REPEATER
+    worker: full-flow-merger
+    resources:
+      - name: full-flow-merge-slot
+        capacity: 1
+    workingDirectory: .claude/worktrees/{{ (index .Inputs 0).Name }}
+    inputs:
+      - workType: delivery-task
+        state: merge
+    outputs:
+      - workType: delivery-task
+        state: merged
+    onContinue:
+      - workType: delivery-task
+        state: merge
+    onRejection:
+      - workType: delivery-task
+        state: ready
+    onFailure:
+      - workType: delivery-task
+        state: failed
+    promptFile: prompts/merger.md
+  - name: decide-next-cycle
+    type: CLASSIFIER_WORKSTATION
+    worker: cycle-decider
+    inputs:
+      - workType: cycle-control
+        state: init
+    classificationRoutes:
+      - label: continue
+        outputs:
+          - workType: cycle-control
+            state: continue
+      - label: complete
+        outputs:
+          - workType: cycle-control
+            state: complete
+    onFailure:
+      - workType: cycle-control
+        state: failed
+  - name: continue-project
+    type: LOGICAL_MOVE
+    inputs:
+      - workType: project
+        state: waiting
+        guards:
+          - type: SAME_NAME
+            matchInput: cycle-control
+      - workType: cycle-control
+        state: continue
+    outputs:
+      - workType: project
+        state: init
+  - name: complete-project
+    type: LOGICAL_MOVE
+    inputs:
+      - workType: project
+        state: waiting
+        guards:
+          - type: SAME_NAME
+            matchInput: cycle-control
+      - workType: cycle-control
+        state: complete
+    outputs:
+      - workType: project
+        state: complete
+  - name: fail-project-from-task
+    type: LOGICAL_MOVE
+    inputs:
+      - workType: project
+        state: waiting
+      - workType: delivery-task
+        state: failed
+        guards:
+          - type: ANY_CHILD_FAILED
+            parentInput: project
+            spawnedBy: assess-project
+    outputs:
+      - workType: project
+        state: failed
+  - name: executor-loop-breaker
+    type: LOGICAL_MOVE
+    guards:
+      - type: VISIT_COUNT
+        workstation: implement-task
+        maxVisits: 20
+    inputs:
+      - workType: delivery-task
+        state: ready
+    outputs:
+      - workType: delivery-task
+        state: failed
+  - name: review-loop-breaker
+    type: LOGICAL_MOVE
+    guards:
+      - type: VISIT_COUNT
+        workstation: review-task
+        maxVisits: 8
+    inputs:
+      - workType: delivery-task
+        state: in-review
+    outputs:
+      - workType: delivery-task
+        state: failed
+  - name: cycle-loop-breaker
+    type: LOGICAL_MOVE
+    guards:
+      - type: VISIT_COUNT
+        workstation: assess-project
+        maxVisits: 8
+        maxVisitsArgument: maxCycles
+    inputs:
+      - workType: project
+        state: init
+    outputs:
+      - workType: project
+        state: failed

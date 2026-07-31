@@ -9,26 +9,26 @@ import contracts "github.com/portpowered/infinite-you/pkg/services/factory_defin
 // downstream consumers finish cutover.
 
 type (
-	ActiveThrottlePause                      = contracts.ActiveThrottlePause
-	CompletedDispatch                      = contracts.CompletedDispatch
-	DispatchConsumedWorkRef                = contracts.DispatchConsumedWorkRef
-	DispatchEntry                          = contracts.DispatchEntry
-	DispatchReconciliationSource           = contracts.DispatchReconciliationSource
-	DispatchRecord                         = contracts.DispatchRecord
-	DispatchRequestEventMetadata           = contracts.DispatchRequestEventMetadata
-	DispatchResourceRef                    = contracts.DispatchResourceRef
-	FactoryDispatchKind                    = contracts.FactoryDispatchKind
-	FactoryDispatchRecord                  = contracts.FactoryDispatchRecord
-	FactoryDispatchStatus                  = contracts.FactoryDispatchStatus
-	FactoryDispatchUsage                   = contracts.FactoryDispatchUsage
-	FactoryDispatchWarning                 = contracts.FactoryDispatchWarning
-	FactorySessionChildDispatchCounts      = contracts.FactorySessionChildDispatchCounts
-	FactorySessionDispatchFailureDetail    = contracts.FactorySessionDispatchFailureDetail
-	FactorySessionDispatchJavaScriptState  = contracts.FactorySessionDispatchJavaScriptState
-	FactorySessionDispatchPetriState       = contracts.FactorySessionDispatchPetriState
-	FactorySessionDispatchState            = contracts.FactorySessionDispatchState
-	FactorySessionDispatchUsage            = contracts.FactorySessionDispatchUsage
-	FactorySessionDispatchWarning          = contracts.FactorySessionDispatchWarning
+	ActiveThrottlePause                   = contracts.ActiveThrottlePause
+	CompletedDispatch                     = contracts.CompletedDispatch
+	DispatchConsumedWorkRef               = contracts.DispatchConsumedWorkRef
+	DispatchEntry                         = contracts.DispatchEntry
+	DispatchReconciliationSource          = contracts.DispatchReconciliationSource
+	DispatchRecord                        = contracts.DispatchRecord
+	DispatchRequestEventMetadata          = contracts.DispatchRequestEventMetadata
+	DispatchResourceRef                   = contracts.DispatchResourceRef
+	FactoryDispatchKind                   = contracts.FactoryDispatchKind
+	FactoryDispatchRecord                 = contracts.FactoryDispatchRecord
+	FactoryDispatchStatus                 = contracts.FactoryDispatchStatus
+	FactoryDispatchUsage                  = contracts.FactoryDispatchUsage
+	FactoryDispatchWarning                = contracts.FactoryDispatchWarning
+	FactorySessionChildDispatchCounts     = contracts.FactorySessionChildDispatchCounts
+	FactorySessionDispatchFailureDetail   = contracts.FactorySessionDispatchFailureDetail
+	FactorySessionDispatchJavaScriptState = contracts.FactorySessionDispatchJavaScriptState
+	FactorySessionDispatchPetriState      = contracts.FactorySessionDispatchPetriState
+	FactorySessionDispatchState           = contracts.FactorySessionDispatchState
+	FactorySessionDispatchUsage           = contracts.FactorySessionDispatchUsage
+	FactorySessionDispatchWarning         = contracts.FactorySessionDispatchWarning
 )
 
 const (

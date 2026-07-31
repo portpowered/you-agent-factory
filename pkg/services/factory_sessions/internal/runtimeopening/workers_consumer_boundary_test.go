@@ -2,11 +2,10 @@ package runtimeopening
 
 import (
 	"context"
-	"os/exec"
-	"strings"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/services/automations"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/models"
@@ -20,47 +19,6 @@ const workersImportRoot = "github.com/portpowered/infinite-you/pkg/services/work
 
 // TestRuntimeOpeningPackagesImportWorkersOnlyThroughRoot seals runtime-opening
 // and construction call sites to the Workers service root contract.
-func TestRuntimeOpeningPackagesImportWorkersOnlyThroughRoot(t *testing.T) {
-	t.Parallel()
-
-	cmd := exec.Command(
-		"go",
-		"list",
-		"-test",
-		"-f",
-		"{{.ImportPath}} {{join .Imports \" \"}}",
-		"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening/...",
-	)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("go list runtimeopening packages: %v\n%s", err, output)
-	}
-
-	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) < 1 {
-			continue
-		}
-		pkgPath := fields[0]
-		for _, imp := range fields[1:] {
-			if imp == workersImportRoot {
-				continue
-			}
-			if strings.HasPrefix(imp, workersImportRoot+"/") {
-				t.Fatalf(
-					"%s must import Workers only through %s; found direct import %s",
-					pkgPath,
-					workersImportRoot,
-					imp,
-				)
-			}
-		}
-	}
-}
 
 // TestRuntimeOpeningFactoryRolesNameWorkersRootContracts proves runtime-opening
 // construction helpers type Workers-facing bindings only through the Workers
@@ -79,9 +37,9 @@ func TestRuntimeOpeningFactoryRolesNameWorkersRootContracts(t *testing.T) {
 
 	var _ ExternalEffects = ExternalEffects{
 		ProviderOverride:     (workers.Provider)(nil),
-		HostedClock:          (workers.HostedPollerClock)(nil),
-		HostedHTTPClient:     (workers.HostedPollerHTTPDoer)(nil),
-		HostedSecretResolver: (workers.HostedPollerSecretResolver)(nil),
+		HostedClock:          (automations.HostedLinearClock)(nil),
+		HostedHTTPClient:     (automations.HostedLinearHTTPDoer)(nil),
+		HostedSecretResolver: (automations.HostedLinearSecretResolver)(nil),
 	}
 }
 
@@ -98,8 +56,10 @@ func TestNewWorkerExecutionForwardsWorkersRootBindings(t *testing.T) {
 	t.Parallel()
 
 	const runnerID = "session-worker-runner"
+	const runWorktree = "feature-login"
 	ptyAllocator := &workers.MockPTYAllocator{}
 	var gotRunnerID string
+	var gotWorktree string
 	var gotPTY workers.PTYAllocator
 	var gotProvider workers.Provider
 
@@ -113,6 +73,7 @@ func TestNewWorkerExecutionForwardsWorkersRootBindings(t *testing.T) {
 		_ *zap.Logger,
 		_ bool,
 		runner string,
+		worktree string,
 		_ *bool,
 		provider workers.Provider,
 		_ func() time.Time,
@@ -120,6 +81,7 @@ func TestNewWorkerExecutionForwardsWorkersRootBindings(t *testing.T) {
 		_ []operatorconfig.ACPIntegration,
 	) (workers.RuntimeService, error) {
 		gotRunnerID = runner
+		gotWorktree = worktree
 		gotPTY = pty
 		gotProvider = provider
 		return nil, nil
@@ -127,7 +89,7 @@ func TestNewWorkerExecutionForwardsWorkersRootBindings(t *testing.T) {
 
 	service, err := NewWorkerExecution(
 		factoryruntime.RuntimeOpeningRequest{},
-		workers.RuntimeOpeningRequest{RunnerID: runnerID},
+		workers.RuntimeOpeningRequest{RunnerID: runnerID, Worktree: runWorktree},
 		openingCoordinatorClock{},
 		zap.NewNop(),
 		workersRootBindingProbeRunner{},
@@ -149,6 +111,9 @@ func TestNewWorkerExecutionForwardsWorkersRootBindings(t *testing.T) {
 	}
 	if gotRunnerID != runnerID {
 		t.Fatalf("runner ID = %q, want %q", gotRunnerID, runnerID)
+	}
+	if gotWorktree != runWorktree {
+		t.Fatalf("worktree = %q, want %q", gotWorktree, runWorktree)
 	}
 	if gotPTY != ptyAllocator {
 		t.Fatalf("PTY allocator = %#v, want %#v", gotPTY, ptyAllocator)

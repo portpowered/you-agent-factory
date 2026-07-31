@@ -1027,9 +1027,6 @@ func workstationAPIFromInternal(workstation interfaces.FactoryWorkstationConfig,
 	if normalized.Worktree != "" {
 		apiWorkstation.Worktree = stringPtr(normalized.Worktree)
 	}
-	if normalized.OpenCodeAgent != "" {
-		apiWorkstation.OpenCodeAgent = stringPtr(normalized.OpenCodeAgent)
-	}
 	return apiWorkstation
 }
 
@@ -1169,12 +1166,12 @@ func workerDefinitionAPIFromInternalWithUsage(def *interfaces.FactoryWorkerConfi
 		AgentTools:       agentWorkerToolsAPIFromInternal(def.AgentTools),
 		Model:            stringPtrIfNotEmpty(def.Model),
 		ModelProvider:    workerModelProviderPtrIfNotEmpty(def.ModelProvider),
+		ReasoningEffort:  stringPtrIfNotEmpty(def.ReasoningEffort),
 		ModelLocality:    workerModelLocalityPtrIfNotEmpty(def.ModelLocality),
 		ExecutorProvider: workerProviderPtrIfNotEmpty(def.ExecutorProvider),
 		Operations:       modelOperationsAPIFromInternal(def.Operations),
 		Resources:        resourceRequirementsAPIFromInternal(def.Resources),
 		SkipPermissions:  boolPtrIfTrue(def.SkipPermissions),
-		OpenCodeAgent:    stringPtrIfNotEmpty(def.OpenCodeAgent),
 		StopToken:        stringPtrIfNotEmpty(def.StopToken),
 		Timeout:          stringPtrIfNotEmpty(def.Timeout),
 	}
@@ -1299,12 +1296,16 @@ func modelOperationContentTypesAPIFromInternal(contentTypes []string) []factorya
 }
 
 func workstationLimitsAPIFromInternal(limits interfaces.WorkstationLimits) *factoryapi.WorkstationLimits {
-	if limits.MaxRetries == 0 && limits.MaxExecutionTime == "" {
+	if limits.MaxRetries == 0 && limits.MaxExecutionTime == "" && limits.MaxGeneratedWorkItems == 0 &&
+		limits.MaxGeneratedWorkItemsArgument == "" && limits.MaxGeneratedWorkItemsArgumentOffset == 0 {
 		return nil
 	}
 	return &factoryapi.WorkstationLimits{
-		MaxExecutionTime: stringPtrIfNotEmpty(limits.MaxExecutionTime),
-		MaxRetries:       intPtrIfNonZero(limits.MaxRetries),
+		MaxExecutionTime:                    stringPtrIfNotEmpty(limits.MaxExecutionTime),
+		MaxRetries:                          intPtrIfNonZero(limits.MaxRetries),
+		MaxGeneratedWorkItems:               intPtrIfNonZero(limits.MaxGeneratedWorkItems),
+		MaxGeneratedWorkItemsArgument:       stringPtrIfNotEmpty(limits.MaxGeneratedWorkItemsArgument),
+		MaxGeneratedWorkItemsArgumentOffset: intPtrIfNonZero(limits.MaxGeneratedWorkItemsArgumentOffset),
 	}
 }
 
@@ -1350,9 +1351,10 @@ func workstationCronAPIFromInternal(cron *interfaces.CronConfig) *factoryapi.Wor
 		return nil
 	}
 	return &factoryapi.WorkstationCron{
+		Every:          stringPtrIfNotEmpty(cron.Every),
 		ExpiryWindow:   stringPtrIfNotEmpty(cron.ExpiryWindow),
 		Jitter:         stringPtrIfNotEmpty(cron.Jitter),
-		Schedule:       cron.Schedule,
+		Schedule:       stringPtrIfNotEmpty(cron.Schedule),
 		TriggerAtStart: boolPtrIfTrue(cron.TriggerAtStart),
 	}
 }
@@ -1430,10 +1432,11 @@ func workstationGuardsAPIFromInternal(guards []interfaces.GuardConfig) *[]factor
 	values := make([]factoryapi.WorkstationGuard, len(guards))
 	for i, guard := range guards {
 		values[i] = factoryapi.WorkstationGuard{
-			Type:        publicWorkstationGuardTypeFromInternal(guard.Type),
-			Workstation: stringPtrIfNotEmpty(guard.Workstation),
-			MaxVisits:   intPtrIfNonZero(guard.MaxVisits),
-			MatchConfig: guardMatchConfigAPIFromInternal(guard.MatchConfig),
+			Type:              publicWorkstationGuardTypeFromInternal(guard.Type),
+			Workstation:       stringPtrIfNotEmpty(guard.Workstation),
+			MaxVisits:         intPtrIfNonZero(guard.MaxVisits),
+			MaxVisitsArgument: stringPtrIfNotEmpty(guard.MaxVisitsArgument),
+			MatchConfig:       guardMatchConfigAPIFromInternal(guard.MatchConfig),
 		}
 	}
 	return &values

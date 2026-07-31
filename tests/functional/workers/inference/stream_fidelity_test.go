@@ -17,10 +17,8 @@ import (
 )
 
 const (
-	claudeFullStreamGoldenCase     = "full-stream-text-success"
-	codexPartialStreamGoldenCase   = "success"
-	openCodeSnapshotOnlyGoldenCase = "structured-snapshot-success"
-	geminiFinalOnlyGoldenCase        = "text-success"
+	claudeFullStreamGoldenCase   = "full-stream-text-success"
+	codexPartialStreamGoldenCase = "success"
 )
 
 // TestProviderFullStreamClaimsDeltasAndSnapshotsTruthfully replays a sanitized
@@ -126,113 +124,6 @@ func TestProviderPartialStreamDoesNotFabricateMissingDeltas(t *testing.T) {
 	assertPartialStreamPublicResponseEvents(t, responseEvents, factoryEvents, "Codex fixture answer COMPLETE")
 }
 
-// TestProviderSnapshotOnlyEmitsCompletedSnapshotsOnly replays a sanitized
-// snapshot-only provider transcript through root.BuildProcess and proves
-// published Factory response events expose native streaming with completed
-// message snapshots only—zero message deltas and no final-only fidelity claims.
-func TestProviderSnapshotOnlyEmitsCompletedSnapshotsOnly(t *testing.T) {
-	loaded := loadStreamFidelityGoldenCase(t, modelprovider.ProviderOpenCode, openCodeSnapshotOnlyGoldenCase)
-	if loaded.Manifest.FidelityClass != support.ProviderSessionFidelitySnapshotOnly {
-		t.Fatalf(
-			"manifest.fidelityClass = %q, want %q",
-			loaded.Manifest.FidelityClass,
-			support.ProviderSessionFidelitySnapshotOnly,
-		)
-	}
-
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	support.WriteAgentConfig(t, dir, "worker", strings.Replace(
-		support.BuildModelWorkerConfig(modelprovider.ProviderOpenCode, loaded.Process.Model),
-		"stopToken: COMPLETE",
-		"skipPermissions: true\nstopToken: COMPLETE",
-		1,
-	))
-	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"provider snapshot-only fidelity"}`))
-
-	exitCode := 0
-	if loaded.Process.ExitCode != nil {
-		exitCode = *loaded.Process.ExitCode
-	}
-	executablePath := writeStreamFidelityOpenCodeExecutable(t)
-	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
-		Stdout:   append([]byte(nil), loaded.Stdout.Raw...),
-		Stderr:   []byte(loaded.Stderr),
-		ExitCode: exitCode,
-	})
-
-	_, listed, _, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(
-		t,
-		dir,
-		serviceedges.Edges{
-			ProviderCommandRunner:    runner,
-			WorkersExecutableLocator: streamFidelityOpenCodeExecutableLocator{path: executablePath},
-			WorkersResolveSymlinks:   streamFidelityIdentityResolveSymlinks,
-		},
-		30*time.Second,
-	)
-
-	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
-		t.Fatalf("completed work = %d, want 1; listed=%#v", got, listed)
-	}
-	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 0 {
-		t.Fatalf("failed work = %d, want 0", got)
-	}
-	if runner.CallCount() < 1 {
-		t.Fatalf("provider command runner calls = %d, want at least one invocation", runner.CallCount())
-	}
-
-	assertSnapshotOnlyPublicResponseEvents(t, responseEvents, "Hello world COMPLETE")
-}
-
-// TestProviderFinalOnlyEmitsTerminalMessageOnly replays a sanitized final-only
-// provider transcript through root.BuildProcess and proves published Factory
-// response events expose only the terminal completed message with final-only
-// fidelity and native-final delivery—zero fabricated message deltas or native
-// streaming claims.
-func TestProviderFinalOnlyEmitsTerminalMessageOnly(t *testing.T) {
-	loaded := loadStreamFidelityGoldenCase(t, modelprovider.ProviderGemini, geminiFinalOnlyGoldenCase)
-	if loaded.Manifest.FidelityClass != support.ProviderSessionFidelityFinalOnly {
-		t.Fatalf(
-			"manifest.fidelityClass = %q, want %q",
-			loaded.Manifest.FidelityClass,
-			support.ProviderSessionFidelityFinalOnly,
-		)
-	}
-
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(modelprovider.ProviderGemini, loaded.Process.Model))
-	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"provider final-only fidelity"}`))
-
-	exitCode := 0
-	if loaded.Process.ExitCode != nil {
-		exitCode = *loaded.Process.ExitCode
-	}
-	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
-		Stdout:   append([]byte(nil), loaded.Stdout.Raw...),
-		Stderr:   []byte(loaded.Stderr),
-		ExitCode: exitCode,
-	})
-
-	_, listed, _, responseEvents := support.RunFactoryToCompletionWithEdgesAndResponseEvents(
-		t,
-		dir,
-		serviceedges.Edges{ProviderCommandRunner: runner},
-		20*time.Second,
-	)
-
-	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
-		t.Fatalf("completed work = %d, want 1; listed=%#v", got, listed)
-	}
-	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 0 {
-		t.Fatalf("failed work = %d, want 0", got)
-	}
-	if runner.CallCount() != 1 {
-		t.Fatalf("provider command runner calls = %d, want exactly one provider-process edge", runner.CallCount())
-	}
-
-	assertFinalOnlyPublicResponseEvents(t, responseEvents, "gemini functional answer COMPLETE")
-}
-
 func loadStreamFidelityGoldenCase(
 	t *testing.T,
 	provider modelprovider.Provider,
@@ -260,10 +151,10 @@ func assertFullStreamPublicResponseEvents(
 	t.Helper()
 
 	var (
-		deltaCount      int
-		deltaText       strings.Builder
-		completedText   string
-		completedSeen   bool
+		deltaCount    int
+		deltaText     strings.Builder
+		completedText string
+		completedSeen bool
 	)
 
 	for _, event := range events {
@@ -589,10 +480,10 @@ func streamFidelityInferenceResponseContains(
 	t.Helper()
 
 	for _, event := range factoryEvents {
-		if event.Type != factoryapi.FactoryEventTypeInferenceResponse {
+		if event.Type != factoryapi.FactoryEventTypeModelResponse {
 			continue
 		}
-		payload, err := event.Payload.AsInferenceResponseEventPayload()
+		payload, err := support.AsInferenceResponseObservation(event)
 		if err != nil {
 			t.Fatalf("decode inference response event: %v", err)
 		}

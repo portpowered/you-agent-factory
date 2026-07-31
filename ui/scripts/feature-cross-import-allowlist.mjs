@@ -1124,48 +1124,6 @@ export const allowlistedCrossFeatureBoundaryViolations = [
   },
   {
     relativeFilePath:
-      "src/features/factory-graph-editor/lib/work-state/factory-graph-work-state-phase-styling.ts",
-    importSpecifiers: [
-      "../../../flowchart/components/current-activity-node-chrome",
-      "../../../flowchart/components/graph-semantic-icon",
-    ],
-    reason:
-      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-  },
-  {
-    relativeFilePath:
-      "src/features/flowchart/components/current-activity-place-node.tsx",
-    importSpecifiers: [
-      "../../factory-graph-editor/lib/draft/factory-graph-draft-types",
-      "../../factory-graph-editor/lib/work-state/factory-graph-work-state-phase-styling",
-      "../../workflow-activity/messages/activity-shell",
-    ],
-    reason:
-      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-  },
-  {
-    relativeFilePath:
-      "src/features/flowchart/components/current-activity-resource-node.tsx",
-    importSpecifiers: ["../../workflow-activity/messages/activity-shell"],
-    reason:
-      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-  },
-  {
-    relativeFilePath:
-      "src/features/flowchart/components/current-activity-work-type-node.tsx",
-    importSpecifiers: ["../../workflow-activity/messages/activity-shell"],
-    reason:
-      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-  },
-  {
-    relativeFilePath:
-      "src/features/flowchart/components/current-activity-worker-node.tsx",
-    importSpecifiers: ["../../workflow-activity/messages/activity-shell"],
-    reason:
-      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-  },
-  {
-    relativeFilePath:
       "src/features/flowchart/lib/workstation-graph-presentation.ts",
     importSpecifiers: [
       "../../current-factory-definition/lib/workstation-behavior",
@@ -1184,22 +1142,6 @@ export const allowlistedCrossFeatureBoundaryViolations = [
   },
   {
     relativeFilePath:
-      "src/features/graphs/components/workstation-node-view.tsx",
-    importSpecifiers: [
-      "../../current-factory-definition/lib/workstation-progress-outcome-routes",
-      "../../flowchart/components/current-activity-node-chrome",
-      "../../flowchart/components/current-activity-work-progress-marker",
-      "../../flowchart/components/graph-semantic-icon",
-      "../../flowchart/lib/current-activity-graph-hover",
-      "../../flowchart/lib/workstation-graph-presentation",
-      "../../flowchart/messages/activity-graph",
-      "../../workflow-activity/messages/activity-shell",
-    ],
-    reason:
-      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-  },
-  {
-    relativeFilePath:
       "src/features/header/components/dashboard-export-dialog.tsx",
     importSpecifiers: [
       "../../export/hooks/use-current-factory-export",
@@ -1210,16 +1152,16 @@ export const allowlistedCrossFeatureBoundaryViolations = [
   },
   {
     relativeFilePath:
-      "src/features/header/components/dashboard-header-session-controls.tsx",
-    importSpecifiers: ["../../export/messages/export-dialog"],
+      "src/features/bento/components/session-controls-widget.tsx",
+    importSpecifiers: [
+      "../../export/state/exportDialogStore",
+      "../../header/components/dashboard-session-controls",
+      "../../header/components/tick-slider-control",
+      "../../header/hooks/use-dashboard-session-tabs-state",
+      "../../header/messages/header-controls",
+    ],
     reason:
-      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-  },
-  {
-    relativeFilePath: "src/features/header/components/dashboard-header.tsx",
-    importSpecifiers: ["../../export/state/exportDialogStore"],
-    reason:
-      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
+      "Session controls reuse the active dashboard session model and export dialog state from their existing feature owners.",
   },
   {
     relativeFilePath:
@@ -1848,13 +1790,6 @@ export const allowlistedCrossFeatureBoundaryViolations = [
       "../../current-factory-definition/lib/doc-editable-values",
       "../../workflow-activity/lib/factory-bundled-docs",
     ],
-    reason:
-      "Doc-nodes cross-feature internal import debt from factory/docs dashboard graph and current-selection flows. Route reuse through public/ boundaries in a follow-up structural cleanup.",
-  },
-  {
-    relativeFilePath:
-      "src/features/flowchart/components/current-activity-doc-node.tsx",
-    importSpecifiers: ["../../workflow-activity/messages/activity-shell"],
     reason:
       "Doc-nodes cross-feature internal import debt from factory/docs dashboard graph and current-selection flows. Route reuse through public/ boundaries in a follow-up structural cleanup.",
   },

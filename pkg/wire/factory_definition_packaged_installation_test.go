@@ -101,12 +101,19 @@ func TestProvidePackagedFactoryDefinitions_LoadsDetachedGeneratedCatalog(t *test
 	}
 
 	wantNames := []string{
+		"@you/classify",
 		"@you/deep-research",
+		"@you/full-flow",
 		"@you/fusion",
 		"@you/goal",
+		"@you/loop",
+		"@you/plan-execute",
+		"@you/plan-parallel",
 		"@you/quorum",
 		"@you/review",
+		"@you/spawn",
 		"@you/subagent",
+		"@you/tournament",
 		"@you/tts",
 	}
 	if len(definitions) != len(wantNames) {
@@ -125,16 +132,23 @@ func TestProvidePackagedFactoryDefinitions_LoadsDetachedGeneratedCatalog(t *test
 	if err != nil {
 		t.Fatalf("read published Goal definition: %v", err)
 	}
-	if !bytes.Equal(definitions[2].JSON, publishedGoal) {
+	goalIndex := -1
+	for index := range definitions {
+		if definitions[index].Name == "@you/goal" {
+			goalIndex = index
+			break
+		}
+	}
+	if goalIndex < 0 || !bytes.Equal(definitions[goalIndex].JSON, publishedGoal) {
 		t.Fatal("injected Goal definition differs from the generated publication artifact")
 	}
 
-	definitions[2].JSON[0] ^= 0xff
+	definitions[goalIndex].JSON[0] ^= 0xff
 	reloaded, err := providePackagedFactoryDefinitions()
 	if err != nil {
 		t.Fatalf("second providePackagedFactoryDefinitions() error = %v", err)
 	}
-	if !bytes.Equal(reloaded[2].JSON, publishedGoal) {
+	if !bytes.Equal(reloaded[goalIndex].JSON, publishedGoal) {
 		t.Fatal("mutating one injected catalog changed a later injected catalog")
 	}
 }

@@ -22,6 +22,7 @@ func TestDocsTopicInventory_AliasesRemainQueryableThroughPackagedSurface(t *test
 	wantAliases := map[string][]string{
 		"workstations": {"workstation"},
 		"batch-inputs": {"batch-work"},
+		"providers":    {"acp"},
 	}
 	for _, entry := range entries {
 		want, ok := wantAliases[entry.Name]

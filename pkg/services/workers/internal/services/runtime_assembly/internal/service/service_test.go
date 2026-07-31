@@ -19,6 +19,23 @@ func (resolve registryFunc) Resolve(
 	return resolve(request)
 }
 
+func (resolve registryFunc) Execute(
+	ctx context.Context,
+	request runners.ExecuteRequest,
+) (runners.ExecuteResult, error) {
+	binding, err := resolve.Resolve(runners.ResolutionRequest{
+		Identity:             request.Identity,
+		RequiredCapabilities: request.RequiredCapabilities,
+	})
+	if err != nil {
+		return runners.ExecuteResult{}, err
+	}
+	if binding.Runner == nil {
+		return runners.ExecuteResult{}, workers.ErrUnknownRunnerSelection
+	}
+	return binding.Runner.Execute(ctx, request.Attempt)
+}
+
 func TestBuildReturnsDetachedBindingsInRequestOrder(t *testing.T) {
 	request := detachmentRequest()
 

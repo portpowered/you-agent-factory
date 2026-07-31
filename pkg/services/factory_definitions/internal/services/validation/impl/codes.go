@@ -6,8 +6,8 @@ import (
 	"slices"
 	"strings"
 
-	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
 )
 
 const (
@@ -17,6 +17,8 @@ const (
 	CodeDanglingResourceReference                                = "factory.resource.danglingReference"
 	CodeWorkerWorkstationIncompatibleBehavior                    = "factory.workstation.incompatibleWorkerBehavior"
 	CodeWorkerUnsupportedModelProvider                           = "factory.worker.unsupportedModelProvider"
+	CodeWorkerUnsupportedReasoningEffort                         = "factory.worker.unsupportedReasoningEffort"
+	CodeWorkerACPModelProviderRequired                           = "factory.worker.acpModelProviderRequired"
 	CodeWorkstationMissingOutputRoutes                           = "factory.workstation.missingOutputRoutes"
 	CodeWorkstationMissingFailureRoute                           = "factory.workstation.missingFailureRoute"
 	CodeWorkstationMissingRejectionRoute                         = "factory.workstation.missingRejectionRoute"
@@ -422,13 +424,13 @@ func invocationSignatureParameterDefaultTargets(parameter factorydefinitions.Inv
 			fmt.Sprintf("invocationSignature parameter %q only supports defaultValues for its multi-value mode", name),
 		))
 	}
-	if !invocationParameterSupportsListDefaults(valueMode) && len(parameter.DefaultValues) > 0 {
+	if !invocationParameterSupportsListDefaults(valueMode) && len(parameter.DefaultValues) > 1 {
 		targets = append(targets, invocationSignatureParameterTarget(
 			CodeInvocationSignatureInvalidDefaultShape,
 			index,
 			"defaultValues",
 			name,
-			fmt.Sprintf("invocationSignature parameter %q only supports defaultValue for its single-value mode", name),
+			fmt.Sprintf("invocationSignature parameter %q supports at most one defaultValues entry for its single-value mode", name),
 		))
 	}
 	return targets
@@ -518,9 +520,6 @@ func invocationSignatureParameterBindingShapeTargets(parameter factorydefinition
 	valueMode := strings.TrimSpace(parameter.ValueMode)
 	if parameter.Sensitive && state.hasPositionalBinding {
 		targets = append(targets, invocationSignatureParameterTarget(CodeInvocationSignatureSensitivePositional, index, "bindings", name, fmt.Sprintf("invocationSignature parameter %q is sensitive and cannot be exposed as a positional argument", name)))
-	}
-	if state.hasStdinBinding && state.hasNamedBinding {
-		targets = append(targets, invocationSignatureParameterTarget(CodeInvocationSignatureInvalidStdinRouting, index, "bindings", name, fmt.Sprintf("invocationSignature parameter %q cannot combine STDIN and NAMED bindings", name)))
 	}
 	if state.hasStdinBinding && state.hasNamedRestBinding {
 		targets = append(targets, invocationSignatureParameterTarget(CodeInvocationSignatureInvalidStdinRouting, index, "bindings", name, fmt.Sprintf("invocationSignature parameter %q cannot combine STDIN and NAMED_REST bindings", name)))
@@ -663,11 +662,11 @@ func invocationWorkerInterpolationFieldTargets(workers []workerconfig.Config) []
 		fields = appendInterpolationField(fields, SubjectTypeWorker, subjectID, SubjectLocationDefinition, basePath+".provider", worker.Provider, false, "worker.provider")
 		fields = appendInterpolationField(fields, SubjectTypeWorker, subjectID, SubjectLocationDefinition, basePath+".model", worker.Model, false, "worker.model")
 		fields = appendInterpolationField(fields, SubjectTypeWorker, subjectID, SubjectLocationDefinition, basePath+".modelProvider", worker.ModelProvider, false, "worker.modelProvider")
+		fields = appendInterpolationField(fields, SubjectTypeWorker, subjectID, SubjectLocationDefinition, basePath+".reasoningEffort", worker.ReasoningEffort, false, "worker.reasoningEffort")
 		fields = appendInterpolationField(fields, SubjectTypeWorker, subjectID, SubjectLocationDefinition, basePath+".executorProvider", worker.ExecutorProvider, false, "worker.executorProvider")
 		fields = appendInterpolationField(fields, SubjectTypeWorker, subjectID, SubjectLocationDefinition, basePath+".command", worker.Command, false, "worker.command")
 		fields = appendInterpolationField(fields, SubjectTypeWorker, subjectID, SubjectLocationDefinition, basePath+".timeout", worker.Timeout, false, "worker.timeout")
 		fields = appendInterpolationField(fields, SubjectTypeWorker, subjectID, SubjectLocationDefinition, basePath+".stopToken", worker.StopToken, false, "worker.stopToken")
-		fields = appendInterpolationField(fields, SubjectTypeWorker, subjectID, SubjectLocationDefinition, basePath+".openCodeAgent", worker.OpenCodeAgent, false, "worker.openCodeAgent")
 		fields = appendInterpolationField(fields, SubjectTypeWorker, subjectID, SubjectLocationDefinition, basePath+".body", worker.Body, false, "worker body")
 		for argIndex, arg := range worker.Args {
 			fields = appendInterpolationField(fields, SubjectTypeWorker, subjectID, SubjectLocationDefinition, fmt.Sprintf("%s.args[%d]", basePath, argIndex), arg, false, "worker.args entry")
@@ -683,7 +682,6 @@ func invocationWorkstationInterpolationFieldTargets(workstations []factorydefini
 		basePath := fmt.Sprintf("%s.workstations[%d](%s)", validationRoot, workstationIndex, workstation.Name)
 		fields = appendInterpolationField(fields, SubjectTypeWorkstation, subjectID, SubjectLocationDefinition, basePath+".worker", workstation.WorkerTypeName, false, "workstation.worker")
 		fields = appendInterpolationField(fields, SubjectTypeWorkstation, subjectID, SubjectLocationDefinition, basePath+".runner", workstation.Runner, false, "workstation.runner")
-		fields = appendInterpolationField(fields, SubjectTypeWorkstation, subjectID, SubjectLocationDefinition, basePath+".openCodeAgent", workstation.OpenCodeAgent, false, "workstation.openCodeAgent")
 		fields = appendInterpolationField(fields, SubjectTypeWorkstation, subjectID, SubjectLocationDefinition, basePath+".promptFile", workstation.PromptFile, false, "workstation.promptFile")
 		fields = appendInterpolationField(fields, SubjectTypeWorkstation, subjectID, SubjectLocationDefinition, basePath+".outputSchema", workstation.OutputSchema, false, "workstation.outputSchema")
 		fields = appendInterpolationField(fields, SubjectTypeWorkstation, subjectID, SubjectLocationDefinition, basePath+".timeout", workstation.Timeout, false, "workstation.timeout")
@@ -691,6 +689,10 @@ func invocationWorkstationInterpolationFieldTargets(workstations []factorydefini
 		fields = appendInterpolationField(fields, SubjectTypeWorkstation, subjectID, SubjectLocationDefinition, basePath+".promptTemplate", workstation.PromptTemplate, false, "workstation.promptTemplate")
 		fields = appendInterpolationField(fields, SubjectTypeWorkstation, subjectID, SubjectLocationDefinition, basePath+".workingDirectory", workstation.WorkingDirectory, false, "workstation.workingDirectory")
 		fields = appendInterpolationField(fields, SubjectTypeWorkstation, subjectID, SubjectLocationDefinition, basePath+".worktree", workstation.Worktree, false, "workstation.worktree")
+		if workstation.Cron != nil {
+			fields = appendInterpolationField(fields, SubjectTypeWorkstation, subjectID, SubjectLocationDefinition, basePath+".cron.schedule", workstation.Cron.Schedule, false, "workstation.cron.schedule")
+			fields = appendInterpolationField(fields, SubjectTypeWorkstation, subjectID, SubjectLocationDefinition, basePath+".cron.every", workstation.Cron.Every, false, "workstation.cron.every")
+		}
 		for key, value := range workstation.Env {
 			fields = appendInterpolationField(fields, SubjectTypeWorkstation, subjectID, SubjectLocationDefinition, fmt.Sprintf("%s.env[%q]", basePath, key), value, false, fmt.Sprintf("workstation.env[%q]", key))
 		}

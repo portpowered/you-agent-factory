@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	cliAdapterPackagePath = "pkg/services/factory_definitions/transports/cli"
-	cliAdapterImportPath  = "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
+	cliAdapterPackagePath   = "pkg/services/factory_definitions/transports/cli"
+	cliAdapterImportPath    = "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
 	factoryDefinitionsOwner = "factory_definitions"
 )
 

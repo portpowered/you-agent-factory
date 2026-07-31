@@ -29,7 +29,7 @@ export type DetailCardEditableFactoryDocumentOverrides = {
   behavior?: "STANDARD" | "REPEATER" | "POLLER";
   model?: string;
   modelProvider?:
-    | "CURSOR"
+    | "CODEX"
     | "CODEX"
     | "CLAUDE"
     | "GEMINI"
@@ -104,7 +104,7 @@ export function buildDetailCardEditableFactoryDocument(
       model: overrides?.model ?? `gpt-5.${index + 5}`,
       modelProvider:
         overrides?.modelProvider ??
-        (index === 0 ? ("CURSOR" as const) : ("CODEX" as const)),
+        (index === 0 ? ("CODEX" as const) : ("CODEX" as const)),
       name,
       type: "MODEL_WORKER",
     })),
@@ -135,7 +135,7 @@ export function buildDetailCardMultiWorkstationFactoryDocument(
     workers: [
       {
         model: "gpt-5.5",
-        modelProvider: "CURSOR",
+        modelProvider: "CODEX",
         name: "reviewer",
         type: "MODEL_WORKER",
       },
@@ -192,7 +192,7 @@ export function buildDetailCardMultiResourceFactoryDocument(): CurrentFactoryDoc
     workers: [
       {
         model: "gpt-5.5",
-        modelProvider: "CURSOR",
+        modelProvider: "CODEX",
         name: "reviewer",
         resources: [{ capacity: 1, name: "agent-slot" }],
         type: "MODEL_WORKER",
@@ -223,7 +223,7 @@ export function buildDetailCardSharedWorkerFactoryDocument(overrides?: {
     workers: [
       {
         model: "gpt-5.5",
-        modelProvider: "CURSOR",
+        modelProvider: "CODEX",
         name: "processor",
         type: "MODEL_WORKER",
       },

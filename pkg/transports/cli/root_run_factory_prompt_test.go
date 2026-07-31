@@ -37,10 +37,9 @@ func TestRunCommand_HelpDocumentsSupportedInputPathsAndStdoutModes(t *testing.T)
 		"--dir",
 		"--named",
 		"--factory",
-		"trailing positional text or piped stdin text",
-		"INVOCATION_INPUT_SOURCE_CONFLICT",
-		"primary-result-only stdout by default",
-		"--output response-stream",
+		"--provider cursor-acp",
+		"response stream by default",
+		"--output primary",
 	} {
 		if !strings.Contains(runCmd.Long, want) {
 			t.Fatalf("run command long help missing %q", want)
@@ -69,8 +68,8 @@ func TestRunCommand_HelpDocumentsSupportedInputPathsAndStdoutModes(t *testing.T)
 	if outputFlag == nil {
 		t.Fatal("expected --output flag on run command")
 	}
-	if !strings.Contains(outputFlag.Usage, "primary (default)") || !strings.Contains(outputFlag.Usage, "response-stream") {
-		t.Fatalf("--output usage = %q, want primary default and response-stream guidance", outputFlag.Usage)
+	if !strings.Contains(outputFlag.Usage, "response-stream (default") || !strings.Contains(outputFlag.Usage, "primary") {
+		t.Fatalf("--output usage = %q, want response-stream default and primary guidance", outputFlag.Usage)
 	}
 }
 

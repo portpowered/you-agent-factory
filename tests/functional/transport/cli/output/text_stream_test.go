@@ -16,8 +16,8 @@ import (
 	"testing"
 	"time"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -411,7 +411,7 @@ func isHumanFactoryLifecycleLine(line string) bool {
 	}
 	message := line[closingBracket+2:]
 	for _, prefix := range []string{
-		"work accepted", "work moved", "Factory Session started", "Factory Session completed",
+		"work accepted", "work moved", "factory started", "factory completed",
 		"workstation queued", "workstation started", "workstation completed", "workstation failed", "workstation interrupted",
 		"inference started", "inference completed", "inference failed", "workflow phase", "workflow checkpoint written",
 		"final output updated",

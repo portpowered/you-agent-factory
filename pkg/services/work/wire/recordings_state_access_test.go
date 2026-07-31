@@ -93,6 +93,11 @@ func TestRecordingsStateAccessServiceRejectsUnsupportedWorkRootRoles(t *testing.
 		t.Fatal("MaterializeContentURL() error = nil, want unsupported role")
 	}
 
+	_, err = svc.MaterializeWorkerOutput(ctx, work.MaterializeWorkerOutputRequest{})
+	if err == nil {
+		t.Fatal("MaterializeWorkerOutput() error = nil, want unsupported role")
+	}
+
 	_, err = svc.PrepareInvocationInput(ctx, work.InvocationInputPreparationRequest{})
 	if err == nil {
 		t.Fatal("PrepareInvocationInput() error = nil, want unsupported role")

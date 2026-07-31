@@ -80,7 +80,8 @@ func writeACPJavaScriptFactory(t *testing.T) string {
   const child = await agent.run({
     prompt: "complete the JavaScript ACP child",
     label: "javascript-acp",
-    executorProvider: "cursor-acp",
+    executorProvider: "ACP",
+    modelProvider: "cursor-acp",
     model: "test-model",
   });
   return child;

@@ -20,6 +20,7 @@ continuous, and mock-worker run tasks.
 | Execute a JavaScript workflow | `you run --factory <workflow.js>` |
 | Keep a local Factory Session alive while idle | Add `--continuously` |
 | Replace live worker dispatch with deterministic outcomes | Add `--with-mock-workers [config.json]` |
+| Run worker dispatches in an isolated Git checkout | Add `--worktree <name>` |
 | Serve an API only for the run lifetime | Add `--with-server` |
 | Serve the embedded dashboard and open it once | Add `--with-site` |
 | Serve the Current Factory continuously | `you server` |
@@ -168,6 +169,29 @@ you run --dir ./factory --with-mock-workers ./docs/examples/mock-workers.json --
 
 Use `you docs mock-workers` for the config contract and passthrough behavior.
 
+## Run in a Git worktree
+
+Add `--worktree <name>` to create or reuse a checkout under the invocation
+working directory's worktree parent and execute every worker dispatch from
+that checkout:
+
+```bash
+you run --named @you/goal --worktree feature-login \
+  --to "Fix the login bug and verify the focused tests"
+```
+
+The selection is run-scoped and does not modify the Factory definition. It is
+provider-neutral: Codex, ACP, Claude, script, and other worker routes receive
+the same materialized checkout as their working directory. Existing valid
+checkouts are reused. A missing Git repository, an invalid relative worktree
+name, a conflicting non-worktree path, or `git worktree add` failure stops the
+dispatch with a worktree preparation error.
+
+The name must be relative and cannot traverse outside the Factory's worktree
+parent. When a run-level worktree is selected, it overrides workstation-level
+`workingDirectory` and `worktree` templates for that run. Without the flag,
+authored workstation behavior is unchanged.
+
 ## Server and site lifecycles
 
 Ordinary `you run` shapes are serverless. This includes Current Factory batch
@@ -219,13 +243,13 @@ Supported one-shot `--factory` and `--named` invocations expose three stdout
 modes. Use `you docs config` for `invocationReturn` and primary-result
 selection policy.
 
-### Primary-result mode (default)
+### Primary-result mode
 
-Successful invocations write only the Factory's configured primary result to
-stdout. Redirect it directly:
+Select `--output primary` to write only the Factory's configured primary result
+to stdout. Redirect it directly:
 
 ```bash
-you run --factory ./factory.json "Summarize the changelog" > result.txt
+you run --factory ./factory.json --output primary "Summarize the changelog" > result.txt
 ```
 
 Add `--quiet` when the same terminal-only contract must also suppress operator
@@ -236,24 +260,24 @@ global `--json` and with explicit `--output`.
 
 ### Single-JSON automation mode
 
-Add global `--json` without `--output response-stream` to write exactly one
+Add global `--json` with `--output primary` to write exactly one
 `InvocationResponse` JSON object. Lifecycle records and provider-session chunks
 are not included. Live and `--replay` invocations use the same single-response
 presentation rule:
 
 ```bash
-you --json run --factory ./factory.json "Summarize the changelog"
+you --json run --factory ./factory.json --output primary "Summarize the changelog"
 ```
 
-### Human Factory Event stream mode
+### Human Factory Event stream mode (default)
 
-Select `--output response-stream` to render the ordered canonical Factory Event
-lifecycle for people on the terminal. The same consumer is used for live and
+One-shot text invocations render the ordered canonical Factory Event lifecycle
+for people on the terminal by default. The same consumer is used for live and
 `--replay` invocations, and the stream ends with the same primary result as
 primary-result mode:
 
 ```bash
-you run --named team-review --output response-stream "Review the release notes"
+you run --named team-review "Review the release notes"
 ```
 
 Human lifecycle lines summarize Work acceptance, Factory Session start and
@@ -265,7 +289,7 @@ human presentation; terminal detection does not silently select another format.
 
 ### NDJSON automation mode
 
-Add global `--json` with `--output response-stream` for newline-delimited
+Add global `--json` for newline-delimited
 automation output. Each non-empty stdout line is one complete JSON record.
 Streamed events use `recordType=factory_event` with a nested canonical
 `FactoryEvent`, including its unchanged session sequence context. An available
@@ -279,7 +303,7 @@ earlier releases. The CLI never emits a raw `FactoryResponseEvent` or a
 `recordType=response_event` record.
 
 ```bash
-you --json run --factory ./factory.json --output response-stream "Summarize the changelog"
+you --json run --factory ./factory.json "Summarize the changelog"
 ```
 
 ### Invocation failures

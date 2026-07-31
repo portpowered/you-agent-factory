@@ -1,0 +1,475 @@
+package plan_parallel
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+)
+
+const parallelDAG = `{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"task-a","workTypeName":"planned-task","payload":"TASK_A_UNIQUE_OBJECTIVE"},{"name":"task-b","workTypeName":"planned-task","payload":"TASK_B_UNIQUE_OBJECTIVE"},{"name":"task-c","workTypeName":"planned-task","payload":"TASK_C_UNIQUE_OBJECTIVE"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"task-c","targetWorkName":"task-a"},{"type":"DEPENDS_ON","sourceWorkName":"task-c","targetWorkName":"task-b"}]}}`
+
+func TestPackagedPlanParallelExecutesReadyDAGConcurrentlyAndMerges(t *testing.T) {
+	// This cell intentionally uses the public API because it owns retained
+	// Factory Event and reconnect/replay assertions below.
+	runner := newPlanParallelRunner(parallelDAG)
+	server := startPlanParallelServer(t, runner)
+	response := invokePlanParallel(t, server, map[string]any{
+		"request":       "implement three dependent tasks",
+		"executorModel": "gpt-5.6-luna",
+	})
+
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		message := ""
+		if response.Message != nil {
+			message = *response.Message
+		}
+		requests := runner.requestsSnapshot()
+		args := make([][]string, 0, len(requests))
+		for _, request := range requests {
+			args = append(args, request.Args)
+		}
+		errors := make([]string, 0)
+		for _, event := range server.GetFactoryEvents(t) {
+			if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
+				continue
+			}
+			payload, err := event.Payload.AsDispatchResponseEventPayload()
+			if err == nil && payload.Error != nil {
+				errors = append(errors, *payload.Error)
+			}
+			if err == nil && payload.FailureDetail != nil {
+				errors = append(errors, payload.FailureDetail.Message)
+			}
+		}
+		t.Fatalf("status = %q, want COMPLETED; message = %q; dispatch errors = %#v; request args = %#v; response = %#v", response.Status, message, errors, args, response)
+	}
+	if got := planParallelPrimaryText(t, response); !strings.Contains(got, "merged parallel result") {
+		t.Fatalf("primary result = %q, want merger output", got)
+	}
+	if runner.maxConcurrentExecutors() < 2 {
+		t.Fatalf("maximum concurrent task executors = %d, want at least 2 dependency-ready tasks", runner.maxConcurrentExecutors())
+	}
+	if runner.executionCount() != 3 || runner.mergeCount() != 1 {
+		t.Fatalf("executor calls = %d, merge calls = %d; want 3 and 1", runner.executionCount(), runner.mergeCount())
+	}
+	assertPlanParallelPromptsContainInputs(t, runner.requestsSnapshot())
+	assertPlanParallelProviderSelection(t, runner.requestsSnapshot())
+
+	events := server.GetFactoryEvents(t)
+	dispatches := support.ObserveDispatchEvents(t, events)
+	if len(dispatches) != 5 || dispatches[0].Request.TransitionId != "plan-parallel-work" ||
+		dispatches[len(dispatches)-1].Request.TransitionId != "merge-plan-results" {
+		t.Fatalf("dispatches = %#v, want planner, three tasks, and terminal merger", dispatches)
+	}
+	assertPlanParallelGeneratedDAGEvent(t, events)
+	assertPlanParallelRetainedReplay(t, server, events)
+}
+
+func TestPackagedPlanParallelExecutorEffortCanBeOverridden(t *testing.T) {
+	runner := newPlanParallelRunner(parallelDAG)
+	response, err := runPlanParallelCLI(t, runner,
+		"--executor-model", "gpt-5.6-luna",
+		"--executor-reasoning-effort", "low",
+		"--to", "implement three dependent tasks",
+	)
+	if err != nil {
+		t.Fatalf("plan-parallel CLI invocation: %v", err)
+	}
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("response = %#v, want completed low-effort override", response)
+	}
+	executors := 0
+	for _, request := range runner.requestsSnapshot() {
+		prompt := string(request.Stdin)
+		if strings.Contains(prompt, "Plan an executable Work DAG") ||
+			strings.Contains(prompt, "Treat the original request and all completed generated Work inputs") {
+			continue
+		}
+		executors++
+		if !planParallelHasArgPair(request.Args, "--config", `model_reasoning_effort="low"`) {
+			t.Fatalf("executor args = %#v, want low effort override", request.Args)
+		}
+	}
+	if executors != 3 {
+		t.Fatalf("executor requests = %d, want 3", executors)
+	}
+}
+
+func TestPackagedPlanParallelRejectsUnsupportedEffortBeforeExecutorProviderExecution(t *testing.T) {
+	runner := newPlanParallelRunner(parallelDAG)
+	_, err := runPlanParallelCLI(t, runner,
+		"--executor-reasoning-effort", "extreme",
+		"--to", "implement three dependent tasks",
+	)
+	if err == nil {
+		t.Fatal("plan-parallel CLI invocation error = nil, want invalid resolved effort failure")
+	}
+	requests := runner.requestsSnapshot()
+	if len(requests) != 1 || !strings.Contains(string(requests[0].Stdin), "Plan an executable Work DAG") {
+		t.Fatalf("provider requests = %#v, want only the prerequisite planner and no executor process", requests)
+	}
+}
+
+func assertPlanParallelProviderSelection(t *testing.T, requests []platformprocess.CommandRequest) {
+	t.Helper()
+	executors := 0
+	for index, request := range requests {
+		if request.Command != "codex" ||
+			!planParallelHasArg(request.Args, "--dangerously-bypass-approvals-and-sandbox") {
+			t.Fatalf("provider request[%d] = command %q args %#v, want Codex with packaged skip-permissions", index, request.Command, request.Args)
+		}
+		prompt := string(request.Stdin)
+		isExecutor := !strings.Contains(prompt, "Plan an executable Work DAG") &&
+			!strings.Contains(prompt, "Treat the original request and all completed generated Work inputs")
+		if isExecutor {
+			executors++
+			if !planParallelHasArgPair(request.Args, "--model", "gpt-5.6-luna") ||
+				!planParallelHasArgPair(request.Args, "--config", `model_reasoning_effort="xhigh"`) {
+				t.Fatalf("executor request[%d] args = %#v, want Luna xhigh", index, request.Args)
+			}
+			continue
+		}
+		if !planParallelHasArgPair(request.Args, "--model", "operator-model") ||
+			planParallelHasArg(request.Args, "--config") {
+			t.Fatalf("planner/merger request[%d] args = %#v, want operator model without effort override", index, request.Args)
+		}
+	}
+	if executors != 3 {
+		t.Fatalf("executor requests = %d, want 3", executors)
+	}
+}
+
+func assertPlanParallelPromptsContainInputs(t *testing.T, requests []platformprocess.CommandRequest) {
+	t.Helper()
+	executorPrompts := make([]string, 0, 3)
+	var mergerPrompt string
+	for _, request := range requests {
+		prompt := string(request.Stdin)
+		switch {
+		case strings.Contains(prompt, "Plan an executable Work DAG"):
+		case strings.Contains(prompt, "Treat the original request and all completed generated Work inputs"):
+			mergerPrompt = prompt
+		default:
+			executorPrompts = append(executorPrompts, prompt)
+		}
+	}
+	if len(executorPrompts) != 3 {
+		t.Fatalf("executor prompts = %d, want 3", len(executorPrompts))
+	}
+	markers := []string{"TASK_A_UNIQUE_OBJECTIVE", "TASK_B_UNIQUE_OBJECTIVE", "TASK_C_UNIQUE_OBJECTIVE"}
+	for index, prompt := range executorPrompts {
+		matches := 0
+		for _, marker := range markers {
+			if strings.Contains(prompt, marker) {
+				matches++
+			}
+		}
+		if matches != 1 || strings.Contains(prompt, "implement three dependent tasks") {
+			t.Fatalf("executor prompt[%d] did not isolate exactly one assigned payload: %q", index, prompt)
+		}
+	}
+	if mergerPrompt == "" || !strings.Contains(mergerPrompt, "implement three dependent tasks") ||
+		strings.Count(mergerPrompt, "planned task completed") != 3 {
+		t.Fatalf("merger prompt does not contain the parent request and all three child results: %q", mergerPrompt)
+	}
+}
+
+func assertPlanParallelGeneratedDAGEvent(t *testing.T, events []factoryapi.FactoryEvent) {
+	t.Helper()
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeWorkRequest {
+			continue
+		}
+		payload, err := event.Payload.AsWorkRequestEventPayload()
+		if err != nil || payload.Works == nil || len(*payload.Works) != 3 || payload.Relations == nil {
+			continue
+		}
+		names := make([]string, 0, len(*payload.Works))
+		for _, item := range *payload.Works {
+			names = append(names, item.Name)
+		}
+		if strings.Join(names, ",") != "task-a,task-b,task-c" || len(*payload.Relations) != 5 {
+			t.Fatalf("replayed generated DAG = works %v relations %#v", names, *payload.Relations)
+		}
+		dependencies := 0
+		parentChildren := 0
+		for _, relation := range *payload.Relations {
+			switch relation.Type {
+			case factoryapi.RelationTypeDependsOn:
+				if relation.SourceWorkName != "task-c" ||
+					(relation.TargetWorkName != "task-a" && relation.TargetWorkName != "task-b") {
+					t.Fatalf("replayed generated dependency = %#v", relation)
+				}
+				dependencies++
+			case factoryapi.RelationTypeParentChild:
+				parentChildren++
+			}
+		}
+		if dependencies != 2 || parentChildren != 3 {
+			t.Fatalf("replayed generated relation counts = dependencies %d parent-child %d", dependencies, parentChildren)
+		}
+		return
+	}
+	t.Fatal("retained event history did not reconstruct the generated Work DAG")
+}
+
+func assertPlanParallelRetainedReplay(
+	t *testing.T,
+	server *support.FunctionalAPIServer,
+	events []factoryapi.FactoryEvent,
+) {
+	t.Helper()
+	if len(events) < 2 {
+		t.Fatalf("events = %d, want retained history", len(events))
+	}
+	sequence := support.ReconnectSequenceForFactoryEvent(events[0])
+	replayed := server.GetFactoryEventsAfter(t, support.FactoryEventReadCursor{
+		AfterEventID:  events[0].Id,
+		AfterSequence: &sequence,
+	})
+	if len(replayed) != len(events)-1 {
+		t.Fatalf("retained replay events = %d, want %d", len(replayed), len(events)-1)
+	}
+	for index := range replayed {
+		if replayed[index].Id != events[index+1].Id {
+			t.Fatalf("retained replay event %d = %q, want %q", index, replayed[index].Id, events[index+1].Id)
+		}
+	}
+}
+
+func TestPackagedPlanParallelRejectsPlannerBatchAboveCeilingAtomically(t *testing.T) {
+	works := make([]string, 13)
+	for index := range works {
+		works[index] = fmt.Sprintf(`{"name":"task-%02d","workTypeName":"planned-task"}`, index+1)
+	}
+	runner := newPlanParallelRunner(`{"request":{"type":"FACTORY_REQUEST_BATCH","works":[` + strings.Join(works, ",") + `]}}`)
+	server := startPlanParallelServer(t, runner)
+	response := invokePlanParallel(t, server, map[string]any{"request": "produce too many tasks"})
+
+	if response.Status != factoryapi.InvocationTerminalStatusFailed || response.PrimaryResult != nil {
+		t.Fatalf("response = %#v, want failed invocation without primary result", response)
+	}
+	if runner.executionCount() != 0 || runner.mergeCount() != 0 {
+		t.Fatalf("executor calls = %d, merge calls = %d; want atomic rejection", runner.executionCount(), runner.mergeCount())
+	}
+}
+
+func TestPackagedPlanParallelChildFailureFansInWithoutMerge(t *testing.T) {
+	runner := newPlanParallelRunner(`{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"failing-task","workTypeName":"planned-task"}]}}`)
+	runner.failExecutors = true
+	server := startPlanParallelServer(t, runner)
+	response := invokePlanParallel(t, server, map[string]any{"request": "surface a child failure"})
+
+	if response.Status != factoryapi.InvocationTerminalStatusFailed || response.PrimaryResult != nil {
+		t.Fatalf("response = %#v, want failed invocation without primary result", response)
+	}
+	if runner.executionCount() != 3 || runner.mergeCount() != 0 {
+		t.Fatalf("executor calls = %d, merge calls = %d; want bounded provider retries and no merge", runner.executionCount(), runner.mergeCount())
+	}
+}
+
+type planParallelRunner struct {
+	mu             sync.Mutex
+	plannerOutput  string
+	active         int
+	maxActive      int
+	executions     int
+	merges         int
+	failExecutors  bool
+	readyExecutors chan struct{}
+	requests       []platformprocess.CommandRequest
+}
+
+func newPlanParallelRunner(plannerOutput string) *planParallelRunner {
+	return &planParallelRunner{plannerOutput: plannerOutput, readyExecutors: make(chan struct{})}
+}
+
+func (runner *planParallelRunner) Run(ctx context.Context, request platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	runner.mu.Lock()
+	runner.requests = append(runner.requests, request)
+	runner.mu.Unlock()
+	prompt := string(request.Stdin)
+	switch {
+	case strings.Contains(prompt, "Plan an executable Work DAG"):
+		return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout(runner.plannerOutput)}, nil
+	case strings.Contains(prompt, "Treat the original request and all completed generated Work inputs"):
+		runner.mu.Lock()
+		runner.merges++
+		runner.mu.Unlock()
+		return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("merged parallel result")}, nil
+	default:
+		runner.mu.Lock()
+		runner.executions++
+		if runner.failExecutors {
+			runner.mu.Unlock()
+			return platformprocess.CommandResult{}, errors.New("planned task provider failure")
+		}
+		runner.active++
+		if runner.active > runner.maxActive {
+			runner.maxActive = runner.active
+		}
+		if runner.active >= 2 {
+			select {
+			case <-runner.readyExecutors:
+			default:
+				close(runner.readyExecutors)
+			}
+		}
+		runner.mu.Unlock()
+
+		select {
+		case <-runner.readyExecutors:
+		case <-time.After(2 * time.Second):
+		case <-ctx.Done():
+			return platformprocess.CommandResult{}, ctx.Err()
+		}
+		runner.mu.Lock()
+		runner.active--
+		runner.mu.Unlock()
+		return platformprocess.CommandResult{Stdout: support.CodexSuccessStdout("planned task completed")}, nil
+	}
+}
+
+func (runner *planParallelRunner) requestsSnapshot() []platformprocess.CommandRequest {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return append([]platformprocess.CommandRequest(nil), runner.requests...)
+}
+
+func planParallelHasArgPair(args []string, name, value string) bool {
+	for index := 0; index+1 < len(args); index++ {
+		if args[index] == name && args[index+1] == value {
+			return true
+		}
+	}
+	return false
+}
+
+func planParallelHasArg(args []string, name string) bool {
+	for _, arg := range args {
+		if arg == name {
+			return true
+		}
+	}
+	return false
+}
+
+func (runner *planParallelRunner) maxConcurrentExecutors() int {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return runner.maxActive
+}
+
+func (runner *planParallelRunner) executionCount() int {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return runner.executions
+}
+
+func (runner *planParallelRunner) mergeCount() int {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return runner.merges
+}
+
+func startPlanParallelServer(t *testing.T, runner platformprocess.CommandRunner) *support.FunctionalAPIServer {
+	t.Helper()
+	factoryDir := support.InstallPackagedFactory(t, t.TempDir(), factorydefinitions.PackagedPlanParallelFactoryName)
+	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: factoryDir, WaitForServiceModeRuntime: true,
+		Args:  []string{"--provider", "CODEX", "--model", "operator-model"},
+		Edges: serviceedges.Edges{ProviderCommandRunner: runner},
+	})
+}
+
+func runPlanParallelCLI(
+	t *testing.T,
+	runner platformprocess.CommandRunner,
+	factoryArgs ...string,
+) (factoryapi.InvocationResponse, error) {
+	t.Helper()
+	homeDir := t.TempDir()
+	support.InstallPackagedFactory(t, homeDir, factorydefinitions.PackagedPlanParallelFactoryName)
+	args := []string{
+		"you", "--json", "run",
+		"--named", factorydefinitions.PackagedPlanParallelFactoryName,
+		"--provider", "CODEX", "--model", "operator-model",
+		"--no-record",
+	}
+	args = append(args, factoryArgs...)
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.WorkingDirectory = t.TempDir()
+	err := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner}).Execute(inputs.Input)
+	if err != nil {
+		return factoryapi.InvocationResponse{}, err
+	}
+	if inputs.Stderr() != "" {
+		t.Fatalf("stderr = %q, want empty successful-run stderr", inputs.Stderr())
+	}
+	return support.DecodeInvocationResponseJSON(t, inputs.Stdout()), nil
+}
+
+func invokePlanParallel(t *testing.T, server *support.FunctionalAPIServer, args map[string]any) factoryapi.InvocationResponse {
+	t.Helper()
+	statusCode, responseBody := postPlanParallel(t, server, args)
+	if statusCode != http.StatusOK {
+		t.Fatalf("POST invocation status = %d; body = %s", statusCode, responseBody)
+	}
+	var decoded factoryapi.InvocationResponse
+	if err := json.Unmarshal(responseBody, &decoded); err != nil {
+		t.Fatalf("decode invocation: %v", err)
+	}
+	return decoded
+}
+
+func postPlanParallel(
+	t *testing.T,
+	server *support.FunctionalAPIServer,
+	args map[string]any,
+) (int, []byte) {
+	t.Helper()
+	requestID := fmt.Sprintf("plan-parallel-%d", time.Now().UnixNano())
+	payload, err := json.Marshal(factoryapi.InvocationRequest{RequestId: &requestID, Args: &args})
+	if err != nil {
+		t.Fatalf("marshal invocation: %v", err)
+	}
+	response, err := http.Post(server.URL()+"/factory-sessions/"+factorysessions.DefaultSessionID+"/invocations", "application/json", bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("POST invocation: %v", err)
+	}
+	defer response.Body.Close()
+	responseBody, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("read invocation response: %v", err)
+	}
+	return response.StatusCode, responseBody
+}
+
+func planParallelPrimaryText(t *testing.T, response factoryapi.InvocationResponse) string {
+	t.Helper()
+	if response.PrimaryResult == nil || len(*response.PrimaryResult) != 1 {
+		t.Fatalf("primary result = %#v, want one part", response.PrimaryResult)
+	}
+	part, err := (*response.PrimaryResult)[0].AsWorkTextContentPart()
+	if err != nil {
+		t.Fatalf("decode primary text: %v", err)
+	}
+	return part.Text
+}

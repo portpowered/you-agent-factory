@@ -17,6 +17,7 @@ import (
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
+	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	acpcli "github.com/portpowered/infinite-you/pkg/transports/cli/acp"
@@ -130,21 +131,34 @@ func provideExpandFactoryConfigOperation(
 
 func provideConfigureInitOperation(
 	service operatorsettings.ConfigDocumentService,
-) cli.ConfigureInitOperation {
+
+) (cli.ConfigureInitOperation, error) {
+	packaged, err := providerswire.PackagedACPIntegrations()
+	if err != nil {
+		return nil, fmt.Errorf("load packaged ACP integrations for init: %w", err)
+	}
+	defaults := make([]operatorsettings.ACPIntegration, 0, len(packaged))
+	for _, integration := range packaged {
+		defaults = append(defaults, operatorsettings.ACPIntegration{
+			ID: integration.ID, Name: integration.Name.String(),
+			Transport: integration.Transport, Command: integration.Command,
+		})
+	}
 	return initsetup.NewConfigurer(
 		service,
 		func(input io.Reader, maxLines int) (initsetup.ContextLineReader, error) {
 			return platformstdio.NewContextLineReader(input, maxLines)
 		},
-	)
+		defaults,
+	), nil
 }
 
 func provideACPCLIService(
 	settings operatorsettings.ConfigDocumentService,
-	providersFactory providers.Factory,
+	providersService providers.Service,
 	generateID operatorsettings.IDGenerator,
 ) acpcli.Service {
-	return acpcli.Service{Settings: settings, ProvidersFactory: providersFactory, GenerateID: generateID}
+	return acpcli.Service{Settings: settings, Providers: providersService, GenerateID: generateID}
 }
 
 func provideQueryFactoryOperation(transport standardCLIHTTPProtocol) cli.QueryFactoryOperation {

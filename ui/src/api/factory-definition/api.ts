@@ -17,7 +17,6 @@ import {
   readOptionalEnumArray,
   readOptionalFactoryVersion,
   readOptionalInteger,
-  readOptionalNonEmptyString,
   readOptionalNullableString,
   readOptionalObject,
   readOptionalString,
@@ -193,7 +192,6 @@ const WORKER_KEYS = new Set([
   "id",
   "provider",
   "resources",
-  "openCodeAgent",
   "operations",
   "skipPermissions",
   "stopToken",
@@ -226,7 +224,6 @@ const WORKSTATION_KEYS = new Set([
   "onContinue",
   "onFailure",
   "onRejection",
-  "openCodeAgent",
   "operation",
   "operationBindings",
   "outputSchema",
@@ -299,15 +296,14 @@ const WORKER_TYPE_VALUES = new Set<NonNullable<FactoryWorker["type"]>>([
 const WORKER_MODEL_PROVIDER_VALUES = new Set<FactoryWorkerModelProvider>([
   "CLAUDE",
   "CODEX",
-  "CURSOR",
-  "GEMINI",
-  "KIRO",
-  "OPENCODE",
+  "ANTIGRAVITY",
 ]);
 const EXACT_INVOCATION_PLACEHOLDER_PATTERN = /^\$\{([A-Za-z0-9_.-]+)\}$/;
+const PROVIDER_IDENTITY_PATTERN =
+  /^(?:[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*|ANTIGRAVITY|ANTHROPIC|CLAUDE|CODEX|OPENAI)$/;
 const WORKER_PROVIDER_VALUES = new Set<
   NonNullable<FactoryWorker["executorProvider"]>
->(["SCRIPT_WRAP"]);
+>(["ACP", "SCRIPT_WRAP"]);
 const WORKER_MODEL_LOCALITY_VALUES = new Set<
   NonNullable<FactoryWorker["modelLocality"]>
 >(["LOCAL", "CLOUD"]);
@@ -316,11 +312,8 @@ const HOSTED_WORKER_PROVIDER_VALUES = new Set<
 >(["LINEAR"]);
 const RUNNER_ID_VALUES = new Set<FactoryRunnerID>([
   "codex",
-  "gemini",
-  "kiro",
-  "cursor-cli",
-  "opencode",
-  "pi",
+  "claude",
+  "antigravity",
 ]);
 const WORKSTATION_BEHAVIOR_VALUES = new Set<
   NonNullable<FactoryWorkstation["behavior"]>
@@ -851,11 +844,6 @@ function decodeWorker(
   const timeout = readOptionalString(record, "timeout", path);
   const stopToken = readOptionalString(record, "stopToken", path);
   const skipPermissions = readOptionalBoolean(record, "skipPermissions", path);
-  const openCodeAgent = readOptionalNonEmptyString(
-    record,
-    "openCodeAgent",
-    path,
-  );
   const auth = readOptionalObject(record, "auth", path, decodeHostedWorkerAuth);
   const linear = readOptionalObject(
     record,
@@ -913,9 +901,6 @@ function decodeWorker(
   if (skipPermissions !== undefined) {
     worker.skipPermissions = skipPermissions;
   }
-  if (openCodeAgent !== undefined) {
-    worker.openCodeAgent = openCodeAgent;
-  }
   if (auth !== undefined) {
     worker.auth = auth;
   }
@@ -944,7 +929,8 @@ function readOptionalWorkerModelProvider(
   if (
     WORKER_MODEL_PROVIDER_VALUES.has(
       modelProvider as FactoryWorkerModelProvider,
-    )
+    ) ||
+    PROVIDER_IDENTITY_PATTERN.test(modelProvider)
   ) {
     return modelProvider as FactoryWorker["modelProvider"];
   }
@@ -952,7 +938,7 @@ function readOptionalWorkerModelProvider(
     return modelProvider as FactoryWorker["modelProvider"];
   }
   throw new FactoryDefinitionAPIError(
-    `${path}.modelProvider must be one of ${Array.from(WORKER_MODEL_PROVIDER_VALUES).join(", ")}.`,
+    `${path}.modelProvider must be a valid provider identity or one of ${Array.from(WORKER_MODEL_PROVIDER_VALUES).join(", ")}.`,
   );
 }
 
@@ -1398,11 +1384,6 @@ function decodeWorkstation(value: unknown, path: string): FactoryWorkstation {
   const worktree = readOptionalString(record, "worktree", path);
   const env = readOptionalStringMap(record, "env", path);
   const runner = readOptionalEnum(record, "runner", path, RUNNER_ID_VALUES);
-  const openCodeAgent = readOptionalNonEmptyString(
-    record,
-    "openCodeAgent",
-    path,
-  );
   const operation = readOptionalString(record, "operation", path);
   const operationBindings = readOptionalArray(
     record,
@@ -1476,9 +1457,6 @@ function decodeWorkstation(value: unknown, path: string): FactoryWorkstation {
   }
   if (runner !== undefined) {
     workstation.runner = runner;
-  }
-  if (openCodeAgent !== undefined) {
-    workstation.openCodeAgent = openCodeAgent;
   }
   if (operation !== undefined) {
     workstation.operation = operation;

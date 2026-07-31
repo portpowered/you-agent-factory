@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )

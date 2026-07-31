@@ -8,6 +8,7 @@ import (
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
+	acp "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp"
 	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
@@ -62,8 +63,8 @@ func TestRootDelegatesListAndGetToCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListProviders() = %v", err)
 	}
-	if len(list.Providers) != 8 {
-		t.Fatalf("len(Providers) = %d, want 8", len(list.Providers))
+	if len(list.Providers) != 3 {
+		t.Fatalf("len(Providers) = %d, want 3", len(list.Providers))
 	}
 
 	got, err := root.GetProvider(context.Background(), providers.GetProviderRequest{ID: providers.IDCodex})
@@ -74,12 +75,9 @@ func TestRootDelegatesListAndGetToCatalog(t *testing.T) {
 		t.Fatalf("GetProvider(codex).Provider.ID = %q, want codex", got.Provider.ID)
 	}
 
-	byAlias, err := root.GetProvider(context.Background(), providers.GetProviderRequest{ID: providers.ID("cursor")})
-	if err != nil {
-		t.Fatalf("GetProvider(cursor) = %v", err)
-	}
-	if byAlias.Provider.ID != providers.IDCursor {
-		t.Fatalf("GetProvider(cursor).Provider.ID = %q, want agent", byAlias.Provider.ID)
+	_, err = root.GetProvider(context.Background(), providers.GetProviderRequest{ID: providers.ID("cursor")})
+	if !errors.Is(err, providers.ErrUnknownProvider) {
+		t.Fatalf("GetProvider(cursor) error = %v, want ErrUnknownProvider", err)
 	}
 }
 
@@ -94,14 +92,17 @@ func TestRootDelegatesExecuteToOnePrivateExecutionAttempt(t *testing.T) {
 	executionService, err := executionwire.NewService(
 		catalogService,
 		execution.Registration{
-			Provider: providers.IDCursor,
+			Provider: providers.IDCodex,
 			Attempt: func(
 				_ context.Context,
 				request providers.ExecuteRequest,
 			) (providers.ExecuteResult, error) {
 				calls++
-				if request.Provider != providers.IDCursor {
-					t.Fatalf("adapter provider = %q, want %q", request.Provider, providers.IDCursor)
+				if request.Provider != providers.IDCodex {
+					t.Fatalf("adapter provider = %q, want %q", request.Provider, providers.IDCodex)
+				}
+				if request.ReasoningEffort != "xhigh" {
+					t.Fatalf("adapter reasoning effort = %q, want canonical xhigh", request.ReasoningEffort)
 				}
 				return providers.ExecuteResult{Content: "root result"}, nil
 			},
@@ -116,8 +117,9 @@ func TestRootDelegatesExecuteToOnePrivateExecutionAttempt(t *testing.T) {
 	}
 
 	result, err := root.Execute(context.Background(), providers.ExecuteRequest{
-		Provider:  providers.ID("cursor"),
-		AttemptID: "attempt-1",
+		Provider:        providers.IDCodex,
+		AttemptID:       "attempt-1",
+		ReasoningEffort: " XHIGH ",
 	})
 	if err != nil {
 		t.Fatalf("Execute() = %v", err)
@@ -125,6 +127,110 @@ func TestRootDelegatesExecuteToOnePrivateExecutionAttempt(t *testing.T) {
 	if result.Content != "root result" || calls != 1 {
 		t.Fatalf("Execute() = (%#v, %d calls), want root result and 1 call", result, calls)
 	}
+}
+
+func TestRootACPRejectsSeparateReasoningEffortAndAcceptsExactModelID(t *testing.T) {
+	t.Parallel()
+
+	catalogService, err := catalogwire.NewService()
+	if err != nil {
+		t.Fatalf("catalogwire.NewService() = %v", err)
+	}
+	executionService, err := executionwire.NewService(catalogService)
+	if err != nil {
+		t.Fatalf("executionwire.NewService() = %v", err)
+	}
+	acpService := &stubACPService{provider: "cursor-acp"}
+	root, err := providerservice.NewWithACP(catalogService, executionService, acpService, nil)
+	if err != nil {
+		t.Fatalf("NewWithACP() = %v", err)
+	}
+
+	_, executeErr := root.Execute(context.Background(), providers.ExecuteRequest{
+		Provider:        "cursor-acp",
+		AttemptID:       "attempt-acp-effort",
+		Model:           "cursor-grok-4.5-medium-fast",
+		ReasoningEffort: "xhigh",
+	})
+	var failure providers.ExecuteFailure
+	if !errors.As(executeErr, &failure) ||
+		failure.Kind != providers.ExecuteFailureKindInvalidRequest ||
+		!strings.Contains(failure.Message, "exact advertised model id") ||
+		acpService.executeCalls != 0 {
+		t.Fatalf("Execute(ACP with effort) = (%#v, %d calls), want invalid request before ACP execution", executeErr, acpService.executeCalls)
+	}
+
+	result, executeErr := root.Execute(context.Background(), providers.ExecuteRequest{
+		Provider:  "cursor-acp",
+		AttemptID: "attempt-acp-model",
+		Model:     "cursor-grok-4.5-medium-fast",
+	})
+	if executeErr != nil || result.Content != "acp result" || acpService.executeCalls != 1 {
+		t.Fatalf("Execute(ACP exact model) = (%#v, %v, %d calls), want delegated success", result, executeErr, acpService.executeCalls)
+	}
+}
+
+func TestRootRejectsSeparateReasoningEffortForAgy(t *testing.T) {
+	t.Parallel()
+
+	root := mustRootService(t)
+	_, executeErr := root.Execute(context.Background(), providers.ExecuteRequest{
+		Provider:        providers.ID(" ANTIGRAVITY "),
+		AttemptID:       "attempt-agy-effort",
+		ReasoningEffort: "xhigh",
+	})
+	var failure providers.ExecuteFailure
+	if !errors.As(executeErr, &failure) ||
+		failure.Kind != providers.ExecuteFailureKindInvalidRequest ||
+		!strings.Contains(failure.Message, "does not support a separate reasoning effort") {
+		t.Fatalf("Execute(Agy with effort) error = %#v, want invalid request", executeErr)
+	}
+}
+
+func TestRootRejectsMinimalReasoningEffortForClaude(t *testing.T) {
+	t.Parallel()
+
+	root := mustRootService(t)
+	_, err := root.Execute(context.Background(), providers.ExecuteRequest{
+		Provider:        providers.ID(" CLAUDE "),
+		AttemptID:       "claude-minimal",
+		ReasoningEffort: " MINIMAL ",
+	})
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) {
+		t.Fatalf("Execute() error = %T(%v), want ExecuteFailure", err, err)
+	}
+	if failure.Kind != providers.ExecuteFailureKindInvalidRequest {
+		t.Fatalf("failure.Kind = %q, want invalid_request", failure.Kind)
+	}
+}
+
+var _ acp.Service = (*stubACPService)(nil)
+
+type stubACPService struct {
+	provider     providers.ID
+	executeCalls int
+}
+
+func (service *stubACPService) Close(context.Context) error { return nil }
+
+func (service *stubACPService) Configure(context.Context, []providers.ACPIntegration) error {
+	return nil
+}
+
+func (service *stubACPService) Integrations() []providers.ACPIntegration { return nil }
+
+func (service *stubACPService) Resolve(id providers.ID) (providers.ID, bool) {
+	return service.provider, id == service.provider
+}
+
+func (service *stubACPService) Execute(
+	_ context.Context,
+	_ providers.ID,
+	_ providers.ExecuteRequest,
+) (providers.ExecuteResult, error) {
+	service.executeCalls++
+	return providers.ExecuteResult{Content: "acp result"}, nil
 }
 
 func TestRootDelegatesTypedExecutionFailure(t *testing.T) {
@@ -180,7 +286,7 @@ func TestRootCatalogTypedFailuresMatchPrivateCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListProviders() = %v", err)
 	}
-	agy, ok := indexProviders(list.Providers)[providers.IDAgy]
+	agy, ok := indexProviders(list.Providers)[providers.IDAntigravity]
 	if !ok {
 		t.Fatal("ListProviders() missing agy provider")
 	}

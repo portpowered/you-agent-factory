@@ -369,7 +369,6 @@ func modelsCompositionCases() []modelsCompositionCase {
 			name: "invoke",
 			args: []string{
 				"--verbose", "--json", "--server", "https://factory.example",
-				"--default-worker-model-provider", "codex", "--default-worker-model", "gpt-test",
 				"models", "invoke", "model-alpha", "--operation", "TTS",
 				"--text", "hello", "--output", "speech.wav",
 			},
@@ -437,7 +436,7 @@ func executeModelsComposition(
 		_ operatorconfig.Defaults,
 		flags operatorconfig.FlagOverrides,
 	) (operatorconfig.ResolvedDefaults, error) {
-		if flags.WorkerModelProvider != "codex" || flags.WorkerModel != "gpt-test" {
+		if flags.WorkerModelProvider != "" || flags.WorkerModel != "" {
 			t.Fatalf("operator default flags = %#v", flags)
 		}
 		return defaults, nil
@@ -979,7 +978,7 @@ func TestWorkersACPCommandsValidateAndRouteRequests(t *testing.T) {
 		want     string
 		canceled bool
 	}{
-		{name: "list requires providers factory", args: []string{"acp", "list"}, want: "Providers factory is required"},
+		{name: "list is removed", args: []string{"acp", "list"}, want: "unknown command"},
 		{name: "add validates transport", args: []string{"acp", "add", "--name", "custom-acp", "--transport", "http", "--argument", "agent acp"}, want: "transport must be stdio"},
 		{name: "add routes to service", args: []string{"acp", "add", "--name", "custom-acp", "--argument", "agent acp"}, want: "ID generator is required"},
 		{name: "delete routes to service", args: []string{"acp", "delete", "--name", "custom-acp"}, want: "context canceled", canceled: true},

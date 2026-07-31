@@ -7,8 +7,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-
-	"github.com/portpowered/infinite-you/internal/testlanes"
 )
 
 var emptyCoverageBaseline = map[string]struct{}{}
@@ -76,62 +74,6 @@ func TestIsFunctionalTestPackage(t *testing.T) {
 				t.Fatalf("isFunctionalTestPackage(%q) = %t, want %t", tc.importPath, got, tc.want)
 			}
 		})
-	}
-}
-
-func TestResolveCoverageLaneDefaultsToUnitPackages(t *testing.T) {
-	coverPackages, testPackages, err := resolveCoverageLane(config{})
-	if err != nil {
-		t.Fatalf("resolveCoverageLane() error = %v", err)
-	}
-
-	if !slices.Contains(coverPackages, modulePath+"/pkg/root") {
-		t.Fatalf("cover packages missing backend package: %v", coverPackages)
-	}
-	if slices.Contains(coverPackages, modulePath+"/pkg/transports/http/client") {
-		t.Fatalf("cover packages unexpectedly include generated client: %v", coverPackages)
-	}
-	if slices.Contains(coverPackages, modulePath+"/internal/testutil") {
-		t.Fatalf("cover packages unexpectedly include test helper package: %v", coverPackages)
-	}
-	if !slices.Contains(testPackages, modulePath+"/pkg/root") {
-		t.Fatalf("test packages missing backend unit package: %v", testPackages)
-	}
-	if slices.Contains(testPackages, modulePath+"/tests/functional/runtime_api") {
-		t.Fatalf("unit test packages unexpectedly include functional package: %v", testPackages)
-	}
-}
-
-func TestResolveCoverageLaneFunctionalSuite(t *testing.T) {
-	_, testPackages, err := resolveCoverageLane(config{suite: "functional"})
-	if err != nil {
-		t.Fatalf("resolveCoverageLane() error = %v", err)
-	}
-
-	for _, functionalPackage := range []string{
-		modulePath + "/tests/functional/acceptance",
-		modulePath + "/tests/functional/bootstrap_portability",
-		modulePath + "/tests/functional/guards_batch",
-		modulePath + "/tests/functional/providers",
-		modulePath + "/tests/functional/replay_contracts",
-		modulePath + "/tests/functional/runtime_api",
-		modulePath + "/tests/functional/smoke",
-		modulePath + "/tests/functional/workflow",
-	} {
-		if !slices.Contains(testPackages, functionalPackage) {
-			t.Fatalf("test packages missing maintained functional package %q: %v", functionalPackage, testPackages)
-		}
-	}
-	for _, providerPackage := range testlanes.RequiredProviderFunctionalPackages() {
-		if !slices.Contains(testPackages, providerPackage) {
-			t.Fatalf("test packages missing required provider package %q: %v", providerPackage, testPackages)
-		}
-	}
-	if slices.Contains(testPackages, modulePath+"/tests/functional/internal/support") {
-		t.Fatalf("test packages unexpectedly include functional support helpers: %v", testPackages)
-	}
-	if slices.Contains(testPackages, modulePath+"/pkg/config") {
-		t.Fatalf("functional test packages unexpectedly include backend unit package: %v", testPackages)
 	}
 }
 

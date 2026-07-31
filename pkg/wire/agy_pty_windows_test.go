@@ -11,11 +11,11 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestConPTYSessionRun_CompletesChildProcess(t *testing.T) {
-	result, session := runWiredConPTY(t, []string{`C:\Windows\System32\cmd.exe`, "/c", "echo", "agy-pty"}, agypty.DefaultSessionConfig())
+	result, session := runWiredConPTY(t, []string{`C:\Windows\System32\cmd.exe`, "/c", "echo", "agy-pty"}, workers.DefaultPTYSessionConfig())
 	defer session.Close()
 	if !strings.Contains(result.CleanedText, "agy-pty") {
 		t.Fatalf("CleanedText = %q", result.CleanedText)
@@ -23,7 +23,7 @@ func TestConPTYSessionRun_CompletesChildProcess(t *testing.T) {
 }
 
 func TestConPTYSessionRun_HardTimeoutTerminatesProcess(t *testing.T) {
-	cfg := agypty.DefaultSessionConfig()
+	cfg := workers.DefaultPTYSessionConfig()
 	cfg.HardTimeout, cfg.IdleTimeout = 100*time.Millisecond, time.Hour
 	result, session := runWiredConPTY(t, []string{`C:\Windows\System32\ping.exe`, "-n", "120", "127.0.0.1"}, cfg)
 	defer session.Close()
@@ -33,7 +33,7 @@ func TestConPTYSessionRun_HardTimeoutTerminatesProcess(t *testing.T) {
 }
 
 func TestConPTYSessionRun_ClosesPTYAfterRun(t *testing.T) {
-	_, session := runWiredConPTY(t, []string{`C:\Windows\System32\cmd.exe`, "/c", "echo", "close"}, agypty.DefaultSessionConfig())
+	_, session := runWiredConPTY(t, []string{`C:\Windows\System32\cmd.exe`, "/c", "echo", "close"}, workers.DefaultPTYSessionConfig())
 	if err := session.Close(); err != nil {
 		t.Fatalf("Close() error = %v", err)
 	}
@@ -42,7 +42,7 @@ func TestConPTYSessionRun_ClosesPTYAfterRun(t *testing.T) {
 	}
 }
 
-func runWiredConPTY(t *testing.T, argv []string, cfg agypty.SessionConfig) (agypty.SessionResult, agypty.PTYSession) {
+func runWiredConPTY(t *testing.T, argv []string, cfg workers.PTYSessionConfig) (workers.PTYSessionResult, workers.PTYSession) {
 	t.Helper()
 	if _, err := os.Stat(argv[0]); err != nil {
 		t.Skipf("executable unavailable: %v", err)
@@ -51,7 +51,7 @@ func runWiredConPTY(t *testing.T, argv []string, cfg agypty.SessionConfig) (agyp
 	if err != nil {
 		t.Fatal(err)
 	}
-	session, err := allocator.Allocate(context.Background(), agypty.ProcessLaunch{Executable: argv[0], Argv: argv}, cfg)
+	session, err := allocator.Allocate(context.Background(), workers.PTYProcessLaunch{Executable: argv[0], Argv: argv}, cfg)
 	if err != nil {
 		t.Skipf("ConPTY unavailable: %v", err)
 	}

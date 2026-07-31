@@ -1,6 +1,7 @@
-import type { FactoryTopologyReplayProjection } from "../factory-topology-replay";
+import type { FactoryGraphRuntimeProjection } from "@you-agent-factory/factory-graph";
 
-export function createFactoryTopologyProjection(): FactoryTopologyReplayProjection {
+/** Runtime fixture for consumers that construct a complete FactoryGraphSource. */
+export function createFactoryTopologyProjection(): FactoryGraphRuntimeProjection {
   return {
     activity: {
       activeDispatchOverlays: [

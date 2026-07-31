@@ -197,7 +197,6 @@ func TestCanonicalProviderSessionProvider(t *testing.T) {
 	}{
 		{name: "empty", input: "", expected: ""},
 		{name: "cursor already canonical", input: "cursor", expected: "cursor"},
-		{name: "legacy cursor command", input: string(ModelProviderCursor), expected: "cursor"},
 		{name: "cursor alias", input: "cursor-agent", expected: "cursor"},
 		{name: "other provider unchanged", input: "codex", expected: "codex"},
 	}
@@ -735,16 +734,16 @@ func TestResolveRunnerSelection(t *testing.T) {
 	}{
 		{
 			name:              "WorkstationWins",
-			workstationRunner: "  GEMINI ",
+			workstationRunner: "  ANTIGRAVITY ",
 			factoryRunner:     RunnerIDCodex,
 			modelProvider:     RunnerIDCodex,
-			wantRunner:        RunnerIDGemini,
+			wantRunner:        RunnerIDAntigravity,
 			wantSource:        RunnerSelectionSourceWorkstation,
 		},
 		{
 			name:          "FactoryWinsWhenWorkstationUnset",
-			factoryRunner: "cursor-cli",
-			wantRunner:    RunnerIDCursorCLI,
+			factoryRunner: "claude",
+			wantRunner:    RunnerIDClaude,
 			wantSource:    RunnerSelectionSourceFactory,
 		},
 		{
@@ -754,10 +753,10 @@ func TestResolveRunnerSelection(t *testing.T) {
 			wantSource:    RunnerSelectionSourceLegacyProvider,
 		},
 		{
-			name:          "DefaultFallsBackToCodex",
+			name:          "LegacyClaudeProvider",
 			modelProvider: "claude",
-			wantRunner:    RunnerIDCodex,
-			wantSource:    RunnerSelectionSourceDefault,
+			wantRunner:    RunnerIDClaude,
+			wantSource:    RunnerSelectionSourceLegacyProvider,
 		},
 	}
 
@@ -771,18 +770,6 @@ func TestResolveRunnerSelection(t *testing.T) {
 				t.Fatalf("ResolveRunnerSelection(...) = %#v, want runner=%q source=%q", got, tt.wantRunner, tt.wantSource)
 			}
 		})
-	}
-}
-
-func TestBuiltInRunnerMetadata(t *testing.T) {
-	t.Parallel()
-
-	metadata, ok := BuiltInRunnerMetadata("  CURSOR-CLI ")
-	if !ok {
-		t.Fatal("expected cursor-cli metadata")
-	}
-	if metadata.ID != RunnerIDCursorCLI {
-		t.Fatalf("metadata.ID = %q, want %q", metadata.ID, RunnerIDCursorCLI)
 	}
 }
 
@@ -815,12 +802,7 @@ func TestSupportedModelProviders_IncludesAllCanonicalCommands(t *testing.T) {
 	want := []ModelProvider{
 		ModelProviderClaude,
 		ModelProviderCodex,
-		ModelProviderGemini,
-		ModelProviderKiro,
-		ModelProviderCursor,
-		ModelProviderOpenCode,
-		ModelProviderPi,
-		ModelProviderAgy,
+		ModelProviderAntigravity,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("supported provider count = %d, want %d", len(got), len(want))
@@ -839,12 +821,7 @@ func TestModelProviderPublicInternalMapping_RoundTripsAllSupportedProviders(t *t
 	}{
 		{string(factoryapi.WorkerModelProviderClaude), ModelProviderClaude},
 		{string(factoryapi.WorkerModelProviderCodex), ModelProviderCodex},
-		{string(factoryapi.WorkerModelProviderCursor), ModelProviderCursor},
-		{string(factoryapi.WorkerModelProviderGemini), ModelProviderGemini},
-		{string(factoryapi.WorkerModelProviderKiro), ModelProviderKiro},
-		{string(factoryapi.WorkerModelProviderOpenCode), ModelProviderOpenCode},
-		{string(factoryapi.WorkerModelProviderPi), ModelProviderPi},
-		{string(factoryapi.WorkerModelProviderAgy), ModelProviderAgy},
+		{string(factoryapi.WorkerModelProviderAntigravity), ModelProviderAntigravity},
 	}
 
 	for _, tt := range cases {
@@ -866,15 +843,8 @@ func TestPublicWorkerModelProviderFromInternalRuntime_CanonicalizesProviderAlias
 		input string
 		want  string
 	}{
-		{"gemini", string(factoryapi.WorkerModelProviderGemini)},
-		{"kiro-cli", string(factoryapi.WorkerModelProviderKiro)},
-		{"opencode", string(factoryapi.WorkerModelProviderOpenCode)},
-		{"GEMINI", string(factoryapi.WorkerModelProviderGemini)},
-		{"KIRO", string(factoryapi.WorkerModelProviderKiro)},
-		{"OPENCODE", string(factoryapi.WorkerModelProviderOpenCode)},
-		{"agy", string(factoryapi.WorkerModelProviderAgy)},
-		{"AGY", string(factoryapi.WorkerModelProviderAgy)},
-		{"antigravity", string(factoryapi.WorkerModelProviderAgy)},
+		{"antigravity", string(factoryapi.WorkerModelProviderAntigravity)},
+		{"ANTIGRAVITY", string(factoryapi.WorkerModelProviderAntigravity)},
 	}
 
 	for _, tt := range cases {
@@ -888,7 +858,7 @@ func TestPublicWorkerModelProviderFromInternalRuntime_CanonicalizesProviderAlias
 
 func TestStrictPublicFactoryWorkerModelProvider_AcceptsAllCanonicalPublicValues(t *testing.T) {
 	for _, provider := range []string{
-		"CLAUDE", "CODEX", "CURSOR", "GEMINI", "KIRO", "OPENCODE", "PI", "AGY",
+		"CLAUDE", "CODEX", "ANTIGRAVITY",
 	} {
 		if got := StrictPublicFactoryWorkerModelProvider(provider); got != provider {
 			t.Fatalf("StrictPublicFactoryWorkerModelProvider(%q) = %q, want %q", provider, got, provider)

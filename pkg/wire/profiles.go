@@ -50,8 +50,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
-	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
 	httpapplication "github.com/portpowered/infinite-you/pkg/transports/http/application"
@@ -241,7 +239,7 @@ func provideOperatorSettingsCreateTemporaryFile(edges serviceedges.Edges) operat
 }
 
 func provideOperatorSettingsProviderCatalog(
-	providers *providerregistry.Registry,
+	providers workers.ProviderRegistry,
 ) operatorsettings.ProviderCatalog {
 	return func(value string) (string, bool) {
 		canonical, err := providers.CanonicalIdentity(value)
@@ -387,9 +385,10 @@ func provideDurableExecutionFactory(loadOperatorConfig operatorsettings.ConfigLo
 	return func(
 		definition factorydefinitions.RuntimeOpeningRequest,
 		session factorysessions.SessionRuntimeOpeningRequest,
+		defaults operatorsettings.ResolvedDefaults,
 		root factorysessionwire.RuntimeRoot,
 		clock factoryruntime.Clock,
-		provider workerprovider.Provider,
+		provider workers.Provider,
 		mockWorkersConfig *workers.MockWorkersConfig,
 		factory factorysessionwire.FactorySessionExecutionFactory,
 		providerIdentities factorysessions.ProviderIdentityResolver,
@@ -398,6 +397,7 @@ func provideDurableExecutionFactory(loadOperatorConfig operatorsettings.ConfigLo
 			loadOperatorConfig,
 			definition,
 			session,
+			defaults,
 			root,
 			clock,
 			provider,

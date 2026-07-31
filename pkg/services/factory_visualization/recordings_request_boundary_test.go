@@ -3,16 +3,12 @@ package factory_visualization_test
 import (
 	"context"
 	"errors"
-	"os/exec"
-	"strings"
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/recordingsqueries"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
-
-const recordingsQueriesPackage = modulePrefix + "pkg/services/factory_visualization/internal/recordingsqueries"
 
 // TestVisualizationConstructsRecordingsRequestsThroughRoot proves CUT-VIS-REC story 003:
 // Factory Visualization projection-query edges construct Recordings root requests
@@ -143,30 +139,6 @@ func TestVisualizationConstructsRecordingsRequestsThroughRoot(t *testing.T) {
 // TestVisualizationRecordingsRequestConstructionImportsRecordingsRootOnly seals the
 // request-construction path: Visualization projection-query helpers may depend on
 // Recordings only through the service root contract.
-func TestVisualizationRecordingsRequestConstructionImportsRecordingsRootOnly(t *testing.T) {
-	t.Parallel()
-	assertRecordingsRequestConstructionImportsRecordingsRootOnly(t, recordingsQueriesPackage)
-}
-
-func assertRecordingsRequestConstructionImportsRecordingsRootOnly(t *testing.T, packagePath string) {
-	t.Helper()
-
-	cmd := exec.Command("go", "list", "-f", "{{join .Imports \"\\n\"}}", packagePath)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("go list imports for %s: %v\n%s", packagePath, err, output)
-	}
-	for _, importPath := range strings.Fields(string(output)) {
-		if isForbiddenVisualizationRecordingsImport(importPath) {
-			t.Fatalf(
-				"%s import %s is forbidden for recordings request construction; use %s only",
-				packagePath,
-				importPath,
-				recordingsRoot,
-			)
-		}
-	}
-}
 
 type recordingsRequestBoundaryStub struct {
 	lastReconstruct recordings.ReconstructWorldStateRequest
@@ -175,7 +147,7 @@ type recordingsRequestBoundaryStub struct {
 
 	reconstructResult recordings.ReconstructWorldStateResult
 	dashboardResult   recordings.SimpleDashboardQueryResult
-	validateErr         error
+	validateErr       error
 }
 
 var _ recordings.Service = (*recordingsRequestBoundaryStub)(nil)

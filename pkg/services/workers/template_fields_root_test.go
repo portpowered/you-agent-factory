@@ -13,8 +13,8 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workertesthelpers "github.com/portpowered/infinite-you/pkg/services/workers/internal/testhelpers"
 	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/prompting"
+	workertesthelpers "github.com/portpowered/infinite-you/pkg/services/workers/internal/testhelpers"
 )
 
 func canonicalWorkerTestPath(value string) string {

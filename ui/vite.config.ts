@@ -19,6 +19,10 @@ const factoryReplayPackageRoot = path.resolve(
   uiRoot,
   "packages/factory-replay/src",
 );
+const factoryGraphPackageRoot = path.resolve(
+  uiRoot,
+  "packages/factory-graph/src",
+);
 const factoryVisualizersPackageRoot = path.resolve(
   uiRoot,
   "packages/factory-visualizers/src",
@@ -41,6 +45,10 @@ const sharedReactAliases = [
   {
     find: "@you-agent-factory/factory-replay",
     replacement: path.join(factoryReplayPackageRoot, "index.ts"),
+  },
+  {
+    find: "@you-agent-factory/factory-graph",
+    replacement: path.join(factoryGraphPackageRoot, "index.ts"),
   },
   {
     find: "@testing-library/jest-dom/vitest",

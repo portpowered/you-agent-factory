@@ -38,7 +38,7 @@ function expectBentoCardHeaderSemantics(
 
   if (compactChrome) {
     expect(header?.className).toContain("min-h-11");
-    expect(header?.className).toContain("flex-wrap");
+    expect(header?.className).not.toContain("flex-wrap");
   } else {
     expect(header?.className).toContain("min-h-13");
     expect(header?.className).not.toContain("flex-wrap");

@@ -3,13 +3,13 @@ import { resolveRunnerSelection } from "./runner-selection";
 
 describe("resolveRunnerSelection", () => {
   it("prefers workstation overrides, then factory, then legacy modelProvider, then default", () => {
-    expect(resolveRunnerSelection("gemini", "codex", "CODEX")).toEqual({
-      runnerId: "gemini",
+    expect(resolveRunnerSelection("antigravity", "codex", "CODEX")).toEqual({
+      runnerId: "antigravity",
       source: "workstation",
     });
 
-    expect(resolveRunnerSelection(null, "cursor-cli", "codex")).toEqual({
-      runnerId: "cursor-cli",
+    expect(resolveRunnerSelection(null, "codex", "codex")).toEqual({
+      runnerId: "codex",
       source: "factory",
     });
 
@@ -19,8 +19,8 @@ describe("resolveRunnerSelection", () => {
     });
 
     expect(resolveRunnerSelection(null, null, "CLAUDE")).toEqual({
-      runnerId: "codex",
-      source: "default",
+	  runnerId: "claude",
+	  source: "legacy_provider",
     });
   });
 });

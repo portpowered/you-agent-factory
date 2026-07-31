@@ -19,10 +19,11 @@ type Input struct {
 	// WorkingDirectory is the invocation-local project root observed by the
 	// outer process edge. It is required; Initializer performs no host lookup.
 	WorkingDirectory string
-	// StdinIsTTY and StdoutIsTTY carry terminal classification observed by the
+	// StdinIsTTY, StdoutIsTTY, and StderrIsTTY carry terminal classification observed by the
 	// outer process edge. Nil means false and never triggers stream inspection.
 	StdinIsTTY  *bool
 	StdoutIsTTY *bool
+	StderrIsTTY *bool
 }
 
 // processInput is an immutable normalized snapshot of one process invocation.
@@ -37,6 +38,7 @@ type processInput struct {
 	workingDir  string
 	stdinIsTTY  bool
 	stdoutIsTTY bool
+	stderrIsTTY bool
 }
 
 func normalize(input Input) (processInput, error) {
@@ -91,6 +93,7 @@ func normalize(input Input) (processInput, error) {
 		workingDir:  workingDir,
 		stdinIsTTY:  terminalClassification(input.StdinIsTTY),
 		stdoutIsTTY: terminalClassification(input.StdoutIsTTY),
+		stderrIsTTY: terminalClassification(input.StderrIsTTY),
 	}, nil
 }
 

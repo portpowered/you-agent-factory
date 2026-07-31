@@ -25,7 +25,7 @@ var goal = struct {
 	PackagedFactoryName: packagedGoalFactoryName,
 }
 
-func TestProviderPosture_Absent_UnresolvedDefaultRejectsWithDocumentedGuidance(t *testing.T) {
+func TestProviderPosture_RemovedDefaultProviderFlagIsRejected(t *testing.T) {
 	t.Parallel()
 
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
@@ -40,18 +40,14 @@ func TestProviderPosture_Absent_UnresolvedDefaultRejectsWithDocumentedGuidance(t
 		"--no-record",
 	)
 	if err == nil {
-		t.Fatalf("expected unresolved DEFAULT provider failure, got result=%#v", result)
+		t.Fatalf("expected removed flag failure, got result=%#v", result)
 	}
 	if result.ExitCode == 0 {
 		t.Fatalf("exit code = 0, want non-zero for absent provider posture")
 	}
 
 	combined := result.Stdout + result.Stderr
-	for _, want := range []string{
-		"DEFAULT requires a concrete provider",
-		"YOU_DEFAULT_WORKER_MODEL_PROVIDER",
-		"--default-worker-model-provider",
-	} {
+	for _, want := range []string{"unknown flag", "--default-worker-model-provider"} {
 		if !strings.Contains(combined, want) {
 			t.Fatalf("output = %q, want documented absent-provider guidance %q", combined, want)
 		}
@@ -89,10 +85,9 @@ func TestProviderPosture_Configured_ExplicitHomeConfigEnablesNamedGoalSuccessPat
 	args = append(args,
 		"run",
 		"--named", goal.PackagedFactoryName,
-		"--with-mock-workers",
+		"--with-mock-workers=" + mockWorkersPath,
 		"--no-record",
 		"--quiet",
-		mockWorkersPath,
 		goalText,
 	)
 
@@ -141,12 +136,11 @@ func TestProviderPosture_Discovered_EnvDefaultResolvesWithoutFileProvider(t *tes
 	args = append(args, session.ServerFlags()...)
 	args = append(args,
 		"run",
-		"--default-worker-model-provider", "DEFAULT",
+		"--provider", "DEFAULT",
 		"--named", goal.PackagedFactoryName,
-		"--with-mock-workers",
+		"--with-mock-workers=" + mockWorkersPath,
 		"--no-record",
 		"--quiet",
-		mockWorkersPath,
 		goalText,
 	)
 

@@ -150,15 +150,15 @@ func TestFailureBaseline_NoServer_ModelsListCommandReportsUnreachableEndpoint(t 
 	}
 }
 
-func TestFailureBaseline_AbsentDefault_RunCommandRejectsUnresolvedDefaultProvider(t *testing.T) {
+func TestFailureBaseline_RemovedDefaultProviderFlagIsRejected(t *testing.T) {
 	result := executeGoalFailureProcess(t, "", "", serviceedges.Edges{},
 		"run", "--default-worker-model-provider", "DEFAULT", "--no-record",
 	)
 	if result.err == nil {
-		t.Fatal("expected unresolved DEFAULT provider error")
+		t.Fatal("expected removed flag error")
 	}
-	if !strings.Contains(result.err.Error(), "DEFAULT requires a concrete provider") {
-		t.Fatalf("error = %q, want unresolved DEFAULT guidance", result.err.Error())
+	if !strings.Contains(result.err.Error(), "unknown flag: --default-worker-model-provider") {
+		t.Fatalf("error = %q, want unknown removed flag guidance", result.err.Error())
 	}
 }
 

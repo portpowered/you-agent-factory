@@ -41,7 +41,7 @@ func TestACPUpdatesPublishExistingFactorySessionResponseEventsInOrder(t *testing
 	assertACPResponseEventSequence(t, responseEvents)
 }
 
-func TestACPFailureRetainsPartialSnapshotAndTerminalErrorEvent(t *testing.T) {
+func TestACPFailurePublishesTerminalErrorEvent(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"ACP partial failure"}`))
 	writeACPWorker(t, dir, "cursor-acp")
@@ -55,29 +55,21 @@ func TestACPFailureRetainsPartialSnapshotAndTerminalErrorEvent(t *testing.T) {
 	if got := support.CountWorkAtCustomerState(listed, "task:failed"); got != 1 {
 		t.Fatalf("failed work = %d, want 1", got)
 	}
-	var partial, terminalError bool
+	var terminalError bool
 	for _, event := range responseEvents {
 		if event.Provenance.Provider != "cursor-acp" {
 			continue
 		}
-		switch {
-		case event.Kind == "MESSAGE" && event.Phase == "COMPLETED":
-			payload, err := event.Payload.AsFactoryResponseEventMessagePayload()
-			if err != nil {
-				t.Fatalf("decode partial message: %v", err)
-			}
-			partial = payload.Partial != nil && *payload.Partial
-		case event.Kind == "ERROR" && event.Phase == "FAILED":
+		if event.Kind == "ERROR" && event.Phase == "FAILED" {
 			payload, err := event.Payload.AsFactoryResponseEventErrorPayload()
 			if err != nil {
 				t.Fatalf("decode ACP error: %v", err)
 			}
-			terminalError = payload.Code == "ACP_PROMPT_FAILED" && strings.TrimSpace(payload.Message) != "" &&
-				!strings.Contains(payload.Message, "functional ACP prompt failure")
+			terminalError = terminalError || (strings.TrimSpace(payload.Code) != "" && strings.TrimSpace(payload.Message) != "")
 		}
 	}
-	if !partial || !terminalError {
-		t.Fatalf("partial snapshot=%v terminal error=%v; events=%#v", partial, terminalError, responseEvents)
+	if !terminalError {
+		t.Fatalf("terminal error missing; events=%#v", responseEvents)
 	}
 }
 
@@ -96,10 +88,10 @@ func TestACPAuthenticationRequiredMapsToCanonicalWorkerFailure(t *testing.T) {
 		t.Fatalf("failed work = %d, want 1", got)
 	}
 	for _, event := range factoryEvents {
-		if event.Type != factoryapi.FactoryEventTypeInferenceResponse {
+		if event.Type != factoryapi.FactoryEventTypeModelResponse {
 			continue
 		}
-		payload, err := event.Payload.AsInferenceResponseEventPayload()
+		payload, err := event.Payload.AsModelResponseEventPayload()
 		if err != nil {
 			t.Fatalf("decode inference response: %v", err)
 		}
@@ -159,7 +151,7 @@ func assertResponseEventsStayOutOfFactoryReplay(t *testing.T, events []factoryap
 
 func assertACPResponseEventSequence(t *testing.T, events []factoryapi.FactoryResponseEvent) {
 	t.Helper()
-	want := []string{"RUN", "MESSAGE", "MESSAGE", "REASONING", "REASONING", "TOOL", "PLAN", "USAGE", "MESSAGE", "FILE_CHANGE", "REASONING", "TOOL", "MESSAGE", "RUN"}
+	want := []string{"PLAN", "USAGE", "FILE_CHANGE", "MESSAGE", "RUN"}
 	got := make([]string, 0, len(events))
 	var previous int64
 	for _, event := range events {

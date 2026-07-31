@@ -445,7 +445,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/providers/acp/catalog_cli_test.go::TestRootBuiltACPCommandsAddListDeleteOneSettingsBackedCatalogEntry",
+          "test": "tests/functional/providers/acp/catalog_cli_test.go::TestRootBuiltACPCommandsAddDeleteAndUnifiedListOneSettingsBackedCatalogEntry",
           "boundary": "cli"
         }
       ]
@@ -460,14 +460,14 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/providers/acp/catalog_cli_test.go::TestRootBuiltACPCommandsAddListDeleteOneSettingsBackedCatalogEntry",
+          "test": "tests/functional/providers/acp/catalog_cli_test.go::TestRootBuiltACPCommandsAddDeleteAndUnifiedListOneSettingsBackedCatalogEntry",
           "boundary": "cli"
         }
       ]
     },
     {
-      "stableId": "cli/you.workers.acp.list",
-      "name": "you workers acp list",
+      "stableId": "cli/you.workers.list",
+      "name": "you workers list",
       "interface": "cli",
       "classification": "runnable",
       "status": "covered",
@@ -475,7 +475,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/providers/acp/catalog_cli_test.go::TestRootBuiltACPCommandsAddListDeleteOneSettingsBackedCatalogEntry",
+          "test": "tests/functional/providers/acp/catalog_cli_test.go::TestRootBuiltACPCommandsAddDeleteAndUnifiedListOneSettingsBackedCatalogEntry",
           "boundary": "cli"
         }
       ]

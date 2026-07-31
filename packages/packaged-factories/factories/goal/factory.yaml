@@ -1,0 +1,97 @@
+name: "@you/goal"
+id: builtin-goal
+description:
+  type: LOCALIZABLE_ASSET
+  value: Repeatedly works a goal until the executor reports completion or the Factory reaches a failure bound.
+invocationSignature:
+  parameters:
+    - name: input
+      description: Goal to pursue until completion.
+      externalName: to
+      required: true
+      bindings:
+        - kind: POSITIONAL
+          position: 1
+        - kind: STDIN
+        - kind: NAMED
+    - name: executorProvider
+      description: Model provider for the goal executor; omitted values use operator defaults.
+      externalName: executor-provider
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+    - name: executorModel
+      description: Model for the goal executor; omitted values use operator defaults.
+      externalName: executor-model
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+examples:
+  - name: complete-goal
+    description:
+      type: LOCALIZABLE_ASSET
+      value: Pursue a bounded implementation goal.
+    args:
+      input: Implement and verify the requested change
+invocationReturn:
+  policy: EXPLICIT
+  workTypeName: goal
+  terminalState: complete
+workTypes:
+  - name: goal
+    handlingBehavior:
+      - DEFAULT
+    states:
+      - name: init
+        type: INITIAL
+      - name: execute
+        type: PROCESSING
+      - name: complete
+        type: TERMINAL
+      - name: failed
+        type: FAILED
+workers:
+  - name: goal-executor
+    type: AGENT_WORKER
+    skipPermissions: true
+    modelProvider: ${executorProvider}
+    model: ${executorModel}
+    stopToken: <COMPLETE>
+    promptFile: prompts/executor.md
+workstations:
+  - name: execute-goal
+    type: AGENT_RUN
+    behavior: REPEATER
+    workPropagation:
+      mode: PRESERVE_INPUT
+    worker: goal-executor
+    inputs:
+      - workType: goal
+        state: init
+    outputs:
+      - workType: goal
+        state: complete
+    onContinue:
+      - workType: goal
+        state: init
+    onRejection:
+      - workType: goal
+        state: init
+    onFailure:
+      - workType: goal
+        state: failed
+    promptFile: prompts/executor.md
+  - name: goal-loop-breaker
+    type: LOGICAL_MOVE
+    guards:
+      - type: VISIT_COUNT
+        workstation: execute-goal
+        maxVisits: 12
+    inputs:
+      - workType: goal
+        state: init
+    outputs:
+      - workType: goal
+        state: failed

@@ -56,7 +56,7 @@ Public factory config names workers by behavior class:
 | `INFERENCE_WORKER` | One-shot model operations | Harnessless inference such as TTS, ASR, or typed `INFERENCE_RUN` dispatches |
 | `AGENT_WORKER` | Agent-loop model execution | Prompt-rendered `AGENT_RUN` workstations that iterate until acceptance, rejection, or failure |
 | `SCRIPT_WORKER` | Script execution | Command-backed `SCRIPT_RUN` workstations |
-| `POLLER_WORKER` | Hosted poller integration | Workstations with `behavior: "POLLER"` that ingest external work through built-in providers |
+| `POLLER_WORKER` | Automations-owned hosted poller ingress | Workstations with `behavior: "POLLER"` that admit external work as ordinary Work Requests |
 
 ### Legacy compatibility aliases
 
@@ -83,16 +83,18 @@ See `you docs workstations` for the matching `INFERENCE_RUN`, `AGENT_RUN`,
 - `INFERENCE_WORKER` can declare provider-agnostic `operations`, named input
   and output slots, `modelLocality`, and concrete `model` identity so
   `INFERENCE_RUN` workstations can validate compatibility before dispatch.
-- `AGENT_WORKER` supplies the model backend and shared system instructions for
-  prompt-rendered `AGENT_RUN` workstations.
-- Current built-in `modelProvider` values are `CLAUDE` and `CODEX`.
+- `AGENT_WORKER` supplies the model backend, optional provider-neutral
+  `reasoningEffort`, and shared system instructions for prompt-rendered
+  `AGENT_RUN` workstations.
+- Current built-in `modelProvider` values are `CLAUDE`, `CODEX`, and
+  `ANTIGRAVITY`.
 - Runner selection is separate from `modelProvider`. Use factory or
   workstation `runner` fields to choose the built-in runner ID: `codex`,
-  `gemini`, `kiro`, `cursor-cli`, or `opencode`.
-- Optional `openCodeAgent` selects a named OpenCode agent profile when the
-  resolved runner is `opencode`. Omit it to keep today's default `opencode run`
-  behavior without `--agent`.
-- The current public `executorProvider` value is `SCRIPT_WRAP`.
+  `claude` or `antigravity`.
+- `executorProvider` accepts the canonical mechanisms `SCRIPT_WRAP` and `ACP`.
+  For ACP, `modelProvider` names an integration such as `cursor-acp`. See
+  `you docs providers` for ACP setup and
+  lifecycle commands.
 - Older snake_case and alias frontmatter keys are compatibility-only inputs.
   New docs and authored configs should use canonical camelCase fields.
 
@@ -112,8 +114,8 @@ You are a helpful assistant.
 When operator defaults are configured, you can omit `modelProvider` and
 `model` on `MODEL_WORKER` definitions and let the runtime fill them from
 `~/.you-agent-factory/config.json`, `YOU_DEFAULT_WORKER_MODEL_PROVIDER`,
-`YOU_DEFAULT_WORKER_MODEL`, or global `--default-worker-model-provider` and
-`--default-worker-model`. See `you docs config` for precedence, `DEFAULT`
+`YOU_DEFAULT_WORKER_MODEL`, or run-scoped `you run --provider` and `--model`.
+See `you docs config` for precedence, `DEFAULT`
 resolution, and failure modes.
 
 Authored worker `modelProvider` and `model` values always win over operator
@@ -123,7 +125,7 @@ defaults. Script and hosted workers never receive operator model defaults.
 
 | Put it on the worker | Put it on the workstation |
 |----------------------|---------------------------|
-| `type`, `model`, `modelProvider`, `executorProvider`, `openCodeAgent` | `type`, `worker`, `promptFile`, prompt body, `openCodeAgent` |
+| `type`, `model`, `modelProvider`, `executorProvider`, `reasoningEffort` | `type`, `worker`, `promptFile`, prompt body |
 | `command`, `args` | `behavior`, `outputs`, `onFailure`, `onContinue`, `onRejection` |
 | `provider`, `auth.secretRef`, `linear.*` for hosted pollers | `outputSchema`, `limits.maxExecutionTime`, `limits.maxRetries` |
 | `resources`, `timeout`, `stopToken`, `skipPermissions` | `stopWords`, `workingDirectory`, `worktree`, `env` |
@@ -137,6 +139,25 @@ worker. Do not move hosted Linear provider config onto the workstation body.
 Use the worker when the setting belongs to the execution backend or shared
 worker identity. Use the workstation when the setting belongs to one workflow
 step, prompt rendering, or per-step execution behavior.
+
+### Reasoning effort
+
+Model-backed workers may set `reasoningEffort` to `minimal`, `low`, `medium`,
+`high`, `xhigh`, or `max`. Values are trimmed and normalized to lowercase.
+Omit the field to preserve the provider or selected model default. Invocation
+parameters may supply an exact placeholder such as
+`reasoningEffort: ${executorReasoningEffort}`; an unsupported resolved value
+fails before a provider process starts.
+
+The runtime keeps this contract provider-neutral. Codex translates it to
+`--config model_reasoning_effort="<effort>"`, while Claude translates it to
+`--effort <effort>`. Claude's `ultracode` session mode is not an effort value:
+configure that provider-specific workflow separately instead of setting
+`reasoningEffort`. ACP integrations such as `cursor-acp` advertise exact model
+identifiers that already encode effort, for example
+`cursor-grok-4.5-medium-fast`; select that model ID and omit
+`reasoningEffort`. Providers without an effort mapping reject a non-empty
+value; the current `ANTIGRAVITY` adapter does not accept a separate effort.
 
 ## Worker Types
 
@@ -338,8 +359,12 @@ Use a poller worker when Infinite You should run a built-in provider
 integration instead of a custom script or model backend. V1 poller workers are
 poller-only and pair with a workstation that uses `behavior: "POLLER"`.
 
+Poller workers are Automations-owned ingress sources: the service runtime
+supervises them outside Workers execution, and each accepted observation
+becomes an ordinary Work Request. They are not persistent Worker executors.
+
 Legacy `HOSTED_WORKER` remains accepted during the migration window and
-projects to the same poller behavior.
+projects to the same Automations poller behavior.
 
 The current built-in hosted provider is `LINEAR`. Hosted workers authenticate
 through `auth.secretRef` only. Do not put inline API keys, OAuth tokens, or
@@ -437,20 +462,19 @@ Use `you docs workstations` for `behavior: "POLLER"` lifecycle semantics and
 | `skipPermissions` | inference and agent workers | Provider-specific permission shortcut |
 | `modelLocality` | inference workers | `LOCAL` or `CLOUD` execution locality for model operations and diagnostics |
 | `operations` | inference workers | Provider-agnostic capability declarations with uppercase operation names and typed slots |
-| `openCodeAgent` | agent workers | Named OpenCode agent profile for dispatches that resolve to runner `opencode` |
 | `agentTools.policy` | agent workers | Explicit tool policy: `DISABLED`, `READ_ONLY`, or `ENABLED` |
 
 ## Provider Fields
 
 Keep `modelProvider` and `executorProvider` separate:
 
-- `modelProvider` names the model backend. Current built-in values are
-  `CLAUDE` and `CODEX`. Omit it when operator defaults supply the provider for
-  this run.
+- `modelProvider` names the selected provider integration. It may be a model
+  backend such as `CLAUDE` or `CODEX`, or an ACP integration such as
+  `cursor-acp`. Omit it only when operator defaults supply the provider.
 - `model` names the concrete model identifier such as `gpt-5-codex`. Omit it
   when operator defaults supply the model for this run.
-- `executorProvider` names the execution wrapper around that worker. The
-  current public built-in value is `SCRIPT_WRAP`.
+- `executorProvider` names the execution mechanism around that worker. Use
+  `SCRIPT_WRAP` for command wrappers and `ACP` for Agent Client Protocol.
 
 For a normal model worker, both fields can appear on the same worker because
 they answer different questions: which model backend to use, and which worker
@@ -459,52 +483,6 @@ execution adapter should run it.
 Use `runner` when the operator needs to choose the execution family. Keep
 `modelProvider` for worker-local provider compatibility, diagnostics, and the
 worker provider compatibility fallback when no explicit runner is configured.
-
-## OpenCode Agent Profiles
-
-Use `openCodeAgent` on an `AGENT_WORKER` when the dispatch should run through
-the OpenCode runner and you want OpenCode to apply a named agent profile
-(system prompt, tool permissions, and other settings created with
-`opencode agent create`) instead of duplicating that guidance in the worker
-body.
-
-```yaml
----
-type: AGENT_WORKER
-model: gpt-5
-runner: opencode
-openCodeAgent: implementer
----
-
-Follow the workstation prompt. The OpenCode agent profile supplies shared
-tooling defaults for this worker.
-```
-
-Requirements and behavior:
-
-- `openCodeAgent` must be a non-empty string when set. Explicit empty or
-  whitespace-only values fail validation.
-- The field is honored only when runner selection resolves to `opencode`.
-  Setting `openCodeAgent` while the resolved runner is something else fails
-  during factory build with an error that names `openCodeAgent`, the agent
-  name, and the resolved runner ID.
-- When configured and the runner is `opencode`, dispatches invoke
-  `opencode run --agent <name>` before the rendered user prompt. Inference
-  diagnostics record the resolved value as `opencode_agent`.
-- Omit `openCodeAgent` to keep the existing `opencode run` argument shape with
-  no `--agent` flag.
-
-Discover available agent names with the OpenCode CLI:
-
-```bash
-opencode agent list
-```
-
-See the [OpenCode CLI reference](https://opencode.ai/docs/cli/) for agent
-create/list commands and profile management.
-
-Workstations can override the worker default. See `you docs workstations`
-for precedence and workstation-level examples.
 
 ## Response-stream provider fidelity
 

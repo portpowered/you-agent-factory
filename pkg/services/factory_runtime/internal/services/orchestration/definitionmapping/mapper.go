@@ -540,8 +540,9 @@ func (cm *Mapper) resolveGuard(g interfaces.GuardConfig) petri.Guard {
 	switch g.Type {
 	case interfaces.GuardTypeVisitCount:
 		return &petri.VisitCountGuard{
-			TransitionID: g.Workstation, // workstation name == transition ID
-			MaxVisits:    g.MaxVisits,
+			TransitionID:      g.Workstation, // workstation name == transition ID
+			MaxVisits:         g.MaxVisits,
+			MaxVisitsArgument: g.MaxVisitsArgument,
 		}
 	default:
 		return nil

@@ -134,9 +134,9 @@ func TestMapCommittedOwnerPackageWorkersTransitionalDebtMoves(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/workers/provider_test",
+			path: "pkg/services/providers/internal/services/execution/internal/provider_test",
 			want: PackageMapping{
-				PackagePath: "pkg/services/workers/provider_test",
+				PackagePath: "pkg/services/providers/internal/services/execution/internal/provider_test",
 				Disposition: DispositionMove,
 				Destination: "providers/internal/services/execution",
 			},
@@ -162,33 +162,25 @@ func TestMapCommittedOwnerPackageWorkersProvidersExtractionMoves(t *testing.T) {
 		want PackageMapping
 	}{
 		{
-			path: "pkg/services/workers/agypty",
+			path: "pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty",
 			want: PackageMapping{
-				PackagePath: "pkg/services/workers/agypty",
+				PackagePath: "pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty",
 				Disposition: DispositionMove,
 				Destination: "providers/internal/services/execution",
 			},
 		},
 		{
-			path: "pkg/services/workers/cliprovider",
+			path: "pkg/services/providers/internal/services/execution/internal/provider",
 			want: PackageMapping{
-				PackagePath: "pkg/services/workers/cliprovider",
+				PackagePath: "pkg/services/providers/internal/services/execution/internal/provider",
 				Disposition: DispositionMove,
 				Destination: "providers/internal/services/execution",
 			},
 		},
 		{
-			path: "pkg/services/workers/provider",
+			path: "pkg/services/providers/internal/services/execution/internal/provider/registry",
 			want: PackageMapping{
-				PackagePath: "pkg/services/workers/provider",
-				Disposition: DispositionMove,
-				Destination: "providers/internal/services/execution",
-			},
-		},
-		{
-			path: "pkg/services/workers/provider/registry",
-			want: PackageMapping{
-				PackagePath: "pkg/services/workers/provider/registry",
+				PackagePath: "pkg/services/providers/internal/services/execution/internal/provider/registry",
 				Disposition: DispositionMove,
 				Destination: "providers/internal/services/catalog",
 			},
@@ -392,3 +384,5 @@ func workersCanonicalRetainRest(rest string) bool {
 		return false
 	}
 }
+
+

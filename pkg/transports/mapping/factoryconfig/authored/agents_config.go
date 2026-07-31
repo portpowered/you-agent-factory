@@ -57,6 +57,7 @@ func ParseWorkerConfig(data []byte, sourcePath string) (*factorydefinitions.Fact
 		Provider:         parsed.Provider,
 		Model:            parsed.Model,
 		ModelProvider:    parsed.ModelProvider,
+		ReasoningEffort:  parsed.ReasoningEffort,
 		ExecutorProvider: parsed.ExecutorProvider,
 		Command:          parsed.Command,
 		Args:             append([]string(nil), parsed.Args...),
@@ -64,13 +65,9 @@ func ParseWorkerConfig(data []byte, sourcePath string) (*factorydefinitions.Fact
 		Timeout:          parsed.Timeout,
 		StopToken:        parsed.StopToken,
 		SkipPermissions:  parsed.SkipPermissions,
-		OpenCodeAgent:    parsed.OpenCodeAgent,
 		Auth:             cloneHostedWorkerAuthConfig(parsed.Auth),
 		Linear:           cloneHostedLinearWorkerConfig(parsed.Linear),
 		Body:             body,
-	}
-	if err := validateOpenCodeAgentInFrontmatter(rawFrontmatter, "frontmatter"); err != nil {
-		return nil, fmt.Errorf("validate worker frontmatter in %s: %w", sourcePath, err)
 	}
 	if cfg.Provider != "" {
 		cfg.Provider = internalFactoryHostedWorkerProviderFromPublic(cfg.Provider)
@@ -91,6 +88,7 @@ type workerFrontmatterInput struct {
 	Provider         string                                       `yaml:"provider,omitempty"`
 	Model            string                                       `yaml:"model,omitempty"`
 	ModelProvider    string                                       `yaml:"modelProvider,omitempty"`
+	ReasoningEffort  string                                       `yaml:"reasoningEffort,omitempty"`
 	ExecutorProvider string                                       `yaml:"executorProvider,omitempty"`
 	Command          string                                       `yaml:"command,omitempty"`
 	Args             []string                                     `yaml:"args,omitempty"`
@@ -98,28 +96,8 @@ type workerFrontmatterInput struct {
 	Timeout          string                                       `yaml:"timeout,omitempty"`
 	StopToken        string                                       `yaml:"stopToken,omitempty"`
 	SkipPermissions  bool                                         `yaml:"skipPermissions,omitempty"`
-	OpenCodeAgent    string                                       `yaml:"openCodeAgent,omitempty"`
 	Auth             *factorydefinitions.HostedWorkerAuthConfig   `yaml:"auth,omitempty"`
 	Linear           *factorydefinitions.HostedLinearWorkerConfig `yaml:"linear,omitempty"`
-}
-
-func validateOpenCodeAgentInFrontmatter(frontmatter map[string]any, path string) error {
-	raw, ok := frontmatter["openCodeAgent"]
-	if !ok {
-		return nil
-	}
-	agent, ok := raw.(string)
-	if !ok {
-		return fmt.Errorf("%s.openCodeAgent must be a string", path)
-	}
-	return validateOpenCodeAgentField(path, agent)
-}
-
-func validateOpenCodeAgentField(path, agent string) error {
-	if strings.TrimSpace(agent) == "" {
-		return fmt.Errorf("%s.openCodeAgent must be a non-empty string", path)
-	}
-	return nil
 }
 
 func cloneHostedWorkerAuthConfig(cfg *factorydefinitions.HostedWorkerAuthConfig) *factorydefinitions.HostedWorkerAuthConfig {
@@ -169,10 +147,6 @@ func ParseWorkstationConfig(data []byte, sourcePath string) (*factorydefinitions
 	}
 	normalizeWorkstationPublicEnums(&cfg)
 	NormalizeWorkstationExecutionLimit(&cfg)
-	if err := validateOpenCodeAgentInFrontmatter(rawFrontmatter, "frontmatter"); err != nil {
-		return nil, fmt.Errorf("validate workstation frontmatter in %s: %w", sourcePath, err)
-	}
-
 	cfg.Body = body
 	if cfg.PromptFile == "" {
 		cfg.PromptTemplate = body
@@ -304,6 +278,7 @@ type workerFrontmatter struct {
 	Provider         string                                       `yaml:"provider,omitempty"`
 	Model            string                                       `yaml:"model,omitempty"`
 	ModelProvider    string                                       `yaml:"modelProvider,omitempty"`
+	ReasoningEffort  string                                       `yaml:"reasoningEffort,omitempty"`
 	ExecutorProvider string                                       `yaml:"executorProvider,omitempty"`
 	Command          string                                       `yaml:"command,omitempty"`
 	Args             []string                                     `yaml:"args,omitempty"`
@@ -311,7 +286,6 @@ type workerFrontmatter struct {
 	Timeout          string                                       `yaml:"timeout,omitempty"`
 	StopToken        string                                       `yaml:"stopToken,omitempty"`
 	SkipPermissions  bool                                         `yaml:"skipPermissions,omitempty"`
-	OpenCodeAgent    string                                       `yaml:"openCodeAgent,omitempty"`
 	Auth             *factorydefinitions.HostedWorkerAuthConfig   `yaml:"auth,omitempty"`
 	Linear           *factorydefinitions.HostedLinearWorkerConfig `yaml:"linear,omitempty"`
 }
@@ -323,7 +297,6 @@ type workstationFrontmatter struct {
 	Type             string                              `yaml:"type,omitempty"`
 	Worker           string                              `yaml:"worker,omitempty"`
 	Runner           string                              `yaml:"runner,omitempty"`
-	OpenCodeAgent    string                              `yaml:"openCodeAgent,omitempty"`
 	PromptFile       string                              `yaml:"promptFile,omitempty"`
 	OutputSchema     string                              `yaml:"outputSchema,omitempty"`
 	Limits           workstationLimitsFrontmatter        `yaml:"limits,omitempty"`
@@ -342,12 +315,16 @@ type workstationFrontmatter struct {
 }
 
 type workstationLimitsFrontmatter struct {
-	MaxRetries       int    `yaml:"maxRetries,omitempty"`
-	MaxExecutionTime string `yaml:"maxExecutionTime,omitempty"`
+	MaxRetries                          int    `yaml:"maxRetries,omitempty"`
+	MaxExecutionTime                    string `yaml:"maxExecutionTime,omitempty"`
+	MaxGeneratedWorkItems               int    `yaml:"maxGeneratedWorkItems,omitempty"`
+	MaxGeneratedWorkItemsArgument       string `yaml:"maxGeneratedWorkItemsArgument,omitempty"`
+	MaxGeneratedWorkItemsArgumentOffset int    `yaml:"maxGeneratedWorkItemsArgumentOffset,omitempty"`
 }
 
 type cronFrontmatter struct {
 	Schedule       string `yaml:"schedule,omitempty"`
+	Every          string `yaml:"every,omitempty"`
 	TriggerAtStart bool   `yaml:"triggerAtStart,omitempty"`
 	Jitter         string `yaml:"jitter,omitempty"`
 	ExpiryWindow   string `yaml:"expiryWindow,omitempty"`
@@ -367,10 +344,11 @@ type inputGuardFrontmatter struct {
 }
 
 type guardFrontmatter struct {
-	Type        factorydefinitions.GuardType         `yaml:"type"`
-	Workstation string                               `yaml:"workstation,omitempty"`
-	MaxVisits   int                                  `yaml:"maxVisits,omitempty"`
-	MatchConfig *factorydefinitions.GuardMatchConfig `yaml:"matchConfig,omitempty"`
+	Type              factorydefinitions.GuardType         `yaml:"type"`
+	Workstation       string                               `yaml:"workstation,omitempty"`
+	MaxVisits         int                                  `yaml:"maxVisits,omitempty"`
+	MaxVisitsArgument string                               `yaml:"maxVisitsArgument,omitempty"`
+	MatchConfig       *factorydefinitions.GuardMatchConfig `yaml:"matchConfig,omitempty"`
 }
 
 func workstationFrontmatterForExpansion(def factorydefinitions.FactoryWorkstationConfig) workstationFrontmatter {
@@ -379,16 +357,20 @@ func workstationFrontmatterForExpansion(def factorydefinitions.FactoryWorkstatio
 		behavior = factorydefinitions.WorkstationKind(publicFactoryWorkstationKindFromInternal(def.Kind))
 	}
 	rendered := workstationFrontmatter{
-		ID:               def.ID,
-		Name:             def.Name,
-		Kind:             behavior,
-		Type:             def.Type,
-		Worker:           def.WorkerTypeName,
-		Runner:           def.Runner,
-		OpenCodeAgent:    def.OpenCodeAgent,
-		PromptFile:       def.PromptFile,
-		OutputSchema:     def.OutputSchema,
-		Limits:           workstationLimitsFrontmatter{MaxRetries: def.Limits.MaxRetries, MaxExecutionTime: def.Limits.MaxExecutionTime},
+		ID:           def.ID,
+		Name:         def.Name,
+		Kind:         behavior,
+		Type:         def.Type,
+		Worker:       def.WorkerTypeName,
+		Runner:       def.Runner,
+		PromptFile:   def.PromptFile,
+		OutputSchema: def.OutputSchema,
+		Limits: workstationLimitsFrontmatter{
+			MaxRetries: def.Limits.MaxRetries, MaxExecutionTime: def.Limits.MaxExecutionTime,
+			MaxGeneratedWorkItems:               def.Limits.MaxGeneratedWorkItems,
+			MaxGeneratedWorkItemsArgument:       def.Limits.MaxGeneratedWorkItemsArgument,
+			MaxGeneratedWorkItemsArgumentOffset: def.Limits.MaxGeneratedWorkItemsArgumentOffset,
+		},
 		Inputs:           ioFrontmatterSlice(def.Inputs),
 		Outputs:          ioFrontmatterSlice(def.Outputs),
 		OnContinue:       ioFrontmatterSlice(def.OnContinue),
@@ -404,6 +386,7 @@ func workstationFrontmatterForExpansion(def factorydefinitions.FactoryWorkstatio
 	if def.Cron != nil {
 		rendered.Cron = &cronFrontmatter{
 			Schedule:       def.Cron.Schedule,
+			Every:          def.Cron.Every,
 			TriggerAtStart: def.Cron.TriggerAtStart,
 			Jitter:         def.Cron.Jitter,
 			ExpiryWindow:   def.Cron.ExpiryWindow,
@@ -441,6 +424,7 @@ func workerFrontmatterForExpansion(def factorydefinitions.FactoryWorkerConfig) w
 		Provider:         publicFactoryHostedWorkerProviderFromInternal(def.Provider),
 		Model:            def.Model,
 		ModelProvider:    modelProvider,
+		ReasoningEffort:  def.ReasoningEffort,
 		ExecutorProvider: executorProvider,
 		Command:          def.Command,
 		Args:             append([]string(nil), def.Args...),
@@ -448,7 +432,6 @@ func workerFrontmatterForExpansion(def factorydefinitions.FactoryWorkerConfig) w
 		Timeout:          def.Timeout,
 		StopToken:        def.StopToken,
 		SkipPermissions:  def.SkipPermissions,
-		OpenCodeAgent:    def.OpenCodeAgent,
 		Auth:             cloneHostedWorkerAuthConfig(def.Auth),
 		Linear:           cloneHostedLinearWorkerConfig(def.Linear),
 	}
@@ -473,10 +456,11 @@ func guardFrontmatterSlice(configs []factorydefinitions.GuardConfig) []guardFron
 	out := make([]guardFrontmatter, len(configs))
 	for i := range configs {
 		out[i] = guardFrontmatter{
-			Type:        factorydefinitions.GuardType(publicFactoryGuardTypeStringFromInternal(configs[i].Type)),
-			Workstation: configs[i].Workstation,
-			MaxVisits:   configs[i].MaxVisits,
-			MatchConfig: factorydefinitions.CloneGuardMatchConfig(configs[i].MatchConfig),
+			Type:              factorydefinitions.GuardType(publicFactoryGuardTypeStringFromInternal(configs[i].Type)),
+			Workstation:       configs[i].Workstation,
+			MaxVisits:         configs[i].MaxVisits,
+			MaxVisitsArgument: configs[i].MaxVisitsArgument,
+			MatchConfig:       factorydefinitions.CloneGuardMatchConfig(configs[i].MatchConfig),
 		}
 	}
 	return out

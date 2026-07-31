@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/namevalue"
 	factoryresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/resource"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/namevalue"
 )
 
 type Config struct {
@@ -17,6 +17,7 @@ type Config struct {
 	Provider         string                    `json:"provider,omitempty" yaml:"provider,omitempty"`
 	Model            string                    `json:"model,omitempty" yaml:"model,omitempty"`
 	ModelProvider    string                    `json:"modelProvider,omitempty" yaml:"modelProvider,omitempty"`
+	ReasoningEffort  string                    `json:"reasoningEffort,omitempty" yaml:"reasoningEffort,omitempty"`
 	ModelLocality    string                    `json:"modelLocality,omitempty" yaml:"modelLocality,omitempty"`
 	ExecutorProvider string                    `json:"executorProvider,omitempty" yaml:"executorProvider,omitempty"`
 	Operations       []ModelOperation          `json:"operations,omitempty" yaml:"operations,omitempty"`
@@ -26,13 +27,17 @@ type Config struct {
 	Timeout          string                    `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 	StopToken        string                    `json:"stopToken,omitempty" yaml:"stopToken,omitempty"`
 	SkipPermissions  bool                      `json:"skipPermissions,omitempty" yaml:"skipPermissions,omitempty"`
-	OpenCodeAgent    string                    `json:"openCodeAgent,omitempty" yaml:"openCodeAgent,omitempty"`
 	Auth             *HostedWorkerAuthConfig   `json:"auth,omitempty" yaml:"auth,omitempty"`
 	Linear           *HostedLinearWorkerConfig `json:"linear,omitempty" yaml:"linear,omitempty"`
 	AgentTools       *AgentToolsConfig         `json:"agentTools,omitempty" yaml:"agentTools,omitempty"`
 	Body             string                    `json:"body,omitempty" yaml:"-"`
 	SessionID        string                    `json:"-" yaml:"-"`
 	Concurrency      int                       `json:"-" yaml:"-"`
+	// RuntimeDefaultModelProvider and RuntimeDefaultModel retain operator
+	// fallbacks for invocation-interpolated selections. They are effective
+	// runtime metadata and never part of an authored Factory definition.
+	RuntimeDefaultModelProvider string `json:"-" yaml:"-"`
+	RuntimeDefaultModel         string `json:"-" yaml:"-"`
 }
 
 func (w *Config) TimeoutDuration() time.Duration {

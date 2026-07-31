@@ -1,6 +1,7 @@
 package packagedfactorycatalog_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io/fs"
@@ -10,10 +11,13 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+	"text/template"
 
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	"github.com/portpowered/infinite-you/internal/testpath"
 	packagedfactories "github.com/portpowered/infinite-you/packages/packaged-factories"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"gopkg.in/yaml.v3"
@@ -33,14 +37,19 @@ func TestGenerateArtifactsProducesEquivalentSelfContainedPairsForCompleteInvento
 	if err != nil {
 		t.Fatalf("GenerateArtifacts: %v", err)
 	}
-	if len(artifacts) != 7 {
-		t.Fatalf("artifacts = %d, want 7", len(artifacts))
+	if len(artifacts) != 14 {
+		t.Fatalf("artifacts = %d, want 14", len(artifacts))
 	}
 
 	bySlug := make(map[string]packagedfactorycatalog.ArtifactPair, len(artifacts))
 	for _, artifact := range artifacts {
 		bySlug[artifact.Slug] = artifact
 		assertEquivalentArtifactPair(t, artifact)
+		for _, worker := range artifact.Factory.Workers {
+			if worker.Type == "AGENT_WORKER" && !worker.SkipPermissions {
+				t.Fatalf("packaged Factory %q agent worker %q does not default skipPermissions to true", artifact.PublicName, worker.Name)
+			}
+		}
 	}
 	if bySlug["fusion"].PublicName != "@you/fusion" || bySlug["fusion"].Factory.Name != "fusion" {
 		t.Fatalf("fusion public/artifact names = %q/%q", bySlug["fusion"].PublicName, bySlug["fusion"].Factory.Name)
@@ -49,8 +58,169 @@ func TestGenerateArtifactsProducesEquivalentSelfContainedPairsForCompleteInvento
 		t.Fatal("fusion artifact did not preserve invocation-interpolated provider")
 	}
 	assertInlineAsset(t, bySlug["goal"].JSON, "workers", "goal-executor", "body", "You are executing goal work")
-	assertBundledFile(t, bySlug["deep-research"].JSON, "factory/scripts/deep-research.workflow.js", "SCRIPT", "return (async function")
+	if !strings.Contains(string(bySlug["deep-research"].JSON), `"inlineSource"`) ||
+		!strings.Contains(string(bySlug["deep-research"].JSON), `@you-factory-meta`) {
+		t.Fatal("deep-research artifact did not inline its standalone factory.js source")
+	}
 	assertExamplesPreserved(t, bySlug["subagent"])
+	assertMetaPlannerContract(t, bySlug["plan-parallel"], "parallel-planner")
+	assertPlanParallelDelegatesTerminalSynthesisToMerger(t, bySlug["plan-parallel"])
+	assertPlanParallelExecutorsReturnSubstantiveResults(t, bySlug["plan-parallel"])
+	assertPlanParallelMergerPrimaryResultContract(t, bySlug["plan-parallel"])
+	assertMetaPlannerContract(t, bySlug["full-flow"], "full-flow-planner")
+}
+
+func assertPlanParallelExecutorsReturnSubstantiveResults(t *testing.T, artifact packagedfactorycatalog.ArtifactPair) {
+	t.Helper()
+	for _, worker := range artifact.Factory.Workers {
+		if worker.Name != "parallel-executor" {
+			continue
+		}
+		for _, required := range []string{"Execute the one assigned Work item", "Never return a bare control token", "substantive evidence report"} {
+			if !strings.Contains(worker.Body, required) {
+				t.Fatalf("packaged Factory %q executor body does not contain %q", artifact.PublicName, required)
+			}
+		}
+		return
+	}
+	t.Fatalf("packaged Factory %q does not contain parallel-executor", artifact.PublicName)
+}
+
+func assertPlanParallelDelegatesTerminalSynthesisToMerger(t *testing.T, artifact packagedfactorycatalog.ArtifactPair) {
+	t.Helper()
+	const required = "Do not create a catch-all synthesis, summary, merge, or final-answer planned task"
+	for _, worker := range artifact.Factory.Workers {
+		if worker.Name == "parallel-planner" && strings.Contains(worker.Body, required) {
+			return
+		}
+	}
+	t.Fatalf("packaged Factory %q planner does not reserve terminal synthesis for its merger", artifact.PublicName)
+}
+
+func assertPlanParallelMergerPrimaryResultContract(t *testing.T, artifact packagedfactorycatalog.ArtifactPair) {
+	t.Helper()
+	if artifact.Factory.InvocationReturn == nil ||
+		artifact.Factory.InvocationReturn.Policy != work.InvocationReturnPolicyExplicit ||
+		artifact.Factory.InvocationReturn.WorkTypeName != "parallel-plan" ||
+		artifact.Factory.InvocationReturn.TerminalState != "complete" {
+		t.Fatalf(
+			"packaged Factory %q invocationReturn = %#v, want EXPLICIT parallel-plan/complete",
+			artifact.PublicName,
+			artifact.Factory.InvocationReturn,
+		)
+	}
+
+	var merger *factorydefinitions.FactoryWorkstationConfig
+	for index := range artifact.Factory.Workstations {
+		if artifact.Factory.Workstations[index].Name == "merge-plan-results" {
+			merger = &artifact.Factory.Workstations[index]
+			break
+		}
+	}
+	if merger == nil {
+		t.Fatalf("packaged Factory %q does not contain merge-plan-results", artifact.PublicName)
+	}
+	body := merger.Body
+	if body == "" {
+		body = merger.PromptTemplate
+	}
+	for _, required := range []string{
+		"Treat the original request and all completed generated Work inputs",
+		"Original parent request and completed generated child results",
+		"Never claim that completed generated task results are missing",
+		"{{ if .Payload -}}",
+		"{{- else if .PreviousOutput -}}",
+		"{{ range .Content }}{{ .Text }}{{ end }}",
+	} {
+		if !strings.Contains(body, required) {
+			t.Fatalf("packaged Factory %q merger body does not contain %q", artifact.PublicName, required)
+		}
+	}
+	if len(merger.Inputs) != 2 ||
+		merger.Inputs[0].WorkTypeName != "parallel-plan" || merger.Inputs[0].StateName != "waiting" ||
+		merger.Inputs[1].WorkTypeName != "planned-task" || merger.Inputs[1].StateName != "complete" ||
+		merger.Inputs[1].Guard == nil ||
+		merger.Inputs[1].Guard.Type != factorydefinitions.GuardTypeAllChildrenComplete ||
+		merger.Inputs[1].Guard.ParentInput != "parallel-plan" ||
+		merger.Inputs[1].Guard.SpawnedBy != "plan-parallel-work" {
+		t.Fatalf("packaged Factory %q merger inputs = %#v, want parent waiting plus ALL_CHILDREN_COMPLETE children", artifact.PublicName, merger.Inputs)
+	}
+	if len(merger.Outputs) != 1 ||
+		merger.Outputs[0].WorkTypeName != "parallel-plan" ||
+		merger.Outputs[0].StateName != "complete" {
+		t.Fatalf("packaged Factory %q merger outputs = %#v, want parallel-plan complete", artifact.PublicName, merger.Outputs)
+	}
+
+	type contentPart struct{ Text string }
+	type inputToken struct {
+		Name           string
+		WorkTypeID     string
+		Payload        string
+		PreviousOutput string
+		Content        []contentPart
+	}
+	rendered, err := renderPlanParallelMergerPrompt(body, []inputToken{
+		{Name: "work-1", WorkTypeID: "parallel-plan", Payload: "PARENT_REQUEST_MARKER"},
+		{Name: "task-a", WorkTypeID: "planned-task", Payload: "CHILD_A_RESULT_MARKER"},
+		{Name: "task-b", WorkTypeID: "planned-task", PreviousOutput: "CHILD_B_PREVIOUS_OUTPUT_MARKER"},
+		{
+			Name:       "task-c",
+			WorkTypeID: "planned-task",
+			Content:    []contentPart{{Text: "CHILD_C_CONTENT_MARKER"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("render packaged Factory %q merger prompt: %v", artifact.PublicName, err)
+	}
+	for _, required := range []string{
+		"PARENT_REQUEST_MARKER",
+		"CHILD_A_RESULT_MARKER",
+		"CHILD_B_PREVIOUS_OUTPUT_MARKER",
+		"CHILD_C_CONTENT_MARKER",
+		"--- work-1 (parallel-plan) ---",
+		"--- task-a (planned-task) ---",
+		"--- task-b (planned-task) ---",
+		"--- task-c (planned-task) ---",
+	} {
+		if !strings.Contains(rendered, required) {
+			t.Fatalf("rendered merger prompt missing %q:\n%s", required, rendered)
+		}
+	}
+}
+
+func renderPlanParallelMergerPrompt(body string, inputs any) (string, error) {
+	parsed, err := template.New("merge-plan-results").Parse(body)
+	if err != nil {
+		return "", err
+	}
+	var buf bytes.Buffer
+	if err := parsed.Execute(&buf, map[string]any{"Inputs": inputs}); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}
+
+func assertMetaPlannerContract(t *testing.T, artifact packagedfactorycatalog.ArtifactPair, workerName string) {
+	t.Helper()
+	for _, worker := range artifact.Factory.Workers {
+		if worker.Name != workerName {
+			continue
+		}
+		for _, required := range []string{
+			"you docs agents",
+			"Never run bare `you`",
+			`{"request":{"type":"FACTORY_REQUEST_BATCH"`,
+			"sourceWorkName",
+			"targetWorkName",
+			"requiredState",
+		} {
+			if !strings.Contains(worker.Body, required) {
+				t.Fatalf("packaged Factory %q planner %q body does not contain %q", artifact.PublicName, workerName, required)
+			}
+		}
+		return
+	}
+	t.Fatalf("packaged Factory %q does not contain planner worker %q", artifact.PublicName, workerName)
 }
 
 func TestGenerateArtifactsEmbedsDocumentsInputsAndPreservesMetadataExactly(t *testing.T) {

@@ -154,14 +154,14 @@ func splitServicesOwnerPath(packagePath string) (owner, rest string, ok bool) {
 
 func mapProvidersExtraction(packagePath string) (PackageMapping, bool) {
 	switch {
-	case packagePath == "pkg/services/workers/agypty",
+	case packagePath == "pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty",
 		packagePath == "pkg/services/workers/cliprovider",
-		packagePath == "pkg/services/workers/provider",
-		strings.HasPrefix(packagePath, "pkg/services/workers/provider/"),
-		packagePath == "pkg/services/workers/provider_test",
-		strings.HasPrefix(packagePath, "pkg/services/workers/provider_test/"):
+		packagePath == "pkg/services/providers/internal/services/execution/internal/provider",
+		strings.HasPrefix(packagePath, "pkg/services/providers/internal/services/execution/internal/provider/"),
+		packagePath == "pkg/services/providers/internal/services/execution/internal/provider_test",
+		strings.HasPrefix(packagePath, "pkg/services/providers/internal/services/execution/internal/provider_test/"):
 		destination := "providers/internal/services/execution"
-		if packagePath == "pkg/services/workers/provider/registry" {
+		if packagePath == "pkg/services/providers/internal/services/execution/internal/provider/registry" {
 			destination = "providers/internal/services/catalog"
 		}
 		return PackageMapping{
@@ -471,3 +471,5 @@ func mergeOwnerPackageRows(existing []PackageMapping, ownerRows []PackageMapping
 	})
 	return merged
 }
+
+

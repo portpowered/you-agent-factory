@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
-	factorylifecycle "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle"
 	factoryinternal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
+	factorylifecycle "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle"
+	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
 )
 
 type stubAuthoringLayout struct{}

@@ -1,12 +1,13 @@
 type: object
-description: Trigger timing for cron workstations. Cron workstations use a schedule expression; interval triggers are not supported.
+description: Trigger timing for scheduled workstations. Provide exactly one of a five-field cron schedule or a positive duration in every; Factory validation enforces the exclusive choice.
 additionalProperties: false
-required:
-  - schedule
 properties:
   schedule:
     type: string
     description: Standard five-field cron expression used to produce internal time work while the factory service is running.
+  every:
+    type: string
+    description: Positive Go duration interval, such as 30s, 5m, 1h, or 1h30m, used instead of schedule.
   triggerAtStart:
     type: boolean
     default: false

@@ -213,11 +213,11 @@ func assertFileJavaScriptImportedSuccessOutcome(t *testing.T, result factoryapi.
 	if result.PrimaryResult == nil || len(*result.PrimaryResult) != 1 {
 		t.Fatalf("primary result = %#v, want exactly one content part", result.PrimaryResult)
 	}
-	part, err := (*result.PrimaryResult)[0].AsWorkJsonContentPart()
+	part, err := (*result.PrimaryResult)[0].AsWorkTextContentPart()
 	if err != nil {
 		t.Fatalf("decode primary result content part: %v", err)
 	}
-	if got, ok := part.Json.(string); !ok || got != fileJavaScriptImportedSuccessResult {
-		t.Fatalf("primary result = %#v, want exact imported string %q", part.Json, fileJavaScriptImportedSuccessResult)
+	if part.Text != fileJavaScriptImportedSuccessResult {
+		t.Fatalf("primary result = %q, want exact imported string %q", part.Text, fileJavaScriptImportedSuccessResult)
 	}
 }

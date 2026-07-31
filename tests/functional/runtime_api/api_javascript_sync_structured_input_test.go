@@ -65,12 +65,12 @@ func TestNamedJavaScriptFactoryRunResolvesInvocationInputThroughCLI(t *testing.T
 	if result.PrimaryResult == nil || len(*result.PrimaryResult) != 1 {
 		t.Fatalf("primary result = %#v, want one content part", result.PrimaryResult)
 	}
-	part, err := (*result.PrimaryResult)[0].AsWorkJsonContentPart()
+	part, err := (*result.PrimaryResult)[0].AsWorkTextContentPart()
 	if err != nil {
 		t.Fatalf("decode primary result: %v", err)
 	}
-	if got, ok := part.Json.(string); !ok || got != jsStructuredInputSuccessResult {
-		t.Fatalf("primary result = %#v, want %q", part.Json, jsStructuredInputSuccessResult)
+	if part.Text != jsStructuredInputSuccessResult {
+		t.Fatalf("primary result = %q, want %q", part.Text, jsStructuredInputSuccessResult)
 	}
 }
 
@@ -135,12 +135,12 @@ func TestJavaScriptSyncExecutionResolvesStructuredInvocationInput(t *testing.T) 
 	if response.Result.PrimaryResult == nil || len(*response.Result.PrimaryResult) != 1 {
 		t.Fatalf("primary result = %#v, want one content part", response.Result.PrimaryResult)
 	}
-	part, err := (*response.Result.PrimaryResult)[0].AsWorkJsonContentPart()
+	part, err := (*response.Result.PrimaryResult)[0].AsWorkTextContentPart()
 	if err != nil {
 		t.Fatalf("decode primary result: %v", err)
 	}
-	if got, ok := part.Json.(string); !ok || got != jsStructuredInputSuccessResult {
-		t.Fatalf("primary result = %#v, want %q", part.Json, jsStructuredInputSuccessResult)
+	if part.Text != jsStructuredInputSuccessResult {
+		t.Fatalf("primary result = %q, want %q", part.Text, jsStructuredInputSuccessResult)
 	}
 	if runner.CallCount() != 0 {
 		t.Fatalf("provider command runner call count = %d, want 0 for inline JavaScript workflow", runner.CallCount())

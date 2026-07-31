@@ -110,15 +110,7 @@ func IsPollerRunPublicWorkstationType(value string, kind WorkstationKind) bool {
 }
 
 func IsInferenceWorkerType(value string) bool { return StrictWorkerType(value) == WorkerTypeInference }
-func IsAgentWorkerType(value string) bool     { return StrictWorkerType(value) == WorkerTypeAgent }
-func IsProviderBackedWorkerType(value string) bool {
-	return IsInferenceWorkerType(value) || IsAgentWorkerType(value)
-}
-func UsesModelhostLease(workerType, locality string) bool {
-	return IsProviderBackedWorkerType(workerType) && locality == "LOCAL"
-}
-func IsScriptWorkerType(value string) bool           { return StrictWorkerType(value) == WorkerTypeScript }
-func IsPollerWorkerType(value string) bool           { return StrictWorkerType(value) == WorkerTypePoller }
+
 func ProjectWorkerBehaviorClass(value string) string { return StrictWorkerType(value) }
 
 func IsInferenceRunWorkstationType(value string) bool {

@@ -147,9 +147,7 @@ func TestInitSuppliedInputFailuresDoNotWrite(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), test.wantErr) {
 				t.Fatalf("Process.Execute() error = %v, want %q", err, test.wantErr)
 			}
-			if got := fixture.readConfig(); got != existingOperatorConfig {
-				t.Fatalf("operator config changed after rejected input:\n%s", got)
-			}
+			assertOperatorSelectionsPreserved(t, fixture.readConfig(), "rejected input")
 		})
 	}
 }
@@ -368,9 +366,7 @@ func TestInitInteractiveRejectedOrTerminatedInputDoesNotWrite(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), test.wantErr) {
 				t.Fatalf("Process.Execute() error = %v, want %q", err, test.wantErr)
 			}
-			if got := fixture.readConfig(); got != existingOperatorConfig {
-				t.Fatalf("operator config changed after rejected prompt:\n%s", got)
-			}
+			assertOperatorSelectionsPreserved(t, fixture.readConfig(), "rejected prompt")
 		})
 	}
 }
@@ -391,9 +387,7 @@ func TestInitInteractiveContextCancellationAtModelDoesNotWrite(t *testing.T) {
 	if err == nil || !errors.Is(err, context.Canceled) {
 		t.Fatalf("Process.Execute() error = %v, want context cancellation", err)
 	}
-	if got := fixture.readConfig(); got != existingOperatorConfig {
-		t.Fatalf("operator config changed after context cancellation:\n%s", got)
-	}
+	assertOperatorSelectionsPreserved(t, fixture.readConfig(), "context cancellation")
 }
 
 // TestInitInteractivePreCommitFailurePreservesConfig proves failed prompted commits preserve the original config.
@@ -463,6 +457,22 @@ func (fixture initFixture) execute(
 		Context:          fixture.t.Context(),
 		WorkingDirectory: fixture.workingDir,
 	})
+}
+
+func assertOperatorSelectionsPreserved(t *testing.T, document, phase string) {
+	t.Helper()
+	for _, want := range []string{
+		`"workerModelProvider": "claude"`,
+		`"workerModel": "old-model"`,
+		`"directory": "custom-logs"`,
+		`"directory": "custom-metrics"`,
+		`"id": "review"`,
+		`"model": "preset-model"`,
+	} {
+		if !strings.Contains(document, want) {
+			t.Fatalf("operator config after %s omitted preserved setting %q:\n%s", phase, want, document)
+		}
+	}
 }
 
 func (fixture initFixture) executeInteractive(

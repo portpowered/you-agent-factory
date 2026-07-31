@@ -108,6 +108,38 @@ func TestMergeRequiresRuntimeDefinitions(t *testing.T) {
 	}
 }
 
+func TestMergeCanonicalizesReasoningEffortAndIgnoresWhitespaceRuntimeOverride(t *testing.T) {
+	t.Parallel()
+
+	authored := &factorydefinitions.FactoryConfig{Workers: []factorydefinitions.FactoryWorkerConfig{{
+		Name:            "agent",
+		ReasoningEffort: " HIGH ",
+	}}}
+	effective, err := runtimeconfig.Merge(authored, definitions{
+		workers: map[string]*factorydefinitions.FactoryWorkerConfig{
+			"agent": {ReasoningEffort: " \t "},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Merge: %v", err)
+	}
+	if got := effective.Workers[0].ReasoningEffort; got != "high" {
+		t.Fatalf("reasoning effort = %q, want canonical authored high", got)
+	}
+
+	effective, err = runtimeconfig.Merge(authored, definitions{
+		workers: map[string]*factorydefinitions.FactoryWorkerConfig{
+			"agent": {ReasoningEffort: " XHIGH "},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Merge runtime override: %v", err)
+	}
+	if got := effective.Workers[0].ReasoningEffort; got != "xhigh" {
+		t.Fatalf("reasoning effort = %q, want canonical runtime xhigh", got)
+	}
+}
+
 func TestMergeNilFactoryReturnsNoEffectiveDefinition(t *testing.T) {
 	t.Parallel()
 

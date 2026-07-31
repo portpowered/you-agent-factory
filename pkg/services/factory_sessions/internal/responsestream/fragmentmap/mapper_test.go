@@ -25,7 +25,7 @@ func TestMapFragment_ProgressFragmentEmitsProgressUpdated(t *testing.T) {
 		DispatchID: "dispatch-42",
 		Payload:    "planning next step",
 		ProviderSessionRef: &workerexecution.ProviderSessionMetadata{
-			Provider: string(modelprovider.ProviderCursor),
+			Provider: string(modelprovider.ProviderCodex),
 			Kind:     "session_id",
 			ID:       "cursor-session-123",
 		},
@@ -71,6 +71,41 @@ func TestMapFragment_ProgressFragmentEmitsProgressUpdated(t *testing.T) {
 
 	if err := responseevents.ValidateEvent(event); err != nil {
 		t.Fatalf("ValidateEvent() error = %v", err)
+	}
+}
+
+func TestMapFragment_NativeToolProgressUsesObjectResultSummary(t *testing.T) {
+	t.Parallel()
+
+	fragment := responsestream.Event{
+		Kind:              responsestream.EventKindProgressFragment,
+		Type:              responsestream.EventTypeProgress,
+		DispatchID:        "dispatch-tool",
+		Payload:           "read completed",
+		ExternalEventType: "tool.completed",
+		Metadata: map[string]string{
+			"correlation_id": "call-1",
+			"tool_name":      "read",
+		},
+	}
+	events, err := fragmentmap.MapFragment(fragmentmap.Context{
+		FactorySessionID: "session-1",
+		RunID:            "run-1",
+	}, fragment)
+	if err != nil {
+		t.Fatalf("MapFragment() error = %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("event count = %d, want 1", len(events))
+	}
+	var payload struct {
+		ResultSummary map[string]any `json:"resultSummary"`
+	}
+	if err := json.Unmarshal(events[0].Payload, &payload); err != nil {
+		t.Fatalf("unmarshal tool payload: %v", err)
+	}
+	if got := payload.ResultSummary["detail"]; got != "read completed" {
+		t.Fatalf("resultSummary.detail = %#v, want read completed", got)
 	}
 }
 
@@ -182,7 +217,7 @@ func TestMapFragment_ResponseFragmentEmitsMessageDelta(t *testing.T) {
 		DispatchID: "dispatch-42",
 		Payload:    "hello ",
 		ProviderSessionRef: &workerexecution.ProviderSessionMetadata{
-			Provider: string(modelprovider.ProviderCursor),
+			Provider: string(modelprovider.ProviderCodex),
 			Kind:     "session_id",
 			ID:       "cursor-session-123",
 		},
@@ -391,7 +426,7 @@ func TestMapFragment_StreamCompletedEmitsRunCompleted(t *testing.T) {
 		Kind:       responsestream.EventKindStreamCompleted,
 		DispatchID: "dispatch-42",
 		ProviderSessionRef: &workerexecution.ProviderSessionMetadata{
-			Provider: string(modelprovider.ProviderCursor),
+			Provider: string(modelprovider.ProviderCodex),
 			Kind:     "session_id",
 			ID:       "cursor-session-123",
 		},
@@ -455,11 +490,15 @@ func TestMapFragment_StreamFailedEmitsErrorFailed(t *testing.T) {
 		DispatchID: "dispatch-99",
 		Payload:    "normalized provider failure",
 		ProviderSessionRef: &workerexecution.ProviderSessionMetadata{
-			Provider: string(modelprovider.ProviderCursor),
+			Provider: string(modelprovider.ProviderCodex),
 			Kind:     "session_id",
 			ID:       "cursor-session-456",
 		},
 		ExternalEventType: "response.failed",
+		Metadata: map[string]string{
+			"work_failure_type": string(workerexecution.WorkFailureTypeTimeout),
+			"retryable":         "true",
+		},
 	}
 	ctx := fragmentmap.Context{
 		FactorySessionID: "session-abc",
@@ -489,8 +528,8 @@ func TestMapFragment_StreamFailedEmitsErrorFailed(t *testing.T) {
 	if err := json.Unmarshal(event.Payload, &payload); err != nil {
 		t.Fatalf("unmarshal error payload: %v", err)
 	}
-	if payload.Code != "stream_failed" || payload.Message != "normalized provider failure" {
-		t.Fatalf("error payload = %#v, want stream_failed code and provider failure message", payload)
+	if payload.Code != "timeout" || payload.Message != "normalized provider failure" || !payload.Retryable {
+		t.Fatalf("error payload = %#v, want retryable timeout code and provider failure message", payload)
 	}
 
 	if err := responseevents.ValidateEvent(event); err != nil {
@@ -644,7 +683,7 @@ func TestMapFragment_CompactionSignalEmitsStreamGapUpdated(t *testing.T) {
 			LastDroppedSequence:   2,
 		},
 		ProviderSessionRef: &workerexecution.ProviderSessionMetadata{
-			Provider: string(modelprovider.ProviderCursor),
+			Provider: string(modelprovider.ProviderCodex),
 			Kind:     "session_id",
 			ID:       "cursor-session-123",
 		},

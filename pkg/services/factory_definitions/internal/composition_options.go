@@ -1,8 +1,8 @@
 package internal
 
 import (
-	distributionservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution"
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	distributionservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution"
 )
 
 type compositionOptions struct {

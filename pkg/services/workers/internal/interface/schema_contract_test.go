@@ -510,8 +510,25 @@ func TestMockWorkersSchema_StaleStagingDetectedByContractCheck(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read staged schema: %v", err)
 	}
+	backupFile, err := os.CreateTemp(filepath.Dir(stagedPath), ".mock-workers-schema-backup-*")
+	if err != nil {
+		t.Fatalf("reserve staged schema backup: %v", err)
+	}
+	backupPath := backupFile.Name()
+	if err := backupFile.Close(); err != nil {
+		t.Fatalf("close staged schema backup: %v", err)
+	}
+	if err := os.Remove(backupPath); err != nil {
+		t.Fatalf("remove staged schema backup placeholder: %v", err)
+	}
+	if err := os.Rename(stagedPath, backupPath); err != nil {
+		t.Fatalf("move staged schema to backup: %v", err)
+	}
 	defer func() {
-		_ = os.WriteFile(stagedPath, before, 0o644)
+		_ = os.Remove(stagedPath)
+		if err := os.Rename(backupPath, stagedPath); err != nil {
+			t.Errorf("restore staged schema backup: %v", err)
+		}
 	}()
 
 	corrupted := append(append([]byte(nil), before...), '\n')
@@ -520,8 +537,27 @@ func TestMockWorkersSchema_StaleStagingDetectedByContractCheck(t *testing.T) {
 		detected bool
 	)
 	for attempt := 0; attempt < 32; attempt++ {
-		if err := os.WriteFile(stagedPath, corrupted, 0o644); err != nil {
+		next, err := os.CreateTemp(filepath.Dir(stagedPath), ".mock-workers-schema-stale-*")
+		if err != nil {
+			t.Fatalf("create stale staged schema: %v", err)
+		}
+		nextPath := next.Name()
+		if _, err := next.Write(corrupted); err != nil {
+			_ = next.Close()
 			t.Fatalf("write stale staged schema: %v", err)
+		}
+		if err := next.Close(); err != nil {
+			t.Fatalf("close stale staged schema: %v", err)
+		}
+		if _, err := os.Stat(stagedPath); err == nil {
+			previousPath := nextPath + ".previous"
+			if err := os.Rename(stagedPath, previousPath); err != nil {
+				t.Fatalf("move previous stale staged schema: %v", err)
+			}
+			defer os.Remove(previousPath)
+		}
+		if err := os.Rename(nextPath, stagedPath); err != nil {
+			t.Fatalf("install stale staged schema: %v", err)
 		}
 		drift, err = contractstaging.Check(repositoryRoot)
 		if err != nil {

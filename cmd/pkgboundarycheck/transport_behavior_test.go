@@ -800,6 +800,9 @@ func TestRunBlocksStaleTransportBehaviorBaselineEntry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := os.MkdirAll(filepath.Dir(filepath.Join(repoRoot, transportBehaviorBaselinePath)), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(repoRoot, transportBehaviorBaselinePath), payload, 0o644); err != nil {
 		t.Fatal(err)
 	}

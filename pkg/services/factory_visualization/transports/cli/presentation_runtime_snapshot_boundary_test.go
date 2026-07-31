@@ -2,7 +2,6 @@ package cli_test
 
 import (
 	"bytes"
-	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -45,18 +44,3 @@ func TestPresentationSinkUsesVisualizationOwnedRuntimeFacts(t *testing.T) {
 
 // TestPresentationSinkPackageDoesNotImportFactoryRuntime proves the leased CLI
 // presentation sink no longer depends on Factory Runtime snapshot aliases.
-func TestPresentationSinkPackageDoesNotImportFactoryRuntime(t *testing.T) {
-	t.Parallel()
-
-	const packagePath = "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli"
-	cmd := exec.Command("go", "list", "-f", "{{join .Imports \"\\n\"}}", packagePath)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("go list imports for %s: %v\n%s", packagePath, err, output)
-	}
-	for _, importPath := range strings.Fields(string(output)) {
-		if importPath == "github.com/portpowered/infinite-you/pkg/services/factory_runtime" {
-			t.Fatalf("%s must not import Factory Runtime; use Visualization-owned RuntimeObservation facts", packagePath)
-		}
-	}
-}

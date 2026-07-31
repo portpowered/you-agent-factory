@@ -48,8 +48,8 @@ func TestRunWorkflowRemovalContract_RunHelpBaselineDocumentsSupportedContract(t 
 		"--factory",
 		"trailing positional text or piped stdin text",
 		"INVOCATION_INPUT_SOURCE_CONFLICT",
-		"primary-result-only stdout by default",
-		"--output response-stream",
+		"response stream by default",
+		"--output primary",
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("run help baseline missing %q", want)

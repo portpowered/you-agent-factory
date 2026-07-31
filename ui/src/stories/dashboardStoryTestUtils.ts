@@ -208,80 +208,71 @@ export async function expectTimelineToolbarAlignment(
   canvasElement: HTMLElement,
 ): Promise<void> {
   const canvas = within(canvasElement);
-  const toolbar = await canvas.findByRole("region", {
+  const header = await canvas.findByRole("region", {
     name: "dashboard summary",
   });
-  const heading = within(toolbar).getByRole("heading", { name: "U" });
-  const activeTab = within(toolbar).getByRole("tab", { name: "root" });
-  const slider = within(toolbar).getByRole<HTMLInputElement>("slider", {
+  const controlsCard = await canvas.findByRole("article", {
+    name: "Session controls",
+  });
+  const heading = within(header).getByRole("heading", { name: "U" });
+  const activeTab = within(header).getByRole("tab", { name: "root" });
+  const slider = within(controlsCard).getByRole<HTMLInputElement>("slider", {
     name: "Timeline tick",
   });
-  const progressText = within(toolbar).getByText(/^\d+\/\d+$/);
-  const languageButton = within(toolbar).getByRole("button", {
+  const progressText = within(controlsCard).getByText(/^\d+\/\d+$/);
+  const languageButton = within(header).getByRole("button", {
     name: "Change language",
   });
-  const actionsGroup = within(toolbar).getByRole("group", {
+  const actionsGroup = within(header).getByRole("group", {
     name: "Dashboard actions",
   });
-  const exportButton = within(toolbar).getByRole("button", {
+  const exportButton = within(controlsCard).getByRole("button", {
     name: "Export PNG",
   });
   const sliderShell = requireValue(
     slider.closest<HTMLElement>("div"),
-    "expected slider shell in dashboard toolbar",
-  );
-  const primaryRow = requireValue(
-    heading.closest<HTMLElement>("div"),
-    "expected primary dashboard toolbar row",
-  );
-  const secondaryRow = requireValue(
-    sliderShell.parentElement,
-    "expected secondary dashboard toolbar row",
+    "expected slider shell in session controls card",
   );
   const sliderMetaGroup = requireValue(
     progressText.parentElement,
-    "expected timeline meta group in dashboard toolbar",
+    "expected timeline meta group in session controls card",
   );
   const headingRect = heading.getBoundingClientRect();
   const activeTabRect = activeTab.getBoundingClientRect();
   const actionsGroupRect = actionsGroup.getBoundingClientRect();
-  const primaryRowRect = primaryRow.getBoundingClientRect();
-  const secondaryRowRect = secondaryRow.getBoundingClientRect();
+  const headerRect = header.getBoundingClientRect();
+  const controlsCardRect = controlsCard.getBoundingClientRect();
   const sliderRect = sliderShell.getBoundingClientRect();
   const sliderInputRect = slider.getBoundingClientRect();
   const progressTextRect = progressText.getBoundingClientRect();
   const languageButtonRect = languageButton.getBoundingClientRect();
   const exportButtonRect = exportButton.getBoundingClientRect();
-  const headerControls = Array.from(
-    toolbar.querySelectorAll(
-      '[aria-label="Timeline tick"], [aria-label="Change language"], [aria-label="Export PNG"]',
-    ),
-  );
 
   expect(sliderShell.className).toContain("gap-1.5");
   expect(sliderShell.className).toContain("px-1");
   expect(sliderShell.className).toContain("py-1");
+  expect(controlsCard.dataset.dashboardPanelShell).toBe("grid-card");
   expect(
-    within(toolbar).queryByRole("status", { name: /Event stream/i }),
+    within(header).queryByRole("status", { name: /Event stream/i }),
   ).toBeNull();
   expect(sliderMetaGroup.contains(progressText)).toBe(true);
   expect(
-    within(toolbar).queryByRole("button", { name: "Return to current tick" }),
+    within(header).queryByRole("button", { name: "Return to current tick" }),
   ).toBeNull();
-  expect(headerControls).toHaveLength(3);
-  expect(headerControls[0]).toBe(languageButton);
-  expect(headerControls[1]).toBe(slider);
-  expect(headerControls[2]).toBe(exportButton);
-  expect(primaryRowRect.top).toBeLessThan(secondaryRowRect.top);
-  expect(sliderRect.top).toBeGreaterThanOrEqual(headingRect.bottom - 1);
-  expect(sliderRect.top).toBeGreaterThanOrEqual(activeTabRect.bottom - 1);
-  expect(sliderRect.top).toBeGreaterThanOrEqual(actionsGroupRect.bottom - 1);
+  expect(
+    within(header).queryByRole("slider", { name: "Timeline tick" }),
+  ).toBeNull();
+  expect(
+    within(header).queryByRole("button", { name: "Export PNG" }),
+  ).toBeNull();
+  expect(headerRect.bottom).toBeLessThanOrEqual(controlsCardRect.top);
+  expect(headingRect.top).toBeGreaterThanOrEqual(headerRect.top);
+  expect(activeTabRect.top).toBeGreaterThanOrEqual(headerRect.top);
+  expect(actionsGroupRect.top).toBeGreaterThanOrEqual(headerRect.top);
   expect(progressTextRect.width).toBeGreaterThan(0);
   expect(progressTextRect.height).toBeGreaterThan(0);
   expect(progressTextRect.top).toBeGreaterThanOrEqual(sliderInputRect.top - 1);
-  expect(exportButtonRect.left).toBeGreaterThanOrEqual(
-    actionsGroupRect.left - 1,
-  );
+  expect(exportButtonRect.left).toBeGreaterThanOrEqual(sliderRect.left - 1);
   expect(languageButtonRect.width).toBeGreaterThan(0);
   expect(languageButtonRect.height).toBeGreaterThan(0);
 }

@@ -1,32 +1,18 @@
-export interface CurrentActivityGraphNodeHoverState {
-  activeFlow?: boolean;
-  muted?: boolean;
-  selected?: boolean;
-  validationError?: boolean;
-}
+import {
+  factoryGraphNodeHoverClassName,
+  type FactoryGraphNodeHoverState,
+  type FactoryGraphNodeHoverSurface,
+} from "@you-agent-factory/factory-graph";
 
-export type CurrentActivityGraphNodeHoverSurface = "primary" | "warning";
+export type CurrentActivityGraphNodeHoverState = FactoryGraphNodeHoverState;
 
-/** Accent border/shadow applied on pointer hover when higher-priority states are absent. */
-const CURRENT_ACTIVITY_GRAPH_NODE_HOVER_CLASSES: Record<
-  CurrentActivityGraphNodeHoverSurface,
-  string
-> = {
-  primary:
-    "transition-[background-color,border-color,box-shadow,opacity] hover:border-primary hover:bg-primary-container hover:opacity-100 hover:shadow-af-accent-chip",
-  warning:
-    "transition-[background-color,border-color,box-shadow,opacity] hover:border-primary hover:bg-warning-container hover:opacity-100 hover:shadow-af-accent-chip",
-};
+export type CurrentActivityGraphNodeHoverSurface = FactoryGraphNodeHoverSurface;
 
 export function currentActivityGraphNodeHoverClassName(
   state: CurrentActivityGraphNodeHoverState,
   surface: CurrentActivityGraphNodeHoverSurface = "warning",
 ): string | undefined {
-  if (state.selected || state.validationError) {
-    return undefined;
-  }
-
-  return CURRENT_ACTIVITY_GRAPH_NODE_HOVER_CLASSES[surface];
+  return factoryGraphNodeHoverClassName(state, surface);
 }
 
 export interface CurrentActivityGraphEdgeHoverState {

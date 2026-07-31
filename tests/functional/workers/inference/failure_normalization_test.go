@@ -36,7 +36,7 @@ const (
 func TestProviderNonZeroExitMapsToPublicFailure(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
-		modelprovider.ProviderCursor,
+		modelprovider.ProviderCodex,
 		"cursor-test-model",
 	))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"provider non-zero exit"}`))
@@ -45,7 +45,7 @@ func TestProviderNonZeroExitMapsToPublicFailure(t *testing.T) {
 	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
 		ExitCode: exitCode,
 		Stdout: []byte(
-			`{"type":"system","subtype":"init","session_id":"` + providerExitNormalizationSessionID + `"}` + "\n",
+			`{"type":"thread.started","thread_id":"` + providerExitNormalizationSessionID + `"}` + "\n",
 		),
 		Stderr: []byte("provider process crashed unexpectedly"),
 	})
@@ -296,10 +296,10 @@ func terminalInferenceFailureObservation(t *testing.T, events []factoryapi.Facto
 	var terminal factoryapi.InferenceResponseEventPayload
 	found := false
 	for _, event := range events {
-		if event.Type != factoryapi.FactoryEventTypeInferenceResponse {
+		if event.Type != factoryapi.FactoryEventTypeModelResponse {
 			continue
 		}
-		payload, err := event.Payload.AsInferenceResponseEventPayload()
+		payload, err := support.AsInferenceResponseObservation(event)
 		if err != nil {
 			t.Fatalf("decode inference response: %v", err)
 		}
@@ -310,7 +310,7 @@ func terminalInferenceFailureObservation(t *testing.T, events []factoryapi.Facto
 		found = true
 	}
 	if !found {
-		t.Fatalf("factory events missing terminal INFERENCE_RESPONSE failure")
+		t.Fatalf("factory events missing terminal MODEL_RESPONSE failure")
 	}
 	return terminal
 }
@@ -341,8 +341,7 @@ func assertPublicProviderFailureSurfacesRedactSensitiveMaterial(
 	failureEvents := make([]factoryapi.FactoryEvent, 0, len(events))
 	for _, event := range events {
 		switch event.Type {
-		case factoryapi.FactoryEventTypeInferenceResponse,
-			factoryapi.FactoryEventTypeDispatchResponse,
+		case factoryapi.FactoryEventTypeDispatchResponse,
 			factoryapi.FactoryEventTypeModelResponse:
 			failureEvents = append(failureEvents, event)
 		}

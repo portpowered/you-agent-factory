@@ -2003,23 +2003,31 @@ export async function startFactoryApiServer({
     server.listen(apiPort, previewHost, resolve);
   });
 
+  let stopPromise = null;
   return {
     releaseReplayStream,
     replayCompleted,
     replayPaused,
     requestedEventSessionIDs,
     stop: async () => {
-      server.closeAllConnections?.();
-      await new Promise((resolve, reject) => {
-        server.close((error) => {
-          if (error) {
-            reject(error);
-            return;
-          }
+      if (!stopPromise) {
+        stopPromise = new Promise((resolve, reject) => {
+          server.close((error) => {
+            if (error) {
+              reject(error);
+              return;
+            }
 
-          resolve();
+            resolve();
+          });
+          // Stop accepting reconnects before terminating the dashboard's
+          // long-lived event-stream sockets.
+          server.closeAllConnections?.();
+          server.closeIdleConnections?.();
         });
-      });
+      }
+      await stopPromise;
+      await waitForPortAvailable(previewHost, apiPort);
     },
   };
 }

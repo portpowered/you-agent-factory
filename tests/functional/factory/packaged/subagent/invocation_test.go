@@ -9,16 +9,19 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -77,6 +80,78 @@ func TestPackagedSubagentStreamsChildResponseEvents(t *testing.T) {
 		t.Fatalf("primaryResult = %q, want %q", got, packagedSubagentChildPrimaryResult)
 	}
 	assertPackagedSubagentChildResponseEvents(t, responseEvents)
+}
+
+func TestPackagedSubagentPropagatesLunaXHighReasoningEffort(t *testing.T) {
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: support.CodexSuccessStdout("review complete"),
+	})
+	response := runPackagedSubagentProviderCLI(t, runner,
+		"--worker-provider", "CODEX",
+		"--worker-model", "gpt-5.6-luna",
+		"--worker-reasoning-effort", "xhigh",
+		"--to", "review the implementation",
+	)
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("response = %#v, want completed", response)
+	}
+	want := []string{
+		"exec", "--json", "--dangerously-bypass-approvals-and-sandbox",
+		"--model", "gpt-5.6-luna",
+		"--config", `model_reasoning_effort="xhigh"`,
+		"-",
+	}
+	if got := runner.LastRequest().Args; !reflect.DeepEqual(got, want) {
+		t.Fatalf("subagent command args = %#v, want %#v", got, want)
+	}
+}
+
+func TestPackagedSubagentOmittedReasoningEffortPreservesProviderDefault(t *testing.T) {
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: support.CodexSuccessStdout("review complete"),
+	})
+	response := runPackagedSubagentProviderCLI(t, runner,
+		"--worker-provider", "CODEX",
+		"--worker-model", "gpt-5.6-luna",
+		"--to", "review the implementation",
+	)
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("response = %#v, want completed", response)
+	}
+	want := []string{
+		"exec", "--json", "--dangerously-bypass-approvals-and-sandbox",
+		"--model", "gpt-5.6-luna",
+		"-",
+	}
+	if got := runner.LastRequest().Args; !reflect.DeepEqual(got, want) {
+		t.Fatalf("subagent command args = %#v, want provider default without effort config %#v", got, want)
+	}
+}
+
+func runPackagedSubagentProviderCLI(
+	t *testing.T,
+	runner platformprocess.CommandRunner,
+	factoryArgs ...string,
+) factoryapi.InvocationResponse {
+	t.Helper()
+	homeDir := t.TempDir()
+	support.InstallPackagedFactory(t, homeDir, factorydefinitions.PackagedSubagentFactoryName)
+	args := []string{
+		"you", "--json", "run",
+		"--named", factorydefinitions.PackagedSubagentFactoryName,
+		"--no-record",
+	}
+	args = append(args, factoryArgs...)
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.WorkingDirectory = t.TempDir()
+	if err := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner}).Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s", args, err, inputs.Stdout(), inputs.Stderr())
+	}
+	if inputs.Stderr() != "" {
+		t.Fatalf("stderr = %q, want empty successful-run stderr", inputs.Stderr())
+	}
+	return support.DecodeInvocationResponseJSON(t, inputs.Stdout())
 }
 
 // TestPackagedSubagentChildFailureReturnsStableFailure proves that packaged
@@ -139,8 +214,16 @@ func postPackagedSubagentInvocation(
 	requestText string,
 ) factoryapi.InvocationResponse {
 	t.Helper()
+	return postPackagedSubagentArgs(t, serverURL, map[string]interface{}{"input": requestText})
+}
 
-	body, err := json.Marshal(packagedSubagentTextInvocationRequest(requestText))
+func postPackagedSubagentArgs(
+	t *testing.T,
+	serverURL string,
+	args map[string]interface{},
+) factoryapi.InvocationResponse {
+	t.Helper()
+	body, err := json.Marshal(factoryapi.InvocationRequest{Args: &args})
 	if err != nil {
 		t.Fatalf("marshal invocation request: %v", err)
 	}
@@ -167,18 +250,9 @@ func postPackagedSubagentInvocation(
 }
 
 func packagedSubagentTextInvocationRequest(requestText string) factoryapi.InvocationRequest {
-	var part factoryapi.WorkContentPart
-	if err := part.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
-		Type: factoryapi.WorkContentPartTypeText,
-		Text: requestText,
-	}); err != nil {
-		panic(fmt.Sprintf("build invocation text content: %v", err))
-	}
-	sourceKind := factoryapi.InvocationInputSourceKindText
-	content := factoryapi.WorkContent{part}
+	args := map[string]interface{}{"input": requestText}
 	return factoryapi.InvocationRequest{
-		SourceKind: &sourceKind,
-		Content:    &content,
+		Args: &args,
 	}
 }
 
@@ -203,18 +277,18 @@ func assertPackagedSubagentChildResponseEvents(
 		if *event.DispatchId != dispatchID {
 			t.Fatalf("response event[%d] dispatch = %q, want %q", index, *event.DispatchId, dispatchID)
 		}
-		if event.Kind != factoryapi.FactoryResponseEventKindMessage {
-			t.Fatalf("response event[%d] kind = %q, want MESSAGE child progress", index, event.Kind)
-		}
-		if event.Phase != factoryapi.FactoryResponseEventPhaseCompleted {
-			t.Fatalf("response event[%d] phase = %q, want COMPLETED child message", index, event.Phase)
-		}
 		if event.SchemaVersion == "" || event.EventId == "" {
 			t.Fatalf("response event[%d] = %#v, want public response-event contract fields", index, event)
 		}
 	}
 
 	finalEvent := events[len(events)-1]
+	if finalEvent.Kind != factoryapi.FactoryResponseEventKindMessage {
+		t.Fatalf("final response event kind = %q, want MESSAGE", finalEvent.Kind)
+	}
+	if finalEvent.Phase != factoryapi.FactoryResponseEventPhaseCompleted {
+		t.Fatalf("final response event phase = %q, want COMPLETED", finalEvent.Phase)
+	}
 	payload, err := finalEvent.Payload.AsFactoryResponseEventMessagePayload()
 	if err != nil {
 		t.Fatalf("decode final child response event payload: %v", err)
@@ -261,11 +335,7 @@ func runPackagedSubagentCLIJSONInvocation(t *testing.T, requestText string) fact
 		t.Fatalf("stderr = %q, want empty successful-run stderr", inputs.Stderr())
 	}
 
-	var response factoryapi.InvocationResponse
-	if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stdout())), &response); decodeErr != nil {
-		t.Fatalf("decode invocation JSON stdout: %v\nstdout:\n%s", decodeErr, inputs.Stdout())
-	}
-	return response
+	return support.DecodeInvocationResponseJSON(t, inputs.Stdout())
 }
 
 func runHermeticPackagedSubagentInvocation(t *testing.T, requestText string) (string, int) {
@@ -286,8 +356,9 @@ func runHermeticPackagedSubagentInvocation(t *testing.T, requestText string) (st
 	args := []string{
 		"you", "run",
 		"--named", factorydefinitions.PackagedSubagentFactoryName,
-		"--with-mock-workers", "--no-record", "--quiet",
-		mockWorkersPath, requestText,
+		"--with-mock-workers", mockWorkersPath,
+		"--no-record", "--quiet",
+		requestText,
 	}
 	inputs := support.FakeInputs(t.Context(), args)
 	inputs.Input.Env = environment
@@ -350,10 +421,7 @@ func runPackagedSubagentCLIJSONFailureInvocation(
 	inputs.Input.WorkingDirectory = t.TempDir()
 	execErr := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input)
 
-	var response factoryapi.InvocationResponse
-	if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stdout())), &response); decodeErr != nil {
-		t.Fatalf("decode invocation JSON stdout: %v\nstdout:\n%s", decodeErr, inputs.Stdout())
-	}
+	response := support.DecodeInvocationResponseJSON(t, inputs.Stdout())
 	return response, inputs.Stderr(), execErr
 }
 

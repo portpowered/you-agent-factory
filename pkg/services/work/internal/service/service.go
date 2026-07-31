@@ -184,6 +184,13 @@ func (s *applicationService) MaterializeContentURL(
 	return s.contentMaterializer.MaterializeContentURL(ctx, rawURL)
 }
 
+func (s *applicationService) MaterializeWorkerOutput(
+	ctx context.Context,
+	request work.MaterializeWorkerOutputRequest,
+) (work.MaterializeWorkerOutputResult, error) {
+	return work.MaterializeWorkerOutput(ctx, request)
+}
+
 func (s *applicationService) PrepareInvocationInput(
 	ctx context.Context,
 	request work.InvocationInputPreparationRequest,

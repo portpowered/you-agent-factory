@@ -34,22 +34,12 @@ func StandardCatalog() providers.Service {
 		selectable(providers.IDCodex),
 		selectable(providers.IDClaude),
 		selectable(providers.IDGemini),
-		selectableWithAliases(providers.IDCursor, "cursor"),
 	)
 }
 
 func selectable(id providers.ID) providers.Descriptor {
 	return providers.Descriptor{
 		ID:           id,
-		Availability: providers.AvailabilitySelectable,
-		Readiness:    providers.ReadinessReady,
-	}
-}
-
-func selectableWithAliases(id providers.ID, aliases ...string) providers.Descriptor {
-	return providers.Descriptor{
-		ID:           id,
-		Aliases:      append([]string(nil), aliases...),
 		Availability: providers.AvailabilitySelectable,
 		Readiness:    providers.ReadinessReady,
 	}

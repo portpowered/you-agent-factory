@@ -31,6 +31,11 @@ var discoverUnitPackages = discoverPackages
 var stderrWriter io.Writer = os.Stderr
 var exitFunc = os.Exit
 
+// Windows permits a 32,767-character CreateProcess command line. Keep enough
+// headroom for the executable and quoting while allowing the current unit
+// package inventory to run in one scheduler wave.
+const maxGoTestCommandLen = 30000
+
 func main() {
 	if err := executeUnitLane(); err != nil {
 		fmt.Fprintf(stderrWriter, "%v\n", err)
@@ -118,6 +123,59 @@ func discoverPackagesUnder(rootDir, importPrefix string) ([]string, error) {
 }
 
 func runUnitTests(cfg config, packages []string) error {
+	packages = localPackageArguments(packages)
+	baseArgs := baseGoTestArgs(cfg)
+	baseLen := commandArgLen(baseArgs)
+	for len(packages) > 0 {
+		batch := make([]string, 0, len(packages))
+		currentLen := baseLen
+		for len(packages) > 0 {
+			next := packages[0]
+			nextLen := len(next)
+			if len(batch) > 0 {
+				nextLen++
+			}
+			if currentLen+nextLen > maxGoTestCommandLen && len(batch) > 0 {
+				break
+			}
+			if currentLen+nextLen > maxGoTestCommandLen {
+				return fmt.Errorf("go test command too long for package %q", next)
+			}
+			batch = append(batch, next)
+			currentLen += nextLen
+			packages = packages[1:]
+		}
+		if err := runGoTest(cfg, batch); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func localPackageArguments(packages []string) []string {
+	local := make([]string, len(packages))
+	for index, pkg := range packages {
+		if strings.HasPrefix(pkg, modulePath+"/") {
+			local[index] = "." + strings.TrimPrefix(pkg, modulePath)
+			continue
+		}
+		local[index] = pkg
+	}
+	return local
+}
+
+func commandArgLen(args []string) int {
+	total := 0
+	for i, arg := range args {
+		if i > 0 {
+			total++
+		}
+		total += len(arg)
+	}
+	return total
+}
+
+func baseGoTestArgs(cfg config) []string {
 	args := []string{"test", fmt.Sprintf("-p=%d", cfg.jobs)}
 	if !cfg.vet {
 		args = append(args, "-vet=off")
@@ -125,6 +183,11 @@ func runUnitTests(cfg config, packages []string) error {
 	if cfg.short {
 		args = append(args, "-short")
 	}
+	return args
+}
+
+func runGoTest(cfg config, packages []string) error {
+	args := baseGoTestArgs(cfg)
 	args = append(args, packages...)
 	if cfg.count > 0 {
 		args = append(args, fmt.Sprintf("-count=%d", cfg.count))

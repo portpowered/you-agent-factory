@@ -3,16 +3,10 @@ import {
   Component,
   type ErrorInfo,
   type ReactNode,
-  useEffect,
-  useRef,
 } from "react";
 
-import type {
-  FactoryTopologyReplayMessages,
-  FactoryTopologyReplayProps,
-} from "./factory-topology-replay";
+import type { FactoryTopologyReplayMessages } from "./factory-topology-replay";
 import {
-  type FactoryTopologyReplayError,
   type FactoryVisualizerError,
   type FactoryVisualizerErrorKind,
   factoryVisualizerErrorKey,
@@ -138,28 +132,6 @@ export class FactoryTopologyErrorBoundary extends Component<
     this.reportedErrors.add(key);
     this.props.onError?.(error);
   }
-}
-
-export function useDistinctTopologyErrorReport(
-  error: FactoryTopologyReplayError | undefined,
-  onError: FactoryTopologyReplayProps["onError"],
-) {
-  const reportedErrors = useRef(new Set<string>());
-  useEffect(() => {
-    if (!error) return;
-    const key =
-      error.kind === "layout-validation"
-        ? error.issues
-            .map(
-              (issue) =>
-                `${issue.category}:${issue.code}:${issue.path.join(".")}`,
-            )
-            .join("|")
-        : factoryVisualizerErrorKey(error);
-    if (reportedErrors.current.has(key)) return;
-    reportedErrors.current.add(key);
-    onError?.(error);
-  }, [error, onError]);
 }
 
 function resetKeysChanged(

@@ -187,7 +187,7 @@ func normalizeProvider(provider string) (providers.ID, error) {
 	switch strings.TrimSpace(provider) {
 	case string(providersessions.ProviderCodex):
 		return providers.IDCodex, nil
-	case string(providersessions.ProviderCursor), "agent", "cursor-agent":
+	case string(providersessions.ProviderCursor):
 		return providers.IDCursor, nil
 	default:
 		return "", providersessions.ErrUnsupportedProvider

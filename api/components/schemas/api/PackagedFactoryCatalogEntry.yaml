@@ -4,6 +4,8 @@ required:
   - name
   - project
   - slug
+  - description
+  - examples
   - json
   - yaml
 properties:
@@ -16,6 +18,16 @@ properties:
   slug:
     type: string
     description: URL-safe Factory catalog identity.
+  description:
+    allOf:
+      - $ref: '../data-models/NameValue.yaml'
+    description: Localized customer-facing explanation of what this packaged Factory does.
+  examples:
+    type: array
+    minItems: 1
+    description: Representative runnable invocations published by this packaged Factory.
+    items:
+      $ref: '../data-models/FactoryInvocationExample.yaml'
   json:
     type: object
     additionalProperties: true

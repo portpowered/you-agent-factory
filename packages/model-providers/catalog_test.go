@@ -51,10 +51,10 @@ func TestCatalogReturnsGeneratedContractProjection(t *testing.T) {
 	if catalog.FormatVersion != generated.ProviderCatalogFormatVersionV1 {
 		t.Fatalf("FormatVersion = %q, want %q", catalog.FormatVersion, generated.ProviderCatalogFormatVersionV1)
 	}
-	if len(catalog.Providers) != 8 {
-		t.Fatalf("provider count = %d, want 8", len(catalog.Providers))
+	if len(catalog.Providers) != 3 {
+		t.Fatalf("provider count = %d, want 3", len(catalog.Providers))
 	}
-	if catalog.Providers[0].Id != "agy" || catalog.Providers[len(catalog.Providers)-1].Id != "pi" {
+	if catalog.Providers[0].Id != "antigravity" || catalog.Providers[len(catalog.Providers)-1].Id != "codex" {
 		t.Fatalf("providers are not in canonical ID order: first = %q, last = %q", catalog.Providers[0].Id, catalog.Providers[len(catalog.Providers)-1].Id)
 	}
 }
@@ -94,7 +94,7 @@ func TestPublishedValuesAreDetachedAcrossCallers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("third Catalog() error = %v", err)
 	}
-	if secondCatalog.Providers[0].Id != "agy" || thirdCatalog.Providers[0].Id != "agy" {
+	if secondCatalog.Providers[0].Id != "antigravity" || thirdCatalog.Providers[0].Id != "antigravity" {
 		t.Fatal("mutating one parsed catalog affected another caller")
 	}
 	if len(thirdCatalog.Providers[0].Aliases) != 0 {

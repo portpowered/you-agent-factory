@@ -68,26 +68,6 @@ func RuntimeResourceRequirementsFromBoundaryValue(value any) any {
 	return runtimeResourceRequirementsFromBoundaryValue(value)
 }
 
-func ValidateOpenCodeAgentField(path, agent string) error {
-	return validateOpenCodeAgentField(path, agent)
-}
-
-func MergeStopWords(base, extra []string) []string {
-	return mergeStopWords(base, extra)
-}
-
 func CloneStringMap(values map[string]string) map[string]string {
 	return cloneStringMap(values)
-}
-
-func NormalizeCanonicalWorkstationRuntime(
-	workstation *factorydefinitions.FactoryWorkstationConfig,
-) {
-	normalizeCanonicalWorkstationRuntime(workstation)
-}
-
-func NormalizeWorkstationTaxonomyKind(
-	workstation *factorydefinitions.FactoryWorkstationConfig,
-) {
-	normalizeWorkstationTaxonomyKind(workstation)
 }

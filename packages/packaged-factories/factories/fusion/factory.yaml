@@ -1,0 +1,172 @@
+name: "@you/fusion"
+id: builtin-fusion
+description:
+  type: LOCALIZABLE_ASSET
+  value: Produces an initial answer with one worker and refines it with a second worker.
+invocationSignature:
+  parameters:
+    - name: input
+      description: Text request to run through the two-stage fusion flow.
+      externalName: to
+      required: true
+      bindings:
+        - kind: POSITIONAL
+          position: 1
+        - kind: STDIN
+        - kind: NAMED
+    - name: resultFile
+      description: Optional output-path hint for file-oriented callers.
+      externalName: result-file
+      typeHint: FILE_PATH
+      bindings:
+        - kind: NAMED
+    - name: firstProvider
+      description: Optional provider override for the first fusion pass; omitted values use operator defaults.
+      externalName: first-provider
+      aliases:
+        - p1
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+    - name: secondProvider
+      description: Optional provider override for the second fusion pass; omitted values use operator defaults.
+      externalName: second-provider
+      aliases:
+        - p2
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+    - name: firstModel
+      description: Optional model override for the first fusion pass; omitted values use operator defaults.
+      externalName: first-model
+      aliases:
+        - m1
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+    - name: secondModel
+      description: Optional model override for the second fusion pass; omitted values use operator defaults.
+      externalName: second-model
+      aliases:
+        - m2
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
+    - name: firstEffort
+      description: Reasoning effort hint for the first fusion pass.
+      externalName: first-effort
+      aliases:
+        - e1
+      choices:
+        - low
+        - medium
+        - high
+      defaultValue: medium
+      bindings:
+        - kind: NAMED
+    - name: secondEffort
+      description: Reasoning effort hint for the second fusion pass.
+      externalName: second-effort
+      aliases:
+        - e2
+      choices:
+        - low
+        - medium
+        - high
+      defaultValue: medium
+      bindings:
+        - kind: NAMED
+  outputContract:
+    mode: FILE
+    pathParameter: resultFile
+    contentType: text/markdown
+    fileExtension: .md
+    description: When output is supplied, callers can treat the refined answer as file-oriented markdown content.
+examples:
+  - name: positional-input-with-provider-overrides
+    description:
+      type: LOCALIZABLE_ASSET
+      value: Draft a release summary with provider overrides.
+    args:
+      input: Draft a release summary
+      firstProvider: CLAUDE
+      secondProvider: CODEX
+      resultFile: fusion-summary.md
+  - name: stdin-input-with-model-overrides
+    description:
+      type: LOCALIZABLE_ASSET
+      value: Draft a release summary with model overrides.
+    args:
+      input: Draft a release summary
+      firstModel: claude-sonnet-4-20250514
+      secondModel: gpt-5
+workTypes:
+  - name: task
+    handlingBehavior:
+      - DEFAULT
+    states:
+      - name: init
+        type: INITIAL
+      - name: draft
+        type: PROCESSING
+      - name: complete
+        type: TERMINAL
+      - name: failed
+        type: FAILED
+resources: []
+workers:
+  - name: fusion-drafter
+    type: AGENT_WORKER
+    skipPermissions: true
+    modelProvider: ${firstProvider}
+    model: ${firstModel}
+    body: |-
+      Reasoning effort: ${firstEffort}
+      You are the first-stage drafter for @you/fusion. Assume no prior context. Investigate the complete request and any relevant workspace evidence, then produce a thorough standalone draft whose assumptions, decisions, and verification can be checked by another model.
+  - name: fusion-refiner
+    type: AGENT_WORKER
+    skipPermissions: true
+    modelProvider: ${secondProvider}
+    model: ${secondModel}
+    body: |-
+      Reasoning effort: ${secondEffort}
+      You are the second-stage refiner for @you/fusion. Assume the original request and first draft are your only conversational context. Validate the draft against available evidence, repair omissions or unsupported claims, preserve useful detail, and produce a polished final response that stands alone.
+workstations:
+  - name: draft-fusion
+    type: AGENT_RUN
+    worker: fusion-drafter
+    inputs:
+      - workType: task
+        state: init
+    outputs:
+      - workType: task
+        state: draft
+    onFailure:
+      - workType: task
+        state: failed
+    body: |-
+      Start from zero context. Read the complete request below. When it concerns a workspace, inspect contributor instructions, relevant architecture, source, tests, and current state before answering. Create a complete first draft that addresses every requirement, identifies bounded assumptions, handles important edge cases, and includes concrete verification or source evidence where applicable. This draft will be handed to a separate refiner, so do not rely on implicit context.
+
+      Request:
+      ${input}
+  - name: refine-fusion
+    type: AGENT_RUN
+    worker: fusion-refiner
+    inputs:
+      - workType: task
+        state: draft
+    outputs:
+      - workType: task
+        state: complete
+    onFailure:
+      - workType: task
+        state: failed
+    body: |-
+      Start from zero context beyond the original request and prior draft included in this Work. Re-read the request, inspect relevant available evidence, and independently check the draft for correctness, completeness, contradictions, unsupported claims, missing edge cases, and weak verification. Rewrite it into one final self-contained response; do not merely summarize or endorse the draft.
+
+      Original request:
+      ${input}

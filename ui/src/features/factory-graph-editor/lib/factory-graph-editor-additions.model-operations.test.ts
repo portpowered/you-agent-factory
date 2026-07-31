@@ -47,7 +47,7 @@ describe("factory graph editor additions model operations", () => {
           command: "",
           kind: "worker",
           model: "",
-          modelProvider: "CURSOR",
+          modelProvider: "CODEX",
           name: "tts-worker",
           operations: [],
           provider: "",
@@ -69,7 +69,7 @@ describe("factory graph editor additions model operations", () => {
           command: "",
           kind: "worker",
           model: "",
-          modelProvider: "CURSOR",
+          modelProvider: "CODEX",
           name: "tts-worker",
           operations: [invalidOperation],
           provider: "",
@@ -109,7 +109,7 @@ describe("factory graph editor additions model operations", () => {
         command: "",
         kind: "worker",
         model: "",
-        modelProvider: "CURSOR",
+        modelProvider: "CODEX",
         name: "tts-worker",
         operations: [operation],
         provider: "",
@@ -119,7 +119,7 @@ describe("factory graph editor additions model operations", () => {
 
     expect(nextDraft.additions.workers).toEqual([
       {
-        modelProvider: "CURSOR",
+        modelProvider: "CODEX",
         name: "tts-worker",
         operations: [
           {
@@ -154,7 +154,7 @@ describe("factory graph editor additions taxonomy", () => {
         command: "",
         kind: "worker",
         model: "",
-        modelProvider: "CURSOR",
+        modelProvider: "CODEX",
         name: "reviewer",
         operations: [],
         provider: "",
@@ -163,7 +163,7 @@ describe("factory graph editor additions taxonomy", () => {
     );
     expect(agentDraft.additions.workers).toEqual([
       {
-        modelProvider: "CURSOR",
+        modelProvider: "CODEX",
         name: "reviewer",
         type: "AGENT_WORKER",
       },

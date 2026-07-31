@@ -1,5 +1,0 @@
-{
-  "prompt": "Process the golden timeout task.",
-  "model": "anthropic/claude-sonnet-4",
-  "session_id": "pi-session-timeout"
-}

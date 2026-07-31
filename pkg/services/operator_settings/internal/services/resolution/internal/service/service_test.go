@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	internalservice "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution/internal/service"
 	resolution "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution"
+	internalservice "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/resolution/internal/service"
 	internaltestproviders "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
@@ -235,9 +235,9 @@ func TestResolveEffective_PresetInfluencesInvocationLayerWhenUnset(t *testing.T)
 
 	service := newResolutionService(t)
 	presets := []operatorsettings.DocumentWorkerPreset{{
-		ID:            "careful-review",
-		ModelProvider: "codex",
-		Model:         "preset-model",
+		ID:              "careful-review",
+		ModelProvider:   "codex",
+		Model:           "preset-model",
 		ReasoningEffort: "high",
 	}}
 	resolved, err := service.ResolveEffective(operatorsettings.ResolveEffectiveRequest{
@@ -352,22 +352,19 @@ func TestResolveEffective_ConstructionIsInert(t *testing.T) {
 	}
 }
 
-func TestResolveEffective_CanonicalizesProviderAliasThroughProvidersRoot(t *testing.T) {
+func TestResolveEffective_RejectsRemovedCursorExecutionIdentity(t *testing.T) {
 	t.Parallel()
 
 	service := newResolutionService(t)
-	resolved, err := service.ResolveEffective(operatorsettings.ResolveEffectiveRequest{
+	_, err := service.ResolveEffective(operatorsettings.ResolveEffectiveRequest{
 		DocumentBaseline: operatorsettings.DocumentDefaults{
 			WorkerModelProvider: "cursor",
 			WorkerModel:         "file-model",
 		},
 		ConfigPath: "/tmp/config.json",
 	})
-	if err != nil {
-		t.Fatalf("ResolveEffective() = %v", err)
-	}
-	if resolved.Selection.WorkerModelProvider != "CURSOR" {
-		t.Fatalf("provider = %q, want CURSOR", resolved.Selection.WorkerModelProvider)
+	if err == nil || !strings.Contains(err.Error(), "unsupported") {
+		t.Fatalf("ResolveEffective(cursor) = %v, want unsupported provider", err)
 	}
 }
 

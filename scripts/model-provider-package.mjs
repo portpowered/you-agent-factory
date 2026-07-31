@@ -408,7 +408,7 @@ export async function verifyCleanConsumer(repositoryRoot, tarballPath) {
 			'import publication from "@you-agent-factory/model-providers/manifest" with { type: "json" };',
 			`const expectedHashes = ${JSON.stringify(expectedRuntimeHashes)};`,
 			`const runtimeExports = ${JSON.stringify(runtimeExports)};`,
-			'assert.equal(catalog.providers[0].id, "agy");',
+			'assert.equal(catalog.providers[0].id, "antigravity");',
 			'assert.equal(manifestSchema.$id, "https://schemas.you.dev/model-providers/provider-manifest/1.0.0.schema.json");',
 			'assert.equal(catalogSchema.$id, "https://schemas.you.dev/model-providers/provider-catalog/1.0.0.schema.json");',
 			'assert.equal(publication.packageId, "you-agent-factory.model-providers");',

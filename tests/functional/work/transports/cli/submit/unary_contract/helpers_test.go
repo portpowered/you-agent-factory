@@ -13,21 +13,21 @@ import (
 	"strings"
 	"testing"
 
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const (
-	unaryContractWorkType                 = "task"
-	unaryContractFileWorkName             = "unary-file-task"
-	unaryContractStdinWorkName            = "unary-stdin-task"
-	unaryContractDefaultSessionWorkName   = "unary-default-session-task"
-	unaryContractExplicitSessionWorkName  = "unary-explicit-session-task"
-	unaryContractStructuredFailureWorkName = "unary-structured-failure-task"
-	unaryContractStructuredFailureUnsafeMessage = "payload-secret access-token-secret"
+	unaryContractWorkType                          = "task"
+	unaryContractFileWorkName                      = "unary-file-task"
+	unaryContractStdinWorkName                     = "unary-stdin-task"
+	unaryContractDefaultSessionWorkName            = "unary-default-session-task"
+	unaryContractExplicitSessionWorkName           = "unary-explicit-session-task"
+	unaryContractStructuredFailureWorkName         = "unary-structured-failure-task"
+	unaryContractStructuredFailureUnsafeMessage    = "payload-secret access-token-secret"
 	unaryContractStructuredFailureUnsafeCredential = "sk-proj-secret123"
 )
 

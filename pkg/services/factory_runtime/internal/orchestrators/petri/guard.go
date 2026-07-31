@@ -228,8 +228,9 @@ func (g *MatchesFieldsGuard) Evaluate(candidates []factorytoken.Token, bindings 
 // transition has reached or exceeded a threshold. Used by EXHAUSTION transitions
 // to route tokens that have been retried too many times.
 type VisitCountGuard struct {
-	TransitionID string // which transition's visit count to check
-	MaxVisits    int    // threshold — guard passes when TotalVisits[TransitionID] >= MaxVisits
+	TransitionID      string // which transition's visit count to check
+	MaxVisits         int    // fixed ceiling for the threshold
+	MaxVisitsArgument string // optional invocation argument that tightens the ceiling
 }
 
 var _ Guard = (*VisitCountGuard)(nil)
@@ -240,12 +241,29 @@ func (g *VisitCountGuard) Evaluate(candidates []factorytoken.Token, _ map[string
 	var matched []factorytoken.Token
 	for _, c := range candidates {
 		visits := c.History.TotalVisits[g.TransitionID]
-		if visits >= g.MaxVisits {
+		if visits >= g.effectiveMaxVisits(c) {
 			matched = append(matched, c)
 		}
 	}
 
 	return matched, len(matched) > 0
+}
+
+func (g *VisitCountGuard) effectiveMaxVisits(candidate factorytoken.Token) int {
+	maximum := g.MaxVisits
+	argumentName := strings.TrimSpace(g.MaxVisitsArgument)
+	if argumentName == "" || candidate.Color.InvocationArguments == nil {
+		return maximum
+	}
+	argument, ok := candidate.Color.InvocationArguments.Arguments[argumentName]
+	if !ok || len(argument.Values) != 1 {
+		return maximum
+	}
+	value, err := strconv.Atoi(strings.TrimSpace(argument.Values[0]))
+	if err != nil || value <= 0 || value > maximum {
+		return maximum
+	}
+	return value
 }
 
 // AllWithParentGuard matches all candidates whose ParentID matches a bound token's WorkID.

@@ -64,7 +64,7 @@ var deletionGates = map[string]string{
 // remains migration debt until later Providers packets land.
 var approvedPlatformLeafPorts = map[string]struct{}{
 	modulePath + "/pkg/services/providers/execution/inferencecontract": {},
-	modulePath + "/pkg/services/workers/provider/inferencecontract":    {},
+	modulePath + "/pkg/services/providers/internal/services/execution/internal/provider/inferencecontract":    {},
 }
 
 // approvedPlatformAdapterPorts records narrow source-to-owner exceptions for a
@@ -639,3 +639,4 @@ func writeFinding(writer io.Writer, label string, item finding) {
 		remediation,
 	)
 }
+

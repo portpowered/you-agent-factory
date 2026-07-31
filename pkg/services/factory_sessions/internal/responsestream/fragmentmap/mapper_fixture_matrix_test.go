@@ -217,7 +217,7 @@ func TestMapFragment_ResponseFragmentItemIDStableAcrossMatrixDeltas(t *testing.T
 		Type:       responsestream.EventTypeTextDelta,
 		DispatchID: "dispatch-matrix",
 		ProviderSessionRef: &workerexecution.ProviderSessionMetadata{
-			Provider: string(modelprovider.ProviderCursor),
+			Provider: string(modelprovider.ProviderCodex),
 			Kind:     "session_id",
 			ID:       "cursor-session-matrix",
 		},

@@ -22,7 +22,11 @@ func TestDiscoverReturnsCompleteSortedAuthoredInventory(t *testing.T) {
 		t.Fatalf("Discover: %v", err)
 	}
 
-	want := []string{"deep-research", "fusion", "goal", "quorum", "review", "subagent", "tts"}
+	want := []string{
+		"classify", "deep-research", "full-flow", "fusion", "goal", "loop",
+		"plan-execute", "plan-parallel", "quorum", "review", "spawn", "subagent",
+		"tournament", "tts",
+	}
 	if len(inventory.Entries) != len(want) {
 		t.Fatalf("entries = %d, want %d", len(inventory.Entries), len(want))
 	}
@@ -30,7 +34,11 @@ func TestDiscoverReturnsCompleteSortedAuthoredInventory(t *testing.T) {
 		if entry.Slug != want[index] {
 			t.Fatalf("entry[%d].Slug = %q, want %q", index, entry.Slug, want[index])
 		}
-		if entry.SourcePath != "factories/"+entry.Slug+"/factory.json" {
+		wantExtension := ".yaml"
+		if entry.Slug == "deep-research" || entry.Slug == "spawn" || entry.Slug == "tournament" {
+			wantExtension = ".js"
+		}
+		if entry.SourcePath != "factories/"+entry.Slug+"/factory"+wantExtension {
 			t.Fatalf("entry[%d].SourcePath = %q", index, entry.SourcePath)
 		}
 		if entry.Factory.Name != "@you/"+entry.Slug {
@@ -39,6 +47,35 @@ func TestDiscoverReturnsCompleteSortedAuthoredInventory(t *testing.T) {
 		if entry.Factory.Project == "" {
 			t.Fatalf("entry[%d].Factory.Project is empty", index)
 		}
+	}
+}
+
+func TestDiscoverAcceptsStandaloneJavaScriptRoot(t *testing.T) {
+	t.Parallel()
+	source := fstest.MapFS{
+		"factories/js/factory.js": &fstest.MapFile{Data: []byte(`/* @you-factory-meta
+{
+  "name":"@you/js",
+  "version":1,
+  "id":"id-js",
+  "description":{"type":"LOCALIZABLE_ASSET","value":"One-file workflow."},
+  "argsSchema":{"type":"object","properties":{"request":{"type":"string"}}},
+  "defaultPolicy":{"mode":"READ_ONLY","maxAgents":1,"concurrency":1,"maxDepth":1,"maxRetries":0,"allowNetwork":false,"allowConnectors":false,"allowDangerFullAccess":false,"writableRoots":[]}
+}
+*/
+return { request: args.request };`)},
+	}
+	inventory, err := packagedfactorycatalog.Discover(context.Background(), source, "factories")
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	entry := inventory.Entries[0]
+	if entry.SourcePath != "factories/js/factory.js" || entry.Factory.Project != "id-js" {
+		t.Fatalf("entry = %#v", entry)
+	}
+	if entry.Factory.Orchestrator == nil || entry.Factory.Orchestrator.JavaScript == nil ||
+		entry.Factory.Orchestrator.JavaScript.InlineSource == nil {
+		t.Fatalf("JavaScript orchestrator = %#v", entry.Factory.Orchestrator)
 	}
 }
 

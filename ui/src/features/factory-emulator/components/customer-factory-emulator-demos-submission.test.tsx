@@ -7,9 +7,8 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { bunVi as vi } from "../../../testing/bun/vi-compat";
 import { customerFactoryEmulatorDemoFixtures } from "../lib/customer-demo-fixtures";
 import { CustomerFactoryEmulatorDemos } from "./customer-factory-emulator-demos";
 

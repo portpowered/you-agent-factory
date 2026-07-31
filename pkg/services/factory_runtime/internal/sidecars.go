@@ -77,6 +77,27 @@ func (s *RuntimeSidecars) Start(ctx context.Context, hosted factory.HostedHandle
 			}
 		}()
 	}
+	if schedules, ok := s.automation.(automations.InvocationScheduleService); ok {
+		runtimeCfg := handle.Bundle.RuntimeCfg
+		if runtimeCfg == nil {
+			return s.failStart(handle, cancel, fmt.Errorf("runtime config is required"))
+		}
+		var scheduleFactory *invocationScheduleFactory
+		if existing, wrapped := handle.Bundle.Factory.(*invocationScheduleFactory); wrapped {
+			existing.setContext(sidecarCtx)
+			scheduleFactory = existing
+		} else {
+			scheduleFactory = &invocationScheduleFactory{
+				Factory: handle.Bundle.Factory, schedules: schedules,
+				factoryDir: runtimeCfg.FactoryDir(), factoryConfig: runtimeCfg.FactoryConfig(),
+				runtimeConfig: runtimeCfg, ctx: sidecarCtx,
+			}
+			handle.Bundle.Factory = scheduleFactory
+		}
+		if err := scheduleFactory.recoverInvocationSchedules(sidecarCtx); err != nil {
+			return s.failStart(handle, cancel, fmt.Errorf("recover invocation schedules: %w", err))
+		}
+	}
 
 	if s.enabled {
 		if s.automation == nil {

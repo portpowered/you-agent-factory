@@ -3,30 +3,31 @@ import type { ReactNode } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { getCurrentSelectionShellMessages } from "../../current-selection/base/messages/shell/current-selection-shell";
+import { CurrentSelectionWidget } from "../../current-selection/components/widget/current-selection-widget";
 import type { useCurrentSelection } from "../../current-selection/hooks/core/useCurrentSelection";
 import type { useCurrentSelectionDetails } from "../../current-selection/hooks/core/useCurrentSelectionDetails";
-import { CurrentSelectionWidget } from "../../current-selection/components/widget/current-selection-widget";
 import type { useSelectedProviderSessionState } from "../../current-selection/work-selection/hooks/useSelectedProviderSessionState";
 import { InlineAddWidgetCard } from "../../dashboard-add-card/components/inline-add-widget-card";
 import { FactorySessionWidget } from "../../factory-session-detail/components/factory-session-widget";
 import { getFactorySessionWidgetMessages } from "../../factory-session-detail/messages/factory-session-widget";
-import { getProviderSessionWidgetMessages } from "../../provider-session-detail/messages/provider-session-widget";
+import { getHeaderControlsMessages } from "../../header/messages/header-controls";
 import { ProviderSessionWidget } from "../../provider-session-detail/components/provider-session-widget";
-import { getSubmitWorkMessages } from "../../submit-work/messages/submit-work";
+import { getProviderSessionWidgetMessages } from "../../provider-session-detail/messages/provider-session-widget";
 import { SubmitWorkWidget } from "../../submit-work/components/submit-work-widget";
-import { getTerminalWorkMessages } from "../../terminal-work/messages/terminal-work";
+import { getSubmitWorkMessages } from "../../submit-work/messages/submit-work";
 import { TerminalWorkWidget } from "../../terminal-work/components/terminal-work-widget";
+import { getTerminalWorkMessages } from "../../terminal-work/messages/terminal-work";
+import { TraceDrilldownWidget } from "../../trace-drilldown/components/trace-drilldown-widget";
 import type { useTraceDrilldown } from "../../trace-drilldown/hooks/useTraceDrilldown";
 import { getTraceDrilldownMessages } from "../../trace-drilldown/messages/trace-drilldown";
-import { TraceDrilldownWidget } from "../../trace-drilldown/components/trace-drilldown-widget";
+import { WorkOutcomeWidget } from "../../work-outcome/components/work-outcome-widget";
 import type { useWorkOutcomeChart } from "../../work-outcome/hooks/useWorkOutcomeChart";
 import { getWorkOutcomeMessages } from "../../work-outcome/messages/work-outcome";
-import { WorkOutcomeWidget } from "../../work-outcome/components/work-outcome-widget";
-import { getWorkTotalsMessages } from "../../work-totals/messages/work-totals";
 import { WorkTotalsWidget } from "../../work-totals/components/work-totals-widget";
+import { getWorkTotalsMessages } from "../../work-totals/messages/work-totals";
+import { WorkflowActivityWidget } from "../../workflow-activity/components/workflow-activity-widget";
 import type { useCurrentActivityImportController } from "../../workflow-activity/hooks/current-activity-import-controller";
 import { getWorkflowActivityShellMessages } from "../../workflow-activity/messages/activity-shell";
-import { WorkflowActivityWidget } from "../../workflow-activity/components/workflow-activity-widget";
 import { DASHBOARD_WIDGET_IDS } from "../hooks/useDashboardLayout";
 import {
   type DashboardWidgetPickerWidgetType,
@@ -34,6 +35,7 @@ import {
 } from "../lib/dashboard-widget-picker";
 import type { AgentBentoLayoutCard, AgentBentoLayoutItem } from "./agent-bento";
 import { DashboardWidgetRemoveButton } from "./dashboard-widget-remove-button";
+import { SessionControlsWidget } from "./session-controls-widget";
 
 export interface DashboardCardBuilderArgs {
   currentSelection: ReturnType<typeof useCurrentSelection>;
@@ -171,13 +173,15 @@ function buildWidgetCard({
   traceGridState,
   workChartModel,
 }: DashboardWidgetCardBuilderArgs): AgentBentoLayoutCard {
-  const removeAction = (
-    <DashboardWidgetRemoveButton
-      locale={locale}
-      onClick={() => onRemoveDashboardWidget(layoutItem.id)}
-      widgetTitle={getDashboardWidgetTitle(layoutItem.widgetType, locale)}
-    />
-  );
+  const removeAction =
+    layoutItem.widgetType ===
+    DASHBOARD_WIDGET_IDS.sessionControls ? undefined : (
+      <DashboardWidgetRemoveButton
+        locale={locale}
+        onClick={() => onRemoveDashboardWidget(layoutItem.id)}
+        widgetTitle={getDashboardWidgetTitle(layoutItem.widgetType, locale)}
+      />
+    );
 
   if (
     layoutItem.widgetType === DASHBOARD_WIDGET_IDS.workTotals ||
@@ -440,6 +444,18 @@ function buildSingletonWidgetCard({
           />
         ),
       };
+    case DASHBOARD_WIDGET_IDS.sessionControls:
+      return {
+        id: layoutItem.id,
+        widgetType: layoutItem.widgetType,
+        children: (
+          <SessionControlsWidget
+            headerAction={headerAction}
+            locale={locale}
+            widgetId={layoutItem.id}
+          />
+        ),
+      };
     case DASHBOARD_WIDGET_IDS.providerSession:
       return {
         id: layoutItem.id,
@@ -498,6 +514,8 @@ function getDashboardWidgetTitle(widgetType: string, locale?: string): string {
       return getFactorySessionWidgetMessages(locale).title;
     case DASHBOARD_WIDGET_IDS.providerSession:
       return getProviderSessionWidgetMessages(locale).title;
+    case DASHBOARD_WIDGET_IDS.sessionControls:
+      return getHeaderControlsMessages(locale).sessionControlsLabel;
     case DASHBOARD_WIDGET_IDS.submitWork:
       return getSubmitWorkMessages(locale).cardTitle;
     case DASHBOARD_WIDGET_IDS.terminalWork:

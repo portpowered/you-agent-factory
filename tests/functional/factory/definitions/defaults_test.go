@@ -323,8 +323,8 @@ func assertGlobalDefaultsPresetDispatches(
 	if len(dispatches) != 2 {
 		t.Fatalf("dispatch count = %d, want 2", len(dispatches))
 	}
-	assertGlobalDefaultsPresetDispatch(t, dispatches[0], "", "CODEX", "default-model", "")
-	assertGlobalDefaultsPresetDispatch(t, dispatches[1], "careful-review", "CODEX", "preset-model", "medium")
+	assertGlobalDefaultsPresetDispatch(t, dispatches[0], "", "codex", "default-model", "")
+	assertGlobalDefaultsPresetDispatch(t, dispatches[1], "careful-review", "codex", "preset-model", "medium")
 }
 
 func assertGlobalDefaultsPresetDispatch(

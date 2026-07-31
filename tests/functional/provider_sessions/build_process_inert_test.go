@@ -45,14 +45,14 @@ func TestProviderSessionsRemainInertThroughRootBuildProcessConstruction(t *testi
 }
 
 type providerSessionEffectRecorder struct {
-	t                 testing.TB
-	homeCalls         atomic.Int32
-	fileStatCalls     atomic.Int32
-	fileOpenCount     atomic.Int32
-	codexWalkCount    atomic.Int32
-	codexSymlinkCount atomic.Int32
-	cursorWalkCount   atomic.Int32
-	cursorSymlinkCount atomic.Int32
+	t                   testing.TB
+	homeCalls           atomic.Int32
+	fileStatCalls       atomic.Int32
+	fileOpenCount       atomic.Int32
+	codexWalkCount      atomic.Int32
+	codexSymlinkCount   atomic.Int32
+	cursorWalkCount     atomic.Int32
+	cursorSymlinkCount  atomic.Int32
 	cursorDatabaseCount atomic.Int32
 }
 
@@ -63,13 +63,13 @@ func newProviderSessionEffectRecorder(t testing.TB) *providerSessionEffectRecord
 
 func (recorder *providerSessionEffectRecorder) edges() serviceedges.Edges {
 	return serviceedges.Edges{
-		ProviderSessionResolveHomeDirectory: recorder.recordHome,
-		ProviderSessionFileSystem:           recorder,
-		ProviderSessionCodexWalkDirectory:   recorder.recordCodexWalk,
-		ProviderSessionCodexResolveSymlinks: recorder.recordCodexSymlink,
-		ProviderSessionCursorWalkDirectory:  recorder.recordCursorWalk,
+		ProviderSessionResolveHomeDirectory:  recorder.recordHome,
+		ProviderSessionFileSystem:            recorder,
+		ProviderSessionCodexWalkDirectory:    recorder.recordCodexWalk,
+		ProviderSessionCodexResolveSymlinks:  recorder.recordCodexSymlink,
+		ProviderSessionCursorWalkDirectory:   recorder.recordCursorWalk,
 		ProviderSessionCursorResolveSymlinks: recorder.recordCursorSymlink,
-		ProviderSessionCursorOpenDatabase:   recorder.recordCursorDatabase,
+		ProviderSessionCursorOpenDatabase:    recorder.recordCursorDatabase,
 	}
 }
 

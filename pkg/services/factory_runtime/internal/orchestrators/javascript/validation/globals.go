@@ -9,6 +9,13 @@ var supportedRootGlobals = map[string]struct{}{
 	"agent":    {},
 	"parallel": {},
 	"pipeline": {},
+	// Safe ECMAScript intrinsics used for bounded data shaping. These are
+	// provided by goja and do not expose host filesystem, process, or network
+	// capabilities.
+	"Array": {},
+	"Error": {},
+	"JSON":  {},
+	"Math":  {},
 }
 
 var supportedWorkflowMembers = map[string]struct{}{

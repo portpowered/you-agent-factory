@@ -1455,7 +1455,12 @@
       "description": "Open provider identity used by authored modelProvider fields. Extension identities use lowercase letters and digits separated by dots or hyphens. Built-in identities and documented legacy aliases remain accepted compatibility spellings. For example, `customer.provider` is a valid extension identity.",
       "maxLength": 128,
       "minLength": 1,
-      "pattern": "^(?:[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*|AGY|ANTHROPIC|CLAUDE|CODEX|CURSOR|CURSOR_AGENT|GEMINI|KIRO|OPENAI|OPENCODE|PI)$",
+      "pattern": "^(?:[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*|ANTIGRAVITY|ANTHROPIC|CLAUDE|CODEX|OPENAI)$",
+      "type": "string"
+    },
+    "ReasoningEffort": {
+      "description": "Optional provider-neutral reasoning effort. Surrounding whitespace and letter case are normalized. Omit the field to preserve the selected provider and model default. Factory definitions may use an exact invocation-parameter placeholder such as `${executorReasoningEffort}`.",
+      "pattern": "^(?:[\t-\r    - \u2028\u2029  　]*(?:[mM][iI][nN][iI][mM][aA][lL]|[lL][oO][wW]|[mM][eE][dD][iI][uU][mM]|[hH][iI][gG][hH]|[xX][hH][iI][gG][hH]|[mM][aA][xX])?[\t-\r    - \u2028\u2029  　]*|\\$\\{[A-Za-z0-9_.-]+\\})$",
       "type": "string"
     },
     "RequiredTool": {
@@ -1587,11 +1592,8 @@
       "description": "Stable built-in runner identifiers supported by factory and workstation runner selection.",
       "enum": [
         "codex",
-        "gemini",
-        "kiro",
-        "cursor-cli",
-        "opencode",
-        "pi"
+        "claude",
+        "antigravity"
       ],
       "type": "string"
     },
@@ -2005,7 +2007,7 @@
               "$ref": "#/$defs/WorkerProvider"
             }
           ],
-          "description": "Canonical Providers catalog identity used to select worker execution, an exact invocation-parameter placeholder, or the retained `SCRIPT_WRAP` compatibility value. ACP-backed identities use names such as `cursor-acp`; the Providers catalog determines their private execution kind."
+          "description": "Execution mechanism. Use `ACP` for ACP-backed workers and put the configured integration identity (for example `cursor-acp`) in modelProvider. `SCRIPT_WRAP` remains the command-wrapper compatibility value; legacy named executor identities remain accepted during migration."
         },
         "id": {
           "description": "Optional durable public identifier for this worker. When present, graph and layout references should use this id instead of the mutable name.",
@@ -2032,7 +2034,7 @@
           "description": "Provider locality for this model capability declaration. Use `LOCAL` for embedded or host-managed inference and `CLOUD` for remote provider execution."
         },
         "modelProvider": {
-          "description": "Canonical model-provider identity used for model routing and provider diagnostics, or an exact invocation-parameter placeholder such as `${modelProvider}`. Extension identities use lowercase standardized syntax; built-in values such as `CLAUDE` and `CODEX` remain compatibility conveniences.",
+          "description": "Canonical provider identity used for model routing and provider diagnostics, or an exact invocation-parameter placeholder such as `${modelProvider}`. For `executorProvider: ACP`, this names the configured ACP integration, such as `cursor-acp`. Extension identities use lowercase standardized syntax; built-in values such as `CLAUDE` and `CODEX` remain compatibility conveniences.",
           "oneOf": [
             {
               "$ref": "#/$defs/ProviderIdentity"
@@ -2045,10 +2047,6 @@
         },
         "name": {
           "description": "Worker name referenced by Workstation.worker.",
-          "type": "string"
-        },
-        "openCodeAgent": {
-          "description": "Optional OpenCode agent profile name for model workers that dispatch through the OpenCode runner. When set, OpenCode dispatches invoke `opencode run --agent \u003cname\u003e`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/).",
           "type": "string"
         },
         "operations": {
@@ -2065,6 +2063,9 @@
             }
           ],
           "description": "Built-in hosted provider identity when this worker uses repository-owned hosted execution."
+        },
+        "reasoningEffort": {
+          "$ref": "#/$defs/ReasoningEffort"
         },
         "resources": {
           "description": "Resource capacity this worker requires before it can be dispatched.",
@@ -2108,10 +2109,10 @@
       "type": "string"
     },
     "WorkerProvider": {
-      "description": "Built-in worker-provider compatibility values. Authored executorProvider fields also accept extensible lowercase Providers catalog identities.",
+      "description": "Worker execution mechanism. Canonical values are ACP and SCRIPT_WRAP; extensible lowercase identities remain accepted for compatibility with existing factories.",
       "maxLength": 128,
       "minLength": 1,
-      "pattern": "^(?:SCRIPT_WRAP|\\$\\{[A-Za-z0-9_.-]+\\}|[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*)$",
+      "pattern": "^(?:ACP|SCRIPT_WRAP|\\$\\{[A-Za-z0-9_.-]+\\}|[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*)$",
       "type": "string"
     },
     "WorkerType": {
@@ -2228,10 +2229,6 @@
           },
           "type": "array"
         },
-        "openCodeAgent": {
-          "description": "Optional OpenCode agent profile override for this workstation. When set, overrides the worker default for OpenCode dispatches and invokes `opencode run --agent \u003cname\u003e`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/).",
-          "type": "string"
-        },
         "operation": {
           "allOf": [
             {
@@ -2330,8 +2327,12 @@
     },
     "WorkstationCron": {
       "additionalProperties": false,
-      "description": "Trigger timing for cron workstations. Cron workstations use a schedule expression; interval triggers are not supported.",
+      "description": "Trigger timing for scheduled workstations. Provide exactly one of a five-field cron schedule or a positive duration in every; Factory validation enforces the exclusive choice.",
       "properties": {
+        "every": {
+          "description": "Positive Go duration interval, such as 30s, 5m, 1h, or 1h30m, used instead of schedule.",
+          "type": "string"
+        },
         "expiryWindow": {
           "description": "Positive Go duration after due_at before a stale cron time token expires and can be consumed by the system expiry transition. Defaults to the duration until the next scheduled cron fire when omitted.",
           "type": "string"
@@ -2350,9 +2351,6 @@
           "type": "boolean"
         }
       },
-      "required": [
-        "schedule"
-      ],
       "type": "object"
     },
     "WorkstationGuard": {
@@ -2372,9 +2370,13 @@
           "type": "string"
         },
         "maxVisits": {
-          "description": "For `VISIT_COUNT` guards, the visit threshold.",
+          "description": "For `VISIT_COUNT` guards, the fixed visit ceiling.",
           "minimum": 1,
           "type": "integer"
+        },
+        "maxVisitsArgument": {
+          "description": "Optional invocation argument whose positive integer value tightens the fixed visit ceiling.",
+          "type": "string"
         },
         "parentInput": {
           "description": "For parent-aware input guards, the parent workType name from another input in the same workstation.",
@@ -2454,6 +2456,20 @@
         "maxExecutionTime": {
           "description": "Go duration limit for one dispatch attempt before it times out.",
           "type": "string"
+        },
+        "maxGeneratedWorkItems": {
+          "description": "Fixed maximum number of Work items one accepted worker-emitted FACTORY_REQUEST_BATCH may contain.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "maxGeneratedWorkItemsArgument": {
+          "description": "Optional invocation argument whose positive integer value tightens the fixed generated-Work ceiling.",
+          "type": "string"
+        },
+        "maxGeneratedWorkItemsArgumentOffset": {
+          "description": "Offset added to the invocation argument before applying the generated-Work ceiling.",
+          "minimum": 0,
+          "type": "integer"
         },
         "maxRetries": {
           "description": "Maximum number of retry attempts after a failed dispatch before the workstation gives up.",

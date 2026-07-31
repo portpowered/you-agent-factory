@@ -71,7 +71,7 @@ describe("mergeEditableWorkStateContractValidationErrors", () => {
         },
       ],
       workers: [
-        { modelProvider: "CURSOR", name: "reviewer", type: "MODEL_WORKER" },
+        { modelProvider: "CODEX", name: "reviewer", type: "MODEL_WORKER" },
       ],
     };
 
@@ -94,7 +94,7 @@ describe("mergeEditableWorkStateContractValidationErrors", () => {
         },
       ],
       workers: [
-        { modelProvider: "CURSOR", name: "reviewer", type: "MODEL_WORKER" },
+        { modelProvider: "CODEX", name: "reviewer", type: "MODEL_WORKER" },
       ],
       workstations: [
         {

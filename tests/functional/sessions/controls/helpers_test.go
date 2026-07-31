@@ -24,7 +24,7 @@ const (
 	pauseResumeBusyLoopWorkflowName   = "busy-loop"
 	pauseResumeDurableStatusTimeout   = 15 * time.Second
 
-	interruptedInspectWorkTypeName     = "goal"
+	interruptedInspectWorkTypeName      = "goal"
 	interruptedInspectReviewWorkstation = "review-goal"
 )
 
@@ -721,7 +721,7 @@ func interruptedInspectFactoryConfig() map[string]any {
 				"name":   interruptedInspectReviewWorkstation,
 				"type":   "CLASSIFIER_WORKSTATION",
 				"worker": "mock-worker",
-				"inputs":    []map[string]string{{"workType": interruptedInspectWorkTypeName, "state": "init"}},
+				"inputs": []map[string]string{{"workType": interruptedInspectWorkTypeName, "state": "init"}},
 				"classificationRoutes": []map[string]any{
 					{
 						"label": "accepted",

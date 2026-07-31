@@ -100,19 +100,11 @@ func TestMapCommittedOwnerPackageUsesPlanNestedDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/workers/provider/registry",
+			path: "pkg/services/providers/internal/services/execution/internal/provider/registry",
 			want: PackageMapping{
-				PackagePath: "pkg/services/workers/provider/registry",
+				PackagePath: "pkg/services/providers/internal/services/execution/internal/provider/registry",
 				Disposition: DispositionMove,
 				Destination: "providers/internal/services/catalog",
-			},
-		},
-		{
-			path: "pkg/services/workers/cliprovider",
-			want: PackageMapping{
-				PackagePath: "pkg/services/workers/cliprovider",
-				Disposition: DispositionMove,
-				Destination: "providers/internal/services/execution",
 			},
 		},
 		{
@@ -233,3 +225,4 @@ func TestCommittedManifestMapsProductOwnersWithoutRediscovery(t *testing.T) {
 		t.Fatalf("committed packages missing owners: %v", err)
 	}
 }
+

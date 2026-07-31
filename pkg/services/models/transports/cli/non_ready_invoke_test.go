@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	managedruntime "github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -238,39 +237,5 @@ func readinessFailureClass(readiness factoryapi.ManagedRuntimeReadinessState) wo
 		return workers.InferenceFailureClassLoadingModel
 	default:
 		return workers.InferenceFailureClassRuntimeFailure
-	}
-}
-
-func nonReadyLocalModelFactoryConfig() map[string]any {
-	return map[string]any{
-		"name": "factory",
-		"resources": []map[string]any{{
-			"name":       "omnivoice-cache",
-			"type":       interfaces.ResourceTypeModel,
-			"capacity":   1,
-			"model":      "OMNIVOICE_Q4_K_M",
-			"backend":    "LLAMACPP",
-			"loadPolicy": "ON_DEMAND",
-		}},
-		"workers": []map[string]any{{
-			"name":          "voice-local",
-			"type":          interfaces.WorkerTypeModel,
-			"modelProvider": "CODEX",
-			"model":         "OMNIVOICE_Q4_K_M",
-			"modelLocality": interfaces.ModelLocalityLocal,
-			"resources":     []map[string]any{{"name": "omnivoice-cache", "capacity": 1}},
-			"operations": []map[string]any{{
-				"name": "TTS",
-				"inputs": []map[string]any{{
-					"name":         "text",
-					"contentTypes": []string{interfaces.ModelOperationContentTypeText},
-					"required":     true,
-				}},
-				"outputs": []map[string]any{{
-					"name":         "audio",
-					"contentTypes": []string{interfaces.ModelOperationContentTypeAudio},
-				}},
-			}},
-		}},
 	}
 }

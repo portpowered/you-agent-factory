@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	workers "github.com/portpowered/infinite-you/pkg/services/workers"
-	inferencecontract "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 )
 
 type rootProviderStub struct{}
@@ -26,12 +25,26 @@ func TestProviderPortExposedAtWorkersRoot(t *testing.T) {
 	}
 }
 
-func TestProviderPortMatchesInferenceContract(t *testing.T) {
-	t.Parallel()
-
-	var nested inferencecontract.Provider = rootProviderStub{}
-	var root workers.Provider = nested
-	if root == nil {
-		t.Fatal("workers.Provider is not assignable from inferencecontract.Provider")
+func TestRunnerIdentityForWorker(t *testing.T) {
+	tests := []struct {
+		name, executor, modelProvider, want string
+		wantErr                             bool
+	}{
+		{name: "canonical ACP", executor: "ACP", modelProvider: "cursor-acp", want: "cursor-acp"},
+		{name: "canonical ACP is case insensitive", executor: "acp", modelProvider: "custom", want: "custom"},
+		{name: "legacy named executor", executor: "cursor-acp", want: "cursor-acp"},
+		{name: "script wrap", executor: "SCRIPT_WRAP"},
+		{name: "missing ACP integration", executor: "ACP", wantErr: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := workers.RunnerIdentityForWorker(test.executor, test.modelProvider)
+			if (err != nil) != test.wantErr {
+				t.Fatalf("error = %v, wantErr %v", err, test.wantErr)
+			}
+			if got != test.want {
+				t.Fatalf("identity = %q, want %q", got, test.want)
+			}
+		})
 	}
 }

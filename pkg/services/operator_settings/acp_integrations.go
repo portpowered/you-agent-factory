@@ -59,6 +59,24 @@ func (service ConfigDocumentService) ConfigureACPIntegrationDelete(ctx context.C
 	})
 }
 
+// EnsurePackagedACPIntegrations materializes defaults only when the ACP
+// integration list is absent. An explicitly present list, including an empty
+// list, is customer-owned and remains unchanged.
+func (service ConfigDocumentService) EnsurePackagedACPIntegrations(ctx context.Context, path string, defaults []ACPIntegration) (ConfigDocument, error) {
+	return service.configureACPIntegrations(ctx, path, func(document ConfigDocument) (ConfigDocument, error) {
+		config := document.FileConfig()
+		if config.Workers.ACP.Integrations != nil {
+			return document, nil
+		}
+		config.Workers.ACP.Integrations = append([]ACPIntegration(nil), defaults...)
+		normalized, err := config.Normalize()
+		if err != nil {
+			return ConfigDocument{}, err
+		}
+		return ConfigDocumentFromConfig(normalized), nil
+	})
+}
+
 func (service ConfigDocumentService) configureACPIntegrations(
 	ctx context.Context,
 	path string,

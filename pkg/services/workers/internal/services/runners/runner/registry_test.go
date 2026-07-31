@@ -21,11 +21,8 @@ func TestBuiltInRunnerCommand_MatchesInternalModelProviderCLI(t *testing.T) {
 		command  string
 	}{
 		{workerexecution.RunnerIDCodex, string(modelprovider.ProviderCodex)},
-		{workerexecution.RunnerIDGemini, string(modelprovider.ProviderGemini)},
-		{workerexecution.RunnerIDKiro, string(modelprovider.ProviderKiro)},
-		{workerexecution.RunnerIDCursorCLI, string(modelprovider.ProviderCursor)},
-		{workerexecution.RunnerIDOpenCode, string(modelprovider.ProviderOpenCode)},
-		{workerexecution.RunnerIDPi, string(modelprovider.ProviderPi)},
+		{workerexecution.RunnerIDClaude, string(modelprovider.ProviderClaude)},
+		{workerexecution.RunnerIDAntigravity, "agy"},
 	}
 
 	for _, tc := range cases {
@@ -46,11 +43,8 @@ func TestValidateBuiltInRunnerPrerequisites_UsesExpectedCommand(t *testing.T) {
 
 	for _, runnerID := range []string{
 		workerexecution.RunnerIDCodex,
-		workerexecution.RunnerIDGemini,
-		workerexecution.RunnerIDKiro,
-		workerexecution.RunnerIDCursorCLI,
-		workerexecution.RunnerIDOpenCode,
-		workerexecution.RunnerIDPi,
+		workerexecution.RunnerIDClaude,
+		workerexecution.RunnerIDAntigravity,
 	} {
 		if err := ValidateBuiltInRunnerPrerequisites(locator, runnerID); err != nil {
 			t.Fatalf("ValidateBuiltInRunnerPrerequisites(%q): %v", runnerID, err)
@@ -59,11 +53,8 @@ func TestValidateBuiltInRunnerPrerequisites_UsesExpectedCommand(t *testing.T) {
 
 	want := []string{
 		string(modelprovider.ProviderCodex),
-		string(modelprovider.ProviderGemini),
-		string(modelprovider.ProviderKiro),
-		string(modelprovider.ProviderCursor),
-		string(modelprovider.ProviderOpenCode),
-		string(modelprovider.ProviderPi),
+		string(modelprovider.ProviderClaude),
+		"agy",
 	}
 	if len(commands) != len(want) {
 		t.Fatalf("lookPath calls = %#v, want %#v", commands, want)
@@ -80,17 +71,17 @@ func TestValidateBuiltInRunnerPrerequisites_ReportsMissingBinary(t *testing.T) {
 		return "", errors.New("executable file not found in $PATH")
 	})
 
-	err := ValidateBuiltInRunnerPrerequisites(locator, workerexecution.RunnerIDCursorCLI)
+	err := ValidateBuiltInRunnerPrerequisites(locator, workerexecution.RunnerIDCodex)
 	if err == nil {
 		t.Fatal("expected missing binary validation error")
 	}
-	if !strings.Contains(err.Error(), `Cursor CLI runner requires "agent" on PATH`) {
+	if !strings.Contains(err.Error(), `Codex runner requires "codex" on PATH`) {
 		t.Fatalf("error = %q, want runner-specific PATH guidance", err.Error())
 	}
 }
 
 func TestValidateBuiltInRunnerPrerequisites_FailsClosedWithoutExecutableLocator(t *testing.T) {
-	err := ValidateBuiltInRunnerPrerequisites(nil, workerexecution.RunnerIDCursorCLI)
+	err := ValidateBuiltInRunnerPrerequisites(nil, workerexecution.RunnerIDCodex)
 	if err == nil || !strings.Contains(err.Error(), "executable locator is required") {
 		t.Fatalf("error = %v, want missing executable locator", err)
 	}

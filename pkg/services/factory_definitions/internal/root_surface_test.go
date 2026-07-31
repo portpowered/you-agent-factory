@@ -8,8 +8,8 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorylifecycle "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle"
 	factoryinternal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
+	factorylifecycle "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle"
 )
 
 func TestNewWithAuthoringLayoutConstructsPublishedRootCatalogSurface(t *testing.T) {
@@ -112,8 +112,10 @@ func (rootSurfaceSessionHost) PersistRootDir() string { return "/persist" }
 func (rootSurfaceSessionHost) WorkstationLoader() factorydefinitions.WorkstationLoader {
 	return nil
 }
-func (rootSurfaceSessionHost) CurrentRuntimeConfig() factorydefinitions.LoadedFactorySource { return nil }
-func (rootSurfaceSessionHost) WorkflowID() string                                           { return "workflow" }
+func (rootSurfaceSessionHost) CurrentRuntimeConfig() factorydefinitions.LoadedFactorySource {
+	return nil
+}
+func (rootSurfaceSessionHost) WorkflowID() string { return "workflow" }
 func (rootSurfaceSessionHost) RequireSession(string) (*factorydefinitions.DefinitionSession, error) {
 	return &factorydefinitions.DefinitionSession{}, nil
 }

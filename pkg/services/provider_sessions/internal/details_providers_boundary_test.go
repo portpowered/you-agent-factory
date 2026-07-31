@@ -50,14 +50,13 @@ func TestDetails_ProvidersRootBoundary_Success(t *testing.T) {
 	})
 }
 
-// TestDetails_ProvidersRootBoundary_NormalizesProviderAliases proves Details
-// normalizes legacy provider strings into Providers-root provider IDs before
-// reader dispatch.
-func TestDetails_ProvidersRootBoundary_NormalizesProviderAliases(t *testing.T) {
+// TestDetails_ProvidersRootBoundary_UsesCanonicalCursorIdentity proves Details
+// dispatches only the canonical Cursor provider identity.
+func TestDetails_ProvidersRootBoundary_UsesCanonicalCursorIdentity(t *testing.T) {
 	root := t.TempDir()
 	svc := newServiceForRoots(t, t.TempDir(), root)
 
-	for _, provider := range []string{"cursor", "agent", "cursor-agent"} {
+	for _, provider := range []string{"cursor"} {
 		t.Run(provider, func(t *testing.T) {
 			_, err := svc.Details(provider, providers.SessionIDKind, "missing-session")
 			if !errors.Is(err, providersessions.ErrSessionNotFound) {
@@ -71,6 +70,11 @@ func TestDetails_ProvidersRootBoundary_NormalizesProviderAliases(t *testing.T) {
 				t.Fatalf("LookupError = %#v, want normalized Cursor root context", lookupErr)
 			}
 		})
+	}
+	for _, provider := range []string{"agent", "cursor-agent"} {
+		if _, err := svc.Details(provider, providers.SessionIDKind, "missing-session"); !errors.Is(err, providersessions.ErrUnsupportedProvider) {
+			t.Fatalf("Details(%q) error = %v, want ErrUnsupportedProvider", provider, err)
+		}
 	}
 }
 

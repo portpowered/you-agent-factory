@@ -9,9 +9,9 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/inference"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -24,6 +24,7 @@ import (
 // availability after quiescence.
 func TestPetriIndependentWorkDispatchesConcurrently(t *testing.T) {
 	t.Run("capacity_limited_concurrency_completes_all_work", func(t *testing.T) {
+		t.Parallel()
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "batch_ideation_pipeline"))
 		traceIDs := seedBatchIdeas(t, dir, 3)
 
@@ -40,10 +41,10 @@ func TestPetriIndependentWorkDispatchesConcurrently(t *testing.T) {
 		}, 10*time.Second)
 
 		assertWorkAtCustomerStates(t, listed, map[string]int{
-			support.WorkCustomerLocation("story", "complete"): 3,
-			support.WorkCustomerLocation("idea", "init"):      0,
-			support.WorkCustomerLocation("prd", "init"):       0,
-			support.WorkCustomerLocation("story", "init"):     0,
+			support.WorkCustomerLocation("story", "complete"):  3,
+			support.WorkCustomerLocation("idea", "init"):       0,
+			support.WorkCustomerLocation("prd", "init"):        0,
+			support.WorkCustomerLocation("story", "init"):      0,
 			support.WorkCustomerLocation("story", "in-review"): 0,
 		})
 		assertCompletedStoryTraces(t, listed, traceIDs)
@@ -56,6 +57,7 @@ func TestPetriIndependentWorkDispatchesConcurrently(t *testing.T) {
 	})
 
 	t.Run("serial_concurrency_limit_completes_all_work", func(t *testing.T) {
+		t.Parallel()
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "serial_ideation_pipeline"))
 		traceIDs := seedBatchIdeas(t, dir, 3)
 
@@ -72,10 +74,10 @@ func TestPetriIndependentWorkDispatchesConcurrently(t *testing.T) {
 		}, 30*time.Second)
 
 		assertWorkAtCustomerStates(t, listed, map[string]int{
-			support.WorkCustomerLocation("story", "complete"): 3,
-			support.WorkCustomerLocation("idea", "init"):      0,
-			support.WorkCustomerLocation("prd", "init"):       0,
-			support.WorkCustomerLocation("story", "init"):     0,
+			support.WorkCustomerLocation("story", "complete"):  3,
+			support.WorkCustomerLocation("idea", "init"):       0,
+			support.WorkCustomerLocation("prd", "init"):        0,
+			support.WorkCustomerLocation("story", "init"):      0,
 			support.WorkCustomerLocation("story", "in-review"): 0,
 		})
 		assertCompletedStoryTraces(t, listed, traceIDs)
@@ -96,6 +98,7 @@ func TestPetriIndependentWorkDispatchesConcurrently(t *testing.T) {
 // collapsing, swapping, or duplicating identities.
 func TestPetriConcurrentResultsCorrelateToOriginalWork(t *testing.T) {
 	t.Run("single_seed_correlates_to_terminal_work", func(t *testing.T) {
+		t.Parallel()
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dispatcher_workflow"))
 		traceID := "trace-single-seed"
 		seedIdeas(t, dir, []seedIdea{{traceID: traceID, title: "add login page"}})
@@ -111,6 +114,7 @@ func TestPetriConcurrentResultsCorrelateToOriginalWork(t *testing.T) {
 	})
 
 	t.Run("two_concurrent_seeds_each_reach_terminal_work", func(t *testing.T) {
+		t.Parallel()
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dispatcher_workflow"))
 		traceIDs := seedIdeas(t, dir, []seedIdea{
 			{traceID: "trace-alpha", title: "feature-alpha"},
@@ -129,6 +133,7 @@ func TestPetriConcurrentResultsCorrelateToOriginalWork(t *testing.T) {
 	})
 
 	t.Run("multi_seed_completions_remain_distinct", func(t *testing.T) {
+		t.Parallel()
 		const n = 5
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dispatcher_workflow"))
 		ideas := make([]seedIdea, n)
@@ -152,6 +157,7 @@ func TestPetriConcurrentResultsCorrelateToOriginalWork(t *testing.T) {
 	})
 
 	t.Run("concurrent_execution_pool_keeps_distinct_work_identities", func(t *testing.T) {
+		t.Parallel()
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "batch_ideation_pipeline"))
 		traceIDs := seedIdeas(t, dir, []seedIdea{
 			{traceID: "trace-iso-1", title: "file-1"},
@@ -207,10 +213,10 @@ func TestPetriConcurrentFailureDoesNotDuplicateDispatch(t *testing.T) {
 	assertWorkAtCustomerStates(t, listed, map[string]int{
 		successTerminal: 1,
 		failedTerminal:  1,
-		support.WorkCustomerLocation("idea", "init"):         0,
-		support.WorkCustomerLocation("story", "init"):        0,
-		support.WorkCustomerLocation("story", "in-review"):   0,
-		support.WorkCustomerLocation("story", "executing"):   0,
+		support.WorkCustomerLocation("idea", "init"):       0,
+		support.WorkCustomerLocation("story", "init"):      0,
+		support.WorkCustomerLocation("story", "in-review"): 0,
+		support.WorkCustomerLocation("story", "executing"): 0,
 	})
 	assertTerminalWorkCorrelatesToTraceIDs(t, listed, successTerminal, []string{passTraceID})
 	assertTerminalWorkCorrelatesToTraceIDs(t, listed, failedTerminal, []string{failTraceID})

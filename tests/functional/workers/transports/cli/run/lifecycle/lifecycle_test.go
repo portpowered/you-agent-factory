@@ -56,6 +56,7 @@ func TestCLIRunCleanInvocationCompletesWithoutDashboardStartup(t *testing.T) {
 		"you", "run",
 		"--factory", factoryPath,
 		"--no-record",
+		"--quiet",
 		"prove workers-owned clean invocation lifecycle",
 	}
 	inputs := support.FakeInputs(t.Context(), args)
@@ -121,6 +122,7 @@ func TestCLIRunServerAttachedInvocationTargetsExistingFactorySession(t *testing.
 		"--factory", factoryPath,
 		"--with-server",
 		"--no-record",
+		"--quiet",
 		"prove workers-owned server-attached lifecycle",
 	}
 	inputs := support.FakeInputs(t.Context(), args)
@@ -206,6 +208,7 @@ func TestCLIRunCleanInvocationFailurePreservesPublicError(t *testing.T) {
 		"you", "run",
 		"--factory", factoryPath,
 		"--no-record",
+		"--quiet",
 		"prove workers-owned clean invocation failure lifecycle",
 	}
 	inputs := support.FakeInputs(t.Context(), args)

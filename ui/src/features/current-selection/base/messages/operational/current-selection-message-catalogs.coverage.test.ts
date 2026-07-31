@@ -195,7 +195,7 @@ const invokeWorkerDetail = (
       ];
     case "localizeModelProvider":
       return [
-        formatter("CURSOR" as never),
+        formatter("CODEX" as never),
         formatter("CODEX" as never),
         formatter("future-provider" as never),
       ];

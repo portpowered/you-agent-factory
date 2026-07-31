@@ -16,9 +16,7 @@ Flags:
   -h, --help   help for docs
 
 Global Flags:
-  -d, --debug                                  emit lower-level command diagnostics where supported (implies --verbose)
-      --default-worker-model string            default worker model for model workers with omitted model
-      --default-worker-model-provider string   default worker model provider for model workers with omitted modelProvider (accepted canonical providers: CLAUDE, CODEX, CURSOR, GEMINI, KIRO, OPENCODE, PI, AGY; accepted aliases include codex, claude, gemini, kiro-cli, opencode, pi, agy, agent, cursor, anthropic, and openai; DEFAULT resolves through lower-precedence concrete provider)
-      --json                                   emit structured JSON on stdout for supported commands; diagnostics remain on stderr
-      --server string                          factory API base URI (http:// or https://); HTTP client commands target this URI, while you server and server-enabled runs bind its loopback host and port (default "http://localhost:7437")
-  -v, --verbose                                emit concise command diagnostics to stderr
+  -d, --debug           emit lower-level command diagnostics where supported (implies --verbose)
+      --json            emit structured JSON on stdout for supported commands; diagnostics remain on stderr
+      --server string   factory API base URI (http:// or https://); HTTP client commands target this URI, while you server and server-enabled runs bind its loopback host and port (default "http://localhost:7437")
+  -v, --verbose         emit concise command diagnostics to stderr

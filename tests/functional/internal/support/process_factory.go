@@ -1,7 +1,12 @@
 package support
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
@@ -10,8 +15,8 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/inference"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -197,15 +202,144 @@ func runFactoryToCompletionWithHome(
 	})
 	daemon := StartProcessCommand(t, process, inputs.Input)
 	baseURL := server.WaitForURL(t)
+	var (
+		responseCaptureCancel context.CancelFunc
+		responseCaptureDone   <-chan responseEventCaptureResult
+		responseActivity      <-chan factoryapi.FactoryResponseEvent
+	)
+	if captureResponseEvents {
+		// Subscribe while the continuously hosted session is live. Waiting until
+		// terminal work is observed leaves the session itself active, so a fresh
+		// SSE request correctly remains open and the old retained-history helper
+		// could spend its entire timeout waiting for the HTTP response.
+		liveSession := GetDefaultSession(t, baseURL)
+		captureContext, cancelCapture := context.WithCancel(context.Background())
+		responseCaptureCancel = cancelCapture
+		captureDone := make(chan responseEventCaptureResult, 1)
+		captureStarted := make(chan error, 1)
+		activity := make(chan factoryapi.FactoryResponseEvent, 256)
+		responseCaptureDone = captureDone
+		responseActivity = activity
+		go func() {
+			events, err := captureFactoryResponseEvents(
+				captureContext,
+				SessionResponseEventsURL(baseURL, liveSession.Id),
+				captureStarted,
+				activity,
+			)
+			captureDone <- responseEventCaptureResult{events: events, err: err}
+		}()
+		if err := <-captureStarted; err != nil {
+			t.Fatalf("start factory response-event capture: %v", err)
+		}
+	}
 	WaitForTerminalStatus(t, baseURL, timeout)
 
 	session := GetDefaultSession(t, baseURL)
 	work := ListDefaultSessionWork(t, baseURL)
 	events := GetFactoryEventsAt(t, baseURL)
 	var responseEvents []factoryapi.FactoryResponseEvent
-	if captureResponseEvents {
-		responseEvents = GetFactoryResponseEventsAt(t, baseURL, session.Id)
+	if responseCaptureCancel != nil {
+		// Work completion and response-stream publication use separate observers.
+		// Wait for the stream's terminal event instead of relying on a scheduler
+		// sleep, with a short ceiling for providers that expose partial streams.
+		waitForTerminalResponseEvent(responseActivity, 500*time.Millisecond)
+		responseCaptureCancel()
+		capture := <-responseCaptureDone
+		if capture.err != nil {
+			t.Fatalf("capture factory response events: %v", capture.err)
+		}
+		responseEvents = capture.events
 	}
 	daemon.Stop(t)
+	closeCtx, cancelClose := context.WithTimeout(context.Background(), processCommandStopTimeout)
+	defer cancelClose()
+	if closer, ok := process.(interface{ Close(context.Context) error }); ok {
+		if err := closer.Close(closeCtx); err != nil {
+			t.Fatalf("close application process: %v", err)
+		}
+	}
 	return session, work, events, responseEvents
+}
+
+type responseEventCaptureResult struct {
+	events []factoryapi.FactoryResponseEvent
+	err    error
+}
+
+func captureFactoryResponseEvents(
+	ctx context.Context,
+	endpoint string,
+	started chan<- error,
+	activity chan<- factoryapi.FactoryResponseEvent,
+) ([]factoryapi.FactoryResponseEvent, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		started <- err
+		if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("GET response-event stream: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		started <- fmt.Errorf("status = %d", response.StatusCode)
+		return nil, fmt.Errorf("GET response-event stream status = %d", response.StatusCode)
+	}
+	started <- nil
+
+	var events []factoryapi.FactoryResponseEvent
+	scanner := bufio.NewScanner(response.Body)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		var event factoryapi.FactoryResponseEvent
+		if err := json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(line, "data:"))), &event); err != nil {
+			return nil, fmt.Errorf("decode response event: %w", err)
+		}
+		events = append(events, event)
+		select {
+		case activity <- event:
+		default:
+		}
+	}
+	if err := scanner.Err(); err != nil && !errors.Is(err, context.Canceled) && !errors.Is(ctx.Err(), context.Canceled) {
+		return nil, fmt.Errorf("read response-event stream: %w", err)
+	}
+	return events, nil
+}
+
+func waitForTerminalResponseEvent(
+	activity <-chan factoryapi.FactoryResponseEvent,
+	ceiling time.Duration,
+) {
+	timer := time.NewTimer(ceiling)
+	defer timer.Stop()
+	for {
+		select {
+		case event := <-activity:
+			if isTerminalResponseEvent(event) {
+				return
+			}
+		case <-timer.C:
+			return
+		}
+	}
+}
+
+func isTerminalResponseEvent(event factoryapi.FactoryResponseEvent) bool {
+	if event.Kind == factoryapi.FactoryResponseEventKindError {
+		return event.Phase == factoryapi.FactoryResponseEventPhaseFailed ||
+			event.Phase == factoryapi.FactoryResponseEventPhaseCanceled
+	}
+	return event.Kind == factoryapi.FactoryResponseEventKindRun &&
+		(event.Phase == factoryapi.FactoryResponseEventPhaseCompleted ||
+			event.Phase == factoryapi.FactoryResponseEventPhaseFailed ||
+			event.Phase == factoryapi.FactoryResponseEventPhaseCanceled)
 }

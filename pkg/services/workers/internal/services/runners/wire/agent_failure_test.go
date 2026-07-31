@@ -65,8 +65,8 @@ func TestAgentRunnerNormalizesProviderFailureKindsWithoutRetry(t *testing.T) {
 				t.Fatalf("Execute() retained failure = %#v, want kind %q", retained, test.kind)
 			}
 			assertAgentFailureFacts(t, result, providerErr, published)
-			if !reflect.DeepEqual(observedOrder, []string{"progress", "terminal"}) {
-				t.Fatalf("failure observation order = %v, want progress then terminal", observedOrder)
+			if !reflect.DeepEqual(observedOrder, []string{"progress", "progress", "terminal"}) {
+				t.Fatalf("failure observation order = %v, want diagnostic, stream failure, then terminal", observedOrder)
 			}
 
 			failure.Diagnostics.Metadata["safe"] = "provider-mutated"
@@ -119,8 +119,8 @@ func TestAgentRunnerPreservesCancellationAndDeadlineContext(t *testing.T) {
 				if !errors.Is(outcome.err, test.want) {
 					t.Fatalf("Execute() error = %v, want %v", outcome.err, test.want)
 				}
-				if fake.calls.Load() != 1 || publishCalls.Load() != 1 {
-					t.Fatalf("calls = provider:%d progress:%d, want one each", fake.calls.Load(), publishCalls.Load())
+				if fake.calls.Load() != 1 || publishCalls.Load() != 2 {
+					t.Fatalf("calls = provider:%d progress:%d, want one provider call and two progress publications", fake.calls.Load(), publishCalls.Load())
 				}
 				if outcome.result.Diagnostics == nil ||
 					outcome.result.Diagnostics.Metadata["safe"] != "kept" {
@@ -134,8 +134,8 @@ func TestAgentRunnerPreservesCancellationAndDeadlineContext(t *testing.T) {
 					}
 				} else {
 					var providerErr *workers.ProviderError
-					if errors.As(outcome.err, &providerErr) {
-						t.Fatalf("cancellation error = %#v, want cancellation without failure classification", outcome.err)
+					if !errors.As(outcome.err, &providerErr) || providerErr.Message != "provider invocation was canceled" {
+						t.Fatalf("cancellation error = %#v, want canonical cancellation ProviderError", outcome.err)
 					}
 				}
 			}
@@ -224,11 +224,21 @@ func resolveAgentRunner(
 	if err != nil {
 		t.Fatalf("NewAgentRegistry() error = %v", err)
 	}
-	binding, err := registry.Resolve(runners.ResolutionRequest{Identity: agent.Identity})
-	if err != nil {
-		t.Fatalf("Resolve(agent) error = %v", err)
-	}
-	return binding.Runner
+	return agentRegistryStrategy{registry: registry}
+}
+
+type agentRegistryStrategy struct {
+	registry runners.Service
+}
+
+func (strategy agentRegistryStrategy) Execute(
+	ctx context.Context,
+	request workers.RunnerExecutionRequest,
+) (workers.RunnerExecutionResult, error) {
+	return strategy.registry.Execute(ctx, runners.ExecuteRequest{
+		Identity: agent.Identity,
+		Attempt:  request,
+	})
 }
 
 func providerFailureFixture(
@@ -275,10 +285,13 @@ func assertAgentFailureFacts(
 	if !reflect.DeepEqual(providerErr.Diagnostics, result.Diagnostics) {
 		t.Fatalf("error diagnostics = %#v, want detached equivalent of %#v", providerErr.Diagnostics, result.Diagnostics)
 	}
-	if len(published) != 1 ||
+	if len(published) != 2 ||
 		published[0].DispatchID != "dispatch-agent-1" ||
 		published[0].Payload != "provider stopped" ||
-		!reflect.DeepEqual(published[0].ProviderSessionRef, wantSession) {
-		t.Fatalf("failure progress = %#v, want one correlated pre-terminal fact", published)
+		!reflect.DeepEqual(published[0].ProviderSessionRef, wantSession) ||
+		published[1].Kind != workers.FailedFragmentKind ||
+		published[1].Type != "FAILED" ||
+		!reflect.DeepEqual(published[1].ProviderSessionRef, wantSession) {
+		t.Fatalf("failure progress = %#v, want correlated diagnostic and terminal failure", published)
 	}
 }

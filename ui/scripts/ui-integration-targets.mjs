@@ -13,7 +13,6 @@ export const mockedBackendBrowserIntegrationFiles = [
   "integration/factory-graph-editor-session-switch.integration.test.mjs",
   "integration/factory-graph-editor.integration.test.mjs",
   "integration/factory-import-second-session.integration.test.mjs",
-  "integration/hosted-exact-session-replay.integration.test.mjs",
   "integration/maintainer-phantom-worker-graph.integration.test.mjs",
   "integration/packaged-factories-hosted-route.integration.test.mjs",
 ];

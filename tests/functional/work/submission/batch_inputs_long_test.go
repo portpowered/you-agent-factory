@@ -18,7 +18,7 @@ import (
 const (
 	legacyUnaryRetirementRequestID = "request-retired-unary-replay"
 	legacyUnaryRetirementWorkID    = "work-retired-unary-replay"
-	legacyUnaryRetirementWorkName    = "replayed"
+	legacyUnaryRetirementWorkName  = "replayed"
 )
 
 // TestLegacyUnaryRetirementReplaySubmitsCanonicalBatchWorkRequests proves

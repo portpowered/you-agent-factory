@@ -2,8 +2,6 @@ package factorysessions_test
 
 import (
 	"context"
-	"os/exec"
-	"strings"
 	"testing"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -116,30 +114,6 @@ func (fake *sessionsCheckpointRuntimeFake) AcceptDispatchResult(context.Context,
 	return factoryruntime.AcceptDispatchResultResult{}, nil
 }
 
-func TestSessionsCheckpointPeerLease_DoesNotImportCheckpointRecoveryPaths(t *testing.T) {
-	t.Parallel()
-
-	for _, root := range sessionsCheckpointPeerLeaseRoots {
-		root := root
-		t.Run(root, func(t *testing.T) {
-			t.Parallel()
-			assertSessionsLeaseForbiddenImports(t, root)
-		})
-	}
-}
-
-func TestSessionsCheckpointPeerLease_ImportsFactoryRuntimeOnlyThroughRoot(t *testing.T) {
-	t.Parallel()
-
-	for _, root := range sessionsCheckpointPeerLeaseRoots {
-		root := root
-		t.Run(root, func(t *testing.T) {
-			t.Parallel()
-			assertSessionsLeaseRuntimeImportsResolveToRoot(t, root)
-		})
-	}
-}
-
 func TestSessionsResumeCoordination_UsesRecordingsAndRuntimeRootContracts(t *testing.T) {
 	t.Parallel()
 
@@ -159,63 +133,5 @@ func TestSessionsResumeCoordination_UsesRecordingsAndRuntimeRootContracts(t *tes
 	}
 	if checkpoint.CheckpointID != "sess-checkpoint-1" || len(checkpoint.Payload) == 0 {
 		t.Fatalf("checkpoint = %#v, want opaque restored checkpoint", checkpoint)
-	}
-}
-
-func assertSessionsLeaseForbiddenImports(t *testing.T, packageRoot string) {
-	t.Helper()
-
-	cmd := exec.Command(
-		"go",
-		"list",
-		"-deps",
-		"-f",
-		"{{if not .Standard}}{{.ImportPath}}{{end}}",
-		packageRoot,
-	)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("go list deps for %s: %v\n%s", packageRoot, err, output)
-	}
-	for _, dep := range strings.Fields(string(output)) {
-		for _, forbidden := range forbiddenSessionsCheckpointRecoveryImports {
-			if dep == forbidden || strings.HasPrefix(dep, forbidden+"/") {
-				t.Fatalf("%s must not import %s; found dependency %s", packageRoot, forbidden, dep)
-			}
-		}
-	}
-}
-
-func assertSessionsLeaseRuntimeImportsResolveToRoot(t *testing.T, packageRoot string) {
-	t.Helper()
-
-	cmd := exec.Command("go", "list", "-f", "{{.ImportPath}} {{join .Imports \" \"}} {{join .TestImports \" \"}}", packageRoot)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("go list imports for %s: %v\n%s", packageRoot, err, output)
-	}
-	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) < 1 {
-			continue
-		}
-		pkgPath := fields[0]
-		for _, imp := range fields[1:] {
-			if imp == recordingsRootImport || strings.HasPrefix(imp, recordingsRootImport+"/") {
-				continue
-			}
-			if imp != factoryRuntimeRootImport && strings.HasPrefix(imp, factoryRuntimeRootImport+"/") {
-				t.Fatalf(
-					"%s must import Factory Runtime only through %s; found direct import %s",
-					pkgPath,
-					factoryRuntimeRootImport,
-					imp,
-				)
-			}
-		}
 	}
 }

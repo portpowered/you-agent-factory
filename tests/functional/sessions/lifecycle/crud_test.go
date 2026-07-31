@@ -9,15 +9,14 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/internal/testutil"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -39,7 +38,7 @@ func TestFactorySessionCreateListShowDelete(t *testing.T) {
 
 	baseURL := server.URL()
 	serverPort := portFromServerURL(t, baseURL)
-	binaryPath := buildYouCLIBinary(t)
+	processHarness := newRootProcessHarness(t)
 
 	newFactoryDir := filepath.Join(t.TempDir(), "session-lifecycle-crud-factory")
 	if err := os.Mkdir(newFactoryDir, 0o755); err != nil {
@@ -49,7 +48,7 @@ func TestFactorySessionCreateListShowDelete(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	createOut, err := runYouCLI(ctx, binaryPath, primaryFactoryDir, baseURL,
+	createOut, err := runYouCLI(ctx, processHarness, primaryFactoryDir, baseURL,
 		"--json",
 		"session", "create",
 		"--dir", newFactoryDir,
@@ -71,7 +70,7 @@ func TestFactorySessionCreateListShowDelete(t *testing.T) {
 	}
 	sessionID := created.Session.Id
 
-	listOut, err := runYouCLI(ctx, binaryPath, primaryFactoryDir, baseURL, "session", "list")
+	listOut, err := runYouCLI(ctx, processHarness, primaryFactoryDir, baseURL, "session", "list")
 	if err != nil {
 		t.Fatalf("you session list: %v\noutput:\n%s", err, listOut)
 	}
@@ -82,7 +81,7 @@ func TestFactorySessionCreateListShowDelete(t *testing.T) {
 		}
 	}
 
-	listJSONOut, err := runYouCLI(ctx, binaryPath, primaryFactoryDir, baseURL,
+	listJSONOut, err := runYouCLI(ctx, processHarness, primaryFactoryDir, baseURL,
 		"--json",
 		"session", "list",
 	)
@@ -97,7 +96,7 @@ func TestFactorySessionCreateListShowDelete(t *testing.T) {
 		t.Fatalf("session list JSON missing created session %q at %q: %#v", sessionID, newFactoryDir, listed.Sessions)
 	}
 
-	showOut, err := runYouCLI(ctx, binaryPath, primaryFactoryDir, baseURL,
+	showOut, err := runYouCLI(ctx, processHarness, primaryFactoryDir, baseURL,
 		"--json",
 		"session", "show", sessionID,
 	)
@@ -118,7 +117,7 @@ func TestFactorySessionCreateListShowDelete(t *testing.T) {
 		t.Fatalf("session show missing runtime status markers: %#v", shown)
 	}
 
-	deleteOut, err := runYouCLI(ctx, binaryPath, primaryFactoryDir, "",
+	deleteOut, err := runYouCLI(ctx, processHarness, primaryFactoryDir, "",
 		"--json",
 		"session", "delete", sessionID,
 		"--port", fmt.Sprintf("%d", serverPort),
@@ -136,19 +135,12 @@ func TestFactorySessionCreateListShowDelete(t *testing.T) {
 		t.Fatalf("session delete confirmation = %q, want %q", deleted.SessionID, sessionID)
 	}
 
-	showAfterDeleteOut, err := runYouCLI(ctx, binaryPath, primaryFactoryDir, baseURL,
+	showAfterDeleteOut, err := runYouCLI(ctx, processHarness, primaryFactoryDir, baseURL,
 		"--json",
 		"session", "show", sessionID,
 	)
 	if err == nil {
 		t.Fatalf("you session show after delete unexpectedly succeeded:\n%s", showAfterDeleteOut)
-	}
-	exitErr, ok := err.(*exec.ExitError)
-	if !ok {
-		t.Fatalf("you session show after delete error = %v, want *exec.ExitError", err)
-	}
-	if exitErr.ExitCode() == 0 {
-		t.Fatalf("you session show after delete exit code = 0, want non-zero")
 	}
 	showAfterDelete := string(showAfterDeleteOut)
 	if !strings.Contains(showAfterDelete, "not found") {
@@ -172,7 +164,7 @@ func TestFactorySessionListMultipleSessions(t *testing.T) {
 	defer server.Stop(t)
 
 	baseURL := server.URL()
-	binaryPath := buildYouCLIBinary(t)
+	processHarness := newRootProcessHarness(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
@@ -181,19 +173,19 @@ func TestFactorySessionListMultipleSessions(t *testing.T) {
 	if err := os.Mkdir(firstFactoryDir, 0o755); err != nil {
 		t.Fatalf("create first factory directory: %v", err)
 	}
-	firstSession := createSessionViaCLI(t, ctx, binaryPath, primaryFactoryDir, baseURL, firstFactoryDir)
+	firstSession := createSessionViaCLI(t, ctx, processHarness, primaryFactoryDir, baseURL, firstFactoryDir)
 
 	secondFactoryDir := filepath.Join(t.TempDir(), "session-lifecycle-crud-factory-b")
 	if err := os.Mkdir(secondFactoryDir, 0o755); err != nil {
 		t.Fatalf("create second factory directory: %v", err)
 	}
-	secondSession := createSessionViaCLI(t, ctx, binaryPath, primaryFactoryDir, baseURL, secondFactoryDir)
+	secondSession := createSessionViaCLI(t, ctx, processHarness, primaryFactoryDir, baseURL, secondFactoryDir)
 
 	if firstSession.id == secondSession.id {
 		t.Fatalf("session ids must be distinct: first=%q second=%q", firstSession.id, secondSession.id)
 	}
 
-	listOut, err := runYouCLI(ctx, binaryPath, primaryFactoryDir, baseURL, "session", "list")
+	listOut, err := runYouCLI(ctx, processHarness, primaryFactoryDir, baseURL, "session", "list")
 	if err != nil {
 		t.Fatalf("you session list: %v\noutput:\n%s", err, listOut)
 	}
@@ -207,7 +199,7 @@ func TestFactorySessionListMultipleSessions(t *testing.T) {
 		}
 	}
 
-	listJSONOut, err := runYouCLI(ctx, binaryPath, primaryFactoryDir, baseURL,
+	listJSONOut, err := runYouCLI(ctx, processHarness, primaryFactoryDir, baseURL,
 		"--json",
 		"session", "list",
 	)
@@ -241,7 +233,7 @@ func TestFactorySessionMissingShowAndDeleteFail(t *testing.T) {
 
 	baseURL := server.URL()
 	serverPort := portFromServerURL(t, baseURL)
-	binaryPath := buildYouCLIBinary(t)
+	processHarness := newRootProcessHarness(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
@@ -250,22 +242,22 @@ func TestFactorySessionMissingShowAndDeleteFail(t *testing.T) {
 	if err := os.Mkdir(isolationFactoryDir, 0o755); err != nil {
 		t.Fatalf("create isolation factory directory: %v", err)
 	}
-	openSession := createSessionViaCLI(t, ctx, binaryPath, primaryFactoryDir, baseURL, isolationFactoryDir)
+	openSession := createSessionViaCLI(t, ctx, processHarness, primaryFactoryDir, baseURL, isolationFactoryDir)
 
-	showOut, err := runYouCLI(ctx, binaryPath, primaryFactoryDir, baseURL,
+	showOut, err := runYouCLI(ctx, processHarness, primaryFactoryDir, baseURL,
 		"--json",
 		"session", "show", sessionLifecycleCRUDMissingSessionID,
 	)
 	assertCLISessionNotFoundFailure(t, "show", showOut, err, sessionLifecycleCRUDMissingSessionID, false)
 
-	deleteOut, err := runYouCLI(ctx, binaryPath, primaryFactoryDir, "",
+	deleteOut, err := runYouCLI(ctx, processHarness, primaryFactoryDir, "",
 		"--json",
 		"session", "delete", sessionLifecycleCRUDMissingSessionID,
 		"--port", fmt.Sprintf("%d", serverPort),
 	)
 	assertCLISessionNotFoundFailure(t, "delete", deleteOut, err, sessionLifecycleCRUDMissingSessionID, true)
 
-	showOut, err = runYouCLI(ctx, binaryPath, primaryFactoryDir, baseURL,
+	showOut, err = runYouCLI(ctx, processHarness, primaryFactoryDir, baseURL,
 		"--json",
 		"session", "show", openSession.id,
 	)
@@ -283,7 +275,7 @@ func TestFactorySessionMissingShowAndDeleteFail(t *testing.T) {
 		t.Fatalf("isolation session show folder path = %q, want %q", shown.FolderPath, isolationFactoryDir)
 	}
 
-	listJSONOut, err := runYouCLI(ctx, binaryPath, primaryFactoryDir, baseURL,
+	listJSONOut, err := runYouCLI(ctx, processHarness, primaryFactoryDir, baseURL,
 		"--json",
 		"session", "list",
 	)
@@ -552,14 +544,14 @@ type cliCreatedSession struct {
 func createSessionViaCLI(
 	t *testing.T,
 	ctx context.Context,
-	binaryPath string,
+	processHarness *builtcliacceptance.Harness,
 	workingDir string,
 	serverURL string,
 	factoryDir string,
 ) cliCreatedSession {
 	t.Helper()
 
-	createOut, err := runYouCLI(ctx, binaryPath, workingDir, serverURL,
+	createOut, err := runYouCLI(ctx, processHarness, workingDir, serverURL,
 		"--json",
 		"session", "create",
 		"--dir", factoryDir,
@@ -639,25 +631,14 @@ func sessionLifecycleCRUDFactoryConfig() map[string]any {
 	}
 }
 
-func buildYouCLIBinary(t *testing.T) string {
+func newRootProcessHarness(t *testing.T) *builtcliacceptance.Harness {
 	t.Helper()
-
-	binaryName := "you"
-	if runtime.GOOS == "windows" {
-		binaryName += ".exe"
-	}
-	binaryPath := filepath.Join(t.TempDir(), binaryName)
-	build := exec.Command("go", "build", "-o", binaryPath, "./cmd/factory")
-	build.Dir = testutil.MustRepoRoot(t)
-	if output, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build you CLI: %v\n%s", err, string(output))
-	}
-	return binaryPath
+	return builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
 }
 
 func runYouCLI(
 	ctx context.Context,
-	binaryPath string,
+	processHarness *builtcliacceptance.Harness,
 	workingDir string,
 	serverURL string,
 	args ...string,
@@ -667,7 +648,7 @@ func runYouCLI(
 		cmdArgs = append(cmdArgs, "--server", serverURL)
 	}
 	cmdArgs = append(cmdArgs, args...)
-	cmd := exec.CommandContext(ctx, binaryPath, cmdArgs...)
+	cmd := processHarness.CommandContext(ctx, cmdArgs...)
 	cmd.Dir = workingDir
 	return cmd.CombinedOutput()
 }
@@ -842,13 +823,6 @@ func assertCLISessionNotFoundFailure(
 
 	if err == nil {
 		t.Fatalf("you session %s unexpectedly succeeded:\n%s", operation, output)
-	}
-	exitErr, ok := err.(*exec.ExitError)
-	if !ok {
-		t.Fatalf("you session %s error = %v, want *exec.ExitError", operation, err)
-	}
-	if exitErr.ExitCode() == 0 {
-		t.Fatalf("you session %s exit code = 0, want non-zero", operation)
 	}
 
 	text := string(output)

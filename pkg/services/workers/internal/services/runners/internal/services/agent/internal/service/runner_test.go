@@ -89,6 +89,14 @@ func TestExecuteCanonicalizesTimeoutAndUnknownFailureMessages(t *testing.T) {
 			wantMsg: agentTimeoutFailureMessage,
 		},
 		{
+			name: "timeout provider-specific message",
+			failure: providers.ExecuteFailure{
+				Kind:    providers.ExecuteFailureKindTimeout,
+				Message: "Cursor request timed out.",
+			},
+			wantMsg: agentTimeoutFailureMessage,
+		},
+		{
 			name: "unknown empty message",
 			failure: providers.ExecuteFailure{
 				Kind: providers.ExecuteFailureKindUnknown,
@@ -131,8 +139,8 @@ func TestExecuteFailurePreservesSessionRefAndBoundsMessages(t *testing.T) {
 		},
 	}
 	fake := &failingProvidersFake{failure: failure}
-	var published int
-	runner, err := New(fake, func(workers.ProgressFragment) { published++ })
+	var published []workers.ProgressFragment
+	runner, err := New(fake, func(fragment workers.ProgressFragment) { published = append(published, fragment) })
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -141,8 +149,11 @@ func TestExecuteFailurePreservesSessionRefAndBoundsMessages(t *testing.T) {
 	if err == nil {
 		t.Fatal("Execute() error = nil, want provider failure")
 	}
-	if published != 0 {
-		t.Fatalf("progress publications = %d, want none without diagnostics", published)
+	if len(published) != 1 {
+		t.Fatalf("progress publications = %d, want terminal failure", len(published))
+	}
+	if published[0].Kind != workers.FailedFragmentKind || published[0].Payload != longMessage[:failureMessageRuneLimit] {
+		t.Fatalf("terminal failure publication = %#v", published[0])
 	}
 	wantSession := &workers.ProviderSessionMetadata{
 		Provider: string(providers.IDCodex),
@@ -218,9 +229,9 @@ func baseAgentRequest() workers.RunnerExecutionRequest {
 		Dispatch: work.WorkDispatch{
 			DispatchID: "dispatch-agent-1",
 		},
-		RunnerID:    string(providers.IDCodex),
+		RunnerID:     string(providers.IDCodex),
 		SystemPrompt: "system",
-		UserMessage: "user",
+		UserMessage:  "user",
 	}
 }
 

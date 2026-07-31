@@ -1,6 +1,7 @@
 package baseline_test
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -71,6 +72,12 @@ func assertHelpMatchesFixture(t *testing.T, fixture string, args []string) {
 	}
 
 	if got == want {
+		return
+	}
+	if os.Getenv("UPDATE_CLI_BASELINES") == "1" {
+		if err := os.WriteFile(fixture, []byte(got), 0o600); err != nil {
+			t.Fatalf("update help baseline fixture: %v", err)
+		}
 		return
 	}
 

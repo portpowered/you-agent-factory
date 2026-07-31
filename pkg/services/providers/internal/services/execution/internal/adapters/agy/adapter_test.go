@@ -14,16 +14,16 @@ import (
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
 	agy "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy"
+	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty"
 	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
-	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
 )
 
 func TestAgyNewRegistrationBindsCanonicalIdentity(t *testing.T) {
 	t.Parallel()
 
 	registration := agy.NewRegistration(nil)
-	if registration.Provider != providers.IDAgy {
-		t.Fatalf("Provider = %q, want %q", registration.Provider, providers.IDAgy)
+	if registration.Provider != providers.IDAntigravity {
+		t.Fatalf("Provider = %q, want %q", registration.Provider, providers.IDAntigravity)
 	}
 	if registration.Attempt == nil {
 		t.Fatal("Attempt = nil, want unavailable attempt")
@@ -37,7 +37,7 @@ func TestAgyRootFailsClosedWhenEffectAbsent(t *testing.T) {
 	result, err := root.Execute(
 		t.Context(),
 		providers.ExecuteRequest{
-			Provider:  providers.IDAgy,
+			Provider:  providers.IDAntigravity,
 			AttemptID: "attempt-agy-unavailable",
 		},
 	)
@@ -63,7 +63,7 @@ func TestAgyBuiltInRegistrationFailsClosedWithoutEffect(t *testing.T) {
 	result, err := root.Execute(
 		t.Context(),
 		providers.ExecuteRequest{
-			Provider:  providers.IDAgy,
+			Provider:  providers.IDAntigravity,
 			AttemptID: "attempt-agy-built-in-unavailable",
 		},
 	)
@@ -84,12 +84,12 @@ func TestAgyRootPTYExecutionEndToEnd(t *testing.T) {
 	root := newAgyRoot(t, effect)
 
 	result, err := root.Execute(t.Context(), providers.ExecuteRequest{
-		Provider:         providers.IDAgy,
+		Provider:         providers.IDAntigravity,
 		AttemptID:        "dispatch-agy-e2e",
 		WorkingDirectory: ".",
 		UserMessage:      privatePrompt,
 		ResumeSession: &providers.SessionRef{
-			Provider: providers.IDAgy,
+			Provider: providers.IDAntigravity,
 			Kind:     providers.SessionIDKind,
 			ID:       "session-e2e",
 		},
@@ -122,7 +122,7 @@ func TestAgyRootRejectsUnusableFinalOutput(t *testing.T) {
 	root := newAgyRoot(t, effect)
 
 	result, err := root.Execute(t.Context(), providers.ExecuteRequest{
-		Provider:    providers.IDAgy,
+		Provider:    providers.IDAntigravity,
 		AttemptID:   "dispatch-agy-empty",
 		UserMessage: "hello",
 	})
@@ -138,7 +138,7 @@ func TestAgyRootPreservesRequestAndFinalStdout(t *testing.T) {
 	t.Parallel()
 
 	request := providers.ExecuteRequest{
-		Provider:         providers.IDAgy,
+		Provider:         providers.IDAntigravity,
 		AttemptID:        "attempt-agy-success",
 		Model:            "agy-model",
 		UserMessage:      "perform the accepted work",
@@ -257,11 +257,11 @@ func TestAgyRootTimeoutPreservesResumeSessionOnFailure(t *testing.T) {
 	root := newAgyRoot(t, effect)
 
 	result, err := root.Execute(t.Context(), providers.ExecuteRequest{
-		Provider:    providers.IDAgy,
+		Provider:    providers.IDAntigravity,
 		AttemptID:   "dispatch-agy-timeout-session",
 		UserMessage: "plan the goal",
 		ResumeSession: &providers.SessionRef{
-			Provider: providers.IDAgy,
+			Provider: providers.IDAntigravity,
 			Kind:     providers.SessionIDKind,
 			ID:       "session-on-failure",
 		},
@@ -304,11 +304,11 @@ func TestAgyRootMissingExecutablePreservesResumeSessionOnFailure(t *testing.T) {
 	root := newAgyRoot(t, effect)
 
 	_, err := root.Execute(t.Context(), providers.ExecuteRequest{
-		Provider:    providers.IDAgy,
+		Provider:    providers.IDAntigravity,
 		AttemptID:   "dispatch-agy-missing-session",
 		UserMessage: "hello",
 		ResumeSession: &providers.SessionRef{
-			Provider: providers.IDAgy,
+			Provider: providers.IDAntigravity,
 			Kind:     providers.SessionIDKind,
 			ID:       "session-on-setup-failure",
 		},
@@ -327,7 +327,7 @@ func TestAgyRootMissingExecutablePreservesResumeSessionOnFailure(t *testing.T) {
 
 func agyFailureRequest() providers.ExecuteRequest {
 	return providers.ExecuteRequest{
-		Provider:    providers.IDAgy,
+		Provider:    providers.IDAntigravity,
 		AttemptID:   "attempt-agy-failure",
 		UserMessage: "deterministic failure prompt",
 	}
@@ -347,8 +347,8 @@ func assertAgyDependencyFailure(
 		failure.Kind != providers.ExecuteFailureKindDependency {
 		t.Fatalf("Execute() error = %#v, want dependency failure", err)
 	}
-	if !strings.Contains(failure.Message, "Agy") {
-		t.Fatalf("failure message = %q, want Agy unavailable message", failure.Message)
+	if !strings.Contains(failure.Message, "Antigravity") {
+		t.Fatalf("failure message = %q, want Antigravity unavailable message", failure.Message)
 	}
 }
 

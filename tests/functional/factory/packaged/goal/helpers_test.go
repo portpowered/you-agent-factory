@@ -24,12 +24,12 @@ import (
 const (
 	packagedGoalFactoryName                 = "@you/goal"
 	packagedGoalPlanWorkstationName         = "plan-goal"
-	packagedGoalExecuteWorkstationName        = "execute-goal"
-	packagedGoalCheckWorkstationName          = "check-goal"
-	packagedGoalReviewWorkstationName         = "review-goal"
-	packagedGoalMockWorkerAcceptedSummary     = "mock worker accepted"
-	packagedGoalRejectThenCompleteSummary     = "finished after rejection"
-	packagedGoalContinueThenCompleteSummary   = "finished after continue"
+	packagedGoalExecuteWorkstationName      = "execute-goal"
+	packagedGoalCheckWorkstationName        = "check-goal"
+	packagedGoalReviewWorkstationName       = "review-goal"
+	packagedGoalMockWorkerAcceptedSummary   = "mock worker accepted"
+	packagedGoalRejectThenCompleteSummary   = "finished after rejection"
+	packagedGoalContinueThenCompleteSummary = "finished after continue"
 )
 
 func scaffoldPackagedGoalBuiltInFactory(t *testing.T) string {
@@ -369,10 +369,9 @@ func runPackagedGoalQuietCLIBatch(
 	args := []string{
 		"you", "run",
 		"--named", packagedGoalFactoryName,
-		"--with-mock-workers",
+		"--with-mock-workers=" + mockWorkersPath,
 		"--no-record",
 		"--quiet",
-		mockWorkersPath,
 		goalText,
 	}
 	inputs := support.FakeInputs(t.Context(), args)
@@ -405,10 +404,9 @@ func runPackagedGoalQuietCLIBatchWithTimeout(
 	args := []string{
 		"you", "run",
 		"--named", packagedGoalFactoryName,
-		"--with-mock-workers",
+		"--with-mock-workers=" + mockWorkersPath,
 		"--no-record",
 		"--quiet",
-		mockWorkersPath,
 		goalText,
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), timeout)

@@ -2,8 +2,8 @@ package wire
 
 import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	internalauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout"
 	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
+	internalauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout"
 	authoringlayoutwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/wire"
 	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
@@ -14,18 +14,18 @@ import (
 // construct the private authoring_layout subservice behind the CTR-DEF root
 // authoring slice.
 type AuthoringLayoutDependencies struct {
-	Validator            factorydefinitions.Validator
-	MapInput             factorydefinitions.FactoryLayoutPayloadMapper
-	Loader               *compilationloading.Loader
-	MaterializeFiles     factorydefinitions.PortableBundledFilesMaterializer
-	ValidateWrites       factorydefinitions.PortableBundledFileWritesValidator
-	PruneRemovedDocs     factorydefinitions.PortableBundledDocsPruner
-	CopySupportedFiles   factorydefinitions.PortableBundledFilesCopier
-	AuthoredWriterFS     factorydefinitions.AuthoredLayoutWriterFileSystem
-	EnsureInbox          factorydefinitions.InputInboxSentinelEnsurer
-	PersistenceFS        factorydefinitions.PersistenceFileSystem
-	NamedPaths           factorydefinitions.NamedPathResolver
-	Directories          factorydefinitions.DirectoryReplacementStore
+	Validator          factorydefinitions.Validator
+	MapInput           factorydefinitions.FactoryLayoutPayloadMapper
+	Loader             *compilationloading.Loader
+	MaterializeFiles   factorydefinitions.PortableBundledFilesMaterializer
+	ValidateWrites     factorydefinitions.PortableBundledFileWritesValidator
+	PruneRemovedDocs   factorydefinitions.PortableBundledDocsPruner
+	CopySupportedFiles factorydefinitions.PortableBundledFilesCopier
+	AuthoredWriterFS   factorydefinitions.AuthoredLayoutWriterFileSystem
+	EnsureInbox        factorydefinitions.InputInboxSentinelEnsurer
+	PersistenceFS      factorydefinitions.PersistenceFileSystem
+	NamedPaths         factorydefinitions.NamedPathResolver
+	Directories        factorydefinitions.DirectoryReplacementStore
 }
 
 // NewAuthoringLayoutService constructs the private authoring_layout subservice

@@ -1,4 +1,8 @@
 {
+  "description": {
+    "type": "LOCALIZABLE_ASSET",
+    "value": "Breaks a research question into bounded specialist investigations and synthesizes their findings."
+  },
   "examples": [
     {
       "args": {
@@ -32,9 +36,13 @@
           },
           {
             "kind": "STDIN"
+          },
+          {
+            "kind": "NAMED"
           }
         ],
         "description": "Research topic for the lead research workflow.",
+        "externalName": "to",
         "name": "topic",
         "required": true
       },
@@ -46,7 +54,7 @@
         ],
         "defaultValue": "2",
         "description": "Investigation breadth from 1 (focused) through 3 (broad). Defaults to 2.",
-        "externalName": "researchDepth",
+        "externalName": "research-depth",
         "name": "researchDepth",
         "typeHint": "STRING"
       },
@@ -58,7 +66,7 @@
         ],
         "defaultValue": "2",
         "description": "Maximum specialist child agents for this invocation, from 0 through 2. Defaults to 2.",
-        "externalName": "maxSubagents",
+        "externalName": "max-subagents",
         "name": "maxSubagents",
         "typeHint": "STRING"
       },
@@ -68,9 +76,8 @@
             "kind": "NAMED"
           }
         ],
-        "defaultValue": "CODEX",
-        "description": "Approved provider for specialist research execution. Defaults to CODEX.",
-        "externalName": "model-provider",
+        "description": "Optional provider for specialist research execution; omitted values use operator defaults.",
+        "externalName": "research-model-provider",
         "name": "modelProvider",
         "typeHint": "STRING"
       },
@@ -80,9 +87,8 @@
             "kind": "NAMED"
           }
         ],
-        "defaultValue": "gpt-5",
-        "description": "Approved model for specialist research execution. Defaults to gpt-5.",
-        "externalName": "model",
+        "description": "Optional model for specialist research execution; omitted values use operator defaults.",
+        "externalName": "research-model",
         "name": "model",
         "typeHint": "STRING"
       },
@@ -114,20 +120,13 @@
             "type": "integer"
           },
           "model": {
-            "default": "gpt-5",
-            "description": "The requested specialist execution model, subject to package policy.",
-            "enum": [
-              "gpt-5"
-            ],
+            "description": "Optional specialist execution model.",
             "minLength": 1,
             "type": "string"
           },
           "modelProvider": {
-            "default": "CODEX",
-            "description": "The package's approved specialist execution provider.",
-            "enum": [
-              "CODEX"
-            ],
+            "description": "Optional specialist execution provider.",
+            "minLength": 1,
             "type": "string"
           },
           "reasoningEffort": {
@@ -161,34 +160,25 @@
         "allowConnectors": false,
         "allowDangerFullAccess": false,
         "allowNetwork": false,
-        "allowedModels": [
-          "gpt-5"
-        ],
         "allowedReasoningEfforts": [
           "medium"
         ],
         "concurrency": 2,
-        "maxAgents": 3,
+        "maxAgents": 5,
         "maxDepth": 1,
         "maxRetries": 0,
         "mode": "READ_ONLY",
         "writableRoots": []
       },
-      "sourceRef": "scripts/deep-research.workflow.js"
+      "inlineSource": {
+        "encoding": "utf-8",
+        "inline": "/* @you-factory-meta\n{\n  \"name\": \"@you/deep-research\",\n  \"version\": 1,\n  \"id\": \"builtin-deep-research\",\n  \"description\": {\n    \"type\": \"LOCALIZABLE_ASSET\",\n    \"value\": \"Breaks a research question into bounded specialist investigations and synthesizes their findings.\"\n  },\n  \"invocationSignature\": {\n    \"parameters\": [\n      {\n        \"name\": \"topic\",\n        \"description\": \"Research topic for the lead research workflow.\",\n        \"externalName\": \"to\",\n        \"required\": true,\n        \"bindings\": [\n          {\n            \"kind\": \"POSITIONAL\",\n            \"position\": 1\n          },\n          {\n            \"kind\": \"STDIN\"\n          },\n          {\n            \"kind\": \"NAMED\"\n          }\n        ]\n      },\n      {\n        \"name\": \"researchDepth\",\n        \"description\": \"Investigation breadth from 1 (focused) through 3 (broad). Defaults to 2.\",\n        \"externalName\": \"research-depth\",\n        \"typeHint\": \"STRING\",\n        \"defaultValue\": \"2\",\n        \"bindings\": [\n          {\n            \"kind\": \"NAMED\"\n          }\n        ]\n      },\n      {\n        \"name\": \"maxSubagents\",\n        \"description\": \"Maximum specialist child agents for this invocation, from 0 through 2. Defaults to 2.\",\n        \"externalName\": \"max-subagents\",\n        \"typeHint\": \"STRING\",\n        \"defaultValue\": \"2\",\n        \"bindings\": [\n          {\n            \"kind\": \"NAMED\"\n          }\n        ]\n      },\n      {\n        \"name\": \"modelProvider\",\n        \"description\": \"Optional provider for specialist research execution; omitted values use operator defaults.\",\n        \"externalName\": \"research-model-provider\",\n        \"typeHint\": \"STRING\",\n        \"bindings\": [\n          {\n            \"kind\": \"NAMED\"\n          }\n        ]\n      },\n      {\n        \"name\": \"model\",\n        \"description\": \"Optional model for specialist research execution; omitted values use operator defaults.\",\n        \"externalName\": \"research-model\",\n        \"typeHint\": \"STRING\",\n        \"bindings\": [\n          {\n            \"kind\": \"NAMED\"\n          }\n        ]\n      },\n      {\n        \"name\": \"reasoningEffort\",\n        \"description\": \"Approved reasoning effort for specialist research execution. Defaults to medium.\",\n        \"externalName\": \"reasoning-effort\",\n        \"typeHint\": \"STRING\",\n        \"defaultValue\": \"medium\",\n        \"bindings\": [\n          {\n            \"kind\": \"NAMED\"\n          }\n        ]\n      }\n    ]\n  },\n  \"examples\": [\n    {\n      \"name\": \"positional-topic\",\n      \"description\": {\n        \"type\": \"LOCALIZABLE_ASSET\",\n        \"value\": \"Compare two workflow architecture approaches.\"\n      },\n      \"args\": {\n        \"topic\": \"Compare event sourcing and state machines for workflow orchestration\"\n      }\n    },\n    {\n      \"name\": \"stdin-topic\",\n      \"description\": {\n        \"type\": \"LOCALIZABLE_ASSET\",\n        \"value\": \"Research retrieval-augmented generation trade-offs.\"\n      },\n      \"args\": {\n        \"topic\": \"What are the trade-offs of retrieval-augmented generation?\"\n      }\n    }\n  ],\n  \"argsSchema\": {\n    \"type\": \"object\",\n    \"required\": [\n      \"topic\"\n    ],\n    \"properties\": {\n      \"topic\": {\n        \"type\": \"string\",\n        \"minLength\": 1,\n        \"description\": \"The subject to investigate.\"\n      },\n      \"researchDepth\": {\n        \"type\": \"integer\",\n        \"minimum\": 1,\n        \"maximum\": 3,\n        \"default\": 2,\n        \"description\": \"Investigation breadth: 1 focused, 2 balanced, or 3 broad.\"\n      },\n      \"maxSubagents\": {\n        \"type\": \"integer\",\n        \"minimum\": 0,\n        \"maximum\": 2,\n        \"default\": 2,\n        \"description\": \"Per-invocation specialist cap within the factory policy ceiling.\"\n      },\n      \"modelProvider\": {\n        \"type\": \"string\",\n        \"minLength\": 1,\n        \"description\": \"Optional specialist execution provider.\"\n      },\n      \"model\": {\n        \"type\": \"string\",\n        \"minLength\": 1,\n        \"description\": \"Optional specialist execution model.\"\n      },\n      \"reasoningEffort\": {\n        \"type\": \"string\",\n        \"enum\": [\n          \"medium\"\n        ],\n        \"minLength\": 1,\n        \"default\": \"medium\",\n        \"description\": \"The requested specialist reasoning effort, subject to package policy.\"\n      }\n    },\n    \"additionalProperties\": false\n  },\n  \"defaultPolicy\": {\n    \"mode\": \"READ_ONLY\",\n    \"maxAgents\": 5,\n    \"concurrency\": 2,\n    \"maxDepth\": 1,\n    \"maxRetries\": 0,\n    \"allowNetwork\": false,\n    \"allowConnectors\": false,\n    \"allowDangerFullAccess\": false,\n    \"writableRoots\": [],\n    \"allowedReasoningEfforts\": [\n      \"medium\"\n    ]\n  }\n}\n*/\n\nreturn (async function () {\n  phase(\"lead-research\");\n\n  const topic = args.topic;\n  const researchDepth = args.researchDepth === undefined ? 2 : args.researchDepth;\n  const maxSubagents = args.maxSubagents === undefined ? 2 : args.maxSubagents;\n  const modelProvider = args.modelProvider;\n  const model = args.model;\n  const reasoningEffort = args.reasoningEffort === undefined ? \"medium\" : args.reasoningEffort;\n  // Longer topics carry enough scope to benefit from the two complementary\n  // specialist roles while short questions remain a lead-only investigation.\n  const needsSpecialists = args.topic.length \u003e= 40;\n  const specialistCount = needsSpecialists ? Math.min(maxSubagents, 2) : 0;\n  // Reserve one bounded retry for every specialist plus the lead synthesis.\n  // Provider-backed workers can fail transiently even when the same request is\n  // valid, and a research workflow should degrade explicitly instead of losing\n  // all otherwise useful findings.\n  const requiredCalls = (specialistCount * 2) + 1;\n  const budget = workflow.budget();\n  if (requiredCalls \u003e budget.maxAgents) {\n    throw \"deep research requires \" + requiredCalls + \" agent calls but maxAgents is \" + budget.maxAgents;\n  }\n\n  let specialistFindings = [];\n  if (needsSpecialists \u0026\u0026 maxSubagents \u003e 0) {\n    phase(\"specialist-research\");\n    const specialistRequests = [\n      {\n        label: \"research-specialist-technical\",\n        prompt: \"You are an independent technical research specialist with zero prior context. Investigate the mechanisms, terminology, primary evidence, implementation constraints, and disputed claims for the complete topic below at breadth level \" + researchDepth + \". Distinguish verified facts from inference, explain source quality, and return a standalone evidence summary for a lead researcher.\\n\\nTopic:\\n\" + topic,\n        modelProvider: modelProvider || \"\",\n        model: model || \"\",\n        reasoningEffort: reasoningEffort,\n        skipPermissions: true,\n      },\n      {\n        label: \"research-specialist-tradeoffs\",\n        prompt: \"You are an independent practical research specialist with zero prior context. Investigate real-world trade-offs, alternatives, risks, failure modes, counterarguments, and decision criteria for the complete topic below at breadth level \" + researchDepth + \". Distinguish verified facts from inference and return a standalone evidence summary for a lead researcher.\\n\\nTopic:\\n\" + topic,\n        modelProvider: modelProvider || \"\",\n        model: model || \"\",\n        reasoningEffort: reasoningEffort,\n        skipPermissions: true,\n      },\n    ].slice(0, maxSubagents);\n    specialistFindings = await parallel(specialistRequests);\n    for (let index = 0; index \u003c specialistFindings.length; index += 1) {\n      if (specialistFindings[index].status !== \"COMPLETED\") {\n        const retryRequest = specialistRequests[index];\n        specialistFindings[index] = await agent.run({\n          label: retryRequest.label + \"-retry\",\n          prompt: retryRequest.prompt + \"\\n\\nThis is a bounded retry after the first provider attempt failed. Return the standalone evidence summary directly.\",\n          modelProvider: retryRequest.modelProvider,\n          model: retryRequest.model,\n          reasoningEffort: retryRequest.reasoningEffort,\n          skipPermissions: true,\n        });\n      }\n    }\n  }\n\n  phase(\"lead-synthesis\");\n  const specialistStatuses = specialistFindings.map(function (finding, index) {\n    return {\n      role: index === 0 ? \"technical\" : \"tradeoffs\",\n      status: finding.status,\n      diagnostic: finding.status === \"COMPLETED\" ? \"\" : (finding.diagnostic || \"specialist evidence unavailable after bounded retry\"),\n    };\n  });\n  const specialistEvidence = specialistFindings.length === 0\n    ? \"No specialist findings were requested.\"\n    : specialistFindings.map(function (finding, index) {\n        const role = index === 0 ? \"technical\" : \"tradeoffs\";\n        if (finding.status === \"COMPLETED\") {\n          return \"[\" + role + \" specialist]\\n\" + finding.output.text;\n        }\n        return \"[\" + role + \" specialist unavailable]\\n\" + (finding.diagnostic || \"provider execution failed after bounded retry\");\n      }).join(\"\\n\\n\");\n  const leadSynthesis = await agent.run({\n    label: \"lead-research-synthesis\",\n    prompt: \"You are the lead researcher with no shared conversation. Produce a complete answer to the topic below at breadth level \" + researchDepth + \". Independently check the question's scope and terminology, integrate every relevant specialist finding, resolve or clearly preserve disagreements, distinguish evidence from inference, identify meaningful limitations, and make the response useful without access to these intermediate notes.\\n\\nTopic:\\n\" + topic +\n      \"\\n\\nCompleted specialist evidence:\\n\" + specialistEvidence,\n    modelProvider: modelProvider || \"\",\n    model: model || \"\",\n    reasoningEffort: reasoningEffort,\n    skipPermissions: true,\n  });\n  if (leadSynthesis.status !== \"COMPLETED\") {\n    throw \"lead research synthesis failed\";\n  }\n\n  return {\n    topic: topic,\n    role: \"lead-researcher\",\n    researchDepth: researchDepth,\n    maxSubagents: maxSubagents,\n    execution: {\n      modelProvider: modelProvider,\n      model: model,\n      reasoningEffort: reasoningEffort,\n    },\n    synthesis: {\n      leadResult: leadSynthesis.output,\n      specialistStatuses: specialistStatuses,\n    },\n  };\n})();\n"
+      },
+      "metadata": {
+        "name": "@you/deep-research",
+        "version": "1"
+      }
     },
     "kind": "JAVASCRIPT"
-  },
-  "supportingFiles": {
-    "bundledFiles": [
-      {
-        "content": {
-          "encoding": "utf-8",
-          "inline": "return (async function () {\n  phase(\"lead-research\");\n\n  const topic = args.topic;\n  const researchDepth = args.researchDepth === undefined ? 2 : args.researchDepth;\n  const maxSubagents = args.maxSubagents === undefined ? 2 : args.maxSubagents;\n  const modelProvider = args.modelProvider === undefined ? \"CODEX\" : args.modelProvider;\n  const model = args.model === undefined ? \"gpt-5\" : args.model;\n  const reasoningEffort = args.reasoningEffort === undefined ? \"medium\" : args.reasoningEffort;\n  // Longer topics carry enough scope to benefit from the two complementary\n  // specialist roles while short questions remain a lead-only investigation.\n  const needsSpecialists = args.topic.length \u003e= 40;\n\n  let specialistFindings = [];\n  if (needsSpecialists \u0026\u0026 maxSubagents \u003e 0) {\n    phase(\"specialist-research\");\n    specialistFindings = await parallel([\n      {\n        label: \"research-specialist-technical\",\n        prompt: \"Investigate technical mechanisms and supporting evidence for the research topic at breadth level \" + researchDepth + \".\",\n        modelProvider: modelProvider,\n        model: model,\n        reasoningEffort: reasoningEffort,\n      },\n      {\n        label: \"research-specialist-tradeoffs\",\n        prompt: \"Investigate practical trade-offs, risks, and counterarguments for the research topic at breadth level \" + researchDepth + \".\",\n        modelProvider: modelProvider,\n        model: model,\n        reasoningEffort: reasoningEffort,\n      },\n    ].slice(0, maxSubagents));\n  }\n\n  phase(\"lead-synthesis\");\n  const specialistEvidence = specialistFindings.length === 0\n    ? \"No specialist findings were requested.\"\n    : specialistFindings[0].output.text + (specialistFindings.length \u003e 1 ? \"\\n\" + specialistFindings[1].output.text : \"\");\n  const leadSynthesis = await agent.run({\n    label: \"lead-research-synthesis\",\n    prompt: \"You are the lead researcher. Investigate and synthesize a coherent answer for the topic: \" + topic + \". \" +\n      \"Use breadth level \" + researchDepth + \". Incorporate these completed specialist findings when present: \" +\n      specialistEvidence,\n    modelProvider: modelProvider,\n    model: model,\n    reasoningEffort: reasoningEffort,\n  });\n\n  return {\n    topic: topic,\n    role: \"lead-researcher\",\n    researchDepth: researchDepth,\n    maxSubagents: maxSubagents,\n    execution: {\n      modelProvider: modelProvider,\n      model: model,\n      reasoningEffort: reasoningEffort,\n    },\n    synthesis: {\n      leadResult: leadSynthesis.output,\n    },\n  };\n})();\n"
-        },
-        "id": "factory/scripts/deep-research.workflow.js",
-        "targetPath": "factory/scripts/deep-research.workflow.js",
-        "type": "SCRIPT"
-      }
-    ]
   }
 }

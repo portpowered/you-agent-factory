@@ -16,7 +16,7 @@ export function DashboardHeaderColorPaletteControls({
   return (
     <fieldset
       aria-label={headerMessages.globalHeaderActionsLabel}
-      className="flex shrink-0 items-center gap-1.5 self-end pr-2"
+      className="flex shrink-0 items-center gap-1.5 self-center"
     >
       <DashboardPaletteMenu locale={locale} />
       <DashboardLocaleMenu locale={locale} onChangeLocale={onChangeLocale} />

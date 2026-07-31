@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	mcpoperatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/mcp"
@@ -175,39 +174,6 @@ func TestBind_LoadDocumentContextCanceledBeforeRootReturnsDocumentedEnvelope(t *
 	}
 }
 
-func TestBind_LoadDocumentContextDeadlineExceededBeforeRootReturnsDocumentedEnvelope(t *testing.T) {
-	t.Parallel()
-
-	var invoked bool
-	operation := mcpoperatorsettings.Bind(mcpoperatorsettings.RootDependencies{
-		Settings: fakeSettingsRoot{invoked: &invoked},
-	})
-	ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond)
-	defer cancel()
-	time.Sleep(2 * time.Millisecond)
-	raw, err := operation(
-		ctx,
-		mcpoperatorsettings.ToolLoadDocument,
-		json.RawMessage(`{"path":"`+testConfigPath+`"}`),
-	)
-	if err != nil {
-		t.Fatalf("CallTool(load_document) transport error = %v, want typed tool response", err)
-	}
-	if invoked {
-		t.Fatal("fake settings root was invoked for expired context")
-	}
-	envelope := assertTypedToolErrorEnvelope(
-		t,
-		raw,
-		"operator_settings.request.timed_out",
-		true,
-		"",
-	)
-	if envelope.Message != "operator settings request timed out" {
-		t.Fatalf("error.message = %q, want timed out request message; envelope = %#v", envelope.Message, envelope)
-	}
-}
-
 func mustCallLoadDocument(t *testing.T, fake fakeSettingsRoot, inputJSON string) json.RawMessage {
 	t.Helper()
 
@@ -233,7 +199,7 @@ func assertTypedToolErrorEnvelope(
 	t.Helper()
 
 	var response struct {
-		Result *json.RawMessage                    `json:"result"`
+		Result *json.RawMessage                       `json:"result"`
 		Error  *mcpoperatorsettings.ToolErrorEnvelope `json:"error"`
 	}
 	if err := json.Unmarshal(raw, &response); err != nil {

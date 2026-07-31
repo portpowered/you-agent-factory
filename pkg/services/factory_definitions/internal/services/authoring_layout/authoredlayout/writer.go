@@ -490,12 +490,14 @@ func workstationHasRuntimeFields(
 ) bool {
 	return strings.TrimSpace(workstation.Type) != "" ||
 		workstation.Runner != "" ||
-		workstation.OpenCodeAgent != "" ||
 		workstation.PromptFile != "" ||
 		workstation.OutputSchema != "" ||
 		workstation.Timeout != "" ||
 		workstation.Limits.MaxRetries != 0 ||
 		workstation.Limits.MaxExecutionTime != "" ||
+		workstation.Limits.MaxGeneratedWorkItems != 0 ||
+		workstation.Limits.MaxGeneratedWorkItemsArgument != "" ||
+		workstation.Limits.MaxGeneratedWorkItemsArgumentOffset != 0 ||
 		workstation.Body != "" ||
 		workstation.PromptTemplate != "" ||
 		workstation.WorkingDirectory != "" ||

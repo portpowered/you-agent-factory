@@ -1,6 +1,7 @@
 package mcp_test
 
 import (
+	"net/http"
 	"testing"
 	"time"
 
@@ -94,10 +95,10 @@ func TestMCPPauseResumeAndCancelTargetCanonicalFactorySession(t *testing.T) {
 	closeMCPServer(t, nil, serveErr)
 }
 
-// TestMCPControlledSessionIsReadableThroughAPI proves an MCP-controlled Factory
-// Session remains readable through the public API with the same session id and
-// shared Factory Session vocabulary after MCP start and lifecycle interaction.
-func TestMCPControlledSessionIsReadableThroughAPI(t *testing.T) {
+// TestMCPControlledSessionIsIsolatedFromAnotherAPIHostByDefault proves the
+// default in-memory persistence policy does not leak an MCP host's session
+// into a separately constructed API host.
+func TestMCPControlledSessionIsIsolatedFromAnotherAPIHostByDefault(t *testing.T) {
 	projectRoot := setupBusyLoopWorkflowFixture(t)
 	apiServer := startFunctionalAPIServerForMCPControls(t, projectRoot)
 	baseURL := apiServer.URL()
@@ -120,8 +121,7 @@ func TestMCPControlledSessionIsReadableThroughAPI(t *testing.T) {
 		t.Fatalf("mcp read status = %q, want PAUSED", mcpRead.Status)
 	}
 
-	apiRead := readAPIFactorySessionDurableReadModel(t, baseURL, sessionID)
-	assertAPIReadMatchesMCPSharedFactorySessionVocabulary(t, mcpRead, apiRead)
+	assertAPIFactorySessionNotFound(t, baseURL, sessionID)
 
 	shutdown()
 	closeMCPServer(t, nil, serveErr)
@@ -260,11 +260,10 @@ func TestMCPAsyncFactorySessionCanBePolledToFailure(t *testing.T) {
 	closeMCPServer(t, nil, serveErr)
 }
 
-// TestMCPAsyncCancellationIsVisibleThroughAPI proves MCP cancel on an async
-// Factory Session leaves a cancelled lifecycle status visible through the public
-// API for the same session id so operators can confirm cancellation outside the
-// MCP host.
-func TestMCPAsyncCancellationIsVisibleThroughAPI(t *testing.T) {
+// TestMCPAsyncCancellationIsIsolatedFromAnotherAPIHostByDefault proves
+// cancellation remains visible in the owning MCP host without creating
+// project-local state for a separately constructed API host.
+func TestMCPAsyncCancellationIsIsolatedFromAnotherAPIHostByDefault(t *testing.T) {
 	projectRoot := setupBusyLoopWorkflowFixture(t)
 	apiServer := startFunctionalAPIServerForMCPControls(t, projectRoot)
 	baseURL := apiServer.URL()
@@ -289,23 +288,22 @@ func TestMCPAsyncCancellationIsVisibleThroughAPI(t *testing.T) {
 	)
 	assertCanonicalSessionID(t, mcpRead.SessionId, sessionID, "mcp cancel read")
 
-	apiRead := waitForAPIFactorySessionStatus(
-		t,
-		baseURL,
-		sessionID,
-		factoryapi.FactorySessionDurableLifecycleStatusCanceled,
-		8*time.Second,
-	)
-	assertCanonicalSessionID(t, apiRead.SessionId, sessionID, "api cancel read")
-	if mcpRead.Status != apiRead.Status {
-		t.Fatalf("mcp status = %q, api status = %q, want matching shared CANCELED status", mcpRead.Status, apiRead.Status)
-	}
-	if apiRead.OrchestratorKind != factoryapi.JAVASCRIPT {
-		t.Fatalf("api orchestratorKind = %q, want %q", apiRead.OrchestratorKind, factoryapi.JAVASCRIPT)
-	}
+	assertAPIFactorySessionNotFound(t, baseURL, sessionID)
 
 	shutdown()
 	closeMCPServer(t, nil, serveErr)
+}
+
+func assertAPIFactorySessionNotFound(t *testing.T, baseURL, sessionID string) {
+	t.Helper()
+	response, err := http.Get(baseURL + "/factory-sessions/" + sessionID)
+	if err != nil {
+		t.Fatalf("GET isolated API Factory Session: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusNotFound {
+		t.Fatalf("GET isolated API Factory Session status = %d, want 404", response.StatusCode)
+	}
 }
 
 func toolNamesFromListResult(t *testing.T, result map[string]any) []string {

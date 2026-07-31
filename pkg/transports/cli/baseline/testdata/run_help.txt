@@ -6,7 +6,7 @@ Default execution uses batch mode and exits after idle completion. Use --continu
 
 Use --named with a persisted canonical factory name to resolve project-local factories before global built-ins under ~/.you-agent-factory/factories. Built-ins materialize lazily into that global root on first use and stay editable on disk. Use --factory with a JSON, YAML, or JavaScript Factory source. Supported selectors are --dir, --named, and --factory. Selected Factories can define custom invocation arguments; run you run --named <factory> --help or you run --factory <factory.yaml> --help to inspect signature-backed usage while keeping existing run-level flags available. In Factory invocation mode, provide either trailing positional text or piped stdin text, or use signature-defined file, repeated, and defaulted inputs; conflicting positional text and stdin return INVOCATION_INPUT_SOURCE_CONFLICT. Named-Factory selection lives in you docs authoring-factories; invocation behavior lives in you docs run and you docs sessions; model choices live in you docs models.
 
-Supported one-shot Factory invocations use primary-result-only stdout by default. Global --json selects one InvocationResponse; --output response-stream selects ordered human Factory Events; combining global --json with response-stream selects NDJSON. Quiet conflicts with global JSON and explicit --output. Failures use one standard ErrorResponse on stderr. Runtime logs are structured JSON rolling files grouped by UTC start date under the selected log root; environment details are record-channel diagnostics only, and system logs include command stdout/stderr only on command failures. Runtime metrics are a separate structured JSONL operational channel with independent rolling files.
+The common ACP workflow is `you run --named @you/goal --provider cursor-acp --model auto "Describe the task"`. Run-level --provider selects modelProvider and --model selects an optional model within that provider. Supported one-shot text invocations use the ordered response stream by default; use --output primary for final-result-only stdout. Global --json with response-stream selects NDJSON. Quiet conflicts with global JSON and explicit --output. Failures use one standard ErrorResponse on stderr. Runtime logs are structured JSON rolling files grouped by UTC start date under the selected log root; environment details are record-channel diagnostics only, and system logs include command stdout/stderr only on command failures. Runtime metrics are a separate structured JSONL operational channel with independent rolling files.
 
 Usage:
   you run [flags]
@@ -35,22 +35,14 @@ Flags:
       --dir string                                                                   factory base directory (default "factory")
       --factory string                                                               path to a JSON or YAML Factory file, or an unambiguous Factory directory, for portable one-shot runs; use positional text or piped stdin for the invocation input
   -h, --help                                                                         help for run
+      --model string                                                                 override the optional model selected within the provider for this run
   -a, --named string                                                                 canonical persisted factory name resolved from ./factory before ~/.you-agent-factory/factories; built-ins materialize there on first use and remain editable
       --no-record                                                                    disable the default replay artifact for this invocation
-      --output string                                                                invocation stdout mode: primary (default) or response-stream for canonical Factory Events on supported live or replayed one-shot factory runs
+      --output string                                                                invocation stdout mode: response-stream (default for one-shot text invocations) or primary for final-result-only output
+      --provider string                                                              override the worker modelProvider for this run (for example cursor-acp)
       --quiet                                                                        suppress dashboard output for quiet or CI-oriented runs
       --record string                                                                path to write a replay artifact for this run; replay artifacts are sensitive, and default live runs record automatically unless --no-record is used
       --replay string                                                                path to replay an existing sensitive replay artifact
-      --runtime-log-compress                                                         compress rotated runtime log files
-      --runtime-log-dir string                                                       root directory for structured runtime log files grouped by UTC start date (default: ~/.you-agent-factory/logs)
-      --runtime-log-max-age-days int                                                 maximum days to retain rotated runtime log files (default 30)
-      --runtime-log-max-backups int                                                  maximum rotated runtime log files to retain (default 20)
-      --runtime-log-max-size-mb int                                                  rotate each runtime log file after this many megabytes (default 100)
-      --runtime-metrics-compress                                                     compress rotated runtime metrics files
-      --runtime-metrics-dir string                                                   root directory for structured runtime metrics JSONL files grouped by UTC start date (default: ~/.you-agent-factory/metrics)
-      --runtime-metrics-max-age-days int                                             maximum days to retain rotated runtime metrics files (default 30)
-      --runtime-metrics-max-backups int                                              maximum rotated runtime metrics files to retain (default 20)
-      --runtime-metrics-max-size-mb int                                              rotate each runtime metrics file after this many megabytes (default 100)
       --skip-permissions                                                             request an invocation-only unsafe permission bypass for agent workers without changing persisted factory configuration
       --with-mock-workers string[="__agent_factory_default_mock_workers_config__"]   enable mock-worker execution with an optional mock-workers JSON config path
       --with-server                                                                  serve the Current Factory API for the lifetime of this run without opening a browser
@@ -58,9 +50,7 @@ Flags:
       --work string                                                                  path to initial FACTORY_REQUEST_BATCH JSON file to submit
 
 Global Flags:
-  -d, --debug                                  emit lower-level command diagnostics where supported (implies --verbose)
-      --default-worker-model string            default worker model for model workers with omitted model
-      --default-worker-model-provider string   default worker model provider for model workers with omitted modelProvider (accepted canonical providers: CLAUDE, CODEX, CURSOR, GEMINI, KIRO, OPENCODE, PI, AGY; accepted aliases include codex, claude, gemini, kiro-cli, opencode, pi, agy, agent, cursor, anthropic, and openai; DEFAULT resolves through lower-precedence concrete provider)
-      --json                                   emit structured JSON on stdout for supported commands; diagnostics remain on stderr
-      --server string                          factory API base URI (http:// or https://); HTTP client commands target this URI, while you server and server-enabled runs bind its loopback host and port (default "http://localhost:7437")
-  -v, --verbose                                emit concise command diagnostics to stderr
+  -d, --debug           emit lower-level command diagnostics where supported (implies --verbose)
+      --json            emit structured JSON on stdout for supported commands; diagnostics remain on stderr
+      --server string   factory API base URI (http:// or https://); HTTP client commands target this URI, while you server and server-enabled runs bind its loopback host and port (default "http://localhost:7437")
+  -v, --verbose         emit concise command diagnostics to stderr

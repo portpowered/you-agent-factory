@@ -12,6 +12,7 @@ import (
 type workingDirectoryContextKey struct{}
 type stdinTTYContextKey struct{}
 type stdoutTTYContextKey struct{}
+type stderrTTYContextKey struct{}
 
 func WithWorkingDirectory(ctx context.Context, dir string) context.Context {
 	return context.WithValue(ctx, workingDirectoryContextKey{}, dir)
@@ -37,6 +38,15 @@ func WithStdoutTTY(ctx context.Context, isTTY bool) context.Context {
 
 func StdoutIsTTY(ctx context.Context) bool {
 	value, _ := ctx.Value(stdoutTTYContextKey{}).(bool)
+	return value
+}
+
+func WithStderrTTY(ctx context.Context, isTTY bool) context.Context {
+	return context.WithValue(ctx, stderrTTYContextKey{}, isTTY)
+}
+
+func StderrIsTTY(ctx context.Context) bool {
+	value, _ := ctx.Value(stderrTTYContextKey{}).(bool)
 	return value
 }
 

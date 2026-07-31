@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { Button } from "@you-agent-factory/components/primitives";
+import { createFactoryGraphSource } from "@you-agent-factory/factory-graph";
 import { useEffect, useState } from "react";
 import { expect, within } from "storybook/test";
 
@@ -71,7 +72,14 @@ const meta = {
         workStateCount: (count: number) => `${count} Work`,
         workStateCountUnavailable: "Work unavailable",
       },
-      state: { projection: createFactoryTopologyProjection(), status: "ready" },
+      state: {
+        source: createFactoryGraphSource({
+          factory: { name: "Topology fixture" },
+          runtime: createFactoryTopologyProjection(),
+          selectedTick: 2,
+        }),
+        status: "ready",
+      },
     },
     workProgress: {
       formatNumber: String,

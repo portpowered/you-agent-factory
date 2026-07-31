@@ -35,6 +35,13 @@ const (
 	PackagedReviewFactoryName            = "@you/review"
 	PackagedReviewExecuteWorkstationName = "execute-review-work"
 	PackagedReviewWorkstationName        = "review-review-work"
+	PackagedTournamentFactoryName        = "@you/tournament"
+	PackagedSpawnFactoryName             = "@you/spawn"
+	PackagedLoopFactoryName              = "@you/loop"
+	PackagedPlanExecuteFactoryName       = "@you/plan-execute"
+	PackagedPlanParallelFactoryName      = "@you/plan-parallel"
+	PackagedClassifyFactoryName          = "@you/classify"
+	PackagedFullFlowFactoryName          = "@you/full-flow"
 )
 
 // CustomerVisibleFactoryName returns the customer-facing Factory identifier for

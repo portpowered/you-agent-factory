@@ -59,6 +59,7 @@ export interface HeaderControlsMessages {
   sessionFolderFieldLabel: string;
   sessionFolderHelperText: string;
   sessionFolderFieldPlaceholder: string;
+  sessionControlsLabel: string;
   sessionTabCloseLabelTemplate: string;
   sessionTabsLabel: string;
   sessionsEmptyTitle: string;
@@ -151,6 +152,7 @@ const headerControlsMessagesByLocale = {
     sessionFolderHelperText:
       "Please pass in an absolute path like /home/bob/my-project/factory. The folder must contain a runnable factory.",
     sessionFolderFieldPlaceholder: "/home/bob/my-project/factory",
+    sessionControlsLabel: "Session controls",
     sessionTabCloseLabelTemplate: "Close {{sessionLabel}} session",
     sessionTabsLabel: "factory sessions",
     sessionsEmptyTitle: "No live sessions",
@@ -238,6 +240,7 @@ const headerControlsMessagesByLocale = {
     sessionFolderHelperText:
       "ローカルのファクトリーフォルダーのパスを入力するか、この端末からフォルダーを選んでください。フォルダーには実行可能なファクトリーが含まれている必要があります。",
     sessionFolderFieldPlaceholder: "/path/to/factory-workspace",
+    sessionControlsLabel: "セッション操作",
     sessionTabCloseLabelTemplate: "{{sessionLabel}} セッションを閉じる",
     sessionTabsLabel: "ファクトリーセッション",
     sessionsEmptyTitle: "実行中のセッションはありません",
@@ -326,6 +329,7 @@ const headerControlsMessagesByLocale = {
     sessionFolderHelperText:
       "로컬 팩토리 폴더 경로를 입력하거나 이 기기에서 폴더를 선택하세요. 폴더에는 실행 가능한 팩토리가 있어야 합니다.",
     sessionFolderFieldPlaceholder: "/path/to/factory-workspace",
+    sessionControlsLabel: "세션 컨트롤",
     sessionTabCloseLabelTemplate: "{{sessionLabel}} 세션 닫기",
     sessionTabsLabel: "팩토리 세션",
     sessionsEmptyTitle: "실행 중인 세션이 없습니다",
@@ -412,6 +416,7 @@ const headerControlsMessagesByLocale = {
     sessionFolderHelperText:
       "请输入本地工厂文件夹路径，或从这台设备选择一个文件夹。该文件夹必须包含可运行的工厂。",
     sessionFolderFieldPlaceholder: "/path/to/factory-workspace",
+    sessionControlsLabel: "会话控件",
     sessionTabCloseLabelTemplate: "关闭 {{sessionLabel}} 会话",
     sessionTabsLabel: "工厂会话",
     sessionsEmptyTitle: "没有运行中的会话",

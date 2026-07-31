@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	compilationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
 	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
 )
@@ -17,9 +17,9 @@ type stubLoadedSource struct {
 }
 
 func (s stubLoadedSource) FactoryConfig() *factorydefinitions.FactoryConfig { return s.cfg }
-func (s stubLoadedSource) FactoryDir() string                             { return "/factories/alpha" }
-func (s stubLoadedSource) RuntimeBaseDir() string                         { return "/factories/alpha" }
-func (s stubLoadedSource) SetRuntimeBaseDir(string)                       {}
+func (s stubLoadedSource) FactoryDir() string                               { return "/factories/alpha" }
+func (s stubLoadedSource) RuntimeBaseDir() string                           { return "/factories/alpha" }
+func (s stubLoadedSource) SetRuntimeBaseDir(string)                         {}
 func (s stubLoadedSource) PortableBundledFileReplacements() []factorydefinitions.PortableBundledFileReplacement {
 	return nil
 }

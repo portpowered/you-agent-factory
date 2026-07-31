@@ -25,6 +25,27 @@ type staticInferencer struct {
 	delay    time.Duration
 }
 
+func TestAgentRunInferenceRequestFallsBackToModelProviderRunner(t *testing.T) {
+	processEnvironment := []string{"PATH=C:\\Tools", "USERPROFILE=C:\\Users\\customer"}
+	req := agentRunInferenceRequest(
+		workerexecution.WorkstationExecutionRequest{
+			Dispatch:           work.WorkDispatch{DispatchID: "dispatch"},
+			ProcessEnvironment: processEnvironment,
+		},
+		&interfaces.FactoryWorkerConfig{ModelProvider: "codex"},
+	)
+	if req.RunnerID != "codex" {
+		t.Fatalf("RunnerID = %q, want model provider fallback", req.RunnerID)
+	}
+	if len(req.ProcessEnvironment) != 2 || req.ProcessEnvironment[0] != processEnvironment[0] || req.ProcessEnvironment[1] != processEnvironment[1] {
+		t.Fatalf("ProcessEnvironment = %#v, want host execution environment", req.ProcessEnvironment)
+	}
+	processEnvironment[0] = "PATH=mutated"
+	if req.ProcessEnvironment[0] == processEnvironment[0] {
+		t.Fatal("ProcessEnvironment aliases workstation request")
+	}
+}
+
 func (s staticInferencer) Infer(ctx context.Context, _ messages.InferenceRequest) (messages.InferenceResult, error) {
 	if s.delay > 0 {
 		timer := time.NewTimer(s.delay)
@@ -370,6 +391,42 @@ func TestAgentRunExecutor_RequestModelSelectionOverridesWorkerWithoutMutation(t 
 	}
 }
 
+func TestEffectiveAgentRunWorkerDefinition_EmptyInterpolationPreservesOperatorOverride(t *testing.T) {
+	t.Run("authored placeholders resolve empty", func(t *testing.T) {
+		worker := &interfaces.FactoryWorkerConfig{
+			Model: "${model}", ModelProvider: "${provider}", ReasoningEffort: "${effort}",
+		}
+		effective := effectiveAgentRunWorkerDefinition(workerexecution.WorkstationExecutionRequest{}, worker)
+		if effective.Model != "" || effective.ModelProvider != "" || effective.ReasoningEffort != "" {
+			t.Fatalf(
+				"effective provider/model/effort = %q/%q/%q, want empty resolved placeholders",
+				effective.ModelProvider,
+				effective.Model,
+				effective.ReasoningEffort,
+			)
+		}
+	})
+
+	t.Run("resolved effort overlays authored placeholder", func(t *testing.T) {
+		worker := &interfaces.FactoryWorkerConfig{ReasoningEffort: "${effort}"}
+		effective := effectiveAgentRunWorkerDefinition(
+			workerexecution.WorkstationExecutionRequest{ReasoningEffort: "xhigh"},
+			worker,
+		)
+		if effective.ReasoningEffort != "xhigh" {
+			t.Fatalf("effective effort = %q, want xhigh", effective.ReasoningEffort)
+		}
+	})
+
+	t.Run("operator values survive empty invocation values", func(t *testing.T) {
+		worker := &interfaces.FactoryWorkerConfig{Model: "operator-model", ModelProvider: "CODEX"}
+		effective := effectiveAgentRunWorkerDefinition(workerexecution.WorkstationExecutionRequest{}, worker)
+		if effective.Model != worker.Model || effective.ModelProvider != worker.ModelProvider {
+			t.Fatalf("effective provider/model = %q/%q, want %q/%q", effective.ModelProvider, effective.Model, worker.ModelProvider, worker.Model)
+		}
+	})
+}
+
 type staticRuntimeConfig struct {
 	Workers map[string]*interfaces.FactoryWorkerConfig
 }
@@ -413,8 +470,11 @@ func TestEvaluateAgentRunOutcome_StopTokenAndContinueSemantics(t *testing.T) {
 	t.Parallel()
 
 	worker := &interfaces.FactoryWorkerConfig{StopToken: "<COMPLETE>"}
-	if got := evaluateAgentRunOutcome("done <COMPLETE>", worker); got != workerexecution.OutcomeAccepted {
+	if got := evaluateAgentRunOutcome("done\n<COMPLETE>", worker); got != workerexecution.OutcomeAccepted {
 		t.Fatalf("stop token outcome = %s, want ACCEPTED", got)
+	}
+	if got := evaluateAgentRunOutcome("completion uses <COMPLETE>\n<CONTINUE>", worker); got != workerexecution.OutcomeContinue {
+		t.Fatalf("final continue outcome = %s, want CONTINUE", got)
 	}
 	if got := evaluateAgentRunOutcome("still working <CONTINUE>", worker); got != workerexecution.OutcomeContinue {
 		t.Fatalf("continue outcome = %s, want CONTINUE", got)

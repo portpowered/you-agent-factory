@@ -1,4 +1,5 @@
 import { Dialog } from "@you-agent-factory/components/overlays";
+import { Button, Text } from "@you-agent-factory/components/primitives";
 import {
   type DragEvent as ReactDragEvent,
   useEffect,
@@ -9,7 +10,6 @@ import {
 import type { DashboardStreamState } from "../../../api/dashboard/types";
 import type { FactorySessionSummary } from "../../../api/factory-sessions";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
-import { Button, Text } from "@you-agent-factory/components/primitives";
 import { AlertPanel } from "../../../components/ui/alert-panel";
 import { useDashboardStreamStore } from "../../dashboard/state/dashboardStreamStore";
 import {
@@ -247,7 +247,7 @@ function SessionTabsContent({
     <>
       <nav
         aria-label={messages.sessionTabsLabel}
-        className="min-w-0 max-w-full overflow-x-auto overscroll-x-contain"
+        className="min-w-0 overflow-x-auto overscroll-x-contain"
       >
         <div
           aria-orientation="horizontal"

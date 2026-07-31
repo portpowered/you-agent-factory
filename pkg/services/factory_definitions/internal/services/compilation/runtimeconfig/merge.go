@@ -38,6 +38,7 @@ func applyRuntimeDefinitions(
 	runtimeDefinitions factorydefinitions.RuntimeDefinitionLookup,
 ) error {
 	for index := range factoryConfig.Workers {
+		normalizeCanonicalWorkerRuntime(&factoryConfig.Workers[index])
 		definition, ok := runtimeDefinitions.Worker(factoryConfig.Workers[index].Name)
 		if !ok || definition == nil {
 			continue
@@ -84,6 +85,13 @@ func applyWorkerRuntimeDefinition(
 	if runtimeDefinition.ModelProvider != "" {
 		worker.ModelProvider = runtimeDefinition.ModelProvider
 	}
+	if effort := strings.TrimSpace(runtimeDefinition.ReasoningEffort); effort != "" {
+		if canonical, ok := factorydefinitions.CanonicalizeReasoningEffort(effort); ok {
+			worker.ReasoningEffort = canonical
+		} else {
+			worker.ReasoningEffort = runtimeDefinition.ReasoningEffort
+		}
+	}
 	if runtimeDefinition.ModelLocality != "" {
 		worker.ModelLocality = runtimeDefinition.ModelLocality
 	}
@@ -114,9 +122,6 @@ func applyWorkerRuntimeDefinition(
 	if runtimeDefinition.SkipPermissions {
 		worker.SkipPermissions = true
 	}
-	if runtimeDefinition.OpenCodeAgent != "" {
-		worker.OpenCodeAgent = runtimeDefinition.OpenCodeAgent
-	}
 	if runtimeDefinition.Auth != nil {
 		worker.Auth = runtimeDefinition.Auth
 	}
@@ -131,6 +136,15 @@ func applyWorkerRuntimeDefinition(
 			[]factorydefinitions.ResourceConfig(nil),
 			runtimeDefinition.Resources...,
 		)
+	}
+}
+
+func normalizeCanonicalWorkerRuntime(worker *factorydefinitions.FactoryWorkerConfig) {
+	if worker == nil {
+		return
+	}
+	if effort, ok := factorydefinitions.CanonicalizeReasoningEffort(worker.ReasoningEffort); ok {
+		worker.ReasoningEffort = effort
 	}
 }
 
@@ -172,9 +186,6 @@ func applyWorkstationRuntimeDefinition(
 	}
 	if runtimeDefinition.Runner != "" {
 		workstation.Runner = runtimeDefinition.Runner
-	}
-	if runtimeDefinition.OpenCodeAgent != "" {
-		workstation.OpenCodeAgent = runtimeDefinition.OpenCodeAgent
 	}
 	applyWorkstationRuntimeTopology(workstation, runtimeDefinition)
 	applyWorkstationRuntimeTemplate(workstation, runtimeDefinition, baseStopWords)
@@ -300,6 +311,15 @@ func mergeWorkstationLimits(
 	}
 	if runtime.MaxExecutionTime != "" {
 		merged.MaxExecutionTime = runtime.MaxExecutionTime
+	}
+	if runtime.MaxGeneratedWorkItems != 0 {
+		merged.MaxGeneratedWorkItems = runtime.MaxGeneratedWorkItems
+	}
+	if runtime.MaxGeneratedWorkItemsArgument != "" {
+		merged.MaxGeneratedWorkItemsArgument = runtime.MaxGeneratedWorkItemsArgument
+	}
+	if runtime.MaxGeneratedWorkItemsArgumentOffset != 0 {
+		merged.MaxGeneratedWorkItemsArgumentOffset = runtime.MaxGeneratedWorkItemsArgumentOffset
 	}
 	return merged
 }

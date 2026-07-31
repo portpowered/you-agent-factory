@@ -7,19 +7,19 @@ import (
 
 func TestValidateInstallPackagedFactoryRequest_RejectsScaffoldOptions(t *testing.T) {
 	tests := []struct {
-		name    string
+		name     string
 		scaffold CreateFactoryScaffoldRequest
 	}{
 		{
-			name: "target dir",
+			name:     "target dir",
 			scaffold: CreateFactoryScaffoldRequest{TargetDir: "./factory"},
 		},
 		{
-			name: "type",
+			name:     "type",
 			scaffold: CreateFactoryScaffoldRequest{Type: "ralph"},
 		},
 		{
-			name: "executor",
+			name:     "executor",
 			scaffold: CreateFactoryScaffoldRequest{Executor: "claude"},
 		},
 	}

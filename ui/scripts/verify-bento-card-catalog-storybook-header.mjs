@@ -1,5 +1,9 @@
 const HEADER_CATALOG_CARDS = [
-  { compactChrome: true, name: "Work totals" },
+  {
+    compactChrome: true,
+    name: "Work totals",
+    primaryActionName: "Remove Work totals widget from dashboard",
+  },
   { compactChrome: false, name: "Provider session" },
   { compactChrome: false, name: "Add widget" },
   {
@@ -50,9 +54,7 @@ export async function collectCardHeaderMetrics(article) {
       : [];
 
     return {
-      compactChrome:
-        header.className.includes("min-h-11") &&
-        header.className.includes("flex-wrap"),
+      compactChrome: header.className.includes("min-h-11"),
       hasGrabCursor: header.className.includes("cursor-grab"),
       hasHeaderDragHandle:
         header.getAttribute("data-bento-drag-handle") === "true",
@@ -122,6 +124,27 @@ export function assertCardHeaderMetrics(cardName, metrics, { compactChrome }) {
     if (rectsOverlap(metrics.titleRect, actionRect)) {
       throw new Error(
         `${cardName}: title overlapped header action "${actionRect.label}" at ${compactChrome ? "compact" : "default"} density.`,
+      );
+    }
+
+    if (
+      actionRect.x + actionRect.width <
+      metrics.headerRect.x + metrics.headerRect.width - 16
+    ) {
+      throw new Error(
+        `${cardName}: header action "${actionRect.label}" was not aligned to the right toolbar edge.`,
+      );
+    }
+
+    if (
+      Math.abs(
+        actionRect.y +
+          actionRect.height / 2 -
+          (metrics.headerRect.y + metrics.headerRect.height / 2),
+      ) > 2
+    ) {
+      throw new Error(
+        `${cardName}: header action "${actionRect.label}" wrapped below the title row.`,
       );
     }
   }

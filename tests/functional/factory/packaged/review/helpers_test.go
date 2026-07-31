@@ -54,11 +54,7 @@ func runPackagedReviewCLIJSONInvocation(
 		t.Fatalf("stderr = %q, want empty successful-run stderr", inputs.Stderr())
 	}
 
-	var response factoryapi.InvocationResponse
-	if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stdout())), &response); decodeErr != nil {
-		t.Fatalf("decode invocation JSON stdout: %v\nstdout:\n%s", decodeErr, inputs.Stdout())
-	}
-	return response
+	return support.DecodeInvocationResponseJSON(t, inputs.Stdout())
 }
 
 func runPackagedReviewCLIJSONInvocationWithFactorySetup(
@@ -103,11 +99,7 @@ func runPackagedReviewCLIJSONInvocationWithFactorySetup(
 		t.Fatalf("stderr = %q, want empty successful-run stderr", inputs.Stderr())
 	}
 
-	var response factoryapi.InvocationResponse
-	if decodeErr := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stdout())), &response); decodeErr != nil {
-		t.Fatalf("decode invocation JSON stdout: %v\nstdout:\n%s", decodeErr, inputs.Stdout())
-	}
-	return response
+	return support.DecodeInvocationResponseJSON(t, inputs.Stdout())
 }
 
 func setPackagedReviewWorkerModel(t *testing.T, factoryDir, model string) {
@@ -195,9 +187,7 @@ func runPackagedReviewCLIJSONFailureInvocation(
 
 	var response factoryapi.InvocationResponse
 	if stdout := strings.TrimSpace(inputs.Stdout()); stdout != "" {
-		if decodeErr := json.Unmarshal([]byte(stdout), &response); decodeErr != nil {
-			t.Fatalf("decode invocation JSON stdout: %v\nstdout:\n%s", decodeErr, inputs.Stdout())
-		}
+		response = support.DecodeInvocationResponseJSON(t, stdout)
 	}
 	return response, inputs.Stderr(), execErr
 }

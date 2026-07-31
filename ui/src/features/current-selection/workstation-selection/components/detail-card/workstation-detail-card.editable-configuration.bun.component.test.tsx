@@ -266,7 +266,7 @@ function buildReadyEditableConfigurationState(overrides?: {
         "codex",
         "gemini",
         "kiro",
-        "cursor-cli",
+        "codex",
         "opencode",
         "pi",
       ],

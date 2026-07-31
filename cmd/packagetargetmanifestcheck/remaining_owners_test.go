@@ -34,7 +34,7 @@ func TestAllProductOwnerUnexpectedSiblingsCoveredByMoveRules(t *testing.T) {
 			switch spec.owner {
 			case "workers":
 				switch child {
-				case "agypty", "cliprovider", "provider", "provider_test":
+				case "agypty", "provider", "provider_test":
 					_, ok := mapProvidersExtraction("pkg/services/workers/" + child)
 					if !ok {
 						t.Fatalf("mapProvidersExtraction(workers/%s) ok = false", child)

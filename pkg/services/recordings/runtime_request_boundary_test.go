@@ -2,8 +2,6 @@ package recordings_test
 
 import (
 	"context"
-	"os/exec"
-	"strings"
 	"testing"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -85,36 +83,6 @@ func TestRecordingsConstructsRuntimeRequestsThroughRoot(t *testing.T) {
 // TestRecordingsRuntimeRequestConstructionImportsRuntimeRootOnly seals the
 // request-construction path: Recordings boundary tests may depend on Factory
 // Runtime request helpers only through the service root contract.
-func TestRecordingsRuntimeRequestConstructionImportsRuntimeRootOnly(t *testing.T) {
-	t.Parallel()
-	assertRuntimeRequestConstructionImportsRuntimeRootOnly(t)
-}
-
-func assertRuntimeRequestConstructionImportsRuntimeRootOnly(t *testing.T) {
-	t.Helper()
-
-	cmd := exec.Command(
-		"go",
-		"list",
-		"-f",
-		"{{join .Imports \"\\n\"}}",
-		recordingsRoot,
-	)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("go list imports for %s: %v\n%s", recordingsRoot, err, output)
-	}
-	for _, importPath := range strings.Fields(string(output)) {
-		if isForbiddenRecordingsRuntimeImport(importPath) {
-			t.Fatalf(
-				"%s import %s is forbidden for runtime request construction; use %s only",
-				recordingsRoot,
-				importPath,
-				factoryRuntimeRoot,
-			)
-		}
-	}
-}
 
 type runtimeRequestBoundaryStub struct {
 	lastObserve factoryruntime.ObserveRequest

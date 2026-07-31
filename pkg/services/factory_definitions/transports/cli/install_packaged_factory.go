@@ -21,18 +21,18 @@ type InstallPackagedFactoryOperation = factorydefinitions.InstallPackagedFactory
 // InstallPackagedFactoryConfig carries resolved CLI inputs for packaged
 // Factory installation.
 type InstallPackagedFactoryConfig struct {
-	Context     context.Context
-	HomeDir     string
-	Package     string
-	Dir         string
-	DirChanged  bool
-	Format      string
+	Context       context.Context
+	HomeDir       string
+	Package       string
+	Dir           string
+	DirChanged    bool
+	Format        string
 	FormatChanged bool
-	Replace     bool
-	JSON        bool
-	Output      io.Writer
-	Diagnostics io.Writer
-	Verbose     bool
+	Replace       bool
+	JSON          bool
+	Output        io.Writer
+	Diagnostics   io.Writer
+	Verbose       bool
 }
 
 // InstallPackagedFactoryResult is the structured success payload for packaged

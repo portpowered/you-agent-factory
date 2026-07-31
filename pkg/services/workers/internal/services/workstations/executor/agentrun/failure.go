@@ -67,6 +67,9 @@ func failureMetadataForError(err error) *workerexecution.WorkFailureMetadata {
 	if metadata := modelhostFailureMetadata(err); metadata != nil {
 		return metadata
 	}
+	if providerErr := workerexecution.NormalizeProviderExecutionError(err); providerErr != nil {
+		return workerexecution.WorkFailureMetadataFromProviderError(providerErr)
+	}
 	family := workerexecution.WorkFailureFamilyTerminal
 	failureType := workerexecution.WorkFailureTypeInternalServerError
 	if errors.Is(err, context.Canceled) {

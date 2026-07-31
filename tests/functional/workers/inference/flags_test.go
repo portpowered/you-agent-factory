@@ -81,8 +81,8 @@ func TestUnsupportedProviderFlagReturnsCapabilityError(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 
 	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
-		modelprovider.ProviderGemini,
-		"gemini-2.5-flash",
+		modelprovider.ProviderClaude,
+		"claude-test-model",
 	))
 	support.WriteWorkstationConfig(t, dir, "process", `---
 type: MODEL_WORKSTATION

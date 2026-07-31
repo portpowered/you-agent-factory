@@ -88,6 +88,9 @@ func InterpolateWorkerConfig(worker workerconfig.Config, args *work.InvocationAr
 	if next.ModelProvider, err = interpolateInvocationField(next.ModelProvider, args, "worker.modelProvider", false, readFile); err != nil {
 		return workerconfig.Config{}, err
 	}
+	if next.ReasoningEffort, err = interpolateInvocationField(next.ReasoningEffort, args, "worker.reasoningEffort", false, readFile); err != nil {
+		return workerconfig.Config{}, err
+	}
 	if next.ExecutorProvider, err = interpolateInvocationField(next.ExecutorProvider, args, "worker.executorProvider", false, readFile); err != nil {
 		return workerconfig.Config{}, err
 	}
@@ -98,9 +101,6 @@ func InterpolateWorkerConfig(worker workerconfig.Config, args *work.InvocationAr
 		return workerconfig.Config{}, err
 	}
 	if next.StopToken, err = interpolateInvocationField(next.StopToken, args, "worker.stopToken", false, readFile); err != nil {
-		return workerconfig.Config{}, err
-	}
-	if next.OpenCodeAgent, err = interpolateInvocationField(next.OpenCodeAgent, args, "worker.openCodeAgent", false, readFile); err != nil {
 		return workerconfig.Config{}, err
 	}
 	if next.Body, err = interpolateInvocationField(next.Body, args, "worker body", false, readFile); err != nil {
@@ -125,9 +125,6 @@ func InterpolateWorkstationConfig(workstation factorydefinitions.FactoryWorkstat
 	if next.Runner, err = interpolateInvocationField(next.Runner, args, "workstation.runner", false, readFile); err != nil {
 		return factorydefinitions.FactoryWorkstationConfig{}, err
 	}
-	if next.OpenCodeAgent, err = interpolateInvocationField(next.OpenCodeAgent, args, "workstation.openCodeAgent", false, readFile); err != nil {
-		return factorydefinitions.FactoryWorkstationConfig{}, err
-	}
 	if next.PromptFile, err = interpolateInvocationField(next.PromptFile, args, "workstation.promptFile", false, readFile); err != nil {
 		return factorydefinitions.FactoryWorkstationConfig{}, err
 	}
@@ -148,6 +145,16 @@ func InterpolateWorkstationConfig(workstation factorydefinitions.FactoryWorkstat
 	}
 	if next.Worktree, err = interpolateInvocationField(next.Worktree, args, "workstation.worktree", false, readFile); err != nil {
 		return factorydefinitions.FactoryWorkstationConfig{}, err
+	}
+	if next.Cron != nil {
+		cron := *next.Cron
+		if cron.Schedule, err = interpolateInvocationField(cron.Schedule, args, "workstation.cron.schedule", false, readFile); err != nil {
+			return factorydefinitions.FactoryWorkstationConfig{}, err
+		}
+		if cron.Every, err = interpolateInvocationField(cron.Every, args, "workstation.cron.every", false, readFile); err != nil {
+			return factorydefinitions.FactoryWorkstationConfig{}, err
+		}
+		next.Cron = &cron
 	}
 	for key, value := range next.Env {
 		resolved, err := interpolateInvocationField(value, args, fmt.Sprintf("workstation.env[%q]", key), false, readFile)

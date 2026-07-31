@@ -23,6 +23,7 @@ type ChildExecutionRequest struct {
 	ModelProvider    string
 	Model            string
 	ReasoningEffort  string
+	SkipPermissions  bool
 	Command          string
 	Sandbox          string
 	WritableRoots    []string
@@ -62,8 +63,6 @@ type ChildExecutor interface {
 // highest-precedence source that supplies it. It performs no IO or mutation.
 func ResolveChildWorkerSettings(req ChildExecutionRequest, agents map[string]interfaces.FactoryOrchestratorJavaScriptAgent, config WorkerSettingsConfig) (ChildExecutionRequest, error) {
 	explicitPreset := strings.TrimSpace(req.Preset)
-	explicitProvider := strings.TrimSpace(req.ModelProvider)
-	explicitEffort := strings.TrimSpace(req.ReasoningEffort)
 	factoryPreset := ""
 	if agent, ok := agents[strings.TrimSpace(req.AgentID)]; ok {
 		factoryPreset = strings.TrimSpace(agent.Preset)
@@ -84,21 +83,29 @@ func ResolveChildWorkerSettings(req ChildExecutionRequest, agents map[string]int
 	req.ModelProvider = firstWorkerValue(req.ModelProvider, preset.ModelProvider, config.DefaultModelProvider)
 	req.Model = firstWorkerValue(req.Model, preset.Model, config.DefaultModel)
 	req.ReasoningEffort = firstWorkerValue(req.ReasoningEffort, preset.ReasoningEffort)
-	if provider, ok := interfaces.CanonicalizeOperatorWorkerModelProviderInput(req.ModelProvider); req.ModelProvider != "" {
+	if strings.EqualFold(strings.TrimSpace(req.ExecutorProvider), workerexecution.ExecutorProviderACP) {
+		if _, err := workerexecution.RunnerIdentityForWorker(req.ExecutorProvider, req.ModelProvider); err != nil {
+			return ChildExecutionRequest{}, fmt.Errorf("agent.run() has invalid ACP provider selection: %w", err)
+		}
+		req.ExecutorProvider = workerexecution.ExecutorProviderACP
+		req.ModelProvider = strings.TrimSpace(req.ModelProvider)
+	} else if provider, ok := interfaces.CanonicalizeOperatorWorkerModelProviderInput(req.ModelProvider); req.ModelProvider != "" {
 		if !ok || interfaces.IsSymbolicWorkerModelProviderDefault(provider) {
 			return ChildExecutionRequest{}, fmt.Errorf("agent.run() has unsupported effective modelProvider %q", req.ModelProvider)
 		}
-		if explicitProvider == "" {
-			req.ModelProvider = provider
+		// Authored built-ins use public uppercase vocabulary, while provider
+		// registries use their canonical command identities.
+		if internal, builtIn := interfaces.InternalModelProviderFromPublicWorkerModelProvider(provider); builtIn {
+			req.ModelProvider = string(internal)
+		} else {
+			req.ModelProvider = strings.TrimSpace(req.ModelProvider)
 		}
 	}
 	if effort, ok := interfaces.CanonicalizeReasoningEffort(req.ReasoningEffort); req.ReasoningEffort != "" {
 		if !ok {
 			return ChildExecutionRequest{}, fmt.Errorf("agent.run() has unsupported effective reasoningEffort %q", req.ReasoningEffort)
 		}
-		if explicitEffort == "" {
-			req.ReasoningEffort = effort
-		}
+		req.ReasoningEffort = effort
 	}
 	return req, nil
 }
@@ -150,6 +157,7 @@ func (e *FakeChildExecutor) Execute(ctx context.Context, req ChildExecutionReque
 		ModelProvider:      req.ModelProvider,
 		Model:              req.Model,
 		ReasoningEffort:    req.ReasoningEffort,
+		SkipPermissions:    req.SkipPermissions,
 		Command:            req.Command,
 		Sandbox:            req.Sandbox,
 		SchemaDigest:       schemaDigest(req.OutputSchema),
@@ -194,6 +202,7 @@ func (e *FakeChildExecutor) executeFailed(ctx context.Context, req ChildExecutio
 		ModelProvider:   req.ModelProvider,
 		Model:           req.Model,
 		ReasoningEffort: req.ReasoningEffort,
+		SkipPermissions: req.SkipPermissions,
 		Command:         req.Command,
 		Sandbox:         req.Sandbox,
 		SchemaDigest:    schemaDigest(req.OutputSchema),
@@ -260,6 +269,7 @@ func childExecutionRequestFromSpec(spec map[string]any, workflowName, argsSubjec
 		ModelProvider:    normalized.ModelProvider,
 		Model:            normalized.Model,
 		ReasoningEffort:  normalized.ReasoningEffort,
+		SkipPermissions:  normalized.SkipPermissions,
 		WorkflowName:     workflowName,
 		ArgsSubject:      argsSubject,
 	}, nil
@@ -331,6 +341,9 @@ func childResultValueMap(result ChildExecutionResult) map[string]any {
 	}
 	if req.ReasoningEffort != "" {
 		value["reasoningEffort"] = req.ReasoningEffort
+	}
+	if req.SkipPermissions {
+		value["skipPermissions"] = true
 	}
 	if req.Command != "" {
 		value["command"] = req.Command
@@ -471,8 +484,14 @@ func childExecutionResultFromRecord(child ChildDispatchRecord) ChildExecutionRes
 		ProviderSessionRef: child.ProviderSessionRef,
 		Output:             output,
 		Request: ChildExecutionRequest{
-			Label: child.Label,
-			Model: child.Model,
+			Label:           child.Label,
+			Preset:          child.Preset,
+			ModelProvider:   child.ModelProvider,
+			Model:           child.Model,
+			ReasoningEffort: child.ReasoningEffort,
+			SkipPermissions: child.SkipPermissions,
+			Command:         child.Command,
+			Sandbox:         child.Sandbox,
 		},
 	}
 }

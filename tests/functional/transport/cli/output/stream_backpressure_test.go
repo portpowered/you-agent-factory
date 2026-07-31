@@ -89,8 +89,8 @@ func TestCLISlowWriterDoesNotReorderResponseEvents(t *testing.T) {
 }
 
 type gatedStdoutWriter struct {
-	gate     chan struct{}
-	attempts atomic.Int64
+	gate        chan struct{}
+	attempts    atomic.Int64
 	releaseOnce sync.Once
 
 	mu         sync.Mutex

@@ -50,26 +50,29 @@ const SHARED_SELECTED_SESSION: LoadableProviderSessionRef = {
   provider: "codex",
 };
 
-vi.mock("../../current-selection/components/widget/current-selection-widget", () => ({
-  CurrentSelectionWidget: ({
-    headerAction,
-    onSelectProviderSession,
-  }: {
-    headerAction?: React.ReactNode;
-    onSelectProviderSession?: (session: LoadableProviderSessionRef) => void;
-  }) => (
-    <section>
-      {headerAction}
-      <p>Current selection card</p>
-      <button
-        onClick={() => onSelectProviderSession?.(SHARED_SELECTED_SESSION)}
-        type="button"
-      >
-        Select shared provider session
-      </button>
-    </section>
-  ),
-}));
+vi.mock(
+  "../../current-selection/components/widget/current-selection-widget",
+  () => ({
+    CurrentSelectionWidget: ({
+      headerAction,
+      onSelectProviderSession,
+    }: {
+      headerAction?: React.ReactNode;
+      onSelectProviderSession?: (session: LoadableProviderSessionRef) => void;
+    }) => (
+      <section>
+        {headerAction}
+        <p>Current selection card</p>
+        <button
+          onClick={() => onSelectProviderSession?.(SHARED_SELECTED_SESSION)}
+          type="button"
+        >
+          Select shared provider session
+        </button>
+      </section>
+    ),
+  }),
+);
 
 vi.mock("../../current-selection/hooks/core/useCurrentSelection", () => ({
   useCurrentSelection: () => currentSelectionState,
@@ -105,21 +108,24 @@ vi.mock(
   },
 );
 
-vi.mock("../../provider-session-detail/components/provider-session-widget", () => ({
-  ProviderSessionWidget: ({
-    headerAction,
-    selectedProviderSession,
-  }: {
-    headerAction?: React.ReactNode;
-    selectedProviderSession: LoadableProviderSessionRef | null;
-  }) => (
-    <section>
-      {headerAction}
-      Provider session card
-      {selectedProviderSession ? `: ${selectedProviderSession.id}` : ""}
-    </section>
-  ),
-}));
+vi.mock(
+  "../../provider-session-detail/components/provider-session-widget",
+  () => ({
+    ProviderSessionWidget: ({
+      headerAction,
+      selectedProviderSession,
+    }: {
+      headerAction?: React.ReactNode;
+      selectedProviderSession: LoadableProviderSessionRef | null;
+    }) => (
+      <section>
+        {headerAction}
+        Provider session card
+        {selectedProviderSession ? `: ${selectedProviderSession.id}` : ""}
+      </section>
+    ),
+  }),
+);
 
 vi.mock("../../import/components/dashboard-import-preview-dialog", () => ({
   DashboardImportPreviewDialog: () => null,
@@ -240,6 +246,10 @@ vi.mock("../../workflow-activity/components/workflow-activity-widget", () => ({
   ),
 }));
 
+vi.mock("./session-controls-widget", () => ({
+  SessionControlsWidget: () => <section>Session controls card</section>,
+}));
+
 const mockUseCurrentActivityImportController = vi.fn(() => ({
   activationState: { status: "idle" },
   activateImport: vi.fn(),
@@ -282,6 +292,7 @@ vi.mock("../hooks/useDashboardLayout", () => ({
     addWidget: "add-widget",
     currentSelection: "current-selection",
     providerSession: "provider-session",
+    sessionControls: "session-controls",
     submitWork: "submit-work",
     terminalWork: "terminal-work",
     trace: "trace",
@@ -391,6 +402,9 @@ describe("DashboardBento", () => {
     );
     expect(screen.getByTestId("add-widget").textContent).toContain(
       "Add widget card",
+    );
+    expect(screen.getByTestId("session-controls").textContent).toContain(
+      "Session controls card",
     );
   });
 

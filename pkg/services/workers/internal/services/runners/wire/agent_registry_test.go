@@ -62,7 +62,10 @@ func TestNewAgentRegistryIsInertAndExecutesOneDetachedProviderAttempt(t *testing
 		t.Fatalf("second metadata = %#v, want detached registry snapshot", second.Metadata)
 	}
 
-	result, err := second.Runner.Execute(t.Context(), agentRequest())
+	result, err := registry.Execute(t.Context(), runners.ExecuteRequest{
+		Identity: agent.Identity,
+		Attempt:  agentRequest(),
+	})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -90,10 +93,6 @@ func TestAgentRunnerThroughRegistryConformsToCommonContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewAgentRegistry() error = %v", err)
 	}
-	binding, err := registry.Resolve(runners.ResolutionRequest{Identity: agent.Identity})
-	if err != nil {
-		t.Fatalf("Resolve(agent) error = %v", err)
-	}
 
 	valid := agentRequest()
 	invalid := workers.CloneProviderInferenceRequest(valid)
@@ -105,14 +104,14 @@ func TestAgentRunnerThroughRegistryConformsToCommonContract(t *testing.T) {
 	failure := workers.CloneProviderInferenceRequest(valid)
 	failure.UserMessage = agentFixtureExecutionFailure
 
-	testkit.Run(t, testkit.Subject{
-		Runner:                    binding.Runner,
-		ValidRequest:              valid,
-		InvalidRequest:            invalid,
-		UnsupportedRequest:        unsupported,
-		FailureRequest:            failure,
-		ExpectedResult:            expectedAgentResult(),
-		SkipUnsupportedCapability: true,
+	testkit.RunService(t, testkit.ServiceSubject{
+		Service:            registry,
+		Identity:           agent.Identity,
+		ValidRequest:       valid,
+		InvalidRequest:     invalid,
+		UnsupportedRequest: unsupported,
+		FailureRequest:     failure,
+		ExpectedResult:     expectedAgentResult(),
 		AssertCaptured: func(t *testing.T) {
 			t.Helper()
 			assertAgentProviderRequest(t, fake.Request())
@@ -133,15 +132,13 @@ func TestAgentRunnerSnapshotsRequestBeforeProviderAttempt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewAgentRegistry() error = %v", err)
 	}
-	binding, err := registry.Resolve(runners.ResolutionRequest{Identity: agent.Identity})
-	if err != nil {
-		t.Fatalf("Resolve(agent) error = %v", err)
-	}
-
 	request := agentRequest()
 	done := make(chan error, 1)
 	go func() {
-		_, executeErr := binding.Runner.Execute(t.Context(), request)
+		_, executeErr := registry.Execute(t.Context(), runners.ExecuteRequest{
+			Identity: agent.Identity,
+			Attempt:  request,
+		})
 		done <- executeErr
 	}()
 	<-fake.entered
@@ -271,13 +268,13 @@ func agentRequest() workers.RunnerExecutionRequest {
 				"nested": []any{"dispatch-original"},
 			}},
 		},
-		RunnerID:         string(providers.IDCodex),
-		WorkerType:       "goal-executor",
-		WorkstationType:  "execute-goal",
-		SystemPrompt: "system fixture",
-		UserMessage:  "user fixture",
-		OutputSchema: `{"type":"object"}`,
-		SessionID:    "resume-session-1",
+		RunnerID:        string(providers.IDCodex),
+		WorkerType:      "goal-executor",
+		WorkstationType: "execute-goal",
+		SystemPrompt:    "system fixture",
+		UserMessage:     "user fixture",
+		OutputSchema:    `{"type":"object"}`,
+		SessionID:       "resume-session-1",
 		InputTokens: []any{map[string]any{
 			"nested": []any{"original"},
 		}},
@@ -325,12 +322,12 @@ func expectedAgentResult() workers.RunnerExecutionResult {
 func assertAgentProviderRequest(t *testing.T, request providers.ExecuteRequest) {
 	t.Helper()
 	want := providers.ExecuteRequest{
-		Provider:         providers.IDCodex,
-		AttemptID:        "dispatch-agent-1",
-		WorkerType:       "goal-executor",
-		WorkstationName:  "execute-goal",
-		SystemPrompt:     "system fixture",
-		UserMessage:      "user fixture",
+		Provider:        providers.IDCodex,
+		AttemptID:       "dispatch-agent-1",
+		WorkerType:      "goal-executor",
+		WorkstationName: "execute-goal",
+		SystemPrompt:    "system fixture",
+		UserMessage:     "user fixture",
 		InputTokens: []any{map[string]any{
 			"nested": []any{"original"},
 		}},

@@ -223,6 +223,10 @@ func TestAdmissionContentServiceRejectsUnsupportedSlices(t *testing.T) {
 			_, _, err := service.MaterializeContentURL(ctx, "file:///peer.png")
 			return err
 		}, want: "does not support content materialization"},
+		{name: "worker-output materialize", call: func(ctx context.Context, service Service) error {
+			_, err := service.MaterializeWorkerOutput(ctx, MaterializeWorkerOutputRequest{})
+			return err
+		}, want: "does not support worker-output materialization"},
 		{name: "invocation input", call: func(ctx context.Context, service Service) error {
 			_, err := service.PrepareInvocationInput(ctx, InvocationInputPreparationRequest{})
 			return err

@@ -35,11 +35,11 @@ describe("ReactFlowCurrentActivityCard host contracts", () => {
     });
 
     expect(
-      screen.getByRole("region", { name: "Factory topology" }),
+      screen.getByRole("region", { name: "Work graph viewport" }),
     ).toBeTruthy();
     expect(
-      screen.queryByRole("region", { name: "Factory graph editor tools" }),
-    ).toBeNull();
+      screen.getByRole("region", { name: "Factory graph editor tools" }),
+    ).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
 
@@ -82,8 +82,8 @@ describe("ReactFlowCurrentActivityCard host contracts", () => {
         .getAttribute("disabled"),
     ).not.toBeNull();
     expect(
-      screen.queryByRole("region", { name: "Factory graph editor tools" }),
-    ).toBeNull();
+      screen.getByRole("region", { name: "Factory graph editor tools" }),
+    ).toBeTruthy();
   });
 
   it("renders the editable document plane instead of snapshot-only workstations", async () => {

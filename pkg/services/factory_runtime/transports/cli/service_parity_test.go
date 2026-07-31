@@ -298,6 +298,49 @@ func TestConstructedService_WriteInvocationErrorRendersInvocationCLIErrorContrac
 	}
 }
 
+func TestWriteInvocationError_ClassifiesInvocationArgumentFailuresAsBadRequest(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		code    string
+		message string
+	}{
+		{
+			name:    "misspelled planner model",
+			code:    "INVOCATION_ARGUMENT_UNKNOWN_ARGUMENT",
+			message: `unknown named argument "planer-model" (factory "@you/plan-parallel")`,
+		},
+		{
+			name:    "unknown execute model",
+			code:    "INVOCATION_ARGUMENT_UNKNOWN_ARGUMENT",
+			message: `unknown named argument "execute-model" (factory "@you/plan-parallel")`,
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var stderr bytes.Buffer
+			err := &factoryruntimecli.InvocationError{Code: tc.code, Message: tc.message}
+			if !factoryruntimecli.WriteInvocationError(&stderr, err, false) {
+				t.Fatal("WriteInvocationError did not recognize invocation argument error")
+			}
+
+			var response factoryapi.ErrorResponse
+			if err := json.Unmarshal(bytes.TrimSpace(stderr.Bytes()), &response); err != nil {
+				t.Fatalf("decode ErrorResponse: %v\n%s", err, stderr.String())
+			}
+			if response.Code != factoryapi.ErrorResponseCode(tc.code) ||
+				response.Family != factoryapi.ErrorFamilyBadRequest ||
+				response.Message != tc.message {
+				t.Fatalf("ErrorResponse = %#v", response)
+			}
+		})
+	}
+}
+
 func TestConstructedService_ValidateInvocationOutputSelectionQuietMatchesPackage(t *testing.T) {
 	t.Parallel()
 

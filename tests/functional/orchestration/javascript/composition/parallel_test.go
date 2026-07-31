@@ -16,8 +16,8 @@ import (
 	"time"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/inference"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -597,10 +597,10 @@ func waitForParallelCompositionLabelCompletion(
 }
 
 type gatedParallelChildProvider struct {
-	mu         sync.Mutex
-	active     int
-	peak       int
-	release    chan struct{}
+	mu          sync.Mutex
+	active      int
+	peak        int
+	release     chan struct{}
 	releaseOnce sync.Once
 }
 

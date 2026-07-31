@@ -15,17 +15,17 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/inboxgitkeep"
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout"
 	factorydefinition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition"
-	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
-	catalogwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire"
 	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
+	factoryauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout"
 	authoringlayoutwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/wire"
-	factorydefinitiontestcomposition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/testcomposition"
-	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
+	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
 	factorynamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
+	catalogwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire"
+	factoryloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
+	factorydefinitiontestcomposition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/testcomposition"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	authoredmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/authored"
@@ -72,8 +72,8 @@ func newRootAuthoringServiceForPeer(t *testing.T) factoryroot.Service {
 		AuthoredWriterFS:   fileSystem,
 		EnsureInbox:        inboxgitkeep.NewLocal(fileSystem),
 		PersistenceFS:      fileSystem,
-		NamedPaths:           paths,
-		Directories:          directoryreplace.Local{},
+		NamedPaths:         paths,
+		Directories:        directoryreplace.Local{},
 	})
 	if err != nil {
 		t.Fatalf("NewAuthoringLayoutService: %v", err)
@@ -528,12 +528,12 @@ func newRootAuthoringServiceWithCorruptingWriteForPeer(t *testing.T) factoryroot
 		return os.WriteFile(brokenAgentsPath, []byte("---\ntype: [\n"), 0o644)
 	}
 	authoringLayout, err := authoringlayoutwire.NewService(authoringlayout.Dependencies{
-		Validator:            validator,
-		MapInput:             composition.MapFactoryJSONForPersistence,
-		DecodeFactory:        factorymapping.NewFactoryConfigMapper().Expand,
-		NormalizeAuthored:    authoredmapping.AuthoredFactoryConfigForExpandedLayout,
-		EncodeFactory:        factorymapping.MarshalCanonicalFactoryConfig,
-		Write:                writePrepared,
+		Validator:         validator,
+		MapInput:          composition.MapFactoryJSONForPersistence,
+		DecodeFactory:     factorymapping.NewFactoryConfigMapper().Expand,
+		NormalizeAuthored: authoredmapping.AuthoredFactoryConfigForExpandedLayout,
+		EncodeFactory:     factorymapping.MarshalCanonicalFactoryConfig,
+		Write:             writePrepared,
 		Validate: func(targetDir string) error {
 			return loader.ValidateFactoryDirReadOnly(targetDir, nil, validateWrites)
 		},

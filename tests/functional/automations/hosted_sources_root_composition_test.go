@@ -111,6 +111,7 @@ func hostedSourcesFactoryConfig() map[string]any {
 			"states": []map[string]string{
 				{"name": "init", "type": "INITIAL"},
 				{"name": "queued", "type": "PROCESSING"},
+				{"name": "failed", "type": "FAILED"},
 			},
 		}},
 		"workers": []map[string]any{{
@@ -129,6 +130,10 @@ func hostedSourcesFactoryConfig() map[string]any {
 			"worker":   "linear-poller",
 			"inputs":   []map[string]string{{"workType": "story", "state": "init"}},
 			"outputs":  []map[string]string{{"workType": "story", "state": "queued"}},
+			"onFailure": []map[string]string{{
+				"workType": "story",
+				"state":    "failed",
+			}},
 		}},
 	}
 }

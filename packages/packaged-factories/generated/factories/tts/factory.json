@@ -1,5 +1,43 @@
 {
+  "description": {
+    "type": "LOCALIZABLE_ASSET",
+    "value": "Converts submitted text to audio with the packaged local text-to-speech model."
+  },
+  "examples": [
+    {
+      "args": {
+        "text": "The release is ready."
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Convert a short release summary to audio."
+      },
+      "name": "speak-release-summary"
+    }
+  ],
   "id": "builtin-tts",
+  "invocationSignature": {
+    "parameters": [
+      {
+        "bindings": [
+          {
+            "kind": "POSITIONAL",
+            "position": 1
+          },
+          {
+            "kind": "STDIN"
+          },
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "description": "Text to convert to speech.",
+        "externalName": "to",
+        "name": "text",
+        "required": true
+      }
+    ]
+  },
   "name": "tts",
   "resources": [
     {
@@ -35,7 +73,7 @@
   ],
   "workers": [
     {
-      "body": "You are the @you/tts built-in factory worker.",
+      "body": "You are the local text-to-speech worker for @you/tts. Treat the bound text slot as the complete input, preserve its wording and reading order, synthesize exactly one audio result with the configured local model, and surface a clear failure rather than returning partial or unrelated content.",
       "command": "omnivoice-llamacpp",
       "model": "OMNIVOICE_Q4_K_M",
       "modelLocality": "LOCAL",
@@ -74,7 +112,7 @@
   ],
   "workstations": [
     {
-      "body": "Convert the requested text into speech for {{ .WorkID }}.",
+      "body": "For Work {{ .WorkID }}, read the complete bound text input, pass it unchanged to the configured TTS operation, and return the resulting audio content. Do not summarize, translate, add commentary, or claim success if synthesis produces no valid audio output.",
       "inputs": [
         {
           "state": "init",

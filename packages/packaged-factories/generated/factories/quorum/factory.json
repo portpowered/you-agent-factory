@@ -1,4 +1,8 @@
 {
+  "description": {
+    "type": "LOCALIZABLE_ASSET",
+    "value": "Runs independent assessments in parallel and merges them into one final answer."
+  },
   "examples": [
     {
       "args": {
@@ -41,9 +45,13 @@
           },
           {
             "kind": "STDIN"
+          },
+          {
+            "kind": "NAMED"
           }
         ],
         "description": "Text request evaluated by the quorum workers.",
+        "externalName": "to",
         "name": "input",
         "required": true
       },
@@ -56,12 +64,10 @@
             "kind": "NAMED"
           }
         ],
-        "choices": [
-          "CLAUDE",
-          "CODEX"
+        "defaultValues": [
+          ""
         ],
-        "defaultValue": "CODEX",
-        "description": "Provider for both independent quorum branch workers. Defaults to CODEX.",
+        "description": "Provider for both independent quorum branch workers; omitted values use operator defaults.",
         "externalName": "branch-provider",
         "name": "branchProvider"
       },
@@ -74,8 +80,10 @@
             "kind": "NAMED"
           }
         ],
-        "defaultValue": "gpt-5",
-        "description": "Model for both independent quorum branch workers. Defaults to gpt-5.",
+        "defaultValues": [
+          ""
+        ],
+        "description": "Model for both independent quorum branch workers; omitted values use operator defaults.",
         "externalName": "branch-model",
         "name": "branchModel"
       },
@@ -88,12 +96,10 @@
             "kind": "NAMED"
           }
         ],
-        "choices": [
-          "CLAUDE",
-          "CODEX"
+        "defaultValues": [
+          ""
         ],
-        "defaultValue": "CODEX",
-        "description": "Provider for the final quorum merge worker. Defaults to CODEX.",
+        "description": "Provider for the final quorum merge worker; omitted values use operator defaults.",
         "externalName": "merge-provider",
         "name": "mergeProvider"
       },
@@ -106,8 +112,10 @@
             "kind": "NAMED"
           }
         ],
-        "defaultValue": "gpt-5",
-        "description": "Model for the final quorum merge worker. Defaults to gpt-5.",
+        "defaultValues": [
+          ""
+        ],
+        "description": "Model for the final quorum merge worker; omitted values use operator defaults.",
         "externalName": "merge-model",
         "name": "mergeModel"
       }
@@ -193,30 +201,33 @@
   ],
   "workers": [
     {
-      "body": "First independent quorum branch for @you/quorum.",
+      "body": "You are quorum branch A. Assume zero prior context, investigate the complete request independently, use available workspace evidence, and return a standalone proposed answer with assumptions and verification.",
       "model": "${branchModel}",
       "modelProvider": "${branchProvider}",
       "name": "quorum-branch-a",
+      "skipPermissions": true,
       "type": "AGENT_WORKER"
     },
     {
-      "body": "Second independent quorum branch for @you/quorum.",
+      "body": "You are quorum branch B. Assume zero prior context, independently challenge likely assumptions in the complete request, use available workspace evidence, and return a standalone proposed answer with risks and verification.",
       "model": "${branchModel}",
       "modelProvider": "${branchProvider}",
       "name": "quorum-branch-b",
+      "skipPermissions": true,
       "type": "AGENT_WORKER"
     },
     {
-      "body": "Final merge worker for @you/quorum.",
+      "body": "You are the quorum merger. Treat the original request and two branch results as complete context, reconcile them against evidence, preserve material disagreements, and return one self-contained final answer. Before reporting a surprising implementation defect, inspect adjacent behavior and tests or run a focused read-only verification; distinguish canonical intermediate representations from customer-visible output formats, and label any unverified concern as a hypothesis rather than a fact.",
       "model": "${mergeModel}",
       "modelProvider": "${mergeProvider}",
       "name": "quorum-merge",
+      "skipPermissions": true,
       "type": "AGENT_WORKER"
     }
   ],
   "workstations": [
     {
-      "body": "Preserve the original request and create two independent quorum branch Work items.",
+      "body": "Preserve the complete original request without summarizing or dropping context, and create exactly two independent quorum branch Work items whose names and lineage remain traceable to the original Work.",
       "inputs": [
         {
           "state": "init",
@@ -251,7 +262,7 @@
       "worker": ""
     },
     {
-      "body": "Produce branch A's independent assessment of the request.\n\nOriginal request:\n{{ range (index .Inputs 0).Content }}{{ .Text }}{{ end }}",
+      "body": "You have no shared conversation with any other branch. Read the original request in full and inspect relevant workspace instructions, source, tests, or other evidence when available. Produce branch A's independent solution, covering all requirements, bounded assumptions, edge cases, and verification. Make the result self-contained for a merger that cannot infer your reasoning.\n\nOriginal request:\n{{ range (index .Inputs 0).Content }}{{ .Text }}{{ end }}",
       "inputs": [
         {
           "state": "init",
@@ -275,7 +286,7 @@
       "worker": "quorum-branch-a"
     },
     {
-      "body": "Produce branch B's independent assessment of the request.\n\nOriginal request:\n{{ range (index .Inputs 0).Content }}{{ .Text }}{{ end }}",
+      "body": "You have no shared conversation with any other branch. Read the original request in full and inspect relevant workspace instructions, source, tests, or other evidence when available. Produce branch B's independent solution with special attention to alternative interpretations, hidden risks, failure cases, and verification. Make the result self-contained for a merger that cannot infer your reasoning.\n\nOriginal request:\n{{ range (index .Inputs 0).Content }}{{ .Text }}{{ end }}",
       "inputs": [
         {
           "state": "init",
@@ -299,7 +310,7 @@
       "worker": "quorum-branch-b"
     },
     {
-      "body": "Synthesize the two quorum assessments into one final response. The inputs are ordered as original request, branch A, then branch B.\n\nOriginal request:\n{{ range (index .Inputs 0).Content }}{{ .Text }}{{ end }}\n\nBranch A output:\n{{ (index .Inputs 1).Payload }}\n\nBranch B output:\n{{ (index .Inputs 2).Payload }}",
+      "body": "Start from zero context. The inputs are ordered as original request, branch A, then branch B. Read all three completely. Reconcile the proposals against the request and available evidence, select the strongest supported conclusions, preserve consequential disagreements or caveats, and synthesize one complete customer-facing response. Do not invent missing evidence or silently treat consensus as proof.\n\nOriginal request:\n{{ range (index .Inputs 0).Content }}{{ .Text }}{{ end }}\n\nBranch A output:\n{{ (index .Inputs 1).Payload }}\n\nBranch B output:\n{{ (index .Inputs 2).Payload }}\n\nBefore reporting a surprising implementation defect, verify it against\nadjacent behavior and tests or run a focused read-only check. Distinguish\ncanonical intermediate representations from customer-visible output\nformats. If verification is unavailable, report the concern as a\nhypothesis rather than a confirmed defect.",
       "inputs": [
         {
           "state": "quorum-context",

@@ -36,6 +36,21 @@ export const publicPackagePolicies = {
     allowedRuntimeDependencies: new Set(["@you-agent-factory/client"]),
     allowedPublicPackageDependencies: new Set(["@you-agent-factory/client"]),
   },
+  "factory-graph": {
+    packageName: "@you-agent-factory/factory-graph",
+    allowedRuntimeDependencies: new Set([
+      "@you-agent-factory/client",
+      "@you-agent-factory/components",
+      "@you-agent-factory/factory-replay",
+      "react",
+      "@xyflow/react",
+    ]),
+    allowedPublicPackageDependencies: new Set([
+      "@you-agent-factory/client",
+      "@you-agent-factory/components",
+      "@you-agent-factory/factory-replay",
+    ]),
+  },
   "factory-emulator": {
     packageName: "@you-agent-factory/factory-emulator",
     allowedRuntimeDependencies: new Set([
@@ -72,6 +87,7 @@ export const publicPackagePolicies = {
     allowedRuntimeDependencies: new Set([
       "@you-agent-factory/client",
       "@you-agent-factory/components",
+      "@you-agent-factory/factory-graph",
       "@you-agent-factory/factory-replay",
       "@xyflow/react",
       "react",
@@ -80,6 +96,7 @@ export const publicPackagePolicies = {
     allowedPublicPackageDependencies: new Set([
       "@you-agent-factory/client",
       "@you-agent-factory/components",
+      "@you-agent-factory/factory-graph",
       "@you-agent-factory/factory-replay",
     ]),
   },

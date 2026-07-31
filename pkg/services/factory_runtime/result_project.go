@@ -209,7 +209,10 @@ func projectDecodedValue(
 				return []work.WorkContentPart{artifactBackedPart(sessionID, artifact, typed)}, nil
 			}
 		}
-		return []work.WorkContentPart{jsonPart(typed, path)}, nil
+		return []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeText,
+			Text: typed,
+		}}, nil
 	case []any:
 		return []work.WorkContentPart{jsonPart(typed, path)}, nil
 	case map[string]any:

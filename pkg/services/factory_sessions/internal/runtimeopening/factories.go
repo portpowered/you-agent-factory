@@ -12,6 +12,7 @@ import (
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -34,9 +35,9 @@ type ExternalEffects struct {
 	RuntimeHostObserver              factorysessions.RuntimeHostObserver
 	FactoryVisualizationSink         factoryvisualization.Sink
 	FactoryVisualizationRootObserver factoryvisualization.RootObserver
-	HostedClock                      workers.HostedPollerClock
-	HostedHTTPClient                 workers.HostedPollerHTTPDoer
-	HostedSecretResolver             workers.HostedPollerSecretResolver
+	HostedClock                      automations.HostedLinearClock
+	HostedHTTPClient                 automations.HostedLinearHTTPDoer
+	HostedSecretResolver             automations.HostedLinearSecretResolver
 	HostedLinearEndpoint             string
 }
 
@@ -68,7 +69,7 @@ type FactorySessionExecutionFactory = func(
 ) (factorysessions.ExecutionService, error)
 
 type ConductorInvocationWithProgressFactory = func(
-	workers.ProviderRegistry,
+	providers.Service,
 	workers.CommandRunner,
 	workers.PTYAllocator,
 	workers.ProgressPublisher,
@@ -91,6 +92,7 @@ type WorkersRuntimeFactory = func(
 	workers.PTYAllocator,
 	*zap.Logger,
 	bool,
+	string,
 	string,
 	*bool,
 	workers.Provider,
@@ -117,6 +119,7 @@ type DurableExecution struct {
 type DurableExecutionFactory func(
 	factorydefinitions.RuntimeOpeningRequest,
 	factorysessions.SessionRuntimeOpeningRequest,
+	operatorsettings.ResolvedDefaults,
 	RuntimeRoot,
 	factoryruntime.Clock,
 	workers.Provider,

@@ -9,8 +9,8 @@ import (
 )
 
 type snapshotPortabilityStub struct {
-	captureCalled bool
-	prepareCalled bool
+	captureCalled     bool
+	prepareCalled     bool
 	materializeCalled bool
 }
 

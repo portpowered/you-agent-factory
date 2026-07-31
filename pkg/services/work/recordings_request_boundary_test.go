@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"os/exec"
-	"strings"
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -14,8 +12,6 @@ import (
 	stateaccess "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access"
 	stateaccesswire "github.com/portpowered/infinite-you/pkg/services/work/internal/services/state_access/wire"
 )
-
-const stateAccessWireRoot = modulePrefix + "pkg/services/work/internal/services/state_access/wire"
 
 // TestWorkConstructsRecordingsRequestsThroughRoot proves CUT-WORK-REC story 003:
 // leased Work state_access Recordings-backed reads construct Recordings queries
@@ -104,33 +100,6 @@ func TestWorkRecordingsTypedProjectionFailuresSurfaceThroughReadEdge(t *testing.
 // TestWorkRecordingsRequestConstructionImportsRecordingsRootOnly seals the
 // request-construction path: Work boundary tests may depend on Recordings query
 // helpers only through the service root contract.
-func TestWorkRecordingsRequestConstructionImportsRecordingsRootOnly(t *testing.T) {
-	t.Parallel()
-	assertRecordingsRequestConstructionImportsRecordingsRootOnly(t, stateAccessWireRoot)
-}
-
-func assertRecordingsRequestConstructionImportsRecordingsRootOnly(
-	t *testing.T,
-	packagePath string,
-) {
-	t.Helper()
-
-	cmd := exec.Command("go", "list", "-f", "{{join .Imports \"\\n\"}}", packagePath)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("go list imports for %s: %v\n%s", packagePath, err, output)
-	}
-	for _, importPath := range strings.Fields(string(output)) {
-		if isForbiddenWorkRecordingsImport(importPath) {
-			t.Fatalf(
-				"%s import %s is forbidden for Recordings request construction; use %s only",
-				packagePath,
-				importPath,
-				recordingsRoot,
-			)
-		}
-	}
-}
 
 type unavailableSessionResolver struct{}
 

@@ -2,9 +2,9 @@ package support
 
 import "path/filepath"
 
-// ProviderSessionFixtureRoot is the tracked repo-relative root for provider
-// session golden fixtures. It is narrowly excepted from docs/temp/** ignore.
-const ProviderSessionFixtureRoot = "docs/temp/functional/provider-sessions"
+// ProviderSessionFixtureRoot is the repo-relative root for provider-session
+// golden fixtures owned by the functional-test support package.
+const ProviderSessionFixtureRoot = "tests/functional/internal/support/testdata/provider-sessions"
 
 // ProviderSessionFixturePath joins path segments under the tracked fixture root.
 func ProviderSessionFixturePath(parts ...string) string {

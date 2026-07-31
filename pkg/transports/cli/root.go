@@ -16,10 +16,10 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionscli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
-	factorydefinitionscli "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/cli"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	acpcli "github.com/portpowered/infinite-you/pkg/transports/cli/acp"
@@ -56,8 +56,8 @@ type cliGlobalOptions struct {
 }
 
 type cliOperatorDefaultsOptions struct {
-	defaultWorkerModelProvider string
-	defaultWorkerModel         string
+	providerOverride string
+	modelOverride    string
 }
 
 type SubmitWorkOperation func(submitcli.SubmitConfig) error
@@ -156,29 +156,29 @@ type CommandFactory struct {
 	resolveOperatorDefaults           operatorconfig.DefaultsResolver
 	loadOperatorConfig                operatorconfig.ConfigLoader
 
-	SubmitWork            func(submitcli.SubmitConfig) error
-	SubmitBatch           func(submitcli.BatchConfig) error
-	SessionsCLI           sessioncli.Service
-	BuildExecution        ExecutionServiceBuilder
-	ModelsCLI             modelscli.Service
-	FlattenFactoryConfig  func(configcli.FactoryConfigFlattenConfig) error
-	ExpandFactoryConfig   func(configcli.FactoryConfigExpandConfig) error
-	InitFactory           interfaces.ScaffoldInitializer
-	ConfigureInit         func(initsetup.Config) error
+	SubmitWork             func(submitcli.SubmitConfig) error
+	SubmitBatch            func(submitcli.BatchConfig) error
+	SessionsCLI            sessioncli.Service
+	BuildExecution         ExecutionServiceBuilder
+	ModelsCLI              modelscli.Service
+	FlattenFactoryConfig   func(configcli.FactoryConfigFlattenConfig) error
+	ExpandFactoryConfig    func(configcli.FactoryConfigExpandConfig) error
+	InitFactory            interfaces.ScaffoldInitializer
+	ConfigureInit          func(initsetup.Config) error
 	InstallPackagedFactory func(factorydefinitionscli.InstallPackagedFactoryConfig) error
-	QueryFactory          func(factorycli.QueryConfig) error
-	ListFactories         func(factorycli.ListConfig) error
-	ValidateFactory       func(factorycli.ValidateConfig) error
-	CreateFactoryFromFile func(factorycli.CreateFromFileConfig) error
-	ReplaceFactoryCurrent func(factorycli.ReplaceCurrentConfig) error
-	UpdateFactoryFromFile func(factorycli.UpdateFromFileConfig) error
-	DeleteFactory         func(factorycli.DeleteConfig) error
-	ListWork              func(workcli.ListConfig) error
-	ShowWork              func(workcli.ShowConfig) error
-	MoveWork              func(workcli.MoveConfig) error
-	VisualizeWork         func(workcli.VisualizeConfig) error
-	openRunSelection      runcli.SelectionFactory
-	acp                   acpcli.Service
+	QueryFactory           func(factorycli.QueryConfig) error
+	ListFactories          func(factorycli.ListConfig) error
+	ValidateFactory        func(factorycli.ValidateConfig) error
+	CreateFactoryFromFile  func(factorycli.CreateFromFileConfig) error
+	ReplaceFactoryCurrent  func(factorycli.ReplaceCurrentConfig) error
+	UpdateFactoryFromFile  func(factorycli.UpdateFromFileConfig) error
+	DeleteFactory          func(factorycli.DeleteConfig) error
+	ListWork               func(workcli.ListConfig) error
+	ShowWork               func(workcli.ShowConfig) error
+	MoveWork               func(workcli.MoveConfig) error
+	VisualizeWork          func(workcli.VisualizeConfig) error
+	openRunSelection       runcli.SelectionFactory
+	acp                    acpcli.Service
 }
 
 // NewCommandFactory copies the Wire-built graph without installing defaults.
@@ -374,30 +374,9 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 		return err
 	}
 	cfg.HomeDir = homeDir
-	if rootOptions.loadOperatorConfig != nil {
-		operatorConfig, loadErr := rootOptions.loadOperatorConfig(operatorconfig.DefaultConfigPath(homeDir))
-		if loadErr != nil && !errors.Is(loadErr, syscall.ENOTDIR) {
-			return loadErr
-		}
-		if loadErr == nil {
-			cfg.ACPIntegrations = append([]operatorconfig.ACPIntegration(nil), operatorConfig.Workers.ACP.Integrations...)
-		}
-	}
-	modelCacheDir, _, err := lookupProcessEnvironment(
-		rootOptions,
-		runcli.ModelCacheDirEnvironment,
-	)
-	if err != nil {
+	if err := configureRunEnvironment(cmd, &cfg, rootOptions, homeDir); err != nil {
 		return err
 	}
-	cfg.ModelCacheDir = modelCacheDir
-	cfg.FactoryScaffoldInitializer = rootOptions.InitFactory
-	cfg.ResolveCurrentFactoryDir = rootOptions.resolveCurrentFactoryDir
-	cfg.ResolveFactoryConfigRoot = rootOptions.resolveFactoryConfigRoot
-	cfg.LoadFactoryConfigFile = rootOptions.loadFactoryConfigFile
-	cfg.WorkRequestFileLoader = rootOptions.workRequestFileLoader
-	cfg.DirectoryCreator = rootOptions.runDirectoryCreator
-	cfg.BrowserOpener = rootOptions.browserOpener
 	if err := resolveRunFactorySelection(
 		cmd,
 		&cfg,
@@ -409,7 +388,10 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 		return err
 	}
 
-	resolvedOperatorDefaults, err := resolveOperatorDefaults(cmd, operatorDefaults, rootOptions, homeDir)
+	runOperatorDefaults := *operatorDefaults
+	runOperatorDefaults.providerOverride = cfg.ProviderOverride
+	runOperatorDefaults.modelOverride = cfg.ModelOverride
+	resolvedOperatorDefaults, err := resolveOperatorDefaults(cmd, &runOperatorDefaults, rootOptions, homeDir)
 	if err != nil {
 		return err
 	}
@@ -417,11 +399,19 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 	cfg.Stdin = cmd.InOrStdin()
 	cfg.StdinIsTTY = func() bool { return startupcli.StdinIsTTY(cmd.Context()) }
 	cfg.OutputIsTTY = startupcli.StdoutIsTTY(cmd.Context())
+	cfg.ProgressOutput = cmd.ErrOrStderr()
+	cfg.ProgressIsTTY = startupcli.StderrIsTTY(cmd.Context())
 	if err := resolveRunFactoryPrompt(cmd, &cfg, promptArgs, rootOptions.prepareInvocationInput); err != nil {
 		runcli.ObserveInvocationRejection(logger, err)
 		return err
 	}
 	cleanInvocation, textInvocation := runInvocationModes(cmd, cfg)
+	invocationFactorySelected := cmd.Flags().Changed("factory") || cmd.Flags().Changed("named")
+	defaultResponseStream := !cfg.SuppressDashboardRendering &&
+		(textInvocation || (invocationFactorySelected && !cfg.Continuously && !cmd.Flags().Changed("work") && len(promptArgs) > 0))
+	if defaultResponseStream && strings.TrimSpace(cfg.InvocationOutputMode) == "" && !cfg.InvocationOutputExplicit {
+		cfg.InvocationOutputMode = runcli.InvocationOutputResponseStream
+	}
 	cfg.CleanInvocation = cleanInvocation
 	cfg.JSON = globals.json
 	runPolicy := resolveEffectiveRunPolicy(cmd, cfg, policy)
@@ -443,6 +433,37 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 		return errors.New("run service initializer is required")
 	}
 	return delegateRunInitialization(cmd.Context(), cfg, defaultInvocation, rootOptions)
+}
+
+func configureRunEnvironment(cmd *cobra.Command, cfg *runcli.RunConfig, rootOptions CommandFactory, homeDir string) error {
+	if rootOptions.loadOperatorConfig != nil {
+		operatorConfig, loadErr := rootOptions.loadOperatorConfig(operatorconfig.DefaultConfigPath(homeDir))
+		if loadErr != nil && !errors.Is(loadErr, syscall.ENOTDIR) {
+			return loadErr
+		}
+		if loadErr == nil {
+			cfg.ACPIntegrations = append([]operatorconfig.ACPIntegration(nil), operatorConfig.Workers.ACP.Integrations...)
+			if err := rootOptions.acp.Configure(cmd.Context(), operatorConfig.Workers.ACP.Integrations); err != nil {
+				return err
+			}
+		}
+	}
+	modelCacheDir, _, err := lookupProcessEnvironment(
+		rootOptions,
+		runcli.ModelCacheDirEnvironment,
+	)
+	if err != nil {
+		return err
+	}
+	cfg.ModelCacheDir = modelCacheDir
+	cfg.FactoryScaffoldInitializer = rootOptions.InitFactory
+	cfg.ResolveCurrentFactoryDir = rootOptions.resolveCurrentFactoryDir
+	cfg.ResolveFactoryConfigRoot = rootOptions.resolveFactoryConfigRoot
+	cfg.LoadFactoryConfigFile = rootOptions.loadFactoryConfigFile
+	cfg.WorkRequestFileLoader = rootOptions.workRequestFileLoader
+	cfg.DirectoryCreator = rootOptions.runDirectoryCreator
+	cfg.BrowserOpener = rootOptions.browserOpener
+	return nil
 }
 
 func delegateRunInitialization(ctx context.Context, cfg runcli.RunConfig, defaultInvocation bool, options CommandFactory) error {
@@ -487,7 +508,7 @@ func runInvocationModes(cmd *cobra.Command, cfg runcli.RunConfig) (cleanInvocati
 	return cleanInvocation, textInvocation
 }
 
-func resolveOperatorDefaults(cmd *cobra.Command, operatorDefaults *cliOperatorDefaultsOptions, rootOptions CommandFactory, homeDir string) (operatorconfig.ResolvedDefaults, error) {
+func resolveOperatorDefaults(_ *cobra.Command, options *cliOperatorDefaultsOptions, rootOptions CommandFactory, homeDir string) (operatorconfig.ResolvedDefaults, error) {
 	if rootOptions.resolveOperatorDefaults == nil {
 		return operatorconfig.ResolvedDefaults{}, fmt.Errorf("Operator Settings defaults resolver is required")
 	}
@@ -507,20 +528,12 @@ func resolveOperatorDefaults(cmd *cobra.Command, operatorDefaults *cliOperatorDe
 	if err != nil {
 		return operatorconfig.ResolvedDefaults{}, err
 	}
-	return rootOptions.resolveOperatorDefaults(homeDir, environment, operatorconfig.FlagOverrides{
-		WorkerModelProvider: resolvedPersistentStringIfCLI(
-			cmd,
-			"you.flag.default-worker-model-provider",
-			"default-worker-model-provider",
-			operatorDefaults.defaultWorkerModelProvider,
-		),
-		WorkerModel: resolvedPersistentStringIfCLI(
-			cmd,
-			"you.flag.default-worker-model",
-			"default-worker-model",
-			operatorDefaults.defaultWorkerModel,
-		),
-	})
+	flags := operatorconfig.FlagOverrides{}
+	if options != nil {
+		flags.WorkerModelProvider = strings.TrimSpace(options.providerOverride)
+		flags.WorkerModel = strings.TrimSpace(options.modelOverride)
+	}
+	return rootOptions.resolveOperatorDefaults(homeDir, environment, flags)
 }
 
 func resolveProcessHomeDir(options CommandFactory) (string, error) {

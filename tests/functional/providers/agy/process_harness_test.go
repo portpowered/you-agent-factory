@@ -28,7 +28,7 @@ const agyFunctionalModel = "gemini-pro"
 func TestAgyConductorSuccessThroughRootBuildProcess(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", strings.Replace(
-		support.BuildModelWorkerConfig(modelprovider.ProviderAgy, agyFunctionalModel),
+		support.BuildModelWorkerConfig(modelprovider.ProviderAntigravity, agyFunctionalModel),
 		"stopToken: COMPLETE",
 		"skipPermissions: true\nstopToken: COMPLETE",
 		1,
@@ -73,7 +73,7 @@ func TestAgyConductorSuccessThroughRootBuildProcess(t *testing.T) {
 func TestAgyNativeFailureThroughRootBuildProcessIsSafe(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
-		modelprovider.ProviderAgy,
+		modelprovider.ProviderAntigravity,
 		agyFunctionalModel,
 	))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"agy native failure"}`))
@@ -107,7 +107,7 @@ func TestAgyNativeFailureThroughRootBuildProcessIsSafe(t *testing.T) {
 	if strings.Contains(payload, leaked) || strings.Contains(payload, "secret-key") {
 		t.Fatalf("Factory events leaked unsafe Agy failure detail: %s", payload)
 	}
-	assertAgyProviderSession(t, events, factoryapi.InferenceOutcomeFailed, string(modelprovider.ProviderAgy))
+	assertAgyProviderSession(t, events, factoryapi.InferenceOutcomeFailed, string(modelprovider.ProviderAntigravity))
 }
 
 // TestAgyTimeoutFailureThroughRootBuildProcess proves timeout normalization
@@ -115,7 +115,7 @@ func TestAgyNativeFailureThroughRootBuildProcessIsSafe(t *testing.T) {
 func TestAgyTimeoutFailureThroughRootBuildProcess(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
-		modelprovider.ProviderAgy,
+		modelprovider.ProviderAntigravity,
 		agyFunctionalModel,
 	))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"agy timeout failure"}`))
@@ -141,7 +141,7 @@ func TestAgyTimeoutFailureThroughRootBuildProcess(t *testing.T) {
 	if reason != factoryapi.WorkFailureTypeTimeout {
 		t.Fatalf("failure reason = %q, want %q", reason, factoryapi.WorkFailureTypeTimeout)
 	}
-	assertAgyProviderSession(t, events, factoryapi.InferenceOutcomeFailed, string(modelprovider.ProviderAgy))
+	assertAgyProviderSession(t, events, factoryapi.InferenceOutcomeFailed, string(modelprovider.ProviderAntigravity))
 }
 
 // TestAgyCommandCancellationThroughRootBuildProcessIsCanonical proves
@@ -149,7 +149,7 @@ func TestAgyTimeoutFailureThroughRootBuildProcess(t *testing.T) {
 func TestAgyCommandCancellationThroughRootBuildProcessIsCanonical(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", support.BuildModelWorkerConfig(
-		modelprovider.ProviderAgy,
+		modelprovider.ProviderAntigravity,
 		agyFunctionalModel,
 	))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"agy command cancel"}`))
@@ -346,10 +346,10 @@ func assertAgyProviderSession(
 
 	var found bool
 	for _, event := range events {
-		if event.Type != factoryapi.FactoryEventTypeInferenceResponse {
+		if event.Type != factoryapi.FactoryEventTypeModelResponse {
 			continue
 		}
-		payload, err := event.Payload.AsInferenceResponseEventPayload()
+		payload, err := support.AsInferenceResponseObservation(event)
 		if err != nil {
 			t.Fatalf("decode inference response: %v", err)
 		}
@@ -374,10 +374,10 @@ func terminalFailureReason(t *testing.T, events []factoryapi.FactoryEvent) facto
 	t.Helper()
 
 	for _, event := range events {
-		if event.Type != factoryapi.FactoryEventTypeInferenceResponse {
+		if event.Type != factoryapi.FactoryEventTypeModelResponse {
 			continue
 		}
-		payload, err := event.Payload.AsInferenceResponseEventPayload()
+		payload, err := support.AsInferenceResponseObservation(event)
 		if err != nil {
 			t.Fatalf("decode inference response: %v", err)
 		}

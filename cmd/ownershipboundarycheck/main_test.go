@@ -60,7 +60,7 @@ type Config struct { Runtime runtime.Service }`,
 import inference "github.com/portpowered/infinite-you/pkg/services/providers/execution/inferencecontract"
 type Adapter struct { Invoke inference.Invoker }`,
 		"pkg/platform/http/migration_debt.go": `package http
-import debt "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
+import debt "github.com/portpowered/infinite-you/pkg/services/providers/inference"
 type DebtAdapter struct { Invoke debt.Invoker }`,
 	})
 
@@ -297,3 +297,4 @@ func baselineEntryFor(rule, filePath, target string) baselineEntry {
 		Stage: baselineStage, DeletionGate: deletionGates[rule],
 	}
 }
+

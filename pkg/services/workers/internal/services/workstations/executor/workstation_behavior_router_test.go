@@ -32,8 +32,8 @@ func TestScriptExecutorExecuteRequiresResolvedRunner(t *testing.T) {
 		&interfaces.FactoryWorkerConfig{Command: "selected-script"},
 		&capturingCommandRunner{}, nil, "", nil, nil,
 	)
-	if _, err := executor.Execute(context.Background(), workerexecution.WorkstationExecutionRequest{}); err == nil || !strings.Contains(err.Error(), "runner is required") {
-		t.Fatalf("missing Runner error = %v", err)
+	if _, err := executor.Execute(context.Background(), workerexecution.WorkstationExecutionRequest{}); err == nil || !strings.Contains(err.Error(), "runner registry is required") {
+		t.Fatalf("missing runner registry error = %v", err)
 	}
 }
 

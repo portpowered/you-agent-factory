@@ -45,7 +45,7 @@ func TestNewService_RequiresExactInjectedPorts(t *testing.T) {
 		},
 		PackagedInstaller:           installer,
 		ScaffoldInitializer:         scaffold,
-		ScaffoldFactoryNameResolver:   resolver,
+		ScaffoldFactoryNameResolver: resolver,
 	}); err == nil || svc != nil || !strings.Contains(err.Error(), "list operation is required") {
 		t.Fatalf("NewService(nil list) = %#v, %v; want list operation required error", svc, err)
 	}
@@ -61,7 +61,7 @@ func TestNewService_RequiresExactInjectedPorts(t *testing.T) {
 		t.Fatalf("NewService(nil resolve) = %#v, %v; want resolve operation required error", svc, err)
 	}
 	if svc, err := distributionwire.NewService(distributionservice.Dependencies{
-		PackagedCatalog:     catalog,
+		PackagedCatalog:             catalog,
 		PackagedInstaller:           factorydefinitions.PackagedFactoryInstallationOperations{},
 		ScaffoldInitializer:         scaffold,
 		ScaffoldFactoryNameResolver: resolver,

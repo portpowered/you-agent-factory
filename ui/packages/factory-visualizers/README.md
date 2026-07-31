@@ -1,7 +1,7 @@
 # `@you-agent-factory/factory-visualizers`
 
-Controlled React components for rendering caller-prepared Factory replay
-projections. The package exports `FactoryTopologyReplay`,
+Controlled React components for rendering a caller-prepared `FactoryGraphSource`
+through the original Factory semantic graph. The package exports `FactoryTopologyReplay`,
 `FactoryRecordingTopologyReplay`, `FactoryTimelineScrubber`, and
 `WorkProgressVisualizer`, and `FactoryEmulatorControls` together with their
 message, formatting, status, callback, and structured error contracts.
@@ -10,11 +10,9 @@ See the [public package family guide](https://github.com/portpowered/you-agent-f
 for clean-install commands, static and interactive package examples, dependency
 direction, and the precise hosted-runtime versus emulator support boundary.
 
-`FactoryTopologyReplay` accepts a presentation-only `chrome` configuration.
-Choose the `full`, `minimal`, or `none` preset, then override `legend`,
-`background`, `viewportControls`, or `visibilityControls` individually. The
-resolver starts from the selected preset and applies supplied overrides without
-changing the caller-provided topology, activity, or Work-progress projection.
+`FactoryTopologyReplay` has one ready input: a `FactoryGraphSource` containing
+the complete Factory, its authored layout, and one selected-tick runtime
+projection. It deliberately has no topology-only rendering fallback.
 
 `FactoryEmulatorControls` composes the lower-level controlled playback toolbar
 with `FactoryTimelineScrubber`. Hosts provide the current/history selection and
@@ -40,11 +38,11 @@ local failure message. A failure may include `recoveryAction` with a host-owned
 callback; the visualizers render that action but never assume a retry,
 transport, timer, or global error-state implementation.
 
-The host always owns transport, persistence, and canonical Factory data. It can
-either prepare controlled projections with `@you-agent-factory/factory-replay`
-or pass an unknown recording directly to `FactoryRecordingTopologyReplay`,
-which validates it through `@you-agent-factory/client` before deriving the
-selected-tick projections. Import the package styles once:
+The host always owns transport, persistence, and canonical Factory data. It
+prepares selected-tick runtime data with `@you-agent-factory/factory-replay`
+and passes it with the complete Factory through `@you-agent-factory/factory-graph`.
+`FactoryRecordingTopologyReplay` validates an unknown recording and renders it
+only when the recording includes that complete Factory. Import the package styles once:
 
 ```tsx
 import {
@@ -93,9 +91,9 @@ keeps fixed history stable as later evidence arrives, and can return to current
 mode with its follow-latest action. Current mode also incorporates newly
 accepted same-tick events in canonical sequence order.
 
-The installed-consumer verification uses the public client parser and public
-replay projection functions before passing the prepared topology to
-`FactoryTopologyReplay`. It imports the client recording fixture and both
+The installed-consumer verification uses the public client parser, replay
+projection functions, and Factory graph source before passing the canonical
+graph to `FactoryTopologyReplay`. It imports the client recording fixture and both
 package style entry points only through public package exports.
 
 Run `make storybook` in this directory for package-local development. Use

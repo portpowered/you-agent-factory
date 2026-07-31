@@ -41,4 +41,4 @@ you workers	workers	you
 you workers acp	acp	you workers
 you workers acp add	add	you workers acp
 you workers acp delete	delete	you workers acp
-you workers acp list	list	you workers acp
+you workers list	list	you workers

@@ -9,13 +9,13 @@ BUN_BIN     := $(shell where.exe bun >NUL 2>NUL && echo bun)
 else
 BUN_BIN     := $(shell command -v bun 2>/dev/null)
 endif
-BUN_INSTALL := $(BUN_BIN) install --frozen-lockfile
+BUN_INSTALL := $(BUN_BIN) install
 BUN_PACKAGE_DIRS := ui/packages/components ui
 UI_SCRIPT   := $(if $(BUN_BIN),$(BUN_BIN) run,$(NPM) run)
 UI_EXEC     := $(if $(BUN_BIN),$(BUN_BIN) x,$(NPM) exec)
-UI_INSTALL  := $(if $(BUN_BIN),$(BUN_BIN) install --frozen-lockfile,$(NPM) install --no-package-lock)
+UI_INSTALL  := $(if $(BUN_BIN),$(BUN_BIN) install,$(NPM) install --no-package-lock)
 FUNCTIONAL_DEFAULT_PACKAGES := ./tests/functional/...
-FUNCTIONAL_DEFAULT_JOBS ?= 2
+FUNCTIONAL_DEFAULT_JOBS ?= 8
 UNIT_DEFAULT_JOBS ?= 32
 FUNCTIONAL_LONG_TAGS ?= functionallong
 FUNCTIONAL_LONG_PACKAGES := ./tests/functional/...
@@ -39,8 +39,8 @@ CONFIG_CONTRACT_SMOKE_TIMEOUT ?= 120s
 JAVASCRIPT_RUNTIME_REGRESSION_TESTS ?= ^(TestCallBehavior_WorkflowFinalInventoryMatchesExecution|TestCallBehavior_AgentRunInventoryMatchesExecution|TestRun_ProgressPrimitives_EmitsOrderedRuntimeRecords|TestRun_PolicyDeniedChildOperations_ReturnStableDiagnostics|TestCallBehavior_WorkflowResumeStateInventoryMatchesExecution)$$
 RESPONSE_STREAM_STRESS_SMOKE_TEST := TestSessionResponseEventStore_Backpressure
 RESPONSE_STREAM_STRESS_SMOKE_TIMEOUT ?= 120s
-BUILT_CLI_ACCEPTANCE_PACKAGES := ./tests/functional/acceptance ./tests/functional/transport/cli/process
-BUILT_CLI_ACCEPTANCE_TIMEOUT ?= 300s
+ROOT_PROCESS_ACCEPTANCE_PACKAGES := ./tests/functional/acceptance ./tests/functional/transport/cli/process
+ROOT_PROCESS_ACCEPTANCE_TIMEOUT ?= 300s
 
 ifeq ($(OS),Windows_NT)
 	BINARY_NAME := you.exe
@@ -122,7 +122,7 @@ endef
 .PHONY: test-functional test-functional-long test-backend-functional functional-boundary-check functional-test-viz
 .PHONY: test-ui-browser-integration test-ui-storybook-integration test-ui-durable-session-real-backend test-ui-performance ui-component-test
 .PHONY: test-unit-coverage test-functional-coverage test-backend-coverage test-coverage-go test-race
-.PHONY: test-backend-verification test-built-cli-acceptance long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval
+.PHONY: test-backend-verification test-root-process-acceptance long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval
 
 .PHONY: verify-fast verify-pr verify-pr-inference verify-extended verify-build verify-lint verify-api
 .PHONY: verify-build-contracts verify-tests run-concurrent-ui-verification-lanes verify test-ui-coverage
@@ -130,6 +130,7 @@ endef
 .PHONY: backend-dependency-graph
 
 .PHONY: generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api generate-wire
+.PHONY: interfaces-api-bundle interfaces-go interfaces-contracts interfaces-ui-openapi interfaces-ui-client interfaces-ui-emulator interfaces-ui interfaces-all
 
 .PHONY: wire-smoke api-smoke api-package-pack-smoke api-package-verify packaged-factory-package-smoke packaged-factory-package-verify packaged-factory-package-script-test packaged-factory-package-pack-check packaged-factory-package-candidate-dry-run packaged-factory-package-consumer-smoke model-provider-package-smoke model-provider-package-verify model-provider-reference-input-smoke
 .PHONY: public-release-package-smoke
@@ -153,6 +154,7 @@ endef
 .PHONY: ui-test-storybook ui-components-typecheck ui-components-test ui-components-storybook ui-components-boundary ui-components-dependency-direction ui-components-verify ui-verify-fresh-npm-install
 .PHONY: ui-public-package-release ui-public-package-publish-prepare
 .PHONY: ui-storybook  ui-deadcode
+.PHONY: ui-package-client-build ui-package-components-build ui-package-emulator-build ui-package-replay-build ui-package-visualizers-build ui-packages-build ui-dashboard-build ui-build-all build-all
 
 
 default:
@@ -184,6 +186,34 @@ generate-go-client-api:
 
 generate-ui-api:
 	cd ui && node ./scripts/generate-openapi-types.mjs ../api/openapi.yaml src/api/generated/openapi.ts
+
+# Interface generation is split by consumer so callers can refresh only UI
+# artifacts or all generated interfaces without relying on prerequisite order.
+interfaces-api-bundle:
+	$(MAKE) bundle-api
+
+interfaces-go: interfaces-api-bundle
+	$(MAKE) generate-go-api
+
+interfaces-contracts:
+	$(MAKE) contracts-generate
+
+interfaces-ui-openapi: interfaces-api-bundle ui-deps
+	$(MAKE) generate-ui-api
+
+interfaces-ui-client: interfaces-contracts interfaces-ui-openapi
+	cd ui/packages/client && $(UI_SCRIPT) generate
+
+interfaces-ui-emulator: ui-deps
+	cd ui/packages/factory-emulator && $(UI_SCRIPT) generate
+
+# Regenerates the dashboard and UI-package interface artifacts without emitting
+# the generated Go HTTP server/client interfaces.
+interfaces-ui: interfaces-ui-client interfaces-ui-emulator
+
+# Regenerates every public interface artifact: bundled OpenAPI, Go HTTP
+# interfaces, contract schemas, and UI-facing generated artifacts.
+interfaces-all: interfaces-go interfaces-ui
 
 generate-wire:
 	$(GO) generate ./pkg/...
@@ -351,15 +381,14 @@ test-integration:
 	$(GO) test ./pkg/services/automations/internal/services/filesystem_watchers/internal/service -run '^TestFileWatcher_' -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./pkg/platform/process -run '^TestExecCommandRunner_' -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./pkg/services/workers/worktree -run '^TestPrepareFactoryGitWorktree_(CreatesWorktreeWhenMissing|ReusesExistingValidWorktree|UsesExistingWorktreesParent|ReturnsFailureWhenWorktreeAddFails|ReturnsFailureWhenPathExistsButIsNotWorktree)$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
-	$(GO) test ./pkg/services/workers/provider -run '^TestScriptWrapProvider_CommandEnvironmentPreventsGitMergeEditorPrompt$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test ./pkg/services/providers/internal/services/execution/internal/provider -run '^TestScriptWrapProvider_CommandEnvironmentPreventsGitMergeEditorPrompt$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 test-contract:
-	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./contracts ./pkg/services/factory_definitions/contracts/contracttests ./pkg/services/workers/provider/functionaltests ./pkg/services/workers/provider/paritytests ./pkg/transports/http/contracttests ./pkg/transports/cli/clicontract ./pkg/transports/cli/climanifestgen -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./contracts ./pkg/services/factory_definitions/contracts/contracttests ./pkg/services/providers/internal/services/execution/internal/provider/functionaltests ./pkg/services/providers/internal/services/execution/internal/provider/paritytests ./pkg/transports/http/contracttests ./pkg/transports/cli/baseline ./pkg/transports/cli/clicontract ./pkg/transports/cli/cliinputs ./pkg/transports/cli/climanifestgen ./pkg/transports/cli/commandidentity -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 test-functional:
 	$(MAKE) functional-boundary-check
 	$(GO) run ./cmd/functionallane -jobs $(FUNCTIONAL_DEFAULT_JOBS) -count=1 -timeout $(GO_TEST_TIMEOUT)
-	$(GO) test -short ./pkg/transports/cli/baseline ./pkg/transports/cli/cliinputs ./pkg/transports/cli/commandidentity -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 functional-boundary-check:
 	$(GO) run ./cmd/functionalboundarycheck
@@ -395,9 +424,8 @@ test-release:
 test-functional-long:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) $(FUNCTIONAL_LONG_PACKAGES) -count=1 -timeout $(GO_TEST_TIMEOUT)
 
-test-built-cli-acceptance:
-	$(MAKE) build
-	$(GO) test $(BUILT_CLI_ACCEPTANCE_PACKAGES) -count=1 -timeout $(BUILT_CLI_ACCEPTANCE_TIMEOUT)
+test-root-process-acceptance:
+	$(GO) test $(ROOT_PROCESS_ACCEPTANCE_PACKAGES) -count=1 -timeout $(ROOT_PROCESS_ACCEPTANCE_TIMEOUT)
 
 verify-fast:
 	$(info Running fast verification tier: typecheck + MCP contract boundary + short UI/unit suite + short Go suite)
@@ -490,7 +518,7 @@ current-factory-watcher-switch-smoke:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/factory/current -run $(CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TEST) -count=$(CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_COUNT) -timeout $(CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TIMEOUT)
 
 provider-parity-smoke:
-	$(GO) test ./pkg/services/workers/provider/paritytests -run $(CROSS_PROVIDER_PARITY_SMOKE_TEST) -count=1 -timeout $(CROSS_PROVIDER_PARITY_SMOKE_TIMEOUT)
+	$(GO) test ./pkg/services/providers/internal/services/execution/internal/provider/paritytests -run $(CROSS_PROVIDER_PARITY_SMOKE_TEST) -count=1 -timeout $(CROSS_PROVIDER_PARITY_SMOKE_TIMEOUT)
 
 javascript-contract-smoke:
 	$(GO) run ./cmd/javascriptcontractsmoke -root .
@@ -616,12 +644,12 @@ run-concurrent-ui-verification-lanes:
 	./scripts/ci/run-concurrent-ui-verification-lanes.sh
 
 verify-tests:
-	$(info Running required CI-equivalent test lanes: maintenance + integration + contract + release surface + built-CLI S24 acceptance + concurrent UI coverage/browser integration + Storybook + UI backend integration + independent backend unit and functional coverage)
+	$(info Running required CI-equivalent test lanes: maintenance + integration + contract + release surface + root-process S24 acceptance + concurrent UI coverage/browser integration + Storybook + UI backend integration + independent backend unit and functional coverage)
 	$(call run_verification_step,test-maintenance,Backend Maintenance lane)
 	$(call run_verification_step,test-integration,Backend Integration lane)
 	$(call run_verification_step,test-contract,Backend Contract lane)
 	$(call run_verification_step,release-surface-smoke,Release surface smoke lane)
-	$(call run_verification_step,test-built-cli-acceptance,Built-CLI S24 acceptance lane)
+	$(call run_verification_step,test-root-process-acceptance,Root-process S24 acceptance lane)
 	$(call run_verification_step,run-concurrent-ui-verification-lanes,Concurrent UI Coverage + UI Browser Integration lanes)
 	$(call run_verification_step,test-ui-storybook-integration,UI Storybook Integration lane)
 	$(call run_verification_step,test-ui-durable-session-real-backend,UI Backend Integration lane)
@@ -657,7 +685,7 @@ ci-verify-tests: ci-verify-build-contracts
 	$(MAKE) test-integration
 	$(MAKE) test-contract
 	$(MAKE) release-surface-smoke
-	$(MAKE) test-built-cli-acceptance
+	$(MAKE) test-root-process-acceptance
 	$(MAKE) run-concurrent-ui-verification-lanes
 	$(MAKE) test-unit-coverage
 	$(MAKE) test-functional-coverage
@@ -714,6 +742,38 @@ ifeq ($(BUN_BIN),)
 else
 	cd ui && $(UI_SCRIPT) build
 endif
+
+# Build each publishable UI package once, in dependency order. The dashboard
+# consumes package source during its Vite build, while package dist/ artifacts
+# are required for local package consumers and release checks.
+ui-package-client-build: interfaces-ui-client
+	cd ui/packages/client && $(UI_SCRIPT) build
+
+ui-package-components-build: ui-deps
+	cd ui/packages/components && $(UI_SCRIPT) build
+
+ui-package-emulator-build: interfaces-ui-emulator ui-package-client-build
+	cd ui/packages/factory-emulator && $(UI_SCRIPT) build
+
+ui-package-replay-build: ui-package-client-build
+	cd ui/packages/factory-replay && $(UI_SCRIPT) build
+
+ui-package-visualizers-build: ui-package-client-build ui-package-components-build ui-package-replay-build
+	cd ui/packages/factory-visualizers && $(UI_SCRIPT) build:current
+
+ui-packages-build: ui-package-client-build ui-package-components-build ui-package-emulator-build ui-package-replay-build ui-package-visualizers-build
+
+ui-dashboard-build: interfaces-ui
+	$(MAKE) ui-build
+
+# Rebuilds every UI artifact: generated contracts, package dist/ outputs, and
+# the dashboard's distributable Vite bundle.
+ui-build-all: ui-packages-build ui-dashboard-build
+
+# Produces the complete application from canonical interface sources before
+# compiling both the dashboard and the Go CLI.
+build-all: interfaces-all ui-build-all
+	$(MAKE) build
 
 ui-test:
 	cd ui && $(UI_SCRIPT) test:unit

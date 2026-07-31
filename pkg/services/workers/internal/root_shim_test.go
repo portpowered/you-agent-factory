@@ -3,14 +3,14 @@ package internal
 import (
 	"testing"
 
-	workstationswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workstationswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/wire"
 )
 
 func TestNewRootConstructsPublishedWorkersService(t *testing.T) {
 	t.Parallel()
 
-	root, err := NewRoot(&recordingRuntimeAssembly{}, workstationswire.NewService())
+	root, err := NewRoot(&recordingRuntimeAssembly{}, workstationswire.NewService(), nil)
 	if err != nil {
 		t.Fatalf("NewRoot() error = %v", err)
 	}

@@ -54,7 +54,7 @@ func TestMapPackageMarksProcessEdgesAsArchitectureException(t *testing.T) {
 }
 
 func TestMapPackageMovesProviderPackagesOutOfWorkers(t *testing.T) {
-	row, err := ownershipinventory.MapPackage("pkg/services/workers/provider/codex")
+	row, err := ownershipinventory.MapPackage("pkg/services/providers/internal/services/execution/internal/provider/codex")
 	if err != nil {
 		t.Fatalf("MapPackage() error = %v", err)
 	}
@@ -92,3 +92,4 @@ func TestInventoryArtifactExistsAtCanonicalPath(t *testing.T) {
 		t.Fatalf("ownership inventory artifact missing at %s: %v", ownershipinventory.InventoryRelativePath, err)
 	}
 }
+

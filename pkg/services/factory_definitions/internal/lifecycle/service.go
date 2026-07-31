@@ -11,11 +11,11 @@ import (
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
+	namedfactorypath "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
 	compilationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation"
 	distributionservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution"
 	distributionwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/wire"
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
-	namedfactorypath "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
 )
 
 // ErrCurrentFactoryNotFound reports that no durable current-factory pointer
@@ -33,13 +33,13 @@ const (
 type Service struct {
 	nonCatalogDefaults
 	catalog.Service
-	validationService        validationservice.Service
-	authoringLayoutService   authoringlayout.Service
-	compilationService       compilationservice.Service
-	host                     Host
-	activationGateway        factoryroot.DefinitionActivationGateway
-	versionFileSystem        factoryroot.VersionFileSystem
-	distributionService      distributionservice.Service
+	validationService      validationservice.Service
+	authoringLayoutService authoringlayout.Service
+	compilationService     compilationservice.Service
+	host                   Host
+	activationGateway      factoryroot.DefinitionActivationGateway
+	versionFileSystem      factoryroot.VersionFileSystem
+	distributionService    distributionservice.Service
 }
 
 type nonCatalogDefaults interface {

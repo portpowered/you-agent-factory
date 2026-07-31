@@ -27,9 +27,9 @@ const (
   content: { message: "` + structuredArtifactContentValue + `" },
 });
 return { artifactRef: artifactRef };`
-	structuredArtifactID            = "artifact-1"
-	structuredArtifactLabel         = "js-output-mapping-artifact-label"
-	structuredArtifactContentValue  = "js-output-mapping-artifact-content"
+	structuredArtifactID           = "artifact-1"
+	structuredArtifactLabel        = "js-output-mapping-artifact-label"
+	structuredArtifactContentValue = "js-output-mapping-artifact-content"
 
 	unsupportedReturnWorkflowFileName = "unsupported-return.workflow.js"
 	unsupportedReturnWorkflowSource   = `return function () {};`
@@ -473,12 +473,12 @@ func assertReturnValuePrimaryResult(
 	if result.PrimaryResult == nil || len(*result.PrimaryResult) != 1 {
 		t.Fatalf("primary result = %#v, want exactly one Work content part", result.PrimaryResult)
 	}
-	part, err := (*result.PrimaryResult)[0].AsWorkJsonContentPart()
+	part, err := (*result.PrimaryResult)[0].AsWorkTextContentPart()
 	if err != nil {
 		t.Fatalf("decode primary result Work content part: %v", err)
 	}
-	if got, ok := part.Json.(string); !ok || got != want {
-		t.Fatalf("primary result = %#v, want exact string %q", part.Json, want)
+	if part.Text != want {
+		t.Fatalf("primary result = %q, want exact string %q", part.Text, want)
 	}
 }
 

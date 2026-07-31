@@ -10,7 +10,11 @@ import {
   isDashboardWidgetID,
   LEGACY_SELECTION_WIDGET_IDS,
   LEGACY_WORK_OUTCOME_WIDGET_IDS,
+  WORK_OUTCOME_CHART_MIN_GRID_HEIGHT,
+  WORK_OUTCOME_CHART_MIN_GRID_WIDTH,
 } from "./dashboardLayoutSchema";
+
+const DASHBOARD_GRID_COLUMNS = 12;
 
 export function mergeDashboardLayout(
   layout: AgentBentoLayoutItem[],
@@ -129,6 +133,8 @@ function resolveStoredWidgetType(
       return DASHBOARD_WIDGET_IDS.trace;
     case DASHBOARD_WIDGET_IDS.workGraph:
       return DASHBOARD_WIDGET_IDS.workGraph;
+    case DASHBOARD_WIDGET_IDS.workOutcomeChart:
+      return DASHBOARD_WIDGET_IDS.workOutcomeChart;
     case DASHBOARD_WIDGET_IDS.workTotals:
       return DASHBOARD_WIDGET_IDS.workTotals;
     case DASHBOARD_WIDGET_IDS.addWidget:
@@ -183,14 +189,43 @@ function migrateDashboardLayout(
   const normalizedLayout = layout
     .map((item) => normalizeDashboardLayoutItem(item))
     .filter((item): item is AgentBentoLayoutItem => item !== null);
+  const needsSessionControlsMigration = !normalizedLayout.some(
+    (item) => item.widgetType === DASHBOARD_WIDGET_IDS.sessionControls,
+  );
+  const layoutWithTraceMigration = migrateTraceLayout(normalizedLayout);
+  const compactedLayout = needsSessionControlsMigration
+    ? migrateDashboardCompactionLayout(layoutWithTraceMigration)
+    : layoutWithTraceMigration;
   const migratedLayout = normalizeInlineAddWidgetLayout(
     migrateProviderSessionLayout(
-      migrateDashboardCompactionLayout(
-        migrateTraceLayout(migrateWorkOutcomeLayout(normalizedLayout)),
-      ),
+      migrateSessionControlsLayout(migrateWorkOutcomeLayout(compactedLayout)),
     ),
   );
   return migratedLayout;
+}
+
+function migrateSessionControlsLayout(
+  layout: AgentBentoLayoutItem[],
+): AgentBentoLayoutItem[] {
+  if (
+    layout.some(
+      (item) => item.widgetType === DASHBOARD_WIDGET_IDS.sessionControls,
+    )
+  ) {
+    return layout;
+  }
+
+  const sessionControlsItem = DEFAULT_DASHBOARD_LAYOUT.find(
+    (item) => item.widgetType === DASHBOARD_WIDGET_IDS.sessionControls,
+  );
+  if (!sessionControlsItem) {
+    throw new Error("default session-controls layout is missing");
+  }
+
+  return [
+    { ...sessionControlsItem },
+    ...layout.map((item) => ({ ...item, y: item.y + sessionControlsItem.h })),
+  ];
 }
 
 function migrateDashboardCompactionLayout(
@@ -331,5 +366,59 @@ function normalizeInlineAddWidgetLayout(
 function migrateWorkOutcomeLayout(
   layout: AgentBentoLayoutItem[],
 ): AgentBentoLayoutItem[] {
-  return layout;
+  const legacyDefaultChart = layout.find(
+    (item) =>
+      item.widgetType === DASHBOARD_WIDGET_IDS.workOutcomeChart &&
+      item.h === 6 &&
+      item.w === 4 &&
+      item.x === 8 &&
+      (item.y === 15 || item.y === 17),
+  );
+
+  return layout.map((item) => {
+    if (item.widgetType === DASHBOARD_WIDGET_IDS.workOutcomeChart) {
+      const width = Math.min(
+        Math.max(item.w, WORK_OUTCOME_CHART_MIN_GRID_WIDTH),
+        DASHBOARD_GRID_COLUMNS,
+      );
+      return {
+        ...item,
+        h:
+          item === legacyDefaultChart
+            ? WORK_OUTCOME_CHART_MIN_GRID_HEIGHT
+            : Math.max(item.h, WORK_OUTCOME_CHART_MIN_GRID_HEIGHT),
+        minH: WORK_OUTCOME_CHART_MIN_GRID_HEIGHT,
+        minW: WORK_OUTCOME_CHART_MIN_GRID_WIDTH,
+        w: width,
+        x: Math.min(Math.max(item.x, 0), DASHBOARD_GRID_COLUMNS - width),
+      };
+    }
+
+    if (!legacyDefaultChart) {
+      return item;
+    }
+
+    if (
+      item.widgetType === DASHBOARD_WIDGET_IDS.submitWork &&
+      item.h === 6 &&
+      item.w === 4 &&
+      item.x === 8 &&
+      item.y === legacyDefaultChart.y + 6
+    ) {
+      return { ...item, y: legacyDefaultChart.y + 4 };
+    }
+
+    if (
+      (item.widgetType === DASHBOARD_WIDGET_IDS.addWidget ||
+        item.widgetType === DASHBOARD_WIDGET_IDS.factorySession) &&
+      item.h === 4 &&
+      item.w === 4 &&
+      item.x === 8 &&
+      item.y === legacyDefaultChart.y + 12
+    ) {
+      return { ...item, y: legacyDefaultChart.y + 10 };
+    }
+
+    return item;
+  });
 }

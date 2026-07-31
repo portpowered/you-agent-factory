@@ -119,7 +119,7 @@ Inheriting the full process environment can propagate secrets (`AWS_*`,
 
 ### Required controls
 
-1. **Centralized merge policy.** Use `pkg/services/workers/provider/commandenv.Build`
+1. **Centralized merge policy.** Use `pkg/services/providers/internal/services/execution/internal/provider/commandenv.Build`
    for provider subprocess environment assembly. Precedence: process environment,
    provider variables, then automation defaults (`GIT_TERMINAL_PROMPT=0`, etc.).
 2. **No duplicate env builders.** The Agy adapter must not fork a parallel
@@ -319,7 +319,9 @@ Checked against `docs/internal/standards/code/general-backend-standards.md`:
 | Document | Role |
 | --- | --- |
 | `docs/architecture/agy-pty-boundary.md` | ADR — scope, platforms, exclusions |
-| Story 003 interface proposal (`agy-pty-interface.md`, `pkg/services/workers/agypty`) | Mock seams, `maxCaptureBytes`, fixture locations |
+| Story 003 interface proposal (`agy-pty-interface.md`, `pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty`) | Mock seams, `maxCaptureBytes`, fixture locations |
 | `pkg/services/workers/process/doc.go` | Supervision and cleanup escape documentation |
-| `pkg/services/workers/provider/commandenv/environment.go` | Environment merge policy |
+| `pkg/services/providers/internal/services/execution/internal/provider/commandenv/environment.go` | Environment merge policy |
 | `pkg/services/workers/worktree/paths.go` | Path normalization reference for workspace containment |
+
+

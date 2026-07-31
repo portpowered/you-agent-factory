@@ -18,7 +18,7 @@ function artifactExport(slug: string, format: "json" | "yaml") {
   return `@you-agent-factory/packaged-factories/factories/${slug}.${format}` as const;
 }
 
-function createValues(catalog: CatalogResponse) {
+export function createPackagedFactoryPublicValues(catalog: CatalogResponse) {
   const values = new Map<PackagedFactoryPublicExport, unknown>();
   values.set(schemaExport, {
     $id: schemaIdentity,
@@ -31,6 +31,8 @@ function createValues(catalog: CatalogResponse) {
       name: factory.name,
       project: factory.project,
       slug: factory.slug,
+      description: factory.description,
+      examples: factory.examples,
       json: {
         locator: `generated/factories/${factory.slug}/factory.json`,
         sha256: placeholderHash,
@@ -56,7 +58,7 @@ function loadValues() {
       if (!response.ok) {
         throw new Error(`packaged factory catalog request failed: ${response.status}`);
       }
-      return createValues((await response.json()) as CatalogResponse);
+      return createPackagedFactoryPublicValues((await response.json()) as CatalogResponse);
     })
     .catch((error) => {
       catalogRequest = undefined;

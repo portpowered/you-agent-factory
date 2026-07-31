@@ -12,17 +12,17 @@ import (
 
 // Forbidden sanitization categories for provider-session golden fixtures.
 const (
-	ProviderSessionForbiddenCredential         = "credential"
-	ProviderSessionForbiddenHostPath           = "host-path"
-	ProviderSessionForbiddenPrivateRepoURL     = "private-repo-url"
-	ProviderSessionForbiddenEnvDump            = "env-dump"
-	ProviderSessionForbiddenUnboundedContent   = "unbounded-content"
-	ProviderSessionForbiddenAccountIdentifier  = "account-identifier"
+	ProviderSessionForbiddenCredential        = "credential"
+	ProviderSessionForbiddenHostPath          = "host-path"
+	ProviderSessionForbiddenPrivateRepoURL    = "private-repo-url"
+	ProviderSessionForbiddenEnvDump           = "env-dump"
+	ProviderSessionForbiddenUnboundedContent  = "unbounded-content"
+	ProviderSessionForbiddenAccountIdentifier = "account-identifier"
 )
 
 const (
-	providerSessionMaxPromptRunes  = 4096
-	providerSessionMaxStringRunes  = 32 * 1024
+	providerSessionMaxPromptRunes    = 4096
+	providerSessionMaxStringRunes    = 32 * 1024
 	providerSessionEnvDumpMinEntries = 2
 )
 
@@ -52,25 +52,25 @@ var (
 	}
 
 	providerSessionAccountKeyNames = map[string]struct{}{
-		"accountid":      {},
-		"account_id":     {},
-		"organizationid": {},
+		"accountid":       {},
+		"account_id":      {},
+		"organizationid":  {},
 		"organization_id": {},
-		"orgid":          {},
-		"org_id":         {},
-		"useremail":      {},
-		"user_email":     {},
-		"email":          {},
+		"orgid":           {},
+		"org_id":          {},
+		"useremail":       {},
+		"user_email":      {},
+		"email":           {},
 	}
 
 	providerSessionPromptKeyNames = map[string]struct{}{
-		"prompt":       {},
-		"systemprompt": {},
+		"prompt":        {},
+		"systemprompt":  {},
 		"system_prompt": {},
-		"userprompt":   {},
-		"user_prompt":  {},
-		"input":        {},
-		"messages":     {},
+		"userprompt":    {},
+		"user_prompt":   {},
+		"input":         {},
+		"messages":      {},
 	}
 
 	providerSessionEnvKeyNames = map[string]struct{}{

@@ -67,7 +67,7 @@ describe("useFactoryGraphAddEntityController add submit", () => {
       result.current.setAddEntityDraft({
         kind: "worker",
         model: "gpt",
-        modelProvider: "CURSOR",
+        modelProvider: "CODEX",
         name: "reviewer",
       });
     });

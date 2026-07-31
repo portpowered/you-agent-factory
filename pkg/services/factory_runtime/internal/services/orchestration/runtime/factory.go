@@ -14,14 +14,14 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factory_context "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/context"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/engine"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	checkpointrecovery "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery"
 	checkpointrecoverywire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery/wire"
 	dispatchplanning "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning"
 	dispatchplanningwire "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/dispatch_planning/wire"
+	factory_context "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/context"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/engine"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/scheduler"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
@@ -47,20 +47,20 @@ type TickableFactory interface {
 
 // factoryImpl is the concrete Factory implementation.
 type factoryImpl struct {
-	engine       *engine.FactoryEngine
-	cfg          *runtimeConfig
-	topology     *state.Net
-	logger       logging.Logger
-	resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult]
-	dispatchFlow *dispatchPlanningResultHook
-	dispatchPlan dispatchplanning.Service
+	engine             *engine.FactoryEngine
+	cfg                *runtimeConfig
+	topology           *state.Net
+	logger             logging.Logger
+	resultBuffer       *buffers.TypedBuffer[workerexecution.WorkResult]
+	dispatchFlow       *dispatchPlanningResultHook
+	dispatchPlan       dispatchplanning.Service
 	checkpointRecovery checkpointrecovery.Service
-	workers      workers.WorkstationPoolBoundary
-	eventHistory recordings.RuntimeLedger
-	state        interfaces.FactoryState
-	startedAt    time.Time
-	clock        factory.Clock
-	mu           sync.RWMutex
+	workers            workers.WorkstationPoolBoundary
+	eventHistory       recordings.RuntimeLedger
+	state              interfaces.FactoryState
+	startedAt          time.Time
+	clock              factory.Clock
+	mu                 sync.RWMutex
 	// completeCh is closed when Run() returns (either by termination or error).
 	// WaitToComplete() returns this channel.
 	completeCh           chan struct{}
@@ -433,6 +433,7 @@ func configureRuntimeDispatch(
 		cfg.net,
 		resultBuffer,
 		cfg.completionDeliveryPlanner,
+		cfg.workRequestIDs,
 		sessionIDFromFactoryConfig(cfg),
 	)
 	return resultHook, planner, workersBoundary
@@ -900,6 +901,7 @@ func (a *schedulerAdapter) Select(enabled []interfaces.EnabledTransition, snapsh
 	for i, r := range results {
 		decisions[i] = interfaces.FiringDecision{
 			TransitionID:  r.TransitionID,
+			InputTokens:   r.InputTokens,
 			ConsumeTokens: r.ConsumeTokens,
 			WorkerType:    r.WorkerType,
 			InputBindings: r.InputBindings,
@@ -944,15 +946,6 @@ func hasNonTerminalWork(marking petri.MarkingSnapshot, topology *state.Net) bool
 	}
 
 	return false
-}
-
-// WorkflowContext returns the workflow context wired at factory construction.
-func WorkflowContext(f factory.Factory) *factory_context.FactoryContext {
-	provider, ok := f.(factory.WorkflowContextProvider)
-	if !ok || provider == nil {
-		return nil
-	}
-	return provider.WorkflowContext()
 }
 
 func (f *factoryImpl) WorkflowContext() *factory_context.FactoryContext {

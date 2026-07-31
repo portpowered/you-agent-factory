@@ -3,6 +3,7 @@ package agentrun
 import (
 	"context"
 	"strings"
+	"time"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 
@@ -10,16 +11,22 @@ import (
 )
 
 type runnerInferencer struct {
-	runner  runnerContract
-	baseReq workerexecution.ProviderInferenceRequest
+	runner     runnerContract
+	baseReq    workerexecution.ProviderInferenceRequest
+	retrySleep func(context.Context, time.Duration) error
 }
+
+const (
+	agentRunProviderMaxRetries     = 2
+	agentRunProviderInitialBackoff = 100 * time.Millisecond
+)
 
 type runnerContract interface {
 	Execute(ctx context.Context, request workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error)
 }
 
 func newRunnerInferencer(runner runnerContract, baseReq workerexecution.ProviderInferenceRequest) messages.Inferencer {
-	return &runnerInferencer{runner: runner, baseReq: baseReq}
+	return &runnerInferencer{runner: runner, baseReq: baseReq, retrySleep: sleepForProviderRetry}
 }
 
 func (i *runnerInferencer) Infer(ctx context.Context, req messages.InferenceRequest) (messages.InferenceResult, error) {
@@ -28,13 +35,33 @@ func (i *runnerInferencer) Infer(ctx context.Context, req messages.InferenceRequ
 	runnerReq.SystemPrompt = systemPrompt
 	runnerReq.UserMessage = userMessage
 
-	resp, err := i.runner.Execute(ctx, runnerReq)
-	if err != nil {
-		return messages.InferenceResult{}, err
+	for retryCount := 0; ; retryCount++ {
+		resp, err := i.runner.Execute(ctx, runnerReq)
+		if err == nil {
+			return messages.InferenceResult{
+				Message: messages.NewTextMessage(messages.RoleAssistant, resp.Content),
+			}, nil
+		}
+		providerErr := workerexecution.NormalizeProviderExecutionError(err)
+		decision := workerexecution.WorkFailureDecisionFromProviderError(providerErr)
+		if !decision.Retryable || retryCount >= agentRunProviderMaxRetries {
+			return messages.InferenceResult{}, err
+		}
+		if err := i.retrySleep(ctx, agentRunProviderInitialBackoff<<retryCount); err != nil {
+			return messages.InferenceResult{}, err
+		}
 	}
-	return messages.InferenceResult{
-		Message: messages.NewTextMessage(messages.RoleAssistant, resp.Content),
-	}, nil
+}
+
+func sleepForProviderRetry(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (i *runnerInferencer) InferStream(ctx context.Context, req messages.InferenceRequest) (<-chan messages.StreamMessage, error) {

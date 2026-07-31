@@ -20,7 +20,6 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 const (
@@ -433,13 +432,13 @@ func NewSecretResolver(
 	getenv func(string) string,
 	readFile func(string) ([]byte, error),
 ) SecretResolver {
-	return func(_ context.Context, runtimeCfg workers.HostedRuntimePaths, secretRef string) (string, error) {
+	return func(_ context.Context, runtimeCfg RuntimePaths, secretRef string) (string, error) {
 		return resolveSecretRef(runtimeCfg, secretRef, getenv, readFile)
 	}
 }
 
 func resolveSecretRef(
-	runtimeCfg workers.HostedRuntimePaths,
+	runtimeCfg RuntimePaths,
 	secretRef string,
 	getenv func(string) string,
 	readFile func(string) ([]byte, error),

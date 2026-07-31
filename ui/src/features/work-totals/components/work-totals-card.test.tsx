@@ -126,3 +126,30 @@ describe("WorkTotalsCard", () => {
     expect(screen.getByLabelText("已分派：5")).toBeTruthy();
   });
 });
+
+describe("WorkTotalsCard header layout", () => {
+  it("keeps the compact header action in the title row", () => {
+    render(
+      <WorkTotalsCard
+        {...REPRESENTATIVE_TOTALS}
+        headerAction={<button type="button">Remove work totals</button>}
+      />,
+    );
+
+    const card = screen.getByRole("article", { name: "Work totals" });
+    const header = requireValue(
+      card.querySelector("header"),
+      "Expected work totals header.",
+    );
+    const tools = header.lastElementChild;
+    const removeButton = within(card).getByRole("button", {
+      name: "Remove work totals",
+    });
+
+    expect(header.className).not.toContain("flex-wrap");
+    expect(tools?.className).toContain("ml-auto");
+    expect(tools?.className).not.toContain("w-full");
+    expect(tools?.className).not.toContain("flex-wrap");
+    expect(tools?.contains(removeButton)).toBe(true);
+  });
+});

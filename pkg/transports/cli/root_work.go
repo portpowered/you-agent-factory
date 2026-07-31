@@ -151,14 +151,6 @@ func applyRepresentativeResolvedInputs(
 	if err != nil {
 		return err
 	}
-	defaultWorkerModel, err := inputs.String("you.flag.default-worker-model")
-	if err != nil {
-		return err
-	}
-	defaultWorkerModelProvider, err := inputs.String("you.flag.default-worker-model-provider")
-	if err != nil {
-		return err
-	}
 	jsonOutput, err := inputs.Bool("you.flag.json")
 	if err != nil {
 		return err
@@ -173,8 +165,6 @@ func applyRepresentativeResolvedInputs(
 	}
 
 	diagnostics.debug = debug
-	operatorDefaults.defaultWorkerModel = defaultWorkerModel
-	operatorDefaults.defaultWorkerModelProvider = defaultWorkerModelProvider
 	globals.json = jsonOutput
 	globals.server = server
 	diagnostics.verbose = verbose
@@ -501,6 +491,7 @@ func applyRunCommandInvocationOutputMode(cmd *cobra.Command, cfg *runcli.RunConf
 	if !changed {
 		return nil
 	}
+	cfg.InvocationOutputExplicit = true
 	normalized, err := runcli.NormalizeInvocationOutputMode(cfg.InvocationOutputMode)
 	if err != nil {
 		return err
@@ -541,16 +532,13 @@ func resolveRunCommandInvocationInput(cmd *cobra.Command, args []string, base ru
 		override := true
 		cfg.InvocationSkipPermissionsOverride = &override
 	}
-	promptArgs := args
-	if cfg.MockWorkersConfigPath != defaultMockWorkersConfigPathSentinel {
-		return promptArgs, cfg, nil
-	}
-	if len(args) == 0 {
+	if cfg.MockWorkersConfigPath == defaultMockWorkersConfigPathSentinel {
+		// Bare --with-mock-workers already applied its no-option default in the
+		// tokenizer. Do not steal the next remainder token: it may be a
+		// factory-signature flag such as --to or a positional prompt.
 		cfg.MockWorkersConfigPath = ""
-		return promptArgs, cfg, nil
 	}
-	cfg.MockWorkersConfigPath = args[0]
-	return args[1:], cfg, nil
+	return args, cfg, nil
 }
 
 func helpRequested(cmd *cobra.Command) bool {

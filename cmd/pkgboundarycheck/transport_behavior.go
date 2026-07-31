@@ -14,7 +14,7 @@ import (
 	"strings"
 )
 
-const transportBehaviorBaselinePath = "transport-behavior-baseline.json"
+const transportBehaviorBaselinePath = "docs/internal/baselines/transport-behavior-baseline.json"
 const transportBehaviorBaselineStage = "wire-injection-full-blow"
 const transportBehaviorDeletionGate = "move the behavior to its owning service, Initializer lifecycle, or an injected external-effect edge and delete this exact entry"
 
@@ -774,6 +774,9 @@ func createTransportBehaviorBaseline(cfg config) error {
 		return fmt.Errorf("resolve repo root: %w", err)
 	}
 	path := filepath.Join(repoRoot, transportBehaviorBaselinePath)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create transport behavior baseline directory: %w", err)
+	}
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if err != nil {
 		return fmt.Errorf("create transport behavior baseline: %w", err)

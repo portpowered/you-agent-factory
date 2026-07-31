@@ -10,7 +10,7 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 type recordingAgyPTYHost struct{ allocated bool }
@@ -59,9 +59,9 @@ func TestProvideAgyPTYAllocatorPreservesInjectedNativeHost(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	session, err := allocator.Allocate(context.Background(), agypty.ProcessLaunch{
+	session, err := allocator.Allocate(context.Background(), workers.PTYProcessLaunch{
 		Executable: "agy", Argv: []string{"agy"},
-	}, agypty.DefaultSessionConfig())
+	}, workers.DefaultPTYSessionConfig())
 	if err != nil {
 		t.Fatalf("Allocate() error = %v", err)
 	}

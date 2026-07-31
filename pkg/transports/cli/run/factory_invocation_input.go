@@ -349,6 +349,7 @@ func invocationTarget(
 		FactoryDir:        cfg.Dir,
 		FactorySourcePath: cfg.FactoryConfigPath,
 		RunnerID:          cfg.RunnerID,
+		Worktree:          cfg.Worktree,
 		OperatorDefaults:  cfg.OperatorDefaults,
 		ExecutionBaseDir:  cfg.ExecutionBaseDir,
 		HomeDir:           cfg.HomeDir,

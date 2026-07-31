@@ -235,14 +235,14 @@ func TestRunnerSuccessResultsStayDetachedAcrossRepeatedAndConcurrentExecutions(t
 func TestRunnerNormalizesCommandFailuresWithPartialDiagnosticsAndOneTerminalResponse(t *testing.T) {
 	processFailure := errors.New("exec: executable file not found")
 	tests := []struct {
-		name              string
-		result            workers.CommandResult
-		commandErr        error
-		wantMessage       string
-		wantOutcome       workers.ScriptExecutionOutcome
-		wantFailureType   *workers.ScriptFailureType
-		wantWorkFailure   workers.WorkFailureType
-		wantExitCode      *int
+		name            string
+		result          workers.CommandResult
+		commandErr      error
+		wantMessage     string
+		wantOutcome     workers.ScriptExecutionOutcome
+		wantFailureType *workers.ScriptFailureType
+		wantWorkFailure workers.WorkFailureType
+		wantExitCode    *int
 	}{
 		{
 			name: "non-zero exit",

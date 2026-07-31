@@ -177,7 +177,7 @@ func TestHumanFactoryEventRenderer_CustomerLifecycleGolden(t *testing.T) {
 	}
 
 	want := "[1] work accepted: Review release\n" +
-		"[2] Factory Session started\n" +
+		"[2] factory started\n" +
 		"[3] workstation queued: release review\n" +
 		"[4] workstation started: release review\n" +
 		"[5] inference started (attempt 1)\n" +
@@ -186,7 +186,7 @@ func TestHumanFactoryEventRenderer_CustomerLifecycleGolden(t *testing.T) {
 		"[8] workflow phase synthesize: ACTIVE\n" +
 		"[9] workflow checkpoint written: draft-ready (RESUMABLE)\n" +
 		"[10] final output updated: FINAL\n" +
-		"[11] Factory Session completed: SUCCEEDED\n\n" +
+		"[11] factory completed: SUCCEEDED\n\n" +
 		responseStreamPrimaryResultHeader + "\napproved"
 	if got := output.String(); got != want {
 		t.Fatalf("output = %q, want %q", got, want)

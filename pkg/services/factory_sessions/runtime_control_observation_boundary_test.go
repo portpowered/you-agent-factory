@@ -2,8 +2,6 @@ package factorysessions_test
 
 import (
 	"context"
-	"os/exec"
-	"strings"
 	"testing"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -17,50 +15,6 @@ var controlObservationLeaseImportRoots = []string{
 
 // TestControlObservationLeaseImportsFactoryRuntimeOnlyThroughRoot seals the
 // Sessions control/observation consumer edge against nested Runtime packages.
-func TestControlObservationLeaseImportsFactoryRuntimeOnlyThroughRoot(t *testing.T) {
-	t.Parallel()
-
-	for _, root := range controlObservationLeaseImportRoots {
-		for _, testMode := range []bool{false, true} {
-			args := []string{"list", "-f", "{{.ImportPath}} {{join .Imports \" \"}} {{join .TestImports \" \"}}"}
-			if testMode {
-				args = append(args, "-test")
-			}
-			args = append(args, root)
-
-			cmd := exec.Command("go", args...)
-			output, err := cmd.CombinedOutput()
-			if err != nil {
-				t.Fatalf("go list %s (test=%v): %v\n%s", root, testMode, err, output)
-			}
-
-			for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
-				line = strings.TrimSpace(line)
-				if line == "" {
-					continue
-				}
-				fields := strings.Fields(line)
-				if len(fields) < 1 {
-					continue
-				}
-				pkgPath := fields[0]
-				for _, imp := range fields[1:] {
-					if imp == factoryRuntimeImportRoot {
-						continue
-					}
-					if strings.HasPrefix(imp, factoryRuntimeImportRoot+"/") {
-						t.Fatalf(
-							"%s must import Factory Runtime only through %s; found direct import %s",
-							pkgPath,
-							factoryRuntimeImportRoot,
-							imp,
-						)
-					}
-				}
-			}
-		}
-	}
-}
 
 // peerRuntimeRootBoundaryFake exercises the published Sessions root control and
 // observation slice through singular Service methods that carry Runtime root

@@ -163,7 +163,7 @@ func TestCompareProviderSessionGoldens_LoadsTrackedFixtureWithoutCallingMapper(t
 	// Observed values are supplied by the caller; comparison never synthesizes
 	// expected output via a mapper/adapter under test.
 	observed := ProviderSessionObservedGoldens{
-		ProviderSession:   append(json.RawMessage(nil), loaded.Expected.ProviderSession...),
+		ProviderSession:  append(json.RawMessage(nil), loaded.Expected.ProviderSession...),
 		ResponseEvents:   append([]json.RawMessage(nil), loaded.Expected.ResponseEvents...),
 		InvocationResult: append(json.RawMessage(nil), loaded.Expected.InvocationResult...),
 	}

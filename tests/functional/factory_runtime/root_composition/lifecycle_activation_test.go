@@ -15,9 +15,9 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -221,22 +221,22 @@ func stringPointerValue(value *string) string {
 }
 
 type factoryRuntimeDelegatingRecorder struct {
-	local              platformfilesystem.Local
-	workflowHome       string
-	idGeneratorCalls   atomic.Int32
-	directoryMkdir     atomic.Int32
-	directoryStat      atomic.Int32
-	inputReadDir       atomic.Int32
-	inputReadFile      atomic.Int32
-	inputStat          atomic.Int32
-	inputWalk          atomic.Int32
-	dispatchRecord     atomic.Int32
-	workflowReadDir    atomic.Int32
-	workflowReadFile   atomic.Int32
-	workflowStat       atomic.Int32
-	workflowSymlink    atomic.Int32
-	workflowHomeCalls  atomic.Int32
-	scriptCommand      atomic.Int32
+	local             platformfilesystem.Local
+	workflowHome      string
+	idGeneratorCalls  atomic.Int32
+	directoryMkdir    atomic.Int32
+	directoryStat     atomic.Int32
+	inputReadDir      atomic.Int32
+	inputReadFile     atomic.Int32
+	inputStat         atomic.Int32
+	inputWalk         atomic.Int32
+	dispatchRecord    atomic.Int32
+	workflowReadDir   atomic.Int32
+	workflowReadFile  atomic.Int32
+	workflowStat      atomic.Int32
+	workflowSymlink   atomic.Int32
+	workflowHomeCalls atomic.Int32
+	scriptCommand     atomic.Int32
 }
 
 func newFactoryRuntimeDelegatingRecorder(t *testing.T, workflowHome ...string) *factoryRuntimeDelegatingRecorder {
@@ -252,7 +252,7 @@ func (recorder *factoryRuntimeDelegatingRecorder) edges() serviceedges.Edges {
 	return serviceedges.Edges{
 		FactoryRuntimeIDGenerator:                   recorder.generateID,
 		FactoryRuntimeDirectories:                   &factoryRuntimeDelegatingDirectory{recorder: recorder},
-		FactoryRuntimeInputs:                      &factoryRuntimeDelegatingInput{recorder: recorder},
+		FactoryRuntimeInputs:                        &factoryRuntimeDelegatingInput{recorder: recorder},
 		FactoryRuntimeInputDirectoryWalker:          recorder.walkInputs,
 		DispatchRecorder:                            recorder.recordDispatch,
 		FactoryRuntimeWorkflowSources:               &factoryRuntimeDelegatingWorkflowSource{recorder: recorder},

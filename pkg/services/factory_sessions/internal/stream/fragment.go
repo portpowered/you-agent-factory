@@ -8,7 +8,10 @@ import (
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 )
 
-func mapInferenceProgressFragment(fragment factorysessions.ProgressFragment) responsestream.Event {
+// MapProgressFragment converts the shared Worker progress contract into the
+// bounded internal response-stream vocabulary used by live and durable sessions.
+func MapProgressFragment(fragment factorysessions.ProgressFragment) responsestream.Event {
+	nativeType := strings.TrimSpace(fragment.Type)
 	kind := responsestream.EventKindProgressFragment
 	switch fragment.Kind {
 	case factorysessions.ResponseFragmentKind:
@@ -18,15 +21,31 @@ func mapInferenceProgressFragment(fragment factorysessions.ProgressFragment) res
 	case factorysessions.FailedFragmentKind:
 		kind = responsestream.EventKindStreamFailed
 	}
+	eventType := responsestream.EventType(nativeType)
+	if kind == responsestream.EventKindProgressFragment {
+		// Providers reports native phase names (for example message.completed)
+		// while the bounded response stream accepts only its small semantic enum.
+		// Preserve the native value separately for canonical projection.
+		eventType = responsestream.EventTypeProgress
+	}
 	return responsestream.Event{
 		Kind:               kind,
-		Type:               responsestream.EventType(strings.TrimSpace(fragment.Type)),
+		Type:               eventType,
 		DispatchID:         strings.TrimSpace(fragment.DispatchID),
 		ProviderSessionRef: providersessions.CloneMetadata(fragment.ProviderSessionRef),
 		Payload:            fragment.Payload,
-		ExternalEventType:  strings.TrimSpace(fragment.ExternalEventType),
+		ExternalEventType:  firstNonEmpty(fragment.ExternalEventType, nativeType),
 		Metadata:           cloneStringMap(fragment.Metadata),
 	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func cloneStringMap(values map[string]string) map[string]string {

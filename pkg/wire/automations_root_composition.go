@@ -10,7 +10,6 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 	"go.uber.org/zap"
 )
 
@@ -55,7 +54,7 @@ func AutomationsRootFromEdges(
 
 	commandRunner := workers.CommandRunner(noopAutomationCommandRunner{})
 	if edges.ScriptCommandRunner != nil {
-		commandRunner = workerprocess.AdaptCommandRunner(edges.ScriptCommandRunner)
+		commandRunner = workers.AdaptCommandRunner(edges.ScriptCommandRunner)
 	}
 
 	ports, err := factorydefinitionswire.InvocationPolicyPortsFromNestedOwner()

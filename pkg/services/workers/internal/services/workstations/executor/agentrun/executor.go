@@ -2,6 +2,7 @@ package agentrun
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -12,7 +13,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 )
 
 // AgentRunExecutor executes AGENT_RUN workstations through a go-agent-harness adapter.
@@ -23,7 +23,19 @@ type AgentRunExecutor struct {
 	harness           HarnessAdapter
 	logger            logging.Logger
 	recorder          AgentRunEventRecorder
+	progress          workerexecution.ProgressPublisher
 	now               func() time.Time
+}
+
+// WithProgressPublisher publishes the authoritative final agent message after
+// the harness has completed all of its internal model/tool turns.
+func (executor *AgentRunExecutor) WithProgressPublisher(
+	publisher workerexecution.ProgressPublisher,
+) *AgentRunExecutor {
+	if executor != nil {
+		executor.progress = publisher
+	}
+	return executor
 }
 
 var _ workstationRequestExecutor = (*AgentRunExecutor)(nil)
@@ -120,6 +132,7 @@ func (executor *AgentRunExecutor) Execute(ctx context.Context, request workerexe
 		duration := executor.clockNow().Sub(start)
 		result.Metrics = workerexecution.WorkMetrics{Duration: duration}
 		executor.recordAgentRunResponse(request.Dispatch, result, duration, harnessResult.Messages)
+		executor.publishFinalMessage(request.Dispatch.DispatchID, result.Output)
 		return result, nil
 	}
 	if executor.decisionEnvelopes != nil &&
@@ -134,6 +147,7 @@ func (executor *AgentRunExecutor) Execute(ctx context.Context, request workerexe
 		duration := executor.clockNow().Sub(start)
 		result.Metrics = workerexecution.WorkMetrics{Duration: duration}
 		executor.recordAgentRunResponse(request.Dispatch, result, duration, harnessResult.Messages)
+		executor.publishFinalMessage(request.Dispatch.DispatchID, result.Output)
 		return result, nil
 	}
 
@@ -147,7 +161,39 @@ func (executor *AgentRunExecutor) Execute(ctx context.Context, request workerexe
 		Metrics:      workerexecution.WorkMetrics{Duration: executor.clockNow().Sub(start)},
 	}
 	executor.recordAgentRunResponse(request.Dispatch, result, result.Metrics.Duration, harnessResult.Messages)
+	executor.publishFinalMessage(request.Dispatch.DispatchID, result.Output)
 	return result, nil
+}
+
+func (executor *AgentRunExecutor) publishFinalMessage(dispatchID string, content string) {
+	if executor == nil || executor.progress == nil || strings.TrimSpace(content) == "" {
+		return
+	}
+	payload, err := json.Marshal(workerexecution.MessagePayload{
+		Role: "assistant",
+		ContentBlocks: []workerexecution.ContentBlock{{
+			Kind: workerexecution.ContentBlockText,
+			Text: strings.TrimSpace(content),
+		}},
+	})
+	if err != nil {
+		return
+	}
+	draft := workerexecution.Draft{
+		Kind:       workerexecution.KindMessage,
+		Phase:      workerexecution.PhaseCompleted,
+		DispatchID: strings.TrimSpace(dispatchID),
+		ItemID:     strings.TrimSpace(dispatchID) + "-final-message",
+		Provenance: workerexecution.Provenance{
+			Provider:        "agent-run",
+			NativeEventType: "agent_final_response",
+			Delivery:        workerexecution.DeliveryNativeFinal,
+			Representation:  workerexecution.RepresentationSnapshot,
+			Fidelity:        workerexecution.FidelityFinalOnly,
+		},
+		Payload: payload,
+	}
+	executor.progress(workerexecution.CanonicalDraftFragment(dispatchID, draft))
 }
 
 func firstDecisionEnvelopeService(
@@ -160,17 +206,29 @@ func firstDecisionEnvelopeService(
 }
 
 func effectiveAgentRunWorkerDefinition(request workerexecution.WorkstationExecutionRequest, workerDef *interfaces.FactoryWorkerConfig) *interfaces.FactoryWorkerConfig {
-	if workerDef == nil || (request.Model == "" && request.ModelProvider == "") {
+	if workerDef == nil {
 		return workerDef
 	}
 	effective := *workerDef
-	if request.Model != "" {
+	// Workstation execution has already resolved invocation interpolation.
+	// An empty resolved value clears an authored placeholder, but it must not
+	// erase an operator-level provider/model override already applied to the
+	// runtime worker definition.
+	if request.Model != "" || isInvocationInterpolation(workerDef.Model) {
 		effective.Model = request.Model
 	}
-	if request.ModelProvider != "" {
+	if request.ModelProvider != "" || isInvocationInterpolation(workerDef.ModelProvider) {
 		effective.ModelProvider = request.ModelProvider
 	}
+	if request.ReasoningEffort != "" || isInvocationInterpolation(workerDef.ReasoningEffort) {
+		effective.ReasoningEffort = request.ReasoningEffort
+	}
 	return &effective
+}
+
+func isInvocationInterpolation(value string) bool {
+	trimmed := strings.TrimSpace(value)
+	return strings.HasPrefix(trimmed, "${") && strings.HasSuffix(trimmed, "}")
 }
 
 func (executor *AgentRunExecutor) recordAgentRunResponse(
@@ -194,31 +252,36 @@ func agentRunInferenceRequest(
 	workerDef *interfaces.FactoryWorkerConfig,
 ) workerexecution.ProviderInferenceRequest {
 	req := workerexecution.ProviderInferenceRequest{
-		Dispatch:          work.CloneWorkDispatch(request.Dispatch),
-		WorkerType:        request.WorkerType,
-		WorkstationType:   request.WorkstationType,
-		RunnerID:          request.RunnerID,
-		ExecutorProvider:  request.ExecutorProvider,
-		ProjectID:         request.ProjectID,
-		InputTokens:       cloneRawInputTokens(request.InputTokens),
-		ModelOperation:    request.ModelOperation,
-		ModelBindings:     workerexecution.CloneResolvedModelOperationBindings(request.ModelBindings),
-		SystemPrompt:      request.SystemPrompt,
-		UserMessage:       request.UserMessage,
-		OutputSchema:      request.OutputSchema,
-		ToolExecutionMode: workerexecution.RunnerToolExecutionModeRequired,
-		EnvVars:           cloneEnvVars(request.EnvVars),
-		Worktree:          request.Worktree,
-		WorkingDirectory:  request.WorkingDirectory,
+		Dispatch:           work.CloneWorkDispatch(request.Dispatch),
+		WorkerType:         request.WorkerType,
+		WorkstationType:    request.WorkstationType,
+		RunnerID:           request.RunnerID,
+		ExecutorProvider:   request.ExecutorProvider,
+		ProjectID:          request.ProjectID,
+		InputTokens:        cloneRawInputTokens(request.InputTokens),
+		ModelOperation:     request.ModelOperation,
+		ModelBindings:      workerexecution.CloneResolvedModelOperationBindings(request.ModelBindings),
+		SystemPrompt:       request.SystemPrompt,
+		UserMessage:        request.UserMessage,
+		OutputSchema:       request.OutputSchema,
+		ToolExecutionMode:  workerexecution.RunnerToolExecutionModeRequired,
+		EnvVars:            cloneEnvVars(request.EnvVars),
+		ProcessEnvironment: append([]string(nil), request.ProcessEnvironment...),
+		Worktree:           request.Worktree,
+		WorkingDirectory:   request.WorkingDirectory,
 	}
 	if workerDef != nil {
 		req.Model = workerDef.Model
 		req.ModelProvider = workerDef.ModelProvider
+		req.ReasoningEffort = workerDef.ReasoningEffort
 		req.ModelLocality = workerDef.ModelLocality
 		req.SessionID = workerDef.SessionID
 	}
-	if executorProvider := strings.TrimSpace(req.ExecutorProvider); executorProvider != "" && !strings.EqualFold(executorProvider, "SCRIPT_WRAP") {
-		req.RunnerID = executorProvider
+	if identity, err := workerexecution.RunnerIdentityForWorker(req.ExecutorProvider, req.ModelProvider); err == nil && identity != "" {
+		req.RunnerID = identity
+	}
+	if strings.TrimSpace(req.RunnerID) == "" {
+		req.RunnerID = strings.TrimSpace(req.ModelProvider)
 	}
 	return req
 }
@@ -227,7 +290,7 @@ func evaluateAgentRunOutcome(output string, workerDef *interfaces.FactoryWorkerC
 	if workerDef == nil || workerDef.StopToken == "" {
 		return workerexecution.OutcomeAccepted
 	}
-	if workerprovider.ContainsStopToken(output, workerDef.StopToken) {
+	if workerexecution.ContainsStopToken(output, workerDef.StopToken) {
 		return workerexecution.OutcomeAccepted
 	}
 	if strings.Contains(output, "<CONTINUE>") {

@@ -1,7 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { afterEach, beforeEach, vi } from "vitest";
 import type {
@@ -12,6 +12,7 @@ import type { ImportFactoryValue } from "../../../../../api/session-factory";
 import { factoryFromDashboardTopology } from "../../../../../components/dashboard/fixtures";
 import { installDashboardBrowserTestShims } from "../../../../../components/dashboard/test-browser-shims";
 import { semanticWorkflowDashboardSnapshot } from "../../../../../components/dashboard/test-fixtures";
+import { getDashboardFlowAxisLegendMessages } from "../../../messages/dashboard-flow-axis-legend";
 import { DashboardSessionTestProvider } from "../../../../../testing/dashboard-session-test-provider";
 import {
   baseFactoryDefinitionDocument,
@@ -47,6 +48,38 @@ export interface RenderCurrentActivityOptions {
 }
 export const defaultDraftState = createMockGraphEditorDraftState();
 
+export function dashboardSnapshotWithStateCounts(
+  overrides: Record<string, number>,
+): DashboardSnapshot {
+  const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
+  snapshot.runtime.place_token_counts = {
+    ...snapshot.runtime.place_token_counts,
+    ...overrides,
+  };
+
+  return snapshot;
+}
+
+export async function getStateNodeArticle(label: string): Promise<HTMLElement> {
+  const button = await screen.findByRole("button", {
+    name: `Select ${label} state`,
+  });
+  return button.closest(".react-flow__node") as HTMLElement;
+}
+
+export async function expandGraphLegend(locale = "en"): Promise<HTMLElement> {
+  const messages = getDashboardFlowAxisLegendMessages(locale);
+  const actionTargetLabel =
+    messages.title.charAt(0).toLowerCase() + messages.title.slice(1);
+  const expandButton = await screen.findByRole("button", {
+    name: messages.expandToggleLabel(actionTargetLabel),
+  });
+
+  fireEvent.click(expandButton);
+
+  return await screen.findByLabelText(messages.title);
+}
+
 export function refreshFactoryFromTopology(
   snapshot: DashboardSnapshot,
 ): DashboardSnapshot {
@@ -65,6 +98,52 @@ export function currentFactoryDocumentFromSnapshot(
     ...snapshot.factory,
     version: baseFactoryDefinitionDocument.version,
   };
+}
+
+export function workerDenseSnapshot(): DashboardSnapshot {
+  const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
+  snapshot.runtime.active_executions_by_dispatch_id = {
+    "dispatch-draft-active": {
+      dispatch_id: "dispatch-draft-active",
+      started_at: "2026-05-19T01:10:00Z",
+      transition_id: "draft-transition",
+      workstation_name: "draft",
+      workstation_node_id: "draft",
+    },
+  };
+  snapshot.runtime.active_dispatch_ids = ["dispatch-draft-active"];
+  snapshot.runtime.active_workstation_node_ids = ["draft"];
+  snapshot.runtime.active_throttle_pauses = [
+    {
+      affected_worker_types: ["stalled"],
+      lane_id: "provider:codex",
+      model: "gpt-5",
+      paused_until: "2026-05-19T01:15:00Z",
+      provider: "OPENAI",
+      recover_at: "2026-05-19T01:16:00Z",
+    },
+  ];
+  snapshot.runtime.workstation_requests_by_dispatch_id = {
+    "dispatch-review": {
+      counts: {
+        dispatched_count: 1,
+        errored_count: 1,
+        responded_count: 1,
+      },
+      dispatch_id: "dispatch-review",
+      request: {},
+      response: {
+        failure_message: "Provider request failed.",
+        outcome: "FAILED",
+      },
+      transition_id: "review-transition",
+      workstation_name: "review",
+      workstation_node_id: "review",
+      work_items: [],
+    },
+  };
+
+  return snapshot;
 }
 
 export function dashboardSnapshotWithActiveWorkItemCount(
@@ -221,6 +300,11 @@ export function renderWithQueryClient(view: ReactElement) {
 }
 
 let restoreBrowserTestShims: (() => void) | null = null;
+
+export function reinstallDashboardBrowserTestShims(): void {
+  restoreBrowserTestShims?.();
+  restoreBrowserTestShims = installDashboardBrowserTestShims();
+}
 
 export function registerCurrentActivityCardTestLifecycle(): void {
   beforeEach(() => {

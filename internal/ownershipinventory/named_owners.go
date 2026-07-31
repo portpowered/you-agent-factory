@@ -88,7 +88,7 @@ func committedNamedOwnerConfirmations() []NamedOwnerConfirmation {
 			NestedSubservices: slices.Clone(NamedOwnerNestedSubservices["providers"]),
 			ResidualPackageRules: []ResidualPackageRule{
 				{
-					PackagePrefix: "pkg/services/workers/agypty",
+					PackagePrefix: "pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty",
 					Destination:   "providers",
 					Disposition:   DispositionMove,
 					Note:          "Agy/PTY adapter packages move into Providers native adapters under the singular Providers root.",
@@ -100,13 +100,13 @@ func committedNamedOwnerConfirmations() []NamedOwnerConfirmation {
 					Note:          "CLI provider registry/enumeration packages move into Providers Catalog; no CLI-specific competing registry remains.",
 				},
 				{
-					PackagePrefix: "pkg/services/workers/provider",
+					PackagePrefix: "pkg/services/providers/internal/services/execution/internal/provider",
 					Destination:   "providers",
 					Disposition:   DispositionMove,
 					Note:          "Workers provider execution/adapter packages move into Providers Execution; catalog and execution stay nested under Providers, not alternate top-level owners.",
 				},
 				{
-					PackagePrefix: "pkg/services/workers/provider_test",
+					PackagePrefix: "pkg/services/providers/internal/services/execution/internal/provider_test",
 					Destination:   "providers",
 					Disposition:   DispositionMove,
 					Note:          "Provider test/support packages follow the Providers extraction successor.",
@@ -140,3 +140,5 @@ func compareNamedOwnerConfirmations(a, b NamedOwnerConfirmation) int {
 func packageMatchesResidualPrefix(packagePath, prefix string) bool {
 	return packagePath == prefix || strings.HasPrefix(packagePath, prefix+"/")
 }
+
+

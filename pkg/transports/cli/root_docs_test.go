@@ -229,13 +229,13 @@ func TestRunDocumentation_InvocationOutputModeExamplesReachCurrentCLIBoundary(t 
 		t.Fatalf("Markdown(run) error = %v", err)
 	}
 	for _, marker := range []string{
-		"### Primary-result mode (default)",
-		"### Human Factory Event stream mode",
+		"### Primary-result mode",
+		"### Human Factory Event stream mode (default)",
 		"### NDJSON automation mode",
 		"recordType=factory_event",
 		"recordType=invocation_result",
-		`you run --named team-review --output response-stream "Review the release notes"`,
-		`you --json run --factory ./factory.json --output response-stream "Summarize the changelog"`,
+		`you run --named team-review "Review the release notes"`,
+		`you --json run --factory ./factory.json "Summarize the changelog"`,
 		"`you docs config`",
 	} {
 		if !strings.Contains(doc, marker) {
@@ -267,17 +267,17 @@ func TestRunDocumentation_InvocationOutputModeExamplesReachCurrentCLIBoundary(t 
 
 	factoryPath := writePortableFactoryWithDefaultHandling(t, t.TempDir())
 	executeDocumentedRunExample(t, []string{"run", "--factory", factoryPath, "Summarize the changelog"})
-	executeDocumentedRunExample(t, []string{"run", "--factory", factoryPath, "--output", "response-stream", "Summarize the changelog"})
-	executeDocumentedRunExample(t, []string{"--json", "run", "--factory", factoryPath, "--output", "response-stream", "Summarize the changelog"})
+	executeDocumentedRunExample(t, []string{"run", "--factory", factoryPath, "--output", "primary", "Summarize the changelog"})
+	executeDocumentedRunExample(t, []string{"--json", "run", "--factory", factoryPath, "Summarize the changelog"})
 
 	if len(runs) != 3 {
 		t.Fatalf("documented output-mode examples reaching run boundary = %d, want 3", len(runs))
 	}
-	if runs[0].InvocationOutputMode != runcli.InvocationOutputPrimaryResult {
-		t.Fatalf("primary-result mode = %q, want default primary output", runs[0].InvocationOutputMode)
+	if runs[0].InvocationOutputMode != runcli.InvocationOutputResponseStream {
+		t.Fatalf("default mode = %q, want response stream", runs[0].InvocationOutputMode)
 	}
-	if runs[1].InvocationOutputMode != runcli.InvocationOutputResponseStream || runs[1].JSONOutput {
-		t.Fatalf("human response-stream mode = %#v, want response-stream without JSON", runs[1])
+	if runs[1].InvocationOutputMode != runcli.InvocationOutputPrimaryResult || runs[1].JSONOutput {
+		t.Fatalf("primary mode = %#v, want primary without JSON", runs[1])
 	}
 	if runs[2].InvocationOutputMode != runcli.InvocationOutputResponseStream || !runs[2].JSONOutput {
 		t.Fatalf("NDJSON response-stream mode = %#v, want response-stream with JSON", runs[2])
@@ -526,7 +526,7 @@ func TestDocsCommand_UnsupportedTopicReturnsCanonicalTopicError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected unsupported docs topic to fail")
 	}
-	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, run, config, mock-workers, record-replay, guards, relationships, work, sessions, orchestrators, javascript-workflows, mcp, workstations, workers, resources, models, batch-inputs, templates)` {
+	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, run, config, mock-workers, record-replay, guards, relationships, work, sessions, orchestrators, javascript-workflows, mcp, workstations, workers, providers, resources, models, batch-inputs, templates)` {
 		t.Fatalf("unexpected docs error %q", got)
 	}
 	if got := stdout.String(); got != "" {

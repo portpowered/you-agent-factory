@@ -848,12 +848,9 @@ const (
 
 // Defines values for RunnerID.
 const (
-	RunnerIDCodex     RunnerID = "codex"
-	RunnerIDCursorCLI RunnerID = "cursor-cli"
-	RunnerIDGemini    RunnerID = "gemini"
-	RunnerIDKiro      RunnerID = "kiro"
-	RunnerIDOpenCode  RunnerID = "opencode"
-	RunnerIDPi        RunnerID = "pi"
+	RunnerIDAntigravity RunnerID = "antigravity"
+	RunnerIDClaude      RunnerID = "claude"
+	RunnerIDCodex       RunnerID = "codex"
 )
 
 // Defines values for RunnerSelectionSource.
@@ -970,14 +967,9 @@ const (
 
 // Defines values for WorkerModelProvider.
 const (
-	WorkerModelProviderAgy      WorkerModelProvider = "AGY"
-	WorkerModelProviderClaude   WorkerModelProvider = "CLAUDE"
-	WorkerModelProviderCodex    WorkerModelProvider = "CODEX"
-	WorkerModelProviderCursor   WorkerModelProvider = "CURSOR"
-	WorkerModelProviderGemini   WorkerModelProvider = "GEMINI"
-	WorkerModelProviderKiro     WorkerModelProvider = "KIRO"
-	WorkerModelProviderOpenCode WorkerModelProvider = "OPENCODE"
-	WorkerModelProviderPi       WorkerModelProvider = "PI"
+	WorkerModelProviderAntigravity WorkerModelProvider = "ANTIGRAVITY"
+	WorkerModelProviderClaude      WorkerModelProvider = "CLAUDE"
+	WorkerModelProviderCodex       WorkerModelProvider = "CODEX"
 )
 
 // Defines values for WorkerType.
@@ -4197,8 +4189,11 @@ type Guard struct {
 	// MatchInput For `SAME_NAME` and `SAME_TRACE_ID` input guards, the peer input workType name from another input in the same workstation.
 	MatchInput *string `json:"matchInput,omitempty"`
 
-	// MaxVisits For `VISIT_COUNT` guards, the visit threshold.
+	// MaxVisits For `VISIT_COUNT` guards, the fixed visit ceiling.
 	MaxVisits *int `json:"maxVisits,omitempty"`
+
+	// MaxVisitsArgument Optional invocation argument whose positive integer value tightens the fixed visit ceiling.
+	MaxVisitsArgument *string `json:"maxVisitsArgument,omitempty"`
 
 	// ParentInput For parent-aware input guards, the parent workType name from another input in the same workstation.
 	ParentInput *string `json:"parentInput,omitempty"`
@@ -4882,7 +4877,8 @@ type ModelResponseEventPayload struct {
 	OutputPreview *string `json:"outputPreview,omitempty"`
 
 	// ProviderLocality Worker-declared model locality, such as LOCAL or CLOUD.
-	ProviderLocality string `json:"providerLocality"`
+	ProviderLocality string                   `json:"providerLocality"`
+	ProviderSession  *ProviderSessionMetadata `json:"providerSession,omitempty"`
 
 	// ResourceAcquired Whether the invocation acquired the required local model resources.
 	ResourceAcquired *bool `json:"resourceAcquired,omitempty"`
@@ -5027,6 +5023,12 @@ type OrchestratorPhaseStatus string
 
 // PackagedFactoryCatalogEntry defines model for PackagedFactoryCatalogEntry.
 type PackagedFactoryCatalogEntry struct {
+	// Description Localized customer-facing explanation of what this packaged Factory does.
+	Description NameValue `json:"description"`
+
+	// Examples Representative runnable invocations published by this packaged Factory.
+	Examples []FactoryInvocationExample `json:"examples"`
+
 	// Json Canonical Factory JSON artifact.
 	Json map[string]interface{} `json:"json"`
 
@@ -5543,6 +5545,9 @@ type ProviderSessionUnknownEvent struct {
 
 // ProviderTechnicalSupportLevel Maintainer-verified technical support posture for a provider integration. This value does not describe whether the provider is installed or ready on the current machine.
 type ProviderTechnicalSupportLevel string
+
+// ReasoningEffort Optional provider-neutral reasoning effort. Surrounding whitespace and letter case are normalized. Omit the field to preserve the selected provider and model default. Factory definitions may use an exact invocation-parameter placeholder such as `${executorReasoningEffort}`.
+type ReasoningEffort = string
 
 // Relation defines model for Relation.
 type Relation struct {
@@ -6509,7 +6514,7 @@ type Worker struct {
 	// Description Optional localized customer-facing explanation of this worker.
 	Description *NameValue `json:"description,omitempty"`
 
-	// ExecutorProvider Canonical Providers catalog identity used to select worker execution, an exact invocation-parameter placeholder, or the retained `SCRIPT_WRAP` compatibility value. ACP-backed identities use names such as `cursor-acp`; the Providers catalog determines their private execution kind.
+	// ExecutorProvider Execution mechanism. Use `ACP` for ACP-backed workers and put the configured integration identity (for example `cursor-acp`) in modelProvider. `SCRIPT_WRAP` remains the command-wrapper compatibility value; legacy named executor identities remain accepted during migration.
 	ExecutorProvider *WorkerProvider `json:"executorProvider,omitempty"`
 
 	// Id Optional durable public identifier for this worker. When present, graph and layout references should use this id instead of the mutable name.
@@ -6524,20 +6529,20 @@ type Worker struct {
 	// ModelLocality Provider locality for this model capability declaration. Use `LOCAL` for embedded or host-managed inference and `CLOUD` for remote provider execution.
 	ModelLocality *WorkerModelLocality `json:"modelLocality,omitempty"`
 
-	// ModelProvider Canonical model-provider identity used for model routing and provider diagnostics, or an exact invocation-parameter placeholder such as `${modelProvider}`. Extension identities use lowercase standardized syntax; built-in values such as `CLAUDE` and `CODEX` remain compatibility conveniences.
+	// ModelProvider Canonical provider identity used for model routing and provider diagnostics, or an exact invocation-parameter placeholder such as `${modelProvider}`. For `executorProvider: ACP`, this names the configured ACP integration, such as `cursor-acp`. Extension identities use lowercase standardized syntax; built-in values such as `CLAUDE` and `CODEX` remain compatibility conveniences.
 	ModelProvider *WorkerModelProvider `json:"modelProvider,omitempty"`
 
 	// Name Worker name referenced by Workstation.worker.
 	Name string `json:"name"`
-
-	// OpenCodeAgent Optional OpenCode agent profile name for model workers that dispatch through the OpenCode runner. When set, OpenCode dispatches invoke `opencode run --agent <name>`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/).
-	OpenCodeAgent *string `json:"openCodeAgent,omitempty"`
 
 	// Operations Provider-agnostic model operations that this worker can execute, including named input and output slots.
 	Operations *[]ModelOperation `json:"operations,omitempty"`
 
 	// Provider Built-in hosted provider identity when this worker uses repository-owned hosted execution.
 	Provider *HostedWorkerProvider `json:"provider,omitempty"`
+
+	// ReasoningEffort Optional provider-neutral reasoning effort. Surrounding whitespace and letter case are normalized. Omit the field to preserve the selected provider and model default. Factory definitions may use an exact invocation-parameter placeholder such as `${executorReasoningEffort}`.
+	ReasoningEffort *ReasoningEffort `json:"reasoningEffort,omitempty"`
 
 	// Resources Resource capacity this worker requires before it can be dispatched.
 	Resources *[]ResourceRequirement `json:"resources,omitempty"`
@@ -6561,7 +6566,7 @@ type WorkerModelLocality string
 // WorkerModelProvider Built-in model-provider constants retained as generated-client conveniences. Authored modelProvider fields use the open ProviderIdentity contract, so this list is not an exhaustive provider inventory.
 type WorkerModelProvider string
 
-// WorkerProvider Built-in worker-provider compatibility values. Authored executorProvider fields also accept extensible lowercase Providers catalog identities.
+// WorkerProvider Worker execution mechanism. Canonical values are ACP and SCRIPT_WRAP; extensible lowercase identities remain accepted for compatibility with existing factories.
 type WorkerProvider = string
 
 // WorkerType Worker implementation families supported by the public factory-config contract.
@@ -6731,9 +6736,6 @@ type Workstation struct {
 	// OnRejection Optional destination emitted when the worker rejects the current work without a hard failure. Classifier workstations must not declare onRejection.
 	OnRejection *[]WorkstationIO `json:"onRejection,omitempty"`
 
-	// OpenCodeAgent Optional OpenCode agent profile override for this workstation. When set, overrides the worker default for OpenCode dispatches and invokes `opencode run --agent <name>`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/).
-	OpenCodeAgent *string `json:"openCodeAgent,omitempty"`
-
 	// Operation Uppercase provider-agnostic operation requested by `MODEL_INVOKE` workstations, such as `TTS`.
 	Operation *ModelOperationName `json:"operation,omitempty"`
 
@@ -6777,8 +6779,11 @@ type Workstation struct {
 	Worktree *string `json:"worktree,omitempty"`
 }
 
-// WorkstationCron Trigger timing for cron workstations. Cron workstations use a schedule expression; interval triggers are not supported.
+// WorkstationCron Trigger timing for scheduled workstations. Provide exactly one of a five-field cron schedule or a positive duration in every; Factory validation enforces the exclusive choice.
 type WorkstationCron struct {
+	// Every Positive Go duration interval, such as 30s, 5m, 1h, or 1h30m, used instead of schedule.
+	Every *string `json:"every,omitempty"`
+
 	// ExpiryWindow Positive Go duration after due_at before a stale cron time token expires and can be consumed by the system expiry transition. Defaults to the duration until the next scheduled cron fire when omitted.
 	ExpiryWindow *string `json:"expiryWindow,omitempty"`
 
@@ -6786,7 +6791,7 @@ type WorkstationCron struct {
 	Jitter *string `json:"jitter,omitempty"`
 
 	// Schedule Standard five-field cron expression used to produce internal time work while the factory service is running.
-	Schedule string `json:"schedule"`
+	Schedule *string `json:"schedule,omitempty"`
 
 	// TriggerAtStart When true, service startup submits one immediate internal time work item before waiting for the next scheduled cron fire.
 	TriggerAtStart *bool `json:"triggerAtStart,omitempty"`
@@ -6800,8 +6805,11 @@ type WorkstationGuard struct {
 	// MatchInput For `SAME_NAME` and `SAME_TRACE_ID` input guards, the peer input workType name from another input in the same workstation.
 	MatchInput *string `json:"matchInput,omitempty"`
 
-	// MaxVisits For `VISIT_COUNT` guards, the visit threshold.
+	// MaxVisits For `VISIT_COUNT` guards, the fixed visit ceiling.
 	MaxVisits *int `json:"maxVisits,omitempty"`
+
+	// MaxVisitsArgument Optional invocation argument whose positive integer value tightens the fixed visit ceiling.
+	MaxVisitsArgument *string `json:"maxVisitsArgument,omitempty"`
 
 	// ParentInput For parent-aware input guards, the parent workType name from another input in the same workstation.
 	ParentInput *string `json:"parentInput,omitempty"`
@@ -6838,6 +6846,15 @@ type WorkstationKind string
 type WorkstationLimits struct {
 	// MaxExecutionTime Go duration limit for one dispatch attempt before it times out.
 	MaxExecutionTime *string `json:"maxExecutionTime,omitempty"`
+
+	// MaxGeneratedWorkItems Fixed maximum number of Work items one accepted worker-emitted FACTORY_REQUEST_BATCH may contain.
+	MaxGeneratedWorkItems *int `json:"maxGeneratedWorkItems,omitempty"`
+
+	// MaxGeneratedWorkItemsArgument Optional invocation argument whose positive integer value tightens the fixed generated-Work ceiling.
+	MaxGeneratedWorkItemsArgument *string `json:"maxGeneratedWorkItemsArgument,omitempty"`
+
+	// MaxGeneratedWorkItemsArgumentOffset Offset added to the invocation argument before applying the generated-Work ceiling.
+	MaxGeneratedWorkItemsArgumentOffset *int `json:"maxGeneratedWorkItemsArgumentOffset,omitempty"`
 
 	// MaxRetries Maximum number of retry attempts after a failed dispatch before the workstation gives up.
 	MaxRetries *int `json:"maxRetries,omitempty"`

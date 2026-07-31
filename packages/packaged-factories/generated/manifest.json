@@ -3,16 +3,49 @@
   "factorySchema": "https://schemas.portpowered.com/you/config/factory.schema.json",
   "factories": [
     {
+      "name": "@you/classify",
+      "project": "builtin-classify",
+      "slug": "classify",
+      "json": {
+        "locator": "generated/factories/classify/factory.json",
+        "sha256": "34cade4ec7ffd12824fb7fbd397d29f7c0e67d6def677b9f68b1a3999b0f4ad1"
+      },
+      "yaml": {
+        "locator": "generated/factories/classify/factory.yaml",
+        "sha256": "eda9c8384df8454a5e8e7ef226ab7f9e6afdf00037f2c30b488ffdd06e619847"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Classifies a request by complexity and routes it to the configured small, medium, or large model lane."
+      },
+      "examples": [
+        {
+          "name": "route-request",
+          "description": {
+            "type": "LOCALIZABLE_ASSET",
+            "value": "Route an implementation request to the appropriate lane."
+          },
+          "args": {
+            "request": "Explain and fix the failing test"
+          }
+        }
+      ]
+    },
+    {
       "name": "@you/deep-research",
       "project": "builtin-deep-research",
       "slug": "deep-research",
       "json": {
         "locator": "generated/factories/deep-research/factory.json",
-        "sha256": "0fc85f6ce286a14a487f92a599df22f1abe9391c29cc69e8835cefe144f4c042"
+        "sha256": "41f5ed140dfb3f61b6d4b951a7468adea640277c2e16ea8da309ad83f97d260b"
       },
       "yaml": {
         "locator": "generated/factories/deep-research/factory.yaml",
-        "sha256": "d17cfd508c401d529d476571f2562a8b3234db09ffb6ec8c595cfef28da02b56"
+        "sha256": "40c909db90fa7641932ba871cccba606f6dd2437cb188f033baa6320921eaaf3"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Breaks a research question into bounded specialist investigations and synthesizes their findings."
       },
       "examples": [
         {
@@ -38,16 +71,51 @@
       ]
     },
     {
+      "name": "@you/full-flow",
+      "project": "builtin-full-flow",
+      "slug": "full-flow",
+      "json": {
+        "locator": "generated/factories/full-flow/factory.json",
+        "sha256": "4586c33c6bab2efcda5d5a4320b71a57d52353d34081ea86d01abfd0b70e30cb"
+      },
+      "yaml": {
+        "locator": "generated/factories/full-flow/factory.yaml",
+        "sha256": "bc81c0003094b08fd71a378dac5ae2aaf73b063ffb270ee74ab6ae59fea5258a"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Plans parallel implementation waves in isolated worktrees, merges completed tasks, and replans until the project is complete."
+      },
+      "examples": [
+        {
+          "name": "deliver-project",
+          "description": {
+            "type": "LOCALIZABLE_ASSET",
+            "value": "Deliver a project in bounded parallel waves."
+          },
+          "args": {
+            "maxCycles": "4",
+            "maxTasksPerCycle": "4",
+            "request": "Complete the requested project"
+          }
+        }
+      ]
+    },
+    {
       "name": "@you/fusion",
       "project": "builtin-fusion",
       "slug": "fusion",
       "json": {
         "locator": "generated/factories/fusion/factory.json",
-        "sha256": "0303b984e8e6a7b6042162593f385e5dba17b44160775025002ee40db5081bea"
+        "sha256": "5f796e7ead85e0e536ef086e0de72292f294124e9462c2e1d7bdcfadacfe529a"
       },
       "yaml": {
         "locator": "generated/factories/fusion/factory.yaml",
-        "sha256": "2452e78926bfaca6137445eaf27bf6516e64a5adf53416890330d69f4d4e792f"
+        "sha256": "2d9a7cf1ee30e38cb72e532a04ce03a3b4e3f7f197e33f08d6b38639749497ec"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Produces an initial answer with one worker and refines it with a second worker."
       },
       "examples": [
         {
@@ -59,7 +127,7 @@
           "args": {
             "firstProvider": "CLAUDE",
             "input": "Draft a release summary",
-            "output": "fusion-summary.md",
+            "resultFile": "fusion-summary.md",
             "secondProvider": "CODEX"
           }
         },
@@ -83,12 +151,116 @@
       "slug": "goal",
       "json": {
         "locator": "generated/factories/goal/factory.json",
-        "sha256": "4f50b4b59f5b377f422709544aea6dd0b76b798591e81b43598363454f11ea81"
+        "sha256": "6ac36ce8489cbff6d629fd536f78096dba005fa43e50a44b5571c9dbf97ecb54"
       },
       "yaml": {
         "locator": "generated/factories/goal/factory.yaml",
-        "sha256": "5064b2d7cd30116d356205ad53072ae9b041443b7ba3f41c4a9f858c857f0415"
-      }
+        "sha256": "bb5fd122193e2d6fac8919e9dfb224bc46c5c1572c119fffe533e30528b6849b"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Repeatedly works a goal until the executor reports completion or the Factory reaches a failure bound."
+      },
+      "examples": [
+        {
+          "name": "complete-goal",
+          "description": {
+            "type": "LOCALIZABLE_ASSET",
+            "value": "Pursue a bounded implementation goal."
+          },
+          "args": {
+            "input": "Implement and verify the requested change"
+          }
+        }
+      ]
+    },
+    {
+      "name": "@you/loop",
+      "project": "builtin-loop",
+      "slug": "loop",
+      "json": {
+        "locator": "generated/factories/loop/factory.json",
+        "sha256": "e50e0050d24c7386b8ae5479162ca8d36dbfca6ec41122013d3f27edb589d396"
+      },
+      "yaml": {
+        "locator": "generated/factories/loop/factory.yaml",
+        "sha256": "2286ec1ea401baa37c4a6458e06390a75b2eebe2cf3577acaf7ea2c6215d104f"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Runs the requested task at a duration interval such as 1h for the lifetime of the Factory Session."
+      },
+      "examples": [
+        {
+          "name": "hourly-dependency-check",
+          "description": {
+            "type": "LOCALIZABLE_ASSET",
+            "value": "Check dependency updates once per hour."
+          },
+          "args": {
+            "every": "1h",
+            "request": "Check dependency updates"
+          }
+        }
+      ]
+    },
+    {
+      "name": "@you/plan-execute",
+      "project": "builtin-plan-execute",
+      "slug": "plan-execute",
+      "json": {
+        "locator": "generated/factories/plan-execute/factory.json",
+        "sha256": "cfe85cc2ed2bc37c79b3a87827ba3f8359649558d3715f65cde5068d6b7db0ca"
+      },
+      "yaml": {
+        "locator": "generated/factories/plan-execute/factory.yaml",
+        "sha256": "f3d8fceff6ebeca84952472df18dbc8379985b73261dd99ce262fd6a227394a5"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Writes a Markdown and JSON PRD for a project request, then executes that plan in the current workspace."
+      },
+      "examples": [
+        {
+          "name": "plan-and-implement",
+          "description": {
+            "type": "LOCALIZABLE_ASSET",
+            "value": "Produce a durable PRD and implement it in the current repository."
+          },
+          "args": {
+            "request": "Implement and verify the requested feature"
+          }
+        }
+      ]
+    },
+    {
+      "name": "@you/plan-parallel",
+      "project": "builtin-plan-parallel",
+      "slug": "plan-parallel",
+      "json": {
+        "locator": "generated/factories/plan-parallel/factory.json",
+        "sha256": "1a989e0f4ab76278e1f6404c27aa1a21eb89334e2b0dbab3cea729662c4b7430"
+      },
+      "yaml": {
+        "locator": "generated/factories/plan-parallel/factory.yaml",
+        "sha256": "68e814871d8b9af290f7972eca620efa603c3ef359d813828e669e3c700f44f5"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Plans a dependency graph of Work, executes ready tasks concurrently, and merges the completed results."
+      },
+      "examples": [
+        {
+          "name": "parallel-implementation-plan",
+          "description": {
+            "type": "LOCALIZABLE_ASSET",
+            "value": "Plan and execute a dependency-aware implementation."
+          },
+          "args": {
+            "request": "Implement and test the requested feature"
+          }
+        }
+      ]
     },
     {
       "name": "@you/quorum",
@@ -96,11 +268,15 @@
       "slug": "quorum",
       "json": {
         "locator": "generated/factories/quorum/factory.json",
-        "sha256": "787f154e43a0b22b50d0fa3712f640a271035f68bbd97c9f9c4ff1a3b22b7d3d"
+        "sha256": "f4b9c59d4481955b051a2d36768ba664878879bacd7ffcb9891a02fcb3c83281"
       },
       "yaml": {
         "locator": "generated/factories/quorum/factory.yaml",
-        "sha256": "a03d5365a3ba6a6e671c049bc08a8873a80a852ab4174831cff9fb19820c0488"
+        "sha256": "2c177c48674769503f3c051774904d44610f5c08c356e4945f5eeb370dbebb67"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Runs independent assessments in parallel and merges them into one final answer."
       },
       "examples": [
         {
@@ -135,11 +311,15 @@
       "slug": "review",
       "json": {
         "locator": "generated/factories/review/factory.json",
-        "sha256": "7d9d51b0f3666a14a08e9b1f38adbd0dadf5a91ce770b1b50924dd8c0f416ca2"
+        "sha256": "4c9d5f019cc9f39791cb7ca521a9b089ec313d0540d6456c77fc1ac6e06a4c4c"
       },
       "yaml": {
         "locator": "generated/factories/review/factory.yaml",
-        "sha256": "720768d66c9c025da40bb19174c887baf0e0f0cac74c301a20366ff888d5f58c"
+        "sha256": "3cac4ae0c076ea6b978fce3ffa7f3fed7815a63bf2b4c901ff78ccb692ff36c8"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Produces candidate work and repeats independent review until approval or a bounded failure."
       },
       "examples": [
         {
@@ -155,16 +335,50 @@
       ]
     },
     {
+      "name": "@you/spawn",
+      "project": "builtin-spawn",
+      "slug": "spawn",
+      "json": {
+        "locator": "generated/factories/spawn/factory.json",
+        "sha256": "dcfc4db717abb64f042faa659dc3bee141491aaae8332e9e725e286e264fcd80"
+      },
+      "yaml": {
+        "locator": "generated/factories/spawn/factory.yaml",
+        "sha256": "a48fec0f5c8a5ffcd2996665649a8b65cabb0eafe385441c84d5f8cbf5780dad"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Plans an exact number of independent tasks, runs them concurrently, and merges their results into one answer."
+      },
+      "examples": [
+        {
+          "name": "ten-travel-researchers",
+          "description": {
+            "type": "LOCALIZABLE_ASSET",
+            "value": "Plan ten travel research tasks, execute them concurrently, and merge their findings."
+          },
+          "args": {
+            "count": "10",
+            "request": "research the best places to travel"
+          }
+        }
+      ]
+    },
+    {
       "name": "@you/subagent",
       "project": "builtin-subagent",
       "slug": "subagent",
       "json": {
         "locator": "generated/factories/subagent/factory.json",
-        "sha256": "7eb4c0d50651dde3dc523d949a259a2252f934f2b419c41fae8fac63944a4424"
+        "sha256": "7914a52bf786008c0cfb6628f804e004878f843cf5912c1913cd491563ac2cb2"
       },
       "yaml": {
         "locator": "generated/factories/subagent/factory.yaml",
-        "sha256": "f67e352efee61ee7ef52d8b5e33724100ccacfa97201be20e2fd2bd8b1602e13"
+        "sha256": "41ca13b7b138b76ac6cbbc0220d34a92386aa1e7ec6b652408025d6a6a21ac44"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Runs one bounded read-only subagent and returns its result."
       },
       "examples": [
         {
@@ -190,17 +404,63 @@
       ]
     },
     {
+      "name": "@you/tournament",
+      "project": "builtin-tournament",
+      "slug": "tournament",
+      "json": {
+        "locator": "generated/factories/tournament/factory.json",
+        "sha256": "0e5535924b73ffbe6b2229ec051ed97517292077983a9c4f174c0b8b154e7081"
+      },
+      "yaml": {
+        "locator": "generated/factories/tournament/factory.yaml",
+        "sha256": "452c02e0556bec9176431b2804e1f9d254ba6ff70bae0758993921037b05bdc4"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Runs candidates through bounded 1v1 matches, uses a judge to advance each winner, and returns the champion result."
+      },
+      "examples": [
+        {
+          "name": "two-round-tournament",
+          "description": {
+            "type": "LOCALIZABLE_ASSET",
+            "value": "Compare four candidate launch strategies through two judged rounds."
+          },
+          "args": {
+            "request": "Propose a launch strategy",
+            "rounds": "2"
+          }
+        }
+      ]
+    },
+    {
       "name": "@you/tts",
       "project": "builtin-tts",
       "slug": "tts",
       "json": {
         "locator": "generated/factories/tts/factory.json",
-        "sha256": "a38464667ca8ffcd525b2763fe6542c24e42c59cea885b38c96994d0bf4ee25f"
+        "sha256": "074de7745359dee76441a8a579d367103f5e858be1b59a0308599376b1ca97c7"
       },
       "yaml": {
         "locator": "generated/factories/tts/factory.yaml",
-        "sha256": "6d527753d8a57644a11c12cedb614297f528018757b3163d659e18612e0c4f8d"
-      }
+        "sha256": "32c6baaf349be27e18d03a17d5ab67a433fcbbc83de705672f6aa01eb96272f7"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Converts submitted text to audio with the packaged local text-to-speech model."
+      },
+      "examples": [
+        {
+          "name": "speak-release-summary",
+          "description": {
+            "type": "LOCALIZABLE_ASSET",
+            "value": "Convert a short release summary to audio."
+          },
+          "args": {
+            "text": "The release is ready."
+          }
+        }
+      ]
     }
   ]
 }

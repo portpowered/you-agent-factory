@@ -25,12 +25,12 @@ const (
 
 	// workersProviderEffectMigrationDebtPackage remains the live declaration
 	// site until Providers packets land. It is not the durable normative owner.
-	workersProviderEffectMigrationDebtPackage = "pkg/services/workers/provider/inferencecontract"
+	workersProviderEffectMigrationDebtPackage = "pkg/services/providers/internal/services/execution/internal/provider/inferencecontract"
 
 	// workersProviderMigrationDebtPrefix hosts the absorbed Standardized
 	// Providers catalog/registry/execution surfaces until Providers packets
 	// land. Competing forks outside this prefix and Providers are rejected.
-	workersProviderMigrationDebtPrefix = "pkg/services/workers/provider/"
+	workersProviderMigrationDebtPrefix = "pkg/services/providers/internal/services/execution/internal/provider/"
 
 	edgesPackagePath = "pkg/services/edges"
 
@@ -541,3 +541,4 @@ func writeProviderEffectOwnershipFindings(writer io.Writer, findings []providerE
 		}
 	}
 }
+

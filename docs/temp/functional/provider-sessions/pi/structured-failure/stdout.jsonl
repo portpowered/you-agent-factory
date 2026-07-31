@@ -1,2 +1,0 @@
-{"type":"session","id":"pi-session-structured-failure"}
-{"type":"message_end","message":{"id":"msg-structured-failure","role":"assistant","content":[],"stopReason":"error","errorMessage":"rate limited"}}

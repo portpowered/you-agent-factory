@@ -19,9 +19,9 @@ export {
   semanticWorkflowDashboardSnapshot,
 } from "../../../components/dashboard/test-fixtures";
 
+import { CurrentSelectionWidget } from "../../current-selection/components/widget/current-selection-widget";
 import { useCurrentSelection } from "../../current-selection/hooks/core/useCurrentSelection";
 import { useCurrentSelectionDetails } from "../../current-selection/hooks/core/useCurrentSelectionDetails";
-import { CurrentSelectionWidget } from "../../current-selection/components/widget/current-selection-widget";
 import { useSelectedProviderSessionState } from "../../current-selection/work-selection/hooks/useSelectedProviderSessionState";
 import { InlineAddWidgetCard } from "../../dashboard-add-card/components/inline-add-widget-card";
 import { ProviderSessionWidget } from "../../provider-session-detail/components/provider-session-widget";
@@ -32,13 +32,13 @@ import {
 } from "../../submit-work/components/submit-work-card";
 import { SubmitWorkWidget } from "../../submit-work/components/submit-work-widget";
 import { TerminalWorkWidget } from "../../terminal-work/components/terminal-work-widget";
-import type { useTraceDrilldown } from "../../trace-drilldown/hooks/useTraceDrilldown";
 import { TraceDrilldownWidget } from "../../trace-drilldown/components/trace-drilldown-widget";
-import type { WorkChartModel } from "../../work-outcome/lib/trends";
+import type { useTraceDrilldown } from "../../trace-drilldown/hooks/useTraceDrilldown";
 import { WorkOutcomeWidget } from "../../work-outcome/components/work-outcome-widget";
+import type { WorkChartModel } from "../../work-outcome/lib/trends";
 import { WorkTotalsWidget } from "../../work-totals/components/work-totals-widget";
-import { useCurrentActivityImportController } from "../../workflow-activity/hooks/current-activity-import-controller";
 import { WorkflowActivityWidget } from "../../workflow-activity/components/workflow-activity-widget";
+import { useCurrentActivityImportController } from "../../workflow-activity/hooks/current-activity-import-controller";
 import {
   DASHBOARD_WIDGET_IDS,
   DEFAULT_DASHBOARD_LAYOUT,
@@ -72,6 +72,13 @@ export const providerSessionID = "sess-bento-card-catalog";
 export const providerSessionLoadingID = "sess-bento-card-loading";
 export const providerSessionEmptyID = "sess-bento-card-empty";
 export const providerSessionErrorID = "sess-bento-card-error";
+
+const HEADER_CONSISTENCY_WORK_TOTALS_ACTION = (
+  <DashboardWidgetRemoveButton
+    onClick={() => undefined}
+    widgetTitle="Work totals"
+  />
+);
 
 export const populatedProviderSession = {
   dispatchID: "dispatch-review-active",
@@ -1939,7 +1946,10 @@ export function HeaderConsistencyStory({
         cards={[
           {
             children: (
-              <WorkTotalsWidget snapshot={semanticWorkflowDashboardSnapshot} />
+              <WorkTotalsWidget
+                headerAction={HEADER_CONSISTENCY_WORK_TOTALS_ACTION}
+                snapshot={semanticWorkflowDashboardSnapshot}
+              />
             ),
             id: "work-totals::header-consistency",
             widgetType: DASHBOARD_WIDGET_IDS.workTotals,
@@ -2009,7 +2019,7 @@ export function HeaderConsistencyStory({
         ]}
         initialWidth={initialWidth}
         layout={layout}
-        responsiveMode="interactive"
+        responsiveMode="adaptive"
       />
     </div>
   );

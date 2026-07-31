@@ -809,7 +809,7 @@ func assertGeneratedCronWorkstation(t *testing.T, workstation factoryapi.Worksta
 	if workstation.Cron == nil {
 		t.Fatal("expected generated cron to decode")
 	}
-	if workstation.Cron.Schedule != "*/5 * * * *" {
+	if workstation.Cron.Schedule == nil || *workstation.Cron.Schedule != "*/5 * * * *" {
 		t.Fatalf("expected generated cron schedule to decode, got %#v", workstation.Cron)
 	}
 	if workstation.Cron.TriggerAtStart == nil || !*workstation.Cron.TriggerAtStart {

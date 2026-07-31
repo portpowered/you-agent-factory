@@ -161,17 +161,17 @@ func TestMapCommittedOwnerPackageWorkersMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path: "pkg/services/workers/provider/registry",
+			path: "pkg/services/providers/internal/services/execution/internal/provider/registry",
 			want: PackageMapping{
-				PackagePath: "pkg/services/workers/provider/registry",
+				PackagePath: "pkg/services/providers/internal/services/execution/internal/provider/registry",
 				Disposition: DispositionMove,
 				Destination: "providers/internal/services/catalog",
 			},
 		},
 		{
-			path: "pkg/services/workers/provider_test",
+			path: "pkg/services/providers/internal/services/execution/internal/provider_test",
 			want: PackageMapping{
-				PackagePath: "pkg/services/workers/provider_test",
+				PackagePath: "pkg/services/providers/internal/services/execution/internal/provider_test",
 				Disposition: DispositionMove,
 				Destination: "providers/internal/services/execution",
 			},
@@ -231,3 +231,4 @@ func TestWorkersTopLevelUnexpectedCoveredByMoveRules(t *testing.T) {
 		}
 	}
 }
+

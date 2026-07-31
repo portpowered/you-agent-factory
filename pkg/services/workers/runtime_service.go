@@ -1,6 +1,8 @@
 package workers
 
 import (
+	"context"
+
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 )
 
@@ -8,6 +10,7 @@ import (
 // opened Factory Session runtime.
 type RuntimeOpeningRequest struct {
 	RunnerID                          string
+	Worktree                          string
 	MockWorkers                       *MockWorkersConfig
 	InvocationSkipPermissionsOverride *bool
 	SkipBuiltInPrerequisiteValidation bool
@@ -31,6 +34,7 @@ type AgentRunEventRecorder func(AgentRunResponseEvent)
 type RuntimeService interface {
 	Service
 
+	Close(context.Context) error
 	WithCommandRunners(CommandRunner, CommandRunner) (RuntimeService, error)
 	WithProgressPublisher(
 		CommandRunner,

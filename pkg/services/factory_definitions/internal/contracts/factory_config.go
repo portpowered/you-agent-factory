@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/namevalue"
 	catalogresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/resource"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/namevalue"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -497,8 +497,11 @@ type BundledFileContentConfig struct {
 
 // WorkstationLimits holds execution limits from workstation configuration.
 type WorkstationLimits struct {
-	MaxRetries       int    `json:"max_retries,omitempty" yaml:"maxRetries,omitempty"`
-	MaxExecutionTime string `json:"max_execution_time,omitempty" yaml:"maxExecutionTime,omitempty"`
+	MaxRetries                          int    `json:"max_retries,omitempty" yaml:"maxRetries,omitempty"`
+	MaxExecutionTime                    string `json:"max_execution_time,omitempty" yaml:"maxExecutionTime,omitempty"`
+	MaxGeneratedWorkItems               int    `json:"max_generated_work_items,omitempty" yaml:"maxGeneratedWorkItems,omitempty"`
+	MaxGeneratedWorkItemsArgument       string `json:"max_generated_work_items_argument,omitempty" yaml:"maxGeneratedWorkItemsArgument,omitempty"`
+	MaxGeneratedWorkItemsArgumentOffset int    `json:"max_generated_work_items_argument_offset,omitempty" yaml:"maxGeneratedWorkItemsArgumentOffset,omitempty"`
 }
 
 // WorkPropagationMode selects how downstream work receives payload content.
@@ -535,7 +538,6 @@ type FactoryWorkstationConfig struct {
 	OperationBindings     []ModelOperationBinding     `json:"operationBindings,omitempty" yaml:"operationBindings,omitempty"`
 	WorkerTypeName        string                      `json:"worker" yaml:"worker,omitempty"`
 	Runner                string                      `json:"runner,omitempty" yaml:"runner,omitempty"`
-	OpenCodeAgent         string                      `json:"openCodeAgent,omitempty" yaml:"openCodeAgent,omitempty"`
 	PromptFile            string                      `json:"prompt_file,omitempty" yaml:"promptFile,omitempty"`
 	OutputSchema          string                      `json:"output_schema,omitempty" yaml:"outputSchema,omitempty"`
 	Timeout               string                      `json:"timeout,omitempty" yaml:"timeout,omitempty"`
@@ -573,6 +575,7 @@ type ClassificationRouteConfig struct {
 // and routing; this object only owns trigger timing.
 type CronConfig struct {
 	Schedule       string `json:"schedule,omitempty" yaml:"schedule,omitempty"`
+	Every          string `json:"every,omitempty" yaml:"every,omitempty"`
 	TriggerAtStart bool   `json:"triggerAtStart,omitempty" yaml:"triggerAtStart,omitempty"`
 	Jitter         string `json:"jitter,omitempty" yaml:"jitter,omitempty"`
 	ExpiryWindow   string `json:"expiryWindow,omitempty" yaml:"expiryWindow,omitempty"`
@@ -591,6 +594,7 @@ func (c *CronConfig) UnmarshalJSON(data []byte) error {
 
 	type cronConfigPayload struct {
 		Schedule       string `json:"schedule,omitempty"`
+		Every          string `json:"every,omitempty"`
 		TriggerAtStart bool   `json:"triggerAtStart,omitempty"`
 		Jitter         string `json:"jitter,omitempty"`
 		ExpiryWindow   string `json:"expiryWindow,omitempty"`
@@ -601,6 +605,7 @@ func (c *CronConfig) UnmarshalJSON(data []byte) error {
 	}
 
 	c.Schedule = payload.Schedule
+	c.Every = payload.Every
 	c.TriggerAtStart = payload.TriggerAtStart
 	c.Jitter = payload.Jitter
 	c.ExpiryWindow = payload.ExpiryWindow
@@ -655,10 +660,11 @@ type GuardMatchConfig struct {
 
 // GuardConfig declares a guard on a workstation using customer-facing names.
 type GuardConfig struct {
-	Type        GuardType         `json:"type" yaml:"type"`
-	Workstation string            `json:"workstation,omitempty" yaml:"workstation,omitempty"`
-	MaxVisits   int               `json:"max_visits,omitempty" yaml:"maxVisits,omitempty"`
-	MatchConfig *GuardMatchConfig `json:"match_config,omitempty" yaml:"matchConfig,omitempty"`
+	Type              GuardType         `json:"type" yaml:"type"`
+	Workstation       string            `json:"workstation,omitempty" yaml:"workstation,omitempty"`
+	MaxVisits         int               `json:"max_visits,omitempty" yaml:"maxVisits,omitempty"`
+	MaxVisitsArgument string            `json:"max_visits_argument,omitempty" yaml:"maxVisitsArgument,omitempty"`
+	MatchConfig       *GuardMatchConfig `json:"match_config,omitempty" yaml:"matchConfig,omitempty"`
 }
 
 type IOConfig struct {

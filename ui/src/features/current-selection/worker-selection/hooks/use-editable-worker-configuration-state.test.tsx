@@ -31,7 +31,7 @@ function buildFactoryDocument(
     workers: [
       {
         model: "gpt-5.5",
-        modelProvider: "CURSOR",
+        modelProvider: "CODEX",
         name: "reviewer",
         type: "MODEL_WORKER",
       },
@@ -85,7 +85,7 @@ describe("useEditableWorkerConfigurationState", () => {
       canSave: false,
       draft: {
         model: "gpt-5.5",
-        modelProvider: "CURSOR",
+        modelProvider: "CODEX",
         name: "reviewer",
         type: "MODEL_WORKER",
       },
@@ -366,16 +366,16 @@ describe("useEditableWorkerConfigurationState", () => {
       expect(result.current).toMatchObject({
         draft: {
           model: "Keep this local model draft.",
-          modelProvider: "CURSOR",
+          modelProvider: "CODEX",
           type: "MODEL_WORKER",
         },
         isDirty: true,
-        overwriteFieldNames: expect.arrayContaining(["model", "modelProvider"]),
+        overwriteFieldNames: ["model"],
         status: "ready",
       });
     });
     if (result.current?.status === "ready") {
-      expect(result.current.overwriteFieldNames).toHaveLength(2);
+      expect(result.current.overwriteFieldNames).toHaveLength(1);
     }
   });
 
@@ -417,11 +417,11 @@ describe("useEditableWorkerConfigurationState", () => {
     await waitFor(() => {
       expect(result.current).toMatchObject({
         isDirty: true,
-        overwriteFieldNames: expect.arrayContaining(["model", "modelProvider"]),
+        overwriteFieldNames: ["model"],
         status: "ready",
       });
       if (result.current?.status === "ready") {
-        expect(result.current.overwriteFieldNames).toHaveLength(2);
+        expect(result.current.overwriteFieldNames).toHaveLength(1);
       }
     });
 
@@ -450,7 +450,7 @@ describe("useEditableWorkerConfigurationState", () => {
         workers: [
           {
             model: "gpt-5.5",
-            modelProvider: "CURSOR",
+            modelProvider: "CODEX",
             name: "reviewer",
             skipPermissions: true,
             stopToken: "<COMPLETE>",
@@ -484,7 +484,7 @@ describe("useEditableWorkerConfigurationState", () => {
       status: "ready",
       draft: {
         model: "gpt-5.5",
-        modelProvider: "CURSOR",
+        modelProvider: "CODEX",
         skipPermissions: true,
         stopToken: "<COMPLETE>",
         timeoutAmount: "30",
@@ -564,7 +564,7 @@ describe("useEditableWorkerConfigurationState", () => {
         workers: [
           {
             model: "gpt-5.5",
-            modelProvider: "CURSOR",
+            modelProvider: "CODEX",
             name: "reviewer",
             type: "MODEL_WORKER",
           },
@@ -620,7 +620,7 @@ describe("useEditableWorkerConfigurationState", () => {
     expect(result.current).toMatchObject({
       draft: {
         model: "Keep this local review draft.",
-        modelProvider: "CURSOR",
+        modelProvider: "CODEX",
       },
       isDirty: true,
       status: "ready",
@@ -652,7 +652,7 @@ describe("useEditableWorkerConfigurationState", () => {
         workers: [
           {
             model: "gpt-5.5",
-            modelProvider: "CURSOR",
+            modelProvider: "CODEX",
             name: "reviewer",
             type: "MODEL_WORKER",
           },
@@ -838,7 +838,7 @@ describe("useEditableWorkerConfigurationState", () => {
         workers: [
           {
             model: "gpt-5.5",
-            modelProvider: "CURSOR",
+            modelProvider: "CODEX",
             name: "linear-poller",
             type: "MODEL_WORKER",
           },

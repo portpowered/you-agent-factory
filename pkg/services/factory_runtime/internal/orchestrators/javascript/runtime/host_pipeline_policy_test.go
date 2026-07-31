@@ -580,9 +580,9 @@ func TestRun_ParallelObjectChildren_ResolveWorkerSettings(t *testing.T) {
 	if err != nil || !outcome.OK {
 		t.Fatalf("Run() outcome=%#v err=%v", outcome, err)
 	}
-	assertWorkerSelection(t, captured["child-preset"], "child", "CLAUDE", "child-model", "high")
-	assertWorkerSelection(t, captured["factory-preset"], "factory", "CODEX", "factory-model", "low")
-	assertWorkerSelection(t, captured["scalar-defaults"], "", "GEMINI", "default-model", "")
+	assertWorkerSelection(t, captured["child-preset"], "child", "claude", "child-model", "high")
+	assertWorkerSelection(t, captured["factory-preset"], "factory", "codex", "factory-model", "low")
+	assertWorkerSelection(t, captured["scalar-defaults"], "", "gemini", "default-model", "")
 }
 
 func TestRun_ParallelDynamicUnsupportedFieldDoesNotConsumeDispatchIdentity(t *testing.T) {

@@ -156,7 +156,7 @@ func assertRuntimeConfigAlignmentGeneratedBoundary(t *testing.T, generated facto
 	if cron.Behavior == nil || string(*cron.Behavior) != interfaces.CanonicalPublicWorkstationKind(interfaces.WorkstationKindCron) {
 		t.Fatalf("%s kind = %#v, want CRON", runtimeConfigAlignmentCronWorkstation, cron.Behavior)
 	}
-	if cron.Cron == nil || cron.Cron.Schedule != "0 * * * *" {
+	if cron.Cron == nil || stringValueFromFunctionalPtr(cron.Cron.Schedule) != "0 * * * *" {
 		t.Fatalf("%s cron = %#v, want schedule 0 * * * *", runtimeConfigAlignmentCronWorkstation, cron.Cron)
 	}
 	if cron.Cron.TriggerAtStart == nil || !*cron.Cron.TriggerAtStart {

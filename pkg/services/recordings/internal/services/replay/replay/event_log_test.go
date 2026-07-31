@@ -255,6 +255,11 @@ func TestReduceReplayEvents_CompletionsPreserveRecordedOutputWork(t *testing.T) 
 	if got[1].ID != "work-task-39" || got[1].WorkTypeID != "task" {
 		t.Fatalf("recorded output work[1] = %#v, want work-task-39/task", got[1])
 	}
+	// Replay reconstructs the same terminal Work identity facts that Work
+	// materialization assigned on the live path; it must not invent new IDs.
+	if got[0].CurrentChainingTraceID != "trace-1" || got[0].Tags["kind"] != "plan" {
+		t.Fatalf("recorded output work[0] lineage = %#v", got[0])
+	}
 }
 
 func TestReduceReplayEvents_CompletionsRehydrateSafeDiagnosticsThroughInterfaces(t *testing.T) {
@@ -418,26 +423,28 @@ func thinDispatchReplayArtifact(t *testing.T) (*interfaces.ReplayArtifact, facto
 func safeDiagnosticReductionArtifact(t *testing.T) *interfaces.ReplayArtifact {
 	t.Helper()
 
+	modelResponse := replayInferenceResponseEvent(
+		t,
+		work.WorkDispatch{
+			DispatchID: "dispatch-safe",
+			Execution: work.ExecutionMetadata{
+				RequestID: "request-safe",
+				TraceID:   "trace-safe",
+				WorkIDs:   []string{"work-safe"},
+			},
+		},
+		"dispatch-safe/inference-request/1",
+		1,
+		3,
+		"recorded provider output",
+		&workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "response_id", ID: "resp-safe-123"},
+		safeDiagnosticReductionFixture(),
+		"",
+	)
+	modelResponse.Type = factoryapi.FactoryEventTypeModelResponse
 	return testReplayArtifact(
 		t,
-		replayInferenceResponseEvent(
-			t,
-			work.WorkDispatch{
-				DispatchID: "dispatch-safe",
-				Execution: work.ExecutionMetadata{
-					RequestID: "request-safe",
-					TraceID:   "trace-safe",
-					WorkIDs:   []string{"work-safe"},
-				},
-			},
-			"dispatch-safe/inference-request/1",
-			1,
-			3,
-			"recorded provider output",
-			&workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "response_id", ID: "resp-safe-123"},
-			safeDiagnosticReductionFixture(),
-			"",
-		),
+		modelResponse,
 		replayDispatchCompletedEvent(t, "completion-safe", workerexecution.WorkResult{
 			DispatchID:   "dispatch-safe",
 			TransitionID: "transition-safe",

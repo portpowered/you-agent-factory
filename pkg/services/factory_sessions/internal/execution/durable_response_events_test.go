@@ -173,7 +173,7 @@ func TestJavaScriptRuntimeService_LiveChildExecutor_UsesConductorBeforeSessionRe
 	}
 }
 
-func TestJavaScriptRuntimeService_SessionProgressPublisher_IgnoresNonDraftFragments(t *testing.T) {
+func TestJavaScriptRuntimeService_SessionProgressPublisher_MapsGenericFragments(t *testing.T) {
 	t.Parallel()
 
 	service := newDurableResponseEventsService(t)
@@ -187,8 +187,8 @@ func TestJavaScriptRuntimeService_SessionProgressPublisher_IgnoresNonDraftFragme
 	if state.responseEvents == nil {
 		t.Fatal("response event store was not initialized")
 	}
-	if accounting := state.responseEvents.RetentionAccounting(); accounting.EventCount != 0 {
-		t.Fatalf("retained events = %#v, want none for ignored fragments", accounting)
+	if accounting := state.responseEvents.RetentionAccounting(); accounting.EventCount != 1 {
+		t.Fatalf("retained events = %#v, want mapped generic progress fragment only", accounting)
 	}
 }
 

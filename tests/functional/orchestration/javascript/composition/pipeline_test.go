@@ -17,11 +17,11 @@ import (
 )
 
 const (
-	pipelineStageOneLabel          = "edit-0"
-	pipelineStageTwoLabel          = "review-0"
-	pipelineStageOnePrompt         = "edit alpha"
-	pipelineStageOneFailurePrompt  = "fail:edit rejected"
-	pipelineStageFailureWorkflow = `return (async function () {
+	pipelineStageOneLabel         = "edit-0"
+	pipelineStageTwoLabel         = "review-0"
+	pipelineStageOnePrompt        = "edit alpha"
+	pipelineStageOneFailurePrompt = "fail:edit rejected"
+	pipelineStageFailureWorkflow  = `return (async function () {
   const items = ["alpha"];
   const results = await pipeline(
     items,

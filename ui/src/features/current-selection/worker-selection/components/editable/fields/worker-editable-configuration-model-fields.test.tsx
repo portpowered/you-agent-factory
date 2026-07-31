@@ -66,14 +66,14 @@ describe("WorkerEditableConfigurationModelFields", () => {
         executorProvider: "SCRIPT_WRAP",
         model: "gpt-5.5",
         modelLocality: "LOCAL",
-        modelProvider: "CURSOR",
+        modelProvider: "CODEX",
         skipPermissions: true,
       },
     });
 
     expect(
       screen.getByRole("combobox", { name: messages.modelProviderLabel }),
-    ).toHaveTextContent(messages.localizeModelProvider("CURSOR"));
+    ).toHaveTextContent(messages.localizeModelProvider("CODEX"));
     expect(
       screen.getByRole("textbox", { name: messages.modelLabel }),
     ).toHaveValue("gpt-5.5");
@@ -130,7 +130,13 @@ describe("WorkerEditableConfigurationModelFields", () => {
 
   it("calls model select draft handlers when combobox values change", async () => {
     const user = userEvent.setup();
-    const state = renderModelFields();
+    const state = renderModelFields({
+      draft: {
+        executorProvider: "",
+        modelLocality: "",
+        modelProvider: "CLAUDE",
+      },
+    });
 
     await selectComboboxOption(
       user,

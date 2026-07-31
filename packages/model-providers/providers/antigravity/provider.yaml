@@ -1,0 +1,39 @@
+id: antigravity
+aliases: []
+displayName:
+  type: LOCALIZABLE_ASSET
+  value: Antigravity
+description:
+  type: LOCALIZABLE_ASSET
+  value: Antigravity terminal-agent integration.
+documentation:
+  - kind: homepage
+    url: https://agylabs.github.io/agy-demos/
+technicalSupportLevel: experimental
+implementationAvailability: bundled
+maximumExecutionCapabilities:
+  promptSubmission: true
+  imageInput: false
+  sessionResume: true
+  structuredOutput: false
+  toolExecution: true
+  workingDirectory: true
+  worktree: false
+maximumResponseFidelityCapabilities:
+  nativeStreaming: false
+  messageDeltas: false
+  messageSnapshots: true
+  reasoningSummaries: false
+  toolLifecycle: false
+  toolOutputDeltas: false
+  fileChanges: false
+  plans: false
+  usage: false
+  stableItemIds: false
+  providerReconnect: false
+discovery:
+  executableNames:
+    - agy
+  endpointKinds:
+    - stdio
+  configurationKeys: []

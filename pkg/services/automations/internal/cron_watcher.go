@@ -12,9 +12,9 @@ import (
 	"github.com/jonboulle/clockwork"
 	"go.uber.org/zap"
 
-	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	cron "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 const (
@@ -95,19 +95,30 @@ func (s *Service) registerCronJobs(
 		if ws.Kind != interfaces.WorkstationKindCron {
 			continue
 		}
-		schedule, err := s.cronSchedule(ws)
+		if ws.Cron == nil {
+			s.logger().Warn("cron watcher disabled", zap.String("workstation", ws.Name), zap.String("reason", "missing cron configuration"))
+			continue
+		}
+		var err error
+		if strings.TrimSpace(ws.Cron.Every) != "" {
+			if _, invocationScoped := invocationParameterReference(ws.Cron.Every); invocationScoped {
+				s.logger().Info("invocation interval watcher awaiting controller Work",
+					zap.String("workstation", ws.Name),
+					zap.String("every", ws.Cron.Every),
+				)
+				continue
+			}
+			err = s.registerIntervalJob(ctx, scheduler, schedulerClock, runtimeCfg, workflowIdentity, ws, submitter)
+		} else {
+			var schedule string
+			schedule, err = s.cronSchedule(ws)
+			if err == nil {
+				err = s.registerCronJob(ctx, scheduler, schedulerClock, runtimeCfg, workflowIdentity, ws, schedule, submitter)
+			}
+		}
 		if err != nil {
 			s.logger().Warn("cron watcher disabled",
 				zap.String("workstation", ws.Name),
-				zap.Error(err),
-			)
-			continue
-		}
-
-		if err := s.registerCronJob(ctx, scheduler, schedulerClock, runtimeCfg, workflowIdentity, ws, schedule, submitter); err != nil {
-			s.logger().Warn("cron watcher disabled",
-				zap.String("workstation", ws.Name),
-				zap.String("schedule", schedule),
 				zap.Error(err),
 			)
 			continue
@@ -116,6 +127,33 @@ func (s *Service) registerCronJobs(
 		registered++
 	}
 	return registered
+}
+
+func (s *Service) registerIntervalJob(
+	ctx context.Context,
+	scheduler gocron.Scheduler,
+	schedulerClock clockwork.Clock,
+	runtimeCfg interfaces.RuntimeWorkstationLookup,
+	workflowIdentity string,
+	ws interfaces.FactoryWorkstationConfig,
+	submitter WorkRequestSubmitter,
+) error {
+	every, err := time.ParseDuration(strings.TrimSpace(ws.Cron.Every))
+	if err != nil || every < time.Second || every > 7*24*time.Hour {
+		return fmt.Errorf("interval %q must be from 1s through 168h", ws.Cron.Every)
+	}
+	_, err = scheduler.NewJob(
+		gocron.DurationJob(every),
+		gocron.NewTask(func() {
+			s.runCronJob(ctx, runtimeCfg, workflowIdentity, ws, schedulerClock.Now().UTC(), submitter)
+		}),
+		gocron.WithSingletonMode(gocron.LimitModeReschedule),
+	)
+	if err != nil {
+		return fmt.Errorf("register interval %q: %w", ws.Cron.Every, err)
+	}
+	s.logger().Info("interval watcher registered", zap.String("workstation", ws.Name), zap.String("every", ws.Cron.Every))
+	return nil
 }
 
 func (s *Service) registerCronJob(

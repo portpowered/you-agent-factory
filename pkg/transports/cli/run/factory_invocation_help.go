@@ -68,6 +68,7 @@ func ResolveFactoryInvocationInputSchema(
 
 type factoryInvocationHelpData struct {
 	factoryName   string
+	description   string
 	selectionText string
 	commandPrefix string
 	signature     *interfaces.InvocationSignatureConfig
@@ -106,6 +107,7 @@ func loadFactoryInvocationHelpData(cliName string, cfg RunConfig) (*factoryInvoc
 		}
 		return &factoryInvocationHelpData{
 			factoryName:   selectedFactoryName(loaded, cfg.NamedFactoryName),
+			description:   selectedFactoryDescription(loaded),
 			selectionText: fmt.Sprintf("named factory %s", cfg.NamedFactoryName),
 			commandPrefix: fmt.Sprintf("%s run --named %s", cliName, cfg.NamedFactoryName),
 			signature:     loaded.InvocationSignature,
@@ -124,6 +126,7 @@ func loadFactoryInvocationHelpData(cliName string, cfg RunConfig) (*factoryInvoc
 		}
 		return &factoryInvocationHelpData{
 			factoryName:   selectedFactoryName(loaded, cfg.FactoryConfigPath),
+			description:   selectedFactoryDescription(loaded),
 			selectionText: fmt.Sprintf("factory config %s", cfg.FactoryConfigPath),
 			commandPrefix: fmt.Sprintf("%s run --factory %s", cliName, cfg.FactoryConfigPath),
 			signature:     loaded.InvocationSignature,
@@ -150,6 +153,13 @@ func selectedFactoryName(cfg *interfaces.FactoryConfig, fallback string) string 
 	return fallback
 }
 
+func selectedFactoryDescription(cfg *interfaces.FactoryConfig) string {
+	if cfg == nil || cfg.Description == nil {
+		return ""
+	}
+	return strings.TrimSpace(cfg.Description.Value)
+}
+
 func formatFactoryInvocationHelp(data factoryInvocationHelpData) string {
 	var builder strings.Builder
 	builder.WriteString("Factory invocation help\n\n")
@@ -158,6 +168,11 @@ func formatFactoryInvocationHelp(data factoryInvocationHelpData) string {
 	builder.WriteString(" (")
 	builder.WriteString(data.selectionText)
 	builder.WriteString(")\n\n")
+	if data.description != "" {
+		builder.WriteString("Purpose:\n  ")
+		builder.WriteString(data.description)
+		builder.WriteString("\n\n")
+	}
 	builder.WriteString("Usage:\n")
 	builder.WriteString("  ")
 	builder.WriteString(data.commandPrefix)

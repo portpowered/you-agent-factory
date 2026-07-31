@@ -15,9 +15,9 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/portablefiles"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionsinternal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
 	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
 	distributionscaffoldfacts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/scaffoldfacts"
-	factorydefinitionsinternal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factorydefaultscaffold "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/defaultscaffold"
 )
@@ -584,9 +584,9 @@ func validConstructionPorts(t *testing.T) constructionPorts {
 				return factorydefinitions.PackagedFactoryInstallResult{}, nil
 			},
 		},
-		requiredToolChecker:   stubRequiredToolChecker{},
-		orchestratorValidator: stubOrchestratorValidator{},
-		portableFileSystem:    platformfilesystem.Local{},
+		requiredToolChecker:       stubRequiredToolChecker{},
+		orchestratorValidator:     stubOrchestratorValidator{},
+		portableFileSystem:        platformfilesystem.Local{},
 		directoryReplacementStore: stubDirectoryReplacementStore{},
 	}
 }
@@ -643,7 +643,7 @@ func (wireStubActivationGateway) SessionFactoryPersistRoot(*factorydefinitions.D
 func (wireStubActivationGateway) NamedFactoryActivationPaths(*factorydefinitions.DefinitionSession) (string, string) {
 	return "", ""
 }
-func (wireStubActivationGateway) SaveNow() time.Time { return time.Unix(0, 0) }
+func (wireStubActivationGateway) SaveNow() time.Time                       { return time.Unix(0, 0) }
 func (wireStubActivationGateway) WithActivationLock(fn func() error) error { return fn() }
 func (wireStubActivationGateway) RequireIdleRuntimeForSession(context.Context, string) error {
 	return nil

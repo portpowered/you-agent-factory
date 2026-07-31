@@ -168,6 +168,7 @@ func openRuntime(
 	durableExecution, err := durableExecutionFactory(
 		configured.Definition,
 		configured.Session,
+		configured.OperatorDefaults,
 		root,
 		clock,
 		providerForDurable,
@@ -242,6 +243,9 @@ func openRuntime(
 	if err != nil {
 		return runtimeProducts{}, err
 	}
+	cleanup.Add(func() error {
+		return serviceService.Close(context.WithoutCancel(ctx))
+	})
 	if automationFactory == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Automations factory is required")
 	}

@@ -113,6 +113,21 @@ func TestFailureMetadataForError_ModelhostLeaseDeniedIsThrottle(t *testing.T) {
 	}
 }
 
+func TestFailureMetadataForError_PreservesRetryableProviderFailure(t *testing.T) {
+	t.Parallel()
+
+	err := workerexecution.NewProviderError(
+		workerexecution.WorkFailureTypeInternalServerError,
+		"temporary provider failure",
+		errors.New("temporary provider failure"),
+	)
+	metadata := failureMetadataForError(err)
+	if metadata == nil || metadata.Family != workerexecution.WorkFailureFamilyRetryable ||
+		metadata.Type != workerexecution.WorkFailureTypeInternalServerError {
+		t.Fatalf("metadata = %#v, want retryable internal server error", metadata)
+	}
+}
+
 func TestModelhostOperationalFailureClass_MissingAssets(t *testing.T) {
 	t.Parallel()
 

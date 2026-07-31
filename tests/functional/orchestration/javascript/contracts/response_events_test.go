@@ -25,9 +25,9 @@ import (
 )
 
 const (
-	cursorChildSessionID               = "cursor-js-child-session"
-	phaseCheckpointWorkflowFileName    = "phase-checkpoint.workflow.js"
-	phaseCheckpointWorkflowSource      = `phase("plan");
+	codexChildSessionID             = "codex-js-child-session"
+	phaseCheckpointWorkflowFileName = "phase-checkpoint.workflow.js"
+	phaseCheckpointWorkflowSource   = `phase("plan");
 workflow.checkpoint({ label: "plan-ready", state: { ready: true } });
 phase("execute");
 return "hello";`
@@ -36,8 +36,8 @@ return "hello";`
   const child = await agent.run({
     prompt: "summarize workflows",
     label: "summarize-findings",
-    modelProvider: "cursor",
-    model: "cursor-test-model",
+    modelProvider: "codex",
+    model: "codex-test-model",
   });
   return { label: "child-progress", child: child };
 })();`
@@ -50,7 +50,7 @@ return "hello";`
 func TestJavaScriptChildProgressPublishesCanonicalResponseEvents(t *testing.T) {
 	dir := scaffoldChildProgressWorkflow(t)
 	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
-		Stdout: cursorChildProgressStream(cursorChildSessionID, "Child summary COMPLETE"),
+		Stdout: codexChildProgressStream(codexChildSessionID, "Child summary COMPLETE"),
 	})
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
@@ -75,7 +75,7 @@ func TestJavaScriptChildProgressPublishesCanonicalResponseEvents(t *testing.T) {
 func TestJavaScriptTerminalResultFollowsFinalResponseEvent(t *testing.T) {
 	dir := scaffoldChildProgressWorkflow(t)
 	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
-		Stdout: cursorChildProgressStream(cursorChildSessionID, "Child summary COMPLETE"),
+		Stdout: codexChildProgressStream(codexChildSessionID, "Child summary COMPLETE"),
 	})
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
@@ -278,7 +278,7 @@ func startChildProgressWorkflowAsync(t *testing.T, serverURL, dir string) factor
 type executionObservationKind string
 
 const (
-	executionObservationResponseEvent executionObservationKind = "response_event"
+	executionObservationResponseEvent  executionObservationKind = "response_event"
 	executionObservationTerminalResult executionObservationKind = "terminal_result"
 )
 
@@ -677,22 +677,17 @@ func getFactoryEventsForSessionAt(
 	return collected
 }
 
-func cursorChildProgressStream(sessionID, result string) []byte {
+func codexChildProgressStream(sessionID, result string) []byte {
 	records := []string{
-		`{"type":"system","subtype":"init","session_id":"` + sessionID + `"}`,
-		`{"type":"assistant","timestamp_ms":1,"message":{"role":"assistant","content":[{"type":"text","text":"working"}]},"session_id":"` + sessionID + `"}`,
-		`{"type":"tool_call","subtype":"started","call_id":"call-1","tool_call":{"readToolCall":{"args":{"path":"README.md"}}},"session_id":"` + sessionID + `"}`,
-		`{"type":"tool_call","subtype":"completed","call_id":"call-1","tool_call":{"readToolCall":{"result":{"success":{}}}},"session_id":"` + sessionID + `"}`,
-		string(cursorChildTerminalRecord(sessionID, result)),
+		`{"type":"thread.started","thread_id":` + mustJSONString(sessionID) + `}`,
+		`{"type":"turn.started"}`,
+		`{"type":"item.completed","item":{"id":"message-working","type":"agent_message","text":"working"}}`,
+		`{"type":"item.started","item":{"id":"call-1","type":"command_execution","command":"read README.md"}}`,
+		`{"type":"item.completed","item":{"id":"call-1","type":"command_execution","command":"read README.md","aggregated_output":"success"}}`,
+		`{"type":"item.completed","item":{"id":"message-final","type":"agent_message","text":` + mustJSONString(result) + `}}`,
+		`{"type":"turn.completed","usage":{"input_tokens":4,"output_tokens":3}}`,
 	}
 	return []byte(strings.Join(records, "\n"))
-}
-
-func cursorChildTerminalRecord(sessionID, result string) []byte {
-	return []byte(
-		`{"type":"result","subtype":"success","is_error":false,"result":` +
-			mustJSONString(result) + `,"session_id":` + mustJSONString(sessionID) + `}`,
-	)
 }
 
 func mustJSONString(value string) string {

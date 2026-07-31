@@ -141,7 +141,7 @@ func TestResolveEffective_ProviderCatalogFailuresMapToSettingsResolutionKinds(t 
 			kind:     operatorsettings.ResolutionFailureKindUnsupportedOverride,
 		},
 		{
-			name: "invalid provider id",
+			name:     "invalid provider id",
 			provider: "invalid-provider",
 			root: newRecordingProvidersBoundaryFake().withGetProviderError(
 				providers.ID("invalid-provider"),

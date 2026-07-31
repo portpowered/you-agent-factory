@@ -114,10 +114,14 @@ func newInvocationErrorResponse(code, message string) factoryapi.ErrorResponse {
 		code = InvocationErrorCodeFailed
 	}
 	family := factoryapi.ErrorFamilyInternalServerError
-	switch code {
-	case CurrentFactoryNotFoundCode:
+	switch {
+	case strings.HasPrefix(code, "INVOCATION_ARGUMENT_"):
+		family = factoryapi.ErrorFamilyBadRequest
+	case code == CurrentFactoryNotFoundCode:
 		family = factoryapi.ErrorFamilyNotFound
-	case CurrentFactoryInvalidCode, InvocationOutputConflictCode, InvocationOutputUnsupportedCode:
+	case code == CurrentFactoryInvalidCode ||
+		code == InvocationOutputConflictCode ||
+		code == InvocationOutputUnsupportedCode:
 		family = factoryapi.ErrorFamilyBadRequest
 	}
 	return factoryapi.ErrorResponse{

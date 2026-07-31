@@ -1,11 +1,10 @@
 import "../../../../../testing/vitest-dom-capabilities.setup";
 
 import { fireEvent, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, it, mock } from "bun:test";
+import { afterEach, beforeEach, describe, it, vi } from "vitest";
 
 import { CurrentFactoryDefinitionError } from "../../../../../api/current-factory-definition";
 import { semanticWorkflowDashboardSnapshot } from "../../../../../components/dashboard/test-fixtures";
-import { bunVi as vi } from "../../../../../testing/bun/vi-compat";
 import {
   buildDetailCardEditableFactoryDocument,
   buildDetailCardFactoryDocumentQueryResult,
@@ -44,8 +43,8 @@ const useCurrentFactoryDocument = vi.fn<
 const useFactoryDocumentSave = vi.fn();
 const useCurrentWorkstationPromptTemplateValidation = vi.fn();
 
-mock.module("sonner", () => ({ ...actualSonner, toast }));
-mock.module(
+vi.doMock("sonner", () => ({ ...actualSonner, toast }));
+vi.doMock(
   "../../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
   () => ({
     ...currentFactoryDefinitionHooks,
@@ -53,14 +52,14 @@ mock.module(
   }),
 );
 
-mock.module(
+vi.doMock(
   "../../../../current-factory-definition/hooks/useFactoryDocumentSave",
   () => ({
     useFactoryDocumentSave,
   }),
 );
 
-mock.module(
+vi.doMock(
   "../../../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation",
   () => ({
     useCurrentWorkstationPromptTemplateValidation,

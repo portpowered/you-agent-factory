@@ -31,11 +31,11 @@ var explicitlyClassifiedPackages = map[string]Lane{
 	ModulePath + "/packages/packaged-factories":                               LaneMaintenance,
 	ModulePath + "/packages/model-providers":                                  LaneMaintenance,
 	ModulePath + "/pkg/services/factory_sessions/internal/execution/fixtures": LaneIntegration,
-	ModulePath + "/pkg/transports/cli/baseline":                               LaneFunctional,
+	ModulePath + "/pkg/transports/cli/baseline":                               LaneContract,
 	ModulePath + "/pkg/transports/cli/clicontract":                            LaneContract,
-	ModulePath + "/pkg/transports/cli/cliinputs":                              LaneFunctional,
+	ModulePath + "/pkg/transports/cli/cliinputs":                              LaneContract,
 	ModulePath + "/pkg/transports/cli/climanifestgen":                         LaneContract,
-	ModulePath + "/pkg/transports/cli/commandidentity":                        LaneFunctional,
+	ModulePath + "/pkg/transports/cli/commandidentity":                        LaneContract,
 }
 
 // ForImportPath returns the primary lane for a repository package. Packages

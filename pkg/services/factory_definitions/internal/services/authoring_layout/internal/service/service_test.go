@@ -16,14 +16,14 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/inboxgitkeep"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout"
 	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
+	factoryauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout"
 	authoringlayoutwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/wire"
-	factorydefinitiontestcomposition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/testcomposition"
 	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
 	internalportableconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
+	factorydefinitiontestcomposition "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/testcomposition"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	authoredmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/authored"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
@@ -86,9 +86,9 @@ type stubLoadedSource struct {
 }
 
 func (s stubLoadedSource) FactoryConfig() *factorydefinitions.FactoryConfig { return s.cfg }
-func (s stubLoadedSource) FactoryDir() string                                 { return "" }
-func (s stubLoadedSource) RuntimeBaseDir() string                             { return "" }
-func (s stubLoadedSource) SetRuntimeBaseDir(string)                           {}
+func (s stubLoadedSource) FactoryDir() string                               { return "" }
+func (s stubLoadedSource) RuntimeBaseDir() string                           { return "" }
+func (s stubLoadedSource) SetRuntimeBaseDir(string)                         {}
 func (s stubLoadedSource) PortableBundledFileReplacements() []factorydefinitions.PortableBundledFileReplacement {
 	return nil
 }
@@ -345,11 +345,11 @@ func newAuthoringLayoutServiceFromComposition(
 		return internalportableconfig.ValidateWrites(fileSystem, targetDir, config)
 	}
 	svc, err := authoringlayoutwire.NewService(authoringlayout.Dependencies{
-		Validator:            validator,
-		MapInput:             composition.MapFactoryJSONForPersistence,
-		DecodeFactory:        factorymapping.NewFactoryConfigMapper().Expand,
-		NormalizeAuthored:    authoredmapping.AuthoredFactoryConfigForExpandedLayout,
-		EncodeFactory:        factorymapping.MarshalCanonicalFactoryConfig,
+		Validator:         validator,
+		MapInput:          composition.MapFactoryJSONForPersistence,
+		DecodeFactory:     factorymapping.NewFactoryConfigMapper().Expand,
+		NormalizeAuthored: authoredmapping.AuthoredFactoryConfigForExpandedLayout,
+		EncodeFactory:     factorymapping.MarshalCanonicalFactoryConfig,
 		Write: func(targetDir string, prepared *factorydefinitions.PreparedFactoryLayoutPayload, sourcePath string) error {
 			return writer.WritePrepared(targetDir, prepared, sourcePath, materializeFiles, pruneRemovedDocs)
 		},
@@ -606,12 +606,12 @@ func newAuthoringLayoutServiceWithCorruptingWrite(
 		return os.WriteFile(brokenAgentsPath, []byte("---\ntype: [\n"), 0o644)
 	}
 	svc, err := authoringlayoutwire.NewService(authoringlayout.Dependencies{
-		Validator:            validator,
-		MapInput:             composition.MapFactoryJSONForPersistence,
-		DecodeFactory:        factorymapping.NewFactoryConfigMapper().Expand,
-		NormalizeAuthored:    authoredmapping.AuthoredFactoryConfigForExpandedLayout,
-		EncodeFactory:        factorymapping.MarshalCanonicalFactoryConfig,
-		Write:                writePrepared,
+		Validator:         validator,
+		MapInput:          composition.MapFactoryJSONForPersistence,
+		DecodeFactory:     factorymapping.NewFactoryConfigMapper().Expand,
+		NormalizeAuthored: authoredmapping.AuthoredFactoryConfigForExpandedLayout,
+		EncodeFactory:     factorymapping.MarshalCanonicalFactoryConfig,
+		Write:             writePrepared,
 		Validate: func(targetDir string) error {
 			return loader.ValidateFactoryDirReadOnly(targetDir, nil, validateWrites)
 		},

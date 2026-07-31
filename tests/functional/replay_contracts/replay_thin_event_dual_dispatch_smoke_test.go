@@ -38,9 +38,9 @@ func TestReplayThinEventDualDispatchSmoke_SharedArtifactCapturesModelAndScriptDi
 	recordedEvents := testutil.GeneratedFactoryEvents(t, smoke.artifact.Events)
 
 	assertThinEventWorkRequestContainsBothPaths(t, smoke.liveEvents, smoke.requestID, smoke.traceID, smoke.modelWorkID, smoke.scriptWorkID)
-	assertThinEventDispatchLifecycleForWork(t, smoke.liveEvents, smoke.modelWorkID, factoryapi.FactoryEventTypeInferenceRequest, factoryapi.FactoryEventTypeInferenceResponse)
+	assertThinEventDispatchLifecycleForWork(t, smoke.liveEvents, smoke.modelWorkID, factoryapi.FactoryEventTypeModelRequest, factoryapi.FactoryEventTypeModelResponse)
 	assertThinEventDispatchLifecycleForWork(t, smoke.liveEvents, smoke.scriptWorkID, factoryapi.FactoryEventTypeScriptRequest, factoryapi.FactoryEventTypeScriptResponse)
-	assertThinEventDispatchLifecycleForWork(t, recordedEvents, smoke.modelWorkID, factoryapi.FactoryEventTypeInferenceRequest, factoryapi.FactoryEventTypeInferenceResponse)
+	assertThinEventDispatchLifecycleForWork(t, recordedEvents, smoke.modelWorkID, factoryapi.FactoryEventTypeModelRequest, factoryapi.FactoryEventTypeModelResponse)
 	assertThinEventDispatchLifecycleForWork(t, recordedEvents, smoke.scriptWorkID, factoryapi.FactoryEventTypeScriptRequest, factoryapi.FactoryEventTypeScriptResponse)
 	assertLiveEventsMatchRecordedArtifact(t, smoke.liveEvents, smoke.artifact)
 }
@@ -342,28 +342,28 @@ func assertThinEventModelAttemptCorrelation(t *testing.T, events []factoryapi.Fa
 	dispatchIndex := requireThinEventDispatchRequestIndexForWork(t, events, workID)
 	dispatchID := thinEventDispatchIDFromEvent(t, events[dispatchIndex], workID)
 
-	requestIndex := requireThinEventDispatchEventIndexAfter(t, events, factoryapi.FactoryEventTypeInferenceRequest, dispatchID, dispatchIndex+1)
-	request := assertReplayInferenceRequest(t, events[requestIndex], dispatchID, 1)
-	responseIndex := requireThinEventDispatchEventIndexAfter(t, events, factoryapi.FactoryEventTypeInferenceResponse, dispatchID, requestIndex+1)
-	response := assertReplayInferenceResponse(t, events[responseIndex], dispatchID, request.InferenceRequestId, request.Attempt)
+	requestIndex := requireThinEventDispatchEventIndexAfter(t, events, factoryapi.FactoryEventTypeModelRequest, dispatchID, dispatchIndex+1)
+	request := assertReplayModelRequest(t, events[requestIndex], dispatchID, 1)
+	responseIndex := requireThinEventDispatchEventIndexAfter(t, events, factoryapi.FactoryEventTypeModelResponse, dispatchID, requestIndex+1)
+	response := assertReplayModelResponse(t, events[responseIndex], dispatchID, request.ModelRequestId, request.Attempt)
 
-	requireThinEventRawPath(t, rawEvents[requestIndex], "payload.inferenceRequestId")
-	requireThinEventRawPath(t, rawEvents[responseIndex], "payload.inferenceRequestId")
+	requireThinEventRawPath(t, rawEvents[requestIndex], "payload.modelRequestId")
+	requireThinEventRawPath(t, rawEvents[responseIndex], "payload.modelRequestId")
 
 	if stringPointerValue(events[requestIndex].Context.DispatchId) != dispatchID {
-		t.Fatalf("INFERENCE_REQUEST context.dispatchId = %q, want %q", stringPointerValue(events[requestIndex].Context.DispatchId), dispatchID)
+		t.Fatalf("MODEL_REQUEST context.dispatchId = %q, want %q", stringPointerValue(events[requestIndex].Context.DispatchId), dispatchID)
 	}
 	if stringPointerValue(events[responseIndex].Context.DispatchId) != dispatchID {
-		t.Fatalf("INFERENCE_RESPONSE context.dispatchId = %q, want %q", stringPointerValue(events[responseIndex].Context.DispatchId), dispatchID)
+		t.Fatalf("MODEL_RESPONSE context.dispatchId = %q, want %q", stringPointerValue(events[responseIndex].Context.DispatchId), dispatchID)
 	}
 	if !functionalEventContextHasWorkID(events[requestIndex], workID) || !functionalEventContextHasWorkID(events[responseIndex], workID) {
 		t.Fatalf("inference event work IDs = request:%#v response:%#v, want %q", events[requestIndex].Context.WorkIds, events[responseIndex].Context.WorkIds, workID)
 	}
-	if request.InferenceRequestId == "" {
-		t.Fatalf("INFERENCE_REQUEST inferenceRequestId is empty")
+	if request.ModelRequestId == "" {
+		t.Fatal("MODEL_REQUEST modelRequestId is empty")
 	}
-	if stringPointerValue(response.Response) == "" {
-		t.Fatalf("INFERENCE_RESPONSE response is empty for dispatch %q", dispatchID)
+	if response.OutputContent == nil || len(*response.OutputContent) == 0 {
+		t.Fatalf("MODEL_RESPONSE outputContent is empty for dispatch %q", dispatchID)
 	}
 }
 
@@ -560,43 +560,43 @@ func assertLiveEventsMatchRecordedArtifact(t *testing.T, liveEvents []factoryapi
 	}
 }
 
-func assertReplayInferenceRequest(
+func assertReplayModelRequest(
 	t *testing.T,
 	event factoryapi.FactoryEvent,
 	dispatchID string,
 	attempt int,
-) factoryapi.InferenceRequestEventPayload {
+) factoryapi.ModelRequestEventPayload {
 	t.Helper()
 
-	request, err := event.Payload.AsInferenceRequestEventPayload()
+	request, err := event.Payload.AsModelRequestEventPayload()
 	if err != nil {
-		t.Fatalf("decode inference-request payload: %v", err)
+		t.Fatalf("decode model-request payload: %v", err)
 	}
 	if stringPointerValue(event.Context.DispatchId) != dispatchID || request.Attempt != attempt {
-		t.Fatalf("inference request correlation = %#v, want dispatch=%s attempt=%d", request, dispatchID, attempt)
+		t.Fatalf("model request correlation = %#v, want dispatch=%s attempt=%d", request, dispatchID, attempt)
 	}
-	if request.InferenceRequestId == "" || request.Prompt == "" {
-		t.Fatalf("inference request missing request ID or prompt: %#v", request)
+	if request.ModelRequestId == "" || request.Worker == "" {
+		t.Fatalf("model request missing request ID or worker: %#v", request)
 	}
 	return request
 }
 
-func assertReplayInferenceResponse(
+func assertReplayModelResponse(
 	t *testing.T,
 	event factoryapi.FactoryEvent,
 	dispatchID string,
 	requestID string,
 	attempt int,
-) factoryapi.InferenceResponseEventPayload {
+) factoryapi.ModelResponseEventPayload {
 	t.Helper()
 
-	response, err := event.Payload.AsInferenceResponseEventPayload()
+	response, err := event.Payload.AsModelResponseEventPayload()
 	if err != nil {
-		t.Fatalf("decode inference-response payload: %v", err)
+		t.Fatalf("decode model-response payload: %v", err)
 	}
 	if stringPointerValue(event.Context.DispatchId) != dispatchID ||
-		response.InferenceRequestId != requestID || response.Attempt != attempt {
-		t.Fatalf("inference response correlation = %#v, want dispatch=%s request=%s attempt=%d", response, dispatchID, requestID, attempt)
+		response.ModelRequestId != requestID || response.Attempt != attempt {
+		t.Fatalf("model response correlation = %#v, want dispatch=%s request=%s attempt=%d", response, dispatchID, requestID, attempt)
 	}
 	if response.DurationMillis < 0 {
 		t.Fatalf("durationMillis = %d, want non-negative", response.DurationMillis)

@@ -47,8 +47,8 @@ func PublicEmittableFactoryEventKinds() []PublicEmittableKind {
 		{Kind: recordings.FactoryEventTypeFactoryStateResponse, EmissionEvidence: "pkg/services/recordings/internal/services/canonical_ledger/events/event_history.go RecordFactoryStateChange"},
 		{Kind: recordings.FactoryEventTypeRunResponse, EmissionEvidence: "pkg/services/recordings/internal/services/canonical_ledger/events/event_history.go RecordRunResponse"},
 		{Kind: recordings.FactoryEventTypeWorkStateChange, EmissionEvidence: "pkg/services/recordings/internal/services/canonical_ledger/events/event_history.go RecordWorkStateChange"},
-		{Kind: recordings.FactoryEventTypeInferenceRequest, EmissionEvidence: "pkg/services/workers/provider/recording_provider.go and pkg/services/recordings/internal/services/canonical_ledger/events/event_history.go RecordInferenceEvent"},
-		{Kind: recordings.FactoryEventTypeInferenceResponse, EmissionEvidence: "pkg/services/workers/provider/recording_provider.go and pkg/services/recordings/internal/services/canonical_ledger/events/event_history.go RecordInferenceEvent"},
+		{Kind: recordings.FactoryEventTypeInferenceRequest, EmissionEvidence: "pkg/services/providers/internal/services/execution/internal/provider/recording_provider.go and pkg/services/recordings/internal/services/canonical_ledger/events/event_history.go RecordInferenceEvent"},
+		{Kind: recordings.FactoryEventTypeInferenceResponse, EmissionEvidence: "pkg/services/providers/internal/services/execution/internal/provider/recording_provider.go and pkg/services/recordings/internal/services/canonical_ledger/events/event_history.go RecordInferenceEvent"},
 		{Kind: recordings.FactoryEventTypeModelRequest, EmissionEvidence: "pkg/services/workers/internal/services/workstations/execution/recording/model.go and pkg/services/recordings/internal/services/canonical_ledger/events/event_history.go RecordModelEvent"},
 		{Kind: recordings.FactoryEventTypeModelResponse, EmissionEvidence: "pkg/services/workers/internal/services/workstations/execution/recording/model.go and pkg/services/recordings/internal/services/canonical_ledger/events/event_history.go RecordModelEvent"},
 		{Kind: recordings.FactoryEventTypeScriptRequest, EmissionEvidence: "pkg/services/workers/internal/services/workstations/executor/script.go and pkg/services/recordings/internal/services/canonical_ledger/events/event_history.go RecordScriptEvent"},
@@ -156,3 +156,4 @@ func ContractOnlyFactoryEventKinds() []ContractOnlyKind {
 	})
 	return kinds
 }
+

@@ -47,15 +47,15 @@ const routingArtifactWorkflowSource = `return (async function () {
 })();`
 
 type routingReachabilityContext struct {
-	t                       *testing.T
-	server                  *support.FunctionalAPIServer
-	baseURL                 string
-	factoryDir              string
+	t                        *testing.T
+	server                   *support.FunctionalAPIServer
+	baseURL                  string
+	factoryDir               string
 	liveJavaScriptFactoryDir string
-	jsLive                  string
-	durable                 routingDurableSessionContext
-	opened                  string
-	workID                  string
+	jsLive                   string
+	durable                  routingDurableSessionContext
+	opened                   string
+	workID                   string
 }
 
 type routingDurableSessionContext struct {

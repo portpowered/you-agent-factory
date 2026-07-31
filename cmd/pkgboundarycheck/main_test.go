@@ -267,6 +267,9 @@ func build() { _ = work.NewRequestPreparationService() }
 	if err != nil {
 		t.Fatalf("marshal service construction baseline: %v", err)
 	}
+	if err := os.MkdirAll(filepath.Dir(filepath.Join(repoRoot, serviceConstructionBaselinePath)), 0o755); err != nil {
+		t.Fatalf("create service construction baseline directory: %v", err)
+	}
 	if err := os.WriteFile(filepath.Join(repoRoot, serviceConstructionBaselinePath), payload, 0o644); err != nil {
 		t.Fatalf("write service construction baseline: %v", err)
 	}
@@ -297,6 +300,9 @@ func TestMigrationBaselinesMustBeDeletedAtZero(t *testing.T) {
 	payload, err := json.Marshal(serviceConstructionBaseline{Version: 1, Entries: []serviceConstructionBaselineEntry{}})
 	if err != nil {
 		t.Fatalf("marshal empty service construction baseline: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(filepath.Join(repoRoot, serviceConstructionBaselinePath)), 0o755); err != nil {
+		t.Fatalf("create service construction baseline directory: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(repoRoot, serviceConstructionBaselinePath), payload, 0o644); err != nil {
 		t.Fatalf("write empty service construction baseline: %v", err)

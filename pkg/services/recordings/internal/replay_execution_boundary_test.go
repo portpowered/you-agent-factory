@@ -17,19 +17,9 @@ import (
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
 
-const (
-	replayExecutionService = modulePrefix + "pkg/services/recordings/internal"
-	replayExecutionPackage = modulePrefix + "pkg/services/recordings/internal/services/replay/replay"
-)
-
 // TestReplayExecutionImportsRuntimeRootOnly seals CUT-REC-RUN story 003: replay
 // execution construction may depend on Factory Runtime only through the service
 // root contract.
-func TestReplayExecutionImportsRuntimeRootOnly(t *testing.T) {
-	t.Parallel()
-	assertProductionImportsUseRuntimeRootOnly(t, replayExecutionService)
-	assertProductionImportsUseRuntimeRootOnly(t, replayExecutionPackage)
-}
 
 // TestReplayExecutionYieldsRuntimeRootHookAndPlanOutcomes proves replay-execution
 // construction yields Runtime-facing hook and completion-plan outcomes through

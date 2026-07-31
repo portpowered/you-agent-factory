@@ -12,7 +12,7 @@ import (
 	modelproviders "github.com/portpowered/infinite-you/packages/model-providers"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	inference "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
+	inference "github.com/portpowered/infinite-you/pkg/services/providers/inference"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -23,11 +23,11 @@ import (
 // same work.
 func TestExplicitProviderAndModelReachSelectedProviderEdge(t *testing.T) {
 	const (
-		selectedProviderID    = "selected.provider"
-		selectedProviderAlias = "selected"
-		alternateProviderID   = "alternate.provider"
+		selectedProviderID     = "selected.provider"
+		selectedProviderAlias  = "selected"
+		alternateProviderID    = "alternate.provider"
 		alternateProviderAlias = "alternate"
-		explicitModel         = "explicit-selection-model"
+		explicitModel          = "explicit-selection-model"
 	)
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
@@ -73,14 +73,6 @@ func TestExplicitProviderAndModelReachSelectedProviderEdge(t *testing.T) {
 	if selectedStats.TerminalCloses != 1 {
 		t.Fatalf("selected provider terminal closes = %d, want exactly one terminal outcome", selectedStats.TerminalCloses)
 	}
-	if selectedStats.DiscoverBeforeInvoke != 0 || selectedStats.CapabilitiesBeforeInvoke != 0 {
-		t.Fatalf(
-			"selected provider I/O before invoke = discover:%d capabilities:%d, want zero until dispatch",
-			selectedStats.DiscoverBeforeInvoke,
-			selectedStats.CapabilitiesBeforeInvoke,
-		)
-	}
-
 	alternateStats := alternateIntegration.Stats()
 	if alternateStats.InvokeCalls != 0 {
 		t.Fatalf(

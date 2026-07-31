@@ -35,8 +35,18 @@ func normalizeAttemptFailure(
 	ctx context.Context,
 	attemptErr error,
 	request providers.ExecuteRequest,
-) error {
+) (normalized error) {
 	lifecycle, hasLifecycle := attemptFailureAs(attemptErr)
+	defer func() {
+		if !hasLifecycle || lifecycle.SessionRef == nil || normalized == nil {
+			return
+		}
+		if failure, ok := executeFailureAs(normalized); ok {
+			session := lifecycle.SessionRef.Clone()
+			failure.SessionRef = &session
+			normalized = failure
+		}
+	}()
 	signals := []error{ctx.Err()}
 	if hasLifecycle {
 		signals = append(signals,
@@ -74,9 +84,13 @@ func normalizeAttemptFailure(
 			Kind: providers.ExecuteFailureKindCanceled,
 		}, request)
 	}
-	if hasLifecycle && lifecycle.DecodeError != nil {
+	// Stream lifecycle failures describe an unusable provider response, not a
+	// caller validation failure. Classify them as dependency failures so the
+	// bounded worker retry policy can recover transient provider output faults.
+	if hasLifecycle && (lifecycle.FinalParseError != nil ||
+		lifecycle.FlushError != nil || lifecycle.DecodeError != nil) {
 		return normalizeDeclaredFailure(providers.ExecuteFailure{
-			Kind:        providers.ExecuteFailureKindInvalidRequest,
+			Kind:        providers.ExecuteFailureKindDependency,
 			Diagnostics: lifecycleStageDiagnostics(lifecycle, hasLifecycle),
 		}, request)
 	}

@@ -8,7 +8,7 @@ import {
 const factoryWithWorkStateRoutes: CanonicalFactoryDefinition = {
   name: "Current Factory",
   workers: [
-    { modelProvider: "CURSOR", name: "reviewer", type: "MODEL_WORKER" },
+    { modelProvider: "CODEX", name: "reviewer", type: "MODEL_WORKER" },
   ],
   workTypes: [
     {

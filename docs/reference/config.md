@@ -44,9 +44,9 @@ own provider or model:
 ```
 
 `YOU_DEFAULT_WORKER_MODEL_PROVIDER` and `YOU_DEFAULT_WORKER_MODEL` override the
-file independently. Global `--default-worker-model-provider` and
-`--default-worker-model` flags override both. Precedence is `file < env < flag`.
-Authored worker values still win over operator defaults. Use `you docs workers`
+file independently. For one invocation, `you run --provider` and `--model`
+override both. Precedence is `file < env < run flag`. Authored worker values
+still win over operator defaults. Use `you docs workers`
 for worker fields and `you docs javascript-workflows` for reusable child-agent
 presets.
 

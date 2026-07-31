@@ -15,6 +15,7 @@ const (
 	FieldModelProvider    = "modelProvider"
 	FieldModel            = "model"
 	FieldReasoningEffort  = "reasoningEffort"
+	FieldSkipPermissions  = "skipPermissions"
 )
 
 var supportedFields = []string{
@@ -25,6 +26,7 @@ var supportedFields = []string{
 	FieldModelProvider,
 	FieldModel,
 	FieldReasoningEffort,
+	FieldSkipPermissions,
 }
 
 var supportedFieldSet = func() map[string]struct{} {
@@ -44,6 +46,7 @@ type JavaScriptChildSpec struct {
 	ModelProvider    string
 	Model            string
 	ReasoningEffort  string
+	SkipPermissions  bool
 }
 
 // SupportedFields returns the canonical beta agent.run field names.
@@ -74,12 +77,16 @@ func NormalizeJavaScriptChild(value map[string]any) (JavaScriptChildSpec, error)
 	if err != nil {
 		return JavaScriptChildSpec{}, err
 	}
-	optional := make(map[string]string, len(supportedFields)-1)
-	for _, field := range supportedFields[1:] {
+	optional := make(map[string]string, len(supportedFields)-2)
+	for _, field := range supportedFields[1 : len(supportedFields)-1] {
 		optional[field], err = optionalString(value, field)
 		if err != nil {
 			return JavaScriptChildSpec{}, err
 		}
+	}
+	skipPermissions, err := optionalBool(value, FieldSkipPermissions)
+	if err != nil {
+		return JavaScriptChildSpec{}, err
 	}
 	return JavaScriptChildSpec{
 		Prompt:           prompt,
@@ -89,7 +96,20 @@ func NormalizeJavaScriptChild(value map[string]any) (JavaScriptChildSpec, error)
 		ModelProvider:    optional[FieldModelProvider],
 		Model:            optional[FieldModel],
 		ReasoningEffort:  optional[FieldReasoningEffort],
+		SkipPermissions:  skipPermissions,
 	}, nil
+}
+
+func optionalBool(value map[string]any, field string) (bool, error) {
+	raw, found := value[field]
+	if !found {
+		return false, nil
+	}
+	normalized, ok := raw.(bool)
+	if !ok {
+		return false, fmt.Errorf(`agent.run() requires %q to be a boolean`, field)
+	}
+	return normalized, nil
 }
 
 func requiredString(value map[string]any, field string) (string, error) {

@@ -62,7 +62,7 @@ real JavaScript execution and durable persistence are still out of scope here.
 - Do not replace `factory.json` or the Petri-net-backed factory engine with JavaScript. JavaScript is another orchestrator kind inside the factory model.
 - Do not expose raw JavaScript runtime internals as the primary customer data model.
 - Do not make MCP the only supported interface.
-- Do not require one provider. The first slice may default to existing runner support, but the contract must admit `codex`, `cursor-cli`, `kiro`, `gemini`, and `opencode`.
+- Do not require one provider. The first slice may default to existing runner support, but the contract must admit catalog identities such as `codex` and `cursor-acp`.
 - Do not hand workflow scripts unlimited host access. File, process, network, model, and tool capabilities must be declared and enforced.
 - Do not make live provider credentials mandatory for the core test suite. Live-provider tests are an opt-in verification layer; mock/fake runner coverage must prove the orchestration contract offline.
 
@@ -203,7 +203,7 @@ Extend the existing dispatch model so both orchestrators can explain agent/scrip
 - `label`: script-authored task label such as `edit:foo.rs` or `refute 1.2`.
 - `workstationName`: Petri workstation name when applicable.
 - `transitionId`: Petri transition id when applicable.
-- `runnerId`: `codex`, `cursor-cli`, `kiro`, `gemini`, `opencode`, or future runner.
+- `runnerId`: a selectable Providers catalog identity such as `codex` or `cursor-acp`.
 - `model`: optional model/runtime selection.
 - `reasoningEffort`: optional effort level such as `minimal`, `low`, `medium`, or `high` when the runner supports it.
 - `routeProfile`: optional policy-checked route profile such as `scout`, `reviewer`, `security`, or `synthesizer`.
@@ -433,7 +433,7 @@ type AgentRunOptions = {
   label?: string;
   phase?: string;
   prompt: string;
-  runner?: "codex" | "cursor-cli" | "kiro" | "gemini" | "opencode";
+  runner?: string;
   model?: string;
   reasoningEffort?: "minimal" | "low" | "medium" | "high";
   profile?: "scout" | "reviewer" | "security" | "synthesizer";
@@ -1033,7 +1033,7 @@ Acceptance:
 Acceptance:
 
 - Runner ids normalize through existing `interfaces.NormalizeRunnerID`.
-- `codex`, `cursor-cli`, `kiro`, `gemini`, and `opencode` are accepted or rejected based on availability/policy with consistent errors.
+- Provider identities are accepted or rejected based on catalog availability and policy with consistent errors.
 - Worktree isolation is deterministic and cleaned up.
 
 ### API Handlers And Surface Mapping
@@ -1273,7 +1273,7 @@ Acceptance:
 - Orchestrator with fake JavaScript runtime subsystem and fake dispatch bridge.
 - Scheduler bounded concurrency and cancellation.
 - Scheduler queued-state projection before workers start.
-- Runner bridge for `codex`, `cursor-cli`, `kiro`, `gemini`, `opencode`.
+- Runner bridge for selectable Providers catalog identities.
 - Runner bridge output capture for command metadata, stdout/stderr, last message, provider events, warnings, and usage.
 - API handlers against fake orchestrator service.
 - MCP tools against fake orchestrator service.

@@ -2592,6 +2592,10 @@ export interface components {
       project: string;
       /** @description URL-safe Factory catalog identity. */
       slug: string;
+      /** @description Localized customer-facing explanation of what this packaged Factory does. */
+      description: components["schemas"]["NameValue"];
+      /** @description Representative runnable invocations published by this packaged Factory. */
+      examples: components["schemas"]["FactoryInvocationExample"][];
       /** @description Canonical Factory JSON artifact. */
       json: {
         [key: string]: unknown;
@@ -3303,6 +3307,7 @@ export interface components {
       outputPreview?: string;
       outputContent?: components["schemas"]["WorkContent"];
       diagnostics?: components["schemas"]["SafeWorkDiagnostics"];
+      providerSession?: components["schemas"]["ProviderSessionMetadata"];
       failureDetail?: components["schemas"]["FailureDetail"];
     };
     /** @description Request details captured immediately before a model-worker provider attempt is invoked. FactoryEvent.context owns dispatch, request, trace, and work identity, and the matching dispatch-request event owns the transition identifier. Prompt content is intentionally present and should be treated as sensitive in recordings and diagnostics. */
@@ -4374,11 +4379,12 @@ export interface components {
       provider?: components["schemas"]["HostedWorkerProvider"];
       /** @description Model identifier to request from the configured model provider when this worker uses model execution. */
       model?: string;
-      /** @description Canonical model-provider identity used for model routing and provider diagnostics, or an exact invocation-parameter placeholder such as `${modelProvider}`. Extension identities use lowercase standardized syntax; built-in values such as `CLAUDE` and `CODEX` remain compatibility conveniences. */
+      /** @description Canonical provider identity used for model routing and provider diagnostics, or an exact invocation-parameter placeholder such as `${modelProvider}`. For `executorProvider: ACP`, this names the configured ACP integration, such as `cursor-acp`. Extension identities use lowercase standardized syntax; built-in values such as `CLAUDE` and `CODEX` remain compatibility conveniences. */
       modelProvider?: components["schemas"]["ProviderIdentity"] | string;
+      reasoningEffort?: components["schemas"]["ReasoningEffort"];
       /** @description Provider locality for this model capability declaration. Use `LOCAL` for embedded or host-managed inference and `CLOUD` for remote provider execution. */
       modelLocality?: components["schemas"]["WorkerModelLocality"];
-      /** @description Canonical Providers catalog identity used to select worker execution, an exact invocation-parameter placeholder, or the retained `SCRIPT_WRAP` compatibility value. ACP-backed identities use names such as `cursor-acp`; the Providers catalog determines their private execution kind. */
+      /** @description Execution mechanism. Use `ACP` for ACP-backed workers and put the configured integration identity (for example `cursor-acp`) in modelProvider. `SCRIPT_WRAP` remains the command-wrapper compatibility value; legacy named executor identities remain accepted during migration. */
       executorProvider?: components["schemas"]["WorkerProvider"];
       /** @description Provider-agnostic model operations that this worker can execute, including named input and output slots. */
       operations?: components["schemas"]["ModelOperation"][];
@@ -4394,8 +4400,6 @@ export interface components {
       stopToken?: string;
       /** @description When true, bypasses permission checks for providers that support permission gating. */
       skipPermissions?: boolean;
-      /** @description Optional OpenCode agent profile name for model workers that dispatch through the OpenCode runner. When set, OpenCode dispatches invoke `opencode run --agent <name>`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/). */
-      openCodeAgent?: string;
       /** @description Hosted-worker authentication contract. V1 hosted workers accept only auth.secretRef. */
       auth?: components["schemas"]["HostedWorkerAuth"];
       /** @description Provider-specific configuration for the built-in hosted LINEAR worker. */
@@ -4569,7 +4573,7 @@ export interface components {
      * @enum {string}
      */
     WorkerModelLocality: WorkerModelLocality;
-    /** @description Built-in worker-provider compatibility values. Authored executorProvider fields also accept extensible lowercase Providers catalog identities. */
+    /** @description Worker execution mechanism. Canonical values are ACP and SCRIPT_WRAP; extensible lowercase identities remain accepted for compatibility with existing factories. */
     WorkerProvider: string;
     /** @description One provider-agnostic operation exposed by a model worker, such as `TTS`. */
     ModelOperation: {
@@ -4623,8 +4627,6 @@ export interface components {
       worker: string;
       /** @description Optional workstation-specific runner override. When omitted, dispatch falls back to the factory runner, then worker modelProvider compatibility when no explicit runner is configured, then the default codex runner. */
       runner?: components["schemas"]["RunnerID"];
-      /** @description Optional OpenCode agent profile override for this workstation. When set, overrides the worker default for OpenCode dispatches and invokes `opencode run --agent <name>`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/). */
-      openCodeAgent?: string;
       /** @description Path to a prompt template file loaded for model-oriented workstation execution. */
       promptFile?: string;
       /** @description JSON schema string used to validate or parse structured model output when configured. */
@@ -4683,6 +4685,12 @@ export interface components {
       maxRetries?: number;
       /** @description Go duration limit for one dispatch attempt before it times out. */
       maxExecutionTime?: string;
+      /** @description Fixed maximum number of Work items one accepted worker-emitted FACTORY_REQUEST_BATCH may contain. */
+      maxGeneratedWorkItems?: number;
+      /** @description Optional invocation argument whose positive integer value tightens the fixed generated-Work ceiling. */
+      maxGeneratedWorkItemsArgument?: string;
+      /** @description Offset added to the invocation argument before applying the generated-Work ceiling. */
+      maxGeneratedWorkItemsArgumentOffset?: number;
     };
     /**
      * @description Scheduling kind for a workstation, which determines how the engine schedules and dispatches work to it. Standard workstations are scheduled as soon as their inputs are ready, and can have multiple work items in-flight at the same time.  Repeater workstations are triggered whenever their inputs change, and will reloop the outputs on rejection back to the initial place. Cron workstations create internal time work and dispatch their configured worker when time and input guards are satisfied. Poller workstations bind a poller-capable worker that the service runtime supervises as a long-lived ingress loop.
@@ -4695,10 +4703,12 @@ export interface components {
      * @enum {string}
      */
     WorkstationType: WorkstationType;
-    /** @description Trigger timing for cron workstations. Cron workstations use a schedule expression; interval triggers are not supported. */
+    /** @description Trigger timing for scheduled workstations. Provide exactly one of a five-field cron schedule or a positive duration in every; Factory validation enforces the exclusive choice. */
     WorkstationCron: {
       /** @description Standard five-field cron expression used to produce internal time work while the factory service is running. */
-      schedule: string;
+      schedule?: string;
+      /** @description Positive Go duration interval, such as 30s, 5m, 1h, or 1h30m, used instead of schedule. */
+      every?: string;
       /**
        * @description When true, service startup submits one immediate internal time work item before waiting for the next scheduled cron fire.
        * @default false
@@ -4730,8 +4740,10 @@ export interface components {
       type: components["schemas"]["GuardType"];
       /** @description For `VISIT_COUNT` guards, the workstation whose visits are counted. */
       workstation?: string;
-      /** @description For `VISIT_COUNT` guards, the visit threshold. */
+      /** @description For `VISIT_COUNT` guards, the fixed visit ceiling. */
       maxVisits?: number;
+      /** @description Optional invocation argument whose positive integer value tightens the fixed visit ceiling. */
+      maxVisitsArgument?: string;
       /** @description For `MATCHES_FIELDS` guards, the field-selector configuration used to compare candidate inputs. */
       matchConfig?: components["schemas"]["GuardMatchConfig"];
       /** @description For parent-aware input guards, the parent workType name from another input in the same workstation. */
@@ -5452,6 +5464,8 @@ export interface components {
      * @enum {string}
      */
     HostedWorkerProvider: HostedWorkerProvider;
+    /** @description Optional provider-neutral reasoning effort. Surrounding whitespace and letter case are normalized. Omit the field to preserve the selected provider and model default. Factory definitions may use an exact invocation-parameter placeholder such as `${executorReasoningEffort}`. */
+    ReasoningEffort: string;
     /** @description Hosted-worker authentication contract. V1 hosted workers accept only secret references rather than inline credentials or OAuth-style fields. */
     HostedWorkerAuth: {
       /** @description Referenced secret name that resolves the hosted provider API key at runtime. */
@@ -5515,8 +5529,10 @@ export interface components {
       type: components["schemas"]["WorkstationGuardType"];
       /** @description For `VISIT_COUNT` guards, the workstation whose visits are counted. */
       workstation?: string;
-      /** @description For `VISIT_COUNT` guards, the visit threshold. */
+      /** @description For `VISIT_COUNT` guards, the fixed visit ceiling. */
       maxVisits?: number;
+      /** @description Optional invocation argument whose positive integer value tightens the fixed visit ceiling. */
+      maxVisitsArgument?: string;
       /** @description For `MATCHES_FIELDS` guards, the field-selector configuration used to compare candidate inputs. */
       matchConfig?: components["schemas"]["GuardMatchConfig"];
       /** @description For parent-aware input guards, the parent workType name from another input in the same workstation. */
@@ -8059,12 +8075,7 @@ export type WorkerType = (typeof WorkerType)[keyof typeof WorkerType];
 export const WorkerModelProvider = {
   CLAUDE: "CLAUDE",
   CODEX: "CODEX",
-  CURSOR: "CURSOR",
-  GEMINI: "GEMINI",
-  KIRO: "KIRO",
-  OPENCODE: "OPENCODE",
-  PI: "PI",
-  AGY: "AGY",
+  ANTIGRAVITY: "ANTIGRAVITY",
 } as const;
 export type WorkerModelProvider =
   (typeof WorkerModelProvider)[keyof typeof WorkerModelProvider];
@@ -8126,11 +8137,8 @@ export type ModelOperationContentType =
   (typeof ModelOperationContentType)[keyof typeof ModelOperationContentType];
 export const RunnerID = {
   codex: "codex",
-  gemini: "gemini",
-  kiro: "kiro",
-  cursor_cli: "cursor-cli",
-  opencode: "opencode",
-  pi: "pi",
+  claude: "claude",
+  antigravity: "antigravity",
 } as const;
 export type RunnerID = (typeof RunnerID)[keyof typeof RunnerID];
 export const RunnerSelectionSource = {

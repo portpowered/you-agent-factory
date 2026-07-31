@@ -6,13 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os/exec"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -30,11 +28,11 @@ const (
 	parentChildLineageChild     = "child"
 	parentChildLineageWorkType  = "task"
 
-	parentChildFailureRequestID = "request-parent-child-failure"
-	parentChildFailureParentID  = "parent-story-set-id"
-	parentChildFailureChildID   = "child-story-id"
-	parentChildFailureParent    = "story-set"
-	parentChildFailureChild     = "story-child"
+	parentChildFailureRequestID  = "request-parent-child-failure"
+	parentChildFailureParentID   = "parent-story-set-id"
+	parentChildFailureChildID    = "child-story-id"
+	parentChildFailureParent     = "story-set"
+	parentChildFailureChild      = "story-child"
 	parentChildFailureParentType = "story-set"
 	parentChildFailureChildType  = "story"
 )
@@ -64,7 +62,7 @@ func TestParentChildLineageSurvivesDispatchAndReplay(t *testing.T) {
 	defer server.Stop(t)
 
 	baseURL := server.URL()
-	binaryPath := buildParentChildCLIBinary(t)
+	processHarness := newParentChildRootProcessHarness(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -81,7 +79,7 @@ func TestParentChildLineageSurvivesDispatchAndReplay(t *testing.T) {
 		parentChildLineageChild,
 		parentChildLineageParent,
 	)
-	submitOut, err := runParentChildCLI(ctx, binaryPath, dir, baseURL,
+	submitOut, err := runParentChildCLI(ctx, processHarness, dir, baseURL,
 		"--json",
 		"submit", "batch",
 		batchJSON,
@@ -128,7 +126,7 @@ func TestParentChildLineageSurvivesDispatchAndReplay(t *testing.T) {
 	shown, err := runParentChildWorkShowCLIJSON(
 		t,
 		ctx,
-		binaryPath,
+		processHarness,
 		dir,
 		baseURL,
 		parentChildLineageChildID,
@@ -166,7 +164,7 @@ func TestChildFailureProjectsToDocumentedParentView(t *testing.T) {
 	defer server.Stop(t)
 
 	baseURL := server.URL()
-	binaryPath := buildParentChildCLIBinary(t)
+	processHarness := newParentChildRootProcessHarness(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -183,7 +181,7 @@ func TestChildFailureProjectsToDocumentedParentView(t *testing.T) {
 		parentChildFailureChild,
 		parentChildFailureParent,
 	)
-	submitOut, err := runParentChildCLI(ctx, binaryPath, dir, baseURL,
+	submitOut, err := runParentChildCLI(ctx, processHarness, dir, baseURL,
 		"--json",
 		"submit", "batch",
 		batchJSON,
@@ -201,7 +199,7 @@ func TestChildFailureProjectsToDocumentedParentView(t *testing.T) {
 	parentShown, err := runParentChildWorkShowCLIJSON(
 		t,
 		ctx,
-		binaryPath,
+		processHarness,
 		dir,
 		baseURL,
 		parentChildFailureParentID,
@@ -214,7 +212,7 @@ func TestChildFailureProjectsToDocumentedParentView(t *testing.T) {
 	childShown, err := runParentChildWorkShowCLIJSON(
 		t,
 		ctx,
-		binaryPath,
+		processHarness,
 		dir,
 		baseURL,
 		parentChildFailureChildID,
@@ -228,7 +226,6 @@ func TestChildFailureProjectsToDocumentedParentView(t *testing.T) {
 	events := server.GetFactoryEvents(t)
 	assertParentChildFailureProjectionInFactoryEvents(t, events, parentChildFailureRequestID, parentChildFailureChildID)
 }
-
 
 // TestDispatchPreservesSubmittedWorkPayloadTagsAndType proves through provider
 // dispatch observations that the executor input preserves the submitted payload,
@@ -899,31 +896,20 @@ func findListedWorkByID(listed factoryapi.ListWorkResponse, workID string) (fact
 	return factoryapi.Work{}, false
 }
 
-func buildParentChildCLIBinary(t *testing.T) string {
+func newParentChildRootProcessHarness(t *testing.T) *builtcliacceptance.Harness {
 	t.Helper()
-
-	binaryName := "you"
-	if runtime.GOOS == "windows" {
-		binaryName += ".exe"
-	}
-	binaryPath := filepath.Join(t.TempDir(), binaryName)
-	build := exec.Command("go", "build", "-o", binaryPath, "./cmd/factory")
-	build.Dir = testutil.MustRepoRoot(t)
-	if output, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build you CLI: %v\n%s", err, string(output))
-	}
-	return binaryPath
+	return builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
 }
 
 func runParentChildCLI(
 	ctx context.Context,
-	binaryPath string,
+	processHarness *builtcliacceptance.Harness,
 	workingDir string,
 	serverURL string,
 	args ...string,
 ) ([]byte, error) {
 	cmdArgs := append([]string{"--server", serverURL}, args...)
-	cmd := exec.CommandContext(ctx, binaryPath, cmdArgs...)
+	cmd := processHarness.CommandContext(ctx, cmdArgs...)
 	cmd.Dir = workingDir
 	return cmd.CombinedOutput()
 }
@@ -931,14 +917,14 @@ func runParentChildCLI(
 func runParentChildWorkShowCLIJSON(
 	t *testing.T,
 	ctx context.Context,
-	binaryPath string,
+	processHarness *builtcliacceptance.Harness,
 	workingDir string,
 	serverURL string,
 	workID string,
 ) (factoryapi.Work, error) {
 	t.Helper()
 
-	output, err := runParentChildCLI(ctx, binaryPath, workingDir, serverURL,
+	output, err := runParentChildCLI(ctx, processHarness, workingDir, serverURL,
 		"--json",
 		"work", "show", workID,
 	)

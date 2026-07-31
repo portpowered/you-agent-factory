@@ -12,9 +12,9 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/inference"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -438,9 +438,9 @@ func runDependencyTerminalHappyPath(t *testing.T, prerequisiteWorkID, prerequisi
 
 	assertDependencyWorkLocations(t, listed, map[string]int{
 		support.WorkCustomerLocation("prd", dependencyArchivedState): 2,
-		support.WorkCustomerLocation("prd", "init"):                    0,
-		support.WorkCustomerLocation("prd", "in-review"):               0,
-		support.WorkCustomerLocation("prd", "failed"):                  0,
+		support.WorkCustomerLocation("prd", "init"):                  0,
+		support.WorkCustomerLocation("prd", "in-review"):             0,
+		support.WorkCustomerLocation("prd", "failed"):                0,
 	})
 	if !support.HasWorkAtCustomerState(listed, prerequisiteWorkID, support.WorkCustomerLocation("prd", dependencyArchivedState)) {
 		t.Fatalf("prerequisite work %q not at archived in public listing: %#v", prerequisiteWorkID, listed)

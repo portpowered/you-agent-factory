@@ -60,7 +60,7 @@ func TestRenderDetailCatalogMarkdownIncludesLabelsAndStableOrdering(t *testing.T
 			Line:           42,
 			Description:    "verifies provider replay",
 			BuildTags:      []string{"functionallong"},
-			Golden:         "docs/temp/functional/provider-sessions/openai/invoke/manifest.json",
+			Golden:         "tests/functional/internal/support/testdata/provider-sessions/openai/invoke/manifest.json",
 			Classification: functionaltestmetadata.ClassificationCustomer,
 		},
 		{
@@ -84,7 +84,7 @@ func TestRenderDetailCatalogMarkdownIncludesLabelsAndStableOrdering(t *testing.T
 		Case:          "invoke",
 		FidelityClass: "partial-stream",
 		ID:            "openai-invoke",
-		ManifestPath:  "docs/temp/functional/provider-sessions/openai/invoke/manifest.json",
+		ManifestPath:  "tests/functional/internal/support/testdata/provider-sessions/openai/invoke/manifest.json",
 	}
 	catalog := functionaltestviz.BuildDetailCatalog(records)
 
@@ -118,7 +118,7 @@ func TestRenderDetailCatalogMarkdownIncludesLabelsAndStableOrdering(t *testing.T
 	if !strings.Contains(first, "    - Golden id: `openai-invoke`\n") {
 		t.Fatalf("golden id missing:\n%s", first)
 	}
-	if !strings.Contains(first, "    - Manifest: `docs/temp/functional/provider-sessions/openai/invoke/manifest.json`\n") {
+	if !strings.Contains(first, "    - Manifest: `tests/functional/internal/support/testdata/provider-sessions/openai/invoke/manifest.json`\n") {
 		t.Fatalf("golden manifest path missing:\n%s", first)
 	}
 	if !strings.Contains(first, "- **TestLoad** — (undocumented)\n") {

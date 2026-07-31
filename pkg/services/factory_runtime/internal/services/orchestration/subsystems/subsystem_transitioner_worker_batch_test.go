@@ -28,6 +28,28 @@ func TestTransitioner_WorkerEmittedGeneratedSubmissionBatchCreatesGeneratedWork(
 	assertGeneratedWorkerBatchOutcome(t, result, first, normalized[1])
 }
 
+func TestTransitioner_WorkerEmittedGeneratedSubmissionBatchPreservesInvocationArguments(t *testing.T) {
+	now := time.Date(2026, time.April, 16, 22, 5, 0, 0, time.UTC)
+	net := workerBatchTestNet()
+	transitioner := NewTransitioner(net, nil, func() time.Time { return now }, testTokenTransformer(net), nil, nil, nil, testWorkPropagationPolicy())
+	snapshot := workerBatchSnapshot(`{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"child","workTypeName":"child"}]}}`)
+	snapshot.Dispatches["dispatch-1"].ConsumedTokens[0].Color.InvocationArguments = &work.InvocationArguments{Arguments: map[string]work.InvocationArgument{
+		"baseBranch": {Values: []string{"main"}},
+	}}
+
+	result := executeWorkerBatchTransition(t, transitioner, snapshot)
+	normalized := normalizeGeneratedWorkerBatch(t, result.GeneratedBatches[0])
+	got := normalized[0].InvocationArguments
+	if got == nil || len(got.Arguments["baseBranch"].Values) != 1 || got.Arguments["baseBranch"].Values[0] != "main" {
+		t.Fatalf("generated invocation arguments = %#v, want inherited baseBranch", got)
+	}
+
+	snapshot.Dispatches["dispatch-1"].ConsumedTokens[0].Color.InvocationArguments.Arguments["baseBranch"] = work.InvocationArgument{Values: []string{"mutated"}}
+	if normalized[0].InvocationArguments.Arguments["baseBranch"].Values[0] != "main" {
+		t.Fatal("generated Work aliases parent invocation arguments")
+	}
+}
+
 func TestTransitioner_WorkerEmittedGeneratedSubmissionBatchPreservesCanonicalChainingTrace(t *testing.T) {
 	now := time.Date(2026, time.April, 16, 22, 10, 0, 0, time.UTC)
 	net := workerBatchTestNet()
@@ -467,4 +489,75 @@ func TestTransitioner_MalformedWorkerEmittedFactoryRequestBatchFailsDispatch(t *
 	if len(result.GeneratedBatches) != 0 {
 		t.Fatalf("generated batches = %#v, want none", result.GeneratedBatches)
 	}
+}
+
+func TestTransitioner_WorkerEmittedFactoryRequestBatchHonorsGeneratedWorkLimit(t *testing.T) {
+	now := time.Date(2026, time.July, 29, 17, 0, 0, 0, time.UTC)
+	net := workerBatchTestNet()
+	net.Transitions["t1"].Name = "generate"
+	transitioner := NewTransitioner(
+		net, nil, func() time.Time { return now }, testTokenTransformer(net),
+		generatedWorkLimitRuntime{maximum: 1}, nil, nil, testWorkPropagationPolicy(),
+	)
+	snapshot := workerBatchSnapshot(`{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"first","workTypeName":"child"},{"name":"second","workTypeName":"child"}]}}`)
+
+	result, err := transitioner.Execute(context.Background(), snapshot)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	if result == nil || len(result.CompletedDispatches) != 1 {
+		t.Fatalf("completed dispatches = %#v, want one failed dispatch", result)
+	}
+	completed := result.CompletedDispatches[0]
+	if completed.Outcome != workerexecution.OutcomeFailed ||
+		!strings.Contains(completed.Reason, "contains 2 Work items, exceeding workstation limit 1") {
+		t.Fatalf("completed dispatch = %#v, want stable generated-work limit failure", completed)
+	}
+	if len(result.GeneratedBatches) != 0 {
+		t.Fatalf("generated batches = %#v, want atomic rejection before admission", result.GeneratedBatches)
+	}
+}
+
+func TestTransitioner_WorkerEmittedFactoryRequestBatchHonorsInvocationArgumentLimit(t *testing.T) {
+	now := time.Date(2026, time.July, 30, 17, 0, 0, 0, time.UTC)
+	net := workerBatchTestNet()
+	net.Transitions["t1"].Name = "generate"
+	transitioner := NewTransitioner(
+		net, nil, func() time.Time { return now }, testTokenTransformer(net),
+		generatedWorkLimitRuntime{maximum: 9, argument: "maxTasks", offset: 1}, nil, nil, testWorkPropagationPolicy(),
+	)
+	snapshot := workerBatchSnapshot(`{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"first","workTypeName":"child"},{"name":"second","workTypeName":"child"},{"name":"control","workTypeName":"child"}]}}`)
+	snapshot.Dispatches["dispatch-1"].ConsumedTokens[0].Color.InvocationArguments = &work.InvocationArguments{
+		Arguments: map[string]work.InvocationArgument{"maxTasks": {Values: []string{"1"}}},
+	}
+
+	result, err := transitioner.Execute(context.Background(), snapshot)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	completed := result.CompletedDispatches[0]
+	if completed.Outcome != workerexecution.OutcomeFailed ||
+		!strings.Contains(completed.Reason, "contains 3 Work items, exceeding workstation limit 2") {
+		t.Fatalf("completed dispatch = %#v, want caller-selected generated-work limit failure", completed)
+	}
+	if len(result.GeneratedBatches) != 0 {
+		t.Fatalf("generated batches = %#v, want atomic rejection", result.GeneratedBatches)
+	}
+}
+
+type generatedWorkLimitRuntime struct {
+	maximum  int
+	argument string
+	offset   int
+}
+
+func (runtime generatedWorkLimitRuntime) Workstation(name string) (*interfaces.FactoryWorkstationConfig, bool) {
+	return &interfaces.FactoryWorkstationConfig{
+		Name: name,
+		Limits: interfaces.WorkstationLimits{
+			MaxGeneratedWorkItems:               runtime.maximum,
+			MaxGeneratedWorkItemsArgument:       runtime.argument,
+			MaxGeneratedWorkItemsArgumentOffset: runtime.offset,
+		},
+	}, true
 }

@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workerenvdiagnostics "github.com/portpowered/infinite-you/pkg/services/workers/envdiagnostics"
+	workstationenv "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/envdiagnostics"
 )
 
 // CommandRunner is the Workers-owned subprocess execution port.
@@ -39,19 +39,17 @@ type CommandResult struct {
 }
 
 const (
-	RedactedCommandEnvValue         = workerenvdiagnostics.RedactedCommandEnvValue
-	MetadataOnlyCommandEnvValue     = workerenvdiagnostics.MetadataOnlyCommandEnvValue
-	CommandEnvClassificationSafe    = workerenvdiagnostics.CommandEnvClassificationSafe
-	CommandEnvClassificationRedacted = workerenvdiagnostics.CommandEnvClassificationRedacted
-	CommandEnvClassificationMetadataOnly = workerenvdiagnostics.CommandEnvClassificationMetadataOnly
+	RedactedCommandEnvValue              = workstationenv.RedactedCommandEnvValue
+	MetadataOnlyCommandEnvValue          = workstationenv.MetadataOnlyCommandEnvValue
+	CommandEnvClassificationSafe         = workstationenv.CommandEnvClassificationSafe
+	CommandEnvClassificationRedacted     = workstationenv.CommandEnvClassificationRedacted
+	CommandEnvClassificationMetadataOnly = workstationenv.CommandEnvClassificationMetadataOnly
 )
 
 type (
-	CommandEnvClassification       = workerenvdiagnostics.CommandEnvClassification
-	CommandEnvDiagnosticProjection = workerenvdiagnostics.CommandEnvDiagnosticProjection
+	CommandEnvDiagnosticProjection = workstationenv.CommandEnvDiagnosticProjection
 )
 
 var (
-	ClassifyCommandEnvKey           = workerenvdiagnostics.ClassifyCommandEnvKey
-	ProjectCommandEnvForDiagnostics = workerenvdiagnostics.ProjectCommandEnvForDiagnostics
+	ProjectCommandEnvForDiagnostics = workstationenv.ProjectCommandEnvForDiagnostics
 )

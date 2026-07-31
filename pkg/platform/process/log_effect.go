@@ -24,17 +24,14 @@ type LoggingCommandRunner struct {
 
 func (r LoggingCommandRunner) Run(ctx context.Context, req CommandRequest) (CommandResult, error) {
 	logger := logging.EnsureLogger(r.Logger)
-	if r.Runner == nil {
-		return CommandResult{}, errors.New("platform process command runner is required")
-	}
-	if r.Clock == nil {
-		return CommandResult{}, errors.New("platform process clock is required")
-	}
 	logger.Info("command runner: request received", commandRequestLogFields(req)...)
 	logger.Verbose("command runner: verbose request details", commandRequestDetailsLogFields(req)...)
 	started := r.Clock.Now()
 	result, err := r.Runner.Run(ctx, req)
 	duration := r.Clock.Now().Sub(started)
+	if result.ExitCode != 0 {
+		logger.Error("command runner: request failed", commandOutputDetailsLogFields(req, result, duration)...)
+	}
 	logger.Info("command runner: request completed", commandCompletionLogFields(req, result, duration, commandResultStatus(ctx, result, err), err)...)
 	logger.Verbose("command runner: verbose output details", commandOutputDetailsLogFields(req, result, duration)...)
 	return result, err

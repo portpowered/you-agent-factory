@@ -71,7 +71,7 @@ var productOwnerTopLevelSpecs = map[string]ownerTopLevelSpec{
 	},
 	"providers": {
 		owner:          "providers",
-		expectedRetain: []string{"internal", "transports", "wire"},
+		expectedRetain: []string{"inference", "internal", "transports", "wire"},
 	},
 	"recordings": {
 		owner:          "recordings",
@@ -90,21 +90,6 @@ var productOwnerTopLevelSpecs = map[string]ownerTopLevelSpec{
 	"workers": {
 		owner:          "workers",
 		expectedRetain: []string{"internal", "wire"},
-		unexpected: []string{
-			"agypty",
-			"cliprovider",
-			"envdiagnostics",
-			"executor",
-			"invocation",
-			"process",
-			"prompting",
-			"provider",
-			"provider_test",
-			"runner",
-			"service",
-			"services",
-			"worktree",
-		},
 	},
 }
 

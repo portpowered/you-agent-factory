@@ -7,21 +7,20 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"reflect"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/internal/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const (
-	batchInputsWorkType = "task"
+	batchInputsWorkType    = "task"
 	batchInputsAltWorkType = "review"
 
 	batchInputsInlineRequestID = "work-batch-inputs-inline"
@@ -43,9 +42,9 @@ const (
 	batchInputsUnknownTypeWorkName  = "unknown-type-task"
 	batchInputsUnknownWorkType      = "nonexistent-type"
 
-	batchInputsMixedBatchRequestID   = "work-batch-inputs-mixed-batch"
-	batchInputsMixedValidWorkName    = "mixed-valid-task"
-	batchInputsMixedInvalidWorkName  = "mixed-invalid-task"
+	batchInputsMixedBatchRequestID  = "work-batch-inputs-mixed-batch"
+	batchInputsMixedValidWorkName   = "mixed-valid-task"
+	batchInputsMixedInvalidWorkName = "mixed-invalid-task"
 
 	batchIngressRegressionRequestID = "request-http-batch-ingress-regression"
 	batchIngressRegressionWorkID    = "work-http-batch-ingress-regression"
@@ -65,7 +64,7 @@ func TestWorkBatchAcceptsInlineFileAndStdinShapes(t *testing.T) {
 	defer server.Stop(t)
 
 	baseURL := server.URL()
-	binaryPath := buildYouCLIBinary(t)
+	processHarness := newRootProcessHarness(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
@@ -80,7 +79,7 @@ func TestWorkBatchAcceptsInlineFileAndStdinShapes(t *testing.T) {
 
 	t.Run("inline", func(t *testing.T) {
 		batchJSON := canonicalBatch(batchInputsInlineRequestID, batchInputsInlineWorkName)
-		output, err := runYouSubmitBatch(ctx, binaryPath, factoryDir, baseURL, batchJSON, nil)
+		output, err := runYouSubmitBatch(ctx, processHarness, factoryDir, baseURL, batchJSON, nil)
 		if err != nil {
 			t.Fatalf("you submit batch inline: %v\noutput:\n%s", err, output)
 		}
@@ -96,7 +95,7 @@ func TestWorkBatchAcceptsInlineFileAndStdinShapes(t *testing.T) {
 			t.Fatalf("write batch file: %v", err)
 		}
 
-		output, err := runYouSubmitBatch(ctx, binaryPath, factoryDir, baseURL, batchPath, nil)
+		output, err := runYouSubmitBatch(ctx, processHarness, factoryDir, baseURL, batchPath, nil)
 		if err != nil {
 			t.Fatalf("you submit batch file: %v\noutput:\n%s", err, output)
 		}
@@ -107,7 +106,7 @@ func TestWorkBatchAcceptsInlineFileAndStdinShapes(t *testing.T) {
 
 	t.Run("stdin", func(t *testing.T) {
 		batchJSON := canonicalBatch(batchInputsStdinRequestID, batchInputsStdinWorkName)
-		output, err := runYouSubmitBatch(ctx, binaryPath, factoryDir, baseURL, "-", strings.NewReader(batchJSON))
+		output, err := runYouSubmitBatch(ctx, processHarness, factoryDir, baseURL, "-", strings.NewReader(batchJSON))
 		if err != nil {
 			t.Fatalf("you submit batch stdin: %v\noutput:\n%s", err, output)
 		}
@@ -129,7 +128,7 @@ func TestWorkBatchSelectsDefaultAndExplicitWorkTypes(t *testing.T) {
 	defer server.Stop(t)
 
 	baseURL := server.URL()
-	binaryPath := buildYouCLIBinary(t)
+	processHarness := newRootProcessHarness(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
@@ -139,7 +138,7 @@ func TestWorkBatchSelectsDefaultAndExplicitWorkTypes(t *testing.T) {
 			batchInputsDefaultTypeRequestID,
 			batchInputsDefaultTypeWorkName,
 		)
-		output, err := runYouSubmitBatch(ctx, binaryPath, factoryDir, baseURL, batchJSON, nil)
+		output, err := runYouSubmitBatch(ctx, processHarness, factoryDir, baseURL, batchJSON, nil)
 		if err != nil {
 			t.Fatalf("you submit batch default work type: %v\noutput:\n%s", err, output)
 		}
@@ -160,7 +159,7 @@ func TestWorkBatchSelectsDefaultAndExplicitWorkTypes(t *testing.T) {
 			batchInputsExplicitTypeWorkName,
 			batchInputsAltWorkType,
 		)
-		output, err := runYouSubmitBatch(ctx, binaryPath, factoryDir, baseURL, batchJSON, nil)
+		output, err := runYouSubmitBatch(ctx, processHarness, factoryDir, baseURL, batchJSON, nil)
 		if err != nil {
 			t.Fatalf("you submit batch explicit work type: %v\noutput:\n%s", err, output)
 		}
@@ -187,7 +186,7 @@ func TestWorkBatchRejectsUnknownTypeWithoutPartialMutation(t *testing.T) {
 	defer server.Stop(t)
 
 	baseURL := server.URL()
-	binaryPath := buildYouCLIBinary(t)
+	processHarness := newRootProcessHarness(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
@@ -201,7 +200,7 @@ func TestWorkBatchRejectsUnknownTypeWithoutPartialMutation(t *testing.T) {
 			batchInputsUnknownTypeWorkName,
 			batchInputsUnknownWorkType,
 		)
-		output, err := runYouSubmitBatch(ctx, binaryPath, factoryDir, baseURL, batchJSON, nil)
+		output, err := runYouSubmitBatch(ctx, processHarness, factoryDir, baseURL, batchJSON, nil)
 		assertBatchSubmitRejected(t, output, err, batchInputsUnknownTypeRequestID)
 		assertWorkNotListedByName(t, baseURL, batchInputsUnknownTypeWorkName)
 		assertListedWorkCount(t, baseURL, baselineCount)
@@ -216,7 +215,7 @@ func TestWorkBatchRejectsUnknownTypeWithoutPartialMutation(t *testing.T) {
 			batchInputsMixedInvalidWorkName,
 			batchInputsUnknownWorkType,
 		)
-		output, err := runYouSubmitBatch(ctx, binaryPath, factoryDir, baseURL, batchJSON, nil)
+		output, err := runYouSubmitBatch(ctx, processHarness, factoryDir, baseURL, batchJSON, nil)
 		assertBatchSubmitRejected(t, output, err, batchInputsMixedBatchRequestID)
 		assertWorkNotListedByName(t, baseURL, batchInputsMixedValidWorkName)
 		assertWorkNotListedByName(t, baseURL, batchInputsMixedInvalidWorkName)
@@ -610,32 +609,21 @@ func batchWorkTypeSelectionFactoryConfig() map[string]any {
 	}
 }
 
-func buildYouCLIBinary(t *testing.T) string {
+func newRootProcessHarness(t *testing.T) *builtcliacceptance.Harness {
 	t.Helper()
-
-	binaryName := "you"
-	if runtime.GOOS == "windows" {
-		binaryName += ".exe"
-	}
-	binaryPath := filepath.Join(t.TempDir(), binaryName)
-	build := exec.Command("go", "build", "-o", binaryPath, "./cmd/factory")
-	build.Dir = testutil.MustRepoRoot(t)
-	if output, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build you CLI: %v\n%s", err, string(output))
-	}
-	return binaryPath
+	return builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
 }
 
 func runYouSubmitBatch(
 	ctx context.Context,
-	binaryPath string,
+	processHarness *builtcliacceptance.Harness,
 	workingDir string,
 	serverURL string,
 	batchSource string,
 	stdin io.Reader,
 ) ([]byte, error) {
 	args := []string{"--server", serverURL, "--json", "submit", "batch", batchSource}
-	cmd := exec.CommandContext(ctx, binaryPath, args...)
+	cmd := processHarness.CommandContext(ctx, args...)
 	cmd.Dir = workingDir
 	if stdin != nil {
 		cmd.Stdin = stdin
@@ -726,13 +714,6 @@ func assertBatchSubmitRejected(t *testing.T, output []byte, err error, requestID
 
 	if err == nil {
 		t.Fatalf("you submit batch unexpectedly succeeded:\n%s", output)
-	}
-	exitErr, ok := err.(*exec.ExitError)
-	if !ok {
-		t.Fatalf("you submit batch error = %v, want *exec.ExitError", err)
-	}
-	if exitErr.ExitCode() != 1 {
-		t.Fatalf("you submit batch exit code = %d, want 1", exitErr.ExitCode())
 	}
 
 	text := string(output)

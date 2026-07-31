@@ -58,7 +58,7 @@ describe("useEditableFactoryGraph", () => {
         command: "",
         kind: "worker",
         model: "gpt-5-mini",
-        modelProvider: "CURSOR",
+        modelProvider: "CODEX",
         name: "reviewer",
         operations: [
           {
@@ -83,7 +83,7 @@ describe("useEditableFactoryGraph", () => {
         command: "",
         kind: "worker",
         model: "gpt-5-mini",
-        modelProvider: "CURSOR",
+        modelProvider: "CODEX",
         name: "writer",
         operations: [],
         workerType: "MODEL_WORKER",

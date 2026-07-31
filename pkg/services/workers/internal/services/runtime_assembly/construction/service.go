@@ -5,13 +5,13 @@ package construction
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
@@ -20,12 +20,6 @@ import (
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
 	workerprompting "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/prompting"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/skippermissions"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
-	providerconductor "github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
-	providercontract "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
-	"github.com/portpowered/infinite-you/pkg/services/workers/provider/providersroot"
-	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
-	providerstructured "github.com/portpowered/infinite-you/pkg/services/workers/provider/structured"
 )
 
 // Builder constructs one configured worker without owning runtime lifecycle.
@@ -37,10 +31,10 @@ type Builder interface {
 		*workerexecution.Context,
 		logging.Logger,
 		*bool,
-		providercontract.Provider,
-		workerprovider.InferenceProgressPublisher,
+		workers.Provider,
+		workers.ProgressPublisher,
 		workerexecutor.ScriptEventRecorder,
-		workerprovider.InferenceEventRecorder,
+		workers.InferenceEventRecorder,
 		workeragentrun.AgentRunEventRecorder,
 		func() time.Time,
 		func() []string,
@@ -72,25 +66,26 @@ type Result struct {
 
 // Service is a stateless worker executor constructor.
 type Service struct {
-	providerFactory                   *workerprovider.Factory
+	providers                         providers.Service
 	scriptFactory                     *workerexecutor.ScriptFactory
 	interpolation                     interfaces.InvocationInterpolationService
 	executionPolicy                   interfaces.WorkstationExecutionPolicyService
 	decisionEnvelopes                 interfaces.DecisionEnvelopeService
 	factoryDocs                       workers.FactoryDocsLoader
 	worktreePreparer                  workers.FactoryWorktreePreparer
+	runWorktree                       string
 	agentRunHarness                   workeragentrun.HarnessAdapter
 	retryRandom                       platformrandom.Source
 	workstationFiles                  platformfilesystem.ReadFileInspector
 	resolveRunner                     workers.RunnerSelectionResolver
 	resolveProvider                   workers.ProviderIdentityResolver
-	providerRegistry                  *providerregistry.Registry
+	providerRegistry                  workers.ProviderRegistry
 	agentDispatchUsesRegisteredRunner bool
 }
 
 // New constructs a worker executor service from process-owned factories.
 func New(
-	providerFactory *workerprovider.Factory,
+	providerFactory providers.Service,
 	scriptFactory *workerexecutor.ScriptFactory,
 	interpolation interfaces.InvocationInterpolationService,
 	executionPolicy interfaces.WorkstationExecutionPolicyService,
@@ -106,7 +101,7 @@ func New(
 		selected = decisionEnvelopes[0]
 	}
 	return &Service{
-		providerFactory:   providerFactory,
+		providers:         providerFactory,
 		scriptFactory:     scriptFactory,
 		interpolation:     interpolation,
 		executionPolicy:   executionPolicy,
@@ -117,6 +112,17 @@ func New(
 		workstationFiles:  workstationFiles,
 		decisionEnvelopes: selected,
 	}
+}
+
+// WithRunWorktree returns a service copy that applies one run-scoped worktree
+// selection to every non-logical workstation dispatch.
+func (s *Service) WithRunWorktree(worktree string) *Service {
+	if s == nil {
+		return nil
+	}
+	clone := *s
+	clone.runWorktree = worktree
+	return &clone
 }
 
 // WithRunnerSelection returns a service copy that uses the process-owned
@@ -143,7 +149,7 @@ func (s *Service) WithProviderIdentityResolution(resolve workers.ProviderIdentit
 
 // WithProviderRegistry returns a service copy that can route agent dispatch
 // through conductor-backed provider integrations on the Providers root.
-func (s *Service) WithProviderRegistry(registry *providerregistry.Registry) *Service {
+func (s *Service) WithProviderRegistry(registry workers.ProviderRegistry) *Service {
 	if s == nil {
 		return nil
 	}
@@ -168,7 +174,7 @@ func (s *Service) WithAgentRunnerCutover(enabled bool) *Service {
 // and script factories while preserving registry-backed runner selection and
 // provider-identity resolution wiring.
 func (s *Service) WithExecutionFactories(
-	providerFactory *workerprovider.Factory,
+	providerFactory providers.Service,
 	scriptFactory *workerexecutor.ScriptFactory,
 ) *Service {
 	if s == nil {
@@ -176,7 +182,7 @@ func (s *Service) WithExecutionFactories(
 	}
 	clone := *s
 	if providerFactory != nil {
-		clone.providerFactory = providerFactory
+		clone.providers = providerFactory
 	}
 	if scriptFactory != nil {
 		clone.scriptFactory = scriptFactory
@@ -193,10 +199,10 @@ func (s *Service) Build(
 	workflowContext *workerexecution.Context,
 	logger logging.Logger,
 	invocationSkipPermissionsOverride *bool,
-	providerOverride providercontract.Provider,
-	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
+	providerOverride workers.Provider,
+	inferenceProgressPublisher workers.ProgressPublisher,
 	scriptRecorder workerexecutor.ScriptEventRecorder,
-	inferenceRecorder workerprovider.InferenceEventRecorder,
+	inferenceRecorder workers.InferenceEventRecorder,
 	agentRunRecorder workeragentrun.AgentRunEventRecorder,
 	clock func() time.Time,
 	processEnvironment func() []string,
@@ -246,20 +252,20 @@ func (s *Service) Build(
 			agentRunRecorder,
 			clock,
 			s.decisionEnvelopes,
-		)
+		).WithProgressPublisher(inferenceProgressPublisher)
 		direct := &workerexecutor.WorkstationBehaviorRouter{
 			RuntimeConfig: runtimeConfig, InferenceExecutor: inference, AgentRunExecutor: agentRun,
 		}
 		return workstationResult(
 			runtimeConfig, factoryRunnerID, workflowContext, logger, direct, s.interpolation,
-			s.executionPolicy, clock, processEnvironment, currentWorkingDirectory, s.factoryDocs, s.worktreePreparer, s.workstationFiles,
+			s.executionPolicy, clock, processEnvironment, currentWorkingDirectory, s.factoryDocs, s.worktreePreparer, s.runWorktree, s.workstationFiles,
 			s.resolveRunner,
 			s.resolveProvider,
 		), nil
 	case interfaces.WorkstationTypeLogical:
 		return workstationResult(
 			runtimeConfig, factoryRunnerID, workflowContext, logger, nil,
-			s.interpolation, s.executionPolicy, clock, processEnvironment, currentWorkingDirectory, s.factoryDocs, s.worktreePreparer, s.workstationFiles,
+			s.interpolation, s.executionPolicy, clock, processEnvironment, currentWorkingDirectory, s.factoryDocs, s.worktreePreparer, s.runWorktree, s.workstationFiles,
 			s.resolveRunner,
 			s.resolveProvider,
 		), nil
@@ -276,7 +282,7 @@ func (s *Service) Build(
 		}
 		return workstationResult(
 			runtimeConfig, factoryRunnerID, workflowContext, logger, direct, s.interpolation,
-			s.executionPolicy, clock, processEnvironment, currentWorkingDirectory, s.factoryDocs, s.worktreePreparer, s.workstationFiles,
+			s.executionPolicy, clock, processEnvironment, currentWorkingDirectory, s.factoryDocs, s.worktreePreparer, s.runWorktree, s.workstationFiles,
 			s.resolveRunner,
 			s.resolveProvider,
 		), nil
@@ -312,6 +318,7 @@ func (s *Service) BuildLogical(
 		currentWorkingDirectory,
 		s.factoryDocs,
 		s.worktreePreparer,
+		s.runWorktree,
 		s.workstationFiles,
 		s.resolveRunner,
 		s.resolveProvider,
@@ -323,22 +330,14 @@ func (s *Service) agentRunner(
 	def *interfaces.FactoryWorkerConfig,
 	logger logging.Logger,
 	effectiveSkipPermissions bool,
-	providerOverride providercontract.Provider,
-	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
+	providerOverride workers.Provider,
+	inferenceProgressPublisher workers.ProgressPublisher,
 ) (workers.Runner, error) {
-	usesNamedExecutorProvider := def != nil && strings.TrimSpace(def.ExecutorProvider) != "" && !strings.EqualFold(strings.TrimSpace(def.ExecutorProvider), "SCRIPT_WRAP")
+	usesNamedExecutorProvider := def != nil && workers.UsesNamedProvider(def.ExecutorProvider, def.ModelProvider)
 	if providerOverride != nil && !usesNamedExecutorProvider {
 		return workerexecutor.RunnerFromProvider(providerOverride), nil
 	}
-	if s != nil && s.agentDispatchUsesRegisteredRunner {
-		return s.resolveRegisteredAgentRunner(
-			runtimeConfig,
-			logger,
-			effectiveSkipPermissions,
-			inferenceProgressPublisher,
-		)
-	}
-	return s.legacyProviderRunner(
+	return s.resolveRegisteredAgentRunner(
 		runtimeConfig,
 		logger,
 		effectiveSkipPermissions,
@@ -350,29 +349,14 @@ func (s *Service) resolveRegisteredAgentRunner(
 	runtimeConfig interfaces.RuntimeConfigLookup,
 	logger logging.Logger,
 	effectiveSkipPermissions bool,
-	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
+	inferenceProgressPublisher workers.ProgressPublisher,
 ) (workers.Runner, error) {
-	if s == nil || s.providerFactory == nil {
-		return nil, fmt.Errorf("provider worker factory is required")
+	if s == nil || s.providers == nil {
+		return nil, fmt.Errorf("Providers service is required")
 	}
 	publish := agentProgressPublisherOrNoop(inferenceProgressPublisher)
-	providersConfig := providersroot.Config{
-		Factory:          s.providerFactory,
-		SkipPermissions:  effectiveSkipPermissions,
-		Logger:           logger,
-		Publish:          publish,
-		FactoryDirectory: strings.TrimSpace(runtimeConfig.FactoryDir()),
-	}
-	if s.providerRegistry != nil {
-		providersConfig.ProviderRegistry = s.providerRegistry
-		providersConfig.Conductor = providerconductor.New(s.providerRegistry)
-	}
-	providersRoot, err := providersroot.NewService(providersConfig)
-	if err != nil {
-		return nil, fmt.Errorf("construct Providers root for agent dispatch: %w", err)
-	}
 	registry, err := runnerswire.NewAgentRegistry(runners.AgentDependencies{
-		Providers: providersRoot,
+		Providers: s.providers,
 		Publish:   publish,
 	})
 	if err != nil {
@@ -391,37 +375,12 @@ func (s *Service) resolveRegisteredAgentRunner(
 }
 
 func agentProgressPublisherOrNoop(
-	publisher workerprovider.InferenceProgressPublisher,
-) workerprovider.InferenceProgressPublisher {
+	publisher workers.ProgressPublisher,
+) workers.ProgressPublisher {
 	if publisher != nil {
 		return publisher
 	}
 	return func(_ workers.ProgressFragment) {}
-}
-
-func (s *Service) legacyProviderRunner(
-	runtimeConfig interfaces.RuntimeConfigLookup,
-	logger logging.Logger,
-	effectiveSkipPermissions bool,
-	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
-) (workers.Runner, error) {
-	if s == nil || s.providerFactory == nil {
-		return nil, fmt.Errorf("provider worker factory is required")
-	}
-	var responseExecutor workerprovider.ResponseStreamExecutor
-	if inferenceProgressPublisher != nil {
-		responseExecutor = providerstructured.NewExecutor()
-	}
-	built, err := s.providerFactory.New(
-		effectiveSkipPermissions,
-		logger,
-		inferenceProgressPublisher,
-		responseExecutor,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return built, nil
 }
 
 // runnerProviderAdapter lets the provider-boundary recorder observe the final
@@ -433,17 +392,10 @@ type runnerProviderAdapter struct {
 
 func recordProviderRunner(
 	runner workers.Runner,
-	recorder workerprovider.InferenceEventRecorder,
+	recorder workers.InferenceEventRecorder,
 	clock func() time.Time,
 ) workers.Runner {
-	if recorder == nil {
-		return runner
-	}
-	return workerexecutor.RunnerFromProvider(workerprovider.NewRecordingProvider(
-		runnerProviderAdapter{runner: runner},
-		recorder,
-		clock,
-	))
+	return runner
 }
 
 func (a runnerProviderAdapter) Infer(
@@ -451,7 +403,7 @@ func (a runnerProviderAdapter) Infer(
 	request workerexecution.ProviderInferenceRequest,
 ) (workerexecution.InferenceResponse, error) {
 	if a.runner == nil {
-		return workerexecution.InferenceResponse{}, workerprovider.NewProviderError(
+		return workerexecution.InferenceResponse{}, workers.NewProviderError(
 			workerexecution.WorkFailureTypeMisconfigured,
 			"recording runner requires an implementation",
 			nil,
@@ -518,6 +470,7 @@ func workstationResult(
 	currentWorkingDirectory func() (string, error),
 	factoryDocs workers.FactoryDocsLoader,
 	worktreePreparer workers.FactoryWorktreePreparer,
+	runWorktree string,
 	workstationFiles platformfilesystem.ReadFileInspector,
 	resolveRunner workers.RunnerSelectionResolver,
 	resolveProvider workers.ProviderIdentityResolver,
@@ -537,6 +490,7 @@ func workstationResult(
 			ExecutionPolicy: executionPolicy,
 			Renderer:        renderer, Logger: logger,
 			WorktreePreparer: worktreePreparer,
+			RunWorktree:      runWorktree,
 			FileSystem:       workstationFiles,
 		},
 	}

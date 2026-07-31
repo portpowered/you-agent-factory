@@ -7,7 +7,7 @@
 | Date | 2026-07-14 (UTC) |
 | Companion ADR | `docs/architecture/agy-pty-boundary.md` |
 | Threat review | `docs/architecture/agy-pty-threat-review.md` |
-| Packages | `pkg/services/workers/agypty` (policy and port), `pkg/platform/pty` (native adapter) |
+| Packages | `pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty` (policy and port), `pkg/platform/pty` (native adapter) |
 | Gates | Story 17+ Agy execution |
 
 This document proposes the mockable Go PTY/process seams for the minimal native
@@ -205,5 +205,7 @@ Same exclusions as `agy-pty-boundary.md`:
 | `agy-pty-boundary.md` | ADR — scope, platforms, gating |
 | `agy-pty-threat-review.md` | T1–T10 controls and Story 17 security checklist |
 | `pkg/services/workers/process/doc.go` | Supervision and cleanup escape documentation |
-| `pkg/services/workers/provider/commandenv/environment.go` | Environment merge policy |
+| `pkg/services/providers/internal/services/execution/internal/provider/commandenv/environment.go` | Environment merge policy |
 | `pkg/services/workers/worktree/paths.go` | Relative name normalization reference |
+
+

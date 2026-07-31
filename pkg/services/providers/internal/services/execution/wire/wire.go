@@ -2,25 +2,29 @@
 package wire
 
 import (
+	"context"
+
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	acp "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp"
 	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
-	acpadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/acp"
 	agyadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy"
+	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty"
 	claudeadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude"
 	codexadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex"
-	cursoradapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/cursor"
-	geminiadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/gemini"
-	kiroadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/kiro"
-	opencodeadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/opencode"
-	piadapter "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/pi"
 	executionservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/process"
 )
+
+// NewAgyPTYAllocator constructs the Providers-owned PTY implementation behind
+// the Workers root allocation port.
+func NewAgyPTYAllocator(host platformpty.Host, clock platformclock.Source) (workers.PTYAllocator, error) {
+	return agypty.NewAllocator(host, clock)
+}
 
 // NewService constructs an inert execution service over the supplied canonical
 // catalog and private adapter registrations.
@@ -31,9 +35,15 @@ func NewService(
 	return executionservice.New(catalogService, registrations...)
 }
 
-// NewACPRegistration binds one configured ACP command at the execution boundary.
-func NewACPRegistration(id providers.ID, name string, args []string, factory platformprocess.CommandFactory, locator platformprocess.ExecutableLocator) execution.Registration {
-	return acpadapter.NewRegistration(id, acpadapter.Command{Name: name, Args: append([]string(nil), args...)}, factory, locator)
+// NewACPRegistration delegates one configured ACP identity to the already
+// constructed parent-private ACP service.
+func NewACPRegistration(id providers.ID, service acp.Service) execution.Registration {
+	return execution.Registration{
+		Provider: id,
+		Attempt: func(ctx context.Context, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
+			return service.Execute(ctx, id, request)
+		},
+	}
 }
 
 // NewBuiltInService constructs an inert execution service with the native
@@ -56,15 +66,7 @@ func BuiltInRegistrations(dependencies ...executionservice.BuiltInDependencies) 
 func BuiltInDependenciesFromRunner(
 	runner platformprocess.CommandRunner,
 ) executionservice.BuiltInDependencies {
-	return BuiltInDependenciesFromWorkersRunner(workerprocess.AdaptCommandRunner(runner))
-}
-
-// CursorPlatformDependencies are platform facts required for oversized Windows
-// Cursor prompt materialization in the built-in Providers Execution adapter.
-type CursorPlatformDependencies struct {
-	OperatingSystem string
-	TemporaryDir    string
-	TemporaryFiles  platformfilesystem.TemporaryFileSystem
+	return BuiltInDependenciesFromWorkersRunner(workers.AdaptCommandRunner(runner))
 }
 
 // AgyPTYPlatformDependencies are platform facts required for the built-in Agy
@@ -78,7 +80,6 @@ type AgyPTYPlatformDependencies struct {
 // BuiltInRunnerPlatformDependencies carries optional platform facts for
 // built-in adapter effects constructed from the Workers subprocess runner.
 type BuiltInRunnerPlatformDependencies struct {
-	Cursor CursorPlatformDependencies
 	AgyPTY AgyPTYPlatformDependencies
 }
 
@@ -93,7 +94,7 @@ func BuiltInDependenciesFromWorkersRunner(
 		deps = platform[0]
 	}
 	return executionservice.BuiltInDependencies{
-		Agy: agyadapter.NewPTYEffect(agyadapter.PTYEffectOptions{
+		Antigravity: agyadapter.NewPTYEffect(agyadapter.PTYEffectOptions{
 			Allocator: deps.AgyPTY.Allocator,
 			ExecutableDependencies: agyadapter.ExecutableDependencies{
 				Locator:   deps.AgyPTY.Locator,
@@ -102,14 +103,5 @@ func BuiltInDependenciesFromWorkersRunner(
 		}),
 		Codex:  codexadapter.NewCommandEffect(runner),
 		Claude: claudeadapter.NewCommandEffect(runner),
-		Cursor: cursoradapter.NewCommandEffect(runner, cursoradapter.CommandEffectOptions{
-			OperatingSystem: deps.Cursor.OperatingSystem,
-			TemporaryDir:    deps.Cursor.TemporaryDir,
-			TemporaryFiles:  deps.Cursor.TemporaryFiles,
-		}),
-		Gemini:   geminiadapter.NewCommandEffect(runner),
-		Kiro:     kiroadapter.NewCommandEffect(runner),
-		OpenCode: opencodeadapter.NewCommandEffect(runner),
-		Pi:       piadapter.NewCommandEffect(runner),
 	}
 }

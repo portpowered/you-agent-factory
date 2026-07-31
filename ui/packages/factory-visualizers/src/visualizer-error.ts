@@ -17,19 +17,7 @@ export interface FactoryVisualizerError {
   recoverable: boolean;
 }
 
-export interface FactoryVisualizationLayoutDiagnostic {
-  issues: readonly Pick<
-    FactoryVisualizationLayoutIssue,
-    "category" | "code" | "path"
-  >[];
-  kind: "layout-validation";
-  message: string;
-  recoverable: true;
-}
-
-export type FactoryTopologyReplayError =
-  | FactoryVisualizerError
-  | FactoryVisualizationLayoutDiagnostic;
+export type FactoryTopologyReplayError = FactoryVisualizerError;
 
 const ERROR_MESSAGES: Record<FactoryVisualizerErrorKind, string> = {
   endpoint: "The prepared topology contains invalid edge endpoints.",
@@ -107,5 +95,3 @@ function readSafeCode(error: Error): string | undefined {
 function safeErrorName(name: string): string {
   return /^[A-Za-z][A-Za-z0-9]*Error$/.test(name) ? name : "Error";
 }
-
-import type { FactoryVisualizationLayoutIssue } from "@you-agent-factory/client";

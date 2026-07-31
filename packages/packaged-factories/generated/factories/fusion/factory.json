@@ -1,10 +1,14 @@
 {
+  "description": {
+    "type": "LOCALIZABLE_ASSET",
+    "value": "Produces an initial answer with one worker and refines it with a second worker."
+  },
   "examples": [
     {
       "args": {
         "firstProvider": "CLAUDE",
         "input": "Draft a release summary",
-        "output": "fusion-summary.md",
+        "resultFile": "fusion-summary.md",
         "secondProvider": "CODEX"
       },
       "description": {
@@ -33,7 +37,7 @@
       "description": "When output is supplied, callers can treat the refined answer as file-oriented markdown content.",
       "fileExtension": ".md",
       "mode": "FILE",
-      "pathParameter": "output"
+      "pathParameter": "resultFile"
     },
     "parameters": [
       {
@@ -44,24 +48,25 @@
           },
           {
             "kind": "STDIN"
+          },
+          {
+            "kind": "NAMED"
           }
         ],
         "description": "Text request to run through the two-stage fusion flow.",
+        "externalName": "to",
         "name": "input",
         "required": true
       },
       {
-        "aliases": [
-          "o"
-        ],
         "bindings": [
           {
             "kind": "NAMED"
           }
         ],
         "description": "Optional output-path hint for file-oriented callers.",
-        "externalName": "output",
-        "name": "output",
+        "externalName": "result-file",
+        "name": "resultFile",
         "typeHint": "FILE_PATH"
       },
       {
@@ -73,7 +78,10 @@
             "kind": "NAMED"
           }
         ],
-        "description": "Optional provider override for the first fusion pass.",
+        "defaultValues": [
+          ""
+        ],
+        "description": "Optional provider override for the first fusion pass; omitted values use operator defaults.",
         "externalName": "first-provider",
         "name": "firstProvider"
       },
@@ -86,7 +94,10 @@
             "kind": "NAMED"
           }
         ],
-        "description": "Optional provider override for the second fusion pass.",
+        "defaultValues": [
+          ""
+        ],
+        "description": "Optional provider override for the second fusion pass; omitted values use operator defaults.",
         "externalName": "second-provider",
         "name": "secondProvider"
       },
@@ -99,7 +110,10 @@
             "kind": "NAMED"
           }
         ],
-        "description": "Optional model override for the first fusion pass.",
+        "defaultValues": [
+          ""
+        ],
+        "description": "Optional model override for the first fusion pass; omitted values use operator defaults.",
         "externalName": "first-model",
         "name": "firstModel"
       },
@@ -112,7 +126,10 @@
             "kind": "NAMED"
           }
         ],
-        "description": "Optional model override for the second fusion pass.",
+        "defaultValues": [
+          ""
+        ],
+        "description": "Optional model override for the second fusion pass; omitted values use operator defaults.",
         "externalName": "second-model",
         "name": "secondModel"
       },
@@ -185,23 +202,25 @@
   ],
   "workers": [
     {
-      "body": "First-stage drafter for @you/fusion.\nReasoning effort: ${firstEffort}",
+      "body": "Reasoning effort: ${firstEffort}\nYou are the first-stage drafter for @you/fusion. Assume no prior context. Investigate the complete request and any relevant workspace evidence, then produce a thorough standalone draft whose assumptions, decisions, and verification can be checked by another model.",
       "model": "${firstModel}",
       "modelProvider": "${firstProvider}",
       "name": "fusion-drafter",
+      "skipPermissions": true,
       "type": "AGENT_WORKER"
     },
     {
-      "body": "Second-stage refiner for @you/fusion.\nReasoning effort: ${secondEffort}",
+      "body": "Reasoning effort: ${secondEffort}\nYou are the second-stage refiner for @you/fusion. Assume the original request and first draft are your only conversational context. Validate the draft against available evidence, repair omissions or unsupported claims, preserve useful detail, and produce a polished final response that stands alone.",
       "model": "${secondModel}",
       "modelProvider": "${secondProvider}",
       "name": "fusion-refiner",
+      "skipPermissions": true,
       "type": "AGENT_WORKER"
     }
   ],
   "workstations": [
     {
-      "body": "Create a strong first draft for the request.\n\nRequest:\n${input}",
+      "body": "Start from zero context. Read the complete request below. When it concerns a workspace, inspect contributor instructions, relevant architecture, source, tests, and current state before answering. Create a complete first draft that addresses every requirement, identifies bounded assumptions, handles important edge cases, and includes concrete verification or source evidence where applicable. This draft will be handed to a separate refiner, so do not rely on implicit context.\n\nRequest:\n${input}",
       "inputs": [
         {
           "state": "init",
@@ -225,7 +244,7 @@
       "worker": "fusion-drafter"
     },
     {
-      "body": "Refine the current draft into the final response for the same request.\n\nOriginal request:\n${input}",
+      "body": "Start from zero context beyond the original request and prior draft included in this Work. Re-read the request, inspect relevant available evidence, and independently check the draft for correctness, completeness, contradictions, unsupported claims, missing edge cases, and weak verification. Rewrite it into one final self-contained response; do not merely summarize or endorse the draft.\n\nOriginal request:\n${input}",
       "inputs": [
         {
           "state": "draft",

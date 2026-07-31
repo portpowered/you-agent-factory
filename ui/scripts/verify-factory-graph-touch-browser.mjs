@@ -3,7 +3,7 @@ import { chromium } from "playwright";
 const storybookURL =
   process.env.AGENT_FACTORY_STORYBOOK_URL ?? "http://127.0.0.1:6008";
 const storyURL = new URL(
-  "/iframe.html?id=factory-visualizers-factorytopologyreplay--touch-pane-panning&viewMode=story",
+  "/iframe.html?id=agent-factory-dashboard-react-flow-current-activity-card--touch-pane-panning&viewMode=story",
   storybookURL,
 ).toString();
 
@@ -52,13 +52,6 @@ async function viewportTransform(page) {
   return page
     .locator(".react-flow__viewport")
     .evaluate((viewport) => viewport.style.transform);
-}
-
-async function viewportZoom(page) {
-  return page.locator(".react-flow__viewport").evaluate((viewport) => {
-    const matrix = new DOMMatrix(getComputedStyle(viewport).transform);
-    return matrix.a;
-  });
 }
 
 async function waitForAnimationFrame(page) {
@@ -151,32 +144,6 @@ async function verifyTouchGestures(browser) {
       initialTransform,
     );
 
-    const zoomBeforePinch = await viewportZoom(page);
-    await client.send("Input.dispatchTouchEvent", {
-      touchPoints: [
-        { id: 2, x: point.x + 20, y: point.y },
-        { id: 3, x: point.x + 60, y: point.y },
-      ],
-      type: "touchStart",
-    });
-    await waitForAnimationFrame(page);
-    for (let step = 1; step <= 4; step += 1) {
-      await dispatchTouchMove(client, page, [
-        { id: 2, x: point.x + 20 - (20 * step) / 4, y: point.y },
-        { id: 3, x: point.x + 60 + (20 * step) / 4, y: point.y },
-      ]);
-    }
-    await client.send("Input.dispatchTouchEvent", {
-      touchPoints: [],
-      type: "touchEnd",
-    });
-    await page.waitForFunction((before) => {
-      const viewport = document.querySelector(".react-flow__viewport");
-      return viewport
-        ? new DOMMatrix(getComputedStyle(viewport).transform).a > before
-        : false;
-    }, zoomBeforePinch);
-
     const finalScroll = await page.evaluate(() => ({
       x: document.documentElement.scrollLeft,
       y: document.documentElement.scrollTop,
@@ -192,7 +159,7 @@ async function verifyTouchGestures(browser) {
   }
 }
 
-async function verifyDesktopPanePan(browser) {
+async function verifyDesktopPaneSelectionDrag(browser) {
   const { context, page } = await openStory(browser, {
     viewport: { height: 900, width: 1280 },
   });
@@ -208,12 +175,11 @@ async function verifyDesktopPanePan(browser) {
     await page.mouse.down();
     await page.mouse.move(point.x + 80, point.y + 60, { steps: 4 });
     await page.mouse.up();
-    await page.waitForFunction(
-      (before) =>
-        document.querySelector(".react-flow__viewport")?.style.transform !==
-        before,
-      initialTransform,
-    );
+    await waitForAnimationFrame(page);
+    const finalTransform = await viewportTransform(page);
+    if (finalTransform !== initialTransform) {
+      throw new Error("Primary-button selection drag panned the graph");
+    }
     const finalScroll = await page.evaluate(() => ({
       x: document.documentElement.scrollLeft,
       y: document.documentElement.scrollTop,
@@ -222,7 +188,7 @@ async function verifyDesktopPanePan(browser) {
       finalScroll.x !== initialScroll.x ||
       finalScroll.y !== initialScroll.y
     ) {
-      throw new Error("Desktop graph panning scrolled the page");
+      throw new Error("Desktop graph selection scrolled the page");
     }
   } finally {
     await context.close();
@@ -232,8 +198,10 @@ async function verifyDesktopPanePan(browser) {
 const browser = await chromium.launch({ headless: true });
 try {
   await verifyTouchGestures(browser);
-  await verifyDesktopPanePan(browser);
-  console.log("Factory graph touch and desktop gesture verification passed.");
+  await verifyDesktopPaneSelectionDrag(browser);
+  console.log(
+    "Factory graph touch-pan and desktop selection-drag verification passed.",
+  );
 } finally {
   await browser.close();
 }

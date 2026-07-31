@@ -261,7 +261,7 @@ func formatHumanFactoryEvent(event interfaces.FactoryEvent) ([]byte, bool) {
 	case interfaces.FactoryEventTypeWorkRequest:
 		message = formatHumanWorkAccepted(event)
 	case interfaces.FactoryEventTypeSessionStarted:
-		message = "Factory Session started"
+		message = "factory started"
 	case interfaces.FactoryEventTypeSessionCompleted:
 		message = formatHumanSessionCompleted(event)
 	case interfaces.FactoryEventTypeDispatchQueued:
@@ -292,27 +292,128 @@ func formatHumanFactoryEvent(event interfaces.FactoryEvent) ([]byte, bool) {
 	return []byte(fmt.Sprintf("[%d] %s", sequence, message)), true
 }
 
+func formatColorHumanFactoryEvent(event interfaces.FactoryEvent) ([]byte, bool) {
+	line, ok := formatHumanFactoryEvent(event)
+	if !ok {
+		return nil, false
+	}
+	code := humanFactoryEventColor(event)
+	if code == "" {
+		return line, true
+	}
+	return []byte("\x1b[" + code + "m" + string(line) + "\x1b[0m"), true
+}
+
+func humanFactoryEventColor(event interfaces.FactoryEvent) string {
+	switch event.Type {
+	case interfaces.FactoryEventTypeWorkRequest:
+		return "33"
+	case interfaces.FactoryEventTypeSessionStarted:
+		return "36"
+	case interfaces.FactoryEventTypeSessionCompleted:
+		return "32"
+	case interfaces.FactoryEventTypeDispatchQueued,
+		interfaces.FactoryEventTypeDispatchRequest,
+		interfaces.FactoryEventTypeDispatchResponse,
+		interfaces.FactoryEventTypeDispatchInterrupted,
+		interfaces.FactoryEventTypeInferenceRequest,
+		interfaces.FactoryEventTypeInferenceResponse:
+		return stableWorkstationColor(stringPointerValue(event.Context.DispatchID))
+	default:
+		return ""
+	}
+}
+
+func stableWorkstationColor(identity string) string {
+	palette := [...]string{"31", "32", "33", "34", "35", "36", "91", "92", "93", "94", "95", "96"}
+	var hash uint32 = 2166136261
+	for _, value := range []byte(identity) {
+		hash ^= uint32(value)
+		hash *= 16777619
+	}
+	return palette[hash%uint32(len(palette))]
+}
+
 func formatHumanWorkAccepted(event interfaces.FactoryEvent) string {
 	payload, ok := decodeFactoryEventPayload[work.WorkRequestEventPayload](event)
 	if !ok || len(payload.Works) == 0 {
 		return withHumanLifecycleSubject("work accepted", firstFactoryEventWorkID(event))
 	}
 	if len(payload.Works) > 1 {
-		return fmt.Sprintf("work accepted: %d items", len(payload.Works))
+		return formatHumanAcceptedWorkBatch(payload)
 	}
 	subject := payload.Works[0].Name
-	if strings.TrimSpace(subject) == "" {
+	if content := workContentSummary(payload.Works[0].Content); content != "" &&
+		(strings.TrimSpace(subject) == "" || subject == payload.Works[0].WorkID || strings.HasPrefix(subject, "work-")) {
+		subject = content
+	} else if strings.TrimSpace(subject) == "" {
 		subject = payload.Works[0].WorkID
 	}
 	return withHumanLifecycleSubject("work accepted", subject)
 }
 
+func formatHumanAcceptedWorkBatch(payload work.WorkRequestEventPayload) string {
+	lines := []string{fmt.Sprintf("work accepted: %d items", len(payload.Works))}
+	for _, item := range payload.Works {
+		identity := boundedHumanProgressPayload(item.WorkID)
+		if identity == "" {
+			identity = boundedHumanProgressPayload(item.Name)
+		}
+		name := boundedHumanProgressPayload(item.Name)
+		task := workContentSummary(item.Content)
+		line := "- " + identity
+		if name != "" && name != identity {
+			line += " (" + name + ")"
+		}
+		if task != "" {
+			line += ": " + task
+		}
+		lines = append(lines, boundedHumanProgressPayload(line))
+	}
+	for _, relation := range payload.Relations {
+		source := boundedHumanProgressPayload(relation.SourceWorkName)
+		if source == "" {
+			continue
+		}
+		target := boundedHumanProgressPayload(relation.TargetWorkID)
+		if target == "" {
+			target = boundedHumanProgressPayload(relation.TargetWorkName)
+		}
+		if target != "" {
+			lines = append(lines, "- "+source+" "+humanWorkRelationPhrase(relation.Type)+" "+target)
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+func humanWorkRelationPhrase(relationType work.WorkRelationType) string {
+	switch relationType {
+	case work.WorkRelationDependsOn:
+		return "depends on ->"
+	case work.WorkRelationParentChild:
+		return "parent of ->"
+	default:
+		return "relates to ->"
+	}
+}
+
+func workContentSummary(parts []work.WorkContentPart) string {
+	for _, part := range parts {
+		if part.Type.Normalized() == work.WorkContentPartTypeText {
+			if text := boundedHumanProgressPayload(part.Text); text != "" {
+				return text
+			}
+		}
+	}
+	return ""
+}
+
 func formatHumanSessionCompleted(event interfaces.FactoryEvent) string {
 	payload, ok := decodeFactoryEventPayload[interfaces.FactorySessionCompletedEventPayload](event)
 	if !ok || payload.FinalStatus == "" {
-		return "Factory Session completed"
+		return "factory completed"
 	}
-	message := "Factory Session completed: " + string(payload.FinalStatus)
+	message := "factory completed: " + string(payload.FinalStatus)
 	if payload.FailureDetail != nil {
 		message = withHumanLifecycleFailure(message, payload.FailureDetail.Message)
 	}
@@ -330,7 +431,10 @@ func formatHumanDispatchQueued(event interfaces.FactoryEvent) string {
 
 func formatHumanDispatchStarted(event interfaces.FactoryEvent) string {
 	payload, _ := decodeFactoryEventPayload[interfaces.DispatchRequestEventPayload](event)
-	return withHumanLifecycleSubject("workstation started", payload.TransitionID)
+	return withHumanLifecycleWorkIDs(
+		withHumanLifecycleSubject("workstation started", payload.TransitionID),
+		dispatchInputWorkIDs(payload),
+	)
 }
 
 func formatHumanDispatchCompleted(event interfaces.FactoryEvent) string {
@@ -339,7 +443,9 @@ func formatHumanDispatchCompleted(event interfaces.FactoryEvent) string {
 	if payload.Outcome == workerexecution.OutcomeFailed {
 		label = "workstation failed"
 	}
-	message := withHumanLifecycleSubject(label, payload.TransitionID)
+	message := withHumanLifecycleWorkIDs(
+		withHumanLifecycleSubject(label, payload.TransitionID), factoryEventWorkIDs(event),
+	)
 	if payload.Outcome != "" && payload.Outcome != workerexecution.OutcomeAccepted && payload.Outcome != workerexecution.OutcomeFailed {
 		message += " (" + string(payload.Outcome) + ")"
 	}
@@ -347,6 +453,41 @@ func formatHumanDispatchCompleted(event interfaces.FactoryEvent) string {
 		message = withHumanLifecycleFailure(message, payload.FailureDetail.Message)
 	}
 	return message
+}
+
+func dispatchInputWorkIDs(payload interfaces.DispatchRequestEventPayload) []string {
+	ids := make([]string, 0, len(payload.Inputs))
+	for _, input := range payload.Inputs {
+		ids = append(ids, input.WorkID)
+	}
+	return ids
+}
+
+func factoryEventWorkIDs(event interfaces.FactoryEvent) []string {
+	if event.Context.WorkIDs == nil {
+		return nil
+	}
+	return *event.Context.WorkIDs
+}
+
+func withHumanLifecycleWorkIDs(message string, ids []string) string {
+	seen := make(map[string]struct{}, len(ids))
+	formatted := make([]string, 0, len(ids))
+	for _, id := range ids {
+		id = boundedHumanProgressPayload(id)
+		if id == "" {
+			continue
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		formatted = append(formatted, id)
+	}
+	if len(formatted) == 0 {
+		return message
+	}
+	return message + " (" + strings.Join(formatted, ", ") + ")"
 }
 
 func formatHumanDispatchInterrupted(event interfaces.FactoryEvent) string {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -11,13 +12,13 @@ import (
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
-	runnerwire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire"
 	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
+	runnerwire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire"
 )
 
-// ScriptExecutor adapts the common Runner result onto the workstation result
-// boundary. Production construction sets runner through the private immutable
-// registry; the remaining configuration fields support package-local legacy
+// ScriptExecutor adapts the private runners.Service.Execute result onto the
+// workstation result boundary. Production construction holds the immutable
+// script registry; remaining configuration fields support package-local legacy
 // tests while that compatibility surface is retired.
 type ScriptExecutor struct {
 	Command       string
@@ -30,7 +31,7 @@ type ScriptExecutor struct {
 	FactoryDocs   workers.FactoryDocsLoader
 	Publish       workers.ProgressPublisher
 
-	runner workers.Runner
+	registry runners.Service
 }
 
 // ScriptEventRecorder receives worker-owned script-boundary facts.
@@ -79,7 +80,7 @@ func (f *ScriptFactory) New(
 	if f == nil {
 		return nil, errors.New("construct script worker: factory is required")
 	}
-	commandRunner := workerprocess.CommandRunnerWithLogging(
+	commandRunner := workers.CommandRunnerWithLogging(
 		f.commandRunner,
 		logger,
 		f.commandClock,
@@ -120,7 +121,7 @@ func newScriptExecutor(
 	if definition == nil {
 		return nil, errors.New("construct script worker: definition is required")
 	}
-	binding, err := resolveScriptRunner(
+	registry, err := resolveScriptRegistry(
 		definition,
 		commandRunner,
 		factoryDirectory,
@@ -142,11 +143,11 @@ func newScriptExecutor(
 		Now:           now,
 		FactoryDocs:   factoryDocs,
 		Publish:       publish,
-		runner:        binding.Runner,
+		registry:      registry,
 	}, nil
 }
 
-func resolveScriptRunner(
+func resolveScriptRegistry(
 	definition *workerconfig.FactoryWorkerConfig,
 	commandRunner CommandRunner,
 	factoryDirectory string,
@@ -154,7 +155,7 @@ func resolveScriptRunner(
 	record workers.ScriptEventRecorder,
 	now func() time.Time,
 	factoryDocs workers.FactoryDocsLoader,
-) (runners.Binding, error) {
+) (runners.Service, error) {
 	if publish == nil {
 		publish = func(workers.ProgressFragment) {}
 	}
@@ -176,28 +177,60 @@ func resolveScriptRunner(
 		},
 	)
 	if err != nil {
-		return runners.Binding{}, fmt.Errorf("construct script worker: %w", err)
+		return nil, fmt.Errorf("construct script worker: %w", err)
 	}
-	binding, err := registry.Resolve(runners.ResolutionRequest{
+	if _, err := registry.Resolve(runners.ResolutionRequest{
 		Identity: runners.ScriptIdentity,
-	})
-	if err != nil {
-		return runners.Binding{}, fmt.Errorf("resolve script worker: %w", err)
+	}); err != nil {
+		return nil, fmt.Errorf("resolve script worker: %w", err)
 	}
-	return binding, nil
+	return registry, nil
 }
 
-// Execute invokes only the registry-resolved common Runner and translates its
-// canonical result into the existing workstation result shape.
+// Execute invokes the private runners.Service.Execute boundary and translates
+// its canonical result into the existing workstation result shape.
 func (se *ScriptExecutor) Execute(
 	ctx context.Context,
 	request workers.WorkstationExecutionRequest,
 ) (workers.WorkResult, error) {
-	if se == nil || se.runner == nil {
-		return workers.WorkResult{}, errors.New("script executor runner is required")
+	if se == nil || se.registry == nil {
+		return workers.WorkResult{}, errors.New("script executor runner registry is required")
 	}
-	result, executionErr := se.runner.Execute(ctx, scriptRunnerRequest(request))
+	result, executionErr := se.registry.Execute(ctx, runners.ExecuteRequest{
+		Identity: runners.ScriptIdentity,
+		Attempt:  scriptRunnerRequest(request),
+	})
 	return scriptWorkResult(request.Dispatch.DispatchID, request.Dispatch.TransitionID, result, executionErr), nil
+}
+
+// ExecuteWithWorker runs a dispatch with its invocation-interpolated Script
+// Worker definition. Script command arguments are invocation data just like
+// model/provider fields and must not remain frozen at runtime construction.
+func (se *ScriptExecutor) ExecuteWithWorker(
+	ctx context.Context,
+	request workers.WorkstationExecutionRequest,
+	definition *workerconfig.FactoryWorkerConfig,
+) (workers.WorkResult, error) {
+	if se == nil {
+		return workers.WorkResult{}, errors.New("script executor is required")
+	}
+	if definition != nil && definition.Command == se.Command && slices.Equal(definition.Args, se.Args) {
+		return se.Execute(ctx, request)
+	}
+	interpolated, err := newScriptExecutor(
+		definition,
+		se.CommandRunner,
+		se.Logger,
+		se.FactoryDir,
+		se.Publish,
+		se.recorder,
+		se.Now,
+		se.FactoryDocs,
+	)
+	if err != nil {
+		return workers.WorkResult{}, err
+	}
+	return interpolated.Execute(ctx, request)
 }
 
 func scriptRunnerRequest(request workers.WorkstationExecutionRequest) workers.RunnerExecutionRequest {

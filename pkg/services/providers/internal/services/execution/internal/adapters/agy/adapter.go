@@ -47,7 +47,7 @@ type EffectResult struct {
 // NewRegistration binds one Agy effect to the canonical Agy identity.
 func NewRegistration(effect Effect) execution.Registration {
 	return execution.Registration{
-		Provider: providers.IDAgy,
+		Provider: providers.IDAntigravity,
 		Attempt:  newAttempt(effect),
 	}
 }
@@ -130,7 +130,7 @@ func unavailableAttempt(
 ) (providers.ExecuteResult, error) {
 	return providers.ExecuteResult{}, providers.ExecuteFailure{
 		Kind:    providers.ExecuteFailureKindDependency,
-		Message: "Agy native execution is unavailable",
+		Message: "Antigravity native execution is unavailable",
 	}
 }
 

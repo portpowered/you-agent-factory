@@ -24,15 +24,15 @@ import (
 )
 
 const (
-	terminalSuccessPrimaryResult         = "primary result COMPLETE"
-	inlineJavaScriptWorkflowFileName     = "results-dispatches.workflow.js"
-	dispatchCorrelationWorkflowFileName  = "results-dispatches-correlation.workflow.js"
-	partialResultWorkflowName              = "resumable-two-step-fake-children"
-	dispatchCorrelationChildLabel        = "dispatch-correlation-child"
-	dispatchCorrelationChildPrompt       = "prove-dispatch-correlation"
-	partialResultCheckpointLabel         = "after-step-one"
-	partialResultFirstDispatchID         = "dispatch-1"
-	partialResultSecondDispatchID        = "dispatch-2"
+	terminalSuccessPrimaryResult        = "primary result COMPLETE"
+	inlineJavaScriptWorkflowFileName    = "results-dispatches.workflow.js"
+	dispatchCorrelationWorkflowFileName = "results-dispatches-correlation.workflow.js"
+	partialResultWorkflowName           = "resumable-two-step-fake-children"
+	dispatchCorrelationChildLabel       = "dispatch-correlation-child"
+	dispatchCorrelationChildPrompt      = "prove-dispatch-correlation"
+	partialResultCheckpointLabel        = "after-step-one"
+	partialResultFirstDispatchID        = "dispatch-1"
+	partialResultSecondDispatchID       = "dispatch-2"
 )
 
 type partialResultBlockingProvider struct {
@@ -732,13 +732,12 @@ func assertFactorySessionResultPrimaryText(
 	if result.PrimaryResult == nil || len(*result.PrimaryResult) != 1 {
 		t.Fatalf("primaryResult = %#v, want one content part", result.PrimaryResult)
 	}
-	part, err := (*result.PrimaryResult)[0].AsWorkJsonContentPart()
+	part, err := (*result.PrimaryResult)[0].AsWorkTextContentPart()
 	if err != nil {
-		t.Fatalf("primaryResult[0] as json part: %v", err)
+		t.Fatalf("primaryResult[0] as text part: %v", err)
 	}
-	got, ok := part.Json.(string)
-	if !ok || got != wantText {
-		t.Fatalf("primaryResult json = %#v, want string %q", part.Json, wantText)
+	if part.Text != wantText {
+		t.Fatalf("primaryResult text = %q, want %q", part.Text, wantText)
 	}
 }
 

@@ -200,10 +200,9 @@ func TestGenericSessionProjectionCoversProductionCommandShapes(t *testing.T) {
 		path string
 	}{
 		{
-			name: "root boolean shorthand and string options",
+			name: "root boolean shorthand options",
 			args: []string{
-				"you", "-v", "--debug", "--default-worker-model-provider", "openai",
-				"--default-worker-model", "gpt-test", "session", "list",
+				"you", "-v", "--debug", "session", "list",
 			},
 			path: "you session list",
 		},

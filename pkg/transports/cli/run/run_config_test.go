@@ -53,7 +53,7 @@ func TestRun_RedirectedHumanResponseStreamConsumesOnlyCanonicalTypedEvents(t *te
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	want := "[1] Factory Session started\n" +
+	want := "[1] factory started\n" +
 		"[2] workflow phase synthesize: ACTIVE\n" +
 		"[3] workflow checkpoint written: draft-ready (RESUMABLE)\n\n" +
 		responseStreamPrimaryResultHeader + "\n" + answer

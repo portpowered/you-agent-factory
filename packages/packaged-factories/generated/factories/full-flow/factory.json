@@ -1,0 +1,783 @@
+{
+  "description": {
+    "type": "LOCALIZABLE_ASSET",
+    "value": "Plans parallel implementation waves in isolated worktrees, merges completed tasks, and replans until the project is complete."
+  },
+  "examples": [
+    {
+      "args": {
+        "maxCycles": "4",
+        "maxTasksPerCycle": "4",
+        "request": "Complete the requested project"
+      },
+      "description": {
+        "type": "LOCALIZABLE_ASSET",
+        "value": "Deliver a project in bounded parallel waves."
+      },
+      "name": "deliver-project"
+    }
+  ],
+  "id": "builtin-full-flow",
+  "invocationReturn": {
+    "policy": "EXPLICIT",
+    "terminalState": "complete",
+    "workTypeName": "project"
+  },
+  "invocationSignature": {
+    "parameters": [
+      {
+        "bindings": [
+          {
+            "kind": "POSITIONAL",
+            "position": 1
+          },
+          {
+            "kind": "STDIN"
+          },
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "description": "Project to deliver through iterative implementation waves.",
+        "externalName": "to",
+        "name": "request",
+        "required": true
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "defaultValue": "main",
+        "description": "Base branch for task worktrees.",
+        "externalName": "base-branch",
+        "name": "baseBranch"
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "choices": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8"
+        ],
+        "defaultValue": "4",
+        "description": "Maximum planning cycles from 1 through 8.",
+        "externalName": "max-cycles",
+        "name": "maxCycles",
+        "typeHint": "NUMBER_STRING"
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "choices": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8"
+        ],
+        "defaultValue": "4",
+        "description": "Maximum tasks in one wave from 1 through 8.",
+        "externalName": "max-tasks-per-cycle",
+        "name": "maxTasksPerCycle",
+        "typeHint": "NUMBER_STRING"
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "defaultValues": [
+          ""
+        ],
+        "description": "Model provider for planning; omitted values use operator defaults.",
+        "externalName": "planner-provider",
+        "name": "plannerProvider"
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "defaultValues": [
+          ""
+        ],
+        "description": "Model for planning; omitted values use operator defaults.",
+        "externalName": "planner-model",
+        "name": "plannerModel"
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "defaultValues": [
+          ""
+        ],
+        "description": "Model provider for implementation and merge; omitted values use operator defaults.",
+        "externalName": "executor-provider",
+        "name": "executorProvider"
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "defaultValues": [
+          ""
+        ],
+        "description": "Model for implementation and merge; omitted values use operator defaults.",
+        "externalName": "executor-model",
+        "name": "executorModel"
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "defaultValues": [
+          ""
+        ],
+        "description": "Model provider for task review; omitted values use operator defaults.",
+        "externalName": "reviewer-provider",
+        "name": "reviewerProvider"
+      },
+      {
+        "bindings": [
+          {
+            "kind": "NAMED"
+          }
+        ],
+        "defaultValues": [
+          ""
+        ],
+        "description": "Model for task review; omitted values use operator defaults.",
+        "externalName": "reviewer-model",
+        "name": "reviewerModel"
+      }
+    ]
+  },
+  "name": "full-flow",
+  "resources": [
+    {
+      "capacity": 8,
+      "name": "full-flow-task-slots"
+    },
+    {
+      "capacity": 1,
+      "name": "full-flow-planner-slot"
+    },
+    {
+      "capacity": 1,
+      "name": "full-flow-merge-slot"
+    }
+  ],
+  "supportingFiles": {
+    "bundledFiles": [
+      {
+        "content": {
+          "encoding": "utf-8",
+          "inline": "#!/usr/bin/env python3\n\"\"\"Emit the planner's authored full-flow cycle route without model ambiguity.\"\"\"\n\nfrom __future__ import annotations\n\nimport sys\n\n\nVALID_DECISIONS = {\"continue\", \"complete\"}\n\n\ndef decide_cycle(payload: str) -\u003e str:\n    decision = payload.strip().lower()\n    if decision not in VALID_DECISIONS:\n        raise ValueError(\"cycle-control payload must be exactly 'continue' or 'complete'\")\n    return decision\n\n\ndef main(argv: list[str]) -\u003e int:\n    if len(argv) != 2:\n        print(\"usage: decide-cycle.py \u003ccontinue|complete\u003e\", file=sys.stderr)\n        return 2\n    try:\n        decision = decide_cycle(argv[1])\n    except ValueError as error:\n        print(error, file=sys.stderr)\n        return 2\n    print(decision)\n    return 0\n\n\nif __name__ == \"__main__\":\n    raise SystemExit(main(sys.argv))\n"
+        },
+        "id": "factory/scripts/decide-cycle.py",
+        "targetPath": "factory/scripts/decide-cycle.py",
+        "type": "SCRIPT"
+      },
+      {
+        "content": {
+          "encoding": "utf-8",
+          "inline": "#!/usr/bin/env python3\n\"\"\"Create or reuse one safe task worktree for @you/full-flow.\"\"\"\nimport json\nimport re\nimport subprocess\nimport sys\nimport time\nfrom pathlib import Path\n\nSAFE_TASK = re.compile(r\"^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$\")\nSAFE_BRANCH = re.compile(r\"^[A-Za-z0-9][A-Za-z0-9._/-]{0,79}$\")\n\ndef run(root, *args):\n    result = subprocess.run([\"git\", *args], cwd=root, text=True, capture_output=True)\n    if result.returncode:\n        raise RuntimeError(result.stderr.strip() or result.stdout.strip())\n    return result.stdout.strip()\n\ndef persist_longpaths(root):\n    last_error = \"\"\n    for _ in range(20):\n        result = subprocess.run(\n            [\"git\", \"config\", \"core.longpaths\", \"true\"],\n            cwd=root,\n            text=True,\n            capture_output=True,\n        )\n        if result.returncode == 0:\n            return\n        last_error = result.stderr.strip() or result.stdout.strip()\n        # Parallel task setup processes can briefly contend on .git/config.lock.\n        # Give the lock owner a bounded opportunity to finish before retrying.\n        time.sleep(0.05)\n    raise RuntimeError(last_error or \"could not persist core.longpaths\")\n\ndef main():\n    if len(sys.argv) != 3 or not SAFE_TASK.fullmatch(sys.argv[1]) or not SAFE_BRANCH.fullmatch(sys.argv[2]) or \"..\" in sys.argv[1] or \"..\" in sys.argv[2]:\n        raise RuntimeError(\"safe task and base branch names are required\")\n    task, base = sys.argv[1], sys.argv[2]\n    root = Path(run(None, \"rev-parse\", \"--show-toplevel\"))\n    run(root, \"rev-parse\", \"--verify\", base)\n    target = root / \".claude\" / \"worktrees\" / task\n    if not (target / \".git\").exists():\n        target.parent.mkdir(parents=True, exist_ok=True)\n        exists = subprocess.run([\"git\", \"show-ref\", \"--verify\", \"--quiet\", f\"refs/heads/{task}\"], cwd=root).returncode == 0\n        args = [\"worktree\", \"add\", str(target), task] if exists else [\"worktree\", \"add\", \"-b\", task, str(target), base]\n        # Packaged invocations may run with an isolated HOME and therefore\n        # cannot rely on a customer's global Git-for-Windows configuration.\n        run(root, \"-c\", \"core.longpaths=true\", *args)\n    persist_longpaths(root)\n    print(json.dumps({\"status\":\"ready\",\"task\":task,\"base\":base,\"worktree\":str(target)}))\n\nif __name__ == \"__main__\":\n    try:\n        main()\n    except Exception as error:\n        print(f\"task worktree setup failed: {error}\", file=sys.stderr)\n        raise SystemExit(1)\n"
+        },
+        "id": "factory/scripts/setup-task-worktree.py",
+        "targetPath": "factory/scripts/setup-task-worktree.py",
+        "type": "SCRIPT"
+      }
+    ]
+  },
+  "workTypes": [
+    {
+      "handlingBehavior": [
+        "DEFAULT"
+      ],
+      "name": "project",
+      "states": [
+        {
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "name": "waiting",
+          "type": "PROCESSING"
+        },
+        {
+          "name": "complete",
+          "type": "TERMINAL"
+        },
+        {
+          "name": "failed",
+          "type": "FAILED"
+        }
+      ]
+    },
+    {
+      "name": "delivery-task",
+      "states": [
+        {
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "name": "ready",
+          "type": "PROCESSING"
+        },
+        {
+          "name": "in-review",
+          "type": "PROCESSING"
+        },
+        {
+          "name": "ci",
+          "type": "PROCESSING"
+        },
+        {
+          "name": "merge",
+          "type": "PROCESSING"
+        },
+        {
+          "name": "merged",
+          "type": "TERMINAL"
+        },
+        {
+          "name": "failed",
+          "type": "FAILED"
+        }
+      ]
+    },
+    {
+      "name": "cycle-control",
+      "states": [
+        {
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "name": "continue",
+          "type": "PROCESSING"
+        },
+        {
+          "name": "complete",
+          "type": "TERMINAL"
+        },
+        {
+          "name": "failed",
+          "type": "FAILED"
+        }
+      ]
+    }
+  ],
+  "workers": [
+    {
+      "body": "You are the planning stage for one bounded delivery cycle. Assume zero prior\nconversation. Inspect the complete request, repository contributor instructions,\narchitecture, relevant source and tests, current branch and working-tree state,\nand already merged results before deciding what remains. Preserve unrelated user\nchanges and never infer completion from prior prose alone.\n\nBefore planning, run `you docs agents` and read it. Also run\n`you docs batch-inputs` and `you docs relationships` when available. The runtime\ndoes not infer a batch from prose: your entire response must be one raw JSON\nobject with an outer `request` wrapper, with no Markdown fence or surrounding\nexplanation.\n\nNever run bare `you`: it starts a Factory runtime and writes session state.\nInvoke only those exact read-only `you docs \u003ctopic\u003e` commands. If a docs command\nis unavailable or fails, continue from the explicit contract below. Do not\nrebuild or reconstruct the CLI with `go run`, a package manager, or another\ntool; do not start a runtime, retry with bare `you`, or create\n`.you-agent-factory` state.\n\nProject request:\n${request}\n\nCycle limits are maxCycles=${maxCycles} and\nmaxTasksPerCycle=${maxTasksPerCycle}. The project and cycle-control Work name is\nexactly `{{ (index .Inputs 0).Name }}`.\n\nIf work remains, return raw JSON matching this exact shape:\n\n{\"request\":{\"type\":\"FACTORY_REQUEST_BATCH\",\"works\":[{\"name\":\"task-a\",\"workTypeName\":\"delivery-task\",\"state\":\"init\",\"payload\":\"Standalone implementation task with observed repository context, objective, boundaries, relevant files, dependency assumptions, acceptance criteria, tests, and merge risks.\"},{\"name\":\"{{ (index .Inputs 0).Name }}\",\"workTypeName\":\"cycle-control\",\"state\":\"init\",\"payload\":\"continue\"}],\"relations\":[{\"type\":\"DEPENDS_ON\",\"sourceWorkName\":\"{{ (index .Inputs 0).Name }}\",\"targetWorkName\":\"task-a\",\"requiredState\":\"merged\"}]}}\n\nGenerate between one and the configured maximum `delivery-task` items plus\nexactly one `cycle-control` item. Its name must exactly match\n`{{ (index .Inputs 0).Name }}` and its payload must be `continue`. Every\ndelivery task must use state `init`, be a standalone specification for an agent\nwith no shared context, and have a unique Git branch name matching\n`^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$` (in particular, no slash). Add a\nDEPENDS_ON relation whose source is cycle-control and target is each delivery\ntask, with requiredState `merged`. A DEPENDS_ON source is blocked by its target.\nAdd delivery-task dependencies only when execution truly must be ordered, and\nuse requiredState `merged` for them.\n\nWhen direct inspection proves the entire project request and its verification\nare complete, return exactly this shape instead:\n\n{\"request\":{\"type\":\"FACTORY_REQUEST_BATCH\",\"works\":[{\"name\":\"{{ (index .Inputs 0).Name }}\",\"workTypeName\":\"cycle-control\",\"state\":\"init\",\"payload\":\"complete\"}],\"relations\":[]}}\n\nDo not emit requestId, additional top-level fields, other work types or states,\ncycles, self-dependencies, unknown names, PARENT_CHILD, SPAWNED_BY, comments,\nMarkdown, or prose outside the JSON object. Do not declare completion while\nrequired work or failing checks remain.\n",
+      "model": "${plannerModel}",
+      "modelProvider": "${plannerProvider}",
+      "name": "full-flow-planner",
+      "skipPermissions": true,
+      "type": "AGENT_WORKER"
+    },
+    {
+      "args": [
+        "factory/scripts/setup-task-worktree.py",
+        "{{ (index .Inputs 0).Name }}",
+        "${baseBranch}"
+      ],
+      "command": "python3",
+      "name": "task-worktree-setup",
+      "type": "SCRIPT_WORKER"
+    },
+    {
+      "body": "You are the implementation agent for one assigned delivery task in an isolated\nworktree. Assume zero conversational context and read the complete Work payload,\ndependency outputs, repository contributor instructions, architecture, relevant\nsource and tests, and current worktree status before editing.\n\nImplement only the assigned task while preserving unrelated and already merged\nchanges. Validate the planner's assumptions against current code. Exercise the\ntask's behavioral acceptance criteria and important failure cases, run\nproportional tests, inspect the diff, and commit a coherent reviewable change.\nReturn a self-contained summary with files changed, decisions, commands and\noutcomes, and any limitation needed by review or merge.\n\nEnd with `\u003cCOMPLETE\u003e` only when the task is implemented, verified, and committed.\nUse `\u003cCONTINUE\u003e` only when another pass can make concrete progress; explain the\nremaining work before the marker.\n",
+      "model": "${executorModel}",
+      "modelProvider": "${executorProvider}",
+      "name": "full-flow-executor",
+      "skipPermissions": true,
+      "stopToken": "\u003cCOMPLETE\u003e",
+      "type": "AGENT_WORKER"
+    },
+    {
+      "body": "You are an independent reviewer with no shared conversation. Read the full task,\nrepository instructions, actual worktree diff and commits, relevant source and\ntests, and the executor's verification evidence. Review correctness before\nstyle, including task scope, behavioral and failure cases, architecture fit,\ncompatibility, security implications, and preservation of unrelated work.\n\nAccept only a task that is ready for CI and eventual merge. When rejecting,\nidentify each concrete defect, the required correction, and why it matters so a\nfresh executor can repair it without guessing. Do not approve based only on the\nexecutor's claims or reject for subjective preferences.\n",
+      "model": "${reviewerModel}",
+      "modelProvider": "${reviewerProvider}",
+      "name": "full-flow-reviewer",
+      "skipPermissions": true,
+      "type": "AGENT_WORKER"
+    },
+    {
+      "body": "You are the verification stage for an independently reviewed task and have no\nhidden context. Read the task, repository instructions, worktree diff, review\nresult, and existing test conventions. Run the exact focused checks that prove\nthe changed behavior, then the proportional repository, lint, generation,\ncontract, or documentation checks required by the affected boundaries.\n\nDiagnose and repair task-owned failures without hiding output or changing\nunrelated behavior. If required remote CI exists, inspect it until terminal.\nReport commands, outcomes, and any known baseline failure. Return `\u003cCOMPLETE\u003e`\nonly when every required task-owned check passes. Return `\u003cCONTINUE\u003e` with a\nspecific repair plan while actionable verification work remains.\n",
+      "model": "${executorModel}",
+      "modelProvider": "${executorProvider}",
+      "name": "full-flow-ci",
+      "skipPermissions": true,
+      "type": "AGENT_WORKER"
+    },
+    {
+      "body": "You are the merge stage for one verified task. Assume zero shared context. Read\nthe task specification, repository instructions, worktree commits and diff,\nreview and CI evidence, current base branch, and changes merged by other tasks.\n\nUpdate against the evolving base, resolve conflicts semantically without\ndiscarding either valid task work or unrelated changes, and rerun every check\naffected by conflict resolution. Merge using the repository's established local\nworkflow and verify that the task commit is observable on the base branch with a\nclean relevant status. Report the resulting commit and verification evidence.\n\nReturn `\u003cCOMPLETE\u003e` only after the merge is actually observable on the base.\nUse `\u003cCONTINUE\u003e` while a repair, conflict, check, or merge action remains.\n",
+      "model": "${executorModel}",
+      "modelProvider": "${executorProvider}",
+      "name": "full-flow-merger",
+      "skipPermissions": true,
+      "type": "AGENT_WORKER"
+    },
+    {
+      "args": [
+        "factory/scripts/decide-cycle.py",
+        "{{ (index .Inputs 0).Payload }}"
+      ],
+      "command": "python3",
+      "name": "cycle-decider",
+      "type": "SCRIPT_WORKER"
+    }
+  ],
+  "workstations": [
+    {
+      "body": "You are the planning stage for one bounded delivery cycle. Assume zero prior\nconversation. Inspect the complete request, repository contributor instructions,\narchitecture, relevant source and tests, current branch and working-tree state,\nand already merged results before deciding what remains. Preserve unrelated user\nchanges and never infer completion from prior prose alone.\n\nBefore planning, run `you docs agents` and read it. Also run\n`you docs batch-inputs` and `you docs relationships` when available. The runtime\ndoes not infer a batch from prose: your entire response must be one raw JSON\nobject with an outer `request` wrapper, with no Markdown fence or surrounding\nexplanation.\n\nNever run bare `you`: it starts a Factory runtime and writes session state.\nInvoke only those exact read-only `you docs \u003ctopic\u003e` commands. If a docs command\nis unavailable or fails, continue from the explicit contract below. Do not\nrebuild or reconstruct the CLI with `go run`, a package manager, or another\ntool; do not start a runtime, retry with bare `you`, or create\n`.you-agent-factory` state.\n\nProject request:\n${request}\n\nCycle limits are maxCycles=${maxCycles} and\nmaxTasksPerCycle=${maxTasksPerCycle}. The project and cycle-control Work name is\nexactly `{{ (index .Inputs 0).Name }}`.\n\nIf work remains, return raw JSON matching this exact shape:\n\n{\"request\":{\"type\":\"FACTORY_REQUEST_BATCH\",\"works\":[{\"name\":\"task-a\",\"workTypeName\":\"delivery-task\",\"state\":\"init\",\"payload\":\"Standalone implementation task with observed repository context, objective, boundaries, relevant files, dependency assumptions, acceptance criteria, tests, and merge risks.\"},{\"name\":\"{{ (index .Inputs 0).Name }}\",\"workTypeName\":\"cycle-control\",\"state\":\"init\",\"payload\":\"continue\"}],\"relations\":[{\"type\":\"DEPENDS_ON\",\"sourceWorkName\":\"{{ (index .Inputs 0).Name }}\",\"targetWorkName\":\"task-a\",\"requiredState\":\"merged\"}]}}\n\nGenerate between one and the configured maximum `delivery-task` items plus\nexactly one `cycle-control` item. Its name must exactly match\n`{{ (index .Inputs 0).Name }}` and its payload must be `continue`. Every\ndelivery task must use state `init`, be a standalone specification for an agent\nwith no shared context, and have a unique Git branch name matching\n`^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$` (in particular, no slash). Add a\nDEPENDS_ON relation whose source is cycle-control and target is each delivery\ntask, with requiredState `merged`. A DEPENDS_ON source is blocked by its target.\nAdd delivery-task dependencies only when execution truly must be ordered, and\nuse requiredState `merged` for them.\n\nWhen direct inspection proves the entire project request and its verification\nare complete, return exactly this shape instead:\n\n{\"request\":{\"type\":\"FACTORY_REQUEST_BATCH\",\"works\":[{\"name\":\"{{ (index .Inputs 0).Name }}\",\"workTypeName\":\"cycle-control\",\"state\":\"init\",\"payload\":\"complete\"}],\"relations\":[]}}\n\nDo not emit requestId, additional top-level fields, other work types or states,\ncycles, self-dependencies, unknown names, PARENT_CHILD, SPAWNED_BY, comments,\nMarkdown, or prose outside the JSON object. Do not declare completion while\nrequired work or failing checks remain.\n",
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "project"
+        }
+      ],
+      "limits": {
+        "maxGeneratedWorkItems": 9,
+        "maxGeneratedWorkItemsArgument": "maxTasksPerCycle",
+        "maxGeneratedWorkItemsArgumentOffset": 1
+      },
+      "name": "assess-project",
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "project"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "waiting",
+          "workType": "project"
+        }
+      ],
+      "promptFile": "prompts/planner.md",
+      "resources": [
+        {
+          "capacity": 1,
+          "name": "full-flow-planner-slot"
+        }
+      ],
+      "type": "AGENT_RUN",
+      "workPropagation": {
+        "mode": "PRESERVE_INPUT"
+      },
+      "worker": "full-flow-planner"
+    },
+    {
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "delivery-task"
+        }
+      ],
+      "name": "setup-task-worktree",
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "delivery-task"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "ready",
+          "workType": "delivery-task"
+        }
+      ],
+      "resources": [
+        {
+          "capacity": 1,
+          "name": "full-flow-task-slots"
+        }
+      ],
+      "type": "SCRIPT_RUN",
+      "worker": "task-worktree-setup"
+    },
+    {
+      "behavior": "REPEATER",
+      "body": "You are the implementation agent for one assigned delivery task in an isolated\nworktree. Assume zero conversational context and read the complete Work payload,\ndependency outputs, repository contributor instructions, architecture, relevant\nsource and tests, and current worktree status before editing.\n\nImplement only the assigned task while preserving unrelated and already merged\nchanges. Validate the planner's assumptions against current code. Exercise the\ntask's behavioral acceptance criteria and important failure cases, run\nproportional tests, inspect the diff, and commit a coherent reviewable change.\nReturn a self-contained summary with files changed, decisions, commands and\noutcomes, and any limitation needed by review or merge.\n\nEnd with `\u003cCOMPLETE\u003e` only when the task is implemented, verified, and committed.\nUse `\u003cCONTINUE\u003e` only when another pass can make concrete progress; explain the\nremaining work before the marker.\n",
+      "inputs": [
+        {
+          "state": "ready",
+          "workType": "delivery-task"
+        }
+      ],
+      "name": "implement-task",
+      "onContinue": [
+        {
+          "state": "ready",
+          "workType": "delivery-task"
+        }
+      ],
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "delivery-task"
+        }
+      ],
+      "onRejection": [
+        {
+          "state": "ready",
+          "workType": "delivery-task"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "in-review",
+          "workType": "delivery-task"
+        }
+      ],
+      "promptFile": "prompts/executor.md",
+      "resources": [
+        {
+          "capacity": 1,
+          "name": "full-flow-task-slots"
+        }
+      ],
+      "type": "AGENT_RUN",
+      "worker": "full-flow-executor",
+      "workingDirectory": ".claude/worktrees/{{ (index .Inputs 0).Name }}"
+    },
+    {
+      "body": "You are an independent reviewer with no shared conversation. Read the full task,\nrepository instructions, actual worktree diff and commits, relevant source and\ntests, and the executor's verification evidence. Review correctness before\nstyle, including task scope, behavioral and failure cases, architecture fit,\ncompatibility, security implications, and preservation of unrelated work.\n\nAccept only a task that is ready for CI and eventual merge. When rejecting,\nidentify each concrete defect, the required correction, and why it matters so a\nfresh executor can repair it without guessing. Do not approve based only on the\nexecutor's claims or reject for subjective preferences.\n",
+      "inputs": [
+        {
+          "state": "in-review",
+          "workType": "delivery-task"
+        }
+      ],
+      "name": "review-task",
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "delivery-task"
+        }
+      ],
+      "onRejection": [
+        {
+          "state": "ready",
+          "workType": "delivery-task"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "ci",
+          "workType": "delivery-task"
+        }
+      ],
+      "promptFile": "prompts/reviewer.md",
+      "type": "AGENT_RUN",
+      "worker": "full-flow-reviewer",
+      "workingDirectory": ".claude/worktrees/{{ (index .Inputs 0).Name }}"
+    },
+    {
+      "behavior": "REPEATER",
+      "body": "You are the verification stage for an independently reviewed task and have no\nhidden context. Read the task, repository instructions, worktree diff, review\nresult, and existing test conventions. Run the exact focused checks that prove\nthe changed behavior, then the proportional repository, lint, generation,\ncontract, or documentation checks required by the affected boundaries.\n\nDiagnose and repair task-owned failures without hiding output or changing\nunrelated behavior. If required remote CI exists, inspect it until terminal.\nReport commands, outcomes, and any known baseline failure. Return `\u003cCOMPLETE\u003e`\nonly when every required task-owned check passes. Return `\u003cCONTINUE\u003e` with a\nspecific repair plan while actionable verification work remains.\n",
+      "inputs": [
+        {
+          "state": "ci",
+          "workType": "delivery-task"
+        }
+      ],
+      "name": "verify-task-ci",
+      "onContinue": [
+        {
+          "state": "ci",
+          "workType": "delivery-task"
+        }
+      ],
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "delivery-task"
+        }
+      ],
+      "onRejection": [
+        {
+          "state": "ready",
+          "workType": "delivery-task"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "merge",
+          "workType": "delivery-task"
+        }
+      ],
+      "promptFile": "prompts/ci.md",
+      "type": "AGENT_RUN",
+      "worker": "full-flow-ci",
+      "workingDirectory": ".claude/worktrees/{{ (index .Inputs 0).Name }}"
+    },
+    {
+      "behavior": "REPEATER",
+      "body": "You are the merge stage for one verified task. Assume zero shared context. Read\nthe task specification, repository instructions, worktree commits and diff,\nreview and CI evidence, current base branch, and changes merged by other tasks.\n\nUpdate against the evolving base, resolve conflicts semantically without\ndiscarding either valid task work or unrelated changes, and rerun every check\naffected by conflict resolution. Merge using the repository's established local\nworkflow and verify that the task commit is observable on the base branch with a\nclean relevant status. Report the resulting commit and verification evidence.\n\nReturn `\u003cCOMPLETE\u003e` only after the merge is actually observable on the base.\nUse `\u003cCONTINUE\u003e` while a repair, conflict, check, or merge action remains.\n",
+      "inputs": [
+        {
+          "state": "merge",
+          "workType": "delivery-task"
+        }
+      ],
+      "name": "merge-task",
+      "onContinue": [
+        {
+          "state": "merge",
+          "workType": "delivery-task"
+        }
+      ],
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "delivery-task"
+        }
+      ],
+      "onRejection": [
+        {
+          "state": "ready",
+          "workType": "delivery-task"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "merged",
+          "workType": "delivery-task"
+        }
+      ],
+      "promptFile": "prompts/merger.md",
+      "resources": [
+        {
+          "capacity": 1,
+          "name": "full-flow-merge-slot"
+        }
+      ],
+      "type": "AGENT_RUN",
+      "worker": "full-flow-merger",
+      "workingDirectory": ".claude/worktrees/{{ (index .Inputs 0).Name }}"
+    },
+    {
+      "classificationRoutes": [
+        {
+          "label": "continue",
+          "outputs": [
+            {
+              "state": "continue",
+              "workType": "cycle-control"
+            }
+          ]
+        },
+        {
+          "label": "complete",
+          "outputs": [
+            {
+              "state": "complete",
+              "workType": "cycle-control"
+            }
+          ]
+        }
+      ],
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "cycle-control"
+        }
+      ],
+      "name": "decide-next-cycle",
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "cycle-control"
+        }
+      ],
+      "type": "CLASSIFIER_WORKSTATION",
+      "worker": "cycle-decider"
+    },
+    {
+      "inputs": [
+        {
+          "guards": [
+            {
+              "matchInput": "cycle-control",
+              "type": "SAME_NAME"
+            }
+          ],
+          "state": "waiting",
+          "workType": "project"
+        },
+        {
+          "state": "continue",
+          "workType": "cycle-control"
+        }
+      ],
+      "name": "continue-project",
+      "outputs": [
+        {
+          "state": "init",
+          "workType": "project"
+        }
+      ],
+      "type": "LOGICAL_MOVE",
+      "worker": ""
+    },
+    {
+      "inputs": [
+        {
+          "guards": [
+            {
+              "matchInput": "cycle-control",
+              "type": "SAME_NAME"
+            }
+          ],
+          "state": "waiting",
+          "workType": "project"
+        },
+        {
+          "state": "complete",
+          "workType": "cycle-control"
+        }
+      ],
+      "name": "complete-project",
+      "outputs": [
+        {
+          "state": "complete",
+          "workType": "project"
+        }
+      ],
+      "type": "LOGICAL_MOVE",
+      "worker": ""
+    },
+    {
+      "inputs": [
+        {
+          "state": "waiting",
+          "workType": "project"
+        },
+        {
+          "guards": [
+            {
+              "parentInput": "project",
+              "spawnedBy": "assess-project",
+              "type": "ANY_CHILD_FAILED"
+            }
+          ],
+          "state": "failed",
+          "workType": "delivery-task"
+        }
+      ],
+      "name": "fail-project-from-task",
+      "outputs": [
+        {
+          "state": "failed",
+          "workType": "project"
+        }
+      ],
+      "type": "LOGICAL_MOVE",
+      "worker": ""
+    },
+    {
+      "guards": [
+        {
+          "maxVisits": 20,
+          "type": "VISIT_COUNT",
+          "workstation": "implement-task"
+        }
+      ],
+      "inputs": [
+        {
+          "state": "ready",
+          "workType": "delivery-task"
+        }
+      ],
+      "name": "executor-loop-breaker",
+      "outputs": [
+        {
+          "state": "failed",
+          "workType": "delivery-task"
+        }
+      ],
+      "type": "LOGICAL_MOVE",
+      "worker": ""
+    },
+    {
+      "guards": [
+        {
+          "maxVisits": 8,
+          "type": "VISIT_COUNT",
+          "workstation": "review-task"
+        }
+      ],
+      "inputs": [
+        {
+          "state": "in-review",
+          "workType": "delivery-task"
+        }
+      ],
+      "name": "review-loop-breaker",
+      "outputs": [
+        {
+          "state": "failed",
+          "workType": "delivery-task"
+        }
+      ],
+      "type": "LOGICAL_MOVE",
+      "worker": ""
+    },
+    {
+      "guards": [
+        {
+          "maxVisits": 8,
+          "maxVisitsArgument": "maxCycles",
+          "type": "VISIT_COUNT",
+          "workstation": "assess-project"
+        }
+      ],
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "project"
+        }
+      ],
+      "name": "cycle-loop-breaker",
+      "outputs": [
+        {
+          "state": "failed",
+          "workType": "project"
+        }
+      ],
+      "type": "LOGICAL_MOVE",
+      "worker": ""
+    }
+  ]
+}

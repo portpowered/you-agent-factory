@@ -13,11 +13,6 @@ import (
 func TestResolveOperatorDefaultsDelegatesExactObservedLayers(t *testing.T) {
 	t.Parallel()
 	root := &cobra.Command{Use: "you"}
-	root.PersistentFlags().String("default-worker-model-provider", "", "")
-	root.PersistentFlags().String("default-worker-model", "", "")
-	if err := root.PersistentFlags().Set("default-worker-model-provider", "codex"); err != nil {
-		t.Fatal(err)
-	}
 	command := &cobra.Command{Use: "run"}
 	root.AddCommand(command)
 
@@ -44,7 +39,7 @@ func TestResolveOperatorDefaultsDelegatesExactObservedLayers(t *testing.T) {
 			return want, nil
 		},
 	}
-	got, err := resolveOperatorDefaults(command, &cliOperatorDefaultsOptions{defaultWorkerModelProvider: "codex"}, factory, "/home/customer")
+	got, err := resolveOperatorDefaults(command, &cliOperatorDefaultsOptions{providerOverride: "codex"}, factory, "/home/customer")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +81,7 @@ func TestRootGlobalResolutionIsAvailableToAttachedCommandFamilies(t *testing.T) 
 	}
 }
 
-func TestRunCompatibilityParsingRefreshesResolvedGlobals(t *testing.T) {
+func TestRunParsingResolvesRunScopedProvider(t *testing.T) {
 	factory := withTestInjectedPlatformRoles(CommandFactory{
 		ModelsCLI: rootModelsCLI,
 	})
@@ -99,28 +94,10 @@ func TestRunCompatibilityParsingRefreshesResolvedGlobals(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Find(run) error = %v", err)
 	}
-	var received resolvedinput.Inputs
-	run.RunE = func(cmd *cobra.Command, args []string) error {
-		if _, parseErr := parseRunCommandArgs(cmd, args); parseErr != nil {
-			return parseErr
-		}
-		if refreshErr := climanifestcobra.RefreshResolvedPersistentInputs(cmd); refreshErr != nil {
-			return refreshErr
-		}
-		var resolveErr error
-		received, resolveErr = climanifestcobra.ResolvedPersistentInputs(cmd)
-		return resolveErr
+	if run.Flags().Lookup("provider") == nil {
+		t.Fatal("run is missing --provider")
 	}
-	root.SetArgs([]string{"run", "--default-worker-model-provider", "codex"})
-	if err := root.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	value, err := received.String("you.flag.default-worker-model-provider")
-	if err != nil || value != "codex" {
-		t.Fatalf("resolved provider = (%q, %v), want codex", value, err)
-	}
-	state, ok := received.State("you.flag.default-worker-model-provider")
-	if !ok || state.Provenance != resolvedinput.SourceCLIFlag || !state.Changed {
-		t.Fatalf("resolved provider state = (%#v, %t), want changed CLI provenance", state, ok)
+	if root.PersistentFlags().Lookup("default-worker-model-provider") != nil {
+		t.Fatal("root still exposes --default-worker-model-provider")
 	}
 }

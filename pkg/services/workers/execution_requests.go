@@ -53,13 +53,14 @@ type RunnerMetadata struct {
 }
 
 const (
-	RunnerIDCodex     = "codex"
-	RunnerIDGemini    = "gemini"
-	RunnerIDKiro      = "kiro"
-	RunnerIDCursorCLI = "cursor-cli"
-	RunnerIDOpenCode  = "opencode"
-	RunnerIDPi        = "pi"
-	RunnerIDAgy       = "agy"
+	RunnerIDCodex       = "codex"
+	RunnerIDClaude      = "claude"
+	RunnerIDAntigravity = "antigravity"
+	// Retired runner IDs remain available for persisted-data decoding only.
+	RunnerIDGemini   = "gemini"
+	RunnerIDKiro     = "kiro"
+	RunnerIDOpenCode = "opencode"
+	RunnerIDPi       = "pi"
 )
 
 type RunnerSelectionSource string
@@ -117,6 +118,7 @@ type WorkstationExecutionRequest struct {
 	ModelBindings            []ResolvedModelOperationBinding `json:"model_bindings,omitempty"`
 	Model                    string                          `json:"model,omitempty"`
 	ModelProvider            string                          `json:"model_provider,omitempty"`
+	ReasoningEffort          string                          `json:"reasoning_effort,omitempty"`
 	SystemPrompt             string                          `json:"system_prompt,omitempty"`
 	UserMessage              string                          `json:"user_message,omitempty"`
 	OutputSchema             string                          `json:"output_schema,omitempty"`
@@ -148,9 +150,9 @@ type ProviderInferenceRequest struct {
 	WorkingDirectory             string                          `json:"working_directory,omitempty"`
 	Model                        string                          `json:"model,omitempty"`
 	ModelProvider                string                          `json:"model_provider,omitempty"`
+	ReasoningEffort              string                          `json:"reasoning_effort,omitempty"`
 	ModelLocality                string                          `json:"model_locality,omitempty"`
 	SessionID                    string                          `json:"session_id,omitempty"`
-	OpenCodeAgent                string                          `json:"open_code_agent,omitempty"`
 	// SkipPermissions is the invocation-effective worker policy. Construction
 	// resolves persisted configuration and invocation overrides before the
 	// request reaches either the native runner or neutral conductor.

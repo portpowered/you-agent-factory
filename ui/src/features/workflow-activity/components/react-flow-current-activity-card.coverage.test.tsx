@@ -429,7 +429,9 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     expect(
       screen.getByRole("heading", { name: "Current activity" }),
     ).toBeTruthy();
-    expect(screen.getByText("Loading Factory topology...")).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "No workflow topology loaded" }),
+    ).toBeTruthy();
     expect(screen.queryByTestId("mock-react-flow")).toBeNull();
   });
 

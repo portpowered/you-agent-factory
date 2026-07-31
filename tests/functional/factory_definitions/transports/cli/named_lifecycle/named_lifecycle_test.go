@@ -12,12 +12,12 @@ import (
 )
 
 const (
-	namedLifecycleFactoryName   = "cli-named-lifecycle"
-	listMembershipFactoryName   = "cli-list-membership"
-	deleteMissingFactoryName    = "cli-delete-missing"
-	namedLifecycleWorkType      = "task"
-	namedLifecycleUpdatedType   = "updated-task"
-	listMembershipWorkType      = "membership-task"
+	namedLifecycleFactoryName = "cli-named-lifecycle"
+	listMembershipFactoryName = "cli-list-membership"
+	deleteMissingFactoryName  = "cli-delete-missing"
+	namedLifecycleWorkType    = "task"
+	namedLifecycleUpdatedType = "updated-task"
+	listMembershipWorkType    = "membership-task"
 )
 
 // TestCLIFactoryNamedCreateListUpdateDelete proves the public you factory

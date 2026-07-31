@@ -98,74 +98,6 @@
           "valueType": "bool",
           "visibility": "visible"
         },
-        "you.flag.default-worker-model": {
-          "acceptedSources": [
-            "cli",
-            "environment",
-            "operator-config",
-            "manifest-default"
-          ],
-          "aliases": [],
-          "completion": "none",
-          "defaultValue": {
-            "string": ""
-          },
-          "handlerBindingId": "you.binding.default-worker-model",
-          "id": "you.flag.default-worker-model",
-          "kind": "named",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.flag.default-worker-model",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model",
-          "maxCardinality": 1,
-          "minCardinality": 0,
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "sensitivity": "public",
-          "scope": "persistent",
-          "shorthand": "",
-          "usage": "default worker model for model workers with omitted model",
-          "valueType": "string",
-          "visibility": "visible"
-        },
-        "you.flag.default-worker-model-provider": {
-          "acceptedSources": [
-            "cli",
-            "environment",
-            "operator-config",
-            "manifest-default"
-          ],
-          "aliases": [],
-          "completion": "none",
-          "defaultValue": {
-            "string": ""
-          },
-          "handlerBindingId": "you.binding.default-worker-model-provider",
-          "id": "you.flag.default-worker-model-provider",
-          "kind": "named",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.flag.default-worker-model-provider",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model-provider",
-          "maxCardinality": 1,
-          "minCardinality": 0,
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "sensitivity": "public",
-          "scope": "persistent",
-          "shorthand": "",
-          "usage": "default worker model provider for model workers with omitted modelProvider (accepted canonical providers: CLAUDE, CODEX, CURSOR, GEMINI, KIRO, OPENCODE, PI, AGY; accepted aliases include codex, claude, gemini, kiro-cli, opencode, pi, agy, agent, cursor, anthropic, and openai; DEFAULT resolves through lower-precedence concrete provider)",
-          "valueType": "string",
-          "visibility": "visible"
-        },
         "you.flag.json": {
           "acceptedSources": [
             "cli",
@@ -274,14 +206,6 @@
           "id": "you.binding.debug",
           "inputId": "you.flag.debug"
         },
-        "you.binding.default-worker-model": {
-          "id": "you.binding.default-worker-model",
-          "inputId": "you.flag.default-worker-model"
-        },
-        "you.binding.default-worker-model-provider": {
-          "id": "you.binding.default-worker-model-provider",
-          "inputId": "you.flag.default-worker-model-provider"
-        },
         "you.binding.json": {
           "id": "you.binding.json",
           "inputId": "you.flag.json"
@@ -362,32 +286,6 @@
           "kind": "process"
         }
       },
-      "sourceBindings": {
-        "you.source.default-worker-model.environment": {
-          "externalKey": "YOU_DEFAULT_WORKER_MODEL",
-          "id": "you.source.default-worker-model.environment",
-          "inputId": "you.flag.default-worker-model",
-          "source": "environment"
-        },
-        "you.source.default-worker-model.operator-config": {
-          "externalKey": "defaults.workerModel",
-          "id": "you.source.default-worker-model.operator-config",
-          "inputId": "you.flag.default-worker-model",
-          "source": "operator-config"
-        },
-        "you.source.default-worker-model-provider.environment": {
-          "externalKey": "YOU_DEFAULT_WORKER_MODEL_PROVIDER",
-          "id": "you.source.default-worker-model-provider.environment",
-          "inputId": "you.flag.default-worker-model-provider",
-          "source": "environment"
-        },
-        "you.source.default-worker-model-provider.operator-config": {
-          "externalKey": "defaults.workerModelProvider",
-          "id": "you.source.default-worker-model-provider.operator-config",
-          "inputId": "you.flag.default-worker-model-provider",
-          "source": "operator-config"
-        }
-      },
       "usage": {
         "example": "  # Start the default Codex-backed Factory with explicit Work.\n  you run --work ./docs/examples/startup-work.json\n\n  # Agent orientation and command matrix.\n  you docs agents",
         "line": "you"
@@ -439,54 +337,6 @@
           "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
-          "visibility": "visible"
-        },
-        "you.config.flag.default-worker-model": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.config.flag.default-worker-model",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.config.flag.default-worker-model",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "shorthand": "",
-          "valueType": "string",
-          "visibility": "visible"
-        },
-        "you.config.flag.default-worker-model-provider": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.config.flag.default-worker-model-provider",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.config.flag.default-worker-model-provider",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model-provider",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "shorthand": "",
-          "valueType": "string",
           "visibility": "visible"
         },
         "you.config.flag.json": {
@@ -626,54 +476,6 @@
           "valueType": "bool",
           "visibility": "visible"
         },
-        "you.factory.flag.default-worker-model": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.factory.flag.default-worker-model",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.factory.flag.default-worker-model",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "shorthand": "",
-          "valueType": "string",
-          "visibility": "visible"
-        },
-        "you.factory.flag.default-worker-model-provider": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.factory.flag.default-worker-model-provider",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.factory.flag.default-worker-model-provider",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model-provider",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "shorthand": "",
-          "valueType": "string",
-          "visibility": "visible"
-        },
         "you.factory.flag.json": {
           "aliases": [],
           "binding": "",
@@ -809,54 +611,6 @@
           "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
-          "visibility": "visible"
-        },
-        "you.factory.config.flag.default-worker-model": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.factory.config.flag.default-worker-model",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.factory.config.flag.default-worker-model",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "shorthand": "",
-          "valueType": "string",
-          "visibility": "visible"
-        },
-        "you.factory.config.flag.default-worker-model-provider": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.factory.config.flag.default-worker-model-provider",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.factory.config.flag.default-worker-model-provider",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model-provider",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "shorthand": "",
-          "valueType": "string",
           "visibility": "visible"
         },
         "you.factory.config.flag.json": {
@@ -1060,54 +814,6 @@
           "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
-          "visibility": "visible"
-        },
-        "you.factory.config.expand.flag.default-worker-model": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.factory.config.expand.flag.default-worker-model",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.factory.config.expand.flag.default-worker-model",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "shorthand": "",
-          "valueType": "string",
-          "visibility": "visible"
-        },
-        "you.factory.config.expand.flag.default-worker-model-provider": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.factory.config.expand.flag.default-worker-model-provider",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.factory.config.expand.flag.default-worker-model-provider",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model-provider",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "shorthand": "",
-          "valueType": "string",
           "visibility": "visible"
         },
         "you.factory.config.expand.flag.json": {
@@ -1351,54 +1057,6 @@
           "valueType": "bool",
           "visibility": "visible"
         },
-        "you.factory.config.flatten.flag.default-worker-model": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.factory.config.flatten.flag.default-worker-model",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.factory.config.flatten.flag.default-worker-model",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "shorthand": "",
-          "valueType": "string",
-          "visibility": "visible"
-        },
-        "you.factory.config.flatten.flag.default-worker-model-provider": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.factory.config.flatten.flag.default-worker-model-provider",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.factory.config.flatten.flag.default-worker-model-provider",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model-provider",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "shorthand": "",
-          "valueType": "string",
-          "visibility": "visible"
-        },
         "you.factory.config.flatten.flag.json": {
           "aliases": [],
           "binding": "",
@@ -1640,54 +1298,6 @@
           "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
-          "visibility": "visible"
-        },
-        "you.factory.config.validate.flag.default-worker-model": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.factory.config.validate.flag.default-worker-model",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.factory.config.validate.flag.default-worker-model",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "shorthand": "",
-          "valueType": "string",
-          "visibility": "visible"
-        },
-        "you.factory.config.validate.flag.default-worker-model-provider": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.factory.config.validate.flag.default-worker-model-provider",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.factory.config.validate.flag.default-worker-model-provider",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model-provider",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "shorthand": "",
-          "valueType": "string",
           "visibility": "visible"
         },
         "you.factory.config.validate.flag.json": {
@@ -1937,54 +1547,6 @@
           "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
-          "visibility": "visible"
-        },
-        "you.factory.create.flag.default-worker-model": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.factory.create.flag.default-worker-model",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.factory.create.flag.default-worker-model",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "shorthand": "",
-          "valueType": "string",
-          "visibility": "visible"
-        },
-        "you.factory.create.flag.default-worker-model-provider": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.factory.create.flag.default-worker-model-provider",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.factory.create.flag.default-worker-model-provider",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model-provider",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "shorthand": "",
-          "valueType": "string",
           "visibility": "visible"
         },
         "you.factory.create.flag.dir": {
@@ -2341,54 +1903,6 @@
           "valueType": "bool",
           "visibility": "visible"
         },
-        "you.factory.delete.flag.default-worker-model": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.factory.delete.flag.default-worker-model",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.factory.delete.flag.default-worker-model",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "shorthand": "",
-          "valueType": "string",
-          "visibility": "visible"
-        },
-        "you.factory.delete.flag.default-worker-model-provider": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.factory.delete.flag.default-worker-model-provider",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.factory.delete.flag.default-worker-model-provider",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model-provider",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "shorthand": "",
-          "valueType": "string",
-          "visibility": "visible"
-        },
         "you.factory.delete.flag.dir": {
           "acceptedSources": [
             "cli",
@@ -2644,54 +2158,6 @@
           "valueType": "bool",
           "visibility": "visible"
         },
-        "you.factory.list.flag.default-worker-model": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.factory.list.flag.default-worker-model",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.factory.list.flag.default-worker-model",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "shorthand": "",
-          "valueType": "string",
-          "visibility": "visible"
-        },
-        "you.factory.list.flag.default-worker-model-provider": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.factory.list.flag.default-worker-model-provider",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.factory.list.flag.default-worker-model-provider",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model-provider",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "shorthand": "",
-          "valueType": "string",
-          "visibility": "visible"
-        },
         "you.factory.list.flag.dir": {
           "acceptedSources": [
             "cli",
@@ -2943,54 +2409,6 @@
           "valueType": "bool",
           "visibility": "visible"
         },
-        "you.factory.query.flag.default-worker-model": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.factory.query.flag.default-worker-model",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.factory.query.flag.default-worker-model",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "shorthand": "",
-          "valueType": "string",
-          "visibility": "visible"
-        },
-        "you.factory.query.flag.default-worker-model-provider": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.factory.query.flag.default-worker-model-provider",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.factory.query.flag.default-worker-model-provider",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model-provider",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "shorthand": "",
-          "valueType": "string",
-          "visibility": "visible"
-        },
         "you.factory.query.flag.json": {
           "aliases": [],
           "binding": "",
@@ -3240,54 +2658,6 @@
           "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
-          "visibility": "visible"
-        },
-        "you.factory.replace-current.flag.default-worker-model": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.factory.replace-current.flag.default-worker-model",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.factory.replace-current.flag.default-worker-model",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "shorthand": "",
-          "valueType": "string",
-          "visibility": "visible"
-        },
-        "you.factory.replace-current.flag.default-worker-model-provider": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.factory.replace-current.flag.default-worker-model-provider",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.factory.replace-current.flag.default-worker-model-provider",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model-provider",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "shorthand": "",
-          "valueType": "string",
           "visibility": "visible"
         },
         "you.factory.replace-current.flag.json": {
@@ -3606,54 +2976,6 @@
           "valueType": "bool",
           "visibility": "visible"
         },
-        "you.factory.update.flag.default-worker-model": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.factory.update.flag.default-worker-model",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.factory.update.flag.default-worker-model",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "shorthand": "",
-          "valueType": "string",
-          "visibility": "visible"
-        },
-        "you.factory.update.flag.default-worker-model-provider": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.factory.update.flag.default-worker-model-provider",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.factory.update.flag.default-worker-model-provider",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model-provider",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "shorthand": "",
-          "valueType": "string",
-          "visibility": "visible"
-        },
         "you.factory.update.flag.dir": {
           "acceptedSources": [
             "cli",
@@ -3940,54 +3262,6 @@
           "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
-          "visibility": "visible"
-        },
-        "you.init.flag.default-worker-model": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.init.flag.default-worker-model",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.init.flag.default-worker-model",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "shorthand": "",
-          "valueType": "string",
-          "visibility": "visible"
-        },
-        "you.init.flag.default-worker-model-provider": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.init.flag.default-worker-model-provider",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.init.flag.default-worker-model-provider",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model-provider",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "shorthand": "",
-          "valueType": "string",
           "visibility": "visible"
         },
         "you.init.flag.json": {
@@ -4382,54 +3656,6 @@
           "valueType": "bool",
           "visibility": "visible"
         },
-        "you.session.flag.default-worker-model": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.session.flag.default-worker-model",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.session.flag.default-worker-model",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "shorthand": "",
-          "valueType": "string",
-          "visibility": "visible"
-        },
-        "you.session.flag.default-worker-model-provider": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.session.flag.default-worker-model-provider",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.session.flag.default-worker-model-provider",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model-provider",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "shorthand": "",
-          "valueType": "string",
-          "visibility": "visible"
-        },
         "you.session.flag.json": {
           "aliases": [],
           "binding": "",
@@ -4624,54 +3850,6 @@
           "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
-          "visibility": "visible"
-        },
-        "you.session.create.flag.default-worker-model": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.session.create.flag.default-worker-model",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.session.create.flag.default-worker-model",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "shorthand": "",
-          "valueType": "string",
-          "visibility": "visible"
-        },
-        "you.session.create.flag.default-worker-model-provider": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.session.create.flag.default-worker-model-provider",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.session.create.flag.default-worker-model-provider",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model-provider",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "shorthand": "",
-          "valueType": "string",
           "visibility": "visible"
         },
         "you.session.create.flag.dir": {
@@ -5070,54 +4248,6 @@
           "valueType": "bool",
           "visibility": "visible"
         },
-        "you.session.delete.flag.default-worker-model": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.session.delete.flag.default-worker-model",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.session.delete.flag.default-worker-model",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "shorthand": "",
-          "valueType": "string",
-          "visibility": "visible"
-        },
-        "you.session.delete.flag.default-worker-model-provider": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.session.delete.flag.default-worker-model-provider",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.session.delete.flag.default-worker-model-provider",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model-provider",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "shorthand": "",
-          "valueType": "string",
-          "visibility": "visible"
-        },
         "you.session.delete.flag.json": {
           "aliases": [],
           "binding": "",
@@ -5373,54 +4503,6 @@
           "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
-          "visibility": "visible"
-        },
-        "you.session.dispatches.flag.default-worker-model": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.session.dispatches.flag.default-worker-model",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.session.dispatches.flag.default-worker-model",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "shorthand": "",
-          "valueType": "string",
-          "visibility": "visible"
-        },
-        "you.session.dispatches.flag.default-worker-model-provider": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.session.dispatches.flag.default-worker-model-provider",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.session.dispatches.flag.default-worker-model-provider",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model-provider",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "shorthand": "",
-          "valueType": "string",
           "visibility": "visible"
         },
         "you.session.dispatches.flag.json": {
@@ -5729,54 +4811,6 @@
           "valueType": "bool",
           "visibility": "visible"
         },
-        "you.session.list.flag.default-worker-model": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.session.list.flag.default-worker-model",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.session.list.flag.default-worker-model",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "shorthand": "",
-          "valueType": "string",
-          "visibility": "visible"
-        },
-        "you.session.list.flag.default-worker-model-provider": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.session.list.flag.default-worker-model-provider",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.session.list.flag.default-worker-model-provider",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model-provider",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "shorthand": "",
-          "valueType": "string",
-          "visibility": "visible"
-        },
         "you.session.list.flag.json": {
           "aliases": [],
           "binding": "",
@@ -6060,54 +5094,6 @@
           "valueType": "bool",
           "visibility": "visible"
         },
-        "you.session.pause.flag.default-worker-model": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.session.pause.flag.default-worker-model",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.session.pause.flag.default-worker-model",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "shorthand": "",
-          "valueType": "string",
-          "visibility": "visible"
-        },
-        "you.session.pause.flag.default-worker-model-provider": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.session.pause.flag.default-worker-model-provider",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.session.pause.flag.default-worker-model-provider",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model-provider",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "shorthand": "",
-          "valueType": "string",
-          "visibility": "visible"
-        },
         "you.session.pause.flag.json": {
           "aliases": [],
           "binding": "",
@@ -6365,54 +5351,6 @@
           "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
-          "visibility": "visible"
-        },
-        "you.session.resume.flag.default-worker-model": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.session.resume.flag.default-worker-model",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.session.resume.flag.default-worker-model",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "shorthand": "",
-          "valueType": "string",
-          "visibility": "visible"
-        },
-        "you.session.resume.flag.default-worker-model-provider": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.session.resume.flag.default-worker-model-provider",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.session.resume.flag.default-worker-model-provider",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model-provider",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "shorthand": "",
-          "valueType": "string",
           "visibility": "visible"
         },
         "you.session.resume.flag.json": {
@@ -6673,54 +5611,6 @@
           "valueType": "bool",
           "visibility": "visible"
         },
-        "you.session.show.flag.default-worker-model": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.session.show.flag.default-worker-model",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.session.show.flag.default-worker-model",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "shorthand": "",
-          "valueType": "string",
-          "visibility": "visible"
-        },
-        "you.session.show.flag.default-worker-model-provider": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.session.show.flag.default-worker-model-provider",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.session.show.flag.default-worker-model-provider",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model-provider",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "shorthand": "",
-          "valueType": "string",
-          "visibility": "visible"
-        },
         "you.session.show.flag.json": {
           "aliases": [],
           "binding": "",
@@ -6935,54 +5825,6 @@
             "since": "1.0.0"
           }
         },
-        "you.work.flag.default-worker-model": {
-          "id": "you.work.flag.default-worker-model",
-          "long": "default-worker-model",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "valueType": "string",
-          "required": false,
-          "default": "",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.work.flag.default-worker-model",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
-        "you.work.flag.default-worker-model-provider": {
-          "id": "you.work.flag.default-worker-model-provider",
-          "long": "default-worker-model-provider",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "valueType": "string",
-          "required": false,
-          "default": "",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.work.flag.default-worker-model-provider",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
         "you.work.flag.json": {
           "id": "you.work.flag.json",
           "long": "json",
@@ -7115,54 +5957,6 @@
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.work.list.flag.debug",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
-        "you.work.list.flag.default-worker-model": {
-          "id": "you.work.list.flag.default-worker-model",
-          "long": "default-worker-model",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "valueType": "string",
-          "required": false,
-          "default": "",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.work.list.flag.default-worker-model",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
-        "you.work.list.flag.default-worker-model-provider": {
-          "id": "you.work.list.flag.default-worker-model-provider",
-          "long": "default-worker-model-provider",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "valueType": "string",
-          "required": false,
-          "default": "",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.work.list.flag.default-worker-model-provider",
             "state": "active",
             "since": "1.0.0"
           }
@@ -7640,54 +6434,6 @@
             "since": "1.0.0"
           }
         },
-        "you.work.show.flag.default-worker-model": {
-          "id": "you.work.show.flag.default-worker-model",
-          "long": "default-worker-model",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "valueType": "string",
-          "required": false,
-          "default": "",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.work.show.flag.default-worker-model",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
-        "you.work.show.flag.default-worker-model-provider": {
-          "id": "you.work.show.flag.default-worker-model-provider",
-          "long": "default-worker-model-provider",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "valueType": "string",
-          "required": false,
-          "default": "",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.work.show.flag.default-worker-model-provider",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
         "you.work.show.flag.json": {
           "id": "you.work.show.flag.json",
           "long": "json",
@@ -7983,54 +6729,6 @@
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.work.move.flag.debug",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
-        "you.work.move.flag.default-worker-model": {
-          "id": "you.work.move.flag.default-worker-model",
-          "long": "default-worker-model",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "valueType": "string",
-          "required": false,
-          "default": "",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.work.move.flag.default-worker-model",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
-        "you.work.move.flag.default-worker-model-provider": {
-          "id": "you.work.move.flag.default-worker-model-provider",
-          "long": "default-worker-model-provider",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "valueType": "string",
-          "required": false,
-          "default": "",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.work.move.flag.default-worker-model-provider",
             "state": "active",
             "since": "1.0.0"
           }
@@ -8336,54 +7034,6 @@
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.work.visualize.flag.debug",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
-        "you.work.visualize.flag.default-worker-model": {
-          "id": "you.work.visualize.flag.default-worker-model",
-          "long": "default-worker-model",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "valueType": "string",
-          "required": false,
-          "default": "",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.work.visualize.flag.default-worker-model",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
-        "you.work.visualize.flag.default-worker-model-provider": {
-          "id": "you.work.visualize.flag.default-worker-model-provider",
-          "long": "default-worker-model-provider",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "valueType": "string",
-          "required": false,
-          "default": "",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.work.visualize.flag.default-worker-model-provider",
             "state": "active",
             "since": "1.0.0"
           }
@@ -8700,54 +7350,6 @@
             "since": "1.0.0"
           }
         },
-        "you.docs.flag.default-worker-model": {
-          "id": "you.docs.flag.default-worker-model",
-          "long": "default-worker-model",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "valueType": "string",
-          "required": false,
-          "default": "",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.docs.flag.default-worker-model",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
-        "you.docs.flag.default-worker-model-provider": {
-          "id": "you.docs.flag.default-worker-model-provider",
-          "long": "default-worker-model-provider",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "valueType": "string",
-          "required": false,
-          "default": "",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.docs.flag.default-worker-model-provider",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
         "you.docs.flag.json": {
           "id": "you.docs.flag.json",
           "long": "json",
@@ -8908,17 +7510,71 @@
         "formatVersion": "1.0.0",
         "itemId": "you.workers",
         "documentation": {
-          "title": {"id": "you.workers.title", "canonicalEnglish": "Manage worker execution integrations"},
-          "description": {"id": "you.workers.description", "canonicalEnglish": "Inspect and configure customer-facing worker execution integrations."}
+          "title": {
+            "id": "you.workers.title",
+            "canonicalEnglish": "Manage worker execution integrations"
+          },
+          "description": {
+            "id": "you.workers.description",
+            "canonicalEnglish": "Inspect and configure customer-facing worker execution integrations."
+          }
         },
-        "examples": ["you workers acp list"],
+        "examples": [
+          "you workers list"
+        ],
         "visibility": "public",
         "sourceHash": "de337db29cafe8cc0ef433569f086c6a8d844036cbc576377c480980804ec19c"
       },
-      "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.workers", "since": "1.0.0", "state": "active"},
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.workers",
+        "since": "1.0.0",
+        "state": "active"
+      },
       "visibility": "visible",
       "runnable": false,
-      "usage": {"line": "workers"}
+      "usage": {
+        "line": "workers"
+      }
+    },
+    "you.workers.list": {
+      "id": "you.workers.list",
+      "name": "list",
+      "path": "you workers list",
+      "aliases": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.workers.list",
+        "documentation": {
+          "title": {
+            "id": "you.workers.list.title",
+            "canonicalEnglish": "List worker integrations"
+          },
+          "description": {
+            "id": "you.workers.list.description",
+            "canonicalEnglish": "List all selectable built-in and operator-configured worker integrations."
+          }
+        },
+        "examples": [
+          "you workers list"
+        ],
+        "visibility": "public",
+        "sourceHash": "de337db29cafe8cc0ef433569f086c6a8d844036cbc576377c480980804ec19c"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.workers.list",
+        "since": "1.0.0",
+        "state": "active"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {
+        "line": "list"
+      },
+      "handler": {
+        "id": "you.workers.list.handler"
+      }
     },
     "you.workers.acp": {
       "id": "you.workers.acp",
@@ -8929,39 +7585,32 @@
         "formatVersion": "1.0.0",
         "itemId": "you.workers.acp",
         "documentation": {
-          "title": {"id": "you.workers.acp.title", "canonicalEnglish": "Manage ACP provider integrations"},
-          "description": {"id": "you.workers.acp.description", "canonicalEnglish": "List built-in Agent Client Protocol providers and add or delete operator-configured ACP providers."}
+          "title": {
+            "id": "you.workers.acp.title",
+            "canonicalEnglish": "Manage ACP provider integrations"
+          },
+          "description": {
+            "id": "you.workers.acp.description",
+            "canonicalEnglish": "Add or delete operator-configured Agent Client Protocol providers. Use `you workers list` to inspect all providers."
+          }
         },
-        "examples": ["you workers acp list"],
+        "examples": [
+          "you workers acp add --name cursor-acp --transport stdio --argument 'cursor-agent acp'"
+        ],
         "visibility": "public",
         "sourceHash": "de337db29cafe8cc0ef433569f086c6a8d844036cbc576377c480980804ec19c"
       },
-      "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.workers.acp", "since": "1.0.0", "state": "active"},
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.workers.acp",
+        "since": "1.0.0",
+        "state": "active"
+      },
       "visibility": "visible",
       "runnable": false,
-      "usage": {"line": "acp"}
-    },
-    "you.workers.acp.list": {
-      "id": "you.workers.acp.list",
-      "name": "list",
-      "path": "you workers acp list",
-      "aliases": [],
-      "documentation": {
-        "formatVersion": "1.0.0",
-        "itemId": "you.workers.acp.list",
-        "documentation": {
-          "title": {"id": "you.workers.acp.list.title", "canonicalEnglish": "List ACP providers"},
-          "description": {"id": "you.workers.acp.list.description", "canonicalEnglish": "List built-in and operator-configured ACP provider identities with their execution kind and current availability."}
-        },
-        "examples": ["you workers acp list"],
-        "visibility": "public",
-        "sourceHash": "de337db29cafe8cc0ef433569f086c6a8d844036cbc576377c480980804ec19c"
-      },
-      "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.workers.acp.list", "since": "1.0.0", "state": "active"},
-      "visibility": "visible",
-      "runnable": true,
-      "usage": {"line": "list"},
-      "handler": {"id": "you.workers.acp.list.handler"}
+      "usage": {
+        "line": "acp"
+      }
     },
     "you.workers.acp.add": {
       "id": "you.workers.acp.add",
@@ -8972,23 +7621,106 @@
         "formatVersion": "1.0.0",
         "itemId": "you.workers.acp.add",
         "documentation": {
-          "title": {"id": "you.workers.acp.add.title", "canonicalEnglish": "Add an ACP provider"},
-          "description": {"id": "you.workers.acp.add.description", "canonicalEnglish": "Add or replace one operator-configured stdio ACP provider integration."}
+          "title": {
+            "id": "you.workers.acp.add.title",
+            "canonicalEnglish": "Add an ACP provider"
+          },
+          "description": {
+            "id": "you.workers.acp.add.description",
+            "canonicalEnglish": "Add or replace one operator-configured stdio ACP provider integration."
+          }
         },
-        "examples": ["you workers acp add --name cursor-acp --transport stdio --argument 'cursor-agent acp'"],
+        "examples": [
+          "you workers acp add --name cursor-acp --transport stdio --argument 'cursor-agent acp'"
+        ],
         "visibility": "public",
         "sourceHash": "de337db29cafe8cc0ef433569f086c6a8d844036cbc576377c480980804ec19c"
       },
       "flags": {
-        "you.workers.acp.add.flag.name": {"id": "you.workers.acp.add.flag.name", "long": "name", "shorthand": "", "aliases": [], "scope": "local", "valueType": "string", "required": true, "default": "", "changedDefault": false, "noOptionDefault": "", "repeatable": false, "normalization": "trim", "completion": "none", "binding": "", "visibility": "visible", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.workers.acp.add.flag.name", "since": "1.0.0", "state": "active"}},
-        "you.workers.acp.add.flag.transport": {"id": "you.workers.acp.add.flag.transport", "long": "transport", "shorthand": "", "aliases": [], "scope": "local", "valueType": "string", "required": false, "default": "stdio", "changedDefault": false, "noOptionDefault": "", "repeatable": false, "normalization": "lowercase-trim", "completion": "none", "binding": "", "visibility": "visible", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.workers.acp.add.flag.transport", "since": "1.0.0", "state": "active"}},
-        "you.workers.acp.add.flag.argument": {"id": "you.workers.acp.add.flag.argument", "long": "argument", "shorthand": "", "aliases": [], "scope": "local", "valueType": "string", "required": true, "default": "", "changedDefault": false, "noOptionDefault": "", "repeatable": false, "normalization": "trim", "completion": "none", "binding": "", "visibility": "visible", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.workers.acp.add.flag.argument", "since": "1.0.0", "state": "active"}}
+        "you.workers.acp.add.flag.name": {
+          "id": "you.workers.acp.add.flag.name",
+          "long": "name",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": true,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.workers.acp.add.flag.name",
+            "since": "1.0.0",
+            "state": "active"
+          }
+        },
+        "you.workers.acp.add.flag.transport": {
+          "id": "you.workers.acp.add.flag.transport",
+          "long": "transport",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "stdio",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "lowercase-trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.workers.acp.add.flag.transport",
+            "since": "1.0.0",
+            "state": "active"
+          }
+        },
+        "you.workers.acp.add.flag.argument": {
+          "id": "you.workers.acp.add.flag.argument",
+          "long": "argument",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": true,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.workers.acp.add.flag.argument",
+            "since": "1.0.0",
+            "state": "active"
+          }
+        }
       },
-      "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.workers.acp.add", "since": "1.0.0", "state": "active"},
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.workers.acp.add",
+        "since": "1.0.0",
+        "state": "active"
+      },
       "visibility": "visible",
       "runnable": true,
-      "usage": {"line": "add --name <provider> --transport stdio --argument <command>"},
-      "handler": {"id": "you.workers.acp.add.handler"}
+      "usage": {
+        "line": "add --name <provider> --transport stdio --argument <command>"
+      },
+      "handler": {
+        "id": "you.workers.acp.add.handler"
+      }
     },
     "you.workers.acp.delete": {
       "id": "you.workers.acp.delete",
@@ -8999,21 +7731,60 @@
         "formatVersion": "1.0.0",
         "itemId": "you.workers.acp.delete",
         "documentation": {
-          "title": {"id": "you.workers.acp.delete.title", "canonicalEnglish": "Delete an ACP provider"},
-          "description": {"id": "you.workers.acp.delete.description", "canonicalEnglish": "Delete one operator-configured ACP provider integration without removing built-in provider metadata."}
+          "title": {
+            "id": "you.workers.acp.delete.title",
+            "canonicalEnglish": "Delete an ACP provider"
+          },
+          "description": {
+            "id": "you.workers.acp.delete.description",
+            "canonicalEnglish": "Delete one operator-configured ACP provider integration without removing built-in provider metadata."
+          }
         },
-        "examples": ["you workers acp delete --name cursor-acp"],
+        "examples": [
+          "you workers acp delete --name cursor-acp"
+        ],
         "visibility": "public",
         "sourceHash": "de337db29cafe8cc0ef433569f086c6a8d844036cbc576377c480980804ec19c"
       },
       "flags": {
-        "you.workers.acp.delete.flag.name": {"id": "you.workers.acp.delete.flag.name", "long": "name", "shorthand": "", "aliases": [], "scope": "local", "valueType": "string", "required": true, "default": "", "changedDefault": false, "noOptionDefault": "", "repeatable": false, "normalization": "trim", "completion": "none", "binding": "", "visibility": "visible", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.workers.acp.delete.flag.name", "since": "1.0.0", "state": "active"}}
+        "you.workers.acp.delete.flag.name": {
+          "id": "you.workers.acp.delete.flag.name",
+          "long": "name",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": true,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.workers.acp.delete.flag.name",
+            "since": "1.0.0",
+            "state": "active"
+          }
+        }
       },
-      "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.workers.acp.delete", "since": "1.0.0", "state": "active"},
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.workers.acp.delete",
+        "since": "1.0.0",
+        "state": "active"
+      },
       "visibility": "visible",
       "runnable": true,
-      "usage": {"line": "delete --name <provider>"},
-      "handler": {"id": "you.workers.acp.delete.handler"}
+      "usage": {
+        "line": "delete --name <provider>"
+      },
+      "handler": {
+        "id": "you.workers.acp.delete.handler"
+      }
     },
     "you.mcp": {
       "aliases": [],
@@ -9088,54 +7859,6 @@
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.mcp.flag.debug",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
-        "you.mcp.flag.default-worker-model": {
-          "id": "you.mcp.flag.default-worker-model",
-          "long": "default-worker-model",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "valueType": "string",
-          "required": false,
-          "default": "",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.mcp.flag.default-worker-model",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
-        "you.mcp.flag.default-worker-model-provider": {
-          "id": "you.mcp.flag.default-worker-model-provider",
-          "long": "default-worker-model-provider",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "valueType": "string",
-          "required": false,
-          "default": "",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.mcp.flag.default-worker-model-provider",
             "state": "active",
             "since": "1.0.0"
           }
@@ -9326,54 +8049,6 @@
           "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
-          "visibility": "visible"
-        },
-        "you.mcp.serve.flag.default-worker-model": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.mcp.serve.flag.default-worker-model",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.mcp.serve.flag.default-worker-model",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "shorthand": "",
-          "valueType": "string",
-          "visibility": "visible"
-        },
-        "you.mcp.serve.flag.default-worker-model-provider": {
-          "aliases": [],
-          "binding": "",
-          "changedDefault": false,
-          "completion": "none",
-          "default": "",
-          "id": "you.mcp.serve.flag.default-worker-model-provider",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.mcp.serve.flag.default-worker-model-provider",
-            "since": "1.0.0",
-            "state": "active"
-          },
-          "long": "default-worker-model-provider",
-          "noOptionDefault": "",
-          "normalization": "",
-          "repeatable": false,
-          "required": false,
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "shorthand": "",
-          "valueType": "string",
           "visibility": "visible"
         },
         "you.mcp.serve.flag.fixture-catalog": {
@@ -9702,54 +8377,6 @@
             "since": "1.0.0"
           }
         },
-        "you.models.flag.default-worker-model": {
-          "id": "you.models.flag.default-worker-model",
-          "long": "default-worker-model",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "valueType": "string",
-          "required": false,
-          "default": "",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.models.flag.default-worker-model",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
-        "you.models.flag.default-worker-model-provider": {
-          "id": "you.models.flag.default-worker-model-provider",
-          "long": "default-worker-model-provider",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "valueType": "string",
-          "required": false,
-          "default": "",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.models.flag.default-worker-model-provider",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
         "you.models.flag.json": {
           "id": "you.models.flag.json",
           "long": "json",
@@ -9882,54 +8509,6 @@
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.models.list.flag.debug",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
-        "you.models.list.flag.default-worker-model": {
-          "id": "you.models.list.flag.default-worker-model",
-          "long": "default-worker-model",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "valueType": "string",
-          "required": false,
-          "default": "",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.models.list.flag.default-worker-model",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
-        "you.models.list.flag.default-worker-model-provider": {
-          "id": "you.models.list.flag.default-worker-model-provider",
-          "long": "default-worker-model-provider",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "valueType": "string",
-          "required": false,
-          "default": "",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.models.list.flag.default-worker-model-provider",
             "state": "active",
             "since": "1.0.0"
           }
@@ -10195,54 +8774,6 @@
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.models.inspect.flag.debug",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
-        "you.models.inspect.flag.default-worker-model": {
-          "id": "you.models.inspect.flag.default-worker-model",
-          "long": "default-worker-model",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "valueType": "string",
-          "required": false,
-          "default": "",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.models.inspect.flag.default-worker-model",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
-        "you.models.inspect.flag.default-worker-model-provider": {
-          "id": "you.models.inspect.flag.default-worker-model-provider",
-          "long": "default-worker-model-provider",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "valueType": "string",
-          "required": false,
-          "default": "",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.models.inspect.flag.default-worker-model-provider",
             "state": "active",
             "since": "1.0.0"
           }
@@ -10514,54 +9045,6 @@
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.models.invoke.flag.debug",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
-        "you.models.invoke.flag.default-worker-model": {
-          "id": "you.models.invoke.flag.default-worker-model",
-          "long": "default-worker-model",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "valueType": "string",
-          "required": false,
-          "default": "",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.models.invoke.flag.default-worker-model",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
-        "you.models.invoke.flag.default-worker-model-provider": {
-          "id": "you.models.invoke.flag.default-worker-model-provider",
-          "long": "default-worker-model-provider",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "valueType": "string",
-          "required": false,
-          "default": "",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.models.invoke.flag.default-worker-model-provider",
             "state": "active",
             "since": "1.0.0"
           }
@@ -10969,54 +9452,6 @@
             "since": "1.0.0"
           }
         },
-        "you.models.pull.flag.default-worker-model": {
-          "id": "you.models.pull.flag.default-worker-model",
-          "long": "default-worker-model",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "valueType": "string",
-          "required": false,
-          "default": "",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.models.pull.flag.default-worker-model",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
-        "you.models.pull.flag.default-worker-model-provider": {
-          "id": "you.models.pull.flag.default-worker-model-provider",
-          "long": "default-worker-model-provider",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "valueType": "string",
-          "required": false,
-          "default": "",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.models.pull.flag.default-worker-model-provider",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
         "you.models.pull.flag.json": {
           "id": "you.models.pull.flag.json",
           "long": "json",
@@ -11217,7 +9652,7 @@
           },
           "description": {
             "id": "you.run.description",
-            "canonicalEnglish": "Load workflow and run the factory engine.\n\nWithout an explicit --dir, --named, or --factory selector, you run validates the exact invocation-local ./factory/factory.json as the Current Factory; it does not bootstrap a missing Factory or follow another current-factory pointer. Run you run --work ./docs/examples/startup-work.json to submit explicit default Work; Factory directory runs can consume factory/inputs/task/default while active. Missing and invalid definitions fail before runtime, listener, or browser activation. Ordinary batch, continuous, named, portable Factory, replay, mock-worker, and JavaScript runs start no HTTP listener. Add --with-server to serve the Current Factory API for exactly the run lifetime without opening a browser, or --with-site to imply that server and open the embedded dashboard once after readiness. Server-enabled runs bind only the loopback host and preferred port from global --server, advance monotonically through port 65535 on collisions, report the actual bound URL, and join the listener before returning.\n\nDefault execution uses batch mode and exits after idle completion. Use --continuously to keep the factory alive while idle until you cancel it. Use --with-mock-workers with an optional JSON config path for deterministic outcomes. Use --quiet to suppress dashboard output for scripted or CI-oriented runs. Use --skip-permissions to request an invocation-only unsafe permission bypass for agent workers without changing persisted factory configuration. Normal live runs record by default unless you pass --no-record. Replay artifacts are sensitive and can contain prompts, payloads, stdout, stderr, and diagnostic metadata.\n\nUse --named with a persisted canonical factory name to resolve project-local factories before global built-ins under ~/.you-agent-factory/factories. Built-ins materialize lazily into that global root on first use and stay editable on disk. Use --factory with a JSON, YAML, or JavaScript Factory source. Supported selectors are --dir, --named, and --factory. Selected Factories can define custom invocation arguments; run you run --named <factory> --help or you run --factory <factory.yaml> --help to inspect signature-backed usage while keeping existing run-level flags available. In Factory invocation mode, provide either trailing positional text or piped stdin text, or use signature-defined file, repeated, and defaulted inputs; conflicting positional text and stdin return INVOCATION_INPUT_SOURCE_CONFLICT. Named-Factory selection lives in you docs authoring-factories; invocation behavior lives in you docs run and you docs sessions; model choices live in you docs models.\n\nSupported one-shot Factory invocations use primary-result-only stdout by default. Global --json selects one InvocationResponse; --output response-stream selects ordered human Factory Events; combining global --json with response-stream selects NDJSON. Quiet conflicts with global JSON and explicit --output. Failures use one standard ErrorResponse on stderr. Runtime logs are structured JSON rolling files grouped by UTC start date under the selected log root; environment details are record-channel diagnostics only, and system logs include command stdout/stderr only on command failures. Runtime metrics are a separate structured JSONL operational channel with independent rolling files."
+            "canonicalEnglish": "Load workflow and run the factory engine.\n\nWithout an explicit --dir, --named, or --factory selector, you run validates the exact invocation-local ./factory/factory.json as the Current Factory; it does not bootstrap a missing Factory or follow another current-factory pointer. Run you run --work ./docs/examples/startup-work.json to submit explicit default Work; Factory directory runs can consume factory/inputs/task/default while active. Missing and invalid definitions fail before runtime, listener, or browser activation. Ordinary batch, continuous, named, portable Factory, replay, mock-worker, and JavaScript runs start no HTTP listener. Add --with-server to serve the Current Factory API for exactly the run lifetime without opening a browser, or --with-site to imply that server and open the embedded dashboard once after readiness. Server-enabled runs bind only the loopback host and preferred port from global --server, advance monotonically through port 65535 on collisions, report the actual bound URL, and join the listener before returning.\n\nDefault execution uses batch mode and exits after idle completion. Use --continuously to keep the factory alive while idle until you cancel it. Use --with-mock-workers with an optional JSON config path for deterministic outcomes. Use --worktree <name> to create or reuse a Git worktree under the invocation working directory and execute every worker dispatch in that checkout, independent of provider. Use --quiet to suppress dashboard output for scripted or CI-oriented runs. Use --skip-permissions to request an invocation-only unsafe permission bypass for agent workers without changing persisted factory configuration. Normal live runs record by default unless you pass --no-record. Replay artifacts are sensitive and can contain prompts, payloads, stdout, stderr, and diagnostic metadata.\n\nUse --named with a persisted canonical factory name to resolve project-local factories before global built-ins under ~/.you-agent-factory/factories. Built-ins materialize lazily into that global root on first use and stay editable on disk. Use --factory with a JSON, YAML, or JavaScript Factory source. Supported selectors are --dir, --named, and --factory. Selected Factories can define custom invocation arguments; run you run --named <factory> --help or you run --factory <factory.yaml> --help to inspect signature-backed usage while keeping existing run-level flags available. In Factory invocation mode, provide either trailing positional text or piped stdin text, or use signature-defined file, repeated, and defaulted inputs; conflicting positional text and stdin return INVOCATION_INPUT_SOURCE_CONFLICT. Named-Factory selection lives in you docs authoring-factories; invocation behavior lives in you docs run and you docs sessions; model choices live in you docs models.\n\nThe common ACP workflow is `you run --named @you/goal --provider cursor-acp --model auto \"Describe the task\"`. Run-level --provider selects modelProvider and --model selects an optional model within that provider. Supported one-shot text invocations use the ordered response stream by default; use --output primary for final-result-only stdout. Global --json with response-stream selects NDJSON. Quiet conflicts with global JSON and explicit --output. Failures use one standard ErrorResponse on stderr. Runtime logs are structured JSON rolling files grouped by UTC start date under the selected log root; environment details are record-channel diagnostics only, and system logs include command stdout/stderr only on command failures. Runtime metrics are a separate structured JSONL operational channel with independent rolling files."
           }
         },
         "examples": [
@@ -11304,54 +9739,6 @@
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.run.flag.debug",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
-        "you.run.flag.default-worker-model": {
-          "id": "you.run.flag.default-worker-model",
-          "long": "default-worker-model",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "valueType": "string",
-          "required": false,
-          "default": "",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.run.flag.default-worker-model",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
-        "you.run.flag.default-worker-model-provider": {
-          "id": "you.run.flag.default-worker-model-provider",
-          "long": "default-worker-model-provider",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "valueType": "string",
-          "required": false,
-          "default": "",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.run.flag.default-worker-model-provider",
             "state": "active",
             "since": "1.0.0"
           }
@@ -11452,6 +9839,78 @@
             "since": "1.0.0"
           }
         },
+        "you.run.flag.provider": {
+          "id": "you.run.flag.provider",
+          "long": "provider",
+          "usage": "override the worker modelProvider for this run (for example cursor-acp)",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.run.flag.provider",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.run.flag.worktree": {
+          "id": "you.run.flag.worktree",
+          "long": "worktree",
+          "usage": "create or reuse a Git worktree under the invocation working directory and execute this run in its checkout",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.run.flag.worktree",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.run.flag.model": {
+          "id": "you.run.flag.model",
+          "long": "model",
+          "usage": "override the optional model selected within the provider for this run",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.run.flag.model",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
         "you.run.flag.no-record": {
           "id": "you.run.flag.no-record",
           "long": "no-record",
@@ -11479,7 +9938,7 @@
         "you.run.flag.output": {
           "id": "you.run.flag.output",
           "long": "output",
-          "usage": "invocation stdout mode: primary (default) or response-stream for canonical Factory Events on supported live or replayed one-shot factory runs",
+          "usage": "invocation stdout mode: response-stream (default for one-shot text invocations) or primary for final-result-only output",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
@@ -11612,7 +10071,7 @@
           "normalization": "",
           "completion": "none",
           "binding": "",
-          "visibility": "visible",
+          "visibility": "hidden",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.run.flag.runtime-log-compress",
@@ -11636,7 +10095,7 @@
           "normalization": "",
           "completion": "none",
           "binding": "",
-          "visibility": "visible",
+          "visibility": "hidden",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.run.flag.runtime-log-dir",
@@ -11660,7 +10119,7 @@
           "normalization": "",
           "completion": "none",
           "binding": "",
-          "visibility": "visible",
+          "visibility": "hidden",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.run.flag.runtime-log-max-age-days",
@@ -11684,7 +10143,7 @@
           "normalization": "",
           "completion": "none",
           "binding": "",
-          "visibility": "visible",
+          "visibility": "hidden",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.run.flag.runtime-log-max-backups",
@@ -11708,7 +10167,7 @@
           "normalization": "",
           "completion": "none",
           "binding": "",
-          "visibility": "visible",
+          "visibility": "hidden",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.run.flag.runtime-log-max-size-mb",
@@ -11732,7 +10191,7 @@
           "normalization": "",
           "completion": "none",
           "binding": "",
-          "visibility": "visible",
+          "visibility": "hidden",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.run.flag.runtime-metrics-compress",
@@ -11756,7 +10215,7 @@
           "normalization": "",
           "completion": "none",
           "binding": "",
-          "visibility": "visible",
+          "visibility": "hidden",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.run.flag.runtime-metrics-dir",
@@ -11780,7 +10239,7 @@
           "normalization": "",
           "completion": "none",
           "binding": "",
-          "visibility": "visible",
+          "visibility": "hidden",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.run.flag.runtime-metrics-max-age-days",
@@ -11804,7 +10263,7 @@
           "normalization": "",
           "completion": "none",
           "binding": "",
-          "visibility": "visible",
+          "visibility": "hidden",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.run.flag.runtime-metrics-max-backups",
@@ -11828,7 +10287,7 @@
           "normalization": "",
           "completion": "none",
           "binding": "",
-          "visibility": "visible",
+          "visibility": "hidden",
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.run.flag.runtime-metrics-max-size-mb",
@@ -12284,54 +10743,6 @@
             "since": "1.0.0"
           }
         },
-        "you.server.flag.default-worker-model": {
-          "id": "you.server.flag.default-worker-model",
-          "long": "default-worker-model",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "valueType": "string",
-          "required": false,
-          "default": "",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.server.flag.default-worker-model",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
-        "you.server.flag.default-worker-model-provider": {
-          "id": "you.server.flag.default-worker-model-provider",
-          "long": "default-worker-model-provider",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "valueType": "string",
-          "required": false,
-          "default": "",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.server.flag.default-worker-model-provider",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
         "you.server.flag.json": {
           "id": "you.server.flag.json",
           "long": "json",
@@ -12564,54 +10975,6 @@
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.submit.flag.debug",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
-        "you.submit.flag.default-worker-model": {
-          "id": "you.submit.flag.default-worker-model",
-          "long": "default-worker-model",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "valueType": "string",
-          "required": false,
-          "default": "",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.submit.flag.default-worker-model",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
-        "you.submit.flag.default-worker-model-provider": {
-          "id": "you.submit.flag.default-worker-model-provider",
-          "long": "default-worker-model-provider",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "valueType": "string",
-          "required": false,
-          "default": "",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.submit.flag.default-worker-model-provider",
             "state": "active",
             "since": "1.0.0"
           }
@@ -12968,54 +11331,6 @@
           "lifecycle": {
             "formatVersion": "1.0.0",
             "itemId": "you.submit.batch.flag.debug",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
-        "you.submit.batch.flag.default-worker-model": {
-          "id": "you.submit.batch.flag.default-worker-model",
-          "long": "default-worker-model",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model",
-          "valueType": "string",
-          "required": false,
-          "default": "",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.submit.batch.flag.default-worker-model",
-            "state": "active",
-            "since": "1.0.0"
-          }
-        },
-        "you.submit.batch.flag.default-worker-model-provider": {
-          "id": "you.submit.batch.flag.default-worker-model-provider",
-          "long": "default-worker-model-provider",
-          "shorthand": "",
-          "aliases": [],
-          "scope": "inherited",
-          "inheritedFromInputId": "you.flag.default-worker-model-provider",
-          "valueType": "string",
-          "required": false,
-          "default": "",
-          "changedDefault": false,
-          "noOptionDefault": "",
-          "repeatable": false,
-          "normalization": "",
-          "completion": "none",
-          "binding": "",
-          "visibility": "visible",
-          "lifecycle": {
-            "formatVersion": "1.0.0",
-            "itemId": "you.submit.batch.flag.default-worker-model-provider",
             "state": "active",
             "since": "1.0.0"
           }

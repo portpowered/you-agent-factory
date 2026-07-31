@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/root"
 	"github.com/portpowered/infinite-you/pkg/services/edges"
@@ -29,11 +30,15 @@ var runProcess = func() int {
 		if err == nil {
 			stdinIsTTY := streamIsTerminal(os.Stdin)
 			stdoutIsTTY := streamIsTerminal(os.Stdout)
+			stderrIsTTY := streamIsTerminal(os.Stderr)
 			err = process.Execute(root.Input{
 				Args: os.Args, Env: os.Environ(), Stdin: os.Stdin, Stdout: os.Stdout,
 				Stderr: os.Stderr, Context: ctx, WorkingDirectory: workingDirectory,
-				StdinIsTTY: &stdinIsTTY, StdoutIsTTY: &stdoutIsTTY,
+				StdinIsTTY: &stdinIsTTY, StdoutIsTTY: &stdoutIsTTY, StderrIsTTY: &stderrIsTTY,
 			})
+			closeCtx, cancelClose := context.WithTimeout(context.Background(), 5*time.Second)
+			err = errors.Join(err, process.Close(closeCtx))
+			cancelClose()
 		}
 	}
 	return processExitCode(err, ctx.Err(), os.Args)
@@ -94,7 +99,7 @@ func selectedCommandName(args []string) string {
 
 func globalFlagConsumesValue(arg string) bool {
 	switch arg {
-	case "--server", "--default-worker-model-provider", "--default-worker-model":
+	case "--server":
 		return true
 	default:
 		return false

@@ -10,6 +10,7 @@ const distRoot = path.join(packageRoot, "dist");
 const allowedDependencies = new Set([
   "@you-agent-factory/client",
   "@you-agent-factory/components",
+  "@you-agent-factory/factory-graph",
   "@you-agent-factory/factory-replay",
   "@xyflow/react",
   "react",

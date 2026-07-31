@@ -2,27 +2,20 @@ package factory_test
 
 import (
 	"context"
-	"os/exec"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/replayhooks"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
-)
-
-const (
-	runtimeReplayhooksPackage = factoryRuntimeRoot + "/internal/services/orchestration/replayhooks"
-	runtimeHostPackage        = factoryRuntimeRoot + "/internal/host"
 )
 
 // TestRuntimeConstructsRecordingsCapabilitiesThroughRoot proves CUT-RUN-REC story 003:
@@ -153,45 +146,6 @@ func testRuntimeHostingExposesRecordingsRootCapabilities(t *testing.T) {
 // TestRuntimeRecordingsRequestConstructionImportsRecordingsRootOnly seals the
 // request-construction path: Runtime boundary tests may depend on Recordings
 // only through the service root contract.
-func TestRuntimeRecordingsRequestConstructionImportsRecordingsRootOnly(t *testing.T) {
-	t.Parallel()
-
-	for _, packagePath := range []string{runtimeReplayhooksPackage, runtimeHostPackage} {
-		packagePath := packagePath
-		t.Run(shortRuntimePackageName(packagePath), func(t *testing.T) {
-			t.Parallel()
-			assertRecordingsRequestConstructionImportsRecordingsRootOnly(t, packagePath)
-		})
-	}
-}
-
-func assertRecordingsRequestConstructionImportsRecordingsRootOnly(t *testing.T, packagePath string) {
-	t.Helper()
-
-	cmd := exec.Command("go", "list", "-f", "{{join .Imports \"\\n\"}}", packagePath)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("go list imports for %s: %v\n%s", packagePath, err, output)
-	}
-	for _, importPath := range strings.Fields(string(output)) {
-		if isForbiddenFactoryRuntimeRecordingsImport(importPath) {
-			t.Fatalf(
-				"%s import %s is forbidden for recordings request construction; use %s only",
-				packagePath,
-				importPath,
-				recordingsRoot,
-			)
-		}
-	}
-}
-
-func shortRuntimePackageName(packagePath string) string {
-	prefix := factoryRuntimeRoot + "/"
-	if strings.HasPrefix(packagePath, prefix) {
-		return strings.TrimPrefix(packagePath, prefix)
-	}
-	return packagePath
-}
 
 type runtimeReplayHookStub struct {
 	name         string

@@ -112,11 +112,11 @@ func TestResolveChildWorkerSettings_FieldByFieldPrecedence(t *testing.T) {
 		name      string
 		req, want factory.JavaScriptChildExecutionRequest
 	}{
-		{"explicit fields", factory.JavaScriptChildExecutionRequest{ModelProvider: "kiro-cli", Model: "explicit-model", ReasoningEffort: "minimal"}, factory.JavaScriptChildExecutionRequest{ModelProvider: "kiro-cli", Model: "explicit-model", ReasoningEffort: "minimal"}},
-		{"child preset", factory.JavaScriptChildExecutionRequest{Preset: "child"}, factory.JavaScriptChildExecutionRequest{Preset: "child", ModelProvider: "CLAUDE", Model: "child-model", ReasoningEffort: "high"}},
-		{"factory preset", factory.JavaScriptChildExecutionRequest{AgentID: "reviewer"}, factory.JavaScriptChildExecutionRequest{AgentID: "reviewer", Preset: "factory", ModelProvider: "CODEX", Model: "factory-model", ReasoningEffort: "low"}},
-		{"mixed fields", factory.JavaScriptChildExecutionRequest{AgentID: "reviewer", Preset: "child", Model: "explicit-model"}, factory.JavaScriptChildExecutionRequest{AgentID: "reviewer", Preset: "child", ModelProvider: "CLAUDE", Model: "explicit-model", ReasoningEffort: "high"}},
-		{"scalar defaults", factory.JavaScriptChildExecutionRequest{}, factory.JavaScriptChildExecutionRequest{ModelProvider: "GEMINI", Model: "scalar-model"}},
+		{"explicit fields", factory.JavaScriptChildExecutionRequest{ModelProvider: "kiro-cli", Model: "explicit-model", ReasoningEffort: " XHIGH "}, factory.JavaScriptChildExecutionRequest{ModelProvider: "kiro-cli", Model: "explicit-model", ReasoningEffort: "xhigh"}},
+		{"child preset", factory.JavaScriptChildExecutionRequest{Preset: "child"}, factory.JavaScriptChildExecutionRequest{Preset: "child", ModelProvider: "claude", Model: "child-model", ReasoningEffort: "high"}},
+		{"factory preset", factory.JavaScriptChildExecutionRequest{AgentID: "reviewer"}, factory.JavaScriptChildExecutionRequest{AgentID: "reviewer", Preset: "factory", ModelProvider: "codex", Model: "factory-model", ReasoningEffort: "low"}},
+		{"mixed fields", factory.JavaScriptChildExecutionRequest{AgentID: "reviewer", Preset: "child", Model: "explicit-model"}, factory.JavaScriptChildExecutionRequest{AgentID: "reviewer", Preset: "child", ModelProvider: "claude", Model: "explicit-model", ReasoningEffort: "high"}},
+		{"scalar defaults", factory.JavaScriptChildExecutionRequest{}, factory.JavaScriptChildExecutionRequest{ModelProvider: "gemini", Model: "scalar-model"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -132,6 +132,20 @@ func TestResolveChildWorkerSettings_FieldByFieldPrecedence(t *testing.T) {
 				t.Fatalf("repeated selection = %#v, %v; want %#v", again, err, got)
 			}
 		})
+	}
+}
+
+func TestResolveChildWorkerSettings_CanonicalizesExplicitModelProvider(t *testing.T) {
+	got, err := workflowruntime.ResolveChildWorkerSettings(
+		factory.JavaScriptChildExecutionRequest{ModelProvider: " CODEX "},
+		nil,
+		factory.JavaScriptWorkerSettings{},
+	)
+	if err != nil {
+		t.Fatalf("ResolveChildWorkerSettings() error = %v", err)
+	}
+	if got.ModelProvider != "codex" {
+		t.Fatalf("modelProvider = %q, want canonical codex", got.ModelProvider)
 	}
 }
 
@@ -470,7 +484,7 @@ func (s *stubChildExecutor) executionRequests() []factory.JavaScriptChildExecuti
 
 func TestRun_AgentRunDynamicObjectCarriesCanonicalFieldsToExecutor(t *testing.T) {
 	stub := &stubChildExecutor{mode: stubChildExecutionMode}
-	source := `const child = { prompt: " review ", label: " reviewer ", preset: " careful ", executorProvider: " cursor-acp ", modelProvider: " codex ", model: " gpt-test ", reasoningEffort: " high " }; agent.run(child); return { ok: true };`
+	source := `const child = { prompt: " review ", label: " reviewer ", preset: " careful ", executorProvider: " cursor-acp ", modelProvider: " codex ", model: " gpt-test ", reasoningEffort: " high ", skipPermissions: true }; agent.run(child); return { ok: true };`
 	outcome, err := runtimeWorkflows.Run(context.Background(), factory.JavaScriptRuntimeRequest{
 		Source: source, SourceRef: "inline", SessionID: "canonical-child-fields",
 		Policy: workflowpolicy.DefaultEffectivePolicy(),
@@ -488,8 +502,28 @@ func TestRun_AgentRunDynamicObjectCarriesCanonicalFieldsToExecutor(t *testing.T)
 		t.Fatalf("executor request count = %d, want 1", len(requests))
 	}
 	got := requests[0]
-	if got.Prompt != "review" || got.Label != "reviewer" || got.Preset != "careful" || got.ExecutorProvider != "cursor-acp" || got.ModelProvider != "codex" || got.Model != "gpt-test" || got.ReasoningEffort != "high" {
+	if got.Prompt != "review" || got.Label != "reviewer" || got.Preset != "careful" || got.ExecutorProvider != "cursor-acp" || got.ModelProvider != "codex" || got.Model != "gpt-test" || got.ReasoningEffort != "high" || !got.SkipPermissions {
 		t.Fatalf("executor request = %#v, want normalized canonical fields", got)
+	}
+}
+
+func TestRun_AgentRunRejectsNonBooleanSkipPermissionsBeforeDispatch(t *testing.T) {
+	stub := &stubChildExecutor{mode: stubChildExecutionMode}
+	outcome, err := runtimeWorkflows.Run(context.Background(), factory.JavaScriptRuntimeRequest{
+		Source:    `agent.run({ prompt: "review", skipPermissions: "true" }); return { ok: true };`,
+		SourceRef: "inline", SessionID: "invalid-skip-permissions",
+		Policy: workflowpolicy.DefaultEffectivePolicy(),
+	}, factory.JavaScriptRuntimeHooks{NewChildExecutor: func(string, factory.JavaScriptChildRecordSink, workflowpolicy.EffectivePolicy) factory.JavaScriptChildExecutor {
+		return stub
+	}})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if outcome.OK || !strings.Contains(outcome.Failure.Message, `agent.run() requires "skipPermissions" to be a boolean`) {
+		t.Fatalf("Run() outcome = %#v, want typed skipPermissions failure", outcome)
+	}
+	if len(stub.executionRequests()) != 0 {
+		t.Fatal("invalid skipPermissions reached child executor")
 	}
 }
 

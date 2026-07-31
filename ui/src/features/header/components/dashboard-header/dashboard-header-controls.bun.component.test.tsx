@@ -11,7 +11,7 @@ import type { DashboardSessionTabsState } from "../../hooks/use-dashboard-sessio
 import { getColorPaletteOptions } from "../../messages/color-palette-options";
 import { getHeaderControlsMessages } from "../../messages/header-controls";
 import { DashboardHeaderColorPaletteControls } from "../dashboard-header-color-palette-controls";
-import { DashboardHeaderSessionControls } from "../dashboard-header-session-controls";
+import { DashboardSessionControls } from "../dashboard-session-controls";
 
 function inactiveSessionTabsState(): DashboardSessionTabsState {
   return {
@@ -33,7 +33,7 @@ it("header controls expose localized icon-only actions and open export", () => {
         locale={locale}
         onChangeLocale={() => {}}
       />
-      <DashboardHeaderSessionControls
+      <DashboardSessionControls
         isExportDialogOpen={false}
         locale={locale}
         onOpenExportDialog={onOpenExportDialog}

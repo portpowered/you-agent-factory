@@ -115,7 +115,7 @@
     },
     "operatorWorkerModelProvider": {
       "type": "string",
-      "pattern": "^[\\t-\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]*(?:AGY|ANTHROPIC|CLAUDE|CODEX|CURSOR|CURSOR_AGENT|GEMINI|KIRO|OPENAI|OPENCODE|PI|agent|agy|anthropic|antigravity|claude|codex|cursor|cursor-agent|gemini|kiro|kiro-cli|openai|opencode|pi)[\\t-\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]*$",
+      "pattern": "^[\\t-\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]*(?:AGY|ANTHROPIC|CLAUDE|CODEX|GEMINI|KIRO|OPENAI|OPENCODE|PI|agy|anthropic|antigravity|claude|codex|gemini|kiro|kiro-cli|openai|opencode|pi)[\\t-\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]*$",
       "description": "Required model provider canonicalized to a supported provider after surrounding whitespace is trimmed. Symbolic DEFAULT is rejected in presets."
     },
     "workerPreset": {
@@ -155,13 +155,15 @@
         },
         "reasoningEffort": {
           "type": "string",
-          "pattern": "^[\\t-\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]*(?:[mM][iI][nN][iI][mM][aA][lL]|[lL][oO][wW]|[mM][eE][dD][iI][uU][mM]|[hH][iI][gG][hH])?[\\t-\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]*$",
+          "pattern": "^[\\t-\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]*(?:[mM][iI][nN][iI][mM][aA][lL]|[lL][oO][wW]|[mM][eE][dD][iI][uU][mM]|[hH][iI][gG][hH]|[xX][hH][iI][gG][hH]|[mM][aA][xX])?[\\t-\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]*$",
           "description": "Optional reasoning effort level. Surrounding whitespace and letter case are normalized; an empty value is accepted.",
           "examples": [
             "",
             "low",
             "medium",
-            "high"
+            "high",
+            "xhigh",
+            "max"
           ]
         }
       }
@@ -446,7 +448,7 @@
       "defaults.workerModelProvider": {
         "inventoryId": "defaults.workerModelProvider",
         "jsonPath": "defaults.workerModelProvider",
-        "defaultEmptyBehavior": "missing or whitespace-only value is unset until env/flag layers apply; symbolic DEFAULT resolves through lower-precedence concrete provider",
+        "defaultEmptyBehavior": "missing or whitespace-only value is unset until the environment layer applies; symbolic DEFAULT resolves through lower-precedence concrete provider",
         "parseOwner": "operator_settings",
         "persistenceOwner": "operator_settings",
         "strictness": "operator_settings generated GlobalConfig strict decode (unknown fields and trailing JSON rejected)",
@@ -483,11 +485,9 @@
           "itemId": "config.defaults.worker-model-provider",
           "layers": [
             "file",
-            "env",
-            "flag"
+            "env"
           ],
-          "environmentVariable": "YOU_DEFAULT_WORKER_MODEL_PROVIDER",
-          "flagName": "--default-worker-model-provider"
+          "environmentVariable": "YOU_DEFAULT_WORKER_MODEL_PROVIDER"
         },
         "sensitivity": {
           "formatVersion": "1.0.0",
@@ -498,7 +498,7 @@
       "defaults.workerModel": {
         "inventoryId": "defaults.workerModel",
         "jsonPath": "defaults.workerModel",
-        "defaultEmptyBehavior": "missing or whitespace-only value is unset until env/flag layers apply",
+        "defaultEmptyBehavior": "missing or whitespace-only value is unset until the environment layer applies",
         "parseOwner": "operator_settings",
         "persistenceOwner": "operator_settings",
         "strictness": "operator_settings generated GlobalConfig strict decode (unknown fields and trailing JSON rejected)",
@@ -512,7 +512,7 @@
             },
             "description": {
               "id": "config.defaults.worker-model.description",
-              "canonicalEnglish": "Default model name for workers when not overridden per preset or invocation. Missing or whitespace-only values remain unset until env/flag layers apply."
+              "canonicalEnglish": "Default model name for workers when not overridden per preset or invocation. Missing or whitespace-only values remain unset until the environment layer applies."
             }
           },
           "examples": [
@@ -533,11 +533,9 @@
           "itemId": "config.defaults.worker-model",
           "layers": [
             "file",
-            "env",
-            "flag"
+            "env"
           ],
-          "environmentVariable": "YOU_DEFAULT_WORKER_MODEL",
-          "flagName": "--default-worker-model"
+          "environmentVariable": "YOU_DEFAULT_WORKER_MODEL"
         },
         "sensitivity": {
           "formatVersion": "1.0.0",
@@ -741,7 +739,7 @@
       "workerPresets[].reasoningEffort": {
         "inventoryId": "workerPresets[].reasoningEffort",
         "jsonPath": "workerPresets[].reasoningEffort",
-        "defaultEmptyBehavior": "optional; empty value is accepted; supported values are minimal, low, medium, high",
+        "defaultEmptyBehavior": "optional; empty value is accepted; supported values are minimal, low, medium, high, xhigh, max",
         "parseOwner": "operator_settings",
         "persistenceOwner": "operator_settings",
         "strictness": "operator_settings generated GlobalConfig strict decode (unknown fields and trailing JSON rejected)",
@@ -755,14 +753,16 @@
             },
             "description": {
               "id": "config.worker-presets.reasoning-effort.description",
-              "canonicalEnglish": "Optional reasoning effort level. Empty value is accepted; supported values are minimal, low, medium, and high."
+              "canonicalEnglish": "Optional reasoning effort level. Empty value is accepted; supported values are minimal, low, medium, high, xhigh, and max."
             }
           },
           "examples": [
             "",
             "low",
             "medium",
-            "high"
+            "high",
+            "xhigh",
+            "max"
           ],
           "visibility": "public",
           "sourceHash": "e86e22b0cc80dc31e5ae9137dfd66f86a61957be6d71684ef364a36379aa5a76"

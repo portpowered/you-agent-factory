@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
+	"time"
 )
 
 // functionalRPCPeer is deliberately an ACP implementation at the process
@@ -20,6 +22,7 @@ type functionalRPCPeer struct {
 	stderr     io.Writer
 	modelSet   bool
 	sessionID  string
+	sessions   int
 	nextCallID int
 }
 
@@ -81,7 +84,13 @@ func (p *functionalRPCPeer) serve() error {
 			if p.mode == "model" {
 				config = `[{"type":"select","id":"model","name":"Model","category":"model","currentValue":"default","options":[{"name":"Test model","value":"test-model"}]}]`
 			}
-			result := json.RawMessage(fmt.Sprintf(`{"sessionId":%q,"configOptions":%s}`, p.sessionID, config))
+			p.sessions++
+			sessionID := p.sessionID
+			if p.mode == "persistent" || p.mode == "serialize" {
+				sessionID = fmt.Sprintf("acp-session-functional-1-%d", p.sessions)
+			}
+			p.sessionID = sessionID
+			result := json.RawMessage(fmt.Sprintf(`{"sessionId":%q,"configOptions":%s}`, sessionID, config))
 			if err := p.respond(request.ID, result); err != nil {
 				return err
 			}
@@ -100,7 +109,14 @@ func (p *functionalRPCPeer) serve() error {
 			if err := p.prompt(request); err != nil {
 				return err
 			}
-			return nil
+			if (p.mode == "spawn" && p.sessions >= 4) ||
+				(p.mode == "tournament" && p.sessions >= 3) ||
+				((p.mode == "persistent" || p.mode == "serialize") && p.sessions >= 2) {
+				return nil
+			}
+			if p.mode != "persistent" && p.mode != "serialize" && p.mode != "spawn" && p.mode != "tournament" {
+				return nil
+			}
 		case "$/cancel_request", "session/cancel":
 			return nil
 		default:
@@ -114,6 +130,34 @@ func (p *functionalRPCPeer) serve() error {
 }
 
 func (p *functionalRPCPeer) prompt(request rpcEnvelope) error {
+	if handled, err := p.respondToPackagedPrompt(request); handled {
+		return err
+	}
+	if p.mode == "crash-once" {
+		marker := os.Getenv("YOU_TEST_ACP_CRASH_MARKER")
+		if _, err := os.Stat(marker); os.IsNotExist(err) {
+			if err := os.WriteFile(marker, []byte("crashed"), 0o600); err != nil {
+				return err
+			}
+			return fmt.Errorf("intentional ACP peer crash")
+		}
+	}
+	if p.mode == "serialize" && p.sessions == 1 {
+		if signal := os.Getenv("YOU_TEST_ACP_PROMPT_SIGNAL"); signal != "" {
+			_ = os.WriteFile(signal, []byte("first-prompt-started"), 0o600)
+		}
+		release := os.Getenv("YOU_TEST_ACP_RELEASE_SIGNAL")
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			if _, err := os.Stat(release); err == nil {
+				break
+			}
+			if time.Now().After(deadline) {
+				return fmt.Errorf("timed out waiting for first prompt release")
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
 	if p.mode == "block" {
 		if signal := os.Getenv("YOU_TEST_ACP_PROMPT_SIGNAL"); signal != "" {
 			_ = os.WriteFile(signal, []byte("prompt-started"), 0o600)
@@ -144,6 +188,23 @@ func (p *functionalRPCPeer) prompt(request rpcEnvelope) error {
 			return p.respondError(request.ID, -32603, "Internal error", map[string]any{"error": "ACP prompt omitted canonical resource link"})
 		}
 	}
+	if p.mode == "content" {
+		var params struct {
+			Prompt []map[string]any `json:"prompt"`
+		}
+		if err := json.Unmarshal(request.Params, &params); err != nil {
+			return fmt.Errorf("decode content prompt: %w", err)
+		}
+		want := os.Getenv("YOU_TEST_ACP_CONTENT_SENTINEL")
+		found := false
+		for _, block := range params.Prompt {
+			text, _ := block["text"].(string)
+			found = found || strings.Contains(text, want)
+		}
+		if want == "" || !found {
+			return p.respondError(request.ID, -32603, "Internal error", map[string]any{"error": "ACP prompt omitted input Work content"})
+		}
+	}
 	if p.mode == "model" && !p.modelSet {
 		return p.respondError(request.ID, -32603, "Internal error", map[string]any{"error": "advertised model was not applied"})
 	}
@@ -172,6 +233,26 @@ func (p *functionalRPCPeer) prompt(request rpcEnvelope) error {
 		}
 	}
 	return p.respond(request.ID, json.RawMessage(`{"stopReason":"end_turn"}`))
+}
+
+func (p *functionalRPCPeer) respondToPackagedPrompt(request rpcEnvelope) (bool, error) {
+	responses := map[string][]string{
+		"tournament": {"candidate one", "candidate two", `{"winner":"B","rationale":"candidate two is stronger"}`},
+		"spawn":      {`["research climate","research cost"]`, "climate findings", "cost findings", "merged travel answer"},
+	}
+	modeResponses, ok := responses[p.mode]
+	if !ok {
+		return false, nil
+	}
+	index := p.sessions - 1
+	if index < 0 || index >= len(modeResponses) {
+		message := fmt.Sprintf("unexpected packaged %s prompt", p.mode)
+		return true, p.respondError(request.ID, -32603, "Internal error", map[string]any{"error": message})
+	}
+	if err := p.update(fmt.Sprintf(`{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":%q}}`, modeResponses[index])); err != nil {
+		return true, err
+	}
+	return true, p.respond(request.ID, json.RawMessage(`{"stopReason":"end_turn"}`))
 }
 
 func (p *functionalRPCPeer) assertUnsupportedClientMethods() error {

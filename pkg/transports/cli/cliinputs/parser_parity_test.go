@@ -244,6 +244,56 @@ func productionParserParityRunFlagCases() []productionParserParityCase {
 			},
 		},
 		{
+			name:        "run bare with-mock-workers before signature args leaves --to positional",
+			commandPath: "you run",
+			argv:        []string{"run", "--with-mock-workers", "--to", "fix the bug"},
+			flagLong:    "with-mock-workers",
+			verify: func(t *testing.T, inv cliinputs.Inventory, parsed platformprocess.CLIParseResult) {
+				t.Helper()
+				record := findFlagRecord(t, inv, "you run", "with-mock-workers")
+				flag := parsedFlag(parsed, "with-mock-workers")
+				if flag == nil || !flag.Changed || flag.Value != record.NoOptionDefault {
+					t.Fatalf("parsed with-mock-workers = %#v, want no-option default %q", flag, record.NoOptionDefault)
+				}
+				if len(parsed.Positionals) != 2 || parsed.Positionals[0] != "--to" || parsed.Positionals[1] != "fix the bug" {
+					t.Fatalf("positionals = %v, want [--to fix the bug]", parsed.Positionals)
+				}
+			},
+		},
+		{
+			name:        "run bare with-mock-workers after signature args leaves --to positional",
+			commandPath: "you run",
+			argv:        []string{"run", "--to", "fix the bug", "--with-mock-workers"},
+			flagLong:    "with-mock-workers",
+			verify: func(t *testing.T, inv cliinputs.Inventory, parsed platformprocess.CLIParseResult) {
+				t.Helper()
+				record := findFlagRecord(t, inv, "you run", "with-mock-workers")
+				flag := parsedFlag(parsed, "with-mock-workers")
+				if flag == nil || !flag.Changed || flag.Value != record.NoOptionDefault {
+					t.Fatalf("parsed with-mock-workers = %#v, want no-option default %q", flag, record.NoOptionDefault)
+				}
+				if len(parsed.Positionals) != 2 || parsed.Positionals[0] != "--to" || parsed.Positionals[1] != "fix the bug" {
+					t.Fatalf("positionals = %v, want [--to fix the bug]", parsed.Positionals)
+				}
+			},
+		},
+		{
+			name:        "run with-mock-workers explicit config path does not steal signature args",
+			commandPath: "you run",
+			argv:        []string{"run", "--with-mock-workers", "mock-workers.json", "--to", "fix the bug"},
+			flagLong:    "with-mock-workers",
+			verify: func(t *testing.T, inv cliinputs.Inventory, parsed platformprocess.CLIParseResult) {
+				t.Helper()
+				flag := parsedFlag(parsed, "with-mock-workers")
+				if flag == nil || !flag.Changed || flag.Value != "mock-workers.json" {
+					t.Fatalf("parsed with-mock-workers = %#v, want mock-workers.json", flag)
+				}
+				if len(parsed.Positionals) != 2 || parsed.Positionals[0] != "--to" || parsed.Positionals[1] != "fix the bug" {
+					t.Fatalf("positionals = %v, want [--to fix the bug]", parsed.Positionals)
+				}
+			},
+		},
+		{
 			name:        "run no-option bool flag parses as true",
 			commandPath: "you run",
 			argv:        []string{"run", "--no-record"},

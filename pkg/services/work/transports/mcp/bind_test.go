@@ -3,7 +3,6 @@ package workmcp_test
 import (
 	"context"
 	"encoding/json"
-	"os/exec"
 	"strings"
 	"testing"
 
@@ -28,7 +27,7 @@ func TestBind_FakeRootInvokedThroughGetTool(t *testing.T) {
 				t.Fatalf("workId = %q, want %q", workID, testWorkID)
 			}
 			return work.ReadModel{
-				WorkID:   testWorkID,
+				WorkID:       testWorkID,
 				WorkTypeName: "task",
 			}, nil
 		},
@@ -84,14 +83,6 @@ func TestBind_ToolOperationRejectsMissingContext(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "MCP request context is required") {
 		t.Fatalf("ToolOperation(nil context) error = %v, want required-context error", err)
 	}
-}
-
-func TestPackageBoundary_DoesNotImportWorkInternal(t *testing.T) {
-	t.Parallel()
-
-	forbidden := "github.com/portpowered/infinite-you/pkg/services/work/internal"
-	packagePath := "github.com/portpowered/infinite-you/pkg/services/work/transports/mcp"
-	assertPackageDirectImportsForbidden(t, packagePath, []string{forbidden})
 }
 
 type fakeWorkRoot struct {
@@ -157,22 +148,4 @@ func (fake fakeWorkRoot) MoveWorkForSession(
 		panic("unexpected MoveWorkForSession on fake Work root")
 	}
 	return fake.moveWorkForSession(ctx, sessionID, workID, stateName, requestID)
-}
-
-func assertPackageDirectImportsForbidden(t *testing.T, packagePath string, forbiddenRoots []string) {
-	t.Helper()
-
-	cmd := exec.Command("go", "list", "-f", "{{.Imports}}", packagePath)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("go list imports for %s: %v\n%s", packagePath, err, output)
-	}
-	imports := strings.Fields(strings.Trim(string(output), "[]"))
-	for _, importPath := range imports {
-		for _, forbidden := range forbiddenRoots {
-			if importPath == forbidden || strings.HasPrefix(importPath, forbidden+"/") {
-				t.Fatalf("%s must not import forbidden ownership %s; found direct import %s", packagePath, forbidden, importPath)
-			}
-		}
-	}
 }

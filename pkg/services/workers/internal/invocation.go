@@ -1,24 +1,25 @@
 package internal
 
 import (
+	"context"
 	"fmt"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
+	runnerswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire"
 	workerinvocation "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/invocation"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
-	workerproviderstructured "github.com/portpowered/infinite-you/pkg/services/workers/provider/structured"
 )
 
 // NewInvocation constructs the narrow direct-invocation role used by
 // standalone Factory Session execution.
 func NewInvocation(
+	providersService providers.Service,
 	commandRunner workers.CommandRunner,
-	commandClock workerprocess.Clock,
-	allocator agypty.PTYAllocator,
+	commandClock workers.Clock,
+	allocator workers.PTYAllocator,
 	resolveSymlinks workers.ResolveExecutableSymlinks,
 	executableLocator platformprocess.ExecutableLocator,
 	executableInspector platformfilesystem.PathInspector,
@@ -27,7 +28,7 @@ func NewInvocation(
 	temporaryFileSystems ...platformfilesystem.TemporaryFileSystem,
 ) (workers.InvocationExecutor, error) {
 	return newInvocation(
-		commandRunner, commandClock, allocator, resolveSymlinks,
+		providersService, commandRunner, commandClock, allocator, resolveSymlinks,
 		executableLocator, executableInspector, executableFiles, operatingSystem,
 		nil, temporaryFileSystems...,
 	)
@@ -36,34 +37,36 @@ func NewInvocation(
 // NewInvocationWithProgress constructs one direct-invocation role that publishes
 // provider progress fragments through the supplied publisher.
 func NewInvocationWithProgress(
+	providersService providers.Service,
 	commandRunner workers.CommandRunner,
-	commandClock workerprocess.Clock,
-	allocator agypty.PTYAllocator,
+	commandClock workers.Clock,
+	allocator workers.PTYAllocator,
 	resolveSymlinks workers.ResolveExecutableSymlinks,
 	executableLocator platformprocess.ExecutableLocator,
 	executableInspector platformfilesystem.PathInspector,
 	executableFiles platformfilesystem.ReadOpener,
 	operatingSystem workers.OperatingSystem,
-	progressPublisher workerprovider.InferenceProgressPublisher,
+	progressPublisher workers.ProgressPublisher,
 	temporaryFileSystems ...platformfilesystem.TemporaryFileSystem,
 ) (workers.InvocationExecutor, error) {
 	return newInvocation(
-		commandRunner, commandClock, allocator, resolveSymlinks,
+		providersService, commandRunner, commandClock, allocator, resolveSymlinks,
 		executableLocator, executableInspector, executableFiles, operatingSystem,
 		progressPublisher, temporaryFileSystems...,
 	)
 }
 
 func newInvocation(
+	providersService providers.Service,
 	commandRunner workers.CommandRunner,
-	commandClock workerprocess.Clock,
-	allocator agypty.PTYAllocator,
+	commandClock workers.Clock,
+	allocator workers.PTYAllocator,
 	resolveSymlinks workers.ResolveExecutableSymlinks,
 	executableLocator platformprocess.ExecutableLocator,
 	executableInspector platformfilesystem.PathInspector,
 	executableFiles platformfilesystem.ReadOpener,
 	operatingSystem workers.OperatingSystem,
-	progressPublisher workerprovider.InferenceProgressPublisher,
+	progressPublisher workers.ProgressPublisher,
 	temporaryFileSystems ...platformfilesystem.TemporaryFileSystem,
 ) (workers.InvocationExecutor, error) {
 	if commandRunner == nil {
@@ -75,31 +78,35 @@ func newInvocation(
 	if allocator == nil {
 		return nil, fmt.Errorf("construct Worker invocation: PTY allocator is required")
 	}
+	if providersService == nil {
+		return nil, fmt.Errorf("construct Worker invocation: Providers service is required")
+	}
 	if progressPublisher == nil {
-		provider, err := NewProviderFromCommandRunner(
-			commandRunner, commandClock, allocator, resolveSymlinks,
-			executableLocator, executableInspector, executableFiles, operatingSystem,
-			temporaryFileSystems...,
-		)
-		if err != nil {
-			return nil, err
-		}
-		return workerinvocation.NewExecutor(provider), nil
+		progressPublisher = func(workers.ProgressFragment) {}
 	}
+	registry, err := runnerswire.NewAgentRegistry(runners.AgentDependencies{
+		Providers: providersService,
+		Publish:   progressPublisher,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("construct Worker invocation: %w", err)
+	}
+	return workerinvocation.NewExecutor(registryExecuteProvider{registry: registry}), nil
+}
 
-	factory, err := workerprovider.NewFactory(
-		commandRunner, commandClock, allocator, resolveSymlinks,
-		executableLocator, executableInspector, executableFiles, operatingSystem,
-		temporaryFileSystems...,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("construct Worker provider: %w", err)
+// registryExecuteProvider routes transitional InvocationExecutor traffic through
+// the private runners.Service.Execute boundary rather than holding a Strategy.
+type registryExecuteProvider struct{ registry runners.Service }
+
+func (provider registryExecuteProvider) Infer(
+	ctx context.Context,
+	request workers.ProviderInferenceRequest,
+) (workers.InferenceResponse, error) {
+	if provider.registry == nil {
+		return workers.InferenceResponse{}, fmt.Errorf("construct Worker invocation: agent runner registry is required")
 	}
-	provider, err := factory.New(
-		false, nil, progressPublisher, workerproviderstructured.NewExecutor(),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("construct Worker provider: %w", err)
-	}
-	return workerinvocation.NewExecutor(provider), nil
+	return provider.registry.Execute(ctx, runners.ExecuteRequest{
+		Identity: runners.AgentIdentity,
+		Attempt:  request,
+	})
 }

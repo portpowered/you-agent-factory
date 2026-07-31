@@ -30,7 +30,7 @@ function buildFactoryDocument(
     },
     workers: [
       {
-        modelProvider: "CURSOR",
+        modelProvider: "CODEX",
         name: "reviewer",
         type: "MODEL_WORKER",
       },

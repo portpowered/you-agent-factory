@@ -5,8 +5,8 @@ import (
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
+	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 )
 
 func provideRecordingsCLIAdapter() recordingscli.Adapter {

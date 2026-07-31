@@ -25,13 +25,13 @@ const repositoryImportPrefix = "github.com/portpowered/infinite-you/"
 const peerServiceImportBaselinePath = "service-cross-import-baseline.json"
 const peerServiceImportBaselineStage = "wire-injection-full-blow"
 const peerServiceImportDeletionGate = "replace the peer implementation import with the exact pkg/services/<peer> root contract and delete this exact entry"
-const testServiceImportBaselinePath = "test-service-import-baseline.json"
+const testServiceImportBaselinePath = "docs/internal/baselines/test-service-import-baseline.json"
 const testServiceImportBaselineStage = "wire-injection-full-blow"
 const testServiceImportDeletionGate = "replace the concrete service subpackage import with the owning service root contract, an owner-local test, or root.BuildProcess"
 const supportServiceImportBaselinePath = "support-service-import-baseline.json"
 const supportServiceImportBaselineStage = "wire-injection-full-blow"
 const supportServiceImportDeletionGate = "replace reusable support composition with service-root contracts, typed edge fakes, package-local owner fixtures, or root.BuildProcess"
-const serviceConstructionBaselinePath = "service-construction-baseline.json"
+const serviceConstructionBaselinePath = "docs/internal/baselines/service-construction-baseline.json"
 const serviceConstructionBaselineStage = "wire-injection-full-blow"
 const serviceConstructionDeletionGate = "inject the already-constructed service role from pkg/wire or move the invariant to the owning service"
 
@@ -68,7 +68,7 @@ var allowedServiceValueConstructionSymbols = map[string]map[string]struct{}{
 		"NewEmptyMockWorkersConfig": {},
 		"NewProviderError":          {},
 	},
-	"github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract": {
+	"github.com/portpowered/infinite-you/pkg/services/providers/inference": {
 		"NewCapabilitySet": {},
 	},
 }
@@ -102,7 +102,7 @@ var transportPrivateServiceSubpackages = []string{
 	"pkg/services/factory_sessions/internal/sessionservice",
 	"pkg/services/recordings/events",
 	"pkg/services/recordings/internal/services/canonical_ledger/events",
-	"pkg/services/workers/provider",
+	"pkg/services/providers/internal/services/execution/internal/provider",
 	"pkg/services/workers/runner",
 	"pkg/services/workers/service",
 	"pkg/services/workers/services",
@@ -112,73 +112,73 @@ var transportPrivateServiceSubpackages = []string{
 // paths whose external callers have been migrated to the owning service root.
 // Packages within the same service may continue using these paths internally.
 var convergedServiceSubpackageRoots = map[string]string{
-	"pkg/services/factory_definitions/internal/contracts":       "factory_definitions",
+	"pkg/services/factory_definitions/internal/contracts":                                           "factory_definitions",
 	"pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope":         "factory_definitions",
 	"pkg/services/factory_definitions/internal/services/invocation_policy/invocationinterpolation":  "factory_definitions",
 	"pkg/services/factory_definitions/internal/services/invocation_policy/invocationoutput":         "factory_definitions",
 	"pkg/services/factory_definitions/internal/services/invocation_policy/invocationworktype":       "factory_definitions",
-	"pkg/services/factory_definitions/internal/services/compilation/loadedsource":             "factory_definitions",
-	"pkg/services/factory_definitions/internal/services/catalog/persistence":              "factory_definitions",
+	"pkg/services/factory_definitions/internal/services/compilation/loadedsource":                   "factory_definitions",
+	"pkg/services/factory_definitions/internal/services/catalog/persistence":                        "factory_definitions",
 	"pkg/services/factory_definitions/internal/services/invocation_policy/quorumpolicy":             "factory_definitions",
-	"pkg/services/factory_definitions/internal/services/snapshots_portability/replayconfig":             "factory_definitions",
-	"pkg/services/factory_definitions/internal/services/catalog/resource":                 "factory_definitions",
-	"pkg/services/factory_definitions/internal/services/snapshots_portability/capture":          "factory_definitions",
+	"pkg/services/factory_definitions/internal/services/snapshots_portability/replayconfig":         "factory_definitions",
+	"pkg/services/factory_definitions/internal/services/catalog/resource":                           "factory_definitions",
+	"pkg/services/factory_definitions/internal/services/snapshots_portability/capture":              "factory_definitions",
 	"pkg/services/factory_definitions/internal/services/invocation_policy/ttsobservability":         "factory_definitions",
 	"pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution":     "factory_definitions",
 	"pkg/services/factory_definitions/internal/services/invocation_policy/workpropagation":          "factory_definitions",
-	"pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers":                  "factory_definitions",
-	"pkg/services/factory_definitions/internal/services/validation/authoredmodel/taxonomy":         "factory_definitions",
-	"pkg/services/factory_runtime/internal/services/orchestration/state":                        "factory_runtime",
-	"pkg/services/factory_runtime/internal/services/orchestration/token":                        "factory_runtime",
-	"pkg/services/factory_runtime/internal/services/orchestration/metrics":                      "factory_runtime",
-	"pkg/services/factory_runtime/internal/services/instance_host/build":                        "factory_runtime",
-	"pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptstore":  "factory_runtime",
+	"pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers":           "factory_definitions",
+	"pkg/services/factory_definitions/internal/services/validation/authoredmodel/taxonomy":          "factory_definitions",
+	"pkg/services/factory_runtime/internal/services/orchestration/state":                            "factory_runtime",
+	"pkg/services/factory_runtime/internal/services/orchestration/token":                            "factory_runtime",
+	"pkg/services/factory_runtime/internal/services/orchestration/metrics":                          "factory_runtime",
+	"pkg/services/factory_runtime/internal/services/instance_host/build":                            "factory_runtime",
+	"pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptstore":   "factory_runtime",
 	"pkg/services/factory_runtime/internal/services/checkpoint_recovery/internal/javascriptsummary": "factory_runtime",
-	"pkg/services/factory_runtime/internal/services/orchestration/context":                      "factory_runtime",
-	"pkg/services/factory_runtime/internal/services/orchestration/definitionmapping":            "factory_runtime",
-	"pkg/services/factory_runtime/internal/services/orchestration/engine":                       "factory_runtime",
-	"pkg/services/automations/internal/services/filesystem_watchers":                       "automations",
-	"pkg/services/automations/internal/services/filesystem_watchers/internal/service":      "automations",
-	"pkg/services/automations/internal/services/filesystem_watchers/wire":                  "automations",
-	"pkg/services/factory_runtime/internal":                     "factory_runtime",
-	"pkg/services/factory_runtime/internal/services/orchestration/orchestrationowner":           "factory_runtime",
-	"pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract":         "factory_runtime",
-	"pkg/services/factory_runtime/internal/services/orchestration/replayhooks":                  "factory_runtime",
-	"pkg/services/factory_runtime/internal/services/orchestration/runtime":                      "factory_runtime",
-	"pkg/services/factory_runtime/internal/services/orchestration/runtimecontract":              "factory_runtime",
-	"pkg/services/factory_runtime/internal/services/orchestration/scheduler":                    "factory_runtime",
-	"pkg/services/factory_runtime/internal/services/orchestration/subsystems":                   "factory_runtime",
-	"pkg/services/factory_runtime/internal/services/orchestration/throttle":                     "factory_runtime",
-	"pkg/services/factory_runtime/internal/services/orchestration/token_transformer":            "factory_runtime",
-	"pkg/services/factory_runtime/internal/services/orchestration/tooling": "factory_runtime",
-	"pkg/services/factory_sessions/internal/invocation":         "factory_sessions",
-	"pkg/services/factory_sessions/internal/cursors":            "factory_sessions",
-	"pkg/services/factory_sessions/internal/execution":          "factory_sessions",
-	"pkg/services/factory_sessions/internal/logicaltarget":      "factory_sessions",
-	"pkg/services/factory_sessions/internal/responseevents":     "factory_sessions",
-	"pkg/services/factory_sessions/internal/responseeventstore": "factory_sessions",
-	"pkg/services/factory_sessions/internal/responsestream":     "factory_sessions",
-	"pkg/services/factory_sessions/internal/runtime":            "factory_sessions",
-	"pkg/services/factory_sessions/internal/runtimebinding":     "factory_sessions",
-	"pkg/services/factory_definitions/internal/services/validation/impl":               "factory_definitions",
-	"pkg/services/factory_definitions/internal/services/snapshots_portability/editable":                 "factory_definitions",
-	"pkg/services/factory_definitions/scaffold":                 "factory_definitions",
-	"pkg/services/factory_definitions/service":                  "factory_definitions",
-	"pkg/services/recordings/events":                            "recordings",
-	"pkg/services/recordings/internal/services/canonical_ledger/events": "recordings",
-	"pkg/services/recordings/internal/services/projection_query/projections":        "recordings",
-	"pkg/services/recordings/internal/services/projection_query/projections/dashboard": "recordings",
-	"pkg/services/recordings/internal/services/artifacts_export/artifacts":             "recordings",
-	"pkg/services/recordings/internal/services/replay/replay":                            "recordings",
-	"pkg/services/recordings/artifacts":                                                "recordings",
-	"pkg/services/recordings/replay":                            "recordings",
-	"pkg/services/recordings/service":                           "recordings",
-	"pkg/services/workers/agypty":                               "workers",
-	"pkg/services/workers/invocation":                           "workers",
-	"pkg/services/workers/prompting":                            "workers",
-	"pkg/services/workers/provider":                             "workers",
-	"pkg/services/automations/internal/services/hosted_sources": "automations",
-	"pkg/services/workers/services/testing":                     "workers",
+	"pkg/services/factory_runtime/internal/services/orchestration/context":                          "factory_runtime",
+	"pkg/services/factory_runtime/internal/services/orchestration/definitionmapping":                "factory_runtime",
+	"pkg/services/factory_runtime/internal/services/orchestration/engine":                           "factory_runtime",
+	"pkg/services/automations/internal/services/filesystem_watchers":                                "automations",
+	"pkg/services/automations/internal/services/filesystem_watchers/internal/service":               "automations",
+	"pkg/services/automations/internal/services/filesystem_watchers/wire":                           "automations",
+	"pkg/services/factory_runtime/internal":                                                         "factory_runtime",
+	"pkg/services/factory_runtime/internal/services/orchestration/orchestrationowner":               "factory_runtime",
+	"pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract":             "factory_runtime",
+	"pkg/services/factory_runtime/internal/services/orchestration/replayhooks":                      "factory_runtime",
+	"pkg/services/factory_runtime/internal/services/orchestration/runtime":                          "factory_runtime",
+	"pkg/services/factory_runtime/internal/services/orchestration/runtimecontract":                  "factory_runtime",
+	"pkg/services/factory_runtime/internal/services/orchestration/scheduler":                        "factory_runtime",
+	"pkg/services/factory_runtime/internal/services/orchestration/subsystems":                       "factory_runtime",
+	"pkg/services/factory_runtime/internal/services/orchestration/throttle":                         "factory_runtime",
+	"pkg/services/factory_runtime/internal/services/orchestration/token_transformer":                "factory_runtime",
+	"pkg/services/factory_runtime/internal/services/orchestration/tooling":                          "factory_runtime",
+	"pkg/services/factory_sessions/internal/invocation":                                             "factory_sessions",
+	"pkg/services/factory_sessions/internal/cursors":                                                "factory_sessions",
+	"pkg/services/factory_sessions/internal/execution":                                              "factory_sessions",
+	"pkg/services/factory_sessions/internal/logicaltarget":                                          "factory_sessions",
+	"pkg/services/factory_sessions/internal/responseevents":                                         "factory_sessions",
+	"pkg/services/factory_sessions/internal/responseeventstore":                                     "factory_sessions",
+	"pkg/services/factory_sessions/internal/responsestream":                                         "factory_sessions",
+	"pkg/services/factory_sessions/internal/runtime":                                                "factory_sessions",
+	"pkg/services/factory_sessions/internal/runtimebinding":                                         "factory_sessions",
+	"pkg/services/factory_definitions/internal/services/validation/impl":                            "factory_definitions",
+	"pkg/services/factory_definitions/internal/services/snapshots_portability/editable":             "factory_definitions",
+	"pkg/services/factory_definitions/scaffold":                                                     "factory_definitions",
+	"pkg/services/factory_definitions/service":                                                      "factory_definitions",
+	"pkg/services/recordings/events":                                                                "recordings",
+	"pkg/services/recordings/internal/services/canonical_ledger/events":                             "recordings",
+	"pkg/services/recordings/internal/services/projection_query/projections":                        "recordings",
+	"pkg/services/recordings/internal/services/projection_query/projections/dashboard":              "recordings",
+	"pkg/services/recordings/internal/services/artifacts_export/artifacts":                          "recordings",
+	"pkg/services/recordings/internal/services/replay/replay":                                       "recordings",
+	"pkg/services/recordings/artifacts":                                                             "recordings",
+	"pkg/services/recordings/replay":                                                                "recordings",
+	"pkg/services/recordings/service":                                                               "recordings",
+	"pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty":               "workers",
+	"pkg/services/workers/invocation":                                                               "workers",
+	"pkg/services/workers/prompting":                                                                "workers",
+	"pkg/services/providers/internal/services/execution/internal/provider":                          "workers",
+	"pkg/services/automations/internal/services/hosted_sources":                                     "automations",
+	"pkg/services/workers/services/testing":                                                         "workers",
 }
 
 var factoryRetiredPackageRoots = []retiredPackageRoot{
@@ -250,17 +250,17 @@ var approvedApplicationGraphImporters = []string{
 // provider/inferencecontract entries remain only as migration debt until later
 // Providers packets land; they are not the durable normative owner.
 var approvedPeerServiceContractImports = map[string]struct{}{
-	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/workers/agypty":                                                        {},
-	"pkg/platform/pty\x00github.com/portpowered/infinite-you/pkg/services/workers/agypty":                                                          {},
+	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty":    {},
+	"pkg/platform/pty\x00github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty":      {},
 	"pkg/services/edges\x00" + providersLeafEffectContractImport:                                                                                   {},
-	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":                                    {},
-	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/automations":                                         {},
-	"pkg/wire\x00github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/wire": {},
-	"pkg/services/factory_runtime\x00github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":                          {},
-	"pkg/services/factory_runtime/internal/services/instance_host/build\x00github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":                    {},
-	"pkg/services/recordings\x00github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":                               {},
-	"pkg/services/recordings/internal/services/artifacts_export/artifacts\x00github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract": {},
-	"pkg/services/recordings/internal/services/replay/replay\x00github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract": {},
+	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/providers/inference":                                                   {},
+	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/automations":                                                           {},
+	"pkg/wire\x00github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/wire":                               {},
+	"pkg/services/factory_runtime\x00github.com/portpowered/infinite-you/pkg/services/providers/inference":                                         {},
+	"pkg/services/factory_runtime/internal/services/instance_host/build\x00github.com/portpowered/infinite-you/pkg/services/providers/inference":   {},
+	"pkg/services/recordings\x00github.com/portpowered/infinite-you/pkg/services/providers/inference":                                              {},
+	"pkg/services/recordings/internal/services/artifacts_export/artifacts\x00github.com/portpowered/infinite-you/pkg/services/providers/inference": {},
+	"pkg/services/recordings/internal/services/replay/replay\x00github.com/portpowered/infinite-you/pkg/services/providers/inference":              {},
 }
 
 // publicExternalEffectContractImports are intentionally declared beside the
@@ -270,10 +270,10 @@ var approvedPeerServiceContractImports = map[string]struct{}{
 // Workers provider/inferencecontract remains migration debt; Providers leaf is
 // the durable public effect port.
 var publicExternalEffectContractImports = map[string]struct{}{
-	providersLeafEffectContractImport:                                                       {},
-	"github.com/portpowered/infinite-you/pkg/services/workers/agypty":                       {},
-	"github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract":   {},
-	"github.com/portpowered/infinite-you/pkg/services/automations":        {},
+	providersLeafEffectContractImport: {},
+	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty": {},
+	"github.com/portpowered/infinite-you/pkg/services/providers/inference":                                                {},
+	"github.com/portpowered/infinite-you/pkg/services/automations":                                                        {},
 }
 
 const (
@@ -1296,6 +1296,9 @@ func createTestServiceImportBaseline(cfg config) error {
 			Stage:        testServiceImportBaselineStage,
 			DeletionGate: testServiceImportDeletionGate,
 		})
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create test service import baseline directory: %w", err)
 	}
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {

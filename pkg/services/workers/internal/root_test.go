@@ -4,10 +4,10 @@ import (
 	"context"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workersinternal "github.com/portpowered/infinite-you/pkg/services/workers/internal"
 	runtimeassembly "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly"
 	workstationswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/wire"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 type recordingRuntimeAssembly struct {
@@ -29,7 +29,7 @@ func (assembly *recordingRuntimeAssembly) Build(
 func TestNewRootConstructsPublishedWorkersService(t *testing.T) {
 	t.Parallel()
 
-	root, err := workersinternal.NewRoot(&recordingRuntimeAssembly{}, workstationswire.NewService())
+	root, err := workersinternal.NewRoot(&recordingRuntimeAssembly{}, workstationswire.NewService(), nil)
 	if err != nil {
 		t.Fatalf("NewRoot() error = %v", err)
 	}
@@ -45,10 +45,10 @@ func TestNewRootConstructsPublishedWorkersService(t *testing.T) {
 func TestNewRootRejectsMissingOwners(t *testing.T) {
 	t.Parallel()
 
-	if _, err := workersinternal.NewRoot(nil, workstationswire.NewService()); err == nil {
+	if _, err := workersinternal.NewRoot(nil, workstationswire.NewService(), nil); err == nil {
 		t.Fatal("NewRoot(nil assembly) error = nil, want missing runtime assembly")
 	}
-	if _, err := workersinternal.NewRoot(&recordingRuntimeAssembly{}, nil); err == nil {
+	if _, err := workersinternal.NewRoot(&recordingRuntimeAssembly{}, nil, nil); err == nil {
 		t.Fatal("NewRoot(nil workstations) error = nil, want missing workstations owner")
 	}
 }
@@ -58,18 +58,18 @@ func TestNewRootBuildRuntimeDelegatesWithoutLifecycle(t *testing.T) {
 
 	want := workers.RuntimeBuildResult{
 		RunnerSelection: workers.ResolvedRunnerSelection{
-			RunnerID: workers.RunnerIDAgy,
+			RunnerID: workers.RunnerIDAntigravity,
 			Source:   workers.RunnerSelectionSourceFactory,
 		},
 	}
 	assembly := &recordingRuntimeAssembly{result: want}
-	root, err := workersinternal.NewRoot(assembly, workstationswire.NewService())
+	root, err := workersinternal.NewRoot(assembly, workstationswire.NewService(), nil)
 	if err != nil {
 		t.Fatalf("NewRoot() error = %v", err)
 	}
 
 	got, err := root.BuildRuntime(t.Context(), workers.RuntimeBuildRequest{
-		RunnerID: workers.RunnerIDAgy,
+		RunnerID: workers.RunnerIDAntigravity,
 		Roles: []workers.RuntimeBuildRoleRequest{{
 			Name: "writer",
 			Kind: workers.RuntimeBuildRoleKindWorker,

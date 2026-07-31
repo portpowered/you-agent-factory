@@ -93,6 +93,12 @@ type Service interface {
 	// ErrContentURLInaccessible. Callers do not supply HTTP or filesystem effect
 	// interfaces on the request shape.
 	MaterializeContentURL(context.Context, string) (string, ContentCleanup, error)
+	// MaterializeWorkerOutput is the published Worker-output materialization
+	// slice. Peers supply detached proposed output and lineage context; Work
+	// validates proposals and assigns canonical Work identity and lineage, or
+	// returns a typed failure such as ErrInvalidProposedWork or
+	// ErrUnknownProposedWorkType. Invalid proposals must not enter Runtime state.
+	MaterializeWorkerOutput(context.Context, MaterializeWorkerOutputRequest) (MaterializeWorkerOutputResult, error)
 
 	// PrepareInvocationInput is part of the published invocation/return-policy
 	// slice. Peers supply already-collected edge values through plain

@@ -18,8 +18,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	providercontract "github.com/portpowered/infinite-you/pkg/services/providers/inference"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	providercontract "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -670,4 +670,3 @@ func (provider countingProvider) Infer(context.Context, workers.ProviderInferenc
 	provider.calls.Add(1)
 	return workers.InferenceResponse{}, nil
 }
-

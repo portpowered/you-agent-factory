@@ -27,8 +27,10 @@ func (s *FIFOScheduler) Select(enabled []interfaces.EnabledTransition, _ /* snap
 	for _, et := range enabled {
 		// Collect all token IDs this transition needs to consume.
 		// OBSERVE-mode arcs are checked for conflicts but not consumed.
-		var tokenIDs []string
+		var inputTokenIDs []string
+		var consumeTokenIDs []string
 		inputBindings := make(map[string][]string)
+		seenInputs := make(map[string]struct{})
 		conflict := false
 
 		// Sort binding keys for deterministic token ordering. Without this,
@@ -48,10 +50,14 @@ func (s *FIFOScheduler) Select(enabled []interfaces.EnabledTransition, _ /* snap
 					conflict = true
 					break
 				}
-				// Only consume tokens from CONSUME-mode arcs.
+				inputBindings[arcName] = append(inputBindings[arcName], id)
+				if _, seen := seenInputs[id]; !seen {
+					seenInputs[id] = struct{}{}
+					inputTokenIDs = append(inputTokenIDs, id)
+				}
+				// Only claim and mutate tokens from CONSUME-mode arcs.
 				if et.ArcModes[arcName] != interfaces.ArcModeObserve {
-					tokenIDs = append(tokenIDs, id)
-					inputBindings[arcName] = append(inputBindings[arcName], id)
+					consumeTokenIDs = append(consumeTokenIDs, id)
 				}
 			}
 			if conflict {
@@ -63,13 +69,14 @@ func (s *FIFOScheduler) Select(enabled []interfaces.EnabledTransition, _ /* snap
 		}
 
 		// Claim all tokens for this firing.
-		for _, id := range tokenIDs {
+		for _, id := range consumeTokenIDs {
 			claimed[id] = true
 		}
 
 		decisions = append(decisions, interfaces.FiringDecision{
 			TransitionID:  et.TransitionID,
-			ConsumeTokens: tokenIDs,
+			InputTokens:   inputTokenIDs,
+			ConsumeTokens: consumeTokenIDs,
 			WorkerType:    et.WorkerType,
 			InputBindings: inputBindings,
 		})

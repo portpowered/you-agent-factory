@@ -6,8 +6,10 @@ import {
   browserScenarioTimeoutMs,
   buildTimeoutMs,
   expectNoBrowserErrors,
+  findAvailablePort,
   openBrowserPage,
   startBrowserPreview,
+  startRealBackendBrowserHarness,
   uiInteractionTimeoutMs,
 } from "./browser-test-harness.mjs";
 
@@ -17,28 +19,26 @@ const viewports = [
   { height: 900, width: 1440 },
 ];
 
-const catalogResponse = {
-  factories: [
-    {
-      json: { id: "builtin-example", name: "example" },
-      name: "@you/example",
-      project: "builtin-example",
-      slug: "example",
-      yaml: "id: builtin-example\nname: example\n",
-    },
-  ],
-};
-
 describe.sequential("Packaged Factories production route", () => {
+  let backend = null;
   let preview = null;
 
   beforeAll(async () => {
+    const apiPort = await findAvailablePort();
+    backend = await startRealBackendBrowserHarness({
+      apiPort,
+      requestID: `req-packaged-factories-${Date.now()}`,
+      workflowFixture: "agent-run-fake-child.workflow.js",
+      workflowName: "packaged-factories-catalog",
+    });
     preview = await startBrowserPreview();
   }, buildTimeoutMs);
 
   afterAll(async () => {
     await preview?.stop();
+    await backend?.stop();
     preview = null;
+    backend = null;
   });
 
   it(
@@ -51,16 +51,17 @@ describe.sequential("Packaged Factories production route", () => {
 
         try {
           await browserPage.page.setViewportSize(viewport);
-          // The Vite preview serves the dashboard only. Fulfill the backend
-          // contract here; its handler response is verified in Go.
-          await browserPage.page.route("**/packaged-factories", (route) => {
+          // The Vite preview serves the dashboard only. Proxy this request to
+          // the real backend so the rendered description proves the complete
+          // catalog handler-to-browser contract.
+          await browserPage.page.route("**/packaged-factories", async (route) => {
             if (new URL(route.request().url()).pathname !== "/packaged-factories") {
               return route.continue();
             }
-            return route.fulfill({
-              body: JSON.stringify(catalogResponse),
-              contentType: "application/json",
+            const response = await route.fetch({
+              url: `${backend.apiOrigin}/packaged-factories`,
             });
+            return route.fulfill({ response });
           });
           await browserPage.page.goto(
             new URL("packaged-factories", preview.previewURL).href,
@@ -68,6 +69,15 @@ describe.sequential("Packaged Factories production route", () => {
           );
           await browserPage.page
             .getByRole("heading", { level: 2, name: "Packaged Factories" })
+            .waitFor({
+              state: "visible",
+              timeout: uiInteractionTimeoutMs,
+            });
+          await browserPage.page
+            .getByText(
+              "Breaks a research question into bounded specialist investigations and synthesizes their findings.",
+              { exact: true },
+            )
             .waitFor({
               state: "visible",
               timeout: uiInteractionTimeoutMs,

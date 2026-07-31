@@ -73,9 +73,12 @@ func (e *ProviderChildExecutor) Execute(ctx context.Context, req workflowresult.
 
 	dispatchID, childIndex := e.childDispatchIdentity(req)
 	providerName, providerSessionRef := "", ""
-	runnerID := strings.TrimSpace(req.ExecutorProvider)
+	runnerID, selectionErr := workerexecution.RunnerIdentityForWorker(req.ExecutorProvider, req.ModelProvider)
+	if selectionErr != nil {
+		return workflowresult.JavaScriptChildExecutionResult{}, selectionErr
+	}
 	if runnerID == "" {
-		runnerID = strings.TrimSpace(req.Command)
+		runnerID = firstLiveChildValue(req.Command, req.ModelProvider)
 	}
 	artifactID := e.records.NextChildArtifactID()
 	artifactRef := workflowresult.FormatArtifactURI(e.sessionID, artifactID)
@@ -90,6 +93,7 @@ func (e *ProviderChildExecutor) Execute(ctx context.Context, req workflowresult.
 		ModelProvider:   req.ModelProvider,
 		Model:           req.Model,
 		ReasoningEffort: req.ReasoningEffort,
+		SkipPermissions: req.SkipPermissions,
 		Command:         req.Command,
 		Sandbox:         req.Sandbox,
 		SchemaDigest:    e.childValues.SchemaDigest(req.OutputSchema),
@@ -100,7 +104,7 @@ func (e *ProviderChildExecutor) Execute(ctx context.Context, req workflowresult.
 
 	e.records.AppendChildDispatch(base, workflowresult.JavaScriptChildDispatchStatusQueued)
 
-	inferReq := providerInferenceRequestFromChild(e.sessionID, dispatchID, req)
+	inferReq := providerInferenceRequestFromChild(dispatchID, req)
 	inferReq.WorkingDirectory = e.workingDir
 	execution, err := e.executeWithRetry(ctx, inferReq, base)
 	base.Attempt = execution.Attempt
@@ -223,7 +227,6 @@ func (e *ProviderChildExecutor) childDispatchIdentity(req workflowresult.JavaScr
 }
 
 func providerInferenceRequestFromChild(
-	sessionID string,
 	dispatchID string,
 	req workflowresult.JavaScriptChildExecutionRequest,
 ) workerexecution.ProviderInferenceRequest {
@@ -234,9 +237,9 @@ func providerInferenceRequestFromChild(
 		}
 	}
 	preset := strings.TrimSpace(req.Preset)
-	runnerID := strings.TrimSpace(req.ExecutorProvider)
+	runnerID, _ := workerexecution.RunnerIdentityForWorker(req.ExecutorProvider, req.ModelProvider)
 	if runnerID == "" {
-		runnerID = strings.TrimSpace(req.Command)
+		runnerID = firstLiveChildValue(req.Command, req.ModelProvider)
 	}
 	inferReq := workerexecution.ProviderInferenceRequest{
 		Dispatch: work.WorkDispatch{
@@ -246,13 +249,23 @@ func providerInferenceRequestFromChild(
 		UserMessage:      req.Prompt,
 		Model:            req.Model,
 		ModelProvider:    req.ModelProvider,
+		ReasoningEffort:  req.ReasoningEffort,
 		OutputSchema:     outputSchema,
-		SessionID:        sessionID,
 		RunnerID:         runnerID,
 		ExecutorProvider: strings.TrimSpace(req.ExecutorProvider),
 		WorkerType:       preset,
+		SkipPermissions:  req.SkipPermissions,
 	}
 	return inferReq
+}
+
+func firstLiveChildValue(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func providerChildOutput(req workflowresult.JavaScriptChildExecutionRequest, content string) map[string]any {

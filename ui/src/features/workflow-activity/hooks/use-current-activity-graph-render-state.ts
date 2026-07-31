@@ -51,14 +51,17 @@ export function useCurrentActivityGraphRenderState({
   isSaving: boolean;
   visibilityPreset: FactoryGraphEditorVisibilityPreset;
 }) {
-  const viewState = useCurrentActivityFactoryGraphViewState({
-    baseFactoryDocument: documentDraft.baseDocument,
-    editableFactoryDocument: factoryDocumentState.currentFactoryDocument,
-    editableFactoryDocumentStatus: definitionStatus,
-    editorMode,
-    latestFactoryDocument: documentDraft.latestDocument,
-    pendingFactoryDefinition: documentDraft.pendingFactoryDefinition,
-  });
+  const viewState = useCurrentActivityFactoryGraphViewState(
+    {
+      baseFactoryDocument: documentDraft.baseDocument,
+      editableFactoryDocument: factoryDocumentState.currentFactoryDocument,
+      editableFactoryDocumentStatus: definitionStatus,
+      editorMode,
+      latestFactoryDocument: documentDraft.latestDocument,
+      pendingFactoryDefinition: documentDraft.pendingFactoryDefinition,
+    },
+    snapshot,
+  );
   const resolveGraphEdges = useCallback(
     (positionedGraphLayout: GraphLayout) =>
       buildVisibleGraphEdgesWithDraft({

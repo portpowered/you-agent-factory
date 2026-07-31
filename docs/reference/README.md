@@ -35,6 +35,7 @@ concept owners below when you need the complete customer-facing contract.
 | `mcp` | `you mcp serve` host setup, backing modes, first-use smoke, and troubleshooting | [MCP host setup](mcp.md) |
 | `workstations` | Workstation kinds, routes, runtime fields, and scoped execution settings | [Workstations](workstations.md) |
 | `workers` | Worker quick reference | [Workers](workers.md) |
+| `providers` | ACP presets, custom integrations, Factory selection, validation, removal, and JavaScript usage | [Providers and ACP agents](providers.md) |
 | `resources` | Bounded-concurrency quick reference | [Resources](resources.md) and [Config](config.md) |
 | `models` | Model discovery, readiness, pull, invocation, and Factory execution boundaries | [Models](models.md) |
 | `batch-inputs` | Batch-request quick reference | [Batch inputs](batch-inputs.md) |
@@ -44,6 +45,7 @@ concept owners below when you need the complete customer-facing contract.
 the canonical `batch-inputs` topic.
 `workstation` remains accepted as a compatibility alias for the canonical
 `workstations` topic.
+`acp` is accepted as a short alias for the canonical `providers` topic.
 
 ## CLI Output And Diagnostics
 
@@ -95,6 +97,9 @@ filesystem work around that invocation.
   model/script/hosted backend fields, explicit `AGENT_WORKER` tool policy,
   agent-run failure classes, hosted `auth.secretRef` guidance, and split
   `workers/<name>/AGENTS.md` placement.
+- [Providers and ACP agents](providers.md) owns ACP installation, built-in
+  presets, operator-added integrations, `executorProvider` selection, and
+  provider lifecycle commands.
 - [Workstations](workstations.md) owns `AGENT_RUN` versus `INFERENCE_RUN`
   runtime behavior in addition to workstation kinds, route fields, and
   workstation-scoped execution settings.
@@ -134,6 +139,7 @@ Use these canonical concept owners when you need the current contract.
 - [Submitted work](work.md)
 - [Workstations](workstations.md)
 - [Workers](workers.md)
+- [Providers and ACP agents](providers.md)
 - [Resources](resources.md)
 - [Models](models.md)
 - [Author AGENTS.md](authoring-agents-md.md)

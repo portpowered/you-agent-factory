@@ -421,7 +421,7 @@ func TestRuntimeOpeningRequestFactoryMapsSelectionsIntoOwnerRequests(t *testing.
 	mocks := workers.NewEmptyMockWorkersConfig()
 	opening := provideRuntimeOpeningRequestFactory()(runcli.RunConfig{
 		Dir: "factory", FactoryConfigPath: "/tmp/factory.json",
-		ExecutionBaseDir: "execution", RunnerID: "runner",
+		ExecutionBaseDir: "execution", RunnerID: "runner", Worktree: "feature-login",
 		HomeDir: "home", WorkFile: "work.json", BindHost: "127.0.0.1",
 		Port: 8080, AutoPort: true,
 		Continuously: true, Verbose: true, RecordPath: "record.json",
@@ -444,7 +444,8 @@ func TestRuntimeOpeningRequestFactoryMapsSelectionsIntoOwnerRequests(t *testing.
 		!request.FactorySession.Host.AutoPort {
 		t.Fatalf("Factory Session request = %#v", request.FactorySession)
 	}
-	if request.Workers.RunnerID != "runner" || request.Workers.MockWorkers != mocks || request.Workers.InvocationSkipPermissionsOverride != &skip {
+	if request.Workers.RunnerID != "runner" || request.Workers.Worktree != "feature-login" ||
+		request.Workers.MockWorkers != mocks || request.Workers.InvocationSkipPermissionsOverride != &skip {
 		t.Fatalf("Workers request = %#v", request.Workers)
 	}
 	if request.Recordings.RecordPath != "record.json" || request.Recordings.ReplayPath != "replay.json" || request.Recordings.WorkflowID != "flow" {

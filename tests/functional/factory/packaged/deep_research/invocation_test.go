@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -40,6 +39,7 @@ func TestPackagedDeepResearchRequiredInputCompletes(t *testing.T) {
 		FactoryDir:                factoryDir,
 		UseMockWorkers:            true,
 		WaitForServiceModeRuntime: true,
+		Args:                      []string{"--provider", "CODEX", "--model", "gpt-5"},
 	})
 
 	args := map[string]any{"topic": topic}
@@ -51,7 +51,12 @@ func TestPackagedDeepResearchRequiredInputCompletes(t *testing.T) {
 		args,
 	)
 	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
-		t.Fatalf("session status = %q, want SUCCEEDED; response = %#v", response.Status, response)
+		resultJSON, _ := json.Marshal(response.Result)
+		session := support.GetJSON[map[string]any](t, server.URL()+"/factory-sessions/"+response.SessionId)
+		sessionJSON, _ := json.Marshal(session)
+		dispatches := listFactorySessionDispatches(t, server.URL(), response.SessionId)
+		dispatchJSON, _ := json.Marshal(dispatches)
+		t.Fatalf("session status = %q, want SUCCEEDED; result = %s; session = %s; dispatches = %s; response = %#v", response.Status, resultJSON, sessionJSON, dispatchJSON, response)
 	}
 	if response.Result == nil || response.Result.PrimaryResult == nil || len(*response.Result.PrimaryResult) != 1 {
 		t.Fatalf("primary result = %#v, want one synthesized result part", response.Result)
@@ -123,6 +128,7 @@ func TestPackagedDeepResearchOptionalInputsReachWorkers(t *testing.T) {
 		FactoryDir:                factoryDir,
 		UseMockWorkers:            true,
 		WaitForServiceModeRuntime: true,
+		Args:                      []string{"--provider", "CODEX", "--model", "gpt-5"},
 	})
 
 	args := map[string]any{
@@ -184,7 +190,7 @@ func TestPackagedDeepResearchOptionalInputsReachWorkers(t *testing.T) {
 		if dispatch.Status != factoryapi.FactoryDispatchStatusCOMPLETED {
 			t.Fatalf("dispatch status = %q, want COMPLETED", dispatch.Status)
 		}
-		if dispatch.ModelProvider == nil || *dispatch.ModelProvider != "CODEX" ||
+		if dispatch.ModelProvider == nil || !strings.EqualFold(*dispatch.ModelProvider, "CODEX") ||
 			dispatch.Model == nil || *dispatch.Model != "gpt-5" ||
 			dispatch.ReasoningEffort == nil || *dispatch.ReasoningEffort != "medium" {
 			t.Fatalf(
@@ -226,6 +232,7 @@ func TestPackagedDeepResearchWorkerFailureReturnsFailedOutcome(t *testing.T) {
 		UseMockWorkers:            true,
 		MockWorkersConfig:         packagedDeepResearchRejectingMockWorkersConfig(),
 		WaitForServiceModeRuntime: true,
+		Args:                      []string{"--provider", "CODEX", "--model", "gpt-5"},
 		Edges: serviceedges.Edges{
 			ProviderCommandRunner: packagedDeepResearchFailingCommandRunner{},
 		},
@@ -304,15 +311,21 @@ func startPackagedDeepResearchInvocation(
 	t.Helper()
 
 	factory := support.GetJSON[factoryapi.Factory](t, server.URL()+"/factory-sessions/~default/factory")
-	workflowFile := filepath.Join(factoryDir, "scripts", "deep-research.workflow.js")
+	_ = factoryDir
+	javascript := factory.Orchestrator.Javascript
 	return postJSON[factoryapi.FactorySessionSyncExecutionResponse](
 		t,
 		server.URL()+"/factory-sessions/sync",
 		factoryapi.FactorySessionExecutionRequest{
 			RequestId: requestID,
 			Source: factoryapi.FactorySessionExecutionSource{
-				Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowFile,
-				WorkflowFile: &workflowFile,
+				Kind: factoryapi.FactorySessionExecutionSourceKindInlineWorkflow,
+				InlineWorkflow: &factoryapi.FactorySessionExecutionInlineWorkflow{
+					Dialect:      javascript.Dialect,
+					Entrypoint:   javascript.Entrypoint,
+					InlineSource: *javascript.InlineSource,
+					Metadata:     javascript.Metadata,
+				},
 			},
 			Args:         &args,
 			Orchestrator: factory.Orchestrator,

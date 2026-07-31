@@ -2,6 +2,7 @@ package workstation_test
 
 import (
 	"context"
+	"errors"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	"os"
@@ -35,6 +36,26 @@ func (codexWorktreePreparer) Prepare(
 	return workerexecution.FactoryWorktreePreparation{
 		CheckoutPath: filepath.Join(factoryRoot, ".worktrees", worktreeName),
 	}, nil
+}
+
+type runWorktreePreparer struct {
+	factoryRoot  string
+	worktreeName string
+	checkoutPath string
+	err          error
+}
+
+func (p *runWorktreePreparer) Prepare(
+	_ context.Context,
+	factoryRoot string,
+	worktreeName string,
+) (workerexecution.FactoryWorktreePreparation, error) {
+	p.factoryRoot = factoryRoot
+	p.worktreeName = worktreeName
+	if p.err != nil {
+		return workerexecution.FactoryWorktreePreparation{}, p.err
+	}
+	return workerexecution.FactoryWorktreePreparation{CheckoutPath: p.checkoutPath}, nil
 }
 
 func (m *dispatchCapturingExecutor) Execute(_ context.Context, d workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error) {
@@ -171,11 +192,95 @@ func TestWorkstationExecutor_LegacyClaudeWorktree_SkipsCodexFactoryPreparation(t
 	if mock.dispatch.Worktree != "my-feature-branch" {
 		t.Fatalf("worktree = %q, want my-feature-branch", mock.dispatch.Worktree)
 	}
-	if mock.dispatch.RunnerID != workerexecution.RunnerIDCodex {
-		t.Fatalf("runner = %q, want default codex runner id", mock.dispatch.RunnerID)
+	if mock.dispatch.RunnerID != workerexecution.RunnerIDClaude {
+		t.Fatalf("runner = %q, want claude runner id", mock.dispatch.RunnerID)
 	}
 	if _, err := os.Stat(filepath.Join(factoryRoot, ".worktrees", "my-feature-branch")); !os.IsNotExist(err) {
 		t.Fatal("expected factory-managed worktree not to be created for legacy Claude provider")
+	}
+}
+
+func TestWorkstationExecutor_RunWorktreeMaterializesForProviderNeutralDispatch(t *testing.T) {
+	factoryRoot := filepath.Join(t.TempDir(), "factory")
+	executionRoot := filepath.Dir(factoryRoot)
+	checkoutPath := filepath.Join(executionRoot, ".worktrees", "feature-login")
+	preparer := &runWorktreePreparer{checkoutPath: checkoutPath}
+	mock := &dispatchCapturingExecutor{result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}}
+	we := newCodexWorktreeTestWorkstationExecutor(runtimefixtures.RuntimeConfigLookupFixture{
+		FactoryPath:     factoryRoot,
+		RuntimeBasePath: executionRoot,
+		Workers: map[string]*interfaces.FactoryWorkerConfig{
+			"claude-worker": {
+				Type:          interfaces.WorkerTypeModel,
+				Body:          "system",
+				ModelProvider: string(modelprovider.ProviderClaude),
+			},
+		},
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			"process": {
+				Type:           interfaces.WorkstationTypeModel,
+				WorkerTypeName: "claude-worker",
+				PromptTemplate: "Process",
+			},
+		},
+	}, mock)
+	we.RunWorktree = "feature-login"
+	we.WorktreePreparer = preparer
+
+	result, err := we.Execute(context.Background(), work.WorkDispatch{
+		DispatchID: "dispatch-1", TransitionID: "transition-1",
+		WorkerType: "claude-worker", WorkstationName: "process",
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Outcome != workerexecution.OutcomeAccepted || !mock.called {
+		t.Fatalf("result = %#v, executor called = %t", result, mock.called)
+	}
+	if preparer.factoryRoot != executionRoot || preparer.worktreeName != "feature-login" {
+		t.Fatalf("preparation = (%q, %q), want (%q, feature-login)", preparer.factoryRoot, preparer.worktreeName, executionRoot)
+	}
+	if mock.dispatch.Worktree != "feature-login" || mock.dispatch.WorkingDirectory != checkoutPath {
+		t.Fatalf("dispatch paths = worktree %q, working directory %q", mock.dispatch.Worktree, mock.dispatch.WorkingDirectory)
+	}
+}
+
+func TestWorkstationExecutor_RunWorktreePreparationFailureStopsDispatch(t *testing.T) {
+	preparer := &runWorktreePreparer{err: errors.New("git worktree add failed")}
+	mock := &dispatchCapturingExecutor{}
+	we := newCodexWorktreeTestWorkstationExecutor(runtimefixtures.RuntimeConfigLookupFixture{
+		FactoryPath: "factory",
+		Workers: map[string]*interfaces.FactoryWorkerConfig{
+			"worker": {
+				Type:          interfaces.WorkerTypeModel,
+				Body:          "system",
+				ModelProvider: string(modelprovider.ProviderClaude),
+			},
+		},
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			"process": {
+				Type:           interfaces.WorkstationTypeModel,
+				WorkerTypeName: "worker",
+				PromptTemplate: "Process",
+			},
+		},
+	}, mock)
+	we.RunWorktree = "feature-login"
+	we.WorktreePreparer = preparer
+
+	result, err := we.Execute(context.Background(), work.WorkDispatch{
+		DispatchID: "dispatch-1", TransitionID: "transition-1",
+		WorkerType: "worker", WorkstationName: "process",
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.Outcome != workerexecution.OutcomeFailed ||
+		!strings.Contains(result.Error, "worktree preparation failed: git worktree add failed") {
+		t.Fatalf("result = %#v, want worktree preparation failure", result)
+	}
+	if mock.called {
+		t.Fatal("executor called after worktree preparation failure")
 	}
 }
 

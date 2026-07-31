@@ -18,7 +18,6 @@ import (
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	agypkg "github.com/portpowered/infinite-you/pkg/services/workers/provider/agy"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -27,12 +26,13 @@ const (
 	agyFinalOnlySuccessGoldenCase  = "final-only-success"
 	agyStructuredFailureGoldenCase = "structured-failure"
 	agyTimeoutGoldenCase           = "timeout"
+	agyTimeoutFailureMessage       = "Agy request timed out."
 )
 
 // TestAgyGoldenFinalOnlySuccess replays a sanitized Agy final-only-success
 // transcript through the customer process boundary and proves public final-only
 // success without fabricated streaming deltas or structured snapshot events.
-// golden: docs/temp/functional/provider-sessions/agy/final-only-success/manifest.json
+// golden: tests/functional/internal/support/testdata/provider-sessions/agy/final-only-success/manifest.json
 func TestAgyGoldenFinalOnlySuccess(t *testing.T) {
 	repoRoot := testutil.MustRepoRoot(t)
 	caseDir := filepath.Join(
@@ -64,7 +64,7 @@ func TestAgyGoldenFinalOnlySuccess(t *testing.T) {
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", strings.Replace(
-		support.BuildModelWorkerConfig(modelprovider.ProviderAgy, request.Model),
+		support.BuildModelWorkerConfig(modelprovider.ProviderAntigravity, request.Model),
 		"stopToken: COMPLETE",
 		"skipPermissions: true\nstopToken: COMPLETE",
 		1,
@@ -139,7 +139,7 @@ func TestAgyGoldenFinalOnlySuccess(t *testing.T) {
 // TestAgyGoldenStructuredFailure replays a sanitized Agy structured-failure
 // transcript through the customer process boundary and proves a public
 // structured auth failure outcome distinct from timeout or silent success.
-// golden: docs/temp/functional/provider-sessions/agy/structured-failure/manifest.json
+// golden: tests/functional/internal/support/testdata/provider-sessions/agy/structured-failure/manifest.json
 func TestAgyGoldenStructuredFailure(t *testing.T) {
 	runAgyFailureGoldenCase(
 		t,
@@ -154,7 +154,7 @@ func TestAgyGoldenStructuredFailure(t *testing.T) {
 // TestAgyGoldenTimeout replays a sanitized Agy timeout transcript through the
 // customer process boundary and proves a public timeout outcome distinct from
 // structured auth failure or silent success.
-// golden: docs/temp/functional/provider-sessions/agy/timeout/manifest.json
+// golden: tests/functional/internal/support/testdata/provider-sessions/agy/timeout/manifest.json
 func TestAgyGoldenTimeout(t *testing.T) {
 	loaded, request := loadAgyGoldenCase(
 		t,
@@ -165,7 +165,7 @@ func TestAgyGoldenTimeout(t *testing.T) {
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", strings.Replace(
-		support.BuildModelWorkerConfig(modelprovider.ProviderAgy, request.Model),
+		support.BuildModelWorkerConfig(modelprovider.ProviderAntigravity, request.Model),
 		"stopToken: COMPLETE",
 		"skipPermissions: true\nstopToken: COMPLETE",
 		1,
@@ -215,8 +215,8 @@ func TestAgyGoldenTimeout(t *testing.T) {
 	if inferencePayload.ProviderSession == nil || inferencePayload.ProviderSession.Provider == nil {
 		t.Fatal("inference response missing provider session metadata")
 	}
-	if got := support.StringPointerValue(inferencePayload.ProviderSession.Provider); got != string(modelprovider.ProviderAgy) {
-		t.Fatalf("provider session provider = %q, want %q", got, modelprovider.ProviderAgy)
+	if got := support.StringPointerValue(inferencePayload.ProviderSession.Provider); got != string(modelprovider.ProviderAntigravity) {
+		t.Fatalf("provider session provider = %q, want %q", got, modelprovider.ProviderAntigravity)
 	}
 	assertAgyFailureDoesNotLeakSensitiveOutput(t, events, responseEvents)
 	assertAgyGoldenTimeoutResponseStream(t, responseEvents)
@@ -236,7 +236,7 @@ func runAgyFailureGoldenCase(
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(t, dir, "worker", strings.Replace(
-		support.BuildModelWorkerConfig(modelprovider.ProviderAgy, request.Model),
+		support.BuildModelWorkerConfig(modelprovider.ProviderAntigravity, request.Model),
 		"stopToken: COMPLETE",
 		"skipPermissions: true\nstopToken: COMPLETE",
 		1,
@@ -290,8 +290,8 @@ func runAgyFailureGoldenCase(
 	if inferencePayload.ProviderSession == nil || inferencePayload.ProviderSession.Provider == nil {
 		t.Fatal("inference response missing provider session metadata")
 	}
-	if got := support.StringPointerValue(inferencePayload.ProviderSession.Provider); got != string(modelprovider.ProviderAgy) {
-		t.Fatalf("provider session provider = %q, want %q", got, modelprovider.ProviderAgy)
+	if got := support.StringPointerValue(inferencePayload.ProviderSession.Provider); got != string(modelprovider.ProviderAntigravity) {
+		t.Fatalf("provider session provider = %q, want %q", got, modelprovider.ProviderAntigravity)
 	}
 	assertAgyFailureDoesNotLeakSensitiveOutput(t, events, responseEvents)
 
@@ -391,11 +391,11 @@ func assertAgyGoldenTimeoutResponseStream(
 		if payload.Code != "" && payload.Code != "timeout" {
 			t.Fatalf("terminal response error code = %q, want timeout", payload.Code)
 		}
-		if payload.Message != agypkg.TimeoutFailureMessage {
+		if payload.Message != agyTimeoutFailureMessage {
 			t.Fatalf(
 				"terminal response error message = %q, want %q",
 				payload.Message,
-				agypkg.TimeoutFailureMessage,
+				agyTimeoutFailureMessage,
 			)
 		}
 	}
@@ -521,8 +521,8 @@ func agyGoldenInferenceObservation(
 	)
 	for _, event := range events {
 		switch event.Type {
-		case factoryapi.FactoryEventTypeInferenceResponse:
-			payload, err := event.Payload.AsInferenceResponseEventPayload()
+		case factoryapi.FactoryEventTypeModelResponse:
+			payload, err := support.AsInferenceResponseObservation(event)
 			if err != nil {
 				t.Fatalf("decode inference response: %v", err)
 			}
@@ -561,10 +561,10 @@ func agyGoldenFailedInferenceObservation(
 		foundInference   bool
 	)
 	for _, event := range events {
-		if event.Type != factoryapi.FactoryEventTypeInferenceResponse {
+		if event.Type != factoryapi.FactoryEventTypeModelResponse {
 			continue
 		}
-		payload, err := event.Payload.AsInferenceResponseEventPayload()
+		payload, err := support.AsInferenceResponseObservation(event)
 		if err != nil {
 			t.Fatalf("decode inference response: %v", err)
 		}
@@ -588,7 +588,7 @@ func observeAgyProviderSessionGolden(
 	if payload.Outcome == factoryapi.InferenceOutcomeSucceeded {
 		status = "completed"
 	}
-	provider := string(modelprovider.ProviderAgy)
+	provider := string(modelprovider.ProviderAntigravity)
 	sessionID := ""
 	if payload.ProviderSession != nil {
 		if payload.ProviderSession.Provider != nil {

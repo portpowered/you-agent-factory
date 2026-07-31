@@ -45,28 +45,28 @@ func TestModelsEffectsRemainInertThroughRootBuildProcessConstruction(t *testing.
 }
 
 type modelEffectRecorder struct {
-	assetHTTP           atomic.Int32
-	assetMkdirAll       atomic.Int32
-	assetStat           atomic.Int32
-	assetHome           atomic.Int32
-	assetWriteFile      atomic.Int32
-	assetRename         atomic.Int32
-	assetRemove         atomic.Int32
-	assetReadFile       atomic.Int32
-	assetReadDir        atomic.Int32
-	assetCreate         atomic.Int32
-	assetOpen           atomic.Int32
-	hostLauncher        atomic.Int32
-	hostHTTP            atomic.Int32
-	hostClockNow        atomic.Int32
-	hostClockTimer      atomic.Int32
-	runtimeCommand      atomic.Int32
-	runtimeHTTP         atomic.Int32
-	runtimeInspect      atomic.Int32
-	runtimeTempDir      atomic.Int32
-	runtimeTempFile     atomic.Int32
-	invocationArtifact  atomic.Int32
-	pullMetrics         atomic.Int32
+	assetHTTP          atomic.Int32
+	assetMkdirAll      atomic.Int32
+	assetStat          atomic.Int32
+	assetHome          atomic.Int32
+	assetWriteFile     atomic.Int32
+	assetRename        atomic.Int32
+	assetRemove        atomic.Int32
+	assetReadFile      atomic.Int32
+	assetReadDir       atomic.Int32
+	assetCreate        atomic.Int32
+	assetOpen          atomic.Int32
+	hostLauncher       atomic.Int32
+	hostHTTP           atomic.Int32
+	hostClockNow       atomic.Int32
+	hostClockTimer     atomic.Int32
+	runtimeCommand     atomic.Int32
+	runtimeHTTP        atomic.Int32
+	runtimeInspect     atomic.Int32
+	runtimeTempDir     atomic.Int32
+	runtimeTempFile    atomic.Int32
+	invocationArtifact atomic.Int32
+	pullMetrics        atomic.Int32
 }
 
 func newModelEffectRecorder() *modelEffectRecorder {
@@ -75,29 +75,29 @@ func newModelEffectRecorder() *modelEffectRecorder {
 
 func (recorder *modelEffectRecorder) edges() serviceedges.Edges {
 	return serviceedges.Edges{
-		ModelAssetHTTPClient:           &recordingModelHTTPDoer{recorder: recorder, counter: &recorder.assetHTTP},
-		ModelAssetEndpoints:            models.RuntimeAssetEndpoints{BaseURL: "https://catalog.example", APIBaseURL: "https://api.catalog.example"},
-		ModelAssetHostPlatform:         models.AssetHostPlatform{OperatingSystem: "recording-os", Architecture: "recording-arch"},
-		ModelAssetMakeDirectories:      recorder.recordAssetMkdirAll,
-		ModelAssetInspectPath:          recorder.recordAssetStat,
-		ModelAssetResolveHomeDirectory: recorder.recordAssetHome,
-		ModelAssetWriteFile:            recorder.recordAssetWriteFile,
-		ModelAssetRenamePath:           recorder.recordAssetRename,
-		ModelAssetRemovePath:           recorder.recordAssetRemove,
-		ModelAssetReadFile:             recorder.recordAssetReadFile,
-		ModelAssetReadDirectory:        recorder.recordAssetReadDir,
-		ModelAssetCreateFile:           recorder.recordAssetCreate,
-		ModelAssetOpenFile:             recorder.recordAssetOpen,
-		ModelHostProcessLauncher:       recorder,
-		ModelHostHTTPClient:            &recordingModelHTTPDoer{recorder: recorder, counter: &recorder.hostHTTP},
-		ModelHostClock:                 recorder,
-		ModelRuntimeCommandRunner:      recorder,
-		ModelRuntimeHTTPClient:         &recordingModelHTTPDoer{recorder: recorder, counter: &recorder.runtimeHTTP},
-		ModelRuntimeInspectFile:        recorder.recordRuntimeInspect,
-		ModelRuntimeTempDirectory:      recorder.recordRuntimeTempDir,
-		ModelRuntimeCreateTempFile:     recorder.recordRuntimeTempFile,
+		ModelAssetHTTPClient:              &recordingModelHTTPDoer{recorder: recorder, counter: &recorder.assetHTTP},
+		ModelAssetEndpoints:               models.RuntimeAssetEndpoints{BaseURL: "https://catalog.example", APIBaseURL: "https://api.catalog.example"},
+		ModelAssetHostPlatform:            models.AssetHostPlatform{OperatingSystem: "recording-os", Architecture: "recording-arch"},
+		ModelAssetMakeDirectories:         recorder.recordAssetMkdirAll,
+		ModelAssetInspectPath:             recorder.recordAssetStat,
+		ModelAssetResolveHomeDirectory:    recorder.recordAssetHome,
+		ModelAssetWriteFile:               recorder.recordAssetWriteFile,
+		ModelAssetRenamePath:              recorder.recordAssetRename,
+		ModelAssetRemovePath:              recorder.recordAssetRemove,
+		ModelAssetReadFile:                recorder.recordAssetReadFile,
+		ModelAssetReadDirectory:           recorder.recordAssetReadDir,
+		ModelAssetCreateFile:              recorder.recordAssetCreate,
+		ModelAssetOpenFile:                recorder.recordAssetOpen,
+		ModelHostProcessLauncher:          recorder,
+		ModelHostHTTPClient:               &recordingModelHTTPDoer{recorder: recorder, counter: &recorder.hostHTTP},
+		ModelHostClock:                    recorder,
+		ModelRuntimeCommandRunner:         recorder,
+		ModelRuntimeHTTPClient:            &recordingModelHTTPDoer{recorder: recorder, counter: &recorder.runtimeHTTP},
+		ModelRuntimeInspectFile:           recorder.recordRuntimeInspect,
+		ModelRuntimeTempDirectory:         recorder.recordRuntimeTempDir,
+		ModelRuntimeCreateTempFile:        recorder.recordRuntimeTempFile,
 		ModelInvocationArtifactFileSystem: recorder,
-		ModelPullMetricsRecorder:       recorder,
+		ModelPullMetricsRecorder:          recorder,
 	}
 }
 

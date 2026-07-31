@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	codexFunctionalSessionID          = "session-functional-root"
+	codexFunctionalSessionID            = "session-functional-root"
 	codexFunctionalMissingSessionID     = "session-missing-root"
 	codexFunctionalMalformedSessionID   = "session-malformed-root"
 	codexFunctionalBoundedWalkSessionID = "session-bounded-root"

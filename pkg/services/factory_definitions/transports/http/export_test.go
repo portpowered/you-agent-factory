@@ -1,6 +1,6 @@
 package http
 
 var (
-	DefinitionsRootErrorResponseForTest          = definitionsRootErrorResponse
+	DefinitionsRootErrorResponseForTest           = definitionsRootErrorResponse
 	DefinitionsRequestContextErrorResponseForTest = definitionsRequestContextErrorResponse
 )

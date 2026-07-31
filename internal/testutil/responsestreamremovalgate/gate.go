@@ -115,7 +115,7 @@ func AssertGate(ctx context.Context, repoRoot string) error {
 // provider adapters themselves are executed by that package's tests; this
 // removal gate inspects only static source and fixture evidence.
 func AssertProviderParityOwnerEvidence(repoRoot string) error {
-	const ownerRoot = "pkg/services/workers/provider/paritytests"
+	const ownerRoot = "pkg/services/providers/internal/services/execution/internal/provider/paritytests"
 	requiredFiles := []string{
 		"catalog_test.go",
 		"harness_test.go",
@@ -284,3 +284,4 @@ func RepoRoot() (string, error) {
 		current = parent
 	}
 }
+

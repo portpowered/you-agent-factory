@@ -199,8 +199,8 @@ func TestRunnerProjectsLocalInvocationRequest(t *testing.T) {
 			Model: "WHISPER", ModelLocality: models.RuntimeModelLocalityLocal,
 			Resources: []models.LocalResource{{ID: "worker-resource", Name: "slot"}},
 		},
-		Resources: resources,
-		Dispatch:  request.Dispatch,
+		Resources:      resources,
+		Dispatch:       request.Dispatch,
 		ModelOperation: "transcribe",
 		ModelBindings: []models.ResolvedModelOperationBinding{{
 			Slot: "audio", Source: string(workers.ModelOperationBindingSourceInput),
@@ -255,7 +255,7 @@ func TestNewRejectsMissingConfigurationAndEffects(t *testing.T) {
 		deps   Dependencies
 	}{
 		{
-			name: "models service",
+			name:   "models service",
 			config: validConfig(),
 			deps:   Dependencies{},
 		},
@@ -580,12 +580,12 @@ func validConfig() Config {
 
 func validRequest() workers.RunnerExecutionRequest {
 	return workers.RunnerExecutionRequest{
-		RunnerID:        Identity,
-		WorkerType:      "request-worker",
-		WorkstationType: "request-workstation",
-		ModelOperation:  "transcribe",
+		RunnerID:         Identity,
+		WorkerType:       "request-worker",
+		WorkstationType:  "request-workstation",
+		ModelOperation:   "transcribe",
 		WorkingDirectory: "explicit-work-dir",
-		Worktree:        "worktree-fallback",
+		Worktree:         "worktree-fallback",
 		InputTokens: []any{map[string]any{
 			"nested": "original",
 		}},

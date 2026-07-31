@@ -375,10 +375,19 @@ type OrchestratorOverride struct {
 	Raw  json.RawMessage
 }
 
-// PersistencePolicy is the application-level durable snapshot policy. The
-// zero value preserves production persistence; callers must select Disabled
-// explicitly when durable snapshots are not wanted.
+// PersistencePolicy is the application-level durable snapshot policy.
+// The zero value and PersistencePolicyDisabled select in-memory execution
+// with no project-local durable-session recording. Callers and tests that
+// need restart/resume snapshots must select PersistencePolicyEnabled.
 type PersistencePolicy string
+
+const (
+	// PersistencePolicyEnabled writes project-local durable session snapshots
+	// under .you-agent-factory/durable-sessions for restart/resume.
+	PersistencePolicyEnabled PersistencePolicy = "enabled"
+	// PersistencePolicyDisabled keeps durable execution in memory only.
+	PersistencePolicyDisabled PersistencePolicy = "disabled"
+)
 
 // PhaseSummary summarizes dispatch progress for one workflow phase.
 type PhaseSummary struct {

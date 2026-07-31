@@ -13,9 +13,9 @@ import (
 	"time"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	agy "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
-	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
+	agy "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy"
+	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty"
 )
 
 const privatePrompt = "run; rm -rf / | cat"
@@ -96,6 +96,38 @@ func TestPTYEffectRequiresAllocator(t *testing.T) {
 	}
 }
 
+func TestPTYEffectRejectsSeparateReasoningEffort(t *testing.T) {
+	t.Parallel()
+
+	factoryRoot := t.TempDir()
+	executable := filepath.Join(factoryRoot, "agy.exe")
+	if err := os.WriteFile(executable, []byte("stub"), 0o755); err != nil {
+		t.Fatalf("write executable: %v", err)
+	}
+	allocator := &stubAllocator{}
+	effect := agy.NewPTYEffect(agy.PTYEffectOptions{
+		FactoryRoot:            factoryRoot,
+		Allocator:              allocator,
+		Executable:             executable,
+		ExecutableDependencies: executableDependencies(nil, executable),
+	})
+	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
+		Provider:        providers.IDAntigravity,
+		AttemptID:       "dispatch-agy-effort",
+		ReasoningEffort: "xhigh",
+		UserMessage:     "review",
+	}, func([]byte) error { return nil })
+	var failure execution.AttemptFailure
+	if !errors.As(err, &failure) ||
+		failure.NativeError == nil ||
+		!strings.Contains(failure.NativeError.Error(), "does not support a separate reasoning effort") {
+		t.Fatalf("Execute() error = %v, want unsupported reasoning effort", err)
+	}
+	if len(allocator.sessions) != 0 {
+		t.Fatalf("PTY allocations = %d, want none", len(allocator.sessions))
+	}
+}
+
 func TestPTYEffectBuildsArgvWorkspaceAndEnvironment(t *testing.T) {
 	t.Parallel()
 
@@ -110,16 +142,16 @@ func TestPTYEffectBuildsArgvWorkspaceAndEnvironment(t *testing.T) {
 	}
 	mock := &stubAllocator{result: agypty.SessionResult{ExitCode: 0, CleanedText: "ok"}}
 	effect := agy.NewPTYEffect(agy.PTYEffectOptions{
-		FactoryRoot: factoryRoot,
-		Allocator:   mock,
-		Executable:  executable,
+		FactoryRoot:            factoryRoot,
+		Allocator:              mock,
+		Executable:             executable,
 		ExecutableDependencies: executableDependencies(nil, executable),
 	})
 	if effect == nil {
 		t.Fatal("NewPTYEffect() returned nil")
 	}
 	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
-		Provider:         providers.IDAgy,
+		Provider:         providers.IDAntigravity,
 		AttemptID:        "dispatch-agy",
 		Model:            "gemini-pro",
 		UserMessage:      privatePrompt,
@@ -127,7 +159,7 @@ func TestPTYEffectBuildsArgvWorkspaceAndEnvironment(t *testing.T) {
 		WorkerType:       "agent-worker",
 		WorkstationName:  "review-work",
 		ResumeSession: &providers.SessionRef{
-			Provider: providers.IDAgy,
+			Provider: providers.IDAntigravity,
 			Kind:     providers.SessionIDKind,
 			ID:       "session-1",
 		},
@@ -172,13 +204,13 @@ func TestPTYEffectExecutesThroughInjectedNativePTY(t *testing.T) {
 	const prompt = "summarize this; preserve argv boundaries"
 	var observed []byte
 	result, err := effect.Execute(context.Background(), providers.ExecuteRequest{
-		Provider:         providers.IDAgy,
+		Provider:         providers.IDAntigravity,
 		AttemptID:        "dispatch-agy-contract",
 		Model:            "gemini-pro",
 		UserMessage:      prompt,
 		WorkingDirectory: ".",
 		ResumeSession: &providers.SessionRef{
-			Provider: providers.IDAgy,
+			Provider: providers.IDAntigravity,
 			Kind:     providers.SessionIDKind,
 			ID:       "session-agy-contract",
 		},
@@ -213,7 +245,7 @@ func TestPTYEffectPreservesPromptMetacharactersInArgv(t *testing.T) {
 		ExecutableDependencies: executableDependencies(nil),
 	})
 	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
-		Provider:         providers.IDAgy,
+		Provider:         providers.IDAntigravity,
 		AttemptID:        "dispatch-agy-42",
 		WorkingDirectory: ".",
 		UserMessage:      privatePrompt,
@@ -243,7 +275,7 @@ func TestPTYEffectTimeoutCleansCaptureBeforeObserve(t *testing.T) {
 		ExecutableDependencies: executableDependencies(nil),
 	})
 	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
-		Provider:    providers.IDAgy,
+		Provider:    providers.IDAntigravity,
 		AttemptID:   "dispatch-agy-timeout",
 		UserMessage: "hello",
 	}, func([]byte) error {
@@ -286,7 +318,7 @@ func TestPTYEffectFailsClosedWithoutExecutableEffects(t *testing.T) {
 		Executable:  "agy",
 	})
 	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
-		Provider:    providers.IDAgy,
+		Provider:    providers.IDAntigravity,
 		AttemptID:   "dispatch-agy-missing-effects",
 		UserMessage: "hello",
 	}, func([]byte) error { return nil })
@@ -311,7 +343,7 @@ func TestPTYEffectResolvesBareExecutableThroughInjectedSearchPath(t *testing.T) 
 		ExecutableDependencies: executableDependencies(map[string]string{"agy": resolved}, resolved),
 	})
 	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
-		Provider:         providers.IDAgy,
+		Provider:         providers.IDAntigravity,
 		AttemptID:        "dispatch-agy-path",
 		WorkingDirectory: ".",
 		UserMessage:      "hello",
@@ -345,7 +377,7 @@ func TestPTYEffectDispatchContextIsPreservedInLaunch(t *testing.T) {
 		ExecutableDependencies: executableDependencies(nil),
 	})
 	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
-		Provider:        providers.IDAgy,
+		Provider:        providers.IDAntigravity,
 		AttemptID:       "dispatch-agy-context",
 		WorkerType:      "agent-worker",
 		WorkstationName: "review-work",

@@ -8,7 +8,6 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
 
@@ -24,9 +23,9 @@ func provideAutomationHostedSourcesFactory(edges serviceedges.Edges) (automation
 	factory := automations.NewHostedSourcesFactory(checkpointStore)
 	return func(
 		logger *zap.Logger,
-		clock workers.HostedPollerClock,
-		httpClient workers.HostedPollerHTTPDoer,
-		secretResolver workers.HostedPollerSecretResolver,
+		clock automations.HostedLinearClock,
+		httpClient automations.HostedLinearHTTPDoer,
+		secretResolver automations.HostedLinearSecretResolver,
 		linearEndpoint string,
 	) automations.HostedPollers {
 		if clock == nil {

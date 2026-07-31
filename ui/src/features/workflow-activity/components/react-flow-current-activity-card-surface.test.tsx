@@ -7,15 +7,6 @@ import { createDefaultFactoryLayout } from "../../factory-graph-editor/lib/layou
 import { projectFactoryValidationTargets } from "../../factory-graph-editor/lib/projection/factory-validation-graph-projection";
 import { CurrentActivityGraphSurface } from "./react-flow-current-activity-card-surface";
 
-vi.mock("../../dashboard/components/topology-replay/hosted-topology-replay", () => ({
-  HostedTopologyReplay: (props: { selectedNodeID?: string }) => (
-    <div
-      data-selected-node-id={props.selectedNodeID}
-      data-testid="hosted-topology-replay"
-    />
-  ),
-}));
-
 vi.mock("./react-flow-current-activity-card-viewport", () => ({
   CurrentActivityGraphViewport: ({
     addControls,
@@ -25,6 +16,7 @@ vi.mock("./react-flow-current-activity-card-viewport", () => ({
     onEditorNodeClick,
     saveControls,
     saveDisabledReason,
+    nodes,
   }: {
     addControls: {
       setMenuOpen: (open: boolean) => void;
@@ -39,9 +31,14 @@ vi.mock("./react-flow-current-activity-card-viewport", () => ({
     onEditorNodeClick: () => void;
     saveControls: { requestConfirmation: () => void };
     saveDisabledReason: string | null;
+    nodes: Array<{ id: string; selected?: boolean }>;
   }) => (
     <div
       data-disabled-reason={saveDisabledReason ?? ""}
+      data-selected-node-ids={nodes
+        .filter((node) => node.selected)
+        .map((node) => node.id)
+        .join(",")}
       data-testid="graph-viewport"
     >
       <button onClick={saveControls.requestConfirmation} type="button">
@@ -334,12 +331,13 @@ function createViewModelStub(overrides: Record<string, unknown> = {}) {
   return {
     ...createEditorStub(overrides),
     ...createGraphStub(),
+    ...("nodes" in overrides ? { nodes: overrides.nodes } : {}),
   };
 }
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: surface coverage keeps the shared editor chrome fixtures together.
 describe("CurrentActivityGraphSurface", () => {
-  it("uses the controlled hosted topology renderer for observer states", () => {
+  it("uses the semantic graph viewport for observer states", () => {
     render(
       <CurrentActivityGraphSurface
         viewModel={createViewModelStub({ editorMode: false }) as never}
@@ -349,14 +347,18 @@ describe("CurrentActivityGraphSurface", () => {
       />,
     );
 
-    expect(screen.getByTestId("hosted-topology-replay")).toBeTruthy();
-    expect(screen.queryByTestId("graph-viewport")).toBeNull();
+    expect(screen.getByTestId("graph-viewport")).toBeTruthy();
   });
 
-  it("maps the existing observer selection into the shared node identity", () => {
+  it("keeps selected semantic graph nodes in the observer viewport", () => {
+    const viewModel = createViewModelStub({
+      editorMode: false,
+      nodes: [{ id: "work-state:story:queued", selected: true }],
+    });
+
     render(
       <CurrentActivityGraphSurface
-        viewModel={createViewModelStub({ editorMode: false }) as never}
+        viewModel={viewModel as never}
         imports={importControllerStub}
         selection={{ kind: "state-node", placeId: "story:queued" }}
         snapshot={semanticWorkflowDashboardSnapshot}
@@ -364,13 +366,11 @@ describe("CurrentActivityGraphSurface", () => {
     );
 
     expect(
-      screen
-        .getByTestId("hosted-topology-replay")
-        .getAttribute("data-selected-node-id"),
+      screen.getByTestId("graph-viewport").getAttribute("data-selected-node-ids"),
     ).toBe("work-state:story:queued");
   });
 
-  it("delegates the empty observer state to the controlled hosted renderer", () => {
+  it("renders the explicit empty state when observer topology is unavailable", () => {
     const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
     snapshot.factory = undefined;
     snapshot.topology.workstation_node_ids = [];
@@ -384,7 +384,7 @@ describe("CurrentActivityGraphSurface", () => {
       />,
     );
 
-    expect(screen.getByTestId("hosted-topology-replay")).toBeTruthy();
+    expect(screen.getByText("No workflow topology loaded")).toBeTruthy();
     expect(screen.queryByTestId("graph-viewport")).toBeNull();
   });
 
@@ -405,8 +405,7 @@ describe("CurrentActivityGraphSurface", () => {
     expect(
       screen.queryByText("A newer factory definition is available"),
     ).toBeNull();
-    expect(screen.queryByTestId("hosted-topology-replay")).toBeTruthy();
-    expect(screen.queryByTestId("graph-viewport")).toBeNull();
+    expect(screen.getByTestId("graph-viewport")).toBeTruthy();
   });
 
   it("renders shared-surface notices and forwards viewport editor actions", () => {

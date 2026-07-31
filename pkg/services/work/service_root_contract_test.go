@@ -165,6 +165,13 @@ func (f *rootServiceFake) MaterializeContentURL(
 	return f.materializePath, cleanup, f.materializeErr
 }
 
+func (f *rootServiceFake) MaterializeWorkerOutput(
+	ctx context.Context,
+	request work.MaterializeWorkerOutputRequest,
+) (work.MaterializeWorkerOutputResult, error) {
+	return work.MaterializeWorkerOutput(ctx, request)
+}
+
 func (f *rootServiceFake) PrepareInvocationInput(
 	_ context.Context,
 	request work.InvocationInputPreparationRequest,

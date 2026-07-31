@@ -12,12 +12,9 @@ import (
 )
 
 const (
-	operatorSettingsFoldedIdentityInventoryImport =
-		"github.com/portpowered/infinite-you/pkg/services/operator_settings/identityinventory"
-	operatorSettingsFoldedTestlinkImport =
-		"github.com/portpowered/infinite-you/pkg/services/operator_settings/testlink"
-	operatorSettingsFoldedTestprovidersImport =
-		"github.com/portpowered/infinite-you/pkg/services/operator_settings/testproviders"
+	operatorSettingsFoldedIdentityInventoryImport = "github.com/portpowered/infinite-you/pkg/services/operator_settings/identityinventory"
+	operatorSettingsFoldedTestlinkImport          = "github.com/portpowered/infinite-you/pkg/services/operator_settings/testlink"
+	operatorSettingsFoldedTestprovidersImport     = "github.com/portpowered/infinite-you/pkg/services/operator_settings/testproviders"
 )
 
 var operatorSettingsFoldedSiblingImports = []string{

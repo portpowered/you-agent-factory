@@ -28,6 +28,7 @@ const (
 	TopicSessions            Topic = "sessions"
 	TopicWorkstations        Topic = "workstations"
 	TopicWorkers             Topic = "workers"
+	TopicProviders           Topic = "providers"
 	TopicResources           Topic = "resources"
 	TopicModels              Topic = "models"
 	TopicOrchestrators       Topic = "orchestrators"
@@ -40,6 +41,7 @@ const (
 const (
 	TopicWorkstationAlias Topic = "workstation"
 	TopicBatchWorkAlias   Topic = "batch-work"
+	TopicACPAlias         Topic = "acp"
 )
 
 const (
@@ -55,6 +57,7 @@ const (
 	referenceSessionsPath            = "sessions.md"
 	referenceWorkstationsPath        = "workstations.md"
 	referenceWorkersPath             = "workers.md"
+	referenceProvidersPath           = "providers.md"
 	referenceResourcesPath           = "resources.md"
 	referenceModelsPath              = "models.md"
 	referenceOrchestratorsPath       = "orchestrators.md"
@@ -88,6 +91,7 @@ var topicDocuments = []topicDocument{
 	{topic: TopicMCP, description: "Canonical you mcp serve install path, preview tool catalog, scope boundaries, and automation-backed checks.", path: referenceMCPPath, displayOrder: 39},
 	{topic: TopicWorkstations, description: "Workstation kinds, route fields, runtime step behavior, and scoped execution settings.", path: referenceWorkstationsPath, displayOrder: 40, aliases: []Topic{TopicWorkstationAlias}},
 	{topic: TopicWorkers, description: "Worker types, model providers, script workers, and worker configuration.", path: referenceWorkersPath, displayOrder: 50},
+	{topic: TopicProviders, description: "ACP agent setup, custom provider lifecycle, Factory selection, validation, and JavaScript usage.", path: referenceProvidersPath, displayOrder: 55, aliases: []Topic{TopicACPAlias}},
 	{topic: TopicResources, description: "Resource capacity, bounded concurrency, and workstation resource requirements.", path: referenceResourcesPath, displayOrder: 60},
 	{topic: TopicModels, description: "Local and hosted model setup for workers and CLI model commands.", path: referenceModelsPath, displayOrder: 70},
 	{topic: TopicBatchInputs, description: "Batch input files, request shape, dependencies, and validation.", path: referenceBatchInputsPath, displayOrder: 80, aliases: []Topic{TopicBatchWorkAlias}},

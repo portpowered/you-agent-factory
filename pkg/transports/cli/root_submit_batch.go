@@ -3,10 +3,11 @@ package cli
 import (
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 
-	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -16,6 +17,8 @@ func newRunServerFlagBindings() climanifestcobra.RunServerFlagBindings {
 	stringInputs := []string{
 		"you.run.flag.work", "you.run.flag.dir", "you.run.flag.named",
 		"you.run.flag.factory", "you.run.flag.record", "you.run.flag.replay",
+		"you.run.flag.provider", "you.run.flag.model",
+		"you.run.flag.worktree",
 		"you.run.flag.runtime-log-dir", "you.run.flag.runtime-metrics-dir",
 		"you.run.flag.with-mock-workers", "you.run.flag.output",
 	}
@@ -51,6 +54,9 @@ func applyRunResolvedInputs(cfg runcli.RunConfig, values map[string]any) (runcli
 		{"you.run.flag.dir", &cfg.Dir},
 		{"you.run.flag.named", &cfg.NamedFactoryName},
 		{"you.run.flag.factory", &cfg.FactoryConfigPath},
+		{"you.run.flag.provider", &cfg.ProviderOverride},
+		{"you.run.flag.model", &cfg.ModelOverride},
+		{"you.run.flag.worktree", &cfg.Worktree},
 		{"you.run.flag.record", &cfg.RecordPath},
 		{"you.run.flag.replay", &cfg.ReplayPath},
 		{"you.run.flag.runtime-log-dir", &cfg.RuntimeLogDir},
@@ -149,6 +155,17 @@ func parseRunCommandArgs(cmd *cobra.Command, args []string) ([]string, error) {
 	}
 
 	remainder = append(remainder, positional...)
+	if mockWorkersFlag := flagsByToken["--with-mock-workers"]; mockWorkersFlag != nil &&
+		mockWorkersFlag.Changed &&
+		mockWorkersFlag.Value.String() == defaultMockWorkersConfigPathSentinel &&
+		len(remainder) > 0 &&
+		!runFlagValueLooksLikeFlag(remainder[0]) &&
+		strings.EqualFold(filepath.Ext(remainder[0]), ".json") {
+		if err := mockWorkersFlag.Value.Set(remainder[0]); err != nil {
+			return nil, err
+		}
+		remainder = remainder[1:]
+	}
 	return remainder, nil
 }
 
@@ -180,13 +197,20 @@ func resolveRunFlagValue(flag *pflag.Flag, args []string, index int, hasInlineVa
 		}
 		return "true", false, nil
 	}
+	if index+1 < len(args) && !runFlagValueLooksLikeFlag(args[index+1]) {
+		return args[index+1], true, nil
+	}
 	if flag.NoOptDefVal != "" {
 		return flag.NoOptDefVal, false, nil
 	}
-	if index+1 >= len(args) {
-		return "", false, fmt.Errorf("flag needs an argument: %s", "--"+flag.Name)
-	}
-	return args[index+1], true, nil
+	return "", false, fmt.Errorf("flag needs an argument: %s", "--"+flag.Name)
+}
+
+// runFlagValueLooksLikeFlag reports whether token would be parsed as a flag
+// token rather than an optional flag value. Bare "-" remains a value so stdin
+// path conventions stay available.
+func runFlagValueLooksLikeFlag(token string) bool {
+	return token != "-" && strings.HasPrefix(token, "-")
 }
 
 // ParseArgvForCLIInputsInventory parses argv on the caller-supplied canonical

@@ -64,14 +64,6 @@ func TestNewRejectsInvalidRegistrationSets(t *testing.T) {
 			}},
 		},
 		{
-			name:    "non-canonical alias",
-			catalog: mustCatalog(t),
-			registrations: []execution.Registration{{
-				Provider: "cursor",
-				Attempt:  validAttempt,
-			}},
-		},
-		{
 			name: "unavailable provider",
 			catalog: &recordingCatalog{
 				registration: func(id providers.ID) (providers.Descriptor, error) {
@@ -122,7 +114,7 @@ func TestExecuteValidatesThenResolvesCanonicalAdapterExactlyOnce(t *testing.T) {
 	executionService, err := executionwire.NewService(
 		catalogService,
 		execution.Registration{
-			Provider: providers.IDCursor,
+			Provider: providers.IDCodex,
 			Attempt: func(
 				_ context.Context,
 				request providers.ExecuteRequest,
@@ -138,12 +130,12 @@ func TestExecuteValidatesThenResolvesCanonicalAdapterExactlyOnce(t *testing.T) {
 		t.Fatalf("NewService() = %v", err)
 	}
 	resume := &providers.SessionRef{
-		Provider: providers.IDCursor,
+		Provider: providers.IDCodex,
 		Kind:     providers.SessionIDKind,
 		ID:       "session-1",
 	}
 	request := providers.ExecuteRequest{
-		Provider:         providers.ID("cursor"),
+		Provider:         providers.IDCodex,
 		AttemptID:        "attempt-1",
 		SystemPrompt:     "system",
 		UserMessage:      "user",
@@ -164,7 +156,7 @@ func TestExecuteValidatesThenResolvesCanonicalAdapterExactlyOnce(t *testing.T) {
 		t.Fatalf("adapter calls = %d, want 1", calls)
 	}
 	want := request.Clone()
-	want.Provider = providers.IDCursor
+	want.Provider = providers.IDCodex
 	if !reflect.DeepEqual(received, want) {
 		t.Fatalf("adapter request = %#v, want %#v", received, want)
 	}
@@ -261,7 +253,7 @@ func TestExecuteNeverFallsBackForUnknownUnavailableOrUnregisteredProvider(t *tes
 		want     error
 	}{
 		{name: "unknown", provider: "missing", want: providers.ErrUnknownProvider},
-		{name: "catalog unavailable", provider: providers.IDAgy, want: providers.ErrProviderUnavailable},
+		{name: "catalog unavailable", provider: providers.IDAntigravity, want: providers.ErrProviderUnavailable},
 		{name: "no registered adapter", provider: providers.IDClaude, want: providers.ErrProviderUnavailable},
 	}
 
@@ -481,14 +473,20 @@ func TestExecuteNormalizesEveryPrivateFailureShape(t *testing.T) {
 		{
 			name:       "decode lifecycle failure",
 			attemptErr: execution.AttemptFailure{DecodeError: errors.New("decode detail")},
-			wantKind:   providers.ExecuteFailureKindInvalidRequest,
+			wantKind:   providers.ExecuteFailureKindDependency,
 			wantStage:  "decode",
 		},
 		{
 			name:       "flush lifecycle failure",
 			attemptErr: execution.AttemptFailure{FlushError: errors.New("flush detail")},
-			wantKind:   providers.ExecuteFailureKindUnknown,
+			wantKind:   providers.ExecuteFailureKindDependency,
 			wantStage:  "flush",
+		},
+		{
+			name:       "final parse lifecycle failure",
+			attemptErr: execution.AttemptFailure{FinalParseError: errors.New("final parse detail")},
+			wantKind:   providers.ExecuteFailureKindDependency,
+			wantStage:  "final_parse",
 		},
 		{
 			name:       "empty lifecycle failure",

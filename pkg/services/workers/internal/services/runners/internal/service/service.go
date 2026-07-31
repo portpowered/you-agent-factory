@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"strings"
@@ -70,6 +71,34 @@ func (s *service) Resolve(
 	}
 	binding.Metadata = cloneMetadata(binding.Metadata)
 	return binding, nil
+}
+
+// Execute resolves one immutable registration and runs a single request-scoped
+// strategy attempt. Selection itself performs no execution side effect before
+// the strategy call; no request state is retained after return.
+func (s *service) Execute(
+	ctx context.Context,
+	request runners.ExecuteRequest,
+) (runners.ExecuteResult, error) {
+	if err := ctx.Err(); err != nil {
+		return runners.ExecuteResult{}, err
+	}
+	binding, err := s.Resolve(runners.ResolutionRequest{
+		Identity:             request.Identity,
+		RequiredCapabilities: request.RequiredCapabilities,
+	})
+	if err != nil {
+		return runners.ExecuteResult{}, err
+	}
+	if nilRunner(binding.Runner) {
+		return runners.ExecuteResult{}, fmt.Errorf(
+			"%w: runner %q has no implementation",
+			workers.ErrInvalidRunnerRegistration,
+			binding.Identity,
+		)
+	}
+	attempt := workers.CloneProviderInferenceRequest(request.Attempt)
+	return binding.Runner.Execute(ctx, attempt)
 }
 
 func validateRegistration(

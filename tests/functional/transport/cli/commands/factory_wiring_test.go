@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -42,13 +42,11 @@ func TestCLIFactoryInitValidateAndQuery(t *testing.T) {
 	namedFactoriesRoot := filepath.Join(t.TempDir(), "named-factories")
 	sourcePath := filepath.Join(sourceDir, "factory.json")
 
-	binaryPath := buildYouCLIBinary(t)
+	processHarness := newRootProcessHarness(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	createCmd := exec.CommandContext(
-		ctx,
-		binaryPath,
+	createCmd := processHarness.CommandContext(ctx,
 		"factory", "create", factoryWiringName,
 		"--from", sourcePath,
 		"--dir", namedFactoriesRoot,
@@ -74,9 +72,7 @@ func TestCLIFactoryInitValidateAndQuery(t *testing.T) {
 		t.Fatalf("created factory.json missing at %s: %v", createdFactoryPath, err)
 	}
 
-	validateCmd := exec.CommandContext(
-		ctx,
-		binaryPath,
+	validateCmd := processHarness.CommandContext(ctx,
 		"factory", "config", "validate", createdFactoryPath,
 	)
 	validateCmd.Dir = sourceDir
@@ -94,9 +90,7 @@ func TestCLIFactoryInitValidateAndQuery(t *testing.T) {
 	})
 	defer server.Stop(t)
 
-	queryCmd := exec.CommandContext(
-		ctx,
-		binaryPath,
+	queryCmd := processHarness.CommandContext(ctx,
 		"--server", server.URL(),
 		"factory", "query",
 	)
@@ -133,15 +127,13 @@ func TestCLIFactoryFlattenExpandPreservesMeaning(t *testing.T) {
 		t.Fatalf("write factory.json: %v", err)
 	}
 
-	binaryPath := buildYouCLIBinary(t)
+	processHarness := newRootProcessHarness(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	want := flattenFactoryConfigViaCLI(t, ctx, binaryPath, dir)
+	want := flattenFactoryConfigViaCLI(t, ctx, processHarness, dir)
 
-	expandCmd := exec.CommandContext(
-		ctx,
-		binaryPath,
+	expandCmd := processHarness.CommandContext(ctx,
 		"factory", "config", "expand", factoryPath,
 	)
 	expandCmd.Dir = dir
@@ -162,7 +154,7 @@ func TestCLIFactoryFlattenExpandPreservesMeaning(t *testing.T) {
 		}
 	}
 
-	got := flattenFactoryConfigViaCLI(t, ctx, binaryPath, dir)
+	got := flattenFactoryConfigViaCLI(t, ctx, processHarness, dir)
 	if !reflect.DeepEqual(got, want) {
 		wantJSON, _ := json.MarshalIndent(want, "", "  ")
 		gotJSON, _ := json.MarshalIndent(got, "", "  ")
@@ -184,12 +176,12 @@ func TestCLIFactoryReplaceCurrentChangesSessionFactory(t *testing.T) {
 	namedFactoriesRoot := filepath.Join(t.TempDir(), "named-factories")
 	sourcePath := filepath.Join(sourceDir, "factory.json")
 
-	binaryPath := buildYouCLIBinary(t)
+	processHarness := newRootProcessHarness(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
 	factoryDir := createNamedFactoryViaCLI(
-		t, ctx, binaryPath, sourceDir,
+		t, ctx, processHarness, sourceDir,
 		factoryReplaceCurrentName, sourcePath, namedFactoriesRoot,
 	)
 
@@ -199,7 +191,7 @@ func TestCLIFactoryReplaceCurrentChangesSessionFactory(t *testing.T) {
 	})
 	defer server.Stop(t)
 
-	preReplace := queryFactoryViaCLIJSON(t, ctx, binaryPath, server.URL(), factoryDir)
+	preReplace := queryFactoryViaCLIJSON(t, ctx, processHarness, server.URL(), factoryDir)
 	if preReplace.Id == nil || *preReplace.Id != factoryReplaceCurrentName {
 		t.Fatalf("pre-replace factory id = %#v, want %q", preReplace.Id, factoryReplaceCurrentName)
 	}
@@ -208,9 +200,7 @@ func TestCLIFactoryReplaceCurrentChangesSessionFactory(t *testing.T) {
 	}
 	preReplaceLogical := preReplace.Version.Logical.Int64()
 
-	replaceCmd := exec.CommandContext(
-		ctx,
-		binaryPath,
+	replaceCmd := processHarness.CommandContext(ctx,
 		"--server", server.URL(),
 		"factory", "replace-current",
 	)
@@ -224,7 +214,7 @@ func TestCLIFactoryReplaceCurrentChangesSessionFactory(t *testing.T) {
 		t.Fatalf("replace-current output missing success marker %q:\n%s", factoryReplaceSuccessMarker, replaceOutput)
 	}
 
-	postReplace := queryFactoryViaCLIJSON(t, ctx, binaryPath, server.URL(), factoryDir)
+	postReplace := queryFactoryViaCLIJSON(t, ctx, processHarness, server.URL(), factoryDir)
 	if postReplace.Id == nil || *postReplace.Id != factoryReplaceCurrentName {
 		t.Fatalf("post-replace factory id = %#v, want %q", postReplace.Id, factoryReplaceCurrentName)
 	}
@@ -243,13 +233,12 @@ func TestCLIFactoryReplaceCurrentChangesSessionFactory(t *testing.T) {
 func createNamedFactoryViaCLI(
 	t *testing.T,
 	ctx context.Context,
-	binaryPath, workDir, name, sourcePath, namedFactoriesRoot string,
+	processHarness *builtcliacceptance.Harness,
+	workDir, name, sourcePath, namedFactoriesRoot string,
 ) string {
 	t.Helper()
 
-	createCmd := exec.CommandContext(
-		ctx,
-		binaryPath,
+	createCmd := processHarness.CommandContext(ctx,
 		"factory", "create", name,
 		"--from", sourcePath,
 		"--dir", namedFactoriesRoot,
@@ -280,13 +269,12 @@ func createNamedFactoryViaCLI(
 func queryFactoryViaCLIJSON(
 	t *testing.T,
 	ctx context.Context,
-	binaryPath, serverURL, workDir string,
+	processHarness *builtcliacceptance.Harness,
+	serverURL, workDir string,
 ) factoryapi.Factory {
 	t.Helper()
 
-	queryCmd := exec.CommandContext(
-		ctx,
-		binaryPath,
+	queryCmd := processHarness.CommandContext(ctx,
 		"--json",
 		"--server", serverURL,
 		"factory", "query",
@@ -294,9 +282,6 @@ func queryFactoryViaCLIJSON(
 	queryCmd.Dir = workDir
 	queryOut, err := queryCmd.Output()
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			t.Fatalf("you factory query --json: %v\nstderr:\n%s", err, exitErr.Stderr)
-		}
 		t.Fatalf("you factory query --json: %v", err)
 	}
 
@@ -307,20 +292,15 @@ func queryFactoryViaCLIJSON(
 	return current
 }
 
-func flattenFactoryConfigViaCLI(t *testing.T, ctx context.Context, binaryPath, factoryDir string) any {
+func flattenFactoryConfigViaCLI(t *testing.T, ctx context.Context, processHarness *builtcliacceptance.Harness, factoryDir string) any {
 	t.Helper()
 
-	flattenCmd := exec.CommandContext(
-		ctx,
-		binaryPath,
+	flattenCmd := processHarness.CommandContext(ctx,
 		"factory", "config", "flatten", factoryDir,
 	)
 	flattenCmd.Dir = factoryDir
 	flattenOut, err := flattenCmd.Output()
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			t.Fatalf("you factory config flatten: %v\nstderr:\n%s", err, exitErr.Stderr)
-		}
 		t.Fatalf("you factory config flatten: %v", err)
 	}
 

@@ -3,8 +3,8 @@ package subagent
 import (
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 func TestPackagedSubagentInvocationPrimaryResult_ReturnsAgentResponseNotSubmittedInput(t *testing.T) {

@@ -670,7 +670,7 @@ func factoryConfigSmokeCanonicalJSON() string {
 	return `{
   "name": "analytics-platform",
   "id": "analytics-platform",
-  "runner": "gemini",
+  "runner": "antigravity",
   "inputTypes": [{"name":"batch","type":"DEFAULT"}],
   "guards": [{"type":"INFERENCE_THROTTLE_GUARD","modelProvider":"CLAUDE","model":"claude-sonnet-4-20250514","refreshWindow":"15m"}],
   "workTypes": [
@@ -694,7 +694,7 @@ func factoryConfigSmokeCanonicalJSON() string {
     "behavior":"CRON",
     "type":"MODEL_WORKSTATION",
     "worker":"executor",
-    "runner":"cursor-cli",
+    "runner":"codex",
     "promptFile":"prompt.md",
     "body":"Implement {{ .WorkID }}.",
     "outputSchema":"schema.json",

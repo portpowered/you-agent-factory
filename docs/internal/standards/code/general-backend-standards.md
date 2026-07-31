@@ -2,7 +2,7 @@
 
 ---
 author: andreas abdi
-last modified: 2026, july, 27
+last modified: 2026, july, 30
 doc-id: STD-017
 ---
 
@@ -17,12 +17,15 @@ Every contributor who changes backend logic, APIs, runtime behavior, persistence
 ## Quick Rules
 
 - Prefer small, deeply understandable modules over large, clever ones.
-- Keep state explicit, local, and minimal; prefer stateless functions and referentially transparent logic whenever practical.
+- Expose backend operations as methods on injected service implementations; reserve package-level functions for constructors, pure value operations, and private implementation helpers.
+- Inject each service and external-effect dependency directly, once, through the canonical `pkg/wire` graph.
+- Do not hide dependencies in parameter bags, service locators, secondary injectors, runtime factories, or lazy constructors.
+- Keep state explicit, local, and minimal; keep pure computation referentially transparent whenever practical.
 - Separate pure domain logic from transport, IO, time, filesystem, environment, and process boundaries.
 - Reject unexplained magic values, oversized functions, oversized files, and hidden side effects.
 - Use linting, static checks, and CI gates to enforce backend quality rather than relying on reviewer memory alone.
 - Favor a healthy test pyramid: few fast unit tests, majority integration tests, targeted functional tests, and explicit stress coverage where concurrency or scale matters.
-- Instrument systems so logs, metrics, traces, and operational diagnostics make failures understandable.
+- Log service operations and important outcomes with structured, safe context; add metrics, traces, and operational diagnostics where the path warrants them.
 - Design dependency calls with explicit latency, timeout, retry, and backoff behavior.
 - Test performance, load, and failure modes intentionally rather than assuming correctness implies resilience.
 - Keep public contracts, generated code, and handwritten domain logic clearly separated.
@@ -33,6 +36,9 @@ Every contributor who changes backend logic, APIs, runtime behavior, persistence
 Before approval, reviewers **SHOULD** confirm:
 
 - The change fits the repository's package boundaries and dependency direction.
+- Operational behavior is exposed through a service interface and implemented by an injectable struct rather than a floating function.
+- Services and external effects are injected directly once; no dependency bag, service locator, secondary injector, runtime factory, or hidden constructor was added.
+- Production `New...` construction remains in the owning service's `wire/` provider or the canonical `pkg/wire` graph.
 - State and side effects are intentional, isolated, and no broader than necessary.
 - Pure logic is testable without live IO, clocks, processes, or network dependencies.
 - Magic literals, hidden policies, and unexplained special cases are avoided or named clearly.
@@ -40,6 +46,7 @@ Before approval, reviewers **SHOULD** confirm:
 - The change includes the right mix of unit, integration, functional, and stress evidence.
 - Network dependency behavior is explicit about timeout, retry, failure, and observability strategy.
 - Operational signals are sufficient to diagnose latency, failures, and degraded dependency behavior.
+- Service operations log their start or accepted intent, terminal outcome, and relevant identifiers at appropriate levels without leaking sensitive payloads.
 - CI and lint surfaces would catch the class of failure introduced by this area in the future.
 - Public contracts, generated artifacts, and runtime behavior remain aligned.
 
@@ -64,19 +71,53 @@ Rules:
 - Public contract translation **SHOULD** happen at boundaries rather than being spread through business logic.
 - Generated code **MUST** remain generated and **MUST NOT** become the home for handwritten behavior.
 - Dependency direction **SHOULD** flow from transport and runtime edges inward to domain logic, not the reverse.
+- Repository-specific ownership and placement **MUST** follow the current
+  package map in `AGENTS.md` and `docs/architecture/packaged-structure.md`.
+  Standards **MUST NOT** duplicate migration inventories, temporary package
+  exceptions, or planned target paths as permanent architecture rules.
 
-### 2. Statefulness and Functional Style
+### 2. Services, Dependency Injection, and Construction
+
+Backend behavior **MUST** be exposed through explicit service contracts and assembled through one dependency-injection graph.
+
+#### Service operations
+
+- Product and orchestration operations **MUST** be methods on concrete service structs that implement interfaces exposed by the owning service root.
+- Cross-service callers **MUST** depend on the narrow public interface of the owning service and **MUST NOT** call its internal implementation, constructor, or package-level operational helpers.
+- Operational dependencies **MUST** be stored explicitly on the receiving service struct and supplied at construction time. A method **MUST NOT** discover collaborators from global state, context values, registries, or service locators.
+- Exported package-level functions **MUST** be limited to focused construction providers in `wire/`, pure value operations where a receiver is not meaningful, and language- or framework-required adapters. They **MUST NOT** provide an alternate operational API beside the service interface.
+- Unexported pure helpers **MAY** remain package-level when they have no injected dependencies or side effects. Helpers that require collaborators, IO, mutable lifecycle state, or operational policy **MUST** become methods on the owning implementation struct.
+- Request, result, option, and domain-value structs **MAY** group operation data. They **MUST NOT** be used as disguised dependency containers.
+
+#### Direct, single injection
+
+- `pkg/wire` **MUST** construct the complete inert application graph once, construct each service once, and pass that same service instance directly to every consumer that needs it.
+- A service **MUST** receive the specific peer-service interfaces and external-effect ports it consumes. It **MUST NOT** receive a broad bundle, `Dependencies`, `Deps`, `Params`, `Options`, `Services`, or similar grab-bag constructor struct merely to shorten a constructor signature.
+- A constructor parameter struct **MAY** represent one cohesive configuration value, but it **MUST NOT** mix configuration with services, loggers, clocks, stores, clients, runners, or other behavioral dependencies.
+- Services, transports, initializers, and runtime methods **MUST NOT** perform secondary injection, invoke child injectors, assemble another application graph, or create factories that defer service selection or dependency construction until an operation runs.
+- `pkg/initializer` **MUST** activate and unwind roles already built by `pkg/wire`; it **MUST NOT** construct product services or behave as a second composition root.
+- Session- or request-scoped domain state **MAY** be created during an operation. That creation **MUST** use the already-injected services and **MUST NOT** become another dependency-injection pass.
+
+#### Constructor ownership
+
+- Production calls to service and infrastructure constructors named `New...` **MUST** occur only in the owning service's focused `wire/` provider or in the canonical `pkg/wire` composition graph.
+- Non-`wire` production code **MUST NOT** call `New...` to acquire a service, infrastructure adapter, client, store, runner, logger, clock, or other injectable collaborator. Those dependencies **MUST** be constructor-injected into the receiving service.
+- Pure domain-value constructors, request/result builders, standard-library value creation, allocation through Go's built-in `new`, and test fixture construction are not dependency construction and **MAY** remain outside `wire/`.
+- A `wire/` provider **MUST** construct only its focused implementation from explicit parameters. It **MUST NOT** hide a secondary graph, return a service bag for later lookup, or make runtime policy decisions.
+- Tests **SHOULD** construct the implementation under test directly with explicit fakes. Application and functional tests **MUST** use the canonical `root.BuildProcess` and `pkg/wire` path described in Section 7.
+
+### 3. Statefulness and Functional Style
 
 Backend systems **MUST** prefer explicit data flow over hidden mutable state.
 
 Rules:
 
-- Stateless designs are the default.
-- Pure functions **SHOULD** be preferred for parsing, validation, mapping, planning, selection, reduction, and rule evaluation.
+- Stateless service implementations are preferred when lifecycle state is unnecessary.
+- Pure computation **SHOULD** be preferred for parsing, validation, mapping, planning, selection, reduction, and rule evaluation, whether expressed as value methods or private helpers.
 - Referential transparency **SHOULD** be preserved whenever a function can reasonably be made deterministic from its inputs.
 - Mutable shared state **MUST** be justified and narrowly scoped.
 - Package-level mutable state **SHOULD NOT** be introduced except for well-understood infrastructure needs with clear lifecycle control.
-- Side effects **MUST** be isolated behind interfaces or boundary functions.
+- Side effects **MUST** be isolated behind injected service or external-effect interfaces and invoked from service methods or transport adapters.
 - Time, randomness, environment reads, filesystem access, process execution, and network calls **SHOULD** be injected or wrapped so logic remains testable.
 - State transitions **MUST** be explicit in code and easy to trace in tests.
 
@@ -84,10 +125,10 @@ Preferred pattern:
 
 - compute or validate in pure helpers
 - translate at the boundary
-- perform side effects in a thin orchestration layer
+- perform side effects through injected service or external-effect interfaces in a thin service method
 - return explicit results and errors
 
-### 3. Complexity Management and Ousterhout Preferences
+### 4. Complexity Management and Ousterhout Preferences
 
 Backend code **MUST** optimize for lower cognitive load, lower change amplification, and simpler reasoning.
 
@@ -107,7 +148,7 @@ Review questions:
 - Are invariants obvious from the interface and comments?
 - Is there a simpler design with fewer branches, modes, or policy flags?
 
-### 4. Linting, Static Analysis, and Code Shape
+### 5. Linting, Static Analysis, and Code Shape
 
 Backend quality **MUST** be enforced mechanically wherever possible.
 
@@ -115,6 +156,7 @@ Rules:
 
 - Formatting, linting, vetting, and dead-code checks **MUST** pass before merge.
 - The repository **SHOULD** maintain static rules for prohibited patterns rather than relying on tribal knowledge.
+- Repository checks **SHOULD** enforce constructor placement, prohibit dependency-container grab bags, and detect operational package-level functions as these rules become mechanically identifiable.
 - Magic values **SHOULD NOT** appear inline when a named constant, type, or helper would communicate intent better.
 - Sentinel strings, status literals, retry counts, timeout durations, buffer sizes, and policy values **SHOULD** be named and scoped appropriately.
 - Functions **SHOULD** remain short enough to understand in one pass.
@@ -137,103 +179,8 @@ Repository package-size policy:
 - Existing audited package-size debt **MAY** remain only in the exact deletion-only baseline, which blocks new oversized packages, count increases, and stale entries while requiring every reduction to lower or remove the recorded count.
 - Run `make pkg-file-count` for the focused package-size check, or `make lint` before review for the full backend lint path that includes this gate.
 
-Repository package-boundary policy:
 
-- Direct children of `pkg/` are package families. New root `pkg/` package families are **blocking** unless a maintainer deliberately updates the approved family allowlist with the owning domain and rationale.
-- The durable product-owned root package families are: `pkg/initializer`, `pkg/internal`, `pkg/platform`, `pkg/root`, `pkg/services`, `pkg/transports`, and `pkg/wire`. Product services live below `pkg/services`; the retired `pkg/config`, `pkg/factory`, `pkg/models`, `pkg/orchestrators`, `pkg/work`, and `pkg/workers` roots **MUST NOT** be recreated.
-- Every `pkg/services/<service>` root and every nested
-  `pkg/services/<service>/internal/services/<subservice>` root **MUST** declare
-  exactly one named service interface. Direct production files in that root
-  **MUST NOT** add exported package-level functions; public behavior is exposed
-  through the singular interface, with mostly plain request/result structs at
-  the root.
-- Direct child directories of every service and subservice root are restricted
-  to `wire`, `internal`, and `transports` where transports apply. `internal`
-  owns the private implementation, `wire` exposes the focused construction
-  providers consumed by canonical root `pkg/wire`, and nested services live
-  only under the parent-private
-  `<service-or-subservice>/internal/services/<subservice>` container. Each
-  nested subservice recursively follows the same package shape, with deeper
-  nesting under `<subservice>/internal/services/<child>`. A public sibling
-  `<service>/services/` or `<subservice>/services/` container is non-canonical.
-  Go files **MUST NOT** live directly in an `internal/services` container.
-- `make pkg-structure` mechanically enforces the service-root interface,
-  exported-function, recursive directory-shape, and functional-test layout
-  rules. Existing violations are exact deletion-only entries in
-  `docs/internal/baselines/package-structure-baseline.json`: new entries and stale entries are blocking,
-  and the baseline **MUST** converge to zero.
-- Repository-only cross-package fixtures, mocks, assertions, and harnesses **MUST** live under `internal/testutil`; functional process helpers may live under `tests/functional/internal/support`; helpers coupled to one package's behavior **SHOULD** remain package-local. Neither reusable support root is an application composition root, and production packages **MUST NOT** import repository-only test support.
-- A service implementation subpackage under `pkg/services/<service>/...` is private to its owning service even when Go's `internal` visibility does not enforce that boundary. Production code and tests outside that service **MUST NOT** import or construct it. Cross-service consumers use the owning service-root contract; customer-scale functional tests enter through `root.BuildProcess` and supply typed overrides only at process edges. `pkg/wire/**` tests may exercise concrete construction because Wire is the composition root, and exact leaf external-effect contract packages approved by the package-boundary policy may be imported solely as injection ports. Existing cross-owner test imports are recorded in `test-service-import-baseline.json` as deletion-only migration debt: new entries and stale entries are blocking, and the baseline **MUST** converge to zero. Reusable non-test Go support under `internal/testutil` and `tests/functional/internal/support` follows the same ownership rule and is not a composition root. Existing implementation imports are recorded separately in `support-service-import-baseline.json`; new and stale reusable-support entries are blocking, and moving a dependency from a `_test.go` file into shared support does not satisfy either deletion gate.
-- Startup ownership is non-overlapping. `cmd/factory` supplies process input and translates the terminal error to an exit code. The single `pkg/root.BuildProcess` construction entrypoint calls the single `pkg/wire.InjectBundle` composition entrypoint and returns one reusable `application.Process`, but **MUST NOT** predict the selected command or execute component lifecycle. Production supplies empty process edges and functional tests supply explicit external replacements through that same root and Wire path. `pkg/wire.InjectBundle` constructs the complete inert process dependency graph once; it **MUST NOT** delegate application construction to run, invocation, API, MCP, stdio, Factory Runtime, test, or other child injectors or to a callback that manually assembles a secondary graph. Wire constructs the Factory Runtime assembly service and its product-policy dependencies directly; a bundle-owned `FactoryRuntimeAssemblyFactory` or equivalent deferred constructor callback is prohibited. Opened Factory Sessions and initializer runtime scopes expose exact typed service roles and **MUST NOT** pass a `bundle.Bundle`, service locator, or equivalent broad dependency bag into Initializer or transports. Each `application.Process.Execute` call normalizes its invocation-local arguments, environment, streams, and context, then constructs a fresh CLI command tree over the same injected roles. CLI parsing selects a customer operation and lifecycle activation, not another construction entrypoint. Initial injection starts no listener, daemon, watcher, subprocess, model host, or Factory Session. Factory Session and per-session runtime creation are operations owned by the already-injected Factory Session and Factory Runtime services rather than new application-injection passes. `pkg/initializer` starts, stops, cancels, joins, and unwinds already-constructed inert lifecycle handles, but **MUST NOT** construct product services, transports, or Factory Session runtimes.
-- `pkg/transports` owns HTTP, CLI, MCP, generated transport contracts and clients, and boundary mapping. It **MUST NOT** own domain policy or canonical runtime state.
-- `pkg/services/work` owns Work and Work Request content, query/selection, graph/lineage, pure invocation input and return policy, and materialization. `pkg/services/automations` owns cron/time-work orchestration and Automation Hosted Sources. Factory Session orchestration, worker/provider execution, Workers Hosted Runner execution, and generic platform clocks are excluded from Automations ownership.
-- Hosted observation and hosted remote execution are distinct durable ownership responsibilities and **MUST NOT** be collapsed into one Workers-owned hosted concept:
-  - Automation Hosted Sources own observing hosted systems (including Linear-style hosted polling and hosted-source reconciliation), secret resolution used for that observation, poll/restart/checkpoint behavior, normalization of observations, and commanding Work admission / emitting Work Requests. Current transitional package location under `pkg/services/workers/services/hosted_logic` is not proof of durable Workers ownership for those responsibilities.
-  - Workers Hosted Runner owns remote Work execution request/result, remote lifecycle observation for that execution, cancellation, and normalized execution outcome under the Workers Runner contract. Automations **MUST NOT** own that hosted remote execution responsibility.
-  - Normative ownership is decided by observable responsibility, not by folder name alone. Reviewers **MUST** reject assigning hosted Linear-style polling or hosted-source reconciliation to Workers Hosted Runner as the durable owner where Automation Hosted Sources own that behavior.
-- `pkg/services/workers` owns worker/provider execution and Workers Hosted Runner remote Work execution under the Runner contract. It **MUST NOT** claim durable ownership of Automation Hosted Sources polling, reconciliation, observation normalization, or Work-admission commanding merely because transitional hosted-source code still lives under `services/hosted_logic`.
-- `pkg/platform` owns cross-cutting logging, replay and artifact infrastructure, metrics, Factory Session reconnect-cursor persistence, and non-domain clock infrastructure. Provider-specific session discovery and transcript storage belong under `pkg/services/provider_sessions`; platform packages **MUST NOT** own provider-specific session formats. Platform packages may implement domain-owned interfaces, but **MUST NOT** choose Factory, Factory Session, worker, model, or Work policy.
-- Migration-only root-family exceptions are not durable owners. The policy **MUST** record a target owner and a specific active work item for every exception. The former `pkg/service`, `pkg/runtimehost`, `pkg/factory`, `pkg/models`, `pkg/work`, and `pkg/workers` roots are retired: the package-boundary guard **MUST** reject recreating or importing them and direct construction to `pkg/wire`, service contracts and implementations to `pkg/services`, and lifecycle work to `pkg/initializer`. The completed platform family move is canonical at `pkg/platform/logging`, `pkg/platform/replay`, `pkg/platform/metrics`, `pkg/platform/cursors/persistence`, `pkg/platform/cursors/session`, and `pkg/platform/clock`; provider-session Cursor storage is canonical at `pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor`, and Factory-event replay policy is canonical in `pkg/services/recordings/replay`. Each remaining exception **MUST** be removed when its named deletion gate is satisfied, and new behavior **MUST NOT** use an exception as a permanent owner.
-- Generated-code exceptions are documented separately from product-owned package families: `pkg/generatedclient`, `pkg/api/generated`, and generated Go files marked with the standard `Code generated ... DO NOT EDIT.` header when a scanner evaluates files. The package-boundary guard keeps these exceptions visible in its diagnostics instead of treating them as product-owned target package families. Generated-code exceptions **MUST NOT** become homes for handwritten product behavior.
-- Batch 001 migration-only compatibility shim roots such as `pkg/workflowpolicy`, `pkg/workflowpreview`, `pkg/workflowresult`, `pkg/workflowsource`, and `pkg/workflowvalidation` have been removed and **MUST NOT** be recreated. Orchestrator contracts are exposed by `pkg/services/factory_runtime`; Petri and JavaScript implementations live under `pkg/services/factory_runtime/internal/orchestrators` and **MUST NOT** be imported by external consumers.
-- The package-boundary guard blocks Batch 001 migration-only shim markers by default, including in otherwise approved root package families, and reports the shim package, marker, canonical target when detectable, and remediation to import the canonical owner directly. These findings were advisory only during the initial guard lane before the migration-shim removal lane landed.
-- The historical `pkg/modelhost`, `pkg/localmodels`, and `pkg/hostedworkers` roots are retired. The package-boundary guard **MUST** reject recreating those roots or importing them or their subpackages, and **MUST** direct maintainers to the `pkg/services/models` root service contract and its internal implementation for model-host and local-model concerns. For retired `pkg/hostedworkers` behavior, diagnostics **MUST** distinguish target Automation Hosted Sources ownership (hosted polling / observation, secret resolution for observation, poll/restart/checkpoint, observation normalization, and commanding Work admission) from Workers Hosted Runner ownership (remote Work execution request/result, execution lifecycle observation, cancellation, and normalized execution outcome under the Runner contract) instead of implying that all former hostedworkers behavior remains Workers-owned under `pkg/services/workers/services/hosted_logic`. Canonical nested packages and package-local identifiers or test doubles remain allowed. Transitional code may still live under `pkg/services/workers/services/hosted_logic` until later package moves; that location alone does not redefine durable ownership.
-- The historical `pkg/workcontent`, `pkg/materialize`, `pkg/workquery`, `pkg/workgraph`, `pkg/timework`, and `pkg/invocations` roots are retired. The package-boundary guard **MUST** reject recreating those roots or importing them or their subpackages and direct maintainers to the canonical Work, Factory Session invocation, or worker execution owner named by the diagnostic; forwarding packages are prohibited.
-- The historical `pkg/logging`, `pkg/replay`, `pkg/interfaces`, and `pkg/testutil` roots are retired. The package-boundary guard **MUST** reject their recreation and imports, direct maintainers to the platform or defining domain owner, and direct repository-only test support to `internal/testutil` or package-local helpers.
-- The package-boundary guard blocks imports of `pkg/wire` from domain and
-  transport packages. `pkg/wire` is the unrestricted composition root and may
-  import any repository package that Go permits it to import, including
-  concrete service implementations, transports, adapters, and platform
-  providers. Root-only service-consumer rules never apply to `pkg/wire/**`;
-  they constrain services, Initializer, transports, platform code, and reusable
-  support. This import privilege does not authorize Wire to own business policy
-  or lifecycle behavior. `pkg/root` is the only startup consumer of the Wire
-  injector; all other packages consume the typed roles Wire supplies and never
-  reconstruct providers.
-- `pkg/services/edges` is the documented process-edge aggregator architecture
-  exception for `root.BuildProcess` / `pkg/wire` construction and functional
-  overrides. It aggregates replaceable external-effect ports and owns `Merge`
-  for process overrides; it is **not** a service locator, Initializer
-  dependency bag, or owner of external effect contracts. Constructed services
-  **MUST** receive exact projected ports at the composition boundary and
-  **MUST NOT** import or hold `edges.Edges`. Each typed process, HTTP,
-  filesystem, or time port **MUST** be declared by the leaf package that
-  directly performs that effect. `pkg/services/edges` may import the exact
-  model effect owners the `pkg/services/models` root solely to aggregate its
-  published external-effect contracts unchanged. It **MUST NOT** import a
-  composed Models service or runtime, redefine or alias those contracts, or
-  receive a general peer-service subpackage exemption.
-- External provider inference and process effects follow the same leaf-effect
-  rule as Models: the Providers Execution leaf that directly performs the
-  effect declares the leaf effect contract for that provider inference or
-  process port. `pkg/services/edges` may import those exact Providers leaf
-  effect contracts solely to aggregate them unchanged as the
-  `root.BuildProcess` and functional-test override bag. It **MUST NOT** own,
-  redefine, or alias those contracts, or receive a general peer-service
-  subpackage exemption for Providers implementations. Workers consumes the
-  Providers root for provider execution capability and **MUST NOT** redeclare
-  or alias the leaf effect port as a peer-owned contract. Catalog enumeration
-  and one-attempt execution share one Providers-owned source of truth: they
-  absorb the accepted Standardized Providers protocol, registry, open-config,
-  and testkit model rather than defining a competing ownership path.
-  Maintainers **MUST NOT** introduce a second Providers catalog, registry,
-  conductor, or execution-contract family beside that absorbed model while the
-  neutral-conductor lane remains live. Code still living under
-  `pkg/services/workers/provider/` (including `inferencecontract` and
-  `registry`) is migration debt that hosts the absorbed Standardized Providers
-  surfaces until later Providers packets land; those Workers paths are not a
-  license to fork a parallel catalog or execution abstraction. The
-  package-boundary guard permits only the exact Providers leaf effect contract
-  packages across peer services as injection ports; it does not exempt
-  Providers implementations or other peer subpackages, and it rejects competing
-  provider catalog/registry/conductor/execution abstractions outside Providers
-  and the absorbed Workers provider migration-debt surfaces.
-- Package-boundary diagnostics **SHOULD** name the disallowed root package path, state that it is outside the approved package-family allowlist, and direct maintainers either to move code under an approved owner or to update the allowlist with ownership rationale.
-- Run `make pkg-boundary` for dependency and ownership boundaries and
-  `make pkg-structure` for recursive service and functional-test package shape;
-  `make lint` runs both during normal verification.
-
-### 5. Error Handling and Contracts
+### 6. Error Handling and Contracts
 
 Backend systems **MUST** communicate failure clearly and preserve contract correctness.
 
@@ -246,7 +193,7 @@ Rules:
 - Contract drift between schemas, generated code, and runtime behavior **MUST** be guarded by automated checks.
 - Backward compatibility expectations **MUST** be documented when public behavior changes.
 
-### 6. Testing Strategy and Test Pyramid
+### 7. Testing Strategy and Test Pyramid
 
 Backend changes **MUST** include evidence at the correct testing layer.
 
@@ -320,7 +267,7 @@ Minimum expectations for non-trivial backend changes:
 - Concurrency-sensitive behavior has race, stress, or repeat-run coverage where relevant.
 - Public contract changes have contract or smoke coverage.
 
-### 7. CI/CD and Automated Enforcement
+### 8. CI/CD and Automated Enforcement
 
 Best practices **MUST** be enforced by CI/CD, not only by documentation.
 
@@ -342,7 +289,7 @@ Recommended CI shape:
 - unit and integration tests next
 - functional and stress coverage in the appropriate lanes
 
-### 8. Concurrency, Runtime Safety, and Resource Use
+### 9. Concurrency, Runtime Safety, and Resource Use
 
 Backend runtime behavior **MUST** remain safe under concurrent and adverse conditions.
 
@@ -361,7 +308,7 @@ Verification:
 - Race or stress coverage **SHOULD** exist where concurrency is core to the feature.
 - High-risk runtime behavior **SHOULD** include repeated-run or soak-style verification when appropriate.
 
-### 9. Network Traffic and Dependency Behavior
+### 10. Network Traffic and Dependency Behavior
 
 Backend systems **MUST** treat network and dependency interactions as failure-prone boundaries.
 
@@ -391,13 +338,16 @@ Verification:
 - Integration or functional tests **SHOULD** cover dependency timeout and failure paths.
 - Retry behavior **SHOULD** be verified so it does not create duplicate side effects or retry storms.
 
-### 10. Observability, Logging, Metrics, and Tracing
+### 11. Observability, Logging, Metrics, and Tracing
 
 Backend systems **SHOULD** be diagnosable when they fail in production-like environments.
 
 Rules:
 
-- Logs **SHOULD** provide enough structured context to trace failures and important state transitions.
+- Public service operations and operationally significant background actions **MUST** emit structured logs at appropriate levels.
+- Operation logs **MUST** make the accepted intent or start, terminal outcome, relevant stable identifiers, duration when useful, and actionable error context observable. High-frequency paths **MAY** sample or aggregate successful-operation logs when per-operation logging would create harmful volume.
+- Logs **MUST** use the repository's injected logging abstraction. Services **MUST NOT** construct or discover their own logger.
+- Logs **SHOULD** provide enough structured context to trace failures and important state transitions across service boundaries.
 - Metrics **SHOULD** exist for throughput, latency, failures, saturation, retries, and queue or backlog pressure where relevant.
 - Tracing **SHOULD** exist for requests or workflows that cross important subsystem or dependency boundaries.
 - Observability **MUST** cover both local failures and downstream dependency failures.
@@ -413,7 +363,7 @@ Recommended observability outcomes:
 - Latency regressions are detectable before they become outages.
 - Retry storms, queue buildup, and resource exhaustion become visible quickly.
 
-### 11. Performance, Load, Stress, and Failure Modes
+### 12. Performance, Load, Stress, and Failure Modes
 
 Backend systems **MUST** be evaluated for resilience under realistic traffic and failure conditions.
 
@@ -438,12 +388,14 @@ Verification:
 Before merge, authors **SHOULD** confirm:
 
 - Package boundaries and dependency direction remain clear.
+- Operations are methods on injectable service implementations and cross-service calls use service-root interfaces.
+- Dependencies are injected directly once, without grab-bag parameter structs, service lookup, secondary injection, runtime factories, or out-of-`wire` service construction.
 - Stateful behavior is minimized and explicit.
 - Pure logic is separated from side effects where practical.
 - Magic values, oversized functions, and oversized files were addressed.
 - Appropriate tests exist at unit, integration, functional, contract, and stress layers as needed.
 - Dependency calls define timeout, retry, failure, and backoff behavior explicitly.
-- Logs, metrics, traces, and diagnostics are sufficient for the affected operational path.
+- Service operations emit structured, safe, actionable logs; metrics, traces, and diagnostics are sufficient for the affected operational path.
 - Performance, load, and failure-mode behavior were considered for the affected runtime path.
 - CI enforces the important invariants for this area.
 - Public contracts and generated artifacts remain aligned.
@@ -456,6 +408,8 @@ These standards are intentionally general, but the current repository stack sugg
 - Use thin `cmd/` entrypoints and keep backend behavior in `pkg/` and `internal/`.
 - Treat `make lint`, `go vet`, and repository-specific dead-code or guard checks as required quality gates.
 - Keep OpenAPI and generated artifacts aligned through automated smoke or contract checks.
-- Use `tests/functional_test/` for high-value system behavior, not for replacing package-level unit coverage.
+- Use `tests/functional/` for new high-value system behavior, not for replacing
+  package-level unit coverage. `tests/functional_test/` is legacy fixture and
+  compatibility coverage, not the destination for new scenarios.
 - Use `tests/stress/` and similar suites for concurrency, throughput, and resource-boundary risks.
 - Treat dependency-heavy flows as observability-critical and ensure timeout, retry, and failure behavior is testable.

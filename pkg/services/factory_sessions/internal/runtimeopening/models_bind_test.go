@@ -398,6 +398,7 @@ func (failure *openingCoordinatorFailure) openWorkerExecution(
 func openingCoordinatorDurableExecution(
 	_ factorydefinitions.RuntimeOpeningRequest,
 	_ factorysessions.SessionRuntimeOpeningRequest,
+	_ operatorconfig.ResolvedDefaults,
 	_ RuntimeRoot,
 	_ factoryruntime.Clock,
 	_ workers.Provider,
@@ -433,9 +434,9 @@ func openingCoordinatorRecorder(
 
 func openingCoordinatorHostedPollers(
 	*zap.Logger,
-	workers.HostedPollerClock,
-	workers.HostedPollerHTTPDoer,
-	workers.HostedPollerSecretResolver,
+	automations.HostedLinearClock,
+	automations.HostedLinearHTTPDoer,
+	automations.HostedLinearSecretResolver,
 	string,
 ) automations.HostedPollers {
 	return nil

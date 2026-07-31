@@ -126,6 +126,13 @@ func (f *recordingAdmissionWorkService) MaterializeContentURL(
 	return "", nil, errUnsupportedAdmissionWorkServiceMethod
 }
 
+func (f *recordingAdmissionWorkService) MaterializeWorkerOutput(
+	context.Context,
+	work.MaterializeWorkerOutputRequest,
+) (work.MaterializeWorkerOutputResult, error) {
+	return work.MaterializeWorkerOutputResult{}, errUnsupportedAdmissionWorkServiceMethod
+}
+
 func (f *recordingAdmissionWorkService) PrepareInvocationInput(
 	context.Context,
 	work.InvocationInputPreparationRequest,

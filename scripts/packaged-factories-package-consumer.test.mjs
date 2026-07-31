@@ -69,8 +69,8 @@ test("exact candidate installs outside the workspace and verifies every public F
   assert.equal(evidence.packageName, candidate.evidence.packageName);
   assert.equal(evidence.packageVersion, candidate.evidence.candidateVersion);
   assert.equal(evidence.sourceCommit, sourceCommit);
-  assert.equal(evidence.factoryCount, 7);
-  assert.equal(evidence.verifiedSpecifiers.length, 17);
+  assert.equal(evidence.factoryCount, 14);
+  assert.equal(evidence.verifiedSpecifiers.length, 31);
   assert.match(evidence.localizedDescription.value, /\S/);
   assert.ok(Object.keys(evidence.copyableInvocation.args).length > 0);
   await assert.rejects(access(consumerDirectory), { code: "ENOENT" });

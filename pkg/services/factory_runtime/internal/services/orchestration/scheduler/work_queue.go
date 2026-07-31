@@ -95,6 +95,7 @@ func (s *WorkInQueueScheduler) Select(enabled []interfaces.EnabledTransition, sn
 		}
 		decisions = append(decisions, interfaces.FiringDecision{
 			TransitionID:  candidate.transitionID,
+			InputTokens:   candidate.inputTokenIDs,
 			ConsumeTokens: candidate.consumeTokenIDs,
 			WorkerType:    candidate.workerType,
 			InputBindings: candidate.inputBindings,
@@ -108,6 +109,7 @@ type queuedCandidate struct {
 	transitionID        string
 	workerType          string
 	inputBindings       map[string][]string
+	inputTokenIDs       []string
 	consumeTokenIDs     []string
 	traceIDs            []string
 	earliestQueueTime   time.Time
@@ -136,6 +138,7 @@ func collectCandidate(et interfaces.EnabledTransition, topology *state.Net, runt
 		transitionID:        et.TransitionID,
 		workerType:          et.WorkerType,
 		inputBindings:       analysis.inputBindings,
+		inputTokenIDs:       analysis.inputTokenIDs,
 		consumeTokenIDs:     analysis.consumeTokenIDs,
 		traceIDs:            analysis.traceIDs(),
 		earliestQueueTime:   analysis.earliestQueueTime,
@@ -149,6 +152,8 @@ type queuedCandidateAnalysis struct {
 	arcModes            map[string]interfaces.ArcMode
 	topology            *state.Net
 	seenConsumeTokens   map[string]struct{}
+	seenInputTokens     map[string]struct{}
+	inputTokenIDs       []string
 	consumeTokenIDs     []string
 	inputBindings       map[string][]string
 	traceIDSet          map[string]struct{}
@@ -162,6 +167,8 @@ func newQueuedCandidateAnalysis(et interfaces.EnabledTransition, topology *state
 		arcModes:          et.ArcModes,
 		topology:          topology,
 		seenConsumeTokens: make(map[string]struct{}),
+		seenInputTokens:   make(map[string]struct{}),
+		inputTokenIDs:     make([]string, 0, len(et.Bindings)),
 		consumeTokenIDs:   make([]string, 0, len(et.Bindings)),
 		inputBindings:     make(map[string][]string),
 		traceIDSet:        make(map[string]struct{}),
@@ -180,10 +187,14 @@ func (a *queuedCandidateAnalysis) consumeToken(arcName string, token factorytoke
 		return
 	}
 	a.observeTraceCandidate(token)
+	a.inputBindings[arcName] = append(a.inputBindings[arcName], tokenID)
+	if _, exists := a.seenInputTokens[tokenID]; !exists {
+		a.seenInputTokens[tokenID] = struct{}{}
+		a.inputTokenIDs = append(a.inputTokenIDs, tokenID)
+	}
 	if a.arcModes[arcName] == interfaces.ArcModeObserve {
 		return
 	}
-	a.inputBindings[arcName] = append(a.inputBindings[arcName], tokenID)
 	if _, exists := a.seenConsumeTokens[tokenID]; exists {
 		return
 	}

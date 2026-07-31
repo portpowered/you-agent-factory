@@ -17,74 +17,82 @@
   {
     "file": "packages/components/src/charts/index.ts",
     "kind": "type",
-    "name": "ComponentsCategory",
-    "namespace": "charts"
+    "name": "ComponentsCategory"
   },
   {
     "file": "packages/components/src/data-display/index.ts",
     "kind": "type",
-    "name": "ComponentsCategory",
-    "namespace": "dataDisplay"
+    "name": "ComponentsCategory"
   },
   {
     "file": "packages/components/src/factory-emulator/index.ts",
     "kind": "type",
-    "name": "ComponentsCategory",
-    "namespace": "factoryEmulator"
+    "name": "ComponentsCategory"
   },
   {
     "file": "packages/components/src/feedback/index.ts",
     "kind": "type",
-    "name": "ComponentsCategory",
-    "namespace": "feedback"
+    "name": "ComponentsCategory"
   },
   {
     "file": "packages/components/src/forms/index.ts",
     "kind": "type",
-    "name": "ComponentsCategory",
-    "namespace": "forms"
+    "name": "ComponentsCategory"
   },
   {
     "file": "packages/components/src/graphs/index.ts",
     "kind": "type",
-    "name": "ComponentsCategory",
-    "namespace": "graphs"
+    "name": "ComponentsCategory"
   },
   {
     "file": "packages/components/src/icons/index.ts",
-    "kind": "type",
-    "name": "ComponentsCategory",
-    "namespace": "icons"
+    "kind": "file",
+    "name": "packages/components/src/icons/index.ts"
   },
   {
     "file": "packages/components/src/layout/index.ts",
     "kind": "type",
-    "name": "ComponentsCategory",
-    "namespace": "layout"
+    "name": "ComponentsCategory"
   },
   {
     "file": "packages/components/src/navigation/index.ts",
-    "kind": "type",
-    "name": "ComponentsCategory",
-    "namespace": "navigation"
+    "kind": "file",
+    "name": "packages/components/src/navigation/index.ts"
   },
   {
     "file": "packages/components/src/overlays/index.ts",
     "kind": "type",
-    "name": "ComponentsCategory",
-    "namespace": "overlays"
+    "name": "ComponentsCategory"
   },
   {
     "file": "packages/components/src/primitives/index.ts",
     "kind": "type",
-    "name": "ComponentsCategory",
-    "namespace": "primitives"
+    "name": "ComponentsCategory"
   },
   {
     "file": "packages/components/src/recipes/index.ts",
     "kind": "type",
-    "name": "ComponentsCategory",
-    "namespace": "recipes"
+    "name": "ComponentsCategory"
+  },
+  {
+    "file": "packages/components/src/styles.css",
+    "kind": "file",
+    "name": "packages/components/src/styles.css"
+  },
+  {
+    "file": "packages/components/src/styles/color-palette-presets.css",
+    "kind": "file",
+    "name": "packages/components/src/styles/color-palette-presets.css"
+  },
+  {
+    "file": "packages/components/src/styles/color-role-tokens.css",
+    "kind": "file",
+    "name": "packages/components/src/styles/color-role-tokens.css"
+  },
+  {
+    "file": "packages/components/src/styles/layout-role-tokens.css",
+    "kind": "file",
+    "name": "packages/components/src/styles/layout-role-tokens.css"
   },
   {
     "file": "packages/components/src/styles/package-token-fixture-usage.ts",
@@ -92,22 +100,39 @@
     "name": "packages/components/src/styles/package-token-fixture-usage.ts"
   },
   {
+    "file": "packages/components/src/styles/text-color-role-tokens.css",
+    "kind": "file",
+    "name": "packages/components/src/styles/text-color-role-tokens.css"
+  },
+  {
+    "file": "packages/components/src/styles/typography-role-tokens.css",
+    "kind": "file",
+    "name": "packages/components/src/styles/typography-role-tokens.css"
+  },
+  {
+    "file": "packages/components/src/styles/typography-role-utilities.css",
+    "kind": "file",
+    "name": "packages/components/src/styles/typography-role-utilities.css"
+  },
+  {
+    "file": "packages/components/src/styles/typography-roles.css",
+    "kind": "file",
+    "name": "packages/components/src/styles/typography-roles.css"
+  },
+  {
     "file": "packages/components/src/testing/index.ts",
     "kind": "type",
-    "name": "ComponentsCategory",
-    "namespace": "testing"
+    "name": "ComponentsCategory"
   },
   {
     "file": "packages/components/src/tokens/index.ts",
-    "kind": "type",
-    "name": "ComponentsCategory",
-    "namespace": "tokens"
+    "kind": "file",
+    "name": "packages/components/src/tokens/index.ts"
   },
   {
     "file": "packages/components/src/utilities/index.ts",
     "kind": "type",
-    "name": "ComponentsCategory",
-    "namespace": "utilities"
+    "name": "ComponentsCategory"
   },
   {
     "file": "packages/components/vite.build.config.ts",
@@ -130,8 +155,43 @@
     "name": "packages/factory-replay/fixtures/installed-consumer/consumer.ts"
   },
   {
+    "file": "packages/factory-visualizers/src/testing/factory-recording-messages.ts",
+    "kind": "file",
+    "name": "packages/factory-visualizers/src/testing/factory-recording-messages.ts"
+  },
+  {
+    "file": "packages/factory-visualizers/src/testing/factory-recording-responsive-states.ts",
+    "kind": "file",
+    "name": "packages/factory-visualizers/src/testing/factory-recording-responsive-states.ts"
+  },
+  {
+    "file": "packages/factory-visualizers/src/testing/factory-recordings.ts",
+    "kind": "file",
+    "name": "packages/factory-visualizers/src/testing/factory-recordings.ts"
+  },
+  {
     "file": "packages/factory-visualizers/vite.build.config.ts",
     "kind": "file",
     "name": "packages/factory-visualizers/vite.build.config.ts"
+  },
+  {
+    "file": "src/features/dashboard/public/index.ts",
+    "kind": "file",
+    "name": "src/features/dashboard/public/index.ts"
+  },
+  {
+    "file": "src/features/flowchart/components/current-activity-resource-node.tsx",
+    "kind": "file",
+    "name": "src/features/flowchart/components/current-activity-resource-node.tsx"
+  },
+  {
+    "file": "src/features/flowchart/components/current-activity-workstation-node.tsx",
+    "kind": "file",
+    "name": "src/features/flowchart/components/current-activity-workstation-node.tsx"
+  },
+  {
+    "file": "src/features/graphs/components/factory-graph-edge.tsx",
+    "kind": "type",
+    "name": "FactoryGraphEdgeData"
   }
 ]

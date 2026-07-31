@@ -9,11 +9,11 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
+	workers "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestPOSIXPTYSessionRun_CapturesCleanedOutput(t *testing.T) {
-	result, session := runWiredPOSIXPTY(t, []string{"/usr/bin/printf", "\x1b[31magy-pty\x1b[0m"}, agypty.DefaultSessionConfig())
+	result, session := runWiredPOSIXPTY(t, []string{"/usr/bin/printf", "\x1b[31magy-pty\x1b[0m"}, workers.DefaultPTYSessionConfig())
 	defer session.Close()
 	if result.CleanedText != "agy-pty" {
 		t.Fatalf("CleanedText = %q", result.CleanedText)
@@ -21,7 +21,7 @@ func TestPOSIXPTYSessionRun_CapturesCleanedOutput(t *testing.T) {
 }
 
 func TestPOSIXPTYSessionRun_IdleTimeoutTerminatesProcess(t *testing.T) {
-	cfg := agypty.DefaultSessionConfig()
+	cfg := workers.DefaultPTYSessionConfig()
 	cfg.IdleTimeout, cfg.HardTimeout = 100*time.Millisecond, time.Hour
 	result, session := runWiredPOSIXPTY(t, []string{"/bin/sleep", "120"}, cfg)
 	defer session.Close()
@@ -31,7 +31,7 @@ func TestPOSIXPTYSessionRun_IdleTimeoutTerminatesProcess(t *testing.T) {
 }
 
 func TestPOSIXPTYSessionRun_ClosesPTYAfterRun(t *testing.T) {
-	_, session := runWiredPOSIXPTY(t, []string{"/bin/echo", "close"}, agypty.DefaultSessionConfig())
+	_, session := runWiredPOSIXPTY(t, []string{"/bin/echo", "close"}, workers.DefaultPTYSessionConfig())
 	if err := session.Close(); err != nil {
 		t.Fatalf("Close() error = %v", err)
 	}
@@ -40,13 +40,13 @@ func TestPOSIXPTYSessionRun_ClosesPTYAfterRun(t *testing.T) {
 	}
 }
 
-func runWiredPOSIXPTY(t *testing.T, argv []string, cfg agypty.SessionConfig) (agypty.SessionResult, agypty.PTYSession) {
+func runWiredPOSIXPTY(t *testing.T, argv []string, cfg workers.PTYSessionConfig) (workers.PTYSessionResult, workers.PTYSession) {
 	t.Helper()
 	allocator, err := provideAgyPTYAllocator(serviceedges.Edges{AgyPTYClock: platformclock.Real{}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	session, err := allocator.Allocate(context.Background(), agypty.ProcessLaunch{Executable: argv[0], Argv: argv}, cfg)
+	session, err := allocator.Allocate(context.Background(), workers.PTYProcessLaunch{Executable: argv[0], Argv: argv}, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}

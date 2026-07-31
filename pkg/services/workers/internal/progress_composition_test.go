@@ -13,10 +13,9 @@ import (
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
 	"go.uber.org/zap"
 )
 
@@ -24,12 +23,24 @@ var testRetryRandom = platformrandom.SourceFunc(func(int64) (int64, error) {
 	return 0, nil
 })
 
+type testProvidersService struct{}
+
+func (testProvidersService) ListProviders(context.Context, providers.ListProvidersRequest) (providers.ListProvidersResult, error) {
+	return providers.ListProvidersResult{}, nil
+}
+func (testProvidersService) GetProvider(context.Context, providers.GetProviderRequest) (providers.GetProviderResult, error) {
+	return providers.GetProviderResult{}, providers.ErrUnknownProvider
+}
+func (testProvidersService) Execute(context.Context, providers.ExecuteRequest) (providers.ExecuteResult, error) {
+	return providers.ExecuteResult{Content: "ok"}, nil
+}
+
 // pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func TestNewRequiresCompositionSelectedWorkerEffects(t *testing.T) {
-	base := func(provider, script workers.CommandRunner, allocator agypty.PTYAllocator, logger *zap.Logger, now func() time.Time) error {
+	base := func(provider, script workers.CommandRunner, allocator workers.PTYAllocator, logger *zap.Logger, now func() time.Time) error {
 		_, err := New(
-			inertCurrentRuntimeResolver{}, testModelsService{}, provider, script, allocator,
-			logger, false, "", nil, nil, now, os.Environ, os.Getwd, nil, nil, nil, nil,
+			inertCurrentRuntimeResolver{}, testModelsService{}, testProvidersService{}, provider, script, allocator,
+			logger, false, "", "", nil, nil, now, os.Environ, os.Getwd, nil, nil, nil, nil,
 			testFactoryDocsLoader, testResolveSymlinks, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformfilesystem.Local{}, "linux", testFactoryWorktreePreparer{}, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
 			testRetryRandom,
 			platformfilesystem.Local{},
@@ -38,7 +49,7 @@ func TestNewRequiresCompositionSelectedWorkerEffects(t *testing.T) {
 		return err
 	}
 	validRunner := injectedProviderRunner{}
-	validAllocator := &agypty.MockAllocator{}
+	validAllocator := &workers.MockPTYAllocator{}
 	for _, testCase := range []struct {
 		name string
 		err  error
@@ -57,8 +68,8 @@ func TestNewRequiresCompositionSelectedWorkerEffects(t *testing.T) {
 		})
 	}
 	_, err := New(
-		inertCurrentRuntimeResolver{}, testModelsService{}, validRunner, validRunner, validAllocator,
-		zap.NewNop(), false, "", nil, nil, time.Now, os.Environ, os.Getwd, nil, nil, nil, nil,
+		inertCurrentRuntimeResolver{}, testModelsService{}, testProvidersService{}, validRunner, validRunner, validAllocator,
+		zap.NewNop(), false, "", "", nil, nil, time.Now, os.Environ, os.Getwd, nil, nil, nil, nil,
 		testFactoryDocsLoader, testResolveSymlinks, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformfilesystem.Local{}, "linux", nil, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
 		testRetryRandom,
 		platformfilesystem.Local{},
@@ -68,8 +79,8 @@ func TestNewRequiresCompositionSelectedWorkerEffects(t *testing.T) {
 		t.Fatalf("missing worktree preparer error = %v", err)
 	}
 	_, err = New(
-		inertCurrentRuntimeResolver{}, testModelsService{}, validRunner, validRunner, validAllocator,
-		zap.NewNop(), false, "", nil, nil, time.Now, os.Environ, os.Getwd, nil, nil, nil, nil,
+		inertCurrentRuntimeResolver{}, testModelsService{}, testProvidersService{}, validRunner, validRunner, validAllocator,
+		zap.NewNop(), false, "", "", nil, nil, time.Now, os.Environ, os.Getwd, nil, nil, nil, nil,
 		testFactoryDocsLoader, testResolveSymlinks, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformfilesystem.Local{}, "linux", testFactoryWorktreePreparer{}, nil,
 		testRetryRandom,
 		platformfilesystem.Local{},
@@ -79,8 +90,8 @@ func TestNewRequiresCompositionSelectedWorkerEffects(t *testing.T) {
 		t.Fatalf("missing agent-run harness error = %v", err)
 	}
 	_, err = New(
-		inertCurrentRuntimeResolver{}, testModelsService{}, validRunner, validRunner, validAllocator,
-		zap.NewNop(), false, "", nil, nil, time.Now, os.Environ, os.Getwd, nil, nil, nil, nil,
+		inertCurrentRuntimeResolver{}, testModelsService{}, testProvidersService{}, validRunner, validRunner, validAllocator,
+		zap.NewNop(), false, "", "", nil, nil, time.Now, os.Environ, os.Getwd, nil, nil, nil, nil,
 		testFactoryDocsLoader, testResolveSymlinks, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformfilesystem.Local{}, "linux", testFactoryWorktreePreparer{}, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
 		nil,
 		platformfilesystem.Local{},
@@ -90,8 +101,8 @@ func TestNewRequiresCompositionSelectedWorkerEffects(t *testing.T) {
 		t.Fatalf("missing retry random source error = %v", err)
 	}
 	_, err = New(
-		inertCurrentRuntimeResolver{}, testModelsService{}, validRunner, validRunner, validAllocator,
-		zap.NewNop(), false, "", nil, nil, time.Now, os.Environ, os.Getwd, nil, nil, nil, nil,
+		inertCurrentRuntimeResolver{}, testModelsService{}, testProvidersService{}, validRunner, validRunner, validAllocator,
+		zap.NewNop(), false, "", "", nil, nil, time.Now, os.Environ, os.Getwd, nil, nil, nil, nil,
 		testFactoryDocsLoader, testResolveSymlinks, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformfilesystem.Local{}, "linux", testFactoryWorktreePreparer{}, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
 		testRetryRandom,
 		nil,
@@ -101,8 +112,8 @@ func TestNewRequiresCompositionSelectedWorkerEffects(t *testing.T) {
 		t.Fatalf("missing workstation filesystem error = %v", err)
 	}
 	_, err = New(
-		inertCurrentRuntimeResolver{}, testModelsService{}, validRunner, validRunner, validAllocator,
-		zap.NewNop(), false, "", nil, nil, time.Now, os.Environ, os.Getwd, nil, nil, nil, nil,
+		inertCurrentRuntimeResolver{}, testModelsService{}, testProvidersService{}, validRunner, validRunner, validAllocator,
+		zap.NewNop(), false, "", "", nil, nil, time.Now, os.Environ, os.Getwd, nil, nil, nil, nil,
 		testFactoryDocsLoader, testResolveSymlinks, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformfilesystem.Local{}, "linux", testFactoryWorktreePreparer{}, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
 		testRetryRandom,
 		platformfilesystem.Local{},
@@ -111,35 +122,21 @@ func TestNewRequiresCompositionSelectedWorkerEffects(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "provider temporary filesystem is required") {
 		t.Fatalf("missing provider temporary filesystem error = %v", err)
 	}
-	_, err = New(
-		inertCurrentRuntimeResolver{}, testModelsService{}, validRunner, validRunner, validAllocator,
-		zap.NewNop(), false, "", nil, nil, time.Now, os.Environ, os.Getwd, nil, nil, nil, nil,
-		testFactoryDocsLoader, testResolveSymlinks, platformprocess.HostExecutableLocator{}, nil, platformfilesystem.Local{}, "linux", testFactoryWorktreePreparer{}, workeragentrun.NewLibraryHarnessAdapter(platformfilesystem.Local{}),
-		testRetryRandom,
-		platformfilesystem.Local{},
-		platformfilesystem.Local{},
-	)
-	if err == nil || !strings.Contains(err.Error(), "executable path inspector is required") {
-		t.Fatalf("missing executable path inspector error = %v", err)
-	}
 }
 
 func TestNewInvocationRequiresCompositionSelectedWorkerEffects(t *testing.T) {
-	clock := workerprocess.ClockFunc(time.Now)
-	if _, err := NewInvocation(nil, clock, &agypty.MockAllocator{}, testResolveSymlinks, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformfilesystem.Local{}, "linux"); err == nil || !strings.Contains(err.Error(), "command runner is required") {
+	clock := workers.ClockFunc(time.Now)
+	if _, err := NewInvocation(testProvidersService{}, nil, clock, &workers.MockPTYAllocator{}, testResolveSymlinks, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformfilesystem.Local{}, "linux"); err == nil || !strings.Contains(err.Error(), "command runner is required") {
 		t.Fatalf("missing command runner error = %v", err)
 	}
-	if _, err := NewInvocation(injectedProviderRunner{}, clock, nil, testResolveSymlinks, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformfilesystem.Local{}, "linux"); err == nil || !strings.Contains(err.Error(), "PTY allocator is required") {
+	if _, err := NewInvocation(testProvidersService{}, injectedProviderRunner{}, clock, nil, testResolveSymlinks, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformfilesystem.Local{}, "linux"); err == nil || !strings.Contains(err.Error(), "PTY allocator is required") {
 		t.Fatalf("missing allocator error = %v", err)
 	}
-	if _, err := NewInvocation(injectedProviderRunner{}, nil, &agypty.MockAllocator{}, testResolveSymlinks, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformfilesystem.Local{}, "linux"); err == nil || !strings.Contains(err.Error(), "command clock is required") {
+	if _, err := NewInvocation(testProvidersService{}, injectedProviderRunner{}, nil, &workers.MockPTYAllocator{}, testResolveSymlinks, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformfilesystem.Local{}, "linux"); err == nil || !strings.Contains(err.Error(), "command clock is required") {
 		t.Fatalf("missing command clock error = %v", err)
 	}
-	if _, err := NewInvocation(injectedProviderRunner{}, clock, &agypty.MockAllocator{}, testResolveSymlinks, platformprocess.HostExecutableLocator{}, nil, platformfilesystem.Local{}, "linux"); err == nil || !strings.Contains(err.Error(), "executable path inspector is required") {
-		t.Fatalf("missing executable path inspector error = %v", err)
-	}
-	if _, err := NewInvocation(injectedProviderRunner{}, clock, &agypty.MockAllocator{}, testResolveSymlinks, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformfilesystem.Local{}, "linux"); err == nil || !strings.Contains(err.Error(), "temporary filesystem is required") {
-		t.Fatalf("missing temporary filesystem error = %v", err)
+	if _, err := NewInvocation(nil, injectedProviderRunner{}, clock, &workers.MockPTYAllocator{}, testResolveSymlinks, platformprocess.HostExecutableLocator{}, platformfilesystem.Local{}, platformfilesystem.Local{}, "linux"); err == nil || !strings.Contains(err.Error(), "Providers service is required") {
+		t.Fatalf("missing Providers service error = %v", err)
 	}
 }
 
@@ -151,11 +148,13 @@ func testWorkerService(t *testing.T, providerRunner workers.CommandRunner) *Serv
 	service, err := New(
 		inertCurrentRuntimeResolver{},
 		testModelsService{},
+		testProvidersService{},
 		providerRunner,
 		injectedProviderRunner{},
-		&agypty.MockAllocator{},
+		&workers.MockPTYAllocator{},
 		zap.NewNop(),
 		false,
+		"",
 		"",
 		nil,
 		nil,

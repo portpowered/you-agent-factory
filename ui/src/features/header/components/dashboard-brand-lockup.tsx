@@ -18,7 +18,7 @@ export function DashboardBrandLockup({
         className,
       )}
     >
-      <span className="inline-flex h-12 items-center justify-center gap-1 rounded-sm mt-1 border border-primary bg-primary-container px-3 text-sm font-black uppercase leading-none tracking-[0.18em] text-primary">
+      <span className="inline-flex h-12 items-center justify-center gap-1 rounded-sm border border-primary bg-primary-container px-3 text-sm font-black uppercase leading-none tracking-[0.18em] text-primary">
         <span className="text-[1rem] leading-none">U</span>
       </span>
     </span>

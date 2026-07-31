@@ -3,48 +3,25 @@ package internal
 import (
 	"fmt"
 
-	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
-	workerprocess "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/process"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider"
-	workerprovidercontract "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
+	runnerswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire"
 )
 
-// NewProviderFromCommandRunner constructs one provider-backed worker from the
-// supplied command runner using the same production edges as direct invocation.
-func NewProviderFromCommandRunner(
-	commandRunner workers.CommandRunner,
-	commandClock workerprocess.Clock,
-	allocator agypty.PTYAllocator,
-	resolveSymlinks workers.ResolveExecutableSymlinks,
-	executableLocator platformprocess.ExecutableLocator,
-	executableInspector platformfilesystem.PathInspector,
-	executableFiles platformfilesystem.ReadOpener,
-	operatingSystem workers.OperatingSystem,
-	temporaryFileSystems ...platformfilesystem.TemporaryFileSystem,
-) (workerprovidercontract.Provider, error) {
-	if commandRunner == nil {
-		return nil, fmt.Errorf("construct provider-backed worker: command runner is required")
+// NewProviderFromService adapts the Providers root to the retained Workers
+// Provider port used by durable Factory Session construction. Execution enters
+// through the private runners.Service.Execute boundary.
+func NewProviderFromService(service providers.Service) (workers.Provider, error) {
+	if service == nil {
+		return nil, fmt.Errorf("construct Worker provider: Providers service is required")
 	}
-	if commandClock == nil {
-		return nil, fmt.Errorf("construct provider-backed worker: command clock is required")
-	}
-	if allocator == nil {
-		return nil, fmt.Errorf("construct provider-backed worker: PTY allocator is required")
-	}
-	factory, err := workerprovider.NewFactory(
-		commandRunner, commandClock, allocator, resolveSymlinks,
-		executableLocator, executableInspector, executableFiles, operatingSystem,
-		temporaryFileSystems...,
-	)
+	registry, err := runnerswire.NewAgentRegistry(runners.AgentDependencies{
+		Providers: service,
+		Publish:   func(workers.ProgressFragment) {},
+	})
 	if err != nil {
-		return nil, fmt.Errorf("construct provider-backed worker: %w", err)
+		return nil, fmt.Errorf("construct Worker provider: %w", err)
 	}
-	provider, err := factory.New(false, nil, nil, nil)
-	if err != nil {
-		return nil, fmt.Errorf("construct provider-backed worker: %w", err)
-	}
-	return provider, nil
+	return registryExecuteProvider{registry: registry}, nil
 }

@@ -6,9 +6,9 @@ import "encoding/json"
 
 // Tool names use Operator Settings vocabulary and align with accepted root operations.
 const (
-	ToolLoadDocument         = "you.operator_settings.load_document"
-	ToolApplyDocumentUpdate  = "you.operator_settings.apply_document_update"
-	ToolResolveEffective     = "you.operator_settings.resolve_effective"
+	ToolLoadDocument        = "you.operator_settings.load_document"
+	ToolApplyDocumentUpdate = "you.operator_settings.apply_document_update"
+	ToolResolveEffective    = "you.operator_settings.resolve_effective"
 )
 
 // Stable error envelope fields shared by every Operator Settings MCP tool.

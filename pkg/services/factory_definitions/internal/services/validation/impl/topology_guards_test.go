@@ -104,6 +104,48 @@ func TestRuleGuards_VisitCountZeroMaxVisits(t *testing.T) {
 	assertFindingExists(t, findings, "guard-visit-count-max-visits")
 }
 
+func TestRuleInvocationBoundLimitsAcceptsNumberStringParameters(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.InvocationSignature = &factorydefinitions.InvocationSignatureConfig{Parameters: []factorydefinitions.InvocationParameterConfig{
+		{Name: "maxCycles", TypeHint: factorydefinitions.InvocationParameterTypeHintNumberString},
+		{Name: "maxTasks", TypeHint: factorydefinitions.InvocationParameterTypeHintNumberString},
+	}}
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
+		Name: "planner",
+		Limits: factorydefinitions.WorkstationLimits{
+			MaxGeneratedWorkItems: 9, MaxGeneratedWorkItemsArgument: "maxTasks", MaxGeneratedWorkItemsArgumentOffset: 1,
+		},
+		Guards: []factorydefinitions.GuardConfig{{
+			Type: factorydefinitions.GuardTypeVisitCount, Workstation: "planner", MaxVisits: 8, MaxVisitsArgument: "maxCycles",
+		}},
+	}}
+
+	if findings := ruleInvocationBoundLimits(cfg); len(findings) != 0 {
+		t.Fatalf("ruleInvocationBoundLimits() = %#v, want no findings", findings)
+	}
+}
+
+func TestRuleInvocationBoundLimitsRejectsMissingOrNonNumericParameters(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.InvocationSignature = &factorydefinitions.InvocationSignatureConfig{Parameters: []factorydefinitions.InvocationParameterConfig{
+		{Name: "maxTasks", TypeHint: factorydefinitions.InvocationParameterTypeHintString},
+	}}
+	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
+		Name: "planner",
+		Limits: factorydefinitions.WorkstationLimits{
+			MaxGeneratedWorkItems: 9, MaxGeneratedWorkItemsArgument: "maxTasks", MaxGeneratedWorkItemsArgumentOffset: -1,
+		},
+		Guards: []factorydefinitions.GuardConfig{{
+			Type: factorydefinitions.GuardTypeVisitCount, Workstation: "planner", MaxVisits: 8, MaxVisitsArgument: "maxCycles",
+		}},
+	}}
+
+	findings := ruleInvocationBoundLimits(cfg)
+	assertFindingExists(t, findings, "workstation-limit-invocation-bound-parameter")
+	assertFindingExists(t, findings, "workstation-limit-invocation-bound-offset")
+	assertFindingExists(t, findings, "guard-visit-count-invocation-bound-parameter")
+}
+
 func TestRuleGuards_MatchesFieldsMissingMatchConfig(t *testing.T) {
 	cfg := testBaseConfig()
 	cfg.Workstations = []factorydefinitions.FactoryWorkstationConfig{{
@@ -626,8 +668,8 @@ func TestRulePollerWorkstations_RejectsUnsupportedWorkerType(t *testing.T) {
 	if findings[0].Path != "workstations[0](linear-poller).worker" {
 		t.Fatalf("expected path to name poller workstation and worker field, got %q", findings[0].Path)
 	}
-	if got := findings[0].Message; !containsAll(got, `poller workstation "linear-poller"`, `worker "planner"`, `MODEL_WORKER`) {
-		t.Fatalf("expected explicit poller/worker relationship in message, got %q", got)
+	if got := findings[0].Message; !containsAll(got, `poller workstation "linear-poller"`, `worker "planner"`, `MODEL_WORKER`, `Automations-owned`) {
+		t.Fatalf("expected explicit Automations-owned poller/worker relationship in message, got %q", got)
 	}
 }
 

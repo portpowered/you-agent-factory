@@ -35,13 +35,8 @@ const (
 	RunnerOptionalCapabilityStatusSupported   = workers.RunnerOptionalCapabilityStatusSupported
 	RunnerOptionalCapabilityStatusUnsupported = workers.RunnerOptionalCapabilityStatusUnsupported
 
-	RunnerIDCodex     = workers.RunnerIDCodex
-	RunnerIDGemini    = workers.RunnerIDGemini
-	RunnerIDKiro      = workers.RunnerIDKiro
-	RunnerIDCursorCLI = workers.RunnerIDCursorCLI
-	RunnerIDOpenCode  = workers.RunnerIDOpenCode
-	RunnerIDPi        = workers.RunnerIDPi
-	RunnerIDAgy       = workers.RunnerIDAgy
+	RunnerIDCodex       = workers.RunnerIDCodex
+	RunnerIDAntigravity = workers.RunnerIDAntigravity
 
 	RunnerSelectionSourceWorkstation    = workers.RunnerSelectionSourceWorkstation
 	RunnerSelectionSourceFactory        = workers.RunnerSelectionSourceFactory

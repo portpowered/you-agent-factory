@@ -2,15 +2,23 @@ package wire
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+func codexWireTestOutput(content string) []byte {
+	item, _ := json.Marshal(map[string]any{"type": "item.completed", "item": map[string]any{"id": "message", "type": "agent_message", "text": content}})
+	return []byte("{\"type\":\"turn.started\"}\n" + string(item) + "\n{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}\n")
+}
 
 type wireTestProvider struct{}
 
@@ -21,6 +29,10 @@ func (wireTestProvider) Infer(context.Context, workers.ProviderInferenceRequest)
 type wireTestProviderRegistry struct{}
 
 func (wireTestProviderRegistry) UsesNativeRunner(string) bool { return false }
+func (wireTestProviderRegistry) CanonicalIdentity(identity string) (string, error) {
+	return identity, nil
+}
+func (wireTestProviderRegistry) RunnerIdentities() []string { return nil }
 
 func (wireTestProviderRegistry) RunnerMetadata(string) (workers.RunnerMetadata, error) {
 	return workers.RunnerMetadata{}, nil
@@ -29,8 +41,11 @@ func (wireTestProviderRegistry) RunnerMetadata(string) (workers.RunnerMetadata, 
 func (wireTestProviderRegistry) ResolveRunnerSelection(string, string, string) (workers.ResolvedRunnerSelection, error) {
 	return workers.ResolvedRunnerSelection{}, nil
 }
+func (wireTestProviderRegistry) ValidateRunnerPrerequisites(platformprocess.ExecutableLocator, string) error {
+	return nil
+}
 
-func TestProvideConductorInvocationWithProgressFactory_AcceptsWorkersProviderRegistry(t *testing.T) {
+func TestProvideConductorInvocationWithProgressFactory_AcceptsDefaultProvidersService(t *testing.T) {
 	t.Parallel()
 
 	edges := serviceedges.Edges{
@@ -40,17 +55,13 @@ func TestProvideConductorInvocationWithProgressFactory_AcceptsWorkersProviderReg
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
-	registry, err := provideProviderRegistry(edges, providersService)
-	if err != nil {
-		t.Fatalf("provideProviderRegistry() error = %v", err)
-	}
 	allocator, err := provideAgyPTYAllocator(edges)
 	if err != nil {
 		t.Fatalf("provideAgyPTYAllocator() error = %v", err)
 	}
 	adaptRunner := provideWorkerCommandRunnerAdapter()
-	factory := provideConductorInvocationWithProgressFactory(edges)
-	executor, err := factory(registry, adaptRunner(edges.ProviderCommandRunner), allocator, nil)
+	factory := provideConductorInvocationWithProgressFactory(providersService, edges)
+	executor, err := factory(nil, adaptRunner(edges.ProviderCommandRunner), allocator, nil)
 	if err != nil {
 		t.Fatalf("factory() error = %v", err)
 	}
@@ -59,25 +70,36 @@ func TestProvideConductorInvocationWithProgressFactory_AcceptsWorkersProviderReg
 	}
 }
 
-func TestProvideConductorInvocationWithProgressFactory_RejectsNonConcreteRegistry(t *testing.T) {
-	t.Parallel()
-
-	edges := serviceedges.Edges{
-		ProviderCommandRunner: testutil.NewProviderCommandRunner(),
+func TestProvideConductorInvocationWithProgressFactory_ExecutesCodexThroughInjectedRunner(t *testing.T) {
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: codexWireTestOutput("child result")})
+	edges := serviceedges.Edges{ProviderCommandRunner: runner}
+	providersService, err := provideProvidersService(edges)
+	if err != nil {
+		t.Fatalf("provideProvidersService() error = %v", err)
 	}
 	allocator, err := provideAgyPTYAllocator(edges)
 	if err != nil {
 		t.Fatalf("provideAgyPTYAllocator() error = %v", err)
 	}
-	adaptRunner := provideWorkerCommandRunnerAdapter()
-	factory := provideConductorInvocationWithProgressFactory(edges)
-	_, err = factory(wireTestProviderRegistry{}, adaptRunner(edges.ProviderCommandRunner), allocator, nil)
-	if err == nil {
-		t.Fatal("factory() error = nil, want non-concrete registry rejection")
+	executor, err := provideConductorInvocationWithProgressFactory(providersService, edges)(
+		nil, provideWorkerCommandRunnerAdapter()(runner), allocator, nil,
+	)
+	if err != nil {
+		t.Fatalf("construct invocation executor: %v", err)
+	}
+	result, err := executor.Execute(t.Context(), workers.InvocationInput{Request: workers.ProviderInferenceRequest{
+		Dispatch: work.WorkDispatch{DispatchID: "wire-codex-child"},
+		RunnerID: "codex", ModelProvider: "codex", Model: "gpt-5", UserMessage: "do work",
+	}})
+	if err != nil {
+		t.Fatalf("execute Codex child: %v; result=%#v", err, result)
+	}
+	if runner.CallCount() != 1 || result.Response.Content != "child result" {
+		t.Fatalf("runner calls=%d result=%#v", runner.CallCount(), result)
 	}
 }
 
-func TestProvideFactorySessionExecutionFactory_BuildsLiveChildInvocation(t *testing.T) {
+func TestProvideConductorInvocationWithProgressFactory_AcceptsSelectedProvidersService(t *testing.T) {
 	t.Parallel()
 
 	edges := serviceedges.Edges{
@@ -87,11 +109,30 @@ func TestProvideFactorySessionExecutionFactory_BuildsLiveChildInvocation(t *test
 	if err != nil {
 		t.Fatalf("provideProvidersService() error = %v", err)
 	}
+	allocator, err := provideAgyPTYAllocator(edges)
+	if err != nil {
+		t.Fatalf("provideAgyPTYAllocator() error = %v", err)
+	}
+	adaptRunner := provideWorkerCommandRunnerAdapter()
+	factory := provideConductorInvocationWithProgressFactory(providersService, edges)
+	if _, err = factory(providersService, adaptRunner(edges.ProviderCommandRunner), allocator, nil); err != nil {
+		t.Fatalf("factory() error = %v", err)
+	}
+}
+
+func TestProvideFactorySessionExecutionFactory_BuildsLiveChildInvocation(t *testing.T) {
+	t.Parallel()
+
+	edges := serviceedges.Edges{}
+	providersService, err := provideProvidersService(edges)
+	if err != nil {
+		t.Fatalf("provideProvidersService() error = %v", err)
+	}
 	registry, err := provideProviderRegistry(edges, providersService)
 	if err != nil {
 		t.Fatalf("provideProviderRegistry() error = %v", err)
 	}
-	registryRebinder, err := provideProviderRegistryRebinder(edges)
+	registryRebinder, err := provideProviderRegistryRebinder(providersService, edges)
 	if err != nil {
 		t.Fatalf("provideProviderRegistryRebinder() error = %v", err)
 	}
@@ -109,14 +150,14 @@ func TestProvideFactorySessionExecutionFactory_BuildsLiveChildInvocation(t *test
 	sessionIDs := provideFactorySessionIDGenerator(edges)
 	responseEventIDs := provideFactorySessionResponseEventIDGenerator(edges)
 	responseEventRetentionLimits := provideFactorySessionResponseEventRetentionLimits(edges)
-	invocationWithProgress := provideWorkerInvocationWithProgressFactory(edges)
+	invocationWithProgress := provideWorkerInvocationWithProgressFactory(providersService, edges)
 	allocator, err := provideAgyPTYAllocator(edges)
 	if err != nil {
 		t.Fatalf("provideAgyPTYAllocator() error = %v", err)
 	}
 	adaptRunner := provideWorkerCommandRunnerAdapter()
 	mockRunnerFactory := provideWorkersMockCommandRunnerFactory()
-	conductorInvocation := provideConductorInvocationWithProgressFactory(edges)
+	conductorInvocation := provideConductorInvocationWithProgressFactory(providersService, edges)
 	factory := provideFactorySessionExecutionFactory(
 		workflows,
 		provideOrchestrationJavaScriptExecution(provideFactoryRuntimeIDGenerator(edges), workflows),

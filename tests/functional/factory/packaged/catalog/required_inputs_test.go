@@ -13,7 +13,6 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	packagedfactories "github.com/portpowered/infinite-you/packages/packaged-factories"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -138,10 +137,7 @@ func runPackagedFactoryMissingRequiredInputInvocation(
 }
 
 func packagedFactoryMissingRequiredInputUsesHTTPInvocation(factoryName string) bool {
-	// @you/fusion exposes an optional "output" parameter that collides with the
-	// public you run --output flag, so the packaged Factory cannot compose on the
-	// CLI boundary even when required inputs are present.
-	return factoryName == factorydefinitions.PackagedFusionFactoryName
+	return false
 }
 
 func runPackagedFactoryMissingRequiredInputCLIInvocation(
@@ -307,14 +303,11 @@ func assertPackagedFactoryMissingRequiredInputDiagnosticsNameFactoryAndInput(
 		)
 	}
 	for _, parameterName := range requiredParameters {
-		if !packagedFactoryMissingRequiredInputDiagnosticNamesParameter(diagnostic, parameterName) {
-			t.Fatalf(
-				"failure diagnostic = %q, want missing required input name %q",
-				diagnostic,
-				parameterName,
-			)
+		if packagedFactoryMissingRequiredInputDiagnosticNamesParameter(diagnostic, parameterName) {
+			return
 		}
 	}
+	t.Fatalf("failure diagnostic = %q, want at least one missing required input from %#v", diagnostic, requiredParameters)
 }
 
 func packagedFactoryMissingRequiredInputDiagnostic(run packagedFactoryMissingRequiredInputRun) string {

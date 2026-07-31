@@ -11,22 +11,19 @@ import (
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
+	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
+	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/runner"
+	runnermockworker "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/testing"
+	runnerswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire"
+	runtimeassembly "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly"
 	workerconstruction "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/construction"
+	runtimeassemblywire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/wire"
 	modelrecording "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/execution/recording"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/executor/agentrun"
-	"github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners"
-	runnerswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire"
-	workerrunner "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/runner"
-	runtimeassembly "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly"
-	runtimeassemblywire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runtime_assembly/wire"
 	workstationswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/workstations/wire"
-	providerconductor "github.com/portpowered/infinite-you/pkg/services/workers/provider/conductor"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
-	providerregistry "github.com/portpowered/infinite-you/pkg/services/workers/provider/registry"
-	runnermockworker "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/testing"
 	"go.uber.org/zap"
 )
 
@@ -34,15 +31,17 @@ import (
 func NewRuntime(
 	sessions CurrentRuntimeResolver,
 	modelService models.Service,
+	providersService providers.Service,
 	modelsScope models.RuntimeScopeRef,
 	providerCommandRunner workers.CommandRunner,
 	scriptCommandRunner workers.CommandRunner,
-	allocator agypty.PTYAllocator,
+	allocator workers.PTYAllocator,
 	logger *zap.Logger,
 	verbose bool,
 	factoryRunnerID string,
+	runWorktree string,
 	invocationSkipPermissionsOverride *bool,
-	providerOverride workerprovider.Provider,
+	providerOverride workers.Provider,
 	now func() time.Time,
 	processEnvironment func() []string,
 	currentWorkingDirectory func() (string, error),
@@ -65,12 +64,14 @@ func NewRuntime(
 	runtimeService, err := New(
 		sessions,
 		modelService,
+		providersService,
 		providerCommandRunner,
 		scriptCommandRunner,
 		allocator,
 		logger,
 		verbose,
 		factoryRunnerID,
+		runWorktree,
 		invocationSkipPermissionsOverride,
 		providerOverride,
 		now,
@@ -111,15 +112,17 @@ func NewRuntime(
 func NewRuntimeWithSelection(
 	sessions CurrentRuntimeResolver,
 	modelService models.Service,
+	providersService providers.Service,
 	modelsScope models.RuntimeScopeRef,
 	providerCommandRunner workers.CommandRunner,
 	scriptCommandRunner workers.CommandRunner,
-	allocator agypty.PTYAllocator,
+	allocator workers.PTYAllocator,
 	logger *zap.Logger,
 	verbose bool,
 	factoryRunnerID string,
+	runWorktree string,
 	invocationSkipPermissionsOverride *bool,
-	providerOverride workerprovider.Provider,
+	providerOverride workers.Provider,
 	now func() time.Time,
 	processEnvironment func() []string,
 	currentWorkingDirectory func() (string, error),
@@ -140,12 +143,13 @@ func NewRuntimeWithSelection(
 	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
 	providerCommandInjected bool,
 	scriptCommandInjected bool,
-	providerRegistry *providerregistry.Registry,
+	providersLifecycleOwned bool,
+	providerRegistry workers.ProviderRegistry,
 	providerRegistryRebinder ProviderRegistryRebinder,
 ) (workers.RuntimeService, error) {
 	runtimeService, err := NewRuntime(
-		sessions, modelService, modelsScope, providerCommandRunner, scriptCommandRunner,
-		allocator, logger, verbose, factoryRunnerID, invocationSkipPermissionsOverride,
+		sessions, modelService, providersService, modelsScope, providerCommandRunner, scriptCommandRunner,
+		allocator, logger, verbose, factoryRunnerID, runWorktree, invocationSkipPermissionsOverride,
 		providerOverride, now, processEnvironment, currentWorkingDirectory, contentMaterializer, interpolation, executionPolicy,
 		factoryDocs, resolveSymlinks, executableLocator, executableInspector, executableFiles, operatingSystem,
 		worktreePreparer, agentRunHarness, retryRandom, workstationFiles, temporaryFiles, decisionEnvelopes,
@@ -156,6 +160,10 @@ func NewRuntimeWithSelection(
 	service := runtimeService.(*Service)
 	service.providerCommandInjected = providerCommandInjected
 	service.scriptCommandInjected = scriptCommandInjected
+	service.providerLifecycles = &ownedProviderLifecycles{}
+	if providersLifecycleOwned {
+		service.providerLifecycles.Add(providersService)
+	}
 	service.providerRegistry = providerRegistry
 	service.providerRegistryRebinder = providerRegistryRebinder
 	if providerRegistry != nil {
@@ -164,7 +172,6 @@ func NewRuntimeWithSelection(
 			return nil, assemblyErr
 		}
 		service.Root = service.Root.ReplaceRuntimeAssembly(assembly)
-		service.invocationConductor = providerconductor.New(providerRegistry)
 		if builder, ok := service.executorBuilder.(*workerconstruction.Service); ok {
 			service.executorBuilder = builder.
 				WithRunnerSelection(providerRegistry.ResolveRunnerSelection).
@@ -178,7 +185,7 @@ func NewRuntimeWithSelection(
 }
 
 func newRuntimeAssembly(
-	registry *providerregistry.Registry,
+	registry workers.ProviderRegistry,
 ) (runtimeassembly.Service, error) {
 	registrations, err := runtimeAssemblyRegistrations(registry)
 	if err != nil {
@@ -222,21 +229,18 @@ func (runtimeAssemblyRunner) Execute(
 }
 
 func runtimeAssemblyRegistrations(
-	registry *providerregistry.Registry,
+	registry workers.ProviderRegistry,
 ) ([]runners.Registration, error) {
 	implementation := runtimeAssemblyRunner{}
 	if registry != nil {
-		entries := registry.Entries()
-		registrations := make([]runners.Registration, 0, len(entries))
-		for _, entry := range entries {
-			if !entry.Selectable() {
-				continue
-			}
-			metadata, err := registry.RunnerMetadata(string(entry.Identity()))
+		identities := registry.RunnerIdentities()
+		registrations := make([]runners.Registration, 0, len(identities))
+		for _, identity := range identities {
+			metadata, err := registry.RunnerMetadata(identity)
 			if err != nil {
 				return nil, fmt.Errorf(
 					"construct Workers Runtime Assembly runner metadata %q: %w",
-					entry.Identity(),
+					identity,
 					err,
 				)
 			}
@@ -250,13 +254,9 @@ func runtimeAssemblyRegistrations(
 	}
 
 	identities := []string{
-		workers.RunnerIDAgy,
+		workers.RunnerIDAntigravity,
+		workers.RunnerIDClaude,
 		workers.RunnerIDCodex,
-		workers.RunnerIDCursorCLI,
-		workers.RunnerIDGemini,
-		workers.RunnerIDKiro,
-		workers.RunnerIDOpenCode,
-		workers.RunnerIDPi,
 	}
 	registrations := make([]runners.Registration, 0, len(identities))
 	for _, identity := range identities {

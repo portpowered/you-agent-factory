@@ -47,7 +47,7 @@ describe("graph-editor-harness graph actions", () => {
         command: "",
         kind: "worker",
         model: "gpt-5-mini",
-        modelProvider: "CURSOR",
+        modelProvider: "CODEX",
         name: "reviewer",
         operations: [
           {

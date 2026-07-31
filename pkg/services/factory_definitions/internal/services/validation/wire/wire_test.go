@@ -6,9 +6,9 @@ import (
 
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
-	validationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/wire"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
 	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
+	validationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/wire"
 )
 
 type stubLoadedSource struct {
@@ -16,9 +16,9 @@ type stubLoadedSource struct {
 }
 
 func (s stubLoadedSource) FactoryConfig() *factoryroot.FactoryConfig { return s.cfg }
-func (s stubLoadedSource) FactoryDir() string                             { return "" }
-func (s stubLoadedSource) RuntimeBaseDir() string                         { return "" }
-func (s stubLoadedSource) SetRuntimeBaseDir(string)                       {}
+func (s stubLoadedSource) FactoryDir() string                        { return "" }
+func (s stubLoadedSource) RuntimeBaseDir() string                    { return "" }
+func (s stubLoadedSource) SetRuntimeBaseDir(string)                  {}
 func (s stubLoadedSource) PortableBundledFileReplacements() []factoryroot.PortableBundledFileReplacement {
 	return nil
 }

@@ -101,7 +101,7 @@ func TestCheckRejectsManifestIntegrityAndLocatorDrift(t *testing.T) {
 	}{
 		{
 			name: "hash",
-			from: `"sha256": "a38464667ca8ffcd525b2763fe6542c24e42c59cea885b38c96994d0bf4ee25f"`,
+			from: `"sha256": "074de7745359dee76441a8a579d367103f5e858be1b59a0308599376b1ca97c7"`,
 			to:   `"sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"`,
 		},
 		{
@@ -146,7 +146,7 @@ func TestCheckTracksAuthoredInventoryAdditionsAndRemovals(t *testing.T) {
 		if err := copyCatalogTree(source, destination); err != nil {
 			t.Fatal(err)
 		}
-		factoryPath := filepath.Join(destination, "factory.json")
+		factoryPath := filepath.Join(destination, "factory.yaml")
 		payload, err := os.ReadFile(factoryPath)
 		if err != nil {
 			t.Fatal(err)

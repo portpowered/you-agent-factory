@@ -7,9 +7,9 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
+	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty"
 	executionservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/service"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
-	"github.com/portpowered/infinite-you/pkg/services/workers/agypty"
 )
 
 type recordingWorkersRunner struct {
@@ -36,16 +36,16 @@ func (r *recordingPlatformRunner) Run(
 	return platformprocess.CommandResult{Stdout: []byte("ok")}, nil
 }
 
-func TestBuiltInDependenciesFromWorkersRunnerConstructsCodexClaudeCursorGeminiKiroAndOpenCodeEffects(t *testing.T) {
+func TestBuiltInDependenciesFromWorkersRunnerConstructsCodexAndClaudeEffects(t *testing.T) {
 	t.Parallel()
 
 	runner := &recordingWorkersRunner{}
 	deps := BuiltInDependenciesFromWorkersRunner(runner)
-	if deps.Codex == nil || deps.Claude == nil || deps.Cursor == nil || deps.Gemini == nil || deps.Kiro == nil || deps.OpenCode == nil || deps.Pi == nil {
-		t.Fatalf("built-in dependencies = %#v, want codex, claude, cursor, gemini, kiro, opencode, and pi effects", deps)
+	if deps.Codex == nil || deps.Claude == nil {
+		t.Fatalf("built-in dependencies = %#v, want codex and claude effects", deps)
 	}
-	if deps.Agy != nil {
-		t.Fatalf("built-in Agy effect = %#v, want nil without PTY platform dependencies", deps.Agy)
+	if deps.Antigravity != nil {
+		t.Fatalf("built-in Antigravity effect = %#v, want nil without PTY platform dependencies", deps.Antigravity)
 	}
 }
 
@@ -54,11 +54,11 @@ func TestBuiltInDependenciesFromRunnerAdaptsPlatformRunner(t *testing.T) {
 
 	runner := &recordingPlatformRunner{}
 	deps := BuiltInDependenciesFromRunner(runner)
-	if deps.Codex == nil || deps.Claude == nil || deps.Cursor == nil || deps.Gemini == nil || deps.Kiro == nil || deps.OpenCode == nil || deps.Pi == nil {
-		t.Fatalf("built-in dependencies = %#v, want codex, claude, cursor, gemini, kiro, opencode, and pi effects", deps)
+	if deps.Codex == nil || deps.Claude == nil {
+		t.Fatalf("built-in dependencies = %#v, want codex and claude effects", deps)
 	}
-	if deps.Agy != nil {
-		t.Fatalf("built-in Agy effect = %#v, want nil without PTY platform dependencies", deps.Agy)
+	if deps.Antigravity != nil {
+		t.Fatalf("built-in Antigravity effect = %#v, want nil without PTY platform dependencies", deps.Antigravity)
 	}
 }
 
@@ -73,7 +73,7 @@ func TestBuiltInDependenciesFromWorkersRunnerConstructsAgyPTYEffectWithAllocator
 			Inspector: platformfilesystem.Local{},
 		},
 	})
-	if deps.Agy == nil {
+	if deps.Antigravity == nil {
 		t.Fatalf("built-in Agy effect = nil, want PTY effect when allocator is configured")
 	}
 }
@@ -93,7 +93,7 @@ func TestNewBuiltInServiceUsesWorkersRunnerDependencies(t *testing.T) {
 	if err != nil || service == nil {
 		t.Fatalf("NewBuiltInService() = (%v, %v), want execution service", service, err)
 	}
-	if got := executionservice.BuiltInRegistrations(BuiltInDependenciesFromWorkersRunner(runner)); len(got) != 8 {
-		t.Fatalf("built-in registrations = %d, want 8 agy/codex/claude/cursor/gemini/kiro/opencode/pi adapters", len(got))
+	if got := executionservice.BuiltInRegistrations(BuiltInDependenciesFromWorkersRunner(runner)); len(got) != 3 {
+		t.Fatalf("built-in registrations = %d, want 3 antigravity/codex/claude adapters", len(got))
 	}
 }

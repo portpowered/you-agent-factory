@@ -293,24 +293,49 @@ This precedence is selection-only: the CLI chooses exactly one matching named
 factory directory and never merges a project-local definition with a global
 definition of the same canonical name.
 
-First-party built-ins such as `@you/goal`, `@you/quorum`, `@you/review`, and `@you/tts` also use the
-named-factory path:
+The fourteen first-party packaged Factories also use the named-factory path.
+`you factory list` is the discovery source for their descriptions and runnable
+examples.
+
+| Factory | Orchestrator | Use it for |
+| --- | --- | --- |
+| `@you/classify` | Graph | Route a request to a small, medium, or large model lane by complexity. |
+| `@you/deep-research` | JavaScript | Run bounded specialist investigations in parallel and synthesize their findings. |
+| `@you/full-flow` | Graph | Plan implementation waves, work in isolated worktrees, merge, and replan until complete. |
+| `@you/fusion` | Graph | Produce a draft with one worker and refine it with another. |
+| `@you/goal` | Graph | Repeat bounded work on a goal until the executor reports completion. |
+| `@you/loop` | Graph | Execute a request repeatedly at an invocation-supplied duration interval. |
+| `@you/plan-execute` | Graph | Write matching Markdown and JSON PRDs, then execute and verify their stories in the current workspace. |
+| `@you/plan-parallel` | Graph | Plan a Work dependency graph, execute ready tasks concurrently, and merge results. |
+| `@you/quorum` | Graph | Run independent assessments concurrently and merge them. |
+| `@you/review` | Graph | Repeat writing and independent review until approval or exhaustion. |
+| `@you/spawn` | JavaScript | Plan an exact number of tasks, execute them concurrently, and merge ordered results. |
+| `@you/subagent` | Graph | Run one bounded read-only subagent and return its result. |
+| `@you/tournament` | JavaScript | Compare candidates in judged 1v1 matches and return the champion. |
+| `@you/tts` | Graph | Convert text to audio with the packaged local text-to-speech model. |
+
+Representative invocations:
 
 ```bash
+you run --named @you/plan-execute --to "Implement the requested feature"
+you run --named @you/plan-parallel --to "Implement the requested feature"
+you run --named @you/loop --every 1h --to "Check dependency updates"
+you run --named @you/tournament --rounds 3 --to "Propose a launch strategy"
+you run --named @you/full-flow --to "Complete the requested project"
+you run --named @you/spawn --count 10 --to "Research the best places to travel"
 you run --named @you/goal "Ship the login fix by Friday"
 you run --named @you/review "Draft the release notes"
 you run --named @you/quorum "Compare the two proposed release plans."
 you run --named @you/tts --output primary "Read the release summary."
 ```
 
-Start with `@you/goal` when you want a goal-oriented factory you can run
-immediately and customize on disk instead of authoring `factory.json` from
-scratch. Start with `@you/review` when every result must pass an independent
-review before it can be returned. Start with `@you/tts` when you need the inference-oriented packaged
-TTS example. See `you docs run` for named-Factory invocation inputs and stdout
-result modes, `you docs sessions` for stopped-run inspection and recovery, and
-`you docs models` for TTS readiness, direct invocation, and audio or JSON
-result choices.
+Graph Factories use canonical Work, relationships, resources, guards, and
+runtime scheduling. The three JavaScript Factories use the policy-bounded
+workflow runtime where invocation-shaped fan-out is part of their design.
+See `you run --named <factory> --help` for each Factory's arguments,
+`you docs run` for invocation inputs and stdout result modes, `you docs
+sessions` for stopped-run inspection and recovery, and `you docs models` for
+TTS readiness, direct invocation, and audio or JSON result choices.
 
 ### Built-in `@you/review` approval gate
 
@@ -333,8 +358,8 @@ The materialized factory is editable at
 the standard agent-worker fields, including `modelProvider` (`CODEX` or
 `CLAUDE`) and `model`, either in `factory.json` or their split `AGENTS.md`
 front matter. Omit them to use normal operator defaults; `YOU_DEFAULT_WORKER_MODEL_PROVIDER`,
-`YOU_DEFAULT_WORKER_MODEL`, and the global `--default-worker-model-provider` /
-`--default-worker-model` flags retain the documented `file < env < flag`
+`YOU_DEFAULT_WORKER_MODEL`, and run-scoped `you run --provider` / `--model`
+flags retain the documented `file < env < run flag`
 precedence for omitted worker values. Configure both roles when they must use
 the same provider/model, or configure them independently when the reviewer
 needs a different model. Unsupported provider values are rejected by normal

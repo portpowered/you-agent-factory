@@ -463,11 +463,11 @@ func TestWatcherParentChildBatchFanIn(t *testing.T) {
 	)
 
 	wantStates := map[string]int{
-		support.WorkCustomerLocation("story", "complete"):    1,
-		support.WorkCustomerLocation("story", "failed"):      1,
-		support.WorkCustomerLocation("story-set", "failed"):  1,
-		support.WorkCustomerLocation("story", "init"):        0,
-		support.WorkCustomerLocation("story-set", "waiting"):   0,
+		support.WorkCustomerLocation("story", "complete"):     1,
+		support.WorkCustomerLocation("story", "failed"):       1,
+		support.WorkCustomerLocation("story-set", "failed"):   1,
+		support.WorkCustomerLocation("story", "init"):         0,
+		support.WorkCustomerLocation("story-set", "waiting"):  0,
 		support.WorkCustomerLocation("story-set", "complete"): 0,
 	}
 	for location, want := range wantStates {

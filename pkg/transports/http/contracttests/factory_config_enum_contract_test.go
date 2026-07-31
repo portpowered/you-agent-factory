@@ -209,8 +209,8 @@ func assertCanonicalFactoryTopLevelEnums(t *testing.T, factory generated.Factory
 	if factory.Guards == nil || len(*factory.Guards) != 1 {
 		t.Fatalf("canonical factory guards = %#v, want one enum-backed factory guard", factory.Guards)
 	}
-	if factory.Runner == nil || *factory.Runner != generated.RunnerIDGemini {
-		t.Fatalf("canonical factory runner = %#v, want gemini", factory.Runner)
+	if factory.Runner == nil || *factory.Runner != generated.RunnerIDAntigravity {
+		t.Fatalf("canonical factory runner = %#v, want antigravity", factory.Runner)
 	}
 	if (*factory.Guards)[0].Type != generated.FactoryGuardTypeInferenceThrottle {
 		t.Fatalf("canonical factory guard type = %q, want INFERENCE_THROTTLE_GUARD", (*factory.Guards)[0].Type)
@@ -282,8 +282,8 @@ func assertCanonicalExecuteStoryBoundaryFields(t *testing.T, executeStory genera
 	if executeStory.Behavior == nil || *executeStory.Behavior != generated.WorkstationKindCron {
 		t.Fatalf("canonical workstation behavior = %#v, want CRON", executeStory.Behavior)
 	}
-	if executeStory.Runner == nil || *executeStory.Runner != generated.RunnerIDCursorCLI {
-		t.Fatalf("canonical workstation runner = %#v, want cursor-cli", executeStory.Runner)
+	if executeStory.Runner == nil || *executeStory.Runner != generated.RunnerIDCodex {
+		t.Fatalf("canonical workstation runner = %#v, want codex", executeStory.Runner)
 	}
 	if executeStory.Type == nil || *executeStory.Type != generated.WorkstationTypeModelWorkstation {
 		t.Fatalf("canonical workstation type = %#v, want MODEL_WORKSTATION", executeStory.Type)

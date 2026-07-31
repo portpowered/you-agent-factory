@@ -37,7 +37,7 @@ describe("factory graph operations", () => {
         command: "",
         kind: "worker",
         model: "gpt-5-mini",
-        modelProvider: "CURSOR",
+        modelProvider: "CODEX",
         name: "reviewer",
         operations: [
           {
@@ -90,7 +90,7 @@ describe("factory graph operations", () => {
       workers: [
         {
           model: "gpt-5-mini",
-          modelProvider: "CURSOR",
+          modelProvider: "CODEX",
           name: "reviewer",
           type: "INFERENCE_WORKER",
         },
@@ -128,7 +128,7 @@ describe("factory graph operations", () => {
         command: "",
         kind: "worker",
         model: "gpt-5-mini",
-        modelProvider: "CURSOR",
+        modelProvider: "CODEX",
         name: "writer",
         operations: [],
         workerType: "INFERENCE_WORKER",

@@ -22,14 +22,14 @@ const (
 	unknownMockWorkerName = "ghost-worker"
 	invalidMockRunType    = "bogus"
 
-	mockedWorkerName      = "mocked-worker"
-	realWorkerName        = "real-worker"
-	mockedWorkstationName = "mock-process"
-	realWorkstationName   = "real-process"
-	mockedWorkType        = "mock-task"
-	realWorkType          = "real-task"
-	mockedWorkID          = "named-mock-replacement-mocked-work"
-	realWorkID            = "named-mock-replacement-real-work"
+	mockedWorkerName       = "mocked-worker"
+	realWorkerName         = "real-worker"
+	mockedWorkstationName  = "mock-process"
+	realWorkstationName    = "real-process"
+	mockedWorkType         = "mock-task"
+	realWorkType           = "real-task"
+	mockedWorkID           = "named-mock-replacement-mocked-work"
+	realWorkID             = "named-mock-replacement-real-work"
 	injectedProviderOutput = `{"type":"item.completed","item":{"id":"message-final","type":"agent_message","text":"injected-real-worker-output COMPLETE"}}` + "\n"
 
 	rejectWorkerName         = "reject-worker"
@@ -63,10 +63,10 @@ func TestMockWorkersReplaceOnlyNamedChildren(t *testing.T) {
 
 	listed := support.ListDefaultSessionWork(t, server.URL())
 	for placeID, want := range map[string]int{
-		support.WorkCustomerLocation(mockedWorkType, "done"): 1,
-		support.WorkCustomerLocation(realWorkType, "done"):   1,
-		support.WorkCustomerLocation(mockedWorkType, "init"): 0,
-		support.WorkCustomerLocation(realWorkType, "init"):   0,
+		support.WorkCustomerLocation(mockedWorkType, "done"):   1,
+		support.WorkCustomerLocation(realWorkType, "done"):     1,
+		support.WorkCustomerLocation(mockedWorkType, "init"):   0,
+		support.WorkCustomerLocation(realWorkType, "init"):     0,
 		support.WorkCustomerLocation(mockedWorkType, "failed"): 0,
 		support.WorkCustomerLocation(realWorkType, "failed"):   0,
 	} {

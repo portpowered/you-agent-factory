@@ -80,11 +80,10 @@ const BENTO_CARD_SCROLL_CLASS = "overflow-hidden";
 const BENTO_CARD_HEADER_CLASS =
   "relative z-10 flex min-h-13 shrink-0 cursor-grab items-center justify-between gap-3 border-b border-outline bg-surface-container-high px-3.5 py-3 active:cursor-grabbing";
 const BENTO_CARD_HEADER_COMPACT_CLASS =
-  "min-h-11 flex-wrap items-center gap-2 px-3 py-2.5";
+  "min-h-11 items-center gap-2 px-3 py-2.5";
 const BENTO_CARD_HEADER_TOOLS_CLASS =
-  "flex min-w-0 shrink-0 items-center gap-2";
-const BENTO_CARD_HEADER_TOOLS_COMPACT_CLASS =
-  "w-full flex-wrap justify-between gap-1.5 sm:w-auto sm:justify-end";
+  "ml-auto flex min-w-0 shrink-0 items-center gap-2";
+const BENTO_CARD_HEADER_TOOLS_COMPACT_CLASS = "justify-end gap-1.5";
 const BENTO_CARD_BODY_SCROLL_CLASS = "min-h-0 flex-1";
 const BENTO_CARD_BODY_SCROLL_VIEWPORT_CLASS = "h-full";
 const BENTO_CARD_BODY_CLASS = cn(

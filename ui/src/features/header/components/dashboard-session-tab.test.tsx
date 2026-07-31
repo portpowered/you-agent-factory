@@ -41,6 +41,9 @@ describe("DashboardSessionTab controls", () => {
     expect(tab.getAttribute("tabindex")).toBe("0");
     expect(shell?.className).toContain("bg-surface-container-low");
     expect(shell?.className).toContain("text-on-surface");
+    expect(shell?.className).toContain("flex-none");
+    expect(shell?.className).toContain("max-w-72");
+    expect(shell?.className).toContain("min-w-40");
     expect(screen.getByTestId("dashboard-session-live-ping")).toBeTruthy();
   });
 
@@ -92,6 +95,6 @@ describe("DashboardSessionTab controls", () => {
     });
 
     expect(button.getAttribute("aria-haspopup")).toBe("dialog");
-    expect(button.className).toContain("rounded-t-2xl");
+    expect(button.className).toContain("rounded-xl");
   });
 });

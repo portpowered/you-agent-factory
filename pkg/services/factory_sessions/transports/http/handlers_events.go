@@ -198,6 +198,11 @@ func streamFactoryResponseEvents(
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
+	// Commit the SSE response before waiting for the first event. Without this
+	// flush, clients cannot distinguish an established quiet subscription from
+	// a server that never accepted the request, and zero-event sessions block in
+	// http.Client.Do until their context expires.
+	flusher.Flush()
 
 	for {
 		events, err := subscription.Next(r.Context())

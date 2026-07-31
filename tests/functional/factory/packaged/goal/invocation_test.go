@@ -66,15 +66,49 @@ func TestPackagedGoalAcceptCompletesWithSummary(t *testing.T) {
 // then completes with the post-continue primary result.
 func TestPackagedGoalContinueRepeatsThenCompletes(t *testing.T) {
 	dir := scaffoldPackagedGoalBuiltInFactory(t)
+	goalText := "invoke packaged goal after continue"
 	runner := support.NewShapedProviderCommandRunner(
-		platformprocess.CommandResult{Stdout: []byte("ordinary partial progress\n<CONTINUE>")},
+		platformprocess.CommandResult{Stdout: []byte("ordinary partial progress; completion would use <COMPLETE>\n<CONTINUE>")},
 		platformprocess.CommandResult{Stdout: []byte(packagedGoalContinueThenCompleteSummary + "\n<COMPLETE>")},
 	)
 
-	_, response := invokePackagedGoalWithProviderRunner(t, dir, runner, "invoke packaged goal after continue")
+	_, response := invokePackagedGoalWithProviderRunner(t, dir, runner, goalText)
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		errorCode, message := "", ""
+		if response.ErrorCode != nil {
+			errorCode = string(*response.ErrorCode)
+		}
+		if response.Message != nil {
+			message = *response.Message
+		}
+		t.Logf("provider invocation count before failure = %d; response errorCode=%q message=%q", runner.CallCount(), errorCode, message)
+	}
 	assertPackagedGoalCompletedWithSummary(t, response, packagedGoalContinueThenCompleteSummary)
 	if got := runner.CallCount(); got != 2 {
 		t.Fatalf("provider invocation count = %d, want 2 after continue", got)
+	}
+	requests := runner.Requests()
+	secondPrompt := string(requests[1].Stdin) + " " + strings.Join(requests[1].Args, " ")
+	if !strings.Contains(secondPrompt, goalText) || !strings.Contains(secondPrompt, "ordinary partial progress") {
+		t.Fatalf("second attempt prompt does not preserve goal and prior output: %s", secondPrompt)
+	}
+}
+
+// TestPackagedGoalContinueExhaustsAtVisitBound proves the shipped loop breaker
+// fails a perpetually continuing goal after exactly twelve executor visits and
+// never launches a thirteenth attempt.
+func TestPackagedGoalContinueExhaustsAtVisitBound(t *testing.T) {
+	dir := scaffoldPackagedGoalBuiltInFactory(t)
+	results := make([]platformprocess.CommandResult, 12)
+	for index := range results {
+		results[index] = platformprocess.CommandResult{Stdout: []byte(fmt.Sprintf("partial progress %d\n<CONTINUE>", index+1))}
+	}
+	runner := support.NewShapedProviderCommandRunner(results...)
+
+	_, response := invokePackagedGoalWithProviderRunner(t, dir, runner, "invoke packaged goal through visit exhaustion")
+	assertPackagedGoalInvocationFailedWithRuntimeDetails(t, response)
+	if got := runner.CallCount(); got != 12 {
+		t.Fatalf("provider invocation count = %d, want exactly 12 before loop breaker", got)
 	}
 }
 
