@@ -35,8 +35,18 @@ func normalizeAttemptFailure(
 	ctx context.Context,
 	attemptErr error,
 	request providers.ExecuteRequest,
-) error {
+) (normalized error) {
 	lifecycle, hasLifecycle := attemptFailureAs(attemptErr)
+	defer func() {
+		if !hasLifecycle || lifecycle.SessionRef == nil || normalized == nil {
+			return
+		}
+		if failure, ok := executeFailureAs(normalized); ok {
+			session := lifecycle.SessionRef.Clone()
+			failure.SessionRef = &session
+			normalized = failure
+		}
+	}()
 	signals := []error{ctx.Err()}
 	if hasLifecycle {
 		signals = append(signals,

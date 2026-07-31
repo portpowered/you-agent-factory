@@ -138,15 +138,18 @@ func (decoder *decoder) final() (string, *providers.SessionRef, error) {
 	if decoder.finalContent == "" {
 		return "", nil, errors.New("codex stream did not contain a completed agent message")
 	}
-	var session *providers.SessionRef
-	if decoder.sessionID != "" {
-		session = &providers.SessionRef{
-			Provider: providers.IDCodex,
-			Kind:     providers.SessionIDKind,
-			ID:       decoder.sessionID,
-		}
+	return decoder.finalContent, decoder.sessionRef(), nil
+}
+
+func (decoder *decoder) sessionRef() *providers.SessionRef {
+	if decoder.sessionID == "" {
+		return nil
 	}
-	return decoder.finalContent, session, nil
+	return &providers.SessionRef{
+		Provider: providers.IDCodex,
+		Kind:     providers.SessionIDKind,
+		ID:       decoder.sessionID,
+	}
 }
 
 func (decoder *decoder) progressFacts() []providers.ExecuteProgress {

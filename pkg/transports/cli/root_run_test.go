@@ -2139,6 +2139,12 @@ func TestParseRunCommandArgs_WithMockWorkersOptionalPath(t *testing.T) {
 			wantFlagValue: "mock-workers.json",
 			wantRemainder: []string{"--to", "fix the bug"},
 		},
+		{
+			name:          "config path after boolean run flags remains attached to mock workers",
+			args:          []string{"--with-mock-workers", "--no-record", "--quiet", "mock-workers.json", "fix the bug"},
+			wantFlagValue: "mock-workers.json",
+			wantRemainder: []string{"fix the bug"},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

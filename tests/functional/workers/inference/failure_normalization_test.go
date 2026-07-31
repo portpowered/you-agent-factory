@@ -45,7 +45,7 @@ func TestProviderNonZeroExitMapsToPublicFailure(t *testing.T) {
 	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
 		ExitCode: exitCode,
 		Stdout: []byte(
-			`{"type":"system","subtype":"init","session_id":"` + providerExitNormalizationSessionID + `"}` + "\n",
+			`{"type":"thread.started","thread_id":"` + providerExitNormalizationSessionID + `"}` + "\n",
 		),
 		Stderr: []byte("provider process crashed unexpectedly"),
 	})

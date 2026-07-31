@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
@@ -154,6 +155,17 @@ func parseRunCommandArgs(cmd *cobra.Command, args []string) ([]string, error) {
 	}
 
 	remainder = append(remainder, positional...)
+	if mockWorkersFlag := flagsByToken["--with-mock-workers"]; mockWorkersFlag != nil &&
+		mockWorkersFlag.Changed &&
+		mockWorkersFlag.Value.String() == defaultMockWorkersConfigPathSentinel &&
+		len(remainder) > 0 &&
+		!runFlagValueLooksLikeFlag(remainder[0]) &&
+		strings.EqualFold(filepath.Ext(remainder[0]), ".json") {
+		if err := mockWorkersFlag.Value.Set(remainder[0]); err != nil {
+			return nil, err
+		}
+		remainder = remainder[1:]
+	}
 	return remainder, nil
 }
 
