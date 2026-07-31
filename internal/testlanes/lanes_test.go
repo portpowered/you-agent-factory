@@ -28,6 +28,7 @@ func TestForImportPathAssignsPrimaryLanes(t *testing.T) {
 		{name: "CLI generated drift", importPath: ModulePath + "/pkg/transports/cli/climanifestgen", want: LaneContract, wantOK: true},
 		{name: "runtime execution fixtures", importPath: ModulePath + "/pkg/services/factory_sessions/internal/execution/fixtures", want: LaneIntegration, wantOK: true},
 		{name: "functional", importPath: ModulePath + "/tests/functional/runtime_api", want: LaneFunctional, wantOK: true},
+		{name: "provider contract functional", importPath: ModulePath + "/tests/functional/providers/contract", want: LaneFunctional, wantOK: true},
 		{name: "functional support", importPath: ModulePath + "/tests/functional/internal/support", want: LaneMaintenance, wantOK: true},
 		{name: "stress", importPath: ModulePath + "/tests/stress/runtime", want: LaneStress, wantOK: true},
 		{name: "release", importPath: ModulePath + "/tests/release", want: LaneRelease, wantOK: true},
@@ -56,6 +57,7 @@ func TestRunnableFunctionalPackagePolicy(t *testing.T) {
 		want       bool
 	}{
 		{name: "provider package", importPath: ModulePath + "/tests/functional/providers/codex", want: true},
+		{name: "provider contract package", importPath: ModulePath + "/tests/functional/providers/contract", want: true},
 		{name: "existing package", importPath: ModulePath + "/tests/functional/workflow", want: true},
 		{name: "shared support", importPath: ModulePath + "/tests/functional/internal/support", want: false},
 		{name: "backend package", importPath: ModulePath + "/pkg/root", want: false},

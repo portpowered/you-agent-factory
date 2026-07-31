@@ -53,7 +53,9 @@ var allowedServiceRootDirectories = map[string]struct{}{
 }
 
 // allowedFunctionalDomains are the durable product-domain nouns for
-// tests/functional/<domain>/<subsection>/... scenario sources.
+// tests/functional/<domain>/<subsection>/... scenario sources. Provider-neutral
+// and provider-specific scenarios share providers/<subsection>/..., while
+// root-level providers/*.go remains deletion-only aggregate debt.
 var allowedFunctionalDomains = map[string]struct{}{
 	"transport":         {},
 	"workers":           {},
