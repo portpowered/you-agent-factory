@@ -24,12 +24,12 @@ import (
 const (
 	packagedGoalFactoryName                 = "@you/goal"
 	packagedGoalPlanWorkstationName         = "plan-goal"
-	packagedGoalExecuteWorkstationName        = "execute-goal"
-	packagedGoalCheckWorkstationName          = "check-goal"
-	packagedGoalReviewWorkstationName         = "review-goal"
-	packagedGoalMockWorkerAcceptedSummary     = "mock worker accepted"
-	packagedGoalRejectThenCompleteSummary     = "finished after rejection"
-	packagedGoalContinueThenCompleteSummary   = "finished after continue"
+	packagedGoalExecuteWorkstationName      = "execute-goal"
+	packagedGoalCheckWorkstationName        = "check-goal"
+	packagedGoalReviewWorkstationName       = "review-goal"
+	packagedGoalMockWorkerAcceptedSummary   = "mock worker accepted"
+	packagedGoalRejectThenCompleteSummary   = "finished after rejection"
+	packagedGoalContinueThenCompleteSummary = "finished after continue"
 )
 
 func scaffoldPackagedGoalBuiltInFactory(t *testing.T) string {
@@ -212,6 +212,18 @@ func textInvocationRequestBody(goalText string) []byte {
 		panic(fmt.Sprintf("marshal invocation request: %v", err))
 	}
 	return body
+}
+
+func goalDecisionEnvelope(decision, feedback, output string) string {
+	payload, err := json.Marshal(map[string]string{
+		"decision": decision,
+		"feedback": feedback,
+		"output":   output,
+	})
+	if err != nil {
+		panic(fmt.Sprintf("marshal goal decision envelope: %v", err))
+	}
+	return string(payload)
 }
 
 func invocationTextSourceKindPtr() *factoryapi.InvocationInputSourceKind {

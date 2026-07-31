@@ -151,15 +151,15 @@
       "slug": "goal",
       "json": {
         "locator": "generated/factories/goal/factory.json",
-        "sha256": "9e4e8346783e0e5c63b46cd0d461c0f35e78fd6de72b74f77093eb308da43649"
+        "sha256": "e3aeb5aa2fae32baef8b5acb8dc66adf079f66e6c4cf384048973331db77739f"
       },
       "yaml": {
         "locator": "generated/factories/goal/factory.yaml",
-        "sha256": "6cf22114b7eea711b1fbc2277fa04c1f5a9c2822e6a869701f891eff8c9b8f5e"
+        "sha256": "85448d5148da30833da356d4a04a34d90e2a3d56659af00417f858a8e9a3dd79"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",
-        "value": "Repeatedly works a goal until the executor reports completion or the Factory reaches a failure bound."
+        "value": "Persists goal progress and repeatedly works the goal until the executor classifies it complete or blocked."
       },
       "examples": [
         {

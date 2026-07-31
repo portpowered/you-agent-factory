@@ -55,3 +55,4 @@ factory/logs/meta/*
 
 **/__pycache__/*
 /pkg/wire/.you-agent-factory/
+.you-goals/

@@ -379,16 +379,21 @@ command.
 
 ### Built-in `@you/goal` repeater
 
-The shipped goal factory is deliberately minimal. It defines only `goal:init`,
-`goal:execute`, `goal:complete`, and `goal:failed`, with one `goal-executor`
-worker and one `execute-goal` `AGENT_RUN` workstation using `REPEATER`
-behavior. Continue and reject outcomes route back to `goal:init` for another
-pass. An accepted response ending with `<COMPLETE>` advances to
-`goal:complete`, while worker or workstation failure routes to `goal:failed`.
+The shipped goal factory is deliberately minimal. It defines `goal:init`,
+`goal:execute`, `goal:complete`, `goal:blocked`, and `goal:failed`, with one
+`goal-executor` worker and one `execute-goal` `AGENT_RUN` workstation using
+`REPEATER` behavior. The executor maintains an atomic JSON progress file under
+`.you-goals/<session-id>/<work-id>.json` in the working directory and returns a
+decision envelope. `needs_changes` routes back to `goal:init` for another pass,
+`accepted` advances to `goal:complete`, and `blocked` leaves inspectable Work in
+`goal:blocked`. Worker, malformed-envelope, or workstation failure routes to
+`goal:failed`.
 
-The factory's explicit `invocationReturn` selects `goal:complete`. The executor's
-final response, with the control token removed, is therefore returned as the
-invocation `primaryResult` instead of echoing the submitted goal text.
+The factory's explicit `invocationReturn` selects `goal:complete`. The
+executor's accepted envelope `output` is therefore returned as the invocation
+`primaryResult` instead of echoing the submitted goal text. User or Factory
+Session termination remains an external lifecycle control and is never inferred
+from the executor's classifier decision.
 
 The materialized built-in contains only these prompt-bearing entries:
 
