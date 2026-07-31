@@ -58,6 +58,16 @@ func newAttempt(effect Effect) execution.Attempt {
 		effectResult, effectErr := effect.Execute(ctx, request, decoder.observe)
 		flushErr := decoder.flush()
 		if failure, failed := collectFailure(decoder, effectErr, flushErr); failed {
+			if session := decoder.partialSession(); session != nil {
+				if failure.Declared == nil {
+					failure.Declared = &providers.ExecuteFailure{
+						Kind:       providers.ExecuteFailureKindUnknown,
+						SessionRef: session,
+					}
+				} else if failure.Declared.SessionRef == nil {
+					failure.Declared.SessionRef = session
+				}
+			}
 			return providers.ExecuteResult{}, failure
 		}
 		content, session, finalErr := decoder.final()

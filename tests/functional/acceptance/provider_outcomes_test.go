@@ -85,10 +85,9 @@ func TestProviderPosture_Configured_ExplicitHomeConfigEnablesNamedGoalSuccessPat
 	args = append(args,
 		"run",
 		"--named", goal.PackagedFactoryName,
-		"--with-mock-workers",
+		"--with-mock-workers=" + mockWorkersPath,
 		"--no-record",
 		"--quiet",
-		mockWorkersPath,
 		goalText,
 	)
 
@@ -139,10 +138,9 @@ func TestProviderPosture_Discovered_EnvDefaultResolvesWithoutFileProvider(t *tes
 		"run",
 		"--provider", "DEFAULT",
 		"--named", goal.PackagedFactoryName,
-		"--with-mock-workers",
+		"--with-mock-workers=" + mockWorkersPath,
 		"--no-record",
 		"--quiet",
-		mockWorkersPath,
 		goalText,
 	)
 

@@ -91,6 +91,35 @@ func TestCodexRootNormalizesFailureStagesAndSuppressesResults(t *testing.T) {
 	}
 }
 
+func TestCodexRootPreservesStartedSessionOnFailure(t *testing.T) {
+	t.Parallel()
+
+	effect := codex.EffectFunc(func(
+		_ context.Context,
+		_ providers.ExecuteRequest,
+		observe func([]byte) error,
+	) (codex.EffectResult, error) {
+		if err := observe([]byte(
+			"{\"type\":\"thread.started\",\"thread_id\":\"thread-failed-42\"}\n",
+		)); err != nil {
+			return codex.EffectResult{}, err
+		}
+		return codex.EffectResult{}, providers.ExecuteFailure{
+			Kind: providers.ExecuteFailureKindUnknown,
+		}
+	})
+
+	_, err := newCodexRoot(t, effect).Execute(t.Context(), codexFailureRequest())
+	var failure providers.ExecuteFailure
+	if !errors.As(err, &failure) ||
+		failure.SessionRef == nil ||
+		failure.SessionRef.Provider != providers.IDCodex ||
+		failure.SessionRef.Kind != providers.SessionIDKind ||
+		failure.SessionRef.ID != "thread-failed-42" {
+		t.Fatalf("Execute() error = %#v, want failed Codex session reference", err)
+	}
+}
+
 func TestCodexRootCancellationAndDeadlineReachEffectAndCleanUpOnce(t *testing.T) {
 	t.Parallel()
 

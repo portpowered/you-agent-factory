@@ -66,9 +66,8 @@ func TestPackagedFactoryInvokedByCLICanBeInspectedByAPI(t *testing.T) {
 		"--factory", factoryPath,
 		"--with-server",
 		"--server", requestedURL,
-		"--with-mock-workers",
+		"--with-mock-workers=" + mockWorkersPath,
 		"--no-record",
-		mockWorkersPath,
 		goalText,
 	})
 	inputs.Input.WorkingDirectory = factoryDir
@@ -1322,11 +1321,13 @@ func runPackagedGoalInvocationCLIWithMode(
 	cmdArgs = append(cmdArgs, sourceArgs...)
 	cmdArgs = append(
 		cmdArgs,
-		"--with-mock-workers",
+		"--with-mock-workers=" + mockWorkersPath,
 		"--no-record",
 		"--server", baseURL,
-		mockWorkersPath,
 	)
+	if jsonMode {
+		cmdArgs = append(cmdArgs, "--output", "primary")
+	}
 	cmdArgs = append(cmdArgs, args...)
 
 	inputs := support.FakeInputs(ctx, cmdArgs)

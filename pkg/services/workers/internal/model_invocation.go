@@ -259,7 +259,10 @@ func (s *Service) ensureInvocationReady(
 		Name:      modelName,
 		Operation: operation,
 	})
-	return readiness.Readiness, err
+	if err != nil {
+		return readiness.Readiness, err
+	}
+	return readiness.Readiness, readiness.Readiness.InvocationError()
 }
 
 func directModelInvocationWorkstationRequest(

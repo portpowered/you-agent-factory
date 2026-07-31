@@ -369,10 +369,9 @@ func runPackagedGoalQuietCLIBatch(
 	args := []string{
 		"you", "run",
 		"--named", packagedGoalFactoryName,
-		"--with-mock-workers",
+		"--with-mock-workers=" + mockWorkersPath,
 		"--no-record",
 		"--quiet",
-		mockWorkersPath,
 		goalText,
 	}
 	inputs := support.FakeInputs(t.Context(), args)
@@ -405,10 +404,9 @@ func runPackagedGoalQuietCLIBatchWithTimeout(
 	args := []string{
 		"you", "run",
 		"--named", packagedGoalFactoryName,
-		"--with-mock-workers",
+		"--with-mock-workers=" + mockWorkersPath,
 		"--no-record",
 		"--quiet",
-		mockWorkersPath,
 		goalText,
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), timeout)

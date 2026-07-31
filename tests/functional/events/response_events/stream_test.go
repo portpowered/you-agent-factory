@@ -28,14 +28,14 @@ const (
 	functionalResponseEventCompletedRetentionWindow = time.Millisecond
 	functionalResponseEventMissingSessionID         = "session-missing-response-events"
 
-	sessionExpiryChildSessionID      = "cursor-js-session-expiry"
+	sessionExpiryChildSessionID      = "claude-js-session-expiry"
 	sessionExpiryChildWorkflowFile   = "session-expiry-child-progress.workflow.js"
 	sessionExpiryChildWorkflowSource = `return (async function () {
   const child = await agent.run({
     prompt: "summarize session expiry",
     label: "session-expiry-child",
-    modelProvider: "cursor",
-    model: "cursor-test-model",
+    modelProvider: "claude",
+    model: "claude-test-model",
   });
   return { label: "session-expiry", child: child };
 })();`

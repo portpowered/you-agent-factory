@@ -157,6 +157,18 @@ func (decoder *decoder) progressFacts() []providers.ExecuteProgress {
 	return progress
 }
 
+func (decoder *decoder) partialSession() *providers.SessionRef {
+	sessionID := strings.TrimSpace(decoder.sessionID)
+	if sessionID == "" {
+		return nil
+	}
+	return &providers.SessionRef{
+		Provider: providers.IDCodex,
+		Kind:     providers.SessionIDKind,
+		ID:       sessionID,
+	}
+}
+
 func (decoder *decoder) decodeRecord(raw []byte) {
 	if len(bytes.TrimSpace(raw)) == 0 {
 		return
