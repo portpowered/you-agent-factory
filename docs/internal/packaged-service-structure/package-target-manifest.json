@@ -155,7 +155,6 @@
     "pkg/services/factory_definitions/internal/services/validation/internal/topology",
     "pkg/services/factory_definitions/internal/services/validation/wire",
     "pkg/services/factory_definitions/internal/testcomposition",
-    "pkg/services/factory_definitions/service",
     "pkg/services/factory_definitions/transports/cli",
     "pkg/services/factory_definitions/transports/http",
     "pkg/services/factory_definitions/transports/mcp",
@@ -361,21 +360,21 @@
     "pkg/services/providers",
     "pkg/services/providers/inference",
     "pkg/services/providers/internal/service",
+    "pkg/services/providers/internal/services/acp",
+    "pkg/services/providers/internal/services/acp/internal/service",
+    "pkg/services/providers/internal/services/acp/wire",
+    "pkg/services/providers/internal/services/builtins",
+    "pkg/services/providers/internal/services/builtins/internal/service",
+    "pkg/services/providers/internal/services/builtins/wire",
     "pkg/services/providers/internal/services/catalog",
     "pkg/services/providers/internal/services/catalog/internal/service",
     "pkg/services/providers/internal/services/catalog/wire",
     "pkg/services/providers/internal/services/execution",
-    "pkg/services/providers/internal/services/execution/internal/adapters/acp",
     "pkg/services/providers/internal/services/execution/internal/adapters/agy",
     "pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty",
     "pkg/services/providers/internal/services/execution/internal/adapters/claude",
     "pkg/services/providers/internal/services/execution/internal/adapters/codex",
     "pkg/services/providers/internal/services/execution/internal/adapters/commanddispatch",
-    "pkg/services/providers/internal/services/execution/internal/adapters/cursor",
-    "pkg/services/providers/internal/services/execution/internal/adapters/gemini",
-    "pkg/services/providers/internal/services/execution/internal/adapters/kiro",
-    "pkg/services/providers/internal/services/execution/internal/adapters/opencode",
-    "pkg/services/providers/internal/services/execution/internal/adapters/pi",
     "pkg/services/providers/internal/services/execution/internal/provider",
     "pkg/services/providers/internal/services/execution/internal/provider/adapter",
     "pkg/services/providers/internal/services/execution/internal/provider/adapter/testkit",
@@ -384,13 +383,8 @@
     "pkg/services/providers/internal/services/execution/internal/provider/codex",
     "pkg/services/providers/internal/services/execution/internal/provider/commandenv",
     "pkg/services/providers/internal/services/execution/internal/provider/conductor",
-    "pkg/services/providers/internal/services/execution/internal/provider/cursor",
-    "pkg/services/providers/internal/services/execution/internal/provider/gemini",
     "pkg/services/providers/internal/services/execution/internal/provider/inferencecontract",
     "pkg/services/providers/internal/services/execution/internal/provider/inferencecontract/testkit",
-    "pkg/services/providers/internal/services/execution/internal/provider/kiro",
-    "pkg/services/providers/internal/services/execution/internal/provider/opencode",
-    "pkg/services/providers/internal/services/execution/internal/provider/pi",
     "pkg/services/providers/internal/services/execution/internal/provider/providersroot",
     "pkg/services/providers/internal/services/execution/internal/provider/registry",
     "pkg/services/providers/internal/services/execution/internal/provider/structured",
@@ -403,29 +397,30 @@
     "pkg/services/providers/wire",
     "pkg/services/recordings",
     "pkg/services/recordings/internal",
+    "pkg/services/recordings/internal/artifacts",
     "pkg/services/recordings/internal/canonical",
+    "pkg/services/recordings/internal/contracts",
+    "pkg/services/recordings/internal/events",
+    "pkg/services/recordings/internal/events/kinds",
+    "pkg/services/recordings/internal/events/snapshot",
+    "pkg/services/recordings/internal/projections",
+    "pkg/services/recordings/internal/projections/dashboard",
+    "pkg/services/recordings/internal/projections/workstation",
+    "pkg/services/recordings/internal/replay",
     "pkg/services/recordings/internal/services/artifacts_export",
-    "pkg/services/recordings/internal/services/artifacts_export/artifacts",
     "pkg/services/recordings/internal/services/artifacts_export/internal/service",
     "pkg/services/recordings/internal/services/artifacts_export/wire",
     "pkg/services/recordings/internal/services/canonical_ledger",
-    "pkg/services/recordings/internal/services/canonical_ledger/events",
-    "pkg/services/recordings/internal/services/canonical_ledger/events/kinds",
-    "pkg/services/recordings/internal/services/canonical_ledger/events/snapshot",
     "pkg/services/recordings/internal/services/canonical_ledger/internal/service",
     "pkg/services/recordings/internal/services/canonical_ledger/wire",
     "pkg/services/recordings/internal/services/projection_query",
     "pkg/services/recordings/internal/services/projection_query/internal/service",
-    "pkg/services/recordings/internal/services/projection_query/projections",
-    "pkg/services/recordings/internal/services/projection_query/projections/dashboard",
-    "pkg/services/recordings/internal/services/projection_query/projections/workstation",
     "pkg/services/recordings/internal/services/projection_query/wire",
     "pkg/services/recordings/internal/services/recording_lifecycle",
     "pkg/services/recordings/internal/services/recording_lifecycle/internal/service",
     "pkg/services/recordings/internal/services/recording_lifecycle/wire",
     "pkg/services/recordings/internal/services/replay",
     "pkg/services/recordings/internal/services/replay/internal/service",
-    "pkg/services/recordings/internal/services/replay/replay",
     "pkg/services/recordings/internal/services/replay/wire",
     "pkg/services/recordings/transports/cli",
     "pkg/services/recordings/transports/http",
@@ -438,6 +433,7 @@
     "pkg/services/work",
     "pkg/services/work/internal/contenturl",
     "pkg/services/work/internal/invocationreturnpolicy",
+    "pkg/services/work/internal/proposalmaterialization",
     "pkg/services/work/internal/requestadmission",
     "pkg/services/work/internal/service",
     "pkg/services/work/internal/services/content_materialization",
@@ -459,9 +455,11 @@
     "pkg/services/workers/internal",
     "pkg/services/workers/internal/diagnostics",
     "pkg/services/workers/internal/interface",
+    "pkg/services/workers/internal/service",
     "pkg/services/workers/internal/services/runners",
     "pkg/services/workers/internal/services/runners/inference",
     "pkg/services/workers/internal/services/runners/internal/inference",
+    "pkg/services/workers/internal/services/runners/internal/mock",
     "pkg/services/workers/internal/services/runners/internal/script",
     "pkg/services/workers/internal/services/runners/internal/service",
     "pkg/services/workers/internal/services/runners/internal/services/agent",
@@ -1136,11 +1134,6 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/testcomposition",
-      "disposition": "move",
-      "destination": "factory_definitions/internal"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/service",
       "disposition": "move",
       "destination": "factory_definitions/internal"
     },
@@ -2170,6 +2163,36 @@
       "destination": "providers"
     },
     {
+      "packagePath": "pkg/services/providers/internal/services/acp",
+      "disposition": "retain",
+      "destination": "providers"
+    },
+    {
+      "packagePath": "pkg/services/providers/internal/services/acp/internal/service",
+      "disposition": "retain",
+      "destination": "providers"
+    },
+    {
+      "packagePath": "pkg/services/providers/internal/services/acp/wire",
+      "disposition": "retain",
+      "destination": "providers"
+    },
+    {
+      "packagePath": "pkg/services/providers/internal/services/builtins",
+      "disposition": "retain",
+      "destination": "providers"
+    },
+    {
+      "packagePath": "pkg/services/providers/internal/services/builtins/internal/service",
+      "disposition": "retain",
+      "destination": "providers"
+    },
+    {
+      "packagePath": "pkg/services/providers/internal/services/builtins/wire",
+      "disposition": "retain",
+      "destination": "providers"
+    },
+    {
       "packagePath": "pkg/services/providers/internal/services/catalog",
       "disposition": "retain",
       "destination": "providers/internal/services/catalog"
@@ -2186,11 +2209,6 @@
     },
     {
       "packagePath": "pkg/services/providers/internal/services/execution",
-      "disposition": "retain",
-      "destination": "providers/internal/services/execution"
-    },
-    {
-      "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/acp",
       "disposition": "retain",
       "destination": "providers/internal/services/execution"
     },
@@ -2216,31 +2234,6 @@
     },
     {
       "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/commanddispatch",
-      "disposition": "retain",
-      "destination": "providers/internal/services/execution"
-    },
-    {
-      "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/cursor",
-      "disposition": "retain",
-      "destination": "providers/internal/services/execution"
-    },
-    {
-      "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/gemini",
-      "disposition": "retain",
-      "destination": "providers/internal/services/execution"
-    },
-    {
-      "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/kiro",
-      "disposition": "retain",
-      "destination": "providers/internal/services/execution"
-    },
-    {
-      "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/opencode",
-      "disposition": "retain",
-      "destination": "providers/internal/services/execution"
-    },
-    {
-      "packagePath": "pkg/services/providers/internal/services/execution/internal/adapters/pi",
       "disposition": "retain",
       "destination": "providers/internal/services/execution"
     },
@@ -2285,37 +2278,12 @@
       "destination": "providers/internal/services/execution"
     },
     {
-      "packagePath": "pkg/services/providers/internal/services/execution/internal/provider/cursor",
-      "disposition": "move",
-      "destination": "providers/internal/services/execution"
-    },
-    {
-      "packagePath": "pkg/services/providers/internal/services/execution/internal/provider/gemini",
-      "disposition": "move",
-      "destination": "providers/internal/services/execution"
-    },
-    {
       "packagePath": "pkg/services/providers/internal/services/execution/internal/provider/inferencecontract",
       "disposition": "move",
       "destination": "providers/internal/services/execution"
     },
     {
       "packagePath": "pkg/services/providers/internal/services/execution/internal/provider/inferencecontract/testkit",
-      "disposition": "move",
-      "destination": "providers/internal/services/execution"
-    },
-    {
-      "packagePath": "pkg/services/providers/internal/services/execution/internal/provider/kiro",
-      "disposition": "move",
-      "destination": "providers/internal/services/execution"
-    },
-    {
-      "packagePath": "pkg/services/providers/internal/services/execution/internal/provider/opencode",
-      "disposition": "move",
-      "destination": "providers/internal/services/execution"
-    },
-    {
-      "packagePath": "pkg/services/providers/internal/services/execution/internal/provider/pi",
       "disposition": "move",
       "destination": "providers/internal/services/execution"
     },
@@ -2380,17 +2348,57 @@
       "destination": "recordings"
     },
     {
+      "packagePath": "pkg/services/recordings/internal/artifacts",
+      "disposition": "move",
+      "destination": "recordings/internal/services/artifacts_export"
+    },
+    {
       "packagePath": "pkg/services/recordings/internal/canonical",
       "disposition": "retain",
       "destination": "recordings"
     },
     {
-      "packagePath": "pkg/services/recordings/internal/services/artifacts_export",
+      "packagePath": "pkg/services/recordings/internal/contracts",
       "disposition": "retain",
-      "destination": "recordings/internal/services/artifacts_export"
+      "destination": "recordings"
     },
     {
-      "packagePath": "pkg/services/recordings/internal/services/artifacts_export/artifacts",
+      "packagePath": "pkg/services/recordings/internal/events",
+      "disposition": "move",
+      "destination": "recordings/internal/services/canonical_ledger"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/events/kinds",
+      "disposition": "move",
+      "destination": "recordings/internal/services/canonical_ledger"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/events/snapshot",
+      "disposition": "move",
+      "destination": "recordings/internal/services/canonical_ledger"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/projections",
+      "disposition": "move",
+      "destination": "recordings/internal/services/projection_query"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/projections/dashboard",
+      "disposition": "move",
+      "destination": "recordings/internal/services/projection_query"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/projections/workstation",
+      "disposition": "move",
+      "destination": "recordings/internal/services/projection_query"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/replay",
+      "disposition": "move",
+      "destination": "recordings/internal/services/replay"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/artifacts_export",
       "disposition": "retain",
       "destination": "recordings/internal/services/artifacts_export"
     },
@@ -2406,21 +2414,6 @@
     },
     {
       "packagePath": "pkg/services/recordings/internal/services/canonical_ledger",
-      "disposition": "retain",
-      "destination": "recordings/internal/services/canonical_ledger"
-    },
-    {
-      "packagePath": "pkg/services/recordings/internal/services/canonical_ledger/events",
-      "disposition": "retain",
-      "destination": "recordings/internal/services/canonical_ledger"
-    },
-    {
-      "packagePath": "pkg/services/recordings/internal/services/canonical_ledger/events/kinds",
-      "disposition": "retain",
-      "destination": "recordings/internal/services/canonical_ledger"
-    },
-    {
-      "packagePath": "pkg/services/recordings/internal/services/canonical_ledger/events/snapshot",
       "disposition": "retain",
       "destination": "recordings/internal/services/canonical_ledger"
     },
@@ -2441,21 +2434,6 @@
     },
     {
       "packagePath": "pkg/services/recordings/internal/services/projection_query/internal/service",
-      "disposition": "retain",
-      "destination": "recordings/internal/services/projection_query"
-    },
-    {
-      "packagePath": "pkg/services/recordings/internal/services/projection_query/projections",
-      "disposition": "retain",
-      "destination": "recordings/internal/services/projection_query"
-    },
-    {
-      "packagePath": "pkg/services/recordings/internal/services/projection_query/projections/dashboard",
-      "disposition": "retain",
-      "destination": "recordings/internal/services/projection_query"
-    },
-    {
-      "packagePath": "pkg/services/recordings/internal/services/projection_query/projections/workstation",
       "disposition": "retain",
       "destination": "recordings/internal/services/projection_query"
     },
@@ -2486,11 +2464,6 @@
     },
     {
       "packagePath": "pkg/services/recordings/internal/services/replay/internal/service",
-      "disposition": "retain",
-      "destination": "recordings/internal/services/replay"
-    },
-    {
-      "packagePath": "pkg/services/recordings/internal/services/replay/replay",
       "disposition": "retain",
       "destination": "recordings/internal/services/replay"
     },
@@ -2553,6 +2526,11 @@
       "packagePath": "pkg/services/work/internal/invocationreturnpolicy",
       "disposition": "move",
       "destination": "work/internal"
+    },
+    {
+      "packagePath": "pkg/services/work/internal/proposalmaterialization",
+      "disposition": "retain",
+      "destination": "work"
     },
     {
       "packagePath": "pkg/services/work/internal/requestadmission",
@@ -2660,6 +2638,11 @@
       "destination": "workers/internal"
     },
     {
+      "packagePath": "pkg/services/workers/internal/service",
+      "disposition": "retain",
+      "destination": "workers"
+    },
+    {
       "packagePath": "pkg/services/workers/internal/services/runners",
       "disposition": "retain",
       "destination": "workers/internal/services/runners"
@@ -2671,6 +2654,11 @@
     },
     {
       "packagePath": "pkg/services/workers/internal/services/runners/internal/inference",
+      "disposition": "retain",
+      "destination": "workers/internal/services/runners"
+    },
+    {
+      "packagePath": "pkg/services/workers/internal/services/runners/internal/mock",
       "disposition": "retain",
       "destination": "workers/internal/services/runners"
     },

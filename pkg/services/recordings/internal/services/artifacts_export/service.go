@@ -7,21 +7,7 @@ import (
 	"context"
 
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
 )
-
-// SnapshotSource supplies finalized recording facts to artifact export without
-// exposing lifecycle persistence handles.
-type SnapshotSource interface {
-	Snapshot(recordings.RecordingID) (recordinglifecycle.Snapshot, error)
-}
-
-// PortableArtifactPublication persists completed portable artifact bytes at a
-// public destination without exposing private lifecycle storage paths.
-type PortableArtifactPublication interface {
-	Publish(context.Context, string, []byte) error
-	Read(context.Context, string) ([]byte, error)
-}
 
 // Service owns portable artifact build, validate, encode, decode, summarize,
 // export, and read behind the Recordings root.

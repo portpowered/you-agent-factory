@@ -366,6 +366,10 @@ var nestedOwnerMoveRules = map[string][]nestedPathRule{
 		{exact: "internal/inference", prefix: "internal/inference/", dest: "models/internal/services/inference"},
 	},
 	"recordings": {
+		{exact: "internal/artifacts", prefix: "internal/artifacts/", dest: "recordings/internal/services/artifacts_export"},
+		{exact: "internal/events", prefix: "internal/events/", dest: "recordings/internal/services/canonical_ledger"},
+		{exact: "internal/projections", prefix: "internal/projections/", dest: "recordings/internal/services/projection_query"},
+		{exact: "internal/replay", prefix: "internal/replay/", dest: "recordings/internal/services/replay"},
 		{exact: "events", prefix: "events/", dest: "recordings/internal/services/canonical_ledger"},
 		{exact: "projections", prefix: "projections/", dest: "recordings/internal/services/projection_query"},
 		{exact: "replay", prefix: "replay/", dest: "recordings/internal/services/replay"},
@@ -471,5 +475,3 @@ func mergeOwnerPackageRows(existing []PackageMapping, ownerRows []PackageMapping
 	})
 	return merged
 }
-
-

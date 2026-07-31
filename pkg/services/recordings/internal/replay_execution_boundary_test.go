@@ -12,7 +12,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
-	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/replay"
+	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
@@ -86,7 +86,7 @@ func loadReplayExecutionBoundaryArtifact(t *testing.T) *recordings.ReplayArtifac
 	t.Helper()
 
 	storage := platformreplay.NewLocal(runtime.GOOS)
-	path := filepath.FromSlash("services/replay/replay/testdata/inference-events.replay.json")
+	path := filepath.FromSlash("replay/testdata/inference-events.replay.json")
 	artifact, err := replayimpl.Load(storage, path, replayExecutionFactorySnapshotDecoder)
 	if err != nil {
 		t.Fatalf("Load replay fixture: %v", err)

@@ -168,16 +168,16 @@ Therefore the provider inventory needs to be reconciled before further deletion 
 
 ### Recordings
 
-The public transitional directories have now been removed, despite the older committed prose still listing them. Remaining nested wrappers are:
+The public transitional directories and nested wrapper paths have been removed.
+Artifact, event, projection, and replay implementations now live under the
+private `recordings/internal/{artifacts,events,projections,replay}` packages,
+with package-target ownership pointing at their canonical Recordings subservices.
+`artifacts_export` exposes only its subservice `Service`, and the lifecycle target
+constructor is private behind its `wire` package.
 
-- `artifacts_export/artifacts`
-- `canonical_ledger/events`
-- `projection_query/projections`
-- `replay/replay`
-
-`artifacts_export` also declares three interfaces, and `recording_lifecycle` retains an exported constructor.
-
-The root contract is still too broad: 16 named interfaces in `contracts.go` and `portable_recording.go`.
+The public root now exposes one `Service` interface and transport-neutral value
+vocabulary through `contracts.go`; implementation contract declarations and pure
+portable-recording helpers live under `recordings/internal/contracts`.
 
 ### Work
 

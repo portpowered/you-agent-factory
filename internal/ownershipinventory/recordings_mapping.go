@@ -16,6 +16,10 @@ type recordingsMoveRule struct {
 // recordingsMoveRules mirrors cmd/packagetargetmanifestcheck nestedOwnerMoveRules
 // for recordings. Ownership rows keep owner destination with concrete successor paths.
 var recordingsMoveRules = []recordingsMoveRule{
+	{exact: "internal/artifacts", prefix: "internal/artifacts/", subservice: "artifacts_export"},
+	{exact: "internal/events", prefix: "internal/events/", subservice: "canonical_ledger"},
+	{exact: "internal/projections", prefix: "internal/projections/", subservice: "projection_query"},
+	{exact: "internal/replay", prefix: "internal/replay/", subservice: "replay"},
 	{exact: "events", prefix: "events/", subservice: "canonical_ledger"},
 	{exact: "projections", prefix: "projections/", subservice: "projection_query"},
 	{exact: "replay", prefix: "replay/", subservice: "replay"},
@@ -31,19 +35,19 @@ func recordingsMapping(packagePath string) (PackageRow, bool) {
 		return PackageRow{}, false
 	}
 	rest := strings.TrimPrefix(packagePath, prefix)
+	subservice, ok := recordingsMoveSubservice(rest)
+	if ok {
+		return moveRow(
+			packagePath,
+			recordingsOwner,
+			recordingsSuccessor(subservice),
+			recordingsDeletionCondition(subservice),
+		), true
+	}
 	if IsRecordingsCanonicalRetainRest(rest) {
 		return retainRow(packagePath, recordingsOwner, DestinationKindOwner), true
 	}
-	subservice, ok := recordingsMoveSubservice(rest)
-	if !ok {
-		return PackageRow{}, false
-	}
-	return moveRow(
-		packagePath,
-		recordingsOwner,
-		recordingsSuccessor(subservice),
-		recordingsDeletionCondition(subservice),
-	), true
+	return PackageRow{}, false
 }
 
 func recordingsMoveSubservice(rest string) (subservice string, ok bool) {
