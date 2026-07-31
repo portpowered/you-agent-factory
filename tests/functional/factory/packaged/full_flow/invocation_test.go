@@ -299,11 +299,6 @@ func (runner *fullFlowRunner) Run(_ context.Context, request platformprocess.Com
 		runner.merges = append(runner.merges, task)
 		runner.mu.Unlock()
 		return fullFlowCodexResult("<COMPLETE>"), nil
-	case strings.Contains(prompt, "cycle gate with zero prior context"):
-		if strings.Contains(prompt, "Payload: complete") {
-			return fullFlowCodexResult("complete"), nil
-		}
-		return fullFlowCodexResult("continue"), nil
 	case strings.TrimSpace(prompt) == "continue":
 		return fullFlowCodexResult("continue"), nil
 	case strings.TrimSpace(prompt) == "complete":

@@ -120,6 +120,45 @@ supportingFiles:
             encoding: utf-8
             inline: |
                 #!/usr/bin/env python3
+                """Emit the planner's authored full-flow cycle route without model ambiguity."""
+
+                from __future__ import annotations
+
+                import sys
+
+
+                VALID_DECISIONS = {"continue", "complete"}
+
+
+                def decide_cycle(payload: str) -> str:
+                    decision = payload.strip().lower()
+                    if decision not in VALID_DECISIONS:
+                        raise ValueError("cycle-control payload must be exactly 'continue' or 'complete'")
+                    return decision
+
+
+                def main(argv: list[str]) -> int:
+                    if len(argv) != 2:
+                        print("usage: decide-cycle.py <continue|complete>", file=sys.stderr)
+                        return 2
+                    try:
+                        decision = decide_cycle(argv[1])
+                    except ValueError as error:
+                        print(error, file=sys.stderr)
+                        return 2
+                    print(decision)
+                    return 0
+
+
+                if __name__ == "__main__":
+                    raise SystemExit(main(sys.argv))
+          id: factory/scripts/decide-cycle.py
+          targetPath: factory/scripts/decide-cycle.py
+          type: SCRIPT
+        - content:
+            encoding: utf-8
+            inline: |
+                #!/usr/bin/env python3
                 """Create or reuse one safe task worktree for @you/full-flow."""
                 import json
                 import re
@@ -356,12 +395,12 @@ workers:
       name: full-flow-merger
       skipPermissions: true
       type: AGENT_WORKER
-    - body: 'You are a cycle gate with zero prior context. Read the complete cycle-control payload and the observable results of every task it depends on. Return exactly `complete` only when the payload requests completion and the project evidence shows no required work remains; otherwise return exactly `continue`. Do not add prose or infer success from missing evidence. Payload: {{ (index .Inputs 0).Payload }}'
-      model: ${plannerModel}
-      modelProvider: ${plannerProvider}
+    - args:
+        - factory/scripts/decide-cycle.py
+        - '{{ (index .Inputs 0).Payload }}'
+      command: python
       name: cycle-decider
-      skipPermissions: true
-      type: AGENT_WORKER
+      type: SCRIPT_WORKER
 workstations:
     - body: |
         You are the planning stage for one bounded delivery cycle. Assume zero prior

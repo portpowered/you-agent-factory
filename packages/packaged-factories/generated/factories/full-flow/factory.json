@@ -198,6 +198,15 @@
       {
         "content": {
           "encoding": "utf-8",
+          "inline": "#!/usr/bin/env python3\n\"\"\"Emit the planner's authored full-flow cycle route without model ambiguity.\"\"\"\n\nfrom __future__ import annotations\n\nimport sys\n\n\nVALID_DECISIONS = {\"continue\", \"complete\"}\n\n\ndef decide_cycle(payload: str) -\u003e str:\n    decision = payload.strip().lower()\n    if decision not in VALID_DECISIONS:\n        raise ValueError(\"cycle-control payload must be exactly 'continue' or 'complete'\")\n    return decision\n\n\ndef main(argv: list[str]) -\u003e int:\n    if len(argv) != 2:\n        print(\"usage: decide-cycle.py \u003ccontinue|complete\u003e\", file=sys.stderr)\n        return 2\n    try:\n        decision = decide_cycle(argv[1])\n    except ValueError as error:\n        print(error, file=sys.stderr)\n        return 2\n    print(decision)\n    return 0\n\n\nif __name__ == \"__main__\":\n    raise SystemExit(main(sys.argv))\n"
+        },
+        "id": "factory/scripts/decide-cycle.py",
+        "targetPath": "factory/scripts/decide-cycle.py",
+        "type": "SCRIPT"
+      },
+      {
+        "content": {
+          "encoding": "utf-8",
           "inline": "#!/usr/bin/env python3\n\"\"\"Create or reuse one safe task worktree for @you/full-flow.\"\"\"\nimport json\nimport re\nimport subprocess\nimport sys\nimport time\nfrom pathlib import Path\n\nSAFE_TASK = re.compile(r\"^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$\")\nSAFE_BRANCH = re.compile(r\"^[A-Za-z0-9][A-Za-z0-9._/-]{0,79}$\")\n\ndef run(root, *args):\n    result = subprocess.run([\"git\", *args], cwd=root, text=True, capture_output=True)\n    if result.returncode:\n        raise RuntimeError(result.stderr.strip() or result.stdout.strip())\n    return result.stdout.strip()\n\ndef persist_longpaths(root):\n    last_error = \"\"\n    for _ in range(20):\n        result = subprocess.run(\n            [\"git\", \"config\", \"core.longpaths\", \"true\"],\n            cwd=root,\n            text=True,\n            capture_output=True,\n        )\n        if result.returncode == 0:\n            return\n        last_error = result.stderr.strip() or result.stdout.strip()\n        # Parallel task setup processes can briefly contend on .git/config.lock.\n        # Give the lock owner a bounded opportunity to finish before retrying.\n        time.sleep(0.05)\n    raise RuntimeError(last_error or \"could not persist core.longpaths\")\n\ndef main():\n    if len(sys.argv) != 3 or not SAFE_TASK.fullmatch(sys.argv[1]) or not SAFE_BRANCH.fullmatch(sys.argv[2]) or \"..\" in sys.argv[1] or \"..\" in sys.argv[2]:\n        raise RuntimeError(\"safe task and base branch names are required\")\n    task, base = sys.argv[1], sys.argv[2]\n    root = Path(run(None, \"rev-parse\", \"--show-toplevel\"))\n    run(root, \"rev-parse\", \"--verify\", base)\n    target = root / \".claude\" / \"worktrees\" / task\n    if not (target / \".git\").exists():\n        target.parent.mkdir(parents=True, exist_ok=True)\n        exists = subprocess.run([\"git\", \"show-ref\", \"--verify\", \"--quiet\", f\"refs/heads/{task}\"], cwd=root).returncode == 0\n        args = [\"worktree\", \"add\", str(target), task] if exists else [\"worktree\", \"add\", \"-b\", task, str(target), base]\n        # Packaged invocations may run with an isolated HOME and therefore\n        # cannot rely on a customer's global Git-for-Windows configuration.\n        run(root, \"-c\", \"core.longpaths=true\", *args)\n    persist_longpaths(root)\n    print(json.dumps({\"status\":\"ready\",\"task\":task,\"base\":base,\"worktree\":str(target)}))\n\nif __name__ == \"__main__\":\n    try:\n        main()\n    except Exception as error:\n        print(f\"task worktree setup failed: {error}\", file=sys.stderr)\n        raise SystemExit(1)\n"
         },
         "id": "factory/scripts/setup-task-worktree.py",
@@ -339,12 +348,13 @@
       "type": "AGENT_WORKER"
     },
     {
-      "body": "You are a cycle gate with zero prior context. Read the complete cycle-control payload and the observable results of every task it depends on. Return exactly `complete` only when the payload requests completion and the project evidence shows no required work remains; otherwise return exactly `continue`. Do not add prose or infer success from missing evidence. Payload: {{ (index .Inputs 0).Payload }}",
-      "model": "${plannerModel}",
-      "modelProvider": "${plannerProvider}",
+      "args": [
+        "factory/scripts/decide-cycle.py",
+        "{{ (index .Inputs 0).Payload }}"
+      ],
+      "command": "python",
       "name": "cycle-decider",
-      "skipPermissions": true,
-      "type": "AGENT_WORKER"
+      "type": "SCRIPT_WORKER"
     }
   ],
   "workstations": [
