@@ -305,7 +305,7 @@ func (runner *fullFlowRunner) Run(_ context.Context, request platformprocess.Com
 		return fullFlowCodexResult("complete"), nil
 	default:
 		runner.mu.Lock()
-		runner.unexpected = prompt
+		runner.unexpected = fmt.Sprintf("command=%q args=%q prompt=%q", request.Command, request.Args, prompt)
 		runner.mu.Unlock()
 		return platformprocess.CommandResult{}, fmt.Errorf("unexpected full-flow prompt: %s", prompt)
 	}

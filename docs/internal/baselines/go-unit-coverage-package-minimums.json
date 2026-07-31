@@ -1539,7 +1539,47 @@
       "minimum": 94.59
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/inference",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/service",
+      "minimum": 100.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active unit coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The unit coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp/internal/service",
+      "minimum": 50.09
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp/wire",
+      "minimum": 100.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/builtins",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active unit coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The unit coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/builtins/internal/service",
+      "minimum": 78.57
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/builtins/wire",
       "minimum": 100.00
     },
     {
@@ -1849,6 +1889,10 @@
       "minimum": 45.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/proposalmaterialization",
+      "minimum": 83.33
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/internal/requestadmission",
       "minimum": 80.00
     },
@@ -1957,6 +2001,10 @@
       "minimum": 95.55
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/service",
+      "minimum": 71.71
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners",
       "exception": {
         "kind": "measurement",
@@ -1973,6 +2021,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/inference",
       "minimum": 94.31
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/mock",
+      "minimum": 54.05
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/internal/script",

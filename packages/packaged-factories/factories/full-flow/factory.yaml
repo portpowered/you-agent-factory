@@ -147,7 +147,7 @@ workers:
     promptFile: prompts/planner.md
   - name: task-worktree-setup
     type: SCRIPT_WORKER
-    command: python
+    command: python3
     args:
       - factory/scripts/setup-task-worktree.py
       - "{{ (index .Inputs 0).Name }}"
@@ -179,7 +179,7 @@ workers:
     promptFile: prompts/merger.md
   - name: cycle-decider
     type: SCRIPT_WORKER
-    command: python
+    command: python3
     args:
       - factory/scripts/decide-cycle.py
       - "{{ (index .Inputs 0).Payload }}"
