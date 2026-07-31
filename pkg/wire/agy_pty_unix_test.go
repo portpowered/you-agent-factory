@@ -9,6 +9,7 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	workers "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestPOSIXPTYSessionRun_CapturesCleanedOutput(t *testing.T) {
