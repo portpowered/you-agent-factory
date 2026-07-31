@@ -54,6 +54,11 @@ func (service *rootService) Invoke(cfg InvokeConfig) error {
 	if err != nil {
 		return mapModelsRootError(err)
 	}
+	if runtime := catalogResult.Model.ManagedRuntime; strings.TrimSpace(runtime.Identity) != "" {
+		if err := runtime.InvocationError(); err != nil {
+			return mapModelsRootError(err)
+		}
+	}
 	leaseResult, err := service.models.AcquireModelLease(cfg.Context, modelinference.AcquireModelLeaseRequest{
 		Scope: scope.Scope, Name: modelName, Holder: modelsCLIInvokeHolder,
 	})

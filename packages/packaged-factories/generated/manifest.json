@@ -239,11 +239,11 @@
       "slug": "plan-parallel",
       "json": {
         "locator": "generated/factories/plan-parallel/factory.json",
-        "sha256": "a969c7889eb9d42c8589e0e24e5c379fdf15e953002b5c17078a66d057553be6"
+        "sha256": "1a989e0f4ab76278e1f6404c27aa1a21eb89334e2b0dbab3cea729662c4b7430"
       },
       "yaml": {
         "locator": "generated/factories/plan-parallel/factory.yaml",
-        "sha256": "f3bf10581f3d62a5d051363ef58a0a8a3d57c36b7a20a67138e998fd6aaabefb"
+        "sha256": "68e814871d8b9af290f7972eca620efa603c3ef359d813828e669e3c700f44f5"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",
@@ -370,11 +370,11 @@
       "slug": "subagent",
       "json": {
         "locator": "generated/factories/subagent/factory.json",
-        "sha256": "41e92ef5759e746bf4fd4e0e31a489576dc5ae40cf26692ce56e16c570f58743"
+        "sha256": "7914a52bf786008c0cfb6628f804e004878f843cf5912c1913cd491563ac2cb2"
       },
       "yaml": {
         "locator": "generated/factories/subagent/factory.yaml",
-        "sha256": "ce82256500dcb5e76537f893e26f35d0d90eb4aba28726d01cd03f23a5de92c6"
+        "sha256": "41ca13b7b138b76ac6cbbc0220d34a92386aa1e7ec6b652408025d6a6a21ac44"
       },
       "description": {
         "type": "LOCALIZABLE_ASSET",

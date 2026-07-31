@@ -39,6 +39,8 @@ properties:
       such as `cursor-acp`. Extension identities use lowercase standardized
       syntax; built-in values such as `CLAUDE` and `CODEX` remain compatibility
       conveniences.
+  reasoningEffort:
+    $ref: './ReasoningEffort.yaml'
   modelLocality:
     allOf:
       - $ref: './WorkerModelLocality.yaml'

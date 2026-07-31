@@ -40,6 +40,13 @@ invocationSignature:
           description: Model for the subagent; omitted values use operator defaults.
           externalName: worker-model
           name: workerModel
+        - bindings:
+            - kind: NAMED
+          defaultValues:
+            - ""
+          description: Optional reasoning effort for the subagent; omitted values use the provider default.
+          externalName: worker-reasoning-effort
+          name: workerReasoningEffort
 name: subagent
 workTypes:
     - handlingBehavior:
@@ -69,6 +76,7 @@ workers:
       model: ${workerModel}
       modelProvider: ${workerProvider}
       name: subagent-worker
+      reasoningEffort: ${workerReasoningEffort}
       skipPermissions: true
       type: AGENT_WORKER
 workstations:

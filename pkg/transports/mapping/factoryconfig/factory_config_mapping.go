@@ -1166,6 +1166,7 @@ func workerDefinitionAPIFromInternalWithUsage(def *interfaces.FactoryWorkerConfi
 		AgentTools:       agentWorkerToolsAPIFromInternal(def.AgentTools),
 		Model:            stringPtrIfNotEmpty(def.Model),
 		ModelProvider:    workerModelProviderPtrIfNotEmpty(def.ModelProvider),
+		ReasoningEffort:  stringPtrIfNotEmpty(def.ReasoningEffort),
 		ModelLocality:    workerModelLocalityPtrIfNotEmpty(def.ModelLocality),
 		ExecutorProvider: workerProviderPtrIfNotEmpty(def.ExecutorProvider),
 		Operations:       modelOperationsAPIFromInternal(def.Operations),

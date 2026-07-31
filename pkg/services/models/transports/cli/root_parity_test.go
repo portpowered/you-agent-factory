@@ -68,7 +68,7 @@ func parityCatalogScopeOpener(t *testing.T) func(context.Context) (modelscli.Inv
 func parityRootService(t *testing.T, root stubModelsRoot) modelscli.Service {
 	t.Helper()
 	service := modelscli.NewService(modelscli.Config{
-		Models: root,
+		Models:           root,
 		OpenCatalogScope: parityCatalogScopeOpener(t),
 		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
 			return parityInvokeScope(t), nil
@@ -260,7 +260,7 @@ func TestRootAdapter_InvokeJSONResolvesThroughModelsRootCatalogAndInference(t *t
 
 	var out bytes.Buffer
 	if err := service.Invoke(modelscli.InvokeConfig{
-		Context: context.Background(),
+		Context:   context.Background(),
 		ModelName: "OMNIVOICE_Q4_K_M",
 		Operation: "TTS",
 		Text:      "hello world",
@@ -474,17 +474,17 @@ func TestRootAdapter_PullMapsClassifiedModelsRootFailure(t *testing.T) {
 	service := parityRootService(t, stubModelsRoot{
 		pullModel: func(context.Context, string) (modelinference.PullResult, error) {
 			return modelinference.PullResult{
-				ModelName:          "OMNIVOICE_Q4_K_M",
-				ManagedPullOutcome: "SOURCE_FETCH_FAILED",
-				ReadinessState:     "FAILED",
-			}, &modelinference.PullError{
-				Result: modelinference.PullResult{
 					ModelName:          "OMNIVOICE_Q4_K_M",
 					ManagedPullOutcome: "SOURCE_FETCH_FAILED",
 					ReadinessState:     "FAILED",
-				},
-				Cause: errors.New("source fetch failed"),
-			}
+				}, &modelinference.PullError{
+					Result: modelinference.PullResult{
+						ModelName:          "OMNIVOICE_Q4_K_M",
+						ManagedPullOutcome: "SOURCE_FETCH_FAILED",
+						ReadinessState:     "FAILED",
+					},
+					Cause: errors.New("source fetch failed"),
+				}
 		},
 	})
 	var out bytes.Buffer
@@ -552,7 +552,7 @@ func TestRootAdapter_InvokeMapsReadinessFailuresFromModelsRoot(t *testing.T) {
 				},
 			})
 			err := service.Invoke(modelscli.InvokeConfig{
-				Context: context.Background(),
+				Context:   context.Background(),
 				ModelName: "OMNIVOICE_Q4_K_M",
 				Operation: "TTS",
 				Text:      "hello world",
@@ -566,6 +566,53 @@ func TestRootAdapter_InvokeMapsReadinessFailuresFromModelsRoot(t *testing.T) {
 				t.Fatalf("Invoke() error = %v, want errors.Is %v", err, tt.wantIs)
 			}
 		})
+	}
+}
+
+func TestRootAdapter_InvokeRejectsCatalogRuntimeThatIsNotReady(t *testing.T) {
+	t.Parallel()
+
+	acquireCalled := false
+	service := modelscli.NewService(modelscli.Config{
+		Models: stubModelsRoot{
+			getCatalogModel: func(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
+				return modelinference.GetModelResult{Model: modelinference.Detail{
+					Summary: modelinference.Summary{
+						Name: "OMNIVOICE_Q4_K_M",
+						ManagedRuntime: modelinference.Runtime{
+							Identity:       "OMNIVOICE_Q4_K_M",
+							ReadinessState: modelinference.ReadinessStateMissing,
+							LifecycleState: modelinference.LifecycleStateNotInstalled,
+						},
+					},
+				}}, nil
+			},
+			acquireModelLease: func(context.Context, modelinference.AcquireModelLeaseRequest) (modelinference.AcquireModelLeaseResult, error) {
+				acquireCalled = true
+				return modelinference.AcquireModelLeaseResult{}, nil
+			},
+		},
+		OpenInvokeScope: func(context.Context, modelscli.InvokeConfig) (modelscli.InvokeRuntimeScope, error) {
+			return parityInvokeScope(t), nil
+		},
+	})
+
+	err := service.Invoke(modelscli.InvokeConfig{
+		Context:   context.Background(),
+		ModelName: "OMNIVOICE_Q4_K_M",
+		Operation: "TTS",
+		Text:      "hello world",
+		JSON:      true,
+		Output:    io.Discard,
+	})
+	if !errors.Is(err, modelinference.ErrMissing) {
+		t.Fatalf("Invoke() error = %v, want errors.Is ErrMissing", err)
+	}
+	if !strings.Contains(err.Error(), "pull or install") {
+		t.Fatalf("Invoke() error = %q, want bootstrap guidance", err.Error())
+	}
+	if acquireCalled {
+		t.Fatal("Invoke() acquired a model lease after catalog readiness failed")
 	}
 }
 
@@ -583,7 +630,7 @@ func TestRootAdapter_InvokeMapsModelsRootNotFound(t *testing.T) {
 		},
 	})
 	err := service.Invoke(modelscli.InvokeConfig{
-		Context: context.Background(),
+		Context:   context.Background(),
 		ModelName: "missing-model",
 		Operation: "TTS",
 		Text:      "hello world",

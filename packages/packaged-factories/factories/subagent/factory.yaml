@@ -28,6 +28,13 @@ invocationSignature:
         - ""
       bindings:
         - kind: NAMED
+    - name: workerReasoningEffort
+      description: Optional reasoning effort for the subagent; omitted values use the provider default.
+      externalName: worker-reasoning-effort
+      defaultValues:
+        - ""
+      bindings:
+        - kind: NAMED
 examples:
   - name: positional-input
     description:
@@ -59,6 +66,7 @@ workers:
     skipPermissions: true
     modelProvider: ${workerProvider}
     model: ${workerModel}
+    reasoningEffort: ${workerReasoningEffort}
     agentTools:
       policy: READ_ONLY
     promptFile: prompts/worker.md

@@ -3,6 +3,7 @@ package claude
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -65,6 +66,16 @@ func buildCommand(request providers.ExecuteRequest) (workers.CommandRequest, err
 	}
 	if strings.TrimSpace(request.Model) != "" {
 		args = append(args, "--model", strings.TrimSpace(request.Model))
+	}
+	effort, ok := providers.ReasoningEffort(request.ReasoningEffort).Canonical()
+	if !ok {
+		return workers.CommandRequest{}, fmt.Errorf("unsupported reasoning effort %q", request.ReasoningEffort)
+	}
+	if effort != "" {
+		if effort == "minimal" {
+			return workers.CommandRequest{}, fmt.Errorf(`Claude does not support reasoning effort "minimal"`)
+		}
+		args = append(args, "--effort", effort)
 	}
 	if request.ResumeSession != nil && strings.TrimSpace(request.ResumeSession.ID) != "" {
 		args = append(args, "--resume", strings.TrimSpace(request.ResumeSession.ID))

@@ -291,7 +291,8 @@ func externalRegistrationAttempt(registration providerinference.Registration) (e
 		Attempt: func(ctx context.Context, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
 			writer := &externalResponseWriter{}
 			err := registration.Integration.Invoke(ctx, providerinference.InvocationRequest{
-				ID: request.AttemptID, ModelID: request.Model, Prompt: request.UserMessage,
+				ID: request.AttemptID, ModelID: request.Model,
+				ReasoningEffort: request.ReasoningEffort, Prompt: request.UserMessage,
 			}, writer)
 			if err != nil {
 				return providers.ExecuteResult{}, providers.ExecuteFailure{Kind: providers.ExecuteFailureKindUnknown, Message: err.Error()}

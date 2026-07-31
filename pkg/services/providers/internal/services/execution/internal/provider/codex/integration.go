@@ -109,6 +109,7 @@ func executeRequestFromInvocation(request inference.InvocationRequest) providers
 		Provider:           providers.IDCodex,
 		AttemptID:          request.InvocationID(),
 		Model:              request.Model(),
+		ReasoningEffort:    execution.ReasoningEffort,
 		SkipPermissions:    execution.SkipPermissions,
 		SystemPrompt:       request.SystemPrompt(),
 		UserMessage:        request.UserMessage(),

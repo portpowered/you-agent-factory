@@ -46,10 +46,9 @@ func TestCLIContextCancellationStopsExternalWork(t *testing.T) {
 	args = append(args,
 		"run",
 		"--factory", factoryPath,
-		"--with-mock-workers",
+		"--with-mock-workers=" + mockWorkersPath,
 		"--no-record",
 		"--quiet",
-		mockWorkersPath,
 		prompt,
 	)
 
@@ -125,10 +124,9 @@ func TestCLIContextCancellationEmitsNoSuccessResult(t *testing.T) {
 	args = append(args,
 		"run",
 		"--factory", factoryPath,
-		"--with-mock-workers",
+		"--with-mock-workers=" + mockWorkersPath,
 		"--no-record",
 		"--quiet",
-		mockWorkersPath,
 		prompt,
 	)
 

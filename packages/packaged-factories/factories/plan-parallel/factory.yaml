@@ -46,6 +46,13 @@ invocationSignature:
         - ""
       bindings:
         - kind: NAMED
+    - name: executorReasoningEffort
+      description: Reasoning effort for planned task executors. Defaults to xhigh.
+      externalName: executor-reasoning-effort
+      defaultValues:
+        - xhigh
+      bindings:
+        - kind: NAMED
     - name: mergeProvider
       description: Model provider for final synthesis; omitted values use operator defaults.
       externalName: merge-provider
@@ -114,6 +121,7 @@ workers:
     type: AGENT_WORKER
     modelProvider: ${executorProvider}
     model: ${executorModel}
+    reasoningEffort: ${executorReasoningEffort}
     skipPermissions: true
     body: |-
       You are an isolated task executor with zero conversational context. Read the complete assigned Work payload rendered in the user message and relevant workspace instructions and source before acting.

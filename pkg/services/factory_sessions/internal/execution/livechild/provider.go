@@ -249,6 +249,7 @@ func providerInferenceRequestFromChild(
 		UserMessage:      req.Prompt,
 		Model:            req.Model,
 		ModelProvider:    req.ModelProvider,
+		ReasoningEffort:  req.ReasoningEffort,
 		OutputSchema:     outputSchema,
 		RunnerID:         runnerID,
 		ExecutorProvider: strings.TrimSpace(req.ExecutorProvider),

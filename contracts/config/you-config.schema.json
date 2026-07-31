@@ -155,13 +155,15 @@
         },
         "reasoningEffort": {
           "type": "string",
-          "pattern": "^[\\t-\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]*(?:[mM][iI][nN][iI][mM][aA][lL]|[lL][oO][wW]|[mM][eE][dD][iI][uU][mM]|[hH][iI][gG][hH])?[\\t-\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]*$",
+          "pattern": "^[\\t-\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]*(?:[mM][iI][nN][iI][mM][aA][lL]|[lL][oO][wW]|[mM][eE][dD][iI][uU][mM]|[hH][iI][gG][hH]|[xX][hH][iI][gG][hH]|[mM][aA][xX])?[\\t-\\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]*$",
           "description": "Optional reasoning effort level. Surrounding whitespace and letter case are normalized; an empty value is accepted.",
           "examples": [
             "",
             "low",
             "medium",
-            "high"
+            "high",
+            "xhigh",
+            "max"
           ]
         }
       }
@@ -737,7 +739,7 @@
       "workerPresets[].reasoningEffort": {
         "inventoryId": "workerPresets[].reasoningEffort",
         "jsonPath": "workerPresets[].reasoningEffort",
-        "defaultEmptyBehavior": "optional; empty value is accepted; supported values are minimal, low, medium, high",
+        "defaultEmptyBehavior": "optional; empty value is accepted; supported values are minimal, low, medium, high, xhigh, max",
         "parseOwner": "operator_settings",
         "persistenceOwner": "operator_settings",
         "strictness": "operator_settings generated GlobalConfig strict decode (unknown fields and trailing JSON rejected)",
@@ -751,14 +753,16 @@
             },
             "description": {
               "id": "config.worker-presets.reasoning-effort.description",
-              "canonicalEnglish": "Optional reasoning effort level. Empty value is accepted; supported values are minimal, low, medium, and high."
+              "canonicalEnglish": "Optional reasoning effort level. Empty value is accepted; supported values are minimal, low, medium, high, xhigh, and max."
             }
           },
           "examples": [
             "",
             "low",
             "medium",
-            "high"
+            "high",
+            "xhigh",
+            "max"
           ],
           "visibility": "public",
           "sourceHash": "e86e22b0cc80dc31e5ae9137dfd66f86a61957be6d71684ef364a36379aa5a76"

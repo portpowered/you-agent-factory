@@ -70,6 +70,7 @@ func invocationRequestFromExecute(
 		WorkerType:         strings.TrimSpace(request.WorkerType),
 		WorkstationType:    strings.TrimSpace(request.WorkstationName),
 		Model:              strings.TrimSpace(request.Model),
+		ReasoningEffort:    canonicalReasoningEffort(request.ReasoningEffort),
 		SystemPrompt:       request.SystemPrompt,
 		UserMessage:        request.UserMessage,
 		InputTokens:        cloneInputTokens(request.InputTokens),

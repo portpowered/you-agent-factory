@@ -60,11 +60,10 @@ func TestCLIRunNamedFactory(t *testing.T) {
 		cmd := processHarness.CommandContext(ctx,
 			"run",
 			"--named", runWiringNamedFactoryName,
-			"--with-mock-workers",
+			"--with-mock-workers=" + mockWorkersPath,
 			"--no-record",
 			"--server", baseURL,
 			"--quiet",
-			mockWorkersPath,
 			prompt,
 		)
 		cmd.Dir = unrelatedWorkingDir
@@ -118,11 +117,10 @@ func TestCLIRunNamedFactory(t *testing.T) {
 		cmd := processHarness.CommandContext(ctx,
 			"run",
 			"--named", interfaces.PackagedGoalFactoryName,
-			"--with-mock-workers",
+			"--with-mock-workers=" + mockWorkersPath,
 			"--no-record",
 			"--server", baseURL,
 			"--quiet",
-			mockWorkersPath,
 			goalText,
 		)
 		cmd.Dir = unrelatedWorkingDir
@@ -223,11 +221,10 @@ func TestCLIRunFactoryByPath(t *testing.T) {
 	cmd := processHarness.CommandContext(ctx,
 		"run",
 		"--factory", factoryPath,
-		"--with-mock-workers",
+		"--with-mock-workers=" + mockWorkersPath,
 		"--no-record",
 		"--server", baseURL,
 		"--quiet",
-		mockWorkersPath,
 		prompt,
 	)
 	cmd.Dir = factoryDir
@@ -274,11 +271,10 @@ func TestCLIRunFactoryWritesPrimaryResultFromStdin(t *testing.T) {
 	cmd := processHarness.CommandContext(ctx,
 		"run",
 		"--factory", factoryPath,
-		"--with-mock-workers",
+		"--with-mock-workers=" + mockWorkersPath,
 		"--no-record",
 		"--server", baseURL,
 		"--quiet",
-		mockWorkersPath,
 	)
 	cmd.Dir = factoryDir
 	cmd.Stdin = strings.NewReader(prompt)
@@ -323,11 +319,10 @@ func TestCLIRunRejectsConflictingPositionalAndStdinInput(t *testing.T) {
 	cmd := processHarness.CommandContext(ctx,
 		"run",
 		"--factory", factoryPath,
-		"--with-mock-workers",
+		"--with-mock-workers=" + mockWorkersPath,
 		"--no-record",
 		"--server", baseURL,
 		"--quiet",
-		mockWorkersPath,
 		"from positional",
 	)
 	cmd.Dir = factoryDir
@@ -374,11 +369,10 @@ func TestCLIRunFailureWritesNoSuccessPayloadToStdout(t *testing.T) {
 	cmd := processHarness.CommandContext(ctx,
 		"run",
 		"--factory", factoryPath,
-		"--with-mock-workers",
+		"--with-mock-workers=" + mockWorkersPath,
 		"--no-record",
 		"--server", baseURL,
 		"--quiet",
-		mockWorkersPath,
 		"trigger unresolved result",
 	)
 	cmd.Dir = factoryDir
@@ -648,10 +642,9 @@ func runRunWiringFactoryCLI(
 	args := []string{
 		"run",
 		"--factory", factoryPath,
-		"--with-mock-workers",
+		"--with-mock-workers=" + mockWorkersPath,
 		"--no-record",
 		"--quiet",
-		mockWorkersPath,
 	}
 	args = append(args, promptArgs...)
 

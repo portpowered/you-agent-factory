@@ -244,7 +244,7 @@ Reusable JavaScript child settings are operator-owned in
 
 Each preset supports a required, unique, non-empty `id` and required
 `modelProvider`; `model` and `reasoningEffort` are optional. Supported reasoning
-efforts are `minimal`, `low`, `medium`, and `high`. Reference a preset directly
+efforts are `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`. Reference a preset directly
 with `agent.run({preset: "careful-review", ...})`.
 
 Worker fields resolve independently. Highest precedence is an explicit

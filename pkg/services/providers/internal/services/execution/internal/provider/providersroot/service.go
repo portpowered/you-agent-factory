@@ -122,6 +122,7 @@ func inferenceRequest(request providers.ExecuteRequest) workers.ProviderInferenc
 		WorkerType:         strings.TrimSpace(request.WorkerType),
 		WorkstationType:    strings.TrimSpace(request.WorkstationName),
 		Model:              strings.TrimSpace(request.Model),
+		ReasoningEffort:    canonicalReasoningEffort(request.ReasoningEffort),
 		ModelProvider:      modelProviderForProviderIdentity(providerID),
 		SystemPrompt:       request.SystemPrompt,
 		UserMessage:        request.UserMessage,
@@ -136,6 +137,11 @@ func inferenceRequest(request providers.ExecuteRequest) workers.ProviderInferenc
 		infer.SessionID = request.ResumeSession.ID
 	}
 	return infer
+}
+
+func canonicalReasoningEffort(value string) string {
+	canonical, _ := providers.ReasoningEffort(value).Canonical()
+	return canonical
 }
 
 func modelProviderForProviderIdentity(providerID string) string {

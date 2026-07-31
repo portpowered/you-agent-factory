@@ -393,10 +393,28 @@ func TestAgentRunExecutor_RequestModelSelectionOverridesWorkerWithoutMutation(t 
 
 func TestEffectiveAgentRunWorkerDefinition_EmptyInterpolationPreservesOperatorOverride(t *testing.T) {
 	t.Run("authored placeholders resolve empty", func(t *testing.T) {
-		worker := &interfaces.FactoryWorkerConfig{Model: "${model}", ModelProvider: "${provider}"}
+		worker := &interfaces.FactoryWorkerConfig{
+			Model: "${model}", ModelProvider: "${provider}", ReasoningEffort: "${effort}",
+		}
 		effective := effectiveAgentRunWorkerDefinition(workerexecution.WorkstationExecutionRequest{}, worker)
-		if effective.Model != "" || effective.ModelProvider != "" {
-			t.Fatalf("effective provider/model = %q/%q, want empty resolved placeholders", effective.ModelProvider, effective.Model)
+		if effective.Model != "" || effective.ModelProvider != "" || effective.ReasoningEffort != "" {
+			t.Fatalf(
+				"effective provider/model/effort = %q/%q/%q, want empty resolved placeholders",
+				effective.ModelProvider,
+				effective.Model,
+				effective.ReasoningEffort,
+			)
+		}
+	})
+
+	t.Run("resolved effort overlays authored placeholder", func(t *testing.T) {
+		worker := &interfaces.FactoryWorkerConfig{ReasoningEffort: "${effort}"}
+		effective := effectiveAgentRunWorkerDefinition(
+			workerexecution.WorkstationExecutionRequest{ReasoningEffort: "xhigh"},
+			worker,
+		)
+		if effective.ReasoningEffort != "xhigh" {
+			t.Fatalf("effective effort = %q, want xhigh", effective.ReasoningEffort)
 		}
 	})
 

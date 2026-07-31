@@ -35,9 +35,10 @@ type ProviderSession struct {
 }
 
 type InvocationRequest struct {
-	ID      string
-	ModelID string
-	Prompt  string
+	ID              string
+	ModelID         string
+	ReasoningEffort string
+	Prompt          string
 }
 
 type Response struct {

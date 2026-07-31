@@ -76,10 +76,9 @@ func TestCLIWorkerFailureExitCode(t *testing.T) {
 	args = append(args,
 		"run",
 		"--named", "@you/goal",
-		"--with-mock-workers",
+		"--with-mock-workers=" + mockWorkersPath,
 		"--no-record",
 		"--quiet",
-		mockWorkersPath,
 		fmt.Sprintf("worker-failure-exit-%d", time.Now().UnixNano()),
 	)
 
@@ -142,10 +141,9 @@ func TestCLISuccessExitCode(t *testing.T) {
 	args = append(args,
 		"run",
 		"--named", "@you/goal",
-		"--with-mock-workers",
+		"--with-mock-workers=" + mockWorkersPath,
 		"--no-record",
 		"--quiet",
-		mockWorkersPath,
 		fmt.Sprintf("success-exit-%d", time.Now().UnixNano()),
 	)
 

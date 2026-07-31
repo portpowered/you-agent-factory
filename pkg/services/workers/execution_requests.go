@@ -118,6 +118,7 @@ type WorkstationExecutionRequest struct {
 	ModelBindings            []ResolvedModelOperationBinding `json:"model_bindings,omitempty"`
 	Model                    string                          `json:"model,omitempty"`
 	ModelProvider            string                          `json:"model_provider,omitempty"`
+	ReasoningEffort          string                          `json:"reasoning_effort,omitempty"`
 	SystemPrompt             string                          `json:"system_prompt,omitempty"`
 	UserMessage              string                          `json:"user_message,omitempty"`
 	OutputSchema             string                          `json:"output_schema,omitempty"`
@@ -149,6 +150,7 @@ type ProviderInferenceRequest struct {
 	WorkingDirectory             string                          `json:"working_directory,omitempty"`
 	Model                        string                          `json:"model,omitempty"`
 	ModelProvider                string                          `json:"model_provider,omitempty"`
+	ReasoningEffort              string                          `json:"reasoning_effort,omitempty"`
 	ModelLocality                string                          `json:"model_locality,omitempty"`
 	SessionID                    string                          `json:"session_id,omitempty"`
 	// SkipPermissions is the invocation-effective worker policy. Construction

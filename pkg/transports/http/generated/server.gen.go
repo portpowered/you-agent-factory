@@ -5546,6 +5546,9 @@ type ProviderSessionUnknownEvent struct {
 // ProviderTechnicalSupportLevel Maintainer-verified technical support posture for a provider integration. This value does not describe whether the provider is installed or ready on the current machine.
 type ProviderTechnicalSupportLevel string
 
+// ReasoningEffort Optional provider-neutral reasoning effort. Surrounding whitespace and letter case are normalized. Omit the field to preserve the selected provider and model default. Factory definitions may use an exact invocation-parameter placeholder such as `${executorReasoningEffort}`.
+type ReasoningEffort = string
+
 // Relation defines model for Relation.
 type Relation struct {
 	RequiredState  *string `json:"requiredState,omitempty"`
@@ -6537,6 +6540,9 @@ type Worker struct {
 
 	// Provider Built-in hosted provider identity when this worker uses repository-owned hosted execution.
 	Provider *HostedWorkerProvider `json:"provider,omitempty"`
+
+	// ReasoningEffort Optional provider-neutral reasoning effort. Surrounding whitespace and letter case are normalized. Omit the field to preserve the selected provider and model default. Factory definitions may use an exact invocation-parameter placeholder such as `${executorReasoningEffort}`.
+	ReasoningEffort *ReasoningEffort `json:"reasoningEffort,omitempty"`
 
 	// Resources Resource capacity this worker requires before it can be dispatched.
 	Resources *[]ResourceRequirement `json:"resources,omitempty"`

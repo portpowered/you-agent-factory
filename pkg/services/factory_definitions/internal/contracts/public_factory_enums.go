@@ -438,7 +438,7 @@ func CanonicalizeOperatorWorkerModelProviderInput(value string) (string, bool) {
 func CanonicalizeReasoningEffort(value string) (string, bool) {
 	canonical := strings.ToLower(strings.TrimSpace(value))
 	switch canonical {
-	case "", "minimal", "low", "medium", "high":
+	case "", "minimal", "low", "medium", "high", "xhigh", "max":
 		return canonical, true
 	default:
 		return "", false

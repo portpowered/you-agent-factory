@@ -42,10 +42,9 @@ func TestCLISuccessWritesPrimaryResultOnlyToStdout(t *testing.T) {
 	args = append(args,
 		"run",
 		"--named", "@you/goal",
-		"--with-mock-workers",
+		"--with-mock-workers=" + mockWorkersPath,
 		"--no-record",
 		"--quiet",
-		mockWorkersPath,
 		fmt.Sprintf("success-stdout-purity-%d", time.Now().UnixNano()),
 	)
 
@@ -120,10 +119,9 @@ func TestCLIFailureWritesDiagnosticToStderr(t *testing.T) {
 	args = append(args,
 		"run",
 		"--named", "@you/goal",
-		"--with-mock-workers",
+		"--with-mock-workers=" + mockWorkersPath,
 		"--no-record",
 		"--quiet",
-		mockWorkersPath,
 		fmt.Sprintf("failure-stderr-%d", time.Now().UnixNano()),
 	)
 
@@ -375,11 +373,11 @@ func appendGoalRunArgs(
 	args = append(args,
 		"run",
 		"--named", "@you/goal",
-		"--with-mock-workers",
+		"--with-mock-workers=" + mockWorkersPath,
 		"--no-record",
 	)
 	args = append(args, extraArgs...)
-	args = append(args, mockWorkersPath, prompt)
+	args = append(args, prompt)
 	return args
 }
 

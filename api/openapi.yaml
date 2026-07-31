@@ -8826,6 +8826,8 @@ components:
             - type: string
               pattern: ^\$\{[A-Za-z0-9_.-]+\}$
           description: 'Canonical provider identity used for model routing and provider diagnostics, or an exact invocation-parameter placeholder such as `${modelProvider}`. For `executorProvider: ACP`, this names the configured ACP integration, such as `cursor-acp`. Extension identities use lowercase standardized syntax; built-in values such as `CLAUDE` and `CODEX` remain compatibility conveniences.'
+        reasoningEffort:
+          $ref: '#/components/schemas/ReasoningEffort'
         modelLocality:
           allOf:
             - $ref: '#/components/schemas/WorkerModelLocality'
@@ -10175,7 +10177,7 @@ components:
     GlobalConfigWorkerPresetReasoningEffort:
       type: string
       description: Optional reasoning effort; surrounding whitespace and letter case are normalized, and an empty value is treated as unspecified.
-      pattern: "^[\t-\r \N\_  - \L\P  　]*(?:[mM][iI][nN][iI][mM][aA][lL]|[lL][oO][wW]|[mM][eE][dD][iI][uU][mM]|[hH][iI][gG][hH])?[\t-\r \N\_  - \L\P  　]*$"
+      pattern: "^[\t-\r \N\_  - \L\P  　]*(?:[mM][iI][nN][iI][mM][aA][lL]|[lL][oO][wW]|[mM][eE][dD][iI][uU][mM]|[hH][iI][gG][hH]|[xX][hH][iI][gG][hH]|[mM][aA][xX])?[\t-\r \N\_  - \L\P  　]*$"
     WorkRequest:
       type: object
       additionalProperties: false
@@ -10917,6 +10919,10 @@ components:
       description: Built-in repository-owned hosted worker providers supported by the public factory-config contract.
       enum:
         - LINEAR
+    ReasoningEffort:
+      description: Optional provider-neutral reasoning effort. Surrounding whitespace and letter case are normalized. Omit the field to preserve the selected provider and model default. Factory definitions may use an exact invocation-parameter placeholder such as `${executorReasoningEffort}`.
+      type: string
+      pattern: "^(?:[\t-\r \N\_  - \L\P  　]*(?:[mM][iI][nN][iI][mM][aA][lL]|[lL][oO][wW]|[mM][eE][dD][iI][uU][mM]|[hH][iI][gG][hH]|[xX][hH][iI][gG][hH]|[mM][aA][xX])?[\t-\r \N\_  - \L\P  　]*|\\$\\{[A-Za-z0-9_.-]+\\})$"
     HostedWorkerAuth:
       description: Hosted-worker authentication contract. V1 hosted workers accept only secret references rather than inline credentials or OAuth-style fields.
       type: object

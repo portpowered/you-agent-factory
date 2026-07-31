@@ -57,7 +57,6 @@ func provideRuntimeOpeningRequestFactory() runcli.RuntimeOpeningRequestFactory {
 		if cfg.Continuously {
 			mode = factorydefinitions.RuntimeModeService
 		}
-
 		request := &factorysessions.RuntimeOpeningRequest{
 			FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{
 				Directory:        cfg.Dir,
