@@ -41,6 +41,14 @@ func TestMapCommittedOwnerPackageWorkersMoveDestinations(t *testing.T) {
 			},
 		},
 		{
+			path: "pkg/services/workers/internal/service",
+			want: PackageMapping{
+				PackagePath: "pkg/services/workers/internal/service",
+				Disposition: DispositionMove,
+				Destination: "workers/internal",
+			},
+		},
+		{
 			path: "pkg/services/workers/construction",
 			want: PackageMapping{
 				PackagePath: "pkg/services/workers/construction",
@@ -231,4 +239,3 @@ func TestWorkersTopLevelUnexpectedCoveredByMoveRules(t *testing.T) {
 		}
 	}
 }
-

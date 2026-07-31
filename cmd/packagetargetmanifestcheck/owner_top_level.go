@@ -37,7 +37,6 @@ var productOwnerTopLevelSpecs = map[string]ownerTopLevelSpec{
 		unexpected: []string{
 			"clonetests",
 			"definition",
-			"service",
 			"systeminitializationtests",
 		},
 	},
