@@ -83,8 +83,9 @@ See `you docs workstations` for the matching `INFERENCE_RUN`, `AGENT_RUN`,
 - `INFERENCE_WORKER` can declare provider-agnostic `operations`, named input
   and output slots, `modelLocality`, and concrete `model` identity so
   `INFERENCE_RUN` workstations can validate compatibility before dispatch.
-- `AGENT_WORKER` supplies the model backend and shared system instructions for
-  prompt-rendered `AGENT_RUN` workstations.
+- `AGENT_WORKER` supplies the model backend, optional provider-neutral
+  `reasoningEffort`, and shared system instructions for prompt-rendered
+  `AGENT_RUN` workstations.
 - Current built-in `modelProvider` values are `CLAUDE`, `CODEX`, and
   `ANTIGRAVITY`.
 - Runner selection is separate from `modelProvider`. Use factory or
@@ -124,7 +125,7 @@ defaults. Script and hosted workers never receive operator model defaults.
 
 | Put it on the worker | Put it on the workstation |
 |----------------------|---------------------------|
-| `type`, `model`, `modelProvider`, `executorProvider` | `type`, `worker`, `promptFile`, prompt body |
+| `type`, `model`, `modelProvider`, `executorProvider`, `reasoningEffort` | `type`, `worker`, `promptFile`, prompt body |
 | `command`, `args` | `behavior`, `outputs`, `onFailure`, `onContinue`, `onRejection` |
 | `provider`, `auth.secretRef`, `linear.*` for hosted pollers | `outputSchema`, `limits.maxExecutionTime`, `limits.maxRetries` |
 | `resources`, `timeout`, `stopToken`, `skipPermissions` | `stopWords`, `workingDirectory`, `worktree`, `env` |
@@ -138,6 +139,25 @@ worker. Do not move hosted Linear provider config onto the workstation body.
 Use the worker when the setting belongs to the execution backend or shared
 worker identity. Use the workstation when the setting belongs to one workflow
 step, prompt rendering, or per-step execution behavior.
+
+### Reasoning effort
+
+Model-backed workers may set `reasoningEffort` to `minimal`, `low`, `medium`,
+`high`, `xhigh`, or `max`. Values are trimmed and normalized to lowercase.
+Omit the field to preserve the provider or selected model default. Invocation
+parameters may supply an exact placeholder such as
+`reasoningEffort: ${executorReasoningEffort}`; an unsupported resolved value
+fails before a provider process starts.
+
+The runtime keeps this contract provider-neutral. Codex translates it to
+`--config model_reasoning_effort="<effort>"`, while Claude translates it to
+`--effort <effort>`. Claude's `ultracode` session mode is not an effort value:
+configure that provider-specific workflow separately instead of setting
+`reasoningEffort`. ACP integrations such as `cursor-acp` advertise exact model
+identifiers that already encode effort, for example
+`cursor-grok-4.5-medium-fast`; select that model ID and omit
+`reasoningEffort`. Providers without an effort mapping reject a non-empty
+value; the current `ANTIGRAVITY` adapter does not accept a separate effort.
 
 ## Worker Types
 

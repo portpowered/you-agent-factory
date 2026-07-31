@@ -17,6 +17,7 @@ type Config struct {
 	Provider         string                    `json:"provider,omitempty" yaml:"provider,omitempty"`
 	Model            string                    `json:"model,omitempty" yaml:"model,omitempty"`
 	ModelProvider    string                    `json:"modelProvider,omitempty" yaml:"modelProvider,omitempty"`
+	ReasoningEffort  string                    `json:"reasoningEffort,omitempty" yaml:"reasoningEffort,omitempty"`
 	ModelLocality    string                    `json:"modelLocality,omitempty" yaml:"modelLocality,omitempty"`
 	ExecutorProvider string                    `json:"executorProvider,omitempty" yaml:"executorProvider,omitempty"`
 	Operations       []ModelOperation          `json:"operations,omitempty" yaml:"operations,omitempty"`

@@ -158,20 +158,39 @@ func (ae *AgentExecutor) Execute(ctx context.Context, request workerexecution.Wo
 }
 
 func effectiveWorkerDefinition(request workerexecution.WorkstationExecutionRequest, workerDef *interfaces.FactoryWorkerConfig) *interfaces.FactoryWorkerConfig {
-	if workerDef == nil || (request.Model == "" && request.ModelProvider == "" && request.ExecutorProvider == "") {
+	if workerDef == nil {
+		return workerDef
+	}
+	hasResolvedSelection := request.Model != "" ||
+		request.ModelProvider != "" ||
+		request.ReasoningEffort != "" ||
+		request.ExecutorProvider != "" ||
+		isInvocationPlaceholder(workerDef.Model) ||
+		isInvocationPlaceholder(workerDef.ModelProvider) ||
+		isInvocationPlaceholder(workerDef.ReasoningEffort) ||
+		isInvocationPlaceholder(workerDef.ExecutorProvider)
+	if !hasResolvedSelection {
 		return workerDef
 	}
 	effective := *workerDef
-	if request.Model != "" {
+	if request.Model != "" || isInvocationPlaceholder(workerDef.Model) {
 		effective.Model = request.Model
 	}
-	if request.ModelProvider != "" {
+	if request.ModelProvider != "" || isInvocationPlaceholder(workerDef.ModelProvider) {
 		effective.ModelProvider = request.ModelProvider
 	}
-	if request.ExecutorProvider != "" {
+	if request.ReasoningEffort != "" || isInvocationPlaceholder(workerDef.ReasoningEffort) {
+		effective.ReasoningEffort = request.ReasoningEffort
+	}
+	if request.ExecutorProvider != "" || isInvocationPlaceholder(workerDef.ExecutorProvider) {
 		effective.ExecutorProvider = request.ExecutorProvider
 	}
 	return &effective
+}
+
+func isInvocationPlaceholder(value string) bool {
+	trimmed := strings.TrimSpace(value)
+	return strings.HasPrefix(trimmed, "${") && strings.HasSuffix(trimmed, "}")
 }
 
 func (ae *AgentExecutor) canonicalInferenceOutput(raw string, workerDef *interfaces.FactoryWorkerConfig, operationName string) (string, error) {
@@ -356,6 +375,7 @@ func inferenceRequestForExecutionRequest(request workerexecution.WorkstationExec
 			RunnerID: request.RunnerID,
 			Source:   request.RunnerSelectionSource,
 		})
+		req.ReasoningEffort = workerDef.ReasoningEffort
 		req.ModelLocality = workerDef.ModelLocality
 		req.SessionID = workerDef.SessionID
 		if workerDef.SessionID != "" {

@@ -962,12 +962,17 @@ func TestCompletedChildResultsFromRecords_RestoresStoredLiveProviderOutput(t *te
 		{
 			Kind: factory.JavaScriptRecordKindChildDispatch,
 			ChildDispatch: &factory.JavaScriptChildDispatchRecord{
-				DispatchID:    "dispatch-1",
-				ChildIndex:    1,
-				Status:        factory.JavaScriptChildDispatchStatusCompleted,
-				Label:         "step-one",
-				ExecutionMode: factory.JavaScriptChildExecutionModeLive,
-				Output:        storedOutput,
+				DispatchID:      "dispatch-1",
+				ChildIndex:      1,
+				Status:          factory.JavaScriptChildDispatchStatusCompleted,
+				Label:           "step-one",
+				Preset:          "careful",
+				ModelProvider:   "codex",
+				Model:           "gpt-5.6-luna",
+				ReasoningEffort: "xhigh",
+				SkipPermissions: true,
+				ExecutionMode:   factory.JavaScriptChildExecutionModeLive,
+				Output:          storedOutput,
 			},
 		},
 	}
@@ -982,5 +987,12 @@ func TestCompletedChildResultsFromRecords_RestoresStoredLiveProviderOutput(t *te
 	}
 	if result.ExecutionMode != factory.JavaScriptChildExecutionModeLive {
 		t.Fatalf("executionMode = %q, want live-provider", result.ExecutionMode)
+	}
+	if result.Request.Preset != "careful" ||
+		result.Request.ModelProvider != "codex" ||
+		result.Request.Model != "gpt-5.6-luna" ||
+		result.Request.ReasoningEffort != "xhigh" ||
+		!result.Request.SkipPermissions {
+		t.Fatalf("restored child request = %#v, want retained execution selection", result.Request)
 	}
 }

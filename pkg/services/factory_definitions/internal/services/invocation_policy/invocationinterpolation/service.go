@@ -88,6 +88,9 @@ func InterpolateWorkerConfig(worker workerconfig.Config, args *work.InvocationAr
 	if next.ModelProvider, err = interpolateInvocationField(next.ModelProvider, args, "worker.modelProvider", false, readFile); err != nil {
 		return workerconfig.Config{}, err
 	}
+	if next.ReasoningEffort, err = interpolateInvocationField(next.ReasoningEffort, args, "worker.reasoningEffort", false, readFile); err != nil {
+		return workerconfig.Config{}, err
+	}
 	if next.ExecutorProvider, err = interpolateInvocationField(next.ExecutorProvider, args, "worker.executorProvider", false, readFile); err != nil {
 		return workerconfig.Config{}, err
 	}

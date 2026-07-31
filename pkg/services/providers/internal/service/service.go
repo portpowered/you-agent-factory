@@ -110,10 +110,43 @@ func (s *Service) Execute(
 	ctx context.Context,
 	request providers.ExecuteRequest,
 ) (providers.ExecuteResult, error) {
+	if err := request.Validate(); err != nil {
+		return providers.ExecuteResult{}, providers.ExecuteFailure{
+			Kind:    providers.ExecuteFailureKindInvalidRequest,
+			Message: err.Error(),
+		}
+	}
+	request.ReasoningEffort, _ = providers.ReasoningEffort(request.ReasoningEffort).Canonical()
 	if s.acp != nil {
 		if canonical, ok := s.acp.Resolve(request.Provider); ok {
+			if request.ReasoningEffort != "" {
+				return providers.ExecuteResult{}, providers.ExecuteFailure{
+					Kind: providers.ExecuteFailureKindInvalidRequest,
+					Message: fmt.Sprintf(
+						"ACP provider %q selects reasoning effort through its exact advertised model id; omit reasoningEffort and choose the intended model",
+						canonical,
+					),
+				}
+			}
 			request.Provider = canonical
 			return s.acp.Execute(ctx, canonical, request)
+		}
+	}
+	canonicalProvider, err := s.catalog.ResolveProviderID(request.Provider)
+	if err != nil {
+		return providers.ExecuteResult{}, err
+	}
+	request.Provider = canonicalProvider
+	if request.Provider == providers.IDClaude && request.ReasoningEffort == "minimal" {
+		return providers.ExecuteResult{}, providers.ExecuteFailure{
+			Kind:    providers.ExecuteFailureKindInvalidRequest,
+			Message: `Claude does not support reasoning effort "minimal"`,
+		}
+	}
+	if request.Provider == providers.IDAntigravity && request.ReasoningEffort != "" {
+		return providers.ExecuteResult{}, providers.ExecuteFailure{
+			Kind:    providers.ExecuteFailureKindInvalidRequest,
+			Message: "Agy does not support a separate reasoning effort",
 		}
 	}
 	return s.execution.Execute(ctx, request)

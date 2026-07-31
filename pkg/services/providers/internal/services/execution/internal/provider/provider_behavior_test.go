@@ -75,6 +75,52 @@ func TestClaudeProviderBehavior_BuildArgs(t *testing.T) {
 	}
 }
 
+func TestProviderBehaviorBuildArgsRejectsUnsupportedReasoningEffort(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		behavior providerBehavior
+		provider string
+		effort   string
+		want     string
+	}{
+		{
+			name:     "Claude rejects provider-unsupported minimal",
+			behavior: claudeProviderBehavior{logger: logging.NoopLogger{}},
+			provider: string(modelprovider.ProviderClaude),
+			effort:   " MINIMAL ",
+			want:     `does not support reasoning effort "minimal"`,
+		},
+		{
+			name:     "Claude rejects globally unsupported value",
+			behavior: claudeProviderBehavior{logger: logging.NoopLogger{}},
+			provider: string(modelprovider.ProviderClaude),
+			effort:   "extreme",
+			want:     `unsupported reasoning effort "extreme"`,
+		},
+		{
+			name:     "Codex rejects globally unsupported value",
+			behavior: codexProviderBehavior{logger: logging.NoopLogger{}},
+			provider: string(modelprovider.ProviderCodex),
+			effort:   "extreme",
+			want:     `unsupported reasoning effort "extreme"`,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := test.behavior.BuildArgs(context.Background(), workerexecution.ProviderInferenceRequest{
+				ModelProvider:   test.provider,
+				ReasoningEffort: test.effort,
+				UserMessage:     "hello",
+			}, false, nil)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("BuildArgs() error = %v, want %q", err, test.want)
+			}
+		})
+	}
+}
+
 func TestCodexProviderBehavior_BuildArgs(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
@@ -100,6 +146,16 @@ func TestCodexProviderBehavior_BuildArgs(t *testing.T) {
 			},
 			skipPermissions: true,
 			want:            []string{"exec", "--dangerously-bypass-approvals-and-sandbox", "--model", "gpt-5-codex", "-"},
+		},
+		{
+			name: "WithLunaXHighReasoningEffort",
+			req: workerexecution.ProviderInferenceRequest{
+				ModelProvider:   string(modelprovider.ProviderCodex),
+				Model:           "gpt-5.6-luna",
+				ReasoningEffort: " XHIGH ",
+				UserMessage:     "hello",
+			},
+			want: []string{"exec", "--model", "gpt-5.6-luna", "--config", `model_reasoning_effort="xhigh"`, "-"},
 		},
 		{
 			name: "WithWorkingDirectoryRetainsStdinPlaceholderOnly",

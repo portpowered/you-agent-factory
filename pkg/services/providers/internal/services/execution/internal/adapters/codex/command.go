@@ -3,6 +3,7 @@ package codex
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -58,6 +59,13 @@ func buildCommand(request providers.ExecuteRequest) (workers.CommandRequest, err
 	}
 	if strings.TrimSpace(request.Model) != "" {
 		args = append(args, "--model", strings.TrimSpace(request.Model))
+	}
+	effort, ok := providers.ReasoningEffort(request.ReasoningEffort).Canonical()
+	if !ok {
+		return workers.CommandRequest{}, fmt.Errorf("unsupported reasoning effort %q", request.ReasoningEffort)
+	}
+	if effort != "" {
+		args = append(args, "--config", `model_reasoning_effort="`+effort+`"`)
 	}
 	args = append(args, "-")
 	return commanddispatch.WorkersCommand(request, workers.CommandRequest{

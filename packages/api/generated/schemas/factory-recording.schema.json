@@ -3763,6 +3763,11 @@
       },
       "type": "object"
     },
+    "ReasoningEffort": {
+      "description": "Optional provider-neutral reasoning effort. Surrounding whitespace and letter case are normalized. Omit the field to preserve the selected provider and model default. Factory definitions may use an exact invocation-parameter placeholder such as `${executorReasoningEffort}`.",
+      "pattern": "^(?:[\t-\r    - \u2028\u2029  　]*(?:[mM][iI][nN][iI][mM][aA][lL]|[lL][oO][wW]|[mM][eE][dD][iI][uU][mM]|[hH][iI][gG][hH]|[xX][hH][iI][gG][hH]|[mM][aA][xX])?[\t-\r    - \u2028\u2029  　]*|\\$\\{[A-Za-z0-9_.-]+\\})$",
+      "type": "string"
+    },
     "Relation": {
       "additionalProperties": false,
       "properties": {
@@ -5091,6 +5096,9 @@
             }
           ],
           "description": "Built-in hosted provider identity when this worker uses repository-owned hosted execution."
+        },
+        "reasoningEffort": {
+          "$ref": "#/$defs/ReasoningEffort"
         },
         "resources": {
           "description": "Resource capacity this worker requires before it can be dispatched.",

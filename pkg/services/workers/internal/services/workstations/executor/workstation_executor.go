@@ -206,6 +206,18 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 			return *failed, nil
 		}
 	}
+	effort, effortOK := factorydefinitions.CanonicalizeReasoningEffort(workerDef.ReasoningEffort)
+	if !effortOK {
+		return workerexecution.WorkResult{
+			DispatchID:   dispatch.DispatchID,
+			TransitionID: dispatch.TransitionID,
+			Outcome:      workerexecution.OutcomeFailed,
+			Error:        fmt.Sprintf("worker reasoningEffort %q is unsupported", workerDef.ReasoningEffort),
+			Diagnostics:  invocationDiagnostics,
+			Metrics:      workerexecution.WorkMetrics{Duration: we.Now().Sub(start)},
+		}, nil
+	}
+	workerDef.ReasoningEffort = effort
 
 	resolvedContext, failed := we.resolveWorkstationExecutionContext(dispatch, workstationDef, start, logger)
 	if failed != nil {
@@ -653,6 +665,7 @@ func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch work.Wo
 		ModelBindings:            modelBindings,
 		Model:                    workerDef.Model,
 		ModelProvider:            workerDef.ModelProvider,
+		ReasoningEffort:          workerDef.ReasoningEffort,
 		SystemPrompt:             workerDef.Body,
 		UserMessage:              rendered,
 		OutputSchema:             workstationDef.OutputSchema,

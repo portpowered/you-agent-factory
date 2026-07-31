@@ -57,6 +57,31 @@ func TestAgentExecutor_UsesInjectedClockForWorkMetrics(t *testing.T) {
 	}
 }
 
+func TestEffectiveWorkerDefinitionClearsEmptyResolvedPlaceholders(t *testing.T) {
+	worker := &workerconfig.FactoryWorkerConfig{
+		Model:            "${model}",
+		ModelProvider:    "${provider}",
+		ReasoningEffort:  "${effort}",
+		ExecutorProvider: "${runner}",
+	}
+	effective := effectiveWorkerDefinition(workerexecution.WorkstationExecutionRequest{}, worker)
+	if effective.Model != "" ||
+		effective.ModelProvider != "" ||
+		effective.ReasoningEffort != "" ||
+		effective.ExecutorProvider != "" {
+		t.Fatalf(
+			"effective model/provider/effort/runner = %q/%q/%q/%q, want empty resolved placeholders",
+			effective.Model,
+			effective.ModelProvider,
+			effective.ReasoningEffort,
+			effective.ExecutorProvider,
+		)
+	}
+	if worker.ReasoningEffort != "${effort}" {
+		t.Fatalf("authored worker mutated: %#v", worker)
+	}
+}
+
 func (m *agentMockProvider) Infer(_ context.Context, req workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	m.lastReq = req
 	m.callCount++

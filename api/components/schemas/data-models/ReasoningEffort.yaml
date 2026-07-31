@@ -1,0 +1,7 @@
+description: >-
+  Optional provider-neutral reasoning effort. Surrounding whitespace and letter
+  case are normalized. Omit the field to preserve the selected provider and
+  model default. Factory definitions may use an exact invocation-parameter
+  placeholder such as `${executorReasoningEffort}`.
+type: string
+pattern: "^(?:[\t-\r \u0085\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]*(?:[mM][iI][nN][iI][mM][aA][lL]|[lL][oO][wW]|[mM][eE][dD][iI][uU][mM]|[hH][iI][gG][hH]|[xX][hH][iI][gG][hH]|[mM][aA][xX])?[\t-\r \u0085\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]*|\\$\\{[A-Za-z0-9_.-]+\\})$"

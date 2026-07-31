@@ -220,6 +220,9 @@ func effectiveAgentRunWorkerDefinition(request workerexecution.WorkstationExecut
 	if request.ModelProvider != "" || isInvocationInterpolation(workerDef.ModelProvider) {
 		effective.ModelProvider = request.ModelProvider
 	}
+	if request.ReasoningEffort != "" || isInvocationInterpolation(workerDef.ReasoningEffort) {
+		effective.ReasoningEffort = request.ReasoningEffort
+	}
 	return &effective
 }
 
@@ -270,6 +273,7 @@ func agentRunInferenceRequest(
 	if workerDef != nil {
 		req.Model = workerDef.Model
 		req.ModelProvider = workerDef.ModelProvider
+		req.ReasoningEffort = workerDef.ReasoningEffort
 		req.ModelLocality = workerDef.ModelLocality
 		req.SessionID = workerDef.SessionID
 	}

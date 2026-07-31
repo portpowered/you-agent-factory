@@ -9,12 +9,15 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -79,6 +82,78 @@ func TestPackagedSubagentStreamsChildResponseEvents(t *testing.T) {
 	assertPackagedSubagentChildResponseEvents(t, responseEvents)
 }
 
+func TestPackagedSubagentPropagatesLunaXHighReasoningEffort(t *testing.T) {
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: support.CodexSuccessStdout("review complete"),
+	})
+	response := runPackagedSubagentProviderCLI(t, runner,
+		"--worker-provider", "CODEX",
+		"--worker-model", "gpt-5.6-luna",
+		"--worker-reasoning-effort", "xhigh",
+		"--to", "review the implementation",
+	)
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("response = %#v, want completed", response)
+	}
+	want := []string{
+		"exec", "--json", "--dangerously-bypass-approvals-and-sandbox",
+		"--model", "gpt-5.6-luna",
+		"--config", `model_reasoning_effort="xhigh"`,
+		"-",
+	}
+	if got := runner.LastRequest().Args; !reflect.DeepEqual(got, want) {
+		t.Fatalf("subagent command args = %#v, want %#v", got, want)
+	}
+}
+
+func TestPackagedSubagentOmittedReasoningEffortPreservesProviderDefault(t *testing.T) {
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: support.CodexSuccessStdout("review complete"),
+	})
+	response := runPackagedSubagentProviderCLI(t, runner,
+		"--worker-provider", "CODEX",
+		"--worker-model", "gpt-5.6-luna",
+		"--to", "review the implementation",
+	)
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("response = %#v, want completed", response)
+	}
+	want := []string{
+		"exec", "--json", "--dangerously-bypass-approvals-and-sandbox",
+		"--model", "gpt-5.6-luna",
+		"-",
+	}
+	if got := runner.LastRequest().Args; !reflect.DeepEqual(got, want) {
+		t.Fatalf("subagent command args = %#v, want provider default without effort config %#v", got, want)
+	}
+}
+
+func runPackagedSubagentProviderCLI(
+	t *testing.T,
+	runner platformprocess.CommandRunner,
+	factoryArgs ...string,
+) factoryapi.InvocationResponse {
+	t.Helper()
+	homeDir := t.TempDir()
+	support.InstallPackagedFactory(t, homeDir, factorydefinitions.PackagedSubagentFactoryName)
+	args := []string{
+		"you", "--json", "run",
+		"--named", factorydefinitions.PackagedSubagentFactoryName,
+		"--no-record",
+	}
+	args = append(args, factoryArgs...)
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.WorkingDirectory = t.TempDir()
+	if err := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner}).Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s", args, err, inputs.Stdout(), inputs.Stderr())
+	}
+	if inputs.Stderr() != "" {
+		t.Fatalf("stderr = %q, want empty successful-run stderr", inputs.Stderr())
+	}
+	return support.DecodeInvocationResponseJSON(t, inputs.Stdout())
+}
+
 // TestPackagedSubagentChildFailureReturnsStableFailure proves that packaged
 // @you/subagent invocation returns a stable failed public terminal outcome when
 // the child worker rejects, without emitting a success primary result for the
@@ -139,8 +214,16 @@ func postPackagedSubagentInvocation(
 	requestText string,
 ) factoryapi.InvocationResponse {
 	t.Helper()
+	return postPackagedSubagentArgs(t, serverURL, map[string]interface{}{"input": requestText})
+}
 
-	body, err := json.Marshal(packagedSubagentTextInvocationRequest(requestText))
+func postPackagedSubagentArgs(
+	t *testing.T,
+	serverURL string,
+	args map[string]interface{},
+) factoryapi.InvocationResponse {
+	t.Helper()
+	body, err := json.Marshal(factoryapi.InvocationRequest{Args: &args})
 	if err != nil {
 		t.Fatalf("marshal invocation request: %v", err)
 	}
@@ -273,8 +356,9 @@ func runHermeticPackagedSubagentInvocation(t *testing.T, requestText string) (st
 	args := []string{
 		"you", "run",
 		"--named", factorydefinitions.PackagedSubagentFactoryName,
-		"--with-mock-workers", "--no-record", "--quiet",
-		mockWorkersPath, requestText,
+		"--with-mock-workers", mockWorkersPath,
+		"--no-record", "--quiet",
+		requestText,
 	}
 	inputs := support.FakeInputs(t.Context(), args)
 	inputs.Input.Env = environment

@@ -31,6 +31,7 @@ type ExecuteInput struct {
 	WorkerType         string            `json:"workerType,omitempty"`
 	WorkstationName    string            `json:"workstationName,omitempty"`
 	Model              string            `json:"model,omitempty"`
+	ReasoningEffort    string            `json:"reasoningEffort,omitempty"`
 	SkipPermissions    bool              `json:"skipPermissions,omitempty"`
 	SystemPrompt       string            `json:"systemPrompt,omitempty"`
 	UserMessage        string            `json:"userMessage,omitempty"`
@@ -50,6 +51,7 @@ func (input ExecuteInput) executeRequest() providers.ExecuteRequest {
 		WorkerType:         input.WorkerType,
 		WorkstationName:    input.WorkstationName,
 		Model:              input.Model,
+		ReasoningEffort:    input.ReasoningEffort,
 		SkipPermissions:    input.SkipPermissions,
 		SystemPrompt:       input.SystemPrompt,
 		UserMessage:        input.UserMessage,

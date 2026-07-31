@@ -221,6 +221,7 @@ func providerRequest(request workers.RunnerExecutionRequest) providers.ExecuteRe
 		WorkerType:         request.WorkerType,
 		WorkstationName:    request.WorkstationType,
 		Model:              request.Model,
+		ReasoningEffort:    request.ReasoningEffort,
 		SkipPermissions:    request.SkipPermissions,
 		SystemPrompt:       request.SystemPrompt,
 		UserMessage:        request.UserMessage,

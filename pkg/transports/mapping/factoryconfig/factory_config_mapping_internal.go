@@ -582,6 +582,7 @@ func workerInternalFromAPI(worker factoryapi.Worker) interfaces.FactoryWorkerCon
 		Provider:         internalFactoryHostedWorkerProviderFromPublic(string(valueOrEmpty(worker.Provider))),
 		Model:            stringValue(worker.Model),
 		ModelProvider:    internalFactoryWorkerModelProviderFromPublic(worker.ModelProvider),
+		ReasoningEffort:  stringValue(worker.ReasoningEffort),
 		ModelLocality:    internalFactoryWorkerModelLocalityFromPublic(worker.ModelLocality),
 		ExecutorProvider: internalFactoryWorkerProviderFromPublic(worker.ExecutorProvider),
 		Operations:       modelOperationsInternalFromAPI(worker.Operations),

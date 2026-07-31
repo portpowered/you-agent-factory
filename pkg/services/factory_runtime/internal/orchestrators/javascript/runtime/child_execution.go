@@ -63,7 +63,6 @@ type ChildExecutor interface {
 // highest-precedence source that supplies it. It performs no IO or mutation.
 func ResolveChildWorkerSettings(req ChildExecutionRequest, agents map[string]interfaces.FactoryOrchestratorJavaScriptAgent, config WorkerSettingsConfig) (ChildExecutionRequest, error) {
 	explicitPreset := strings.TrimSpace(req.Preset)
-	explicitEffort := strings.TrimSpace(req.ReasoningEffort)
 	factoryPreset := ""
 	if agent, ok := agents[strings.TrimSpace(req.AgentID)]; ok {
 		factoryPreset = strings.TrimSpace(agent.Preset)
@@ -106,9 +105,7 @@ func ResolveChildWorkerSettings(req ChildExecutionRequest, agents map[string]int
 		if !ok {
 			return ChildExecutionRequest{}, fmt.Errorf("agent.run() has unsupported effective reasoningEffort %q", req.ReasoningEffort)
 		}
-		if explicitEffort == "" {
-			req.ReasoningEffort = effort
-		}
+		req.ReasoningEffort = effort
 	}
 	return req, nil
 }
@@ -487,8 +484,14 @@ func childExecutionResultFromRecord(child ChildDispatchRecord) ChildExecutionRes
 		ProviderSessionRef: child.ProviderSessionRef,
 		Output:             output,
 		Request: ChildExecutionRequest{
-			Label: child.Label,
-			Model: child.Model,
+			Label:           child.Label,
+			Preset:          child.Preset,
+			ModelProvider:   child.ModelProvider,
+			Model:           child.Model,
+			ReasoningEffort: child.ReasoningEffort,
+			SkipPermissions: child.SkipPermissions,
+			Command:         child.Command,
+			Sandbox:         child.Sandbox,
 		},
 	}
 }

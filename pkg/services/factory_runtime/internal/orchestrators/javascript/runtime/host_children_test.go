@@ -112,7 +112,7 @@ func TestResolveChildWorkerSettings_FieldByFieldPrecedence(t *testing.T) {
 		name      string
 		req, want factory.JavaScriptChildExecutionRequest
 	}{
-		{"explicit fields", factory.JavaScriptChildExecutionRequest{ModelProvider: "kiro-cli", Model: "explicit-model", ReasoningEffort: "minimal"}, factory.JavaScriptChildExecutionRequest{ModelProvider: "kiro-cli", Model: "explicit-model", ReasoningEffort: "minimal"}},
+		{"explicit fields", factory.JavaScriptChildExecutionRequest{ModelProvider: "kiro-cli", Model: "explicit-model", ReasoningEffort: " XHIGH "}, factory.JavaScriptChildExecutionRequest{ModelProvider: "kiro-cli", Model: "explicit-model", ReasoningEffort: "xhigh"}},
 		{"child preset", factory.JavaScriptChildExecutionRequest{Preset: "child"}, factory.JavaScriptChildExecutionRequest{Preset: "child", ModelProvider: "claude", Model: "child-model", ReasoningEffort: "high"}},
 		{"factory preset", factory.JavaScriptChildExecutionRequest{AgentID: "reviewer"}, factory.JavaScriptChildExecutionRequest{AgentID: "reviewer", Preset: "factory", ModelProvider: "codex", Model: "factory-model", ReasoningEffort: "low"}},
 		{"mixed fields", factory.JavaScriptChildExecutionRequest{AgentID: "reviewer", Preset: "child", Model: "explicit-model"}, factory.JavaScriptChildExecutionRequest{AgentID: "reviewer", Preset: "child", ModelProvider: "claude", Model: "explicit-model", ReasoningEffort: "high"}},

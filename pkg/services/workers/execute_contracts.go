@@ -75,9 +75,10 @@ type ProviderReference struct {
 
 // ModelReference is a detached model identity reference.
 type ModelReference struct {
-	Name     string
-	Provider string
-	Locality string
+	Name            string
+	Provider        string
+	ReasoningEffort string
+	Locality        string
 }
 
 // PromptPolicy carries resolved prompt material for one attempt.

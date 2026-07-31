@@ -150,3 +150,23 @@ func TestExecuteContract_Characterization_TypedFailures(t *testing.T) {
 		t.Fatalf("invalid attempt Execute() error = %v, want ErrExecuteFailed", err)
 	}
 }
+
+func TestExecuteRequestReasoningEffortValidation(t *testing.T) {
+	t.Parallel()
+
+	request := providers.ExecuteRequest{
+		Provider:        providers.IDCodex,
+		AttemptID:       "attempt-effort",
+		ReasoningEffort: " XHIGH ",
+	}
+	if err := request.Validate(); err != nil {
+		t.Fatalf("Validate(xhigh) = %v", err)
+	}
+	if got, ok := providers.ReasoningEffort(request.ReasoningEffort).Canonical(); !ok || got != "xhigh" {
+		t.Fatalf("ReasoningEffort.Canonical() = %q, %t; want xhigh, true", got, ok)
+	}
+	request.ReasoningEffort = "extreme"
+	if err := request.Validate(); err == nil || !strings.Contains(err.Error(), "unsupported reasoning effort") {
+		t.Fatalf("Validate(extreme) = %v, want unsupported reasoning effort", err)
+	}
+}

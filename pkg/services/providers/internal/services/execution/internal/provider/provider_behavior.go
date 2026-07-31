@@ -8,6 +8,7 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 
@@ -140,6 +141,16 @@ func (b claudeProviderBehavior) BuildArgs(_ context.Context, req workerexecution
 	if req.Model != "" {
 		args = append(args, "--model", req.Model)
 	}
+	effort, ok := providers.ReasoningEffort(req.ReasoningEffort).Canonical()
+	if !ok {
+		return nil, fmt.Errorf("unsupported reasoning effort %q", req.ReasoningEffort)
+	}
+	if effort != "" {
+		if effort == "minimal" {
+			return nil, fmt.Errorf(`Claude does not support reasoning effort "minimal"`)
+		}
+		args = append(args, "--effort", effort)
+	}
 	if req.SessionID != "" {
 		logger.Info("inferencer: resuming claude session")
 		args = append(args, "--resume", req.SessionID)
@@ -167,6 +178,13 @@ func (b codexProviderBehavior) BuildArgs(ctx context.Context, req workerexecutio
 
 	if req.Model != "" {
 		args = append(args, "--model", req.Model)
+	}
+	effort, ok := providers.ReasoningEffort(req.ReasoningEffort).Canonical()
+	if !ok {
+		return nil, fmt.Errorf("unsupported reasoning effort %q", req.ReasoningEffort)
+	}
+	if effort != "" {
+		args = append(args, "--config", `model_reasoning_effort="`+effort+`"`)
 	}
 	imageArgs, err := codexImageArgs(ctx, req, buildCtx)
 	if err != nil {

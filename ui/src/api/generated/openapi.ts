@@ -4381,6 +4381,7 @@ export interface components {
       model?: string;
       /** @description Canonical provider identity used for model routing and provider diagnostics, or an exact invocation-parameter placeholder such as `${modelProvider}`. For `executorProvider: ACP`, this names the configured ACP integration, such as `cursor-acp`. Extension identities use lowercase standardized syntax; built-in values such as `CLAUDE` and `CODEX` remain compatibility conveniences. */
       modelProvider?: components["schemas"]["ProviderIdentity"] | string;
+      reasoningEffort?: components["schemas"]["ReasoningEffort"];
       /** @description Provider locality for this model capability declaration. Use `LOCAL` for embedded or host-managed inference and `CLOUD` for remote provider execution. */
       modelLocality?: components["schemas"]["WorkerModelLocality"];
       /** @description Execution mechanism. Use `ACP` for ACP-backed workers and put the configured integration identity (for example `cursor-acp`) in modelProvider. `SCRIPT_WRAP` remains the command-wrapper compatibility value; legacy named executor identities remain accepted during migration. */
@@ -5463,6 +5464,8 @@ export interface components {
      * @enum {string}
      */
     HostedWorkerProvider: HostedWorkerProvider;
+    /** @description Optional provider-neutral reasoning effort. Surrounding whitespace and letter case are normalized. Omit the field to preserve the selected provider and model default. Factory definitions may use an exact invocation-parameter placeholder such as `${executorReasoningEffort}`. */
+    ReasoningEffort: string;
     /** @description Hosted-worker authentication contract. V1 hosted workers accept only secret references rather than inline credentials or OAuth-style fields. */
     HostedWorkerAuth: {
       /** @description Referenced secret name that resolves the hosted provider API key at runtime. */

@@ -96,6 +96,38 @@ func TestPTYEffectRequiresAllocator(t *testing.T) {
 	}
 }
 
+func TestPTYEffectRejectsSeparateReasoningEffort(t *testing.T) {
+	t.Parallel()
+
+	factoryRoot := t.TempDir()
+	executable := filepath.Join(factoryRoot, "agy.exe")
+	if err := os.WriteFile(executable, []byte("stub"), 0o755); err != nil {
+		t.Fatalf("write executable: %v", err)
+	}
+	allocator := &stubAllocator{}
+	effect := agy.NewPTYEffect(agy.PTYEffectOptions{
+		FactoryRoot:            factoryRoot,
+		Allocator:              allocator,
+		Executable:             executable,
+		ExecutableDependencies: executableDependencies(nil, executable),
+	})
+	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
+		Provider:        providers.IDAntigravity,
+		AttemptID:       "dispatch-agy-effort",
+		ReasoningEffort: "xhigh",
+		UserMessage:     "review",
+	}, func([]byte) error { return nil })
+	var failure execution.AttemptFailure
+	if !errors.As(err, &failure) ||
+		failure.NativeError == nil ||
+		!strings.Contains(failure.NativeError.Error(), "does not support a separate reasoning effort") {
+		t.Fatalf("Execute() error = %v, want unsupported reasoning effort", err)
+	}
+	if len(allocator.sessions) != 0 {
+		t.Fatalf("PTY allocations = %d, want none", len(allocator.sessions))
+	}
+}
+
 func TestPTYEffectBuildsArgvWorkspaceAndEnvironment(t *testing.T) {
 	t.Parallel()
 

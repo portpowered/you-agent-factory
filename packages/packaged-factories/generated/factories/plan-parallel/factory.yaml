@@ -55,6 +55,13 @@ invocationSignature:
         - bindings:
             - kind: NAMED
           defaultValues:
+            - xhigh
+          description: Reasoning effort for planned task executors. Defaults to xhigh.
+          externalName: executor-reasoning-effort
+          name: executorReasoningEffort
+        - bindings:
+            - kind: NAMED
+          defaultValues:
             - ""
           description: Model provider for final synthesis; omitted values use operator defaults.
           externalName: merge-provider
@@ -119,6 +126,7 @@ workers:
       model: ${executorModel}
       modelProvider: ${executorProvider}
       name: parallel-executor
+      reasoningEffort: ${executorReasoningEffort}
       skipPermissions: true
       type: AGENT_WORKER
     - body: |-

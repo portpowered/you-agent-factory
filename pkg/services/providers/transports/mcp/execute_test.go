@@ -17,6 +17,7 @@ const testExecuteInputJSON = `{
 	"workerType":"agent",
 	"workstationName":"ws-1",
 	"model":"gpt-test",
+	"reasoningEffort":"xhigh",
 	"skipPermissions":true,
 	"systemPrompt":"system",
 	"userMessage":"hello",
@@ -63,6 +64,7 @@ func TestBind_ExecuteSuccessReturnsDetachedResultFromInjectedRoot(t *testing.T) 
 			if request.WorkerType != "agent" ||
 				request.WorkstationName != "ws-1" ||
 				request.Model != "gpt-test" ||
+				request.ReasoningEffort != "xhigh" ||
 				!request.SkipPermissions ||
 				request.SystemPrompt != "system" ||
 				request.UserMessage != "hello" ||

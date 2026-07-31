@@ -245,7 +245,7 @@ func validateWorkerPresets(presets []WorkerPreset) ([]WorkerPreset, error) {
 		}
 		effort, ok := interfaces.CanonicalizeReasoningEffort(preset.ReasoningEffort)
 		if !ok {
-			return nil, fmt.Errorf("workerPresets[%d] %q has unsupported reasoningEffort %q: accepted values are minimal, low, medium, high", i, id, preset.ReasoningEffort)
+			return nil, fmt.Errorf("workerPresets[%d] %q has unsupported reasoningEffort %q: accepted values are minimal, low, medium, high, xhigh, max", i, id, preset.ReasoningEffort)
 		}
 		validated[i] = WorkerPreset{
 			ID:              id,

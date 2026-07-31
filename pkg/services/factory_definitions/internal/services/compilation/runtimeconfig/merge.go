@@ -38,6 +38,7 @@ func applyRuntimeDefinitions(
 	runtimeDefinitions factorydefinitions.RuntimeDefinitionLookup,
 ) error {
 	for index := range factoryConfig.Workers {
+		normalizeCanonicalWorkerRuntime(&factoryConfig.Workers[index])
 		definition, ok := runtimeDefinitions.Worker(factoryConfig.Workers[index].Name)
 		if !ok || definition == nil {
 			continue
@@ -84,6 +85,13 @@ func applyWorkerRuntimeDefinition(
 	if runtimeDefinition.ModelProvider != "" {
 		worker.ModelProvider = runtimeDefinition.ModelProvider
 	}
+	if effort := strings.TrimSpace(runtimeDefinition.ReasoningEffort); effort != "" {
+		if canonical, ok := factorydefinitions.CanonicalizeReasoningEffort(effort); ok {
+			worker.ReasoningEffort = canonical
+		} else {
+			worker.ReasoningEffort = runtimeDefinition.ReasoningEffort
+		}
+	}
 	if runtimeDefinition.ModelLocality != "" {
 		worker.ModelLocality = runtimeDefinition.ModelLocality
 	}
@@ -128,6 +136,15 @@ func applyWorkerRuntimeDefinition(
 			[]factorydefinitions.ResourceConfig(nil),
 			runtimeDefinition.Resources...,
 		)
+	}
+}
+
+func normalizeCanonicalWorkerRuntime(worker *factorydefinitions.FactoryWorkerConfig) {
+	if worker == nil {
+		return
+	}
+	if effort, ok := factorydefinitions.CanonicalizeReasoningEffort(worker.ReasoningEffort); ok {
+		worker.ReasoningEffort = effort
 	}
 }
 

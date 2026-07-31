@@ -46,12 +46,13 @@ func TestProviderChildExecutor_Execute_RecordsLiveProviderDispatch(t *testing.T)
 	executor := NewProviderChildExecutor("session-live-child", provider, collectorSink, scriptedChildValues{})
 
 	result, err := executor.Execute(context.Background(), factory.JavaScriptChildExecutionRequest{
-		Prompt:        "summarize workflows",
-		Label:         "summarize-findings",
-		ModelProvider: "CODEX",
-		Model:         "gpt-test",
-		WorkflowName:  "agent-run-fake-child",
-		ArgsSubject:   "workflows",
+		Prompt:          "summarize workflows",
+		Label:           "summarize-findings",
+		ModelProvider:   "CODEX",
+		Model:           "gpt-test",
+		ReasoningEffort: "xhigh",
+		WorkflowName:    "agent-run-fake-child",
+		ArgsSubject:     "workflows",
 		OutputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -77,8 +78,15 @@ func TestProviderChildExecutor_Execute_RecordsLiveProviderDispatch(t *testing.T)
 	if provider.callCount != 1 {
 		t.Fatalf("provider call count = %d, want 1", provider.callCount)
 	}
-	if provider.lastInput.Request.ModelProvider != "CODEX" || provider.lastInput.Request.Model != "gpt-test" {
-		t.Fatalf("provider worker settings = (%q, %q), want (CODEX, gpt-test)", provider.lastInput.Request.ModelProvider, provider.lastInput.Request.Model)
+	if provider.lastInput.Request.ModelProvider != "CODEX" ||
+		provider.lastInput.Request.Model != "gpt-test" ||
+		provider.lastInput.Request.ReasoningEffort != "xhigh" {
+		t.Fatalf(
+			"provider worker settings = (%q, %q, %q), want (CODEX, gpt-test, xhigh)",
+			provider.lastInput.Request.ModelProvider,
+			provider.lastInput.Request.Model,
+			provider.lastInput.Request.ReasoningEffort,
+		)
 	}
 	if got := collectorSink.statusTransitions("dispatch-1"); len(got) != 3 {
 		t.Fatalf("recorded status transitions = %#v, want queued/running/completed", got)
@@ -510,6 +518,7 @@ func TestProviderInferenceRequestFromChild_PropagatesPresetAsWorkerType(t *testi
 		Prompt:          "mocked child prompt",
 		Preset:          "worker-a",
 		ModelProvider:   "codex",
+		ReasoningEffort: "xhigh",
 		SkipPermissions: true,
 	})
 	if req.WorkerType != "worker-a" {
@@ -523,6 +532,9 @@ func TestProviderInferenceRequestFromChild_PropagatesPresetAsWorkerType(t *testi
 	}
 	if req.RunnerID != "codex" {
 		t.Fatalf("RunnerID = %q, want model provider fallback for SCRIPT_WRAP child", req.RunnerID)
+	}
+	if req.ReasoningEffort != "xhigh" {
+		t.Fatalf("ReasoningEffort = %q, want xhigh", req.ReasoningEffort)
 	}
 	if !req.SkipPermissions {
 		t.Fatal("SkipPermissions = false, want packaged JavaScript child policy forwarded")

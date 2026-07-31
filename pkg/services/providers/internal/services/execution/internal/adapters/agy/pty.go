@@ -95,6 +95,9 @@ func buildPTYLaunch(
 	request providers.ExecuteRequest,
 	config ptyLaunchConfig,
 ) (ptyLaunch, error) {
+	if effort, _ := providers.ReasoningEffort(request.ReasoningEffort).Canonical(); effort != "" {
+		return ptyLaunch{}, fmt.Errorf("agy does not support a separate reasoning effort")
+	}
 	executable, err := resolveExecutable(
 		config.executable,
 		config.locator,

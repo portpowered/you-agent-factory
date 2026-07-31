@@ -88,6 +88,7 @@ type ExecuteRequest struct {
 	WorkerType         string
 	WorkstationName    string
 	Model              string
+	ReasoningEffort    string
 	SkipPermissions    bool
 	SystemPrompt       string
 	UserMessage        string
@@ -109,12 +110,29 @@ func (request ExecuteRequest) Validate() error {
 	if strings.TrimSpace(request.AttemptID) == "" {
 		return fmt.Errorf("%w: empty attempt id", ErrExecuteFailed)
 	}
+	if _, ok := ReasoningEffort(request.ReasoningEffort).Canonical(); !ok {
+		return fmt.Errorf("%w: unsupported reasoning effort %q", ErrExecuteFailed, request.ReasoningEffort)
+	}
 	if request.ResumeSession != nil {
 		if err := request.ResumeSession.Validate(); err != nil {
 			return fmt.Errorf("%w", err)
 		}
 	}
 	return nil
+}
+
+// ReasoningEffort is a provider-neutral inference effort value.
+type ReasoningEffort string
+
+// Canonical trims and lowercases a supported inference effort.
+func (value ReasoningEffort) Canonical() (string, bool) {
+	canonical := strings.ToLower(strings.TrimSpace(string(value)))
+	switch canonical {
+	case "", "minimal", "low", "medium", "high", "xhigh", "max":
+		return canonical, true
+	default:
+		return "", false
+	}
 }
 
 // Clone returns a detached execute-request copy.

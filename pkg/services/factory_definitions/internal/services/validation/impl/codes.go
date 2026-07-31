@@ -17,6 +17,7 @@ const (
 	CodeDanglingResourceReference                                = "factory.resource.danglingReference"
 	CodeWorkerWorkstationIncompatibleBehavior                    = "factory.workstation.incompatibleWorkerBehavior"
 	CodeWorkerUnsupportedModelProvider                           = "factory.worker.unsupportedModelProvider"
+	CodeWorkerUnsupportedReasoningEffort                         = "factory.worker.unsupportedReasoningEffort"
 	CodeWorkerACPModelProviderRequired                           = "factory.worker.acpModelProviderRequired"
 	CodeWorkstationMissingOutputRoutes                           = "factory.workstation.missingOutputRoutes"
 	CodeWorkstationMissingFailureRoute                           = "factory.workstation.missingFailureRoute"
@@ -661,6 +662,7 @@ func invocationWorkerInterpolationFieldTargets(workers []workerconfig.Config) []
 		fields = appendInterpolationField(fields, SubjectTypeWorker, subjectID, SubjectLocationDefinition, basePath+".provider", worker.Provider, false, "worker.provider")
 		fields = appendInterpolationField(fields, SubjectTypeWorker, subjectID, SubjectLocationDefinition, basePath+".model", worker.Model, false, "worker.model")
 		fields = appendInterpolationField(fields, SubjectTypeWorker, subjectID, SubjectLocationDefinition, basePath+".modelProvider", worker.ModelProvider, false, "worker.modelProvider")
+		fields = appendInterpolationField(fields, SubjectTypeWorker, subjectID, SubjectLocationDefinition, basePath+".reasoningEffort", worker.ReasoningEffort, false, "worker.reasoningEffort")
 		fields = appendInterpolationField(fields, SubjectTypeWorker, subjectID, SubjectLocationDefinition, basePath+".executorProvider", worker.ExecutorProvider, false, "worker.executorProvider")
 		fields = appendInterpolationField(fields, SubjectTypeWorker, subjectID, SubjectLocationDefinition, basePath+".command", worker.Command, false, "worker.command")
 		fields = appendInterpolationField(fields, SubjectTypeWorker, subjectID, SubjectLocationDefinition, basePath+".timeout", worker.Timeout, false, "worker.timeout")

@@ -85,6 +85,7 @@ func adaptRunnerRequest(
 		WorkingDirectory:             workingDirectory,
 		Model:                        request.Target.Model.Name,
 		ModelProvider:                firstNonEmpty(request.Target.Model.Provider, providerIdentity(request.Target.Provider)),
+		ReasoningEffort:              request.Target.Model.ReasoningEffort,
 		ModelLocality:                request.Target.Model.Locality,
 		SessionID:                    sessionID,
 		SkipPermissions:              request.Target.Permissions.SkipPermissions,
