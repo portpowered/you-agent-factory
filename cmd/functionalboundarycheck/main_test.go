@@ -108,6 +108,22 @@ func scenario() {
 	}
 }
 
+func TestCheckFunctionalCompositionTreeAcceptsProviderNeutralContractSubpackage(t *testing.T) {
+	root, _ := writeFunctionalSourceAt(t, "tests/functional/providers/contract/custom_integration_test.go", `package contract
+import (
+  "github.com/portpowered/infinite-you/pkg/services/edges"
+  "github.com/portpowered/infinite-you/tests/functional/internal/support"
+)
+func scenario() {
+  process := support.BuildProcess(nil, edges.Edges{})
+  _ = process
+}
+`)
+	if err := checkFunctionalCompositionTree(root); err != nil {
+		t.Fatalf("checkFunctionalCompositionTree() error = %v, want provider-neutral contract destination accepted", err)
+	}
+}
+
 func TestCheckFunctionalCompositionTreeAcceptsProviderPublicContracts(t *testing.T) {
 	for _, importPath := range []string{
 		"github.com/portpowered/infinite-you/pkg/services/edges",
@@ -298,7 +314,12 @@ func TestCheckAggregateProviderTestsRejectsReintroducedRemovedException(t *testi
 func TestCheckAggregateProviderTestsAcceptsDedicatedSubpackageTest(t *testing.T) {
 	root := t.TempDir()
 	writeAggregateProviderTests(t, root, grandfatheredAggregateProviderTestFiles)
-	writeFunctionalSourceAtRoot(t, root, providerTestRoot+"codex/new_scenario_test.go", "package codex\n")
+	for _, path := range []string{
+		providerTestRoot + "codex/new_scenario_test.go",
+		providerTestRoot + "contract/new_scenario_test.go",
+	} {
+		writeFunctionalSourceAtRoot(t, root, path, "package provider_test\n")
+	}
 
 	if err := checkAggregateProviderTests(root); err != nil {
 		t.Fatalf("checkAggregateProviderTests() error = %v", err)
@@ -348,4 +369,3 @@ func writeFunctionalSourceAtRoot(t *testing.T, root, relativePath, source string
 	}
 	return path
 }
-
