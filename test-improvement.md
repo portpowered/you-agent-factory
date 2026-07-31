@@ -1,5 +1,55 @@
 `test-functional` still takes about 100 seconds because it is now dominated by real runtime/process integration work, not `go list` or CLI compilation.
 
+## Implementation outcome
+
+`TEST-IMPROVEMENT-001` implemented and independently audited the highest-value
+changes using `@you/plan-parallel` for the mutation DAG and
+`@you/plan-execute` for durable PRD-based convergence.
+
+Accepted changes:
+
+- ACP keeps representative process-boundary failure proofs while the exhaustive
+  five-mode classification matrix runs directly against the owning service.
+- The eight advanced Factory save-version cases reuse one API server and reset
+  the current Factory to a deterministic baseline between rows.
+- CLI baseline, input-inventory, and command-identity packages are owned and
+  invoked by the contract tier; `test-functional` no longer runs them as a
+  separate serial tail.
+- Stale JavaScript string-result assertions now enforce the intended
+  customer-facing `TEXT` contract. Structured JavaScript results remain JSON.
+- Petri completion fixtures use an exact raw final `<COMPLETE>` line, and the
+  mock-provider proof emits protocol-valid Codex JSONL instead of triggering
+  retries.
+
+Measured verification:
+
+| Measurement | Result |
+| --- | ---: |
+| Observed baseline | 100.293s, exit 2 |
+| Accepted run 1 | 75.277s, exit 0 |
+| Accepted run 2 | 75.884s, exit 0 |
+| Accepted run 3 | 76.178s, exit 0 |
+| Accepted median | 75.884s |
+| Median wall-time change | -24.409s (-24.34%) |
+| Final promoted-root integration run | 81.394s, exit 0 |
+
+The accepted ACP package runs were 28.542s, 29.210s, and 28.628s versus
+32.180s in the observed baseline. Factory transformation ran in 24.051s,
+24.168s, and 23.943s versus 29.798s. All affected focused tests,
+`make test-lane-audit`, and all three full functional repetitions passed.
+The additional promoted-root run also passed after combining the implementation
+with the packaged `plan-execute` completion-token fix; it is not included in
+the three-run benchmark median.
+
+The broader `make test-contract` and `make test` aggregates retain unrelated
+baseline failures: the contract target references a deleted Factory Definitions
+package and an existing HTTP alias guard is red; the unit lane has an existing
+generated-manifest staging expectation. The newly moved CLI contract packages
+themselves pass in the contract command.
+
+The implementation is commit `3073fd5bf`. Factory evidence and limitations are
+recorded in `BOOT-PLAN-PARALLEL-006` and `BOOT-PLAN-EXECUTE-002`.
+
 The important detail is that `-jobs 8` maps directly to `go test -p=8` in [cmd/functionallane/main.go](C:/Users/andre/work/portos/infinite-you/cmd/functionallane/main.go:55). That parallelizes packages, but tests inside each package remain serial. The largest functional packages contain many tests and almost no `t.Parallel()` usage.
 
 From the last passing run:
