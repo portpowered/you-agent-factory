@@ -45,6 +45,13 @@ must have a stable sequential `id`, numeric `priority`, standalone description,
 behavioral `acceptanceCriteria`, explicit `tests`, `passes: false`, and an empty
 `notes` value. The JSON and Markdown files must describe the same plan.
 
-Read both files back before finishing. End with `<COMPLETE>` only after they
-exist, parse correctly, agree with the repository evidence, and give the next
-agent all context required to execute from scratch.
+Read both files back before finishing. Only after they exist, parse correctly,
+agree with the repository evidence, and give the next agent all context
+required to execute from scratch, end the response with the exact raw token
+below as its final non-empty line:
+
+<COMPLETE>
+
+Do not wrap that token in backticks or a Markdown fence, quote it, prefix or
+suffix it with prose, or place any non-empty content after it. The Factory
+recognizes only the exact raw final line as successful planner completion.

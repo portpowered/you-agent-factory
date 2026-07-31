@@ -28,7 +28,7 @@ func TestPackagedPlanExecutePlansThenExecutesWithOperatorDefaults(t *testing.T) 
 	workspace := t.TempDir()
 	home := t.TempDir()
 	support.InstallPackagedFactory(t, home, factorydefinitions.PackagedPlanExecuteFactoryName)
-	assertPlanExecutePlannerBoundary(t)
+	assertPlanExecutePromptContracts(t)
 	runner := &planExecuteRunner{workspace: workspace}
 
 	args := []string{
@@ -122,23 +122,46 @@ func (runner *planExecuteRunner) Run(_ context.Context, request platformprocess.
 	}
 }
 
-func assertPlanExecutePlannerBoundary(t *testing.T) {
+func assertPlanExecutePromptContracts(t *testing.T) {
 	t.Helper()
-	path := filepath.Join(
+	promptsDir := filepath.Join(
 		testutil.MustRepoRoot(t),
-		"packages", "packaged-factories", "factories", "plan-execute", "prompts", "planner.md",
+		"packages", "packaged-factories", "factories", "plan-execute", "prompts",
 	)
-	payload, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read authored planner prompt: %v", err)
-	}
-	prompt := string(payload)
-	for _, required := range []string{
-		"ends after verified implementation in the current",
-		"do not make them a story acceptance criterion",
+	for _, fixture := range []struct {
+		name     string
+		required []string
+	}{
+		{
+			name: "planner.md",
+			required: []string{
+				"ends after verified implementation in the current",
+				"do not make them a story acceptance criterion",
+				"end the response with the exact raw token",
+				"below as its final non-empty line",
+				"Do not wrap that token in backticks",
+				"successful planner completion",
+			},
+		},
+		{
+			name: "executor.md",
+			required: []string{
+				"end the response with the exact raw",
+				"token below as its final non-empty line",
+				"Do not wrap that token in backticks",
+				"successful executor completion",
+			},
+		},
 	} {
-		if !strings.Contains(prompt, required) {
-			t.Fatalf("planner prompt missing local delivery boundary %q", required)
+		payload, err := os.ReadFile(filepath.Join(promptsDir, fixture.name))
+		if err != nil {
+			t.Fatalf("read authored %s prompt: %v", fixture.name, err)
+		}
+		prompt := string(payload)
+		for _, required := range fixture.required {
+			if !strings.Contains(prompt, required) {
+				t.Fatalf("%s prompt missing completion contract %q", fixture.name, required)
+			}
 		}
 	}
 }

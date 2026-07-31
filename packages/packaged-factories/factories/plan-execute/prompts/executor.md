@@ -32,5 +32,12 @@ because code was written, and never hide a failing check.
 
 Return a self-contained delivery summary listing implemented behavior, files or
 boundaries changed, verification commands and outcomes, and any genuine
-remaining limitations. End with `<COMPLETE>` only when every story is marked
-passed and the requested implementation is complete.
+remaining limitations. Only when every story is marked passed and the
+requested implementation is complete, end the response with the exact raw
+token below as its final non-empty line:
+
+<COMPLETE>
+
+Do not wrap that token in backticks or a Markdown fence, quote it, prefix or
+suffix it with prose, or place any non-empty content after it. The Factory
+recognizes only the exact raw final line as successful executor completion.
