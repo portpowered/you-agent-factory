@@ -333,9 +333,9 @@ func TestPetriSingleWorkerRunCompletesAtQuiescence(t *testing.T) {
 			[]byte("# Architecture Review\n\nPlease review the system architecture."))
 
 		provider := testutil.NewMockWorkerMapProviderWithDefault(map[string][]testutil.WorkResponse{
-			"planner":   {{Content: "Task processed successfully.<COMPLETE>"}},
-			"processor": {{Content: "Task execution failed.<COMPLETE>"}},
-			"reviewer":  {{Content: "Task execution failed.<COMPLETE>"}},
+			"planner":   {{Content: "Task processed successfully.\n<COMPLETE>\n"}},
+			"processor": {{Content: "Task execution succeeded.\n<COMPLETE>\n"}},
+			"reviewer":  {{Content: "Task review accepted.\n<COMPLETE>\n"}},
 		})
 		session, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 			ProviderOverride:    provider,
@@ -738,7 +738,7 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 			[]byte("# Architecture Review\n\nPlease review the system architecture."))
 
 		provider := testutil.NewMockWorkerMapProviderWithDefault(map[string][]testutil.WorkResponse{
-			"planner": {{Content: "Task processed successfully.<COMPLETE>"}},
+			"planner": {{Content: "Task processed successfully.\n<COMPLETE>\n"}},
 		})
 		_, listed := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
 			ProviderOverride: provider,
@@ -796,7 +796,7 @@ func TestPetriWorkerErrorReturnsFailedTerminalOutcome(t *testing.T) {
 
 		provider := testutil.NewMockWorkerMapProviderWithDefault(map[string][]testutil.WorkResponse{
 			"planner": {
-				{Content: "Task processed successfully.<COMPLETE>"},
+				{Content: "Task processed successfully.\n<COMPLETE>\n"},
 			},
 			"processor": {
 				{Content: "Task execution failed.<FAILED>"},
@@ -1146,7 +1146,7 @@ func TestPetriInvocationInputAndOutputMapping(t *testing.T) {
 
 		provider := testutil.NewMockWorkerMapProviderWithDefault(map[string][]testutil.WorkResponse{
 			"planner": {
-				{Content: "Task processed successfully.<COMPLETE>"},
+				{Content: "Task processed successfully.\n<COMPLETE>\n"},
 			},
 			"processor": {
 				{Content: "Task execution failed.<FAILED>"},

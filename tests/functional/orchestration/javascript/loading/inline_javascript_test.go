@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	orderedJavaScriptPipelineResult = "ordered-pipeline-complete"
+	orderedJavaScriptPipelineResult   = "ordered-pipeline-complete"
 	orderedJavaScriptPipelineWorkflow = `return (async function () {
   const first = await agent.run({
     prompt: "stage-one-input",
@@ -60,10 +60,10 @@ const (
 )
 
 const (
-	inlineJavaScriptSuccessResult      = "<SUCCESS>"
-	inlineJavaScriptSyntaxErrorSource  = "workflow.final(\"ok\");\nphase(\"setup\";\n"
-	inlineJavaScriptSyntaxErrorLine    = 2
-	workflowSourceSyntaxErrorCode      = "workflow.source.syntaxError"
+	inlineJavaScriptSuccessResult     = "<SUCCESS>"
+	inlineJavaScriptSyntaxErrorSource = "workflow.final(\"ok\");\nphase(\"setup\";\n"
+	inlineJavaScriptSyntaxErrorLine   = 2
+	workflowSourceSyntaxErrorCode     = "workflow.source.syntaxError"
 )
 
 var privateJavaScriptVMDiagnosticMarkers = []string{
@@ -362,12 +362,12 @@ func assertInlineJavaScriptSuccessOutcome(t *testing.T, result factoryapi.Invoca
 	if result.PrimaryResult == nil || len(*result.PrimaryResult) != 1 {
 		t.Fatalf("primary result = %#v, want exactly one content part", result.PrimaryResult)
 	}
-	part, err := (*result.PrimaryResult)[0].AsWorkJsonContentPart()
+	part, err := (*result.PrimaryResult)[0].AsWorkTextContentPart()
 	if err != nil {
 		t.Fatalf("decode primary result content part: %v", err)
 	}
-	if got, ok := part.Json.(string); !ok || got != inlineJavaScriptSuccessResult {
-		t.Fatalf("primary result = %#v, want exact string %q", part.Json, inlineJavaScriptSuccessResult)
+	if part.Text != inlineJavaScriptSuccessResult {
+		t.Fatalf("primary result = %q, want exact string %q", part.Text, inlineJavaScriptSuccessResult)
 	}
 }
 

@@ -19,9 +19,9 @@ import (
 )
 
 const (
-	namedJavaScriptFactoryName       = "named-javascript-loading"
-	namedJavaScriptSuccessResult     = "named-javascript-loading:<NAMED_FACTORY_SUCCESS>"
-	namedJavaScriptBusyLoopInline    = "var spin=0; while(true){ spin+=1; }"
+	namedJavaScriptFactoryName        = "named-javascript-loading"
+	namedJavaScriptSuccessResult      = "named-javascript-loading:<NAMED_FACTORY_SUCCESS>"
+	namedJavaScriptBusyLoopInline     = "var spin=0; while(true){ spin+=1; }"
 	namedJavaScriptSessionControlWait = 10 * time.Second
 )
 
@@ -255,12 +255,12 @@ func assertNamedJavaScriptSessionSuccessOutcome(
 	if response.Result.PrimaryResult == nil || len(*response.Result.PrimaryResult) != 1 {
 		t.Fatalf("primary result = %#v, want exactly one content part", response.Result.PrimaryResult)
 	}
-	part, err := (*response.Result.PrimaryResult)[0].AsWorkJsonContentPart()
+	part, err := (*response.Result.PrimaryResult)[0].AsWorkTextContentPart()
 	if err != nil {
 		t.Fatalf("decode primary result content part: %v", err)
 	}
-	if got, ok := part.Json.(string); !ok || got != namedJavaScriptSuccessResult {
-		t.Fatalf("primary result = %#v, want exact named-factory string %q", part.Json, namedJavaScriptSuccessResult)
+	if part.Text != namedJavaScriptSuccessResult {
+		t.Fatalf("primary result = %q, want exact named-factory string %q", part.Text, namedJavaScriptSuccessResult)
 	}
 	if response.ResolvedSource.SourceRef == nil ||
 		!strings.Contains(*response.ResolvedSource.SourceRef, namedJavaScriptFactoryName) {
@@ -309,12 +309,12 @@ func assertNamedJavaScriptSuccessOutcome(t *testing.T, result factoryapi.Invocat
 	if result.PrimaryResult == nil || len(*result.PrimaryResult) != 1 {
 		t.Fatalf("primary result = %#v, want exactly one content part", result.PrimaryResult)
 	}
-	part, err := (*result.PrimaryResult)[0].AsWorkJsonContentPart()
+	part, err := (*result.PrimaryResult)[0].AsWorkTextContentPart()
 	if err != nil {
 		t.Fatalf("decode primary result content part: %v", err)
 	}
-	if got, ok := part.Json.(string); !ok || got != namedJavaScriptSuccessResult {
-		t.Fatalf("primary result = %#v, want exact named-factory string %q", part.Json, namedJavaScriptSuccessResult)
+	if part.Text != namedJavaScriptSuccessResult {
+		t.Fatalf("primary result = %q, want exact named-factory string %q", part.Text, namedJavaScriptSuccessResult)
 	}
 }
 

@@ -18,7 +18,8 @@ func TestServiceConfigOverrideAlignment_CustomerProcessSharesScriptAndProviderCo
 	runner := testutil.NewProviderCommandRunner(
 		platformprocess.CommandResult{Stdout: []byte("script-output")},
 		platformprocess.CommandResult{
-			Stdout: []byte("provider-output COMPLETE"),
+			// Protocol-valid Codex JSONL; plain text is a retryable decode fault.
+			Stdout: support.CodexSuccessStdout("provider-output COMPLETE"),
 			Stderr: []byte(`{"event":"session.created","session_id":"sess_mixed_command"}`),
 		},
 	)

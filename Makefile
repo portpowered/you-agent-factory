@@ -384,12 +384,11 @@ test-integration:
 	$(GO) test ./pkg/services/providers/internal/services/execution/internal/provider -run '^TestScriptWrapProvider_CommandEnvironmentPreventsGitMergeEditorPrompt$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 test-contract:
-	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./contracts ./pkg/services/factory_definitions/contracts/contracttests ./pkg/services/providers/internal/services/execution/internal/provider/functionaltests ./pkg/services/providers/internal/services/execution/internal/provider/paritytests ./pkg/transports/http/contracttests ./pkg/transports/cli/clicontract ./pkg/transports/cli/climanifestgen -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test -short -p=$(UNIT_DEFAULT_JOBS) ./contracts ./pkg/services/factory_definitions/contracts/contracttests ./pkg/services/providers/internal/services/execution/internal/provider/functionaltests ./pkg/services/providers/internal/services/execution/internal/provider/paritytests ./pkg/transports/http/contracttests ./pkg/transports/cli/baseline ./pkg/transports/cli/clicontract ./pkg/transports/cli/cliinputs ./pkg/transports/cli/climanifestgen ./pkg/transports/cli/commandidentity -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 test-functional:
 	$(MAKE) functional-boundary-check
 	$(GO) run ./cmd/functionallane -jobs $(FUNCTIONAL_DEFAULT_JOBS) -count=1 -timeout $(GO_TEST_TIMEOUT)
-	$(GO) test -short ./pkg/transports/cli/baseline ./pkg/transports/cli/cliinputs ./pkg/transports/cli/commandidentity -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 functional-boundary-check:
 	$(GO) run ./cmd/functionalboundarycheck

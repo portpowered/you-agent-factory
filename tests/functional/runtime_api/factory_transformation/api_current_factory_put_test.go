@@ -487,9 +487,16 @@ func TestCurrentFactoryPUT_RejectsTypeCountCollisionBeforePersistingDefaultFacto
 }
 
 func TestCurrentFactoryPUT_RequiresAdvancedSaveVersion(t *testing.T) {
+	// One FunctionalAPIServer for the whole advanced-version matrix. Each row
+	// restores a deterministic "alpha"/"task" baseline before asserting so a
+	// successful save (or rejected stale write) cannot contaminate later rows.
+	rootDir := t.TempDir()
+	seedNamedFactoryRoot(t, rootDir, "alpha", "task")
+	server := startFactoryTransformationServer(t, rootDir)
+
 	for _, tc := range advancedSaveVersionCases() {
 		t.Run(tc.name, func(t *testing.T) {
-			runAdvancedSaveVersionCase(t, tc)
+			runAdvancedSaveVersionCase(t, server, tc)
 		})
 	}
 }
@@ -501,12 +508,9 @@ type advancedSaveVersionCase struct {
 	wantState string
 }
 
-func runAdvancedSaveVersionCase(t *testing.T, tc advancedSaveVersionCase) {
+func runAdvancedSaveVersionCase(t *testing.T, server *support.FunctionalAPIServer, tc advancedSaveVersionCase) {
 	t.Helper()
-	rootDir := t.TempDir()
-	seedNamedFactoryRoot(t, rootDir, "alpha", "task")
-	server := startFactoryTransformationServer(t, rootDir)
-	current := getCurrentFactory(t, server.URL())
+	current := ensureAdvancedSaveVersionBaseline(t, server.URL())
 	if current.Version == nil {
 		t.Fatal("current factory version = nil, want version metadata")
 	}
@@ -526,6 +530,24 @@ func runAdvancedSaveVersionCase(t *testing.T, tc advancedSaveVersionCase) {
 
 	reloaded := getCurrentFactory(t, server.URL())
 	assertFactoryWorkType(t, reloaded, tc.wantState, "reloaded current factory after version save")
+}
+
+// ensureAdvancedSaveVersionBaseline returns the current Factory after guaranteeing
+// work type "task" so matrix rows remain independently isolatable on one server.
+func ensureAdvancedSaveVersionBaseline(t *testing.T, serverURL string) factoryapi.Factory {
+	t.Helper()
+	current := getCurrentFactory(t, serverURL)
+	if current.Version == nil {
+		t.Fatal("current factory version = nil, want version metadata")
+	}
+	if current.WorkTypes != nil && len(*current.WorkTypes) == 1 && (*current.WorkTypes)[0].Name == "task" {
+		return current
+	}
+	return saveCurrentFactoryDefinition(
+		t,
+		serverURL,
+		currentFactorySaveDocument(t, "alpha", "task", versionDocument(advancedFactoryVersion(t, current.Version))),
+	)
 }
 
 func advancedSaveVersionCases() []advancedSaveVersionCase {

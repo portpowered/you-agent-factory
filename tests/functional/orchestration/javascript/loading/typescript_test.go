@@ -308,11 +308,11 @@ func assertTypeScriptSuccessOutcome(t *testing.T, result factoryapi.InvocationRe
 	if result.PrimaryResult == nil || len(*result.PrimaryResult) != 1 {
 		t.Fatalf("primary result = %#v, want exactly one content part", result.PrimaryResult)
 	}
-	part, err := (*result.PrimaryResult)[0].AsWorkJsonContentPart()
+	part, err := (*result.PrimaryResult)[0].AsWorkTextContentPart()
 	if err != nil {
 		t.Fatalf("decode primary result content part: %v", err)
 	}
-	if got, ok := part.Json.(string); !ok || got != typeScriptSuccessResult {
-		t.Fatalf("primary result = %#v, want exact TypeScript success string %q", part.Json, typeScriptSuccessResult)
+	if part.Text != typeScriptSuccessResult {
+		t.Fatalf("primary result = %q, want exact TypeScript success string %q", part.Text, typeScriptSuccessResult)
 	}
 }

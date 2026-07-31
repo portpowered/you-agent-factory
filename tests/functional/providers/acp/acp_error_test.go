@@ -51,15 +51,16 @@ func TestACPFailureRedactsConfiguredSecretsFromStderr(t *testing.T) {
 	t.Fatalf("ACP response stream omitted redacted stderr diagnostic: %#v", responseEvents)
 }
 
+// TestACPProtocolFailuresMapToStableWorkerFailureClasses keeps two representative
+// root.BuildProcess cells for misconfigured vs unknown ACP protocol failures.
+// The exhaustive mode matrix lives in
+// pkg/services/providers/internal/services/acp/internal/service.
 func TestACPProtocolFailuresMapToStableWorkerFailureClasses(t *testing.T) {
 	for _, test := range []struct {
 		mode string
 		want factoryapi.WorkFailureType
 	}{
 		{mode: "version", want: factoryapi.WorkFailureTypeMisconfigured},
-		{mode: "init-fail", want: factoryapi.WorkFailureTypeUnknown},
-		{mode: "malformed", want: factoryapi.WorkFailureTypeUnknown},
-		{mode: "eof", want: factoryapi.WorkFailureTypeUnknown},
 		{mode: "fail", want: factoryapi.WorkFailureTypeUnknown},
 	} {
 		t.Run(test.mode, func(t *testing.T) {
