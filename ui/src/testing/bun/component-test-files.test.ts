@@ -70,7 +70,7 @@ describe("classifyComponentTestSource", () => {
   it("routes graph-dependent features through Vitest before explicit Bun suffixes", () => {
     expect(
       classifyComponentTestSource(
-        "src/features/factory-graph-editor/example.bun.component.test.tsx",
+        "src/features/factory-graph-editor/components/controls/factory-graph-editor-controls.bun.component.test.tsx",
         "",
       ),
     ).toMatchObject({

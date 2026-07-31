@@ -66,15 +66,29 @@ async function verifyViewport(browser, viewport) {
       clientWidth: element.clientWidth,
       scrollWidth: element.scrollWidth,
     }));
-    if (navigationMetrics.scrollWidth > navigationMetrics.clientWidth) {
+    if (
+      viewport.width <= 375 &&
+      navigationMetrics.scrollWidth <= navigationMetrics.clientWidth
+    ) {
       throw new Error(
-        `Session tabs overflowed instead of sharing the available width at ${viewport.width}px.`,
+        `Session tabs compressed instead of exposing horizontal scrolling at ${viewport.width}px.`,
       );
     }
     if ((await navigation.evaluate((element) => element.scrollLeft)) !== 0) {
       throw new Error(
         `Session tabs unexpectedly retained a horizontal scroll position at ${viewport.width}px.`,
       );
+    }
+    if (viewport.width <= 375) {
+      const scrolled = await navigation.evaluate((element) => {
+        element.scrollLeft = element.scrollWidth;
+        return element.scrollLeft;
+      });
+      if (scrolled <= 0) {
+        throw new Error(
+          `Session tabs could not be horizontally scrolled at ${viewport.width}px.`,
+        );
+      }
     }
 
     const regions = await page.evaluate(() => {
