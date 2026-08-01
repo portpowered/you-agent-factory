@@ -160,6 +160,9 @@ afterAll(() => {
     );
 
     const chart = screen.getByRole("img", { name: "工作结果图表" });
+    expect(
+      within(chart).getAllByText(chartMessages.yAxisLabel, { exact: true }),
+    ).toHaveLength(1);
     const queuedLegendControl = within(chart).getByRole("button", {
       name: chartMessages.hideSeriesLabel(chartMessages.seriesLabels.queued),
     });

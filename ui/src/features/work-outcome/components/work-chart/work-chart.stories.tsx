@@ -138,24 +138,6 @@ const WORK_CHART_SERIES: readonly WorkChartSeriesDefinition[] = [
   },
 ];
 
-async function expectWorkChartOverlayContract(
-  chart: HTMLElement,
-): Promise<void> {
-  const chartMessages = getWorkOutcomeMessages().chart;
-  const overlay = chart.querySelector<HTMLElement>(
-    "[data-work-chart-overlay='true']",
-  );
-
-  expect(overlay).not.toBeNull();
-
-  await waitFor(() => {
-    expect(within(chart).getByText(chartMessages.xAxisLabel)).toBeVisible();
-    expect(
-      within(overlay as HTMLElement).getByText(chartMessages.yAxisLabel),
-    ).toBeVisible();
-  });
-}
-
 async function expectWorkChartLegendAndAxisContract(
   chart: HTMLElement,
 ): Promise<void> {
@@ -168,6 +150,20 @@ async function expectWorkChartLegendAndAxisContract(
       yAxisLabel: chartMessages.yAxisLabel,
     });
   });
+
+  const queuedLegendControl = within(chart).getByRole("button", {
+    name: "Hide Queued series",
+  });
+  queuedLegendControl.focus();
+  expect(document.activeElement).toBe(queuedLegendControl);
+  await userEvent.keyboard("{Enter}");
+  expect(
+    within(chart).getByRole("button", { name: "Show Queued series" }),
+  ).toBeVisible();
+  await userEvent.keyboard("{Enter}");
+  expect(
+    within(chart).getByRole("button", { name: "Hide Queued series" }),
+  ).toBeVisible();
 }
 
 function expectWorkChartPaddingContract(chart: HTMLElement): void {
@@ -178,18 +174,6 @@ function expectWorkChartPaddingContract(chart: HTMLElement): void {
   expect(chart.className).toContain("sm:px-6");
   expect(chart.className).toContain("sm:pb-6");
   expect(chart.className).toContain("sm:pt-5");
-
-  const overlay = chart.querySelector<HTMLElement>(
-    "[data-work-chart-overlay='true']",
-  );
-
-  expect(overlay).not.toBeNull();
-  expect(overlay?.className).toContain("px-5");
-  expect(overlay?.className).toContain("pb-4");
-  expect(overlay?.className).toContain("pt-4");
-  expect(overlay?.className).toContain("sm:px-6");
-  expect(overlay?.className).toContain("sm:pb-5");
-  expect(overlay?.className).toContain("sm:pt-5");
 }
 
 function expectNoOverflowInStoryShell(canvasElement: HTMLElement): void {
@@ -238,7 +222,6 @@ export const Populated = {
       name: "Work outcome chart",
     });
 
-    await expectWorkChartOverlayContract(chart);
     expectWorkChartPaddingContract(chart);
     await expectWorkChartLegendAndAxisContract(chart);
   },
@@ -318,7 +301,6 @@ export const ConstrainedWidth = {
       name: "Work outcome chart",
     });
 
-    await expectWorkChartOverlayContract(chart);
     expectWorkChartPaddingContract(chart);
     await expectWorkChartLegendAndAxisContract(chart);
     await dragWorkChart(chart, 0.1, 0.5);

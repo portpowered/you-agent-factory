@@ -38,7 +38,7 @@ export type { WorkChartSeriesDefinition } from "../../lib/work-chart-data";
 
 const WORK_CHART_AXIS_LABEL_CLASS = dashboardChartAxisLabelClassName();
 export const WORK_CHART_MARGIN = { bottom: 24, left: 18, right: 28, top: 28 };
-const WORK_CHART_LEGEND_ITEM_CLASS = "gap-1.5 py-0";
+const WORK_CHART_LEGEND_ITEM_CLASS = "shrink-0 gap-1.5 py-0 whitespace-nowrap";
 const WORK_CHART_LEGEND_SWATCH_CLASS = "h-2 w-2";
 const WORK_CHART_SHELL_CLASS =
   "flex h-full min-h-0 min-w-0 w-full flex-1 flex-col gap-3";
@@ -168,7 +168,6 @@ interface ReadyWorkChartProps {
   yAxisLabel: string;
 }
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: keeps chart interaction, legend, and axis overlay wiring together in one render path.
 function ReadyWorkChart({
   ariaLabel,
   chartData,
@@ -178,8 +177,7 @@ function ReadyWorkChart({
   xAxisLabel,
   yAxisLabel,
 }: ReadyWorkChartProps) {
-  const { overlayClassName, readyClassName } =
-    workChartPresentationClasses(presentation);
+  const { readyClassName } = workChartPresentationClasses(presentation);
   const chartMessages = getWorkOutcomeMessages(locale).chart;
   const {
     beginSelection,
@@ -228,21 +226,6 @@ function ReadyWorkChart({
           onMouseMove: updateSelection,
           onMouseUp: commitSelection,
         }}
-        overlay={
-          <div
-            className={cn(
-              overlayClassName,
-              "items-start justify-center text-on-surface-variant",
-            )}
-            data-work-chart-overlay="true"
-          >
-            <div className="flex min-h-0 flex-1 items-center">
-              <span className="-rotate-180 text-sm [writing-mode:vertical-rl]">
-                {yAxisLabel}
-              </span>
-            </div>
-          </div>
-        }
         presentation={presentation}
         rootAttributes={{
           "data-work-chart-legend-placement": "shell-row",
@@ -289,6 +272,7 @@ function ReadyWorkChart({
           >
             <Label
               angle={-90}
+              className={WORK_CHART_AXIS_LABEL_CLASS}
               value={yAxisLabel}
               position="insideLeft"
               style={{ textAnchor: "middle" }}
@@ -344,12 +328,12 @@ function WorkChartLegendRow({
 }: WorkChartLegendRowProps) {
   return (
     <div
-      className="shrink-0 pb-0.5 pt-0"
+      className="min-w-0 shrink-0 overflow-x-auto pb-0.5 pt-0"
       data-work-chart-legend="true"
       data-work-chart-legend-density="compact"
     >
       <ChartLegendContent
-        className="flex-nowrap justify-center gap-x-2 gap-y-1 pt-0 sm:justify-start"
+        className="!flex-nowrap justify-center gap-x-2 gap-y-1 pt-0 sm:justify-start"
         getToggleLabel={(label, hidden) =>
           hidden
             ? chartMessages.showSeriesLabel(label)

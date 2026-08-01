@@ -173,14 +173,6 @@ async function expectWorkOutcomeChartContract(
   expect(chart.className).toContain("pt-0");
   expect(chart.className).not.toContain("rounded-2xl");
 
-  const overlay = chart.querySelector<HTMLElement>(
-    "[data-work-chart-overlay='true']",
-  );
-
-  expect(overlay).not.toBeNull();
-  expect(overlay?.className).toContain("px-0");
-  expect(overlay?.className).toContain("pb-3");
-  expect(overlay?.className).toContain("pt-0");
   expectSingleWorkOutcomeCardHeader(card, {
     cardRegionLabel: chartMessages.cardRegionLabel,
     cardTitle: chartMessages.cardTitle,
@@ -193,9 +185,6 @@ async function expectWorkOutcomeChartContract(
 
     expect(chart).toBeVisible();
     expect(within(card).getByText(chartMessages.xAxisLabel)).toBeVisible();
-    expect(
-      within(overlay as HTMLElement).getByText(chartMessages.yAxisLabel),
-    ).toBeVisible();
     expect(responsiveContainer).not.toBeNull();
     expect(svg).not.toBeNull();
     expect((responsiveContainer?.getBoundingClientRect().height ?? 0) > 0).toBe(
@@ -503,19 +492,24 @@ export const LocalizedZhCN = {
     await expect(chart).toBeVisible();
     expect(chart.getAttribute("data-work-chart-ready")).toBe("true");
     await waitFor(() => {
-      const overlay = chart.querySelector<HTMLElement>(
-        "[data-work-chart-overlay='true']",
-      );
-
       expect(within(card).getByText("刻度")).toBeVisible();
-      expect(
-        within(overlay as HTMLElement).getByText("工作计数"),
-      ).toBeVisible();
       expectWorkChartAxisLabelsVisible(chart, {
         xAxisLabel: chartMessages.xAxisLabel,
         yAxisLabel: chartMessages.yAxisLabel,
       });
     });
+
+    const queuedLegendControl = within(chart).getByRole("button", {
+      name: chartMessages.hideSeriesLabel(chartMessages.seriesLabels.queued),
+    });
+    queuedLegendControl.focus();
+    expect(document.activeElement).toBe(queuedLegendControl);
+    await userEvent.keyboard("{Enter}");
+    expect(
+      within(chart).getByRole("button", {
+        name: chartMessages.showSeriesLabel(chartMessages.seriesLabels.queued),
+      }),
+    ).toBeVisible();
     expectSingleWorkOutcomeCardHeader(card, {
       cardRegionLabel: chartMessages.cardRegionLabel,
       cardTitle: chartMessages.cardTitle,

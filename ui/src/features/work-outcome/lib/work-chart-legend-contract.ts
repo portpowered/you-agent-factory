@@ -75,21 +75,12 @@ export function expectWorkChartAxisLabelsVisible(
   const chartScope = within(chart);
   expect(chartScope.getByText(xAxisLabel)).toBeVisible();
 
-  const overlay = chart.querySelector<HTMLElement>(
-    "[data-work-chart-overlay='true']",
-  );
-  expect(overlay).toBeTruthy();
-  expect(within(overlay as HTMLElement).getByText(yAxisLabel)).toBeVisible();
+  const yAxisLabelNodes = chartScope.getAllByText(yAxisLabel, { exact: true });
+  expect(yAxisLabelNodes).toHaveLength(1);
+  expect(yAxisLabelNodes[0]).toBeVisible();
 
   const chartRect = chart.getBoundingClientRect();
-  const overlayRect = overlay?.getBoundingClientRect();
-  expect(overlayRect).toBeTruthy();
-  expect(overlayRect?.left ?? 0).toBeGreaterThanOrEqual(chartRect.left - 1);
-  expect(overlayRect?.top ?? 0).toBeGreaterThanOrEqual(chartRect.top - 1);
-  expect(overlayRect?.right ?? 0).toBeLessThanOrEqual(chartRect.right + 1);
-
-  const yAxisLabelNode = within(overlay as HTMLElement).getByText(yAxisLabel);
-  const yAxisLabelRect = yAxisLabelNode.getBoundingClientRect();
+  const yAxisLabelRect = yAxisLabelNodes[0].getBoundingClientRect();
   expect(yAxisLabelRect.right).toBeLessThanOrEqual(chartRect.right + 1);
   expect(yAxisLabelRect.top).toBeGreaterThanOrEqual(chartRect.top - 1);
 }

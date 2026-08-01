@@ -33,12 +33,40 @@ afterAll(() => {
     expect(within(chart).getByText("In-flight")).toBeTruthy();
     expect(within(chart).getByText("Completed")).toBeTruthy();
     expect(within(chart).queryByText("Failed")).toBeNull();
-    const overlay = chart.querySelector<HTMLElement>(
-      "[data-work-chart-overlay='true']",
-    );
-    expect(overlay).toBeTruthy();
     expect(within(chart).getByText("Ticks")).toBeTruthy();
-    expect(within(overlay as HTMLElement).getByText("Work count")).toBeTruthy();
+    const yAxisLabels = within(chart).getAllByText("Work count", {
+      exact: true,
+    });
+    expect(yAxisLabels).toHaveLength(1);
+    expect(yAxisLabels[0]).toBeVisible();
+  });
+
+  it("renders exactly one localized y-axis label", () => {
+    const chartMessages = {
+      failed: "失败/重试",
+      inFlight: "进行中",
+      queued: "排队中",
+      completed: "已完成",
+    } as const;
+
+    render(
+      <WorkChart
+        ariaLabel="工作结果图表"
+        locale="zh-CN"
+        model={sparseWorkChartModel}
+        series={OUTCOME_SERIES.map((series) => ({
+          ...series,
+          label: chartMessages[series.key],
+        }))}
+      />,
+    );
+
+    const chart = screen.getByRole("img", { name: "工作结果图表" });
+    const yAxisLabels = within(chart).getAllByText("工作计数", {
+      exact: true,
+    });
+    expect(yAxisLabels).toHaveLength(1);
+    expect(yAxisLabels[0]).toBeVisible();
   });
 
   it("renders visible SVG line paths for a live-session-like event timeline model", () => {
