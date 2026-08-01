@@ -165,17 +165,10 @@ func TestDiscoverTools_ExecuteDiscoveryMatchesHandlerRegistration(t *testing.T) 
 	}
 }
 
-func TestBind_ExecuteFailuresReturnTypedErrorEnvelopes(t *testing.T) {
+func TestBind_ExecuteFailuresReturnIdentityAndCatalogEnvelopes(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
-		name          string
-		rootErr       error
-		wantCode      string
-		wantMessage   string
-		wantRetryable bool
-		wantKind      string
-	}{
+	assertExecuteRootErrorEnvelopes(t, []executeRootErrorEnvelopeCase{
 		{
 			name:          "invalid provider id",
 			rootErr:       providers.ErrInvalidID,
@@ -190,6 +183,13 @@ func TestBind_ExecuteFailuresReturnTypedErrorEnvelopes(t *testing.T) {
 			wantMessage:   "provider is unknown",
 			wantRetryable: false,
 		},
+	})
+}
+
+func TestBind_ExecuteFailuresReturnCancelAndTimeoutEnvelopes(t *testing.T) {
+	t.Parallel()
+
+	assertExecuteRootErrorEnvelopes(t, []executeRootErrorEnvelopeCase{
 		{
 			name:          "execute canceled sentinel",
 			rootErr:       providers.ErrExecuteCancelled,
@@ -228,6 +228,13 @@ func TestBind_ExecuteFailuresReturnTypedErrorEnvelopes(t *testing.T) {
 			wantRetryable: true,
 			wantKind:      "timeout",
 		},
+	})
+}
+
+func TestBind_ExecuteFailuresReturnExecuteFailureKindEnvelopes(t *testing.T) {
+	t.Parallel()
+
+	assertExecuteRootErrorEnvelopes(t, []executeRootErrorEnvelopeCase{
 		{
 			name: "execute failure authentication",
 			rootErr: providers.ExecuteFailure{
@@ -283,7 +290,20 @@ func TestBind_ExecuteFailuresReturnTypedErrorEnvelopes(t *testing.T) {
 			wantRetryable: false,
 			wantKind:      "unknown",
 		},
-	}
+	})
+}
+
+type executeRootErrorEnvelopeCase struct {
+	name          string
+	rootErr       error
+	wantCode      string
+	wantMessage   string
+	wantRetryable bool
+	wantKind      string
+}
+
+func assertExecuteRootErrorEnvelopes(t *testing.T, cases []executeRootErrorEnvelopeCase) {
+	t.Helper()
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

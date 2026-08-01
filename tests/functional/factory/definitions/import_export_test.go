@@ -43,8 +43,18 @@ func TestExportedFactoryCanBeImportedAndRun(t *testing.T) {
 		importExportWorkerName,
 		support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"),
 	)
+	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: support.CodexSuccessStdout("Done. COMPLETE"),
+	})
+	edges := serviceedges.Edges{ProviderCommandRunner: runner}
+	process := support.BuildProcess(t, edges)
+	support.CleanupProcess(t, process)
 
-	exported, err := support.FlattenFactoryConfig(t, filepath.Join(sourceDir, "factory.json"))
+	exported, err := support.FlattenFactoryConfigWithProcess(
+		t,
+		process,
+		filepath.Join(sourceDir, "factory.json"),
+	)
 	if err != nil {
 		t.Fatalf("FlattenFactoryConfig(export source): %v", err)
 	}
@@ -59,8 +69,10 @@ func TestExportedFactoryCanBeImportedAndRun(t *testing.T) {
 
 	homeDir := t.TempDir()
 	workingDir := t.TempDir()
-	importedDir := support.CreateNamedFactory(
+	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	importedDir := support.CreateNamedFactoryWithProcess(
 		t,
+		process,
 		homeDir,
 		workingDir,
 		importExportImportedName,
@@ -70,7 +82,12 @@ func TestExportedFactoryCanBeImportedAndRun(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(importedDir, "factory.json")); err != nil {
 		t.Fatalf("imported factory.json missing at %s: %v", importedDir, err)
 	}
-	importedFactory, err := support.LoadedFactory(t, filepath.Join(importedDir, "factory.json"))
+	importedFactory, err := support.LoadedFactoryWithProcessAndEnv(
+		t,
+		process,
+		env,
+		filepath.Join(importedDir, "factory.json"),
+	)
 	if err != nil {
 		t.Fatalf("load imported factory through public flatten readback: %v", err)
 	}
@@ -84,11 +101,6 @@ func TestExportedFactoryCanBeImportedAndRun(t *testing.T) {
 		importExportWorkType,
 		[]byte(`{"title":"exported factory imported and run"}`),
 	)
-
-	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
-		Stdout: support.CodexSuccessStdout("Done. COMPLETE"),
-	})
-	edges := serviceedges.Edges{ProviderCommandRunner: runner}
 
 	_, listed := support.RunFactoryToCompletionWithEdgesAndWork(
 		t,
@@ -120,8 +132,14 @@ func TestImportExportPreservesNestedDocsScriptsAndMetadata(t *testing.T) {
 		support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"),
 	)
 	seedImportExportPortableFilesOnDisk(t, sourceDir)
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
 
-	exported, err := support.FlattenFactoryConfig(t, filepath.Join(sourceDir, "factory.json"))
+	exported, err := support.FlattenFactoryConfigWithProcess(
+		t,
+		process,
+		filepath.Join(sourceDir, "factory.json"),
+	)
 	if err != nil {
 		t.Fatalf("FlattenFactoryConfig(export source): %v", err)
 	}
@@ -158,8 +176,10 @@ func TestImportExportPreservesNestedDocsScriptsAndMetadata(t *testing.T) {
 
 	homeDir := t.TempDir()
 	workingDir := t.TempDir()
-	importedDir := support.CreateNamedFactory(
+	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	importedDir := support.CreateNamedFactoryWithProcess(
 		t,
+		process,
 		homeDir,
 		workingDir,
 		importExportPortableName,
@@ -177,7 +197,12 @@ func TestImportExportPreservesNestedDocsScriptsAndMetadata(t *testing.T) {
 		importExportPortableScriptBody,
 	)
 
-	importedFactory, err := support.LoadedFactory(t, filepath.Join(importedDir, "factory.json"))
+	importedFactory, err := support.LoadedFactoryWithProcessAndEnv(
+		t,
+		process,
+		env,
+		filepath.Join(importedDir, "factory.json"),
+	)
 	if err != nil {
 		t.Fatalf("load imported factory through public flatten readback: %v", err)
 	}
@@ -204,11 +229,13 @@ func TestImportExportPreservesNestedDocsScriptsAndMetadata(t *testing.T) {
 func TestInvalidImportDoesNotReplaceCurrentFactory(t *testing.T) {
 	runner := support.NewRecordingCommandRunner("runtime must not execute during invalid import")
 	edges := serviceedges.Edges{ProviderCommandRunner: runner}
+	process := support.BuildProcess(t, edges)
+	support.CleanupProcess(t, process)
 
 	homeDir := t.TempDir()
 	workingDir := t.TempDir()
 	env := append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
-	namedFactoriesRoot := initializeImportExportCustomerHome(t, env, workingDir)
+	namedFactoriesRoot := support.InitializeCustomerHomeWithProcess(t, process, env, workingDir)
 
 	sourceDir := support.ScaffoldFactory(t, importExportCurrentFactoryConfig())
 	support.WriteAgentConfig(
@@ -219,8 +246,9 @@ func TestInvalidImportDoesNotReplaceCurrentFactory(t *testing.T) {
 	)
 	sourcePath := filepath.Join(sourceDir, "factory.json")
 
-	factoryDir := createImportExportActivatedNamedFactory(
+	factoryDir := support.CreateAndActivateNamedFactoryAtRootWithProcess(
 		t,
+		process,
 		env,
 		workingDir,
 		namedFactoriesRoot,
@@ -228,7 +256,12 @@ func TestInvalidImportDoesNotReplaceCurrentFactory(t *testing.T) {
 		sourcePath,
 	)
 
-	baselineFactory, err := support.LoadedFactory(t, filepath.Join(factoryDir, "factory.json"))
+	baselineFactory, err := support.LoadedFactoryWithProcessAndEnv(
+		t,
+		process,
+		env,
+		filepath.Join(factoryDir, "factory.json"),
+	)
 	if err != nil {
 		t.Fatalf("load baseline current factory: %v", err)
 	}
@@ -255,7 +288,7 @@ func TestInvalidImportDoesNotReplaceCurrentFactory(t *testing.T) {
 	})
 	updateInputs.Input.Env = env
 	updateInputs.Input.WorkingDirectory = workingDir
-	updateErr := support.BuildProcess(t, edges).Execute(updateInputs.Input)
+	updateErr := process.Execute(updateInputs.Input)
 	if updateErr == nil {
 		t.Fatalf(
 			"Process.Execute(factory update invalid import) error = nil, want customer-visible failure; stdout=%q stderr=%q",
@@ -275,7 +308,12 @@ func TestInvalidImportDoesNotReplaceCurrentFactory(t *testing.T) {
 		)
 	}
 
-	reloadedFactory, err := support.LoadedFactory(t, filepath.Join(factoryDir, "factory.json"))
+	reloadedFactory, err := support.LoadedFactoryWithProcessAndEnv(
+		t,
+		process,
+		env,
+		filepath.Join(factoryDir, "factory.json"),
+	)
 	if err != nil {
 		t.Fatalf("reload current factory after rejected import: %v", err)
 	}
@@ -284,7 +322,7 @@ func TestInvalidImportDoesNotReplaceCurrentFactory(t *testing.T) {
 	listInputs := support.FakeInputs(t.Context(), []string{"you", "--json", "factory", "list"})
 	listInputs.Input.Env = env
 	listInputs.Input.WorkingDirectory = workingDir
-	if err := support.BuildProcess(t, edges).Execute(listInputs.Input); err != nil {
+	if err := process.Execute(listInputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(factory list) error = %v\nstdout:\n%s\nstderr:\n%s",
 			err,
@@ -326,93 +364,6 @@ type importExportFactoryListEntry struct {
 	Name             string `json:"name"`
 	FactoryDirectory string `json:"factoryDirectory"`
 	Current          bool   `json:"current"`
-}
-
-func initializeImportExportCustomerHome(t *testing.T, env []string, workingDirectory string) string {
-	t.Helper()
-
-	homeDir := importExportEnvironmentHome(env)
-	namedFactoriesRoot := filepath.Join(homeDir, ".you-agent-factory", "factories")
-	missingFactory := filepath.Join(workingDirectory, "missing-initialization-factory.json")
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you", "run", "--factory", missingFactory,
-	})
-	inputs.Input.Env = env
-	inputs.Input.WorkingDirectory = workingDirectory
-	err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input)
-	if err == nil || !strings.Contains(err.Error(), filepath.Base(missingFactory)) {
-		t.Fatalf(
-			"Process.Execute(run missing Factory) error = %v, want missing Factory diagnostic\nstdout:\n%s\nstderr:\n%s",
-			err,
-			inputs.Stdout(),
-			inputs.Stderr(),
-		)
-	}
-	return namedFactoriesRoot
-}
-
-func createImportExportActivatedNamedFactory(
-	t *testing.T,
-	env []string,
-	workingDirectory string,
-	namedFactoriesRoot string,
-	name string,
-	factoryConfigPath string,
-) string {
-	t.Helper()
-
-	inputs := support.FakeInputs(t.Context(), []string{
-		"you",
-		"--json",
-		"factory",
-		"create",
-		name,
-		"--from",
-		factoryConfigPath,
-		"--dir",
-		namedFactoriesRoot,
-		"--set-current",
-	})
-	inputs.Input.Env = env
-	inputs.Input.WorkingDirectory = workingDirectory
-	if err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
-		t.Fatalf(
-			"Process.Execute(factory create %q --set-current) error = %v\nstdout:\n%s\nstderr:\n%s",
-			name,
-			err,
-			inputs.Stdout(),
-			inputs.Stderr(),
-		)
-	}
-
-	var result struct {
-		FactoryDir string `json:"factoryDir"`
-	}
-	if err := json.Unmarshal([]byte(inputs.Stdout()), &result); err != nil {
-		t.Fatalf("decode factory create result: %v\nstdout:\n%s", err, inputs.Stdout())
-	}
-	if _, err := os.Stat(filepath.Join(result.FactoryDir, "factory.json")); err != nil {
-		t.Fatalf(
-			"activated named Factory %q missing factory.json at %s: %v",
-			name,
-			result.FactoryDir,
-			err,
-		)
-	}
-	return result.FactoryDir
-}
-
-func importExportEnvironmentHome(env []string) string {
-	for index := len(env) - 1; index >= 0; index-- {
-		item := env[index]
-		if strings.HasPrefix(item, "HOME=") {
-			return strings.TrimPrefix(item, "HOME=")
-		}
-		if strings.HasPrefix(item, "USERPROFILE=") {
-			return strings.TrimPrefix(item, "USERPROFILE=")
-		}
-	}
-	return ""
 }
 
 func assertImportExportCurrentFactoryUnchanged(

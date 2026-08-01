@@ -9,6 +9,7 @@ import (
 
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -49,11 +50,12 @@ func newAgentFactoryExportImportFixture(
 	authoredDir := t.TempDir()
 	writeAgentFactoryExportImportAuthoredLayout(t, authoredDir, name, options.workType, options.terminalState)
 
-	canonicalPayload, err := support.FlattenFactoryConfig(t, authoredDir)
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	canonicalPayload, err := support.FlattenFactoryConfigWithProcess(t, process, authoredDir)
 	if err != nil {
 		t.Fatalf("FlattenFactoryConfig(%s): %v", name, err)
 	}
-	if _, err := support.LoadedFactory(t, authoredDir); err != nil {
+	if _, err := support.LoadedFactoryWithProcess(t, process, authoredDir); err != nil {
 		t.Fatalf("LoadRuntimeConfig(authored fixture %s): %v", name, err)
 	}
 
