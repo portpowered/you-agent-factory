@@ -5,6 +5,7 @@ const bunUnitTestFiles = [
     cwd: process.cwd(),
   }),
 ].sort();
+const bunTestArguments = process.argv.slice(2);
 
 if (bunUnitTestFiles.length === 0) {
   console.error(
@@ -20,7 +21,7 @@ if (bunUnitTestFiles.length === 0) {
   );
 
   const result = Bun.spawnSync({
-    cmd: [process.execPath, "test", ...bunUnitTestFiles],
+    cmd: [process.execPath, "test", ...bunTestArguments, ...bunUnitTestFiles],
     cwd: process.cwd(),
     stderr: "inherit",
     stdout: "inherit",

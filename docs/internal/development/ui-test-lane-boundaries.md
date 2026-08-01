@@ -13,9 +13,12 @@ disjoint from `.bun.component.test.tsx`, ordinary component tests, browser or
 integration tests, performance tests, and Storybook tests. The required UI
 unit seed lane is run with `cd ui && bun run test:unit:bun`; it discovers only
 the Bun suffix and reports the selected files plus Bun's terminal file/test
-totals. The required UI Coverage lane runs the Vitest Node unit project only;
-component, browser, and performance tests are separate confidence lanes and do
-not affect its threshold.
+totals. The aggregate unit lane (`bun run test:unit`) runs that Bun lane before
+the optimized Vitest `dashboard-unit` project and fails on either result. The
+required UI Coverage lane runs Vitest Node coverage plus the Bun-owned unit
+coverage pass, merging Bun's LCOV source records exactly once while preserving
+the existing thresholds. Component, browser, and performance tests are separate
+confidence lanes and do not affect the unit coverage threshold.
 
 The component lane runs browserless tests in two compatibility groups: Bun is
 the default for tests without Vitest-only capabilities, and Vitest temporarily
