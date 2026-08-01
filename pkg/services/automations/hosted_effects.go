@@ -1,10 +1,6 @@
 package automations
 
 import (
-	"context"
-	"net/http"
-	"time"
-
 	hostedsources "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources"
 	"go.uber.org/zap"
 )
@@ -13,46 +9,19 @@ import (
 // process-edge injection.
 type HostedLinearCheckpointStore = hostedsources.CheckpointStore
 
-// HostedLinearHTTPDoer performs hosted Linear GraphQL network requests.
-type HostedLinearHTTPDoer interface {
-	Do(*http.Request) (*http.Response, error)
-}
+// HostedLinearHTTPDoer performs hosted Linear GraphQL network requests. The
+// effect contract remains owned by the private hosted-sources implementation.
+type HostedLinearHTTPDoer = hostedsources.HTTPDoer
 
 // HostedRuntimePaths is the minimum runtime view needed to resolve a hosted
-// source credential. Factory Definition runtime lookups satisfy this contract
-// without becoming part of the Automations public dependency surface.
-type HostedRuntimePaths interface {
-	FactoryDir() string
-	RuntimeBaseDir() string
-}
+// source credential.
+type HostedRuntimePaths = hostedsources.HostedRuntimePaths
 
 // HostedLinearSecretResolver resolves hosted Linear credentials.
-type HostedLinearSecretResolver func(
-	context.Context,
-	HostedRuntimePaths,
-	string,
-) (string, error)
+type HostedLinearSecretResolver = hostedsources.SecretResolver
 
 // HostedLinearClock schedules hosted Linear poller waits.
-type HostedLinearClock interface {
-	After(time.Duration) <-chan time.Time
-}
-
-// NewHostedLinearCheckpointStore constructs atomic checkpoint persistence from
-// an exact filesystem effect.
-var NewHostedLinearCheckpointStore = hostedsources.NewCheckpointStore
-
-// NewHostedLinearSecretResolver binds hosted Linear credential resolution
-// effects.
-func NewHostedLinearSecretResolver(
-	getenv func(string) string,
-	readFile func(string) ([]byte, error),
-) HostedLinearSecretResolver {
-	inner := hostedsources.NewSecretResolver(getenv, readFile)
-	return func(ctx context.Context, runtimePaths HostedRuntimePaths, secretRef string) (string, error) {
-		return inner(ctx, runtimePaths, secretRef)
-	}
-}
+type HostedLinearClock = hostedsources.Clock
 
 // HostedLinearDefaultRequestTimeout is the default hosted Linear HTTP timeout.
 const HostedLinearDefaultRequestTimeout = hostedsources.DefaultRequestTimeout

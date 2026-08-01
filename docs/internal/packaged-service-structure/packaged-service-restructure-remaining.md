@@ -12,7 +12,7 @@ These are live counts from production `.go` files, not just the stale baseline:
 
 | Service | Root interfaces | Root exported functions | Noncanonical root directories | Status |
 |---|---:|---:|---|---|
-| `automations` | 7 | 3 | — | Contract not sealed |
+| `automations` | 1 | 0 | — | Root contract sealed; nested subservice debt remains |
 | `factory_definitions` | 31 | 19 | `clonetests`, `definition`, `systeminitializationtests` | Major decomposition remaining |
 | `factory_runtime` | 36 | 50 | `testdata` | Major decomposition remaining |
 | `factory_sessions` | 4 | 13 | — | Contract/transport consolidation remaining |

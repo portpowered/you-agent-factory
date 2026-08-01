@@ -91,7 +91,7 @@ func (a *Adapter) invokeStartSource(
 	ctx context.Context,
 	request automations.StartSourceRequest,
 ) (automations.StartSourceResult, error) {
-	if a == nil || a.root.Operations == nil {
+	if a == nil || !rootAvailable(a.root) {
 		return automations.StartSourceResult{}, errors.New("automations root is required")
 	}
 	return a.root.StartSource(ctx, request)
@@ -101,7 +101,7 @@ func (a *Adapter) invokeStopSource(
 	ctx context.Context,
 	request automations.StopSourceRequest,
 ) (automations.StopSourceResult, error) {
-	if a == nil || a.root.Operations == nil {
+	if a == nil || !rootAvailable(a.root) {
 		return automations.StopSourceResult{}, errors.New("automations root is required")
 	}
 	return a.root.StopSource(ctx, request)
@@ -111,7 +111,7 @@ func (a *Adapter) invokeWaitSource(
 	ctx context.Context,
 	request automations.WaitSourceRequest,
 ) (automations.WaitSourceResult, error) {
-	if a == nil || a.root.Operations == nil {
+	if a == nil || !rootAvailable(a.root) {
 		return automations.WaitSourceResult{}, errors.New("automations root is required")
 	}
 	return a.root.WaitSource(ctx, request)

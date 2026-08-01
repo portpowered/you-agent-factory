@@ -64,6 +64,28 @@ func TestNewAdapter_RejectsNilRootOperations(t *testing.T) {
 	}
 }
 
+func TestNewAdapter_RejectsTypedNilRootOperations(t *testing.T) {
+	t.Parallel()
+
+	var typedNil *typedNilRoot
+	root := automations.Root{Operations: typedNil}
+	if NewAdapter(root) != nil {
+		t.Fatal("NewAdapter with typed-nil Operations must return nil")
+	}
+
+	adapter := &Adapter{root: root}
+	if adapter.Root().Operations != nil {
+		t.Fatal("Root on an adapter with typed-nil Operations must return an empty root")
+	}
+	if _, err := adapter.invokeSourceStatus(context.Background(), automations.SourceStatusRequest{}); err == nil {
+		t.Fatal("invokeSourceStatus with typed-nil Operations must return an error")
+	}
+}
+
+type typedNilRoot struct {
+	automations.Service
+}
+
 func TestAdapter_PropagatesTypedRootFailures(t *testing.T) {
 	t.Parallel()
 

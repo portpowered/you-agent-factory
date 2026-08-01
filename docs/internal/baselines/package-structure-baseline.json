@@ -1219,21 +1219,6 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/automations/contracts.go",
-      "target": "NewPreparedInvocationSchedules"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/automations/hosted_effects.go",
-      "target": "NewHostedLinearSecretResolver"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/automations/hosted_sources_factory.go",
-      "target": "NewHostedSourcesFactory"
-    },
-    {
-      "rule": "service-root-exported-function",
       "filePath": "pkg/services/automations/internal/services/hosted_sources/service.go",
       "target": "NewCheckpointStore"
     },
@@ -2396,11 +2381,6 @@
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/workers/workstation_pool_boundary_impl.go",
       "target": "NewWorkstationPoolBoundary"
-    },
-    {
-      "rule": "service-root-interface-count",
-      "filePath": "pkg/services/automations",
-      "target": "pkg/services/automations/contracts.go:Clock,pkg/services/automations/contracts.go:FilesystemInputReader,pkg/services/automations/contracts.go:FilesystemWatcher,pkg/services/automations/contracts.go:FilesystemWatcherFactory,pkg/services/automations/contracts.go:HostedPollers,pkg/services/automations/contracts.go:InvocationScheduleService,pkg/services/automations/contracts.go:Service,pkg/services/automations/hosted_effects.go:HostedLinearClock,pkg/services/automations/hosted_effects.go:HostedLinearHTTPDoer,pkg/services/automations/hosted_effects.go:HostedRuntimePaths"
     },
     {
       "rule": "service-root-interface-count",

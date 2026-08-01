@@ -1049,6 +1049,12 @@
     },
     {
       "fromOwner": "automations",
+      "toOwner": "platform",
+      "class": "external_effect",
+      "evidence": "pkg/services/automations -\u003e pkg/platform/clock"
+    },
+    {
+      "fromOwner": "automations",
       "toOwner": "transports",
       "class": "command",
       "evidence": "pkg/services/automations/transports/http -\u003e pkg/transports/http/generated"

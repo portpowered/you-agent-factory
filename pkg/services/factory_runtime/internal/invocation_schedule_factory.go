@@ -15,9 +15,16 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
+// invocationScheduleService is the optional Automations capability consumed
+// by runtime-owned schedule recovery. It stays local because it is not part of
+// the cross-service Automations root authority.
+type invocationScheduleService interface {
+	PrepareInvocationSchedules(context.Context, automations.InvocationScheduleRequest) (automations.PreparedInvocationSchedules, error)
+}
+
 type invocationScheduleFactory struct {
 	factory.Factory
-	schedules     automations.InvocationScheduleService
+	schedules     invocationScheduleService
 	factoryDir    string
 	factoryConfig *interfaces.FactoryConfig
 	runtimeConfig interfaces.RuntimeConfigLookup
@@ -28,7 +35,7 @@ type invocationScheduleFactory struct {
 }
 
 func attachInvocationScheduleFactory(ctx context.Context, automation automations.Service, instance factory.HostedInstance) {
-	schedules, ok := automation.(automations.InvocationScheduleService)
+	schedules, ok := automation.(invocationScheduleService)
 	bundle, bundleOK := instance.(*factoryhost.Bundle)
 	if !ok || !bundleOK || bundle == nil || bundle.Factory == nil || bundle.RuntimeCfg == nil {
 		return
