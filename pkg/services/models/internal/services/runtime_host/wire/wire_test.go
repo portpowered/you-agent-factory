@@ -9,6 +9,7 @@ import (
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	runtimehostwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/wire"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
@@ -28,8 +29,8 @@ func TestNewServiceRequiresRuntimeHostDependencies(t *testing.T) {
 		scopes          runtimescopes.Service
 		assets          *recordingAssetsService
 		launcher        *recordingProcessLauncher
-		hostHTTP        models.HostHTTPDoer
-		clock           models.HostClock
+		hostHTTP        modelseffects.HostHTTPDoer
+		clock           modelseffects.HostClock
 		wantContains    string
 		wantInvalidDeps bool
 	}{
@@ -112,8 +113,8 @@ type recordingProcessLauncher struct {
 
 func (launcher *recordingProcessLauncher) Start(
 	context.Context,
-	models.HostProcessStartSpec,
-) (models.HostManagedProcess, error) {
+	modelseffects.HostProcessStartSpec,
+) (modelseffects.HostManagedProcess, error) {
 	launcher.starts++
 	panic("process launcher called during inert construction")
 }
@@ -121,7 +122,7 @@ func (launcher *recordingProcessLauncher) Start(
 type testHostClock struct{}
 
 func (testHostClock) Now() time.Time { return time.Unix(0, 0) }
-func (testHostClock) NewTimer(time.Duration) models.HostTimer {
+func (testHostClock) NewTimer(time.Duration) modelseffects.HostTimer {
 	panic("host timer created during inert construction")
 }
 

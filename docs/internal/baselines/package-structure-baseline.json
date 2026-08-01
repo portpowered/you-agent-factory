@@ -1609,11 +1609,6 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/models/internal/services/runtime_host/internal/services/leases/service.go",
-      "target": "BindCoordinator"
-    },
-    {
-      "rule": "service-root-exported-function",
       "filePath": "pkg/services/models/local_execution_contract.go",
       "target": "ValidateLocalInvocationRequest"
     },
@@ -2361,21 +2356,6 @@
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/factory_visualization/internal/services/live_view_projection",
       "target": "pkg/services/factory_visualization/internal/services/live_view_projection/service.go:Clock,pkg/services/factory_visualization/internal/services/live_view_projection/service.go:Service,pkg/services/factory_visualization/internal/services/live_view_projection/service.go:Sink,pkg/services/factory_visualization/internal/services/live_view_projection/service.go:Source"
-    },
-    {
-      "rule": "service-root-interface-count",
-      "filePath": "pkg/services/models",
-      "target": "pkg/services/models/host_diagnostics_contract.go:HostDiagnosticLogger,pkg/services/models/host_diagnostics_contract.go:HostMetricsRecorder,pkg/services/models/invocation_artifacts.go:InvocationArtifactExporter,pkg/services/models/invocation_artifacts.go:InvocationArtifactFileSystem,pkg/services/models/managed_runtime_contract.go:InvocationReadinessError,pkg/services/models/runtime_construction_contract.go:AssetHTTPDoer,pkg/services/models/runtime_construction_contract.go:HostClock,pkg/services/models/runtime_construction_contract.go:HostHTTPDoer,pkg/services/models/runtime_construction_contract.go:HostManagedProcess,pkg/services/models/runtime_construction_contract.go:HostProcessLauncher,pkg/services/models/runtime_construction_contract.go:HostTimer,pkg/services/models/runtime_construction_contract.go:RuntimeHTTPDoer,pkg/services/models/runtime_construction_contract.go:RuntimeTempFile,pkg/services/models/service_contract.go:PullMetricsRecorder,pkg/services/models/service_contract.go:Service"
-    },
-    {
-      "rule": "service-root-interface-count",
-      "filePath": "pkg/services/models/internal/services/inference",
-      "target": "pkg/services/models/internal/services/inference/service.go:InvocationRuntime,pkg/services/models/internal/services/inference/service.go:Service"
-    },
-    {
-      "rule": "service-root-interface-count",
-      "filePath": "pkg/services/models/internal/services/runtime_host/internal/services/leases",
-      "target": "pkg/services/models/internal/services/runtime_host/internal/services/leases/service.go:CoordinatorBindable,pkg/services/models/internal/services/runtime_host/internal/services/leases/service.go:Service,pkg/services/models/internal/services/runtime_host/internal/services/leases/service.go:SlotCapacityCoordinator,pkg/services/models/internal/services/runtime_host/internal/services/leases/service.go:SlotFactsProvider"
     },
     {
       "rule": "service-root-interface-count",

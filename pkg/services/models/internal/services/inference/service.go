@@ -7,13 +7,19 @@ import (
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 )
 
-// InvocationRuntime executes one validated scoped model operation under accepted
-// lease capacity. Implementations must return detached content and artifact
-// source facts without exposing runtime handles, endpoints, processes, or
-// filesystem paths to peers.
-type InvocationRuntime interface {
-	Invoke(context.Context, InvocationRuntimeRequest) (InvocationRuntimeResult, error)
-}
+// TargetError and the direct-invocation values remain private to the Models
+// Inference owner while old local-runtime adapters finish converging on this
+// canonical nested service package.
+var ErrUnsupportedResponseMode = models.ErrUnsupportedResponseMode
+
+type ResponseMode = models.ResponseMode
+type Options = models.Options
+type Request = models.Request
+type Result = models.Result
+type ResolvedModelOperationBinding = models.ResolvedModelOperationBinding
+type TargetError = models.TargetError
+
+const ResponseModeAudioStream = models.ResponseModeAudioStream
 
 // Service owns scoped invoke and cancellation behind the singular Models root.
 // Peers reach lease-backed invocation only through the process-scoped Models

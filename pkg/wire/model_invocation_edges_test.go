@@ -21,7 +21,7 @@ func TestModelsServiceIsConstructedOnceAndOpensRuntimeScopeOnSameRoot(t *testing
 	if err != nil {
 		t.Fatalf("provideModelsService: %v", err)
 	}
-	if _, err := root.ListModels(context.Background()); err == nil {
+	if _, err := root.ListCatalog(context.Background(), models.ListModelsRequest{}); err == nil {
 		t.Fatal("unbound Models service unexpectedly accepted a catalog operation")
 	}
 	opened, err := root.OpenRuntimeScope(context.Background(), models.OpenRuntimeScopeRequest{

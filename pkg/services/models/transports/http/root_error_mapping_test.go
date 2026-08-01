@@ -226,7 +226,7 @@ func TestHandler_PullModelMapsTypedRootFailures(t *testing.T) {
 					return models.PullResult{}, tt.rootErr
 				},
 			}
-			handler := NewHandlerFromRoot(RootBinding{Models: root}, zap.NewNop())
+			handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
 			recorder := httptest.NewRecorder()
 
 			handler.PullModel(recorder, httptest.NewRequest(http.MethodPost, "/models/voice/pull", nil), "voice")
@@ -244,7 +244,7 @@ func TestHandler_PullModelUnmappedFailureDoesNotLeakInternalPaths(t *testing.T) 
 			return models.PullResult{}, errors.New("pkg/services/models/internal/cache: /tmp/models unavailable")
 		},
 	}
-	handler := NewHandlerFromRoot(RootBinding{Models: root}, zap.NewNop())
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
 	recorder := httptest.NewRecorder()
 
 	handler.PullModel(recorder, httptest.NewRequest(http.MethodPost, "/models/voice/pull", nil), "voice")

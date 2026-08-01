@@ -1,7 +1,6 @@
 package models
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -119,18 +118,6 @@ const (
 	HostFailureClassCancelled          HostFailureClass = "cancelled"
 	HostFailureClassCapacityExhausted  HostFailureClass = "capacity_exhausted"
 )
-
-// LocalRuntimeHooks observes model resource and load lifecycle activity for
-// Wire/construction-time ProcessDependencies. It is not a peer-facing host/lease
-// or infer contract; peers use Service.InspectRuntime, AcquireLease,
-// ReleaseLease, and InvokeLocal with plain request/result vocabulary instead.
-type LocalRuntimeHooks struct {
-	MarkResourceWaitStarted  func(context.Context, time.Time)
-	MarkResourceWaitFinished func(context.Context, time.Time, bool)
-	MarkLoadRequested        func(context.Context, time.Time)
-	MarkLoadFinished         func(context.Context, time.Time)
-	MarkLoadReused           func(context.Context)
-}
 
 // ModelHostSnapshot contains detached peer-required host readiness facts.
 // Supervisor slots, processes, health clients, timers, eviction policy, and

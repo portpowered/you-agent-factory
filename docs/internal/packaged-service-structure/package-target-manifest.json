@@ -297,10 +297,8 @@
     "pkg/services/factory_visualization/transports/mcp",
     "pkg/services/factory_visualization/wire",
     "pkg/services/models",
-    "pkg/services/models/internal/artifacts",
-    "pkg/services/models/internal/catalog",
-    "pkg/services/models/internal/host",
-    "pkg/services/models/internal/inference",
+    "pkg/services/models/internal/effects",
+    "pkg/services/models/internal/legacyhost",
     "pkg/services/models/internal/local",
     "pkg/services/models/internal/managedruntime",
     "pkg/services/models/internal/service",
@@ -1848,24 +1846,14 @@
       "destination": "models"
     },
     {
-      "packagePath": "pkg/services/models/internal/artifacts",
+      "packagePath": "pkg/services/models/internal/effects",
       "disposition": "retain",
       "destination": "models"
     },
     {
-      "packagePath": "pkg/services/models/internal/catalog",
-      "disposition": "move",
-      "destination": "models/internal/services/catalog"
-    },
-    {
-      "packagePath": "pkg/services/models/internal/host",
-      "disposition": "move",
-      "destination": "models/internal/services/runtime_host"
-    },
-    {
-      "packagePath": "pkg/services/models/internal/inference",
-      "disposition": "move",
-      "destination": "models/internal/services/inference"
+      "packagePath": "pkg/services/models/internal/legacyhost",
+      "disposition": "retain",
+      "destination": "models"
     },
     {
       "packagePath": "pkg/services/models/internal/local",

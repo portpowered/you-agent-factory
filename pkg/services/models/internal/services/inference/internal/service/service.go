@@ -15,18 +15,25 @@ import (
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 )
 
+// InvocationRuntime is the private execution port injected by Inference wire.
+// It is intentionally owned by the implementation package rather than the
+// parent service contract.
+type InvocationRuntime interface {
+	Invoke(context.Context, inference.InvocationRuntimeRequest) (inference.InvocationRuntimeResult, error)
+}
+
 type service struct {
-	scopes      runtimescopes.Service
-	assets      scopedassets.Service
-	catalog     modelcatalog.Service
-	runtimeHost runtimehost.Service
-	runtime     inference.InvocationRuntime
-	artifacts   *inferenceartifacts.Registrar
-	clock       func() time.Time
+	scopes            runtimescopes.Service
+	assets            scopedassets.Service
+	catalog           modelcatalog.Service
+	runtimeHost       runtimehost.Service
+	runtime           InvocationRuntime
+	artifacts         *inferenceartifacts.Registrar
+	clock             func() time.Time
 	executionDeadline func() time.Duration
 
-	hostMu     sync.Mutex
-	hostSlots  map[hostSlotKey]*hostSlotEntry
+	hostMu         sync.Mutex
+	hostSlots      map[hostSlotKey]*hostSlotEntry
 	mu             sync.Mutex
 	nextInvocation int
 	invocations    map[models.ModelInvocationRef]models.InvokeModelResult
@@ -42,7 +49,7 @@ func New(
 	assets scopedassets.Service,
 	catalog modelcatalog.Service,
 	runtimeHost runtimehost.Service,
-	runtime inference.InvocationRuntime,
+	runtime InvocationRuntime,
 	artifacts *inferenceartifacts.Registrar,
 	clock func() time.Time,
 	executionDeadline func() time.Duration,

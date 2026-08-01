@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 )
 
@@ -539,7 +540,7 @@ func TestPrepareModelAssetsRetriesTimeoutThenReturnsSourceFailure(t *testing.T) 
 
 func newPreparationTestService(
 	scopes runtimescopes.Service,
-	client models.AssetHTTPDoer,
+	client modelseffects.AssetHTTPDoer,
 	endpoints models.RuntimeAssetEndpoints,
 	mutations *atomic.Int32,
 ) *service {

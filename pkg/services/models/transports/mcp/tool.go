@@ -6,10 +6,10 @@ import "encoding/json"
 
 // Tool names use Models vocabulary and align with accepted root operations.
 const (
-	ToolListCatalog      = "you.model.list_catalog"
-	ToolPrepareAssets    = "you.model.prepare_assets"
-	ToolAcquireLease     = "you.model.acquire_lease"
-	ToolInvokeWithLease  = "you.model.invoke_with_lease"
+	ToolListCatalog     = "you.model.list_catalog"
+	ToolPrepareAssets   = "you.model.prepare_assets"
+	ToolAcquireLease    = "you.model.acquire_lease"
+	ToolInvokeWithLease = "you.model.invoke_with_lease"
 )
 
 // Stable error envelope fields shared by every Models MCP tool.

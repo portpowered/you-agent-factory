@@ -37,7 +37,6 @@ import (
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
-	"github.com/portpowered/infinite-you/pkg/services/models"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
@@ -307,7 +306,7 @@ func provideOperatorBackendScopeEnsurer(settings operatorsettings.Service) opera
 
 func provideModelInvocationArtifactExporter(
 	edges serviceedges.Edges,
-) (models.InvocationArtifactExporter, error) {
+) (modelswire.InvocationArtifactExporter, error) {
 	filesystem := edges.ModelInvocationArtifactFileSystem
 	if filesystem == nil {
 		filesystem = platformfilesystem.Local{}

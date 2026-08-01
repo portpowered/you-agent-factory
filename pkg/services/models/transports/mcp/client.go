@@ -51,10 +51,10 @@ type canonicalToolHandler func(
 ) (json.RawMessage, error)
 
 var canonicalToolHandlers = map[string]canonicalToolHandler{
-	ToolListCatalog:      handleListCatalog,
-	ToolPrepareAssets:    handlePrepareAssets,
-	ToolAcquireLease:     handleAcquireLease,
-	ToolInvokeWithLease:  handleInvokeWithLease,
+	ToolListCatalog:     handleListCatalog,
+	ToolPrepareAssets:   handlePrepareAssets,
+	ToolAcquireLease:    handleAcquireLease,
+	ToolInvokeWithLease: handleInvokeWithLease,
 }
 
 func handleListCatalog(

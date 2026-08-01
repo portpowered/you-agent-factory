@@ -21,7 +21,7 @@ func TestHandlerFromRoot_ListModelsInvokesModelsRoot(t *testing.T) {
 			return models.List{Results: []models.Summary{{Name: "voice"}}}, nil
 		},
 	}
-	handler := NewHandlerFromRoot(RootBinding{Models: root}, zap.NewNop())
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
 	recorder := httptest.NewRecorder()
 
 	handler.ListModels(recorder, httptest.NewRequest(http.MethodGet, "/models", nil))
@@ -47,7 +47,7 @@ func TestNewHandlerFromRoot_ExposesInjectedModelsRoot(t *testing.T) {
 	t.Parallel()
 
 	root := &rootFake{}
-	handler := NewHandlerFromRoot(RootBinding{Models: root}, zap.NewNop())
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
 	if handler == nil || handler.adapter == nil {
 		t.Fatal("NewHandlerFromRoot returned nil handler or adapter")
 	}

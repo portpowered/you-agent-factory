@@ -49,6 +49,10 @@ func (fake modelAPIFake) ListCatalog(
 	ctx context.Context,
 	request modelcontract.ListModelsRequest,
 ) (modelcontract.ListModelsResult, error) {
+	if fake.listCatalog == nil && fake.list != nil {
+		listed, err := fake.list(ctx)
+		return modelcontract.ListModelsResult{Models: listed.Results}, err
+	}
 	return fake.listCatalog(ctx, request)
 }
 
@@ -56,6 +60,10 @@ func (fake modelAPIFake) GetCatalogModel(
 	ctx context.Context,
 	request modelcontract.GetModelRequest,
 ) (modelcontract.GetModelResult, error) {
+	if fake.getCatalog == nil && fake.get != nil {
+		detail, err := fake.get(ctx, request.Name)
+		return modelcontract.GetModelResult{Model: detail}, err
+	}
 	return fake.getCatalog(ctx, request)
 }
 
@@ -63,6 +71,9 @@ func (fake modelAPIFake) PullModelForScope(
 	ctx context.Context,
 	request modelcontract.PullModelRequest,
 ) (modelcontract.PullResult, error) {
+	if fake.pullForScope == nil && fake.pull != nil {
+		return fake.pull(ctx, request.Name)
+	}
 	return fake.pullForScope(ctx, request)
 }
 
@@ -75,7 +86,11 @@ func (fake modelInvokerFake) InvokeModel(ctx context.Context, name string, reque
 }
 
 func newTestHandler(service modelcontract.Service, invoker workers.ModelInvoker) *Handler {
-	return NewHandler(NewAdapter(service, invoker, passthroughContentPreparation{}), zap.NewNop())
+	scope, err := (modelcontract.RuntimeScopeRef{}).Parse("factory-session:http-test")
+	if err != nil {
+		panic(err)
+	}
+	return NewHandler(NewAdapter(service, invoker, passthroughContentPreparation{}, scope), zap.NewNop())
 }
 
 type passthroughContentPreparation struct{}

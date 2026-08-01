@@ -28,7 +28,7 @@ func TestHandler_ListModelsCanceledBeforeRootCallCompletesWithoutBody(t *testing
 	t.Parallel()
 
 	root := &rootFake{}
-	handler := NewHandlerFromRoot(RootBinding{Models: root}, zap.NewNop())
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -47,7 +47,7 @@ func TestHandler_GetModelCanceledDuringRootCallCompletesWithoutHang(t *testing.T
 	root := &rootFake{
 		get: waitForModelsRoot,
 	}
-	handler := NewHandlerFromRoot(RootBinding{Models: root}, zap.NewNop())
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	req := httptest.NewRequest(http.MethodGet, "/models/voice", nil).WithContext(ctx)
@@ -79,7 +79,7 @@ func TestHandler_PullModelCanceledDuringRootCallCompletesWithoutHang(t *testing.
 	root := &rootFake{
 		pull: waitForModelsPull,
 	}
-	handler := NewHandlerFromRoot(RootBinding{Models: root}, zap.NewNop())
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	req := httptest.NewRequest(http.MethodPost, "/models/voice/pull", nil).WithContext(ctx)
@@ -114,7 +114,7 @@ func TestHandler_ListModelsDeadlineExceededReturnsGatewayTimeout(t *testing.T) {
 			return models.List{}, ctx.Err()
 		},
 	}
-	handler := NewHandlerFromRoot(RootBinding{Models: root}, zap.NewNop())
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
 	defer cancel()
@@ -152,7 +152,7 @@ func TestHandler_PullModelDeadlineExceededReturnsGatewayTimeout(t *testing.T) {
 			return models.PullResult{}, ctx.Err()
 		},
 	}
-	handler := NewHandlerFromRoot(RootBinding{Models: root}, zap.NewNop())
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
 	defer cancel()

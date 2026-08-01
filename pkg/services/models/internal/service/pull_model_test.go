@@ -11,8 +11,8 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 
 	apisurface "github.com/portpowered/infinite-you/pkg/services/models"
-	models "github.com/portpowered/infinite-you/pkg/services/models"
-	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/host"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
+	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	managedruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/managedruntime"
 )
@@ -326,10 +326,10 @@ func TestService_PullModel_UsesInjectedClockForDuration(t *testing.T) {
 
 type capturingPullMetricsRecorder struct {
 	mu      sync.Mutex
-	metrics []models.PullMetric
+	metrics []modelseffects.PullMetric
 }
 
-func (r *capturingPullMetricsRecorder) RecordModelPullMetric(metric models.PullMetric) {
+func (r *capturingPullMetricsRecorder) RecordModelPullMetric(metric modelseffects.PullMetric) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.metrics = append(r.metrics, metric)

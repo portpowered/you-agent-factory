@@ -8,7 +8,8 @@ import (
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
-	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/host"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
+	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	managedruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/managedruntime"
 	"go.uber.org/zap"
@@ -208,7 +209,7 @@ func (s *Service) recordModelPullMetric(name string, labels map[string]string) {
 	if s == nil || s.pullMetrics == nil {
 		return
 	}
-	s.pullMetrics.RecordModelPullMetric(models.PullMetric{
+	s.pullMetrics.RecordModelPullMetric(modelseffects.PullMetric{
 		Name:   name,
 		Labels: cloneMetricLabels(labels),
 	})

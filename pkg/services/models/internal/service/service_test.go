@@ -9,7 +9,8 @@ import (
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
-	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/host"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
+	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog/wire"
@@ -40,7 +41,7 @@ func TestNewServiceRetainsExplicitDependencies(t *testing.T) {
 	if svc.runtimeConfig() != runtimeCfg || svc.modelHost() != host || svc.modelAssetPuller() != puller {
 		t.Fatal("NewService did not retain required dependencies")
 	}
-	if svc.logger() != logger || svc.pullMetrics != metrics {
+	if svc.logger() != logger || svc.pullMetrics != modelseffects.PullMetricsRecorder(metrics) {
 		t.Fatal("NewService did not retain optional dependencies")
 	}
 }
@@ -139,7 +140,7 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 
 type constructionPullMetrics struct{}
 
-func (*constructionPullMetrics) RecordModelPullMetric(models.PullMetric) {}
+func (*constructionPullMetrics) RecordModelPullMetric(modelseffects.PullMetric) {}
 
 type constructionAssetPuller struct{}
 

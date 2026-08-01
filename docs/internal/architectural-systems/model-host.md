@@ -13,12 +13,12 @@ sessions.
 
 | Responsibility | Owner |
 | --- | --- |
-| Local model asset cache inspection | `pkg/services/models/internal/host` via `AssetGateway` |
-| Pull or install materialization | `pkg/services/models/internal/host` delegating to `pkg/services/models/internal/local` pull/cache |
-| Supervised local server lifecycle (`LLAMACPP`) | `pkg/services/models/internal/host` `CatalogHost` runtime slots |
-| Readiness and failure-class projection | `pkg/services/models/internal/host` |
-| Lease issuance, release, and capacity | `pkg/services/models/internal/host` |
-| Idle unload and resource-pressure eviction | `pkg/services/models/internal/host` |
+| Local model asset cache inspection | `pkg/services/models/internal/services/runtime_host` via the Models Assets service |
+| Pull or install materialization | `pkg/services/models/internal/services/assets` delegating to `pkg/services/models/internal/local` pull/cache |
+| Supervised local server lifecycle (`LLAMACPP`) | `pkg/services/models/internal/services/runtime_host` runtime slots |
+| Readiness and failure-class projection | `pkg/services/models/internal/services/runtime_host` |
+| Lease issuance, release, and capacity | `pkg/services/models/internal/services/runtime_host/internal/services/leases` |
+| Idle unload and resource-pressure eviction | `pkg/services/models/internal/services/runtime_host` |
 | Managed-runtime API/CLI vocabulary | root `models.Service` + `pkg/transports/mapping` |
 | Factory session runtime state | per-session runtime only |
 
@@ -26,8 +26,8 @@ Factory sessions and workers **borrow** local model capacity through host leases
 They do not own subprocesses, asset caches, or unload policy.
 
 Direct invocation and local inference/agent worker execution route through
-`pkg/services/models/internal/host/execution.go` (`LeaseExecution.WrapRunner`) when the process-wide
-host is configured. Supervised leases pass `ServingEndpoint` metadata from
+the private runtime-host execution adapter when the process-wide host is configured.
+Supervised leases pass `ServingEndpoint` metadata from
 `lease.Endpoint` into runtime execution so inference uses the host-owned server
 boundary instead of bypassing it with a separate local runtime load path.
 `CatalogHost.InspectReadiness` preserves installed asset `READY`/`INSTALLED`
@@ -42,7 +42,8 @@ Wire constructs one process-wide host during runtime dependency assembly:
 
 - providers: `ProvideLocalModels` and `ProvideModelService` in
   `pkg/wire/providers`
-- host implementation contract: `pkg/services/models/internal/host.Host` / `CatalogHost`
+- host implementation contract: `pkg/services/models/internal/services/runtime_host.Service`
+  with legacy local-runtime compatibility retained under `pkg/services/models/internal/legacyhost`
 - session access: the model service and Worker Execution service receive the
   same injected local-model domain
 
@@ -107,4 +108,5 @@ Provider-neutral failure classes drive caller outcomes:
 - `capacity_exhausted`
 
 These map to managed-runtime `readinessState` values through
-`pkg/services/models/internal/host/contract.go` and `ManagedRuntimeFromSnapshot`.
+`pkg/services/models/internal/legacyhost/contract.go`, the private runtime-host service,
+and `ManagedRuntimeFromSnapshot`.

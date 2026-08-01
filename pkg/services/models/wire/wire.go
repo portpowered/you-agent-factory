@@ -17,8 +17,8 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
-	"github.com/portpowered/infinite-you/pkg/services/models/internal/artifacts"
-	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/host"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
+	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	modelsservice "github.com/portpowered/infinite-you/pkg/services/models/internal/service"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
@@ -45,33 +45,33 @@ const (
 // service.
 func NewService(
 	assetPlatform models.AssetHostPlatform,
-	assetHTTP models.AssetHTTPDoer,
+	assetHTTP AssetHTTPDoer,
 	assetEndpoints models.RuntimeAssetEndpoints,
-	assetMkdirAll models.AssetMakeDirectories,
-	assetStat models.AssetInspectPath,
-	assetHome models.AssetResolveHomeDirectory,
-	assetWriteFile models.AssetWriteFile,
-	assetRename models.AssetRenamePath,
-	assetRemove models.AssetRemovePath,
-	assetReadFile models.AssetReadFile,
-	assetReadDir models.AssetReadDirectory,
-	assetCreate models.AssetCreateFile,
-	assetOpen models.AssetOpenFile,
-	processLauncher models.HostProcessLauncher,
-	hostHTTP models.HostHTTPDoer,
-	hostClock models.HostClock,
+	assetMkdirAll AssetMakeDirectories,
+	assetStat AssetInspectPath,
+	assetHome AssetResolveHomeDirectory,
+	assetWriteFile AssetWriteFile,
+	assetRename AssetRenamePath,
+	assetRemove AssetRemovePath,
+	assetReadFile AssetReadFile,
+	assetReadDir AssetReadDirectory,
+	assetCreate AssetCreateFile,
+	assetOpen AssetOpenFile,
+	processLauncher HostProcessLauncher,
+	hostHTTP HostHTTPDoer,
+	hostClock HostClock,
 	runtimeRunner platformprocess.CommandRunner,
-	runtimeHTTP models.RuntimeHTTPDoer,
-	runtimeInspect models.RuntimeInspectFile,
-	runtimeTempDir models.RuntimeTempDirectory,
-	runtimeTempFile models.RuntimeCreateTempFile,
+	runtimeHTTP RuntimeHTTPDoer,
+	runtimeInspect RuntimeInspectFile,
+	runtimeTempDir RuntimeTempDirectory,
+	runtimeTempFile RuntimeCreateTempFile,
 	logger *zap.Logger,
 	now func() time.Time,
 	issuerEntropy platformrandom.Source,
-	pullMetrics models.PullMetricsRecorder,
-	hostLogger models.HostDiagnosticLogger,
-	hostMetrics models.HostMetricsRecorder,
-	localHooks models.LocalRuntimeHooks,
+	pullMetrics PullMetricsRecorder,
+	hostLogger HostDiagnosticLogger,
+	hostMetrics HostMetricsRecorder,
+	localHooks LocalRuntimeHooks,
 ) (models.Service, error) {
 	if err := validateConstructionInputs(
 		assetPlatform,
@@ -175,7 +175,7 @@ func NewService(
 		runtimeRunner, runtimeHTTP, localmodels.InspectFile(runtimeInspect),
 		localmodels.TempDirectory(runtimeTempDir), createTempFile,
 		runtimeScopes, catalogService, assetService, runtimeHost, inferenceService,
-		models.ProcessDependencies{
+		modelseffects.ProcessDependencies{
 			Logger: logger, Clock: now, PullMetrics: pullMetrics,
 			HostLogger: hostLogger, HostMetrics: hostMetrics, LocalHooks: localHooks,
 		},
@@ -209,25 +209,25 @@ func newCatalogReadinessQuery(assetService scopedassets.Service) catalog.Readine
 
 func validateConstructionInputs(
 	assetPlatform models.AssetHostPlatform,
-	assetHTTP models.AssetHTTPDoer,
-	assetMkdirAll models.AssetMakeDirectories,
-	assetStat models.AssetInspectPath,
-	assetHome models.AssetResolveHomeDirectory,
-	assetWriteFile models.AssetWriteFile,
-	assetRename models.AssetRenamePath,
-	assetRemove models.AssetRemovePath,
-	assetReadFile models.AssetReadFile,
-	assetReadDirectory models.AssetReadDirectory,
-	assetCreate models.AssetCreateFile,
-	assetOpen models.AssetOpenFile,
-	processLauncher models.HostProcessLauncher,
-	hostHTTP models.HostHTTPDoer,
-	hostClock models.HostClock,
+	assetHTTP modelseffects.AssetHTTPDoer,
+	assetMkdirAll modelseffects.AssetMakeDirectories,
+	assetStat modelseffects.AssetInspectPath,
+	assetHome modelseffects.AssetResolveHomeDirectory,
+	assetWriteFile modelseffects.AssetWriteFile,
+	assetRename modelseffects.AssetRenamePath,
+	assetRemove modelseffects.AssetRemovePath,
+	assetReadFile modelseffects.AssetReadFile,
+	assetReadDirectory modelseffects.AssetReadDirectory,
+	assetCreate modelseffects.AssetCreateFile,
+	assetOpen modelseffects.AssetOpenFile,
+	processLauncher modelseffects.HostProcessLauncher,
+	hostHTTP modelseffects.HostHTTPDoer,
+	hostClock modelseffects.HostClock,
 	runtimeRunner platformprocess.CommandRunner,
-	runtimeHTTP models.RuntimeHTTPDoer,
-	runtimeInspect models.RuntimeInspectFile,
-	runtimeTempDir models.RuntimeTempDirectory,
-	runtimeTempFile models.RuntimeCreateTempFile,
+	runtimeHTTP modelseffects.RuntimeHTTPDoer,
+	runtimeInspect modelseffects.RuntimeInspectFile,
+	runtimeTempDir modelseffects.RuntimeTempDirectory,
+	runtimeTempFile modelseffects.RuntimeCreateTempFile,
 	now func() time.Time,
 	issuerEntropy platformrandom.Source,
 ) error {
@@ -307,14 +307,16 @@ func runtimeScopeIssuerID(entropy platformrandom.Source) (string, error) {
 }
 
 // NewInvocationArtifactExporter constructs the Models-owned invocation artifact exporter.
-func NewInvocationArtifactExporter(fileSystem models.InvocationArtifactFileSystem) (models.InvocationArtifactExporter, error) {
-	return artifacts.NewExporter(fileSystem)
+func NewInvocationArtifactExporter(fileSystem InvocationArtifactFileSystem) (InvocationArtifactExporter, error) {
+	return inferencewire.NewInvocationArtifactExporter(fileSystem)
 }
 
-type hostProcessLauncher struct{ next models.HostProcessLauncher }
+type hostProcessLauncher struct {
+	next modelseffects.HostProcessLauncher
+}
 
 func (a hostProcessLauncher) Start(ctx context.Context, spec modelhost.ProcessStartSpec) (modelhost.ManagedProcess, error) {
-	process, err := a.next.Start(ctx, models.HostProcessStartSpec{
+	process, err := a.next.Start(ctx, modelseffects.HostProcessStartSpec{
 		Command: spec.Command, Args: spec.Args, Env: spec.Env, WorkDir: spec.WorkDir, HealthEndpoint: spec.HealthEndpoint,
 	})
 	if err != nil {
@@ -323,14 +325,16 @@ func (a hostProcessLauncher) Start(ctx context.Context, spec modelhost.ProcessSt
 	return process, nil
 }
 
-type hostClockAdapter struct{ next models.HostClock }
+type hostClockAdapter struct{ next modelseffects.HostClock }
 
 func (a hostClockAdapter) Now() time.Time { return a.next.Now() }
 func (a hostClockAdapter) NewTimer(duration time.Duration) modelhost.Timer {
 	return a.next.NewTimer(duration)
 }
 
-type runtimeTempFileAdapter struct{ next models.RuntimeCreateTempFile }
+type runtimeTempFileAdapter struct {
+	next modelseffects.RuntimeCreateTempFile
+}
 
 func (a runtimeTempFileAdapter) create(dir, pattern string) (localmodels.TempFile, error) {
 	return a.next(dir, pattern)

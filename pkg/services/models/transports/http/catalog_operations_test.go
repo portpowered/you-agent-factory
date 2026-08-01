@@ -29,7 +29,7 @@ func TestAdapter_ListModelsInvokesFakeRootAndEncodesSuccess(t *testing.T) {
 			}, nil
 		},
 	}
-	handler := NewHandlerFromRoot(RootBinding{Models: root}, zap.NewNop())
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
 	recorder := httptest.NewRecorder()
 
 	handler.ListModels(recorder, httptest.NewRequest(http.MethodGet, "/models", nil))
@@ -61,7 +61,7 @@ func TestAdapter_GetModelInvokesFakeRootWithDecodedName(t *testing.T) {
 			}, nil
 		},
 	}
-	handler := NewHandlerFromRoot(RootBinding{Models: root}, zap.NewNop())
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
 	recorder := httptest.NewRecorder()
 
 	handler.GetModel(recorder, httptest.NewRequest(http.MethodGet, "/models/voice", nil), "voice")
@@ -90,7 +90,7 @@ func TestAdapter_GetModelRejectsEmptyNameBeforeFakeRoot(t *testing.T) {
 			return models.Detail{}, nil
 		},
 	}
-	handler := NewHandlerFromRoot(RootBinding{Models: root}, zap.NewNop())
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
 	recorder := httptest.NewRecorder()
 
 	handler.GetModel(recorder, httptest.NewRequest(http.MethodGet, "/models/", nil), "   ")
@@ -106,7 +106,7 @@ func TestAdapter_GetModelMapsNotFoundFromFakeRoot(t *testing.T) {
 			return models.Detail{}, models.ErrNotFound
 		},
 	}
-	handler := NewHandlerFromRoot(RootBinding{Models: root}, zap.NewNop())
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
 	recorder := httptest.NewRecorder()
 
 	handler.GetModel(recorder, httptest.NewRequest(http.MethodGet, "/models/missing", nil), "missing")
@@ -122,7 +122,7 @@ func TestAdapter_ListModelsMapsUnavailableCatalogFromFakeRoot(t *testing.T) {
 			return models.List{}, models.ErrUnavailable
 		},
 	}
-	handler := NewHandlerFromRoot(RootBinding{Models: root}, zap.NewNop())
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
 	recorder := httptest.NewRecorder()
 
 	handler.ListModels(recorder, httptest.NewRequest(http.MethodGet, "/models", nil))
@@ -144,7 +144,7 @@ func TestAdapter_GetModelMapsUnavailableCatalogFromFakeRoot(t *testing.T) {
 			return models.Detail{}, models.ErrUnavailable
 		},
 	}
-	handler := NewHandlerFromRoot(RootBinding{Models: root}, zap.NewNop())
+	handler := NewHandlerFromRoot(testRootBinding(root), zap.NewNop())
 	recorder := httptest.NewRecorder()
 
 	handler.GetModel(recorder, httptest.NewRequest(http.MethodGet, "/models/voice", nil), "voice")
@@ -205,7 +205,7 @@ func TestAdapter_ScopedCatalogListGetDecodeIntoRootRequests(t *testing.T) {
 func TestCatalogRootErrorResponse_DoesNotLeakInternalPaths(t *testing.T) {
 	t.Parallel()
 
-	internalErr := errors.New("pkg/services/models/internal/catalog: cache dir /tmp/models unavailable")
+	internalErr := errors.New("Models catalog cache unavailable")
 	status, response, ok := CatalogRootErrorResponse(internalErr)
 	if ok {
 		t.Fatalf("CatalogRootErrorResponse(%v) = handled, want unmapped internal failure", internalErr)
