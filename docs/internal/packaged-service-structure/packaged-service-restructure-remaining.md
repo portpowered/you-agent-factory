@@ -240,8 +240,10 @@ The live checks found these concrete violations:
 
 3. Functional test bypass:
 
-   - `tests/functional/providers/acp/daemon_concurrency_test.go` imports `providers/wire`.
-   - It should construct through `root.BuildProcess` and substitute effects through `edges.Edges`.
+   - Repaired in this pass; `tests/functional/workers/agent/root_build_test.go`
+     now constructs through `root.BuildProcess` and exercises only the public
+     process provider-identity capability. No functional test imports
+     `providers/wire` directly.
 
 4. Package-target inventory drift:
 
