@@ -1,7 +1,6 @@
-package http
+package dispatch
 
 import (
-	"encoding/json"
 	"io"
 	"strings"
 
@@ -24,37 +23,25 @@ type runtimeAcceptDispatchResultHTTPRequest struct {
 	ResultOutcome string `json:"resultOutcome"`
 }
 
-type runtimeDispatchPlanHTTPResponse struct {
+// RuntimeDispatchPlanHTTPResponse is the wire dispatch response retained for
+// the parent adapter's compatibility surface.
+type RuntimeDispatchPlanHTTPResponse struct {
 	Outcome       factoryruntime.DispatchPlanOutcome `json:"outcome"`
 	DispatchID    string                             `json:"dispatchId"`
 	CorrelationID string                             `json:"correlationId,omitempty"`
 }
 
 func decodePlanDispatchRequest(body io.Reader) (factoryruntime.PlanDispatchRequest, error) {
-	payload, err := io.ReadAll(body)
+	req, err := commonDecodeRequiredJSON[runtimeDispatchPlanHTTPRequest](body)
 	if err != nil {
-		return factoryruntime.PlanDispatchRequest{}, err
-	}
-	if len(payload) == 0 {
-		return factoryruntime.PlanDispatchRequest{}, errRequestBodyRequired
-	}
-	var req runtimeDispatchPlanHTTPRequest
-	if err := json.Unmarshal(payload, &req); err != nil {
 		return factoryruntime.PlanDispatchRequest{}, err
 	}
 	return planDispatchRequestFromHTTP(req), nil
 }
 
 func decodeAcceptDispatchResultRequest(body io.Reader) (factoryruntime.AcceptDispatchResultRequest, error) {
-	payload, err := io.ReadAll(body)
+	req, err := commonDecodeRequiredJSON[runtimeAcceptDispatchResultHTTPRequest](body)
 	if err != nil {
-		return factoryruntime.AcceptDispatchResultRequest{}, err
-	}
-	if len(payload) == 0 {
-		return factoryruntime.AcceptDispatchResultRequest{}, errRequestBodyRequired
-	}
-	var req runtimeAcceptDispatchResultHTTPRequest
-	if err := json.Unmarshal(payload, &req); err != nil {
 		return factoryruntime.AcceptDispatchResultRequest{}, err
 	}
 	return acceptDispatchResultRequestFromHTTP(req), nil
@@ -77,9 +64,7 @@ func planDispatchRequestFromHTTP(req runtimeDispatchPlanHTTPRequest) factoryrunt
 	}
 }
 
-func acceptDispatchResultRequestFromHTTP(
-	req runtimeAcceptDispatchResultHTTPRequest,
-) factoryruntime.AcceptDispatchResultRequest {
+func acceptDispatchResultRequestFromHTTP(req runtimeAcceptDispatchResultHTTPRequest) factoryruntime.AcceptDispatchResultRequest {
 	return factoryruntime.AcceptDispatchResultRequest{
 		DispatchID:    strings.TrimSpace(req.DispatchID),
 		CorrelationID: strings.TrimSpace(req.CorrelationID),
@@ -88,20 +73,16 @@ func acceptDispatchResultRequestFromHTTP(
 	}
 }
 
-func dispatchPlanResponseFromPlanResult(
-	result factoryruntime.PlanDispatchResult,
-) runtimeDispatchPlanHTTPResponse {
-	return runtimeDispatchPlanHTTPResponse{
+func dispatchPlanResponseFromPlanResult(result factoryruntime.PlanDispatchResult) RuntimeDispatchPlanHTTPResponse {
+	return RuntimeDispatchPlanHTTPResponse{
 		Outcome:       result.Outcome,
 		DispatchID:    result.DispatchID,
 		CorrelationID: result.CorrelationID,
 	}
 }
 
-func dispatchPlanResponseFromAcceptResult(
-	result factoryruntime.AcceptDispatchResultResult,
-) runtimeDispatchPlanHTTPResponse {
-	return runtimeDispatchPlanHTTPResponse{
+func dispatchPlanResponseFromAcceptResult(result factoryruntime.AcceptDispatchResultResult) RuntimeDispatchPlanHTTPResponse {
+	return RuntimeDispatchPlanHTTPResponse{
 		Outcome:       result.Outcome,
 		DispatchID:    result.DispatchID,
 		CorrelationID: result.CorrelationID,
