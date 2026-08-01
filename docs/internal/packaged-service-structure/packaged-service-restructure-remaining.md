@@ -1,6 +1,6 @@
 ## Audit result
 
-The decomposition is structurally far from complete. All 13 product-service roots still violate at least one packaged-service rule. The active Providers/Workers package-target, ownership, and boundary ledgers have since been reconciled with the live refactor; the broader service-shape debt remains.
+The decomposition is structurally far from complete. Twelve of the 13 product-service roots still violate at least one packaged-service rule. The active Providers/Workers package-target, ownership, and boundary ledgers have since been reconciled with the live refactor; the broader service-shape debt remains.
 
 The governing rule requires exactly one named interface per service/subservice root, no exported root functions, and only `internal`, `wire`, and `transports` child directories ([general-backend-standards.md](C:/Users/andre/work/portos/infinite-you/docs/internal/standards/code/general-backend-standards.md:144)).
 
@@ -19,7 +19,7 @@ These are live counts from production `.go` files, not just the stale baseline:
 | `factory_visualization` | 4 | 20 | — | Contract not sealed |
 | `models` | 15 | 18 | — | Contract not sealed |
 | `operator_settings` | 4 | 28 | `testdata` | Root and document implementation debt |
-| `provider_sessions` | 1 | 2 | — | Closest to compliant; remove root helpers |
+| `provider_sessions` | 1 | 0 | — | Contract sealed |
 | `providers` | 3 | 3 | `inference` | Active refactor is incomplete |
 | `recordings` | 16 | 19 | — | Root directory cleaned, contract still broad |
 | `system_initialization` | 3 | 0 | — | Must consolidate to one interface |
@@ -207,13 +207,12 @@ The old public directories recorded in the baseline have mostly been deleted; th
 
 `workstation_pool_boundary_impl.go` remains explicitly documented as a temporary root implementation exception. It should be relocated once a cycle-free bridge exists.
 
-### Automations, Visualization, Provider Sessions, System Initialization
+### Automations, Visualization, System Initialization
 
 These do not have significant top-level directory migration debt, but they are not contract-complete:
 
 - Automations subservices `filesystem_watchers` and `script_pollers` expose multiple interfaces; `script_pollers` also exports substantial implementation behavior.
 - Visualization’s two projection/lifecycle subservices each expose four interfaces.
-- Provider Sessions must remove `CanonicalProvider` and `CloneMetadata` as exported root functions.
 - System Initialization must consolidate `LegacyFactoryMigrationFileSystem`, `OperatorSettings`, and `Service`.
 
 ## 3. Broken dependency and test contracts

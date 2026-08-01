@@ -1814,16 +1814,6 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/provider_sessions/contracts.go",
-      "target": "CanonicalProvider"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/provider_sessions/contracts.go",
-      "target": "CloneMetadata"
-    },
-    {
-      "rule": "service-root-exported-function",
       "filePath": "pkg/services/providers/selection_contract.go",
       "target": "ResolveIdentity"
     },
