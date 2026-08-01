@@ -1,0 +1,130 @@
+{
+  "schemaVersion": 1,
+  "runnerReportSchemaVersion": 1,
+  "capturedAtUtc": "2026-08-01T09:43:04Z",
+  "purpose": "Isolated baseline before unit-lane scheduling or hotspot changes",
+  "isolation": "Six sequential runs on one Windows host; no UI, functional, lint, or other test lane ran concurrently.",
+  "host": {
+    "os": "windows",
+    "arch": "amd64",
+    "goVersion": "go1.25.0",
+    "hostname": "DESKTOP-BU6597A",
+    "cpus": 24,
+    "gomaxprocs": 24
+  },
+  "scope": {
+    "packageCount": 410,
+    "testCount": 11744,
+    "effectiveJobs": 32,
+    "short": true,
+    "vet": false,
+    "timeout": "300s"
+  },
+  "reproduction": {
+    "cached": "make test UNIT_DIAGNOSTIC_REPORT=.artifacts/unit-lane/<run>.json",
+    "fresh": "make test-unit-fresh UNIT_DIAGNOSTIC_REPORT=.artifacts/unit-lane/<run>.json"
+  },
+  "runs": [
+    {
+      "id": "cached-1",
+      "startedAtUtc": "2026-08-01T09:30:41.352109Z",
+      "finishedAtUtc": "2026-08-01T09:33:31.2138574Z",
+      "outcome": "pass",
+      "wallTimeSeconds": 169.8588777,
+      "count": 0,
+      "cacheMode": "cached",
+      "observedCachedPackages": 0,
+      "slowPackages": [
+        {"package": "github.com/portpowered/infinite-you/pkg/root", "elapsedSeconds": 147.383},
+        {"package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedinstallation", "elapsedSeconds": 137.716},
+        {"package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/definition", "elapsedSeconds": 126.803}
+      ]
+    },
+    {
+      "id": "cached-2",
+      "startedAtUtc": "2026-08-01T09:33:39.9131607Z",
+      "finishedAtUtc": "2026-08-01T09:38:54.7421061Z",
+      "outcome": "pass",
+      "wallTimeSeconds": 314.8236248,
+      "count": 0,
+      "cacheMode": "cached",
+      "observedCachedPackages": 5,
+      "slowPackages": [
+        {"package": "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact", "elapsedSeconds": 79.064},
+        {"package": "github.com/portpowered/infinite-you/pkg/platform/metrics", "elapsedSeconds": 73.443},
+        {"package": "github.com/portpowered/infinite-you/pkg/platform/logging", "elapsedSeconds": 67.08}
+      ]
+    },
+    {
+      "id": "cached-3",
+      "startedAtUtc": "2026-08-01T09:39:07.2137137Z",
+      "finishedAtUtc": "2026-08-01T09:39:32.6650155Z",
+      "outcome": "pass",
+      "wallTimeSeconds": 25.4508717,
+      "count": 0,
+      "cacheMode": "cached",
+      "observedCachedPackages": 387,
+      "slowPackages": [
+        {"package": "github.com/portpowered/infinite-you/pkg/root", "elapsedSeconds": 10.534},
+        {"package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedinstallation", "elapsedSeconds": 8.031},
+        {"package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/agy", "elapsedSeconds": 5.353}
+      ]
+    },
+    {
+      "id": "fresh-1",
+      "startedAtUtc": "2026-08-01T09:39:48.7179274Z",
+      "finishedAtUtc": "2026-08-01T09:40:20.7483113Z",
+      "outcome": "pass",
+      "wallTimeSeconds": 32.0298426,
+      "count": 1,
+      "cacheMode": "fresh",
+      "observedCachedPackages": 0,
+      "slowPackages": [
+        {"package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedinstallation", "elapsedSeconds": 18.879},
+        {"package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal", "elapsedSeconds": 10.042},
+        {"package": "github.com/portpowered/infinite-you/pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor", "elapsedSeconds": 9.716}
+      ]
+    },
+    {
+      "id": "fresh-2",
+      "startedAtUtc": "2026-08-01T09:40:30.2690669Z",
+      "finishedAtUtc": "2026-08-01T09:41:02.8399517Z",
+      "outcome": "pass",
+      "wallTimeSeconds": 32.5703343,
+      "count": 1,
+      "cacheMode": "fresh",
+      "observedCachedPackages": 0,
+      "slowPackages": [
+        {"package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedinstallation", "elapsedSeconds": 10.842},
+        {"package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/internal/service", "elapsedSeconds": 9.7},
+        {"package": "github.com/portpowered/infinite-you/pkg/root", "elapsedSeconds": 9.341}
+      ]
+    },
+    {
+      "id": "fresh-3",
+      "startedAtUtc": "2026-08-01T09:41:13.4588213Z",
+      "finishedAtUtc": "2026-08-01T09:41:55.5407309Z",
+      "outcome": "pass",
+      "wallTimeSeconds": 42.0811984,
+      "count": 1,
+      "cacheMode": "fresh",
+      "observedCachedPackages": 0,
+      "slowPackages": [
+        {"package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedinstallation", "elapsedSeconds": 30.506},
+        {"package": "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/internal/service", "elapsedSeconds": 24.788},
+        {"package": "github.com/portpowered/infinite-you/pkg/root", "elapsedSeconds": 17.691}
+      ]
+    }
+  ],
+  "medianWallTimeSeconds": {
+    "cached": 169.8588777,
+    "fresh": 32.5703343
+  },
+  "notes": [
+    "All six reports had pass outcome, 410 packages, and 11744 tests.",
+    "Cached-policy timing varied substantially while the Go cache warmed; observed cache-hit counts are retained instead of treating cache policy as proof of a hit.",
+    "This is a baseline only; it does not claim the later 20 percent throughput target.",
+    "The full per-package reports remain available in the local .artifacts/unit-lane directory for the current worktree run.",
+    "All report timestamps in this committed summary are normalized to UTC."
+  ]
+}

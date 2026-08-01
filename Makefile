@@ -17,6 +17,7 @@ UI_INSTALL  := $(if $(BUN_BIN),$(BUN_BIN) install,$(NPM) install --no-package-lo
 FUNCTIONAL_DEFAULT_PACKAGES := ./tests/functional/...
 FUNCTIONAL_DEFAULT_JOBS ?= 8
 UNIT_DEFAULT_JOBS ?= 32
+UNIT_DIAGNOSTIC_REPORT ?=
 FUNCTIONAL_LONG_TAGS ?= functionallong
 FUNCTIONAL_LONG_PACKAGES := ./tests/functional/...
 STRESS_DEFAULT_PACKAGES := ./tests/stress/...
@@ -364,10 +365,10 @@ test-full:
 	$(GO) test ./... -timeout $(GO_TEST_TIMEOUT)
 
 test-unit:
-	$(GO) run ./cmd/unitlane -jobs $(UNIT_DEFAULT_JOBS) -timeout $(GO_TEST_TIMEOUT)
+	$(GO) run ./cmd/unitlane -jobs $(UNIT_DEFAULT_JOBS) -timeout $(GO_TEST_TIMEOUT) $(if $(UNIT_DIAGNOSTIC_REPORT),-diagnostic -report $(UNIT_DIAGNOSTIC_REPORT),)
 
 test-unit-fresh:
-	$(GO) run ./cmd/unitlane -jobs $(UNIT_DEFAULT_JOBS) -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) run ./cmd/unitlane -jobs $(UNIT_DEFAULT_JOBS) -count=1 -timeout $(GO_TEST_TIMEOUT) $(if $(UNIT_DIAGNOSTIC_REPORT),-diagnostic -report $(UNIT_DIAGNOSTIC_REPORT),)
 
 test-lane-audit:
 	$(GO) run ./cmd/testlanecheck

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -17,17 +18,20 @@ import (
 const modulePath = testlanes.ModulePath
 
 type config struct {
-	count   int
-	jobs    int
-	root    string
-	short   bool
-	timeout time.Duration
-	vet     bool
+	count      int
+	diagnostic bool
+	jobs       int
+	reportPath string
+	root       string
+	short      bool
+	timeout    time.Duration
+	vet        bool
 }
 
 var executeUnitLane = run
 var execCommand = exec.Command
 var discoverUnitPackages = discoverPackages
+var stdoutWriter io.Writer = os.Stdout
 var stderrWriter io.Writer = os.Stderr
 var exitFunc = os.Exit
 
@@ -61,12 +65,17 @@ func run() error {
 func parseConfig() config {
 	var cfg config
 	flag.IntVar(&cfg.count, "count", 0, "go test -count value; zero preserves Go's content-addressed test cache")
+	flag.BoolVar(&cfg.diagnostic, "diagnostic", false, "collect package timing diagnostics and print a slow-package summary")
 	flag.IntVar(&cfg.jobs, "jobs", 32, "go test -p value")
+	flag.StringVar(&cfg.reportPath, "report", "", "optional path for the machine-readable diagnostic report; implies -diagnostic")
 	flag.StringVar(&cfg.root, "root", "./pkg/...", "go list package pattern for unit test discovery")
 	flag.BoolVar(&cfg.short, "short", true, "run with go test -short")
 	flag.DurationVar(&cfg.timeout, "timeout", 5*time.Minute, "go test timeout")
 	flag.BoolVar(&cfg.vet, "vet", false, "run go test's implicit vet pass")
 	flag.Parse()
+	if cfg.reportPath != "" {
+		cfg.diagnostic = true
+	}
 	if cfg.jobs < 1 {
 		cfg.jobs = 1
 	}
@@ -124,6 +133,11 @@ func discoverPackagesUnder(rootDir, importPrefix string) ([]string, error) {
 
 func runUnitTests(cfg config, packages []string) error {
 	packages = localPackageArguments(packages)
+	var report *unitLaneReport
+	startedAt := time.Now()
+	if cfg.diagnostic {
+		report = newUnitLaneReport(cfg, startedAt)
+	}
 	baseArgs := baseGoTestArgs(cfg)
 	baseLen := commandArgLen(baseArgs)
 	for len(packages) > 0 {
@@ -139,15 +153,29 @@ func runUnitTests(cfg config, packages []string) error {
 				break
 			}
 			if currentLen+nextLen > maxGoTestCommandLen {
-				return fmt.Errorf("go test command too long for package %q", next)
+				err := fmt.Errorf("go test command too long for package %q", next)
+				if report == nil {
+					return err
+				}
+				return finishUnitLaneReport(cfg, report, startedAt, err)
 			}
 			batch = append(batch, next)
 			currentLen += nextLen
 			packages = packages[1:]
 		}
-		if err := runGoTest(cfg, batch); err != nil {
-			return err
+		batchReport, err := runGoTest(cfg, batch)
+		if report != nil {
+			report.addPackages(batchReport)
 		}
+		if err != nil {
+			if report == nil {
+				return err
+			}
+			return finishUnitLaneReport(cfg, report, startedAt, err)
+		}
+	}
+	if report != nil {
+		return finishUnitLaneReport(cfg, report, startedAt, nil)
 	}
 	return nil
 }
@@ -177,6 +205,9 @@ func commandArgLen(args []string) int {
 
 func baseGoTestArgs(cfg config) []string {
 	args := []string{"test", fmt.Sprintf("-p=%d", cfg.jobs)}
+	if cfg.diagnostic {
+		args = append(args, "-json")
+	}
 	if !cfg.vet {
 		args = append(args, "-vet=off")
 	}
@@ -186,7 +217,7 @@ func baseGoTestArgs(cfg config) []string {
 	return args
 }
 
-func runGoTest(cfg config, packages []string) error {
+func runGoTest(cfg config, packages []string) (unitBatchReport, error) {
 	args := baseGoTestArgs(cfg)
 	args = append(args, packages...)
 	if cfg.count > 0 {
@@ -196,9 +227,24 @@ func runGoTest(cfg config, packages []string) error {
 
 	cmd := execCommand("go", args...)
 	cmd.Env = os.Environ()
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	cmd.Stderr = stderrWriter
+	if !cfg.diagnostic {
+		cmd.Stdout = stdoutWriter
+		return unitBatchReport{}, cmd.Run()
+	}
+
+	collector := newUnitTimingCollector()
+	output := &unitDiagnosticOutput{collector: collector, output: stdoutWriter}
+	cmd.Stdout = output
+	runErr := cmd.Run()
+	parseErr := output.flush()
+	if runErr != nil && parseErr != nil {
+		return collector.report(), errors.Join(runErr, parseErr)
+	}
+	if parseErr != nil {
+		return collector.report(), parseErr
+	}
+	return collector.report(), runErr
 }
 
 func commandError(err error, stderr string) error {

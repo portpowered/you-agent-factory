@@ -155,6 +155,22 @@ unchanged packages do not relink and rerun on every local invocation. Use
 `make test` is the compatibility entrypoint for `make test-unit`; `make
 test-full` remains the broad unshortened aggregate across every Go package.
 
+For reproducible package timing evidence, set `UNIT_DIAGNOSTIC_REPORT` on the
+canonical cached or fresh target. The runner consumes `go test -json` events,
+replays readable test output, and writes the run metadata plus stable
+slow-package ranking to the requested JSON path while preserving the child
+test exit status:
+
+```text
+make test UNIT_DIAGNOSTIC_REPORT=.artifacts/unit-lane/cached.json
+make test-unit-fresh UNIT_DIAGNOSTIC_REPORT=.artifacts/unit-lane/fresh.json
+```
+
+Reports include the effective job count, cache/count policy, timeout, short and
+vet settings, host context, total wall time, test counts, package outcomes, and
+package elapsed times. Keep cached and fresh reports separate when comparing
+like-for-like isolated runs.
+
 | Surface | Runs | Intentionally excludes | Failure rerun path |
 | --- | --- | --- | --- |
 | `make verify-fast` | `make typecheck`, `make ui-test`, `make test` | `make test-ui-coverage`, `make ui-integration-test`, `make test-backend-verification`, `make long-tests` | rerun the failing owned step directly: `make typecheck`, `make ui-test`, or `make test` |

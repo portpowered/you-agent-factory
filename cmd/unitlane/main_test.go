@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -102,6 +103,79 @@ func TestRunReportsTestFailure(t *testing.T) {
 	}
 }
 
+func TestDiagnosticRunWritesReportAndPreservesFailure(t *testing.T) {
+	restoreArgsFlagsAndCommand(t)
+	execCommand = fakeUnitLaneCommand
+
+	originalStdout := stdoutWriter
+	originalStderr := stderrWriter
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	stdoutWriter = &stdout
+	stderrWriter = &stderr
+	t.Cleanup(func() {
+		stdoutWriter = originalStdout
+		stderrWriter = originalStderr
+	})
+
+	t.Setenv("GO_WANT_UNITLANE_HELPER", "1")
+	t.Setenv("UNITLANE_HELPER_STDOUT", strings.Join([]string{
+		`{"Action":"start","Package":"pkg/slow"}`,
+		`{"Action":"run","Package":"pkg/slow","Test":"TestSlow"}`,
+		`{"Action":"pass","Package":"pkg/slow","Test":"TestSlow","Elapsed":0.25}`,
+		`{"Action":"output","Package":"pkg/slow","Output":"ok slow\n"}`,
+		`{"Action":"pass","Package":"pkg/slow","Elapsed":2.5}`,
+		`{"Action":"pass","Package":"pkg/cached","Elapsed":0,"Cached":true}`,
+	}, "\n")+"\n")
+	t.Setenv("UNITLANE_HELPER_TEST_FAIL", "1")
+
+	reportPath := filepath.Join(t.TempDir(), "reports", "unit-lane.json")
+	err := runUnitTests(config{
+		count:      1,
+		diagnostic: true,
+		jobs:       3,
+		reportPath: reportPath,
+		root:       "./pkg/...",
+		short:      true,
+		timeout:    2 * time.Minute,
+	}, []string{modulePath + "/pkg/slow"})
+	if err == nil || !strings.Contains(err.Error(), "exit status 2") {
+		t.Fatalf("runUnitTests() error = %v, want preserved child failure", err)
+	}
+	if stdout.String() != "ok slow\n" {
+		t.Fatalf("diagnostic stdout = %q, want readable replayed output", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "unit lane diagnostics: outcome=fail") || !strings.Contains(stderr.String(), "pkg/slow") {
+		t.Fatalf("diagnostic stderr = %q, want failure summary", stderr.String())
+	}
+
+	data, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatalf("read diagnostic report: %v", err)
+	}
+	var report unitLaneReport
+	if err := json.Unmarshal(data, &report); err != nil {
+		t.Fatalf("decode diagnostic report: %v", err)
+	}
+	if report.Outcome != "fail" || report.CacheMode != "fresh" || report.EffectiveJobs != 3 {
+		t.Fatalf("report metadata = %+v, want failed fresh run with three jobs", report)
+	}
+	if len(report.Packages) != 2 || report.Packages[0].Package != "pkg/cached" || report.Packages[1].TestCount != 1 {
+		t.Fatalf("report packages = %+v, want sorted package timings and one test", report.Packages)
+	}
+	if !report.Packages[0].Cached || !report.Packages[0].CacheObserved {
+		t.Fatalf("cached package = %+v, want observed cached result", report.Packages[0])
+	}
+}
+
+func TestDiagnosticBaseArgumentsRequestJSONEvents(t *testing.T) {
+	got := baseGoTestArgs(config{diagnostic: true, jobs: 4, short: true, vet: false})
+	want := []string{"test", "-p=4", "-json", "-vet=off", "-short"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("baseGoTestArgs() = %v, want %v", got, want)
+	}
+}
+
 func TestMainReportsFailureAndExits(t *testing.T) {
 	originalExecute := executeUnitLane
 	originalStderr := stderrWriter
@@ -132,6 +206,9 @@ func TestUnitlaneFakeGoProcess(t *testing.T) {
 
 	switch args[1] {
 	case "test":
+		if output := os.Getenv("UNITLANE_HELPER_STDOUT"); output != "" {
+			fmt.Fprint(os.Stdout, output)
+		}
 		if path := os.Getenv("UNITLANE_HELPER_TEST_ARGS_FILE"); path != "" {
 			if err := os.WriteFile(path, []byte(strings.Join(args[1:], "\n")), 0o600); err != nil {
 				fmt.Fprintln(os.Stderr, err)
@@ -202,7 +279,7 @@ func TestParseConfigDefaultsToShortMode(t *testing.T) {
 	flag.CommandLine = flag.NewFlagSet("unitlane", flag.ContinueOnError)
 
 	got := parseConfig()
-	if got != (config{count: 0, jobs: 32, root: "./pkg/...", short: true, timeout: 5 * time.Minute, vet: false}) {
+	if got != (config{count: 0, diagnostic: false, jobs: 32, reportPath: "", root: "./pkg/...", short: true, timeout: 5 * time.Minute, vet: false}) {
 		t.Fatalf("parseConfig() = %+v, expected count: %v, jobs: %v", got, 0, 32)
 	}
 }
