@@ -306,10 +306,13 @@ func (o *Root) InspectModelAssets(
 }
 
 func (o *Root) RemoveModelAssets(
-	context.Context,
-	models.RemoveModelAssetsRequest,
+	ctx context.Context,
+	request models.RemoveModelAssetsRequest,
 ) (models.RemoveModelAssetsResult, error) {
-	return models.RemoveModelAssetsResult{}, models.ErrUnsupportedOperation
+	if o == nil || o.assets == nil {
+		return models.RemoveModelAssetsResult{}, models.ErrUnsupportedOperation
+	}
+	return o.assets.RemoveModelAssets(ctx, request)
 }
 
 func (o *Root) EnsureModelHost(

@@ -694,6 +694,81 @@ func TestProductionCompositionInspectsScopedAssetsThroughModelsRoot(t *testing.T
 	}
 }
 
+func TestProductionCompositionRemovesScopedAssetsThroughModelsRoot(t *testing.T) {
+	t.Parallel()
+
+	service := newProductionTestService(t)
+	cacheDirectory := t.TempDir()
+	config := models.RuntimeConfig{
+		Resources: []models.RuntimeResource{{
+			Name:     "omnivoice-cache",
+			Type:     models.RuntimeResourceTypeModel,
+			Model:    "OMNIVOICE_Q4_K_M",
+			Provider: "MODELSCOPE",
+		}},
+	}
+	opened, err := service.OpenRuntimeScope(context.Background(), models.OpenRuntimeScopeRequest{
+		Config: models.RuntimeScopeConfig{CacheDirectory: cacheDirectory, Runtime: config},
+	})
+	if err != nil {
+		t.Fatalf("OpenRuntimeScope: %v", err)
+	}
+
+	modelRoot := filepath.Join(cacheDirectory, "OMNIVOICE_Q4_K_M")
+	revisionDirectory := filepath.Join(modelRoot, "rev-root")
+	if err := os.MkdirAll(revisionDirectory, 0o755); err != nil {
+		t.Fatalf("create revision directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(revisionDirectory, "weights.gguf"), []byte("asset"), 0o644); err != nil {
+		t.Fatalf("write asset: %v", err)
+	}
+	outsidePath := filepath.Join(cacheDirectory, "outside-marker")
+	if err := os.WriteFile(outsidePath, []byte("preserve"), 0o644); err != nil {
+		t.Fatalf("write outside marker: %v", err)
+	}
+
+	result, err := service.RemoveModelAssets(context.Background(), models.RemoveModelAssetsRequest{
+		Scope: opened.Scope,
+		Name:  "omnivoice_q4_k_m",
+	})
+	if err != nil {
+		t.Fatalf("RemoveModelAssets: %v", err)
+	}
+	if result.ModelName != "OMNIVOICE_Q4_K_M" ||
+		result.Readiness != models.AssetReadinessMissing ||
+		result.Outcome != models.AssetRemovalRemoved {
+		t.Fatalf("RemoveModelAssets = %#v, want canonical removed result", result)
+	}
+	if _, err := os.Stat(modelRoot); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("managed model root = %v, want absent", err)
+	}
+	if _, err := os.Stat(outsidePath); err != nil {
+		t.Fatalf("outside marker = %v, want preserved", err)
+	}
+
+	repeated, err := service.RemoveModelAssets(context.Background(), models.RemoveModelAssetsRequest{
+		Scope: opened.Scope,
+		Name:  "OMNIVOICE_Q4_K_M",
+	})
+	if err != nil {
+		t.Fatalf("RemoveModelAssets repeated: %v", err)
+	}
+	if repeated.Outcome != models.AssetRemovalAlreadyAbsent || repeated.Readiness != models.AssetReadinessMissing {
+		t.Fatalf("repeated RemoveModelAssets = %#v, want already absent/missing", repeated)
+	}
+
+	_, err = service.RemoveModelAssets(context.Background(), models.RemoveModelAssetsRequest{
+		Scope: opened.Scope,
+		Name:  filepath.Join("..", "outside-marker"),
+	})
+	if !errors.Is(err, models.ErrAssetSourceUnsupported) {
+		t.Fatalf("out-of-scope identity error = %v, want ErrAssetSourceUnsupported", err)
+	}
+	if _, err := os.Stat(outsidePath); err != nil {
+		t.Fatalf("outside marker after invalid identity = %v, want preserved", err)
+	}
+}
+
 func TestProductionCompositionInspectsScopedHostThroughModelsRoot(t *testing.T) {
 	t.Parallel()
 

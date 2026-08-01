@@ -860,6 +860,13 @@ func (availableInferenceAssets) InspectModelAssets(
 	return models.InspectModelAssetsResult{}, models.ErrUnsupportedOperation
 }
 
+func (availableInferenceAssets) RemoveModelAssets(
+	context.Context,
+	models.RemoveModelAssetsRequest,
+) (models.RemoveModelAssetsResult, error) {
+	return models.RemoveModelAssetsResult{}, models.ErrUnsupportedOperation
+}
+
 func (availableInferenceAssets) ResolveRuntimeCache(
 	context.Context,
 	models.InspectModelAssetsRequest,
@@ -896,6 +903,13 @@ func (assets *recordingInferenceAssets) InspectModelAssets(
 	models.InspectModelAssetsRequest,
 ) (models.InspectModelAssetsResult, error) {
 	return models.InspectModelAssetsResult{}, models.ErrUnsupportedOperation
+}
+
+func (assets *recordingInferenceAssets) RemoveModelAssets(
+	context.Context,
+	models.RemoveModelAssetsRequest,
+) (models.RemoveModelAssetsResult, error) {
+	return models.RemoveModelAssetsResult{}, models.ErrUnsupportedOperation
 }
 
 func (assets *recordingInferenceAssets) ResolveRuntimeCache(

@@ -384,6 +384,54 @@ func TestRootDelegatesAssetPreparation(t *testing.T) {
 	}
 }
 
+func TestRootDelegatesAssetRemoval(t *testing.T) {
+	t.Parallel()
+
+	want := models.RemoveModelAssetsResult{
+		ModelName: "scoped-model",
+		Readiness: models.AssetReadinessMissing,
+		Outcome:   models.AssetRemovalRemoved,
+	}
+	privateAssets := &removalAssetService{result: want, err: errors.New("asset removal failed")}
+	root := &Root{assets: privateAssets}
+	request := models.RemoveModelAssetsRequest{Name: "scoped-model"}
+	got, err := root.RemoveModelAssets(context.Background(), request)
+	if !errors.Is(err, privateAssets.err) {
+		t.Fatalf("RemoveModelAssets error = %v, want delegated error", err)
+	}
+	if !reflect.DeepEqual(got, privateAssets.result) || privateAssets.request != request {
+		t.Fatalf("RemoveModelAssets = %#v request %#v, want %#v / %#v", got, privateAssets.request, privateAssets.result, request)
+	}
+}
+
+type removalAssetService struct {
+	request models.RemoveModelAssetsRequest
+	result  models.RemoveModelAssetsResult
+	err     error
+}
+
+func (service *removalAssetService) PrepareModelAssets(
+	context.Context,
+	models.PrepareModelAssetsRequest,
+) (models.PrepareModelAssetsResult, error) {
+	return models.PrepareModelAssetsResult{}, nil
+}
+
+func (service *removalAssetService) InspectModelAssets(
+	context.Context,
+	models.InspectModelAssetsRequest,
+) (models.InspectModelAssetsResult, error) {
+	return models.InspectModelAssetsResult{}, nil
+}
+
+func (service *removalAssetService) RemoveModelAssets(
+	_ context.Context,
+	request models.RemoveModelAssetsRequest,
+) (models.RemoveModelAssetsResult, error) {
+	service.request = request
+	return service.result, service.err
+}
+
 type preparationAssetService struct {
 	request models.PrepareModelAssetsRequest
 	result  models.PrepareModelAssetsResult
@@ -404,6 +452,13 @@ func (*preparationAssetService) InspectModelAssets(
 	return models.InspectModelAssetsResult{}, nil
 }
 
+func (*preparationAssetService) RemoveModelAssets(
+	context.Context,
+	models.RemoveModelAssetsRequest,
+) (models.RemoveModelAssetsResult, error) {
+	return models.RemoveModelAssetsResult{}, nil
+}
+
 func (*preparationAssetService) ResolveRuntimeCache(
 	context.Context,
 	models.InspectModelAssetsRequest,
@@ -412,6 +467,20 @@ func (*preparationAssetService) ResolveRuntimeCache(
 }
 
 func (*preparationAssetService) InspectRuntimeCache(
+	context.Context,
+	models.InspectModelAssetsRequest,
+) (scopedassets.RuntimeCacheInspection, error) {
+	return scopedassets.RuntimeCacheInspection{}, nil
+}
+
+func (*removalAssetService) ResolveRuntimeCache(
+	context.Context,
+	models.InspectModelAssetsRequest,
+) (scopedassets.RuntimeCacheLayout, error) {
+	return scopedassets.RuntimeCacheLayout{}, nil
+}
+
+func (*removalAssetService) InspectRuntimeCache(
 	context.Context,
 	models.InspectModelAssetsRequest,
 ) (scopedassets.RuntimeCacheInspection, error) {
