@@ -114,8 +114,151 @@ Duration  698ms (transform 815ms, setup 0ms, import 1.19s, tests 25ms, environme
 [timing] exit_code=0
 ```
 
-## After-state placeholder
+## After-state: lane audit and focused Bun wall-clock
 
-Focused Bun after-state wall-clock for the same four files will be recorded in
-story `BUN-UNIT-features-current-selection-08-006` under conditions comparable
-to this baseline.
+Recorded for story `BUN-UNIT-features-current-selection-08-006` on the same
+host class as the Vitest baseline (Windows 11 Home `10.0.26200`, i7-13700K, 24
+logical processors; Bun `1.3.12`). Repository revision for these measurements:
+`6f24e3e23` (after the four leased migrations; before this report commit).
+
+### Migrated / retained counts
+
+| Lane ownership | Files | Named tests |
+| --- | ---: | ---: |
+| Migrated to Bun (exclusive) | 4 | 34 |
+| Retained on Vitest | 0 | 0 |
+
+Migrated files (exactly once under Bun):
+
+| Migrated path | Named cases |
+| --- | ---: |
+| `ui/src/features/current-selection/workstation-selection/components/fields/workstation-summary-field-values.bun.unit.test.ts` | 18 |
+| `ui/src/features/current-selection/workstation-selection/editing/editable-workstation-configuration-mutators.bun.unit.test.ts` | 6 |
+| `ui/src/features/current-selection/workstation-selection/editing/editable-workstation-cron-draft-mutators.bun.unit.test.ts` | 6 |
+| `ui/src/features/current-selection/workstation-selection/editing/editable-workstation-overwrite-fields.bun.unit.test.ts` | 4 |
+
+Totals reconcile to the leased baseline: `4` files / `34` named tests. No
+retained Vitest exceptions. The leased `.test.ts` paths no longer exist in the
+tree after rename.
+
+### Lane exclusivity audit
+
+Focused Bun invocation (exactly four files / thirty-four named cases):
+
+```text
+bun test `
+  src/features/current-selection/workstation-selection/components/fields/workstation-summary-field-values.bun.unit.test.ts `
+  src/features/current-selection/workstation-selection/editing/editable-workstation-configuration-mutators.bun.unit.test.ts `
+  src/features/current-selection/workstation-selection/editing/editable-workstation-cron-draft-mutators.bun.unit.test.ts `
+  src/features/current-selection/workstation-selection/editing/editable-workstation-overwrite-fields.bun.unit.test.ts
+```
+
+Result:
+
+```text
+bun test v1.3.12 (700fc117)
+src\features\current-selection\workstation-selection\editing\editable-workstation-configuration-mutators.bun.unit.test.ts:
+(pass) buildEditableWorkstationConfigurationMutators cron fields > updates cron draft fields through cron mutators
+(pass) buildEditableWorkstationConfigurationMutators session sync > marks changes saved from the current draft
+(pass) buildEditableWorkstationConfigurationMutators session sync > resets the draft to the latest factory definition
+(pass) buildEditableWorkstationConfigurationMutators other draft fields > updates prompt, runner, worker, and behavior on the session draft
+(pass) buildEditableWorkstationConfigurationMutators other draft fields > updates the workstation name on the session draft
+(pass) buildEditableWorkstationConfigurationMutators other draft fields > no-ops mutators when session state is null
+src\features\current-selection\workstation-selection\editing\editable-workstation-cron-draft-mutators.bun.unit.test.ts:
+(pass) resolveDraftForBehaviorChange > initializes cron when switching to CRON without an existing draft cron
+(pass) resolveDraftForBehaviorChange > uses an empty cron draft when switching to CRON and the factory has no cron
+(pass) resolveDraftForBehaviorChange > preserves an in-progress cron draft when switching to CRON
+(pass) resolveDraftForBehaviorChange > clears cron when switching away from CRON
+(pass) updateEditableWorkstationCronDraft > returns the draft unchanged for non-CRON behavior
+(pass) updateEditableWorkstationCronDraft > creates and patches cron fields for CRON behavior
+src\features\current-selection\workstation-selection\editing\editable-workstation-overwrite-fields.bun.unit.test.ts:
+(pass) editable workstation overwrite fields > flags model-invoke workstation type, operation, and binding drift
+(pass) editable workstation overwrite fields > ignores model-invoke fields that already match the latest definition
+(pass) editable workstation overwrite fields > flags behavior and runner drift for prompt-oriented workstations
+(pass) editable workstation overwrite fields > formats model-invoke overwrite labels for the warning banner
+src\features\current-selection\workstation-selection\components\fields\workstation-summary-field-values.bun.unit.test.ts:
+(pass) resolveWorkstationSummaryRequiresWorkerAssignment > returns false for ready LOGICAL_MOVE editable configuration
+(pass) resolveWorkstationSummaryRequiresWorkerAssignment > returns true for ready model workstation editable configuration
+(pass) resolveWorkstationSummaryRequiresWorkerAssignment > returns false when topology kind is LOGICAL_MOVE before editable configuration is ready
+(pass) resolveWorkstationSummaryTypeValue > localizes the authoritative workstation type when editable configuration is ready
+(pass) resolveWorkstationSummaryTypeValue > returns loading and unavailable copy for non-ready editable configuration states
+(pass) resolveWorkstationSummaryTypeValue > localizes LOGICAL_MOVE workstation type when editable configuration is ready
+(pass) resolveWorkstationSummaryKindValue > localizes draft scheduling kind when editable configuration is ready
+(pass) resolveWorkstationSummaryKindValue > ignores stale topology kind when editable configuration is ready
+(pass) resolveWorkstationSummaryKindValue > returns loading and unavailable copy for non-ready editable configuration states
+(pass) resolveWorkstationSummaryKindValue > localizes uppercase topology kinds when only topology is available
+(pass) resolveWorkstationSummaryKindValue > normalizes legacy lowercase topology kinds when only topology is available
+(pass) resolveWorkstationSummaryKindValue > localizes unknown topology kinds with explicit fallback text
+(pass) resolveWorkstationSummaryKindValue > returns null for LOGICAL_MOVE workstations
+(pass) resolveWorkstationSummaryPresentation > derives poller summary presentation from editable workstation behavior
+(pass) resolveWorkstationSummaryRunnerValue > returns null for LOGICAL_MOVE workstations
+(pass) resolveWorkstationSummaryRunnerValue > shows localized runner display metadata with RunnerSelectionSource labels
+(pass) resolveWorkstationSummaryRunnerValue > uses legacy_provider when inheriting from worker modelProvider
+(pass) resolveWorkstationSummaryRunnerValue > returns unavailable copy for invalid runner ids
+ 34 pass
+ 0 fail
+ 46 expect() calls
+Ran 34 tests across 4 files. [135.00ms]
+```
+
+Vitest `dashboard-unit` selection of the migrated paths (must be zero):
+
+```text
+.\node_modules\.bin\vitest.exe run --config vitest.lanes.config.ts --project=dashboard-unit --maxWorkers=4 --retry=0 `
+  src/features/current-selection/workstation-selection/components/fields/workstation-summary-field-values.bun.unit.test.ts `
+  src/features/current-selection/workstation-selection/editing/editable-workstation-configuration-mutators.bun.unit.test.ts `
+  src/features/current-selection/workstation-selection/editing/editable-workstation-cron-draft-mutators.bun.unit.test.ts `
+  src/features/current-selection/workstation-selection/editing/editable-workstation-overwrite-fields.bun.unit.test.ts
+```
+
+Result:
+
+```text
+No test files found, exiting with code 1
+filter: ...workstation-summary-field-values.bun.unit.test.ts, ...editable-workstation-configuration-mutators.bun.unit.test.ts, ...editable-workstation-cron-draft-mutators.bun.unit.test.ts, ...editable-workstation-overwrite-fields.bun.unit.test.ts
+projects: dashboard-unit
+exclude: ... src/**/*.bun.unit.test.ts ...
+```
+
+Vitest selection of the retired `.test.ts` paths is also zero (`No test files
+found`); those files are gone after rename. Conclusion: the leased suite
+executes exactly once under Bun and zero times under Vitest. Aggregate focused
+Bun cohort run and affected Vitest selection checks pass; `check-ui-test-lanes.mjs`
+and frontend typecheck also pass on this head.
+
+### Focused after wall-clock (comparable warm-deps)
+
+Command (same four migrated paths as above). Wrapper wall-clock uses
+`[System.Diagnostics.Stopwatch]` around the command, matching the baseline.
+
+| Run | Wrapper wall | Bun reported | Result |
+| --- | ---: | ---: | --- |
+| 1 (first focused) | 189ms | 142ms | 4 files / 34 tests passed |
+| 2 | 174ms | 134ms | 4 files / 34 tests passed |
+| 3 | 172ms | 135ms | 4 files / 34 tests passed |
+| 4 | 167ms | 130ms | 4 files / 34 tests passed |
+
+Median of the three warm comparable samples (runs 2–4): wrapper wall
+`172ms`, Bun reported `134ms`. All runs reported exit code `0`.
+
+### Before / after comparison
+
+| Metric | Vitest baseline | Bun after |
+| --- | ---: | ---: |
+| Focused warm median wrapper wall | 1358 ms | 172 ms |
+| Runner-reported warm median | 698 ms (Vitest) | 134 ms (Bun) |
+| Files | 4 | 4 |
+| Named tests | 34 | 34 |
+| Expect calls (Bun after) | — | 46 |
+| Retained on Vitest | — | 0 files / 0 tests |
+
+These are matched four-file focused observations only; they are not a
+repository-wide speedup claim.
+
+### Changed-line budget
+
+Against the merge-base with `origin/main`, the rename-aware cohort patch is
+**5 files / ~127 insertions / ~6 deletions** (baseline evidence + after-state
+report + four leased rename/import migrations). Well within the ~1,000
+changed-line budget; no unsafe-coupling split required. No production-code
+edits.
