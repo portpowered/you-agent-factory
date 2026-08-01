@@ -93,6 +93,14 @@ func TestRootStartRejectsIncompleteAndUnsupportedRequests(t *testing.T) {
 	}
 
 	_, err = root.Start(context.Background(), factorysessions.StartRequest{
+		Mode: factorysessions.StartMode("UNKNOWN"),
+		Live: &factorysessions.OpenRequest{FolderPath: "/tmp"},
+	})
+	if !errors.As(err, &validation) || validation.Field != "mode" {
+		t.Fatalf("unsupported live start mode = %v, want ValidationError field=mode", err)
+	}
+
+	_, err = root.Start(context.Background(), factorysessions.StartRequest{
 		Mode: factorysessions.StartModeDurableAsync,
 		Live: &factorysessions.OpenRequest{FolderPath: "/tmp"},
 	})

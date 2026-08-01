@@ -19,10 +19,18 @@ func (s *Service) Start(
 	}
 
 	if request.Live != nil {
-		if mode == factorysessions.StartModeDurableAsync || mode == factorysessions.StartModeDurableSync {
+		switch mode {
+		case factorysessions.StartModeAutomatic, factorysessions.StartModeLive:
+			// These are the only modes that can select the live open path.
+		case factorysessions.StartModeDurableAsync, factorysessions.StartModeDurableSync:
 			return factorysessions.StartResult{}, &factorysessions.ExecutionValidationError{
 				Field:   "mode",
 				Message: "live start parameters cannot use a durable start mode",
+			}
+		default:
+			return factorysessions.StartResult{}, &factorysessions.ExecutionValidationError{
+				Field:   "mode",
+				Message: "unsupported Factory Session start mode",
 			}
 		}
 		opened, err := s.OpenFactorySession(ctx, *request.Live)
