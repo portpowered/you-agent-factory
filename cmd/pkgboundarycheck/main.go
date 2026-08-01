@@ -68,7 +68,7 @@ var allowedServiceValueConstructionSymbols = map[string]map[string]struct{}{
 		"NewEmptyMockWorkersConfig": {},
 		"NewProviderError":          {},
 	},
-	"github.com/portpowered/infinite-you/pkg/services/providers/inference": {
+	"github.com/portpowered/infinite-you/pkg/services/providers/wire": {
 		"NewCapabilitySet": {},
 	},
 }
@@ -250,17 +250,17 @@ var approvedApplicationGraphImporters = []string{
 // provider/inferencecontract entries remain only as migration debt until later
 // Providers packets land; they are not the durable normative owner.
 var approvedPeerServiceContractImports = map[string]struct{}{
-	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty":    {},
-	"pkg/platform/pty\x00github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty":      {},
-	"pkg/services/edges\x00" + providersLeafEffectContractImport:                                                                                   {},
-	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/providers/inference":                                                   {},
-	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/automations":                                                           {},
-	"pkg/wire\x00github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/wire":                               {},
-	"pkg/services/factory_runtime\x00github.com/portpowered/infinite-you/pkg/services/providers/inference":                                         {},
-	"pkg/services/factory_runtime/internal/services/instance_host/build\x00github.com/portpowered/infinite-you/pkg/services/providers/inference":   {},
-	"pkg/services/recordings\x00github.com/portpowered/infinite-you/pkg/services/providers/inference":                                              {},
-	"pkg/services/recordings/internal/services/artifacts_export/artifacts\x00github.com/portpowered/infinite-you/pkg/services/providers/inference": {},
-	"pkg/services/recordings/internal/services/replay/replay\x00github.com/portpowered/infinite-you/pkg/services/providers/inference":              {},
+	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty": {},
+	"pkg/platform/pty\x00github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty":   {},
+	"pkg/services/edges\x00" + providersLeafEffectContractImport:                                                                                {},
+	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                                                     {},
+	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/automations":                                                        {},
+	"pkg/wire\x00github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources/wire":                            {},
+	"pkg/services/factory_runtime\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                                           {},
+	"pkg/services/factory_runtime/internal/services/instance_host/build\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":     {},
+	"pkg/services/recordings\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                                                {},
+	"pkg/services/recordings/internal/services/artifacts_export/artifacts\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":   {},
+	"pkg/services/recordings/internal/services/replay/replay\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                {},
 }
 
 // publicExternalEffectContractImports are intentionally declared beside the
@@ -272,7 +272,7 @@ var approvedPeerServiceContractImports = map[string]struct{}{
 var publicExternalEffectContractImports = map[string]struct{}{
 	providersLeafEffectContractImport: {},
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty": {},
-	"github.com/portpowered/infinite-you/pkg/services/providers/inference":                                                {},
+	"github.com/portpowered/infinite-you/pkg/services/providers/wire":                                                     {},
 	"github.com/portpowered/infinite-you/pkg/services/automations":                                                        {},
 }
 

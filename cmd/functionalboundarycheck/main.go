@@ -67,7 +67,7 @@ var forbiddenProviderImplementationImports = []string{
 var providerPublicEffectContractImports = map[string]struct{}{
 	"github.com/portpowered/infinite-you/pkg/services/providers/execution/inferencecontract":                              {},
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty": {},
-	"github.com/portpowered/infinite-you/pkg/services/providers/inference":                                                {},
+	"github.com/portpowered/infinite-you/pkg/services/providers/wire":                                                     {},
 	"github.com/portpowered/infinite-you/pkg/services/automations":                                                        {},
 }
 

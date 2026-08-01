@@ -1132,7 +1132,7 @@
       "toOwner": "providers",
       "class": "external_effect",
       "architectureException": true,
-      "evidence": "pkg/services/edges -\u003e pkg/services/providers/inference"
+      "evidence": "pkg/services/edges -\u003e pkg/services/providers/wire"
     },
     {
       "fromOwner": "edges",
@@ -1483,7 +1483,7 @@
       "fromOwner": "providers",
       "toOwner": "workers",
       "class": "command",
-      "evidence": "pkg/services/providers/inference -\u003e pkg/services/workers"
+      "evidence": "pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty -\u003e pkg/services/workers"
     },
     {
       "fromOwner": "recordings",
@@ -4317,12 +4317,6 @@
     },
     {
       "packagePath": "pkg/services/providers",
-      "disposition": "retain",
-      "destination": "providers",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/providers/inference",
       "disposition": "retain",
       "destination": "providers",
       "destinationKind": "owner"

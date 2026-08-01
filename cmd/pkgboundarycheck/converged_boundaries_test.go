@@ -59,7 +59,7 @@ func TestRunAllowsEdgeAggregatorToImportPublishedEffectContracts(t *testing.T) {
 		"github.com/portpowered/infinite-you/pkg/services/models",
 		"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty",
 		providersLeafEffectContractImport,
-		"github.com/portpowered/infinite-you/pkg/services/providers/inference",
+		"github.com/portpowered/infinite-you/pkg/services/providers/wire",
 		"github.com/portpowered/infinite-you/pkg/services/automations",
 	} {
 		writeGoImportFile(
@@ -96,7 +96,7 @@ func TestRunAllowsPeerServicesToImportExactProviderInferenceContract(t *testing.
 			repoRoot,
 			fmt.Sprintf("pkg/services/%s/provider_contract_%d.go", owner.path, index),
 			owner.pkgName,
-			"github.com/portpowered/infinite-you/pkg/services/providers/inference",
+			"github.com/portpowered/infinite-you/pkg/services/providers/wire",
 		)
 	}
 

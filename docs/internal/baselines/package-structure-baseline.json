@@ -2814,11 +2814,6 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/providers/inference",
-      "target": "pkg/services/providers"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/recordings/internal/services/artifacts_export/artifacts",
       "target": "pkg/services/recordings/internal/services/artifacts_export"
     },
