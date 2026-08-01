@@ -13,8 +13,13 @@ import (
 )
 
 type routingOperatorSettings struct {
+	operatorsettings.Service
 	loadCalls   []string
 	ensureCalls []string
+}
+
+func (routingOperatorSettings) DefaultConfigPath(homeDir string) string {
+	return filepath.Join(homeDir, "settings-owned", "config.json")
 }
 
 func (settings *routingOperatorSettings) LoadFileConfig(path string) (operatorsettings.Config, error) {
@@ -54,7 +59,9 @@ func (localMigrationFileSystem) ReadDir(path string) ([]os.DirEntry, error) { re
 func (localMigrationFileSystem) MkdirAll(path string, mode os.FileMode) error {
 	return os.MkdirAll(path, mode)
 }
-func (localMigrationFileSystem) Rename(oldPath, newPath string) error { return os.Rename(oldPath, newPath) }
+func (localMigrationFileSystem) Rename(oldPath, newPath string) error {
+	return os.Rename(oldPath, newPath)
+}
 
 // TestRootService_InitializeRoutesThroughInternalWorkflow proves the published
 // root Service.Initialize seam is fulfilled through internal workflow ownership
@@ -97,7 +104,7 @@ func TestRootService_InitializeRoutesThroughInternalWorkflow(t *testing.T) {
 	if result.HomeDir != homeDir || result.SystemConfigOutcome != systeminitialization.SystemConfigCreated {
 		t.Fatalf("Initialize() result = %#v", result)
 	}
-	wantConfigPath := operatorsettings.DefaultConfigPath(homeDir)
+	wantConfigPath := settings.DefaultConfigPath(homeDir)
 	if result.ConfigPath != wantConfigPath {
 		t.Fatalf("ConfigPath = %q, want Settings root DefaultConfigPath %q", result.ConfigPath, wantConfigPath)
 	}
@@ -119,7 +126,8 @@ func TestRootService_InitializeSkipPathConstructsSettingsLoadCommandThroughRootC
 	t.Parallel()
 
 	homeDir := t.TempDir()
-	configPath := operatorsettings.DefaultConfigPath(homeDir)
+	settings := &routingOperatorSettings{}
+	configPath := settings.DefaultConfigPath(homeDir)
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +135,6 @@ func TestRootService_InitializeSkipPathConstructsSettingsLoadCommandThroughRootC
 		t.Fatal(err)
 	}
 
-	settings := &routingOperatorSettings{}
 	installer := &routingPackagedInstaller{}
 	service, err := systeminitializationwire.NewService(
 		settings,

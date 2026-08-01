@@ -15,8 +15,13 @@ import (
 )
 
 type fakeOperatorSettings struct {
+	operatorsettings.Service
 	loadErr, ensureErr     error
 	loadCalls, ensureCalls []string
+}
+
+func (fakeOperatorSettings) DefaultConfigPath(homeDir string) string {
+	return filepath.Join(homeDir, "settings-owned", "config.json")
 }
 
 type localMigrationFileSystem struct{}
@@ -80,7 +85,7 @@ type packagedInstallCall struct {
 
 func newTestInitializer(
 	t *testing.T,
-	settings OperatorSettings,
+	settings operatorsettings.Service,
 	installer factorydefinitions.PackagedFactoryInstaller,
 	definitions []factorydefinitions.PackagedDefinition,
 ) *Initializer {
@@ -164,7 +169,7 @@ func TestInitializeFreshHomeReturnsTypedCreatedResultsThroughPeerRoots(t *testin
 		t.Fatalf("Initialize() error = %v", err)
 	}
 
-	wantConfigPath := operatorsettings.DefaultConfigPath(homeDir)
+	wantConfigPath := settings.DefaultConfigPath(homeDir)
 	wantFactoriesRoot := factorydefinitions.NamedFactoriesRoot(homeDir)
 	if result.HomeDir != homeDir ||
 		result.ConfigPath != wantConfigPath ||
@@ -547,7 +552,8 @@ func TestInitializePackagedFactoryFailureAfterSkippedSystemConfigReportsRollback
 	t.Parallel()
 
 	homeDir := t.TempDir()
-	configPath := operatorsettings.DefaultConfigPath(homeDir)
+	settings := &fakeOperatorSettings{}
+	configPath := settings.DefaultConfigPath(homeDir)
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -558,7 +564,7 @@ func TestInitializePackagedFactoryFailureAfterSkippedSystemConfigReportsRollback
 	installErr := errors.New("packaged factory install failed")
 	_, err := newTestInitializer(
 		t,
-		&fakeOperatorSettings{},
+		settings,
 		&fakePackagedInstaller{err: installErr},
 		nil,
 	).Initialize(t.Context(), systeminitialization.Request{HomeDir: homeDir})

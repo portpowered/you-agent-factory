@@ -130,15 +130,11 @@ func TestProvideSystemInitializationServiceComposedInitializeCreatesThenSkipsPac
 	if err != nil {
 		t.Fatalf("provideOperatorSettingsService() error = %v", err)
 	}
-	loadOperatorConfig := provideOperatorConfigLoader(settings)
-	ensureOperatorBackendScope := provideOperatorBackendScopeEnsurer(settings)
-
 	service, err := provideSystemInitializationService(
 		bootstrapCompositionTestPersistence(t),
 		platformfilesystem.Local{},
 		bootstrapCompositionGoalCatalog(t),
-		loadOperatorConfig,
-		ensureOperatorBackendScope,
+		settings,
 		provideSystemInitializationInspectPath(edges),
 		provideSystemInitializationLegacyFactoryMigrationFileSystem(edges),
 	)

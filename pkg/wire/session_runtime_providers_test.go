@@ -310,6 +310,7 @@ func TestOperatorSettingsHomePortCompositionUsesProcessProviderRoot(t *testing.T
 		platformfilesystem.Local{},
 		globalconfigmapping.Decode,
 		providersRoot,
+		func() string { return "00000000-0000-4000-8000-000000000001" },
 	)
 	if err != nil {
 		t.Fatalf("NewServiceFromHomePorts() error = %v", err)

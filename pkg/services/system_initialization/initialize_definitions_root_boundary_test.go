@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	systeminitialization "github.com/portpowered/infinite-you/pkg/services/system_initialization"
 	systeminitializationwire "github.com/portpowered/infinite-you/pkg/services/system_initialization/wire"
 )
@@ -111,7 +112,7 @@ func (installer *failingDefinitionsInstaller) EnsurePackagedFactories(
 
 func newDefinitionsRootService(
 	t *testing.T,
-	settings systeminitializationwire.OperatorSettings,
+	settings operatorsettings.Service,
 	catalog factorydefinitions.PackagedFactoryCatalogOperations,
 	installer factorydefinitions.PackagedFactoryInstaller,
 ) systeminitialization.Service {

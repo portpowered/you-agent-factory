@@ -3,8 +3,6 @@ package wire
 import (
 	"fmt"
 
-	"github.com/google/uuid"
-
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	operatorservice "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/service"
 	documentwire "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document/wire"
@@ -18,7 +16,7 @@ func NewServiceFromHomePorts(
 	files operatorsettings.FileSystem,
 	decode operatorsettings.ConfigDecoder,
 	providersRoot providers.Service,
-	idGenerators ...operatorsettings.IDGenerator,
+	idGenerator operatorsettings.IDGenerator,
 ) (operatorsettings.Service, error) {
 	if files == nil {
 		return nil, fmt.Errorf("operator settings filesystem is required")
@@ -29,9 +27,8 @@ func NewServiceFromHomePorts(
 	if providersRoot == nil {
 		return nil, fmt.Errorf("operator settings providers root is required")
 	}
-	idGenerator := operatorsettings.IDGenerator(uuid.NewString)
-	if len(idGenerators) > 0 && idGenerators[0] != nil {
-		idGenerator = idGenerators[0]
+	if idGenerator == nil {
+		return nil, fmt.Errorf("operator settings ID generator is required")
 	}
 	document := documentwire.NewService(files, nil, decode, nil, nil)
 	resolution, err := resolutionwire.NewService(providersRoot)

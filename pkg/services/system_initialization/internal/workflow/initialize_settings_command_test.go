@@ -16,11 +16,16 @@ import (
 // production paths that bypass the collaborator or depend on Settings
 // transitional packages would fail these behavioral proofs.
 type settingsCommandRecorder struct {
+	operatorsettings.Service
 	loadErr   error
 	ensureErr error
 
 	loadCalls   []string
 	ensureCalls []string
+}
+
+func (settingsCommandRecorder) DefaultConfigPath(homeDir string) string {
+	return filepath.Join(homeDir, "settings-owned", "config.json")
 }
 
 func (recorder *settingsCommandRecorder) LoadFileConfig(path string) (operatorsettings.Config, error) {
@@ -43,8 +48,8 @@ func (recorder *settingsCommandRecorder) EnsureLocalBackendScope(path string) (o
 
 // TestInitializeSettingsCommandConstructionThroughRootCollaborator proves
 // Initialize derives the operator config path with Settings root DefaultConfigPath
-// and routes load/ensure commands only through the injected Settings collaborator
-// ports, with observable Bootstrap outcomes on create, skip, and failure paths.
+// and routes load/ensure commands only through the injected Settings root, with
+// observable Bootstrap outcomes on create, skip, and failure paths.
 func TestInitializeSettingsCommandConstructionThroughRootCollaborator(t *testing.T) {
 	t.Parallel()
 
@@ -63,11 +68,11 @@ func TestInitializeSettingsCommandConstructionThroughRootCollaborator(t *testing
 		wantSettingsCalls settingsCommandExpectation
 	}{
 		{
-			name: "create path ensures then loads through root collaborator",
-			settings: &settingsCommandRecorder{},
+			name:        "create path ensures then loads through root collaborator",
+			settings:    &settingsCommandRecorder{},
 			wantOutcome: systeminitialization.SystemConfigCreated,
 			wantSettingsCalls: settingsCommandExpectation{
-				wantEnsure: []string{"<config>"},
+				wantEnsure:    []string{"<config>"},
 				wantLoadCalls: []string{"<config>"},
 			},
 		},
@@ -125,7 +130,7 @@ func TestInitializeSettingsCommandConstructionThroughRootCollaborator(t *testing
 			t.Parallel()
 
 			homeDir := t.TempDir()
-			wantConfigPath := operatorsettings.DefaultConfigPath(homeDir)
+			wantConfigPath := test.settings.DefaultConfigPath(homeDir)
 			if test.prepareHome != nil {
 				test.prepareHome(t, homeDir, wantConfigPath)
 			}
