@@ -921,6 +921,63 @@ func TestReconstructFactoryWorldState_WorkStateChangeMovesFromFailedToInProgress
 	}
 }
 
+func TestReconstructFactoryWorldState_FailedDispatchRoutedToRetryStateIsNotFailedWork(t *testing.T) {
+	t0 := time.Date(2026, 5, 30, 12, 0, 0, 0, time.UTC)
+	events := []factoryapi.FactoryEvent{
+		initialStructureEvent(t0),
+		workInputEvent(1, t0.Add(time.Second), work.FactoryWorkItem{
+			ID:          "work-retry",
+			WorkTypeID:  "task",
+			DisplayName: "Retry me",
+			TraceID:     "trace-retry",
+			PlaceID:     "task:init",
+		}),
+		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
+			DispatchID:   "dispatch-retry",
+			TransitionID: "t-implement",
+			Workstation:  interfaces.FactoryWorkstationRef{ID: "t-implement", Name: "Implement"},
+			Inputs: []interfaces.WorkstationInput{{
+				TokenID:  "work-retry",
+				PlaceID:  "task:init",
+				WorkItem: &work.FactoryWorkItem{ID: "work-retry", WorkTypeID: "task", TraceID: "trace-retry", PlaceID: "task:init"},
+			}},
+		}),
+		workstationResponseEvent(3, t0.Add(3*time.Second), interfaces.WorkstationResponsePayload{
+			DispatchID:   "dispatch-retry",
+			TransitionID: "t-implement",
+			Workstation:  interfaces.FactoryWorkstationRef{ID: "t-implement", Name: "Implement"},
+			Result:       interfaces.WorkstationResult{Outcome: "FAILED", Error: "provider unavailable", FailureDetail: &workerexecution.FailureDetail{Reason: workerexecution.WorkFailureTypeUnknown, Message: "provider unavailable"}},
+			Outputs: []interfaces.WorkstationOutput{{
+				Type:     string(interfaces.MutationMove),
+				TokenID:  "work-retry",
+				ToPlace:  "task:ready",
+				WorkItem: &work.FactoryWorkItem{ID: "work-retry", WorkTypeID: "task", TraceID: "trace-retry", PlaceID: "task:ready", State: "ready"},
+			}},
+			TraceData: &interfaces.FactoryTraceData{TraceID: "trace-retry", WorkIDs: []string{"work-retry"}},
+		}),
+	}
+
+	state, err := ReconstructFactoryWorldState(events, 3)
+	if err != nil {
+		t.Fatalf("ReconstructFactoryWorldState: %v", err)
+	}
+	if _, ok := state.FailedWorkItemsByID["work-retry"]; ok {
+		t.Fatalf("retry-routed work must not remain failed: %#v", state.FailedWorkItemsByID)
+	}
+	if _, ok := state.ActiveWorkItemsByID["work-retry"]; !ok {
+		t.Fatalf("retry-routed work must remain active: %#v", state.ActiveWorkItemsByID)
+	}
+	if got := state.WorkItemsByID["work-retry"]; got.PlaceID != "task:ready" || got.State != "ready" {
+		t.Fatalf("retry-routed work = %#v, want task:ready", got)
+	}
+	if _, ok := state.FailureDetailsByWorkID["work-retry"]; !ok {
+		t.Fatal("retry-routed work should retain dispatch failure diagnostics")
+	}
+	if got := len(state.FailedDispatches); got != 1 {
+		t.Fatalf("FailedDispatches length = %d, want 1", got)
+	}
+}
+
 func TestReconstructFactoryWorldState_WorkStateChangeMovesFromInitialToArbitraryState(t *testing.T) {
 	t0 := time.Date(2026, 5, 30, 13, 0, 0, 0, time.UTC)
 	events := []factoryapi.FactoryEvent{

@@ -650,7 +650,8 @@ func (r *factoryWorldReducer) terminalWorkForCompletion(outcome workerexecution.
 			continue
 		}
 		category := r.placeCats[item.PlaceID]
-		if category == "TERMINAL" || category == "FAILED" || outcome == workerexecution.OutcomeFailed {
+		if category == "TERMINAL" || category == "FAILED" ||
+			(outcome == workerexecution.OutcomeFailed && strings.TrimSpace(item.State) == "") {
 			return &interfaces.FactoryTerminalWork{WorkItem: item, Status: category}
 		}
 	}
