@@ -109,8 +109,7 @@ func TestHandlerBindsOpenedRolesWithoutReconstructingStableGraph(t *testing.T) {
 	}
 	opened := factorysessions.RuntimeHTTPServices{
 		FactoryRuntime: &runtimeRole{}, FactoryDefinitions: &definitionRole{},
-		FactorySessions: &sessionRole{}, SessionInvocation: &invocationRole{},
-		SessionExecution: &executionRole{}, Work: &workRole{}, Models: &modelRole{},
+		FactorySessions: &sessionRole{}, Work: &workRole{}, Models: &modelRole{},
 		Workers: &workerRole{}, ProviderSessions: &providerSessionRole{},
 	}
 	opened.Logger = zap.NewNop()
@@ -161,8 +160,7 @@ func TestHandlerBindForwardsSessionsRootToHTTPTransport(t *testing.T) {
 	}
 	opened := factorysessions.RuntimeHTTPServices{
 		FactoryRuntime: &runtimeRole{}, FactoryDefinitions: &definitionRole{},
-		FactorySessions: root, SessionInvocation: &invocationRole{},
-		SessionExecution: &executionRole{}, Work: &workRole{}, Models: &modelRole{},
+		FactorySessions: root, Work: &workRole{}, Models: &modelRole{},
 		Workers: &workerRole{}, ProviderSessions: &providerSessionRole{},
 		Logger: zap.NewNop(),
 	}

@@ -71,9 +71,6 @@ type InvocationTarget struct {
 // HostedLiveInvocation is the live runtime surface used by hosted CLI invocations.
 type HostedLiveInvocation struct {
 	Sessions Service
-	Invoker  interface {
-		InvokeFactorySession(context.Context, string, InvocationRequest) (interfaces.FactoryInvocationResult, error)
-	}
 }
 
 // FactoryInvocationOutcome is the detached result of one Factory invocation.
@@ -91,8 +88,8 @@ type ApplicationOpeningPorts struct {
 	}
 	RuntimeHostObserver RuntimeHostObserver
 	// RuntimeHTTPServicesBound is called once after the application runtime opens
-	// and before component binding. Hosted CLI invocations use it to route factory
-	// invokes through the live session invoker on the already-running host.
+	// and before component binding. Hosted CLI invocations use it to retain the
+	// Sessions root and invoke against the already-running host.
 	RuntimeHTTPServicesBound func(RuntimeHTTPServices)
 }
 
@@ -110,17 +107,13 @@ type RuntimeHTTPServices struct {
 	FactoryDefinitions interfaces.Service
 	WorkflowPreview    factoryruntime.WorkflowPreviewOperation
 	FactorySessions    Service
-	SessionInvocation  interface {
-		InvokeFactorySession(context.Context, string, InvocationRequest) (interfaces.FactoryInvocationResult, error)
-	}
-	SessionExecution ExecutionService
-	Work             work.Service
-	Models           models.Service
-	ModelsScope      models.RuntimeScopeRef
-	Workers          workers.Service
-	ProviderSessions providersessions.Service
-	WorkerPrompts    workers.PromptTemplates
-	Logger           *zap.Logger
+	Work               work.Service
+	Models             models.Service
+	ModelsScope        models.RuntimeScopeRef
+	Workers            workers.Service
+	ProviderSessions   providersessions.Service
+	WorkerPrompts      workers.PromptTemplates
+	Logger             *zap.Logger
 }
 
 // FactoryScaffoldInitializer initializes a newly selected Factory directory.

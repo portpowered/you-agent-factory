@@ -6,6 +6,97 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 )
 
+// Start enters one live or durable Factory Session start path through the
+// singular Sessions root. The legacy durable methods remain below as private
+// implementation adapters for existing protocol mappings.
+func (s *Service) Start(
+	ctx context.Context,
+	request factorysessions.StartRequest,
+) (factorysessions.StartResult, error) {
+	mode := request.Mode
+	if mode == "" {
+		mode = factorysessions.StartModeAutomatic
+	}
+
+	if request.Live != nil {
+		switch mode {
+		case factorysessions.StartModeAutomatic, factorysessions.StartModeLive:
+			// These are the only modes that can select the live open path.
+		case factorysessions.StartModeDurableAsync, factorysessions.StartModeDurableSync:
+			return factorysessions.StartResult{}, &factorysessions.ExecutionValidationError{
+				Field:   "mode",
+				Message: "live start parameters cannot use a durable start mode",
+			}
+		default:
+			return factorysessions.StartResult{}, &factorysessions.ExecutionValidationError{
+				Field:   "mode",
+				Message: "unsupported Factory Session start mode",
+			}
+		}
+		opened, err := s.OpenFactorySession(ctx, *request.Live)
+		if err != nil {
+			return factorysessions.StartResult{}, err
+		}
+		if opened == nil {
+			return factorysessions.StartResult{}, factorysessions.ErrSessionNotFound
+		}
+		status := factorysessions.LifecycleStatusRunning
+		if opened.SessionID == "" {
+			status = ""
+		}
+		return factorysessions.StartResult{
+			SessionID: opened.SessionID,
+			Status:    status,
+			Mode:      factorysessions.StartModeLive,
+			Live:      opened,
+		}, nil
+	}
+
+	if mode == factorysessions.StartModeLive {
+		return factorysessions.StartResult{}, &factorysessions.ExecutionValidationError{
+			Field:   "live",
+			Message: "live start parameters are required",
+		}
+	}
+
+	switch mode {
+	case factorysessions.StartModeAutomatic, factorysessions.StartModeDurableAsync:
+		if mode == factorysessions.StartModeAutomatic && request.Wait != nil {
+			mode = factorysessions.StartModeDurableSync
+		} else {
+			started, err := s.StartAsync(ctx, request)
+			if err != nil {
+				return factorysessions.StartResult{}, err
+			}
+			return factorysessions.StartResult{
+				SessionID: started.SessionID,
+				Status:    factorysessions.LifecycleStatus(started.Status),
+				Mode:      factorysessions.StartModeDurableAsync,
+				Async:     &started,
+			}, nil
+		}
+	case factorysessions.StartModeDurableSync:
+		// handled below so AUTOMATIC+Wait and explicit DURABLE_SYNC share one
+		// implementation path.
+	default:
+		return factorysessions.StartResult{}, &factorysessions.ExecutionValidationError{
+			Field:   "mode",
+			Message: "unsupported Factory Session start mode",
+		}
+	}
+
+	started, err := s.StartSync(ctx, request)
+	if err != nil {
+		return factorysessions.StartResult{}, err
+	}
+	return factorysessions.StartResult{
+		SessionID: started.SessionID,
+		Status:    factorysessions.LifecycleStatus(started.Status),
+		Mode:      factorysessions.StartModeDurableSync,
+		Sync:      &started,
+	}, nil
+}
+
 func (s *Service) durableExecution() (factorysessions.ExecutionService, error) {
 	if s == nil || s.durable == nil {
 		return nil, factorysessions.ErrExecutionServiceNotConfigured

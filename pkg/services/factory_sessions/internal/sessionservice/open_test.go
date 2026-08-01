@@ -317,6 +317,55 @@ func TestService_OpenFactorySession_ReturnsOpenedSessionIdentity(t *testing.T) {
 	}
 }
 
+func TestService_StartRoutesLiveOpenThroughTheRoot(t *testing.T) {
+	t.Parallel()
+
+	host := &openTestHost{
+		targets: []factorysessions.Target{{
+			Ref:        factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+			FactoryDir: "/tmp/factory",
+			FolderPath: "/tmp",
+		}},
+		openSessionID: "sess-root-start",
+	}
+	gateway := newServiceTestGateway(host)
+
+	started, err := gateway.Start(context.Background(), factorysessions.StartRequest{
+		Mode: factorysessions.StartModeLive,
+		Live: &factorysessions.OpenRequest{FolderPath: "/tmp"},
+	})
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	if started.SessionID != "sess-root-start" || started.Status != factorysessions.LifecycleStatusRunning ||
+		started.Mode != factorysessions.StartModeLive || started.Live == nil {
+		t.Fatalf("Start() = %#v, want live root result", started)
+	}
+}
+
+func TestService_StartPreservesLiveValidationWithoutCreatingSession(t *testing.T) {
+	t.Parallel()
+
+	host := &openTestHost{
+		targets: []factorysessions.Target{{
+			Ref: factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		}},
+		openErr: errors.New("live open should not run for validation"),
+	}
+	gateway := newServiceTestGateway(host)
+
+	started, err := gateway.Start(context.Background(), factorysessions.StartRequest{
+		Mode: factorysessions.StartModeLive,
+		Live: &factorysessions.OpenRequest{FolderPath: "/tmp", ValidateOnly: true},
+	})
+	if err != nil {
+		t.Fatalf("Start() validation error = %v", err)
+	}
+	if started.SessionID != "" || started.Status != "" || started.Live == nil {
+		t.Fatalf("Start() validation = %#v, want target-only result without live status", started)
+	}
+}
+
 func TestService_OpenFactorySession_LeavesSummaryAbsentWhenSessionCannotResolve(t *testing.T) {
 	t.Parallel()
 
