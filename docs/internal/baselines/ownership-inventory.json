@@ -2430,6 +2430,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/automations/internal/contracts",
+      "disposition": "retain",
+      "destination": "automations",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/automations/internal/services/cron",
       "disposition": "retain",
       "destination": "automations",
