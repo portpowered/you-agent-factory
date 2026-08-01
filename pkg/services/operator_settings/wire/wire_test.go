@@ -180,115 +180,112 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 	}
 }
 
-func TestNewServiceRejectsMissingRequiredPorts(t *testing.T) {
+func TestNewServiceRejectsMissingFileSystem(t *testing.T) {
 	t.Parallel()
 
-	providersRoot := internaltestproviders.StandardCatalog()
+	assertNewServiceRejectsMissingPort(t, func() (operatorsettings.Service, error) {
+		return settingswire.NewService(
+			nil,
+			stubCreateTemporaryFile,
+			stubConfigDecoder,
+			stubConfigEncoder,
+			stubProviderCatalog,
+			internaltestproviders.StandardCatalog(),
+		)
+	}, "construct Operator Settings: filesystem is required")
+}
 
-	tests := []struct {
-		name string
-		call func() (operatorsettings.Service, error)
-		want string
-	}{
-		{
-			name: "filesystem",
-			call: func() (operatorsettings.Service, error) {
-				return settingswire.NewService(
-					nil,
-					stubCreateTemporaryFile,
-					stubConfigDecoder,
-					stubConfigEncoder,
-					stubProviderCatalog,
-					providersRoot,
-				)
-			},
-			want: "construct Operator Settings: filesystem is required",
-		},
-		{
-			name: "create temporary file",
-			call: func() (operatorsettings.Service, error) {
-				return settingswire.NewService(
-					&stubFileSystem{},
-					nil,
-					stubConfigDecoder,
-					stubConfigEncoder,
-					stubProviderCatalog,
-					providersRoot,
-				)
-			},
-			want: "construct Operator Settings: create temporary file is required",
-		},
-		{
-			name: "config decoder",
-			call: func() (operatorsettings.Service, error) {
-				return settingswire.NewService(
-					&stubFileSystem{},
-					stubCreateTemporaryFile,
-					nil,
-					stubConfigEncoder,
-					stubProviderCatalog,
-					providersRoot,
-				)
-			},
-			want: "construct Operator Settings: config decoder is required",
-		},
-		{
-			name: "config encoder",
-			call: func() (operatorsettings.Service, error) {
-				return settingswire.NewService(
-					&stubFileSystem{},
-					stubCreateTemporaryFile,
-					stubConfigDecoder,
-					nil,
-					stubProviderCatalog,
-					providersRoot,
-				)
-			},
-			want: "construct Operator Settings: config encoder is required",
-		},
-		{
-			name: "provider catalog",
-			call: func() (operatorsettings.Service, error) {
-				return settingswire.NewService(
-					&stubFileSystem{},
-					stubCreateTemporaryFile,
-					stubConfigDecoder,
-					stubConfigEncoder,
-					nil,
-					providersRoot,
-				)
-			},
-			want: "construct Operator Settings: provider catalog is required",
-		},
-		{
-			name: "providers root",
-			call: func() (operatorsettings.Service, error) {
-				return settingswire.NewService(
-					&stubFileSystem{},
-					stubCreateTemporaryFile,
-					stubConfigDecoder,
-					stubConfigEncoder,
-					stubProviderCatalog,
-					nil,
-				)
-			},
-			want: "construct Operator Settings: providers root is required",
-		},
+func TestNewServiceRejectsMissingTemporaryFileCreator(t *testing.T) {
+	t.Parallel()
+
+	assertNewServiceRejectsMissingPort(t, func() (operatorsettings.Service, error) {
+		return settingswire.NewService(
+			&stubFileSystem{},
+			nil,
+			stubConfigDecoder,
+			stubConfigEncoder,
+			stubProviderCatalog,
+			internaltestproviders.StandardCatalog(),
+		)
+	}, "construct Operator Settings: create temporary file is required")
+}
+
+func TestNewServiceRejectsMissingConfigDecoder(t *testing.T) {
+	t.Parallel()
+
+	assertNewServiceRejectsMissingPort(t, func() (operatorsettings.Service, error) {
+		return settingswire.NewService(
+			&stubFileSystem{},
+			stubCreateTemporaryFile,
+			nil,
+			stubConfigEncoder,
+			stubProviderCatalog,
+			internaltestproviders.StandardCatalog(),
+		)
+	}, "construct Operator Settings: config decoder is required")
+}
+
+func TestNewServiceRejectsMissingConfigEncoder(t *testing.T) {
+	t.Parallel()
+
+	assertNewServiceRejectsMissingPort(t, func() (operatorsettings.Service, error) {
+		return settingswire.NewService(
+			&stubFileSystem{},
+			stubCreateTemporaryFile,
+			stubConfigDecoder,
+			nil,
+			stubProviderCatalog,
+			internaltestproviders.StandardCatalog(),
+		)
+	}, "construct Operator Settings: config encoder is required")
+}
+
+func TestNewServiceRejectsMissingProviderCatalog(t *testing.T) {
+	t.Parallel()
+
+	assertNewServiceRejectsMissingPort(t, func() (operatorsettings.Service, error) {
+		return settingswire.NewService(
+			&stubFileSystem{},
+			stubCreateTemporaryFile,
+			stubConfigDecoder,
+			stubConfigEncoder,
+			nil,
+			internaltestproviders.StandardCatalog(),
+		)
+	}, "construct Operator Settings: provider catalog is required")
+}
+
+func TestNewServiceRejectsMissingProvidersRoot(t *testing.T) {
+	t.Parallel()
+
+	assertNewServiceRejectsMissingPort(t, func() (operatorsettings.Service, error) {
+		return settingswire.NewService(
+			&stubFileSystem{},
+			stubCreateTemporaryFile,
+			stubConfigDecoder,
+			stubConfigEncoder,
+			stubProviderCatalog,
+			nil,
+		)
+	}, "construct Operator Settings: providers root is required")
+}
+
+func assertNewServiceRejectsMissingPort(
+	t *testing.T,
+	call func() (operatorsettings.Service, error),
+	want string,
+) {
+	t.Helper()
+
+	service, err := call()
+	if err == nil {
+		t.Fatalf("call = (%v, nil), want error %q", service, want)
 	}
-
-	for _, test := range tests {
-		test := test
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-
-			service, err := test.call()
-			if err == nil || service != nil {
-				t.Fatalf("call = (%v, %v), want error %q", service, err, test.want)
-			}
-			if err.Error() != test.want {
-				t.Fatalf("error = %q, want %q", err.Error(), test.want)
-			}
-		})
+	if service != nil {
+		t.Fatalf("call = (%v, %v), want nil service", service, err)
+	}
+	if err.Error() != want {
+		t.Fatalf("error = %q, want %q", err.Error(), want)
 	}
 }
 
