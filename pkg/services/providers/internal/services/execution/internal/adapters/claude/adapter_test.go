@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	effects "github.com/portpowered/infinite-you/pkg/services/providers/internal/effects"
+	effects "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
 	claude "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude"
@@ -30,7 +30,27 @@ func TestCommandEffectPropagatesStreamingObserverFailure(t *testing.T) {
 	}
 }
 
+func TestCommandEffectPreservesFallbackObserverAndRunnerFailures(t *testing.T) {
+	t.Parallel()
+
+	commandErr := errors.New("fallback command failed")
+	observerErr := errors.New("fallback output observer failed")
+	effect := claude.NewCommandEffect(failingCommandRunner{err: commandErr})
+	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
+		Provider:    providers.IDClaude,
+		AttemptID:   "combined-failure",
+		UserMessage: "perform work",
+	}, func([]byte) error { return observerErr })
+	if !errors.Is(err, commandErr) || !errors.Is(err, observerErr) {
+		t.Fatalf("Execute() error = %v, want command and observer failures", err)
+	}
+}
+
 type streamingObserverErrorRunner struct{}
+
+type failingCommandRunner struct {
+	err error
+}
 
 func (streamingObserverErrorRunner) Run(
 	context.Context,
@@ -45,6 +65,13 @@ func (streamingObserverErrorRunner) RunStreaming(
 	observer effects.OutputChunkObserver,
 ) (effects.CommandResult, error) {
 	return effects.CommandResult{}, observer(effects.OutputStreamStdout, []byte("output"))
+}
+
+func (runner failingCommandRunner) Run(
+	_ context.Context,
+	_ effects.CommandRequest,
+) (effects.CommandResult, error) {
+	return effects.CommandResult{Stdout: []byte("fallback output")}, runner.err
 }
 
 func TestClaudeRootPreservesRequestOrderedStreamFinalAndSession(t *testing.T) {

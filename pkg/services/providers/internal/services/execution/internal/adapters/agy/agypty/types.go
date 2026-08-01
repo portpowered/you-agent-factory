@@ -15,7 +15,7 @@
 //   - docs/architecture/agy-pty-threat-review.md — T1/T2 security controls
 package agypty
 
-import effects "github.com/portpowered/infinite-you/pkg/services/providers/internal/effects"
+import effects "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 
 // Default capture and timeout limits for the approved Agy PTY boundary.
 // Story 17 implementation must honor these defaults unless factory config

@@ -28,6 +28,7 @@ const (
 	// composition root may translate a Workers effect into this seam, but these
 	// packages must never import Workers contracts themselves.
 	providersCanonicalWirePackage          = "pkg/services/providers/wire"
+	providersCanonicalExecutionPackage     = "pkg/services/providers/internal/services/execution"
 	providersCanonicalExecutionWirePackage = "pkg/services/providers/internal/services/execution/wire"
 	providersCanonicalAdapterPackagePrefix = "pkg/services/providers/internal/services/execution/internal/adapters/"
 	workersServiceImportPrefix             = repositoryImportPrefix + "pkg/services/workers"
@@ -177,6 +178,7 @@ func providerEffectOwnershipFindingsForFile(
 
 func isProvidersCanonicalEffectPackage(packagePath string) bool {
 	return packagePath == providersCanonicalWirePackage ||
+		packagePath == providersCanonicalExecutionPackage ||
 		packagePath == providersCanonicalExecutionWirePackage ||
 		strings.HasPrefix(packagePath, providersCanonicalAdapterPackagePrefix)
 }

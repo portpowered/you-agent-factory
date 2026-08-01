@@ -56,6 +56,7 @@ func TestProvidersCanonicalEffectCodeDoesNotImportWorkersContracts(t *testing.T)
 	providersWireRoot := filepath.Dir(file)
 	roots := []string{
 		providersWireRoot,
+		filepath.Join(providersWireRoot, "..", "internal", "service", "effects.go"),
 		filepath.Join(providersWireRoot, "..", "internal", "services", "execution", "wire"),
 		filepath.Join(providersWireRoot, "..", "internal", "services", "execution", "internal", "adapters"),
 	}

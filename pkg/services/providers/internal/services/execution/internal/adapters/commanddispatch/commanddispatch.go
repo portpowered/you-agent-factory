@@ -2,7 +2,7 @@ package commanddispatch
 
 import (
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	effects "github.com/portpowered/infinite-you/pkg/services/providers/internal/effects"
+	effects "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 )
 
 // Request returns a Providers subprocess request with attempt correlation

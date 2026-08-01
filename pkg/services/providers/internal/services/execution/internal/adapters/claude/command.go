@@ -7,9 +7,10 @@ import (
 	"strings"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	effects "github.com/portpowered/infinite-you/pkg/services/providers/internal/effects"
+	effects "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/commanddispatch"
 )
@@ -28,22 +29,33 @@ var commandAutomationDefaults = []platformprocess.CommandEnvEntry{
 }
 
 // NewCommandEffect binds one streaming subprocess runner to the Claude adapter.
-func NewCommandEffect(runner effects.CommandRunner) Effect {
+func NewCommandEffect(runner effects.CommandRunner, clocks ...platformclock.Source) Effect {
 	if runner == nil {
 		return nil
+	}
+	var clock platformclock.Source
+	if len(clocks) > 0 {
+		clock = clocks[0]
 	}
 	return EffectFunc(func(
 		ctx context.Context,
 		request providers.ExecuteRequest,
 		observe func([]byte) error,
 	) (EffectResult, error) {
-		started := time.Now()
+		var started time.Time
+		if clock != nil {
+			started = clock.Now()
+		}
 		command, err := buildCommand(request)
 		if err != nil {
 			return EffectResult{}, execution.AttemptFailure{NativeError: err}
 		}
 		result, runErr := runStreaming(ctx, runner, command, observe)
-		effectResult := EffectResult{DurationMillis: time.Since(started).Milliseconds()}
+		durationMillis := int64(0)
+		if clock != nil {
+			durationMillis = clock.Now().Sub(started).Milliseconds()
+		}
+		effectResult := EffectResult{DurationMillis: durationMillis}
 		if runErr != nil {
 			return effectResult, nativeCommandError(ctx, runErr)
 		}
@@ -124,9 +136,7 @@ func runStreaming(
 	result, err := runner.Run(ctx, command)
 	if len(result.Stdout) > 0 {
 		observeErr := observe(result.Stdout)
-		if err == nil {
-			err = observeErr
-		}
+		err = errors.Join(err, observeErr)
 	}
 	return result, err
 }
