@@ -17,7 +17,7 @@ These are live counts from production `.go` files, not just the stale baseline:
 | `factory_runtime` | 36 | 50 | `testdata` | Major decomposition remaining |
 | `factory_sessions` | 4 | 13 | — | Contract/transport consolidation remaining |
 | `factory_visualization` | 4 | 20 | — | Contract not sealed |
-| `models` | 15 | 18 | — | Contract not sealed |
+| `models` | 15 | 18 | — | Root surface frozen; legacy internal folds remain |
 | `operator_settings` | 4 | 28 | `testdata` | Root and document implementation debt |
 | `provider_sessions` | 1 | 2 | — | Closest to compliant; remove root helpers |
 | `providers` | 3 | 3 | `inference` | Active refactor is incomplete |
@@ -107,6 +107,10 @@ These should converge on `internal/services/runtime_opening`.
 The service root also exposes `DefinitionActivationGatewayProvider`, `ExecutionService`, `ModelsCLIPresentationCollaborator`, and `Service`; only the canonical `Service` interface should remain.
 
 ### Models
+
+The root contract surface is now frozen and exercised through `models/wire` by
+the committed root inventory and boundary tests. This is a root-surface seal,
+not the completion of the implementation migration below.
 
 Still mapped for movement:
 
