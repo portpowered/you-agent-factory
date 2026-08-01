@@ -175,6 +175,12 @@ vet settings, host context, total wall time, test counts, package outcomes, and
 package elapsed times. Keep cached and fresh reports separate when comparing
 like-for-like isolated runs.
 
+When a package-level profile identifies repeated test setup as a hotspot, keep
+the focused before-and-after timing record under `docs/internal/baselines/`.
+Share only immutable validated catalogs or stateless owner-local composition
+through the package test entrypoint; keep each test's filesystem root and
+behavioral fixture data isolated so setup reuse cannot hide cross-test state.
+
 The current bounded-policy candidate comparison is retained in
 `docs/internal/baselines/unit-lane-throughput-jobs-20260801.json`. It evaluates
 8, 16, 24, and 32 effective jobs sequentially on the same 24-CPU host; the

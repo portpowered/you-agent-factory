@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "capturedAtUtc": "2026-08-01T10:39:52Z",
+  "purpose": "Focused before-and-after evidence for the measured packagedinstallation fresh-lane hotspot",
+  "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedinstallation",
+  "command": "go test -count=1 -json ./pkg/services/factory_definitions/internal/services/distribution/packagedinstallation",
+  "isolation": "Three sequential focused runs before and three sequential focused runs after the test-setup change; no UI, functional, lint, or other test lane ran concurrently.",
+  "host": {
+    "os": "windows",
+    "arch": "amd64",
+    "goVersion": "go1.25.0",
+    "hostname": "DESKTOP-BU6597A",
+    "cpus": 24,
+    "gomaxprocs": 24
+  },
+  "optimization": {
+    "owner": "factory_definitions packagedinstallation",
+    "scope": "test setup only",
+    "change": "Initialize the validated embedded catalog and stateless persistence composition once in TestMain, reuse one installer in the published-factory loop, and retain per-test temporary roots for independent targets.",
+    "behavioral_scope": "All existing install, replace, cancellation, invalid-payload, content-drift, format, and published-factory load assertions remain unchanged."
+  },
+  "before": {
+    "setup": "Each test rebuilt the persistence composition; catalog validation was repeated in each catalog-using test; published-factory subtests each created a temporary root.",
+    "runs": [
+      {"id": "before-1", "packageElapsedSeconds": 1.327, "wallTimeSeconds": 2.554, "outcome": "pass"},
+      {"id": "before-2", "packageElapsedSeconds": 1.231, "wallTimeSeconds": 2.475, "outcome": "pass"},
+      {"id": "before-3", "packageElapsedSeconds": 1.075, "wallTimeSeconds": 2.270, "outcome": "pass"}
+    ],
+    "medianPackageElapsedSeconds": 1.231
+  },
+  "after": {
+    "setup": "TestMain shares the immutable catalog and stateless persistence composition; the published-factory loop shares its installer while each subtest retains its own temporary root.",
+    "runs": [
+      {"id": "after-1", "packageElapsedSeconds": 0.565, "wallTimeSeconds": 1.407, "outcome": "pass"},
+      {"id": "after-2", "packageElapsedSeconds": 0.599, "wallTimeSeconds": 1.538, "outcome": "pass"},
+      {"id": "after-3", "packageElapsedSeconds": 0.750, "wallTimeSeconds": 1.742, "outcome": "pass"}
+    ],
+    "medianPackageElapsedSeconds": 0.599
+  },
+  "medianPackageElapsedReduction": {
+    "seconds": 0.632,
+    "fraction": 0.5134
+  },
+  "notes": [
+    "The before and after values are package-level Go JSON timing events from the same isolated Windows host and fresh -count=1 policy.",
+    "The full-lane baseline separately identifies packagedinstallation as the recurring fresh-run leader; this focused record measures the owner-local setup change without other package processes competing for the host.",
+    "All report timestamps and comparisons are UTC-normalized."
+  ]
+}

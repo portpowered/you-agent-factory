@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -26,7 +27,23 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 )
 
-func packagedInstallationTestPersistence() factorydefinitions.Persistence {
+var (
+	packagedInstallationPersistence factorydefinitions.Persistence
+	packagedInstallationCatalog     packagedfactorycatalog.DefinitionCatalog
+)
+
+func TestMain(m *testing.M) {
+	packagedInstallationPersistence = newPackagedInstallationTestPersistence()
+	var err error
+	packagedInstallationCatalog, err = packagedfactorycatalog.LoadPublishedDefinitionCatalog()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "load packaged installation test catalog: %v\n", err)
+		os.Exit(1)
+	}
+	os.Exit(m.Run())
+}
+
+func newPackagedInstallationTestPersistence() factorydefinitions.Persistence {
 	validator := factoryvalidation.New(nil)
 	mapper := factorymapping.NewFactoryConfigMapper()
 	fileSystem := platformfilesystem.Local{}
@@ -97,7 +114,7 @@ func TestEnsurePackagedFactories_InvalidPayloadDoesNotCommitTarget(t *testing.T)
 		Name: "@test/invalid",
 		JSON: []byte(`{"id":"invalid","workers":[`),
 	}
-	_, err := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}).
+	_, err := New(packagedInstallationPersistence, platformfilesystem.Local{}).
 		EnsurePackagedFactories(t.Context(), root, []factorydefinitions.PackagedDefinition{definition})
 	if err == nil || !strings.Contains(err.Error(), "install packaged factory") {
 		t.Fatalf("EnsurePackagedFactories() error = %v", err)
@@ -118,7 +135,7 @@ func TestEnsurePackagedFactories_PreparationFailurePreservesExistingRoot(t *test
 		t.Fatal(err)
 	}
 	definition := factorydefinitions.PackagedDefinition{Name: "@test/invalid", JSON: []byte(`{`)}
-	if _, err := New(packagedInstallationTestPersistence(), platformfilesystem.Local{}).
+	if _, err := New(packagedInstallationPersistence, platformfilesystem.Local{}).
 		EnsurePackagedFactories(t.Context(), root, []factorydefinitions.PackagedDefinition{definition}); err == nil {
 		t.Fatal("EnsurePackagedFactories() error = nil")
 	}
@@ -129,7 +146,7 @@ func TestEnsurePackagedFactories_PreparationFailurePreservesExistingRoot(t *test
 }
 
 func TestEnsurePackagedFactories_FailsClosedWithoutFileSystem(t *testing.T) {
-	_, err := New(packagedInstallationTestPersistence(), nil).EnsurePackagedFactories(
+	_, err := New(packagedInstallationPersistence, nil).EnsurePackagedFactories(
 		t.Context(),
 		t.TempDir(),
 		[]factorydefinitions.PackagedDefinition{{Name: "@test/missing-filesystem", JSON: []byte(`{}`)}},
@@ -140,11 +157,7 @@ func TestEnsurePackagedFactories_FailsClosedWithoutFileSystem(t *testing.T) {
 }
 
 func TestInstallPackagedFactory_MaterializesPortableEditableFormats(t *testing.T) {
-	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
-	if err != nil {
-		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
-	}
-	definition, ok := catalog.Lookup("@you/full-flow")
+	definition, ok := packagedInstallationCatalog.Lookup("@you/full-flow")
 	if !ok {
 		t.Fatal("published catalog is missing @you/full-flow")
 	}
@@ -161,7 +174,7 @@ func TestInstallPackagedFactory_MaterializesPortableEditableFormats(t *testing.T
 		t.Run(string(test.format), func(t *testing.T) {
 			root := t.TempDir()
 			result, installErr := New(
-				packagedInstallationTestPersistence(),
+				packagedInstallationPersistence,
 				platformfilesystem.Local{},
 			).InstallPackagedFactory(t.Context(), factorydefinitions.PackagedFactoryInstallParams{
 				NamedFactoriesRoot: root,
@@ -184,15 +197,11 @@ func TestInstallPackagedFactory_MaterializesPortableEditableFormats(t *testing.T
 }
 
 func TestInstallPackagedFactory_DefaultsToJSONAndRejectsUnsupportedFormat(t *testing.T) {
-	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
-	if err != nil {
-		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
-	}
-	definition, ok := catalog.Lookup("@you/goal")
+	definition, ok := packagedInstallationCatalog.Lookup("@you/goal")
 	if !ok {
 		t.Fatal("published catalog is missing @you/goal")
 	}
-	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{})
+	installer := New(packagedInstallationPersistence, platformfilesystem.Local{})
 	root := t.TempDir()
 	result, err := installer.InstallPackagedFactory(
 		t.Context(),
@@ -232,17 +241,11 @@ func TestInstallPackagedFactory_DefaultsToJSONAndRejectsUnsupportedFormat(t *tes
 }
 
 func TestInstallPackagedFactory_MaterializesEveryPublishedFactory(t *testing.T) {
-	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
-	if err != nil {
-		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
-	}
-	for _, definition := range catalog.All() {
+	installer := New(packagedInstallationPersistence, platformfilesystem.Local{})
+	for _, definition := range packagedInstallationCatalog.All() {
 		definition := definition
 		t.Run(definition.Name, func(t *testing.T) {
-			result, installErr := New(
-				packagedInstallationTestPersistence(),
-				platformfilesystem.Local{},
-			).InstallPackagedFactory(
+			result, installErr := installer.InstallPackagedFactory(
 				t.Context(),
 				factorydefinitions.PackagedFactoryInstallParams{
 					NamedFactoriesRoot: t.TempDir(),
@@ -268,15 +271,11 @@ func TestInstallPackagedFactory_MaterializesEveryPublishedFactory(t *testing.T) 
 }
 
 func TestInstallPackagedFactory_RepeatSkipsWithoutContentDrift(t *testing.T) {
-	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
-	if err != nil {
-		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
-	}
-	definition, ok := catalog.Lookup("@you/goal")
+	definition, ok := packagedInstallationCatalog.Lookup("@you/goal")
 	if !ok {
 		t.Fatal("published catalog is missing @you/goal")
 	}
-	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{})
+	installer := New(packagedInstallationPersistence, platformfilesystem.Local{})
 	root := t.TempDir()
 	created, err := installer.InstallPackagedFactory(
 		t.Context(),
@@ -313,15 +312,11 @@ func TestInstallPackagedFactory_RepeatSkipsWithoutContentDrift(t *testing.T) {
 }
 
 func TestInstallPackagedFactory_ExplicitReplaceRestoresPackagedLayout(t *testing.T) {
-	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
-	if err != nil {
-		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
-	}
-	definition, ok := catalog.Lookup("@you/goal")
+	definition, ok := packagedInstallationCatalog.Lookup("@you/goal")
 	if !ok {
 		t.Fatal("published catalog is missing @you/goal")
 	}
-	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{})
+	installer := New(packagedInstallationPersistence, platformfilesystem.Local{})
 	root := t.TempDir()
 	created, err := installer.InstallPackagedFactory(
 		t.Context(),
@@ -363,15 +358,11 @@ func TestInstallPackagedFactory_ExplicitReplaceRestoresPackagedLayout(t *testing
 }
 
 func TestInstallPackagedFactory_RefusesAlternateFormatWithoutReplace(t *testing.T) {
-	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
-	if err != nil {
-		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
-	}
-	definition, ok := catalog.Lookup("@you/goal")
+	definition, ok := packagedInstallationCatalog.Lookup("@you/goal")
 	if !ok {
 		t.Fatal("published catalog is missing @you/goal")
 	}
-	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{})
+	installer := New(packagedInstallationPersistence, platformfilesystem.Local{})
 	root := t.TempDir()
 	if _, err := installer.InstallPackagedFactory(
 		t.Context(),
@@ -383,7 +374,7 @@ func TestInstallPackagedFactory_RefusesAlternateFormatWithoutReplace(t *testing.
 	); err != nil {
 		t.Fatalf("initial InstallPackagedFactory() error = %v", err)
 	}
-	_, err = installer.InstallPackagedFactory(
+	_, err := installer.InstallPackagedFactory(
 		t.Context(),
 		factorydefinitions.PackagedFactoryInstallParams{
 			NamedFactoriesRoot: root,
@@ -397,18 +388,14 @@ func TestInstallPackagedFactory_RefusesAlternateFormatWithoutReplace(t *testing.
 }
 
 func TestInstallPackagedFactory_CancellationBeforeCommitLeavesTargetAbsent(t *testing.T) {
-	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
-	if err != nil {
-		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
-	}
-	definition, ok := catalog.Lookup("@you/goal")
+	definition, ok := packagedInstallationCatalog.Lookup("@you/goal")
 	if !ok {
 		t.Fatal("published catalog is missing @you/goal")
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	root := t.TempDir()
-	_, err = New(packagedInstallationTestPersistence(), platformfilesystem.Local{}).
+	_, err := New(packagedInstallationPersistence, platformfilesystem.Local{}).
 		InstallPackagedFactory(
 			ctx,
 			factorydefinitions.PackagedFactoryInstallParams{
@@ -430,15 +417,11 @@ func TestInstallPackagedFactory_CancellationBeforeCommitLeavesTargetAbsent(t *te
 }
 
 func TestInstallPackagedFactory_FailedReplacePreservesCommittedLayout(t *testing.T) {
-	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
-	if err != nil {
-		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
-	}
-	definition, ok := catalog.Lookup("@you/goal")
+	definition, ok := packagedInstallationCatalog.Lookup("@you/goal")
 	if !ok {
 		t.Fatal("published catalog is missing @you/goal")
 	}
-	installer := New(packagedInstallationTestPersistence(), platformfilesystem.Local{})
+	installer := New(packagedInstallationPersistence, platformfilesystem.Local{})
 	root := t.TempDir()
 	created, err := installer.InstallPackagedFactory(
 		t.Context(),
