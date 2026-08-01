@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -13,12 +12,7 @@ import (
 func TestParseScriptPollerStdoutRejectsMalformedShapes(t *testing.T) {
 	t.Parallel()
 
-	rawEventJSON, err := json.Marshal(map[string]any{
-		"events": []map[string]any{{"type": "WORK_REQUEST"}},
-	})
-	if err != nil {
-		t.Fatalf("marshal raw event payload: %v", err)
-	}
+	rawEventJSON := []byte(`{"events":[{"type":"WORK_REQUEST"}]}`)
 
 	tests := []struct {
 		name             string
