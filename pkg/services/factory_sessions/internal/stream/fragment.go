@@ -5,7 +5,7 @@ import (
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
-	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // MapProgressFragment converts the shared Worker progress contract into the
@@ -32,7 +32,7 @@ func MapProgressFragment(fragment factorysessions.ProgressFragment) responsestre
 		Kind:               kind,
 		Type:               eventType,
 		DispatchID:         strings.TrimSpace(fragment.DispatchID),
-		ProviderSessionRef: providersessions.CloneMetadata(fragment.ProviderSessionRef),
+		ProviderSessionRef: workerexecution.CloneProviderSessionMetadata(fragment.ProviderSessionRef),
 		Payload:            fragment.Payload,
 		ExternalEventType:  firstNonEmpty(fragment.ExternalEventType, nativeType),
 		Metadata:           cloneStringMap(fragment.Metadata),

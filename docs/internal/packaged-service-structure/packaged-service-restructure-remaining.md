@@ -4,7 +4,7 @@ The decomposition is structurally far from complete. Twelve of the 13 product-se
 
 The governing rule requires exactly one named interface per service/subservice root, no exported root functions, and only `internal`, `wire`, and `transports` child directories ([general-backend-standards.md](C:/Users/andre/work/portos/infinite-you/docs/internal/standards/code/general-backend-standards.md:144)).
 
-This note was originally captured before the Providers/Workers inventory repair and was updated on 2026-07-31 UTC to record that repair, the System Initialization contract seal, and the remaining scope.
+This note was originally captured before the Providers/Workers inventory repair and was updated on 2026-07-31 UTC to record that repair, the System Initialization and Provider Sessions contract seals, and the remaining scope.
 
 ## 1. Product services still incomplete
 
@@ -19,7 +19,7 @@ These are live counts from production `.go` files, not just the stale baseline:
 | `factory_visualization` | 4 | 20 | — | Contract not sealed |
 | `models` | 15 | 18 | — | Contract not sealed |
 | `operator_settings` | 4 | 28 | `testdata` | Root and document implementation debt |
-| `provider_sessions` | 1 | 2 | — | Closest to compliant; remove root helpers |
+| `provider_sessions` | 1 | 0 | — | Contract sealed |
 | `providers` | 3 | 3 | `inference` | Active refactor is incomplete |
 | `recordings` | 16 | 19 | — | Root directory cleaned, contract still broad |
 | `system_initialization` | 1 | 0 | — | Contract sealed |
@@ -207,13 +207,12 @@ The old public directories recorded in the baseline have mostly been deleted; th
 
 `workstation_pool_boundary_impl.go` remains explicitly documented as a temporary root implementation exception. It should be relocated once a cycle-free bridge exists.
 
-### Automations, Visualization, and Provider Sessions
+### Automations and Visualization
 
 These do not have significant top-level directory migration debt, but they are not contract-complete:
 
 - Automations subservices `filesystem_watchers` and `script_pollers` expose multiple interfaces; `script_pollers` also exports substantial implementation behavior.
 - Visualization’s two projection/lifecycle subservices each expose four interfaces.
-- Provider Sessions must remove `CanonicalProvider` and `CloneMetadata` as exported root functions.
 
 ## 3. Broken dependency and test contracts
 
