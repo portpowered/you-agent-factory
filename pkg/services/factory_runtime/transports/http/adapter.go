@@ -53,9 +53,10 @@ type Adapter struct {
 }
 
 // NewAdapter constructs the Factory Runtime HTTP adapter bound to the accepted
-// root Service seam. Nil roots fail closed by returning nil.
+// root Service seam. Nil roots, including interfaces containing nil pointers,
+// fail closed by returning nil.
 func NewAdapter(root RuntimeRoot) *Adapter {
-	if root == nil {
+	if _, err := common.RequireRuntimeRoot(root); err != nil {
 		return nil
 	}
 	return &Adapter{
@@ -80,7 +81,11 @@ func (a *Adapter) Root() RuntimeRoot {
 	if a == nil {
 		return nil
 	}
-	return a.root
+	root, err := common.RequireRuntimeRoot(a.root)
+	if err != nil {
+		return nil
+	}
+	return root
 }
 
 func (a *Adapter) runtimeRoot() (RuntimeRoot, error) {

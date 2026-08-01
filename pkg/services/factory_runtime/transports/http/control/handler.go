@@ -20,7 +20,7 @@ type Handler struct {
 
 // NewHandler binds control operations to the already-constructed Runtime root.
 func NewHandler(root factoryruntime.Service) *Handler {
-	if root == nil {
+	if _, err := common.RequireRuntimeRoot(root); err != nil {
 		return nil
 	}
 	return &Handler{root: root}

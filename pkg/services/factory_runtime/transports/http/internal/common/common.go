@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"reflect"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -18,16 +19,27 @@ import (
 var ErrRequestBodyRequired = errors.New("request body is required")
 
 // ErrRuntimeServiceRequired is returned when an adapter is invoked without its
-// required process-scoped Runtime root.
+// required process-scoped Runtime root, including when the root interface
+// contains a typed nil pointer.
 var ErrRuntimeServiceRequired = errors.New("factory runtime service is required")
 
 // RequireRuntimeRoot keeps nil-root handling identical across operation
 // packages without creating another dependency-injection path.
 func RequireRuntimeRoot(root factoryruntime.Service) (factoryruntime.Service, error) {
-	if root == nil {
+	if root == nil || isNilRuntimeRoot(root) {
 		return nil, ErrRuntimeServiceRequired
 	}
 	return root, nil
+}
+
+func isNilRuntimeRoot(root factoryruntime.Service) bool {
+	value := reflect.ValueOf(root)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice:
+		return value.IsNil()
+	default:
+		return false
+	}
 }
 
 // DecodeRequiredJSON decodes one required JSON request body using the same
