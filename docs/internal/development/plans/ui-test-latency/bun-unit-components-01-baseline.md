@@ -91,7 +91,127 @@ Duration  389ms (transform 497ms, setup 0ms, import 639ms, tests 15ms, environme
 [timing] exit_code=0
 ```
 
-## After-state placeholder
+## After migration — lane audit and latency report
 
-Focused Bun after-state wall-clock for the same four files will be recorded in
-story `BUN-UNIT-components-01-004` under conditions comparable to this baseline.
+Recorded for story `BUN-UNIT-components-01-004` on the same host class as the
+Vitest baseline (Windows 11 Home `10.0.26200`, i7-13700K, 24 logical
+processors; Bun `1.3.12`). Repository revision for these measurements:
+`2d1cff0a7`.
+
+### Migrated / retained counts
+
+| Lane ownership | Files | Named tests |
+| --- | ---: | ---: |
+| Migrated to Bun (exclusive) | 4 | 11 |
+| Retained on Vitest | 0 | 0 |
+
+Migrated files (exactly once under Bun):
+
+| Migrated path | Named cases |
+| --- | ---: |
+| `ui/src/components/dashboard/fixtures/public-api.bun.unit.test.ts` | 1 |
+| `ui/src/components/dashboard/fixtures/runtime.bun.unit.test.ts` | 4 |
+| `ui/src/components/dashboard/test-fixtures.bun.unit.test.ts` | 2 |
+| `ui/src/components/dashboard/typography.bun.unit.test.ts` | 4 |
+
+Totals reconcile to the leased baseline: `4` files / `11` named tests. No
+retained Vitest exceptions. The leased `.test.ts` paths no longer exist in the
+tree after rename.
+
+### Lane exclusivity audit
+
+Focused Bun invocation (exactly four files / eleven named cases):
+
+```text
+bun test `
+  src/components/dashboard/fixtures/public-api.bun.unit.test.ts `
+  src/components/dashboard/fixtures/runtime.bun.unit.test.ts `
+  src/components/dashboard/test-fixtures.bun.unit.test.ts `
+  src/components/dashboard/typography.bun.unit.test.ts
+```
+
+Result:
+
+```text
+bun test v1.3.12 (700fc117)
+src\components\dashboard\test-fixtures.bun.unit.test.ts:
+(pass) dashboard/test-fixtures > does not re-export the canonical twenty-node topology fixture
+(pass) dashboard/test-fixtures > keeps twentyNodeDashboardSnapshot wired to the canonical topology fixture
+src\components\dashboard\typography.bun.unit.test.ts:
+(pass) dashboard typography contract > documents Material scale mappings for shared dashboard roles
+(pass) dashboard typography contract > documents the code extension and label roles beside Material families
+(pass) dashboard typography contract > retires the repeated dashboard-only size literals for the covered roles
+(pass) dashboard typography contract > raises body and supporting roles above the prior shared dashboard baseline
+src\components\dashboard\fixtures\public-api.bun.unit.test.ts:
+(pass) dashboard fixture catalog > exports documented fixture catalog entries for direct Storybook and Vitest imports
+src\components\dashboard\fixtures\runtime.bun.unit.test.ts:
+(pass) dashboard runtime fixtures > applies active work overlays without mutating the base topology
+(pass) dashboard runtime fixtures > builds retry, failure, and rejected snapshots with observable session outcomes
+(pass) dashboard runtime fixtures > projects multimodal selected-work payload onto active work item refs
+(pass) dashboard runtime fixtures > composes semantic overlays against one shared topology
+ 11 pass
+ 0 fail
+ 46 expect() calls
+Ran 11 tests across 4 files. [87.00ms]
+```
+
+Vitest `dashboard-unit` selection of the migrated paths (must be zero):
+
+```text
+.\node_modules\.bin\vitest.exe run --config vitest.lanes.config.ts --project=dashboard-unit --maxWorkers=4 --retry=0 `
+  src/components/dashboard/fixtures/public-api.bun.unit.test.ts `
+  src/components/dashboard/fixtures/runtime.bun.unit.test.ts `
+  src/components/dashboard/test-fixtures.bun.unit.test.ts `
+  src/components/dashboard/typography.bun.unit.test.ts
+```
+
+Result:
+
+```text
+No test files found, exiting with code 1
+filter: ...public-api.bun.unit.test.ts, ...runtime.bun.unit.test.ts, ...test-fixtures.bun.unit.test.ts, ...typography.bun.unit.test.ts
+projects: dashboard-unit
+exclude: ... src/**/*.bun.unit.test.ts ...
+```
+
+Vitest selection of the retired `.test.ts` paths is also zero (`No test files
+found`); those files are gone after rename. Conclusion: the leased suite
+executes exactly once under Bun and zero times under Vitest. Aggregate focused
+Bun cohort run and affected Vitest selection checks pass; `check:test-lanes`
+and frontend typecheck also pass on this head.
+
+### Focused after wall-clock (comparable warm-deps)
+
+Command (same four migrated paths as above). Wrapper wall-clock uses
+`[System.Diagnostics.Stopwatch]` around the command, matching the baseline.
+
+| Run | Wrapper wall | Bun reported | Result |
+| --- | ---: | ---: | --- |
+| 0 (first focused) | 131ms | 88ms | 4 files / 11 tests passed |
+| 1 | 127ms | 88ms | 4 files / 11 tests passed |
+| 2 | 129ms | 92ms | 4 files / 11 tests passed |
+| 3 | 124ms | 87ms | 4 files / 11 tests passed |
+
+Median of the three warm comparable samples (runs 1–3): wrapper wall
+`127ms`, Bun reported `88ms`. All runs reported exit code `0`.
+
+### Before / after comparison
+
+| Metric | Vitest baseline | Bun after |
+| --- | ---: | ---: |
+| Focused warm median wrapper wall | 1128 ms | 127 ms |
+| Runner-reported warm median | 389 ms (Vitest) | 88 ms (Bun) |
+| Files | 4 | 4 |
+| Named tests | 11 | 11 |
+| Expect calls (Bun after) | — | 46 |
+| Retained on Vitest | — | 0 files / 0 tests |
+
+These are matched four-file focused observations only; they are not a
+repository-wide speedup claim.
+
+### Changed-line budget
+
+Against `origin/main` at measurement time the cohort patch is **5 files /
+101 insertions / 4 deletions** (baseline evidence doc + four leased
+rename/import migrations). Well within the ~1,000 changed-line budget; no
+unsafe-coupling split required.
