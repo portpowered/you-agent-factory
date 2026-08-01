@@ -93,18 +93,21 @@ Run dashboard package commands from `ui/` with Bun 1.3.12+ on PATH. Root `make` 
 
 | Goal | Canonical command | Runner |
 | --- | --- | --- |
-| Unit tests (Node) | `cd ui && bun run test:unit` or `make ui-test` | Named Vitest `dashboard-unit` project; no DOM setup |
+| Bun-native unit tests (Node) | `cd ui && bun run test:unit:bun` | Discovers `.bun.unit.test.ts` files and runs them with Bun's native test API; DOM-free and browser-free, disjoint from component, browser, performance, and Storybook conventions |
+| Aggregate unit tests (Bun + Vitest) | `cd ui && bun run test:unit` or `make ui-test` | Runs the Bun-native suffix lane first, then the optimized Vitest `dashboard-unit` project for ordinary `.test.ts` and supported `.unit.test.mts` files; stops on either failure |
 | Component tests (jsdom) | `cd ui && bun run test:component` | Named Vitest `dashboard-component` project |
-| Coverage thresholds and replay fixture guard | `make test-ui-coverage` | Node unit coverage via `test:coverage`, then replay check |
+| Coverage thresholds and replay fixture guard | `make test-ui-coverage` | Vitest Node coverage plus the Bun-owned unit LCOV merged once into the coverage report, then replay check |
 | Playwright integration | `cd ui && bun run test:integration` or `make ui-integration-test` | Vitest + Playwright |
-| Unit, component, then integration | `cd ui && bun run test` | Named Vitest lanes in increasing cost order |
+| Unit, component, then integration | `cd ui && bun run test` | Fail-fast orchestration of aggregate units, component tests, and browser integration |
 | Fresh npm install proof for scoped local components | `make ui-verify-fresh-npm-install` or `cd ui && npm run verify:fresh-npm-install` | Node script runs an isolated dashboard `npm install` and asserts `@you-agent-factory/components` resolves from `packages/components` |
 | Storybook browser integration | `make ui-storybook-integration-test` | Storybook static build plus focused responsive browser checks |
 
-Prefer `bun run test:unit` (or `make ui-test`) for dashboard unit work so the
-Node-only project, exclusions, and worker policy stay aligned with CI. Use
-`bun run test:component` when the contract renders React or needs DOM APIs.
-Targeted proof may pass paths to Vitest with the matching lane config.
+Prefer `bun run test:unit` (or `make ui-test`) for dashboard unit work so both
+unit owners, the Node-only exclusions, and the measured Vitest worker policy
+stay aligned with CI. Use `bun run test:unit:bun` when proving one migrated
+`.bun.unit.test.ts` file, and `bun run test:component` when the contract renders
+React or needs DOM APIs. Targeted proof may pass paths to Vitest with the
+matching lane config.
 
 ## GitHub Actions CI Baseline
 
