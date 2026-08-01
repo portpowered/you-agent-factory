@@ -211,31 +211,11 @@ func (c *Compiler) compilePetri(
 func (c *Compiler) compileJavaScript(
 	req orchestration.CompileRequest,
 ) (orchestration.Binding, error) {
-	cfg := req.Config
-	if cfg.Orchestrator == nil || cfg.Orchestrator.JavaScript == nil {
-		return nil, compileError(
-			orchestration.ErrInvalidDefinition,
-			orchestration.KindJavaScript,
-			orchestration.Diagnostic{
-				Code:    diagnosticCodeJavaScriptMissingSource,
-				Message: "orchestrator.javascript configuration is required",
-				Path:    "factory.orchestrator.javascript",
-			},
-		)
-	}
-	if c == nil || c.workflows == nil {
-		return nil, compileError(
-			orchestration.ErrInvalidDefinition,
-			orchestration.KindJavaScript,
-			orchestration.Diagnostic{
-				Code:    diagnosticCodeInvalidDefinition,
-				Message: "JavaScript workflow validation service is unavailable",
-				Path:    "factory.orchestrator.javascript",
-			},
-		)
+	jsCfg, err := requireJavaScriptCompileConfig(c, req.Config)
+	if err != nil {
+		return nil, err
 	}
 
-	jsCfg := cfg.Orchestrator.JavaScript
 	diagnostics := javascriptConfigDiagnostics(c.workflows, jsCfg)
 	if len(diagnostics) > 0 {
 		return nil, compileError(orchestration.ErrInvalidDefinition, orchestration.KindJavaScript, diagnostics...)
@@ -258,6 +238,43 @@ func (c *Compiler) compileJavaScript(
 			},
 		)
 	}
+	return c.compileJavaScriptSourceRef(req, jsCfg, sourceRef)
+}
+
+func requireJavaScriptCompileConfig(
+	c *Compiler,
+	cfg *factorydefinitions.FactoryConfig,
+) (*factorydefinitions.FactoryOrchestratorJavaScriptConfig, error) {
+	if cfg == nil || cfg.Orchestrator == nil || cfg.Orchestrator.JavaScript == nil {
+		return nil, compileError(
+			orchestration.ErrInvalidDefinition,
+			orchestration.KindJavaScript,
+			orchestration.Diagnostic{
+				Code:    diagnosticCodeJavaScriptMissingSource,
+				Message: "orchestrator.javascript configuration is required",
+				Path:    "factory.orchestrator.javascript",
+			},
+		)
+	}
+	if c == nil || c.workflows == nil {
+		return nil, compileError(
+			orchestration.ErrInvalidDefinition,
+			orchestration.KindJavaScript,
+			orchestration.Diagnostic{
+				Code:    diagnosticCodeInvalidDefinition,
+				Message: "JavaScript workflow validation service is unavailable",
+				Path:    "factory.orchestrator.javascript",
+			},
+		)
+	}
+	return cfg.Orchestrator.JavaScript, nil
+}
+
+func (c *Compiler) compileJavaScriptSourceRef(
+	req orchestration.CompileRequest,
+	jsCfg *factorydefinitions.FactoryOrchestratorJavaScriptConfig,
+	sourceRef string,
+) (orchestration.Binding, error) {
 	if req.SourceReader == nil {
 		return nil, compileError(
 			orchestration.ErrInvalidDefinition,
