@@ -11,6 +11,8 @@ import (
 )
 
 func TestCLIResumeSmokeLane_NonResumeTerminalSessionShowPreservesShippedCLIReadSemantics(t *testing.T) {
+	t.Parallel()
+
 	harness := newCLIResumeSmokeSucceededHarness(t)
 	sessionID := harness.startSucceededSession(t)
 
@@ -35,6 +37,8 @@ func TestCLIResumeSmokeLane_NonResumeTerminalSessionShowPreservesShippedCLIReadS
 }
 
 func TestCLIResumeSmokeLane_ResumeInspectionStaysOnSharedSessionHTTPSurface(t *testing.T) {
+	t.Parallel()
+
 	projectRoot := setupCLIResumeSmokeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
 	serverURL, process := startRootCLIResumeAPIServer(t, projectRoot, nil)
 	harness := &cliResumeSmokeHarness{serverURL: serverURL, projectRoot: projectRoot, process: process}

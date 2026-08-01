@@ -14,7 +14,11 @@ import (
 )
 
 func TestInvocationFailureOutputContracts(t *testing.T) {
+	t.Parallel()
+
 	t.Run("terminal failure emits failed result and standard error", func(t *testing.T) {
+		t.Parallel()
+
 		result := executeFailureInvocation(t, []string{
 			"you", "--json", "run", "--named", goalFactoryName, "--no-record",
 			"--output", "response-stream", "deterministic terminal failure",
@@ -61,6 +65,8 @@ func TestInvocationFailureOutputContracts(t *testing.T) {
 	})
 
 	t.Run("human lifecycle presents canonical failed dispatch", func(t *testing.T) {
+		t.Parallel()
+
 		result := executeFailureInvocation(t, []string{
 			"you", "run", "--named", goalFactoryName, "--no-record",
 			"--output", "response-stream", "deterministic terminal failure",
