@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -318,6 +319,45 @@ func TestWorkstationExecutor_ModelWorkstation_RendersPromptAndDelegates(t *testi
 	}
 	if mock.dispatch.UserMessage != "Process work work-1" {
 		t.Fatalf("user message = %q", mock.dispatch.UserMessage)
+	}
+}
+
+func TestWorkstationExecutor_PetriInputUsesWorkersExecutionTokenContract(t *testing.T) {
+	t.Parallel()
+
+	want := workerexecution.Token{
+		ID:      "tok-worker-contract",
+		PlaceID: "work:ready",
+		Color: workerexecution.Color{
+			Name:                   "work-input",
+			RequestID:              "request-worker-contract",
+			WorkID:                 "work-worker-contract",
+			WorkTypeID:             "code-changes",
+			DataType:               workerexecution.DataTypeWork,
+			CurrentChainingTraceID: "trace-worker-contract",
+			TraceID:                "trace-worker-contract",
+			ParentID:               "parent-worker-contract",
+			Tags:                   map[string]string{"branch": "feature-workers-contract"},
+			Relations:              []work.Relation{{Type: work.RelationDependsOn, TargetWorkID: "parent-worker-contract"}},
+			Content:                []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "preserve this input"}},
+			Payload:                []byte("worker-payload"),
+			InvocationArguments:    &work.InvocationArguments{Arguments: map[string]work.InvocationArgument{"provider": {Values: []string{"codex"}}}},
+		},
+		History: workerexecution.History{
+			TotalVisits:         map[string]int{"work:ready": 2},
+			ConsecutiveFailures: map[string]int{"work:ready": 1},
+			PlaceVisits:         map[string]int{"work:ready": 2},
+			LastError:           "previous attempt failed",
+			FailureLog:          []workerexecution.Failure{{TransitionID: "transition-worker-contract", Attempt: 2}},
+		},
+	}
+
+	got := WorkDispatchInputTokens(work.WorkDispatch{InputTokens: InputTokens(want)})
+	if len(got) != 1 {
+		t.Fatalf("decoded input token count = %d, want 1", len(got))
+	}
+	if !reflect.DeepEqual(got[0], want) {
+		t.Fatalf("decoded Worker execution token = %#v, want %#v", got[0], want)
 	}
 }
 

@@ -246,9 +246,9 @@ func (adapter modelHostProcessLauncherAdapter) Start(
 		HealthEndpoint: spec.HealthEndpoint,
 	})
 	if err != nil || process == nil {
-		return process, err
+		return modelswire.HostManagedProcess(process), err
 	}
-	return process, nil
+	return modelswire.HostManagedProcess(process), nil
 }
 
 type modelHostClockAdapter struct {
@@ -265,7 +265,7 @@ func adaptModelHostClock(next serviceedges.HostClock) modelswire.HostClock {
 func (adapter modelHostClockAdapter) Now() time.Time { return adapter.next.Now() }
 
 func (adapter modelHostClockAdapter) NewTimer(duration time.Duration) modelswire.HostTimer {
-	return adapter.next.NewTimer(duration)
+	return modelswire.HostTimer(adapter.next.NewTimer(duration))
 }
 
 func adaptModelRuntimeTempFile(next serviceedges.RuntimeCreateTempFile) modelswire.RuntimeCreateTempFile {
@@ -274,7 +274,7 @@ func adaptModelRuntimeTempFile(next serviceedges.RuntimeCreateTempFile) modelswi
 	}
 	return func(dir, pattern string) (modelswire.RuntimeTempFile, error) {
 		file, err := next(dir, pattern)
-		return file, err
+		return modelswire.RuntimeTempFile(file), err
 	}
 }
 
@@ -307,7 +307,30 @@ func provideModelInvocationArtifactExporter(
 	if filesystem == nil {
 		filesystem = platformfilesystem.Local{}
 	}
-	return modelswire.NewInvocationArtifactExporter(filesystem)
+	return modelswire.NewInvocationArtifactExporter(
+		adaptModelInvocationArtifactFileSystem(filesystem),
+	)
+}
+
+func adaptModelInvocationArtifactFileSystem(
+	next serviceedges.InvocationArtifactFileSystem,
+) modelswire.InvocationArtifactFileSystem {
+	if next == nil {
+		return nil
+	}
+	return modelInvocationArtifactFileSystemAdapter{next: next}
+}
+
+type modelInvocationArtifactFileSystemAdapter struct {
+	next serviceedges.InvocationArtifactFileSystem
+}
+
+func (adapter modelInvocationArtifactFileSystemAdapter) Open(path string) (io.ReadCloser, error) {
+	return adapter.next.Open(path)
+}
+
+func (adapter modelInvocationArtifactFileSystemAdapter) Create(path string) (io.WriteCloser, error) {
+	return adapter.next.Create(path)
 }
 
 func modelLocalRuntimeHooks(hooks workers.LocalRuntimeHooks) modelswire.LocalRuntimeHooks {
