@@ -270,6 +270,50 @@ func TestStartScriptPoller_StopReasonOnContextCancelDuringRun(t *testing.T) {
 	}
 }
 
+func TestStartScriptPoller_DefaultsMissingClockForRestart(t *testing.T) {
+	t.Parallel()
+
+	runner := &sequenceCommandRunner{
+		outcomes: []runOutcome{
+			{result: workers.CommandResult{ExitCode: 1}},
+			{waitForCancel: true},
+		},
+	}
+	svc := newWithCursorRecorder(
+		zap.NewNop(),
+		nil,
+		runner,
+		nil,
+		factorydefinitionfixtures.WorkstationExecutionPolicy{
+			Resolve: func(*interfaces.FactoryWorkstationConfig) (time.Duration, error) {
+				return 0, nil
+			},
+		},
+		nil,
+	).(*service)
+	poller := newCanonicalScriptPollerWorkstation()
+	worker := newCanonicalScriptPollerWorker()
+	runtimeCfg := newScriptPollerLoadedRuntimeConfig(t, t.TempDir(), poller, worker)
+
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	var sidecars sync.WaitGroup
+	svc.StartScriptPoller(
+		runCtx,
+		&sidecars,
+		runtimeCfg,
+		poller,
+		worker,
+		"",
+		func(_ context.Context, _ work.WorkRequest) error { return nil },
+	)
+	t.Cleanup(func() {
+		cancelRun()
+		sidecars.Wait()
+	})
+
+	waitForScriptPollerRunnerCalls(t, runner, 2, time.Second)
+}
+
 func TestStartScriptPoller_StopsDuringBackoffWithoutAnotherRun(t *testing.T) {
 	t.Parallel()
 
@@ -330,15 +374,14 @@ func newScriptPollersServiceWithOptions(options scriptPollersServiceOptions) *se
 			},
 		}
 	}
-	var clock func() clockwork.Clock
-	if options.clock != nil {
-		clockValue := options.clock
-		clock = func() clockwork.Clock { return clockValue }
+	clock := options.clock
+	if clock == nil {
+		clock = clockwork.NewRealClock()
 	}
 	constructed := newWithCursorRecorder(
-		func(string, string) *zap.Logger { return logger },
+		logger,
 		clock,
-		func() workers.CommandRunner { return options.runner },
+		options.runner,
 		nil,
 		executionPolicy,
 		options.cursorRecorder,

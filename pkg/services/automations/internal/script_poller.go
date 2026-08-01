@@ -27,7 +27,7 @@ func (s *Service) StartScriptPoller(
 		runtimeCfg,
 		workstation,
 		workerDef,
-		strings.TrimSpace(s.workflowID),
+		strings.TrimSpace(s.workflowIdentity(runtimeFactoryDir(runtimeCfg))),
 		submitter,
 	)
 }
@@ -50,7 +50,14 @@ func (s *Service) RunScriptPoller(
 		runtimeCfg,
 		workstation,
 		workerDef,
-		strings.TrimSpace(s.workflowID),
+		strings.TrimSpace(s.workflowIdentity(runtimeFactoryDir(runtimeCfg))),
 		submitter,
 	)
+}
+
+func runtimeFactoryDir(runtimeCfg interfaces.RuntimeConfigLookup) string {
+	if runtimeCfg == nil {
+		return ""
+	}
+	return runtimeCfg.FactoryDir()
 }

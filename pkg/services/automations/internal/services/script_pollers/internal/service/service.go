@@ -23,27 +23,22 @@ const (
 )
 
 type service struct {
-	dependencies dependencies
-}
-
-type dependencies struct {
-	logger           func(workstationName, workerName string) *zap.Logger
-	clock            func() clockwork.Clock
-	commandRunner    func() workers.CommandRunner
-	resolveTemplates workers.TemplateFieldResolver
+	logger           *zap.Logger
+	clock            clockwork.Clock
+	commandRunner    workers.CommandRunner
+	templateResolver workers.TemplateFieldResolver
 	executionPolicy  factorydefinitions.WorkstationExecutionPolicyService
-	cursorRecorder   cursorRecorder
+	cursors          cursorRecorder
 }
 
 var _ scriptpollers.Service = (*service)(nil)
 
-// New constructs an inert script-poller service. It stores the supplied
-// collaborators and creates its private in-memory cursor authority without
-// invoking any effect.
+// New constructs an inert script-poller service from direct collaborators. It
+// creates its private in-memory cursor authority without invoking any effect.
 func New(
-	logger func(workstationName, workerName string) *zap.Logger,
-	clock func() clockwork.Clock,
-	commandRunner func() workers.CommandRunner,
+	logger *zap.Logger,
+	clock clockwork.Clock,
+	commandRunner workers.CommandRunner,
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
 ) scriptpollers.Service {
@@ -58,21 +53,30 @@ func New(
 }
 
 func newWithCursorRecorder(
-	logger func(workstationName, workerName string) *zap.Logger,
-	clock func() clockwork.Clock,
-	commandRunner func() workers.CommandRunner,
+	logger *zap.Logger,
+	clock clockwork.Clock,
+	commandRunner workers.CommandRunner,
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
 	recorder cursorRecorder,
 ) scriptpollers.Service {
-	return &service{dependencies: dependencies{
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	if clock == nil {
+		clock = clockwork.NewRealClock()
+	}
+	if commandRunner == nil {
+		commandRunner = unavailableCommandRunner{}
+	}
+	return &service{
 		logger:           logger,
 		clock:            clock,
 		commandRunner:    commandRunner,
-		resolveTemplates: resolveTemplates,
+		templateResolver: resolveTemplates,
 		executionPolicy:  executionPolicy,
-		cursorRecorder:   recorder,
-	}}
+		cursors:          recorder,
+	}
 }
 
 func (s *service) GetCursor(
@@ -115,8 +119,8 @@ func (s *service) superviseScriptPoller(
 	submitter automations.WorkRequestSubmitter,
 ) {
 	logger := s.pollerLogger(workstation.Name, workerDefName(workerDef))
-	runner := s.commandRunner()
-	backoffClock := s.supervisorClock()
+	runner := s.commandRunner
+	backoffClock := s.clock
 	attempt := 0
 	logger.Info("script poller started")
 	defer func() {
@@ -187,7 +191,7 @@ func (s *service) runScriptPoller(
 		runtimeCfg,
 		workstation,
 		workerDef,
-		s.dependencies.resolveTemplates,
+		s.templateResolver,
 		resume,
 	)
 	if err != nil {
@@ -206,7 +210,7 @@ func (s *service) runScriptPoller(
 	}
 
 	if runner == nil {
-		runner = s.commandRunner()
+		runner = s.commandRunner
 	}
 	result, runErr := runner.Run(execCtx, commandReq)
 	if ctx.Err() != nil {
@@ -335,10 +339,10 @@ func (s *service) scriptPollerExecutionTimeout(
 	workstation factorydefinitions.FactoryWorkstationConfig,
 	workerDef *factorydefinitions.FactoryWorkerConfig,
 ) (time.Duration, error) {
-	if s.dependencies.executionPolicy == nil {
+	if s.executionPolicy == nil {
 		return 0, fmt.Errorf("Factory Definition Workstation execution policy service is required")
 	}
-	timeout, err := s.dependencies.executionPolicy.ExecutionTimeout(&workstation)
+	timeout, err := s.executionPolicy.ExecutionTimeout(&workstation)
 	if err != nil {
 		return 0, err
 	}
@@ -358,21 +362,10 @@ func (s *service) scriptPollerExecutionTimeout(
 }
 
 func (s *service) pollerLogger(workstationName, workerName string) *zap.Logger {
-	if s.dependencies.logger != nil {
-		if logger := s.dependencies.logger(workstationName, workerName); logger != nil {
-			return logger
-		}
-	}
-	return zap.NewNop()
-}
-
-func (s *service) commandRunner() workers.CommandRunner {
-	if s.dependencies.commandRunner != nil {
-		if runner := s.dependencies.commandRunner(); runner != nil {
-			return runner
-		}
-	}
-	return unavailableCommandRunner{}
+	return s.logger.With(
+		zap.String("workstation", workstationName),
+		zap.String("worker", workerName),
+	)
 }
 
 type unavailableCommandRunner struct{}
@@ -381,17 +374,8 @@ func (unavailableCommandRunner) Run(context.Context, workers.CommandRequest) (wo
 	return workers.CommandResult{}, errors.New("automation command runner is required")
 }
 
-func (s *service) supervisorClock() clockwork.Clock {
-	if s.dependencies.clock != nil {
-		if clock := s.dependencies.clock(); clock != nil {
-			return clock
-		}
-	}
-	return clockwork.NewRealClock()
-}
-
 func (s *service) cursorRecorder() cursorRecorder {
-	return s.dependencies.cursorRecorder
+	return s.cursors
 }
 
 func unavailableCursorRecorderError() error {

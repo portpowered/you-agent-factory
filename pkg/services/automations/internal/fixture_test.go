@@ -59,28 +59,23 @@ func newAutomationService(fixture automationFixture) *automationinternal.Service
 		automationWorkstationExecutionPolicy(),
 		reconciler,
 		scriptpollerswire.NewService(
-			func(workstationName, workerName string) *zap.Logger {
-				return logger.With(zap.String("workstation", workstationName), zap.String("worker", workerName))
-			},
-			func() clockwork.Clock {
-				if typed, ok := fixture.Clock.(clockwork.Clock); ok && typed != nil {
-					return typed
-				}
-				return clockwork.NewRealClock()
-			},
-			func() workers.CommandRunner { return fixture.CommandRunner },
+			logger,
+			fixturePollerClock(fixture.Clock),
+			fixture.CommandRunner,
 			fixture.ResolveTemplates,
 			automationWorkstationExecutionPolicy(),
 		),
 		cronwire.NewService(),
-		filesystemwatcherswire.NewService(func() clockwork.Clock {
-			if typed, ok := fixture.Clock.(clockwork.Clock); ok && typed != nil {
-				return typed
-			}
-			return clockwork.NewRealClock()
-		}),
+		filesystemwatcherswire.NewService(fixturePollerClock(fixture.Clock)),
 	)
 	return service
+}
+
+func fixturePollerClock(clock factory.Clock) clockwork.Clock {
+	if typed, ok := clock.(clockwork.Clock); ok && typed != nil {
+		return typed
+	}
+	return clockwork.NewRealClock()
 }
 
 type programmableHostedPollers struct {

@@ -2,7 +2,11 @@ package internal_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -57,7 +61,9 @@ func TestStartSchedulerSidecarsForRuntime_AttachesCronAndScriptPollerSupervision
 	workRequestJSON := []byte(`{
 		"requestId":"script-batch-1",
 		"type":"FACTORY_REQUEST_BATCH",
-		"works":[{"name":"issue-script","workTypeName":"task","payload":{"id":"SCRIPT-1"}}]
+		"works":[{"name":"issue-script","workTypeName":"task","payload":{"id":"SCRIPT-1"}}],
+		"cursor":"cursor-runtime-factory-dir",
+		"checkpoint":"checkpoint-runtime-factory-dir"
 	}`)
 	runner := &pollerSequenceCommandRunner{
 		outcomes: []pollerRunOutcome{{result: workers.CommandResult{Stdout: workRequestJSON}}},
@@ -82,7 +88,7 @@ func TestStartSchedulerSidecarsForRuntime_AttachesCronAndScriptPollerSupervision
 		submitted.submit,
 	)
 
-	waitForPollerSubmission(t, submitted, 1, 2*time.Second)
+	waitForPollerSubmission(t, submitted, 2, 2*time.Second)
 
 	var cronRequest work.WorkRequest
 	var foundCron bool
@@ -99,8 +105,36 @@ func TestStartSchedulerSidecarsForRuntime_AttachesCronAndScriptPollerSupervision
 	}
 	assertCronWorkRequestForWorkstation(t, cronRequest, start, cronWS.Name)
 
+	instanceID := runtimeScriptPollerInstanceID(factoryDir, scriptPoller.Name)
+	cursor, err := svc.GetCursor(context.Background(), automations.GetCursorRequest{
+		InstanceID: instanceID,
+	})
+	if err != nil {
+		t.Fatalf("script poller cursor: %v", err)
+	}
+	if cursor.AutomationID != factoryDir ||
+		cursor.InstanceID != instanceID ||
+		string(cursor.Cursor) != "cursor-runtime-factory-dir" ||
+		cursor.Checkpoint != "checkpoint-runtime-factory-dir" {
+		t.Fatalf("script poller cursor = %+v, want runtime factory identity and recovery facts", cursor)
+	}
+
 	cancel()
 	sidecars.Wait()
+}
+
+func runtimeScriptPollerInstanceID(automationID, workstationName string) string {
+	automationID = strings.TrimSpace(automationID)
+	sourceID := "script-poller:" + strings.TrimSpace(workstationName)
+	identity := fmt.Sprintf(
+		"%d:%s:%d:%s",
+		len(automationID),
+		automationID,
+		len(sourceID),
+		sourceID,
+	)
+	sum := sha256.Sum256([]byte("automations-script-poller-instance:" + identity))
+	return "script-poller-instance:" + hex.EncodeToString(sum[:16])
 }
 
 func TestStartSchedulerSidecarsForRuntime_CronCadenceSubmitsScheduledTicks(t *testing.T) {

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -46,6 +47,10 @@ type watcher struct {
 	debounceWindow      time.Duration
 	handledIdentities   handledIdentities
 	lazyHandledIdentity *memoryHandledIdentities
+	admissionMu         sync.Mutex
+	admissions          map[filesystemwatchers.ObservationIdentity]*observationAdmission
+	pendingHandled      map[filesystemwatchers.ObservationIdentity]struct{}
+	preseedMu           sync.RWMutex
 }
 
 type fileEventWatcher interface {
@@ -87,6 +92,18 @@ type directoryWalker func(string, fs.WalkDirFunc) error
 type handledIdentities interface {
 	Contains(filesystemwatchers.ObservationIdentity) bool
 	Record(filesystemwatchers.ObservationIdentity) error
+}
+
+// observationAdmission serializes only callbacks for one observation identity.
+// refs keeps the map entry alive while another callback is waiting on its lock.
+type observationAdmission struct {
+	mu   sync.Mutex
+	refs int
+}
+
+type preseedRequest struct {
+	request work.WorkRequest
+	paths   []string
 }
 
 func newWatcher(config filesystemwatchers.Config) *watcher {
@@ -227,11 +244,84 @@ func (fw *watcher) handledIdentityStore() handledIdentities {
 	return fw.lazyHandledIdentity
 }
 
+func (fw *watcher) lockObservation(identity filesystemwatchers.ObservationIdentity) func() {
+	fw.admissionMu.Lock()
+	if fw.admissions == nil {
+		fw.admissions = make(map[filesystemwatchers.ObservationIdentity]*observationAdmission)
+	}
+	admission := fw.admissions[identity]
+	if admission == nil {
+		admission = &observationAdmission{}
+		fw.admissions[identity] = admission
+	}
+	admission.refs++
+	fw.admissionMu.Unlock()
+
+	admission.mu.Lock()
+	return func() {
+		admission.mu.Unlock()
+
+		fw.admissionMu.Lock()
+		admission.refs--
+		if admission.refs == 0 {
+			delete(fw.admissions, identity)
+		}
+		fw.admissionMu.Unlock()
+	}
+}
+
+func (fw *watcher) markPendingHandled(identity filesystemwatchers.ObservationIdentity) {
+	fw.admissionMu.Lock()
+	defer fw.admissionMu.Unlock()
+	if fw.pendingHandled == nil {
+		fw.pendingHandled = make(map[filesystemwatchers.ObservationIdentity]struct{})
+	}
+	fw.pendingHandled[identity] = struct{}{}
+}
+
+func (fw *watcher) clearPendingHandled(identity filesystemwatchers.ObservationIdentity) {
+	fw.admissionMu.Lock()
+	defer fw.admissionMu.Unlock()
+	delete(fw.pendingHandled, identity)
+}
+
+func (fw *watcher) pendingHandledIdentity(identity filesystemwatchers.ObservationIdentity) bool {
+	fw.admissionMu.Lock()
+	defer fw.admissionMu.Unlock()
+	_, ok := fw.pendingHandled[identity]
+	return ok
+}
+
+func (fw *watcher) retryPendingHandled() error {
+	fw.admissionMu.Lock()
+	identities := make([]filesystemwatchers.ObservationIdentity, 0, len(fw.pendingHandled))
+	for identity := range fw.pendingHandled {
+		identities = append(identities, identity)
+	}
+	fw.admissionMu.Unlock()
+
+	for _, identity := range identities {
+		if fw.handledIdentityStore().Contains(identity) {
+			fw.clearPendingHandled(identity)
+			continue
+		}
+		if err := fw.recordHandledIdentity(identity); err != nil {
+			return fmt.Errorf("retry handled identity %q: %w", identity, err)
+		}
+		fw.clearPendingHandled(identity)
+	}
+	return nil
+}
+
 func (fw *watcher) recordHandledPath(path string) error {
 	identity, err := observationIdentity(fw.dir, path)
 	if err != nil {
 		return err
 	}
+	return fw.recordHandledIdentity(identity)
+}
+
+func (fw *watcher) recordHandledIdentity(identity filesystemwatchers.ObservationIdentity) error {
 	return fw.handledIdentityStore().Record(identity)
 }
 
@@ -241,36 +331,59 @@ func (fw *watcher) recordHandledPath(path string) error {
 // factory started are picked up automatically. If no eligible files are found,
 // it is a no-op.
 func (fw *watcher) PreseedInputs(ctx context.Context) error {
-	requests, paths, err := fw.collectPreseedRequests()
+	fw.preseedMu.Lock()
+	defer fw.preseedMu.Unlock()
+
+	if err := fw.retryPendingHandled(); err != nil {
+		return err
+	}
+
+	plans, err := fw.collectPreseedRequests()
 	if err != nil {
 		return err
 	}
-	if len(requests) == 0 {
+	if len(plans) == 0 {
 		return nil
 	}
 
+	requests := make([]work.WorkRequest, 0, len(plans))
+	for _, plan := range plans {
+		requests = append(requests, plan.request)
+	}
 	if err := fw.validatePreseedRequests(requests); err != nil {
 		return err
 	}
 
 	fw.logger.Info("preseeding factory with existing inputs", zap.Int("count", len(requests)))
-	for _, request := range requests {
-		if err := fw.submit(ctx, request); err != nil {
+	for _, plan := range plans {
+		if err := fw.submit(ctx, plan.request); err != nil {
 			return err
 		}
-	}
-	for _, path := range paths {
-		if err := fw.recordHandledPath(path); err != nil {
-			return err
+		for _, path := range plan.paths {
+			identity, err := observationIdentity(fw.dir, path)
+			if err != nil {
+				return err
+			}
+			fw.markPendingHandled(identity)
+		}
+		for _, path := range plan.paths {
+			if err := fw.recordHandledPath(path); err != nil {
+				return err
+			}
+			identity, err := observationIdentity(fw.dir, path)
+			if err != nil {
+				return err
+			}
+			fw.clearPendingHandled(identity)
 		}
 	}
 	return nil
 }
 
-func (fw *watcher) collectPreseedRequests() ([]work.WorkRequest, []string, error) {
-	var batchRequests []work.WorkRequest
+func (fw *watcher) collectPreseedRequests() ([]preseedRequest, error) {
+	var batchRequests []preseedRequest
 	var fileWorks []work.Work
-	var handledPaths []string
+	var filePaths []string
 	usedFileWorkNames := map[string]int{}
 
 	err := fw.walkDirectory(fw.dir, func(path string, d fs.DirEntry, walkErr error) error {
@@ -282,29 +395,35 @@ func (fw *watcher) collectPreseedRequests() ([]work.WorkRequest, []string, error
 			return nil
 		}
 
-		handledPaths = append(handledPaths, path)
 		if explicitBatch {
-			batchRequests = append(batchRequests, request)
+			batchRequests = append(batchRequests, preseedRequest{
+				request: request,
+				paths:   []string{path},
+			})
 		} else if len(request.Works) == 1 {
 			work := request.Works[0]
 			work.Name = uniqueFileWorkName(work.Name, len(fileWorks), usedFileWorkNames)
 			fileWorks = append(fileWorks, work)
+			filePaths = append(filePaths, path)
 		}
 		return nil
 	})
 	if err != nil {
-		return nil, nil, fmt.Errorf("preseed walk: %w", err)
+		return nil, fmt.Errorf("preseed walk: %w", err)
 	}
 
-	requests := make([]work.WorkRequest, 0, len(batchRequests)+1)
+	plans := make([]preseedRequest, 0, len(batchRequests)+1)
 	if len(fileWorks) > 0 {
-		requests = append(requests, work.WorkRequest{
-			Type:  work.WorkRequestTypeFactoryRequestBatch,
-			Works: fileWorks,
+		plans = append(plans, preseedRequest{
+			request: work.WorkRequest{
+				Type:  work.WorkRequestTypeFactoryRequestBatch,
+				Works: fileWorks,
+			},
+			paths: filePaths,
 		})
 	}
-	requests = append(requests, batchRequests...)
-	return requests, handledPaths, nil
+	plans = append(plans, batchRequests...)
+	return plans, nil
 }
 
 func (fw *watcher) preseedFileRequest(path string, d fs.DirEntry, walkErr error) (work.WorkRequest, bool, bool, error) {
@@ -442,10 +561,27 @@ func (fw *watcher) handleFile(ctx context.Context, path string) error {
 	if err != nil {
 		return err
 	}
+
+	fw.preseedMu.RLock()
+	defer fw.preseedMu.RUnlock()
+	unlockObservation := fw.lockObservation(identity)
+	defer unlockObservation()
+
+	// Keep duplicate admission atomic across the check, Work admission, and
+	// handled-recording. Per-identity locks allow unrelated files to progress
+	// concurrently while overlapping callbacks for one path are serialized.
 	if fw.handledIdentityStore().Contains(identity) {
+		fw.clearPendingHandled(identity)
 		fw.logger.Debug("skipping duplicate filesystem observation",
 			zap.String("path", path),
 			zap.String("identity", string(identity)))
+		return nil
+	}
+	if fw.pendingHandledIdentity(identity) {
+		if err := fw.recordHandledIdentity(identity); err != nil {
+			return err
+		}
+		fw.clearPendingHandled(identity)
 		return nil
 	}
 
@@ -494,7 +630,11 @@ func (fw *watcher) handleFile(ctx context.Context, path string) error {
 	if err := fw.submit(ctx, request); err != nil {
 		return err
 	}
-	return fw.recordHandledPath(path)
+	if err := fw.recordHandledIdentity(identity); err != nil {
+		fw.markPendingHandled(identity)
+		return err
+	}
+	return nil
 }
 
 // deriveWorkTypeAndChannel extracts the work type and optional execution ID

@@ -659,7 +659,7 @@ func newAutomationServiceForTest(
 		scriptpollerswire.NewService(
 			testPollerLogger(logger),
 			testPollerClock(clock),
-			func() workers.CommandRunner { return commandRunner },
+			commandRunner,
 			resolveTemplates,
 			executionPolicy,
 		),
@@ -669,22 +669,18 @@ func newAutomationServiceForTest(
 	return service
 }
 
-func testPollerLogger(logger *zap.Logger) func(string, string) *zap.Logger {
+func testPollerLogger(logger *zap.Logger) *zap.Logger {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	return func(workstationName, workerName string) *zap.Logger {
-		return logger.With(zap.String("workstation", workstationName), zap.String("worker", workerName))
-	}
+	return logger
 }
 
-func testPollerClock(clock Clock) func() clockwork.Clock {
-	return func() clockwork.Clock {
-		if typed, ok := clock.(clockwork.Clock); ok && typed != nil {
-			return typed
-		}
-		return clockwork.NewRealClock()
+func testPollerClock(clock Clock) clockwork.Clock {
+	if typed, ok := clock.(clockwork.Clock); ok && typed != nil {
+		return typed
 	}
+	return clockwork.NewRealClock()
 }
 
 func testScriptPollerInstanceID(automationID, workstationName string) string {
