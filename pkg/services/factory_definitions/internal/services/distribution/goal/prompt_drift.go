@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	distributionpackagedcatalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedcatalog"
 )
 
 type packagedGoalPromptConfig struct {
@@ -79,7 +79,7 @@ func CheckPackagedGoalAssembledPromptDrift() error {
 }
 
 func decodePackagedGoalPromptConfig() (*packagedGoalPromptConfig, error) {
-	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
+	catalog, err := distributionpackagedcatalog.LoadPublishedDefinitionCatalog()
 	if err != nil {
 		return nil, fmt.Errorf("load generated packaged Factory catalog: %w", err)
 	}

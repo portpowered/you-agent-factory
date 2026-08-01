@@ -7,9 +7,9 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryinternal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
+	distributionpackagedcatalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedcatalog"
 )
 
 type source struct {
@@ -93,7 +93,7 @@ func TestCatalogPrecedenceShadowingOrderingAndDetachedDefinitions(t *testing.T) 
 func TestCatalogIncludesEveryPublishedPackagedFactoryWithoutLocation(t *testing.T) {
 	t.Parallel()
 
-	published, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
+	published, err := distributionpackagedcatalog.LoadPublishedDefinitionCatalog()
 	if err != nil {
 		t.Fatalf("load published packaged definitions: %v", err)
 	}

@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"reflect"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -983,5 +984,51 @@ func TestNewServiceInstallAndScaffoldReturnMatchingDistributedFacts(t *testing.T
 			installed.Definition,
 			scaffolded.Definition,
 		)
+	}
+}
+
+func TestNewPublishedPackagedFactoryCatalogUsesDetachedDefinitionsBoundary(t *testing.T) {
+	catalog, err := factorydefinitionswire.NewPublishedPackagedFactoryCatalog()
+	if err != nil {
+		t.Fatalf("NewPublishedPackagedFactoryCatalog() error = %v", err)
+	}
+	listed, err := catalog.ListBuiltInPackagedFactories(
+		context.Background(),
+		factorydefinitions.ListBuiltInPackagedFactoriesRequest{},
+	)
+	if err != nil {
+		t.Fatalf("ListBuiltInPackagedFactories() error = %v", err)
+	}
+	if len(listed.Entries) != 14 {
+		t.Fatalf("published entry count = %d, want 14", len(listed.Entries))
+	}
+	names := make([]string, len(listed.Entries))
+	for index, entry := range listed.Entries {
+		names[index] = entry.Name
+	}
+	if !slices.IsSorted(names) {
+		t.Fatalf("published names are not sorted: %v", names)
+	}
+
+	first, err := catalog.ResolveBuiltInPackagedFactory(
+		context.Background(),
+		factorydefinitions.ResolveBuiltInPackagedFactoryRequest{Name: "@you/goal"},
+	)
+	if err != nil {
+		t.Fatalf("ResolveBuiltInPackagedFactory() error = %v", err)
+	}
+	if len(first.Definition.JSON) == 0 || len(first.Definition.YAML) == 0 {
+		t.Fatal("resolved published definition is missing JSON/YAML bytes")
+	}
+	first.Definition.JSON[0] ^= 0xff
+	second, err := catalog.ResolveBuiltInPackagedFactory(
+		context.Background(),
+		factorydefinitions.ResolveBuiltInPackagedFactoryRequest{Name: "@you/goal"},
+	)
+	if err != nil {
+		t.Fatalf("second ResolveBuiltInPackagedFactory() error = %v", err)
+	}
+	if second.Definition.JSON[0] == first.Definition.JSON[0] {
+		t.Fatal("resolved packaged definition aliases a prior result")
 	}
 }

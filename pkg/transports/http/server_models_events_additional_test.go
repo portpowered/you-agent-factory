@@ -12,7 +12,9 @@ import (
 	"strings"
 	"testing"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionshttp "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/http"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
@@ -25,7 +27,27 @@ import (
 )
 
 func TestListPackagedFactoriesReturnsPublishedCatalog(t *testing.T) {
-	srv := NewServer(nil, nil, nil, zap.NewNop())
+	definition := factorydefinitions.PackagedDefinition{
+		Name:    "@you/example",
+		Project: "builtin-example",
+		JSON:    []byte(`{"name":"@you/example","description":{"type":"LOCALIZABLE_ASSET","value":"Example Factory"},"examples":[{"name":"example","description":{"type":"LOCALIZABLE_ASSET","value":"Run example"},"args":{}}]}`),
+		YAML:    []byte("name: '@you/example'\n"),
+		Formats: []factorydefinitions.PackagedFactoryFormat{factorydefinitions.PackagedFactoryFormatJSON},
+	}
+	srv := NewServer(
+		nil, nil, nil, zap.NewNop(),
+		factorydefinitionshttp.NewHandlerFromRoot(
+			factorydefinitionshttp.RootBinding{Definitions: packagedFactoryCatalogDefinitionsFake{
+				listResult: factorydefinitions.ListBuiltInPackagedFactoriesResult{
+					Entries: []factorydefinitions.BuiltInPackagedFactoryEntry{{
+						Name: definition.Name, Project: definition.Project, Formats: definition.Formats,
+					}},
+				},
+				resolveResult: factorydefinitions.ResolveBuiltInPackagedFactoryResult{Definition: definition},
+			}},
+			zap.NewNop(),
+		),
+	)
 	recorder := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/packaged-factories", nil))
 
@@ -44,6 +66,26 @@ func TestListPackagedFactoriesReturnsPublishedCatalog(t *testing.T) {
 			t.Fatalf("catalog entry is incomplete: %#v", factory)
 		}
 	}
+}
+
+type packagedFactoryCatalogDefinitionsFake struct {
+	factorydefinitions.Service
+	listResult    factorydefinitions.ListBuiltInPackagedFactoriesResult
+	resolveResult factorydefinitions.ResolveBuiltInPackagedFactoryResult
+}
+
+func (fake packagedFactoryCatalogDefinitionsFake) ListBuiltInPackagedFactories(
+	ctx context.Context,
+	request factorydefinitions.ListBuiltInPackagedFactoriesRequest,
+) (factorydefinitions.ListBuiltInPackagedFactoriesResult, error) {
+	return fake.listResult, nil
+}
+
+func (fake packagedFactoryCatalogDefinitionsFake) ResolveBuiltInPackagedFactory(
+	ctx context.Context,
+	request factorydefinitions.ResolveBuiltInPackagedFactoryRequest,
+) (factorydefinitions.ResolveBuiltInPackagedFactoryResult, error) {
+	return fake.resolveResult, nil
 }
 
 type strictModelsServiceFake struct {

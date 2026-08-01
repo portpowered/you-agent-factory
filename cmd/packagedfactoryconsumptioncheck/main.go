@@ -1,6 +1,7 @@
 // Command packagedfactoryconsumptioncheck enforces that shipped first-party
-// Factory definition bytes are consumed only through the packaged publication
-// and catalog loader surfaces.
+// Factory definition bytes are consumed only through the Factory Definitions
+// catalog/materialization boundary. Package publication and catalog-builder
+// implementations are the only code allowed to open the embedded sources.
 package main
 
 import (
@@ -21,7 +22,6 @@ const (
 	packagedFactoriesImport             = modulePath + "/packages/packaged-factories"
 	packagedFactoryCatalogImport        = modulePath + "/internal/packagedfactorycatalog"
 	diagnosticPrefix                    = "[agent-factory:packaged-factory-consumption]"
-	catalogLoaderSymbol                 = "LoadPublishedDefinitionCatalog"
 	packagedFactoriesPublicationSurface = "packages/packaged-factories"
 )
 
@@ -34,7 +34,6 @@ var excludedDirectoryNames = map[string]struct{}{
 	"fixtures":     {},
 	"node_modules": {},
 	"testdata":     {},
-	"tests":        {},
 	"vendor":       {},
 }
 
@@ -43,11 +42,12 @@ var allowedPackagedFactoriesImporters = map[string]struct{}{
 	"internal/packagedfactorycatalog": {},
 }
 
-var allowedCatalogLoaderFiles = map[string]struct{}{
-	"pkg/wire/profiles.go":                   {},
-	"pkg/transports/http/handlers_models.go": {},
-	"pkg/services/factory_definitions/internal/services/distribution/goal/prompt_drift.go": {},
-	"internal/migrationledgercheck/packaged_factory_matrix.go":                             {},
+var allowedCatalogImporters = map[string]struct{}{
+	"cmd/packagedfactorycatalogcheck":                                                 {},
+	"cmd/packagedfactorycataloggenerate":                                              {},
+	"cmd/packagedfactorysourcecheck":                                                  {},
+	"internal/packagedfactorycatalog":                                                 {},
+	"pkg/services/factory_definitions/internal/services/distribution/packagedcatalog": {},
 }
 
 type config struct {
@@ -79,7 +79,7 @@ func run(cfg config, stdout io.Writer) error {
 	}
 	fmt.Fprintf(
 		stdout,
-		"%s packaged Factory consumption is constrained to the embedded catalog surface\n",
+		"%s packaged Factory consumption is constrained to the Factory Definitions catalog surface\n",
 		diagnosticPrefix,
 	)
 	return nil
@@ -102,7 +102,7 @@ func inspectConsumptionBoundary(repoRoot string) ([]string, error) {
 			return err
 		}
 		relative = filepath.ToSlash(relative)
-		if !isProductionGoFile(relative) {
+		if !isGoFile(relative) {
 			return nil
 		}
 		fileViolations, err := inspectGoFile(path, relative)
@@ -140,35 +140,12 @@ func inspectGoFile(path, relative string) ([]string, error) {
 				violations = append(violations, directEmbedImportViolation(relative, importPath))
 			}
 		case packagedFactoryCatalogImport:
-			if usesCatalogLoader(file) {
-				if _, allowed := allowedCatalogLoaderFiles[relative]; !allowed {
-					violations = append(violations, directCatalogLoaderViolation(relative))
-				}
+			if _, allowed := allowedCatalogImporters[packagePath]; !allowed {
+				violations = append(violations, directCatalogImportViolation(relative))
 			}
 		}
 	}
 	return violations, nil
-}
-
-func usesCatalogLoader(file *ast.File) bool {
-	found := false
-	ast.Inspect(file, func(node ast.Node) bool {
-		call, ok := node.(*ast.CallExpr)
-		if !ok {
-			return true
-		}
-		selector, ok := call.Fun.(*ast.SelectorExpr)
-		if !ok || selector.Sel == nil || selector.Sel.Name != catalogLoaderSymbol {
-			return true
-		}
-		ident, ok := selector.X.(*ast.Ident)
-		if !ok || ident.Name != "packagedfactorycatalog" {
-			return true
-		}
-		found = true
-		return false
-	})
-	return found
 }
 
 func directEmbedImportViolation(relative, importPath string) string {
@@ -180,20 +157,17 @@ func directEmbedImportViolation(relative, importPath string) string {
 	)
 }
 
-func directCatalogLoaderViolation(relative string) string {
+func directCatalogImportViolation(relative string) string {
 	return fmt.Sprintf(
-		"%s calls packagedfactorycatalog.%s outside the approved catalog-consumption surface; route built-in packaged Factory list/resolve/install through Factory Definitions catalog operations",
+		"%s imports %s outside the Factory Definitions catalog/materialization boundary; route built-in packaged Factory list/resolve/install through Factory Definitions catalog operations",
 		relative,
-		catalogLoaderSymbol,
+		packagedFactoryCatalogImport,
 	)
 }
 
-func isProductionGoFile(relative string) bool {
+func isGoFile(relative string) bool {
 	lowerName := strings.ToLower(filepath.Base(relative))
-	if !strings.HasSuffix(lowerName, ".go") || strings.HasSuffix(lowerName, "_test.go") {
-		return false
-	}
-	return true
+	return strings.HasSuffix(lowerName, ".go")
 }
 
 func excludedDirectory(path, name, repoRoot string) bool {

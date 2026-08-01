@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -85,14 +84,18 @@ func bootstrapCompositionTestPersistence(t *testing.T) factorydefinitions.Persis
 func bootstrapCompositionGoalCatalog(t *testing.T) factorydefinitions.PackagedFactoryCatalogOperations {
 	t.Helper()
 
-	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
+	catalog, err := factorydefinitionswire.NewPublishedPackagedFactoryCatalog()
 	if err != nil {
-		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
+		t.Fatalf("NewPublishedPackagedFactoryCatalog() error = %v", err)
 	}
-	definition, ok := catalog.Lookup("@you/goal")
-	if !ok {
+	resolved, err := catalog.ResolveBuiltInPackagedFactory(
+		context.Background(),
+		factorydefinitions.ResolveBuiltInPackagedFactoryRequest{Name: "@you/goal"},
+	)
+	if err != nil {
 		t.Fatal("published catalog is missing @you/goal")
 	}
+	definition := resolved.Definition
 	packagedCatalog, err := providePackagedFactoryCatalog([]factorydefinitions.PackagedDefinition{definition})
 	if err != nil {
 		t.Fatalf("providePackagedFactoryCatalog() error = %v", err)

@@ -111,7 +111,7 @@ func newAPITestServer(workAPI apisurface.WorkAPI) *api.Server {
 	handler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
 		Work: workAPI, SessionRequests: sseRequestPreparation{},
 	}, logger)
-	return api.NewServer(handler, nil, nil, logger)
+	return api.NewServer(handler, nil, nil, logger, nil)
 }
 
 func readBody(t *testing.T, resp *http.Response) string {

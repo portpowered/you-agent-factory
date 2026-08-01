@@ -11,7 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	"github.com/portpowered/infinite-you/pkg/platform/directoryreplace"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/inboxgitkeep"
@@ -19,6 +18,7 @@ import (
 	factoryauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout"
 	authoringlayoutprepare "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/prepare"
 	factorypersistence "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/persistence"
+	distributionpackagedcatalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedcatalog"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
@@ -140,7 +140,7 @@ func TestEnsurePackagedFactories_FailsClosedWithoutFileSystem(t *testing.T) {
 }
 
 func TestInstallPackagedFactory_MaterializesPortableEditableFormats(t *testing.T) {
-	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
+	catalog, err := distributionpackagedcatalog.LoadPublishedDefinitionCatalog()
 	if err != nil {
 		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
 	}
@@ -184,7 +184,7 @@ func TestInstallPackagedFactory_MaterializesPortableEditableFormats(t *testing.T
 }
 
 func TestInstallPackagedFactory_DefaultsToJSONAndRejectsUnsupportedFormat(t *testing.T) {
-	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
+	catalog, err := distributionpackagedcatalog.LoadPublishedDefinitionCatalog()
 	if err != nil {
 		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
 	}
@@ -232,7 +232,7 @@ func TestInstallPackagedFactory_DefaultsToJSONAndRejectsUnsupportedFormat(t *tes
 }
 
 func TestInstallPackagedFactory_MaterializesEveryPublishedFactory(t *testing.T) {
-	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
+	catalog, err := distributionpackagedcatalog.LoadPublishedDefinitionCatalog()
 	if err != nil {
 		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
 	}
@@ -268,7 +268,7 @@ func TestInstallPackagedFactory_MaterializesEveryPublishedFactory(t *testing.T) 
 }
 
 func TestInstallPackagedFactory_RepeatSkipsWithoutContentDrift(t *testing.T) {
-	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
+	catalog, err := distributionpackagedcatalog.LoadPublishedDefinitionCatalog()
 	if err != nil {
 		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
 	}
@@ -313,7 +313,7 @@ func TestInstallPackagedFactory_RepeatSkipsWithoutContentDrift(t *testing.T) {
 }
 
 func TestInstallPackagedFactory_ExplicitReplaceRestoresPackagedLayout(t *testing.T) {
-	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
+	catalog, err := distributionpackagedcatalog.LoadPublishedDefinitionCatalog()
 	if err != nil {
 		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
 	}
@@ -363,7 +363,7 @@ func TestInstallPackagedFactory_ExplicitReplaceRestoresPackagedLayout(t *testing
 }
 
 func TestInstallPackagedFactory_RefusesAlternateFormatWithoutReplace(t *testing.T) {
-	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
+	catalog, err := distributionpackagedcatalog.LoadPublishedDefinitionCatalog()
 	if err != nil {
 		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
 	}
@@ -397,7 +397,7 @@ func TestInstallPackagedFactory_RefusesAlternateFormatWithoutReplace(t *testing.
 }
 
 func TestInstallPackagedFactory_CancellationBeforeCommitLeavesTargetAbsent(t *testing.T) {
-	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
+	catalog, err := distributionpackagedcatalog.LoadPublishedDefinitionCatalog()
 	if err != nil {
 		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
 	}
@@ -430,7 +430,7 @@ func TestInstallPackagedFactory_CancellationBeforeCommitLeavesTargetAbsent(t *te
 }
 
 func TestInstallPackagedFactory_FailedReplacePreservesCommittedLayout(t *testing.T) {
-	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
+	catalog, err := distributionpackagedcatalog.LoadPublishedDefinitionCatalog()
 	if err != nil {
 		t.Fatalf("LoadPublishedDefinitionCatalog() error = %v", err)
 	}

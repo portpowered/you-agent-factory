@@ -2,15 +2,13 @@ package goal
 
 import (
 	"encoding/json"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
-	packagedfactories "github.com/portpowered/infinite-you/packages/packaged-factories"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	distributionpackagedcatalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedcatalog"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
 )
 
@@ -57,12 +55,15 @@ func TestMaterializePackagedGoalFactory_DerivesRolePromptsFromCanonicalSource(t 
 
 func authoredGoalPrompt(t *testing.T, source PackagedGoalRolePromptSource) string {
 	t.Helper()
-	path := "factories/goal/" + source.PromptFile
-	content, err := fs.ReadFile(packagedfactories.Source(), path)
+	canonical, err := decodePackagedGoalPromptConfig()
 	if err != nil {
-		t.Fatalf("read authored prompt for role %q: %v", source.Role, err)
+		t.Fatalf("load published prompt for role %q: %v", source.Role, err)
 	}
-	return string(content)
+	prompt, err := assembledPackagedGoalRolePrompt(canonical, source)
+	if err != nil {
+		t.Fatalf("resolve published prompt for role %q: %v", source.Role, err)
+	}
+	return prompt
 }
 
 func TestMaterializePackagedGoalFactory_DeterministicFreshMaterialization(t *testing.T) {
@@ -86,7 +87,7 @@ func TestMaterializePackagedGoalFactory_DeterministicFreshMaterialization(t *tes
 
 func materializePackagedGoalFactory(t *testing.T, globalRoot string) string {
 	t.Helper()
-	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
+	catalog, err := distributionpackagedcatalog.LoadPublishedDefinitionCatalog()
 	if err != nil {
 		t.Fatalf("LoadPublishedDefinitionCatalog: %v", err)
 	}

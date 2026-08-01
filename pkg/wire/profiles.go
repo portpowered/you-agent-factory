@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
@@ -344,11 +343,7 @@ func provideSystemInitializationOperation(
 }
 
 func providePackagedFactoryDefinitions() ([]factorydefinitions.PackagedDefinition, error) {
-	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
-	if err != nil {
-		return nil, err
-	}
-	return catalog.All(), nil
+	return factorydefinitionswire.LoadPublishedPackagedFactoryDefinitions()
 }
 
 func providePackagedFactoryCatalog(

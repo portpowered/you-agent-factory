@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	factorydefinitionshttp "github.com/portpowered/infinite-you/pkg/services/factory_definitions/transports/http"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
@@ -27,10 +28,11 @@ var _ factoryapi.ServerInterface = (*Server)(nil)
 // Server is the REST API server for the agent-factory.
 type Server struct {
 	*factorysessionshttp.Adapter
-	modelsHTTP       *modelshttp.Handler
-	providerSessions providersessions.Service
-	logger           *zap.Logger
-	router           *mux.Router
+	modelsHTTP             *modelshttp.Handler
+	factoryDefinitionsHTTP *factorydefinitionshttp.Adapter
+	providerSessions       providersessions.Service
+	logger                 *zap.Logger
+	router                 *mux.Router
 }
 
 // NewServer composes an immutable generated HTTP server from dependencies
@@ -41,13 +43,15 @@ func NewServer(
 	modelsHTTP *modelshttp.Handler,
 	providerSessions providersessions.Service,
 	logger *zap.Logger,
+	factoryDefinitionsHTTP *factorydefinitionshttp.Adapter,
 ) *Server {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	srv := &Server{
-		Adapter:    factorySessionsHTTP,
-		modelsHTTP: modelsHTTP, providerSessions: providerSessions, logger: logger,
+		Adapter: factorySessionsHTTP, modelsHTTP: modelsHTTP,
+		factoryDefinitionsHTTP: factoryDefinitionsHTTP,
+		providerSessions:       providerSessions, logger: logger,
 	}
 	srv.router = srv.buildRouter()
 	return srv

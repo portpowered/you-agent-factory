@@ -52,7 +52,7 @@ func TestValidateFactory_ReturnsTaxonomyCompatibilityTargets(t *testing.T) {
 func newAPITestServer(validator factorydefinitions.SubmittedDefinitionValidationOperation) *api.Server {
 	logger := zap.NewNop()
 	handler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{FactoryValidation: validator}, logger)
-	return api.NewServer(handler, nil, nil, logger)
+	return api.NewServer(handler, nil, nil, logger, nil)
 }
 
 // taxonomyCompatibilityValidator scripts the service-root finding whose HTTP

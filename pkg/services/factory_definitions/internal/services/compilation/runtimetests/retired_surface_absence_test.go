@@ -7,12 +7,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	"github.com/portpowered/infinite-you/internal/retiredsurfaceguard"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	. "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	namedfactorypath "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
+	distributionpackagedcatalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedcatalog"
 	distributionpackagedinstallation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedinstallation"
 )
 
@@ -272,7 +272,7 @@ func TestRetiredSurfaceResidue_ConfigInitLeavesLegacyEncodedSiblingUntouched(t *
 
 func publishedPackagedDefinitions(t *testing.T) []factorydefinitions.PackagedDefinition {
 	t.Helper()
-	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
+	catalog, err := distributionpackagedcatalog.LoadPublishedDefinitionCatalog()
 	if err != nil {
 		t.Fatalf("LoadPublishedDefinitionCatalog: %v", err)
 	}
