@@ -1,6 +1,6 @@
 # Dashboard-unit baseline
 
-Status: `LTV-UI-TEST-01-unit-lane-throughput-001` complete
+Status: `LTV-UI-TEST-01-unit-lane-throughput-003` complete
 
 Recorded: 2026-08-01T09:39:10Z
 
@@ -124,15 +124,69 @@ test project. Component and combined Vitest invocations retain the shared
 setup and browser-oriented preparation.
 
 The first validation run after the change kept the baseline fingerprint at 390
-files and 3,161 tests, all passing:
+files and 3,161 tests, all passing. It was directional evidence; the matched
+three-run throughput proof is recorded below.
 
 | Run | Wrapper wall | Vitest wall | Transform | Setup | Collection/import | Test bodies | Environment | Result |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
 | 1 | 70.34s | 67.09s | 29.11s | 0ms | 88.27s | 12.32s | 64ms | 390 files / 3,161 tests passed |
 
-This initial sample is directional evidence for the hypothesis, not the final
-three-run throughput claim. Story 003 must repeat three matched after-change
-runs and record the resulting median against the baseline above.
+## Story 003 matched after-change runs
+
+Recorded: 2026-08-01T10:13:24Z
+
+The three after-change runs used the same command, host, warm-cache conditions,
+project selection, four-worker policy, retries-disabled policy, and normal
+output flags as the baseline samples:
+
+```text
+bun run test:unit -- --logHeapUsage --no-color
+```
+
+The current revision was `3f84770e3c0721facf7abee2ceb0c5169b5f6d4d`; the host
+was Windows 11 Home `10.0.26200` / build `26200`, with 24 logical processors
+and 63.72 GiB physical memory. Runtime versions were Bun `1.3.12`, Node
+`22.12.0`, and Vitest `4.1.3`.
+
+The workload remained 3,161 test entries across 390 unique files. The
+normalized, sorted `ui/`-relative file paths retained the baseline SHA-256:
+
+```text
+87768de6badf4fe4af908ec0e35f99a337dd57c45bae09c36067b27f6e6604d1
+```
+
+| Run | Wrapper wall | Vitest wall | Transform | Setup | Collection/import | Test bodies | Environment | Result |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 1 | 95.79s | 89.13s | 44.27s | 0ms | 115.90s | 18.62s | 73ms | 390 files / 3,161 tests passed |
+| 2 | 69.23s | 66.54s | 24.95s | 0ms | 83.19s | 14.49s | 78ms | 390 files / 3,161 tests passed |
+| 3 | 55.05s | 53.17s | 15.84s | 0ms | 65.48s | 13.65s | 67ms | 390 files / 3,161 tests passed |
+
+The matched wrapper median was `69.23s`, down from the baseline median of
+`95.89s` (`27.80%` faster). The Vitest wall median was `66.54s`, down from
+`93.42s` (`28.77%` faster). Setup remained `0ms` in every optimized run;
+aggregate collection/import and transform values varied with the host, while
+the wall-time result remained above the required 20% improvement.
+
+All three runs were terminal and passing with identical file/test counts. None
+reported a file-lock symptom (`EACCES`, `EBUSY`, or equivalent), worker crash,
+out-of-memory failure, or test failure. The runner retained the baseline
+four-worker setting, and no concurrency increase or timeout change was used.
+The separate baseline process-tree observation remains the resource evidence
+for that unchanged worker policy because sampling during a timed run materially
+inflated wall time.
+
+## Story 003 verification
+
+- `bun run typecheck` passed.
+- `bun run lint` passed, including the UI lane and boundary checks.
+- `bun run check:test-lanes` passed.
+- Focused `bunx --no-install vitest run --config vite.config.ts vite.config.test.ts --no-color` passed (3 tests).
+- The full `bun run test:unit -- --logHeapUsage --no-color` lane passed three
+  times with the matched workload above.
+
+The broader `bun run check` remains red on the same pre-existing Biome
+diagnostics in unrelated integration and generated package files recorded for
+Story 002; no such files changed in this story.
 
 ## Verification
 
