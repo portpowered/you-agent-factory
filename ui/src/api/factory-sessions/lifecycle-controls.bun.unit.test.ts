@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
 
+import { bunVi as vi } from "../../testing/bun/vi-compat";
 import {
   approveFactorySession,
   interruptFactorySessionDispatch,
