@@ -38,6 +38,25 @@ func TestNewHostedPollersConstructsOwner(t *testing.T) {
 	var _ hostedsources.HostedPollers = service
 }
 
+func TestNewCheckpointStoreRejectsMissingFilesystem(t *testing.T) {
+	t.Parallel()
+
+	if _, err := hostedsourceswire.NewCheckpointStore(nil); err == nil {
+		t.Fatal("NewCheckpointStore(nil) error = nil, want required-filesystem failure")
+	}
+}
+
+func TestNewSecretResolverRejectsMissingEnvironmentReader(t *testing.T) {
+	t.Parallel()
+
+	resolver := hostedsourceswire.NewSecretResolver(nil, func(string) ([]byte, error) {
+		return nil, nil
+	})
+	if _, err := resolver(context.Background(), nil, "linear-api-key"); err == nil {
+		t.Fatal("NewSecretResolver(nil, reader) error = nil, want required-environment-reader failure")
+	}
+}
+
 func TestHostedPollersValidateLinearPollerDelegatesToService(t *testing.T) {
 	t.Parallel()
 
