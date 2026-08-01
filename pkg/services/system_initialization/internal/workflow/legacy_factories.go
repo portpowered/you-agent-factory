@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	systeminitialization "github.com/portpowered/infinite-you/pkg/services/system_initialization"
 )
 
 type legacyFactoryMigration struct {
@@ -17,7 +16,7 @@ type legacyFactoryMigration struct {
 	targetDir string
 }
 
-func migrateLegacyNamedFactories(homeDir, canonicalRoot string, files systeminitialization.LegacyFactoryMigrationFileSystem) error {
+func migrateLegacyNamedFactories(homeDir, canonicalRoot string, files LegacyFactoryMigrationFileSystem) error {
 	legacyRoot := factorydefinitions.LegacyNamedFactoriesRoot(homeDir)
 	info, err := files.Stat(legacyRoot)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -54,7 +53,7 @@ func migrateLegacyNamedFactories(homeDir, canonicalRoot string, files systeminit
 	return nil
 }
 
-func inventoryLegacyFactoryMigrations(legacyRoot, canonicalRoot string, files systeminitialization.LegacyFactoryMigrationFileSystem) ([]legacyFactoryMigration, error) {
+func inventoryLegacyFactoryMigrations(legacyRoot, canonicalRoot string, files LegacyFactoryMigrationFileSystem) ([]legacyFactoryMigration, error) {
 	pointerPath := filepath.Join(legacyRoot, factorydefinitions.CurrentFactoryPointerFile)
 	pointer, err := files.ReadFile(pointerPath)
 	if err == nil {
