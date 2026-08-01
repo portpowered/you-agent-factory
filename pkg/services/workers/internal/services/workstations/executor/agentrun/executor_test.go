@@ -2,6 +2,7 @@ package agentrun
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"sync"
@@ -556,5 +557,53 @@ func TestAgentRunExecutor_RecordsAgentRunResponseEvent(t *testing.T) {
 	}
 	if diagnostics == nil || diagnostics.AgentRun == nil {
 		t.Fatalf("payload diagnostics = %#v, want agentRun inspection", diagnostics)
+	}
+}
+
+func TestAgentRunExecutor_PublishesFinalMessage(t *testing.T) {
+	t.Parallel()
+
+	var fragments []workerexecution.ProgressFragment
+	executor := NewAgentRunExecutorWithDependencies(
+		staticRuntimeConfig{
+			Workers: map[string]*interfaces.FactoryWorkerConfig{
+				"agent-worker": {Type: interfaces.WorkerTypeAgent},
+			},
+		},
+		&stubRunner{response: "done"},
+		nil,
+		&recordingHarnessAdapter{result: HarnessResult{FinalText: "  done  "}},
+		nil,
+		func() time.Time { return time.Date(2026, 6, 30, 12, 0, 0, 0, time.UTC) },
+	).WithProgressPublisher(func(fragment workerexecution.ProgressFragment) {
+		fragments = append(fragments, fragment)
+	})
+
+	if _, err := executor.Execute(context.Background(), testAgentRunRequest()); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if len(fragments) != 1 {
+		t.Fatalf("published fragments = %d, want 1", len(fragments))
+	}
+	fragment := fragments[0]
+	if fragment.DispatchID != "dispatch-1" {
+		t.Fatalf("fragment dispatch ID = %q, want dispatch-1", fragment.DispatchID)
+	}
+	draft, ok := fragment.CanonicalDraft.(workerexecution.Draft)
+	if !ok {
+		t.Fatalf("canonical draft type = %T, want workers.Draft", fragment.CanonicalDraft)
+	}
+	if draft.Kind != workerexecution.KindMessage || draft.Phase != workerexecution.PhaseCompleted {
+		t.Fatalf("draft lifecycle = %s/%s, want MESSAGE/COMPLETED", draft.Kind, draft.Phase)
+	}
+	if draft.ItemID != "dispatch-1-final-message" {
+		t.Fatalf("draft item ID = %q, want dispatch-1-final-message", draft.ItemID)
+	}
+	var payload workerexecution.MessagePayload
+	if err := json.Unmarshal(draft.Payload, &payload); err != nil {
+		t.Fatalf("decode final message payload: %v", err)
+	}
+	if len(payload.ContentBlocks) != 1 || payload.ContentBlocks[0].Text != "done" {
+		t.Fatalf("final message payload = %#v, want trimmed done text", payload)
 	}
 }

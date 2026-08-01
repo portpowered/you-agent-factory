@@ -83,11 +83,6 @@ func (s *RuntimeSidecars) Start(ctx context.Context, hosted factory.HostedHandle
 
 	sidecarCtx, cancel := context.WithCancel(ctx)
 	handle.SidecarCancel = cancel
-	handle.Sidecars.Add(1)
-	go func() {
-		defer handle.Sidecars.Done()
-		factoryhost.ObserveRuntimeMetrics(sidecarCtx, handle)
-	}()
 	if runtimeAutomation, ok := s.automation.(runtimeAutomationService); ok {
 		if watcher := newFilesystemWatcher(runtimeAutomation, handle.Bundle); watcher != nil {
 			handle.Sidecars.Add(1)
@@ -144,6 +139,14 @@ func (s *RuntimeSidecars) Start(ctx context.Context, hosted factory.HostedHandle
 			return s.failStart(handle, cancel, fmt.Errorf("attach automation sidecars: %w", err))
 		}
 	}
+	// Start the observer after schedule recovery has finished. Recovery may
+	// replace handle.Bundle.Factory, and the observer reads that field from its
+	// goroutine; starting it earlier creates a startup data race.
+	handle.Sidecars.Add(1)
+	go func() {
+		defer handle.Sidecars.Done()
+		factoryhost.ObserveRuntimeMetrics(sidecarCtx, handle)
+	}()
 	return nil
 }
 
