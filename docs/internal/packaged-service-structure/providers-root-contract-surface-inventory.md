@@ -22,27 +22,24 @@ execute_contract.go
 identity_characterization_test.go
 identity_contract.go
 lifecycle_contract.go
-packaged_root_shape_test.go
-providers_root_contract_seal_test.go
 root_catalog_delegation_test.go
 root_contract_characterization_test.go
-root_wire_behavioral_boundary_test.go
 selection_characterization_test.go
 selection_contract.go
 service_contract.go
 ```
 
-**Total:** 18 root-level `.go` files — 18 thin committed root-contract files,
+**Total:** 15 root-level `.go` files — 15 thin committed root-contract files,
 0 excess fold clusters in this packet.
 
 The closed inventory is mirrored by:
 
 - `internal/ownershipinventory/providers_root_contract.go`;
 - `cmd/packagetargetmanifestcheck/providers_root_contract.go`; and
-- `pkg/services/providers/packaged_root_shape_test.go` for the immediate child
-  directory boundary.
+- `pkg/services/providers/root_contract_characterization_test.go` for the
+  immediate child directory boundary and root inventory seal.
 
-`pkg/services/providers/root_wire_behavioral_boundary_test.go` proves that
+`pkg/services/providers/root_catalog_delegation_test.go` proves that
 wire-constructed external registrations are visible and executable only
 through the published `providers.Service`, and that invalid registrations
 remain deterministic construction failures.
