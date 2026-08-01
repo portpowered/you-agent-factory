@@ -175,6 +175,12 @@ vet settings, host context, total wall time, test counts, package outcomes, and
 package elapsed times. Keep cached and fresh reports separate when comparing
 like-for-like isolated runs.
 
+Before treating a timing sample as isolated evidence, record a UTC process
+preflight showing that no other Go test, coverage, vet, lint, UI, functional, or
+package-check lane is competing for the host. A passing unit command is not a
+valid throughput sample when those lanes are active; preserve such reports as
+local diagnostics and repeat the sample after the host is clear.
+
 When a package-level profile identifies repeated test setup as a hotspot, keep
 the focused before-and-after timing record under `docs/internal/baselines/`.
 Share only immutable validated catalogs or stateless owner-local composition
