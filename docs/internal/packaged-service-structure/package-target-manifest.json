@@ -357,7 +357,6 @@
     "pkg/services/provider_sessions/transports/http",
     "pkg/services/provider_sessions/wire",
     "pkg/services/providers",
-    "pkg/services/providers/internal/effects",
     "pkg/services/providers/internal/service",
     "pkg/services/providers/internal/services/acp",
     "pkg/services/providers/internal/services/acp/internal/service",
@@ -2143,11 +2142,6 @@
     },
     {
       "packagePath": "pkg/services/providers",
-      "disposition": "retain",
-      "destination": "providers"
-    },
-    {
-      "packagePath": "pkg/services/providers/internal/effects",
       "disposition": "retain",
       "destination": "providers"
     },

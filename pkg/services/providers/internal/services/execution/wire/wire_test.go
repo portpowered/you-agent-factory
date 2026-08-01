@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	effects "github.com/portpowered/infinite-you/pkg/services/providers/internal/effects"
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	effects "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty"
 	executionservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/service"
@@ -19,12 +21,41 @@ type recordingPlatformRunner struct {
 
 type streamingPlatformRunner struct{}
 
+type failingPlatformRunner struct {
+	err error
+}
+
+type failingStreamingPlatformRunner struct {
+	err error
+}
+
+type sequenceClock struct {
+	times []time.Time
+	index int
+}
+
+func (clock *sequenceClock) Now() time.Time {
+	if clock.index >= len(clock.times) {
+		return clock.times[len(clock.times)-1]
+	}
+	value := clock.times[clock.index]
+	clock.index++
+	return value
+}
+
 func (r *recordingPlatformRunner) Run(
 	_ context.Context,
 	_ platformprocess.CommandRequest,
 ) (platformprocess.CommandResult, error) {
 	r.calls++
 	return platformprocess.CommandResult{Stdout: []byte("ok")}, nil
+}
+
+func (r failingPlatformRunner) Run(
+	_ context.Context,
+	_ platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{Stdout: []byte("fallback output")}, r.err
 }
 
 func (streamingPlatformRunner) Run(
@@ -45,6 +76,24 @@ func (streamingPlatformRunner) RunStreaming(
 	return platformprocess.CommandResult{Stdout: []byte("streamed")}, nil
 }
 
+func (r failingStreamingPlatformRunner) Run(
+	context.Context,
+	platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{}, r.err
+}
+
+func (r failingStreamingPlatformRunner) RunStreaming(
+	_ context.Context,
+	_ platformprocess.CommandRequest,
+	observer platformprocess.OutputChunkObserver,
+) (platformprocess.CommandResult, error) {
+	if observer != nil {
+		observer(platformprocess.OutputStreamStdout, []byte("streamed"))
+	}
+	return platformprocess.CommandResult{Stdout: []byte("streamed")}, r.err
+}
+
 func TestAdaptPlatformCommandRunnerPropagatesFallbackObserverFailure(t *testing.T) {
 	t.Parallel()
 
@@ -60,6 +109,25 @@ func TestAdaptPlatformCommandRunnerPropagatesFallbackObserverFailure(t *testing.
 	})
 	if !errors.Is(err, observerErr) {
 		t.Fatalf("RunStreaming() error = %v, want observer failure", err)
+	}
+}
+
+func TestAdaptPlatformCommandRunnerPreservesFallbackObserverAndRunnerFailures(t *testing.T) {
+	t.Parallel()
+
+	commandErr := errors.New("fallback command failed")
+	observerErr := errors.New("fallback output observer failed")
+	runner, ok := AdaptPlatformCommandRunner(failingPlatformRunner{err: commandErr}).(interface {
+		RunStreaming(context.Context, effects.CommandRequest, effects.OutputChunkObserver) (effects.CommandResult, error)
+	})
+	if !ok {
+		t.Fatal("adapted runner does not expose Providers streaming effect")
+	}
+	_, err := runner.RunStreaming(t.Context(), effects.CommandRequest{}, func(string, []byte) error {
+		return observerErr
+	})
+	if !errors.Is(err, commandErr) || !errors.Is(err, observerErr) {
+		t.Fatalf("RunStreaming() error = %v, want command and observer failures", err)
 	}
 }
 
@@ -81,6 +149,25 @@ func TestAdaptPlatformCommandRunnerPropagatesStreamingObserverFailure(t *testing
 	}
 }
 
+func TestAdaptPlatformCommandRunnerPreservesStreamingObserverAndRunnerFailures(t *testing.T) {
+	t.Parallel()
+
+	commandErr := errors.New("streaming command failed")
+	observerErr := errors.New("streaming output observer failed")
+	runner, ok := AdaptPlatformCommandRunner(failingStreamingPlatformRunner{err: commandErr}).(interface {
+		RunStreaming(context.Context, effects.CommandRequest, effects.OutputChunkObserver) (effects.CommandResult, error)
+	})
+	if !ok {
+		t.Fatal("adapted runner does not expose Providers streaming effect")
+	}
+	_, err := runner.RunStreaming(t.Context(), effects.CommandRequest{}, func(string, []byte) error {
+		return observerErr
+	})
+	if !errors.Is(err, commandErr) || !errors.Is(err, observerErr) {
+		t.Fatalf("RunStreaming() error = %v, want command and observer failures", err)
+	}
+}
+
 func TestBuiltInDependenciesFromProvidersRunnerConstructsCodexAndClaudeEffects(t *testing.T) {
 	t.Parallel()
 
@@ -91,6 +178,34 @@ func TestBuiltInDependenciesFromProvidersRunnerConstructsCodexAndClaudeEffects(t
 	}
 	if deps.Antigravity != nil {
 		t.Fatalf("built-in Antigravity effect = %#v, want nil without PTY platform dependencies", deps.Antigravity)
+	}
+}
+
+func TestBuiltInDependenciesFromProvidersRunnerInjectsClockIntoCommandEffects(t *testing.T) {
+	t.Parallel()
+
+	clock := &sequenceClock{times: []time.Time{
+		time.Unix(100, 0),
+		time.Unix(137, 0),
+	}}
+	deps := BuiltInDependenciesFromRunner(
+		AdaptPlatformCommandRunner(&recordingPlatformRunner{}),
+		BuiltInRunnerPlatformDependencies{Clock: clock},
+	)
+	result, err := deps.Codex.Execute(
+		context.Background(),
+		providers.ExecuteRequest{
+			Provider:    providers.IDCodex,
+			AttemptID:   "clock-injection",
+			UserMessage: "perform work",
+		},
+		func([]byte) error { return nil },
+	)
+	if err != nil {
+		t.Fatalf("Codex effect execution = %v, want success", err)
+	}
+	if result.DurationMillis != 37*1000 {
+		t.Fatalf("Codex effect duration = %d, want %d", result.DurationMillis, 37*1000)
 	}
 }
 

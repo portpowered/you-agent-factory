@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
@@ -27,6 +28,7 @@ type ExecutableDependencies struct {
 type PTYEffectOptions struct {
 	FactoryRoot   string
 	Allocator     agypty.PTYAllocator
+	Clock         platformclock.Source
 	Executable    string
 	SessionConfig agypty.SessionConfig
 	ExecutableDependencies
@@ -51,7 +53,10 @@ func NewPTYEffect(options PTYEffectOptions) Effect {
 		request providers.ExecuteRequest,
 		observe func([]byte) error,
 	) (EffectResult, error) {
-		started := time.Now()
+		var started time.Time
+		if options.Clock != nil {
+			started = options.Clock.Now()
+		}
 		sessionRef := sessionRefFromRequest(request.ResumeSession)
 		launch, err := buildPTYLaunch(request, ptyLaunchConfig{
 			factoryRoot:   factoryRoot,
@@ -65,8 +70,12 @@ func NewPTYEffect(options PTYEffectOptions) Effect {
 		}
 		result, runErr := runPTY(ctx, options.Allocator, launch, sessionConfig, observe)
 		cleaned := cleanedPTYText(result)
+		durationMillis := int64(0)
+		if options.Clock != nil {
+			durationMillis = options.Clock.Now().Sub(started).Milliseconds()
+		}
 		effectResult := EffectResult{
-			DurationMillis: time.Since(started).Milliseconds(),
+			DurationMillis: durationMillis,
 			SessionRef:     sessionRef,
 			CapturedStdout: []byte(cleaned),
 		}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
@@ -52,6 +53,14 @@ func (wireTestProviderRegistry) ValidateRunnerPrerequisites(platformprocess.Exec
 
 type streamingWorkersCommandRunner struct{}
 
+type failingWorkersCommandRunner struct {
+	err error
+}
+
+type failingStreamingWorkersCommandRunner struct {
+	err error
+}
+
 func (streamingWorkersCommandRunner) Run(
 	context.Context,
 	workers.CommandRequest,
@@ -68,6 +77,73 @@ func (streamingWorkersCommandRunner) RunStreaming(
 		observer(workers.OutputStreamStdout, []byte("streamed output"))
 	}
 	return workers.CommandResult{Stdout: []byte("streamed output")}, nil
+}
+
+func (r failingWorkersCommandRunner) Run(context.Context, workers.CommandRequest) (workers.CommandResult, error) {
+	return workers.CommandResult{Stdout: []byte("fallback output")}, r.err
+}
+
+func (r failingStreamingWorkersCommandRunner) Run(context.Context, workers.CommandRequest) (workers.CommandResult, error) {
+	return workers.CommandResult{}, r.err
+}
+
+func (r failingStreamingWorkersCommandRunner) RunStreaming(
+	_ context.Context,
+	_ workers.CommandRequest,
+	observer workers.OutputChunkObserver,
+) (workers.CommandResult, error) {
+	if observer != nil {
+		observer(workers.OutputStreamStdout, []byte("streamed output"))
+	}
+	return workers.CommandResult{Stdout: []byte("streamed output")}, r.err
+}
+
+type concurrentStreamingWorkersCommandRunner struct {
+	count int
+}
+
+func (r concurrentStreamingWorkersCommandRunner) Run(context.Context, workers.CommandRequest) (workers.CommandResult, error) {
+	return workers.CommandResult{}, nil
+}
+
+func (r concurrentStreamingWorkersCommandRunner) RunStreaming(
+	_ context.Context,
+	_ workers.CommandRequest,
+	observer workers.OutputChunkObserver,
+) (workers.CommandResult, error) {
+	var group sync.WaitGroup
+	for index := 0; index < r.count; index++ {
+		group.Add(1)
+		go func(index int) {
+			defer group.Done()
+			observer(workers.OutputStreamStdout, []byte{byte(index)})
+		}(index)
+	}
+	group.Wait()
+	return workers.CommandResult{}, nil
+}
+
+func TestWorkersProviderCommandRunnerSerializesConcurrentStreamingObservers(t *testing.T) {
+	t.Parallel()
+
+	const count = 32
+	runner := workersProviderCommandRunner{
+		runner: concurrentStreamingWorkersCommandRunner{count: count},
+	}
+	chunks := make([]byte, 0, count)
+	result, err := runner.RunStreaming(t.Context(), providerswire.CommandRequest{}, func(_ string, chunk []byte) error {
+		chunks = append(chunks, chunk[0])
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("RunStreaming() error = %v", err)
+	}
+	if result.Stdout != nil || result.Stderr != nil || result.ExitCode != 0 {
+		t.Fatalf("RunStreaming() result = %#v, want empty result", result)
+	}
+	if len(chunks) != count {
+		t.Fatalf("got %d chunks, want %d", len(chunks), count)
+	}
 }
 
 func TestWorkersProviderCommandRunnerPreservesMockInterception(t *testing.T) {
@@ -139,6 +215,34 @@ func TestWorkersProviderCommandRunnerPropagatesStreamingObserverFailure(t *testi
 	})
 	if !errors.Is(err, observerErr) {
 		t.Fatalf("Workers-to-Providers streaming error = %v, want observer failure", err)
+	}
+}
+
+func TestWorkersProviderCommandRunnerPreservesFallbackObserverAndRunnerFailures(t *testing.T) {
+	t.Parallel()
+
+	commandErr := errors.New("fallback command failed")
+	observerErr := errors.New("fallback output observer failed")
+	runner := workersProviderCommandRunner{runner: failingWorkersCommandRunner{err: commandErr}}
+	_, err := runner.RunStreaming(t.Context(), providerswire.CommandRequest{}, func(string, []byte) error {
+		return observerErr
+	})
+	if !errors.Is(err, commandErr) || !errors.Is(err, observerErr) {
+		t.Fatalf("RunStreaming() error = %v, want command and observer failures", err)
+	}
+}
+
+func TestWorkersProviderCommandRunnerPreservesStreamingObserverAndRunnerFailures(t *testing.T) {
+	t.Parallel()
+
+	commandErr := errors.New("streaming command failed")
+	observerErr := errors.New("streaming output observer failed")
+	runner := workersProviderCommandRunner{runner: failingStreamingWorkersCommandRunner{err: commandErr}}
+	_, err := runner.RunStreaming(t.Context(), providerswire.CommandRequest{}, func(string, []byte) error {
+		return observerErr
+	})
+	if !errors.Is(err, commandErr) || !errors.Is(err, observerErr) {
+		t.Fatalf("RunStreaming() error = %v, want command and observer failures", err)
 	}
 }
 

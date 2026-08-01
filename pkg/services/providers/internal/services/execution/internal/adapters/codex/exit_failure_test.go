@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	effects "github.com/portpowered/infinite-you/pkg/services/providers/internal/effects"
+	effects "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	codex "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex"
 )
 

@@ -1483,7 +1483,7 @@
       "fromOwner": "providers",
       "toOwner": "workers",
       "class": "command",
-      "evidence": "pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty -\u003e pkg/services/workers"
+      "evidence": "pkg/services/providers/internal/services/execution/internal/provider/adapter -\u003e pkg/services/workers"
     },
     {
       "fromOwner": "recordings",
@@ -4311,12 +4311,6 @@
     },
     {
       "packagePath": "pkg/services/providers",
-      "disposition": "retain",
-      "destination": "providers",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/providers/internal/effects",
       "disposition": "retain",
       "destination": "providers",
       "destinationKind": "owner"

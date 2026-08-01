@@ -1,5 +1,4 @@
-// Package effects defines the parent-private Providers execution effects.
-package effects
+package service
 
 import (
 	"context"

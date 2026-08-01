@@ -3,6 +3,7 @@ package wire
 
 import (
 	"context"
+	"errors"
 	"sync"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
@@ -10,7 +11,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	effects "github.com/portpowered/infinite-you/pkg/services/providers/internal/effects"
+	effects "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	acp "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp"
 	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
@@ -83,6 +84,7 @@ func AdaptPlatformCommandRunner(runner platformprocess.CommandRunner) effects.Co
 // PTY execution adapter.
 type AgyPTYPlatformDependencies struct {
 	Allocator effects.PTYAllocator
+	Clock     platformclock.Source
 	Locator   platformprocess.ExecutableLocator
 	Inspector platformfilesystem.PathInspector
 }
@@ -90,6 +92,7 @@ type AgyPTYPlatformDependencies struct {
 // BuiltInRunnerPlatformDependencies carries optional platform facts for
 // built-in adapter effects constructed from the Providers subprocess effect.
 type BuiltInRunnerPlatformDependencies struct {
+	Clock  platformclock.Source
 	AgyPTY AgyPTYPlatformDependencies
 }
 
@@ -104,13 +107,14 @@ func builtInDependenciesFromRunner(
 	return executionservice.BuiltInDependencies{
 		Antigravity: agyadapter.NewPTYEffect(agyadapter.PTYEffectOptions{
 			Allocator: deps.AgyPTY.Allocator,
+			Clock:     deps.AgyPTY.Clock,
 			ExecutableDependencies: agyadapter.ExecutableDependencies{
 				Locator:   deps.AgyPTY.Locator,
 				Inspector: deps.AgyPTY.Inspector,
 			},
 		}),
-		Codex:  codexadapter.NewCommandEffect(runner),
-		Claude: claudeadapter.NewCommandEffect(runner),
+		Codex:  codexadapter.NewCommandEffect(runner, deps.Clock),
+		Claude: claudeadapter.NewCommandEffect(runner, deps.Clock),
 	}
 }
 
@@ -153,9 +157,7 @@ func (runner platformCommandRunner) RunStreaming(
 	}
 	if !ok {
 		result, err := runner.Run(ctx, request)
-		if observeErr := publishCompleteOutput(observer, result.Stdout, result.Stderr); err == nil {
-			err = observeErr
-		}
+		err = errors.Join(err, publishCompleteOutput(observer, result.Stdout, result.Stderr))
 		return result, err
 	}
 	var observerMu sync.Mutex
@@ -170,11 +172,9 @@ func (runner platformCommandRunner) RunStreaming(
 			observerErr = observer(stream, chunk)
 		}
 	})
-	if err == nil {
-		observerMu.Lock()
-		err = observerErr
-		observerMu.Unlock()
-	}
+	observerMu.Lock()
+	err = errors.Join(err, observerErr)
+	observerMu.Unlock()
 	return effects.CommandResult{
 		Stdout:   result.Stdout,
 		Stderr:   result.Stderr,

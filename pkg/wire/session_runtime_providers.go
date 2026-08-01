@@ -3,6 +3,7 @@ package wire
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -153,11 +154,9 @@ func (runner workersProviderCommandRunner) RunStreaming(
 				observerErr = observer(stream, chunk)
 			}
 		})
-		if err == nil {
-			observerMu.Lock()
-			err = observerErr
-			observerMu.Unlock()
-		}
+		observerMu.Lock()
+		err = errors.Join(err, observerErr)
+		observerMu.Unlock()
 		return providerswire.CommandResult{
 			Stdout:   result.Stdout,
 			Stderr:   result.Stderr,
@@ -174,9 +173,7 @@ func (runner workersProviderCommandRunner) RunStreaming(
 			observerErr = observer(providerswire.OutputStreamStderr, append([]byte(nil), result.Stderr...))
 		}
 	}
-	if err == nil {
-		err = observerErr
-	}
+	err = errors.Join(err, observerErr)
 	return providerswire.CommandResult{
 		Stdout:   result.Stdout,
 		Stderr:   result.Stderr,
@@ -1003,8 +1000,13 @@ func provideProvidersAgyPTYPlatform(edges serviceedges.Edges) (providerswire.Agy
 	if executableInspector == nil {
 		executableInspector = platformfilesystem.Local{}
 	}
+	clock := edges.Clock
+	if clock == nil {
+		clock = platformclock.Real{}
+	}
 	return providerswire.AgyPTYPlatformDependencies{
 		Allocator: allocator,
+		Clock:     clock,
 		Locator:   executableLocator,
 		Inspector: executableInspector,
 	}, nil

@@ -10,7 +10,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	effects "github.com/portpowered/infinite-you/pkg/services/providers/internal/effects"
+	effects "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	codex "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex"
 	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
@@ -54,6 +54,22 @@ func TestCommandEffectPropagatesStreamingObserverFailure(t *testing.T) {
 	}, func([]byte) error { return observerErr })
 	if !errors.Is(err, observerErr) {
 		t.Fatalf("Execute() error = %v, want observer failure", err)
+	}
+}
+
+func TestCommandEffectPreservesFallbackObserverAndRunnerFailures(t *testing.T) {
+	t.Parallel()
+
+	commandErr := errors.New("fallback command failed")
+	observerErr := errors.New("fallback output observer failed")
+	effect := codex.NewCommandEffect(failingCommandRunner{err: commandErr})
+	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
+		Provider:    providers.IDCodex,
+		AttemptID:   "combined-failure",
+		UserMessage: "perform work",
+	}, func([]byte) error { return observerErr })
+	if !errors.Is(err, commandErr) || !errors.Is(err, observerErr) {
+		t.Fatalf("Execute() error = %v, want command and observer failures", err)
 	}
 }
 
@@ -155,6 +171,10 @@ type recordingCommandRunner struct {
 
 type streamingObserverErrorRunner struct{}
 
+type failingCommandRunner struct {
+	err error
+}
+
 func (streamingObserverErrorRunner) Run(
 	context.Context,
 	effects.CommandRequest,
@@ -168,6 +188,13 @@ func (runner streamingObserverErrorRunner) RunStreaming(
 	observer effects.OutputChunkObserver,
 ) (effects.CommandResult, error) {
 	return effects.CommandResult{}, observer(effects.OutputStreamStdout, []byte("output"))
+}
+
+func (runner failingCommandRunner) Run(
+	_ context.Context,
+	_ effects.CommandRequest,
+) (effects.CommandResult, error) {
+	return effects.CommandResult{Stdout: []byte("fallback output")}, runner.err
 }
 
 func (runner *recordingCommandRunner) Run(

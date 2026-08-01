@@ -18,7 +18,6 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	effects "github.com/portpowered/infinite-you/pkg/services/providers/internal/effects"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	acpwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp/wire"
 	builtinswire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/builtins/wire"
@@ -30,34 +29,34 @@ import (
 
 // CommandRunner is the private Providers execution effect accepted by root
 // composition. It is deliberately not a Workers command contract.
-type CommandRunner = effects.CommandRunner
-type CommandRequest = effects.CommandRequest
-type CommandResult = effects.CommandResult
-type OutputChunkObserver = effects.OutputChunkObserver
+type CommandRunner = providerservice.CommandRunner
+type CommandRequest = providerservice.CommandRequest
+type CommandResult = providerservice.CommandResult
+type OutputChunkObserver = providerservice.OutputChunkObserver
 
 const (
-	OutputStreamStdout = effects.OutputStreamStdout
-	OutputStreamStderr = effects.OutputStreamStderr
+	OutputStreamStdout = providerservice.OutputStreamStdout
+	OutputStreamStderr = providerservice.OutputStreamStderr
 )
 
 // PTYAllocator is the private Providers Agy effect contract. Workers receives
 // a separate adapter at the application composition boundary.
-type PTYAllocator = effects.PTYAllocator
-type PTYSession = effects.PTYSession
-type PTYSessionConfig = effects.PTYSessionConfig
-type PTYProcessLaunch = effects.PTYProcessLaunch
-type PTYSessionResult = effects.PTYSessionResult
+type PTYAllocator = providerservice.PTYAllocator
+type PTYSession = providerservice.PTYSession
+type PTYSessionConfig = providerservice.PTYSessionConfig
+type PTYProcessLaunch = providerservice.PTYProcessLaunch
+type PTYSessionResult = providerservice.PTYSessionResult
 
 // PTY errors are exposed only at this construction boundary so the
 // composition adapter can preserve Workers' established error identity while
 // keeping the implementation-owned effect sentinels private to Providers.
 var (
-	ErrPTYUnsupportedPlatform = effects.ErrPTYUnsupportedPlatform
-	ErrPTYAllocationFailed    = effects.ErrPTYAllocationFailed
-	ErrPTYSessionTimedOut     = effects.ErrPTYSessionTimedOut
-	ErrPTYNonzeroExit         = effects.ErrPTYNonzeroExit
-	ErrPTYClockRequired       = effects.ErrPTYClockRequired
-	ErrPTYHostRequired        = effects.ErrPTYHostRequired
+	ErrPTYUnsupportedPlatform = providerservice.ErrPTYUnsupportedPlatform
+	ErrPTYAllocationFailed    = providerservice.ErrPTYAllocationFailed
+	ErrPTYSessionTimedOut     = providerservice.ErrPTYSessionTimedOut
+	ErrPTYNonzeroExit         = providerservice.ErrPTYNonzeroExit
+	ErrPTYClockRequired       = providerservice.ErrPTYClockRequired
+	ErrPTYHostRequired        = providerservice.ErrPTYHostRequired
 )
 
 // NewAgyPTYAllocator constructs the Providers-owned PTY implementation.
@@ -69,6 +68,7 @@ func NewAgyPTYAllocator(host platformpty.Host, clock platformclock.Source) (PTYA
 // PTY execution adapter.
 type AgyPTYPlatformDependencies struct {
 	Allocator PTYAllocator
+	Clock     platformclock.Source
 	Locator   platformprocess.ExecutableLocator
 	Inspector platformfilesystem.PathInspector
 }
@@ -157,7 +157,7 @@ func (o commandRunnerOption) apply(opts *wireOptions) {
 }
 
 // WithCommandRunner injects the platform subprocess runner used by built-in
-// Codex and Claude command effects. The platform runner is adapted into the
+// Codex and Claude command execution. The platform runner is adapted into the
 // Providers-owned private effect contract inside this package's wire path.
 func WithCommandRunner(runner platformprocess.CommandRunner) Option {
 	return commandRunnerOption{runner: executionwire.AdaptPlatformCommandRunner(runner)}
@@ -361,8 +361,10 @@ func executionserviceRegistrations(commandRunner CommandRunner, agyPTYPlatform A
 	return executionwire.BuiltInRegistrations(executionwire.BuiltInDependenciesFromRunner(
 		commandRunner,
 		executionwire.BuiltInRunnerPlatformDependencies{
+			Clock: agyPTYPlatform.Clock,
 			AgyPTY: executionwire.AgyPTYPlatformDependencies{
 				Allocator: agyPTYPlatform.Allocator,
+				Clock:     agyPTYPlatform.Clock,
 				Locator:   agyPTYPlatform.Locator,
 				Inspector: agyPTYPlatform.Inspector,
 			},
