@@ -1,3 +1,5 @@
 {
+  "id": "claude-golden-structured-failure-session",
+  "kind": "session_id",
   "provider": "claude"
 }
