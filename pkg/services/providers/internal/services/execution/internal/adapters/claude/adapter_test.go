@@ -3,15 +3,49 @@ package claude_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"reflect"
 	"testing"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	effects "github.com/portpowered/infinite-you/pkg/services/providers/internal/effects"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
 	claude "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude"
 	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
 )
+
+func TestCommandEffectPropagatesStreamingObserverFailure(t *testing.T) {
+	t.Parallel()
+
+	observerErr := errors.New("output observer failed")
+	effect := claude.NewCommandEffect(streamingObserverErrorRunner{})
+	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
+		Provider:    providers.IDClaude,
+		AttemptID:   "observer-failure",
+		UserMessage: "perform work",
+	}, func([]byte) error { return observerErr })
+	if !errors.Is(err, observerErr) {
+		t.Fatalf("Execute() error = %v, want observer failure", err)
+	}
+}
+
+type streamingObserverErrorRunner struct{}
+
+func (streamingObserverErrorRunner) Run(
+	context.Context,
+	effects.CommandRequest,
+) (effects.CommandResult, error) {
+	return effects.CommandResult{}, nil
+}
+
+func (streamingObserverErrorRunner) RunStreaming(
+	_ context.Context,
+	_ effects.CommandRequest,
+	observer effects.OutputChunkObserver,
+) (effects.CommandResult, error) {
+	return effects.CommandResult{}, observer(effects.OutputStreamStdout, []byte("output"))
+}
 
 func TestClaudeRootPreservesRequestOrderedStreamFinalAndSession(t *testing.T) {
 	t.Parallel()

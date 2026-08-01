@@ -11,14 +11,14 @@ import (
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	claude "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/claude"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
+	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
 )
 
 func TestCommandEffectRendersProviderNeutralReasoningEffort(t *testing.T) {
 	t.Parallel()
 
 	runner := testutil.NewProviderCommandRunner()
-	effect := claude.NewCommandEffect(workers.AdaptCommandRunner(runner))
+	effect := claude.NewCommandEffect(executionwire.AdaptPlatformCommandRunner(runner))
 	if effect == nil {
 		t.Fatal("NewCommandEffect() returned nil")
 	}
@@ -59,7 +59,7 @@ func TestCommandEffectRejectsUnsupportedReasoningEffort(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			runner := testutil.NewProviderCommandRunner()
-			effect := claude.NewCommandEffect(workers.AdaptCommandRunner(runner))
+			effect := claude.NewCommandEffect(executionwire.AdaptPlatformCommandRunner(runner))
 			_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
 				Provider:        providers.IDClaude,
 				AttemptID:       "claude-invalid-effort-dispatch",

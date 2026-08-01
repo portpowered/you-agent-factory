@@ -7,13 +7,14 @@ import (
 	"strings"
 	"time"
 
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	effects "github.com/portpowered/infinite-you/pkg/services/providers/internal/effects"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/commanddispatch"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-var commandAutomationDefaults = []workers.CommandEnvEntry{
+var commandAutomationDefaults = []platformprocess.CommandEnvEntry{
 	{Name: "GIT_EDITOR", Value: "true"},
 	{Name: "GIT_SEQUENCE_EDITOR", Value: "true"},
 	{Name: "GIT_MERGE_AUTOEDIT", Value: "no"},
@@ -23,7 +24,7 @@ var commandAutomationDefaults = []workers.CommandEnvEntry{
 }
 
 // NewCommandEffect binds one streaming subprocess runner to the Codex adapter.
-func NewCommandEffect(runner workers.CommandRunner) Effect {
+func NewCommandEffect(runner effects.CommandRunner) Effect {
 	if runner == nil {
 		return nil
 	}
@@ -49,9 +50,9 @@ func NewCommandEffect(runner workers.CommandRunner) Effect {
 	})
 }
 
-func buildCommand(request providers.ExecuteRequest) (workers.CommandRequest, error) {
+func buildCommand(request providers.ExecuteRequest) (effects.CommandRequest, error) {
 	if err := validateCodexOptionalCapabilities(request); err != nil {
-		return workers.CommandRequest{}, err
+		return effects.CommandRequest{}, err
 	}
 	args := []string{"exec", "--json"}
 	if request.SkipPermissions {
@@ -62,13 +63,13 @@ func buildCommand(request providers.ExecuteRequest) (workers.CommandRequest, err
 	}
 	effort, ok := providers.ReasoningEffort(request.ReasoningEffort).Canonical()
 	if !ok {
-		return workers.CommandRequest{}, fmt.Errorf("unsupported reasoning effort %q", request.ReasoningEffort)
+		return effects.CommandRequest{}, fmt.Errorf("unsupported reasoning effort %q", request.ReasoningEffort)
 	}
 	if effort != "" {
 		args = append(args, "--config", `model_reasoning_effort="`+effort+`"`)
 	}
 	args = append(args, "-")
-	return commanddispatch.WorkersCommand(request, workers.CommandRequest{
+	return commanddispatch.Request(request, effects.CommandRequest{
 		Command: string(providers.IDCodex),
 		Args:    args,
 		Stdin:   []byte(request.UserMessage),
@@ -88,27 +89,26 @@ func validateCodexOptionalCapabilities(request providers.ExecuteRequest) error {
 }
 
 func buildCommandEnv(processEnvironment []string, envVars map[string]string) []string {
-	return workers.MergeCommandEnv(
+	return platformprocess.MergeCommandEnv(
 		processEnvironment,
-		workers.CommandEnvEntriesFromMap(envVars),
+		platformprocess.CommandEnvEntriesFromMap(envVars),
 		commandAutomationDefaults,
 	)
 }
 
 func runStreaming(
 	ctx context.Context,
-	runner workers.CommandRunner,
+	runner effects.CommandRunner,
 	request providers.ExecuteRequest,
-	command workers.CommandRequest,
+	command effects.CommandRequest,
 	observe func([]byte) error,
-) (workers.CommandResult, error) {
-	if streaming, ok := runner.(interface {
-		RunStreaming(context.Context, workers.CommandRequest, workers.OutputChunkObserver) (workers.CommandResult, error)
-	}); ok {
-		return streaming.RunStreaming(ctx, command, func(stream string, chunk []byte) {
-			if strings.TrimSpace(stream) == workers.OutputStreamStdout {
-				_ = observe(chunk)
+) (effects.CommandResult, error) {
+	if streaming, ok := runner.(effects.StreamingCommandRunner); ok {
+		return streaming.RunStreaming(ctx, command, func(stream string, chunk []byte) error {
+			if strings.TrimSpace(stream) == effects.OutputStreamStdout {
+				return observe(chunk)
 			}
+			return nil
 		})
 	}
 	result, err := runner.Run(ctx, command)

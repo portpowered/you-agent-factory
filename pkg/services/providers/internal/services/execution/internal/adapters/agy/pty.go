@@ -13,9 +13,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty"
-	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/commanddispatch"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/provider/commandenv"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // ExecutableDependencies are policy-free host effects used to resolve the
@@ -122,24 +120,15 @@ func buildPTYLaunch(
 	if err := agypty.ValidateArgv(argv); err != nil {
 		return ptyLaunch{}, err
 	}
-	command := commanddispatch.WorkersCommand(request, workers.CommandRequest{
-		Command: argv[0],
-		Args:    argv[1:],
-		Env: commandenv.Build(
-			request.ProcessEnvironment,
-			request.EnvVars,
-		),
-		WorkDir: workDir,
-	})
-	if len(request.InputTokens) > 0 {
-		command.InputTokens = append([]any(nil), request.InputTokens...)
-	}
 	return ptyLaunch{
 		launch: agypty.ProcessLaunch{
-			Executable: command.Command,
-			Argv:       append([]string{command.Command}, command.Args...),
-			WorkDir:    command.WorkDir,
-			Env:        command.Env,
+			Executable: argv[0],
+			Argv:       append([]string(nil), argv...),
+			WorkDir:    workDir,
+			Env: commandenv.Build(
+				request.ProcessEnvironment,
+				request.EnvVars,
+			),
 		},
 	}, nil
 }

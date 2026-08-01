@@ -4316,6 +4316,12 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/providers/internal/effects",
+      "disposition": "retain",
+      "destination": "providers",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/providers/internal/service",
       "disposition": "retain",
       "destination": "providers",

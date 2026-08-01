@@ -3,6 +3,7 @@ package wire
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
@@ -13,6 +14,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
+	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
@@ -46,6 +48,98 @@ func (wireTestProviderRegistry) ResolveRunnerSelection(string, string, string) (
 }
 func (wireTestProviderRegistry) ValidateRunnerPrerequisites(platformprocess.ExecutableLocator, string) error {
 	return nil
+}
+
+type streamingWorkersCommandRunner struct{}
+
+func (streamingWorkersCommandRunner) Run(
+	context.Context,
+	workers.CommandRequest,
+) (workers.CommandResult, error) {
+	return workers.CommandResult{}, nil
+}
+
+func (streamingWorkersCommandRunner) RunStreaming(
+	_ context.Context,
+	_ workers.CommandRequest,
+	observer workers.OutputChunkObserver,
+) (workers.CommandResult, error) {
+	if observer != nil {
+		observer(workers.OutputStreamStdout, []byte("streamed output"))
+	}
+	return workers.CommandResult{Stdout: []byte("streamed output")}, nil
+}
+
+func TestWorkersProviderCommandRunnerPreservesMockInterception(t *testing.T) {
+	t.Parallel()
+
+	platformRunner := testutil.NewProviderCommandRunner(
+		platformprocess.CommandResult{Stdout: []byte("live provider should not run")},
+	)
+	runner := workersProviderCommandRunner{runner: &workers.MockWorkerCommandRunner{
+		Config: &workers.MockWorkersConfig{
+			MockWorkers: []workers.MockWorkerConfig{{
+				WorkerName:      "mocked-worker",
+				WorkstationName: "mock-process",
+				RunType:         workers.MockWorkerRunTypeAccept,
+			}},
+		},
+		Next: workers.AdaptCommandRunner(platformRunner),
+	}}
+	_, err := runner.Run(t.Context(), providerswire.CommandRequest{
+		Command:         "codex",
+		AttemptID:       "mock-dispatch",
+		WorkerType:      "mocked-worker",
+		WorkstationName: "mock-process",
+	})
+	if err != nil {
+		t.Fatalf("Workers-to-Providers effect projection error = %v", err)
+	}
+	if platformRunner.CallCount() != 0 {
+		t.Fatalf("platform runner calls = %d, want mock interception", platformRunner.CallCount())
+	}
+}
+
+func TestWorkersProviderCommandRunnerFallbackStreamingRunsOnce(t *testing.T) {
+	t.Parallel()
+
+	platformRunner := testutil.NewProviderCommandRunner(
+		platformprocess.CommandResult{Stdout: []byte("complete output")},
+	)
+	runner := workersProviderCommandRunner{runner: workers.AdaptCommandRunner(platformRunner)}
+	var chunks []string
+	result, err := runner.RunStreaming(t.Context(), providerswire.CommandRequest{
+		Command:   "codex",
+		AttemptID: "fallback-streaming",
+	}, func(stream string, chunk []byte) error {
+		chunks = append(chunks, stream+":"+string(chunk))
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Workers-to-Providers fallback streaming error = %v", err)
+	}
+	if result.Stdout == nil || string(result.Stdout) != "complete output" {
+		t.Fatalf("fallback streaming stdout = %q, want complete output", result.Stdout)
+	}
+	if platformRunner.CallCount() != 1 {
+		t.Fatalf("platform runner calls = %d, want one fallback execution", platformRunner.CallCount())
+	}
+	if len(chunks) != 1 || chunks[0] != providerswire.OutputStreamStdout+":complete output" {
+		t.Fatalf("fallback output chunks = %#v, want one complete stdout chunk", chunks)
+	}
+}
+
+func TestWorkersProviderCommandRunnerPropagatesStreamingObserverFailure(t *testing.T) {
+	t.Parallel()
+
+	observerErr := errors.New("Workers output observer failed")
+	runner := workersProviderCommandRunner{runner: streamingWorkersCommandRunner{}}
+	_, err := runner.RunStreaming(t.Context(), providerswire.CommandRequest{}, func(string, []byte) error {
+		return observerErr
+	})
+	if !errors.Is(err, observerErr) {
+		t.Fatalf("Workers-to-Providers streaming error = %v, want observer failure", err)
+	}
 }
 
 func TestProvideConductorInvocationWithProgressFactory_AcceptsDefaultProvidersService(t *testing.T) {

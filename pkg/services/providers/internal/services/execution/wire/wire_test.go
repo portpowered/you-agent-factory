@@ -2,31 +2,22 @@ package wire
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	effects "github.com/portpowered/infinite-you/pkg/services/providers/internal/effects"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty"
 	executionservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/service"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
-
-type recordingWorkersRunner struct {
-	calls int
-}
-
-func (r *recordingWorkersRunner) Run(
-	_ context.Context,
-	_ workers.CommandRequest,
-) (workers.CommandResult, error) {
-	r.calls++
-	return workers.CommandResult{Stdout: []byte("ok")}, nil
-}
 
 type recordingPlatformRunner struct {
 	calls int
 }
+
+type streamingPlatformRunner struct{}
 
 func (r *recordingPlatformRunner) Run(
 	_ context.Context,
@@ -36,24 +27,65 @@ func (r *recordingPlatformRunner) Run(
 	return platformprocess.CommandResult{Stdout: []byte("ok")}, nil
 }
 
-func TestBuiltInDependenciesFromWorkersRunnerConstructsCodexAndClaudeEffects(t *testing.T) {
+func (streamingPlatformRunner) Run(
+	context.Context,
+	platformprocess.CommandRequest,
+) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{}, nil
+}
+
+func (streamingPlatformRunner) RunStreaming(
+	_ context.Context,
+	_ platformprocess.CommandRequest,
+	observer platformprocess.OutputChunkObserver,
+) (platformprocess.CommandResult, error) {
+	if observer != nil {
+		observer(platformprocess.OutputStreamStdout, []byte("streamed"))
+	}
+	return platformprocess.CommandResult{Stdout: []byte("streamed")}, nil
+}
+
+func TestAdaptPlatformCommandRunnerPropagatesFallbackObserverFailure(t *testing.T) {
 	t.Parallel()
 
-	runner := &recordingWorkersRunner{}
-	deps := BuiltInDependenciesFromWorkersRunner(runner)
-	if deps.Codex == nil || deps.Claude == nil {
-		t.Fatalf("built-in dependencies = %#v, want codex and claude effects", deps)
+	observerErr := errors.New("fallback output observer failed")
+	runner, ok := AdaptPlatformCommandRunner(&recordingPlatformRunner{}).(interface {
+		RunStreaming(context.Context, effects.CommandRequest, effects.OutputChunkObserver) (effects.CommandResult, error)
+	})
+	if !ok {
+		t.Fatal("adapted runner does not expose Providers streaming effect")
 	}
-	if deps.Antigravity != nil {
-		t.Fatalf("built-in Antigravity effect = %#v, want nil without PTY platform dependencies", deps.Antigravity)
+	_, err := runner.RunStreaming(t.Context(), effects.CommandRequest{}, func(string, []byte) error {
+		return observerErr
+	})
+	if !errors.Is(err, observerErr) {
+		t.Fatalf("RunStreaming() error = %v, want observer failure", err)
 	}
 }
 
-func TestBuiltInDependenciesFromRunnerAdaptsPlatformRunner(t *testing.T) {
+func TestAdaptPlatformCommandRunnerPropagatesStreamingObserverFailure(t *testing.T) {
+	t.Parallel()
+
+	observerErr := errors.New("streaming output observer failed")
+	runner, ok := AdaptPlatformCommandRunner(streamingPlatformRunner{}).(interface {
+		RunStreaming(context.Context, effects.CommandRequest, effects.OutputChunkObserver) (effects.CommandResult, error)
+	})
+	if !ok {
+		t.Fatal("adapted runner does not expose Providers streaming effect")
+	}
+	_, err := runner.RunStreaming(t.Context(), effects.CommandRequest{}, func(string, []byte) error {
+		return observerErr
+	})
+	if !errors.Is(err, observerErr) {
+		t.Fatalf("RunStreaming() error = %v, want observer failure", err)
+	}
+}
+
+func TestBuiltInDependenciesFromProvidersRunnerConstructsCodexAndClaudeEffects(t *testing.T) {
 	t.Parallel()
 
 	runner := &recordingPlatformRunner{}
-	deps := BuiltInDependenciesFromRunner(runner)
+	deps := BuiltInDependenciesFromRunner(AdaptPlatformCommandRunner(runner))
 	if deps.Codex == nil || deps.Claude == nil {
 		t.Fatalf("built-in dependencies = %#v, want codex and claude effects", deps)
 	}
@@ -62,11 +94,11 @@ func TestBuiltInDependenciesFromRunnerAdaptsPlatformRunner(t *testing.T) {
 	}
 }
 
-func TestBuiltInDependenciesFromWorkersRunnerConstructsAgyPTYEffectWithAllocator(t *testing.T) {
+func TestBuiltInDependenciesFromProvidersRunnerConstructsAgyPTYEffectWithAllocator(t *testing.T) {
 	t.Parallel()
 
-	runner := &recordingWorkersRunner{}
-	deps := BuiltInDependenciesFromWorkersRunner(runner, BuiltInRunnerPlatformDependencies{
+	runner := &recordingPlatformRunner{}
+	deps := BuiltInDependenciesFromRunner(AdaptPlatformCommandRunner(runner), BuiltInRunnerPlatformDependencies{
 		AgyPTY: AgyPTYPlatformDependencies{
 			Allocator: &agypty.MockAllocator{},
 			Locator:   platformprocess.HostExecutableLocator{},
@@ -78,22 +110,22 @@ func TestBuiltInDependenciesFromWorkersRunnerConstructsAgyPTYEffectWithAllocator
 	}
 }
 
-func TestNewBuiltInServiceUsesWorkersRunnerDependencies(t *testing.T) {
+func TestNewBuiltInServiceUsesProvidersRunnerDependencies(t *testing.T) {
 	t.Parallel()
 
 	catalogService, err := catalogwire.NewService()
 	if err != nil {
 		t.Fatalf("catalogwire.NewService() error = %v", err)
 	}
-	runner := &recordingWorkersRunner{}
+	runner := &recordingPlatformRunner{}
 	service, err := NewBuiltInService(
 		catalogService,
-		BuiltInDependenciesFromWorkersRunner(runner),
+		BuiltInDependenciesFromRunner(AdaptPlatformCommandRunner(runner)),
 	)
 	if err != nil || service == nil {
 		t.Fatalf("NewBuiltInService() = (%v, %v), want execution service", service, err)
 	}
-	if got := executionservice.BuiltInRegistrations(BuiltInDependenciesFromWorkersRunner(runner)); len(got) != 3 {
+	if got := executionservice.BuiltInRegistrations(BuiltInDependenciesFromRunner(AdaptPlatformCommandRunner(runner))); len(got) != 3 {
 		t.Fatalf("built-in registrations = %d, want 3 antigravity/codex/claude adapters", len(got))
 	}
 }
