@@ -8,45 +8,34 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 // TestExplicitProviderAndModelReachSelectedProviderEdge proves that when a worker
 // declares an explicit provider and model, root.BuildProcess dispatch invokes the
-// matching registered provider-process edge, completes factory dispatch through
-// that edge, and does not invoke a different registered provider edge for the
-// same work.
+// matching provider command edge, completes factory dispatch through that edge,
+// and does not invoke a different provider command for the same work.
 func TestExplicitProviderAndModelReachSelectedProviderEdge(t *testing.T) {
 	const (
-		selectedProviderID     = "selected.provider"
-		selectedProviderAlias  = "selected"
-		alternateProviderID    = "alternate.provider"
-		alternateProviderAlias = "alternate"
-		explicitModel          = "explicit-selection-model"
+		explicitModel = "explicit-selection-model"
 	)
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	writeExplicitSelectionWorker(t, dir, selectedProviderAlias, explicitModel)
+	writeExplicitSelectionWorker(t, dir, string(modelprovider.ProviderCodex), explicitModel)
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"explicit provider selection"}`))
 
-	selectedProvider := support.NewProgressingExternalProvider(
-		t,
-		selectedProviderID,
-		selectedProviderAlias,
-		"structured progress COMPLETE",
-	)
-	alternateProvider := support.NewProgressingExternalProvider(
-		t,
-		alternateProviderID,
-		alternateProviderAlias,
-		"alternate provider must not run",
-	)
+	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: []byte("structured progress COMPLETE"),
+	})
 
 	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(
 		t,
 		dir,
-		support.ProviderEdges(selectedProvider, alternateProvider),
+		serviceedges.Edges{ProviderCommandRunner: runner},
 		20*time.Second,
 	)
 
@@ -57,74 +46,40 @@ func TestExplicitProviderAndModelReachSelectedProviderEdge(t *testing.T) {
 		t.Fatalf("failed place tokens = %d, want 0", got)
 	}
 
-	selectedStats := selectedProvider.Stats()
-	if selectedStats.InvokeCalls != 1 {
-		t.Fatalf("selected provider invoke calls = %d, want 1", selectedStats.InvokeCalls)
+	if got := runner.CallCount(); got != 1 {
+		t.Fatalf("provider command calls = %d, want exactly one selected-provider invocation", got)
 	}
-	if selectedStats.ProgressWrites < 1 {
-		t.Fatalf(
-			"selected provider progress writes = %d, want at least 1 through the conductor response writer",
-			selectedStats.ProgressWrites,
-		)
+	request := runner.LastRequest()
+	if request.Command != string(modelprovider.ProviderCodex) {
+		t.Fatalf("provider command = %q, want selected provider %q", request.Command, modelprovider.ProviderCodex)
 	}
-	if selectedStats.TerminalCloses != 1 {
-		t.Fatalf("selected provider terminal closes = %d, want exactly one terminal outcome", selectedStats.TerminalCloses)
-	}
-	alternateStats := alternateProvider.Stats()
-	if alternateStats.InvokeCalls != 0 {
-		t.Fatalf(
-			"alternate provider invoke calls = %d, want 0 when worker selected %q",
-			alternateStats.InvokeCalls,
-			selectedProviderAlias,
-		)
-	}
-	if alternateStats.ProgressWrites != 0 || alternateStats.TerminalCloses != 0 {
-		t.Fatalf(
-			"alternate provider side effects = progress:%d terminal:%d, want inert when not selected",
-			alternateStats.ProgressWrites,
-			alternateStats.TerminalCloses,
-		)
-	}
+	support.AssertArgsContainSequence(t, request.Args, []string{"--model", explicitModel})
 }
 
 // TestWorkerProviderOverridesGlobalDefault proves that when a global default
-// provider is configured and both the default and worker provider edges are
-// registered, a worker-authored modelProvider dispatches through the worker
-// provider edge and leaves the global default provider edge inert for that work.
+// provider is configured, a worker-authored modelProvider dispatches through
+// the worker provider command edge instead of the global default command.
 func TestWorkerProviderOverridesGlobalDefault(t *testing.T) {
 	const (
-		defaultProviderID    = "global.default.provider"
-		defaultProviderAlias = "global-default"
-		workerProviderID     = "worker.override.provider"
-		workerProviderAlias  = "worker-override"
-		workerModel          = "worker-override-model"
-		globalDefaultModel   = "global-default-model"
+		workerModel        = "worker-override-model"
+		globalDefaultModel = "global-default-model"
 	)
 
-	t.Setenv(operatorsettings.EnvDefaultWorkerModelProvider, defaultProviderAlias)
+	t.Setenv(operatorsettings.EnvDefaultWorkerModelProvider, string(modelprovider.ProviderClaude))
 	t.Setenv(operatorsettings.EnvDefaultWorkerModel, globalDefaultModel)
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
-	writeExplicitSelectionWorker(t, dir, workerProviderAlias, workerModel)
+	writeExplicitSelectionWorker(t, dir, string(modelprovider.ProviderCodex), workerModel)
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"worker provider overrides global default"}`))
 
-	defaultProvider := support.NewProgressingExternalProvider(
-		t,
-		defaultProviderID,
-		defaultProviderAlias,
-		"global default provider must not run",
-	)
-	workerProvider := support.NewProgressingExternalProvider(
-		t,
-		workerProviderID,
-		workerProviderAlias,
-		"structured progress COMPLETE",
-	)
+	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: []byte("structured progress COMPLETE"),
+	})
 
 	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(
 		t,
 		dir,
-		support.ProviderEdges(defaultProvider, workerProvider),
+		serviceedges.Edges{ProviderCommandRunner: runner},
 		20*time.Second,
 	)
 
@@ -135,70 +90,32 @@ func TestWorkerProviderOverridesGlobalDefault(t *testing.T) {
 		t.Fatalf("failed place tokens = %d, want 0", got)
 	}
 
-	workerStats := workerProvider.Stats()
-	if workerStats.InvokeCalls != 1 {
-		t.Fatalf("worker provider invoke calls = %d, want 1", workerStats.InvokeCalls)
+	if got := runner.CallCount(); got != 1 {
+		t.Fatalf("provider command calls = %d, want exactly one worker-provider invocation", got)
 	}
-	if workerStats.ProgressWrites < 1 {
-		t.Fatalf(
-			"worker provider progress writes = %d, want at least 1 through the conductor response writer",
-			workerStats.ProgressWrites,
-		)
+	request := runner.LastRequest()
+	if request.Command != string(modelprovider.ProviderCodex) {
+		t.Fatalf("provider command = %q, want worker provider %q", request.Command, modelprovider.ProviderCodex)
 	}
-	if workerStats.TerminalCloses != 1 {
-		t.Fatalf("worker provider terminal closes = %d, want exactly one terminal outcome", workerStats.TerminalCloses)
-	}
-
-	defaultStats := defaultProvider.Stats()
-	if defaultStats.InvokeCalls != 0 {
-		t.Fatalf(
-			"global default provider invoke calls = %d, want 0 when worker selected %q",
-			defaultStats.InvokeCalls,
-			workerProviderAlias,
-		)
-	}
-	if defaultStats.ProgressWrites != 0 || defaultStats.TerminalCloses != 0 {
-		t.Fatalf(
-			"global default provider side effects = progress:%d terminal:%d, want inert when worker provider overrides",
-			defaultStats.ProgressWrites,
-			defaultStats.TerminalCloses,
-		)
-	}
+	support.AssertArgsContainSequence(t, request.Args, []string{"--model", workerModel})
 }
 
 // TestUnknownProviderFailsBeforeProcessStart proves that when a worker names an
-// unregistered provider alias, root.BuildProcess construction leaves registered
-// provider edges inert and factory startup fails with a stable validation error
-// before any provider invoke or customer process lifecycle starts.
+// unregistered provider alias, root.BuildProcess construction leaves the
+// provider command edge inert and factory startup fails with a stable
+// validation error before any provider invoke or customer process lifecycle
+// starts.
 func TestUnknownProviderFailsBeforeProcessStart(t *testing.T) {
 	const (
-		unknownProviderAlias    = "unknown-provider"
-		registeredProviderID    = "registered.provider"
-		registeredProviderAlias = "registered"
-		unknownModel            = "unknown-model"
+		unknownProviderAlias = "unknown-provider"
+		unknownModel         = "unknown-model"
 	)
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	writeExplicitSelectionWorker(t, dir, unknownProviderAlias, unknownModel)
 
-	registeredProvider := support.NewProgressingExternalProvider(
-		t,
-		registeredProviderID,
-		registeredProviderAlias,
-		"registered provider must not run",
-	)
-
-	process := support.BuildProcess(t, support.ProviderEdges(registeredProvider))
-
-	constructionStats := registeredProvider.Stats()
-	if constructionStats.InvokeCalls != 0 || constructionStats.ProgressWrites != 0 ||
-		constructionStats.TerminalCloses != 0 || constructionStats.DiscoverCalls != 0 ||
-		constructionStats.CapabilityCalls != 0 {
-		t.Fatalf(
-			"construction side effects = %#v, want inert registry composition",
-			constructionStats,
-		)
-	}
+	runner := support.NewShapedProviderCommandRunner()
+	process := support.BuildProcess(t, serviceedges.Edges{ProviderCommandRunner: runner})
 
 	inputs := support.FakeInputs(t.Context(), []string{
 		"you", "run",
@@ -232,19 +149,8 @@ func TestUnknownProviderFailsBeforeProcessStart(t *testing.T) {
 		)
 	}
 
-	runStats := registeredProvider.Stats()
-	if runStats.InvokeCalls != 0 {
-		t.Fatalf(
-			"registered provider invoke calls after failed startup = %d, want 0",
-			runStats.InvokeCalls,
-		)
-	}
-	if runStats.ProgressWrites != 0 || runStats.TerminalCloses != 0 {
-		t.Fatalf(
-			"registered provider side effects after failed startup = progress:%d terminal:%d, want inert",
-			runStats.ProgressWrites,
-			runStats.TerminalCloses,
-		)
+	if got := runner.CallCount(); got != 0 {
+		t.Fatalf("provider command calls after failed startup = %d, want 0", got)
 	}
 }
 
