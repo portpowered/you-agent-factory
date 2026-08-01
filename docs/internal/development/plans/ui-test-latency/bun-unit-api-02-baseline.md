@@ -96,7 +96,133 @@ Duration  256ms (transform 148ms, setup 0ms, import 197ms, tests 32ms, environme
 [timing] exit_code=0
 ```
 
-## After-state placeholder
+## After migration — lane audit and latency report
 
-Focused Bun after-state wall-clock for the same three files will be recorded in
-story `BUN-UNIT-api-02-005` under conditions comparable to this baseline.
+Recorded for story `BUN-UNIT-api-02-005` on the same host class as the
+Vitest baseline (Windows 11 Home `10.0.26200`, i7-13700K, 24 logical
+processors; Bun `1.3.12`). Repository revision for these measurements:
+`6508a79c2` (after the three leased migrations; before this report commit).
+
+### Migrated / retained counts
+
+| Lane ownership | Files | Named tests |
+| --- | ---: | ---: |
+| Migrated to Bun (exclusive) | 3 | 20 |
+| Retained on Vitest | 0 | 0 |
+
+Migrated files (exactly once under Bun):
+
+| Migrated path | Named cases |
+| --- | ---: |
+| `ui/src/api/session-factory/prompt-template/api.bun.unit.test.ts` | 7 |
+| `ui/src/api/session-routing.bun.unit.test.ts` | 6 |
+| `ui/src/api/session-scope.bun.unit.test.ts` | 7 |
+
+Totals reconcile to the leased baseline: `3` files / `20` named tests. No
+retained Vitest exceptions. The leased `.test.ts` paths no longer exist in the
+tree after rename.
+
+### Lane exclusivity audit
+
+Focused Bun invocation (exactly three files / twenty named cases):
+
+```text
+bun test `
+  src/api/session-factory/prompt-template/api.bun.unit.test.ts `
+  src/api/session-routing.bun.unit.test.ts `
+  src/api/session-scope.bun.unit.test.ts
+```
+
+Result:
+
+```text
+bun test v1.3.12 (700fc117)
+src\api\session-routing.bun.unit.test.ts:
+(pass) factorySessionScopedPath > treats null, undefined, and empty sessions as the default session
+(pass) factorySessionScopedPath > always returns an explicit default-session scoped path
+(pass) factorySessionScopedPath > preserves non-default session identifiers in the scoped path
+(pass) factorySessionScopedPath > exposes the canonical current-factory session route directly
+(pass) factorySessionScopedPath > builds canonical current-factory workstation subroutes under the session path
+(pass) factorySessionScopedPath > exposes explicit work and events session routes
+src\api\session-scope.bun.unit.test.ts:
+(pass) buildSessionScope > maps null, empty, and ~default selection to the default session scope
+(pass) buildSessionScope > keeps resolved default semantics while routing every resource by UUID
+(pass) buildSessionScope > preserves non-default session identifiers and URL-encodes path segments
+(pass) buildSessionScope > reflects pause state for the active non-default session
+(pass) buildSessionScope > does not mark the default session paused when only other sessions are paused
+(pass) buildSessionScope > does not mark the default session paused when the default id is listed as paused
+(pass) buildSessionScope > does not mark a non-default session paused when it is absent from the paused list
+src\api\session-factory\prompt-template\api.bun.unit.test.ts:
+(pass) session-factory prompt-template API > loads the current-factory workstation prompt-template contract
+(pass) session-factory prompt-template API > posts prompt validation against the current-factory workstation contract
+(pass) session-factory prompt-template API > uses the selected session for non-default prompt-template requests
+(pass) session-factory prompt-template API > surfaces typed current-factory prompt-template API errors
+(pass) session-factory prompt-template API > surfaces NETWORK_ERROR when prompt-template validation fetch rejects
+(pass) session-factory prompt-template API > surfaces a network error when no fetch implementation is available
+(pass) session-factory prompt-template API > surfaces invalid JSON and fallback API codes from prompt-template responses
+ 20 pass
+ 0 fail
+ 41 expect() calls
+Ran 20 tests across 3 files. [132.00ms]
+```
+
+Vitest `dashboard-unit` selection of the migrated paths (must be zero):
+
+```text
+.\node_modules\.bin\vitest.exe run --config vitest.lanes.config.ts --project=dashboard-unit --maxWorkers=4 --retry=0 `
+  src/api/session-factory/prompt-template/api.bun.unit.test.ts `
+  src/api/session-routing.bun.unit.test.ts `
+  src/api/session-scope.bun.unit.test.ts
+```
+
+Result:
+
+```text
+No test files found, exiting with code 1
+filter: ...api.bun.unit.test.ts, ...session-routing.bun.unit.test.ts, ...session-scope.bun.unit.test.ts
+projects: dashboard-unit
+exclude: ... src/**/*.bun.unit.test.ts ...
+```
+
+Vitest selection of the retired `.test.ts` paths is also zero (`No test files
+found`); those files are gone after rename. Conclusion: the leased suite
+executes exactly once under Bun and zero times under Vitest. Aggregate focused
+Bun cohort run and affected Vitest selection checks pass; `check:test-lanes`
+and frontend typecheck also pass on this head.
+
+### Focused after wall-clock (comparable warm-deps)
+
+Command (same three migrated paths as above). Wrapper wall-clock uses
+`[System.Diagnostics.Stopwatch]` around the command, matching the baseline.
+
+| Run | Wrapper wall | Bun reported | Result |
+| --- | ---: | ---: | --- |
+| 1 (first focused) | 197ms | 124ms | 3 files / 20 tests passed |
+| 2 | 194ms | 134ms | 3 files / 20 tests passed |
+| 3 | 233ms | 150ms | 3 files / 20 tests passed |
+| 4 | 213ms | 120ms | 3 files / 20 tests passed |
+
+Median of the three warm comparable samples (runs 2–4): wrapper wall
+`213ms`, Bun reported `134ms`. All runs reported exit code `0`.
+
+### Before / after comparison
+
+| Metric | Vitest baseline | Bun after |
+| --- | ---: | ---: |
+| Focused warm median wrapper wall | 851 ms | 213 ms |
+| Runner-reported warm median | 256 ms (Vitest) | 134 ms (Bun) |
+| Files | 3 | 3 |
+| Named tests | 20 | 20 |
+| Expect calls (Bun after) | — | 41 |
+| Retained on Vitest | — | 0 files / 0 tests |
+
+These are matched three-file focused observations only; they are not a
+repository-wide speedup claim.
+
+### Changed-line budget
+
+Against the merge-base with `origin/main`, the rename-aware cohort patch is
+**4 files / ~235 insertions / ~6 deletions** (baseline evidence + after-state
+report + three leased rename/import migrations). Well within the ~1,000
+changed-line budget; no unsafe-coupling split required. No production-code
+edits.
