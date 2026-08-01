@@ -11,7 +11,7 @@ import (
 
 	packagedfactories "github.com/portpowered/infinite-you/packages/packaged-factories"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	workflowruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/javascript/runtime"
+	workflowruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime"
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )

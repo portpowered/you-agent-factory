@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	workflowruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/javascript/runtime"
-	workflowvalidation "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/javascript/validation"
+	workflowruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime"
+	workflowvalidation "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/javascript/validation"
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract"
 	factoryruntimetestkit "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/testkit"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -670,7 +670,7 @@ func assertTimeoutFailure(t *testing.T, sessionID string, outcome factory.JavaSc
 
 func readFixture(t *testing.T, name string) string {
 	t.Helper()
-	path := filepath.Join("..", "..", "..", "..", "..", "..", "..", "tests", "fixtures", "javascript_runtime", name)
+	path := filepath.Join("..", "..", "..", "..", "..", "..", "..", "..", "tests", "fixtures", "javascript_runtime", name)
 	content, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read fixture %s: %v", name, err)
