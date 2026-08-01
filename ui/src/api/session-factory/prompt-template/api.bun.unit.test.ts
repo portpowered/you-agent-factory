@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: existing prompt-template API coverage stayed intact during Bun unit lane migration.
 import { describe, expect, it } from "bun:test";
 
 import { bunVi as vi } from "../../../testing/bun/vi-compat";
