@@ -9,9 +9,8 @@ import (
 // NewService constructs the private artifacts_export capability from the
 // lifecycle snapshot seam and publication effect selected by the Recordings root.
 func NewService(
-	snapshots artifactsexport.SnapshotSource,
-	publication artifactsexport.PortableArtifactPublication,
+	snapshots artifactsexportservice.SnapshotSource,
+	publication artifactsexportservice.PortableArtifactPublication,
 ) artifactsexport.Service {
 	return artifactsexportservice.New(snapshots, publication)
 }
-

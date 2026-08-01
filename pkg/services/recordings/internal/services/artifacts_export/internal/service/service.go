@@ -15,13 +15,27 @@ import (
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
 	artifactsexport "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export"
+	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
 )
+
+// SnapshotSource supplies finalized recording facts to artifact export without
+// exposing lifecycle persistence handles through the subservice root.
+type SnapshotSource interface {
+	Snapshot(recordings.RecordingID) (recordinglifecycle.Snapshot, error)
+}
+
+// PortableArtifactPublication persists completed portable artifact bytes at a
+// public destination without exposing private lifecycle storage paths.
+type PortableArtifactPublication interface {
+	Publish(context.Context, string, []byte) error
+	Read(context.Context, string) ([]byte, error)
+}
 
 // Service keeps portable artifact close/export/read behind the Recordings-owned
 // artifacts_export capability.
 type Service struct {
-	snapshots   artifactsexport.SnapshotSource
-	publication artifactsexport.PortableArtifactPublication
+	snapshots   SnapshotSource
+	publication PortableArtifactPublication
 }
 
 var _ artifactsexport.Service = (*Service)(nil)
@@ -29,8 +43,8 @@ var _ artifactsexport.Service = (*Service)(nil)
 // New constructs the artifacts_export service from the lifecycle snapshot seam
 // and the portable-artifact publication effect.
 func New(
-	snapshots artifactsexport.SnapshotSource,
-	publication artifactsexport.PortableArtifactPublication,
+	snapshots SnapshotSource,
+	publication PortableArtifactPublication,
 ) *Service {
 	return &Service{snapshots: snapshots, publication: publication}
 }

@@ -1489,7 +1489,7 @@
       "fromOwner": "recordings",
       "toOwner": "factory_definitions",
       "class": "query",
-      "evidence": "pkg/services/recordings -\u003e pkg/services/factory_definitions"
+      "evidence": "pkg/services/recordings/internal/artifacts -\u003e pkg/services/factory_definitions"
     },
     {
       "fromOwner": "recordings",
@@ -1501,7 +1501,7 @@
       "fromOwner": "recordings",
       "toOwner": "platform",
       "class": "external_effect",
-      "evidence": "pkg/services/recordings/internal/services/replay/replay -\u003e pkg/platform/replay"
+      "evidence": "pkg/services/recordings/internal/replay -\u003e pkg/platform/replay"
     },
     {
       "fromOwner": "recordings",
@@ -1513,13 +1513,13 @@
       "fromOwner": "recordings",
       "toOwner": "work",
       "class": "command",
-      "evidence": "pkg/services/recordings -\u003e pkg/services/work"
+      "evidence": "pkg/services/recordings/internal/contracts -\u003e pkg/services/work"
     },
     {
       "fromOwner": "recordings",
       "toOwner": "workers",
       "class": "command",
-      "evidence": "pkg/services/recordings -\u003e pkg/services/workers"
+      "evidence": "pkg/services/recordings/internal/contracts -\u003e pkg/services/workers"
     },
     {
       "fromOwner": "root",
@@ -4602,19 +4602,115 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/recordings/internal/artifacts",
+      "disposition": "move",
+      "destination": "recordings",
+      "destinationKind": "owner",
+      "successor": "pkg/services/recordings/internal/services/artifacts_export",
+      "deletionCondition": "delete public package after IMP-REC-artifacts_export private subservice cutover proof"
+    },
+    {
       "packagePath": "pkg/services/recordings/internal/canonical",
       "disposition": "retain",
       "destination": "recordings",
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/recordings/internal/services/artifacts_export",
+      "packagePath": "pkg/services/recordings/internal/contracts",
       "disposition": "retain",
       "destination": "recordings",
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/recordings/internal/services/artifacts_export/artifacts",
+      "packagePath": "pkg/services/recordings/internal/events",
+      "disposition": "move",
+      "destination": "recordings",
+      "destinationKind": "owner",
+      "successor": "pkg/services/recordings/internal/services/canonical_ledger",
+      "deletionCondition": "delete public package after IMP-REC-canonical_ledger private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/events/kinds",
+      "disposition": "move",
+      "destination": "recordings",
+      "destinationKind": "owner",
+      "successor": "pkg/services/recordings/internal/services/canonical_ledger",
+      "deletionCondition": "delete public package after IMP-REC-canonical_ledger private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/events/snapshot",
+      "disposition": "move",
+      "destination": "recordings",
+      "destinationKind": "owner",
+      "successor": "pkg/services/recordings/internal/services/canonical_ledger",
+      "deletionCondition": "delete public package after IMP-REC-canonical_ledger private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/projections",
+      "disposition": "move",
+      "destination": "recordings",
+      "destinationKind": "owner",
+      "successor": "pkg/services/recordings/internal/services/projection_query",
+      "deletionCondition": "delete public package after IMP-REC-projection_query private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/projections/dashboard",
+      "disposition": "move",
+      "destination": "recordings",
+      "destinationKind": "owner",
+      "successor": "pkg/services/recordings/internal/services/projection_query",
+      "deletionCondition": "delete public package after IMP-REC-projection_query private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/projections/projectiontests",
+      "disposition": "move",
+      "destination": "recordings",
+      "destinationKind": "owner",
+      "successor": "pkg/services/recordings/internal/services/projection_query",
+      "deletionCondition": "delete public package after IMP-REC-projection_query private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/projections/workstation",
+      "disposition": "move",
+      "destination": "recordings",
+      "destinationKind": "owner",
+      "successor": "pkg/services/recordings/internal/services/projection_query",
+      "deletionCondition": "delete public package after IMP-REC-projection_query private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/replay",
+      "disposition": "move",
+      "destination": "recordings",
+      "destinationKind": "owner",
+      "successor": "pkg/services/recordings/internal/services/replay",
+      "deletionCondition": "delete public package after IMP-REC-replay private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/replay/clocktests",
+      "disposition": "move",
+      "destination": "recordings",
+      "destinationKind": "owner",
+      "successor": "pkg/services/recordings/internal/services/replay",
+      "deletionCondition": "delete public package after IMP-REC-replay private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/replay/configtests",
+      "disposition": "move",
+      "destination": "recordings",
+      "destinationKind": "owner",
+      "successor": "pkg/services/recordings/internal/services/replay",
+      "deletionCondition": "delete public package after IMP-REC-replay private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/replay/fixturetests",
+      "disposition": "move",
+      "destination": "recordings",
+      "destinationKind": "owner",
+      "successor": "pkg/services/recordings/internal/services/replay",
+      "deletionCondition": "delete public package after IMP-REC-replay private subservice cutover proof"
+    },
+    {
+      "packagePath": "pkg/services/recordings/internal/services/artifacts_export",
       "disposition": "retain",
       "destination": "recordings",
       "destinationKind": "owner"
@@ -4633,24 +4729,6 @@
     },
     {
       "packagePath": "pkg/services/recordings/internal/services/canonical_ledger",
-      "disposition": "retain",
-      "destination": "recordings",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/recordings/internal/services/canonical_ledger/events",
-      "disposition": "retain",
-      "destination": "recordings",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/recordings/internal/services/canonical_ledger/events/kinds",
-      "disposition": "retain",
-      "destination": "recordings",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/recordings/internal/services/canonical_ledger/events/snapshot",
       "disposition": "retain",
       "destination": "recordings",
       "destinationKind": "owner"
@@ -4675,30 +4753,6 @@
     },
     {
       "packagePath": "pkg/services/recordings/internal/services/projection_query/internal/service",
-      "disposition": "retain",
-      "destination": "recordings",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/recordings/internal/services/projection_query/projections",
-      "disposition": "retain",
-      "destination": "recordings",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/recordings/internal/services/projection_query/projections/dashboard",
-      "disposition": "retain",
-      "destination": "recordings",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/recordings/internal/services/projection_query/projections/projectiontests",
-      "disposition": "retain",
-      "destination": "recordings",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/recordings/internal/services/projection_query/projections/workstation",
       "disposition": "retain",
       "destination": "recordings",
       "destinationKind": "owner"
@@ -4735,30 +4789,6 @@
     },
     {
       "packagePath": "pkg/services/recordings/internal/services/replay/internal/service",
-      "disposition": "retain",
-      "destination": "recordings",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/recordings/internal/services/replay/replay",
-      "disposition": "retain",
-      "destination": "recordings",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/recordings/internal/services/replay/replay/clocktests",
-      "disposition": "retain",
-      "destination": "recordings",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/recordings/internal/services/replay/replay/configtests",
-      "disposition": "retain",
-      "destination": "recordings",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/recordings/internal/services/replay/replay/fixturetests",
       "disposition": "retain",
       "destination": "recordings",
       "destinationKind": "owner"

@@ -88,8 +88,8 @@ func TestRunAllowsPeerServicesToImportExactProviderInferenceContract(t *testing.
 		{path: "factory_runtime", pkgName: "factory"},
 		{path: "factory_runtime/internal/services/instance_host/build", pkgName: "runtimebuild"},
 		{path: "recordings", pkgName: "recordings"},
-		{path: "recordings/internal/services/artifacts_export/artifacts", pkgName: "artifacts"},
-		{path: "recordings/internal/services/replay/replay", pkgName: "replay"},
+		{path: "recordings/internal/artifacts", pkgName: "artifacts"},
+		{path: "recordings/internal/replay", pkgName: "replay"},
 	} {
 		writeGoImportFile(
 			t,

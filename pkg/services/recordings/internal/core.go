@@ -9,8 +9,8 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingevents "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/events"
 	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
+	recordingevents "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events"
 	artifactsexport "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export"
 	artifactsexportwire "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export/wire"
 	canonicalledger "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger"
@@ -30,9 +30,9 @@ type combinedService struct {
 	recordings.Ledger
 	recordings.ProjectionService
 	recordinglifecycle.Service
-	artifactsExport   artifactsexport.Service
-	replayService     recordingsreplay.Service
-	canonicalLedger   canonicalledger.Service
+	artifactsExport artifactsexport.Service
+	replayService   recordingsreplay.Service
+	canonicalLedger canonicalledger.Service
 
 	lifecycleMu sync.Mutex
 	replayByKey map[string]*recordings.ReplayArtifact
@@ -227,7 +227,7 @@ func NewServiceWithLifecycleEffects(
 	targetPlanner recordings.LiveRecordingTargetPlanner,
 	writer recordings.RecordingSnapshotWriter,
 	tickers recordings.RecordingFlushTickerFactory,
-	publication artifactsexport.PortableArtifactPublication,
+	publication portableArtifactPublication,
 	clocks ...recordings.RecordingClock,
 ) recordings.Service {
 	if ledger == nil || projection == nil {

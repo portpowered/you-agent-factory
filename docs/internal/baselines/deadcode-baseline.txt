@@ -190,9 +190,9 @@ pkg/services/operator_settings/wire/wire.go: unreachable func: NewService
 pkg/services/provider_sessions/internal/services/codex_reader/internal/service/detail.go: unreachable func: ParseSummary
 pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor/inspection.go: unreachable func: inspection.canceled
 pkg/services/provider_sessions/internal/services/cursor_reader/internal/cursor/store_load.go: unreachable func: LoadSessionFromStoreDB
-pkg/services/recordings/internal/services/replay/replay/event_artifact.go: unreachable func: runStartedFactorySnapshotFromEvent
-pkg/services/recordings/internal/services/replay/replay/factory_snapshot.go: unreachable func: runtimeWorkersByName
-pkg/services/recordings/internal/services/replay/replay/recorder.go: unreachable func: Recorder.BindRecordingService
+pkg/services/recordings/internal/replay/event_artifact.go: unreachable func: runStartedFactorySnapshotFromEvent
+pkg/services/recordings/internal/replay/factory_snapshot.go: unreachable func: runtimeWorkersByName
+pkg/services/recordings/internal/replay/recorder.go: unreachable func: Recorder.BindRecordingService
 pkg/services/work/internal/services/content_materialization/internal/service/materialize.go: unreachable func: Options.maxRedirects
 pkg/services/work/internal/services/content_materialization/internal/service/materialize.go: unreachable func: Options.timeout
 pkg/services/workers/internal/services/workstations/executor/workstation_executor_test.go: unreachable func: writeRuntimeLookupAgentsMD

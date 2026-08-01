@@ -137,6 +137,9 @@ func openRuntime(
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings runtime recorder factory is required")
 	}
 	var runtimeRecording recordings.RuntimeRecorder
+	type runtimeRecordingBinder interface {
+		BindRecordingService(recordings.Service, recordings.CanonicalEventScope) error
+	}
 	sessionRecorderFactory := func(
 		flushInterval time.Duration,
 		loaded factorydefinitions.LoadedFactorySource,
@@ -398,7 +401,11 @@ func openRuntime(
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Recordings factory returned nil service")
 	}
 	if runtimeRecording != nil {
-		if err := runtimeRecording.BindRecordingService(
+		binder, ok := runtimeRecording.(runtimeRecordingBinder)
+		if !ok {
+			return runtimeProducts{}, fmt.Errorf("construct runtime scope: runtime recording does not support Recordings binding")
+		}
+		if err := binder.BindRecordingService(
 			recordingService,
 			recordings.CanonicalEventScope{
 				FactorySessionID: factorysessions.DefaultSessionID,
