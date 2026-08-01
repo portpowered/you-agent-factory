@@ -1699,6 +1699,10 @@
       "minimum": 88.52
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/artifacts",
+      "minimum": 77.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export",
       "exception": {
         "kind": "measurement",
@@ -1707,10 +1711,6 @@
         "deadline": "2027-07-15",
         "removalGate": "The unit coverage profile reports at least one measurable statement for this package."
       }
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/artifacts",
-      "minimum": 77.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export/internal/service",
