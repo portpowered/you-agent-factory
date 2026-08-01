@@ -33,6 +33,24 @@ func BuildProcess(t testing.TB, edges serviceedges.Edges) Process {
 	return process
 }
 
+// CleanupProcess closes a caller-owned reusable process after its sequential
+// public invocations finish. Process wiring is immutable, but lifecycle-owned
+// resources may be retained by commands until the process is closed.
+func CleanupProcess(t testing.TB, process Process) {
+	t.Helper()
+	closer, ok := process.(interface{ Close(context.Context) error })
+	if !ok {
+		return
+	}
+	t.Cleanup(func() {
+		closeCtx, cancel := context.WithTimeout(context.Background(), processCommandStopTimeout)
+		defer cancel()
+		if err := closer.Close(closeCtx); err != nil {
+			t.Errorf("close reusable application process: %v", err)
+		}
+	})
+}
+
 // ExecuteProcess runs one customer command through the shared root-built process.
 func ExecuteProcess(t testing.TB, inputs *CapturedInputs) error {
 	t.Helper()
@@ -65,13 +83,76 @@ func CreateNamedFactory(
 ) string {
 	t.Helper()
 
+	process := BuildProcess(t, serviceedges.Edges{})
+	CleanupProcess(t, process)
+	return CreateNamedFactoryWithProcess(
+		t,
+		process,
+		homeDir,
+		workingDirectory,
+		name,
+		factoryConfigPath,
+	)
+}
+
+// CreateNamedFactoryWithProcess executes the public named Factory create flow
+// on a caller-owned reusable process. Only immutable process wiring is shared;
+// the home, environment, working directory, and Factory root remain local to
+// this invocation.
+func CreateNamedFactoryWithProcess(
+	t testing.TB,
+	process Process,
+	homeDir string,
+	workingDirectory string,
+	name string,
+	factoryConfigPath string,
+) string {
+	t.Helper()
 	env := append(
 		os.Environ(),
 		"HOME="+homeDir,
 		"USERPROFILE="+homeDir,
 	)
-	namedFactoriesRoot := initializeCustomerHome(t, env, workingDirectory)
-	return createNamedFactoryAtRoot(t, env, workingDirectory, namedFactoriesRoot, name, factoryConfigPath)
+	namedFactoriesRoot := InitializeCustomerHomeWithProcess(t, process, env, workingDirectory)
+	return createNamedFactoryAtRootWithProcess(
+		t,
+		process,
+		env,
+		workingDirectory,
+		namedFactoriesRoot,
+		name,
+		factoryConfigPath,
+		false,
+	)
+}
+
+// CreateAndActivateNamedFactoryWithProcess executes the public named Factory
+// create flow with --set-current on a caller-owned reusable process.
+func CreateAndActivateNamedFactoryWithProcess(
+	t testing.TB,
+	process Process,
+	homeDir string,
+	workingDirectory string,
+	name string,
+	factoryConfigPath string,
+) string {
+	t.Helper()
+	env := append(
+		os.Environ(),
+		"HOME="+homeDir,
+		"USERPROFILE="+homeDir,
+	)
+	namedFactoriesRoot := InitializeCustomerHomeWithProcess(t, process, env, workingDirectory)
+	return createNamedFactoryAtRootWithProcess(
+		t,
+		process,
+		env,
+		workingDirectory,
+		namedFactoriesRoot,
+		name,
+		factoryConfigPath,
+		true,
+	)
 }
 
 // CreateNamedFactoryAtRoot executes the public create command against an
@@ -257,6 +338,24 @@ type createNamedFactoryResult struct {
 
 func initializeCustomerHome(t testing.TB, env []string, workingDirectory string) string {
 	t.Helper()
+	process := BuildProcess(t, serviceedges.Edges{})
+	CleanupProcess(t, process)
+	return InitializeCustomerHomeWithProcess(t, process, env, workingDirectory)
+}
+
+// InitializeCustomerHomeWithProcess performs the same public missing-Factory
+// bootstrap probe on a caller-owned process and returns the invocation's
+// isolated named-Factories root.
+func InitializeCustomerHomeWithProcess(
+	t testing.TB,
+	process Process,
+	env []string,
+	workingDirectory string,
+) string {
+	t.Helper()
+	if process == nil {
+		t.Fatal("InitializeCustomerHomeWithProcess requires a process")
+	}
 	homeDir := environmentHome(env)
 	namedFactoriesRoot := filepath.Join(homeDir, ".you-agent-factory", "factories")
 	missingFactory := filepath.Join(workingDirectory, "missing-initialization-factory.json")
@@ -265,7 +364,7 @@ func initializeCustomerHome(t testing.TB, env []string, workingDirectory string)
 	})
 	inputs.Input.Env = env
 	inputs.Input.WorkingDirectory = workingDirectory
-	err := BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input)
+	err := process.Execute(inputs.Input)
 	if err == nil || !strings.Contains(err.Error(), filepath.Base(missingFactory)) {
 		t.Fatalf(
 			"Process.Execute(run missing Factory) error = %v, want missing Factory diagnostic\nstdout:\n%s\nstderr:\n%s",
