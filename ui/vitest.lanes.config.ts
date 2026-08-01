@@ -1,5 +1,6 @@
 import { defineConfig, mergeConfig } from "vitest/config";
 
+import { BUN_UNIT_TEST_GLOB } from "./scripts/ui-test-lane-contract.mjs";
 import viteConfig from "./vite.config";
 
 export default mergeConfig(
@@ -12,6 +13,7 @@ export default mergeConfig(
           test: {
             environment: "node",
             exclude: [
+              BUN_UNIT_TEST_GLOB,
               "src/**/*.component.test.ts",
               "src/**/performance/*.test.ts",
             ],

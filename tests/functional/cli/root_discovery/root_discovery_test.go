@@ -27,6 +27,8 @@ import (
 // generated Session and Work leaves reach their typed transport handlers through
 // the public process root with the canonical argument and flag shapes.
 func TestManifestProjectedRepresentativeHandlersAcceptCanonicalInputs(t *testing.T) {
+	t.Parallel()
+
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{})
 	if err != nil {
 		t.Fatalf("BuildProcess() error = %v", err)
@@ -66,6 +68,8 @@ func TestManifestProjectedRepresentativeHandlersAcceptCanonicalInputs(t *testing
 
 // TestCurrentFactoryFailsBeforeProductActivation proves invalid Current Factory selection is side-effect free.
 func TestCurrentFactoryFailsBeforeProductActivation(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		prepare  func(*testing.T, string)
@@ -101,6 +105,8 @@ func TestCurrentFactoryFailsBeforeProductActivation(t *testing.T) {
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
 			runCurrentFactoryFailureCase(t, test.prepare, test.wantCode)
 		})
 	}
@@ -108,6 +114,8 @@ func TestCurrentFactoryFailsBeforeProductActivation(t *testing.T) {
 
 // TestServerCurrentFactoryFailsBeforeProductActivation proves server validation precedes product activation.
 func TestServerCurrentFactoryFailsBeforeProductActivation(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		prepare  func(*testing.T, string)
@@ -132,6 +140,8 @@ func TestServerCurrentFactoryFailsBeforeProductActivation(t *testing.T) {
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
 			runCurrentFactoryFailureCaseForCommand(t, "server", test.prepare, test.wantCode)
 		})
 	}
@@ -139,6 +149,8 @@ func TestServerCurrentFactoryFailsBeforeProductActivation(t *testing.T) {
 
 // TestRunScopedSiteMissingCurrentFactoryFailsBeforeProductActivation proves site selection does not bypass validation.
 func TestRunScopedSiteMissingCurrentFactoryFailsBeforeProductActivation(t *testing.T) {
+	t.Parallel()
+
 	workingDirectory := t.TempDir()
 	var effects atomic.Int32
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
@@ -241,8 +253,12 @@ func runCurrentFactoryFailureCaseForCommand(
 // TestServerNonTTYReadinessGatesBrowserAndCancellationJoinsOwnedServer proves
 // that server-owned browser startup is independent of stdout TTY state.
 func TestServerNonTTYReadinessGatesBrowserAndCancellationJoinsOwnedServer(t *testing.T) {
+	t.Parallel()
+
 	for iteration := 0; iteration < 3; iteration++ {
 		t.Run(fmt.Sprintf("iteration-%d", iteration), func(t *testing.T) {
+			t.Parallel()
+
 			runServerLifecycleCase(t)
 		})
 	}
@@ -320,6 +336,8 @@ func runServerLifecycleCase(t *testing.T) {
 
 // TestServerBindExhaustionWritesDeclaredErrorWithoutResidualEffects proves terminal bind failures leave no lifecycle effects.
 func TestServerBindExhaustionWritesDeclaredErrorWithoutResidualEffects(t *testing.T) {
+	t.Parallel()
+
 	workingDirectory := t.TempDir()
 	factoryDir := filepath.Join(workingDirectory, "factory")
 	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
@@ -393,6 +411,8 @@ func TestServerBindExhaustionWritesDeclaredErrorWithoutResidualEffects(t *testin
 
 // TestCurrentFactoryRunsToIdleWithoutStartingServer proves ordinary Current Factory runs remain serverless.
 func TestCurrentFactoryRunsToIdleWithoutStartingServer(t *testing.T) {
+	t.Parallel()
+
 	workingDirectory := t.TempDir()
 	factoryDir := filepath.Join(workingDirectory, "factory")
 	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
@@ -450,6 +470,8 @@ func TestCurrentFactoryRunsToIdleWithoutStartingServer(t *testing.T) {
 
 // TestCurrentFactoryRunScopedServerStopsAtIdleAndSiteOpensAfterReadiness proves one-shot hosting and site readiness.
 func TestCurrentFactoryRunScopedServerStopsAtIdleAndSiteOpensAfterReadiness(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		flag        string
@@ -461,6 +483,8 @@ func TestCurrentFactoryRunScopedServerStopsAtIdleAndSiteOpensAfterReadiness(t *t
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
 			workingDirectory := t.TempDir()
 			factoryDir := filepath.Join(workingDirectory, "factory")
 			if err := os.MkdirAll(factoryDir, 0o755); err != nil {
@@ -524,6 +548,8 @@ func TestCurrentFactoryRunScopedServerStopsAtIdleAndSiteOpensAfterReadiness(t *t
 
 // TestContinuousRunScopedServerKeepsListenerUntilCancellation proves continuous hosting follows invocation cancellation.
 func TestContinuousRunScopedServerKeepsListenerUntilCancellation(t *testing.T) {
+	t.Parallel()
+
 	workingDirectory := t.TempDir()
 	factoryDir := filepath.Join(workingDirectory, "factory")
 	if err := os.MkdirAll(factoryDir, 0o755); err != nil {

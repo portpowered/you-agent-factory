@@ -34,6 +34,8 @@ func TestBuildProcessRemainsFilesystemWatcherInertBeforeRuntimeLifecycle(t *test
 }
 
 func TestAutomationsFilesystemWatcherPreseedsThroughRuntimeLifecycle(t *testing.T) {
+	t.Parallel()
+
 	observedSubmissions := make(chan work.FactorySubmissionRecord, 8)
 	dir := support.ScaffoldFactory(t, filesystemWatcherFactoryConfig())
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "preseed item"}`))

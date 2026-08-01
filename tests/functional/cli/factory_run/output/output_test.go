@@ -16,7 +16,11 @@ const (
 )
 
 func TestSuccessfulInvocationOutputModes(t *testing.T) {
+	t.Parallel()
+
 	t.Run("human lifecycle followed by final response", func(t *testing.T) {
+		t.Parallel()
+
 		stdout := runGoalInvocation(t, nil, []string{"--output", "response-stream"})
 
 		lines := nonEmptyLines(stdout)
@@ -37,6 +41,8 @@ func TestSuccessfulInvocationOutputModes(t *testing.T) {
 	})
 
 	t.Run("quiet raw final result", func(t *testing.T) {
+		t.Parallel()
+
 		stdout := runGoalInvocation(t, nil, []string{"--quiet"})
 
 		if stdout != primaryResult {
