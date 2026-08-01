@@ -3,6 +3,7 @@ package modelmcp_test
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -11,6 +12,20 @@ import (
 )
 
 const testRuntimeScopeRef = "models-mcp-bind-scope-001"
+
+func TestRootBinding_IsUnaryModelsRootBinding(t *testing.T) {
+	t.Parallel()
+
+	typeOfBinding := reflect.TypeOf(modelmcp.RootBinding{})
+	if typeOfBinding.NumField() != 1 {
+		t.Fatalf("RootBinding fields = %d, want one Models root field", typeOfBinding.NumField())
+	}
+	field := typeOfBinding.Field(0)
+	wantType := reflect.TypeOf((*models.Service)(nil)).Elem()
+	if field.Name != "Models" || field.Type != wantType {
+		t.Fatalf("RootBinding field = %s %s, want Models %s", field.Name, field.Type, wantType)
+	}
+}
 
 func TestBind_FakeRootInvokedThroughListCatalogTool(t *testing.T) {
 	t.Parallel()

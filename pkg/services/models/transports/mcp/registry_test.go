@@ -29,6 +29,28 @@ func TestDiscoverTools_ExposesExpectedModelsTools(t *testing.T) {
 	}
 }
 
+func TestRegistryParity_HasOneRegisteredHandlerPerUniqueDiscoveredTool(t *testing.T) {
+	t.Parallel()
+
+	tools := modelmcp.DiscoverTools()
+	seen := make(map[string]struct{}, len(tools))
+	for _, tool := range tools {
+		if _, duplicate := seen[tool.Name]; duplicate {
+			t.Fatalf("discovery contains duplicate tool ID %q", tool.Name)
+		}
+		seen[tool.Name] = struct{}{}
+		if !modelmcp.IsCanonicalToolHandlerRegistered(tool.Name) {
+			t.Fatalf("discovered tool %q has no registered canonical handler", tool.Name)
+		}
+		if registered, ok := modelmcp.ToolByName(tool.Name); !ok || registered.Name != tool.Name {
+			t.Fatalf("ToolByName(%q) does not return the discovered registry entry", tool.Name)
+		}
+	}
+	if got := len(modelmcp.ToolNames()); got != len(seen) {
+		t.Fatalf("ToolNames() count = %d, want %d unique discovered tool IDs", got, len(seen))
+	}
+}
+
 func TestDiscoverTools_EachToolHasSchemasDescriptionsAndStableFields(t *testing.T) {
 	t.Parallel()
 
