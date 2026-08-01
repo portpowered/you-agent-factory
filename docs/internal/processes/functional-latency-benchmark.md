@@ -238,3 +238,41 @@ each child had unique stdout/stderr files, and the joined child process IDs
 were no longer running after collection. No file-lock, working-directory,
 environment, port, session, stdio, persistence, or lifecycle collision was
 observed.
+
+## Factory and response events after story 005
+
+The Factory Event and Response Event scenarios now schedule independently
+constructed top-level tests in parallel. Every scenario continues to own its
+temporary Factory, invocation-local environment, dynamic API listener,
+session, recording, cursor, stream, provider edge, and cleanup lifecycle. The
+public API/SSE assertions and canonical event observations are unchanged.
+
+Three uncached samples were captured on 2026-08-01 (UTC) on the same Windows
+11/amd64 machine with Go 1.25.0, 24 logical processors, and the same
+`-short -count=1 -timeout=5m` commands in protocol order. `go clean -testcache`
+ran before each sample. The outer wall time includes command/build setup; the
+`ok` duration is Go test execution time.
+
+| Sample | Factory Events wall | Factory Events `ok` | Response Events wall | Response Events `ok` |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 3.090 | 1.370 | 3.290 | 1.520 |
+| 2 | 3.020 | 1.260 | 3.320 | 1.580 |
+| 3 | 3.230 | 1.450 | 3.440 | 1.620 |
+| **Median** | **3.090** | **1.370** | **3.320** | **1.580** |
+
+The baseline medians were 8.680 seconds for Factory Events and 5.760 seconds
+for Response Events. The post-change medians are respectively 64.4% and
+42.4% lower. The two-package per-sample combined wall times were 6.380,
+6.334, and 6.665 seconds, with a 6.380-second median versus the baseline
+two-package sums of 14.280, 15.000, and 15.030 seconds (15.000-second
+median), a 57.5% lower combined median. The package-median sum is 6.410
+seconds versus the 14.440-second baseline package-median sum, a 55.6% lower
+measurement. All six package executions passed without weakening event-order,
+cursor, retention, stream, projection, or shutdown assertions.
+
+Three concurrent two-package diagnostics also passed. The maximum wall times
+per wave were 3.800, 4.002, and 4.292 seconds; all six exit codes were zero,
+each child had unique stdout/stderr files, every launched process was joined,
+and the diagnostic directories were removed only after collection. No
+file-lock, working-directory, environment, port, session, recording, cursor,
+event-state, or lifecycle collision was observed.

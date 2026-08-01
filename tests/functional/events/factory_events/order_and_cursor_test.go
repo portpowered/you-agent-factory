@@ -23,6 +23,8 @@ const factoryEventsUnknownCursorEventID = "factory-events-invalid-cursor-unknown
 // Factory Events API and that a second retained-history read preserves the same
 // relative order for the same session generation.
 func TestAPIGetFactoryEventsReturnsOrderedDurableHistory(t *testing.T) {
+	t.Parallel()
+
 	dir := support.ScaffoldSingleStepFactory(t, "ordered-durable-history")
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
@@ -62,6 +64,8 @@ func TestAPIGetFactoryEventsReturnsOrderedDurableHistory(t *testing.T) {
 // through the public Factory Events API returns only events recorded after the
 // acknowledged point and does not re-deliver the acknowledged event itself.
 func TestAPIEventCursorReturnsOnlyNewerEvents(t *testing.T) {
+	t.Parallel()
+
 	dir := support.ScaffoldSingleStepFactory(t, "cursor-only-newer-events")
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
@@ -105,6 +109,8 @@ func TestAPIEventCursorReturnsOnlyNewerEvents(t *testing.T) {
 // instead of silently skipping events, and that a valid retained-history read
 // still works for the same session when cursors are omitted.
 func TestAPIInvalidEventCursorReturnsTypedError(t *testing.T) {
+	t.Parallel()
+
 	dir := support.ScaffoldSingleStepFactory(t, "invalid-event-cursor")
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
@@ -173,6 +179,8 @@ func TestAPIInvalidEventCursorReturnsTypedError(t *testing.T) {
 // chaining trace identities on submit are preserved in the emitted WORK_REQUEST
 // batch event and the public Work projection.
 func TestAPISubmitWorkEmitsCanonicalTraceAwareBatchEvent(t *testing.T) {
+	t.Parallel()
+
 	dir := support.ScaffoldSingleStepFactory(t, "trace-aware-submit")
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:     dir,
@@ -258,6 +266,8 @@ func waitForWorkRequestEvent(
 // Session is active and closes when the session terminates through the public
 // session boundary.
 func TestFactoryEventStreamIsOrderedAndClosesAtSessionTermination(t *testing.T) {
+	t.Parallel()
+
 	dir := support.ScaffoldSingleStepFactory(t, "stream-order-close")
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
@@ -294,6 +304,8 @@ func TestFactoryEventStreamIsOrderedAndClosesAtSessionTermination(t *testing.T) 
 // Event stream can reconnect from an acknowledged cursor and resume the live
 // timeline without gaps or duplicate deliveries.
 func TestFactoryEventStreamReconnectHasNoGapOrDuplicate(t *testing.T) {
+	t.Parallel()
+
 	dir := support.ScaffoldSingleStepFactory(t, "stream-reconnect-continuity")
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
@@ -671,6 +683,8 @@ func assertFactoryEventsSameRelativeOrder(
 // resource evidence across InitialStructureRequest and FactoryChange events
 // even when customer-facing names change.
 func TestCanonicalTopologySnapshotsPreservePublicIdentityAndResourceEvidence(t *testing.T) {
+	t.Parallel()
+
 	dir := scaffoldCanonicalTopologyFactory(
 		t,
 		"gpu",
