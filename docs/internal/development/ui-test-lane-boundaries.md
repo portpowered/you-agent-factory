@@ -30,6 +30,30 @@ helpers under `ui/src/testing/` cannot import `DashboardScreen`; dashboard
 composition rendering belongs to
 `ui/src/features/dashboard/components/testing/dashboard-screen-test-render.tsx`.
 
+## Dashboard-unit throughput baselines
+
+Performance work on the Node unit lane must keep timing evidence separate from
+observer-heavy resource probes. Use the canonical `dashboard-unit` project and
+its package-script worker/retry policy, then record at least three comparable
+runs with the same classified file/test workload. Freeze that workload with
+`vitest list --project=dashboard-unit --json`, recording both the unique file
+count and a hash of the normalized sorted file paths. Keep process-tree or
+memory sampling in a separate probe when the sampler materially changes wall
+time; do not include that probe in the timing median.
+
+Vitest 4's summary labels aggregate `collectDuration` as `import`. Treat that
+field as collection/import preparation in reports and do not mistake its
+worker-aggregate value for sequential wall time. The `tests` field is the
+aggregate test-body duration; `setup`, `transform`, and `environment` are
+reported with the same aggregate semantics. The reproducible baseline and the
+current workload fingerprint live in
+[`dashboard-unit-baseline.md`](plans/ui-test-latency/dashboard-unit-baseline.md).
+
+When a Vitest project extends the root config, an empty project array does not
+necessarily clear a root array such as `setupFiles`. If a Node-only project
+must avoid shared browser setup, gate that root value on the explicit project
+selection and keep the component/combined path unchanged.
+
 ## Observable contracts by layer
 
 Place regressions at the **shallowest layer that still observes the

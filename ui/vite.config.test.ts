@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import type { UserConfig } from "vite";
-import viteConfig from "./vite.config";
+import viteConfig, { isDashboardUnitVitestRun } from "./vite.config";
 
 const config = viteConfig as UserConfig;
 
@@ -24,6 +24,28 @@ describe("dashboard Vite config", () => {
         "recharts",
       ]),
     );
+  });
+
+  it("recognizes only an explicit isolated dashboard-unit invocation", () => {
+    expect(
+      isDashboardUnitVitestRun(["node", "vitest", "--project=dashboard-unit"], {
+        VITEST: "true",
+      }),
+    ).toBe(true);
+    expect(
+      isDashboardUnitVitestRun(
+        ["node", "vitest", "run", "--project", "dashboard-unit"],
+        { VITEST: "true" },
+      ),
+    ).toBe(true);
+    expect(
+      isDashboardUnitVitestRun(
+        ["node", "vitest", "--project=dashboard-component"],
+        {
+          VITEST: "true",
+        },
+      ),
+    ).toBe(false);
   });
 
   it("keeps preview and dev proxy coverage aligned for all OpenAPI-backed API paths", () => {

@@ -29,6 +29,22 @@ const factoryVisualizersPackageRoot = path.resolve(
 );
 const isVitestRun =
   process.argv.includes("vitest") || process.env.VITEST === "true";
+
+export function isDashboardUnitVitestRun(
+  argv: readonly string[],
+  env: { VITEST?: string } = process.env,
+): boolean {
+  const projectArgumentIndex = argv.indexOf("--project");
+  const isVitestInvocation = argv.includes("vitest") || env.VITEST === "true";
+
+  return (
+    isVitestInvocation &&
+    (argv.includes("--project=dashboard-unit") ||
+      argv[projectArgumentIndex + 1] === "dashboard-unit")
+  );
+}
+
+const isDashboardUnitRun = isDashboardUnitVitestRun(process.argv);
 const sharedReactAliases = [
   {
     find: "@you-agent-factory/factory-visualizers/styles.css",
@@ -156,39 +172,59 @@ const monacoEditorPlugin =
   typeof monacoEditorPluginModule === "function"
     ? monacoEditorPluginModule
     : monacoEditorPluginModule.default;
-const optimizedDeps = isVitestRun
-  ? ([
-      "@radix-ui/react-collapsible",
-      "@radix-ui/react-dialog",
-      "@radix-ui/react-popover",
-      "@radix-ui/react-scroll-area",
-      "@radix-ui/react-select",
-      "@radix-ui/react-slot",
-      "@xyflow/react",
-      "react-redux",
-      "recharts",
-      "react",
-      "react-dom",
-      "react/jsx-runtime",
-      "react/jsx-dev-runtime",
-    ] as const)
-  : ([
-      "@xyflow/react",
-      "@radix-ui/react-slot",
-      "react-redux",
-      "recharts",
-      "monaco-editor/esm/vs/editor/editor.api.js",
-      "react",
-      "react-dom",
-      "react/jsx-runtime",
-      "react/jsx-dev-runtime",
-    ] as const);
+const optimizedDeps = isDashboardUnitRun
+  ? []
+  : isVitestRun
+    ? ([
+        "@radix-ui/react-collapsible",
+        "@radix-ui/react-dialog",
+        "@radix-ui/react-popover",
+        "@radix-ui/react-scroll-area",
+        "@radix-ui/react-select",
+        "@radix-ui/react-slot",
+        "@xyflow/react",
+        "react-redux",
+        "recharts",
+        "react",
+        "react-dom",
+        "react/jsx-runtime",
+        "react/jsx-dev-runtime",
+      ] as const)
+    : ([
+        "@xyflow/react",
+        "@radix-ui/react-slot",
+        "react-redux",
+        "recharts",
+        "monaco-editor/esm/vs/editor/editor.api.js",
+        "react",
+        "react-dom",
+        "react/jsx-runtime",
+        "react/jsx-dev-runtime",
+      ] as const);
 const storybookInteropDeps = [
   "react",
   "react-dom",
   "react/jsx-runtime",
   "react/jsx-dev-runtime",
 ] as const;
+const vitestServerDepsInline = isDashboardUnitRun
+  ? []
+  : ([
+      "recharts",
+      "@radix-ui/react-collapsible",
+      "@radix-ui/react-compose-refs",
+      "@radix-ui/react-dialog",
+      "@radix-ui/react-popover",
+      "@radix-ui/react-scroll-area",
+      "@radix-ui/react-select",
+      "@radix-ui/react-slot",
+      "@xyflow/react",
+      "@xyflow/system",
+      "react",
+      "react-dom",
+      "react/jsx-runtime",
+      "react/jsx-dev-runtime",
+    ] as const);
 const currentFactoryPromptTemplateProxyPaths = [
   "^/factory-sessions/[^/]+/factory/workstations/[^/]+/prompt-template-contract$",
   "^/factory-sessions/[^/]+/factory/workstations/[^/]+/prompt-template-validation$",
@@ -244,10 +280,10 @@ export default defineConfig({
   },
   optimizeDeps: {
     include: [...optimizedDeps],
-    needsInterop: [...storybookInteropDeps],
+    needsInterop: isDashboardUnitRun ? [] : [...storybookInteropDeps],
   },
   plugins: [
-    react(),
+    ...(!isDashboardUnitRun ? [react()] : []),
     ...(!isVitestRun ? [tailwindcss()] : []),
     ...(!isVitestRun
       ? [
@@ -301,22 +337,7 @@ export default defineConfig({
     server: {
       deps: {
         moduleDirectories: [path.join(uiRoot, "node_modules")],
-        inline: [
-          "recharts",
-          "@radix-ui/react-collapsible",
-          "@radix-ui/react-compose-refs",
-          "@radix-ui/react-dialog",
-          "@radix-ui/react-popover",
-          "@radix-ui/react-scroll-area",
-          "@radix-ui/react-select",
-          "@radix-ui/react-slot",
-          "@xyflow/react",
-          "@xyflow/system",
-          "react",
-          "react-dom",
-          "react/jsx-runtime",
-          "react/jsx-dev-runtime",
-        ],
+        inline: [...vitestServerDepsInline],
       },
     },
     environment: "jsdom",
@@ -329,7 +350,7 @@ export default defineConfig({
       "packages/factory-emulator/src/**/*.test.tsx",
     ],
     globals: true,
-    setupFiles: ["./src/testing/vitest.setup.ts"],
+    setupFiles: isDashboardUnitRun ? [] : ["./src/testing/vitest.setup.ts"],
     testTimeout: isCoverageRun ? 180000 : 30000,
     coverage: {
       provider: "v8",
