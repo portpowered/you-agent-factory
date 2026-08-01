@@ -105,6 +105,9 @@ func TestPackagedFactoryPromptFilesRemainWorkstationOwned(t *testing.T) {
 			"full-flow-ci":       "prompts/ci.md",
 			"full-flow-merger":   "prompts/merger.md",
 		},
+		"subagent": {
+			"subagent-worker": "prompts/run-subagent.md",
+		},
 	}
 
 	artifacts, err := packagedfactorycatalog.GenerateArtifacts(
