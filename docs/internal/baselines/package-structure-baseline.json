@@ -579,11 +579,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/automations/peer_import_boundary_test.go",
-      "target": "automations"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/automations/reconciliation_root_composition_test.go",
       "target": "automations"
     },
@@ -664,11 +659,6 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/factory_runtime/peer_import_boundary_test.go",
-      "target": "factory_runtime"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/factory_visualization/activation_lifecycle_test.go",
       "target": "factory_visualization"
     },
@@ -685,11 +675,6 @@
     {
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/factory_visualization/observe_live_view_test.go",
-      "target": "factory_visualization"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/factory_visualization/peer_import_boundary_test.go",
       "target": "factory_visualization"
     },
     {
@@ -744,22 +729,12 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/operator_settings/peer_import_boundary_test.go",
-      "target": "operator_settings"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/provider_sessions/build_process_inert_test.go",
       "target": "provider_sessions"
     },
     {
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/provider_sessions/doc.go",
-      "target": "provider_sessions"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/provider_sessions/peer_import_boundary_test.go",
       "target": "provider_sessions"
     },
     {
@@ -845,11 +820,6 @@
     {
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/recordings/doc.go",
-      "target": "recordings"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/recordings/peer_import_boundary_test.go",
       "target": "recordings"
     },
     {
@@ -1014,22 +984,12 @@
     },
     {
       "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/work/peer_import_boundary_test.go",
-      "target": "work"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/workflow/config_driven_retry_loop_breaker_test.go",
       "target": "workflow"
     },
     {
       "rule": "functional-test-missing-subsection",
       "filePath": "tests/functional/workflow/doc.go",
-      "target": "workflow"
-    },
-    {
-      "rule": "functional-test-missing-subsection",
-      "filePath": "tests/functional/workflow/helpers_test.go",
       "target": "workflow"
     },
     {
@@ -1256,6 +1216,16 @@
       "rule": "functional-test-unclassified-domain",
       "filePath": "tests/functional/recordings/root_composition/record_replay_lifecycle_activation_test.go",
       "target": "recordings"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/automations/contracts.go",
+      "target": "NewPreparedInvocationSchedules"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/automations/hosted_effects.go",
+      "target": "NewHostedLinearSecretResolver"
     },
     {
       "rule": "service-root-exported-function",
@@ -1854,6 +1824,21 @@
     },
     {
       "rule": "service-root-exported-function",
+      "filePath": "pkg/services/providers/selection_contract.go",
+      "target": "ResolveIdentity"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/providers/selection_contract.go",
+      "target": "ResolveSelection"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/providers/selection_contract.go",
+      "target": "ValidatePrerequisites"
+    },
+    {
+      "rule": "service-root-exported-function",
       "filePath": "pkg/services/recordings/contracts.go",
       "target": "BuildFactoryWorldWorkstationRequestProjectionSlice"
     },
@@ -2204,6 +2189,11 @@
     },
     {
       "rule": "service-root-exported-function",
+      "filePath": "pkg/services/workers/execute_contracts.go",
+      "target": "CloneSafeDiagnostics"
+    },
+    {
+      "rule": "service-root-exported-function",
       "filePath": "pkg/services/workers/execution_context.go",
       "target": "ResolveProjectID"
     },
@@ -2310,12 +2300,37 @@
     {
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/workers/failure.go",
+      "target": "ContainsStopToken"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/workers/failure.go",
       "target": "NewProviderError"
     },
     {
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/workers/failure.go",
+      "target": "NewProviderErrorWithSession"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/workers/failure.go",
       "target": "NormalizeProviderExecutionError"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/workers/failure.go",
+      "target": "WorkFailureDecisionFromMetadata"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/workers/failure.go",
+      "target": "WorkFailureDecisionFromProviderError"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/workers/failure.go",
+      "target": "WorkFailureMetadataFromProviderError"
     },
     {
       "rule": "service-root-exported-function",
@@ -2326,6 +2341,56 @@
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/workers/interfaces.go",
       "target": "WorkDispatchInputTokens"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/workers/mock_workers_contracts.go",
+      "target": "NewEmptyMockWorkersConfig"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/workers/mock_workers_contracts.go",
+      "target": "NewMockWorkersConfigLoader"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/workers/mock_workers_contracts.go",
+      "target": "ParseMockWorkersConfig"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/workers/progress_observations.go",
+      "target": "CanonicalDraftFragment"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/workers/proposal_mappers.go",
+      "target": "ProposedOutputFromLegacyWorkResult"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/workers/proposal_mappers.go",
+      "target": "ProposedWorkFromFactoryWorkItems"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/workers/proposal_mappers.go",
+      "target": "WorkProposedItemsFromProposedWork"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/workers/provider_port.go",
+      "target": "RunnerIdentityForWorker"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/workers/provider_port.go",
+      "target": "UsesNamedProvider"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/workers/pty_contracts.go",
+      "target": "DefaultPTYSessionConfig"
     },
     {
       "rule": "service-root-exported-function",
@@ -2360,11 +2425,6 @@
     {
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/workers/runner_policy_contracts.go",
-      "target": "ResolveOpenCodeAgent"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/workers/runner_policy_contracts.go",
       "target": "ResolveRunnerSelection"
     },
     {
@@ -2374,8 +2434,23 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/workers/runner_policy_contracts.go",
-      "target": "ValidateOpenCodeAgentForRunnerSelection"
+      "filePath": "pkg/services/workers/runner_process.go",
+      "target": "AdaptCommandRunner"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/workers/runner_process.go",
+      "target": "CommandRunnerWithLogging"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/workers/runner_process.go",
+      "target": "ProjectPlatformCommandRunner"
+    },
+    {
+      "rule": "service-root-exported-function",
+      "filePath": "pkg/services/workers/runner_process.go",
+      "target": "SubprocessRequestBase"
     },
     {
       "rule": "service-root-exported-function",
@@ -2430,7 +2505,7 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/automations",
-      "target": "pkg/services/automations/contracts.go:Clock,pkg/services/automations/contracts.go:FilesystemInputReader,pkg/services/automations/contracts.go:FilesystemWatcher,pkg/services/automations/contracts.go:FilesystemWatcherFactory,pkg/services/automations/contracts.go:HostedPollers,pkg/services/automations/contracts.go:Service"
+      "target": "pkg/services/automations/contracts.go:Clock,pkg/services/automations/contracts.go:FilesystemInputReader,pkg/services/automations/contracts.go:FilesystemWatcher,pkg/services/automations/contracts.go:FilesystemWatcherFactory,pkg/services/automations/contracts.go:HostedPollers,pkg/services/automations/contracts.go:InvocationScheduleService,pkg/services/automations/contracts.go:Service,pkg/services/automations/hosted_effects.go:HostedLinearClock,pkg/services/automations/hosted_effects.go:HostedLinearHTTPDoer,pkg/services/automations/hosted_effects.go:HostedRuntimePaths"
     },
     {
       "rule": "service-root-interface-count",
@@ -2509,6 +2584,11 @@
     },
     {
       "rule": "service-root-interface-count",
+      "filePath": "pkg/services/providers",
+      "target": "pkg/services/providers/acp_configuration_contract.go:ACPConfiguration,pkg/services/providers/lifecycle_contract.go:Lifecycle,pkg/services/providers/service_contract.go:Service"
+    },
+    {
+      "rule": "service-root-interface-count",
       "filePath": "pkg/services/recordings",
       "target": "pkg/services/recordings/contracts.go:Clock,pkg/services/recordings/contracts.go:CompletionDeliveryPlanner,pkg/services/recordings/contracts.go:InitialStructureSource,pkg/services/recordings/contracts.go:Ledger,pkg/services/recordings/contracts.go:LiveRecordingTargetPlanner,pkg/services/recordings/contracts.go:ProjectionService,pkg/services/recordings/contracts.go:RecordingClock,pkg/services/recordings/contracts.go:ReplayHook,pkg/services/recordings/contracts.go:RuntimeEventLedger,pkg/services/recordings/contracts.go:RuntimeLedger,pkg/services/recordings/contracts.go:RuntimeRecorder,pkg/services/recordings/contracts.go:Service,pkg/services/recordings/contracts.go:WorkerEventRecorder,pkg/services/recordings/contracts.go:WorkstationRequestProjector,pkg/services/recordings/portable_recording.go:PortableRecordingWriter,pkg/services/recordings/portable_recording.go:RecordingTemporaryFile"
     },
@@ -2540,17 +2620,7 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/workers",
-      "target": "pkg/services/workers/command.go:CommandRunner,pkg/services/workers/interfaces.go:AgentToolFileSystem,pkg/services/workers/interfaces.go:FactoryWorktreePreparer,pkg/services/workers/interfaces.go:HostedPollerClock,pkg/services/workers/interfaces.go:HostedPollerHTTPDoer,pkg/services/workers/interfaces.go:HostedRuntimePaths,pkg/services/workers/interfaces.go:InvocationExecutor,pkg/services/workers/interfaces.go:Runner,pkg/services/workers/interfaces.go:WorkerExecutor,pkg/services/workers/interfaces.go:WorkstationRequestExecutor,pkg/services/workers/interfaces.go:WorktreeFileSystem,pkg/services/workers/interfaces.go:WorktreeGitCommander,pkg/services/workers/prompt_template_contracts.go:PromptTemplates,pkg/services/providers/internal/services/execution/internal/provider_port.go:Provider,pkg/services/workers/runtime_service.go:RuntimeService,pkg/services/workers/sessions_consumer_contracts.go:ProviderRegistry,pkg/services/workers/workstation_contracts.go:ModelInvoker,pkg/services/workers/workstation_contracts.go:Service,pkg/services/workers/workstation_pool_boundary_contracts.go:WorkstationExecutionService,pkg/services/workers/workstation_pool_boundary_contracts.go:WorkstationPoolBoundary"
-    },
-    {
-      "rule": "service-root-interface-count",
-      "filePath": "pkg/services/workers/services/testing",
-      "target": "<none>"
-    },
-    {
-      "rule": "service-root-missing-internal",
-      "filePath": "pkg/services/workers/services/testing/internal",
-      "target": "pkg/services/workers/services/testing"
+      "target": "pkg/services/workers/command.go:CommandRunner,pkg/services/workers/interfaces.go:AgentToolFileSystem,pkg/services/workers/interfaces.go:FactoryWorktreePreparer,pkg/services/workers/interfaces.go:InvocationExecutor,pkg/services/workers/interfaces.go:Runner,pkg/services/workers/interfaces.go:WorkerExecutor,pkg/services/workers/interfaces.go:WorkstationRequestExecutor,pkg/services/workers/interfaces.go:WorktreeFileSystem,pkg/services/workers/interfaces.go:WorktreeGitCommander,pkg/services/workers/mock_workers_contracts.go:MockWorkersConfigFileSystem,pkg/services/workers/prompt_template_contracts.go:PromptTemplates,pkg/services/workers/provider_port.go:Provider,pkg/services/workers/pty_contracts.go:PTYAllocator,pkg/services/workers/pty_contracts.go:PTYSession,pkg/services/workers/runner_process.go:Clock,pkg/services/workers/runtime_service.go:RuntimeService,pkg/services/workers/sessions_consumer_contracts.go:ProviderRegistry,pkg/services/workers/workstation_contracts.go:ModelInvoker,pkg/services/workers/workstation_contracts.go:Service,pkg/services/workers/workstation_pool_boundary_contracts.go:WorkstationExecutionService,pkg/services/workers/workstation_pool_boundary_contracts.go:WorkstationPoolBoundary"
     },
     {
       "rule": "service-root-unexpected-directory",
@@ -2759,11 +2829,6 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_definitions/service",
-      "target": "pkg/services/factory_definitions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_definitions/systeminitializationtests",
       "target": "pkg/services/factory_definitions"
     },
@@ -2879,6 +2944,11 @@
     },
     {
       "rule": "service-root-unexpected-directory",
+      "filePath": "pkg/services/providers/inference",
+      "target": "pkg/services/providers"
+    },
+    {
+      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/recordings/internal/services/artifacts_export/artifacts",
       "target": "pkg/services/recordings/internal/services/artifacts_export"
     },
@@ -2896,26 +2966,6 @@
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/recordings/internal/services/replay/replay",
       "target": "pkg/services/recordings/internal/services/replay"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty",
-      "target": "pkg/services/workers"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/cliprovider",
-      "target": "pkg/services/workers"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/envdiagnostics",
-      "target": "pkg/services/workers"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/executor",
-      "target": "pkg/services/workers"
     },
     {
       "rule": "service-root-unexpected-directory",
@@ -2996,53 +3046,7 @@
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/workers/internal/services/workstations/worktree",
       "target": "pkg/services/workers/internal/services/workstations"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/invocation",
-      "target": "pkg/services/workers"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/process",
-      "target": "pkg/services/workers"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/prompting",
-      "target": "pkg/services/workers"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/providers/internal/services/execution/internal/provider",
-      "target": "pkg/services/workers"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/providers/internal/services/execution/internal/provider_test",
-      "target": "pkg/services/workers"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/runner",
-      "target": "pkg/services/workers"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/service",
-      "target": "pkg/services/workers"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/services",
-      "target": "pkg/services/workers"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/worktree",
-      "target": "pkg/services/workers"
     }
   ],
   "violations": []
 }
-

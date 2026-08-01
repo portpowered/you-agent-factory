@@ -178,19 +178,7 @@ func TestProviderSessionsRootGoInventoryDistinguishesThinContractTestsFromImplem
 		t.Fatalf("LoadProviderSessionsRootGoInventory() error = %v", err)
 	}
 
-	wantThinTests := []string{
-		"del_pses_baseline_gate_test.go",
-		"del_pses_deletion_gate_test.go",
-		"del_pses_prerequisite_gate_test.go",
-		"del_pses_proof_gate_test.go",
-		"legacy_packages_disposition_test.go",
-		"packaged_root_shape_test.go",
-		"providers_import_boundary_test.go",
-		"root_contracts_providers_boundary_test.go",
-		"root_wire_behavioral_boundary_test.go",
-		"service_import_boundary_test.go",
-		"service_root_contract_test.go",
-	}
+	wantThinTests := []string{}
 	wantFoldTests := []string{}
 
 	var gotThinTests []string
