@@ -19,87 +19,111 @@ import (
 
 const rootWireIdentityFixtureRelative = "pkg/services/operator_settings/internal/services/document/identityinventory/testdata/fixtures/valid/existing-scope.json"
 
-// TestRootWireBehavioralBoundary_PublishedServicePreservesObservables constructs
+// TestRootWireBehavioralBoundary_PublishedServicePersistsDocumentDefaults constructs
 // Operator Settings exclusively through operator_settings/wire and proves
-// LoadDocument, ApplyDocumentUpdate, and ResolveEffective preserve observable
-// outcomes and typed failures on the published operatorsettings.Service peer
-// surface after CLN-SET-CONTRACT-ROOTS seals the thin root.
-func TestRootWireBehavioralBoundary_PublishedServicePreservesObservables(t *testing.T) {
+// LoadDocument and ApplyDocumentUpdate preserve the published document results.
+func TestRootWireBehavioralBoundary_PublishedServicePersistsDocumentDefaults(t *testing.T) {
 	internaltestlink.RegisterComposition()
+	t.Parallel()
 
-	t.Run("document persist and effective resolution success", func(t *testing.T) {
-		t.Parallel()
+	homeDir := t.TempDir()
+	configPath := filepath.Join(homeDir, "config.json")
+	if err := os.WriteFile(configPath, []byte(`{
+		"defaults": {
+			"workerModelProvider": "codex",
+			"workerModel": "gpt-5"
+		}
+	}`), 0o600); err != nil {
+		t.Fatalf("WriteFile(config): %v", err)
+	}
 
-		homeDir := t.TempDir()
-		configPath := filepath.Join(homeDir, "config.json")
-		if err := os.WriteFile(configPath, []byte(`{
-			"defaults": {
-				"workerModelProvider": "codex",
-				"workerModel": "gpt-5"
-			}
-		}`), 0o600); err != nil {
-			t.Fatalf("WriteFile(config): %v", err)
-		}
+	root := newRootWireBehavioralService(t)
 
-		root := newRootWireBehavioralService(t)
+	loaded, err := root.LoadDocument(operatorsettings.LoadDocumentRequest{Path: configPath})
+	if err != nil {
+		t.Fatalf("LoadDocument() = %v", err)
+	}
+	if loaded.Document.Defaults.WorkerModelProvider != "codex" ||
+		loaded.Document.Defaults.WorkerModel != "gpt-5" {
+		t.Fatalf("LoadDocument() defaults = %#v, want codex/gpt-5", loaded.Document.Defaults)
+	}
 
-		loaded, err := root.LoadDocument(operatorsettings.LoadDocumentRequest{Path: configPath})
-		if err != nil {
-			t.Fatalf("LoadDocument() = %v", err)
-		}
-		if loaded.Document.Defaults.WorkerModelProvider != "codex" ||
-			loaded.Document.Defaults.WorkerModel != "gpt-5" {
-			t.Fatalf("LoadDocument() defaults = %#v, want codex/gpt-5", loaded.Document.Defaults)
-		}
-
-		provider := "gemini"
-		model := "gemini-pro"
-		updated, err := root.ApplyDocumentUpdate(operatorsettings.ApplyDocumentUpdateRequest{
-			Path: configPath,
-			ProviderModel: operatorsettings.DocumentProviderModelUpdate{
-				Provider: &provider,
-				Model:    &model,
-			},
-		})
-		if err != nil {
-			t.Fatalf("ApplyDocumentUpdate() = %v", err)
-		}
-		if !updated.Persisted {
-			t.Fatal("ApplyDocumentUpdate() Persisted = false, want true after atomic persist")
-		}
-		if updated.Document.Defaults.WorkerModelProvider != "GEMINI" ||
-			updated.Document.Defaults.WorkerModel != "gemini-pro" {
-			t.Fatalf("ApplyDocumentUpdate() defaults = %#v, want GEMINI/gemini-pro", updated.Document.Defaults)
-		}
-
-		reloaded, err := root.LoadDocument(operatorsettings.LoadDocumentRequest{Path: configPath})
-		if err != nil {
-			t.Fatalf("LoadDocument() after persist = %v", err)
-		}
-		if reloaded.Document.Defaults != updated.Document.Defaults {
-			t.Fatalf("reloaded defaults = %#v, want %#v", reloaded.Document.Defaults, updated.Document.Defaults)
-		}
-
-		resolved, err := root.ResolveEffective(operatorsettings.ResolveEffectiveRequest{
-			DocumentBaseline: operatorsettings.DocumentDefaults{
-				WorkerModelProvider: "CODEX",
-				WorkerModel:         "gpt-5",
-			},
-			InvocationOverrides: operatorsettings.EffectiveOverrideFacts{
-				WorkerModelProvider: "gemini",
-				WorkerModel:         "flag-model",
-			},
-			ConfigPath: configPath,
-		})
-		if err != nil {
-			t.Fatalf("ResolveEffective() = %v", err)
-		}
-		if resolved.Selection.WorkerModelProvider != "GEMINI" ||
-			resolved.Selection.WorkerModel != "flag-model" ||
-			resolved.Selection.ConfigPath != configPath {
-			t.Fatalf("ResolveEffective() = %#v", resolved.Selection)
-		}
+	provider := "gemini"
+	model := "gemini-pro"
+	updated, err := root.ApplyDocumentUpdate(operatorsettings.ApplyDocumentUpdateRequest{
+		Path: configPath,
+		ProviderModel: operatorsettings.DocumentProviderModelUpdate{
+			Provider: &provider,
+			Model:    &model,
+		},
 	})
+	if err != nil {
+		t.Fatalf("ApplyDocumentUpdate() = %v", err)
+	}
+	if !updated.Persisted {
+		t.Fatal("ApplyDocumentUpdate() Persisted = false, want true after atomic persist")
+	}
+	if updated.Document.Defaults.WorkerModelProvider != "GEMINI" ||
+		updated.Document.Defaults.WorkerModel != "gemini-pro" {
+		t.Fatalf("ApplyDocumentUpdate() defaults = %#v, want GEMINI/gemini-pro", updated.Document.Defaults)
+	}
+
+	reloaded, err := root.LoadDocument(operatorsettings.LoadDocumentRequest{Path: configPath})
+	if err != nil {
+		t.Fatalf("LoadDocument() after persist = %v", err)
+	}
+	if reloaded.Document.Defaults != updated.Document.Defaults {
+		t.Fatalf("reloaded defaults = %#v, want %#v", reloaded.Document.Defaults, updated.Document.Defaults)
+	}
+}
+
+// TestRootWireBehavioralBoundary_PublishedServiceResolvesEffectiveSelection
+// constructs Operator Settings exclusively through operator_settings/wire and
+// proves ResolveEffective preserves provider normalization, invocation override
+// precedence, and config path results on the published service root.
+func TestRootWireBehavioralBoundary_PublishedServiceResolvesEffectiveSelection(t *testing.T) {
+	internaltestlink.RegisterComposition()
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	configPath := filepath.Join(homeDir, "config.json")
+	if err := os.WriteFile(configPath, []byte(`{
+		"defaults": {
+			"workerModelProvider": "codex",
+			"workerModel": "gpt-5"
+		}
+	}`), 0o600); err != nil {
+		t.Fatalf("WriteFile(config): %v", err)
+	}
+
+	root := newRootWireBehavioralService(t)
+
+	resolved, err := root.ResolveEffective(operatorsettings.ResolveEffectiveRequest{
+		DocumentBaseline: operatorsettings.DocumentDefaults{
+			WorkerModelProvider: "CODEX",
+			WorkerModel:         "gpt-5",
+		},
+		InvocationOverrides: operatorsettings.EffectiveOverrideFacts{
+			WorkerModelProvider: "gemini",
+			WorkerModel:         "flag-model",
+		},
+		ConfigPath: configPath,
+	})
+	if err != nil {
+		t.Fatalf("ResolveEffective() = %v", err)
+	}
+	if resolved.Selection.WorkerModelProvider != "GEMINI" ||
+		resolved.Selection.WorkerModel != "flag-model" ||
+		resolved.Selection.ConfigPath != configPath {
+		t.Fatalf("ResolveEffective() = %#v", resolved.Selection)
+	}
+}
+
+// TestRootWireBehavioralBoundary_PublishedServicePreservesScopeAndTypedFailures
+// keeps the remaining scope and failure observations on the published service
+// root for their focused follow-up scenarios.
+func TestRootWireBehavioralBoundary_PublishedServicePreservesScopeAndTypedFailures(t *testing.T) {
+	internaltestlink.RegisterComposition()
 
 	t.Run("backend scope identity and conflict", func(t *testing.T) {
 		t.Parallel()
