@@ -677,6 +677,22 @@ func (fake *peerRootServiceFake) ForRuntime(OpeningBindingRequest) (Service, err
 	return fake, nil
 }
 
+func (fake *peerRootServiceFake) Start(context.Context, StartRequest) (StartResult, error) {
+	return StartResult{}, ErrDurableSessionNotFound
+}
+
+func (fake *peerRootServiceFake) InvokeFactorySession(
+	context.Context,
+	string,
+	InvocationRequest,
+) (InvocationResult, error) {
+	return InvocationResult{}, ErrSessionNotFound
+}
+
+func (fake *peerRootServiceFake) ActivateNamedFactory(context.Context, string) error {
+	return ErrSessionNotFound
+}
+
 func (fake *peerRootServiceFake) OpenFactorySession(context.Context, OpenRequest) (*OpenResult, error) {
 	return &OpenResult{SessionID: DefaultSessionID}, nil
 }

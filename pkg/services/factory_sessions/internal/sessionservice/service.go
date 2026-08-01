@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
@@ -27,6 +28,11 @@ type Service struct {
 	results        factoryruntime.SessionResultProjectionOperation
 	responseEvents responsestreamservice.Service
 	durable        durableexecution.Service
+	invoker        interface {
+		InvokeFactorySession(context.Context, string, factorysessions.InvocationRequest) (factorydefinitions.FactoryInvocationResult, error)
+	}
+	activate          func(context.Context, string) error
+	activationGateway factorysessions.DefinitionActivationGateway
 }
 
 // ForRuntime keeps an already-bound Factory Sessions gateway stable.
@@ -35,6 +41,74 @@ func (s *Service) ForRuntime(factorysessions.RuntimeBinding) (factorysessions.Se
 		return nil, fmt.Errorf("Factory Sessions gateway is required")
 	}
 	return s, nil
+}
+
+// InvokeFactorySession routes invocation through the root-owned invocation
+// capability attached by the runtime assembly. The nil capability case is
+// explicit so inert construction never starts a runtime as a side effect.
+func (s *Service) InvokeFactorySession(
+	ctx context.Context,
+	sessionID string,
+	request factorysessions.InvocationRequest,
+) (factorysessions.InvocationResult, error) {
+	if s == nil || s.invoker == nil {
+		return factorysessions.InvocationResult{}, fmt.Errorf("Factory Session invocation service is required")
+	}
+	result, err := s.invoker.InvokeFactorySession(ctx, sessionID, request)
+	if err != nil {
+		return factorysessions.InvocationResult{}, err
+	}
+	return factorysessions.InvocationResult{
+		RequestID:     result.RequestID,
+		TraceID:       result.TraceID,
+		Status:        factorysessions.InvocationTerminalStatus(result.Status),
+		PrimaryResult: result.PrimaryResult,
+		ErrorCode:     result.ErrorCode,
+		Message:       result.Message,
+		SessionID:     result.SessionID,
+		WorkID:        result.WorkID,
+		WorkName:      result.WorkName,
+		WorkState:     result.WorkState,
+	}, nil
+}
+
+// ActivateNamedFactory routes named-factory activation through the root-owned
+// runtime callback. Definition policy remains in Factory Definitions; this
+// method only exposes the Sessions-owned serialization boundary.
+func (s *Service) ActivateNamedFactory(ctx context.Context, name string) error {
+	if s == nil || s.activate == nil {
+		return fmt.Errorf("Factory Session activation service is required")
+	}
+	return s.activate(ctx, name)
+}
+
+// DefinitionActivationGateway exposes the already-attached narrow activation
+// edge for the Definitions composition boundary. It is implemented by the
+// concrete root without adding another capability to the peer-facing Service
+// method set.
+func (s *Service) DefinitionActivationGateway() factorysessions.DefinitionActivationGateway {
+	if s == nil {
+		return nil
+	}
+	return s.activationGateway
+}
+
+// bindRootCapabilities attaches runtime-owned capabilities after the live
+// session assembly has been created. It is intentionally private to the
+// Sessions implementation; peers receive only Service.
+func (s *Service) bindRootCapabilities(
+	invoker interface {
+		InvokeFactorySession(context.Context, string, factorysessions.InvocationRequest) (factorydefinitions.FactoryInvocationResult, error)
+	},
+	activate func(context.Context, string) error,
+	activationGateway factorysessions.DefinitionActivationGateway,
+) {
+	if s == nil {
+		return
+	}
+	s.invoker = invoker
+	s.activate = activate
+	s.activationGateway = activationGateway
 }
 
 // New constructs a session gateway with explicit host and dataplane dependencies.

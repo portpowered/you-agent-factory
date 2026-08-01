@@ -73,13 +73,13 @@ func TestHandlerFromRoot_ListFactorySessionsInvokesSessionsRoot(t *testing.T) {
 }
 
 type httpSessionsRootFake struct {
-	sessions     map[string]factorysessions.SessionProjection
-	getSession   func(context.Context, string) (factorysessions.SessionProjection, error)
-	listReads    func(context.Context) ([]factorysessions.ReadProjection, error)
-	listSessions func(context.Context, factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error)
-	onOpen       func(context.Context, factorysessions.OpenRequest) (*factorysessions.OpenResult, error)
-	onClose      func(context.Context, string) error
-	onStartAsync func(context.Context, factorysessions.StartRequest) (factorysessions.AsyncStartResult, error)
+	sessions       map[string]factorysessions.SessionProjection
+	getSession     func(context.Context, string) (factorysessions.SessionProjection, error)
+	listReads      func(context.Context) ([]factorysessions.ReadProjection, error)
+	listSessions   func(context.Context, factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error)
+	onOpen         func(context.Context, factorysessions.OpenRequest) (*factorysessions.OpenResult, error)
+	onClose        func(context.Context, string) error
+	onStartAsync   func(context.Context, factorysessions.StartRequest) (factorysessions.AsyncStartResult, error)
 	onPauseDurable func(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
 	onPauseLive    func(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
 }
@@ -88,6 +88,34 @@ var _ factorysessions.Service = (*httpSessionsRootFake)(nil)
 
 func (fake *httpSessionsRootFake) ForRuntime(factorysessions.OpeningBindingRequest) (factorysessions.Service, error) {
 	return fake, nil
+}
+
+func (fake *httpSessionsRootFake) Start(
+	ctx context.Context,
+	request factorysessions.StartRequest,
+) (factorysessions.StartResult, error) {
+	started, err := fake.StartAsync(ctx, request)
+	if err != nil {
+		return factorysessions.StartResult{}, err
+	}
+	return factorysessions.StartResult{
+		SessionID: started.SessionID,
+		Status:    factorysessions.LifecycleStatus(started.Status),
+		Mode:      factorysessions.StartModeDurableAsync,
+		Async:     &started,
+	}, nil
+}
+
+func (fake *httpSessionsRootFake) InvokeFactorySession(
+	context.Context,
+	string,
+	factorysessions.InvocationRequest,
+) (factorysessions.InvocationResult, error) {
+	return factorysessions.InvocationResult{}, factorysessions.ErrSessionNotFound
+}
+
+func (fake *httpSessionsRootFake) ActivateNamedFactory(context.Context, string) error {
+	return factorysessions.ErrSessionNotFound
 }
 
 func (fake *httpSessionsRootFake) ListFactorySessions(ctx context.Context) ([]factorysessions.ReadProjection, error) {
