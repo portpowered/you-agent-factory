@@ -1,4 +1,4 @@
-package http
+package observe
 
 import factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 

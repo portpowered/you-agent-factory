@@ -1,9 +1,12 @@
-package http
+package presentation
 
 import (
 	"context"
 	"io"
 	"net/http"
+
+	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http/common"
+	transporterrors "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http/errors"
 )
 
 // OpenPresentationHTTP decodes an owned presentation-open HTTP request, invokes
@@ -16,10 +19,14 @@ func (a *Adapter) OpenPresentationHTTP(
 	if err != nil {
 		return OpenPresentationHTTPResponse{}, err
 	}
-	if err := visualizationContextBeforeRoot(ctx); err != nil {
+	if err := common.ContextBeforeRoot(ctx); err != nil {
 		return OpenPresentationHTTPResponse{}, err
 	}
-	result, err := a.OpenPresentation(ctx, req)
+	root, err := a.root()
+	if err != nil {
+		return OpenPresentationHTTPResponse{}, err
+	}
+	result, err := root.OpenPresentation(ctx, req)
 	if err != nil {
 		return OpenPresentationHTTPResponse{}, err
 	}
@@ -37,10 +44,14 @@ func (a *Adapter) PresentProgressHTTP(
 	if err != nil {
 		return PresentProgressHTTPResponse{}, err
 	}
-	if err := visualizationContextBeforeRoot(ctx); err != nil {
+	if err := common.ContextBeforeRoot(ctx); err != nil {
 		return PresentProgressHTTPResponse{}, err
 	}
-	result, err := a.PresentProgress(ctx, req)
+	root, err := a.root()
+	if err != nil {
+		return PresentProgressHTTPResponse{}, err
+	}
+	result, err := root.PresentProgress(ctx, req)
 	if err != nil {
 		return PresentProgressHTTPResponse{}, err
 	}
@@ -58,10 +69,14 @@ func (a *Adapter) FinalizePresentationHTTP(
 	if err != nil {
 		return FinalizePresentationHTTPResponse{}, err
 	}
-	if err := visualizationContextBeforeRoot(ctx); err != nil {
+	if err := common.ContextBeforeRoot(ctx); err != nil {
 		return FinalizePresentationHTTPResponse{}, err
 	}
-	result, err := a.FinalizePresentation(ctx, req)
+	root, err := a.root()
+	if err != nil {
+		return FinalizePresentationHTTPResponse{}, err
+	}
+	result, err := root.FinalizePresentation(ctx, req)
 	if err != nil {
 		return FinalizePresentationHTTPResponse{}, err
 	}
@@ -79,10 +94,14 @@ func (a *Adapter) ClosePresentationHTTP(
 	if err != nil {
 		return ClosePresentationHTTPResponse{}, err
 	}
-	if err := visualizationContextBeforeRoot(ctx); err != nil {
+	if err := common.ContextBeforeRoot(ctx); err != nil {
 		return ClosePresentationHTTPResponse{}, err
 	}
-	result, err := a.ClosePresentation(ctx, req)
+	root, err := a.root()
+	if err != nil {
+		return ClosePresentationHTTPResponse{}, err
+	}
+	result, err := root.ClosePresentation(ctx, req)
 	if err != nil {
 		return ClosePresentationHTTPResponse{}, err
 	}
@@ -96,7 +115,7 @@ func (a *Adapter) HandleOpenPresentation(w http.ResponseWriter, r *http.Request)
 		a.writePresentationRequestError(w, err)
 		return
 	}
-	a.writeJSON(w, http.StatusOK, response)
+	common.WriteJSON(w, http.StatusOK, response, a.logger)
 }
 
 // HandlePresentProgress serves POST /factory-visualization/presentation/progress.
@@ -106,7 +125,7 @@ func (a *Adapter) HandlePresentProgress(w http.ResponseWriter, r *http.Request) 
 		a.writePresentationRequestError(w, err)
 		return
 	}
-	a.writeJSON(w, http.StatusOK, response)
+	common.WriteJSON(w, http.StatusOK, response, a.logger)
 }
 
 // HandleFinalizePresentation serves POST /factory-visualization/presentation/finalize.
@@ -116,7 +135,7 @@ func (a *Adapter) HandleFinalizePresentation(w http.ResponseWriter, r *http.Requ
 		a.writePresentationRequestError(w, err)
 		return
 	}
-	a.writeJSON(w, http.StatusOK, response)
+	common.WriteJSON(w, http.StatusOK, response, a.logger)
 }
 
 // HandleClosePresentation serves POST /factory-visualization/presentation/close.
@@ -126,9 +145,9 @@ func (a *Adapter) HandleClosePresentation(w http.ResponseWriter, r *http.Request
 		a.writePresentationRequestError(w, err)
 		return
 	}
-	a.writeJSON(w, http.StatusOK, response)
+	common.WriteJSON(w, http.StatusOK, response, a.logger)
 }
 
 func (a *Adapter) writePresentationRequestError(w http.ResponseWriter, err error) {
-	a.writeVisualizationRequestError(w, err, "factory visualization presentation request failed")
+	transporterrors.WriteRequestError(w, a.logger, err, "factory visualization presentation request failed")
 }

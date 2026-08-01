@@ -1,9 +1,12 @@
-package http
+package observe
 
 import (
 	"context"
 	"io"
 	"net/http"
+
+	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http/common"
+	transporterrors "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http/errors"
 )
 
 // ObserveHTTP decodes an owned Observe HTTP request, invokes the Visualization
@@ -16,10 +19,14 @@ func (a *Adapter) ObserveHTTP(
 	if err != nil {
 		return ObserveHTTPResponse{}, err
 	}
-	if err := visualizationContextBeforeRoot(ctx); err != nil {
+	if err := common.ContextBeforeRoot(ctx); err != nil {
 		return ObserveHTTPResponse{}, err
 	}
-	result, err := a.Observe(ctx, req)
+	root, err := a.root()
+	if err != nil {
+		return ObserveHTTPResponse{}, err
+	}
+	result, err := root.Observe(ctx, req)
 	if err != nil {
 		return ObserveHTTPResponse{}, err
 	}
@@ -33,9 +40,9 @@ func (a *Adapter) HandleObserve(w http.ResponseWriter, r *http.Request) {
 		a.writeObserveRequestError(w, err)
 		return
 	}
-	a.writeJSON(w, http.StatusOK, response)
+	common.WriteJSON(w, http.StatusOK, response, a.logger)
 }
 
 func (a *Adapter) writeObserveRequestError(w http.ResponseWriter, err error) {
-	a.writeVisualizationRequestError(w, err, "factory visualization observe request failed")
+	transporterrors.WriteRequestError(w, a.logger, err, "factory visualization observe request failed")
 }

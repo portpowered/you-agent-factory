@@ -1,4 +1,4 @@
-package http
+package presentation
 
 // OpenPresentationHTTPRequest is the adapter-owned HTTP request shape for
 // Visualization presentation open. PSS-I02 later fans this into shared OpenAPI

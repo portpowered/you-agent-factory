@@ -1,4 +1,4 @@
-package http
+package observe
 
 import "time"
 
@@ -6,7 +6,7 @@ import "time"
 // Observe. PSS-I02 later fans this into shared OpenAPI route registration; this
 // packet proves decode/map at the owner-local adapter edge.
 type ObserveHTTPRequest struct {
-	Mode      string                         `json:"mode"`
+	Mode      string                             `json:"mode"`
 	Reconnect *ObserveReconnectCursorHTTPRequest `json:"reconnect,omitempty"`
 }
 

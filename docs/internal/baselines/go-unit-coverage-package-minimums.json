@@ -1229,6 +1229,30 @@
       "minimum": 78.83
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http/binding",
+      "minimum": 80.55
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http/common",
+      "minimum": 72.41
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http/errors",
+      "minimum": 87.50
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http/lifecycle",
+      "minimum": 80.26
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http/observe",
+      "minimum": 90.62
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http/presentation",
+      "minimum": 74.25
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/mcp",
       "minimum": 75.87
     },

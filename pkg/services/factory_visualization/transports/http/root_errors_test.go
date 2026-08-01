@@ -239,6 +239,54 @@ func TestVisualizationRootErrorResponseReturnsFalseForUnknownError(t *testing.T)
 	}
 }
 
+func TestVisualizationRootErrorResponseIgnoresTypedNilRootErrors(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		err  error
+	}{
+		{
+			name: "lifecycle",
+			err:  typedNilLifecycleError(),
+		},
+		{
+			name: "projection",
+			err:  typedNilProjectionError(),
+		},
+		{
+			name: "presentation",
+			err:  typedNilPresentationError(),
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			if _, _, ok := factoryvisualizationhttp.VisualizationRootErrorResponseForTest(tc.err); ok {
+				t.Fatal("VisualizationRootErrorResponse = true, want false")
+			}
+		})
+	}
+}
+
+func typedNilLifecycleError() error {
+	var err *factoryvisualization.LifecycleError
+	return err
+}
+
+func typedNilProjectionError() error {
+	var err *factoryvisualization.ProjectionError
+	return err
+}
+
+func typedNilPresentationError() error {
+	var err *factoryvisualization.PresentationError
+	return err
+}
+
 func TestHandleActivateLifecycle_HTTPRoundTripMissingParametersTypedError(t *testing.T) {
 	t.Parallel()
 

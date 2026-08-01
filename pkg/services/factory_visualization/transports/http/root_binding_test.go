@@ -2,6 +2,9 @@ package http_test
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
@@ -48,8 +51,80 @@ func TestHandlerFromRoot_ActivateRequiresInjectedRoot(t *testing.T) {
 	}
 }
 
+func TestHandlerFromRoot_RejectsTypedNilVisualizationRoot(t *testing.T) {
+	t.Parallel()
+
+	var root *httpVisualizationRootFake
+	handler := factoryvisualizationhttp.NewHandlerFromRoot(
+		factoryvisualizationhttp.RootBinding{Visualization: root},
+		zap.NewNop(),
+	)
+
+	if _, err := handler.Activate(context.Background(), factoryvisualization.ActivateRequest{
+		Mode: factoryvisualization.ActivateModeRetainedThenLive,
+	}); err == nil {
+		t.Fatal("Activate with typed nil root = nil, want unavailable-root error")
+	}
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/factory-visualization/lifecycle/activate",
+		strings.NewReader(`{"mode":"RETAINED_THEN_LIVE"}`),
+	)
+	handler.HandleActivateLifecycle(recorder, request)
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf("typed nil root HTTP status = %d, want %d", recorder.Code, http.StatusInternalServerError)
+	}
+}
+
+func TestHandlerFromRoot_ForwardsAllVisualizationOperations(t *testing.T) {
+	t.Parallel()
+
+	root := &httpVisualizationRootFake{}
+	handler := factoryvisualizationhttp.NewHandlerFromRoot(
+		factoryvisualizationhttp.RootBinding{Visualization: root},
+		zap.NewNop(),
+	)
+
+	if _, err := handler.Join(context.Background(), factoryvisualization.JoinRequest{}); err != nil {
+		t.Fatalf("Join: %v", err)
+	}
+	if _, err := handler.StopDrain(context.Background(), factoryvisualization.StopDrainRequest{}); err != nil {
+		t.Fatalf("StopDrain: %v", err)
+	}
+	if _, err := handler.Observe(context.Background(), factoryvisualization.ObserveRequest{}); err != nil {
+		t.Fatalf("Observe: %v", err)
+	}
+	if _, err := handler.OpenPresentation(context.Background(), factoryvisualization.OpenPresentationRequest{}); err != nil {
+		t.Fatalf("OpenPresentation: %v", err)
+	}
+	if _, err := handler.PresentProgress(context.Background(), factoryvisualization.PresentProgressRequest{}); err != nil {
+		t.Fatalf("PresentProgress: %v", err)
+	}
+	if _, err := handler.FinalizePresentation(context.Background(), factoryvisualization.FinalizePresentationRequest{}); err != nil {
+		t.Fatalf("FinalizePresentation: %v", err)
+	}
+	if _, err := handler.ClosePresentation(context.Background(), factoryvisualization.ClosePresentationRequest{}); err != nil {
+		t.Fatalf("ClosePresentation: %v", err)
+	}
+
+	if !root.joinInvoked || !root.stopDrainInvoked || !root.observeInvoked ||
+		!root.openPresentationInvoked || !root.presentProgressInvoked ||
+		!root.finalizePresentationInvoked || !root.closePresentationInvoked {
+		t.Fatalf("root invocation flags = %#v, want every operation invoked", root)
+	}
+}
+
 type httpVisualizationRootFake struct {
-	activateInvoked bool
+	activateInvoked             bool
+	joinInvoked                 bool
+	stopDrainInvoked            bool
+	observeInvoked              bool
+	openPresentationInvoked     bool
+	presentProgressInvoked      bool
+	finalizePresentationInvoked bool
+	closePresentationInvoked    bool
 }
 
 var _ factoryvisualization.Root = (*httpVisualizationRootFake)(nil)
@@ -74,47 +149,54 @@ func (fake *httpVisualizationRootFake) Join(
 	context.Context,
 	factoryvisualization.JoinRequest,
 ) (factoryvisualization.JoinResult, error) {
-	panic("unexpected Join call in HTTP adapter root seam test")
+	fake.joinInvoked = true
+	return factoryvisualization.JoinResult{}, nil
 }
 
 func (fake *httpVisualizationRootFake) StopDrain(
 	context.Context,
 	factoryvisualization.StopDrainRequest,
 ) (factoryvisualization.StopDrainResult, error) {
-	panic("unexpected StopDrain call in HTTP adapter root seam test")
+	fake.stopDrainInvoked = true
+	return factoryvisualization.StopDrainResult{}, nil
 }
 
 func (fake *httpVisualizationRootFake) Observe(
 	context.Context,
 	factoryvisualization.ObserveRequest,
 ) (factoryvisualization.ObserveResult, error) {
-	panic("unexpected Observe call in HTTP adapter root seam test")
+	fake.observeInvoked = true
+	return factoryvisualization.ObserveResult{}, nil
 }
 
 func (fake *httpVisualizationRootFake) OpenPresentation(
 	context.Context,
 	factoryvisualization.OpenPresentationRequest,
 ) (factoryvisualization.OpenPresentationResult, error) {
-	panic("unexpected OpenPresentation call in HTTP adapter root seam test")
+	fake.openPresentationInvoked = true
+	return factoryvisualization.OpenPresentationResult{}, nil
 }
 
 func (fake *httpVisualizationRootFake) PresentProgress(
 	context.Context,
 	factoryvisualization.PresentProgressRequest,
 ) (factoryvisualization.PresentProgressResult, error) {
-	panic("unexpected PresentProgress call in HTTP adapter root seam test")
+	fake.presentProgressInvoked = true
+	return factoryvisualization.PresentProgressResult{}, nil
 }
 
 func (fake *httpVisualizationRootFake) FinalizePresentation(
 	context.Context,
 	factoryvisualization.FinalizePresentationRequest,
 ) (factoryvisualization.FinalizePresentationResult, error) {
-	panic("unexpected FinalizePresentation call in HTTP adapter root seam test")
+	fake.finalizePresentationInvoked = true
+	return factoryvisualization.FinalizePresentationResult{}, nil
 }
 
 func (fake *httpVisualizationRootFake) ClosePresentation(
 	context.Context,
 	factoryvisualization.ClosePresentationRequest,
 ) (factoryvisualization.ClosePresentationResult, error) {
-	panic("unexpected ClosePresentation call in HTTP adapter root seam test")
+	fake.closePresentationInvoked = true
+	return factoryvisualization.ClosePresentationResult{}, nil
 }

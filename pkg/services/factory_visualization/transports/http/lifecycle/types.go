@@ -1,4 +1,4 @@
-package http
+package lifecycle
 
 // ActivateHTTPRequest is the adapter-owned HTTP request shape for Visualization
 // lifecycle Activate. PSS-I02 later fans this into shared OpenAPI route

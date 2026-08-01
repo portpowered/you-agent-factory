@@ -300,6 +300,12 @@
     "pkg/services/factory_visualization/internal/testing/recordingsstub",
     "pkg/services/factory_visualization/transports/cli",
     "pkg/services/factory_visualization/transports/http",
+    "pkg/services/factory_visualization/transports/http/binding",
+    "pkg/services/factory_visualization/transports/http/common",
+    "pkg/services/factory_visualization/transports/http/errors",
+    "pkg/services/factory_visualization/transports/http/lifecycle",
+    "pkg/services/factory_visualization/transports/http/observe",
+    "pkg/services/factory_visualization/transports/http/presentation",
     "pkg/services/factory_visualization/transports/mcp",
     "pkg/services/factory_visualization/wire",
     "pkg/services/models",
@@ -1863,6 +1869,36 @@
     },
     {
       "packagePath": "pkg/services/factory_visualization/transports/http",
+      "disposition": "retain",
+      "destination": "factory_visualization"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/transports/http/binding",
+      "disposition": "retain",
+      "destination": "factory_visualization"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/transports/http/common",
+      "disposition": "retain",
+      "destination": "factory_visualization"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/transports/http/errors",
+      "disposition": "retain",
+      "destination": "factory_visualization"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/transports/http/lifecycle",
+      "disposition": "retain",
+      "destination": "factory_visualization"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/transports/http/observe",
+      "disposition": "retain",
+      "destination": "factory_visualization"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/transports/http/presentation",
       "disposition": "retain",
       "destination": "factory_visualization"
     },

@@ -10,10 +10,30 @@ import (
 )
 
 const (
-	httpAdapterPackagePath  = "pkg/services/factory_visualization/transports/http"
-	httpAdapterImportPath   = "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http"
+	httpAdapterPackagePath    = "pkg/services/factory_visualization/transports/http"
+	httpAdapterImportPath     = "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/http"
 	factoryVisualizationOwner = "factory_visualization"
 )
+
+var httpAdapterPackagePaths = []string{
+	httpAdapterPackagePath,
+	httpAdapterPackagePath + "/binding",
+	httpAdapterPackagePath + "/common",
+	httpAdapterPackagePath + "/errors",
+	httpAdapterPackagePath + "/lifecycle",
+	httpAdapterPackagePath + "/observe",
+	httpAdapterPackagePath + "/presentation",
+}
+
+var httpAdapterImportPaths = []string{
+	httpAdapterImportPath,
+	httpAdapterImportPath + "/binding",
+	httpAdapterImportPath + "/common",
+	httpAdapterImportPath + "/errors",
+	httpAdapterImportPath + "/lifecycle",
+	httpAdapterImportPath + "/observe",
+	httpAdapterImportPath + "/presentation",
+}
 
 type coverageMinimumManifest struct {
 	Lane     string `json:"lane"`
@@ -52,30 +72,42 @@ func assertPackageTargetManifestRegistration(t *testing.T) {
 		t.Fatalf("decode package-target manifest: %v", err)
 	}
 
-	foundInventory := false
+	foundInventory := make(map[string]bool, len(httpAdapterPackagePaths))
 	for _, packagePath := range manifest.Inventory {
-		if packagePath == httpAdapterPackagePath {
-			foundInventory = true
-			break
+		for _, expectedPath := range httpAdapterPackagePaths {
+			if packagePath == expectedPath {
+				foundInventory[expectedPath] = true
+			}
 		}
 	}
-	if !foundInventory {
-		t.Fatalf("package-target manifest inventory missing %q", httpAdapterPackagePath)
+	for _, expectedPath := range httpAdapterPackagePaths {
+		if !foundInventory[expectedPath] {
+			t.Fatalf("package-target manifest inventory missing %q", expectedPath)
+		}
 	}
 
+	expectedPackages := make(map[string]bool, len(httpAdapterPackagePaths))
+	for _, expectedPath := range httpAdapterPackagePaths {
+		expectedPackages[expectedPath] = true
+	}
+	foundPackages := make(map[string]bool, len(httpAdapterPackagePaths))
 	for _, row := range manifest.Packages {
-		if row.PackagePath != httpAdapterPackagePath {
+		if !expectedPackages[row.PackagePath] {
 			continue
 		}
 		if row.Disposition != ownershipinventory.DispositionRetain {
-			t.Fatalf("package-target manifest disposition = %q, want %q", row.Disposition, ownershipinventory.DispositionRetain)
+			t.Fatalf("package-target manifest disposition for %q = %q, want %q", row.PackagePath, row.Disposition, ownershipinventory.DispositionRetain)
 		}
 		if row.Destination != factoryVisualizationOwner {
-			t.Fatalf("package-target manifest destination = %q, want %q", row.Destination, factoryVisualizationOwner)
+			t.Fatalf("package-target manifest destination for %q = %q, want %q", row.PackagePath, row.Destination, factoryVisualizationOwner)
 		}
-		return
+		foundPackages[row.PackagePath] = true
 	}
-	t.Fatalf("package-target manifest packages missing %q", httpAdapterPackagePath)
+	for _, expectedPath := range httpAdapterPackagePaths {
+		if !foundPackages[expectedPath] {
+			t.Fatalf("package-target manifest packages missing %q", expectedPath)
+		}
+	}
 }
 
 func assertOwnershipInventoryRegistration(t *testing.T) {
@@ -93,26 +125,36 @@ func assertOwnershipInventoryRegistration(t *testing.T) {
 		t.Fatalf("decode ownership inventory: %v", err)
 	}
 
+	expectedPackages := make(map[string]bool, len(httpAdapterPackagePaths))
+	for _, expectedPath := range httpAdapterPackagePaths {
+		expectedPackages[expectedPath] = true
+	}
+	foundPackages := make(map[string]bool, len(httpAdapterPackagePaths))
 	for _, row := range inventory.Packages {
-		if row.PackagePath != httpAdapterPackagePath {
+		if !expectedPackages[row.PackagePath] {
 			continue
 		}
 		if row.Disposition != ownershipinventory.DispositionRetain {
-			t.Fatalf("ownership inventory disposition = %q, want %q", row.Disposition, ownershipinventory.DispositionRetain)
+			t.Fatalf("ownership inventory disposition for %q = %q, want %q", row.PackagePath, row.Disposition, ownershipinventory.DispositionRetain)
 		}
 		if row.Destination != factoryVisualizationOwner {
-			t.Fatalf("ownership inventory destination = %q, want %q", row.Destination, factoryVisualizationOwner)
+			t.Fatalf("ownership inventory destination for %q = %q, want %q", row.PackagePath, row.Destination, factoryVisualizationOwner)
 		}
 		if row.DestinationKind != ownershipinventory.DestinationKindOwner {
 			t.Fatalf(
-				"ownership inventory destinationKind = %q, want %q",
+				"ownership inventory destinationKind for %q = %q, want %q",
+				row.PackagePath,
 				row.DestinationKind,
 				ownershipinventory.DestinationKindOwner,
 			)
 		}
-		return
+		foundPackages[row.PackagePath] = true
 	}
-	t.Fatalf("ownership inventory packages missing %q", httpAdapterPackagePath)
+	for _, expectedPath := range httpAdapterPackagePaths {
+		if !foundPackages[expectedPath] {
+			t.Fatalf("ownership inventory packages missing %q", expectedPath)
+		}
+	}
 }
 
 func assertCoverageMinimumRegistration(t *testing.T, lane string, relativePath string) {
@@ -131,14 +173,23 @@ func assertCoverageMinimumRegistration(t *testing.T, lane string, relativePath s
 		t.Fatalf("%s coverage manifest lane = %q, want %q", relativePath, manifest.Lane, lane)
 	}
 
+	expectedPackages := make(map[string]bool, len(httpAdapterImportPaths))
+	for _, expectedPath := range httpAdapterImportPaths {
+		expectedPackages[expectedPath] = true
+	}
+	foundPackages := make(map[string]bool, len(httpAdapterImportPaths))
 	for _, entry := range manifest.Packages {
-		if entry.Package != httpAdapterImportPath {
+		if !expectedPackages[entry.Package] {
 			continue
 		}
 		if entry.Minimum < 0 {
-			t.Fatalf("%s coverage minimum for %q must be non-negative", lane, httpAdapterImportPath)
+			t.Fatalf("%s coverage minimum for %q must be non-negative", lane, entry.Package)
 		}
-		return
+		foundPackages[entry.Package] = true
 	}
-	t.Fatalf("%s coverage manifest missing %q", lane, httpAdapterImportPath)
+	for _, expectedPath := range httpAdapterImportPaths {
+		if !foundPackages[expectedPath] {
+			t.Fatalf("%s coverage manifest missing %q", lane, expectedPath)
+		}
+	}
 }
