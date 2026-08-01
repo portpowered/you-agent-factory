@@ -1,6 +1,6 @@
 // Package wire is the Factory Visualization service composition boundary.
 //
-// Wire performs construction only, returns the singular factoryvisualization.Root
+// Wire performs construction only, returns the singular factoryvisualization.Service
 // interface, and starts no lifecycle components. Parent-private activation_lifecycle,
 // live_view_projection, and response_event_presentation owner wiring stays inside
 // the owner service assembly path; peers depend on Root rather than owner internals
@@ -11,9 +11,7 @@ import (
 	"fmt"
 
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
-	activationlifecycle "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle"
-	activationlifecyclewire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle/wire"
-	liveviewprojectionwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection/wire"
+	internalservice "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/service"
 	responseeventpresentationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/response_event_presentation/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
@@ -30,7 +28,7 @@ func NewRoot(
 	clock factoryvisualization.Clock,
 	sink factoryvisualization.Sink,
 	reportError factoryvisualization.ErrorReporter,
-) (factoryvisualization.Root, error) {
+) (factoryvisualization.Service, error) {
 	switch {
 	case source == nil:
 		return nil, fmt.Errorf("construct Factory Visualization: event source is required")
@@ -41,43 +39,7 @@ func NewRoot(
 	case sink == nil:
 		return nil, fmt.Errorf("construct Factory Visualization: presentation sink is required")
 	}
-	recordingsPeer, err := factoryvisualization.RecordingsPeerFromProjectionService(peer)
-	if err != nil {
-		return nil, err
-	}
-
-	activation, err := activationlifecyclewire.NewService(
-		factoryvisualization.ActivationEventSource(source),
-		recordingsPeer,
-		clock,
-		factoryvisualization.ActivationViewSink(sink),
-		activationlifecycle.ErrorReporter(reportError),
-	)
-	if err != nil {
-		return nil, err
-	}
-	projection, err := liveviewprojectionwire.NewService(
-		source,
-		recordingsPeer,
-		clock,
-		factoryvisualization.ProjectionSink(sink),
-		reportError,
-	)
-	if err != nil {
-		return nil, err
-	}
-	presentation := responseeventpresentationwire.NewService()
-
-	root, err := factoryvisualization.AssembleRoot(
-		activation,
-		projection,
-		presentation,
-		source,
-		recordingsPeer,
-		clock,
-		sink,
-		reportError,
-	)
+	root, err := internalservice.New(source, peer, clock, sink, reportError)
 	if err != nil {
 		return nil, err
 	}
@@ -85,4 +47,27 @@ func NewRoot(
 		return nil, fmt.Errorf("construct Factory Visualization: implementation rejected its dependencies")
 	}
 	return root, nil
+}
+
+// NewService is the canonical Factory Visualization root constructor.
+func NewService(
+	source factoryvisualization.Source,
+	peer recordings.ProjectionService,
+	clock factoryvisualization.Clock,
+	sink factoryvisualization.Sink,
+	reportError factoryvisualization.ErrorReporter,
+) (factoryvisualization.Service, error) {
+	return NewRoot(source, peer, clock, sink, reportError)
+}
+
+// NewCurrentRuntimeSource adapts a selected Factory Session runtime reader to
+// the Visualization source contract.
+func NewCurrentRuntimeSource(reader factoryvisualization.RuntimeReader) factoryvisualization.Source {
+	return internalservice.NewCurrentRuntimeSource(reader)
+}
+
+// NewResponsePresentation constructs the inert response/event presentation
+// capability used by transport composition.
+func NewResponsePresentation() factoryvisualization.ResponsePresentation {
+	return responseeventpresentationwire.NewService()
 }

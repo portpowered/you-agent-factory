@@ -1,4 +1,4 @@
-package factory_visualization
+package service
 
 import (
 	"context"

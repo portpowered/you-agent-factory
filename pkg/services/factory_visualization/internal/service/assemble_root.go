@@ -1,4 +1,4 @@
-package factory_visualization
+package service
 
 import (
 	"errors"
@@ -11,9 +11,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
-// AssembleRoot constructs an inert Factory Visualization root from parent-private
+// assembleRoot constructs an inert Factory Visualization root from parent-private
 // owner services already wired by the service-local Wire packet.
-func AssembleRoot(
+func assembleRoot(
 	activation activationlifecycle.Service,
 	projection liveviewprojection.Service,
 	presentation responsePresentationOwner,
@@ -54,21 +54,21 @@ func AssembleRoot(
 	}, nil
 }
 
-// ActivationEventSource adapts the root construction Source to the activation
+// activationEventSource adapts the root construction Source to the activation
 // lifecycle owner EventSource port.
-func ActivationEventSource(source Source) activationlifecycle.EventSource {
+func activationEventSource(source Source) activationlifecycle.EventSource {
 	return activationSourceAdapter{source: source}
 }
 
-// ActivationViewSink adapts the root construction Sink to the activation
+// activationViewSink adapts the root construction Sink to the activation
 // lifecycle owner ViewSink port.
-func ActivationViewSink(sink Sink) activationlifecycle.ViewSink {
+func activationViewSink(sink Sink) activationlifecycle.ViewSink {
 	return activationSinkAdapter{sink: sink}
 }
 
-// ProjectionSink adapts the root construction Sink to the live view projection
+// projectionSink adapts the root construction Sink to the live view projection
 // owner Sink port.
-func ProjectionSink(sink Sink) liveviewprojection.Sink {
+func projectionSink(sink Sink) liveviewprojection.Sink {
 	return adaptSink(sink)
 }
 

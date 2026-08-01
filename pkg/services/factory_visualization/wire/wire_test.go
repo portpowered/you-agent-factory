@@ -11,8 +11,8 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	liveviewprojection "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection"
-	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/testing/recordingsstub"
+	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 )
@@ -95,6 +95,20 @@ func TestNewRootRejectsMissingConstructionPorts(t *testing.T) {
 				t.Fatalf("NewRoot() error = %v, want %q", err, test.want)
 			}
 		})
+	}
+}
+
+func TestWireConstructorsKeepAdaptersInertAndValidateServiceAlias(t *testing.T) {
+	t.Parallel()
+
+	if source := factoryvisualizationwire.NewCurrentRuntimeSource(nil); source == nil {
+		t.Fatal("NewCurrentRuntimeSource(nil) returned nil source")
+	}
+	if presentation := factoryvisualizationwire.NewResponsePresentation(); presentation == nil {
+		t.Fatal("NewResponsePresentation() returned nil presentation")
+	}
+	if root, err := factoryvisualizationwire.NewService(nil, nil, nil, nil, nil); root != nil || err == nil {
+		t.Fatalf("NewService() = (%v, %v), want nil root and validation error", root, err)
 	}
 }
 

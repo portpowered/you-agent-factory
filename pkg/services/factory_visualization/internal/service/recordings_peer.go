@@ -1,4 +1,4 @@
-package factory_visualization
+package service
 
 import (
 	"errors"
@@ -6,10 +6,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
-// RecordingsPeerFromProjectionService resolves the Recordings root contract from
+// recordingsPeerFromProjectionService resolves the Recordings root contract from
 // a legacy projection peer. Runtime wiring still supplies ProjectionService
 // today, but Visualization presentation paths require recordings.Service.
-func RecordingsPeerFromProjectionService(
+func recordingsPeerFromProjectionService(
 	peer recordings.ProjectionService,
 ) (recordings.Service, error) {
 	if peer == nil {

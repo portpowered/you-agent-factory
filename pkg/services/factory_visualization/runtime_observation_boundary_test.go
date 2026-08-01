@@ -1,4 +1,4 @@
-package factory_visualization
+package factory_visualization_test
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 )
 
 // TestRuntimeObservationUsesRootServiceObserve proves CUT-VIS-RUN story 002:
@@ -42,7 +43,7 @@ func TestRuntimeObservationUsesRootServiceObserve(t *testing.T) {
 			return fn(&factorysessions.LiveRuntime{Factory: runtimeFactory})
 		},
 	}
-	source := NewCurrentRuntimeSource(reader)
+	source := factoryvisualizationwire.NewCurrentRuntimeSource(reader)
 
 	facts, err := source.GetRuntimeSnapshotFacts(context.Background())
 	if err != nil {
@@ -95,7 +96,7 @@ func TestRuntimeObservationPropagatesRootObserveFailure(t *testing.T) {
 			return fn(&factorysessions.LiveRuntime{Factory: runtimeFactory})
 		},
 	}
-	source := NewCurrentRuntimeSource(reader)
+	source := factoryvisualizationwire.NewCurrentRuntimeSource(reader)
 
 	_, err := source.GetRuntimeSnapshotFacts(context.Background())
 	if !errors.Is(err, wantErr) {
@@ -118,7 +119,7 @@ func TestRuntimeObservationUnavailableRuntimeDoesNotCallObserve(t *testing.T) {
 			return factorysessions.ErrRuntimeNotAvailable
 		},
 	}
-	source := NewCurrentRuntimeSource(reader)
+	source := factoryvisualizationwire.NewCurrentRuntimeSource(reader)
 
 	_, err := source.GetRuntimeSnapshotFacts(context.Background())
 	if !errors.Is(err, factorysessions.ErrRuntimeNotAvailable) {
@@ -143,7 +144,7 @@ func TestRuntimeSubscribeUsesMigrationOnlyAPIFactoryCast(t *testing.T) {
 			return fn(&factorysessions.LiveRuntime{Factory: runtimeFactory})
 		},
 	}
-	source := NewCurrentRuntimeSource(reader)
+	source := factoryvisualizationwire.NewCurrentRuntimeSource(reader)
 
 	stream, err := source.SubscribeFactoryEvents(
 		context.Background(),

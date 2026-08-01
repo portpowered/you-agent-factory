@@ -281,6 +281,7 @@
     "pkg/services/factory_visualization",
     "pkg/services/factory_visualization/internal/contracts",
     "pkg/services/factory_visualization/internal/recordingsqueries",
+    "pkg/services/factory_visualization/internal/service",
     "pkg/services/factory_visualization/internal/services/activation_lifecycle",
     "pkg/services/factory_visualization/internal/services/activation_lifecycle/internal/service",
     "pkg/services/factory_visualization/internal/services/activation_lifecycle/wire",
@@ -1763,6 +1764,11 @@
     },
     {
       "packagePath": "pkg/services/factory_visualization/internal/recordingsqueries",
+      "disposition": "retain",
+      "destination": "factory_visualization"
+    },
+    {
+      "packagePath": "pkg/services/factory_visualization/internal/service",
       "disposition": "retain",
       "destination": "factory_visualization"
     },

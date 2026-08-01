@@ -37,6 +37,7 @@ import (
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
@@ -451,9 +452,9 @@ func provideFactoryVisualizationFactory() factoryvisualization.RuntimeFactory {
 		clock factoryvisualization.Clock,
 		sink factoryvisualization.Sink,
 		reportError factoryvisualization.ErrorReporter,
-	) (*factoryvisualization.Service, error) {
-		return factoryvisualization.New(
-			factoryvisualization.NewCurrentRuntimeSource(reader),
+	) (factoryvisualization.Service, error) {
+		return factoryvisualizationwire.NewRoot(
+			factoryvisualizationwire.NewCurrentRuntimeSource(reader),
 			projections,
 			clock,
 			sink,
@@ -641,7 +642,10 @@ func provideApplicationRuntimeAdapter(
 			// Peers leave the composed root inert until explicit Activate.
 			visualization = lifecycle.Functions{
 				StartFunc: func(context.Context) error { return nil },
-				StopFunc:  visualized.Stop,
+				StopFunc: func(ctx context.Context) error {
+					_, err := visualized.StopDrain(ctx, factoryvisualization.StopDrainRequest{})
+					return err
+				},
 			}
 		}
 		handler, err := httpHandler.Bind(opened.HTTP)
@@ -861,7 +865,7 @@ func provideWorkStopSummaryProjector() factorysessions.WorkStopSummaryProjector 
 }
 
 func provideResponsePresentation() factoryvisualization.ResponsePresentation {
-	return factoryvisualization.NewResponsePresentation()
+	return factoryvisualizationwire.NewResponsePresentation()
 }
 
 func provideRuntimeOpener(factory *factorysessionwire.RuntimeOpeningFactory) factorysessionwire.RuntimeOpener {

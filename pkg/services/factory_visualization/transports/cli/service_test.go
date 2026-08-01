@@ -13,6 +13,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	visualizationcli "github.com/portpowered/infinite-you/pkg/services/factory_visualization/transports/cli"
+	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -21,7 +22,7 @@ import (
 func TestNewRequiresPresentation(t *testing.T) {
 	t.Parallel()
 
-	presentation := factoryvisualization.NewResponsePresentation()
+	presentation := factoryvisualizationwire.NewResponsePresentation()
 	if service := visualizationcli.New(nil, presentation); service == nil {
 		t.Fatal("New(nil, presentation) = nil, want Visualization CLI service")
 	}
@@ -39,7 +40,7 @@ func TestNewFromPresentationConstructsPresentationOnlyAdapter(t *testing.T) {
 	if service := visualizationcli.NewFromPresentation(nil); service != nil {
 		t.Fatalf("NewFromPresentation(nil) = %T, want nil", service)
 	}
-	service := visualizationcli.NewFromPresentation(factoryvisualization.NewResponsePresentation())
+	service := visualizationcli.NewFromPresentation(factoryvisualizationwire.NewResponsePresentation())
 	if service == nil {
 		t.Fatal("NewFromPresentation(presentation) = nil, want Visualization CLI service")
 	}
@@ -177,7 +178,7 @@ func TestFormatHumanWorkAccepted_UsesContentForGeneratedWorkName(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal payload: %v", err)
 	}
-	presentation := factoryvisualization.NewResponsePresentation()
+	presentation := factoryvisualizationwire.NewResponsePresentation()
 	service := visualizationcli.New(nil, presentation)
 	var output bytes.Buffer
 	renderer, err := service.OpenFactoryEventRenderer(visualizationcli.FactoryEventRendererConfig{
@@ -222,7 +223,7 @@ func TestHumanFactoryEventRenderer_PresentsBatchWorkAndDispatchWorkIDs(t *testin
 	if err != nil {
 		t.Fatalf("marshal dispatch response: %v", err)
 	}
-	service := visualizationcli.New(nil, factoryvisualization.NewResponsePresentation())
+	service := visualizationcli.New(nil, factoryvisualizationwire.NewResponsePresentation())
 	var output bytes.Buffer
 	renderer, err := service.OpenFactoryEventRenderer(visualizationcli.FactoryEventRendererConfig{
 		Output: &output, InvocationOutputMode: visualizationcli.InvocationOutputResponseStream,
@@ -246,7 +247,7 @@ func TestHumanFactoryEventRenderer_PresentsBatchWorkAndDispatchWorkIDs(t *testin
 func TestHumanFactoryEventRenderer_TTYProgressUsesInjectedTicksAndStops(t *testing.T) {
 	t.Parallel()
 
-	service := visualizationcli.New(nil, factoryvisualization.NewResponsePresentation())
+	service := visualizationcli.New(nil, factoryvisualizationwire.NewResponsePresentation())
 	var output, progress bytes.Buffer
 	ticks := make(chan time.Time, 1)
 	renderer, err := service.OpenFactoryEventRenderer(visualizationcli.FactoryEventRendererConfig{
@@ -343,7 +344,7 @@ func TestFinalizePresentationSession_MapsFinalizeWithoutWriterFailure(t *testing
 }
 
 func newTestService() visualizationcli.Service {
-	return visualizationcli.New(&fakeRootPeer{}, factoryvisualization.NewResponsePresentation())
+	return visualizationcli.New(&fakeRootPeer{}, factoryvisualizationwire.NewResponsePresentation())
 }
 
 func intPtr(value int) *int {
@@ -512,11 +513,11 @@ type recordingResponsePresentation struct {
 }
 
 func (r *recordingResponsePresentation) OpenBestEffortOutput(writer io.Writer) factoryvisualization.Output {
-	return factoryvisualization.NewResponsePresentation().OpenBestEffortOutput(writer)
+	return factoryvisualizationwire.NewResponsePresentation().OpenBestEffortOutput(writer)
 }
 
 func (r *recordingResponsePresentation) OpenLosslessOutput(writer io.Writer) factoryvisualization.Output {
-	return factoryvisualization.NewResponsePresentation().OpenLosslessOutput(writer)
+	return factoryvisualizationwire.NewResponsePresentation().OpenLosslessOutput(writer)
 }
 
 func (r *recordingResponsePresentation) OpenBestEffortFactoryEventStream(
@@ -528,7 +529,7 @@ func (r *recordingResponsePresentation) OpenBestEffortFactoryEventStream(
 	CloseAndDrain() error
 } {
 	r.openedBestEffortStream = true
-	return factoryvisualization.NewResponsePresentation().OpenBestEffortFactoryEventStream(writer, encode)
+	return factoryvisualizationwire.NewResponsePresentation().OpenBestEffortFactoryEventStream(writer, encode)
 }
 
 func (r *recordingResponsePresentation) OpenLosslessFactoryEventStream(
@@ -540,5 +541,5 @@ func (r *recordingResponsePresentation) OpenLosslessFactoryEventStream(
 	CloseAndDrain() error
 } {
 	r.openedLosslessStream = true
-	return factoryvisualization.NewResponsePresentation().OpenLosslessFactoryEventStream(writer, encode)
+	return factoryvisualizationwire.NewResponsePresentation().OpenLosslessFactoryEventStream(writer, encode)
 }
