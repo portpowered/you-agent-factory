@@ -16,6 +16,23 @@ func TestCheckPassesOnRepositoryLedger(t *testing.T) {
 	}
 }
 
+func TestCheckPassesWithRelativeRepositoryRoot(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := findRepoRoot(t)
+	workingDirectory, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	relativeRoot, err := filepath.Rel(workingDirectory, repoRoot)
+	if err != nil {
+		t.Fatalf("filepath.Rel() error = %v", err)
+	}
+	if err := Check(relativeRoot, DefaultLedgerPath, DefaultChecklistPath); err != nil {
+		t.Fatalf("Check() with relative repository root error = %v", err)
+	}
+}
+
 func TestCheckPassesWithAbsoluteCanonicalPaths(t *testing.T) {
 	t.Parallel()
 
