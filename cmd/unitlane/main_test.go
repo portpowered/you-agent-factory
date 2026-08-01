@@ -1,10 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -45,7 +49,7 @@ func TestDiscoverPackagesReportsListFailure(t *testing.T) {
 
 func TestRunExecutesOnlyDiscoveredUnitPackages(t *testing.T) {
 	restoreArgsFlagsAndCommand(t)
-	execCommand = fakeUnitLaneCommand
+	execCommandContext = fakeUnitLaneCommandContext
 	discoverUnitPackages = func(string) ([]string, error) {
 		return []string{modulePath + "/pkg/factory"}, nil
 	}
@@ -88,7 +92,7 @@ func TestLocalPackageArgumentsShortensRepositoryImports(t *testing.T) {
 
 func TestRunReportsTestFailure(t *testing.T) {
 	restoreArgsFlagsAndCommand(t)
-	execCommand = fakeUnitLaneCommand
+	execCommandContext = fakeUnitLaneCommandContext
 	discoverUnitPackages = func(string) ([]string, error) {
 		return []string{modulePath + "/pkg/factory"}, nil
 	}
@@ -105,7 +109,7 @@ func TestRunReportsTestFailure(t *testing.T) {
 
 func TestDiagnosticRunWritesReportAndPreservesFailure(t *testing.T) {
 	restoreArgsFlagsAndCommand(t)
-	execCommand = fakeUnitLaneCommand
+	execCommandContext = fakeUnitLaneCommandContext
 
 	originalStdout := stdoutWriter
 	originalStderr := stderrWriter
@@ -176,6 +180,77 @@ func TestDiagnosticBaseArgumentsRequestJSONEvents(t *testing.T) {
 	}
 }
 
+func TestRunUnitTestsContextDoesNotStartCanceledChild(t *testing.T) {
+	restoreArgsFlagsAndCommand(t)
+	started := false
+	execCommandContext = func(context.Context, string, ...string) *exec.Cmd {
+		started = true
+		return fakeUnitLaneCommand("go")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := runUnitTestsContext(ctx, config{jobs: 32}, []string{modulePath + "/pkg/factory"})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("runUnitTestsContext() error = %v, want context.Canceled", err)
+	}
+	if started {
+		t.Fatal("runUnitTestsContext() started a child after cancellation")
+	}
+}
+
+func TestRunUnitTestsContextTerminatesCanceledChild(t *testing.T) {
+	restoreArgsFlagsAndCommand(t)
+	t.Setenv("GO_WANT_UNITLANE_HELPER", "1")
+	t.Setenv("UNITLANE_HELPER_WAIT_FOR_STDIN", "1")
+	stdinReader, stdinWriter, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("create helper stdin pipe: %v", err)
+	}
+	defer stdinReader.Close()
+	defer stdinWriter.Close()
+	stdoutReader, stdoutWriterPipe := io.Pipe()
+	defer stdoutReader.Close()
+	defer stdoutWriterPipe.Close()
+
+	originalStdout := stdoutWriter
+	stdoutWriter = stdoutWriterPipe
+	t.Cleanup(func() { stdoutWriter = originalStdout })
+
+	started := make(chan *exec.Cmd, 1)
+	execCommandContext = func(ctx context.Context, name string, args ...string) *exec.Cmd {
+		cmd := fakeUnitLaneCommandContext(ctx, name, args...)
+		cmd.Stdin = stdinReader
+		started <- cmd
+		return cmd
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- runUnitTestsContext(ctx, config{jobs: 1}, []string{modulePath + "/pkg/factory"})
+	}()
+
+	ready, err := bufio.NewReader(stdoutReader).ReadString('\n')
+	if err != nil {
+		t.Fatalf("read child readiness: %v", err)
+	}
+	if ready != "ready\n" {
+		t.Fatalf("child readiness = %q, want ready marker", ready)
+	}
+	cmd := <-started
+	cancel()
+	_ = stdinWriter.Close()
+
+	err = <-done
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("runUnitTestsContext() error = %v, want context.Canceled", err)
+	}
+	if cmd.ProcessState == nil || !cmd.ProcessState.Exited() {
+		t.Fatal("canceled child did not finish before the unit lane returned")
+	}
+}
+
 func TestMainReportsFailureAndExits(t *testing.T) {
 	originalExecute := executeUnitLane
 	originalStderr := stderrWriter
@@ -209,6 +284,11 @@ func TestUnitlaneFakeGoProcess(t *testing.T) {
 		if output := os.Getenv("UNITLANE_HELPER_STDOUT"); output != "" {
 			fmt.Fprint(os.Stdout, output)
 		}
+		if os.Getenv("UNITLANE_HELPER_WAIT_FOR_STDIN") == "1" {
+			fmt.Fprintln(os.Stdout, "ready")
+			_, _ = io.Copy(io.Discard, os.Stdin)
+			os.Exit(3)
+		}
 		if path := os.Getenv("UNITLANE_HELPER_TEST_ARGS_FILE"); path != "" {
 			if err := os.WriteFile(path, []byte(strings.Join(args[1:], "\n")), 0o600); err != nil {
 				fmt.Fprintln(os.Stderr, err)
@@ -234,6 +314,15 @@ func fakeUnitLaneCommand(name string, args ...string) *exec.Cmd {
 	return exec.Command(testBinary, cmdArgs...)
 }
 
+func fakeUnitLaneCommandContext(ctx context.Context, name string, args ...string) *exec.Cmd {
+	testBinary, err := os.Executable()
+	if err != nil {
+		panic(err)
+	}
+	cmdArgs := append([]string{"-test.run=TestUnitlaneFakeGoProcess", "--", name}, args...)
+	return exec.CommandContext(ctx, testBinary, cmdArgs...)
+}
+
 func helperCommandArgs(argv []string) ([]string, bool) {
 	for index, arg := range argv {
 		if arg == "--" {
@@ -245,8 +334,10 @@ func helperCommandArgs(argv []string) ([]string, bool) {
 
 func restoreExecCommand(t *testing.T) {
 	t.Helper()
-	original := execCommand
-	t.Cleanup(func() { execCommand = original })
+	originalContext := execCommandContext
+	t.Cleanup(func() {
+		execCommandContext = originalContext
+	})
 }
 
 func restoreArgsFlagsAndCommand(t *testing.T) {

@@ -145,9 +145,13 @@ test-stress`, and `make test-release`. The unit command enumerates only
 specialized packages. Code under `cmd/`, `internal/`, `tests/`, root
 `contracts/`, and the Go UI embed package is intentionally outside unit
 discovery. `make test-lane-audit` verifies that every required Go test package
-has one primary owner. Unit package concurrency defaults to 32 and remains
-overridable with `UNIT_DEFAULT_JOBS`. The fast unit lane schedules only packages
-that contain Go tests and disables `go test`'s duplicate implicit vet pass;
+has one primary owner. Unit package concurrency requests default to 32 and
+remain overridable with `UNIT_DEFAULT_JOBS`; the runner applies the bounded
+policy `min(requested, max(1, min(32, 2*GOMAXPROCS)))` before passing one
+`-p` limit to Go's package scheduler. This keeps the measured 32-job ceiling
+on the current 24-CPU host while contracting on smaller hosts and prevents
+oversized requests from creating unbounded package work. The fast unit lane
+schedules only packages that contain Go tests and disables `go test`'s duplicate implicit vet pass;
 `make lint` and the required PR verification tier continue to run `go vet ./...`.
 The normal `make test` loop retains Go's content-addressed test cache, so
 unchanged packages do not relink and rerun on every local invocation. Use
@@ -170,6 +174,13 @@ Reports include the effective job count, cache/count policy, timeout, short and
 vet settings, host context, total wall time, test counts, package outcomes, and
 package elapsed times. Keep cached and fresh reports separate when comparing
 like-for-like isolated runs.
+
+The current bounded-policy candidate comparison is retained in
+`docs/internal/baselines/unit-lane-throughput-jobs-20260801.json`. It evaluates
+8, 16, 24, and 32 effective jobs sequentially on the same 24-CPU host; the
+32-job candidate was fastest, so the runner retains that measured ceiling while
+contracting to at most twice `GOMAXPROCS` on smaller hosts. Cached and fresh
+invocations use the same effective `-p` limit.
 
 | Surface | Runs | Intentionally excludes | Failure rerun path |
 | --- | --- | --- | --- |

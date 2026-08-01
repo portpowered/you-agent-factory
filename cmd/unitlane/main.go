@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -29,7 +31,7 @@ type config struct {
 }
 
 var executeUnitLane = run
-var execCommand = exec.Command
+var execCommandContext = exec.CommandContext
 var discoverUnitPackages = discoverPackages
 var stdoutWriter io.Writer = os.Stdout
 var stderrWriter io.Writer = os.Stderr
@@ -48,6 +50,9 @@ func main() {
 }
 
 func run() error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
 	cfg := parseConfig()
 	packages, err := discoverUnitPackages(cfg.root)
 	if err != nil {
@@ -56,7 +61,7 @@ func run() error {
 	if len(packages) == 0 {
 		return fmt.Errorf("discover unit packages: no packages found under %s", cfg.root)
 	}
-	if err := runUnitTests(cfg, packages); err != nil {
+	if err := runUnitTestsContext(ctx, cfg, packages); err != nil {
 		return fmt.Errorf("run unit lane: %w", err)
 	}
 	return nil
@@ -66,7 +71,7 @@ func parseConfig() config {
 	var cfg config
 	flag.IntVar(&cfg.count, "count", 0, "go test -count value; zero preserves Go's content-addressed test cache")
 	flag.BoolVar(&cfg.diagnostic, "diagnostic", false, "collect package timing diagnostics and print a slow-package summary")
-	flag.IntVar(&cfg.jobs, "jobs", 32, "go test -p value")
+	flag.IntVar(&cfg.jobs, "jobs", defaultUnitLaneJobs, "requested go test -p value; bounded by the unit-lane policy")
 	flag.StringVar(&cfg.reportPath, "report", "", "optional path for the machine-readable diagnostic report; implies -diagnostic")
 	flag.StringVar(&cfg.root, "root", "./pkg/...", "go list package pattern for unit test discovery")
 	flag.BoolVar(&cfg.short, "short", true, "run with go test -short")
@@ -79,6 +84,7 @@ func parseConfig() config {
 	if cfg.jobs < 1 {
 		cfg.jobs = 1
 	}
+	cfg.jobs = effectiveUnitJobs(cfg.jobs)
 	return cfg
 }
 
@@ -132,6 +138,14 @@ func discoverPackagesUnder(rootDir, importPrefix string) ([]string, error) {
 }
 
 func runUnitTests(cfg config, packages []string) error {
+	return runUnitTestsContext(context.Background(), cfg, packages)
+}
+
+func runUnitTestsContext(ctx context.Context, cfg config, packages []string) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	cfg.jobs = effectiveUnitJobs(cfg.jobs)
 	packages = localPackageArguments(packages)
 	var report *unitLaneReport
 	startedAt := time.Now()
@@ -163,7 +177,13 @@ func runUnitTests(cfg config, packages []string) error {
 			currentLen += nextLen
 			packages = packages[1:]
 		}
-		batchReport, err := runGoTest(cfg, batch)
+		if err := ctx.Err(); err != nil {
+			if report == nil {
+				return err
+			}
+			return finishUnitLaneReport(cfg, report, startedAt, err)
+		}
+		batchReport, err := runGoTestContext(ctx, cfg, batch)
 		if report != nil {
 			report.addPackages(batchReport)
 		}
@@ -204,7 +224,7 @@ func commandArgLen(args []string) int {
 }
 
 func baseGoTestArgs(cfg config) []string {
-	args := []string{"test", fmt.Sprintf("-p=%d", cfg.jobs)}
+	args := []string{"test", fmt.Sprintf("-p=%d", effectiveUnitJobs(cfg.jobs))}
 	if cfg.diagnostic {
 		args = append(args, "-json")
 	}
@@ -217,7 +237,13 @@ func baseGoTestArgs(cfg config) []string {
 	return args
 }
 
-func runGoTest(cfg config, packages []string) (unitBatchReport, error) {
+func runGoTestContext(ctx context.Context, cfg config, packages []string) (unitBatchReport, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return unitBatchReport{}, err
+	}
 	args := baseGoTestArgs(cfg)
 	args = append(args, packages...)
 	if cfg.count > 0 {
@@ -225,18 +251,19 @@ func runGoTest(cfg config, packages []string) (unitBatchReport, error) {
 	}
 	args = append(args, fmt.Sprintf("-timeout=%s", cfg.timeout))
 
-	cmd := execCommand("go", args...)
+	cmd := execCommandContext(ctx, "go", args...)
+	configureUnitLaneCommand(cmd)
 	cmd.Env = os.Environ()
 	cmd.Stderr = stderrWriter
 	if !cfg.diagnostic {
 		cmd.Stdout = stdoutWriter
-		return unitBatchReport{}, cmd.Run()
+		return unitBatchReport{}, contextCommandError(ctx, cmd.Run())
 	}
 
 	collector := newUnitTimingCollector()
 	output := &unitDiagnosticOutput{collector: collector, output: stdoutWriter}
 	cmd.Stdout = output
-	runErr := cmd.Run()
+	runErr := contextCommandError(ctx, cmd.Run())
 	parseErr := output.flush()
 	if runErr != nil && parseErr != nil {
 		return collector.report(), errors.Join(runErr, parseErr)
@@ -245,6 +272,13 @@ func runGoTest(cfg config, packages []string) (unitBatchReport, error) {
 		return collector.report(), parseErr
 	}
 	return collector.report(), runErr
+}
+
+func contextCommandError(ctx context.Context, runErr error) error {
+	if runErr == nil || ctx == nil || ctx.Err() == nil {
+		return runErr
+	}
+	return errors.Join(ctx.Err(), runErr)
 }
 
 func commandError(err error, stderr string) error {

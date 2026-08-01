@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "capturedAtUtc": "2026-08-01T09:59:34.0987291Z",
+  "purpose": "Isolated fresh-lane candidate comparison for the bounded unit scheduler",
+  "baselineReference": "docs/internal/baselines/unit-lane-throughput-20260801.json",
+  "isolation": "Four sequential runs on one Windows host; no UI, functional, lint, or other test lane ran concurrently.",
+  "host": {
+    "os": "windows",
+    "arch": "amd64",
+    "goVersion": "go1.25.0",
+    "hostname": "DESKTOP-BU6597A",
+    "cpus": 24,
+    "gomaxprocs": 24
+  },
+  "scope": {
+    "packageCount": 410,
+    "testCount": 11744,
+    "cacheMode": "fresh",
+    "count": 1,
+    "short": true,
+    "vet": false,
+    "timeout": "300s"
+  },
+  "policy": {
+    "expression": "min(requested, max(1, min(32, 2*GOMAXPROCS)))",
+    "selectedRequestedJobs": 32,
+    "selectedEffectiveJobs": 32,
+    "reason": "The 32-job candidate had the lowest isolated fresh wall time on the 24-CPU host; lower candidates were slower while covering the same package and test set."
+  },
+  "runs": [
+    {
+      "id": "fresh-j8",
+      "startedAtUtc": "2026-08-01T09:56:11.7013382Z",
+      "finishedAtUtc": "2026-08-01T09:57:08.1494633Z",
+      "outcome": "pass",
+      "wallTimeSeconds": 56.4471711,
+      "effectiveJobs": 8
+    },
+    {
+      "id": "fresh-j16",
+      "startedAtUtc": "2026-08-01T09:57:22.0104965Z",
+      "finishedAtUtc": "2026-08-01T09:58:02.4806318Z",
+      "outcome": "pass",
+      "wallTimeSeconds": 40.4694513,
+      "effectiveJobs": 16
+    },
+    {
+      "id": "fresh-j24",
+      "startedAtUtc": "2026-08-01T09:58:06.2506362Z",
+      "finishedAtUtc": "2026-08-01T09:59:00.2596157Z",
+      "outcome": "pass",
+      "wallTimeSeconds": 54.0080667,
+      "effectiveJobs": 24
+    },
+    {
+      "id": "fresh-j32",
+      "startedAtUtc": "2026-08-01T09:59:00.7694888Z",
+      "finishedAtUtc": "2026-08-01T09:59:34.0987291Z",
+      "outcome": "pass",
+      "wallTimeSeconds": 33.3286771,
+      "effectiveJobs": 32
+    }
+  ],
+  "notes": [
+    "Every candidate preserved the canonical short unit package set and 11744 tests.",
+    "The selected policy still uses one go test invocation per command-length batch; it does not add a second package subprocess scheduler.",
+    "The same effective -p limit is used for cached and count=1 fresh runs; only Go's cache policy differs."
+  ]
+}
