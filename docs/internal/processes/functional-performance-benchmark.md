@@ -47,6 +47,14 @@ in a `try/finally` block. Verify that no package test or runner subprocesses
 remain. Record filesystem, build-cache, port, environment, or canonical-state
 collisions, but keep this result separate from the independent baseline.
 
+On Windows PowerShell, format the `-root` argument explicitly so the package
+path is not swallowed by variable expansion:
+
+```powershell
+go run ./cmd/functionallane -jobs=1 -count=1 `
+  ('-root={0}' -f './tests/functional/<package>') -short=true -timeout=5m
+```
+
 Always record the UTC timestamp, revision, operating system, architecture,
 logical processor count, Go version, `GOMOD`, `GOCACHE`, exact commands, and
 whether the run was independent, diagnostic, or contended. Retain failed or
