@@ -34,21 +34,6 @@ type CheckpointStore = hostedlinear.CheckpointStore
 // hosted Linear checkpoint adapter.
 type CheckpointFileSystem = hostedlinear.CheckpointFileSystem
 
-// NewCheckpointStore constructs atomic checkpoint persistence from an exact
-// filesystem effect. Production selection belongs to Wire.
-func NewCheckpointStore(files CheckpointFileSystem) (CheckpointStore, error) {
-	return hostedlinear.NewCheckpointStore(files)
-}
-
-// NewSecretResolver binds the exact environment and filesystem effects used to
-// resolve hosted-source credentials.
-func NewSecretResolver(
-	getenv func(string) string,
-	readFile func(string) ([]byte, error),
-) SecretResolver {
-	return hostedlinear.NewSecretResolver(getenv, readFile)
-}
-
 // DefaultRequestTimeout is the hosted Linear HTTP client timeout used by Wire.
 const DefaultRequestTimeout = hostedlinear.DefaultRequestTimeout
 
