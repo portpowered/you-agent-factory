@@ -202,3 +202,39 @@ was joined before the diagnostic directory was removed. Maximum per-wave wall
 times were 7.786, 9.498, and 7.436 seconds. No executable or file-lock,
 working-directory, environment, port, child-process, or assertion collision
 was observed.
+
+## MCP and CLI session resume after story 004
+
+The MCP runtime-resume, MCP runtime smoke, CLI session-resume, and CLI
+non-regression cells now run as independent parallel test cells. Each cell
+continues to construct its own root-built process and owns its temporary
+factory, HOME/USERPROFILE, streams, stdio or HTTP endpoint, provider, session,
+and lifecycle cleanup. MCP shutdown now cancels and joins the serving process
+from the registered cleanup path as well as the success path. The fixed
+100-millisecond MCP startup wait was removed; the first protocol observation
+provides readiness or reports the serving-process failure.
+
+Three uncached samples were captured on 2026-08-01 (UTC), on the same
+Windows 11/amd64 machine with Go 1.25.0, 24 logical processors, and the same
+`-short -count=1 -timeout=5m` commands. `go clean -testcache` ran before each
+sample. The outer wall time includes command/build setup; the `ok` duration is
+Go test execution time.
+
+| Group | Sample 1 wall | Sample 2 wall | Sample 3 wall | Median wall | Median `ok` |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| CLI MCP resume | 2.648 | 2.716 | 2.703 | **2.703** | **0.729** |
+| CLI session resume | 3.617 | 3.358 | 3.154 | **3.358** | **1.258** |
+
+The baseline medians were 6.200 seconds for CLI MCP resume and 5.940 seconds
+for CLI session resume. The post-change medians are respectively 56.4% and
+43.5% lower. The two-package per-sample combined wall times were 6.265,
+6.074, and 5.857 seconds, with a 6.074-second median versus the baseline
+two-package sums of 25.600, 12.070, and 12.140 seconds (12.140-second
+median), a 50.0% lower combined median. All six package executions passed.
+
+Three concurrent two-package diagnostics also passed. The maximum wall times
+per wave were 4.278, 3.558, and 5.478 seconds; all six exit codes were zero,
+each child had unique stdout/stderr files, and the joined child process IDs
+were no longer running after collection. No file-lock, working-directory,
+environment, port, session, stdio, persistence, or lifecycle collision was
+observed.
