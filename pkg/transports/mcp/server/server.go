@@ -1,4 +1,4 @@
-// Package server exposes an SDK-backed stdio MCP transport for Factory Session tools.
+// Package server exposes an SDK-backed, owner-neutral MCP transport.
 package server
 
 import (
@@ -11,7 +11,6 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	platformstdio "github.com/portpowered/infinite-you/pkg/platform/stdio"
-	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
 	mcpgenerated "github.com/portpowered/infinite-you/pkg/transports/mcp/generated"
 )
 
@@ -20,10 +19,13 @@ const (
 	defaultServerVersion = "dev"
 )
 
-// Options configures one MCP server instance around the exact injected tool
-// operation used by production and protocol tests.
+// Options configures one MCP server instance around a precomposed tool
+// registry. ToolOperation and the generated catalog are retained as a small
+// compatibility path for callers that have not yet moved their owner registry
+// into Wire.
 type Options struct {
-	ToolOperation mcpfactorysession.ToolOperation
+	Registry      ToolRegistry
+	ToolOperation func(context.Context, string, json.RawMessage) (json.RawMessage, error)
 	ServerName    string
 	ServerVersion string
 }
@@ -34,11 +36,13 @@ type Server struct {
 	sdk *mcp.Server
 }
 
-// New constructs an inert MCP server with all canonical and compatibility
-// Factory Session tools registered through the official Go SDK.
+// New constructs an inert MCP server with the supplied registry registered
+// through the official Go SDK. The generic fallback uses the generated catalog
+// and is intentionally kept only for the staged owner-transport migration.
 func New(opts Options) (*Server, error) {
-	if opts.ToolOperation == nil {
-		return nil, fmt.Errorf("mcp server requires a tool operation")
+	registry, err := resolveRegistry(opts)
+	if err != nil {
+		return nil, err
 	}
 
 	name := strings.TrimSpace(opts.ServerName)
@@ -58,16 +62,38 @@ func New(opts Options) (*Server, error) {
 			},
 		},
 	)
-	if err := registerTools(sdk, toolCaller(opts.ToolOperation)); err != nil {
+	if err := registerTools(sdk, registry); err != nil {
 		return nil, err
 	}
 	return &Server{sdk: sdk}, nil
 }
 
-type toolCaller func(context.Context, string, json.RawMessage) (json.RawMessage, error)
+func resolveRegistry(opts Options) (ToolRegistry, error) {
+	if opts.Registry != nil {
+		if len(opts.Registry.Definitions()) == 0 {
+			return nil, fmt.Errorf("mcp server requires a non-empty tool registry")
+		}
+		return opts.Registry, nil
+	}
+	if opts.ToolOperation == nil {
+		return nil, fmt.Errorf("mcp server requires a tool registry or tool operation")
+	}
 
-func registerTools(server *mcp.Server, call toolCaller) error {
-	for _, definition := range mcpgenerated.PrimaryDiscovery() {
+	definitions := mcpgenerated.PrimaryDiscovery()
+	tools := make([]ToolDefinition, 0, len(definitions))
+	for _, definition := range definitions {
+		tools = append(tools, ToolDefinition{
+			Name:        definition.Name,
+			Description: definition.Description,
+			InputSchema: append(json.RawMessage(nil), definition.InputSchema...),
+			Operation:   opts.ToolOperation,
+		})
+	}
+	return NewRegistry(tools)
+}
+
+func registerTools(server *mcp.Server, registry ToolRegistry) error {
+	for _, definition := range registry.Definitions() {
 		var schema map[string]any
 		if err := json.Unmarshal(definition.InputSchema, &schema); err != nil {
 			return fmt.Errorf("register MCP tool %s: decode generated input schema: %w", definition.Name, err)
@@ -75,16 +101,16 @@ func registerTools(server *mcp.Server, call toolCaller) error {
 		if schema["type"] != "object" {
 			return fmt.Errorf("register MCP tool %s: generated input schema must have object type", definition.Name)
 		}
-		addTool(server, definition.Name, definition.Description, definition.InputSchema, call)
+		addTool(server, definition.Name, definition.Description, definition.InputSchema, registry)
 	}
 	return nil
 }
 
-func addTool(server *mcp.Server, name, description string, inputSchema json.RawMessage, call toolCaller) {
+func addTool(server *mcp.Server, name, description string, inputSchema json.RawMessage, registry ToolRegistry) {
 	server.AddTool(&mcp.Tool{
 		Name: name, Description: description, InputSchema: inputSchema,
 	}, func(ctx context.Context, request *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		raw, err := call(ctx, name, request.Params.Arguments)
+		raw, err := registry.Call(ctx, name, request.Params.Arguments)
 		if err != nil {
 			return textResult(err.Error(), true), nil
 		}
