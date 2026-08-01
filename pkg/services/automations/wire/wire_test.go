@@ -335,56 +335,17 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 func TestNewServiceConstructsInertRoot(t *testing.T) {
 	t.Parallel()
 
-	commandRunnerCalls := 0
-	templateCalls := 0
-	hostedFactoryCalls := 0
-	startLinearPollerCalls := 0
-	validateLinearPollerCalls := 0
-
-	ports := validConstructionPorts(t)
-	ports.commandRunner = recordingCommandRunner{calls: &commandRunnerCalls}
-	ports.hostedSources = func(
-		*zap.Logger,
-		automations.HostedLinearClock,
-		automations.HostedLinearHTTPDoer,
-		automations.HostedLinearSecretResolver,
-		string,
-	) automations.HostedPollers {
-		hostedFactoryCalls++
-		return recordingHostedPollers{
-			startCalls:    &startLinearPollerCalls,
-			validateCalls: &validateLinearPollerCalls,
-		}
-	}
-	ports.resolveTemplates = func(
-		string,
-		map[string]string,
-		[]workers.Token,
-		*workers.Context,
-		string,
-	) (*workers.ResolvedTemplateFields, error) {
-		templateCalls++
-		panic("template resolver invoked during inert construction")
-	}
+	calls := &inertConstructionCalls{}
+	ports := inertConstructionPorts(t, calls)
 
 	runtime.GC()
 	time.Sleep(20 * time.Millisecond)
 	baseline := runtime.NumGoroutine()
 
 	service, err := automationswire.NewService(
-		ports.logger,
-		ports.clock,
-		ports.commandRunner,
-		"automations-wire-inert",
-		"",
-		ports.hostedSources,
-		nil,
-		ports.hostedClock,
-		nil,
-		nil,
-		"",
-		ports.resolveTemplates,
-		ports.executionPolicy,
+		ports.logger, ports.clock, ports.commandRunner, "automations-wire-inert", "",
+		ports.hostedSources, nil, ports.hostedClock, nil, nil, "",
+		ports.resolveTemplates, ports.executionPolicy,
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -392,28 +353,7 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 	if service == nil {
 		t.Fatal("NewService() returned nil service")
 	}
-	var published automations.Service = service
-	if published == nil {
-		t.Fatal("constructed service is not assignable to automations.Service")
-	}
-
-	if commandRunnerCalls != 0 || templateCalls != 0 {
-		t.Fatalf(
-			"construction invoked effect stubs (command runner=%d template resolver=%d), want inert construction",
-			commandRunnerCalls,
-			templateCalls,
-		)
-	}
-	if startLinearPollerCalls != 0 || validateLinearPollerCalls != 0 {
-		t.Fatalf(
-			"construction invoked hosted poller lifecycle (start=%d validate=%d), want inert construction",
-			startLinearPollerCalls,
-			validateLinearPollerCalls,
-		)
-	}
-	if hostedFactoryCalls != 1 {
-		t.Fatalf("hosted-sources factory calls = %d, want exactly one composition call", hostedFactoryCalls)
-	}
+	assertInertConstructionCalls(t, calls)
 
 	runtime.GC()
 	time.Sleep(20 * time.Millisecond)
@@ -426,11 +366,76 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 		)
 	}
 
+	assertInertPublishedRoot(t, service)
+}
+
+type inertConstructionCalls struct {
+	commandRunner        int
+	templateResolver     int
+	hostedFactory        int
+	startLinearPoller    int
+	validateLinearPoller int
+}
+
+func inertConstructionPorts(t *testing.T, calls *inertConstructionCalls) constructionPorts {
+	t.Helper()
+
+	ports := validConstructionPorts(t)
+	ports.commandRunner = recordingCommandRunner{calls: &calls.commandRunner}
+	ports.hostedSources = func(
+		*zap.Logger,
+		automations.HostedLinearClock,
+		automations.HostedLinearHTTPDoer,
+		automations.HostedLinearSecretResolver,
+		string,
+	) automations.HostedPollers {
+		calls.hostedFactory++
+		return recordingHostedPollers{
+			startCalls:    &calls.startLinearPoller,
+			validateCalls: &calls.validateLinearPoller,
+		}
+	}
+	ports.resolveTemplates = func(
+		string,
+		map[string]string,
+		[]workers.Token,
+		*workers.Context,
+		string,
+	) (*workers.ResolvedTemplateFields, error) {
+		calls.templateResolver++
+		panic("template resolver invoked during inert construction")
+	}
+	return ports
+}
+
+func assertInertConstructionCalls(t *testing.T, calls *inertConstructionCalls) {
+	t.Helper()
+
+	if calls.commandRunner != 0 || calls.templateResolver != 0 {
+		t.Fatalf(
+			"construction invoked effect stubs (command runner=%d template resolver=%d), want inert construction",
+			calls.commandRunner, calls.templateResolver,
+		)
+	}
+	if calls.startLinearPoller != 0 || calls.validateLinearPoller != 0 {
+		t.Fatalf(
+			"construction invoked hosted poller lifecycle (start=%d validate=%d), want inert construction",
+			calls.startLinearPoller, calls.validateLinearPoller,
+		)
+	}
+	if calls.hostedFactory != 1 {
+		t.Fatalf("hosted-sources factory calls = %d, want exactly one composition call", calls.hostedFactory)
+	}
+}
+
+func assertInertPublishedRoot(t *testing.T, service automations.Service) {
+	t.Helper()
+
 	peer, ok := service.(rootPeer)
 	if !ok {
 		t.Fatal("constructed service does not expose Root() for published peer inspection")
 	}
-	_, err = peer.Root().SourceStatus(context.Background(), automations.SourceStatusRequest{
+	_, err := peer.Root().SourceStatus(context.Background(), automations.SourceStatusRequest{
 		Identity: automations.SourceIdentity{
 			AutomationID: "automations-wire-inert",
 			SourceID:     "missing-source",
