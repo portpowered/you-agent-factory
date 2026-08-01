@@ -5,10 +5,20 @@ observable contracts belong at each layer, and the minimum browser-integration
 coverage for import/export and graph-editing flows. Use it when adding regressions
 or deciding whether an assertion belongs in unit/jsdom coverage or Chromium.
 
-Canonical lane names match [development.md](development.md): **Unit** (Node),
-**Component** (browserless DOM emulation), and **Browser** (`ui/integration/`). The required UI
-Coverage lane runs the Node unit project only; component, browser, and
-performance tests are separate confidence lanes and do not affect its threshold.
+Canonical lane names match [development.md](development.md): **Bun Unit** (Node,
+`.bun.unit.test.ts`), **Unit** (Node, unmigrated `.test.ts`), **Component**
+(browserless DOM emulation), and **Browser** (`ui/integration/`). The Bun Unit
+suffix is reserved for DOM-free, browser-free tests and is intentionally
+disjoint from `.bun.component.test.tsx`, ordinary component tests, browser or
+integration tests, performance tests, and Storybook tests. The required UI
+unit seed lane is run with `cd ui && bun run test:unit:bun`; it discovers only
+the Bun suffix and reports the selected files plus Bun's terminal file/test
+totals. The aggregate unit lane (`bun run test:unit`) runs that Bun lane before
+the optimized Vitest `dashboard-unit` project and fails on either result. The
+required UI Coverage lane runs Vitest Node coverage plus the Bun-owned unit
+coverage pass, merging Bun's LCOV source records exactly once while preserving
+the existing thresholds. Component, browser, and performance tests are separate
+confidence lanes and do not affect the unit coverage threshold.
 
 The component lane runs browserless tests in two compatibility groups: Bun is
 the default for tests without Vitest-only capabilities, and Vitest temporarily
@@ -147,7 +157,7 @@ When the same observable assertion appears in multiple lanes:
 
 ```
 New regression?
-├─ Pure function / fixture? → colocated *.test.ts or *.unit.test.ts in the Node project
+├─ Pure function / fixture? → colocated *.bun.unit.test.ts for Bun migration, or *.test.ts while it remains on Vitest
 ├─ Single card/widget? → colocated *.component.test.tsx with harness doubles
 ├─ Needs cross-owner dashboard stream/replay wiring? → feature-owned dashboard composition component test
 ├─ Needs download, preview server, multi-tab, or real drop path? → current ui/integration/*.integration.test.mjs browser lane
