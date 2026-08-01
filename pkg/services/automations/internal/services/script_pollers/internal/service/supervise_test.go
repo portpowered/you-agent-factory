@@ -330,15 +330,14 @@ func newScriptPollersServiceWithOptions(options scriptPollersServiceOptions) *se
 			},
 		}
 	}
-	var clock func() clockwork.Clock
-	if options.clock != nil {
-		clockValue := options.clock
-		clock = func() clockwork.Clock { return clockValue }
+	clock := options.clock
+	if clock == nil {
+		clock = clockwork.NewRealClock()
 	}
 	constructed := newWithCursorRecorder(
-		func(string, string) *zap.Logger { return logger },
+		logger,
 		clock,
-		func() workers.CommandRunner { return options.runner },
+		options.runner,
 		nil,
 		executionPolicy,
 		options.cursorRecorder,

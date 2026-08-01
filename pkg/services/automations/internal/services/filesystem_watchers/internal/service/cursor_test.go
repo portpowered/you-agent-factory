@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/jonboulle/clockwork"
 	filesystemwatchers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers"
 )
 
@@ -266,5 +267,5 @@ func TestCursorBackedHandledIdentities_ConcurrentRecordsPreserveFacts(t *testing
 }
 
 func testFilesystemWatcherService() *service {
-	return New(nil).(*service)
+	return New(clockwork.NewRealClock()).(*service)
 }

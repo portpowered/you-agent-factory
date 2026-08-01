@@ -11,12 +11,12 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// NewService constructs an inert script-poller service with injected runtime
-// dependencies. Construction never invokes the supplied functions.
+// NewService constructs an inert script-poller service with direct runtime
+// collaborators.
 func NewService(
-	logger func(workstationName, workerName string) *zap.Logger,
-	clock func() clockwork.Clock,
-	commandRunner func() workers.CommandRunner,
+	logger *zap.Logger,
+	clock clockwork.Clock,
+	commandRunner workers.CommandRunner,
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
 ) scriptpollers.Service {

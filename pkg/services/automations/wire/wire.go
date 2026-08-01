@@ -71,6 +71,7 @@ func NewService(
 	if hostedPollers == nil {
 		return nil, fmt.Errorf("construct Automations: hosted-sources factory returned nil HostedPollers")
 	}
+	pollerClock := resolvePollerClock(clock)
 
 	var service *automationinternal.Service
 	reconciler := reconciliationwire.NewService(reconciliation.Effects{
@@ -94,14 +95,14 @@ func NewService(
 		},
 	})
 	childScriptPollers := scriptpollerswire.NewService(
-		pollerLogger(logger),
-		pollerClock(clock),
-		pollerCommandRunner(commandRunner),
+		logger,
+		pollerClock,
+		commandRunner,
 		resolveTemplates,
 		executionPolicy,
 	)
 	childCron := cronwire.NewService()
-	childFilesystemWatchers := filesystemwatcherswire.NewService(pollerClock(clock))
+	childFilesystemWatchers := filesystemwatcherswire.NewService(pollerClock)
 	service = automationinternal.New(
 		logger,
 		clock,
@@ -122,29 +123,11 @@ func NewService(
 	return service, nil
 }
 
-func pollerLogger(logger *zap.Logger) func(string, string) *zap.Logger {
-	if logger == nil {
-		logger = zap.NewNop()
+func resolvePollerClock(clock automations.Clock) clockwork.Clock {
+	if typed, ok := clock.(clockwork.Clock); ok && typed != nil {
+		return typed
 	}
-	return func(workstationName, workerName string) *zap.Logger {
-		return logger.With(
-			zap.String("workstation", workstationName),
-			zap.String("worker", workerName),
-		)
-	}
-}
-
-func pollerClock(clock automations.Clock) func() clockwork.Clock {
-	return func() clockwork.Clock {
-		if typed, ok := clock.(clockwork.Clock); ok && typed != nil {
-			return typed
-		}
-		return clockwork.NewRealClock()
-	}
-}
-
-func pollerCommandRunner(runner workers.CommandRunner) func() workers.CommandRunner {
-	return func() workers.CommandRunner { return runner }
+	return clockwork.NewRealClock()
 }
 
 func validateDependencies(

@@ -23,23 +23,22 @@ const (
 )
 
 type service struct {
-	loggerFactory        func(workstationName, workerName string) *zap.Logger
-	clockFactory         func() clockwork.Clock
-	commandRunnerFactory func() workers.CommandRunner
-	templateResolver     workers.TemplateFieldResolver
-	executionPolicy      factorydefinitions.WorkstationExecutionPolicyService
-	cursors              cursorRecorder
+	logger           *zap.Logger
+	clock            clockwork.Clock
+	commandRunner    workers.CommandRunner
+	templateResolver workers.TemplateFieldResolver
+	executionPolicy  factorydefinitions.WorkstationExecutionPolicyService
+	cursors          cursorRecorder
 }
 
 var _ scriptpollers.Service = (*service)(nil)
 
-// New constructs an inert script-poller service. It stores the supplied
-// collaborators and creates its private in-memory cursor authority without
-// invoking any effect.
+// New constructs an inert script-poller service from direct collaborators. It
+// creates its private in-memory cursor authority without invoking any effect.
 func New(
-	logger func(workstationName, workerName string) *zap.Logger,
-	clock func() clockwork.Clock,
-	commandRunner func() workers.CommandRunner,
+	logger *zap.Logger,
+	clock clockwork.Clock,
+	commandRunner workers.CommandRunner,
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
 ) scriptpollers.Service {
@@ -54,20 +53,26 @@ func New(
 }
 
 func newWithCursorRecorder(
-	logger func(workstationName, workerName string) *zap.Logger,
-	clock func() clockwork.Clock,
-	commandRunner func() workers.CommandRunner,
+	logger *zap.Logger,
+	clock clockwork.Clock,
+	commandRunner workers.CommandRunner,
 	resolveTemplates workers.TemplateFieldResolver,
 	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
 	recorder cursorRecorder,
 ) scriptpollers.Service {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	if commandRunner == nil {
+		commandRunner = unavailableCommandRunner{}
+	}
 	return &service{
-		loggerFactory:        logger,
-		clockFactory:         clock,
-		commandRunnerFactory: commandRunner,
-		templateResolver:     resolveTemplates,
-		executionPolicy:      executionPolicy,
-		cursors:              recorder,
+		logger:           logger,
+		clock:            clock,
+		commandRunner:    commandRunner,
+		templateResolver: resolveTemplates,
+		executionPolicy:  executionPolicy,
+		cursors:          recorder,
 	}
 }
 
@@ -111,8 +116,8 @@ func (s *service) superviseScriptPoller(
 	submitter automations.WorkRequestSubmitter,
 ) {
 	logger := s.pollerLogger(workstation.Name, workerDefName(workerDef))
-	runner := s.commandRunner()
-	backoffClock := s.supervisorClock()
+	runner := s.commandRunner
+	backoffClock := s.clock
 	attempt := 0
 	logger.Info("script poller started")
 	defer func() {
@@ -202,7 +207,7 @@ func (s *service) runScriptPoller(
 	}
 
 	if runner == nil {
-		runner = s.commandRunner()
+		runner = s.commandRunner
 	}
 	result, runErr := runner.Run(execCtx, commandReq)
 	if ctx.Err() != nil {
@@ -354,36 +359,16 @@ func (s *service) scriptPollerExecutionTimeout(
 }
 
 func (s *service) pollerLogger(workstationName, workerName string) *zap.Logger {
-	if s.loggerFactory != nil {
-		if logger := s.loggerFactory(workstationName, workerName); logger != nil {
-			return logger
-		}
-	}
-	return zap.NewNop()
-}
-
-func (s *service) commandRunner() workers.CommandRunner {
-	if s.commandRunnerFactory != nil {
-		if runner := s.commandRunnerFactory(); runner != nil {
-			return runner
-		}
-	}
-	return unavailableCommandRunner{}
+	return s.logger.With(
+		zap.String("workstation", workstationName),
+		zap.String("worker", workerName),
+	)
 }
 
 type unavailableCommandRunner struct{}
 
 func (unavailableCommandRunner) Run(context.Context, workers.CommandRequest) (workers.CommandResult, error) {
 	return workers.CommandResult{}, errors.New("automation command runner is required")
-}
-
-func (s *service) supervisorClock() clockwork.Clock {
-	if s.clockFactory != nil {
-		if clock := s.clockFactory(); clock != nil {
-			return clock
-		}
-	}
-	return clockwork.NewRealClock()
 }
 
 func (s *service) cursorRecorder() cursorRecorder {

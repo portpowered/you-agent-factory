@@ -16,5 +16,5 @@ func (s *service) NewWatcherWithResume(
 	if err != nil {
 		return nil, filesystemwatchers.WatcherFacts{}, err
 	}
-	return newWatcherWithClockAndHandled(req.Config, s.supervisorClock(), handled), facts, nil
+	return newWatcherWithClockAndHandled(req.Config, s.clock, handled), facts, nil
 }

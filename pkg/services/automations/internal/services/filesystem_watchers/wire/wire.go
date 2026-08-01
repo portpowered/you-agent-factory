@@ -9,6 +9,6 @@ import (
 )
 
 // NewService constructs an inert filesystem watcher service.
-func NewService(clock func() clockwork.Clock) filesystemwatchers.Service {
+func NewService(clock clockwork.Clock) filesystemwatchers.Service {
 	return fswservice.New(clock)
 }
