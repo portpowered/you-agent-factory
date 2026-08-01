@@ -2,6 +2,8 @@ package http
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -32,6 +34,93 @@ func TestAdapter_RuntimeRootFailsWhenRootUnset(t *testing.T) {
 	rec := httptest.NewRecorder()
 	adapter.invokeControlResume(rec, context.Background())
 	assertErrorResponse(t, rec, http.StatusInternalServerError, "INTERNAL_ERROR", "factory runtime service is required")
+}
+
+func TestAdapter_CompatibilityHelpersPreserveHTTPOutcomes(t *testing.T) {
+	t.Parallel()
+
+	adapter := &Adapter{}
+
+	jsonRecorder := httptest.NewRecorder()
+	adapter.writeJSON(jsonRecorder, http.StatusCreated, map[string]string{"message": "created"})
+	if jsonRecorder.Code != http.StatusCreated || jsonRecorder.Header().Get("Content-Type") != "application/json" {
+		t.Fatalf("writeJSON response = %d %q, want 201 application/json", jsonRecorder.Code, jsonRecorder.Header().Get("Content-Type"))
+	}
+	if !strings.Contains(jsonRecorder.Body.String(), `"message":"created"`) {
+		t.Fatalf("writeJSON body = %q, want encoded message", jsonRecorder.Body.String())
+	}
+
+	errorRecorder := httptest.NewRecorder()
+	adapter.writeError(errorRecorder, http.StatusBadRequest, "bad request", "BAD_REQUEST")
+	var response factoryapi.ErrorResponse
+	if err := json.NewDecoder(errorRecorder.Body).Decode(&response); err != nil {
+		t.Fatalf("decode writeError response: %v", err)
+	}
+	if errorRecorder.Code != http.StatusBadRequest || response.Message != "bad request" || response.Code != factoryapi.ErrorResponseCodeBADREQUEST {
+		t.Fatalf("writeError response = %d %#v, want bad request response", errorRecorder.Code, response)
+	}
+}
+
+func TestAdapter_CompatibilityContextHelpersPreserveTerminalOutcomes(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if !requestContextEnded(ctx) || requestContextEnded(context.Background()) {
+		t.Fatal("requestContextEnded must recognize only canceled or expired contexts")
+	}
+	if !isRequestContextEnded(context.Canceled) || !isRequestContextEnded(context.DeadlineExceeded) || isRequestContextEnded(errors.New("boom")) {
+		t.Fatal("isRequestContextEnded must recognize only request terminal errors")
+	}
+
+	adapter := &Adapter{}
+	canceledRecorder := httptest.NewRecorder()
+	if !adapter.writeRuntimeRequestContextOutcome(canceledRecorder, context.Canceled) {
+		t.Fatal("canceled request outcome must be handled")
+	}
+	if canceledRecorder.Body.Len() != 0 {
+		t.Fatalf("canceled response body = %q, want empty", canceledRecorder.Body.String())
+	}
+
+	deadlineRecorder := httptest.NewRecorder()
+	if !adapter.writeRuntimeRequestContextOutcome(deadlineRecorder, context.DeadlineExceeded) {
+		t.Fatal("deadline request outcome must be handled")
+	}
+	if deadlineRecorder.Code != http.StatusGatewayTimeout {
+		t.Fatalf("deadline response status = %d, want 504", deadlineRecorder.Code)
+	}
+
+	guardRecorder := httptest.NewRecorder()
+	if !adapter.guardRuntimeRequestContext(guardRecorder, httptest.NewRequest(http.MethodGet, "/status", nil).WithContext(ctx)) {
+		t.Fatal("guardRuntimeRequestContext must handle an already-canceled request")
+	}
+}
+
+func TestAdapter_CompatibilityRootErrorHelpersPreserveMappings(t *testing.T) {
+	t.Parallel()
+
+	adapter := &Adapter{}
+	mappedRecorder := httptest.NewRecorder()
+	if !adapter.writeRootError(mappedRecorder, runtimeHTTPOperationControl, factoryruntime.ErrInvalidLifecycleTransition) {
+		t.Fatal("writeRootError must handle a mapped Runtime failure")
+	}
+	if mappedRecorder.Code != http.StatusBadRequest || !strings.Contains(mappedRecorder.Body.String(), "factory runtime invalid lifecycle transition") {
+		t.Fatalf("mapped root error response = %d %q, want 400 typed failure", mappedRecorder.Code, mappedRecorder.Body.String())
+	}
+
+	unmappedRecorder := httptest.NewRecorder()
+	if adapter.writeRootError(unmappedRecorder, runtimeHTTPOperationControl, errors.New("boom")) {
+		t.Fatal("writeRootError must not handle an unmapped failure")
+	}
+}
+
+func TestAdapter_NilReceiverControlResumeFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	var adapter *Adapter
+	recorder := httptest.NewRecorder()
+	adapter.invokeControlResume(recorder, context.Background())
+	assertErrorResponse(t, recorder, http.StatusInternalServerError, "INTERNAL_ERROR", "factory runtime service is required")
 }
 
 func TestAdapter_ZeroValueObservationOperationsFailClosed(t *testing.T) {
