@@ -30,10 +30,23 @@ type constructionPorts struct {
 	executionPolicy  factorydefinitions.WorkstationExecutionPolicyService
 }
 
+type runtimeAutomationService interface {
+	automations.Service
+	StartSchedulerSidecarsForRuntime(
+		context.Context,
+		*sync.WaitGroup,
+		string,
+		*factorydefinitions.FactoryConfig,
+		factorydefinitions.RuntimeConfigLookup,
+		automations.WorkRequestSubmitter,
+	) error
+	NewFilesystemWatcher(automations.FilesystemWatcherConfig) automations.FilesystemWatcher
+}
+
 func validConstructionPorts(t *testing.T) constructionPorts {
 	t.Helper()
 
-	store, err := automations.NewHostedLinearCheckpointStore(platformfilesystem.Local{})
+	store, err := automationswire.NewHostedLinearCheckpointStore(platformfilesystem.Local{})
 	if err != nil {
 		t.Fatalf("NewHostedLinearCheckpointStore() error = %v", err)
 	}
@@ -42,7 +55,7 @@ func validConstructionPorts(t *testing.T) constructionPorts {
 		logger:        zap.NewNop(),
 		clock:         clockwork.NewFakeClock(),
 		commandRunner: stubCommandRunner{},
-		hostedSources: automations.NewHostedSourcesFactory(store),
+		hostedSources: automationswire.NewHostedSourcesFactory(store),
 		hostedClock:   clockwork.NewFakeClock(),
 		resolveTemplates: func(
 			string,
@@ -61,7 +74,7 @@ func validConstructionPorts(t *testing.T) constructionPorts {
 	}
 }
 
-func (ports constructionPorts) newService(t *testing.T) automations.Service {
+func (ports constructionPorts) newService(t *testing.T) runtimeAutomationService {
 	t.Helper()
 
 	service, err := automationswire.NewService(
@@ -85,7 +98,11 @@ func (ports constructionPorts) newService(t *testing.T) automations.Service {
 	if service == nil {
 		t.Fatal("NewService() returned nil service")
 	}
-	return service
+	runtimeService, ok := service.(runtimeAutomationService)
+	if !ok {
+		t.Fatal("NewService() returned a service without runtime automation capabilities")
+	}
+	return runtimeService
 }
 
 type stubCommandRunner struct{}
@@ -184,7 +201,7 @@ func TestNewServiceServesPublishedPeerBehavior(t *testing.T) {
 		)
 	}
 
-	watcher := published.NewFilesystemWatcher(automations.FilesystemWatcherConfig{
+	watcher := service.NewFilesystemWatcher(automations.FilesystemWatcherConfig{
 		Dir: t.TempDir(),
 		Submitter: func(context.Context, work.WorkRequest) error {
 			return nil

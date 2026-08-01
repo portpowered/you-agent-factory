@@ -101,9 +101,11 @@ func (s *recordingInvocationSchedules) PrepareInvocationSchedules(
 	request automations.InvocationScheduleRequest,
 ) (automations.PreparedInvocationSchedules, error) {
 	s.requests = append(s.requests, request)
-	return automations.NewPreparedInvocationSchedules(func(result work.WorkRequestSubmitResult) {
-		s.commits = append(s.commits, result)
-	}, nil), nil
+	return automations.PreparedInvocationSchedules{
+		CommitFunc: func(result work.WorkRequestSubmitResult) {
+			s.commits = append(s.commits, result)
+		},
+	}, nil
 }
 
 func invocationScheduleRecoveryConfig() *interfaces.FactoryConfig {
@@ -119,4 +121,4 @@ func invocationScheduleRecoveryConfig() *interfaces.FactoryConfig {
 }
 
 var _ factory.Factory = (*invocationScheduleRecoveryFactory)(nil)
-var _ automations.InvocationScheduleService = (*recordingInvocationSchedules)(nil)
+var _ invocationScheduleService = (*recordingInvocationSchedules)(nil)

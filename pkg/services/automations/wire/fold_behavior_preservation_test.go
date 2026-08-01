@@ -267,7 +267,7 @@ func TestWireFoldPreservesFilesystemWatcherFactoryAndPreseed(t *testing.T) {
 }
 
 func TestWireFoldPreservesHostedSourcesFactoryComposition(t *testing.T) {
-	store, err := automations.NewHostedLinearCheckpointStore(platformfilesystem.Local{})
+	store, err := automationswire.NewHostedLinearCheckpointStore(platformfilesystem.Local{})
 	if err != nil {
 		t.Fatalf("NewHostedLinearCheckpointStore() = %v", err)
 	}
@@ -282,7 +282,7 @@ func TestWireFoldPreservesHostedSourcesFactoryComposition(t *testing.T) {
 		endpoint string,
 	) automations.HostedPollers {
 		factoryCalls++
-		return automations.NewHostedSourcesFactory(store)(logger, clock, httpClient, secrets, endpoint)
+		return automationswire.NewHostedSourcesFactory(store)(logger, clock, httpClient, secrets, endpoint)
 	}
 
 	service, err := automationswire.NewService(

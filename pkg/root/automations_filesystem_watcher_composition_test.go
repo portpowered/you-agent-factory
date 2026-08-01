@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
-	"github.com/portpowered/infinite-you/pkg/services/automations"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
@@ -41,7 +40,6 @@ func TestBuildProcessComposesAutomationsFilesystemWatcherInertly(t *testing.T) {
 	if len(submissions) != 0 {
 		t.Fatalf("BuildProcess() submitted %d Work records, want zero before runtime lifecycle", len(submissions))
 	}
-	var _ automations.FilesystemWatcherFactory = (automations.Service)(nil)
 	if process == nil {
 		t.Fatal("BuildProcess() returned nil process")
 	}

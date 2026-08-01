@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/services/automations"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -23,12 +24,31 @@ type RuntimeSidecars struct {
 	enabled    bool
 }
 
+// runtimeAutomationService is the optional runtime-owned capability set
+// retained by Automations while the peer-facing Service stays root-only.
+type runtimeAutomationService interface {
+	automations.Service
+	StartSchedulerSidecarsForRuntime(
+		context.Context,
+		*sync.WaitGroup,
+		string,
+		*interfaces.FactoryConfig,
+		interfaces.RuntimeConfigLookup,
+		automations.WorkRequestSubmitter,
+	) error
+	NewFilesystemWatcher(automations.FilesystemWatcherConfig) automations.FilesystemWatcher
+}
+
 // PreseedRuntimeInputs materializes listener-backed inputs before execution.
 func PreseedRuntimeInputs(ctx context.Context, automation automations.Service, bundle *factoryhost.Bundle) error {
 	if bundle == nil || automation == nil {
 		return nil
 	}
-	watcher := newFilesystemWatcher(automation, bundle)
+	runtimeAutomation, ok := automation.(runtimeAutomationService)
+	if !ok {
+		return nil
+	}
+	watcher := newFilesystemWatcher(runtimeAutomation, bundle)
 	if watcher == nil {
 		return nil
 	}
@@ -68,16 +88,18 @@ func (s *RuntimeSidecars) Start(ctx context.Context, hosted factory.HostedHandle
 		defer handle.Sidecars.Done()
 		factoryhost.ObserveRuntimeMetrics(sidecarCtx, handle)
 	}()
-	if watcher := newFilesystemWatcher(s.automation, handle.Bundle); watcher != nil {
-		handle.Sidecars.Add(1)
-		go func() {
-			defer handle.Sidecars.Done()
-			if err := watcher.Watch(sidecarCtx); err != nil && !errors.Is(err, context.Canceled) {
-				handle.Bundle.RuntimeLogger().Error("file watcher error", zap.Error(err))
-			}
-		}()
+	if runtimeAutomation, ok := s.automation.(runtimeAutomationService); ok {
+		if watcher := newFilesystemWatcher(runtimeAutomation, handle.Bundle); watcher != nil {
+			handle.Sidecars.Add(1)
+			go func() {
+				defer handle.Sidecars.Done()
+				if err := watcher.Watch(sidecarCtx); err != nil && !errors.Is(err, context.Canceled) {
+					handle.Bundle.RuntimeLogger().Error("file watcher error", zap.Error(err))
+				}
+			}()
+		}
 	}
-	if schedules, ok := s.automation.(automations.InvocationScheduleService); ok {
+	if schedules, ok := s.automation.(invocationScheduleService); ok {
 		runtimeCfg := handle.Bundle.RuntimeCfg
 		if runtimeCfg == nil {
 			return s.failStart(handle, cancel, fmt.Errorf("runtime config is required"))
@@ -100,14 +122,15 @@ func (s *RuntimeSidecars) Start(ctx context.Context, hosted factory.HostedHandle
 	}
 
 	if s.enabled {
-		if s.automation == nil {
+		runtimeAutomation, ok := s.automation.(runtimeAutomationService)
+		if !ok {
 			return s.failStart(handle, cancel, fmt.Errorf("automation service is required"))
 		}
 		runtimeCfg := handle.Bundle.RuntimeCfg
 		if runtimeCfg == nil {
 			return s.failStart(handle, cancel, fmt.Errorf("runtime config is required"))
 		}
-		if err := s.automation.StartSchedulerSidecarsForRuntime(
+		if err := runtimeAutomation.StartSchedulerSidecarsForRuntime(
 			sidecarCtx,
 			&handle.Sidecars,
 			runtimeCfg.FactoryDir(),
@@ -124,7 +147,7 @@ func (s *RuntimeSidecars) Start(ctx context.Context, hosted factory.HostedHandle
 	return nil
 }
 
-func newFilesystemWatcher(automation automations.Service, bundle *factoryhost.Bundle) automations.FilesystemWatcher {
+func newFilesystemWatcher(automation runtimeAutomationService, bundle *factoryhost.Bundle) automations.FilesystemWatcher {
 	if automation == nil || bundle == nil || bundle.Factory == nil {
 		return nil
 	}
