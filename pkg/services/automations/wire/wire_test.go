@@ -32,12 +32,21 @@ type constructionPorts struct {
 
 type runtimeAutomationService interface {
 	automations.Service
+	Root() automations.Root
 	StartSchedulerSidecarsForRuntime(
 		context.Context,
 		*sync.WaitGroup,
 		string,
 		*factorydefinitions.FactoryConfig,
 		factorydefinitions.RuntimeConfigLookup,
+		automations.WorkRequestSubmitter,
+	) error
+	RunScriptPoller(
+		context.Context,
+		workers.CommandRunner,
+		factorydefinitions.RuntimeConfigLookup,
+		factorydefinitions.FactoryWorkstationConfig,
+		*factorydefinitions.FactoryWorkerConfig,
 		automations.WorkRequestSubmitter,
 	) error
 	NewFilesystemWatcher(automations.FilesystemWatcherConfig) automations.FilesystemWatcher

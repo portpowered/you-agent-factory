@@ -26,7 +26,7 @@ func TestHandleFile_CommitsCursorAfterSuccess(t *testing.T) {
 
 	identity := watchIdentityForDir(dir)
 	var committed []filesystemwatchers.WatcherFacts
-	store, err := testFilesystemWatcherService().NewHandledIdentities(
+	store, err := testFilesystemWatcherService().newHandledIdentities(
 		filesystemwatchers.WatcherFacts{Identity: identity},
 		func(facts filesystemwatchers.WatcherFacts) error {
 			committed = append(committed, facts)
@@ -84,7 +84,7 @@ func TestResumeWatcherFacts_CompatibleCursorSeedsHandledIdentities(t *testing.T)
 		t.Fatalf("cursor projection = %q/%q, want %q/%q", cursor, checkpoint, authoritative.Cursor, authoritative.Checkpoint)
 	}
 
-	store, err := svc.NewHandledIdentities(resumed, func(facts filesystemwatchers.WatcherFacts) error {
+	store, err := svc.newHandledIdentities(resumed, func(facts filesystemwatchers.WatcherFacts) error {
 		return nil
 	})
 	if err != nil {
@@ -173,7 +173,7 @@ func TestHandleFile_NoSubmitWhenResumeRejectedBeforeWatch(t *testing.T) {
 
 	submitter := &recordingSubmitter{}
 	fw := newTestWatcher(dir, submitter, nil, nil, nil, nil, nil)
-	store, err := svc.NewHandledIdentities(got, func(facts filesystemwatchers.WatcherFacts) error { return nil })
+	store, err := svc.newHandledIdentities(got, func(facts filesystemwatchers.WatcherFacts) error { return nil })
 	if err != nil {
 		t.Fatalf("NewHandledIdentities: %v", err)
 	}
@@ -190,7 +190,7 @@ func TestHandleFile_NoSubmitWhenResumeRejectedBeforeWatch(t *testing.T) {
 func TestRecord_DoesNotReportSuccessWhenCursorPersistFails(t *testing.T) {
 	svc := testFilesystemWatcherService()
 	identity := watchIdentityForDir("/inputs")
-	store, err := svc.NewHandledIdentities(
+	store, err := svc.newHandledIdentities(
 		filesystemwatchers.WatcherFacts{Identity: identity},
 		func(filesystemwatchers.WatcherFacts) error {
 			return errors.New("disk unavailable")
@@ -209,6 +209,6 @@ func TestRecord_DoesNotReportSuccessWhenCursorPersistFails(t *testing.T) {
 	}
 }
 
-func testFilesystemWatcherService() filesystemwatchers.Service {
-	return New()
+func testFilesystemWatcherService() *service {
+	return New(nil).(*service)
 }

@@ -1,4 +1,4 @@
-package script_pollers
+package service
 
 import (
 	"fmt"
@@ -8,10 +8,7 @@ import (
 
 const submitOperation = "script_poller.submit"
 
-// SubmitFailedError reports that Work admission rejected or failed after a valid
-// poller stdout payload was parsed. The underlying Work error is wrapped without
-// reinterpreting admission policy.
-func SubmitFailedError(err error) error {
+func submitFailedError(err error) error {
 	if err == nil {
 		return nil
 	}

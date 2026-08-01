@@ -15,10 +15,9 @@ func (s *Service) NewFilesystemWatcher(config automations.FilesystemWatcherConfi
 		KnownWorkTypes:    config.KnownWorkTypes,
 		ValidStatesByType: config.ValidStatesByType,
 		Files:             config.Files,
-		WalkDirectory:     filesystemwatchers.DirectoryWalker(config.WalkDirectory),
+		WalkDirectory:     config.WalkDirectory,
 		WorkRequestIDs:    config.WorkRequestIDs,
-		Submitter:         filesystemwatchers.WorkRequestSubmitter(config.Submitter),
-		Clock:             s.supervisorClock(),
+		Submitter:         config.Submitter,
 		DebounceWindow:    config.DebounceWindow,
 	})
 }

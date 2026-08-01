@@ -2,7 +2,10 @@ package internal
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -12,8 +15,11 @@ import (
 	factorydefinitioncomposition "github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
+	cronwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/wire"
+	filesystemwatcherswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/wire"
 	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
-	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
+	reconciliationwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation/wire"
+	scriptpollerswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/wire"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -51,7 +57,7 @@ func TestSchedulerSidecarsReconcileLifecycleBeforeCanonicalWorkSubmission(t *tes
 		FactoryPath:  t.TempDir(),
 		Workstations: map[string]*interfaces.FactoryWorkstationConfig{},
 	}
-	service := New(
+	service := newAutomationServiceForTest(
 		zap.NewNop(), clock, nil, workflowID, "", nil, nil, nil,
 	)
 	identity := automations.SourceIdentity{
@@ -115,7 +121,7 @@ func TestSchedulerSidecarsReconcileLifecycleBeforeCanonicalWorkSubmission(t *tes
 }
 
 func TestSchedulerSourceObservationAttachesBeforeStartEffectInitialization(t *testing.T) {
-	service := New(zap.NewNop(), clockwork.NewFakeClock(), nil, "", "", nil, nil, nil)
+	service := newAutomationServiceForTest(zap.NewNop(), clockwork.NewFakeClock(), nil, "", "", nil, nil, nil)
 	identity := automations.SourceIdentity{
 		AutomationID: "workflow-start-barrier",
 		SourceID:     runtimeSchedulerSourceID,
@@ -168,7 +174,7 @@ func TestSchedulerSourceObservationAttachesBeforeStartEffectInitialization(t *te
 func TestProductionRootUsesScriptPollersOwner(t *testing.T) {
 	t.Parallel()
 
-	service := NewService(
+	service := newAutomationServiceForTest(
 		zap.NewNop(), clockwork.NewFakeClock(), nil, "workflow-script-pollers", "", nil, nil, nil,
 	)
 	if service.scriptPollers == nil {
@@ -192,7 +198,7 @@ func TestProductionRootScriptPollerCursorThroughCompositionPath(t *testing.T) {
 		outcomes: []internalScriptPollerOutcome{{result: workers.CommandResult{Stdout: stdout}}},
 	}
 	submitted := &internalScriptPollerSubmitter{}
-	service := NewService(
+	service := newAutomationServiceForTest(
 		zap.NewNop(),
 		clockwork.NewFakeClock(),
 		runner,
@@ -221,19 +227,19 @@ func TestProductionRootScriptPollerCursorThroughCompositionPath(t *testing.T) {
 		t.Fatalf("submit calls = %d, want 1", submitted.calls)
 	}
 
-	supervision := scriptpollers.SupervisionFor(workflowID, poller.Name)
+	instanceID := testScriptPollerInstanceID(workflowID, poller.Name)
 	cursor, err := service.Root().GetCursor(
 		context.Background(),
-		automations.GetCursorRequest{InstanceID: supervision.InstanceID},
+		automations.GetCursorRequest{InstanceID: instanceID},
 	)
 	if err != nil {
 		t.Fatalf("Root.GetCursor: %v", err)
 	}
 	if cursor.AutomationID != workflowID ||
-		cursor.InstanceID != supervision.InstanceID ||
+		cursor.InstanceID != instanceID ||
 		string(cursor.Cursor) != "opaque-cursor-root" ||
 		cursor.Checkpoint != "checkpoint-root" {
-		t.Fatalf("Root.GetCursor = %+v, want committed opaque recovery facts for %q", cursor, supervision.InstanceID)
+		t.Fatalf("Root.GetCursor = %+v, want committed opaque recovery facts for %q", cursor, instanceID)
 	}
 }
 
@@ -330,7 +336,7 @@ func startProductionRootScheduler(
 	workflowID string,
 ) (*Service, automations.SourceIdentity, *sync.WaitGroup, context.CancelFunc) {
 	t.Helper()
-	service := NewService(
+	service := newAutomationServiceForTest(
 		zap.NewNop(), clockwork.NewFakeClock(), nil, workflowID, "", nil, nil, nil,
 	)
 	identity := automations.SourceIdentity{
@@ -531,7 +537,7 @@ func startSchedulerConcurrently(
 }
 
 func TestSchedulerSidecarsReconcileDifferentRuntimeIdentitiesConcurrently(t *testing.T) {
-	service := New(zap.NewNop(), clockwork.NewFakeClock(), nil, "", "", nil, nil, nil)
+	service := newAutomationServiceForTest(zap.NewNop(), clockwork.NewFakeClock(), nil, "", "", nil, nil, nil)
 	factoryConfig := &interfaces.FactoryConfig{}
 	directories := []string{t.TempDir(), t.TempDir()}
 	contexts := make([]context.Context, len(directories))
@@ -616,4 +622,75 @@ func assertSubmittedWorkRequests(
 		(*submitted)[len(*submitted)-1].Works[0].WorkID == (*submitted)[len(*submitted)-2].Works[0].WorkID {
 		t.Fatal("real restarted transition repeated the prior canonical Work identity")
 	}
+}
+
+func newAutomationServiceForTest(
+	logger *zap.Logger,
+	clock Clock,
+	commandRunner workers.CommandRunner,
+	workflowID string,
+	defaultFactoryDir string,
+	hostedPollers automations.HostedPollers,
+	resolveTemplates workers.TemplateFieldResolver,
+	executionPolicy interfaces.WorkstationExecutionPolicyService,
+) *Service {
+	var service *Service
+	reconciler := reconciliationwire.NewService(reconciliation.Effects{
+		Start: func(ctx context.Context, effect reconciliation.StartEffect) error {
+			return service.StartSchedulerSourceEffect(ctx, effect)
+		},
+		Stop: func(ctx context.Context, effect reconciliation.StopEffect) error {
+			return service.StopSchedulerSourceEffect(ctx, effect)
+		},
+		Wait: func(ctx context.Context, effect reconciliation.WaitEffect) (automations.SourceObservation, error) {
+			return service.WaitSchedulerSourceEffect(ctx, effect)
+		},
+	})
+	service = New(
+		logger,
+		clock,
+		commandRunner,
+		workflowID,
+		defaultFactoryDir,
+		hostedPollers,
+		resolveTemplates,
+		executionPolicy,
+		reconciler,
+		scriptpollerswire.NewService(
+			testPollerLogger(logger),
+			testPollerClock(clock),
+			func() workers.CommandRunner { return commandRunner },
+			resolveTemplates,
+			executionPolicy,
+		),
+		cronwire.NewService(),
+		filesystemwatcherswire.NewService(testPollerClock(clock)),
+	)
+	return service
+}
+
+func testPollerLogger(logger *zap.Logger) func(string, string) *zap.Logger {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	return func(workstationName, workerName string) *zap.Logger {
+		return logger.With(zap.String("workstation", workstationName), zap.String("worker", workerName))
+	}
+}
+
+func testPollerClock(clock Clock) func() clockwork.Clock {
+	return func() clockwork.Clock {
+		if typed, ok := clock.(clockwork.Clock); ok && typed != nil {
+			return typed
+		}
+		return clockwork.NewRealClock()
+	}
+}
+
+func testScriptPollerInstanceID(automationID, workstationName string) string {
+	automationID = strings.TrimSpace(automationID)
+	sourceID := "script-poller:" + strings.TrimSpace(workstationName)
+	identity := fmt.Sprintf("%d:%s:%d:%s", len(automationID), automationID, len(sourceID), sourceID)
+	sum := sha256.Sum256([]byte("automations-script-poller-instance:" + identity))
+	return "script-poller-instance:" + hex.EncodeToString(sum[:16])
 }
