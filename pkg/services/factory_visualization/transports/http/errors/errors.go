@@ -24,17 +24,17 @@ func RootErrorResponse(err error) (int, any, bool) {
 	}
 
 	var lifeErr *factoryvisualization.LifecycleError
-	if errors.As(err, &lifeErr) {
+	if errors.As(err, &lifeErr) && lifeErr != nil {
 		return lifecycleErrorResponse(lifeErr)
 	}
 
 	var projErr *factoryvisualization.ProjectionError
-	if errors.As(err, &projErr) {
+	if errors.As(err, &projErr) && projErr != nil {
 		return projectionErrorResponse(projErr)
 	}
 
 	var presErr *factoryvisualization.PresentationError
-	if errors.As(err, &presErr) {
+	if errors.As(err, &presErr) && presErr != nil {
 		return presentationErrorResponse(presErr)
 	}
 
