@@ -1,9 +1,9 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 
 import { parseGoDurationNanoseconds } from "./go-duration";
 
 afterEach(() => {
-  vi.restoreAllMocks();
+  mock.restore();
 });
 
 describe("parseGoDurationNanoseconds", () => {
@@ -28,7 +28,7 @@ describe("parseGoDurationNanoseconds", () => {
   });
 
   it("rejects non-finite parsed amounts", () => {
-    vi.spyOn(Number, "parseFloat").mockReturnValue(Number.NaN);
+    spyOn(Number, "parseFloat").mockReturnValue(Number.NaN);
 
     expect(parseGoDurationNanoseconds("5s")).toBeNull();
   });

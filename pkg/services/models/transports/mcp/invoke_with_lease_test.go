@@ -3,11 +3,14 @@ package modelmcp_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	modelmcp "github.com/portpowered/infinite-you/pkg/services/models/transports/mcp"
 )
+
+var errUnknownInvokeFailure = errors.New("invoke failed for an unmapped internal reason")
 
 func TestBind_InvokeWithLeaseSuccessReturnsInvokeFactsFromInjectedRoot(t *testing.T) {
 	t.Parallel()
@@ -108,74 +111,127 @@ func TestBind_InvokeWithLeaseSuccessReturnsInvokeFactsFromInjectedRoot(t *testin
 func TestBind_InvokeWithLeaseDomainErrorsReturnDistinctTypedEnvelopes(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name          string
-		rootErr       error
-		wantCode      string
-		wantRetryable bool
-	}{
-		{
-			name:          "inference timeout",
-			rootErr:       models.ErrInferenceTimeout,
-			wantCode:      "model.inference.timeout",
-			wantRetryable: true,
-		},
-		{
-			name:          "asset unavailable",
-			rootErr:       models.ErrAssetUnavailable,
-			wantCode:      "model.asset.unavailable",
-			wantRetryable: true,
-		},
-		{
-			name:          "inference failed",
-			rootErr:       models.ErrInferenceFailed,
-			wantCode:      "model.inference.failed",
-			wantRetryable: false,
-		},
-		{
-			name:          "unsupported operation",
-			rootErr:       models.ErrUnsupportedModelOperation,
-			wantCode:      "model.operation.unsupported",
-			wantRetryable: false,
-		},
-		{
-			name:          "lease expired",
-			rootErr:       models.ErrHostLeaseExpired,
-			wantCode:      "model.lease.expired",
-			wantRetryable: false,
-		},
-		{
-			name:          "capacity exhausted",
-			rootErr:       models.ErrHostCapacityExhausted,
-			wantCode:      "model.lease.capacity_exhausted",
-			wantRetryable: true,
-		},
-	}
-
-	for _, test := range tests {
+	for _, test := range invokeWithLeaseDomainErrorCases() {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-
-			fake := fakeModelsRoot{
-				invokeModelWithLease: func(context.Context, models.InvokeModelRequest) (models.InvokeModelResult, error) {
-					return models.InvokeModelResult{}, test.rootErr
-				},
-			}
-			operation := modelmcp.Bind(modelmcp.RootBinding{Models: fake})
-			raw, err := operation(
-				context.Background(),
-				modelmcp.ToolInvokeWithLease,
-				invokeWithLeaseInputJSON(testRuntimeScopeRef, testLeaseRef, testLeaseHolder, testPrepareModelName, testInvokeOperation),
-			)
-			if err != nil {
-				t.Fatalf("CallTool(invoke_with_lease) transport error = %v, want typed tool response", err)
-			}
-			envelope := assertTypedToolErrorEnvelope(t, raw, test.wantCode, test.wantRetryable)
-			if envelope.Details == nil || envelope.Details["reason"] != test.rootErr.Error() {
-				t.Fatalf("error.details = %#v, want reason %q", envelope.Details, test.rootErr.Error())
-			}
+			assertInvokeWithLeaseDomainErrorEnvelope(t, test)
 		})
+	}
+}
+
+type invokeWithLeaseDomainErrorCase struct {
+	name          string
+	rootErr       error
+	wantCode      string
+	wantRetryable bool
+	wantMessage   string
+	wantReason    string
+}
+
+func invokeWithLeaseDomainErrorCases() []invokeWithLeaseDomainErrorCase {
+	return []invokeWithLeaseDomainErrorCase{
+		{
+			name: "runtime scope invalid", rootErr: models.ErrRuntimeScopeInvalid,
+			wantCode: "model.runtime_scope.invalid", wantRetryable: false,
+			wantMessage: "models runtime scope is invalid", wantReason: models.ErrRuntimeScopeInvalid.Error(),
+		},
+		{
+			name: "capacity exhausted", rootErr: models.ErrHostCapacityExhausted,
+			wantCode: "model.lease.capacity_exhausted", wantRetryable: true,
+			wantMessage: "models lease capacity is exhausted", wantReason: models.ErrHostCapacityExhausted.Error(),
+		},
+		{
+			name: "capacity contended", rootErr: models.ErrHostCapacityContended,
+			wantCode: "model.lease.capacity_contended", wantRetryable: true,
+			wantMessage: "models lease capacity is contended", wantReason: models.ErrHostCapacityContended.Error(),
+		},
+		{
+			name: "runtime not ready", rootErr: models.ErrHostRuntimeNotReady,
+			wantCode: "model.host.runtime_not_ready", wantRetryable: true,
+			wantMessage: "models host runtime is not ready", wantReason: models.ErrHostRuntimeNotReady.Error(),
+		},
+		{
+			name: "lease expired", rootErr: models.ErrHostLeaseExpired,
+			wantCode: "model.lease.expired", wantRetryable: false,
+			wantMessage: "models lease has expired", wantReason: models.ErrHostLeaseExpired.Error(),
+		},
+		{
+			name: "lease not found", rootErr: models.ErrHostLeaseNotFound,
+			wantCode: "model.lease.not_found", wantRetryable: false,
+			wantMessage: "models lease was not found", wantReason: models.ErrHostLeaseNotFound.Error(),
+		},
+		{
+			name: "invalid holder", rootErr: models.ErrHostInvalidHolder,
+			wantCode: "model.lease.invalid_holder", wantRetryable: false,
+			wantMessage: "models lease holder is invalid", wantReason: models.ErrHostInvalidHolder.Error(),
+		},
+		{
+			name: "asset unavailable", rootErr: models.ErrAssetUnavailable,
+			wantCode: "model.asset.unavailable", wantRetryable: true,
+			wantMessage: "models assets are unavailable", wantReason: models.ErrAssetUnavailable.Error(),
+		},
+		{
+			name: "inference timeout", rootErr: models.ErrInferenceTimeout,
+			wantCode: "model.inference.timeout", wantRetryable: true,
+			wantMessage: "models inference timed out", wantReason: models.ErrInferenceTimeout.Error(),
+		},
+		{
+			name: "inference failed", rootErr: models.ErrInferenceFailed,
+			wantCode: "model.inference.failed", wantRetryable: false,
+			wantMessage: "models inference failed", wantReason: models.ErrInferenceFailed.Error(),
+		},
+		{
+			name: "unsupported operation", rootErr: models.ErrUnsupportedModelOperation,
+			wantCode: "model.operation.unsupported", wantRetryable: false,
+			wantMessage: "models operation is not supported", wantReason: models.ErrUnsupportedModelOperation.Error(),
+		},
+		{
+			name: "unsupported response mode", rootErr: models.ErrUnsupportedResponseMode,
+			wantCode: "model.inference.response_mode_unsupported", wantRetryable: false,
+			wantMessage: "models inference response mode is not supported", wantReason: models.ErrUnsupportedResponseMode.Error(),
+		},
+		{
+			name: "request canceled", rootErr: context.Canceled,
+			wantCode: "model.request.canceled", wantRetryable: false,
+			wantMessage: "models request was canceled", wantReason: "CANCELED",
+		},
+		{
+			name: "request timed out", rootErr: context.DeadlineExceeded,
+			wantCode: "model.request.timed_out", wantRetryable: true,
+			wantMessage: "models request timed out", wantReason: "TIMED_OUT",
+		},
+		{
+			name: "unknown execution failure", rootErr: errUnknownInvokeFailure,
+			wantCode: "model.execution.internal", wantRetryable: false,
+			wantMessage: errUnknownInvokeFailure.Error(), wantReason: errUnknownInvokeFailure.Error(),
+		},
+	}
+}
+
+func assertInvokeWithLeaseDomainErrorEnvelope(t *testing.T, test invokeWithLeaseDomainErrorCase) {
+	t.Helper()
+
+	fake := fakeModelsRoot{
+		invokeModelWithLease: func(context.Context, models.InvokeModelRequest) (models.InvokeModelResult, error) {
+			return models.InvokeModelResult{}, test.rootErr
+		},
+	}
+	operation := modelmcp.Bind(modelmcp.RootBinding{Models: fake})
+	raw, err := operation(
+		context.Background(),
+		modelmcp.ToolInvokeWithLease,
+		invokeWithLeaseInputJSON(testRuntimeScopeRef, testLeaseRef, testLeaseHolder, testPrepareModelName, testInvokeOperation),
+	)
+	if err != nil {
+		t.Fatalf("CallTool(invoke_with_lease) transport error = %v, want typed tool response", err)
+	}
+	envelope := assertTypedToolErrorEnvelope(t, raw, test.wantCode, test.wantRetryable)
+	if envelope.Message != test.wantMessage {
+		t.Fatalf("error.message = %q, want %q", envelope.Message, test.wantMessage)
+	}
+	if envelope.Details == nil || envelope.Details["reason"] != test.wantReason {
+		t.Fatalf("error.details = %#v, want reason %q", envelope.Details, test.wantReason)
 	}
 }
 

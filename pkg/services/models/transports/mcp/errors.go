@@ -228,108 +228,59 @@ func invokeWithLeaseErrorEnvelope(err error) ToolErrorEnvelope {
 	if envelope, ok := runtimeScopeErrorEnvelope(err); ok {
 		return envelope
 	}
+	if envelope, ok := invokeWithLeaseHostErrorEnvelope(err); ok {
+		return envelope
+	}
+	if envelope, ok := invokeWithLeaseInferenceErrorEnvelope(err); ok {
+		return envelope
+	}
+	return executionErrorEnvelope(err)
+}
+
+func invokeWithLeaseHostErrorEnvelope(err error) (ToolErrorEnvelope, bool) {
 	switch {
 	case errors.Is(err, models.ErrHostCapacityExhausted):
-		return ToolErrorEnvelope{
-			Code:      errorCodeLeaseCapacityExhausted,
-			Message:   errorMessageLeaseCapacityExhausted,
-			Retryable: true,
-			Details: map[string]any{
-				"reason": err.Error(),
-			},
-		}
+		return reasonDetailEnvelope(errorCodeLeaseCapacityExhausted, errorMessageLeaseCapacityExhausted, true, err), true
 	case errors.Is(err, models.ErrHostCapacityContended):
-		return ToolErrorEnvelope{
-			Code:      errorCodeLeaseCapacityContended,
-			Message:   errorMessageLeaseCapacityContended,
-			Retryable: true,
-			Details: map[string]any{
-				"reason": err.Error(),
-			},
-		}
+		return reasonDetailEnvelope(errorCodeLeaseCapacityContended, errorMessageLeaseCapacityContended, true, err), true
 	case errors.Is(err, models.ErrHostRuntimeNotReady):
-		return ToolErrorEnvelope{
-			Code:      errorCodeHostRuntimeNotReady,
-			Message:   errorMessageHostRuntimeNotReady,
-			Retryable: true,
-			Details: map[string]any{
-				"reason": err.Error(),
-			},
-		}
+		return reasonDetailEnvelope(errorCodeHostRuntimeNotReady, errorMessageHostRuntimeNotReady, true, err), true
 	case errors.Is(err, models.ErrHostLeaseExpired):
-		return ToolErrorEnvelope{
-			Code:      errorCodeLeaseExpired,
-			Message:   errorMessageLeaseExpired,
-			Retryable: false,
-			Details: map[string]any{
-				"reason": err.Error(),
-			},
-		}
+		return reasonDetailEnvelope(errorCodeLeaseExpired, errorMessageLeaseExpired, false, err), true
 	case errors.Is(err, models.ErrHostLeaseNotFound):
-		return ToolErrorEnvelope{
-			Code:      errorCodeLeaseNotFound,
-			Message:   errorMessageLeaseNotFound,
-			Retryable: false,
-			Details: map[string]any{
-				"reason": err.Error(),
-			},
-		}
+		return reasonDetailEnvelope(errorCodeLeaseNotFound, errorMessageLeaseNotFound, false, err), true
 	case errors.Is(err, models.ErrHostInvalidHolder):
-		return ToolErrorEnvelope{
-			Code:      errorCodeLeaseInvalidHolder,
-			Message:   errorMessageLeaseInvalidHolder,
-			Retryable: false,
-			Details: map[string]any{
-				"reason": err.Error(),
-			},
-		}
-	case errors.Is(err, models.ErrAssetUnavailable):
-		return ToolErrorEnvelope{
-			Code:      errorCodeAssetUnavailable,
-			Message:   errorMessageAssetUnavailable,
-			Retryable: true,
-			Details: map[string]any{
-				"reason": err.Error(),
-			},
-		}
-	case errors.Is(err, models.ErrInferenceTimeout):
-		return ToolErrorEnvelope{
-			Code:      errorCodeInferenceTimeout,
-			Message:   errorMessageInferenceTimeout,
-			Retryable: true,
-			Details: map[string]any{
-				"reason": err.Error(),
-			},
-		}
-	case errors.Is(err, models.ErrInferenceFailed):
-		return ToolErrorEnvelope{
-			Code:      errorCodeInferenceFailed,
-			Message:   errorMessageInferenceFailed,
-			Retryable: false,
-			Details: map[string]any{
-				"reason": err.Error(),
-			},
-		}
-	case errors.Is(err, models.ErrUnsupportedModelOperation):
-		return ToolErrorEnvelope{
-			Code:      errorCodeModelOperationUnsupported,
-			Message:   errorMessageModelOperationUnsupported,
-			Retryable: false,
-			Details: map[string]any{
-				"reason": err.Error(),
-			},
-		}
-	case errors.Is(err, models.ErrUnsupportedResponseMode):
-		return ToolErrorEnvelope{
-			Code:      errorCodeInferenceResponseUnsupported,
-			Message:   errorMessageInferenceResponseUnsupported,
-			Retryable: false,
-			Details: map[string]any{
-				"reason": err.Error(),
-			},
-		}
+		return reasonDetailEnvelope(errorCodeLeaseInvalidHolder, errorMessageLeaseInvalidHolder, false, err), true
 	default:
-		return executionErrorEnvelope(err)
+		return ToolErrorEnvelope{}, false
+	}
+}
+
+func invokeWithLeaseInferenceErrorEnvelope(err error) (ToolErrorEnvelope, bool) {
+	switch {
+	case errors.Is(err, models.ErrAssetUnavailable):
+		return reasonDetailEnvelope(errorCodeAssetUnavailable, errorMessageAssetUnavailable, true, err), true
+	case errors.Is(err, models.ErrInferenceTimeout):
+		return reasonDetailEnvelope(errorCodeInferenceTimeout, errorMessageInferenceTimeout, true, err), true
+	case errors.Is(err, models.ErrInferenceFailed):
+		return reasonDetailEnvelope(errorCodeInferenceFailed, errorMessageInferenceFailed, false, err), true
+	case errors.Is(err, models.ErrUnsupportedModelOperation):
+		return reasonDetailEnvelope(errorCodeModelOperationUnsupported, errorMessageModelOperationUnsupported, false, err), true
+	case errors.Is(err, models.ErrUnsupportedResponseMode):
+		return reasonDetailEnvelope(errorCodeInferenceResponseUnsupported, errorMessageInferenceResponseUnsupported, false, err), true
+	default:
+		return ToolErrorEnvelope{}, false
+	}
+}
+
+func reasonDetailEnvelope(code, message string, retryable bool, err error) ToolErrorEnvelope {
+	return ToolErrorEnvelope{
+		Code:      code,
+		Message:   message,
+		Retryable: retryable,
+		Details: map[string]any{
+			"reason": err.Error(),
+		},
 	}
 }
 
