@@ -73,6 +73,14 @@ func ensureSingleJSONObject(dec *json.Decoder) error {
 	return nil
 }
 
+func ensureJSONObjectPayload(data []byte) error {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) > 0 && trimmed[0] != '{' {
+		return RequestFieldValidationError{message: "request payload must contain one JSON object"}
+	}
+	return nil
+}
+
 // DecodeError marks a request-body decoding failure without exposing which
 // owner operation performed the decode.
 type DecodeError struct {
@@ -96,8 +104,14 @@ func IsDecodeError(err error) bool {
 // DecodeStrictJSON decodes exactly one JSON object and rejects unknown fields.
 func DecodeStrictJSON[T any](body io.Reader) (T, error) {
 	var zero T
+	if body == nil {
+		return zero, DecodeError{Cause: errors.New("request body is required")}
+	}
 	data, err := io.ReadAll(body)
 	if err != nil {
+		return zero, DecodeError{Cause: err}
+	}
+	if err := ensureJSONObjectPayload(data); err != nil {
 		return zero, DecodeError{Cause: err}
 	}
 
@@ -117,6 +131,9 @@ func DecodeStrictJSON[T any](body io.Reader) (T, error) {
 // DecodeOptionalJSONRequest accepts an empty body and otherwise applies the
 // same strict single-object rules as DecodeStrictJSON.
 func DecodeOptionalJSONRequest[T any](body io.Reader, zero func() T) (T, error) {
+	if body == nil {
+		return zero(), nil
+	}
 	data, err := io.ReadAll(body)
 	if err != nil {
 		return zero(), DecodeError{Cause: err}
@@ -124,6 +141,9 @@ func DecodeOptionalJSONRequest[T any](body io.Reader, zero func() T) (T, error) 
 	trimmed := bytes.TrimSpace(data)
 	if len(trimmed) == 0 {
 		return zero(), nil
+	}
+	if err := ensureJSONObjectPayload(trimmed); err != nil {
+		return zero(), DecodeError{Cause: err}
 	}
 	decoder := json.NewDecoder(bytes.NewReader(trimmed))
 	decoder.DisallowUnknownFields()
