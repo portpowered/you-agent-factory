@@ -10,16 +10,18 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/optional"
+	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 )
 
 type decodedSubmitWorkRequest struct {
-	Request factoryapi.SubmitWorkBySessionIdJSONRequestBody
+	Request       factoryapi.SubmitWorkBySessionIdJSONRequestBody
+	CanonicalJSON []byte
 }
 
 type decodedUpsertWorkRequest struct {
-	Request factoryapi.UpsertWorkRequestBySessionIdJSONRequestBody
+	Request       factoryapi.UpsertWorkRequestBySessionIdJSONRequestBody
+	CanonicalJSON []byte
 }
 
 // StageSubmitWorkFileRequestFromBody decodes one stage-submit-work-file request.
@@ -157,7 +159,10 @@ func SubmitWorkRequestFromBody(body io.Reader) (decodedSubmitWorkRequest, error)
 	if err := validateWorkContentField(fields, ""); err != nil {
 		return decodedSubmitWorkRequest{}, err
 	}
-	return decodedSubmitWorkRequest{Request: req}, nil
+	return decodedSubmitWorkRequest{
+		Request:       req,
+		CanonicalJSON: append([]byte(nil), data...),
+	}, nil
 }
 
 // UpsertWorkRequestFromBody decodes one upsert-work-request body.
@@ -193,7 +198,10 @@ func UpsertWorkRequestFromBody(body io.Reader) (decodedUpsertWorkRequest, error)
 			return decodedUpsertWorkRequest{}, err
 		}
 	}
-	return decodedUpsertWorkRequest{Request: req}, nil
+	return decodedUpsertWorkRequest{
+		Request:       req,
+		CanonicalJSON: append([]byte(nil), data...),
+	}, nil
 }
 
 func normalizeWorkRequestStateJSON(data []byte) ([]byte, error) {

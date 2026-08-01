@@ -46,7 +46,7 @@ func NewHandler(
 	return &Handler{
 		mappings: mappings, modelsContent: modelsContent, validation: validation,
 		invocationWorkType: invocationWorkType,
-		contentStaging: contentStaging, requestPreparation: requestPreparation,
+		contentStaging:     contentStaging, requestPreparation: requestPreparation,
 		sessionRequests: sessionRequests,
 	}, nil
 }
@@ -79,14 +79,15 @@ func (handler *Handler) Bind(opened factorysessions.RuntimeHTTPServices) (http.H
 		FactoryValidation: handler.validation, WorkflowPreview: opened.WorkflowPreview,
 		DurableExecution: mapped.Durable, DurableLifecycle: mapped.Durable,
 		DurableListing: mapped.Durable, DurableProjection: mapped.Durable,
-		DurableLister:     opened.SessionExecution,
-		LiveSessionLister: factorysessionshttp.ReadProjectionSessionListReader{Reader: opened.FactorySessions},
-		WorkerPrompts: opened.WorkerPrompts,
+		DurableLister:      opened.SessionExecution,
+		LiveSessionLister:  factorysessionshttp.ReadProjectionSessionListReader{Reader: opened.FactorySessions},
+		WorkerPrompts:      opened.WorkerPrompts,
 		InvocationWorkType: handler.invocationWorkType,
 		WorkService: work.AdmissionContentService(
 			handler.contentStaging,
 			handler.requestPreparation,
 		),
+		WorkRoot:        opened.Work,
 		SessionRequests: handler.sessionRequests,
 	}, opened.Logger)
 	server := transporthttp.NewServer(sessionsHandler, modelsHandler, opened.ProviderSessions, opened.Logger)

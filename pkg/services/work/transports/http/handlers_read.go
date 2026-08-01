@@ -79,9 +79,20 @@ func (a *Adapter) GetWorkBySessionId(
 func (a *Adapter) writeListDecodeError(w http.ResponseWriter, err error) {
 	var validation *work.ValidationError
 	if errors.As(err, &validation) {
-		a.writeError(w, http.StatusBadRequest, validation.Message, "BAD_REQUEST")
+		a.writeError(w, http.StatusBadRequest, workListValidationMessage(validation), "BAD_REQUEST")
 		return
 	}
 	a.writeError(w, http.StatusBadRequest, "invalid list-work request", "BAD_REQUEST")
 }
 
+func workListValidationMessage(validation *work.ValidationError) string {
+	if validation == nil {
+		return "invalid list-work request"
+	}
+	switch validation.Field {
+	case "state.type", "sortBy":
+		return validation.Field + " is invalid"
+	default:
+		return validation.Message
+	}
+}

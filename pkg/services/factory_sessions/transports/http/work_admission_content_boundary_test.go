@@ -2,7 +2,9 @@ package http
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -13,14 +15,40 @@ import (
 
 var errUnsupportedAdmissionWorkServiceMethod = errors.New("unsupported admission work service method")
 
+type allowingFactoryDefinitions struct{}
+
+func (allowingFactoryDefinitions) GetCurrentFactoryForSession(
+	context.Context,
+	string,
+) (factoryapi.Factory, error) {
+	return factoryapi.Factory{}, nil
+}
+
+func (allowingFactoryDefinitions) SaveFactoryForSession(
+	context.Context,
+	string,
+	factoryapi.FactorySaveMode,
+	factoryapi.Factory,
+) (factoryapi.Factory, error) {
+	return factoryapi.Factory{}, nil
+}
+
+func (allowingFactoryDefinitions) SaveCurrentFactoryForSession(
+	context.Context,
+	string,
+	factoryapi.Factory,
+) (factoryapi.Factory, error) {
+	return factoryapi.Factory{}, nil
+}
+
 type recordingAdmissionWorkService struct {
-	stageCalls   int
-	prepareCalls int
-	prepCalls    int
-	submitCalls  int
-	lastStage    work.StageContentRequest
-	lastItems    []work.StagedSubmissionItem
-	lastPrep     work.WorkRequestPreparation
+	stageCalls        int
+	prepareCalls      int
+	prepCalls         int
+	submitCalls       int
+	lastStage         work.StageContentRequest
+	lastItems         []work.StagedSubmissionItem
+	lastPrep          work.WorkRequestPreparation
 	lastSubmitSession string
 	lastSubmitRequest work.WorkRequest
 
@@ -154,16 +182,20 @@ func TestWorkAdmissionContentBoundary_StagesContentThroughWorkService(t *testing
 	t.Parallel()
 
 	recording := &recordingAdmissionWorkService{}
-	server := NewHandler(Dependencies{WorkService: recording}, nil)
+	server := NewHandler(Dependencies{
+		FactoryDefinitions: allowingFactoryDefinitions{},
+		WorkService:        recording,
+	}, nil)
 
 	request := httptest.NewRequest(
 		"POST",
 		"/factory-sessions/session-1/work/staged-files",
 		strings.NewReader(`{"contentBase64":"aGVsbG8=","fileName":"note.txt","itemType":"document","mediaType":"text/plain"}`),
 	)
-	response, err := server.stageSubmitWorkFileRequest(context.Background(), request)
-	if err != nil {
-		t.Fatalf("stageSubmitWorkFile: %v", err)
+	response := httptest.NewRecorder()
+	server.StageSubmitWorkFileBySessionId(response, request, "session-1")
+	if response.Code != http.StatusCreated {
+		t.Fatalf("stageSubmitWorkFile status = %d, want %d: %s", response.Code, http.StatusCreated, response.Body.String())
 	}
 	if recording.stageCalls != 1 {
 		t.Fatalf("StageContent calls = %d, want 1", recording.stageCalls)
@@ -171,8 +203,12 @@ func TestWorkAdmissionContentBoundary_StagesContentThroughWorkService(t *testing
 	if recording.lastStage.FileName != "note.txt" {
 		t.Fatalf("last stage request = %#v, want note.txt", recording.lastStage)
 	}
-	if response.StagedFileRef == "" {
-		t.Fatalf("staged file ref = %q, want non-empty", response.StagedFileRef)
+	var body factoryapi.StageSubmitWorkFileResponse
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode stage response: %v", err)
+	}
+	if body.StagedFileRef == "" {
+		t.Fatalf("staged file ref = %q, want non-empty", body.StagedFileRef)
 	}
 }
 
@@ -182,24 +218,29 @@ func TestWorkAdmissionContentBoundary_StagesContentThroughWorkService(t *testing
 func TestWorkAdmissionContentBoundary_PreparesWorkRequestThroughWorkService(t *testing.T) {
 	t.Parallel()
 
-	recording := &recordingAdmissionWorkService{}
+	recording := &recordingAdmissionWorkService{
+		submitResult: work.WorkRequestSubmitResult{Accepted: true},
+	}
 	server := NewHandler(Dependencies{WorkService: recording}, nil)
 
-	request := work.WorkRequest{
-		Works: []work.Work{{
-			Name: "task", WorkTypeID: "prd",
-			Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "hello"}},
-		}},
-	}
-	prepared, err := server.prepareWorkRequest(context.Background(), "session-1", request, nil)
-	if err != nil {
-		t.Fatalf("prepareWorkRequest: %v", err)
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/factory-sessions/session-1/work",
+		strings.NewReader(`{"name":"task","workTypeName":"prd"}`),
+	)
+	response := httptest.NewRecorder()
+	server.SubmitWorkBySessionId(response, request, "session-1")
+	if response.Code != http.StatusCreated {
+		t.Fatalf("submit status = %d, want %d: %s", response.Code, http.StatusCreated, response.Body.String())
 	}
 	if recording.prepCalls != 1 {
 		t.Fatalf("PrepareWorkRequest calls = %d, want 1", recording.prepCalls)
 	}
-	if len(prepared.Works) != 1 || prepared.Works[0].Name != "task" {
-		t.Fatalf("prepared request = %#v, want task work", prepared)
+	if len(recording.lastPrep.Request.Works) != 1 || recording.lastPrep.Request.Works[0].Name != "task" {
+		t.Fatalf("prepared request = %#v, want task work", recording.lastPrep.Request)
+	}
+	if string(recording.lastPrep.CanonicalJSON) != `{"name":"task","workTypeName":"prd"}` {
+		t.Fatalf("canonical JSON = %q, want original submit body", recording.lastPrep.CanonicalJSON)
 	}
 }
 
@@ -209,31 +250,25 @@ func TestWorkAdmissionContentBoundary_PreparesWorkRequestThroughWorkService(t *t
 func TestWorkAdmissionContentBoundary_PrepareContentThroughWorkService(t *testing.T) {
 	t.Parallel()
 
-	recording := &recordingAdmissionWorkService{}
+	recording := &recordingAdmissionWorkService{
+		submitResult: work.WorkRequestSubmitResult{Accepted: true},
+	}
 	server := NewHandler(Dependencies{WorkService: recording}, nil)
 
-	var item factoryapi.SubmitWorkItem
-	if err := item.FromSubmitWorkTextItem(factoryapi.SubmitWorkTextItem{
-		Type: factoryapi.SubmitWorkItemTypeText,
-		Text: "hello",
-	}); err != nil {
-		t.Fatalf("FromSubmitWorkTextItem: %v", err)
-	}
-	items := []factoryapi.SubmitWorkItem{item}
-
-	content, err := server.submitWorkContent(context.Background(), factoryapi.SubmitWorkRequest{
-		Items: &items,
-	})
-	if err != nil {
-		t.Fatalf("submitWorkContent: %v", err)
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/factory-sessions/session-1/work",
+		strings.NewReader(`{"items":[{"type":"text","text":"hello"}]}`),
+	)
+	response := httptest.NewRecorder()
+	server.SubmitWorkBySessionId(response, request, "session-1")
+	if response.Code != http.StatusCreated {
+		t.Fatalf("submit status = %d, want %d: %s", response.Code, http.StatusCreated, response.Body.String())
 	}
 	if recording.prepareCalls != 1 {
 		t.Fatalf("PrepareContent calls = %d, want 1", recording.prepareCalls)
 	}
 	if len(recording.lastItems) != 1 || recording.lastItems[0].Text != "hello" {
 		t.Fatalf("last prepare items = %#v, want hello text item", recording.lastItems)
-	}
-	if len(content) != 1 || content[0].Text != "hello" {
-		t.Fatalf("prepared content = %#v, want hello", content)
 	}
 }
