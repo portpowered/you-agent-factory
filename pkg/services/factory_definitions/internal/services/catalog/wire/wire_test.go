@@ -285,32 +285,24 @@ func TestNewPathResolverAndCatalogWireResolveNamedFactoryAndCurrentPointer(t *te
 	}
 }
 
-func TestNewService_ListGetResolveDeleteNamedFactory(t *testing.T) {
-	t.Parallel()
+type namedFactoryCatalogFixture struct {
+	projectRoot string
+	globalRoot  string
+	alphaDir    string
+	betaDir     string
+	svc         catalog.Service
+}
+
+func newNamedFactoryCatalogFixture(t *testing.T) namedFactoryCatalogFixture {
+	t.Helper()
 
 	projectRoot := t.TempDir()
 	globalRoot := t.TempDir()
 	alphaDir := filepath.Join(projectRoot, "alpha")
 	betaDir := filepath.Join(projectRoot, "beta")
-	for _, spec := range []struct {
-		dir string
-	}{
-		{dir: alphaDir},
-		{dir: betaDir},
-	} {
-		if err := os.MkdirAll(spec.dir, 0o755); err != nil {
-			t.Fatalf("MkdirAll(%s): %v", spec.dir, err)
-		}
-		if err := os.WriteFile(filepath.Join(spec.dir, "factory.json"), []byte(`{}`), 0o644); err != nil {
-			t.Fatalf("WriteFile(%s/factory.json): %v", spec.dir, err)
-		}
-	}
-	if err := os.MkdirAll(filepath.Join(globalRoot, "alpha"), 0o755); err != nil {
-		t.Fatalf("MkdirAll(global alpha): %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(globalRoot, "alpha", "factory.json"), []byte(`{}`), 0o644); err != nil {
-		t.Fatalf("WriteFile(global alpha/factory.json): %v", err)
-	}
+	seedNamedFactoryDefinition(t, alphaDir)
+	seedNamedFactoryDefinition(t, betaDir)
+	seedNamedFactoryDefinition(t, filepath.Join(globalRoot, "alpha"))
 
 	fileSystem := platformfilesystem.Local{}
 	paths, err := catalogwire.NewPathResolver(fileSystem)
@@ -324,9 +316,32 @@ func TestNewService_ListGetResolveDeleteNamedFactory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
+	return namedFactoryCatalogFixture{
+		projectRoot: projectRoot,
+		globalRoot:  globalRoot,
+		alphaDir:    alphaDir,
+		betaDir:     betaDir,
+		svc:         svc,
+	}
+}
 
+func seedNamedFactoryDefinition(t *testing.T, factoryDir string) {
+	t.Helper()
+	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", factoryDir, err)
+	}
+	if err := os.WriteFile(filepath.Join(factoryDir, "factory.json"), []byte(`{}`), 0o644); err != nil {
+		t.Fatalf("WriteFile(%s/factory.json): %v", factoryDir, err)
+	}
+}
+
+func TestNewService_ListGetResolveDeleteNamedFactory(t *testing.T) {
+	t.Parallel()
+
+	fx := newNamedFactoryCatalogFixture(t)
 	ctx := context.Background()
-	listed, err := svc.ListNamedFactories(ctx, factorydefinitions.ListNamedFactoriesRequest{RootDir: projectRoot})
+
+	listed, err := fx.svc.ListNamedFactories(ctx, factorydefinitions.ListNamedFactoriesRequest{RootDir: fx.projectRoot})
 	if err != nil {
 		t.Fatalf("ListNamedFactories: %v", err)
 	}
@@ -334,56 +349,56 @@ func TestNewService_ListGetResolveDeleteNamedFactory(t *testing.T) {
 		t.Fatalf("listed entries = %#v, want alpha and beta", listed.Entries)
 	}
 
-	got, err := svc.GetNamedFactory(ctx, factorydefinitions.GetNamedFactoryRequest{
-		RootDir: projectRoot,
+	got, err := fx.svc.GetNamedFactory(ctx, factorydefinitions.GetNamedFactoryRequest{
+		RootDir: fx.projectRoot,
 		Name:    "alpha",
 	})
 	if err != nil {
 		t.Fatalf("GetNamedFactory: %v", err)
 	}
-	if got.Entry.FactoryDir != alphaDir {
-		t.Fatalf("factoryDir = %q, want %q", got.Entry.FactoryDir, alphaDir)
+	if got.Entry.FactoryDir != fx.alphaDir {
+		t.Fatalf("factoryDir = %q, want %q", got.Entry.FactoryDir, fx.alphaDir)
 	}
 
-	resolved, err := svc.ResolveNamedFactory(ctx, factorydefinitions.ResolveNamedFactoryRequest{
-		ProjectRoot: projectRoot,
-		GlobalRoot:  globalRoot,
+	resolved, err := fx.svc.ResolveNamedFactory(ctx, factorydefinitions.ResolveNamedFactoryRequest{
+		ProjectRoot: fx.projectRoot,
+		GlobalRoot:  fx.globalRoot,
 		Name:        "alpha",
 	})
 	if err != nil {
 		t.Fatalf("ResolveNamedFactory: %v", err)
 	}
-	if resolved.Resolution.FactoryDir != alphaDir ||
+	if resolved.Resolution.FactoryDir != fx.alphaDir ||
 		resolved.Resolution.Source != factorydefinitions.NamedFactoryResolutionSourceProjectLocal {
-		t.Fatalf("resolution = %#v, want project-local alpha at %q", resolved.Resolution, alphaDir)
+		t.Fatalf("resolution = %#v, want project-local alpha at %q", resolved.Resolution, fx.alphaDir)
 	}
 
-	if _, err := svc.SetCurrentFactoryPointer(ctx, factorydefinitions.SetCurrentFactoryPointerRequest{
-		RootDir: projectRoot,
+	if _, err := fx.svc.SetCurrentFactoryPointer(ctx, factorydefinitions.SetCurrentFactoryPointerRequest{
+		RootDir: fx.projectRoot,
 		Name:    "beta",
 	}); err != nil {
 		t.Fatalf("SetCurrentFactoryPointer(beta): %v", err)
 	}
-	deleted, err := svc.DeleteNamedFactory(ctx, factorydefinitions.DeleteNamedFactoryRequest{
-		RootDir: projectRoot,
+	deleted, err := fx.svc.DeleteNamedFactory(ctx, factorydefinitions.DeleteNamedFactoryRequest{
+		RootDir: fx.projectRoot,
 		Name:    "alpha",
 	})
 	if err != nil {
 		t.Fatalf("DeleteNamedFactory: %v", err)
 	}
-	if deleted.FactoryDir != alphaDir {
-		t.Fatalf("deleted.FactoryDir = %q, want %q", deleted.FactoryDir, alphaDir)
+	if deleted.FactoryDir != fx.alphaDir {
+		t.Fatalf("deleted.FactoryDir = %q, want %q", deleted.FactoryDir, fx.alphaDir)
 	}
 
-	listed, err = svc.ListNamedFactories(ctx, factorydefinitions.ListNamedFactoriesRequest{RootDir: projectRoot})
+	listed, err = fx.svc.ListNamedFactories(ctx, factorydefinitions.ListNamedFactoriesRequest{RootDir: fx.projectRoot})
 	if err != nil {
 		t.Fatalf("ListNamedFactories after delete: %v", err)
 	}
 	if len(listed.Entries) != 1 || listed.Entries[0].Name != "beta" {
 		t.Fatalf("listed after delete = %#v, want only beta", listed.Entries)
 	}
-	_, err = svc.GetNamedFactory(ctx, factorydefinitions.GetNamedFactoryRequest{
-		RootDir: projectRoot,
+	_, err = fx.svc.GetNamedFactory(ctx, factorydefinitions.GetNamedFactoryRequest{
+		RootDir: fx.projectRoot,
 		Name:    "alpha",
 	})
 	if err == nil || !errors.Is(err, factorydefinitions.ErrNamedFactoryNotFound) {
