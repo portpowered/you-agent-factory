@@ -7,195 +7,178 @@ import (
 	"github.com/portpowered/infinite-you/internal/ownershipinventory"
 )
 
+var factoryDefinitionsMappingCases = []packageMappingCase{
+	{
+		path:        "pkg/services/factory_definitions",
+		wantRetain:  true,
+		retainOwner: "factory_definitions",
+	},
+	{
+		path: "pkg/services/factory_definitions/definition",
+		wantMove: &ownershipinventory.PackageRow{
+			PackagePath:       "pkg/services/factory_definitions/definition",
+			Disposition:       ownershipinventory.DispositionMove,
+			Destination:       "factory_definitions",
+			DestinationKind:   ownershipinventory.DestinationKindOwner,
+			Successor:         "pkg/services/factory_definitions/internal",
+			DeletionCondition: "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof",
+		},
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal/services/snapshots_portability/wire",
+		wantRetain:  true,
+		retainOwner: "factory_definitions",
+	},
+	{
+		path:        "pkg/services/factory_definitions/wire/defaultscaffold",
+		wantRetain:  true,
+		retainOwner: "factory_definitions",
+	},
+	{
+		path:        "pkg/services/factory_definitions/transports/http",
+		wantRetain:  true,
+		retainOwner: "factory_definitions",
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal/services/catalog/wire",
+		wantRetain:  true,
+		retainOwner: "factory_definitions",
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal/services/validation/internal/topology",
+		wantRetain:  true,
+		retainOwner: "factory_definitions",
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal",
+		wantRetain:  true,
+		retainOwner: "factory_definitions",
+	},
+	{
+		path: "pkg/services/factory_definitions/service",
+		wantMove: &ownershipinventory.PackageRow{
+			PackagePath:       "pkg/services/factory_definitions/service",
+			Disposition:       ownershipinventory.DispositionMove,
+			Destination:       "factory_definitions",
+			DestinationKind:   ownershipinventory.DestinationKindOwner,
+			Successor:         "pkg/services/factory_definitions/internal",
+			DeletionCondition: "delete transitional service/ package after owner wire retargets to internal implementation and DEL cutover proof completes",
+		},
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal/services/catalog/namedfactories",
+		wantRetain:  true,
+		retainOwner: "factory_definitions",
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal/services/validation/impl",
+		wantRetain:  true,
+		retainOwner: "factory_definitions",
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal/services/distribution/goal",
+		wantRetain:  true,
+		retainOwner: "factory_definitions",
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal/contracts",
+		wantRetain:  true,
+		retainOwner: "factory_definitions",
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal/services/validation/authoredmodel/namevalue",
+		wantRetain:  true,
+		retainOwner: "factory_definitions",
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers",
+		wantRetain:  true,
+		retainOwner: "factory_definitions",
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal/services/validation/authoredmodel/taxonomy",
+		wantRetain:  true,
+		retainOwner: "factory_definitions",
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal/services/snapshots_portability/replayconfig",
+		wantRetain:  true,
+		retainOwner: "factory_definitions",
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal/services/catalog/resource",
+		wantRetain:  true,
+		retainOwner: "factory_definitions",
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope",
+		wantRetain:  true,
+		retainOwner: "factory_definitions",
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal/services/invocation_policy/invocationinterpolation",
+		wantRetain:  true,
+		retainOwner: "factory_definitions",
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal/services/invocation_policy/invocationoutput",
+		wantRetain:  true,
+		retainOwner: "factory_definitions",
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal/services/invocation_policy/invocationworktype",
+		wantRetain:  true,
+		retainOwner: "factory_definitions",
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal/services/invocation_policy/quorumpolicy",
+		wantRetain:  true,
+		retainOwner: "factory_definitions",
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal/services/invocation_policy/workpropagation",
+		wantRetain:  true,
+		retainOwner: "factory_definitions",
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution",
+		wantRetain:  true,
+		retainOwner: "factory_definitions",
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal/services/invocation_policy/ttsobservability",
+		wantRetain:  true,
+		retainOwner: "factory_definitions",
+	},
+	{
+		path: "pkg/services/factory_definitions/internal/testcomposition",
+		wantMove: &ownershipinventory.PackageRow{
+			PackagePath:       "pkg/services/factory_definitions/internal/testcomposition",
+			Disposition:       ownershipinventory.DispositionMove,
+			Destination:       "factory_definitions",
+			DestinationKind:   ownershipinventory.DestinationKindOwner,
+			Successor:         "pkg/services/factory_definitions/internal",
+			DeletionCondition: "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof",
+		},
+	},
+	{
+		path: "pkg/services/factory_definitions/clonetests",
+		wantMove: &ownershipinventory.PackageRow{
+			PackagePath:       "pkg/services/factory_definitions/clonetests",
+			Disposition:       ownershipinventory.DispositionMove,
+			Destination:       "factory_definitions",
+			DestinationKind:   ownershipinventory.DestinationKindOwner,
+			Successor:         "pkg/services/factory_definitions/internal",
+			DeletionCondition: "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof",
+		},
+	},
+}
+
 func TestMapPackageFactoryDefinitionsMoveDestinations(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
-		path        string
-		wantRetain  bool
-		retainOwner string
-		wantMove    *ownershipinventory.PackageRow
-	}{
-		{
-			path:        "pkg/services/factory_definitions",
-			wantRetain:  true,
-			retainOwner: "factory_definitions",
-		},
-		{
-			path: "pkg/services/factory_definitions/definition",
-			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_definitions/definition",
-				Disposition:       ownershipinventory.DispositionMove,
-				Destination:       "factory_definitions",
-				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/factory_definitions/internal",
-				DeletionCondition: "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof",
-			},
-		},
-		{
-			path:        "pkg/services/factory_definitions/internal/services/snapshots_portability/wire",
-			wantRetain:  true,
-			retainOwner: "factory_definitions",
-		},
-		{
-			path:        "pkg/services/factory_definitions/wire/defaultscaffold",
-			wantRetain:  true,
-			retainOwner: "factory_definitions",
-		},
-		{
-			path:        "pkg/services/factory_definitions/transports/http",
-			wantRetain:  true,
-			retainOwner: "factory_definitions",
-		},
-		{
-			path:        "pkg/services/factory_definitions/internal/services/catalog/wire",
-			wantRetain:  true,
-			retainOwner: "factory_definitions",
-		},
-		{
-			path:        "pkg/services/factory_definitions/internal/services/validation/internal/topology",
-			wantRetain:  true,
-			retainOwner: "factory_definitions",
-		},
-		{
-			path:        "pkg/services/factory_definitions/internal",
-			wantRetain:  true,
-			retainOwner: "factory_definitions",
-		},
-		{
-			path: "pkg/services/factory_definitions/service",
-			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_definitions/service",
-				Disposition:       ownershipinventory.DispositionMove,
-				Destination:       "factory_definitions",
-				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/factory_definitions/internal",
-				DeletionCondition: "delete transitional service/ package after owner wire retargets to internal implementation and DEL cutover proof completes",
-			},
-		},
-		{
-			path:        "pkg/services/factory_definitions/internal/services/catalog/namedfactories",
-			wantRetain:  true,
-			retainOwner: "factory_definitions",
-		},
-		{
-			path: "pkg/services/factory_definitions/internal/services/validation/impl",
-			wantRetain: true,
-			retainOwner: "factory_definitions",
-		},
-		{
-			path: "pkg/services/factory_definitions/internal/services/distribution/goal",
-			wantRetain: true,
-			retainOwner: "factory_definitions",
-		},
-		{
-			path: "pkg/services/factory_definitions/internal/contracts",
-			wantRetain: true,
-			retainOwner: "factory_definitions",
-		},
-		{
-			path: "pkg/services/factory_definitions/internal/services/validation/authoredmodel/namevalue",
-			wantRetain: true,
-			retainOwner: "factory_definitions",
-		},
-		{
-			path: "pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers",
-			wantRetain: true,
-			retainOwner: "factory_definitions",
-		},
-		{
-			path: "pkg/services/factory_definitions/internal/services/validation/authoredmodel/taxonomy",
-			wantRetain: true,
-			retainOwner: "factory_definitions",
-		},
-		{
-			path:        "pkg/services/factory_definitions/internal/services/snapshots_portability/replayconfig",
-			wantRetain:  true,
-			retainOwner: "factory_definitions",
-		},
-		{
-			path:        "pkg/services/factory_definitions/internal/services/catalog/resource",
-			wantRetain:  true,
-			retainOwner: "factory_definitions",
-		},
-		{
-			path:        "pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope",
-			wantRetain:  true,
-			retainOwner: "factory_definitions",
-		},
-		{
-			path:        "pkg/services/factory_definitions/internal/services/invocation_policy/invocationinterpolation",
-			wantRetain:  true,
-			retainOwner: "factory_definitions",
-		},
-		{
-			path:        "pkg/services/factory_definitions/internal/services/invocation_policy/invocationoutput",
-			wantRetain:  true,
-			retainOwner: "factory_definitions",
-		},
-		{
-			path:        "pkg/services/factory_definitions/internal/services/invocation_policy/invocationworktype",
-			wantRetain:  true,
-			retainOwner: "factory_definitions",
-		},
-		{
-			path:        "pkg/services/factory_definitions/internal/services/invocation_policy/quorumpolicy",
-			wantRetain:  true,
-			retainOwner: "factory_definitions",
-		},
-		{
-			path:        "pkg/services/factory_definitions/internal/services/invocation_policy/workpropagation",
-			wantRetain:  true,
-			retainOwner: "factory_definitions",
-		},
-		{
-			path:        "pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution",
-			wantRetain:  true,
-			retainOwner: "factory_definitions",
-		},
-		{
-			path:        "pkg/services/factory_definitions/internal/services/invocation_policy/ttsobservability",
-			wantRetain:  true,
-			retainOwner: "factory_definitions",
-		},
-		{
-			path: "pkg/services/factory_definitions/internal/testcomposition",
-			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_definitions/internal/testcomposition",
-				Disposition:       ownershipinventory.DispositionMove,
-				Destination:       "factory_definitions",
-				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/factory_definitions/internal",
-				DeletionCondition: "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof",
-			},
-		},
-		{
-			path: "pkg/services/factory_definitions/clonetests",
-			wantMove: &ownershipinventory.PackageRow{
-				PackagePath:       "pkg/services/factory_definitions/clonetests",
-				Disposition:       ownershipinventory.DispositionMove,
-				Destination:       "factory_definitions",
-				DestinationKind:   ownershipinventory.DestinationKindOwner,
-				Successor:         "pkg/services/factory_definitions/internal",
-				DeletionCondition: "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof",
-			},
-		},
-	}
-
-	for _, tc := range cases {
-		got, err := ownershipinventory.MapPackage(tc.path)
-		if err != nil {
-			t.Fatalf("MapPackage(%q) error = %v", tc.path, err)
-		}
-		if tc.wantRetain {
-			if got.Disposition != ownershipinventory.DispositionRetain || got.Destination != tc.retainOwner {
-				t.Fatalf("MapPackage(%q) = %#v, want retain→%s", tc.path, got, tc.retainOwner)
-			}
-			continue
-		}
-		if got != *tc.wantMove {
-			t.Fatalf("MapPackage(%q) = %#v, want %#v", tc.path, got, *tc.wantMove)
-		}
+	for _, tc := range factoryDefinitionsMappingCases {
+		assertPackageMapping(t, tc)
 	}
 }
 
