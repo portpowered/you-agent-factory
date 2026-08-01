@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { semanticWorkflowDashboardSnapshot } from "../../../../../components/dashboard/test-fixtures";
 import { getWorkstationDetailMessages } from "../../messages/workstation-detail";
