@@ -86,6 +86,17 @@ type RuntimeArtifactSettings struct {
 	Compress   bool
 }
 
+// RuntimeArtifactSettingsInput carries authored runtime artifact values while
+// preserving whether optional numeric and boolean fields were present. The
+// Operator Settings owner normalizes this input into detached runtime values.
+type RuntimeArtifactSettingsInput struct {
+	Directory  *string
+	MaxSizeMB  *int
+	MaxBackups *int
+	MaxAgeDays *int
+	Compress   *bool
+}
+
 // RuntimeSettings holds the operator-config runtime observability settings.
 type RuntimeSettings struct {
 	Logging RuntimeArtifactSettings
@@ -132,6 +143,62 @@ func defaultRuntimeSettings() RuntimeSettings {
 		Logging: defaultRuntimeArtifactSettings(),
 		Metrics: defaultRuntimeArtifactSettings(),
 	}
+}
+
+// Normalize applies the owner-defined defaults, normalization, and numeric
+// validation for one authored runtime artifact. The returned value is detached
+// from input pointers.
+func (input RuntimeArtifactSettingsInput) Normalize(fieldPath string) (RuntimeArtifactSettings, error) {
+	settings := RuntimeArtifactSettings{}
+	if input.Directory != nil {
+		settings.Directory = strings.TrimSpace(*input.Directory)
+		if settings.Directory == "" {
+			return RuntimeArtifactSettings{}, fmt.Errorf("%s.directory must be non-empty", fieldPath)
+		}
+	}
+	if input.Compress != nil {
+		settings.Compress = *input.Compress
+	}
+	defaults := defaultRuntimeArtifactSettings()
+	var err error
+	settings.MaxSizeMB, err = normalizeRuntimeArtifactNumber(
+		input.MaxSizeMB,
+		defaults.MaxSizeMB,
+		fieldPath,
+		"maxSizeMB",
+	)
+	if err != nil {
+		return RuntimeArtifactSettings{}, err
+	}
+	settings.MaxBackups, err = normalizeRuntimeArtifactNumber(
+		input.MaxBackups,
+		defaults.MaxBackups,
+		fieldPath,
+		"maxBackups",
+	)
+	if err != nil {
+		return RuntimeArtifactSettings{}, err
+	}
+	settings.MaxAgeDays, err = normalizeRuntimeArtifactNumber(
+		input.MaxAgeDays,
+		defaults.MaxAgeDays,
+		fieldPath,
+		"maxAgeDays",
+	)
+	if err != nil {
+		return RuntimeArtifactSettings{}, err
+	}
+	return settings, nil
+}
+
+func normalizeRuntimeArtifactNumber(value *int, defaultValue int, fieldPath, fieldName string) (int, error) {
+	if value == nil {
+		return defaultValue, nil
+	}
+	if *value < 1 {
+		return 0, fmt.Errorf("%s.%s must be at least 1", fieldPath, fieldName)
+	}
+	return *value, nil
 }
 
 // Normalize trims decoded values and validates file-only worker presets.

@@ -51,7 +51,6 @@ func requireEOF(decoder *json.Decoder) error {
 func mapConfig(generated factoryapi.GlobalConfig) (operatorsettings.Config, error) {
 	config := operatorsettings.Config{
 		BackendScopeID: optionalString(generated.BackendScopeID),
-		Runtime:        defaultRuntimeSettings(),
 	}
 	if generated.Defaults != nil {
 		config.Defaults = operatorsettings.Defaults{
@@ -59,24 +58,19 @@ func mapConfig(generated factoryapi.GlobalConfig) (operatorsettings.Config, erro
 			WorkerModel:         optionalString(generated.Defaults.WorkerModel),
 		}
 	}
+	var logging, metrics *factoryapi.GlobalConfigRuntimeArtifactSettings
 	if generated.Runtime != nil {
-		var err error
-		config.Runtime.Logging, err = mapRuntimeArtifactSettings(
-			"runtime.logging",
-			generated.Runtime.Logging,
-			config.Runtime.Logging,
-		)
-		if err != nil {
-			return operatorsettings.Config{}, err
-		}
-		config.Runtime.Metrics, err = mapRuntimeArtifactSettings(
-			"runtime.metrics",
-			generated.Runtime.Metrics,
-			config.Runtime.Metrics,
-		)
-		if err != nil {
-			return operatorsettings.Config{}, err
-		}
+		logging = generated.Runtime.Logging
+		metrics = generated.Runtime.Metrics
+	}
+	var err error
+	config.Runtime.Logging, err = mapRuntimeArtifactSettings("runtime.logging", logging)
+	if err != nil {
+		return operatorsettings.Config{}, err
+	}
+	config.Runtime.Metrics, err = mapRuntimeArtifactSettings("runtime.metrics", metrics)
+	if err != nil {
+		return operatorsettings.Config{}, err
 	}
 	if generated.Workers != nil && generated.Workers.Acp != nil && generated.Workers.Acp.Integrations != nil {
 		config.Workers.ACP.Integrations = make([]operatorsettings.ACPIntegration, len(*generated.Workers.Acp.Integrations))
@@ -103,52 +97,20 @@ func mapConfig(generated factoryapi.GlobalConfig) (operatorsettings.Config, erro
 	return config, nil
 }
 
-func defaultRuntimeSettings() operatorsettings.RuntimeSettings {
-	defaults := operatorsettings.RuntimeArtifactSettings{
-		MaxSizeMB:  operatorsettings.DefaultRuntimeArtifactMaxSizeMB,
-		MaxBackups: operatorsettings.DefaultRuntimeArtifactBackups,
-		MaxAgeDays: operatorsettings.DefaultRuntimeArtifactMaxAge,
-	}
-	return operatorsettings.RuntimeSettings{Logging: defaults, Metrics: defaults}
-}
-
 func mapRuntimeArtifactSettings(
 	fieldPath string,
 	generated *factoryapi.GlobalConfigRuntimeArtifactSettings,
-	defaults operatorsettings.RuntimeArtifactSettings,
 ) (operatorsettings.RuntimeArtifactSettings, error) {
 	if generated == nil {
-		return defaults, nil
+		return (operatorsettings.RuntimeArtifactSettingsInput{}).Normalize(fieldPath)
 	}
-	settings := defaults
-	if generated.Directory != nil {
-		settings.Directory = strings.TrimSpace(*generated.Directory)
-		if settings.Directory == "" {
-			return operatorsettings.RuntimeArtifactSettings{}, fmt.Errorf("%s.directory must be non-empty", fieldPath)
-		}
-	}
-	if generated.MaxSizeMB != nil {
-		if *generated.MaxSizeMB < 1 {
-			return operatorsettings.RuntimeArtifactSettings{}, fmt.Errorf("%s.maxSizeMB must be at least 1", fieldPath)
-		}
-		settings.MaxSizeMB = *generated.MaxSizeMB
-	}
-	if generated.MaxBackups != nil {
-		if *generated.MaxBackups < 1 {
-			return operatorsettings.RuntimeArtifactSettings{}, fmt.Errorf("%s.maxBackups must be at least 1", fieldPath)
-		}
-		settings.MaxBackups = *generated.MaxBackups
-	}
-	if generated.MaxAgeDays != nil {
-		if *generated.MaxAgeDays < 1 {
-			return operatorsettings.RuntimeArtifactSettings{}, fmt.Errorf("%s.maxAgeDays must be at least 1", fieldPath)
-		}
-		settings.MaxAgeDays = *generated.MaxAgeDays
-	}
-	if generated.Compress != nil {
-		settings.Compress = *generated.Compress
-	}
-	return settings, nil
+	return (operatorsettings.RuntimeArtifactSettingsInput{
+		Directory:  generated.Directory,
+		MaxSizeMB:  generated.MaxSizeMB,
+		MaxBackups: generated.MaxBackups,
+		MaxAgeDays: generated.MaxAgeDays,
+		Compress:   generated.Compress,
+	}).Normalize(fieldPath)
 }
 
 // Encode maps normalized Operator Settings values into the generated

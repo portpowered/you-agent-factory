@@ -174,6 +174,30 @@ func TestDecode_PartialRuntimeSettingsApplyDefaultsIndependently(t *testing.T) {
 	}
 }
 
+func TestDecode_ReturnsDetachedNormalizedRuntimeValues(t *testing.T) {
+	payload := []byte(`{
+		"runtime": {
+			"logging": {"directory":" logs "},
+			"metrics": {"compress":true}
+		}
+	}`)
+
+	first, err := globalconfig.Decode(payload)
+	if err != nil {
+		t.Fatalf("first Decode() error = %v", err)
+	}
+	first.Runtime.Logging.Directory = "mutated"
+	first.Runtime.Metrics.Compress = false
+
+	second, err := globalconfig.Decode(payload)
+	if err != nil {
+		t.Fatalf("second Decode() error = %v", err)
+	}
+	if second.Runtime.Logging.Directory != "logs" || !second.Runtime.Metrics.Compress {
+		t.Fatalf("second decoded runtime = %#v, want independent normalized values", second.Runtime)
+	}
+}
+
 func TestLoadFileConfig_PartialDocumentParticipatesInDocumentedPrecedence(t *testing.T) {
 	path := writeConfig(t, `{"defaults":{"workerModelProvider":"codex","workerModel":"file-model"}}`)
 	fileConfig, err := operatorsettings.LoadFileConfig(platformfilesystem.Local{}, globalconfig.Decode, path)
@@ -296,6 +320,8 @@ func TestLoadFileConfig_InvalidDocumentsNamePathAndCause(t *testing.T) {
 		{name: "unknown runtime field", json: `{"runtime":{"unsupported":true}}`, want: `unknown field "unsupported"`},
 		{name: "empty runtime directory", json: `{"runtime":{"logging":{"directory":" "}}}`, want: "runtime.logging.directory must be non-empty"},
 		{name: "invalid runtime size", json: `{"runtime":{"metrics":{"maxSizeMB":0}}}`, want: "runtime.metrics.maxSizeMB must be at least 1"},
+		{name: "invalid runtime backups", json: `{"runtime":{"logging":{"maxBackups":0}}}`, want: "runtime.logging.maxBackups must be at least 1"},
+		{name: "invalid runtime age", json: `{"runtime":{"logging":{"maxAgeDays":-1}}}`, want: "runtime.logging.maxAgeDays must be at least 1"},
 		{name: "trailing JSON", json: `{}` + "\n{}", want: "unexpected trailing JSON"},
 		{name: "invalid trailing token", json: `{}` + "\nx", want: "invalid character"},
 		{name: "missing preset provider", json: `{"workerPresets":[{"id":"build"}]}`, want: "modelProvider"},
