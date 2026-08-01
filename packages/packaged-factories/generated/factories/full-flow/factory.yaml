@@ -177,6 +177,15 @@ supportingFiles:
                     return result.stdout.strip()
 
                 def persist_longpaths(root):
+                    configured = subprocess.run(
+                        ["git", "config", "--get", "core.longpaths"],
+                        cwd=root,
+                        text=True,
+                        capture_output=True,
+                    )
+                    if configured.returncode == 0 and configured.stdout.strip().lower() == "true":
+                        return
+
                     last_error = ""
                     for _ in range(20):
                         result = subprocess.run(
@@ -259,58 +268,7 @@ workTypes:
         - name: failed
           type: FAILED
 workers:
-    - body: |
-        You are the planning stage for one bounded delivery cycle. Assume zero prior
-        conversation. Inspect the complete request, repository contributor instructions,
-        architecture, relevant source and tests, current branch and working-tree state,
-        and already merged results before deciding what remains. Preserve unrelated user
-        changes and never infer completion from prior prose alone.
-
-        Before planning, run `you docs agents` and read it. Also run
-        `you docs batch-inputs` and `you docs relationships` when available. The runtime
-        does not infer a batch from prose: your entire response must be one raw JSON
-        object with an outer `request` wrapper, with no Markdown fence or surrounding
-        explanation.
-
-        Never run bare `you`: it starts a Factory runtime and writes session state.
-        Invoke only those exact read-only `you docs <topic>` commands. If a docs command
-        is unavailable or fails, continue from the explicit contract below. Do not
-        rebuild or reconstruct the CLI with `go run`, a package manager, or another
-        tool; do not start a runtime, retry with bare `you`, or create
-        `.you-agent-factory` state.
-
-        Project request:
-        ${request}
-
-        Cycle limits are maxCycles=${maxCycles} and
-        maxTasksPerCycle=${maxTasksPerCycle}. The project and cycle-control Work name is
-        exactly `{{ (index .Inputs 0).Name }}`.
-
-        If work remains, return raw JSON matching this exact shape:
-
-        {"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"task-a","workTypeName":"delivery-task","state":"init","payload":"Standalone implementation task with observed repository context, objective, boundaries, relevant files, dependency assumptions, acceptance criteria, tests, and merge risks."},{"name":"{{ (index .Inputs 0).Name }}","workTypeName":"cycle-control","state":"init","payload":"continue"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"{{ (index .Inputs 0).Name }}","targetWorkName":"task-a","requiredState":"merged"}]}}
-
-        Generate between one and the configured maximum `delivery-task` items plus
-        exactly one `cycle-control` item. Its name must exactly match
-        `{{ (index .Inputs 0).Name }}` and its payload must be `continue`. Every
-        delivery task must use state `init`, be a standalone specification for an agent
-        with no shared context, and have a unique Git branch name matching
-        `^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$` (in particular, no slash). Add a
-        DEPENDS_ON relation whose source is cycle-control and target is each delivery
-        task, with requiredState `merged`. A DEPENDS_ON source is blocked by its target.
-        Add delivery-task dependencies only when execution truly must be ordered, and
-        use requiredState `merged` for them.
-
-        When direct inspection proves the entire project request and its verification
-        are complete, return exactly this shape instead:
-
-        {"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"{{ (index .Inputs 0).Name }}","workTypeName":"cycle-control","state":"init","payload":"complete"}],"relations":[]}}
-
-        Do not emit requestId, additional top-level fields, other work types or states,
-        cycles, self-dependencies, unknown names, PARENT_CHILD, SPAWNED_BY, comments,
-        Markdown, or prose outside the JSON object. Do not declare completion while
-        required work or failing checks remain.
-      model: ${plannerModel}
+    - model: ${plannerModel}
       modelProvider: ${plannerProvider}
       name: full-flow-planner
       skipPermissions: true
@@ -322,75 +280,23 @@ workers:
       command: python3
       name: task-worktree-setup
       type: SCRIPT_WORKER
-    - body: |
-        You are the implementation agent for one assigned delivery task in an isolated
-        worktree. Assume zero conversational context and read the complete Work payload,
-        dependency outputs, repository contributor instructions, architecture, relevant
-        source and tests, and current worktree status before editing.
-
-        Implement only the assigned task while preserving unrelated and already merged
-        changes. Validate the planner's assumptions against current code. Exercise the
-        task's behavioral acceptance criteria and important failure cases, run
-        proportional tests, inspect the diff, and commit a coherent reviewable change.
-        Return a self-contained summary with files changed, decisions, commands and
-        outcomes, and any limitation needed by review or merge.
-
-        End with `<COMPLETE>` only when the task is implemented, verified, and committed.
-        Use `<CONTINUE>` only when another pass can make concrete progress; explain the
-        remaining work before the marker.
-      model: ${executorModel}
+    - model: ${executorModel}
       modelProvider: ${executorProvider}
       name: full-flow-executor
       skipPermissions: true
       stopToken: <COMPLETE>
       type: AGENT_WORKER
-    - body: |
-        You are an independent reviewer with no shared conversation. Read the full task,
-        repository instructions, actual worktree diff and commits, relevant source and
-        tests, and the executor's verification evidence. Review correctness before
-        style, including task scope, behavioral and failure cases, architecture fit,
-        compatibility, security implications, and preservation of unrelated work.
-
-        Accept only a task that is ready for CI and eventual merge. When rejecting,
-        identify each concrete defect, the required correction, and why it matters so a
-        fresh executor can repair it without guessing. Do not approve based only on the
-        executor's claims or reject for subjective preferences.
-      model: ${reviewerModel}
+    - model: ${reviewerModel}
       modelProvider: ${reviewerProvider}
       name: full-flow-reviewer
       skipPermissions: true
       type: AGENT_WORKER
-    - body: |
-        You are the verification stage for an independently reviewed task and have no
-        hidden context. Read the task, repository instructions, worktree diff, review
-        result, and existing test conventions. Run the exact focused checks that prove
-        the changed behavior, then the proportional repository, lint, generation,
-        contract, or documentation checks required by the affected boundaries.
-
-        Diagnose and repair task-owned failures without hiding output or changing
-        unrelated behavior. If required remote CI exists, inspect it until terminal.
-        Report commands, outcomes, and any known baseline failure. Return `<COMPLETE>`
-        only when every required task-owned check passes. Return `<CONTINUE>` with a
-        specific repair plan while actionable verification work remains.
-      model: ${executorModel}
+    - model: ${executorModel}
       modelProvider: ${executorProvider}
       name: full-flow-ci
       skipPermissions: true
       type: AGENT_WORKER
-    - body: |
-        You are the merge stage for one verified task. Assume zero shared context. Read
-        the task specification, repository instructions, worktree commits and diff,
-        review and CI evidence, current base branch, and changes merged by other tasks.
-
-        Update against the evolving base, resolve conflicts semantically without
-        discarding either valid task work or unrelated changes, and rerun every check
-        affected by conflict resolution. Merge using the repository's established local
-        workflow and verify that the task commit is observable on the base branch with a
-        clean relevant status. Report the resulting commit and verification evidence.
-
-        Return `<COMPLETE>` only after the merge is actually observable on the base.
-        Use `<CONTINUE>` while a repair, conflict, check, or merge action remains.
-      model: ${executorModel}
+    - model: ${executorModel}
       modelProvider: ${executorProvider}
       name: full-flow-merger
       skipPermissions: true

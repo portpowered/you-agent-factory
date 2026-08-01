@@ -70,6 +70,27 @@ func bypass() error {
 	)
 }
 
+func TestRunIgnoresConsumptionCopiesInClaudeWorktrees(t *testing.T) {
+	root := fixtureRepository(t)
+	writeFixture(
+		t,
+		root,
+		".claude/worktrees/other-task/pkg/services/factory_definitions/bypass.go",
+		`package factorydefinitions
+
+import packagedfactories "github.com/portpowered/infinite-you/packages/packaged-factories"
+
+func bypass() packagedfactories.Source {
+	return packagedfactories.Source()
+}
+`,
+	)
+
+	if err := run(config{root: root}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("run() error = %v", err)
+	}
+}
+
 func fixtureRepository(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
@@ -77,6 +98,7 @@ func fixtureRepository(t *testing.T) string {
 		"pkg/wire",
 		"pkg/transports/http",
 		"pkg/services/factory_definitions/internal/services/distribution/goal",
+		"internal/migrationledgercheck",
 		"internal/packagedfactorycatalog",
 		"packages/packaged-factories",
 	} {
@@ -107,6 +129,15 @@ func handlers() error {
 import "github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 
 func promptDrift() error {
+	_, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
+	return err
+}
+`)
+	writeFixture(t, root, "internal/migrationledgercheck/packaged_factory_matrix.go", `package migrationledgercheck
+
+import "github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
+
+func matrix() error {
 	_, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
 	return err
 }

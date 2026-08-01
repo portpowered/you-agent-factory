@@ -1,14 +1,12 @@
 package migrationledgercheck
 
 import (
-	"context"
 	"fmt"
 	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
-	packagedfactories "github.com/portpowered/infinite-you/packages/packaged-factories"
 )
 
 const packagedFactoryInvocationMatrixPrefix = "tests/functional/factory/packaged/"
@@ -49,17 +47,18 @@ func CheckPackagedFactoryInvocationMatrix(repoRoot, checklistPath string) error 
 }
 
 func embeddedPackagedFactorySlugs() ([]string, error) {
-	inventory, err := packagedfactorycatalog.Discover(
-		context.Background(),
-		packagedfactories.Source(),
-		"factories",
-	)
+	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
 	if err != nil {
-		return nil, fmt.Errorf("embedded packaged Factory inventory: %w", err)
+		return nil, fmt.Errorf("published packaged Factory catalog: %w", err)
 	}
-	slugs := make([]string, len(inventory.Entries))
-	for index, entry := range inventory.Entries {
-		slugs[index] = entry.Slug
+	names := catalog.Names()
+	slugs := make([]string, len(names))
+	for index, name := range names {
+		slug, ok := strings.CutPrefix(name, "@you/")
+		if !ok || strings.TrimSpace(slug) == "" || strings.Contains(slug, "/") {
+			return nil, fmt.Errorf("published packaged Factory %q has no usable @you/ slug", name)
+		}
+		slugs[index] = slug
 	}
 	slices.Sort(slugs)
 	return slugs, nil

@@ -71,14 +71,12 @@ workers:
     model: ${plannerModel}
     skipPermissions: true
     stopToken: <COMPLETE>
-    promptFile: prompts/planner.md
   - name: prd-executor
     type: AGENT_WORKER
     modelProvider: ${executorProvider}
     model: ${executorModel}
     skipPermissions: true
     stopToken: <COMPLETE>
-    promptFile: prompts/executor.md
 workstations:
   - name: plan-request
     type: AGENT_RUN
