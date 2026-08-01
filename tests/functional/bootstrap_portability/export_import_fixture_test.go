@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sync"
 	"testing"
 
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
@@ -31,22 +32,24 @@ type exportImportFixtureExpectations struct {
 }
 
 type exportImportFixture struct {
-	AuthoredFactoryDir    string
 	CanonicalFactoryJSON  []byte
 	Expected              exportImportFixtureExpectations
 	FlattenedFactory      factoryapi.Factory
 	GeneratedExportFactor factoryapi.Factory
 }
 
+type exportImportFixtureCache struct {
+	once    sync.Once
+	payload []byte
+	err     error
+}
+
+var cachedExportImportFixture exportImportFixtureCache
+
 func newExportImportFixture(t *testing.T) exportImportFixture {
 	t.Helper()
 
-	authoredFactoryDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
-
-	canonicalFactoryJSON, err := support.FlattenFactoryConfig(t, authoredFactoryDir)
-	if err != nil {
-		t.Fatalf("FlattenFactoryConfig(%s): %v", authoredFactoryDir, err)
-	}
+	canonicalFactoryJSON := cachedExportImportFactoryJSON(t)
 	canonicalFactoryJSON = withExportImportPortableBundledFiles(t, canonicalFactoryJSON)
 	canonicalFactoryJSON = withExportImportPortableLayout(t, canonicalFactoryJSON)
 
@@ -56,12 +59,27 @@ func newExportImportFixture(t *testing.T) exportImportFixture {
 	}
 
 	return exportImportFixture{
-		AuthoredFactoryDir:    authoredFactoryDir,
 		CanonicalFactoryJSON:  canonicalFactoryJSON,
 		Expected:              buildExportImportFixtureExpectations(t, flattenedFactory),
 		FlattenedFactory:      flattenedFactory,
 		GeneratedExportFactor: flattenedFactory,
 	}
+}
+
+func cachedExportImportFactoryJSON(t *testing.T) []byte {
+	t.Helper()
+	cachedExportImportFixture.once.Do(func() {
+		authoredFactoryDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
+		cachedExportImportFixture.payload, cachedExportImportFixture.err = support.FlattenFactoryConfig(
+			t,
+			authoredFactoryDir,
+		)
+		cachedExportImportFixture.payload = append([]byte(nil), cachedExportImportFixture.payload...)
+	})
+	if cachedExportImportFixture.err != nil {
+		t.Fatalf("FlattenFactoryConfig(service_simple): %v", cachedExportImportFixture.err)
+	}
+	return append([]byte(nil), cachedExportImportFixture.payload...)
 }
 
 func withExportImportPortableLayout(t *testing.T, canonicalFactoryJSON []byte) []byte {
@@ -228,12 +246,32 @@ func (fixture exportImportFixture) persistAndActivateAs(t *testing.T, rootDir, n
 }
 
 func (fixture exportImportFixture) persistAtCustomerBoundary(t *testing.T, rootDir, name string, activate bool) string {
+	return fixture.persistAtCustomerBoundaryWithProcess(t, nil, nil, rootDir, name, activate)
+}
+
+func (fixture exportImportFixture) persistAtCustomerBoundaryWithProcess(
+	t testing.TB,
+	process support.Process,
+	env []string,
+	rootDir, name string,
+	activate bool,
+) string {
 	t.Helper()
 
 	sourceDir := t.TempDir()
 	sourcePath := filepath.Join(sourceDir, "factory.json")
 	if err := os.WriteFile(sourcePath, fixture.CanonicalFactoryJSON, 0o600); err != nil {
 		t.Fatalf("write customer Factory source %s: %v", name, err)
+	}
+	if process != nil {
+		if activate {
+			return support.CreateAndActivateNamedFactoryAtRootWithProcess(
+				t, process, env, sourceDir, rootDir, name, sourcePath,
+			)
+		}
+		return support.CreateNamedFactoryAtRootWithProcess(
+			t, process, env, sourceDir, rootDir, name, sourcePath,
+		)
 	}
 	if activate {
 		return support.CreateAndActivateNamedFactoryAtRoot(t, sourceDir, rootDir, name, sourcePath)

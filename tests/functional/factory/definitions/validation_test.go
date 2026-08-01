@@ -13,6 +13,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -103,13 +104,15 @@ func TestFactoryValidationAcceptsMultiWorkTypeExecutableTopology(t *testing.T) {
 func TestFactoryValidationRejectsMissingWorkerWorkstationAndRoute(t *testing.T) {
 	runner := support.NewRecordingCommandRunner("runtime must not execute")
 	edges := serviceedges.Edges{ProviderCommandRunner: runner}
+	process := support.BuildProcess(t, edges)
+	support.CleanupProcess(t, process)
 
 	t.Run("missing_worker", func(t *testing.T) {
 		dir := support.ScaffoldFactory(t, missingWorkerFactoryConfig())
-		assertFactoryValidationRejects(
+		assertFactoryValidationRejectsWithProcess(
 			t,
+			process,
 			dir,
-			edges,
 			validationCodeDanglingWorkerReference,
 			`ghost-worker`,
 			`workstation "processor" references non-existent worker "ghost-worker"`,
@@ -118,10 +121,10 @@ func TestFactoryValidationRejectsMissingWorkerWorkstationAndRoute(t *testing.T) 
 
 	t.Run("missing_workstation", func(t *testing.T) {
 		dir := support.ScaffoldFactory(t, missingWorkstationFactoryConfig())
-		assertFactoryValidationRejects(
+		assertFactoryValidationRejectsWithProcess(
 			t,
+			process,
 			dir,
-			edges,
 			validationCodeLayoutUnknownNodeReference,
 			`workstation:ghost-workstation`,
 			`layout node "workstation:ghost-workstation" does not match any pending graph node`,
@@ -130,10 +133,10 @@ func TestFactoryValidationRejectsMissingWorkerWorkstationAndRoute(t *testing.T) 
 
 	t.Run("missing_route", func(t *testing.T) {
 		dir := support.ScaffoldFactory(t, missingRouteFactoryConfig())
-		assertFactoryValidationRejects(
+		assertFactoryValidationRejectsWithProcess(
 			t,
+			process,
 			dir,
-			edges,
 			validationCodeDanglingPlaceReference,
 			`missing-state`,
 			`references non-existent state "missing-state" of work type "task"`,
@@ -184,11 +187,24 @@ func TestAPIValidateFactoryAcceptsValidAndRejectsInvalidDefinitions(t *testing.T
 	edges := serviceedges.Edges{ProviderCommandRunner: runner}
 
 	hostDir := support.ScaffoldFactory(t, validAPIValidationFactoryConfig())
+	var validFactory factoryapi.Factory
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                hostDir,
 		UseMockWorkers:            true,
 		WaitForServiceModeRuntime: true,
 		Edges:                     edges,
+		BeforeStart: func(tb testing.TB, process support.Process, inputs root.Input) {
+			var err error
+			validFactory, err = support.LoadedFactoryWithProcessAndEnv(
+				tb,
+				process,
+				inputs.Env,
+				filepath.Join(hostDir, "factory.json"),
+			)
+			if err != nil {
+				tb.Fatalf("load valid factory definition: %v", err)
+			}
+		},
 	})
 	defer server.Stop(t)
 
@@ -198,10 +214,6 @@ func TestAPIValidateFactoryAcceptsValidAndRejectsInvalidDefinitions(t *testing.T
 		server.URL()+"/factory-sessions",
 	)
 
-	validFactory, err := support.LoadedFactory(t, filepath.Join(hostDir, "factory.json"))
-	if err != nil {
-		t.Fatalf("load valid factory definition: %v", err)
-	}
 	validResult, validStatus := postValidateFactory(t, server.URL(), validFactory)
 	if validStatus != http.StatusOK {
 		t.Fatalf("POST /factory-validations valid status = %d, want 200", validStatus)
@@ -733,6 +745,17 @@ func assertFactoryValidationAccepts(
 	edges serviceedges.Edges,
 ) {
 	t.Helper()
+	process := support.BuildProcess(t, edges)
+	support.CleanupProcess(t, process)
+	assertFactoryValidationAcceptsWithProcess(t, process, factoryDir)
+}
+
+func assertFactoryValidationAcceptsWithProcess(
+	t *testing.T,
+	process support.Process,
+	factoryDir string,
+) {
+	t.Helper()
 
 	factoryPath := filepath.Join(factoryDir, "factory.json")
 	inputs := support.FakeInputs(t.Context(), []string{
@@ -740,7 +763,7 @@ func assertFactoryValidationAccepts(
 	})
 	inputs.Input.WorkingDirectory = factoryDir
 
-	err := support.BuildProcess(t, edges).Execute(inputs.Input)
+	err := process.Execute(inputs.Input)
 	if err != nil {
 		t.Fatalf(
 			"Process.Execute(factory config validate) error = %v, want validation success; stdout=%q stderr=%q",
@@ -763,6 +786,18 @@ func assertFactoryValidationRejects(
 	wants ...string,
 ) {
 	t.Helper()
+	process := support.BuildProcess(t, edges)
+	support.CleanupProcess(t, process)
+	assertFactoryValidationRejectsWithProcess(t, process, factoryDir, wants...)
+}
+
+func assertFactoryValidationRejectsWithProcess(
+	t *testing.T,
+	process support.Process,
+	factoryDir string,
+	wants ...string,
+) {
+	t.Helper()
 
 	factoryPath := filepath.Join(factoryDir, "factory.json")
 	inputs := support.FakeInputs(t.Context(), []string{
@@ -770,7 +805,7 @@ func assertFactoryValidationRejects(
 	})
 	inputs.Input.WorkingDirectory = factoryDir
 
-	err := support.BuildProcess(t, edges).Execute(inputs.Input)
+	err := process.Execute(inputs.Input)
 	if err == nil {
 		t.Fatalf(
 			"Process.Execute(factory config validate) error = nil, want validation failure; stdout=%q stderr=%q",
