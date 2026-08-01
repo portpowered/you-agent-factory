@@ -70,10 +70,111 @@ Verbose confirmation of the nine named cases was re-run immediately after under
 the same command with `--reporter=verbose`; all nine cases listed above passed
 (`Duration 352ms` Vitest-internal; not used as the wall-clock baseline).
 
-## After-migration placeholder
+## After migration — lane audit and latency report
 
-Bun after timings, migrated/retained counts, and lane-exclusivity proof belong
-in story `BUN-UNIT-features-current-selection-06-004` once migration completes.
-They must use the same host class, worker/retry settings for any remaining
-Vitest retained files, and a focused Bun invocation of the migrated
-`.bun.unit.test.ts` files under comparable warm-deps conditions.
+Recorded for story `BUN-UNIT-features-current-selection-06-004` on the same
+host class as the Vitest baseline (Windows 11 Home `10.0.26200`, i7-13700K,
+24 logical processors; Bun `1.3.12`). Repository revision for these
+measurements: `42b45e12f`.
+
+### Migrated / retained counts
+
+| Lane ownership | Files | Named tests |
+| --- | ---: | ---: |
+| Migrated to Bun (exclusive) | 4 | 9 |
+| Retained on Vitest | 0 | 0 |
+
+Migrated files:
+
+- `ui/src/features/current-selection/work-selection/lib/selected-work-relationship-graph.bun.unit.test.ts`
+- `ui/src/features/current-selection/work-selection/lib/selected-work-relationship-graph.instances.bun.unit.test.ts`
+- `ui/src/features/current-selection/work-selection/lib/selected-work-relationship-relations.bun.unit.test.ts`
+- `ui/src/features/current-selection/work-selection/lib/selected-work-relationship-relations.instances.bun.unit.test.ts`
+
+No retained exceptions. The leased Vitest `*.test.ts` paths no longer exist in
+the tree after rename.
+
+### Lane exclusivity audit
+
+Focused Bun invocation (exactly four files / nine named cases):
+
+```text
+bun test src/features/current-selection/work-selection/lib/selected-work-relationship-graph.bun.unit.test.ts src/features/current-selection/work-selection/lib/selected-work-relationship-graph.instances.bun.unit.test.ts src/features/current-selection/work-selection/lib/selected-work-relationship-relations.bun.unit.test.ts src/features/current-selection/work-selection/lib/selected-work-relationship-relations.instances.bun.unit.test.ts
+```
+
+Result:
+
+```text
+bun test v1.3.12 (700fc117)
+src\features\current-selection\work-selection\lib\selected-work-relationship-graph.bun.unit.test.ts:
+(pass) buildSelectedWorkRelationshipGraph > builds the full connected relationship graph around the selected work item
+(pass) buildSelectedWorkRelationshipGraph > returns an explicit empty graph when no supported relationships exist
+(pass) buildSelectedWorkRelationshipGraph > returns an explicit error state when relationship data is unavailable
+src\features\current-selection\work-selection\lib\selected-work-relationship-graph.instances.bun.unit.test.ts:
+(pass) buildSelectedWorkRelationshipGraph repeated DEPENDS_ON > preserves every distinct DEPENDS_ON relationship from the selected work item
+(pass) factory-batch-local-agent-cli-runtime relationship graph > preserves every DEPENDS_ON relation from the loopback work item in the smoke test fixture
+src\features\current-selection\work-selection\lib\selected-work-relationship-relations.bun.unit.test.ts:
+(pass) projectSelectedWorkRelationshipGraphToDashboardRelations > projects ready relationship graphs from direct relations when available
+(pass) projectSelectedWorkRelationshipGraphToDashboardRelations > returns no relations for loading, error, empty, or missing graphs
+(pass) projectSelectedWorkRelationshipGraphToDashboardRelations > projects repeated dependency edges when direct relations are unavailable
+src\features\current-selection\work-selection\lib\selected-work-relationship-relations.instances.bun.unit.test.ts:
+(pass) projectSelectedWorkRelationshipGraphToDashboardRelations repeated DEPENDS_ON > projects every dependency relation instance from a ready selected-work graph
+ 9 pass
+ 0 fail
+ 26 expect() calls
+Ran 9 tests across 4 files. [72.00ms]
+```
+
+Vitest `dashboard-unit` selection of the migrated paths (must be zero):
+
+```text
+bunx --no-install vitest run --config vitest.lanes.config.ts --project=dashboard-unit --maxWorkers=4 --retry=0 src/features/current-selection/work-selection/lib/selected-work-relationship-graph.bun.unit.test.ts src/features/current-selection/work-selection/lib/selected-work-relationship-graph.instances.bun.unit.test.ts src/features/current-selection/work-selection/lib/selected-work-relationship-relations.bun.unit.test.ts src/features/current-selection/work-selection/lib/selected-work-relationship-relations.instances.bun.unit.test.ts
+```
+
+Result:
+
+```text
+No test files found, exiting with code 1
+filter: ...selected-work-relationship-*.bun.unit.test.ts
+projects: dashboard-unit
+exclude: ... src/**/*.bun.unit.test.ts ...
+```
+
+Vitest selection of the retired `.test.ts` paths is also zero (`No test files
+found`); those files are gone after rename. Conclusion: each leased suite
+executes exactly once under Bun and zero times under Vitest.
+
+### Focused after wall-clock (comparable warm-deps)
+
+Command (same four migrated paths as the exclusivity Bun invocation above).
+
+Warm re-runs after one discarded warm-up (same host / Bun version as baseline):
+
+| Run | Wrapper wall | Bun reported | Result |
+| --- | ---: | ---: | --- |
+| 1 | 111ms | 76ms | 4 files / 9 tests passed |
+| 2 | 108ms | 77ms | 4 files / 9 tests passed |
+| 3 | 105ms | 73ms | 4 files / 9 tests passed |
+
+Median warm wrapper wall-clock after migration: **108 ms**.
+
+### Before / after comparison
+
+| Metric | Vitest baseline | Bun after |
+| --- | ---: | ---: |
+| Focused wrapper wall | 1360 ms | 108 ms (warm median) |
+| Files | 4 | 4 |
+| Named tests | 9 | 9 |
+| Expect calls (Bun after) | — | 26 |
+
+These are matched four-file focused observations only; they are not a
+repository-wide speedup claim. The Vitest baseline uses the primary process
+elapsed sample recorded in story 001 (`elapsed_ms=1360`); the Bun after value
+is the median of three warm wrapper samples under the same host class.
+
+### Changed-line budget
+
+Against `origin/main` including this lane-audit section the cohort patch is
+**5 files / 184 insertions / 4 deletions** (baseline+report note + rename/import
+of the four leased tests). Well within the ~1,000 changed-line budget; no split
+required.
