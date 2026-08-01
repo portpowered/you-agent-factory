@@ -12,7 +12,7 @@ import (
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/replay"
+	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay"
 )
 
 type runtimeRecorderTestClock struct{ now time.Time }

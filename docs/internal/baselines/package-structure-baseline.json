@@ -1839,36 +1839,6 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/recordings/contracts.go",
-      "target": "BuildFactoryWorldWorkstationRequestProjectionSlice"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/recordings/internal/services/recording_lifecycle/live_recording_target.go",
-      "target": "NewLiveRecordingTargetPlanner"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/recordings/metadata.go",
-      "target": "FactoryMetadataWarnings"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/recordings/portable_recording_build.go",
-      "target": "BuildPortableRecording"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/recordings/portable_recording_validate.go",
-      "target": "DecodePortableRecording"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/recordings/portable_recording_validate.go",
-      "target": "ValidatePortableRecording"
-    },
-    {
-      "rule": "service-root-exported-function",
       "filePath": "pkg/services/work/admission_contract.go",
       "target": "NewContentPreparation"
     },
@@ -2589,16 +2559,6 @@
     },
     {
       "rule": "service-root-interface-count",
-      "filePath": "pkg/services/recordings",
-      "target": "pkg/services/recordings/contracts.go:Clock,pkg/services/recordings/contracts.go:CompletionDeliveryPlanner,pkg/services/recordings/contracts.go:InitialStructureSource,pkg/services/recordings/contracts.go:Ledger,pkg/services/recordings/contracts.go:LiveRecordingTargetPlanner,pkg/services/recordings/contracts.go:ProjectionService,pkg/services/recordings/contracts.go:RecordingClock,pkg/services/recordings/contracts.go:ReplayHook,pkg/services/recordings/contracts.go:RuntimeEventLedger,pkg/services/recordings/contracts.go:RuntimeLedger,pkg/services/recordings/contracts.go:RuntimeRecorder,pkg/services/recordings/contracts.go:Service,pkg/services/recordings/contracts.go:WorkerEventRecorder,pkg/services/recordings/contracts.go:WorkstationRequestProjector,pkg/services/recordings/portable_recording.go:PortableRecordingWriter,pkg/services/recordings/portable_recording.go:RecordingTemporaryFile"
-    },
-    {
-      "rule": "service-root-interface-count",
-      "filePath": "pkg/services/recordings/internal/services/artifacts_export",
-      "target": "pkg/services/recordings/internal/services/artifacts_export/service.go:PortableArtifactPublication,pkg/services/recordings/internal/services/artifacts_export/service.go:Service,pkg/services/recordings/internal/services/artifacts_export/service.go:SnapshotSource"
-    },
-    {
-      "rule": "service-root-interface-count",
       "filePath": "pkg/services/work",
       "target": "pkg/services/work/admission_contract.go:ContentPreparation,pkg/services/work/admission_contract.go:FactoryRequestBatchPreparation,pkg/services/work/admission_contract.go:FileSource,pkg/services/work/admission_contract.go:RequestPreparationService,pkg/services/work/content_contract.go:ContentHTTPDoer,pkg/services/work/content_contract.go:ContentMaterializer,pkg/services/work/content_contract.go:ContentTemporaryFile,pkg/services/work/content_staging_contract.go:ContentStagingClock,pkg/services/work/content_staging_contract.go:ContentStagingFileSystem,pkg/services/work/content_staging_contract.go:ContentStagingRandom,pkg/services/work/content_staging_contract.go:ContentStagingService,pkg/services/work/contracts.go:InvocationWorldStateProvider,pkg/services/work/invocation_return_policy_contract.go:InvocationInputPreparation,pkg/services/work/lineage_contract.go:VisualizationFileSystem,pkg/services/work/read_contract.go:ListRequestPreparation,pkg/services/work/service_contract.go:FileSubmissionService,pkg/services/work/service_contract.go:Runtime,pkg/services/work/service_contract.go:RuntimeResolver,pkg/services/work/service_contract.go:Service"
     },
@@ -2941,26 +2901,6 @@
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/providers/inference",
       "target": "pkg/services/providers"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/recordings/internal/services/artifacts_export/artifacts",
-      "target": "pkg/services/recordings/internal/services/artifacts_export"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/recordings/internal/services/canonical_ledger/events",
-      "target": "pkg/services/recordings/internal/services/canonical_ledger"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/recordings/internal/services/projection_query/projections",
-      "target": "pkg/services/recordings/internal/services/projection_query"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/recordings/internal/services/replay/replay",
-      "target": "pkg/services/recordings/internal/services/replay"
     },
     {
       "rule": "service-root-unexpected-directory",

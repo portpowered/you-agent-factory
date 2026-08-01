@@ -22,7 +22,7 @@ func TestLoadRuntimePreservesValidatedPortableRecording(t *testing.T) {
 	path := testpath.MustRepoPathFromCaller(
 		t,
 		0,
-		"pkg", "services", "recordings", "internal", "services", "artifacts_export", "artifacts", "testdata", "valid-v2.json",
+		"pkg", "services", "recordings", "internal", "artifacts", "testdata", "valid-v2.json",
 	)
 	rootDir := t.TempDir()
 	var loggerSessionID string

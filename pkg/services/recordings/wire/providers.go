@@ -8,8 +8,8 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingsinternal "github.com/portpowered/infinite-you/pkg/services/recordings/internal"
-	artifactsimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export/artifacts"
-	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/replay"
+	artifactsimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/artifacts"
+	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
