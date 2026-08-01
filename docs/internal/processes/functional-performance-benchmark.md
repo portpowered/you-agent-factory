@@ -61,3 +61,8 @@ working directory, streams, external edges, and process cleanup isolated; do
 not share a process or mutable canonical state across scenarios. A server
 harness may expose a setup callback that runs after its invocation-local
 environment is prepared and before the daemon command starts.
+
+When a reused setup command reads a fixture, pass the server invocation's
+environment explicitly through the process-input helper. The process wiring is
+reusable; environment values, working directories, captured streams, and
+durable Factory state are not.
