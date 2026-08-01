@@ -486,18 +486,6 @@ type assetsPeerService struct {
 	fails   map[string]error
 }
 
-func (assetsPeerService) ForRuntime(models.RuntimeBinding) (models.Service, error) {
-	return assetsPeerService{}, nil
-}
-
-func (assetsPeerService) ListModels(context.Context) (models.List, error) {
-	return models.List{Results: []models.Summary{}}, nil
-}
-
-func (assetsPeerService) GetModel(context.Context, string) (models.Detail, error) {
-	return models.Detail{}, models.ErrNotFound
-}
-
 func (s assetsPeerService) PullModel(_ context.Context, name string) (models.PullResult, error) {
 	if err := models.ValidatePullModelRequest(models.PullModelRequest{Name: name}); err != nil {
 		return models.PullResult{}, err
@@ -510,22 +498,6 @@ func (s assetsPeerService) PullModel(_ context.Context, name string) (models.Pul
 		return models.PullResult{}, fmt.Errorf("%w: %s", models.ErrNotFound, name)
 	}
 	return result, nil
-}
-
-func (assetsPeerService) InspectRuntime(context.Context, string) (models.Runtime, error) {
-	return models.Runtime{}, models.ErrUnsupported
-}
-
-func (assetsPeerService) AcquireLease(context.Context, models.AcquireLeaseRequest) (models.HostLease, error) {
-	return models.HostLease{}, models.ErrHostRuntimeNotReady
-}
-
-func (assetsPeerService) ReleaseLease(context.Context, models.ReleaseLeaseRequest) error {
-	return models.ErrHostLeaseNotFound
-}
-
-func (assetsPeerService) InvokeLocal(context.Context, models.LocalInvocationRequest) (models.LocalInvocationResult, error) {
-	return models.LocalInvocationResult{Handled: false}, nil
 }
 
 func TestAssets_ValidPullReturnsModelsOwnedPullResult(t *testing.T) {
@@ -648,34 +620,6 @@ type inferPeerService struct {
 	unsupportedRuntimeScopePeer
 	results map[string]models.LocalInvocationResult
 	fails   map[string]error
-}
-
-func (inferPeerService) ForRuntime(models.RuntimeBinding) (models.Service, error) {
-	return inferPeerService{}, nil
-}
-
-func (inferPeerService) ListModels(context.Context) (models.List, error) {
-	return models.List{Results: []models.Summary{}}, nil
-}
-
-func (inferPeerService) GetModel(context.Context, string) (models.Detail, error) {
-	return models.Detail{}, models.ErrNotFound
-}
-
-func (inferPeerService) PullModel(context.Context, string) (models.PullResult, error) {
-	return models.PullResult{}, models.ErrUnsupportedOperation
-}
-
-func (inferPeerService) InspectRuntime(context.Context, string) (models.Runtime, error) {
-	return models.Runtime{}, models.ErrUnsupported
-}
-
-func (inferPeerService) AcquireLease(context.Context, models.AcquireLeaseRequest) (models.HostLease, error) {
-	return models.HostLease{}, models.ErrHostRuntimeNotReady
-}
-
-func (inferPeerService) ReleaseLease(context.Context, models.ReleaseLeaseRequest) error {
-	return models.ErrHostLeaseNotFound
 }
 
 func (s inferPeerService) InvokeLocal(_ context.Context, request models.LocalInvocationRequest) (models.LocalInvocationResult, error) {

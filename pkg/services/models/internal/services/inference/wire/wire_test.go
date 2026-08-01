@@ -108,16 +108,10 @@ func TestNewServiceRequiresInferenceDependencies(t *testing.T) {
 				if test.wantContains != "" && !strings.Contains(err.Error(), test.wantContains) {
 					t.Fatalf("error = %q, want substring %q", err.Error(), test.wantContains)
 				}
-				if clock.timerCalls != 0 {
-					t.Fatalf("timer calls during validation = %d, want 0", clock.timerCalls)
-				}
 				return
 			}
 			if service == nil || err != nil {
 				t.Fatalf("NewService = (%#v, %v), want service", service, err)
-			}
-			if clock.timerCalls != 0 {
-				t.Fatalf("timer calls during construction = %d, want 0", clock.timerCalls)
 			}
 		})
 	}
@@ -145,17 +139,10 @@ func testRuntimeHostService() runtimehost.Service {
 	return recordingRuntimeHostService{}
 }
 
-type testInferenceClock struct {
-	timerCalls int
-}
+type testInferenceClock struct{}
 
 func (clock *testInferenceClock) Now() time.Time {
 	return time.Unix(0, 0)
-}
-
-func (clock *testInferenceClock) NewTimer(time.Duration) modelseffects.HostTimer {
-	clock.timerCalls++
-	panic("host timer created during inert inference construction")
 }
 
 type recordingRuntimeHostService struct{}

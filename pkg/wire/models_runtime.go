@@ -19,6 +19,7 @@ import (
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 	"go.uber.org/zap"
 )
@@ -123,33 +124,33 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 
 	return modelswire.NewService(
 		assetPlatform,
-		assetHTTP,
+		modelswire.AssetHTTPDoer(assetHTTP),
 		assetEndpoints,
-		assetMkdirAll,
-		assetStat,
-		assetHome,
-		assetWriteFile,
-		assetRename,
-		assetRemove,
-		assetReadFile,
-		assetReadDir,
-		assetCreate,
-		assetOpen,
+		modelswire.AssetMakeDirectories(assetMkdirAll),
+		modelswire.AssetInspectPath(assetStat),
+		modelswire.AssetResolveHomeDirectory(assetHome),
+		modelswire.AssetWriteFile(assetWriteFile),
+		modelswire.AssetRenamePath(assetRename),
+		modelswire.AssetRemovePath(assetRemove),
+		modelswire.AssetReadFile(assetReadFile),
+		modelswire.AssetReadDirectory(assetReadDir),
+		modelswire.AssetCreateFile(assetCreate),
+		modelswire.AssetOpenFile(assetOpen),
 		launcher,
 		hostHTTP,
 		hostClock,
 		runtimeRunner,
-		runtimeHTTP,
-		runtimeInspect,
-		runtimeTempDir,
+		modelswire.RuntimeHTTPDoer(runtimeHTTP),
+		modelswire.RuntimeInspectFile(runtimeInspect),
+		modelswire.RuntimeTempDirectory(runtimeTempDir),
 		runtimeTempFile,
 		zap.NewNop(),
 		time.Now,
 		platformrandom.CryptoSource{},
 		edges.ModelPullMetricsRecorder,
-		factorysessionwire.ModelHostDiagnosticLogger(zap.NewNop()),
-		factorysessionwire.ModelHostDiagnosticMetrics(edges.InvocationMetricsRecorder),
-		workerswire.LocalRuntimeHooks(),
+		modelswire.HostDiagnosticLogger(factorysessionwire.ModelHostDiagnosticLogger(zap.NewNop())),
+		modelswire.HostMetricsRecorder(factorysessionwire.ModelHostDiagnosticMetrics(edges.InvocationMetricsRecorder)),
+		modelLocalRuntimeHooks(workerswire.LocalRuntimeHooks()),
 	)
 }
 
@@ -219,6 +220,16 @@ func (modelsProcessLauncher) Start(ctx context.Context, spec modelswire.HostProc
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
 	return &modelsManagedProcess{cmd: cmd, healthEndpoint: endpoint, done: done}, nil
+}
+
+func modelLocalRuntimeHooks(hooks workers.LocalRuntimeHooks) modelswire.LocalRuntimeHooks {
+	return modelswire.LocalRuntimeHooks{
+		MarkResourceWaitStarted:  hooks.MarkResourceWaitStarted,
+		MarkResourceWaitFinished: hooks.MarkResourceWaitFinished,
+		MarkLoadRequested:        hooks.MarkLoadRequested,
+		MarkLoadFinished:         hooks.MarkLoadFinished,
+		MarkLoadReused:           hooks.MarkLoadReused,
+	}
 }
 
 type modelsManagedProcess struct {

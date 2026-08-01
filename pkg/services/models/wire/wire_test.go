@@ -11,7 +11,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"reflect"
 	"runtime"
 	"strings"
 	"sync/atomic"
@@ -1035,34 +1034,6 @@ func assertForeignCatalogScope(
 	}
 	if readiness.ModelName != "" || readiness.Readiness.Identity != "" {
 		t.Fatalf("%s GetModelReadiness returned foreign readiness: %#v", name, readiness)
-	}
-}
-
-func assertReadinessParity(t *testing.T, scoped, compatibility models.Runtime) {
-	t.Helper()
-	if scoped.Identity != compatibility.Identity ||
-		scoped.ReadinessState != compatibility.ReadinessState ||
-		scoped.LifecycleState != compatibility.LifecycleState ||
-		scoped.Locality != compatibility.Locality ||
-		!reflect.DeepEqual(scoped.SupportedOperations, compatibility.SupportedOperations) {
-		t.Fatalf(
-			"production readiness parity = (scoped %#v, compatibility %#v)",
-			scoped,
-			compatibility,
-		)
-	}
-	for _, key := range []string{
-		"cachePath", "installedFileCount", "revision",
-		"sourceId", "sourceKind", "resolverNotes",
-	} {
-		if scoped.Diagnostics[key] != compatibility.Diagnostics[key] {
-			t.Fatalf(
-				"production readiness diagnostic %q = (scoped %q, compatibility %q)",
-				key,
-				scoped.Diagnostics[key],
-				compatibility.Diagnostics[key],
-			)
-		}
 	}
 }
 

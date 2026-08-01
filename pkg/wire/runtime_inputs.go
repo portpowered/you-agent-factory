@@ -250,7 +250,7 @@ func projectRuntimeOpeningExternalEffects(edges serviceedges.Edges) factorysessi
 	return factorysessionwire.RuntimeOpeningExternalEffects{
 		Clock:                            edges.Clock,
 		ProviderOverride:                 edges.ProviderOverride,
-		ModelPullMetricsRecorder:         edges.ModelPullMetricsRecorder,
+		ModelPullMetricsRecorder:         adaptModelPullMetricsRecorder(edges.ModelPullMetricsRecorder),
 		InvocationMetricsRecorder:        edges.InvocationMetricsRecorder,
 		ProviderCommandRunner:            providerRunner,
 		ScriptCommandRunner:              scriptRunner,
@@ -264,6 +264,35 @@ func projectRuntimeOpeningExternalEffects(edges serviceedges.Edges) factorysessi
 		HostedSecretResolver:             edges.HostedSecretResolver,
 		HostedLinearEndpoint:             edges.HostedLinearEndpoint,
 	}
+}
+
+type factorySessionModelPullMetricsAdapter struct {
+	next modelswire.PullMetricsRecorder
+}
+
+func (adapter factorySessionModelPullMetricsAdapter) RecordModelPullMetric(
+	metric factorysessions.InvocationMetric,
+) {
+	if adapter.next == nil {
+		return
+	}
+	labels := make(map[string]string, len(metric.Labels))
+	for key, value := range metric.Labels {
+		labels[key] = value
+	}
+	adapter.next.RecordModelPullMetric(modelswire.PullMetric{
+		Name:   metric.Name,
+		Labels: labels,
+	})
+}
+
+func adaptModelPullMetricsRecorder(
+	recorder modelswire.PullMetricsRecorder,
+) factorysessionwire.ModelPullMetricsRecorder {
+	if recorder == nil {
+		return nil
+	}
+	return factorySessionModelPullMetricsAdapter{next: recorder}
 }
 
 func withStandaloneWorkerProductionEdges(overrides serviceedges.Edges) (serviceedges.Edges, error) {

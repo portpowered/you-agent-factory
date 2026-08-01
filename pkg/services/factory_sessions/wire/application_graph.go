@@ -6,6 +6,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	applicationopening "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/applicationopening"
+	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors/persistence"
 	execution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	runtimepersist "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
@@ -17,7 +18,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
 	invocationwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/invocation/wire"
 	"github.com/portpowered/infinite-you/pkg/services/models"
-	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -114,6 +114,9 @@ type (
 	FactoryRuntimeAssembler                = runtimeopening.FactoryRuntimeAssembler
 	RuntimeOpeningFactory                  = runtimeopening.Factory
 	RuntimeRoot                            = runtimeopening.RuntimeRoot
+	ModelPullMetricsRecorder               = factorysessioncontracts.ModelPullMetricsRecorder
+	InvocationArtifactFileSystem           = factorysessioncontracts.InvocationArtifactFileSystem
+	InvocationArtifactExporter             = factorysessioncontracts.InvocationArtifactExporter
 
 	StandaloneSessionExecutionFactory   = executionopening.StandaloneSessionExecutionFactory
 	WorkerInvocationFactory             = executionopening.WorkerInvocationFactory
@@ -223,7 +226,7 @@ func NewInvocationOperation(
 	effects RuntimeOpeningExternalEffects,
 	workingDirectory platformfilesystem.WorkingDirectory,
 	resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver,
-	artifactExporter modelswire.InvocationArtifactExporter,
+	artifactExporter InvocationArtifactExporter,
 	modelTimeout factorysessions.ModelInvocationTimeout,
 	artifactRoots factoryruntime.RuntimeArtifactRootResolver,
 	generateSessionID factorysessions.SessionIDGenerator,

@@ -15,10 +15,10 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimeopening"
 	"github.com/portpowered/infinite-you/pkg/services/models"
-	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 )
 
 type operation struct {
@@ -26,7 +26,7 @@ type operation struct {
 	effects           runtimeopening.ExternalEffects
 	workingDirectory  platformfilesystem.WorkingDirectory
 	resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver
-	artifactExporter  modelswire.InvocationArtifactExporter
+	artifactExporter  factorysessioncontracts.InvocationArtifactExporter
 	modelTimeout      factorysessions.ModelInvocationTimeout
 	artifactRoots     factoryruntime.RuntimeArtifactRootResolver
 	generateSessionID factorysessions.SessionIDGenerator
@@ -43,7 +43,7 @@ func NewOperation(
 	effects runtimeopening.ExternalEffects,
 	workingDirectory platformfilesystem.WorkingDirectory,
 	resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver,
-	artifactExporter modelswire.InvocationArtifactExporter,
+	artifactExporter factorysessioncontracts.InvocationArtifactExporter,
 	modelTimeout factorysessions.ModelInvocationTimeout,
 	artifactRoots factoryruntime.RuntimeArtifactRootResolver,
 	generateSessionID factorysessions.SessionIDGenerator,
