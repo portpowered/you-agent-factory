@@ -121,6 +121,20 @@ func TestRunIgnoresGeneratedGoFactoryLiteral(t *testing.T) {
 	}
 }
 
+func TestRunIgnoresFactoryCopiesInClaudeWorktrees(t *testing.T) {
+	root := fixtureRepository(t)
+	writeFixture(
+		t,
+		root,
+		".claude/worktrees/other-task/packages/packaged-factories/factories/new/factory.yaml",
+		validYAMLFactory("@you/new", "builtin-new"),
+	)
+
+	if err := run(config{root: root}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("run() error = %v", err)
+	}
+}
+
 func TestRunDiscoversNewFactoryWithoutRequiredNameRegistry(t *testing.T) {
 	root := fixtureRepository(t)
 	writeFixture(t, root, authoredBoundary+"/new/factory.json", validJSONFactory("@you/new", "builtin-new"))
