@@ -73,7 +73,8 @@ func (handler *Handler) Bind(opened factorysessions.RuntimeHTTPServices) (http.H
 		return nil, err
 	}
 	sessionsHandler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
-		Runtime: mapped.Runtime, FactoryStatus: mapped.FactoryStatus,
+		SessionsRoot: opened.FactorySessions,
+		Runtime:      mapped.Runtime, FactoryStatus: mapped.FactoryStatus,
 		Sessions: mapped.Sessions, Work: mapped.Work, WorkRead: mapped.WorkRead,
 		Invocation: mapped.Invocation, FactoryDefinitions: mapped.FactoryDefinitions,
 		FactoryValidation: handler.validation, WorkflowPreview: opened.WorkflowPreview,
