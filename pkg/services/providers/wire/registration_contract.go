@@ -1,7 +1,10 @@
-// Package inference contains the compatibility contract for externally
-// supplied provider registrations. Runtime peers should use providers.Service;
-// this protocol is restricted to the process-edge extension seam.
-package inference
+// Package wire contains the Providers construction boundary and its
+// process-edge registration contract.
+//
+// Runtime peers use providers.Service. These registration values are only for
+// root composition and externally supplied integrations; they are not a
+// second peer-facing Providers service contract.
+package wire
 
 import (
 	"context"
@@ -12,7 +15,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
+// Provider is retained here as a construction-edge alias for the Workers
+// provider override accepted by the root process boundary.
 type Provider = workers.Provider
+
 type Identity string
 type Capability string
 
@@ -23,6 +29,7 @@ type CapabilitySet struct{ values []Capability }
 func NewCapabilitySet(values ...Capability) CapabilitySet {
 	return CapabilitySet{values: append([]Capability(nil), values...)}
 }
+
 func (set CapabilitySet) Values() []Capability      { return slices.Clone(set.values) }
 func (set CapabilitySet) Has(value Capability) bool { return slices.Contains(set.values, value) }
 
@@ -86,21 +93,27 @@ type LocalizedValue struct {
 	Value   string             `json:"value"`
 	Values  *map[string]string `json:"values,omitempty"`
 }
+
 type Deprecation struct {
 	DeprecatedSince string `json:"deprecatedSince"`
 }
+
 type DiscoveryPrerequisites struct {
 	ConfigurationKeys []string `json:"configurationKeys"`
 	EndpointKinds     []string `json:"endpointKinds"`
 	ExecutableNames   []string `json:"executableNames"`
 }
+
 type DocumentationLink struct{ Kind, URL string }
+
 type ExecutionCapabilities struct {
 	ImageInput, PromptSubmission, SessionResume, StructuredOutput, ToolExecution, WorkingDirectory, Worktree bool
 }
+
 type ResponseFidelityCapabilities struct {
 	FileChanges, MessageDeltas, MessageSnapshots, NativeStreaming, Plans, ProviderReconnect, ReasoningSummaries, StableItemIDs, ToolLifecycle, ToolOutputDeltas, Usage bool
 }
+
 type Manifest struct {
 	Aliases                             []string                     `json:"aliases"`
 	Deprecation                         *Deprecation                 `json:"deprecation,omitempty"`
@@ -114,10 +127,12 @@ type Manifest struct {
 	MaximumResponseFidelityCapabilities ResponseFidelityCapabilities `json:"maximumResponseFidelityCapabilities"`
 	TechnicalSupportLevel               TechnicalSupportLevel        `json:"technicalSupportLevel"`
 }
+
 type Registration struct {
 	Manifest    Manifest
 	Integration Integration
 }
+
 type ProviderRegistrations []Registration
 
 type ProgressingIntegrationStats struct {
@@ -134,22 +149,27 @@ type ProgressingIntegration struct {
 func ProgressingExternalIntegration(identity Identity, content string) *ProgressingIntegration {
 	return &ProgressingIntegration{identity: identity, content: content}
 }
+
 func (integration *ProgressingIntegration) Identity() Identity { return integration.identity }
+
 func (*ProgressingIntegration) MaximumCapabilities() CapabilitySet {
 	return NewCapabilitySet(CapabilityPromptSubmission)
 }
+
 func (integration *ProgressingIntegration) Discover(context.Context) (Discovery, error) {
 	integration.mu.Lock()
 	defer integration.mu.Unlock()
 	integration.stats.DiscoverCalls++
 	return Discovery{}, nil
 }
+
 func (integration *ProgressingIntegration) Capabilities(context.Context, InvocationRequest) (CapabilitySet, error) {
 	integration.mu.Lock()
 	defer integration.mu.Unlock()
 	integration.stats.CapabilityCalls++
 	return integration.MaximumCapabilities(), nil
 }
+
 func (integration *ProgressingIntegration) Invoke(ctx context.Context, _ InvocationRequest, writer ResponseWriter) error {
 	integration.mu.Lock()
 	integration.stats.InvokeCalls++
@@ -168,6 +188,7 @@ func (integration *ProgressingIntegration) Invoke(ctx context.Context, _ Invocat
 	integration.mu.Unlock()
 	return nil
 }
+
 func (integration *ProgressingIntegration) Stats() ProgressingIntegrationStats {
 	integration.mu.Lock()
 	defer integration.mu.Unlock()

@@ -20,7 +20,7 @@ These are live counts from production `.go` files, not just the stale baseline:
 | `models` | 15 | 18 | — | Contract not sealed |
 | `operator_settings` | 4 | 28 | `testdata` | Root and document implementation debt |
 | `provider_sessions` | 1 | 2 | — | Closest to compliant; remove root helpers |
-| `providers` | 3 | 3 | `inference` | Active refactor is incomplete |
+| `providers` | 3 | 3 | — | Active refactor is incomplete |
 | `recordings` | 16 | 19 | — | Root directory cleaned, contract still broad |
 | `system_initialization` | 3 | 0 | — | Must consolidate to one interface |
 | `work` | 19 | 138 | `testdata` | Implementation moved, public root still extremely broad |
@@ -161,7 +161,10 @@ ledgers now reflect that state:
 - `providers/internal/services/acp/**` and `providers/internal/services/builtins/**` are recorded under Providers.
 - Deleted provider adapter paths and the deleted `workers/cliprovider` path are no longer inventoried.
 - The remaining `execution/internal/provider/**` entries are explicit transitional Providers move rows.
-- The public `providers/inference` directory remains a structure violation and is deferred to the Providers root-contract packet.
+- The public `providers/inference` compatibility directory was folded into the
+  canonical `providers/wire` process-edge construction boundary by the
+  Providers root-contract packet. The root-level contract inventory and
+  canonical child-directory guard now cover the live Providers surface.
 
 The inventory repair is complete; further provider work is root-contract sealing
 and legacy execution-tree flattening, not reclassifying the live package ledger.

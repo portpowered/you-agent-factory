@@ -10,7 +10,7 @@ import (
 	"time"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	providercontract "github.com/portpowered/infinite-you/pkg/services/providers/inference"
+	providercontract "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
