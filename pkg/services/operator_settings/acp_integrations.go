@@ -82,6 +82,9 @@ func (service ConfigDocumentService) configureACPIntegrations(
 	path string,
 	update func(ConfigDocument) (ConfigDocument, error),
 ) (ConfigDocument, error) {
+	if err := operationContextError(ctx); err != nil {
+		return ConfigDocument{}, err
+	}
 	if err := ctx.Err(); err != nil {
 		return ConfigDocument{}, err
 	}

@@ -90,3 +90,19 @@ func TestConfigureACPIntegrationHonorsCanceledContextBeforeIO(t *testing.T) {
 		t.Fatalf("ConfigureACPIntegrationDelete(canceled) = %v", err)
 	}
 }
+
+func TestConfigureACPIntegrationRejectsNilContext(t *testing.T) {
+	t.Parallel()
+
+	service := ConfigDocumentService{}
+	const want = "operator config context is required"
+	if _, err := service.ConfigureACPIntegrationAdd(nil, "config.json", ACPIntegration{}); err == nil || err.Error() != want {
+		t.Fatalf("ConfigureACPIntegrationAdd(nil) = %v, want %q", err, want)
+	}
+	if _, err := service.ConfigureACPIntegrationDelete(nil, "config.json", "cursor-acp"); err == nil || err.Error() != want {
+		t.Fatalf("ConfigureACPIntegrationDelete(nil) = %v, want %q", err, want)
+	}
+	if _, err := service.EnsurePackagedACPIntegrations(nil, "config.json", nil); err == nil || err.Error() != want {
+		t.Fatalf("EnsurePackagedACPIntegrations(nil) = %v, want %q", err, want)
+	}
+}
