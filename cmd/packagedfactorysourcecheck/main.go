@@ -35,6 +35,7 @@ var rootDocumentNames = map[string]struct{}{
 }
 
 var excludedDirectoryNames = map[string]struct{}{
+	".claude":      {},
 	".git":         {},
 	".artifacts":   {},
 	"coverage":     {},
