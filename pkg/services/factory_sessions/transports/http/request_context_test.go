@@ -12,6 +12,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
 )
 
@@ -132,6 +133,86 @@ func TestHandlerFromRoot_CloseFactorySessionDeadlineExceededReturnsGatewayTimeou
 	assertErrorResponse(t, recorder.Body.Bytes(), factoryapi.ErrorFamilyInternalServerError, factoryapi.ErrorResponseCodeINTERNALERROR, "factory session request timed out")
 }
 
+func TestHandler_InvokeFactorySessionCanceledBeforeDependencyLookupCompletesWithoutBody(t *testing.T) {
+	t.Parallel()
+
+	handler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{}, zap.NewNop())
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/factory-sessions/session-alpha/invoke",
+		strings.NewReader(`{}`),
+	).WithContext(ctx)
+	handler.InvokeFactorySessionBySessionId(recorder, request, "session-alpha")
+
+	if body := recorder.Body.String(); body != "" {
+		t.Fatalf("response body = %q, want empty cancel-oriented outcome", body)
+	}
+}
+
+func TestHandler_InvokeFactorySessionDeadlineReturnedByInvocationMapsToGatewayTimeout(t *testing.T) {
+	t.Parallel()
+
+	handler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
+		Invocation: contextErrorInvocationAPI{err: context.DeadlineExceeded},
+	}, zap.NewNop())
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/factory-sessions/session-alpha/invoke",
+		strings.NewReader(`{}`),
+	)
+	handler.InvokeFactorySessionBySessionId(recorder, request, "session-alpha")
+
+	if recorder.Code != http.StatusGatewayTimeout {
+		t.Fatalf("status = %d, want 504 Gateway Timeout", recorder.Code)
+	}
+	assertErrorResponse(t, recorder.Body.Bytes(), factoryapi.ErrorFamilyInternalServerError, factoryapi.ErrorResponseCodeINTERNALERROR, "factory session request timed out")
+}
+
+func TestHandler_StageSubmitWorkFileCanceledBeforeSessionLookupCompletesWithoutBody(t *testing.T) {
+	t.Parallel()
+
+	handler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{}, zap.NewNop())
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/factory-sessions/session-alpha/work/staged-files",
+		strings.NewReader(`{}`),
+	).WithContext(ctx)
+	handler.StageSubmitWorkFileBySessionId(recorder, request, "session-alpha")
+
+	if body := recorder.Body.String(); body != "" {
+		t.Fatalf("response body = %q, want empty cancel-oriented outcome", body)
+	}
+}
+
+func TestHandler_StageSubmitWorkFileDeadlineFromSessionLookupMapsToGatewayTimeout(t *testing.T) {
+	t.Parallel()
+
+	handler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
+		FactoryDefinitions: contextErrorFactoryDefinitionAPI{err: context.DeadlineExceeded},
+	}, zap.NewNop())
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/factory-sessions/session-alpha/work/staged-files",
+		strings.NewReader(`{}`),
+	)
+	handler.StageSubmitWorkFileBySessionId(recorder, request, "session-alpha")
+
+	if recorder.Code != http.StatusGatewayTimeout {
+		t.Fatalf("status = %d, want 504 Gateway Timeout", recorder.Code)
+	}
+	assertErrorResponse(t, recorder.Body.Bytes(), factoryapi.ErrorFamilyInternalServerError, factoryapi.ErrorResponseCodeINTERNALERROR, "factory session request timed out")
+}
+
 func TestSessionsRequestContextErrorResponseForTest(t *testing.T) {
 	t.Parallel()
 
@@ -150,4 +231,41 @@ func TestSessionsRequestContextErrorResponseForTest(t *testing.T) {
 	if !strings.Contains(string(body), "factory session request timed out") {
 		t.Fatalf("response = %s, want timeout message", body)
 	}
+}
+
+type contextErrorInvocationAPI struct {
+	err error
+}
+
+func (api contextErrorInvocationAPI) InvokeFactorySession(
+	context.Context,
+	string,
+	factoryapi.InvocationRequest,
+) (apisurface.FactoryInvocationResult, error) {
+	return apisurface.FactoryInvocationResult{}, api.err
+}
+
+type contextErrorFactoryDefinitionAPI struct {
+	err error
+}
+
+func (api contextErrorFactoryDefinitionAPI) GetCurrentFactoryForSession(context.Context, string) (factoryapi.Factory, error) {
+	return factoryapi.Factory{}, api.err
+}
+
+func (contextErrorFactoryDefinitionAPI) SaveFactoryForSession(
+	context.Context,
+	string,
+	factoryapi.FactorySaveMode,
+	factoryapi.Factory,
+) (factoryapi.Factory, error) {
+	return factoryapi.Factory{}, nil
+}
+
+func (contextErrorFactoryDefinitionAPI) SaveCurrentFactoryForSession(
+	context.Context,
+	string,
+	factoryapi.Factory,
+) (factoryapi.Factory, error) {
+	return factoryapi.Factory{}, nil
 }
