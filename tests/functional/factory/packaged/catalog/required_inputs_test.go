@@ -2,7 +2,6 @@ package catalog
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,9 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
-	packagedfactories "github.com/portpowered/infinite-you/packages/packaged-factories"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -32,11 +30,11 @@ type packagedFactoryMissingRequiredInputRun struct {
 }
 
 // TestPackagedFactoriesRejectMissingRequiredInputs proves that omitting required
-// invocation inputs for every packaged Factory in the embedded package matrix
+// invocation inputs for every packaged Factory in the published package matrix
 // rejects through the public packaged-catalog invocation boundary without a
 // completed success primary result attributable to the missing-input attempt.
 func TestPackagedFactoriesRejectMissingRequiredInputs(t *testing.T) {
-	cases, err := packagedFactoriesWithRequiredInvocationInputs()
+	cases, err := packagedFactoriesWithRequiredInvocationInputs(t)
 	if err != nil {
 		t.Fatalf("packaged Factory matrix: %v", err)
 	}
@@ -59,11 +57,11 @@ func TestPackagedFactoriesRejectMissingRequiredInputs(t *testing.T) {
 }
 
 // TestPackagedFactoriesNameMissingInputAndFactory proves that omitting required
-// invocation inputs for every packaged Factory in the embedded package matrix
+// invocation inputs for every packaged Factory in the published package matrix
 // surfaces customer-visible failure diagnostics naming both the missing input and
 // the Factory under test through the public packaged-catalog invocation boundary.
 func TestPackagedFactoriesNameMissingInputAndFactory(t *testing.T) {
-	cases, err := packagedFactoriesWithRequiredInvocationInputs()
+	cases, err := packagedFactoriesWithRequiredInvocationInputs(t)
 	if err != nil {
 		t.Fatalf("packaged Factory matrix: %v", err)
 	}
@@ -91,23 +89,28 @@ func TestPackagedFactoriesNameMissingInputAndFactory(t *testing.T) {
 	}
 }
 
-func packagedFactoriesWithRequiredInvocationInputs() ([]packagedFactoryRequiredInputCase, error) {
-	inventory, err := packagedfactorycatalog.Discover(
-		context.Background(),
-		packagedfactories.Source(),
-		"factories",
-	)
+func packagedFactoriesWithRequiredInvocationInputs(t *testing.T) ([]packagedFactoryRequiredInputCase, error) {
+	t.Helper()
+	catalog, err := discoveredPackagedFactoryCatalogViaHTTP(t)
 	if err != nil {
 		return nil, err
 	}
 
 	var cases []packagedFactoryRequiredInputCase
-	for _, entry := range inventory.Entries {
-		if entry.Factory == nil || entry.Factory.InvocationSignature == nil {
+	for _, entry := range catalog.Factories {
+		definitionJSON, err := json.Marshal(entry.Json)
+		if err != nil {
+			return nil, err
+		}
+		var config factorydefinitions.FactoryConfig
+		if err := json.Unmarshal(definitionJSON, &config); err != nil {
+			return nil, err
+		}
+		if config.InvocationSignature == nil {
 			continue
 		}
 		var required []string
-		for _, parameter := range entry.Factory.InvocationSignature.Parameters {
+		for _, parameter := range config.InvocationSignature.Parameters {
 			if parameter.Required {
 				required = append(required, parameter.Name)
 			}
@@ -116,7 +119,7 @@ func packagedFactoriesWithRequiredInvocationInputs() ([]packagedFactoryRequiredI
 			continue
 		}
 		cases = append(cases, packagedFactoryRequiredInputCase{
-			factoryName:        entry.Factory.Name,
+			factoryName:        entry.Name,
 			requiredParameters: required,
 		})
 	}

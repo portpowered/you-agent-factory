@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -14,7 +13,6 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -58,7 +56,6 @@ func TestPackagedFactoryInitMaterialization_InvokesOutsideRepositoryWithBootstra
 
 	materializedResponse := invokePackagedGoalFromWorkingDirectory(
 		t,
-		materializedDir,
 		filepath.Join(materializedDir, "factory.yaml"),
 		outsideWorkingDir,
 		env,
@@ -67,7 +64,6 @@ func TestPackagedFactoryInitMaterialization_InvokesOutsideRepositoryWithBootstra
 	bootstrapDir := support.InstallPackagedFactory(t, homeDir, packagedGoalName)
 	bootstrapResponse := invokePackagedGoalFromWorkingDirectory(
 		t,
-		bootstrapDir,
 		filepath.Join(bootstrapDir, "factory.json"),
 		outsideWorkingDir,
 		env,
@@ -100,14 +96,15 @@ func TestPackagedFactoryInitMaterialization_InvokesOutsideRepositoryWithBootstra
 
 	emptyInputErr := postPackagedGoalInvocationExpectError(
 		t,
-		materializedDir,
 		filepath.Join(materializedDir, "factory.yaml"),
 		outsideWorkingDir,
 		env,
-		"   ",
 	)
-	if string(emptyInputErr.Code) != "INVOCATION_INPUT_EMPTY" {
-		t.Fatalf("empty invocation error code = %q, want INVOCATION_INPUT_EMPTY", emptyInputErr.Code)
+	if string(emptyInputErr.Code) != "INVOCATION_ARGUMENT_MISSING_REQUIRED_INPUT" {
+		t.Fatalf(
+			"empty invocation error code = %q, want INVOCATION_ARGUMENT_MISSING_REQUIRED_INPUT",
+			emptyInputErr.Code,
+		)
 	}
 }
 
@@ -172,7 +169,6 @@ func executeInit(
 
 func invokePackagedGoalFromWorkingDirectory(
 	t *testing.T,
-	factoryDir string,
 	factoryConfigPath string,
 	workingDirectory string,
 	env []string,
@@ -180,124 +176,69 @@ func invokePackagedGoalFromWorkingDirectory(
 ) factoryapi.InvocationResponse {
 	t.Helper()
 
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		FactoryConfigPath:         factoryConfigPath,
-		WorkingDirectory:          workingDirectory,
-		WaitForServiceModeRuntime: true,
-		MockWorkersConfig:         packagedGoalMockWorkersConfig(),
-		Env:                       env,
-	})
-	defer server.Stop(t)
-
-	return postPackagedGoalInvocation(t, server.URL(), goalText)
-}
-
-func postPackagedGoalInvocation(
-	t *testing.T,
-	serverURL string,
-	goalText string,
-) factoryapi.InvocationResponse {
-	t.Helper()
-
-	var part factoryapi.WorkContentPart
-	if err := part.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
-		Type: factoryapi.WorkContentPartTypeText,
-		Text: goalText,
-	}); err != nil {
-		t.Fatalf("build invocation text content: %v", err)
+	mockWorkersPath := writePackagedGoalMockWorkersConfig(t)
+	args := []string{
+		"you", "--json", "run",
+		"--factory", factoryConfigPath,
+		"--with-mock-workers=" + mockWorkersPath,
+		"--no-record", goalText,
 	}
-	sourceKind := factoryapi.InvocationInputSourceKindText
-	content := factoryapi.WorkContent{part}
-	body, err := json.Marshal(factoryapi.InvocationRequest{
-		SourceKind: &sourceKind,
-		Content:    &content,
-	})
-	if err != nil {
-		t.Fatalf("marshal invocation request: %v", err)
-	}
-	response, err := http.Post(
-		strings.TrimSuffix(serverURL, "/")+"/factory-sessions/"+factorysessions.DefaultSessionID+"/invocations",
-		"application/json",
-		bytes.NewReader(body),
-	)
-	if err != nil {
-		t.Fatalf("POST /factory-sessions/~default/invocations: %v", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		payload, _ := io.ReadAll(response.Body)
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Input.Env = append([]string(nil), env...)
+	inputs.Input.WorkingDirectory = workingDirectory
+	if err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
 		t.Fatalf(
-			"POST /factory-sessions/~default/invocations status = %d: %s",
-			response.StatusCode,
-			strings.TrimSpace(string(payload)),
+			"Process.Execute(%v) error = %v\nstdout:\n%s\nstderr:\n%s",
+			args,
+			err,
+			inputs.Stdout(),
+			inputs.Stderr(),
 		)
 	}
-	var decoded factoryapi.InvocationResponse
-	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
-		t.Fatalf("decode invocation response: %v", err)
-	}
-	return decoded
+	return support.DecodeInvocationResponseJSON(t, inputs.Stdout())
 }
 
 func postPackagedGoalInvocationExpectError(
 	t *testing.T,
-	factoryDir string,
 	factoryConfigPath string,
 	workingDirectory string,
 	env []string,
-	goalText string,
 ) factoryapi.ErrorResponse {
 	t.Helper()
 
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		FactoryConfigPath:         factoryConfigPath,
-		WorkingDirectory:          workingDirectory,
-		WaitForServiceModeRuntime: true,
-		MockWorkersConfig:         packagedGoalMockWorkersConfig(),
-		Env:                       env,
-	})
-	defer server.Stop(t)
-
-	var part factoryapi.WorkContentPart
-	if err := part.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
-		Type: factoryapi.WorkContentPartTypeText,
-		Text: goalText,
-	}); err != nil {
-		t.Fatalf("build invocation text content: %v", err)
+	args := []string{
+		"you", "--json", "run",
+		"--factory", factoryConfigPath,
+		"--no-record",
 	}
-	sourceKind := factoryapi.InvocationInputSourceKindText
-	content := factoryapi.WorkContent{part}
-	body, err := json.Marshal(factoryapi.InvocationRequest{
-		SourceKind: &sourceKind,
-		Content:    &content,
-	})
-	if err != nil {
-		t.Fatalf("marshal invocation request: %v", err)
+	inputs := support.FakeInputs(t.Context(), args)
+	inputs.Input.Env = append([]string(nil), env...)
+	inputs.Input.WorkingDirectory = workingDirectory
+	err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input)
+	if err == nil {
+		t.Fatalf("Process.Execute(%v) succeeded for empty required input", args)
 	}
-	response, err := http.Post(
-		strings.TrimSuffix(server.URL(), "/")+"/factory-sessions/"+factorysessions.DefaultSessionID+"/invocations",
-		"application/json",
-		bytes.NewReader(body),
-	)
-	if err != nil {
-		t.Fatalf("POST /factory-sessions/~default/invocations: %v", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusBadRequest {
-		payload, _ := io.ReadAll(response.Body)
-		t.Fatalf(
-			"POST /factory-sessions/~default/invocations status = %d, want 400: %s",
-			response.StatusCode,
-			strings.TrimSpace(string(payload)),
-		)
+	if strings.TrimSpace(inputs.Stdout()) != "" {
+		t.Fatalf("empty-input stdout = %q, want empty", inputs.Stdout())
 	}
 	var decoded factoryapi.ErrorResponse
-	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
-		t.Fatalf("decode invocation error response: %v", err)
+	if err := json.Unmarshal([]byte(strings.TrimSpace(inputs.Stderr())), &decoded); err != nil {
+		t.Fatalf("decode invocation error response: %v\nstderr:\n%s", err, inputs.Stderr())
 	}
 	return decoded
+}
+
+func writePackagedGoalMockWorkersConfig(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "mock-workers.json")
+	payload, err := json.Marshal(packagedGoalMockWorkersConfig())
+	if err != nil {
+		t.Fatalf("marshal packaged goal mock-workers config: %v", err)
+	}
+	if err := os.WriteFile(path, payload, 0o600); err != nil {
+		t.Fatalf("write packaged goal mock-workers config: %v", err)
+	}
+	return path
 }
 
 func packagedGoalMockWorkersConfig() *workers.MockWorkersConfig {

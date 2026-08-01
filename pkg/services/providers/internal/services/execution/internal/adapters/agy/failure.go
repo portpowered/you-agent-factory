@@ -10,7 +10,6 @@ import (
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // ErrMissingExecutable reports that the configured Agy binary could not be resolved.
@@ -51,8 +50,11 @@ func declaredFailureFromPTY(
 			Message: TimeoutFailureMessage,
 		}, true
 	}
-	if failureType := classifyOutputFailure(result.CleanedText); failureType != workers.WorkFailureTypeUnknown {
-		return declaredFailureFromWorkFailure(failureType), true
+	if authenticationFailureOutput(result.CleanedText) {
+		return providers.ExecuteFailure{
+			Kind:    providers.ExecuteFailureKindAuthentication,
+			Message: "Agy authentication failed.",
+		}, true
 	}
 	if errors.Is(err, agypty.ErrNonzeroExit) || result.ExitCode != 0 {
 		return providers.ExecuteFailure{
@@ -88,35 +90,20 @@ func classifySetupError(err error) *providers.ExecuteFailure {
 	}
 }
 
-func classifyOutputFailure(stdout string) workers.WorkFailureType {
+func authenticationFailureOutput(stdout string) bool {
 	normalized := strings.ToLower(strings.TrimSpace(stdout))
 	if normalized == "" {
-		return workers.WorkFailureTypeUnknown
+		return false
 	}
 	for _, signal := range []string{
 		"api key", "authentication", "unauthorized", "forbidden",
 		"login required", "not authenticated",
 	} {
 		if strings.Contains(normalized, signal) {
-			return workers.WorkFailureTypeAuthFailure
+			return true
 		}
 	}
-	return workers.WorkFailureTypeUnknown
-}
-
-func declaredFailureFromWorkFailure(failureType workers.WorkFailureType) providers.ExecuteFailure {
-	switch failureType {
-	case workers.WorkFailureTypeAuthFailure:
-		return providers.ExecuteFailure{
-			Kind:    providers.ExecuteFailureKindAuthentication,
-			Message: "Agy authentication failed.",
-		}
-	default:
-		return providers.ExecuteFailure{
-			Kind:    providers.ExecuteFailureKindUnknown,
-			Message: "Agy reported an execution failure.",
-		}
-	}
+	return false
 }
 
 func orchestrationFailure(err error) error {

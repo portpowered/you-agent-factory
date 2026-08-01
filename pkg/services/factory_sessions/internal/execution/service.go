@@ -401,13 +401,13 @@ func NewJavaScriptExecutionService(
 // fixture-backed live-provider child smoke without MCP host startup. Scope for
 // this provider is the completed CLI live-dispatch smoke lane; MCP live serve and
 // website inspection remain deferred follow-up cells.
-func SmokeLiveChildProvider() workers.Provider {
+func SmokeLiveChildProvider() workers.Runner {
 	return smokeLiveChildProvider{}
 }
 
 type smokeLiveChildProvider struct{}
 
-func (smokeLiveChildProvider) Infer(_ context.Context, _ workers.ProviderInferenceRequest) (workers.InferenceResponse, error) {
+func (smokeLiveChildProvider) Execute(_ context.Context, _ workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error) {
 	return workers.InferenceResponse{
 		Content: `{"text":"live:agent-run-fake-child:summarize-findings:summarize workflows:workflows"}`,
 		ProviderSession: &workers.ProviderSessionMetadata{

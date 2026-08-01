@@ -1,9 +1,13 @@
 package wire_test
 
 import (
+	"fmt"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -38,6 +42,49 @@ func TestProvidersWireDoesNotPublishWorkersProviderRegistry(t *testing.T) {
 			if strings.Contains(body, item) {
 				t.Fatalf("%s still contains Workers registry edge %q", source, item)
 			}
+		}
+	}
+}
+
+func TestProvidersCanonicalEffectCodeDoesNotImportWorkersContracts(t *testing.T) {
+	t.Parallel()
+
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("resolve test file path")
+	}
+	providersWireRoot := filepath.Dir(file)
+	roots := []string{
+		providersWireRoot,
+		filepath.Join(providersWireRoot, "..", "internal", "services", "execution", "wire"),
+		filepath.Join(providersWireRoot, "..", "internal", "services", "execution", "internal", "adapters"),
+	}
+	const workersImportPrefix = "github.com/portpowered/infinite-you/pkg/services/workers"
+	for _, root := range roots {
+		err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+				return nil
+			}
+			file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
+			if err != nil {
+				return err
+			}
+			for _, specification := range file.Imports {
+				importPath, err := strconv.Unquote(specification.Path.Value)
+				if err != nil {
+					return err
+				}
+				if importPath == workersImportPrefix || strings.HasPrefix(importPath, workersImportPrefix+"/") {
+					return fmt.Errorf("%s imports Workers contract %q", path, importPath)
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
 		}
 	}
 }

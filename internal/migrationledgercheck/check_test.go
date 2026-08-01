@@ -16,12 +16,93 @@ func TestCheckPassesOnRepositoryLedger(t *testing.T) {
 	}
 }
 
+func TestCheckPassesWithRelativeRepositoryRoot(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := findRepoRoot(t)
+	workingDirectory, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	relativeRoot, err := filepath.Rel(workingDirectory, repoRoot)
+	if err != nil {
+		t.Fatalf("filepath.Rel() error = %v", err)
+	}
+	if err := Check(relativeRoot, DefaultLedgerPath, DefaultChecklistPath); err != nil {
+		t.Fatalf("Check() with relative repository root error = %v", err)
+	}
+}
+
+func TestCheckPassesWithAbsoluteCanonicalPaths(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := findRepoRoot(t)
+	ledgerPath := filepath.Join(repoRoot, filepath.FromSlash(CanonicalLedgerPath))
+	checklistPath := filepath.Join(repoRoot, filepath.FromSlash(CanonicalChecklistPath))
+	if err := Check(repoRoot, ledgerPath, checklistPath); err != nil {
+		t.Fatalf("Check() with absolute canonical paths error = %v", err)
+	}
+}
+
+func TestCheckDoesNotFallBackToIgnoredLedgerMirror(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeFixtureTree(t, root)
+	writeFixture(t, filepath.Join(root, "docs", "temp", "functional-tests-expansion", "migration-ledger-inventory.json"), `{"rows": [{"source_path": "tests/functional/example/source_test.go", "scenario": "TestExample"}]}`)
+
+	err := Check(root, DefaultLedgerPath, DefaultChecklistPath)
+	if err == nil {
+		t.Fatal("Check() error = nil, want missing committed ledger error")
+	}
+	canonicalPath := filepath.Join(root, filepath.FromSlash(CanonicalLedgerPath))
+	if !strings.Contains(err.Error(), canonicalPath) {
+		t.Fatalf("Check() error = %v, want committed ledger path %q", err, canonicalPath)
+	}
+	ignoredPath := filepath.Join(root, filepath.FromSlash("docs/temp/functional-tests-expansion/migration-ledger-inventory.json"))
+	if strings.Contains(err.Error(), ignoredPath) {
+		t.Fatalf("Check() error = %v, must not fall back to ignored ledger path %q", err, ignoredPath)
+	}
+}
+
+func TestCheckDoesNotFallBackToIgnoredChecklistMirror(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeFixtureTree(t, root)
+	writeFixture(t, filepath.Join(root, filepath.FromSlash(CanonicalLedgerPath)), `{"rows": [{"source_path": "tests/functional/example/source_test.go", "scenario": "TestExample"}]}`)
+	writeFixture(t, filepath.Join(root, "docs", "temp", "functional-tests-expansion", "test-file-checklist.md"), "- [ ] `tests/functional/example/dest_test.go`\n")
+
+	err := Check(root, DefaultLedgerPath, DefaultChecklistPath)
+	if err == nil {
+		t.Fatal("Check() error = nil, want missing committed checklist error")
+	}
+	canonicalPath := filepath.Join(root, filepath.FromSlash(CanonicalChecklistPath))
+	if !strings.Contains(err.Error(), canonicalPath) {
+		t.Fatalf("Check() error = %v, want committed checklist path %q", err, canonicalPath)
+	}
+	ignoredPath := filepath.Join(root, filepath.FromSlash("docs/temp/functional-tests-expansion/test-file-checklist.md"))
+	if strings.Contains(err.Error(), ignoredPath) {
+		t.Fatalf("Check() error = %v, must not fall back to ignored checklist path %q", err, ignoredPath)
+	}
+}
+
 func TestCheckPackagedFactoryInvocationMatrixPassesOnRepositoryLedger(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := findRepoRoot(t)
 	if err := CheckPackagedFactoryInvocationMatrix(repoRoot, DefaultChecklistPath); err != nil {
 		t.Fatalf("CheckPackagedFactoryInvocationMatrix() error = %v", err)
+	}
+}
+
+func TestCheckPackagedFactoryInvocationMatrixAcceptsAbsoluteChecklistPath(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := findRepoRoot(t)
+	checklistPath := filepath.Join(repoRoot, filepath.FromSlash(CanonicalChecklistPath))
+	if err := CheckPackagedFactoryInvocationMatrix(repoRoot, checklistPath); err != nil {
+		t.Fatalf("CheckPackagedFactoryInvocationMatrix() with absolute path error = %v", err)
 	}
 }
 

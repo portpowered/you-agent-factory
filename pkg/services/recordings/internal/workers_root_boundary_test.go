@@ -46,7 +46,7 @@ func TestNewReplayExecutionConstructsWorkersRootPorts(t *testing.T) {
 		t.Fatalf("hooks/planner = (%v,%v), want non-nil replay helpers", hooks, planner)
 	}
 
-	var rootProvider workers.Provider = provider
+	var rootProvider workers.Runner = provider
 	var rootRunner workers.CommandRunner = runner
 	if rootProvider == nil || rootRunner == nil {
 		t.Fatal("NewReplayExecution ports must satisfy workers root contracts")

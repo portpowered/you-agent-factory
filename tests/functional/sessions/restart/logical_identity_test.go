@@ -740,7 +740,7 @@ func (p *logicalIdentityResumeBlockingProvider) callCount() int {
 	return p.calls
 }
 
-func (p *logicalIdentityResumeBlockingProvider) Infer(
+func (p *logicalIdentityResumeBlockingProvider) Execute(
 	ctx context.Context,
 	_ workerexecution.ProviderInferenceRequest,
 ) (workerexecution.InferenceResponse, error) {

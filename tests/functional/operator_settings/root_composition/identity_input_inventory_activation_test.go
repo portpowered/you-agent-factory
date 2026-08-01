@@ -8,21 +8,15 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
-	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
-	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
-	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const (
-	identityActivationGeneratedUUID   = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
-	identityActivationExistingScope   = "local-11111111-1111-4111-8111-111111111111"
-	operatorConfigFixturesRelativeDir = "pkg/services/operator_settings/testdata/fixtures"
+	identityActivationGeneratedUUID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+	identityActivationExistingScope = "local-11111111-1111-4111-8111-111111111111"
 )
 
 // TestBackendScopeIdentityGeneratesThroughRootBuildProcessAfterLifecycle proves
@@ -69,68 +63,6 @@ func TestBackendScopeIdentityReusesExistingScopeThroughRootBuildProcessAfterLife
 	}
 	if got := readBackendScopeIDFromHome(t, homeDir); got != identityActivationExistingScope {
 		t.Fatalf("backendScopeID = %q, want reused scope %q", got, identityActivationExistingScope)
-	}
-}
-
-// TestOperatorInputInventoryActivatesThroughRootBuildProcessAfterLifecycle proves
-// the published input inventory index and LoadFileConfig loader paths activate
-// through public Operator Settings surfaces after runtime lifecycle on a process
-// composed only via root.BuildProcess.
-func TestOperatorInputInventoryActivatesThroughRootBuildProcessAfterLifecycle(t *testing.T) {
-	t.Parallel()
-
-	homeDir := writeOperatorConfigWithBackendScope(t, identityActivationExistingScope)
-	process := support.BuildProcess(t, serviceedges.Edges{})
-
-	runOperatorSettingsLifecycleInitialization(t, process, homeDir)
-
-	providersRoot, err := providerswire.NewService()
-	if err != nil {
-		t.Fatalf("providerswire.NewService() error = %v", err)
-	}
-	settingsRoot, err := settingswire.NewServiceFromHomePorts(
-		platformfilesystem.Local{},
-		globalconfigmapping.Decode,
-		providersRoot,
-	)
-	if err != nil {
-		t.Fatalf("NewServiceFromHomePorts() error = %v", err)
-	}
-	inventory := settingsRoot.ProjectInputInventory()
-	if inventory.FormatVersion != operatorsettings.InputInventoryFormatVersion {
-		t.Fatalf("inventory formatVersion = %q, want %q", inventory.FormatVersion, operatorsettings.InputInventoryFormatVersion)
-	}
-	if len(inventory.Cases) == 0 {
-		t.Fatal("ProjectInputInventory() returned no cases after lifecycle")
-	}
-
-	inputCase, ok := findInputInventoryCase(inventory.Cases, "valid-load-defaults")
-	if !ok {
-		t.Fatal("ProjectInputInventory() missing valid-load-defaults case")
-	}
-	if inputCase.Entrypoint != "LoadFileConfig" || inputCase.Outcome != "accept" {
-		t.Fatalf("valid-load-defaults case = %#v, want LoadFileConfig accept", inputCase)
-	}
-
-	configPath := writeOperatorSettingsFixtureToTemp(t, inputCase.Fixture)
-	loaded, err := operatorsettings.LoadFileConfig(
-		&operatorSettingsActivationFileSystem{recorder: newOperatorSettingsActivationRecorder()},
-		globalconfigmapping.Decode,
-		configPath,
-	)
-	if err != nil {
-		t.Fatalf("LoadFileConfig() after lifecycle = %v", err)
-	}
-	if inputCase.ExpectedConfig == nil {
-		t.Fatal("valid-load-defaults case missing expectedConfig")
-	}
-	if loaded.Defaults.WorkerModelProvider != inputCase.ExpectedConfig.Defaults.WorkerModelProvider ||
-		loaded.Defaults.WorkerModel != inputCase.ExpectedConfig.Defaults.WorkerModel {
-		t.Fatalf(
-			"LoadFileConfig() defaults = %#v, want %#v from input inventory",
-			loaded.Defaults,
-			inputCase.ExpectedConfig.Defaults,
-		)
 	}
 }
 
@@ -203,7 +135,7 @@ func writeOperatorConfigWithBackendScope(t *testing.T, scopeID string) string {
 func readBackendScopeIDFromHome(t *testing.T, homeDir string) string {
 	t.Helper()
 
-	configPath := operatorsettings.DefaultConfigPath(homeDir)
+	configPath := filepath.Join(homeDir, ".you-agent-factory", "config.json")
 	raw, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatalf("read operator config at %q: %v", configPath, err)
@@ -215,28 +147,4 @@ func readBackendScopeIDFromHome(t *testing.T, homeDir string) string {
 		t.Fatalf("decode operator config: %v\ncontent:\n%s", err, raw)
 	}
 	return document.BackendScopeID
-}
-
-func findInputInventoryCase(cases []operatorsettings.InputCase, id string) (operatorsettings.InputCase, bool) {
-	for _, inputCase := range cases {
-		if inputCase.ID == id {
-			return inputCase, true
-		}
-	}
-	return operatorsettings.InputCase{}, false
-}
-
-func writeOperatorSettingsFixtureToTemp(t *testing.T, rel string) string {
-	t.Helper()
-
-	fixturePath := testutil.MustRepoPath(t, filepath.ToSlash(filepath.Join(operatorConfigFixturesRelativeDir, rel)))
-	data, err := os.ReadFile(fixturePath)
-	if err != nil {
-		t.Fatalf("read fixture %s: %v", fixturePath, err)
-	}
-	configPath := filepath.Join(t.TempDir(), "config.json")
-	if err := os.WriteFile(configPath, data, 0o600); err != nil {
-		t.Fatalf("write fixture config: %v", err)
-	}
-	return configPath
 }

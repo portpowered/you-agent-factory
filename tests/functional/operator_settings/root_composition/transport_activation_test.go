@@ -2,146 +2,52 @@ package root_composition_test
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
-	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	operatorsettingshttp "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/http"
-	mcpoperatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/mcp"
-	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
-	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
-	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-const (
-	transportActivationProviderAlias = "codex"
-	transportActivationModel         = "transport-activation-model"
-)
-
-// TestHTTPSettingsTransportActivatesThroughRootBuildProcessAfterLifecycle proves
-// the Settings-owned HTTP adapter activates after runtime lifecycle on a process
-// composed only via root.BuildProcess with edges.Edges effect replacement.
-// CLI Settings transport is covered by
-// TestOperatorConfigDocumentUpdateActivatesThroughRootBuildProcessPublicCLISurface.
-func TestHTTPSettingsTransportActivatesThroughRootBuildProcessAfterLifecycle(t *testing.T) {
-	t.Parallel()
-
-	homeDir := writeOperatorConfigForActivation(t, transportActivationProviderAlias, transportActivationModel)
-	configPath := operatorsettings.DefaultConfigPath(homeDir)
-	recorder := newOperatorSettingsActivationRecorder()
-	process := support.BuildProcess(t, recorder.edges())
-
-	if got := recorder.fileSystemCalls(); got != 0 {
-		t.Fatalf("operator-config filesystem effect calls = %d during BuildProcess, want 0", got)
+// TestOperatorSettingsTransportActivationUsesRootProcess proves the public
+// init transport mutates operator settings only through Process.Execute on the
+// root-built application graph.
+func TestOperatorSettingsTransportActivationUsesRootProcess(t *testing.T) {
+	homeDir := t.TempDir()
+	configDir := filepath.Join(homeDir, ".you-agent-factory")
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
+		t.Fatalf("mkdir operator config directory: %v", err)
+	}
+	configPath := filepath.Join(configDir, "config.json")
+	if err := os.WriteFile(configPath, []byte(`{"defaults":{"workerModelProvider":"codex","workerModel":"old-model"}}`), 0o600); err != nil {
+		t.Fatalf("write operator config: %v", err)
 	}
 
-	runOperatorSettingsLifecycleInitialization(t, process, homeDir)
-
-	beforeTransport := recorder.readFileCalls()
-	providersRoot, err := providerswire.NewService()
-	if err != nil {
-		t.Fatalf("providerswire.NewService() error = %v", err)
-	}
-	root, err := settingswire.NewServiceFromHomePorts(
-		&operatorSettingsActivationFileSystem{recorder: recorder},
-		globalconfigmapping.Decode,
-		providersRoot,
-	)
-	if err != nil {
-		t.Fatalf("NewServiceFromHomePorts() error = %v", err)
-	}
-
-	adapter := operatorsettingshttp.NewAdapterFromRoot(operatorsettingshttp.RootBinding{Settings: root})
-	response, err := adapter.LoadDocument(t.Context(), operatorsettingshttp.LoadDocumentInput{
-		Path:            configPath,
-		RequireExisting: true,
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "init", "--provider", "claude", "--model", "root-process-model",
 	})
+	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	inputs.Input.WorkingDirectory = t.TempDir()
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute(init) error = %v\nstdout:\n%s\nstderr:\n%s", err, inputs.Stdout(), inputs.Stderr())
+	}
+
+	payload, err := os.ReadFile(configPath)
 	if err != nil {
-		t.Fatalf("HTTP LoadDocument() error = %v", err)
+		t.Fatalf("read updated operator config: %v", err)
 	}
-	if !response.Found {
-		t.Fatalf("HTTP LoadDocument() found = false, want true for %q", configPath)
+	var document struct {
+		Defaults struct {
+			WorkerModelProvider string `json:"workerModelProvider"`
+			WorkerModel         string `json:"workerModel"`
+		} `json:"defaults"`
 	}
-	if response.Path != configPath {
-		t.Fatalf("HTTP LoadDocument() path = %q, want %q", response.Path, configPath)
+	if err := json.Unmarshal(payload, &document); err != nil {
+		t.Fatalf("decode updated operator config: %v", err)
 	}
-	if response.Document.Defaults == nil ||
-		response.Document.Defaults.WorkerModel == nil ||
-		*response.Document.Defaults.WorkerModel != transportActivationModel {
-		t.Fatalf("HTTP LoadDocument() defaults = %#v, want model %q", response.Document.Defaults, transportActivationModel)
+	if document.Defaults.WorkerModelProvider != "claude" || document.Defaults.WorkerModel != "root-process-model" {
+		t.Fatalf("updated defaults = %#v, want claude/root-process-model", document.Defaults)
 	}
-	if got := recorder.readFileCalls() - beforeTransport; got == 0 {
-		t.Fatalf("operator-config ReadFile calls during HTTP transport = %d, want > 0 via edges", got)
-	}
-}
-
-// TestMCPSettingsTransportActivatesThroughRootBuildProcessAfterLifecycle proves
-// the Settings-owned MCP adapter activates after runtime lifecycle on a process
-// composed only via root.BuildProcess with edges.Edges effect replacement.
-func TestMCPSettingsTransportActivatesThroughRootBuildProcessAfterLifecycle(t *testing.T) {
-	t.Parallel()
-
-	homeDir := writeOperatorConfigForActivation(t, transportActivationProviderAlias, transportActivationModel)
-	configPath := operatorsettings.DefaultConfigPath(homeDir)
-	recorder := newOperatorSettingsActivationRecorder()
-	process := support.BuildProcess(t, recorder.edges())
-
-	if got := recorder.fileSystemCalls(); got != 0 {
-		t.Fatalf("operator-config filesystem effect calls = %d during BuildProcess, want 0", got)
-	}
-
-	runOperatorSettingsLifecycleInitialization(t, process, homeDir)
-
-	beforeTransport := recorder.readFileCalls()
-	providersRoot, err := providerswire.NewService()
-	if err != nil {
-		t.Fatalf("providerswire.NewService() error = %v", err)
-	}
-	root, err := settingswire.NewServiceFromHomePorts(
-		&operatorSettingsActivationFileSystem{recorder: recorder},
-		globalconfigmapping.Decode,
-		providersRoot,
-	)
-	if err != nil {
-		t.Fatalf("NewServiceFromHomePorts() error = %v", err)
-	}
-
-	operation := mcpoperatorsettings.Bind(mcpoperatorsettings.RootDependencies{Settings: root})
-	raw, err := operation(
-		t.Context(),
-		mcpoperatorsettings.ToolLoadDocument,
-		json.RawMessage(`{"path":`+jsonString(configPath)+`,"requireExisting":true}`),
-	)
-	if err != nil {
-		t.Fatalf("MCP CallTool(load_document) transport error = %v", err)
-	}
-
-	var response mcpoperatorsettings.ToolResponse[operatorsettings.LoadDocumentResult]
-	if err := json.Unmarshal(raw, &response); err != nil {
-		t.Fatalf("decode MCP tool response: %v\nraw=%s", err, raw)
-	}
-	if response.Error != nil || response.Result == nil {
-		t.Fatalf("MCP CallTool(load_document) = %s, want success", raw)
-	}
-	if !response.Result.Found {
-		t.Fatalf("MCP load_document found = false, want true for %q", configPath)
-	}
-	if response.Result.Document.Defaults.WorkerModel != transportActivationModel {
-		t.Fatalf(
-			"MCP load_document model = %q, want %q",
-			response.Result.Document.Defaults.WorkerModel,
-			transportActivationModel,
-		)
-	}
-	if got := recorder.readFileCalls() - beforeTransport; got == 0 {
-		t.Fatalf("operator-config ReadFile calls during MCP transport = %d, want > 0 via edges", got)
-	}
-}
-
-func jsonString(value string) string {
-	encoded, err := json.Marshal(value)
-	if err != nil {
-		panic(err)
-	}
-	return string(encoded)
 }

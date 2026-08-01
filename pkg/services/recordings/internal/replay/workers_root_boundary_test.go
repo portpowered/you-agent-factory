@@ -23,7 +23,7 @@ func TestReplaySideEffectsSatisfyWorkersRootPorts(t *testing.T) {
 		t.Fatalf("NewSideEffects: %v", err)
 	}
 
-	var provider workers.Provider = sideEffects
+	var provider workers.Runner = sideEffects
 	var runner workers.CommandRunner = sideEffects
 	if provider == nil || runner == nil {
 		t.Fatal("replay side effects must satisfy workers root ports")
@@ -44,9 +44,9 @@ func TestReplaySideEffectsSatisfyWorkersRootPorts(t *testing.T) {
 		SystemPrompt:    "system prompt",
 		UserMessage:     "user prompt",
 	}
-	resp, err := provider.Infer(context.Background(), providerRequest)
+	resp, err := provider.Execute(context.Background(), providerRequest)
 	if err != nil {
-		t.Fatalf("Infer through workers.Provider: %v", err)
+		t.Fatalf("Infer through workers.Runner: %v", err)
 	}
 	if resp.Content != "recorded provider output" {
 		t.Fatalf("provider content = %q, want recorded provider output", resp.Content)

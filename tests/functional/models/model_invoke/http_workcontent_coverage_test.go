@@ -14,7 +14,6 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	providercontract "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -213,7 +212,7 @@ type httpWorkContentProvider struct {
 	response workerexecution.InferenceResponse
 }
 
-func (provider *httpWorkContentProvider) Infer(
+func (provider *httpWorkContentProvider) Execute(
 	_ context.Context,
 	_ workerexecution.ProviderInferenceRequest,
 ) (workerexecution.InferenceResponse, error) {
@@ -222,4 +221,4 @@ func (provider *httpWorkContentProvider) Infer(
 	return provider.response, nil
 }
 
-var _ providercontract.Provider = (*httpWorkContentProvider)(nil)
+var _ workerexecution.Runner = (*httpWorkContentProvider)(nil)

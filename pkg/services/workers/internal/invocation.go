@@ -91,21 +91,21 @@ func newInvocation(
 	if err != nil {
 		return nil, fmt.Errorf("construct Worker invocation: %w", err)
 	}
-	return workerinvocation.NewExecutor(registryExecuteProvider{registry: registry}), nil
+	return workerinvocation.NewExecutor(registryRunner{registry: registry}), nil
 }
 
-// registryExecuteProvider routes transitional InvocationExecutor traffic through
+// registryRunner routes transitional InvocationExecutor traffic through
 // the private runners.Service.Execute boundary rather than holding a Strategy.
-type registryExecuteProvider struct{ registry runners.Service }
+type registryRunner struct{ registry runners.Service }
 
-func (provider registryExecuteProvider) Infer(
+func (runner registryRunner) Execute(
 	ctx context.Context,
 	request workers.ProviderInferenceRequest,
 ) (workers.InferenceResponse, error) {
-	if provider.registry == nil {
+	if runner.registry == nil {
 		return workers.InferenceResponse{}, fmt.Errorf("construct Worker invocation: agent runner registry is required")
 	}
-	return provider.registry.Execute(ctx, runners.ExecuteRequest{
+	return runner.registry.Execute(ctx, runners.ExecuteRequest{
 		Identity: runners.AgentIdentity,
 		Attempt:  request,
 	})

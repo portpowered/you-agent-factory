@@ -16,7 +16,6 @@ import (
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	catalog "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestNewServiceConstructsPublishedRoot(t *testing.T) {
@@ -131,7 +130,6 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 
 	probeCalls := 0
 	platformRunner := &inertPlatformCommandRunner{}
-	workersRunner := &inertWorkersCommandRunner{}
 	agyAllocator := &inertPTYAllocator{}
 	agyLocator := &inertExecutableLocator{}
 	agyInspector := &inertPathInspector{}
@@ -152,7 +150,6 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 			}, nil
 		})),
 		WithCommandRunner(platformRunner),
-		WithWorkersCommandRunner(workersRunner),
 		WithAgyPTY(AgyPTYPlatformDependencies{
 			Allocator: agyAllocator,
 			Locator:   agyLocator,
@@ -175,9 +172,6 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 	}
 	if platformRunner.calls != 0 {
 		t.Fatalf("platform command runner calls = %d, want inert construction", platformRunner.calls)
-	}
-	if workersRunner.calls != 0 {
-		t.Fatalf("workers command runner calls = %d, want inert construction", workersRunner.calls)
 	}
 	if agyAllocator.calls != 0 || agyLocator.calls != 0 || agyInspector.calls != 0 {
 		t.Fatalf(
@@ -237,16 +231,14 @@ func TestNewServiceAgyExecuteFailsClosedWithoutInjectedPTY(t *testing.T) {
 func TestNewServiceInjectsPlatformDependenciesThroughWireOptions(t *testing.T) {
 	t.Parallel()
 
-	workersRunner := &recordingWorkersCommandRunner{}
 	agyAllocator := &recordingPTYAllocator{
-		result: workers.PTYSessionResult{ExitCode: 0, CleanedText: "agy via wire"},
+		result: PTYSessionResult{ExitCode: 0, CleanedText: "agy via wire"},
 	}
 	agyPath := filepath.Join(t.TempDir(), "agy")
 	agyLocator := fakeExecutableLocator{string(providers.IDAntigravity): agyPath}
 	agyInspector := fakeExecutableInspector{agyPath: fakeExecutableInfo{directory: false}}
 
 	root, err := NewService(
-		WithWorkersCommandRunner(workersRunner),
 		WithAgyPTY(AgyPTYPlatformDependencies{
 			Allocator: agyAllocator,
 			Locator:   agyLocator,
@@ -256,10 +248,9 @@ func TestNewServiceInjectsPlatformDependenciesThroughWireOptions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
-	if workersRunner.calls != 0 || agyAllocator.calls != 0 {
+	if agyAllocator.calls != 0 {
 		t.Fatalf(
-			"construction invoked platform effects (runner=%d agy allocate=%d), want inert construction",
-			workersRunner.calls,
+			"construction invoked platform effects (agy allocate=%d), want inert construction",
 			agyAllocator.calls,
 		)
 	}
@@ -436,7 +427,6 @@ func TestNewServiceRejectsMissingRequiredConstructionPorts(t *testing.T) {
 				return newRoot(
 					nil,
 					nil,
-					nil,
 					AgyPTYPlatformDependencies{},
 					nil,
 					nil,
@@ -488,18 +478,6 @@ func (r *inertPlatformCommandRunner) Run(
 	panic("platform command runner invoked during inert construction")
 }
 
-type inertWorkersCommandRunner struct {
-	calls int
-}
-
-func (r *inertWorkersCommandRunner) Run(
-	_ context.Context,
-	_ workers.CommandRequest,
-) (workers.CommandResult, error) {
-	r.calls++
-	panic("workers command runner invoked during inert construction")
-}
-
 type inertTemporaryFileSystem struct {
 	calls int
 }
@@ -520,9 +498,9 @@ type inertPTYAllocator struct {
 
 func (a *inertPTYAllocator) Allocate(
 	_ context.Context,
-	_ workers.PTYProcessLaunch,
-	_ workers.PTYSessionConfig,
-) (workers.PTYSession, error) {
+	_ PTYProcessLaunch,
+	_ PTYSessionConfig,
+) (PTYSession, error) {
 	a.calls++
 	panic("agy PTY allocation during inert construction")
 }
@@ -555,18 +533,6 @@ func indexProvidersByID(descriptors []providers.Descriptor) map[providers.ID]pro
 		byID[descriptor.ID] = descriptor
 	}
 	return byID
-}
-
-type recordingWorkersCommandRunner struct {
-	calls int
-}
-
-func (r *recordingWorkersCommandRunner) Run(
-	_ context.Context,
-	_ workers.CommandRequest,
-) (workers.CommandResult, error) {
-	r.calls++
-	return workers.CommandResult{}, nil
 }
 
 type recordingTemporaryFileSystem struct {
@@ -625,23 +591,23 @@ func (f *recordingTemporaryFile) Close() error {
 
 type recordingPTYAllocator struct {
 	calls  int
-	result workers.PTYSessionResult
+	result PTYSessionResult
 }
 
 func (a *recordingPTYAllocator) Allocate(
 	_ context.Context,
-	_ workers.PTYProcessLaunch,
-	_ workers.PTYSessionConfig,
-) (workers.PTYSession, error) {
+	_ PTYProcessLaunch,
+	_ PTYSessionConfig,
+) (PTYSession, error) {
 	a.calls++
 	return &recordingPTYSession{result: a.result}, nil
 }
 
 type recordingPTYSession struct {
-	result workers.PTYSessionResult
+	result PTYSessionResult
 }
 
-func (s *recordingPTYSession) Run(context.Context) (workers.PTYSessionResult, error) {
+func (s *recordingPTYSession) Run(context.Context) (PTYSessionResult, error) {
 	return s.result, nil
 }
 

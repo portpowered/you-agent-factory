@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	effects "github.com/portpowered/infinite-you/pkg/services/providers/internal/effects"
 	codex "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 func TestCodexCommandEffectClassifiesStderrExitFailures(t *testing.T) {
@@ -41,7 +41,7 @@ func TestCodexCommandEffectClassifiesStderrExitFailures(t *testing.T) {
 			t.Parallel()
 
 			effect := codex.NewCommandEffect(codexCommandRunnerStub{
-				result: workers.CommandResult{
+				result: effects.CommandResult{
 					ExitCode: 1,
 					Stderr:   []byte(test.stderr),
 				},
@@ -59,9 +59,9 @@ func TestCodexCommandEffectClassifiesStderrExitFailures(t *testing.T) {
 }
 
 type codexCommandRunnerStub struct {
-	result workers.CommandResult
+	result effects.CommandResult
 }
 
-func (stub codexCommandRunnerStub) Run(_ context.Context, _ workers.CommandRequest) (workers.CommandResult, error) {
+func (stub codexCommandRunnerStub) Run(_ context.Context, _ effects.CommandRequest) (effects.CommandResult, error) {
 	return stub.result, nil
 }

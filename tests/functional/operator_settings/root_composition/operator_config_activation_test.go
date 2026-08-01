@@ -156,7 +156,7 @@ func TestOperatorConfigDocumentUpdateActivatesThroughRootBuildProcessPublicCLISu
 		t.Fatalf("operator-config CreateTemporaryFile calls during init = %d, want > 0 via edges", got)
 	}
 
-	configPath := operatorsettings.DefaultConfigPath(homeDir)
+	configPath := filepath.Join(homeDir, ".you-agent-factory", "config.json")
 	payload, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatalf("read updated operator config: %v", err)

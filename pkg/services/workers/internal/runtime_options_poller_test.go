@@ -105,7 +105,7 @@ func (b *pollerOmissionBuilder) Build(
 	*workers.Context,
 	logging.Logger,
 	*bool,
-	workers.Provider,
+	workers.Runner,
 	workers.ProgressPublisher,
 	workerexecutor.ScriptEventRecorder,
 	workers.InferenceEventRecorder,

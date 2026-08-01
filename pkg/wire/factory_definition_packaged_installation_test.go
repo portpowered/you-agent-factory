@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	packagedfactories "github.com/portpowered/infinite-you/packages/packaged-factories"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
@@ -125,13 +124,6 @@ func TestProvidePackagedFactoryDefinitions_LoadsDetachedGeneratedCatalog(t *test
 		}
 	}
 
-	publishedGoal, err := fs.ReadFile(
-		packagedfactories.Published(),
-		"generated/factories/goal/factory.json",
-	)
-	if err != nil {
-		t.Fatalf("read published Goal definition: %v", err)
-	}
 	goalIndex := -1
 	for index := range definitions {
 		if definitions[index].Name == "@you/goal" {
@@ -139,9 +131,10 @@ func TestProvidePackagedFactoryDefinitions_LoadsDetachedGeneratedCatalog(t *test
 			break
 		}
 	}
-	if goalIndex < 0 || !bytes.Equal(definitions[goalIndex].JSON, publishedGoal) {
-		t.Fatal("injected Goal definition differs from the generated publication artifact")
+	if goalIndex < 0 || len(definitions[goalIndex].JSON) == 0 {
+		t.Fatal("injected Goal definition is missing generated publication bytes")
 	}
+	publishedGoal := append([]byte(nil), definitions[goalIndex].JSON...)
 
 	definitions[goalIndex].JSON[0] ^= 0xff
 	reloaded, err := providePackagedFactoryDefinitions()

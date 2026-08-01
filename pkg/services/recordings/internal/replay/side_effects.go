@@ -155,30 +155,30 @@ func NewSideEffects(
 	return &SideEffects{records: records}, nil
 }
 
-// Infer implements provider.Provider by returning the recorded provider response
-// for the matching dispatch.
-func (s *SideEffects) Infer(ctx context.Context, req workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
+// Execute implements the Workers Runner contract by returning the recorded
+// provider response for the matching dispatch.
+func (s *SideEffects) Execute(ctx context.Context, req workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
 	record, err := s.claim(ctx, "provider", func(candidate sideEffectRecord) bool {
 		return providerRequestMatches(candidate, req)
 	})
 	if err != nil {
-		return workerexecution.InferenceResponse{}, err
+		return workerexecution.RunnerExecutionResult{}, err
 	}
 	if !record.hasCompletion {
-		return workerexecution.InferenceResponse{}, missingCompletionError(record.dispatch)
+		return workerexecution.RunnerExecutionResult{}, missingCompletionError(record.dispatch)
 	}
 
 	result := record.completion.result
 	failureMetadata := result.FailureMetadata
 	if result.Outcome == workerexecution.OutcomeFailed && failureMetadata != nil {
-		return workerexecution.InferenceResponse{}, workers.NewProviderError(
+		return workerexecution.RunnerExecutionResult{}, workers.NewProviderError(
 			failureMetadata.Type,
 			result.Error,
 			errors.New(result.Error),
 		)
 	}
 
-	return workerexecution.InferenceResponse{
+	return workerexecution.RunnerExecutionResult{
 		Content:         result.Output,
 		ProviderSession: workerexecution.CloneProviderSessionMetadata(result.ProviderSession),
 		Diagnostics:     workerexecution.CloneWorkDiagnostics(record.completion.diagnostics),
@@ -317,5 +317,5 @@ func executionMetadataMatches(recorded, observed work.ExecutionMetadata) bool {
 	return true
 }
 
-var _ workers.Provider = (*SideEffects)(nil)
+var _ workers.Runner = (*SideEffects)(nil)
 var _ workers.CommandRunner = (*SideEffects)(nil)

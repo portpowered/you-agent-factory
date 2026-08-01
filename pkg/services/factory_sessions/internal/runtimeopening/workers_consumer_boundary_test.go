@@ -36,7 +36,7 @@ func TestRuntimeOpeningFactoryRolesNameWorkersRootContracts(t *testing.T) {
 	)
 
 	var _ ExternalEffects = ExternalEffects{
-		ProviderOverride:     (workers.Provider)(nil),
+		ProviderOverride:     (workers.Runner)(nil),
 		HostedClock:          (automations.HostedLinearClock)(nil),
 		HostedHTTPClient:     (automations.HostedLinearHTTPDoer)(nil),
 		HostedSecretResolver: (automations.HostedLinearSecretResolver)(nil),
@@ -61,7 +61,7 @@ func TestNewWorkerExecutionForwardsWorkersRootBindings(t *testing.T) {
 	var gotRunnerID string
 	var gotWorktree string
 	var gotPTY workers.PTYAllocator
-	var gotProvider workers.Provider
+	var gotProvider workers.Runner
 
 	workersRuntimeFactory := func(
 		_ roles.CurrentRuntimeResolver,
@@ -75,7 +75,7 @@ func TestNewWorkerExecutionForwardsWorkersRootBindings(t *testing.T) {
 		runner string,
 		worktree string,
 		_ *bool,
-		provider workers.Provider,
+		provider workers.Runner,
 		_ func() time.Time,
 		_ work.ContentMaterializer,
 		_ []operatorconfig.ACPIntegration,

@@ -28,7 +28,7 @@ func TestExecutionServiceRolesNameWorkersRootContracts(t *testing.T) {
 	var (
 		_ LiveChildInvocationFactory
 		_ workers.InvocationExecutor
-		_ workers.Provider
+		_ workers.Runner
 		_ workers.ProgressPublisher
 	)
 }
@@ -37,7 +37,7 @@ func TestSmokeLiveChildProviderUsesWorkersRootInferenceContracts(t *testing.T) {
 	t.Parallel()
 
 	provider := SmokeLiveChildProvider()
-	resp, err := provider.Infer(context.Background(), workers.ProviderInferenceRequest{
+	resp, err := provider.Execute(context.Background(), workers.RunnerExecutionRequest{
 		Dispatch: work.WorkDispatch{
 			DispatchID: "dispatch-boundary",
 			WorkerType: "agent-run-fake-child",

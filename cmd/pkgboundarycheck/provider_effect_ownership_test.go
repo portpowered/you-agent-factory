@@ -6,6 +6,71 @@ import (
 	"testing"
 )
 
+func TestRunRejectsWorkersImportFromProvidersCanonicalEffectBoundary(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoSourceFile(t, repoRoot, providersCanonicalAdapterPackagePrefix+"codex/command.go", `package codex
+
+import workers "github.com/portpowered/infinite-you/pkg/services/workers"
+
+type Effect struct {
+	Runner workers.CommandRunner
+}
+`)
+
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want canonical Providers Workers effect edge rejected")
+	}
+	got := stderr.String()
+	for _, want := range []string{
+		"prohibited Providers-to-Workers effect edge",
+		providersCanonicalAdapterPackagePrefix + "codex",
+		"Providers owns provider execution",
+		"composition adapters belong in pkg/wire",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("run() stderr = %q, want substring %q", got, want)
+		}
+	}
+}
+
+func TestRunAllowsWorkersImportFromAbsorbedProvidersMigrationDebt(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoSourceFile(t, repoRoot, workersProviderMigrationDebtPrefix+"codex/command.go", `package codex
+
+import workers "github.com/portpowered/infinite-you/pkg/services/workers"
+
+type Effect struct {
+	Runner workers.CommandRunner
+}
+`)
+
+	stderr := &bytes.Buffer{}
+	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err != nil {
+		t.Fatalf("run() error = %v, want documented migration debt allowed; stderr=%q", err, stderr.String())
+	}
+}
+
+func TestRunAllowsProvidersCanonicalEffectBoundaryWithoutWorkersImport(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoSourceFile(t, repoRoot, providersCanonicalExecutionWirePackage+"/wire.go", `package wire
+
+type Effect struct{}
+`)
+
+	stderr := &bytes.Buffer{}
+	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err != nil {
+		t.Fatalf("run() error = %v, want clean canonical Providers effect boundary allowed; stderr=%q", err, stderr.String())
+	}
+}
+
 func TestRunAllowsProvidersExecutionLeafOwningProviderEffectContract(t *testing.T) {
 	t.Parallel()
 
@@ -136,6 +201,33 @@ type Edges struct {
 	stderr := &bytes.Buffer{}
 	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err != nil {
 		t.Fatalf("run() error = %v, want edges aggregating Providers leaf effect contract allowed; stderr=%q", err, stderr.String())
+	}
+}
+
+func TestRunAllowsEdgesReferencingWorkersRunnerContract(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoSourceFile(t, repoRoot, "pkg/services/workers/runner.go", `package workers
+
+type Runner interface {
+	Execute()
+}
+`)
+	writeGoSourceFile(t, repoRoot, "pkg/services/edges/definition.go", `package edges
+
+import "github.com/portpowered/infinite-you/pkg/services/workers"
+
+// Deliberate fixture: Workers owns request-scoped execution through Runner;
+// this is not a Providers Infer effect port.
+type Edges struct {
+	ProviderOverride workers.Runner
+}
+`)
+
+	stderr := &bytes.Buffer{}
+	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err != nil {
+		t.Fatalf("run() error = %v, want Workers Runner edge accepted; stderr=%q", err, stderr.String())
 	}
 }
 
@@ -778,4 +870,3 @@ type Provider interface {
 		}
 	}
 }
-

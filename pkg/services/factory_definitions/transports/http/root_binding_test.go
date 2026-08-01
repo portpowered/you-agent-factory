@@ -2,6 +2,7 @@ package http_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -325,3 +326,65 @@ var _ interface {
 	GetCurrentFactoryBySessionId(http.ResponseWriter, *http.Request, factoryapi.SessionID)
 	SaveCurrentFactoryBySessionId(http.ResponseWriter, *http.Request, factoryapi.SessionID)
 } = (*factorydefinitionshttp.Adapter)(nil)
+
+func TestListPackagedFactoriesUsesDefinitionsRootListAndResolve(t *testing.T) {
+	definition := factorydefinitions.PackagedDefinition{
+		Name:    "@you/example",
+		Project: "builtin-example",
+		JSON:    []byte(`{"name":"@you/example","description":{"type":"LOCALIZABLE_ASSET","value":"Example Factory"},"examples":[{"name":"example","description":{"type":"LOCALIZABLE_ASSET","value":"Run example"},"args":{}}]}`),
+		YAML:    []byte("name: '@you/example'\n"),
+		Formats: []factorydefinitions.PackagedFactoryFormat{factorydefinitions.PackagedFactoryFormatJSON},
+	}
+	fake := &packagedFactoryDefinitionsRootFake{
+		listResult: factorydefinitions.ListBuiltInPackagedFactoriesResult{
+			Entries: []factorydefinitions.BuiltInPackagedFactoryEntry{{
+				Name: definition.Name, Project: definition.Project, Formats: definition.Formats,
+			}},
+		},
+		resolveResult: factorydefinitions.ResolveBuiltInPackagedFactoryResult{Definition: definition},
+	}
+	adapter := factorydefinitionshttp.NewHandlerFromRoot(factorydefinitionshttp.RootBinding{Definitions: fake}, zap.NewNop())
+
+	recorder := httptest.NewRecorder()
+	adapter.ListPackagedFactories(recorder, httptest.NewRequest(http.MethodGet, "/packaged-factories", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", recorder.Code, recorder.Body.String())
+	}
+	var response factoryapi.PackagedFactoryCatalogResponse
+	if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(response.Factories) != 1 || response.Factories[0].Name != definition.Name {
+		t.Fatalf("factories = %#v, want one %q", response.Factories, definition.Name)
+	}
+	if response.Factories[0].Slug != "example" || response.Factories[0].Description.Value != "Example Factory" || response.Factories[0].Yaml == "" {
+		t.Fatalf("mapped entry = %#v", response.Factories[0])
+	}
+	if fake.listCalls != 1 || fake.resolveCalls != 1 {
+		t.Fatalf("root calls = list:%d resolve:%d, want list:1 resolve:1", fake.listCalls, fake.resolveCalls)
+	}
+}
+
+type packagedFactoryDefinitionsRootFake struct {
+	factorydefinitions.Service
+	listResult    factorydefinitions.ListBuiltInPackagedFactoriesResult
+	resolveResult factorydefinitions.ResolveBuiltInPackagedFactoryResult
+	listCalls     int
+	resolveCalls  int
+}
+
+func (fake *packagedFactoryDefinitionsRootFake) ListBuiltInPackagedFactories(
+	context.Context,
+	factorydefinitions.ListBuiltInPackagedFactoriesRequest,
+) (factorydefinitions.ListBuiltInPackagedFactoriesResult, error) {
+	fake.listCalls++
+	return fake.listResult, nil
+}
+
+func (fake *packagedFactoryDefinitionsRootFake) ResolveBuiltInPackagedFactory(
+	context.Context,
+	factorydefinitions.ResolveBuiltInPackagedFactoryRequest,
+) (factorydefinitions.ResolveBuiltInPackagedFactoryResult, error) {
+	fake.resolveCalls++
+	return fake.resolveResult, nil
+}

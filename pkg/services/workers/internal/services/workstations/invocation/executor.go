@@ -7,25 +7,24 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// Executor adapts the public Provider contract to one Worker invocation
-// attempt.
+// Executor adapts the public Runner contract to one Worker invocation attempt.
 type Executor struct {
-	provider workers.Provider
+	runner workers.Runner
 }
 
 // NewExecutor constructs the concrete Workers invocation adapter selected by
 // Wire and same-owner Workers constituents.
-func NewExecutor(provider workers.Provider) workers.InvocationExecutor {
-	if provider == nil {
+func NewExecutor(runner workers.Runner) workers.InvocationExecutor {
+	if runner == nil {
 		return nil
 	}
-	return &Executor{provider: provider}
+	return &Executor{runner: runner}
 }
 
-// NewProviderExecutor constructs the concrete adapter without narrowing its
+// NewRunnerExecutor constructs the concrete adapter without narrowing its
 // return type. It is useful in same-owner tests that exercise adapter details.
-func NewProviderExecutor(provider workers.Provider) *Executor {
-	return &Executor{provider: provider}
+func NewRunnerExecutor(runner workers.Runner) *Executor {
+	return &Executor{runner: runner}
 }
 
 func (e *Executor) Execute(
@@ -39,7 +38,7 @@ func (e *Executor) Execute(
 	if err := ctx.Err(); err != nil {
 		return failedInvocationResult(attempt, err), err
 	}
-	if e == nil || e.provider == nil {
+	if e == nil || e.runner == nil {
 		err := workers.NewProviderError(
 			workers.WorkFailureTypeMisconfigured,
 			"provider execution requires a provider",
@@ -48,7 +47,7 @@ func (e *Executor) Execute(
 		return failedInvocationResult(attempt, err), err
 	}
 
-	response, err := e.provider.Infer(ctx, input.Request)
+	response, err := e.runner.Execute(ctx, input.Request)
 	if err != nil {
 		return failedInvocationResult(attempt, err), err
 	}

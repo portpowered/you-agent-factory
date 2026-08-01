@@ -170,7 +170,7 @@ func TestNewDurableExecutionCanonicalizesOperatorDefaultsAndPresets(t *testing.T
 	executionFactory := func(
 		_ string,
 		_ factorysessions.PersistencePolicy,
-		_ workers.Provider,
+		_ workers.Runner,
 		_ factoryruntime.Clock,
 		_ map[string]struct{},
 		settings factoryruntime.JavaScriptWorkerSettings,

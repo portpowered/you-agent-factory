@@ -17,7 +17,6 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	providercontract "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -40,7 +39,7 @@ type FunctionalAPIServerConfig struct {
 	ResponseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits
 	Args                         []string
 	Env                          []string
-	ProviderOverride             providercontract.Provider
+	ProviderOverride             workers.Runner
 	Edges                        serviceedges.Edges
 }
 

@@ -228,7 +228,7 @@ type serviceModeBlockingProvider struct {
 	calls   int
 }
 
-func (p *serviceModeBlockingProvider) Infer(
+func (p *serviceModeBlockingProvider) Execute(
 	ctx context.Context,
 	_ workerexecution.ProviderInferenceRequest,
 ) (workerexecution.InferenceResponse, error) {

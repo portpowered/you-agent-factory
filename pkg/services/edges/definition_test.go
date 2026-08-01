@@ -436,6 +436,6 @@ func (*edgeDirectoryReplacementStore) Commit(string, string, string) (string, er
 
 func (*edgeDirectoryReplacementStore) Restore(string, string) {}
 
-func (*stubProvider) Infer(context.Context, workers.ProviderInferenceRequest) (workers.InferenceResponse, error) {
-	return workers.InferenceResponse{}, nil
+func (*stubProvider) Execute(context.Context, workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error) {
+	return workers.RunnerExecutionResult{}, nil
 }

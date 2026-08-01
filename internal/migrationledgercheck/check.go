@@ -14,10 +14,14 @@ import (
 )
 
 const (
-	DefaultLedgerPath    = "docs/temp/functional-tests-expansion/migration-ledger-inventory.json"
-	DefaultChecklistPath = "docs/temp/functional-tests-expansion/test-file-checklist.md"
-	FunctionalRoot       = "tests/functional"
-	InternalPrefix       = "tests/functional/internal/"
+	// CanonicalLedgerPath and CanonicalChecklistPath are committed under
+	// docs/internal so the checker never falls back to the ignored planner tree.
+	CanonicalLedgerPath    = "docs/internal/functional-tests-expansion/migration-ledger-inventory.json"
+	CanonicalChecklistPath = "docs/internal/functional-tests-expansion/test-file-checklist.md"
+	DefaultLedgerPath      = CanonicalLedgerPath
+	DefaultChecklistPath   = CanonicalChecklistPath
+	FunctionalRoot         = "tests/functional"
+	InternalPrefix         = "tests/functional/internal/"
 )
 
 var checklistPathPattern = regexp.MustCompile("`(tests/functional/[^`]+_test\\.go)`")
@@ -84,6 +88,7 @@ var RequiredSpecialtyTargets = []string{
 	"current-factory-watcher-switch-smoke",
 	"test-root-process-acceptance",
 	"script-timeout-companion-smoke-100",
+	"test-built-cli-acceptance",
 }
 
 // ExpectedDeletionOnlyBatches is the ordered catch-all retirement batch index.
@@ -111,15 +116,27 @@ var ExpectedDeletionOnlyBatches = []string{
 
 // Check validates ledger completeness against the live functional tree.
 func Check(repoRoot, ledgerPath, checklistPath string) error {
-	ledger, err := LoadLedger(filepath.Join(repoRoot, ledgerPath))
+	root, err := resolveRepositoryRoot(repoRoot)
 	if err != nil {
 		return err
 	}
-	live, err := ScanLiveScenarios(repoRoot)
+	resolvedLedgerPath, err := resolveRepositoryPath(root, ledgerPath)
 	if err != nil {
 		return err
 	}
-	checklist, err := LoadChecklistPaths(filepath.Join(repoRoot, checklistPath))
+	ledger, err := LoadLedger(resolvedLedgerPath)
+	if err != nil {
+		return err
+	}
+	live, err := ScanLiveScenarios(root)
+	if err != nil {
+		return err
+	}
+	resolvedChecklistPath, err := resolveRepositoryPath(root, checklistPath)
+	if err != nil {
+		return err
+	}
+	checklist, err := LoadChecklistPaths(resolvedChecklistPath)
 	if err != nil {
 		return err
 	}
@@ -128,7 +145,7 @@ func Check(repoRoot, ledgerPath, checklistPath string) error {
 	problems = append(problems, checkLaneSummary(ledger)...)
 	problems = append(problems, checkDeletionOnlyBatches(ledger)...)
 	problems = append(problems, checkSpecialtyTargets(ledger)...)
-	if err := CheckPackagedFactoryInvocationMatrix(repoRoot, checklistPath); err != nil {
+	if err := CheckPackagedFactoryInvocationMatrix(root, resolvedChecklistPath); err != nil {
 		problems = append(problems, err.Error())
 	}
 	if len(problems) > 0 {
@@ -136,6 +153,34 @@ func Check(repoRoot, ledgerPath, checklistPath string) error {
 		return fmt.Errorf("migration ledger completeness check failed (%d problems):\n- %s", len(problems), strings.Join(problems, "\n- "))
 	}
 	return nil
+}
+
+func resolveRepositoryRoot(repoRoot string) (string, error) {
+	trimmed := strings.TrimSpace(repoRoot)
+	if trimmed == "" {
+		return "", fmt.Errorf("resolve repository root: path is empty")
+	}
+	absolute, err := filepath.Abs(filepath.FromSlash(trimmed))
+	if err != nil {
+		return "", fmt.Errorf("resolve repository root %q: %w", repoRoot, err)
+	}
+	return filepath.Clean(absolute), nil
+}
+
+func resolveRepositoryPath(repoRoot, path string) (string, error) {
+	root, err := resolveRepositoryRoot(repoRoot)
+	if err != nil {
+		return "", err
+	}
+	trimmed := strings.TrimSpace(path)
+	if trimmed == "" {
+		return "", fmt.Errorf("resolve repository path: path is empty")
+	}
+	candidate := filepath.FromSlash(trimmed)
+	if filepath.IsAbs(candidate) {
+		return filepath.Clean(candidate), nil
+	}
+	return filepath.Clean(filepath.Join(root, candidate)), nil
 }
 
 func reconcileLiveAndLedger(live []LiveScenario, ledger *Ledger, checklist map[string]struct{}) []string {
@@ -295,10 +340,14 @@ func LoadChecklistPaths(path string) (map[string]struct{}, error) {
 
 // ScanLiveScenarios inventories customer top-level Test* under tests/functional.
 func ScanLiveScenarios(repoRoot string) ([]LiveScenario, error) {
-	functionalRoot := filepath.Join(repoRoot, filepath.FromSlash(FunctionalRoot))
+	root, err := resolveRepositoryRoot(repoRoot)
+	if err != nil {
+		return nil, err
+	}
+	functionalRoot := filepath.Join(root, filepath.FromSlash(FunctionalRoot))
 	var scenarios []LiveScenario
 
-	err := filepath.WalkDir(functionalRoot, func(path string, entry os.DirEntry, walkErr error) error {
+	err = filepath.WalkDir(functionalRoot, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -308,7 +357,7 @@ func ScanLiveScenarios(repoRoot string) ([]LiveScenario, error) {
 		if !strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
-		rel, err := filepath.Rel(repoRoot, path)
+		rel, err := filepath.Rel(root, path)
 		if err != nil {
 			return err
 		}

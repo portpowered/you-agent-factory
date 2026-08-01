@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -70,7 +71,9 @@ func provideConfiguredProvidersService(
 		providerswire.WithRegistrations(edges.ProviderRegistrations...),
 	}
 	if workersRunner != nil {
-		options = append(options, providerswire.WithWorkersCommandRunner(workersRunner))
+		options = append(options, providerswire.WithCommandEffectRunner(
+			workersProviderCommandRunner{runner: workersRunner},
+		))
 		return providerswire.NewService(options...)
 	}
 	if edges.ProviderCommandRunner != nil {
@@ -83,6 +86,102 @@ func provideConfiguredProvidersService(
 	}
 	options = append(options, providerswire.WithCommandRunner(commandRunner))
 	return providerswire.NewService(options...)
+}
+
+// workersProviderCommandRunner is the composition-root projection from the
+// Workers command edge into the Providers-owned private effect contract. The
+// projection keeps only the correlation fields needed by Workers mock
+// interception; Providers adapters never import the Workers contract.
+type workersProviderCommandRunner struct {
+	runner workers.CommandRunner
+}
+
+func (runner workersProviderCommandRunner) Run(
+	ctx context.Context,
+	request providerswire.CommandRequest,
+) (providerswire.CommandResult, error) {
+	if runner.runner == nil {
+		return providerswire.CommandResult{}, fmt.Errorf("Workers provider command runner is required")
+	}
+	result, err := runner.runner.Run(ctx, workers.CommandRequest{
+		Command:         request.Command,
+		Args:            request.Args,
+		Stdin:           request.Stdin,
+		Env:             request.Env,
+		WorkDir:         request.WorkDir,
+		DispatchID:      request.AttemptID,
+		WorkerType:      request.WorkerType,
+		WorkstationName: request.WorkstationName,
+	})
+	return providerswire.CommandResult{
+		Stdout:   result.Stdout,
+		Stderr:   result.Stderr,
+		ExitCode: result.ExitCode,
+	}, err
+}
+
+func (runner workersProviderCommandRunner) RunStreaming(
+	ctx context.Context,
+	request providerswire.CommandRequest,
+	observer providerswire.OutputChunkObserver,
+) (providerswire.CommandResult, error) {
+	if runner.runner == nil {
+		return providerswire.CommandResult{}, fmt.Errorf("Workers provider command runner is required")
+	}
+	workersRequest := workers.CommandRequest{
+		Command:         request.Command,
+		Args:            request.Args,
+		Stdin:           request.Stdin,
+		Env:             request.Env,
+		WorkDir:         request.WorkDir,
+		DispatchID:      request.AttemptID,
+		WorkerType:      request.WorkerType,
+		WorkstationName: request.WorkstationName,
+	}
+	if streaming, ok := runner.runner.(interface {
+		RunStreaming(context.Context, workers.CommandRequest, workers.OutputChunkObserver) (workers.CommandResult, error)
+	}); ok {
+		var observerMu sync.Mutex
+		var observerErr error
+		result, err := streaming.RunStreaming(ctx, workersRequest, func(stream string, chunk []byte) {
+			if observer == nil {
+				return
+			}
+			observerMu.Lock()
+			defer observerMu.Unlock()
+			if observerErr == nil {
+				observerErr = observer(stream, chunk)
+			}
+		})
+		if err == nil {
+			observerMu.Lock()
+			err = observerErr
+			observerMu.Unlock()
+		}
+		return providerswire.CommandResult{
+			Stdout:   result.Stdout,
+			Stderr:   result.Stderr,
+			ExitCode: result.ExitCode,
+		}, err
+	}
+	result, err := runner.runner.Run(ctx, workersRequest)
+	var observerErr error
+	if observer != nil {
+		if len(result.Stdout) > 0 {
+			observerErr = observer(providerswire.OutputStreamStdout, append([]byte(nil), result.Stdout...))
+		}
+		if observerErr == nil && len(result.Stderr) > 0 {
+			observerErr = observer(providerswire.OutputStreamStderr, append([]byte(nil), result.Stderr...))
+		}
+	}
+	if err == nil {
+		err = observerErr
+	}
+	return providerswire.CommandResult{
+		Stdout:   result.Stdout,
+		Stderr:   result.Stderr,
+		ExitCode: result.ExitCode,
+	}, err
 }
 
 func projectACPIntegrations(integrations []operatorsettings.ACPIntegration) []providers.ACPIntegration {
@@ -524,7 +623,7 @@ func provideFactorySessionExecutionFactory(
 	return func(
 		projectRoot string,
 		persistencePolicy factorysessions.PersistencePolicy,
-		provider workers.Provider,
+		provider workers.Runner,
 		clock factoryruntime.Clock,
 		workerPresetIDs map[string]struct{},
 		workerSettings factoryruntime.JavaScriptWorkerSettings,
@@ -696,7 +795,7 @@ func provideReplayExecutionFactory() recordings.ReplayExecutionFactory {
 	return func(
 		artifact *factorydefinitions.ReplayArtifact,
 	) (
-		workers.Provider,
+		workers.Runner,
 		workers.CommandRunner,
 		[]recordings.ReplayHook,
 		recordings.CompletionDeliveryPlanner,
@@ -787,7 +886,7 @@ func provideWorkersRuntimeFactory(
 		factoryRunnerID string,
 		runWorktree string,
 		invocationSkipPermissionsOverride *bool,
-		providerOverride workers.Provider,
+		providerOverride workers.Runner,
 		now func() time.Time,
 		contentMaterializer work.ContentMaterializer,
 		acpIntegrations []operatorsettings.ACPIntegration,
@@ -892,7 +991,7 @@ func provideWorkersProviderTemporaryFileSystem(edges serviceedges.Edges) platfor
 }
 
 func provideProvidersAgyPTYPlatform(edges serviceedges.Edges) (providerswire.AgyPTYPlatformDependencies, error) {
-	allocator, err := provideAgyPTYAllocator(edges)
+	allocator, err := provideProvidersAgyPTYAllocator(edges)
 	if err != nil {
 		return providerswire.AgyPTYPlatformDependencies{}, err
 	}
@@ -1091,7 +1190,7 @@ func provideProviderFromCommandRunnerFactory(
 	}
 	operatingSystem := resolveWorkersOperatingSystem(edges)
 	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
-	return func(runner workers.CommandRunner) (workers.Provider, error) {
+	return func(runner workers.CommandRunner) (workers.Runner, error) {
 		return workerswire.NewProviderFromCommandRunner(
 			providersService, runner, commandClock, allocator, resolveSymlinks,
 			executableLocator, executableInspector, executableFiles, operatingSystem, temporaryFiles,

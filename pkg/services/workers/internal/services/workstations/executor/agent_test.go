@@ -82,7 +82,7 @@ func TestEffectiveWorkerDefinitionClearsEmptyResolvedPlaceholders(t *testing.T) 
 	}
 }
 
-func (m *agentMockProvider) Infer(_ context.Context, req workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
+func (m *agentMockProvider) Execute(_ context.Context, req workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
 	m.lastReq = req
 	m.callCount++
 	if idx := m.callCount - 1; idx < len(m.responses) || idx < len(m.errors) {

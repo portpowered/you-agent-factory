@@ -62,5 +62,5 @@ func newServerFromRoles(
 		WorkService:     workService,
 		SessionRequests: sessionRequests,
 	}, logger)
-	return NewServer(handler, modelsHTTP, providerSessions, logger)
+	return NewServer(handler, modelsHTTP, providerSessions, logger, nil)
 }

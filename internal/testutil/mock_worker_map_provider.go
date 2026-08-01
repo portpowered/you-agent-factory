@@ -58,8 +58,8 @@ func NewMockWorkerMapProviderWithDefault(responses map[string][]WorkResponse) *M
 	}
 }
 
-// Infer records the request and returns the next predetermined response.
-func (m *MockWorkerMapProvider) Infer(_ context.Context, req workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
+// Execute records the request and returns the next predetermined response.
+func (m *MockWorkerMapProvider) Execute(_ context.Context, req workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -86,6 +86,12 @@ func (m *MockWorkerMapProvider) Infer(_ context.Context, req workerexecution.Pro
 		return workerexecution.InferenceResponse{}, errors.New("failed")
 	}
 	return m.defaultR, nil
+}
+
+// Infer preserves the test helper's legacy convenience spelling. Production
+// Workers execution uses Runner.Execute.
+func (m *MockWorkerMapProvider) Infer(ctx context.Context, req workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
+	return m.Execute(ctx, req)
 }
 
 // Calls returns all InferenceRequests received by this provider, in order.
@@ -119,4 +125,4 @@ func (m *MockWorkerMapProvider) LastCall(workerType string) workerexecution.Prov
 }
 
 // Compile-time check.
-var _ workerexecution.Provider = (*MockWorkerMapProvider)(nil)
+var _ workerexecution.Runner = (*MockWorkerMapProvider)(nil)

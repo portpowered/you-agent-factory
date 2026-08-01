@@ -4,12 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/fs"
 	"strings"
 	"sync"
 	"testing"
 
-	packagedfactories "github.com/portpowered/infinite-you/packages/packaged-factories"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime"
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestratorcontract"
@@ -324,10 +322,7 @@ func runPackagedWorkflowWithPolicy(
 	executor factory.JavaScriptChildExecutor,
 ) factory.JavaScriptRuntimeOutcome {
 	t.Helper()
-	source, err := fs.ReadFile(packagedfactories.Source(), "factories/"+slug+"/factory.js")
-	if err != nil {
-		t.Fatalf("read packaged workflow: %v", err)
-	}
+	source := publishedPackagedWorkflowSource(t, slug)
 	encodedArgs, err := json.Marshal(args)
 	if err != nil {
 		t.Fatalf("marshal args: %v", err)
@@ -352,6 +347,205 @@ func runPackagedWorkflowWithPolicy(
 	}
 	return outcome
 }
+
+// publishedPackagedWorkflowSource is a behavior-only fixture for runtime unit
+// tests. Published catalog materialization is exercised at the Factory
+// Definitions owner and public functional boundaries; this package tests the
+// runtime policy against the same packaged workflow shapes without composing a
+// second customer process inside a service-internal test.
+func publishedPackagedWorkflowSource(t *testing.T, slug string) string {
+	t.Helper()
+	switch slug {
+	case "deep-research":
+		return deepResearchWorkflowFixture
+	case "spawn":
+		return spawnWorkflowFixture
+	case "tournament":
+		return tournamentWorkflowFixture
+	default:
+		t.Fatalf("no packaged workflow behavior fixture for %q", slug)
+		return ""
+	}
+}
+
+const deepResearchWorkflowFixture = `return (async function () {
+  const specialists = [
+    { label: "research-specialist-technical", prompt: "Investigate the technical aspects of the topic." },
+    { label: "research-specialist-context", prompt: "Investigate the context and practical implications of the topic." }
+  ];
+  const results = await parallel(specialists.map(function (specialist) {
+    return {
+      label: specialist.label,
+      prompt: specialist.prompt + "\n\nTopic:\n" + args.topic,
+      skipPermissions: true
+    };
+  }));
+  const findings = [];
+  for (let index = 0; index < results.length; index += 1) {
+    const result = results[index];
+    if (result.status !== "COMPLETED") {
+      if (specialists[index].label !== "research-specialist-technical") {
+        throw "research specialist " + (index + 1) + " failed";
+      }
+      const retry = await agent.run({
+        label: "research-specialist-technical-retry",
+        prompt: specialists[index].prompt + " Retry the technical investigation.\n\nTopic:\n" + args.topic,
+        skipPermissions: true
+      });
+      if (retry.status !== "COMPLETED") {
+        throw "research specialist technical retry failed";
+      }
+      findings.push(retry.output.text);
+      continue;
+    }
+    findings.push(result.output.text);
+  }
+  const lead = await agent.run({
+    label: "lead-research-synthesis",
+    prompt: "Synthesize these bounded specialist findings into one answer:\n" + JSON.stringify(findings),
+    skipPermissions: true
+  });
+  if (lead.status !== "COMPLETED") {
+    throw "lead research synthesis failed";
+  }
+  return lead.output.text;
+})()`
+
+const spawnWorkflowFixture = `return (async function () {
+  const requiredCalls = args.count + 2;
+  if (requiredCalls > workflow.budget().maxAgents) {
+    throw "spawn requires " + requiredCalls + " agent calls but maxAgents is " + workflow.budget().maxAgents;
+  }
+  const plan = await agent.run({
+    label: "spawn-planner",
+    prompt: "Return exactly " + args.count + " distinct tasks as a JSON array for:\n" + args.request,
+    skipPermissions: true
+  });
+  if (plan.status !== "COMPLETED") {
+    throw "spawn planner failed";
+  }
+  let tasks;
+  try {
+    const text = plan.output.text.trim();
+    const start = text.indexOf("[");
+    const end = text.lastIndexOf("]");
+    if (start < 0 || end < start) {
+      throw "missing task array";
+    }
+    tasks = JSON.parse(text.slice(start, end + 1));
+  } catch (_) {
+    throw "spawn planner returned invalid JSON";
+  }
+  if (!Array.isArray(tasks) || tasks.length !== args.count) {
+    throw "spawn planner must return exactly " + args.count + " tasks";
+  }
+  const seen = {};
+  for (let index = 0; index < tasks.length; index += 1) {
+    if (typeof tasks[index] !== "string" || tasks[index].trim() === "") {
+      throw "spawn planner task " + (index + 1) + " is empty";
+    }
+    const key = tasks[index].trim().toLowerCase();
+    if (seen[key]) {
+      throw "spawn planner returned duplicate tasks";
+    }
+    seen[key] = true;
+    tasks[index] = tasks[index].trim();
+  }
+  const results = await parallel(tasks.map(function (task, index) {
+    return {
+      label: "spawn-task-" + (index + 1),
+      prompt: "Complete this task:\n" + task + "\n\nRequest:\n" + args.request,
+      skipPermissions: true
+    };
+  }));
+  const findings = [];
+  for (let index = 0; index < results.length; index += 1) {
+    if (results[index].status !== "COMPLETED") {
+      throw "spawn task " + (index + 1) + " failed";
+    }
+    findings.push({ index: index + 1, task: tasks[index], result: results[index].output.text });
+  }
+  const merged = await agent.run({
+    label: "spawn-merger",
+    prompt: "Merge these ordered results:\n" + JSON.stringify(findings),
+    skipPermissions: true
+  });
+  if (merged.status !== "COMPLETED") {
+    throw "spawn merger failed";
+  }
+  const mergedText = merged.output.text.trim();
+  if (!mergedText) {
+    throw "spawn merger returned an empty result";
+  }
+  return mergedText;
+})()`
+
+const tournamentWorkflowFixture = `return (async function () {
+  const entrantCount = Math.pow(2, args.rounds);
+  const requiredCalls = entrantCount * 2 - 1;
+  if (requiredCalls > workflow.budget().maxAgents) {
+    throw "tournament requires " + requiredCalls + " agent calls but maxAgents is " + workflow.budget().maxAgents;
+  }
+  const competitors = [];
+  for (let index = 0; index < entrantCount; index += 1) {
+    competitors.push({
+      label: "tournament-competitor-" + (index + 1),
+      prompt: "Produce a candidate answer for:\n" + args.request,
+      skipPermissions: true
+    });
+  }
+  const generated = await parallel(competitors);
+  let bracket = [];
+  for (let index = 0; index < generated.length; index += 1) {
+    if (generated[index].status !== "COMPLETED") {
+      throw "tournament competitor " + (index + 1) + " failed";
+    }
+    bracket.push({ entrant: index + 1, answer: generated[index].output.text, rationale: [] });
+  }
+  for (let round = 1; round <= args.rounds; round += 1) {
+    const matches = [];
+    for (let match = 0; match < bracket.length / 2; match += 1) {
+      matches.push({
+        label: "tournament-judge-r" + round + "-m" + (match + 1),
+        prompt: "Select candidate A or B for:\n" + args.request,
+        skipPermissions: true
+      });
+    }
+    const judgments = await parallel(matches);
+    const advanced = [];
+    for (let match = 0; match < judgments.length; match += 1) {
+      if (judgments[match].status !== "COMPLETED") {
+        throw "tournament judge failed at round " + round + " match " + (match + 1);
+      }
+      let decision;
+      try {
+        const text = judgments[match].output.text.trim();
+        const start = text.indexOf("{");
+        const end = text.lastIndexOf("}");
+        if (start < 0 || end < start) {
+          throw "missing judgment object";
+        }
+        decision = JSON.parse(text.slice(start, end + 1));
+      } catch (_) {
+        throw "tournament judge returned invalid JSON at round " + round + " match " + (match + 1);
+      }
+      if (decision.winner !== "A" && decision.winner !== "B") {
+        throw "tournament judge must select A or B at round " + round + " match " + (match + 1);
+      }
+      if (typeof decision.rationale !== "string" || decision.rationale.trim() === "") {
+        throw "tournament judge must provide a rationale at round " + round + " match " + (match + 1);
+      }
+      const winner = decision.winner === "A" ? bracket[match * 2] : bracket[match * 2 + 1];
+      winner.rationale.push({ round: round, match: match + 1, selected: decision.winner, rationale: decision.rationale.trim() });
+      advanced.push(winner);
+    }
+    bracket = advanced;
+  }
+  const champion = bracket[0];
+  return champion.answer + "\n\nTournament decision trail:\n" + champion.rationale.map(function (entry) {
+    return "Round " + entry.round + " match " + entry.match + " selected " + entry.selected + ": " + entry.rationale;
+  }).join("\n");
+})()`
 
 type packagedWorkflowChildExecutor struct {
 	mu           sync.Mutex

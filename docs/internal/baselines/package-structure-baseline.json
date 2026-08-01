@@ -94,16 +94,6 @@
     },
     {
       "rule": "deprecated-runtime-api-file",
-      "filePath": "tests/functional/runtime_api/api_work_root_policy_slices_test.go",
-      "target": "tests/functional/runtime_api"
-    },
-    {
-      "rule": "deprecated-runtime-api-file",
-      "filePath": "tests/functional/runtime_api/api_work_service_application_slices_test.go",
-      "target": "tests/functional/runtime_api"
-    },
-    {
-      "rule": "deprecated-runtime-api-file",
       "filePath": "tests/functional/runtime_api/dashboard_engine_state_test.go",
       "target": "tests/functional/runtime_api"
     },
@@ -301,36 +291,6 @@
       "rule": "deprecated-runtime-api-test",
       "filePath": "tests/functional/runtime_api/api_unified_event_log_smoke_test.go",
       "target": "TestAPIUnifiedEventLogSmoke_LiveRecordReplayProjectionAndDivergenceUseSameTimeline"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_work_root_policy_slices_test.go",
-      "target": "TestWorkRootPolicyServicePrepareInvocationInputAcceptsDirectArgs"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_work_root_policy_slices_test.go",
-      "target": "TestWorkRootPolicyServicePrepareInvocationInputRejectsWhitespaceOnlyText"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_work_root_policy_slices_test.go",
-      "target": "TestWorkRootPolicyServiceResolvePrimaryResultHonorsCanceledContext"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_work_root_policy_slices_test.go",
-      "target": "TestWorkRootPolicyServiceResolvePrimaryResultSubmittedTerminalSuccess"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_work_root_policy_slices_test.go",
-      "target": "TestWorkRootPolicySlicesRejectUnsupportedOperations"
-    },
-    {
-      "rule": "deprecated-runtime-api-test",
-      "filePath": "tests/functional/runtime_api/api_work_service_application_slices_test.go",
-      "target": "TestWorkServiceApplicationSlicesExerciseFunctionalLane"
     },
     {
       "rule": "deprecated-runtime-api-test",
@@ -1149,11 +1109,6 @@
     },
     {
       "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/operator_settings/configcore/operator_config_core_test.go",
-      "target": "operator_settings"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
       "filePath": "tests/functional/operator_settings/root_composition/build_process_inert_test.go",
       "target": "operator_settings"
     },
@@ -1179,17 +1134,7 @@
     },
     {
       "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/operator_settings/root_composition/testmain_test.go",
-      "target": "operator_settings"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
       "filePath": "tests/functional/operator_settings/root_composition/transport_activation_test.go",
-      "target": "operator_settings"
-    },
-    {
-      "rule": "functional-test-unclassified-domain",
-      "filePath": "tests/functional/operator_settings/root_composition/wire_composition_coverage_test.go",
       "target": "operator_settings"
     },
     {
@@ -2320,7 +2265,7 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/edges",
-      "target": "<none>"
+      "target": "pkg/services/edges/models_effects.go:AssetHTTPDoer,pkg/services/edges/models_effects.go:HostClock,pkg/services/edges/models_effects.go:HostHTTPDoer,pkg/services/edges/models_effects.go:HostManagedProcess,pkg/services/edges/models_effects.go:HostProcessLauncher,pkg/services/edges/models_effects.go:HostTimer,pkg/services/edges/models_effects.go:InvocationArtifactFileSystem,pkg/services/edges/models_effects.go:PullMetricsRecorder,pkg/services/edges/models_effects.go:RuntimeHTTPDoer,pkg/services/edges/models_effects.go:RuntimeTempFile"
     },
     {
       "rule": "service-root-interface-count",
@@ -2385,7 +2330,7 @@
     {
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/workers",
-      "target": "pkg/services/workers/command.go:CommandRunner,pkg/services/workers/interfaces.go:AgentToolFileSystem,pkg/services/workers/interfaces.go:FactoryWorktreePreparer,pkg/services/workers/interfaces.go:InvocationExecutor,pkg/services/workers/interfaces.go:Runner,pkg/services/workers/interfaces.go:WorkerExecutor,pkg/services/workers/interfaces.go:WorkstationRequestExecutor,pkg/services/workers/interfaces.go:WorktreeFileSystem,pkg/services/workers/interfaces.go:WorktreeGitCommander,pkg/services/workers/mock_workers_contracts.go:MockWorkersConfigFileSystem,pkg/services/workers/prompt_template_contracts.go:PromptTemplates,pkg/services/workers/provider_port.go:Provider,pkg/services/workers/pty_contracts.go:PTYAllocator,pkg/services/workers/pty_contracts.go:PTYSession,pkg/services/workers/runner_process.go:Clock,pkg/services/workers/runtime_service.go:RuntimeService,pkg/services/workers/sessions_consumer_contracts.go:ProviderRegistry,pkg/services/workers/workstation_contracts.go:ModelInvoker,pkg/services/workers/workstation_contracts.go:Service,pkg/services/workers/workstation_pool_boundary_contracts.go:WorkstationExecutionService,pkg/services/workers/workstation_pool_boundary_contracts.go:WorkstationPoolBoundary"
+      "target": "pkg/services/workers/command.go:CommandRunner,pkg/services/workers/interfaces.go:AgentToolFileSystem,pkg/services/workers/interfaces.go:FactoryWorktreePreparer,pkg/services/workers/interfaces.go:InvocationExecutor,pkg/services/workers/interfaces.go:Runner,pkg/services/workers/interfaces.go:WorkerExecutor,pkg/services/workers/interfaces.go:WorkstationRequestExecutor,pkg/services/workers/interfaces.go:WorktreeFileSystem,pkg/services/workers/interfaces.go:WorktreeGitCommander,pkg/services/workers/mock_workers_contracts.go:MockWorkersConfigFileSystem,pkg/services/workers/prompt_template_contracts.go:PromptTemplates,pkg/services/workers/pty_contracts.go:PTYAllocator,pkg/services/workers/pty_contracts.go:PTYSession,pkg/services/workers/runner_process.go:Clock,pkg/services/workers/runtime_service.go:RuntimeService,pkg/services/workers/sessions_consumer_contracts.go:ProviderRegistry,pkg/services/workers/workstation_contracts.go:ModelInvoker,pkg/services/workers/workstation_contracts.go:Service,pkg/services/workers/workstation_pool_boundary_contracts.go:WorkstationExecutionService,pkg/services/workers/workstation_pool_boundary_contracts.go:WorkstationPoolBoundary"
     },
     {
       "rule": "service-root-unexpected-directory",

@@ -6,8 +6,18 @@ import (
 	"sort"
 	"strings"
 
+	publishedpackagedcatalog "github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
+
+// LoadPublishedDefinitionCatalog validates and materializes the executable's
+// generated packaged-factory publication for Factory Definitions consumers.
+// The publication package remains an implementation detail of this owner
+// boundary; callers receive the validated catalog projection, not an embedded
+// filesystem.
+func LoadPublishedDefinitionCatalog() (publishedpackagedcatalog.DefinitionCatalog, error) {
+	return publishedpackagedcatalog.LoadPublishedDefinitionCatalog()
+}
 
 // Catalog owns deterministic public-name projection and selection over one
 // already-validated embedded packaged Factory catalog.

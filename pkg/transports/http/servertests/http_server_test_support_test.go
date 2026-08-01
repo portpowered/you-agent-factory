@@ -60,5 +60,5 @@ func newAPIServerFromRoles(
 		WorkService:     workService,
 		SessionRequests: sessionRequests,
 	}, logger)
-	return api.NewServer(handler, modelsHTTP, providerSessions, logger)
+	return api.NewServer(handler, modelsHTTP, providerSessions, logger, nil)
 }

@@ -23,6 +23,15 @@ const (
 	providersServiceRootPrefix         = "pkg/services/providers/"
 	providersLeafEffectContractImport  = repositoryImportPrefix + providersLeafEffectContractPackage
 
+	// providersCanonicalEffectPackagePrefix covers the Providers-owned
+	// execution construction and native adapter paths. The application
+	// composition root may translate a Workers effect into this seam, but these
+	// packages must never import Workers contracts themselves.
+	providersCanonicalWirePackage          = "pkg/services/providers/wire"
+	providersCanonicalExecutionWirePackage = "pkg/services/providers/internal/services/execution/wire"
+	providersCanonicalAdapterPackagePrefix = "pkg/services/providers/internal/services/execution/internal/adapters/"
+	workersServiceImportPrefix             = repositoryImportPrefix + "pkg/services/workers"
+
 	// workersProviderEffectMigrationDebtPackage remains the live declaration
 	// site until Providers packets land. It is not the durable normative owner.
 	workersProviderEffectMigrationDebtPackage = "pkg/services/providers/internal/services/execution/internal/provider/inferencecontract"
@@ -135,7 +144,14 @@ func providerEffectOwnershipFindingsForFile(
 	file *ast.File,
 ) []providerEffectOwnershipFinding {
 	imports := importedPackagePaths(file)
-	var findings []providerEffectOwnershipFinding
+	findings := make([]providerEffectOwnershipFinding, 0, 1)
+	if isProvidersCanonicalEffectPackage(packagePath) && importsWorkersService(file) {
+		findings = append(findings, providerEffectOwnershipFinding{
+			kind:        "providers-workers-effect-edge",
+			packagePath: packagePath,
+			filePath:    filePath,
+		})
+	}
 	for _, declaration := range file.Decls {
 		generic, ok := declaration.(*ast.GenDecl)
 		if !ok || generic.Tok != token.TYPE {
@@ -157,6 +173,26 @@ func providerEffectOwnershipFindingsForFile(
 		}
 	}
 	return findings
+}
+
+func isProvidersCanonicalEffectPackage(packagePath string) bool {
+	return packagePath == providersCanonicalWirePackage ||
+		packagePath == providersCanonicalExecutionWirePackage ||
+		strings.HasPrefix(packagePath, providersCanonicalAdapterPackagePrefix)
+}
+
+func importsWorkersService(file *ast.File) bool {
+	for _, specification := range file.Imports {
+		importPath, err := strconv.Unquote(specification.Path.Value)
+		if err != nil {
+			continue
+		}
+		if importPath == workersServiceImportPrefix ||
+			strings.HasPrefix(importPath, workersServiceImportPrefix+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 func providerEffectOwnershipFindingForType(
@@ -463,6 +499,25 @@ func isCompetingProviderAbstractionPackage(packagePath string) bool {
 func writeProviderEffectOwnershipFindings(writer io.Writer, findings []providerEffectOwnershipFinding) {
 	for _, finding := range findings {
 		switch finding.kind {
+		case "providers-workers-effect-edge":
+			fmt.Fprintf(
+				writer,
+				"[agent-factory:pkg-boundary] prohibited Providers-to-Workers effect edge: %s (%s)\n",
+				finding.packagePath,
+				finding.filePath,
+			)
+			fmt.Fprintln(
+				writer,
+				"  reason: canonical Providers execution and construction code imports a Workers registry or command/PTY execution contract.",
+			)
+			fmt.Fprintln(
+				writer,
+				"  ownership: Providers owns provider execution; Workers consumes only the Providers root contract; composition adapters belong in pkg/wire.",
+			)
+			fmt.Fprintln(
+				writer,
+				"  remediation: keep Providers execution behind Providers-owned private effects and translate Workers effects only at the application composition boundary.",
+			)
 		case "durable-owner":
 			fmt.Fprintf(
 				writer,
@@ -541,4 +596,3 @@ func writeProviderEffectOwnershipFindings(writer io.Writer, findings []providerE
 		}
 	}
 }
-

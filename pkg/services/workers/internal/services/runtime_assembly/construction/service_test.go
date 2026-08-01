@@ -224,6 +224,6 @@ var testRetryRandom = platformrandom.SourceFunc(func(int64) (int64, error) {
 
 func testFactoryDocs(string) (map[string]string, error) { return map[string]string{}, nil }
 
-func (providerStub) Infer(context.Context, workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
-	return workerexecution.InferenceResponse{}, nil
+func (providerStub) Execute(context.Context, workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
+	return workerexecution.RunnerExecutionResult{}, nil
 }

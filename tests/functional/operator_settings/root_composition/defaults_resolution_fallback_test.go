@@ -4,66 +4,80 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
-	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
-	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
-	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 // TestResolveFromHomeFallbackPreservesAcceptedSemantics proves defaults
-// resolution through the published Operator Settings root contract preserves
-// accepted environment-over-file semantics when adapter ownership is unset.
+// resolution through the customer process. The file, environment, and runner
+// effects are supplied through the process input and edges.Edges; no Settings
+// or Providers composition root is constructed by the functional test.
 func TestResolveFromHomeFallbackPreservesAcceptedSemantics(t *testing.T) {
-	t.Cleanup(settingswire.RegisterDefaultsResolutionFromHome)
-
 	homeDir := t.TempDir()
-	configPath := operatorsettings.DefaultConfigPath(homeDir)
-	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
-		t.Fatalf("MkdirAll(config dir): %v", err)
+	configDir := filepath.Join(homeDir, ".you-agent-factory")
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
+		t.Fatalf("mkdir operator config directory: %v", err)
 	}
-	if err := os.WriteFile(configPath, []byte(`{
-		"defaults": {
-			"workerModelProvider": "claude",
-			"workerModel": "file-model"
-		}
-	}`), 0o600); err != nil {
-		t.Fatalf("WriteFile(config): %v", err)
+	if err := os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{
+  "defaults": {
+    "workerModelProvider": "claude",
+    "workerModel": "file-model"
+  }
+}`), 0o600); err != nil {
+		t.Fatalf("write operator config: %v", err)
 	}
-	t.Setenv(operatorsettings.EnvDefaultWorkerModelProvider, "codex")
-	t.Setenv(operatorsettings.EnvDefaultWorkerModel, "env-model")
 
-	providersRoot, err := providerswire.NewService()
-	if err != nil {
-		t.Fatalf("providerswire.NewService() error = %v", err)
-	}
-	settingsRoot, err := settingswire.NewServiceFromHomePorts(
-		platformfilesystem.Local{},
-		globalconfigmapping.Decode,
-		providersRoot,
+	dir := support.ScaffoldFactory(t, operatorConfigActivationFactoryConfig())
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"defaults fallback"}`))
+	support.WriteAgentConfig(t, dir, "worker-a", `---
+type: MODEL_WORKER
+stopToken: COMPLETE
+---
+Use the resolved operator defaults.
+`)
+	runner := support.NewShapedProviderCommandRunner(platformprocess.CommandResult{
+		Stdout: support.CodexSuccessStdout("defaults fallback complete"),
+	})
+	server := support.NewProcessAPIServer()
+	process := support.BuildProcess(t, serviceedges.Edges{
+		APIServerStarter:      server.Start,
+		ProviderCommandRunner: runner,
+	})
+
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run",
+		"--dir", dir,
+		"--continuously",
+		"--with-server",
+		"--server", "http://127.0.0.1:1",
+		"--quiet",
+		"--no-record",
+	})
+	inputs.Input.Env = append(
+		os.Environ(),
+		"HOME="+homeDir,
+		"USERPROFILE="+homeDir,
+		operatorsettings.EnvDefaultWorkerModelProvider+"="+string(modelprovider.ProviderCodex),
+		operatorsettings.EnvDefaultWorkerModel+"=env-model",
 	)
-	if err != nil {
-		t.Fatalf("NewServiceFromHomePorts() error = %v", err)
+	inputs.Input.WorkingDirectory = dir
+	daemon := support.StartProcessCommand(t, process, inputs.Input)
+	baseURL := server.WaitForURL(t)
+	support.WaitForTerminalStatus(t, baseURL, 15*time.Second)
+	daemon.Stop(t)
+
+	if runner.CallCount() != 1 {
+		t.Fatalf("provider command runner calls = %d, want 1", runner.CallCount())
 	}
-	resolved, err := settingsRoot.ResolveFromHomeWithEnvironment(
-		homeDir,
-		operatorsettings.Defaults{
-			WorkerModelProvider: os.Getenv(operatorsettings.EnvDefaultWorkerModelProvider),
-			WorkerModel:         os.Getenv(operatorsettings.EnvDefaultWorkerModel),
-		},
-		operatorsettings.FlagOverrides{},
-	)
-	if err != nil {
-		t.Fatalf("ResolveFromHomeWithEnvironment() error = %v", err)
+	call := runner.LastRequest()
+	if call.Command != string(modelprovider.ProviderCodex) {
+		t.Fatalf("command = %q, want %q from environment fallback", call.Command, modelprovider.ProviderCodex)
 	}
-	if resolved.WorkerModelProvider != "CODEX" {
-		t.Fatalf("provider = %q, want CODEX from fallback path", resolved.WorkerModelProvider)
-	}
-	if resolved.WorkerModel != "env-model" {
-		t.Fatalf("model = %q, want env-model", resolved.WorkerModel)
-	}
-	if resolved.ConfigPath != configPath {
-		t.Fatalf("config path = %q, want %q", resolved.ConfigPath, configPath)
-	}
+	support.AssertArgsContainSequence(t, call.Args, []string{"--model", "env-model"})
 }

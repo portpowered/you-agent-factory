@@ -29,7 +29,7 @@ func WarnPortableBundledReplacementReport(
 	factory.WarnPortableBundledReplacementReport(logger, message, replacements)
 }
 
-func providerOverrideForMode(provider workers.Provider, replayProvider workers.Provider) workers.Provider {
+func providerOverrideForMode(provider workers.Runner, replayProvider workers.Runner) workers.Runner {
 	if provider != nil || replayProvider == nil {
 		return provider
 	}

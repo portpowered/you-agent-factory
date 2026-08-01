@@ -44,8 +44,8 @@ func NewMockProviderWithErrors(responses []workerexecution.InferenceResponse, er
 	}
 }
 
-// Infer records the request and returns the next predetermined response.
-func (m *MockProvider) Infer(_ context.Context, req workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
+// Execute records the request and returns the next predetermined response.
+func (m *MockProvider) Execute(_ context.Context, req workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -62,6 +62,12 @@ func (m *MockProvider) Infer(_ context.Context, req workerexecution.ProviderInfe
 	}
 
 	return m.defaultR, nil
+}
+
+// Infer preserves the test helper's legacy convenience spelling. Production
+// Workers execution uses Runner.Execute.
+func (m *MockProvider) Infer(ctx context.Context, req workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
+	return m.Execute(ctx, req)
 }
 
 // Calls returns all InferenceRequests received by this provider, in order.
@@ -94,4 +100,4 @@ func (m *MockProvider) LastCall() workerexecution.ProviderInferenceRequest {
 }
 
 // Compile-time check.
-var _ workerexecution.Provider = (*MockProvider)(nil)
+var _ workerexecution.Runner = (*MockProvider)(nil)

@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	initializerapplication "github.com/portpowered/infinite-you/pkg/initializer/application"
 	"github.com/portpowered/infinite-you/pkg/initializer/lifecycle"
@@ -38,7 +37,6 @@ import (
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
-	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
@@ -304,16 +302,6 @@ func provideOperatorBackendScopeEnsurer(settings operatorsettings.Service) opera
 	}
 }
 
-func provideModelInvocationArtifactExporter(
-	edges serviceedges.Edges,
-) (modelswire.InvocationArtifactExporter, error) {
-	filesystem := edges.ModelInvocationArtifactFileSystem
-	if filesystem == nil {
-		filesystem = platformfilesystem.Local{}
-	}
-	return modelswire.NewInvocationArtifactExporter(filesystem)
-}
-
 func provideModelInvocationTimeout() factorysessions.ModelInvocationTimeout {
 	return factorysessions.DefaultModelInvocationTimeout
 }
@@ -355,11 +343,7 @@ func provideSystemInitializationOperation(
 }
 
 func providePackagedFactoryDefinitions() ([]factorydefinitions.PackagedDefinition, error) {
-	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
-	if err != nil {
-		return nil, err
-	}
-	return catalog.All(), nil
+	return factorydefinitionswire.LoadPublishedPackagedFactoryDefinitions()
 }
 
 func providePackagedFactoryCatalog(
@@ -385,7 +369,7 @@ func provideDurableExecutionFactory(loadOperatorConfig operatorsettings.ConfigLo
 		defaults operatorsettings.ResolvedDefaults,
 		root factorysessionwire.RuntimeRoot,
 		clock factoryruntime.Clock,
-		provider workers.Provider,
+		provider workers.Runner,
 		mockWorkersConfig *workers.MockWorkersConfig,
 		factory factorysessionwire.FactorySessionExecutionFactory,
 		providerIdentities factorysessions.ProviderIdentityResolver,

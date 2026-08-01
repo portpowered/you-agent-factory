@@ -143,17 +143,17 @@ func TestCommandRunnerOverrideForMode_ReplayReplacesOnlyProductionEdge(t *testin
 
 type stubProvider struct{}
 
-func (stubProvider) Infer(context.Context, workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
-	return workerexecution.InferenceResponse{}, nil
+func (stubProvider) Execute(context.Context, workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
+	return workerexecution.RunnerExecutionResult{}, nil
 }
 
 type scriptedReplaySideEffects struct{}
 
-func (*scriptedReplaySideEffects) Infer(
+func (*scriptedReplaySideEffects) Execute(
 	context.Context,
-	workerexecution.ProviderInferenceRequest,
-) (workerexecution.InferenceResponse, error) {
-	return workerexecution.InferenceResponse{}, nil
+	workerexecution.RunnerExecutionRequest,
+) (workerexecution.RunnerExecutionResult, error) {
+	return workerexecution.RunnerExecutionResult{}, nil
 }
 
 func (*scriptedReplaySideEffects) Run(

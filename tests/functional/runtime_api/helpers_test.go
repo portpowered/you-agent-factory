@@ -12,9 +12,9 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -29,7 +29,7 @@ func withClock(clock platformclock.Source) runtimeOption {
 	return func(cfg *support.FunctionalAPIServerConfig) { cfg.Edges.Clock = clock }
 }
 
-func withProvider(provider workerprovider.Provider) runtimeOption {
+func withProvider(provider workers.Runner) runtimeOption {
 	return func(cfg *support.FunctionalAPIServerConfig) { cfg.Edges.ProviderOverride = provider }
 }
 

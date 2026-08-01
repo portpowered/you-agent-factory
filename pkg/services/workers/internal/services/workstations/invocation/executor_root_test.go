@@ -25,7 +25,7 @@ func TestProviderExecutorExecuteMapsCanonicalSuccessMetadata(t *testing.T) {
 		},
 	}}
 
-	result, err := workerinvocation.NewProviderExecutor(provider).Execute(context.Background(), workerexecution.InvocationInput{
+	result, err := workerinvocation.NewRunnerExecutor(provider).Execute(context.Background(), workerexecution.InvocationInput{
 		Request: workerexecution.ProviderInferenceRequest{UserMessage: "hello"}, Attempt: 3,
 	})
 	if err != nil {
@@ -54,7 +54,7 @@ func TestProviderExecutorExecuteMapsCanonicalProviderFailure(t *testing.T) {
 	)
 	provider := &executionTestProvider{err: providerErr}
 
-	result, err := workerinvocation.NewProviderExecutor(provider).Execute(context.Background(), workerexecution.InvocationInput{})
+	result, err := workerinvocation.NewRunnerExecutor(provider).Execute(context.Background(), workerexecution.InvocationInput{})
 	if !errors.Is(err, providerErr) || provider.calls != 1 {
 		t.Fatalf("err = %v, calls = %d", err, provider.calls)
 	}
@@ -77,7 +77,7 @@ func TestProviderExecutorExecutePropagatesCancellationWithoutRetry(t *testing.T)
 		err    error
 	}, 1)
 	go func() {
-		result, err := workerinvocation.NewProviderExecutor(provider).Execute(ctx, workerexecution.InvocationInput{Attempt: 2})
+		result, err := workerinvocation.NewRunnerExecutor(provider).Execute(ctx, workerexecution.InvocationInput{Attempt: 2})
 		done <- struct {
 			result workerexecution.InvocationResult
 			err    error
@@ -96,7 +96,7 @@ func TestProviderExecutorExecutePropagatesCancellationWithoutRetry(t *testing.T)
 
 func TestProviderExecutorExecuteClassifiesDeadline(t *testing.T) {
 	provider := &executionTestProvider{err: context.DeadlineExceeded}
-	result, err := workerinvocation.NewProviderExecutor(provider).Execute(context.Background(), workerexecution.InvocationInput{})
+	result, err := workerinvocation.NewRunnerExecutor(provider).Execute(context.Background(), workerexecution.InvocationInput{})
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("err = %v", err)
 	}
@@ -117,7 +117,7 @@ func TestProviderExecutorExecuteBoundsAndRedactsFailureDiagnostics(t *testing.T)
 		Provider: &workerexecution.ProviderDiagnostic{ResponseMetadata: map[string]string{"content_bytes": "20"}},
 		Command:  &workerexecution.CommandDiagnostic{Stdout: secret, Stderr: secret},
 	}
-	result, _ := workerinvocation.NewProviderExecutor(&executionTestProvider{err: providerErr}).Execute(context.Background(), workerexecution.InvocationInput{})
+	result, _ := workerinvocation.NewRunnerExecutor(&executionTestProvider{err: providerErr}).Execute(context.Background(), workerexecution.InvocationInput{})
 	if result.FailureDetail == nil || result.FailureDetail.Message != "Provider rejected the request as invalid." {
 		t.Fatalf("failure detail = %#v", result.FailureDetail)
 	}
@@ -143,7 +143,7 @@ func TestProviderExecutorExecuteUsesReasonAllowlistForAllPersistedFailures(t *te
 	for _, tc := range tests {
 		t.Run(string(tc.reason), func(t *testing.T) {
 			providerErr := workerexecution.NewProviderError(tc.reason, sensitive, errors.New(sensitive))
-			result, _ := workerinvocation.NewProviderExecutor(&executionTestProvider{err: providerErr}).Execute(context.Background(), workerexecution.InvocationInput{})
+			result, _ := workerinvocation.NewRunnerExecutor(&executionTestProvider{err: providerErr}).Execute(context.Background(), workerexecution.InvocationInput{})
 			if result.FailureDetail == nil || result.FailureDetail.Message != tc.message {
 				t.Fatalf("failure detail = %#v, want message %q", result.FailureDetail, tc.message)
 			}
@@ -160,7 +160,7 @@ type executionTestProvider struct {
 	calls    int
 }
 
-func (p *executionTestProvider) Infer(context.Context, workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
+func (p *executionTestProvider) Execute(context.Context, workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
 	p.calls++
 	return p.response, p.err
 }
@@ -175,7 +175,7 @@ func newBlockingExecutionTestProvider() *blockingExecutionTestProvider {
 	return &blockingExecutionTestProvider{started: make(chan struct{})}
 }
 
-func (p *blockingExecutionTestProvider) Infer(ctx context.Context, _ workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
+func (p *blockingExecutionTestProvider) Execute(ctx context.Context, _ workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
 	p.mu.Lock()
 	p.calls++
 	if p.calls == 1 {

@@ -20,7 +20,7 @@ type agentMockProvider struct {
 	lastReq   workerexecution.ProviderInferenceRequest
 }
 
-func (m *agentMockProvider) Infer(_ context.Context, req workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
+func (m *agentMockProvider) Execute(_ context.Context, req workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
 	m.lastReq = req
 	m.callCount++
 	return m.response, nil

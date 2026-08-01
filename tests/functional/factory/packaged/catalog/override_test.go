@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -184,10 +183,7 @@ func packagedUnmaterializedEntries(entries []listEntry) []listEntry {
 func writeInvalidScopedFactory(t *testing.T, root, name string, payload []byte) string {
 	t.Helper()
 
-	factoryDirectory, err := factorydefinitions.MapDir(root, name)
-	if err != nil {
-		t.Fatalf("MapDir(%q, %q): %v", root, name, err)
-	}
+	factoryDirectory := mappedFactoryDirectory(root, name)
 	if err := os.MkdirAll(factoryDirectory, 0o755); err != nil {
 		t.Fatalf("create %s: %v", name, err)
 	}
@@ -200,10 +196,7 @@ func writeInvalidScopedFactory(t *testing.T, root, name string, payload []byte) 
 func writeScopedFactory(t *testing.T, root, name, description string) string {
 	t.Helper()
 
-	factoryDirectory, err := factorydefinitions.MapDir(root, name)
-	if err != nil {
-		t.Fatalf("MapDir(%q, %q): %v", root, name, err)
-	}
+	factoryDirectory := mappedFactoryDirectory(root, name)
 	payload, err := json.Marshal(map[string]any{
 		"name": name,
 		"id":   strings.TrimPrefix(strings.ReplaceAll(name, "/", "-"), "@"),
@@ -226,6 +219,10 @@ func writeScopedFactory(t *testing.T, root, name, description string) string {
 		t.Fatalf("write %s: %v", name, err)
 	}
 	return factoryDirectory
+}
+
+func mappedFactoryDirectory(root, name string) string {
+	return filepath.Join(root, filepath.FromSlash(name))
 }
 
 func executeFactoryList(t *testing.T, home, workingDirectory string) []listEntry {

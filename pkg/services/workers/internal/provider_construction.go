@@ -9,10 +9,10 @@ import (
 	runnerswire "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/wire"
 )
 
-// NewProviderFromService adapts the Providers root to the retained Workers
-// Provider port used by durable Factory Session construction. Execution enters
+// NewProviderFromService adapts the Providers root to the Workers Runner
+// contract used by durable Factory Session construction. Execution enters
 // through the private runners.Service.Execute boundary.
-func NewProviderFromService(service providers.Service) (workers.Provider, error) {
+func NewProviderFromService(service providers.Service) (workers.Runner, error) {
 	if service == nil {
 		return nil, fmt.Errorf("construct Worker provider: Providers service is required")
 	}
@@ -23,5 +23,5 @@ func NewProviderFromService(service providers.Service) (workers.Provider, error)
 	if err != nil {
 		return nil, fmt.Errorf("construct Worker provider: %w", err)
 	}
-	return registryExecuteProvider{registry: registry}, nil
+	return registryRunner{registry: registry}, nil
 }

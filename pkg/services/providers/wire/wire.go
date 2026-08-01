@@ -18,6 +18,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	effects "github.com/portpowered/infinite-you/pkg/services/providers/internal/effects"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	acpwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp/wire"
 	builtinswire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/builtins/wire"
@@ -25,19 +26,49 @@ import (
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/catalog/wire"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// NewAgyPTYAllocator constructs the Providers-owned PTY implementation behind
-// the Workers root allocation port.
-func NewAgyPTYAllocator(host platformpty.Host, clock platformclock.Source) (workers.PTYAllocator, error) {
+// CommandRunner is the private Providers execution effect accepted by root
+// composition. It is deliberately not a Workers command contract.
+type CommandRunner = effects.CommandRunner
+type CommandRequest = effects.CommandRequest
+type CommandResult = effects.CommandResult
+type OutputChunkObserver = effects.OutputChunkObserver
+
+const (
+	OutputStreamStdout = effects.OutputStreamStdout
+	OutputStreamStderr = effects.OutputStreamStderr
+)
+
+// PTYAllocator is the private Providers Agy effect contract. Workers receives
+// a separate adapter at the application composition boundary.
+type PTYAllocator = effects.PTYAllocator
+type PTYSession = effects.PTYSession
+type PTYSessionConfig = effects.PTYSessionConfig
+type PTYProcessLaunch = effects.PTYProcessLaunch
+type PTYSessionResult = effects.PTYSessionResult
+
+// PTY errors are exposed only at this construction boundary so the
+// composition adapter can preserve Workers' established error identity while
+// keeping the implementation-owned effect sentinels private to Providers.
+var (
+	ErrPTYUnsupportedPlatform = effects.ErrPTYUnsupportedPlatform
+	ErrPTYAllocationFailed    = effects.ErrPTYAllocationFailed
+	ErrPTYSessionTimedOut     = effects.ErrPTYSessionTimedOut
+	ErrPTYNonzeroExit         = effects.ErrPTYNonzeroExit
+	ErrPTYClockRequired       = effects.ErrPTYClockRequired
+	ErrPTYHostRequired        = effects.ErrPTYHostRequired
+)
+
+// NewAgyPTYAllocator constructs the Providers-owned PTY implementation.
+func NewAgyPTYAllocator(host platformpty.Host, clock platformclock.Source) (PTYAllocator, error) {
 	return executionwire.NewAgyPTYAllocator(host, clock)
 }
 
 // AgyPTYPlatformDependencies are platform facts required for the built-in Agy
 // PTY execution adapter.
 type AgyPTYPlatformDependencies struct {
-	Allocator workers.PTYAllocator
+	Allocator PTYAllocator
 	Locator   platformprocess.ExecutableLocator
 	Inspector platformfilesystem.PathInspector
 }
@@ -48,14 +79,13 @@ type Option interface {
 }
 
 type wireOptions struct {
-	catalog              []catalogwire.Option
-	commandRunner        platformprocess.CommandRunner
-	workersCommandRunner workers.CommandRunner
-	agyPTYPlatform       AgyPTYPlatformDependencies
-	acpIntegrations      []providers.ACPIntegration
-	commandFactory       platformprocess.CommandFactory
-	executableLocator    platformprocess.ExecutableLocator
-	registrations        ProviderRegistrations
+	catalog           []catalogwire.Option
+	commandRunner     CommandRunner
+	agyPTYPlatform    AgyPTYPlatformDependencies
+	acpIntegrations   []providers.ACPIntegration
+	commandFactory    platformprocess.CommandFactory
+	executableLocator platformprocess.ExecutableLocator
+	registrations     ProviderRegistrations
 }
 
 type registrationsOption struct {
@@ -119,32 +149,33 @@ func CatalogOption(option catalogwire.Option) Option {
 }
 
 type commandRunnerOption struct {
-	runner platformprocess.CommandRunner
+	runner CommandRunner
 }
 
 func (o commandRunnerOption) apply(opts *wireOptions) {
 	opts.commandRunner = o.runner
 }
 
-// WithCommandRunner injects the shared streaming subprocess runner used by
-// built-in Codex and Claude command effects.
+// WithCommandRunner injects the platform subprocess runner used by built-in
+// Codex and Claude command effects. The platform runner is adapted into the
+// Providers-owned private effect contract inside this package's wire path.
 func WithCommandRunner(runner platformprocess.CommandRunner) Option {
-	return commandRunnerOption{runner: runner}
+	return commandRunnerOption{runner: executionwire.AdaptPlatformCommandRunner(runner)}
 }
 
-type workersCommandRunnerOption struct {
-	runner workers.CommandRunner
+type commandEffectRunnerOption struct {
+	runner CommandRunner
 }
 
-func (o workersCommandRunnerOption) apply(opts *wireOptions) {
-	opts.workersCommandRunner = o.runner
+func (o commandEffectRunnerOption) apply(opts *wireOptions) {
+	opts.commandRunner = o.runner
 }
 
-// WithWorkersCommandRunner injects the shared Workers subprocess runner used
-// by built-in Codex and Claude command effects without losing dispatch
-// correlation required by mock-worker interception.
-func WithWorkersCommandRunner(runner workers.CommandRunner) Option {
-	return workersCommandRunnerOption{runner: runner}
+// WithCommandEffectRunner injects a Providers-owned effect runner from the
+// application composition boundary. Workers-specific projection belongs in
+// pkg/wire, not in Providers.
+func WithCommandEffectRunner(runner CommandRunner) Option {
+	return commandEffectRunnerOption{runner: runner}
 }
 
 type agyPTYPlatformOption struct {
@@ -192,7 +223,6 @@ func NewService(options ...Option) (providers.Service, error) {
 	return newRoot(
 		catalogService,
 		config.commandRunner,
-		config.workersCommandRunner,
 		config.agyPTYPlatform,
 		acp,
 		config.commandFactory,
@@ -214,8 +244,7 @@ func PackagedACPIntegrations() ([]providers.ACPIntegration, error) {
 
 func newRoot(
 	catalogService catalog.Service,
-	commandRunner platformprocess.CommandRunner,
-	workersCommandRunner workers.CommandRunner,
+	commandRunner CommandRunner,
 	agyPTYPlatform AgyPTYPlatformDependencies,
 	acpIntegrations []providers.ACPIntegration,
 	commandFactory platformprocess.CommandFactory,
@@ -225,10 +254,7 @@ func newRoot(
 	if catalogService == nil {
 		return nil, fmt.Errorf("construct Providers: catalog is required")
 	}
-	if workersCommandRunner == nil && commandRunner != nil {
-		workersCommandRunner = workers.AdaptCommandRunner(commandRunner)
-	}
-	registrations := executionserviceRegistrations(workersCommandRunner, agyPTYPlatform)
+	registrations := executionserviceRegistrations(commandRunner, agyPTYPlatform)
 	acpService, err := acpwire.NewService(acpIntegrations, commandFactory, executableLocator)
 	if err != nil {
 		return nil, err
@@ -331,9 +357,9 @@ func (writer *externalResponseWriter) Close(_ context.Context, completion Comple
 	return nil
 }
 
-func executionserviceRegistrations(workersCommandRunner workers.CommandRunner, agyPTYPlatform AgyPTYPlatformDependencies) []execution.Registration {
-	return executionwire.BuiltInRegistrations(executionwire.BuiltInDependenciesFromWorkersRunner(
-		workersCommandRunner,
+func executionserviceRegistrations(commandRunner CommandRunner, agyPTYPlatform AgyPTYPlatformDependencies) []execution.Registration {
+	return executionwire.BuiltInRegistrations(executionwire.BuiltInDependenciesFromRunner(
+		commandRunner,
 		executionwire.BuiltInRunnerPlatformDependencies{
 			AgyPTY: executionwire.AgyPTYPlatformDependencies{
 				Allocator: agyPTYPlatform.Allocator,

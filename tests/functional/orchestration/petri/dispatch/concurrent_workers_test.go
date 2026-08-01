@@ -9,7 +9,6 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -247,7 +246,7 @@ type traceAwareReviewInferenceProvider struct {
 	reviewCounts  map[string]int
 }
 
-func (p *traceAwareReviewInferenceProvider) Infer(
+func (p *traceAwareReviewInferenceProvider) Execute(
 	_ context.Context,
 	req workerexecution.ProviderInferenceRequest,
 ) (workerexecution.InferenceResponse, error) {
@@ -266,7 +265,7 @@ func (p *traceAwareReviewInferenceProvider) Infer(
 	return workerexecution.InferenceResponse{Content: "Done. COMPLETE ACCEPTED"}, nil
 }
 
-var _ workerprovider.Provider = (*traceAwareReviewInferenceProvider)(nil)
+var _ workerexecution.Runner = (*traceAwareReviewInferenceProvider)(nil)
 
 type seedIdea struct {
 	traceID string

@@ -267,7 +267,7 @@ func projectRuntimeOpeningExternalEffects(edges serviceedges.Edges) factorysessi
 }
 
 type factorySessionModelPullMetricsAdapter struct {
-	next modelswire.PullMetricsRecorder
+	next serviceedges.PullMetricsRecorder
 }
 
 func (adapter factorySessionModelPullMetricsAdapter) RecordModelPullMetric(
@@ -280,14 +280,14 @@ func (adapter factorySessionModelPullMetricsAdapter) RecordModelPullMetric(
 	for key, value := range metric.Labels {
 		labels[key] = value
 	}
-	adapter.next.RecordModelPullMetric(modelswire.PullMetric{
+	adapter.next.RecordModelPullMetric(serviceedges.PullMetric{
 		Name:   metric.Name,
 		Labels: labels,
 	})
 }
 
 func adaptModelPullMetricsRecorder(
-	recorder modelswire.PullMetricsRecorder,
+	recorder serviceedges.PullMetricsRecorder,
 ) factorysessionwire.ModelPullMetricsRecorder {
 	if recorder == nil {
 		return nil
@@ -307,6 +307,14 @@ func withStandaloneWorkerProductionEdges(overrides serviceedges.Edges) (servicee
 }
 
 func provideAgyPTYAllocator(edges serviceedges.Edges) (workers.PTYAllocator, error) {
+	allocator, err := provideProvidersAgyPTYAllocator(edges)
+	if err != nil {
+		return nil, err
+	}
+	return providerPTYAllocatorAdapter{allocator: allocator}, nil
+}
+
+func provideProvidersAgyPTYAllocator(edges serviceedges.Edges) (providerswire.PTYAllocator, error) {
 	clock := edges.AgyPTYClock
 	if clock == nil {
 		clock = platformclock.Real{}
@@ -316,6 +324,100 @@ func provideAgyPTYAllocator(edges serviceedges.Edges) (workers.PTYAllocator, err
 		host = platformpty.NewHost()
 	}
 	return providerswire.NewAgyPTYAllocator(host, clock)
+}
+
+// providerPTYAllocatorAdapter keeps the Providers-owned PTY contract behind
+// the Workers root PTY contract at the composition boundary.
+type providerPTYAllocatorAdapter struct {
+	allocator providerswire.PTYAllocator
+}
+
+func (adapter providerPTYAllocatorAdapter) Allocate(
+	ctx context.Context,
+	launch workers.PTYProcessLaunch,
+	config workers.PTYSessionConfig,
+) (workers.PTYSession, error) {
+	if adapter.allocator == nil {
+		return nil, workers.ErrPTYHostRequired
+	}
+	session, err := adapter.allocator.Allocate(ctx, providerswire.PTYProcessLaunch{
+		Executable: launch.Executable,
+		Argv:       launch.Argv,
+		WorkDir:    launch.WorkDir,
+		Env:        launch.Env,
+	}, providerswire.PTYSessionConfig{
+		MaxCaptureBytes: config.MaxCaptureBytes,
+		IdleTimeout:     config.IdleTimeout,
+		HardTimeout:     config.HardTimeout,
+	})
+	if err != nil {
+		return nil, mapProviderPTYError(err)
+	}
+	return providerPTYSessionAdapter{session: session}, nil
+}
+
+type providerPTYSessionAdapter struct {
+	session providerswire.PTYSession
+}
+
+func (adapter providerPTYSessionAdapter) Run(ctx context.Context) (workers.PTYSessionResult, error) {
+	if adapter.session == nil {
+		return workers.PTYSessionResult{}, workers.ErrPTYHostRequired
+	}
+	result, err := adapter.session.Run(ctx)
+	return workers.PTYSessionResult{
+		ExitCode:    result.ExitCode,
+		RawBytes:    result.RawBytes,
+		CleanedText: result.CleanedText,
+		TimedOut:    result.TimedOut,
+		CapacityHit: result.CapacityHit,
+	}, mapProviderPTYError(err)
+}
+
+// mapProviderPTYError preserves the Workers-root error contract at the
+// composition boundary while Providers keeps its own implementation sentinels
+// private behind its wire package.
+func mapProviderPTYError(err error) error {
+	switch {
+	case errors.Is(err, providerswire.ErrPTYUnsupportedPlatform):
+		return mappedProviderPTYError{workerError: workers.ErrPTYUnsupportedPlatform, providerError: err}
+	case errors.Is(err, providerswire.ErrPTYAllocationFailed):
+		return mappedProviderPTYError{workerError: workers.ErrPTYAllocationFailed, providerError: err}
+	case errors.Is(err, providerswire.ErrPTYSessionTimedOut):
+		return mappedProviderPTYError{workerError: workers.ErrPTYSessionTimedOut, providerError: err}
+	case errors.Is(err, providerswire.ErrPTYNonzeroExit):
+		return mappedProviderPTYError{workerError: workers.ErrPTYNonzeroExit, providerError: err}
+	case errors.Is(err, providerswire.ErrPTYClockRequired):
+		return mappedProviderPTYError{workerError: workers.ErrPTYClockRequired, providerError: err}
+	case errors.Is(err, providerswire.ErrPTYHostRequired):
+		return mappedProviderPTYError{workerError: workers.ErrPTYHostRequired, providerError: err}
+	default:
+		return err
+	}
+}
+
+type mappedProviderPTYError struct {
+	workerError   error
+	providerError error
+}
+
+func (err mappedProviderPTYError) Error() string {
+	return err.workerError.Error()
+}
+
+func (err mappedProviderPTYError) Unwrap() error {
+	return err.providerError
+}
+
+func (err mappedProviderPTYError) Is(target error) bool {
+	return target == err.workerError
+}
+
+func (adapter providerPTYSessionAdapter) Close() error {
+	if adapter.session == nil {
+		return nil
+	}
+	return adapter.session.Close()
 }
 
 func provideWorkerCommandRunnerAdapter() factorysessionwire.WorkerCommandRunnerAdapter {

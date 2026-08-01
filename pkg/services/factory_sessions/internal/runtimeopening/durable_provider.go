@@ -11,17 +11,17 @@ import (
 
 // ProviderFromCommandRunnerFactory constructs one provider-backed worker from a
 // Workers command runner using the same production edges as direct invocation.
-type ProviderFromCommandRunnerFactory func(workers.CommandRunner) (workers.Provider, error)
+type ProviderFromCommandRunnerFactory func(workers.CommandRunner) (workers.Runner, error)
 
 func resolveDurableExecutionProvider(
-	providerOverride workers.Provider,
+	providerOverride workers.Runner,
 	mockWorkers *workers.MockWorkersConfig,
 	runtimeCfg interfaces.RuntimeDefinitionLookup,
 	platformRunner platformprocess.CommandRunner,
 	adaptRunner WorkerCommandRunnerAdapter,
 	mockRunnerFactory factoryruntime.WorkersMockCommandRunnerFactory,
 	buildProvider ProviderFromCommandRunnerFactory,
-) (workers.Provider, error) {
+) (workers.Runner, error) {
 	if providerOverride != nil {
 		return providerOverride, nil
 	}

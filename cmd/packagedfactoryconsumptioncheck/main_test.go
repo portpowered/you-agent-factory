@@ -50,7 +50,7 @@ func TestRunRejectsDirectCatalogLoaderOutsideApprovedFiles(t *testing.T) {
 	writeFixture(
 		t,
 		root,
-		"pkg/services/factory_definitions/bypass.go",
+		"pkg/services/work/bypass_test.go",
 		`package factorydefinitions
 
 import "github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
@@ -66,7 +66,57 @@ func bypass() error {
 	assertErrorContains(
 		t,
 		err,
-		"pkg/services/factory_definitions/bypass.go calls packagedfactorycatalog.LoadPublishedDefinitionCatalog",
+		"pkg/services/work/bypass_test.go imports github.com/portpowered/infinite-you/internal/packagedfactorycatalog",
+	)
+}
+
+func TestRunRejectsDirectCatalogDiscoveryOutsideMaterializationBoundary(t *testing.T) {
+	root := fixtureRepository(t)
+	writeFixture(
+		t,
+		root,
+		"tests/functional/catalog/bypass_test.go",
+		`package catalog
+
+import "github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
+
+func bypass() error {
+	_, err := packagedfactorycatalog.Discover(nil, nil, "factories")
+	return err
+}
+`,
+	)
+
+	err := run(config{root: root}, &bytes.Buffer{})
+	assertErrorContains(
+		t,
+		err,
+		"tests/functional/catalog/bypass_test.go imports github.com/portpowered/infinite-you/internal/packagedfactorycatalog",
+	)
+}
+
+func TestRunRejectsDirectPackagedFactoriesImportFromTest(t *testing.T) {
+	root := fixtureRepository(t)
+	writeFixture(
+		t,
+		root,
+		"pkg/services/work/bypass_test.go",
+		`package work
+
+import packagedfactories "github.com/portpowered/infinite-you/packages/packaged-factories"
+
+func bypass() string {
+	return packagedfactories.Source().String()
+}
+`,
+	)
+
+	err := run(config{root: root}, &bytes.Buffer{})
+	assertErrorContains(
+		t,
+		err,
+		"pkg/services/work/bypass_test.go imports",
+		"packages/packaged-factories",
 	)
 }
 
@@ -74,40 +124,49 @@ func fixtureRepository(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
 	for _, relative := range []string{
-		"pkg/wire",
-		"pkg/transports/http",
-		"pkg/services/factory_definitions/internal/services/distribution/goal",
+		"cmd/packagedfactorycatalogcheck",
+		"cmd/packagedfactorycataloggenerate",
+		"cmd/packagedfactorysourcecheck",
 		"internal/packagedfactorycatalog",
+		"pkg/services/factory_definitions/internal/services/distribution/packagedcatalog",
 		"packages/packaged-factories",
 	} {
 		if err := os.MkdirAll(filepath.Join(root, filepath.FromSlash(relative)), 0o755); err != nil {
 			t.Fatalf("MkdirAll(%q): %v", relative, err)
 		}
 	}
-	writeFixture(t, root, "pkg/wire/profiles.go", `package wire
-
-import "github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
-
-func profiles() error {
-	_, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
-	return err
-}
-`)
-	writeFixture(t, root, "pkg/transports/http/handlers_models.go", `package http
-
-import "github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
-
-func handlers() error {
-	_, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
-	return err
-}
-`)
-	writeFixture(t, root, "pkg/services/factory_definitions/internal/services/distribution/goal/prompt_drift.go", `package goal
+	writeFixture(t, root, "pkg/services/factory_definitions/internal/services/distribution/packagedcatalog/published.go", `package packagedcatalog
 
 import "github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 
 func promptDrift() error {
 	_, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
+	return err
+}
+`)
+	writeFixture(t, root, "cmd/packagedfactorysourcecheck/main.go", `package main
+
+import "github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
+
+func source() error {
+	_, err := packagedfactorycatalog.Discover(nil, nil, "factories")
+	return err
+}
+`)
+	writeFixture(t, root, "cmd/packagedfactorycataloggenerate/main.go", `package main
+
+import "github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
+
+func generate() error {
+	return packagedfactorycatalog.Generate(".")
+}
+`)
+	writeFixture(t, root, "cmd/packagedfactorycatalogcheck/main.go", `package main
+
+import "github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
+
+func check() error {
+	_, err := packagedfactorycatalog.Check(".")
 	return err
 }
 `)

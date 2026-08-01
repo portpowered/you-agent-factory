@@ -33,7 +33,7 @@ type SessionBuildSpec struct {
 	Clock                 Clock
 	RecordPath            string
 	WorkflowID            string
-	ProviderOverride      workers.Provider
+	ProviderOverride      workers.Runner
 	ProviderCommandRunner workers.CommandRunner
 	CommandRunnerOverride workers.CommandRunner
 	SubmissionHooks       []SubmissionHook

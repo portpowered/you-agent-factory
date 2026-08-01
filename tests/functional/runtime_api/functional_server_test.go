@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/wire"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -18,7 +18,7 @@ type FunctionalServer struct {
 
 type runtimeOption func(*support.FunctionalAPIServerConfig)
 
-func withProvider(provider workerprovider.Provider) runtimeOption {
+func withProvider(provider workers.Runner) runtimeOption {
 	return func(cfg *support.FunctionalAPIServerConfig) {
 		cfg.Edges.ProviderOverride = provider
 	}

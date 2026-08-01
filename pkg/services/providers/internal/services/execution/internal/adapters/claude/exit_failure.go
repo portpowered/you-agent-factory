@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
+	effects "github.com/portpowered/infinite-you/pkg/services/providers/internal/effects"
 )
 
 type apiErrorEnvelope struct {
@@ -19,7 +19,7 @@ type apiErrorRecord struct {
 	Message string `json:"message"`
 }
 
-func exitFailureFromCommandResult(result workers.CommandResult) error {
+func exitFailureFromCommandResult(result effects.CommandResult) error {
 	if failure, ok := declaredFailureFromCommandOutput(result.Stdout, result.Stderr); ok {
 		return failure
 	}
@@ -40,7 +40,7 @@ func exitFailureFromCommandResult(result workers.CommandResult) error {
 }
 
 func declaredFailureFromCommandOutput(stdout, stderr []byte) (providers.ExecuteFailure, bool) {
-	combined := formatCombinedCommandOutput(workers.CommandResult{Stdout: stdout, Stderr: stderr})
+	combined := formatCombinedCommandOutput(effects.CommandResult{Stdout: stdout, Stderr: stderr})
 	for _, line := range strings.Split(combined, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -90,7 +90,7 @@ func classifyAPIErrorRecord(record apiErrorRecord) providers.ExecuteFailure {
 	return providers.ExecuteFailure{Kind: kind, Message: message}
 }
 
-func formatCombinedCommandOutput(result workers.CommandResult) string {
+func formatCombinedCommandOutput(result effects.CommandResult) string {
 	stdout := strings.TrimSpace(string(result.Stdout))
 	stderr := strings.TrimSpace(string(result.Stderr))
 	switch {

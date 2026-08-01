@@ -108,7 +108,7 @@ func TestFactorySessionsConstructsWorkersRequestsThroughRoot(t *testing.T) {
 		)
 	}
 
-	inferResponse, err := stub.Infer(ctx, inferRequest)
+	inferResponse, err := stub.ExecuteRunner(ctx, inferRequest)
 	if err != nil {
 		t.Fatalf("Infer provider request: %v", err)
 	}
@@ -166,7 +166,7 @@ func TestFactorySessionsWorkersRootContractsCompileAtSessionsRoot(t *testing.T) 
 		_ workers.ProviderInferenceRequest
 		_ workers.InvocationInput
 		_ workers.CommandRequest
-		_ workers.Provider
+		_ workers.Runner
 		_ workers.InvocationExecutor
 		_ workers.CommandRunner
 		_ workers.PTYAllocator
@@ -198,12 +198,12 @@ func (stub *workersRequestBoundaryStub) Execute(
 	}, nil
 }
 
-func (stub *workersRequestBoundaryStub) Infer(
+func (stub *workersRequestBoundaryStub) ExecuteRunner(
 	_ context.Context,
-	request workers.ProviderInferenceRequest,
-) (workers.InferenceResponse, error) {
+	request workers.RunnerExecutionRequest,
+) (workers.RunnerExecutionResult, error) {
 	stub.lastInference = request
-	return workers.InferenceResponse{
+	return workers.RunnerExecutionResult{
 		Content: "workers-root-boundary",
 		ProviderSession: &workers.ProviderSessionMetadata{
 			Provider: "mock",
