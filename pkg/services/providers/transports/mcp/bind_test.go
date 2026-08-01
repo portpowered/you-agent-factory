@@ -3,6 +3,7 @@ package providersmcp_test
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -103,6 +104,23 @@ func TestBind_ToolOperationRejectsMissingContext(t *testing.T) {
 	}
 	if invoked {
 		t.Fatal("fake Providers root was invoked for nil context")
+	}
+}
+
+func TestRootDependencies_BindsExactlyOneProvidersRoot(t *testing.T) {
+	t.Parallel()
+
+	typeOfDependencies := reflect.TypeOf(providersmcp.RootDependencies{})
+	if typeOfDependencies.NumField() != 1 {
+		t.Fatalf("RootDependencies field count = %d, want one unary owner root", typeOfDependencies.NumField())
+	}
+	field := typeOfDependencies.Field(0)
+	if field.Name != "Providers" {
+		t.Fatalf("RootDependencies field = %q, want Providers", field.Name)
+	}
+	wantType := reflect.TypeOf((*providers.Service)(nil)).Elem()
+	if field.Type != wantType {
+		t.Fatalf("RootDependencies.Providers type = %v, want Providers Service root %v", field.Type, wantType)
 	}
 }
 

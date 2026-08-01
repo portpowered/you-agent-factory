@@ -2,7 +2,12 @@ package providersmcp_test
 
 import (
 	"encoding/json"
+	"go/parser"
+	"go/token"
 	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/ownershipinventory"
@@ -10,9 +15,10 @@ import (
 )
 
 const (
-	mcpAdapterPackagePath = "pkg/services/providers/transports/mcp"
-	mcpAdapterImportPath  = "github.com/portpowered/infinite-you/pkg/services/providers/transports/mcp"
-	providersOwner        = "providers"
+	mcpAdapterPackagePath   = "pkg/services/providers/transports/mcp"
+	mcpAdapterImportPath    = "github.com/portpowered/infinite-you/pkg/services/providers/transports/mcp"
+	providersRootImportPath = "github.com/portpowered/infinite-you/pkg/services/providers"
+	providersOwner          = "providers"
 )
 
 type coverageMinimumManifest struct {
@@ -33,6 +39,36 @@ func TestManifestRegistration_MCPAdapterPackageIsRegistered(t *testing.T) {
 	assertOwnershipInventoryRegistration(t)
 	assertCoverageMinimumRegistration(t, "unit", "docs/internal/baselines/go-unit-coverage-package-minimums.json")
 	assertCoverageMinimumRegistration(t, "functional", "docs/internal/baselines/go-functional-coverage-package-minimums.json")
+}
+
+func TestProductionFiles_ImportOnlyProvidersRootOrStandardLibrary(t *testing.T) {
+	t.Parallel()
+
+	root := testutil.MustRepoPath(t, mcpAdapterPackagePath)
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatalf("read MCP adapter directory: %v", err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" || strings.HasSuffix(entry.Name(), "_test.go") {
+			continue
+		}
+		path := filepath.Join(root, entry.Name())
+		file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
+		if err != nil {
+			t.Fatalf("parse %s: %v", path, err)
+		}
+		for _, importSpec := range file.Imports {
+			importPath, err := strconv.Unquote(importSpec.Path.Value)
+			if err != nil {
+				t.Fatalf("decode import in %s: %v", path, err)
+			}
+			if importPath == providersRootImportPath || !strings.Contains(importPath, ".") {
+				continue
+			}
+			t.Errorf("production MCP file %s imports non-owner package %q; only the Providers root is allowed", filepath.ToSlash(path), importPath)
+		}
+	}
 }
 
 func assertPackageTargetManifestRegistration(t *testing.T) {

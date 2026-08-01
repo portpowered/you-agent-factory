@@ -33,6 +33,35 @@ func TestDiscoverTools_ExposesExpectedProvidersTools(t *testing.T) {
 	}
 }
 
+func TestDiscoverTools_RegistryParityAndCanonicalIDsAreUnique(t *testing.T) {
+	t.Parallel()
+
+	seenNames := make(map[string]struct{})
+	seenIDs := make(map[string]string)
+	for _, tool := range providersmcp.DiscoverTools() {
+		if _, duplicate := seenNames[tool.Name]; duplicate {
+			t.Fatalf("duplicate discovered provider tool name %q", tool.Name)
+		}
+		seenNames[tool.Name] = struct{}{}
+
+		id := "mcp.tool." + tool.Name
+		if previousName, duplicate := seenIDs[id]; duplicate {
+			t.Fatalf("duplicate canonical provider tool ID %q for %q and %q", id, previousName, tool.Name)
+		}
+		seenIDs[id] = tool.Name
+
+		if !providersmcp.IsCanonicalToolHandlerRegistered(tool.Name) {
+			t.Fatalf("discovered provider tool %q has no registered handler", tool.Name)
+		}
+		if strings.HasPrefix(tool.Name, "you.workflow.") {
+			t.Fatalf("compatibility alias %q appeared in canonical provider discovery", tool.Name)
+		}
+	}
+	if len(seenNames) != len(providersmcp.ToolNames()) {
+		t.Fatalf("ToolNames count = %d, want %d discovered provider tools", len(providersmcp.ToolNames()), len(seenNames))
+	}
+}
+
 func TestDiscoverTools_EachToolHasSchemasDescriptionsAndStableFields(t *testing.T) {
 	t.Parallel()
 

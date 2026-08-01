@@ -76,13 +76,13 @@ func workContentPartSchema() map[string]any {
 
 func workItemSchema() map[string]any {
 	return objectSchema(map[string]any{
-		"name":                     stringProperty("Customer-authored work item name within the batch."),
-		"workId":                   stringProperty("Optional stable Work identifier."),
-		"requestId":                stringProperty("Optional per-item request identifier."),
-		"workTypeName":             stringProperty("Configured work type name from the Factory definition."),
-		"state":                    stringProperty("Optional authored state name for the submitted work item."),
-		"chainingTraceDepth":       integerProperty("Optional chaining trace depth."),
-		"currentChainingTraceId":   stringProperty("Optional current chaining trace identifier."),
+		"name":                   stringProperty("Customer-authored work item name within the batch."),
+		"workId":                 stringProperty("Optional stable Work identifier."),
+		"requestId":              stringProperty("Optional per-item request identifier."),
+		"workTypeName":           stringProperty("Configured work type name from the Factory definition."),
+		"state":                  stringProperty("Optional authored state name for the submitted work item."),
+		"chainingTraceDepth":     integerProperty("Optional chaining trace depth."),
+		"currentChainingTraceId": stringProperty("Optional current chaining trace identifier."),
 		"previousChainingTraceIds": map[string]any{
 			"type":        "array",
 			"description": "Optional prior chaining trace identifiers.",
@@ -156,13 +156,13 @@ func readModelStateSchema() map[string]any {
 
 func readModelSchema() map[string]any {
 	return objectSchema(map[string]any{
-		"CursorID":                 stringProperty("Opaque cursor identifier for stable pagination."),
-		"Name":                     stringProperty("Customer-authored work item name."),
-		"WorkID":                   stringProperty("Stable Work identifier."),
-		"WorkTypeName":             stringProperty("Configured work type name."),
-		"State":                    readModelStateSchema(),
-		"ChainingTraceDepth":       integerProperty("Chaining trace depth for the work item."),
-		"CurrentChainingTraceID":   stringProperty("Current chaining trace identifier."),
+		"CursorID":               stringProperty("Opaque cursor identifier for stable pagination."),
+		"Name":                   stringProperty("Customer-authored work item name."),
+		"WorkID":                 stringProperty("Stable Work identifier."),
+		"WorkTypeName":           stringProperty("Configured work type name."),
+		"State":                  readModelStateSchema(),
+		"ChainingTraceDepth":     integerProperty("Chaining trace depth for the work item."),
+		"CurrentChainingTraceID": stringProperty("Current chaining trace identifier."),
 		"PreviousChainingTraceIDs": map[string]any{
 			"type":        "array",
 			"description": "Prior chaining trace identifiers.",

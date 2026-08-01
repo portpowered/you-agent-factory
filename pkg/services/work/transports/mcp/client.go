@@ -32,6 +32,22 @@ func BindToolOperation(service work.Service) ToolOperation {
 	return Bind(RootDependencies{Work: service})
 }
 
+// WorkRoot is the accepted Work root contract used by the MCP adapter.
+// Adapter-owned operations invoke this surface rather than Work internal packages.
+type WorkRoot = work.Service
+
+// RootDependencies is the singular Work root binding consumed by the MCP
+// adapter. Tests inject a root-shaped fake without constructing Work internals.
+type RootDependencies struct {
+	Work WorkRoot
+}
+
+// NewFromRoot constructs an MCP tool operation that calls through the supplied
+// Work root binding.
+func NewFromRoot(deps RootDependencies) ToolOperation {
+	return Bind(deps)
+}
+
 type canonicalToolHandler func(
 	context.Context,
 	work.Service,

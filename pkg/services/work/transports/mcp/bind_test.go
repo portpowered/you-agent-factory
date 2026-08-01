@@ -3,6 +3,7 @@ package workmcp_test
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -82,6 +83,23 @@ func TestBind_ToolOperationRejectsMissingContext(t *testing.T) {
 	_, err := operation(nil, workmcp.ToolGet, json.RawMessage(`{}`))
 	if err == nil || !strings.Contains(err.Error(), "MCP request context is required") {
 		t.Fatalf("ToolOperation(nil context) error = %v, want required-context error", err)
+	}
+}
+
+func TestRootDependencies_BindsExactlyOneWorkRoot(t *testing.T) {
+	t.Parallel()
+
+	typeOfDependencies := reflect.TypeOf(workmcp.RootDependencies{})
+	if typeOfDependencies.NumField() != 1 {
+		t.Fatalf("RootDependencies field count = %d, want one unary owner root", typeOfDependencies.NumField())
+	}
+	field := typeOfDependencies.Field(0)
+	if field.Name != "Work" {
+		t.Fatalf("RootDependencies field = %q, want Work", field.Name)
+	}
+	wantType := reflect.TypeOf((*work.Service)(nil)).Elem()
+	if field.Type != wantType {
+		t.Fatalf("RootDependencies.Work type = %v, want Work Service root %v", field.Type, wantType)
 	}
 }
 
