@@ -1,7 +1,6 @@
 package inference_test
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,10 +8,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	modelproviders "github.com/portpowered/infinite-you/packages/model-providers"
-	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	inference "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -34,24 +30,25 @@ func TestExplicitProviderAndModelReachSelectedProviderEdge(t *testing.T) {
 	writeExplicitSelectionWorker(t, dir, selectedProviderAlias, explicitModel)
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"explicit provider selection"}`))
 
-	selectedIntegration := inference.ProgressingExternalIntegration(
+	selectedProvider := support.NewProgressingExternalProvider(
+		t,
 		selectedProviderID,
+		selectedProviderAlias,
 		"structured progress COMPLETE",
 	)
-	alternateIntegration := inference.ProgressingExternalIntegration(
+	alternateProvider := support.NewProgressingExternalProvider(
+		t,
 		alternateProviderID,
+		alternateProviderAlias,
 		"alternate provider must not run",
 	)
 
-	selectedManifest := externalProviderManifest(t, selectedProviderID, selectedProviderAlias)
-	alternateManifest := externalProviderManifest(t, alternateProviderID, alternateProviderAlias)
-
-	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
-		ProviderRegistrations: []inference.Registration{
-			{Manifest: selectedManifest, Integration: selectedIntegration},
-			{Manifest: alternateManifest, Integration: alternateIntegration},
-		},
-	}, 20*time.Second)
+	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(
+		t,
+		dir,
+		support.ProviderEdges(selectedProvider, alternateProvider),
+		20*time.Second,
+	)
 
 	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
 		t.Fatalf("terminal place tokens = %d, want 1 completed work item", got)
@@ -60,7 +57,7 @@ func TestExplicitProviderAndModelReachSelectedProviderEdge(t *testing.T) {
 		t.Fatalf("failed place tokens = %d, want 0", got)
 	}
 
-	selectedStats := selectedIntegration.Stats()
+	selectedStats := selectedProvider.Stats()
 	if selectedStats.InvokeCalls != 1 {
 		t.Fatalf("selected provider invoke calls = %d, want 1", selectedStats.InvokeCalls)
 	}
@@ -73,7 +70,7 @@ func TestExplicitProviderAndModelReachSelectedProviderEdge(t *testing.T) {
 	if selectedStats.TerminalCloses != 1 {
 		t.Fatalf("selected provider terminal closes = %d, want exactly one terminal outcome", selectedStats.TerminalCloses)
 	}
-	alternateStats := alternateIntegration.Stats()
+	alternateStats := alternateProvider.Stats()
 	if alternateStats.InvokeCalls != 0 {
 		t.Fatalf(
 			"alternate provider invoke calls = %d, want 0 when worker selected %q",
@@ -111,24 +108,25 @@ func TestWorkerProviderOverridesGlobalDefault(t *testing.T) {
 	writeExplicitSelectionWorker(t, dir, workerProviderAlias, workerModel)
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"worker provider overrides global default"}`))
 
-	defaultIntegration := inference.ProgressingExternalIntegration(
+	defaultProvider := support.NewProgressingExternalProvider(
+		t,
 		defaultProviderID,
+		defaultProviderAlias,
 		"global default provider must not run",
 	)
-	workerIntegration := inference.ProgressingExternalIntegration(
+	workerProvider := support.NewProgressingExternalProvider(
+		t,
 		workerProviderID,
+		workerProviderAlias,
 		"structured progress COMPLETE",
 	)
 
-	defaultManifest := externalProviderManifest(t, defaultProviderID, defaultProviderAlias)
-	workerManifest := externalProviderManifest(t, workerProviderID, workerProviderAlias)
-
-	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(t, dir, serviceedges.Edges{
-		ProviderRegistrations: []inference.Registration{
-			{Manifest: defaultManifest, Integration: defaultIntegration},
-			{Manifest: workerManifest, Integration: workerIntegration},
-		},
-	}, 20*time.Second)
+	_, listed, _ := support.RunFactoryToCompletionWithEdgesAndObservations(
+		t,
+		dir,
+		support.ProviderEdges(defaultProvider, workerProvider),
+		20*time.Second,
+	)
 
 	if got := support.CountWorkAtCustomerState(listed, "task:done"); got != 1 {
 		t.Fatalf("terminal place tokens = %d, want 1 completed work item", got)
@@ -137,7 +135,7 @@ func TestWorkerProviderOverridesGlobalDefault(t *testing.T) {
 		t.Fatalf("failed place tokens = %d, want 0", got)
 	}
 
-	workerStats := workerIntegration.Stats()
+	workerStats := workerProvider.Stats()
 	if workerStats.InvokeCalls != 1 {
 		t.Fatalf("worker provider invoke calls = %d, want 1", workerStats.InvokeCalls)
 	}
@@ -151,7 +149,7 @@ func TestWorkerProviderOverridesGlobalDefault(t *testing.T) {
 		t.Fatalf("worker provider terminal closes = %d, want exactly one terminal outcome", workerStats.TerminalCloses)
 	}
 
-	defaultStats := defaultIntegration.Stats()
+	defaultStats := defaultProvider.Stats()
 	if defaultStats.InvokeCalls != 0 {
 		t.Fatalf(
 			"global default provider invoke calls = %d, want 0 when worker selected %q",
@@ -183,19 +181,16 @@ func TestUnknownProviderFailsBeforeProcessStart(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	writeExplicitSelectionWorker(t, dir, unknownProviderAlias, unknownModel)
 
-	registeredIntegration := inference.ProgressingExternalIntegration(
+	registeredProvider := support.NewProgressingExternalProvider(
+		t,
 		registeredProviderID,
+		registeredProviderAlias,
 		"registered provider must not run",
 	)
-	registeredManifest := externalProviderManifest(t, registeredProviderID, registeredProviderAlias)
 
-	process := support.BuildProcess(t, serviceedges.Edges{
-		ProviderRegistrations: []inference.Registration{
-			{Manifest: registeredManifest, Integration: registeredIntegration},
-		},
-	})
+	process := support.BuildProcess(t, support.ProviderEdges(registeredProvider))
 
-	constructionStats := registeredIntegration.Stats()
+	constructionStats := registeredProvider.Stats()
 	if constructionStats.InvokeCalls != 0 || constructionStats.ProgressWrites != 0 ||
 		constructionStats.TerminalCloses != 0 || constructionStats.DiscoverCalls != 0 ||
 		constructionStats.CapabilityCalls != 0 {
@@ -237,7 +232,7 @@ func TestUnknownProviderFailsBeforeProcessStart(t *testing.T) {
 		)
 	}
 
-	runStats := registeredIntegration.Stats()
+	runStats := registeredProvider.Stats()
 	if runStats.InvokeCalls != 0 {
 		t.Fatalf(
 			"registered provider invoke calls after failed startup = %d, want 0",
@@ -270,25 +265,4 @@ func writeExplicitSelectionWorker(t *testing.T, factoryDir, provider, model stri
 	if err := os.WriteFile(workerPath, []byte(worker), 0o600); err != nil {
 		t.Fatalf("write explicit selection worker: %v", err)
 	}
-}
-
-func externalProviderManifest(t *testing.T, identity, alias string) inference.Manifest {
-	t.Helper()
-	var catalog struct {
-		Providers []inference.Manifest `json:"providers"`
-	}
-	if err := json.Unmarshal(modelproviders.CatalogJSON(), &catalog); err != nil {
-		t.Fatalf("decode embedded provider catalog: %v", err)
-	}
-	manifest := catalog.Providers[0]
-	manifest.ID = identity
-	manifest.Aliases = []string{alias}
-	manifest.ImplementationAvailability = inference.ImplementationExternallySupplied
-	manifest.TechnicalSupportLevel = inference.SupportProduction
-	manifest.Deprecation = nil
-	manifest.MaximumExecutionCapabilities = inference.ExecutionCapabilities{
-		PromptSubmission: true,
-	}
-	manifest.MaximumResponseFidelityCapabilities = inference.ResponseFidelityCapabilities{}
-	return manifest
 }
