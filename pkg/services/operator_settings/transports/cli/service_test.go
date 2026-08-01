@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -34,7 +35,7 @@ func TestConstructedService_ConfigureReportsPersistedDefaults(t *testing.T) {
 				WorkerModelProvider: "codex",
 				WorkerModel:         "gpt-5",
 			},
-			Runtime: operatorsettings.EmptyDocument().Runtime,
+			Runtime: operatorsettings.EmptyDocument.Runtime,
 		},
 	})
 	service := operatorsettingscli.New(root)
@@ -123,7 +124,7 @@ func TestConstructedService_ConfigureHonorsPromptCancellation(t *testing.T) {
 			WorkerModelProvider: "codex",
 			WorkerModel:         "original",
 		},
-		Runtime: operatorsettings.EmptyDocument().Runtime,
+		Runtime: operatorsettings.EmptyDocument.Runtime,
 	}
 	root := newFakeSettingsRoot(map[string]operatorsettings.Document{
 		configPath: original.Clone(),
@@ -161,7 +162,7 @@ func TestConstructedService_ResolveOperatorDefaultsDelegatesToRoot(t *testing.T)
 				WorkerModelProvider: "claude",
 				WorkerModel:         "file-model",
 			},
-			Runtime: operatorsettings.EmptyDocument().Runtime,
+			Runtime: operatorsettings.EmptyDocument.Runtime,
 		},
 	})
 	service := operatorsettingscli.New(root)
@@ -204,7 +205,7 @@ func TestConfigureFacadeMatchesConstructedService(t *testing.T) {
 				WorkerModelProvider: "codex",
 				WorkerModel:         "gpt-5",
 			},
-			Runtime: operatorsettings.EmptyDocument().Runtime,
+			Runtime: operatorsettings.EmptyDocument.Runtime,
 		},
 	})
 	service := operatorsettingscli.New(root)
@@ -262,7 +263,7 @@ func (fake *fakeSettingsRoot) LoadDocument(
 			}
 		}
 		return operatorsettings.LoadDocumentResult{
-			Document: operatorsettings.EmptyDocument(),
+			Document: operatorsettings.EmptyDocument,
 			Path:     path,
 			Found:    false,
 		}, nil
@@ -283,7 +284,7 @@ func (fake *fakeSettingsRoot) ApplyDocumentUpdate(
 	path := strings.TrimSpace(request.Path)
 	document, found := fake.documents[path]
 	if !found {
-		document = operatorsettings.EmptyDocument()
+		document = operatorsettings.EmptyDocument
 	}
 	expected := strings.TrimSpace(request.ExpectedBackendScope)
 	if expected != "" && document.BackendScopeID != expected {
@@ -334,6 +335,120 @@ func (fake *fakeSettingsRoot) ResolveEffective(
 			ConfigPath:                strings.TrimSpace(request.ConfigPath),
 		},
 	}, nil
+}
+
+func (fake *fakeSettingsRoot) DefaultConfigPath(homeDir string) string {
+	return filepath.Join(strings.TrimSpace(homeDir), ".you-agent-factory", "config.json")
+}
+
+func (fake *fakeSettingsRoot) LoadFileConfig(path string) (operatorsettings.Config, error) {
+	loaded, err := fake.LoadDocument(operatorsettings.LoadDocumentRequest{Path: path})
+	if err != nil {
+		return operatorsettings.Config{}, err
+	}
+	return operatorsettings.Config{
+		BackendScopeID: loaded.Document.BackendScopeID,
+		Defaults: operatorsettings.Defaults{
+			WorkerModelProvider: loaded.Document.Defaults.WorkerModelProvider,
+			WorkerModel:         loaded.Document.Defaults.WorkerModel,
+		},
+	}, nil
+}
+
+func (fake *fakeSettingsRoot) ResolveFromHomeWithEnvironment(
+	homeDir string,
+	environment operatorsettings.Defaults,
+	flags operatorsettings.FlagOverrides,
+) (operatorsettings.ResolvedDefaults, error) {
+	configPath := fake.DefaultConfigPath(homeDir)
+	config, err := fake.LoadFileConfig(configPath)
+	if err != nil {
+		return operatorsettings.ResolvedDefaults{}, err
+	}
+	provider, providerSource := cliWinningDefaultsValue(
+		config.Defaults.WorkerModelProvider,
+		environment.WorkerModelProvider,
+		flags.WorkerModelProvider,
+	)
+	model, modelSource := cliWinningDefaultsValue(
+		config.Defaults.WorkerModel,
+		environment.WorkerModel,
+		flags.WorkerModel,
+	)
+	canonicalProvider, ok := canonicalizeProvider(provider)
+	if !ok {
+		return operatorsettings.ResolvedDefaults{}, operatorsettings.ResolutionFailure{
+			Kind:    operatorsettings.ResolutionFailureKindUnsupportedOverride,
+			Message: provider,
+			Field:   "workerModelProvider",
+		}
+	}
+	if canonicalProvider == "DEFAULT" {
+		return operatorsettings.ResolvedDefaults{}, operatorsettings.ResolutionFailure{
+			Kind: operatorsettings.ResolutionFailureKindInvalidInput,
+			Message: "worker model provider DEFAULT requires a concrete provider from file or environment; " +
+				"set defaults.workerModelProvider, YOU_DEFAULT_WORKER_MODEL_PROVIDER, or you run --provider",
+			Field: "workerModelProvider",
+		}
+	}
+	return operatorsettings.ResolvedDefaults{
+		WorkerModelProvider:       canonicalProvider,
+		WorkerModel:               model,
+		WorkerModelProviderSource: providerSource,
+		WorkerModelSource:         modelSource,
+		ConfigPath:                configPath,
+	}, nil
+}
+
+func (fake *fakeSettingsRoot) EnsureLocalBackendScope(string) (operatorsettings.ResolvedBackendScope, error) {
+	return operatorsettings.ResolvedBackendScope{}, errors.New("test settings root does not implement identity")
+}
+
+func (fake *fakeSettingsRoot) ProjectInputInventory() operatorsettings.InputInventory {
+	return operatorsettings.InputInventory{}
+}
+
+func (fake *fakeSettingsRoot) DeriveProviderBackendScopeID(provider, kind, boundary string) string {
+	return "provider-" + provider + "-" + kind + "-" + boundary
+}
+
+func (fake *fakeSettingsRoot) IsLocalBackendScopeID(string) bool { return false }
+
+func (fake *fakeSettingsRoot) ConfigureACPIntegrationAdd(
+	context.Context,
+	string,
+	operatorsettings.ACPIntegration,
+) (operatorsettings.Document, error) {
+	return operatorsettings.Document{}, errors.New("test settings root does not implement ACP")
+}
+
+func (fake *fakeSettingsRoot) ConfigureACPIntegrationDelete(
+	context.Context,
+	string,
+	string,
+) (operatorsettings.Document, error) {
+	return operatorsettings.Document{}, errors.New("test settings root does not implement ACP")
+}
+
+func (fake *fakeSettingsRoot) EnsurePackagedACPIntegrations(
+	context.Context,
+	string,
+	[]operatorsettings.ACPIntegration,
+) (operatorsettings.Document, error) {
+	return operatorsettings.Document{}, errors.New("test settings root does not implement ACP")
+}
+
+func cliWinningDefaultsValue(fileValue, environmentValue, flagValue string) (string, operatorsettings.Source) {
+	switch {
+	case strings.TrimSpace(flagValue) != "":
+		return strings.TrimSpace(flagValue), operatorsettings.SourceFlag
+	case strings.TrimSpace(environmentValue) != "":
+		return strings.TrimSpace(environmentValue), operatorsettings.SourceEnv
+	case strings.TrimSpace(fileValue) != "":
+		return strings.TrimSpace(fileValue), operatorsettings.SourceFile
+	default:
+		return "", ""
+	}
 }
 
 func mergeProviderModelUpdate(

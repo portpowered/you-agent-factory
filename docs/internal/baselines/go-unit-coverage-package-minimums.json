@@ -1124,7 +1124,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization",
-      "minimum": 59.11
+      "minimum": 4.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/contracts",
@@ -1139,6 +1139,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/recordingsqueries",
       "minimum": 35.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/service",
+      "minimum": 52.10
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle",
@@ -1515,10 +1519,6 @@
       "minimum": 88.43
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/providers/inference",
-      "minimum": 0.00
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/service",
       "minimum": 75.40
     },
@@ -1709,7 +1709,7 @@
       }
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export/artifacts",
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/artifacts",
       "minimum": 77.00
     },
     {
@@ -1731,15 +1731,15 @@
       }
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/events",
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events",
       "minimum": 81.33
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/events/kinds",
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events/kinds",
       "minimum": 83.24
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/events/snapshot",
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events/snapshot",
       "minimum": 74.24
     },
     {
@@ -1765,15 +1765,15 @@
       "minimum": 93.33
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/projections",
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections",
       "minimum": 89.77
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/projections/dashboard",
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections/dashboard",
       "minimum": 85.53
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/projections/workstation",
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections/workstation",
       "minimum": 82.00
     },
     {
@@ -1813,7 +1813,7 @@
       "minimum": 96.66
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/replay",
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay",
       "minimum": 78.72
     },
     {

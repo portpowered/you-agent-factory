@@ -6,18 +6,10 @@ import (
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
-	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerswire "github.com/portpowered/infinite-you/pkg/services/workers/wire"
 )
-
-func init() {
-	settingswire.RegisterProvidersRootConstructor(func() (providers.Service, error) {
-		return providerswire.NewService()
-	})
-}
 
 // provideRuntimeProviderBindings builds graph-worker provider bindings over the
 // Factory Runtime's effective command runner, including mock and replay wrappers.

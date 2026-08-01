@@ -26,7 +26,10 @@ func TestWireLegacyPackagesFoldPreservesExistingBackendScopeIdentity(t *testing.
 	const scopeID = "local-aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
 	configPath := writeIdentityInventoryFixtureToTemp(t, "valid/existing-scope.json")
 
-	root, err := settingswire.NewServiceFromConfigDocument(testConfigDocumentService())
+	root, err := settingswire.NewServiceFromConfigDocument(
+		testConfigDocumentService(),
+		internaltestproviders.StandardCatalog(),
+	)
 	if err != nil {
 		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
 	}

@@ -19,22 +19,22 @@ import (
 // satisfies the singular peer-facing Service contract without exposing
 // additional Bootstrap authority interfaces to peers.
 type Initializer struct {
-	operatorSettings  systeminitialization.OperatorSettings
+	operatorSettings  OperatorSettings
 	packagedCatalog   factorydefinitions.PackagedFactoryCatalogOperations
 	packagedInstaller factorydefinitions.PackagedFactoryInstaller
-	inspectPath       systeminitialization.InspectPath
-	migrationFiles    systeminitialization.LegacyFactoryMigrationFileSystem
+	inspectPath       InspectPath
+	migrationFiles    LegacyFactoryMigrationFileSystem
 }
 
 var _ systeminitialization.Service = (*Initializer)(nil)
 
 // New constructs the canonical workflow from already-selected collaborators.
 func New(
-	operatorSettings systeminitialization.OperatorSettings,
+	operatorSettings OperatorSettings,
 	packagedCatalog factorydefinitions.PackagedFactoryCatalogOperations,
 	packagedInstaller factorydefinitions.PackagedFactoryInstaller,
-	inspectPath systeminitialization.InspectPath,
-	migrationFiles systeminitialization.LegacyFactoryMigrationFileSystem,
+	inspectPath InspectPath,
+	migrationFiles LegacyFactoryMigrationFileSystem,
 ) (*Initializer, error) {
 	if operatorSettings == nil {
 		return nil, fmt.Errorf("construct system initialization: Operator Settings service is required")
@@ -264,7 +264,7 @@ func systemConfigRollbackOutcome(
 	}
 }
 
-func ensureSystemConfigParentIsDirectory(configPath string, inspectPath systeminitialization.InspectPath) error {
+func ensureSystemConfigParentIsDirectory(configPath string, inspectPath InspectPath) error {
 	parentDir := filepath.Dir(configPath)
 	info, err := inspectPath(parentDir)
 	if err != nil {

@@ -33,7 +33,7 @@ func TestLoadDocument_MissingDestinationReturnsEmptyValidDocument(t *testing.T) 
 	if loaded.Path != path {
 		t.Fatalf("Path = %q, want %q", loaded.Path, path)
 	}
-	want := operatorsettings.EmptyDocument()
+	want := operatorsettings.EmptyDocument
 	if !reflect.DeepEqual(loaded.Document, want) {
 		t.Fatalf("Document = %#v, want empty valid document %#v", loaded.Document, want)
 	}
@@ -109,7 +109,7 @@ func TestLoadDocument_ValidOnDiskDocumentReturnsCompleteValidatedDocument(t *tes
 	}) {
 		t.Fatalf("Defaults = %#v, want validated load-defaults values", loaded.Document.Defaults)
 	}
-	if loaded.Document.Runtime != operatorsettings.EmptyDocument().Runtime {
+	if loaded.Document.Runtime != operatorsettings.EmptyDocument.Runtime {
 		t.Fatalf("Runtime = %#v, want production defaults", loaded.Document.Runtime)
 	}
 }

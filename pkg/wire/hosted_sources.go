@@ -7,6 +7,7 @@ import (
 	"github.com/jonboulle/clockwork"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
+	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"go.uber.org/zap"
 )
@@ -15,12 +16,12 @@ func provideAutomationHostedSourcesFactory(edges serviceedges.Edges) (automation
 	checkpointStore := edges.HostedLinearCheckpointStore
 	if checkpointStore == nil {
 		var err error
-		checkpointStore, err = automations.NewHostedLinearCheckpointStore(platformfilesystem.Local{})
+		checkpointStore, err = automationswire.NewHostedLinearCheckpointStore(platformfilesystem.Local{})
 		if err != nil {
 			return nil, err
 		}
 	}
-	factory := automations.NewHostedSourcesFactory(checkpointStore)
+	factory := automationswire.NewHostedSourcesFactory(checkpointStore)
 	return func(
 		logger *zap.Logger,
 		clock automations.HostedLinearClock,
@@ -35,7 +36,7 @@ func provideAutomationHostedSourcesFactory(edges serviceedges.Edges) (automation
 			httpClient = &http.Client{Timeout: automations.HostedLinearDefaultRequestTimeout}
 		}
 		if secretResolver == nil {
-			secretResolver = automations.NewHostedLinearSecretResolver(os.Getenv, os.ReadFile)
+			secretResolver = automationswire.NewHostedLinearSecretResolver(os.Getenv, os.ReadFile)
 		}
 		return factory(logger, clock, httpClient, secretResolver, linearEndpoint)
 	}, nil

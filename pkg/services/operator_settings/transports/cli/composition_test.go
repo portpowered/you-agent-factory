@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -32,7 +33,7 @@ func TestBindConfigureDelegatesThroughAdapterService(t *testing.T) {
 				WorkerModelProvider: "codex",
 				WorkerModel:         "gpt-5",
 			},
-			Runtime: operatorsettings.EmptyDocument().Runtime,
+			Runtime: operatorsettings.EmptyDocument.Runtime,
 		},
 	})
 	operation := operatorsettingscli.BindConfigure(root)
@@ -98,7 +99,7 @@ func TestBindResolveOperatorDefaultsDelegatesThroughAdapterService(t *testing.T)
 				WorkerModelProvider: "codex",
 				WorkerModel:         "gpt-5",
 			},
-			Runtime: operatorsettings.EmptyDocument().Runtime,
+			Runtime: operatorsettings.EmptyDocument.Runtime,
 		},
 	})
 	operation := operatorsettingscli.BindResolveOperatorDefaults(root)
@@ -167,7 +168,7 @@ func (root *compositionSettingsRoot) LoadDocument(
 	document, ok := root.documents[request.Path]
 	if !ok {
 		return operatorsettings.LoadDocumentResult{
-			Document: operatorsettings.EmptyDocument(),
+			Document: operatorsettings.EmptyDocument,
 			Path:     request.Path,
 		}, nil
 	}
@@ -233,4 +234,102 @@ func (root *compositionSettingsRoot) ResolveEffective(
 			ConfigPath:                request.ConfigPath,
 		},
 	}, nil
+}
+
+func (root *compositionSettingsRoot) DefaultConfigPath(homeDir string) string {
+	return filepath.Join(strings.TrimSpace(homeDir), ".you-agent-factory", "config.json")
+}
+
+func (root *compositionSettingsRoot) LoadFileConfig(path string) (operatorsettings.Config, error) {
+	loaded, err := root.LoadDocument(operatorsettings.LoadDocumentRequest{Path: path})
+	if err != nil {
+		return operatorsettings.Config{}, err
+	}
+	return operatorsettings.Config{
+		BackendScopeID: loaded.Document.BackendScopeID,
+		Defaults: operatorsettings.Defaults{
+			WorkerModelProvider: loaded.Document.Defaults.WorkerModelProvider,
+			WorkerModel:         loaded.Document.Defaults.WorkerModel,
+		},
+	}, nil
+}
+
+func (root *compositionSettingsRoot) ResolveFromHomeWithEnvironment(
+	homeDir string,
+	environment operatorsettings.Defaults,
+	flags operatorsettings.FlagOverrides,
+) (operatorsettings.ResolvedDefaults, error) {
+	configPath := root.DefaultConfigPath(homeDir)
+	config, err := root.LoadFileConfig(configPath)
+	if err != nil {
+		return operatorsettings.ResolvedDefaults{}, err
+	}
+	provider, providerSource := compositionWinningValue(
+		config.Defaults.WorkerModelProvider,
+		environment.WorkerModelProvider,
+		flags.WorkerModelProvider,
+	)
+	model, modelSource := compositionWinningValue(
+		config.Defaults.WorkerModel,
+		environment.WorkerModel,
+		flags.WorkerModel,
+	)
+	return operatorsettings.ResolvedDefaults{
+		WorkerModelProvider:       strings.ToUpper(provider),
+		WorkerModel:               model,
+		WorkerModelProviderSource: providerSource,
+		WorkerModelSource:         modelSource,
+		ConfigPath:                configPath,
+	}, nil
+}
+
+func (root *compositionSettingsRoot) EnsureLocalBackendScope(string) (operatorsettings.ResolvedBackendScope, error) {
+	return operatorsettings.ResolvedBackendScope{}, errors.New("test composition root does not implement identity")
+}
+
+func (root *compositionSettingsRoot) ProjectInputInventory() operatorsettings.InputInventory {
+	return operatorsettings.InputInventory{}
+}
+
+func (root *compositionSettingsRoot) DeriveProviderBackendScopeID(provider, kind, boundary string) string {
+	return "provider-" + provider + "-" + kind + "-" + boundary
+}
+
+func (root *compositionSettingsRoot) IsLocalBackendScopeID(string) bool { return false }
+
+func (root *compositionSettingsRoot) ConfigureACPIntegrationAdd(
+	context.Context,
+	string,
+	operatorsettings.ACPIntegration,
+) (operatorsettings.Document, error) {
+	return operatorsettings.Document{}, errors.New("test composition root does not implement ACP")
+}
+
+func (root *compositionSettingsRoot) ConfigureACPIntegrationDelete(
+	context.Context,
+	string,
+	string,
+) (operatorsettings.Document, error) {
+	return operatorsettings.Document{}, errors.New("test composition root does not implement ACP")
+}
+
+func (root *compositionSettingsRoot) EnsurePackagedACPIntegrations(
+	context.Context,
+	string,
+	[]operatorsettings.ACPIntegration,
+) (operatorsettings.Document, error) {
+	return operatorsettings.Document{}, errors.New("test composition root does not implement ACP")
+}
+
+func compositionWinningValue(fileValue, environmentValue, flagValue string) (string, operatorsettings.Source) {
+	switch {
+	case strings.TrimSpace(flagValue) != "":
+		return strings.TrimSpace(flagValue), operatorsettings.SourceFlag
+	case strings.TrimSpace(environmentValue) != "":
+		return strings.TrimSpace(environmentValue), operatorsettings.SourceEnv
+	case strings.TrimSpace(fileValue) != "":
+		return strings.TrimSpace(fileValue), operatorsettings.SourceFile
+	default:
+		return "", ""
+	}
 }

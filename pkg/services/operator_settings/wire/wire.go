@@ -9,6 +9,7 @@ package wire
 import (
 	"fmt"
 
+	"github.com/google/uuid"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	operatorservice "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/service"
 	documentwire "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/services/document/wire"
@@ -27,6 +28,7 @@ func NewService(
 	encoder operatorsettings.ConfigEncoder,
 	providersCatalog operatorsettings.ProviderCatalog,
 	providersRoot providers.Service,
+	idGenerators ...operatorsettings.IDGenerator,
 ) (operatorsettings.Service, error) {
 	if err := validateNewServiceInputs(
 		files,
@@ -50,7 +52,19 @@ func NewService(
 	if err != nil {
 		return nil, err
 	}
-	return operatorservice.New(documentService, resolutionService)
+	idGenerator := operatorsettings.IDGenerator(uuid.NewString)
+	if len(idGenerators) > 0 && idGenerators[0] != nil {
+		idGenerator = idGenerators[0]
+	}
+	return operatorservice.New(
+		documentService,
+		resolutionService,
+		files,
+		createTemp,
+		decoder,
+		encoder,
+		idGenerator,
+	)
 }
 
 func validateNewServiceInputs(

@@ -209,11 +209,11 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 
 	tests := []struct {
 		name              string
-		operatorSettings  systeminitialization.OperatorSettings
+		operatorSettings  OperatorSettings
 		packagedCatalog   factorydefinitions.PackagedFactoryCatalogOperations
 		packagedInstaller factorydefinitions.PackagedFactoryInstaller
-		inspectPath       systeminitialization.InspectPath
-		migrationFiles    systeminitialization.LegacyFactoryMigrationFileSystem
+		inspectPath       InspectPath
+		migrationFiles    LegacyFactoryMigrationFileSystem
 		wantErr           string
 	}{
 		{

@@ -30,7 +30,7 @@ func (service *Service) loadDocument(
 				}
 			}
 			return operatorsettings.LoadDocumentResult{
-				Document: operatorsettings.EmptyDocument(),
+				Document: operatorsettings.EmptyDocument,
 				Path:     path,
 				Found:    false,
 			}, nil

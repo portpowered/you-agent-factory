@@ -20,7 +20,7 @@ import (
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
-	inference "github.com/portpowered/infinite-you/pkg/services/providers/inference"
+	inference "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 )
 
 func TestMain(m *testing.M) {

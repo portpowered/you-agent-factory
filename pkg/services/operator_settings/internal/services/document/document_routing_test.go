@@ -75,11 +75,18 @@ func TestConfigDocumentServiceRoutesMalformedConflictAndUnsupportedThroughNested
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
 	service := operatorsettings.ConfigDocumentService{
-		Files:           platformfilesystem.Local{},
-		CreateTemp:      testCreateTemp,
-		Providers:       controlledProviderCatalog,
-		Decoder:         globalconfigmapping.Decode,
-		Encoder:         globalconfigmapping.Encode,
+		Files:      platformfilesystem.Local{},
+		CreateTemp: testCreateTemp,
+		Providers:  controlledProviderCatalog,
+		Decoder:    globalconfigmapping.Decode,
+		Encoder:    globalconfigmapping.Encode,
+		DocumentOwner: settingsconstruct.NewDocumentOwner(
+			platformfilesystem.Local{},
+			testCreateTemp,
+			globalconfigmapping.Decode,
+			globalconfigmapping.Encode,
+			controlledProviderCatalog,
+		),
 		PersistenceLock: &sync.Mutex{},
 	}
 
@@ -102,9 +109,9 @@ func TestConfigDocumentServiceRoutesMalformedConflictAndUnsupportedThroughNested
 	}
 
 	wrongScope := "local-22222222-2222-4222-8222-222222222222"
-	owner, ownerErr := settingsdocument.ResolvedDocumentOwner(service)
-	if ownerErr != nil {
-		t.Fatalf("ResolvedDocumentOwner() = %v", ownerErr)
+	owner, ok := service.DocumentOwner.(settingsdocument.Service)
+	if !ok {
+		t.Fatalf("DocumentOwner = %T, want private document service", service.DocumentOwner)
 	}
 	_, err = owner.ApplyDocumentUpdate(operatorsettings.ApplyDocumentUpdateRequest{
 		Path:                 path,

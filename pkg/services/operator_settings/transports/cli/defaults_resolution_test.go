@@ -19,7 +19,7 @@ func TestResolveOperatorDefaults_CanonicalizesAcceptedProviderAliases(t *testing
 				WorkerModelProvider: "openai",
 				WorkerModel:         "gpt-5-codex",
 			},
-			Runtime: operatorsettings.EmptyDocument().Runtime,
+			Runtime: operatorsettings.EmptyDocument.Runtime,
 		},
 	})
 	service := operatorsettingscli.New(root)

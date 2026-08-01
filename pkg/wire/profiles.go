@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -37,10 +36,12 @@ import (
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
 	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingscli "github.com/portpowered/infinite-you/pkg/services/recordings/transports/cli"
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
@@ -246,20 +247,23 @@ func provideOperatorSettingsProviderCatalog(
 	}
 }
 
-func provideOperatorConfigDocumentService(
+func provideOperatorSettingsService(
 	files operatorsettings.FileSystem,
 	createTemp operatorsettings.CreateTemporaryFile,
-	providers operatorsettings.ProviderCatalog,
+	providerCatalog operatorsettings.ProviderCatalog,
 	decode operatorsettings.ConfigDecoder,
 	encode operatorsettings.ConfigEncoder,
-) operatorsettings.ConfigDocumentService {
-	return settingswire.NewConfigDocumentService(
+	idGenerator operatorsettings.IDGenerator,
+	providersRoot providers.Service,
+) (operatorsettings.Service, error) {
+	return settingswire.NewService(
 		files,
 		createTemp,
 		decode,
 		encode,
-		providers,
-		&sync.Mutex{},
+		providerCatalog,
+		providersRoot,
+		idGenerator,
 	)
 }
 
@@ -272,7 +276,7 @@ func provideOperatorSettingsIDGenerator(edges serviceedges.Edges) operatorsettin
 
 func provideSystemInitializationInspectPath(
 	edges serviceedges.Edges,
-) systeminitialization.InspectPath {
+) systeminitializationwire.InspectPath {
 	if edges.SystemInitializationInspectPath != nil {
 		return edges.SystemInitializationInspectPath
 	}
@@ -281,28 +285,22 @@ func provideSystemInitializationInspectPath(
 
 func provideSystemInitializationLegacyFactoryMigrationFileSystem(
 	edges serviceedges.Edges,
-) systeminitialization.LegacyFactoryMigrationFileSystem {
+) systeminitializationwire.LegacyFactoryMigrationFileSystem {
 	if edges.SystemInitializationMigrationFileSystem != nil {
 		return edges.SystemInitializationMigrationFileSystem
 	}
 	return platformfilesystem.Local{}
 }
 
-func provideOperatorConfigLoader(files operatorsettings.FileSystem, decode operatorsettings.ConfigDecoder) operatorsettings.ConfigLoader {
+func provideOperatorConfigLoader(settings operatorsettings.Service) operatorsettings.ConfigLoader {
 	return func(path string) (operatorsettings.Config, error) {
-		return operatorsettings.LoadFileConfig(files, decode, path)
+		return settings.LoadFileConfig(path)
 	}
 }
 
-func provideOperatorBackendScopeEnsurer(
-	files operatorsettings.FileSystem,
-	createTemp operatorsettings.CreateTemporaryFile,
-	generateID operatorsettings.IDGenerator,
-	decode operatorsettings.ConfigDecoder,
-	encode operatorsettings.ConfigEncoder,
-) operatorsettings.BackendScopeEnsurer {
+func provideOperatorBackendScopeEnsurer(settings operatorsettings.Service) operatorsettings.BackendScopeEnsurer {
 	return func(path string) (operatorsettings.ResolvedBackendScope, error) {
-		return operatorsettings.EnsureLocalBackendScope(files, createTemp, generateID, decode, encode, path)
+		return settings.EnsureLocalBackendScope(path)
 	}
 }
 
@@ -332,11 +330,11 @@ func provideSystemInitializationService(
 	packagedCatalog factorydefinitions.PackagedFactoryCatalogOperations,
 	loadOperatorConfig operatorsettings.ConfigLoader,
 	ensureOperatorBackendScope operatorsettings.BackendScopeEnsurer,
-	inspectPath systeminitialization.InspectPath,
-	migrationFiles systeminitialization.LegacyFactoryMigrationFileSystem,
+	inspectPath systeminitializationwire.InspectPath,
+	migrationFiles systeminitializationwire.LegacyFactoryMigrationFileSystem,
 ) (systeminitialization.Service, error) {
 	return systeminitializationwire.NewService(
-		systeminitialization.OperatorSettingsFunctions{
+		systeminitializationwire.OperatorSettingsFunctions{
 			Load:   loadOperatorConfig,
 			Ensure: ensureOperatorBackendScope,
 		},
@@ -450,9 +448,9 @@ func provideFactoryVisualizationFactory() factoryvisualization.RuntimeFactory {
 		clock factoryvisualization.Clock,
 		sink factoryvisualization.Sink,
 		reportError factoryvisualization.ErrorReporter,
-	) (*factoryvisualization.Service, error) {
-		return factoryvisualization.New(
-			factoryvisualization.NewCurrentRuntimeSource(reader),
+	) (factoryvisualization.Service, error) {
+		return factoryvisualizationwire.NewRoot(
+			factoryvisualizationwire.NewCurrentRuntimeSource(reader),
 			projections,
 			clock,
 			sink,
@@ -640,7 +638,10 @@ func provideApplicationRuntimeAdapter(
 			// Peers leave the composed root inert until explicit Activate.
 			visualization = lifecycle.Functions{
 				StartFunc: func(context.Context) error { return nil },
-				StopFunc:  visualized.Stop,
+				StopFunc: func(ctx context.Context) error {
+					_, err := visualized.StopDrain(ctx, factoryvisualization.StopDrainRequest{})
+					return err
+				},
 			}
 		}
 		handler, err := httpHandler.Bind(opened.HTTP)
@@ -860,7 +861,7 @@ func provideWorkStopSummaryProjector() factorysessions.WorkStopSummaryProjector 
 }
 
 func provideResponsePresentation() factoryvisualization.ResponsePresentation {
-	return factoryvisualization.NewResponsePresentation()
+	return factoryvisualizationwire.NewResponsePresentation()
 }
 
 func provideRuntimeOpener(factory *factorysessionwire.RuntimeOpeningFactory) factorysessionwire.RuntimeOpener {

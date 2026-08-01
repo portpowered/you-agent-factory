@@ -8,7 +8,8 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state/validation"
 )
 
@@ -18,7 +19,7 @@ import (
 func TestConfigMapper_BuilderEquivalence(t *testing.T) {
 	tests := []struct {
 		name     string
-		buildNet func() (*factoryruntime.Net, error)
+		buildNet func() (*state.Net, error)
 		buildCfg func() *interfaces.FactoryConfig
 	}{
 		{
@@ -73,21 +74,21 @@ func TestConfigMapper_BuilderEquivalence(t *testing.T) {
 
 // --- Pattern 1: Simple linear path ---
 
-func buildSimpleLinear() (*factoryruntime.Net, error) {
+func buildSimpleLinear() (*state.Net, error) {
 	return buildTestNet("test",
-		[]*factoryruntime.WorkType{
+		[]*state.WorkType{
 			newAutoCategorizedWorkType("task", "init", "complete", "failed"),
 		},
 		nil,
-		&factoryruntime.PetriTransition{
+		&petri.Transition{
 			ID:         "transformer",
 			Name:       "transformer",
-			Type:       factoryruntime.PetriTransitionNormal,
+			Type:       petri.TransitionNormal,
 			WorkerType: "transform-worker",
-			InputArcs: []factoryruntime.PetriArc{
+			InputArcs: []petri.Arc{
 				newInputArc("task:init", ""),
 			},
-			OutputArcs: []factoryruntime.PetriArc{
+			OutputArcs: []petri.Arc{
 				newOutputArc("task:complete"),
 			},
 		},
@@ -115,27 +116,27 @@ func configSimpleLinear() *interfaces.FactoryConfig {
 
 // --- Pattern 2: Rejection + failure arcs ---
 
-func buildRejectionFailure() (*factoryruntime.Net, error) {
+func buildRejectionFailure() (*state.Net, error) {
 	return buildTestNet("test",
-		[]*factoryruntime.WorkType{
+		[]*state.WorkType{
 			newAutoCategorizedWorkType("task", "init", "processing", "complete", "failed"),
 		},
 		nil,
-		&factoryruntime.PetriTransition{
+		&petri.Transition{
 			ID:         "processor",
 			Name:       "processor",
-			Type:       factoryruntime.PetriTransitionNormal,
+			Type:       petri.TransitionNormal,
 			WorkerType: "process-worker",
-			InputArcs: []factoryruntime.PetriArc{
+			InputArcs: []petri.Arc{
 				newInputArc("task:init", ""),
 			},
-			OutputArcs: []factoryruntime.PetriArc{
+			OutputArcs: []petri.Arc{
 				newOutputArc("task:complete"),
 			},
-			RejectionArcs: []factoryruntime.PetriArc{
+			RejectionArcs: []petri.Arc{
 				newOutputArc("task:init"),
 			},
-			FailureArcs: []factoryruntime.PetriArc{
+			FailureArcs: []petri.Arc{
 				newOutputArc("task:failed"),
 			},
 		},
@@ -165,38 +166,38 @@ func configRejectionFailure() *interfaces.FactoryConfig {
 
 // --- Pattern 3: Rejection loop with guarded loop breaker ---
 
-func buildRejectionGuardedLoopBreaker() (*factoryruntime.Net, error) {
+func buildRejectionGuardedLoopBreaker() (*state.Net, error) {
 	return buildTestNet("test",
-		[]*factoryruntime.WorkType{
+		[]*state.WorkType{
 			newAutoCategorizedWorkType("task", "init", "complete", "failed"),
 		},
 		nil,
-		&factoryruntime.PetriTransition{
+		&petri.Transition{
 			ID:         "reviewer",
 			Name:       "reviewer",
-			Type:       factoryruntime.PetriTransitionNormal,
+			Type:       petri.TransitionNormal,
 			WorkerType: "review-worker",
-			InputArcs: []factoryruntime.PetriArc{
+			InputArcs: []petri.Arc{
 				newInputArc("task:init", ""),
 			},
-			OutputArcs: []factoryruntime.PetriArc{
+			OutputArcs: []petri.Arc{
 				newOutputArc("task:complete"),
 			},
-			RejectionArcs: []factoryruntime.PetriArc{
+			RejectionArcs: []petri.Arc{
 				newOutputArc("task:init"),
 			},
 		},
-		&factoryruntime.PetriTransition{
+		&petri.Transition{
 			ID:   "reviewer-loop-breaker",
 			Name: "reviewer-loop-breaker",
-			Type: factoryruntime.PetriTransitionNormal,
-			InputArcs: []factoryruntime.PetriArc{
-				newGuardedInputArc("task:init", "task:init:to:reviewer-loop-breaker", &factoryruntime.PetriVisitCountGuard{
+			Type: petri.TransitionNormal,
+			InputArcs: []petri.Arc{
+				newGuardedInputArc("task:init", "task:init:to:reviewer-loop-breaker", &petri.VisitCountGuard{
 					TransitionID: "reviewer",
 					MaxVisits:    3,
 				}),
 			},
-			OutputArcs: []factoryruntime.PetriArc{
+			OutputArcs: []petri.Arc{
 				newOutputArc("task:failed"),
 			},
 		},
@@ -236,24 +237,24 @@ func configRejectionGuardedLoopBreaker() *interfaces.FactoryConfig {
 
 // --- Pattern 4: Resource contention ---
 
-func buildResourceContention() (*factoryruntime.Net, error) {
+func buildResourceContention() (*state.Net, error) {
 	return buildTestNet("test",
-		[]*factoryruntime.WorkType{
+		[]*state.WorkType{
 			newAutoCategorizedWorkType("task", "init", "complete", "failed"),
 		},
-		[]*factoryruntime.ResourceDef{
+		[]*state.ResourceDef{
 			{ID: "gpu", Name: "gpu", Capacity: 2},
 		},
-		&factoryruntime.PetriTransition{
+		&petri.Transition{
 			ID:         "processor",
 			Name:       "processor",
-			Type:       factoryruntime.PetriTransitionNormal,
+			Type:       petri.TransitionNormal,
 			WorkerType: "gpu-worker",
-			InputArcs: []factoryruntime.PetriArc{
+			InputArcs: []petri.Arc{
 				newInputArc("task:init", ""),
 				newInputArc("gpu:available", ""),
 			},
-			OutputArcs: []factoryruntime.PetriArc{
+			OutputArcs: []petri.Arc{
 				newOutputArc("task:complete"),
 				newOutputArc("gpu:available"),
 			},
@@ -286,47 +287,47 @@ func configResourceContention() *interfaces.FactoryConfig {
 
 // --- Pattern 5: Fanout fan-in (all children complete guard) ---
 
-func buildFanoutAllChildrenGuard() (*factoryruntime.Net, error) {
+func buildFanoutAllChildrenGuard() (*state.Net, error) {
 	return buildTestNet("test",
-		[]*factoryruntime.WorkType{
+		[]*state.WorkType{
 			newAutoCategorizedWorkType("request", "init", "waiting", "complete", "failed"),
 			newAutoCategorizedWorkType("page", "init", "complete", "failed"),
 		},
 		nil,
-		&factoryruntime.PetriTransition{
+		&petri.Transition{
 			ID:         "splitter",
 			Name:       "splitter",
-			Type:       factoryruntime.PetriTransitionNormal,
+			Type:       petri.TransitionNormal,
 			WorkerType: "split-worker",
-			InputArcs: []factoryruntime.PetriArc{
+			InputArcs: []petri.Arc{
 				newInputArc("request:init", ""),
 			},
-			OutputArcs: []factoryruntime.PetriArc{
+			OutputArcs: []petri.Arc{
 				newOutputArc("request:waiting"),
 			},
 		},
-		&factoryruntime.PetriTransition{
+		&petri.Transition{
 			ID:         "page-processor",
 			Name:       "page-processor",
-			Type:       factoryruntime.PetriTransitionNormal,
+			Type:       petri.TransitionNormal,
 			WorkerType: "page-worker",
-			InputArcs: []factoryruntime.PetriArc{
+			InputArcs: []petri.Arc{
 				newInputArc("page:init", ""),
 			},
-			OutputArcs: []factoryruntime.PetriArc{
+			OutputArcs: []petri.Arc{
 				newOutputArc("page:complete"),
 			},
 		},
-		&factoryruntime.PetriTransition{
+		&petri.Transition{
 			ID:         "collector",
 			Name:       "collector",
-			Type:       factoryruntime.PetriTransitionNormal,
+			Type:       petri.TransitionNormal,
 			WorkerType: "collect-worker",
-			InputArcs: []factoryruntime.PetriArc{
+			InputArcs: []petri.Arc{
 				newInputArc("request:waiting", "parent"),
-				newObserveAllArc("page:complete", "children", &factoryruntime.PetriAllWithParentGuard{MatchBinding: "parent"}),
+				newObserveAllArc("page:complete", "children", &petri.AllWithParentGuard{MatchBinding: "parent"}),
 			},
-			OutputArcs: []factoryruntime.PetriArc{
+			OutputArcs: []petri.Arc{
 				newOutputArc("request:complete"),
 			},
 		},
@@ -379,47 +380,47 @@ func configFanoutAllChildrenGuard() *interfaces.FactoryConfig {
 
 // --- Pattern 6: Multi-work-type pipeline ---
 
-func buildMultiWorkType() (*factoryruntime.Net, error) {
+func buildMultiWorkType() (*state.Net, error) {
 	return buildTestNet("test",
-		[]*factoryruntime.WorkType{
+		[]*state.WorkType{
 			newAutoCategorizedWorkType("request", "init", "validated", "complete", "failed"),
 			newAutoCategorizedWorkType("report", "init", "complete", "failed"),
 		},
 		nil,
-		&factoryruntime.PetriTransition{
+		&petri.Transition{
 			ID:         "validator",
 			Name:       "validator",
-			Type:       factoryruntime.PetriTransitionNormal,
+			Type:       petri.TransitionNormal,
 			WorkerType: "validation-worker",
-			InputArcs: []factoryruntime.PetriArc{
+			InputArcs: []petri.Arc{
 				newInputArc("request:init", ""),
 			},
-			OutputArcs: []factoryruntime.PetriArc{
+			OutputArcs: []petri.Arc{
 				newOutputArc("request:validated"),
 			},
 		},
-		&factoryruntime.PetriTransition{
+		&petri.Transition{
 			ID:         "report-generator",
 			Name:       "report-generator",
-			Type:       factoryruntime.PetriTransitionNormal,
+			Type:       petri.TransitionNormal,
 			WorkerType: "report-worker",
-			InputArcs: []factoryruntime.PetriArc{
+			InputArcs: []petri.Arc{
 				newInputArc("request:validated", ""),
 			},
-			OutputArcs: []factoryruntime.PetriArc{
+			OutputArcs: []petri.Arc{
 				newOutputArc("request:complete"),
 				newOutputArc("report:init"),
 			},
 		},
-		&factoryruntime.PetriTransition{
+		&petri.Transition{
 			ID:         "report-finalizer",
 			Name:       "report-finalizer",
-			Type:       factoryruntime.PetriTransitionNormal,
+			Type:       petri.TransitionNormal,
 			WorkerType: "finalize-worker",
-			InputArcs: []factoryruntime.PetriArc{
+			InputArcs: []petri.Arc{
 				newInputArc("report:init", ""),
 			},
-			OutputArcs: []factoryruntime.PetriArc{
+			OutputArcs: []petri.Arc{
 				newOutputArc("report:complete"),
 			},
 		},
@@ -482,13 +483,13 @@ func fourStates(initial, processing, terminal, failed string) []interfaces.State
 	}
 }
 
-func buildTestNet(id string, workTypes []*factoryruntime.WorkType, resources []*factoryruntime.ResourceDef, transitions ...*factoryruntime.PetriTransition) (*factoryruntime.Net, error) {
-	n := &factoryruntime.Net{
+func buildTestNet(id string, workTypes []*state.WorkType, resources []*state.ResourceDef, transitions ...*petri.Transition) (*state.Net, error) {
+	n := &state.Net{
 		ID:          id,
-		Places:      make(map[string]*factoryruntime.PetriPlace),
-		Transitions: make(map[string]*factoryruntime.PetriTransition),
-		WorkTypes:   make(map[string]*factoryruntime.WorkType),
-		Resources:   make(map[string]*factoryruntime.ResourceDef),
+		Places:      make(map[string]*petri.Place),
+		Transitions: make(map[string]*petri.Transition),
+		WorkTypes:   make(map[string]*state.WorkType),
+		Resources:   make(map[string]*state.ResourceDef),
 	}
 
 	for _, wt := range workTypes {
@@ -500,7 +501,7 @@ func buildTestNet(id string, workTypes []*factoryruntime.WorkType, resources []*
 
 	for _, resource := range resources {
 		n.Resources[resource.ID] = resource
-		place, _ := factoryruntime.GenerateResourcePlaces(resource, time.Unix(1, 0))
+		place, _ := state.GenerateResourcePlaces(resource, time.Unix(1, 0))
 		n.Places[place.ID] = place
 	}
 
@@ -508,7 +509,7 @@ func buildTestNet(id string, workTypes []*factoryruntime.WorkType, resources []*
 		n.Transitions[transition.ID] = transition
 	}
 
-	factoryruntime.NormalizeTransitionTopology(n, nil)
+	state.NormalizeTransitionTopology(n, nil)
 
 	validator := validation.NewCompositeValidator(
 		&validation.ReachabilityValidator{},
@@ -534,69 +535,69 @@ func buildTestNet(id string, workTypes []*factoryruntime.WorkType, resources []*
 	return n, nil
 }
 
-func newAutoCategorizedWorkType(id string, states ...string) *factoryruntime.WorkType {
-	definitions := make([]factoryruntime.StateDefinition, 0, len(states))
+func newAutoCategorizedWorkType(id string, states ...string) *state.WorkType {
+	definitions := make([]state.StateDefinition, 0, len(states))
 	lastIndex := len(states) - 1
 	for index, stateValue := range states {
-		category := factoryruntime.StateCategoryProcessing
+		category := state.StateCategoryProcessing
 		switch {
 		case index == 0:
-			category = factoryruntime.StateCategoryInitial
+			category = state.StateCategoryInitial
 		case index == lastIndex:
-			category = factoryruntime.StateCategoryFailed
+			category = state.StateCategoryFailed
 		case index == lastIndex-1:
-			category = factoryruntime.StateCategoryTerminal
+			category = state.StateCategoryTerminal
 		}
-		definitions = append(definitions, factoryruntime.StateDefinition{
+		definitions = append(definitions, state.StateDefinition{
 			Value:    stateValue,
 			Category: category,
 		})
 	}
 
-	return &factoryruntime.WorkType{
+	return &state.WorkType{
 		ID:     id,
 		Name:   id,
 		States: definitions,
 	}
 }
 
-func newInputArc(placeID string, bindingName string) factoryruntime.PetriArc {
-	return factoryruntime.PetriArc{
+func newInputArc(placeID string, bindingName string) petri.Arc {
+	return petri.Arc{
 		Name:      bindingName,
 		PlaceID:   placeID,
-		Direction: factoryruntime.PetriArcInput,
+		Direction: petri.ArcInput,
 		Mode:      interfaces.ArcModeConsume,
-		Cardinality: factoryruntime.PetriArcCardinality{
-			Mode: factoryruntime.PetriCardinalityOne,
+		Cardinality: petri.ArcCardinality{
+			Mode: petri.CardinalityOne,
 		},
 	}
 }
 
-func newGuardedInputArc(placeID string, bindingName string, guard factoryruntime.PetriGuard) factoryruntime.PetriArc {
+func newGuardedInputArc(placeID string, bindingName string, guard petri.Guard) petri.Arc {
 	arc := newInputArc(placeID, bindingName)
 	arc.Guard = guard
 	return arc
 }
 
-func newObserveAllArc(placeID string, bindingName string, guard factoryruntime.PetriGuard) factoryruntime.PetriArc {
-	return factoryruntime.PetriArc{
+func newObserveAllArc(placeID string, bindingName string, guard petri.Guard) petri.Arc {
+	return petri.Arc{
 		Name:      bindingName,
 		PlaceID:   placeID,
-		Direction: factoryruntime.PetriArcInput,
+		Direction: petri.ArcInput,
 		Mode:      interfaces.ArcModeObserve,
 		Guard:     guard,
-		Cardinality: factoryruntime.PetriArcCardinality{
-			Mode: factoryruntime.PetriCardinalityAll,
+		Cardinality: petri.ArcCardinality{
+			Mode: petri.CardinalityAll,
 		},
 	}
 }
 
-func newOutputArc(placeID string) factoryruntime.PetriArc {
-	return factoryruntime.PetriArc{
+func newOutputArc(placeID string) petri.Arc {
+	return petri.Arc{
 		PlaceID:   placeID,
-		Direction: factoryruntime.PetriArcOutput,
-		Cardinality: factoryruntime.PetriArcCardinality{
-			Mode: factoryruntime.PetriCardinalityOne,
+		Direction: petri.ArcOutput,
+		Cardinality: petri.ArcCardinality{
+			Mode: petri.CardinalityOne,
 		},
 	}
 }
@@ -606,7 +607,7 @@ func newOutputArc(placeID string) factoryruntime.PetriArc {
 // assertStructuralEquivalence compares two nets for structural equivalence.
 // It ignores arc IDs and names (which differ between builder and config mapper)
 // but verifies: places, transitions, arc connectivity, modes, cardinalities, and guard types.
-func assertStructuralEquivalence(t *testing.T, builderNet, configNet *factoryruntime.Net) {
+func assertStructuralEquivalence(t *testing.T, builderNet, configNet *state.Net) {
 	t.Helper()
 
 	// Compare places.
@@ -631,7 +632,7 @@ func assertStructuralEquivalence(t *testing.T, builderNet, configNet *factoryrun
 	}
 }
 
-func comparePlaces(t *testing.T, builderPlaces, configPlaces map[string]*factoryruntime.PetriPlace) {
+func comparePlaces(t *testing.T, builderPlaces, configPlaces map[string]*petri.Place) {
 	t.Helper()
 	if len(builderPlaces) != len(configPlaces) {
 		t.Errorf("place count: builder=%d, config=%d", len(builderPlaces), len(configPlaces))
@@ -656,7 +657,7 @@ func comparePlaces(t *testing.T, builderPlaces, configPlaces map[string]*factory
 	}
 }
 
-func compareTransitionStructure(t *testing.T, name string, bt, ct *factoryruntime.PetriTransition) {
+func compareTransitionStructure(t *testing.T, name string, bt, ct *petri.Transition) {
 	t.Helper()
 	if bt.Type != ct.Type {
 		t.Errorf("transition %q Type: builder=%q, config=%q", name, bt.Type, ct.Type)
@@ -675,15 +676,15 @@ func compareTransitionStructure(t *testing.T, name string, bt, ct *factoryruntim
 type arcFingerprint struct {
 	PlaceID         string
 	Mode            interfaces.ArcMode
-	CardinalityMode factoryruntime.PetriCardinalityMode
+	CardinalityMode petri.CardinalityMode
 	GuardType       string
 }
 
-func fingerprintArc(a factoryruntime.PetriArc) arcFingerprint {
+func fingerprintArc(a petri.Arc) arcFingerprint {
 	// Normalize: CardinalityN with Count<=1 is equivalent to CardinalityOne.
 	cardMode := a.Cardinality.Mode
-	if cardMode == factoryruntime.PetriCardinalityN && a.Cardinality.Count <= 1 {
-		cardMode = factoryruntime.PetriCardinalityOne
+	if cardMode == petri.CardinalityN && a.Cardinality.Count <= 1 {
+		cardMode = petri.CardinalityOne
 	}
 	return arcFingerprint{
 		PlaceID:         a.PlaceID,
@@ -693,7 +694,7 @@ func fingerprintArc(a factoryruntime.PetriArc) arcFingerprint {
 	}
 }
 
-func compareArcSets(t *testing.T, transName, arcType string, builderArcs, configArcs []factoryruntime.PetriArc) {
+func compareArcSets(t *testing.T, transName, arcType string, builderArcs, configArcs []petri.Arc) {
 	t.Helper()
 	if len(builderArcs) != len(configArcs) {
 		t.Errorf("transition %q %s arc count: builder=%d, config=%d",
@@ -702,11 +703,11 @@ func compareArcSets(t *testing.T, transName, arcType string, builderArcs, config
 	}
 
 	// Build fingerprint → arc maps for both sides.
-	builderByFP := make(map[arcFingerprint]factoryruntime.PetriArc)
+	builderByFP := make(map[arcFingerprint]petri.Arc)
 	for _, a := range builderArcs {
 		builderByFP[fingerprintArc(a)] = a
 	}
-	configByFP := make(map[arcFingerprint]factoryruntime.PetriArc)
+	configByFP := make(map[arcFingerprint]petri.Arc)
 	for _, a := range configArcs {
 		configByFP[fingerprintArc(a)] = a
 	}
@@ -729,35 +730,35 @@ func compareArcSets(t *testing.T, transName, arcType string, builderArcs, config
 	}
 }
 
-func guardTypeName(g factoryruntime.PetriGuard) string {
+func guardTypeName(g petri.Guard) string {
 	if g == nil {
 		return ""
 	}
 	switch g.(type) {
-	case *factoryruntime.PetriDependencyGuard:
+	case *petri.DependencyGuard:
 		return ""
-	case *factoryruntime.PetriVisitCountGuard:
+	case *petri.VisitCountGuard:
 		return "VisitCountGuard"
-	case *factoryruntime.PetriAllWithParentGuard:
+	case *petri.AllWithParentGuard:
 		return "AllWithParentGuard"
-	case *factoryruntime.PetriAnyWithParentGuard:
+	case *petri.AnyWithParentGuard:
 		return "AnyWithParentGuard"
-	case *factoryruntime.PetriMatchColorGuard:
+	case *petri.MatchColorGuard:
 		return "MatchColorGuard"
 	default:
 		return fmt.Sprintf("unknown(%T)", g)
 	}
 }
 
-func compareGuardParams(t *testing.T, transName, placeID string, bg, cg factoryruntime.PetriGuard) {
+func compareGuardParams(t *testing.T, transName, placeID string, bg, cg petri.Guard) {
 	t.Helper()
 	if bg == nil && cg == nil {
 		return
 	}
 
 	switch bv := bg.(type) {
-	case *factoryruntime.PetriVisitCountGuard:
-		cv := cg.(*factoryruntime.PetriVisitCountGuard)
+	case *petri.VisitCountGuard:
+		cv := cg.(*petri.VisitCountGuard)
 		if bv.TransitionID != cv.TransitionID {
 			t.Errorf("transition %q arc to %q: VisitCountGuard.TransitionID builder=%q, config=%q",
 				transName, placeID, bv.TransitionID, cv.TransitionID)
@@ -766,14 +767,14 @@ func compareGuardParams(t *testing.T, transName, placeID string, bg, cg factoryr
 			t.Errorf("transition %q arc to %q: VisitCountGuard.MaxVisits builder=%d, config=%d",
 				transName, placeID, bv.MaxVisits, cv.MaxVisits)
 		}
-	case *factoryruntime.PetriAllWithParentGuard:
-		cv := cg.(*factoryruntime.PetriAllWithParentGuard)
+	case *petri.AllWithParentGuard:
+		cv := cg.(*petri.AllWithParentGuard)
 		if bv.MatchBinding != cv.MatchBinding {
 			t.Errorf("transition %q arc to %q: AllWithParentGuard.MatchBinding builder=%q, config=%q",
 				transName, placeID, bv.MatchBinding, cv.MatchBinding)
 		}
-	case *factoryruntime.PetriAnyWithParentGuard:
-		cv := cg.(*factoryruntime.PetriAnyWithParentGuard)
+	case *petri.AnyWithParentGuard:
+		cv := cg.(*petri.AnyWithParentGuard)
 		if bv.MatchBinding != cv.MatchBinding {
 			t.Errorf("transition %q arc to %q: AnyWithParentGuard.MatchBinding builder=%q, config=%q",
 				transName, placeID, bv.MatchBinding, cv.MatchBinding)

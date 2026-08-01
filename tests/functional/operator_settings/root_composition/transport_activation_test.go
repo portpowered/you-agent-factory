@@ -8,6 +8,7 @@ import (
 	operatorsettingshttp "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/http"
 	mcpoperatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/mcp"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
+	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -37,9 +38,14 @@ func TestHTTPSettingsTransportActivatesThroughRootBuildProcessAfterLifecycle(t *
 	runOperatorSettingsLifecycleInitialization(t, process, homeDir)
 
 	beforeTransport := recorder.readFileCalls()
+	providersRoot, err := providerswire.NewService()
+	if err != nil {
+		t.Fatalf("providerswire.NewService() error = %v", err)
+	}
 	root, err := settingswire.NewServiceFromHomePorts(
 		&operatorSettingsActivationFileSystem{recorder: recorder},
 		globalconfigmapping.Decode,
+		providersRoot,
 	)
 	if err != nil {
 		t.Fatalf("NewServiceFromHomePorts() error = %v", err)
@@ -87,9 +93,14 @@ func TestMCPSettingsTransportActivatesThroughRootBuildProcessAfterLifecycle(t *t
 	runOperatorSettingsLifecycleInitialization(t, process, homeDir)
 
 	beforeTransport := recorder.readFileCalls()
+	providersRoot, err := providerswire.NewService()
+	if err != nil {
+		t.Fatalf("providerswire.NewService() error = %v", err)
+	}
 	root, err := settingswire.NewServiceFromHomePorts(
 		&operatorSettingsActivationFileSystem{recorder: recorder},
 		globalconfigmapping.Decode,
+		providersRoot,
 	)
 	if err != nil {
 		t.Fatalf("NewServiceFromHomePorts() error = %v", err)

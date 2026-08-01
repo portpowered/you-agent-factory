@@ -5,36 +5,30 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
-	"sync"
+	"reflect"
 	"time"
 
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	cronwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/wire"
+	filesystemwatchers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers"
+	hostedsources "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/hosted_sources"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
 )
 
-// Service supervises runtime-scoped cron, watcher, listener, and poller
-// automations.
+// Service is the singular Automations root authority. It exposes only the
+// detached reconciliation, source lifecycle, and cursor/status contract.
+// Runtime-sidecar and construction capabilities remain optional implementation
+// seams owned by their consuming runtime or Wire package.
 type Service interface {
-	FilesystemWatcherFactory
-	StartSchedulerSidecarsForRuntime(
-		context.Context,
-		*sync.WaitGroup,
-		string,
-		*factorydefinitions.FactoryConfig,
-		factorydefinitions.RuntimeConfigLookup,
-		WorkRequestSubmitter,
-	) error
-}
-
-// InvocationScheduleService prepares duration schedules whose interval is
-// supplied by one normalized Factory invocation. Runtime hosts use this
-// optional capability to validate before admission and commit only after the
-// controller Work has been accepted.
-type InvocationScheduleService interface {
-	PrepareInvocationSchedules(context.Context, InvocationScheduleRequest) (PreparedInvocationSchedules, error)
+	Reconcile(context.Context, ReconcileRequest) (ReconcileResult, error)
+	StartSource(context.Context, StartSourceRequest) (StartSourceResult, error)
+	StopSource(context.Context, StopSourceRequest) (StopSourceResult, error)
+	WaitSource(context.Context, WaitSourceRequest) (WaitSourceResult, error)
+	SourceStatus(context.Context, SourceStatusRequest) (SourceStatusResult, error)
+	GetStatus(context.Context, GetStatusRequest) (GetStatusResult, error)
+	GetCursor(context.Context, GetCursorRequest) (GetCursorResult, error)
 }
 
 const (
@@ -84,49 +78,49 @@ type InvocationScheduleObservationRequest struct {
 // PreparedInvocationSchedules owns validated inert schedules. Commit starts
 // them after Work admission; Abort releases them when admission fails.
 type PreparedInvocationSchedules struct {
-	commit func(work.WorkRequestSubmitResult)
-	abort  func()
-}
-
-// NewPreparedInvocationSchedules constructs a prepared schedule result.
-func NewPreparedInvocationSchedules(
-	commit func(work.WorkRequestSubmitResult),
-	abort func(),
-) PreparedInvocationSchedules {
-	return PreparedInvocationSchedules{commit: commit, abort: abort}
+	// CommitFunc starts all prepared schedules using accepted controller
+	// identity. It is populated only by Automations-owned schedule assembly.
+	CommitFunc func(work.WorkRequestSubmitResult)
+	// AbortFunc releases all prepared schedules without starting them. It is
+	// populated only by Automations-owned schedule assembly.
+	AbortFunc func()
 }
 
 // Commit starts all prepared schedules using accepted controller identity.
 func (prepared PreparedInvocationSchedules) Commit(result work.WorkRequestSubmitResult) {
-	if prepared.commit != nil {
-		prepared.commit(result)
+	if prepared.CommitFunc != nil {
+		prepared.CommitFunc(result)
 	}
 }
 
 // Abort releases all prepared schedules without starting them.
 func (prepared PreparedInvocationSchedules) Abort() {
-	if prepared.abort != nil {
-		prepared.abort()
+	if prepared.AbortFunc != nil {
+		prepared.AbortFunc()
 	}
 }
 
-// Root is the additive, implementation-neutral Automations boundary for
-// reconciliation, source lifecycle, and cursor/status operations. Operations
-// is intentionally an anonymous structural contract: existing implementations
-// of the legacy Service interface remain source-compatible, while peers can
-// provide this boundary using only Automations root types.
+// Root is the transport-injectable Automations boundary for reconciliation,
+// source lifecycle, and cursor/status operations. It is a thin value adapter
+// around the singular Service contract.
 //
 // Constructing a Root performs no work. Callers set Operations once when
 // composing a peer and invoke explicit methods on Root.
 type Root struct {
-	Operations interface {
-		Reconcile(context.Context, ReconcileRequest) (ReconcileResult, error)
-		StartSource(context.Context, StartSourceRequest) (StartSourceResult, error)
-		StopSource(context.Context, StopSourceRequest) (StopSourceResult, error)
-		WaitSource(context.Context, WaitSourceRequest) (WaitSourceResult, error)
-		SourceStatus(context.Context, SourceStatusRequest) (SourceStatusResult, error)
-		GetStatus(context.Context, GetStatusRequest) (GetStatusResult, error)
-		GetCursor(context.Context, GetCursorRequest) (GetCursorResult, error)
+	Operations Service
+}
+
+func rootOperationsAvailable(operations Service) bool {
+	if operations == nil {
+		return false
+	}
+
+	value := reflect.ValueOf(operations)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice:
+		return !value.IsNil()
+	default:
+		return true
 	}
 }
 
@@ -134,7 +128,7 @@ func (r Root) Reconcile(
 	ctx context.Context,
 	request ReconcileRequest,
 ) (ReconcileResult, error) {
-	if r.Operations == nil {
+	if !rootOperationsAvailable(r.Operations) {
 		return ReconcileResult{}, unavailableRootError("Reconcile")
 	}
 	return r.Operations.Reconcile(ctx, request)
@@ -144,7 +138,7 @@ func (r Root) StartSource(
 	ctx context.Context,
 	request StartSourceRequest,
 ) (StartSourceResult, error) {
-	if r.Operations == nil {
+	if !rootOperationsAvailable(r.Operations) {
 		return StartSourceResult{}, unavailableRootError("StartSource")
 	}
 	return r.Operations.StartSource(ctx, request)
@@ -154,7 +148,7 @@ func (r Root) StopSource(
 	ctx context.Context,
 	request StopSourceRequest,
 ) (StopSourceResult, error) {
-	if r.Operations == nil {
+	if !rootOperationsAvailable(r.Operations) {
 		return StopSourceResult{}, unavailableRootError("StopSource")
 	}
 	return r.Operations.StopSource(ctx, request)
@@ -164,7 +158,7 @@ func (r Root) WaitSource(
 	ctx context.Context,
 	request WaitSourceRequest,
 ) (WaitSourceResult, error) {
-	if r.Operations == nil {
+	if !rootOperationsAvailable(r.Operations) {
 		return WaitSourceResult{}, unavailableRootError("WaitSource")
 	}
 	return r.Operations.WaitSource(ctx, request)
@@ -174,7 +168,7 @@ func (r Root) SourceStatus(
 	ctx context.Context,
 	request SourceStatusRequest,
 ) (SourceStatusResult, error) {
-	if r.Operations == nil {
+	if !rootOperationsAvailable(r.Operations) {
 		return SourceStatusResult{}, unavailableRootError("SourceStatus")
 	}
 	return r.Operations.SourceStatus(ctx, request)
@@ -184,7 +178,7 @@ func (r Root) GetStatus(
 	ctx context.Context,
 	request GetStatusRequest,
 ) (GetStatusResult, error) {
-	if r.Operations == nil {
+	if !rootOperationsAvailable(r.Operations) {
 		return GetStatusResult{}, unavailableRootError("GetStatus")
 	}
 	return r.Operations.GetStatus(ctx, request)
@@ -194,7 +188,7 @@ func (r Root) GetCursor(
 	ctx context.Context,
 	request GetCursorRequest,
 ) (GetCursorResult, error) {
-	if r.Operations == nil {
+	if !rootOperationsAvailable(r.Operations) {
 		return GetCursorResult{}, unavailableRootError("GetCursor")
 	}
 	return r.Operations.GetCursor(ctx, request)
@@ -513,24 +507,18 @@ var (
 )
 
 // WorkRequestSubmitter admits one Work Request generated by an automation.
-type WorkRequestSubmitter func(context.Context, work.WorkRequest) error
+type WorkRequestSubmitter = filesystemwatchers.WorkRequestSubmitter
 
 // FilesystemInputReader reads the watched input tree selected by Automations.
-type FilesystemInputReader interface {
-	ReadDir(string) ([]fs.DirEntry, error)
-	ReadFile(string) ([]byte, error)
-	Stat(string) (fs.FileInfo, error)
-}
+// The implementation contract remains owned by the private watcher service.
+type FilesystemInputReader = filesystemwatchers.InputFileSystem
 
 // FilesystemDirectoryWalker traverses a watched input tree.
-type FilesystemDirectoryWalker func(string, fs.WalkDirFunc) error
+type FilesystemDirectoryWalker = filesystemwatchers.DirectoryWalker
 
 // FilesystemWatcher supervises one configured input root. Construction is
 // inert; PreseedInputs and Watch perform effects only when explicitly invoked.
-type FilesystemWatcher interface {
-	PreseedInputs(context.Context) error
-	Watch(context.Context) error
-}
+type FilesystemWatcher = filesystemwatchers.Watcher
 
 // FilesystemWatcherConfig carries inert construction inputs for one watcher.
 type FilesystemWatcherConfig struct {
@@ -545,36 +533,14 @@ type FilesystemWatcherConfig struct {
 	DebounceWindow    time.Duration
 }
 
-// FilesystemWatcherFactory constructs inert filesystem watchers through the
-// Automations root.
-type FilesystemWatcherFactory interface {
-	NewFilesystemWatcher(FilesystemWatcherConfig) FilesystemWatcher
-}
-
 // HostedWorkSubmitter admits one normalized Work Request produced by a hosted
 // poller.
-type HostedWorkSubmitter func(context.Context, work.WorkRequest) error
+type HostedWorkSubmitter = hostedsources.WorkSubmitter
 
 // HostedPollers is the provider-specific polling capability supervised by the
-// Automations service.
-type HostedPollers interface {
-	StartLinearPoller(
-		context.Context,
-		*sync.WaitGroup,
-		factorydefinitions.RuntimeConfigLookup,
-		factorydefinitions.FactoryWorkstationConfig,
-		*factorydefinitions.FactoryWorkerConfig,
-		HostedWorkSubmitter,
-	) error
-	ValidateLinearPoller(
-		factorydefinitions.RuntimeConfigLookup,
-		factorydefinitions.FactoryWorkstationConfig,
-		*factorydefinitions.FactoryWorkerConfig,
-		HostedWorkSubmitter,
-	) error
-}
+// Automations service. The implementation contract remains owned by the
+// private hosted-sources service.
+type HostedPollers = hostedsources.HostedPollers
 
 // Clock is the automation time source needed for scheduling and supervision.
-type Clock interface {
-	Now() time.Time
-}
+type Clock = platformclock.Source

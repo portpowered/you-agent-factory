@@ -343,7 +343,7 @@ fnd-12-replay-behavior-baselines:
 
 # FND-12 captured visualization activation success + typed-failure pair.
 fnd-12-visualization-behavior-baselines:
-	$(GO) test ./pkg/services/factory_visualization -run '^Test(ServiceProjectsRetainedAndLiveFactoryEvents|NewRejectsMissingDependencies)$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test ./pkg/services/factory_visualization/internal/service -run '^Test(ServiceProjectsRetainedAndLiveFactoryEvents|NewRejectsMissingDependencies)$$' -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 docs-reference-check:
 	$(GO) run ./cmd/markdown-linter docs/README.md docs/reference

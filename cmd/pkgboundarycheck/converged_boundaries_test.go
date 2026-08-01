@@ -59,7 +59,7 @@ func TestRunAllowsEdgeAggregatorToImportPublishedEffectContracts(t *testing.T) {
 		"github.com/portpowered/infinite-you/pkg/services/models",
 		"github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty",
 		providersLeafEffectContractImport,
-		"github.com/portpowered/infinite-you/pkg/services/providers/inference",
+		"github.com/portpowered/infinite-you/pkg/services/providers/wire",
 		"github.com/portpowered/infinite-you/pkg/services/automations",
 	} {
 		writeGoImportFile(
@@ -88,15 +88,15 @@ func TestRunAllowsPeerServicesToImportExactProviderInferenceContract(t *testing.
 		{path: "factory_runtime", pkgName: "factory"},
 		{path: "factory_runtime/internal/services/instance_host/build", pkgName: "runtimebuild"},
 		{path: "recordings", pkgName: "recordings"},
-		{path: "recordings/internal/services/artifacts_export/artifacts", pkgName: "artifacts"},
-		{path: "recordings/internal/services/replay/replay", pkgName: "replay"},
+		{path: "recordings/internal/artifacts", pkgName: "artifacts"},
+		{path: "recordings/internal/replay", pkgName: "replay"},
 	} {
 		writeGoImportFile(
 			t,
 			repoRoot,
 			fmt.Sprintf("pkg/services/%s/provider_contract_%d.go", owner.path, index),
 			owner.pkgName,
-			"github.com/portpowered/infinite-you/pkg/services/providers/inference",
+			"github.com/portpowered/infinite-you/pkg/services/providers/wire",
 		)
 	}
 

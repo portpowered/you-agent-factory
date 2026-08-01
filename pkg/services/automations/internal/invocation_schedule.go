@@ -136,14 +136,14 @@ func (s *Service) PrepareInvocationSchedules(
 		}
 	}
 
-	return automations.NewPreparedInvocationSchedules(
-		func(result work.WorkRequestSubmitResult) {
+	return automations.PreparedInvocationSchedules{
+		CommitFunc: func(result work.WorkRequestSubmitResult) {
 			for _, entry := range prepared {
 				entry.commit(result)
 			}
 		},
-		func() { abortPreparedInvocationSchedules(prepared) },
-	), nil
+		AbortFunc: func() { abortPreparedInvocationSchedules(prepared) },
+	}, nil
 }
 
 func cronControllerInput(workstation interfaces.FactoryWorkstationConfig, workTypeName string) bool {

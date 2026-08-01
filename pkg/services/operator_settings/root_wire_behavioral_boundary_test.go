@@ -107,7 +107,10 @@ func TestRootWireBehavioralBoundary_PublishedServicePreservesObservables(t *test
 		const scopeID = "local-aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
 		configPath := writeRootWireIdentityFixtureToTemp(t)
 
-		root, err := settingswire.NewServiceFromConfigDocument(rootWireConfigDocumentService())
+		root, err := settingswire.NewServiceFromConfigDocument(
+			rootWireConfigDocumentService(),
+			internaltestproviders.StandardCatalog(),
+		)
 		if err != nil {
 			t.Fatalf("NewServiceFromConfigDocument() = %v", err)
 		}

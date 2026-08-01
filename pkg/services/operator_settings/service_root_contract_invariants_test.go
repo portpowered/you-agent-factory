@@ -1,6 +1,7 @@
 package operatorsettings_test
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -36,7 +37,7 @@ func (fake *documentPeerFake) LoadDocument(
 			}
 		}
 		return operatorsettings.LoadDocumentResult{
-			Document: operatorsettings.EmptyDocument(),
+			Document: operatorsettings.EmptyDocument,
 			Path:     path,
 			Found:    false,
 		}, nil
@@ -57,7 +58,7 @@ func (fake *documentPeerFake) ApplyDocumentUpdate(
 	path := strings.TrimSpace(request.Path)
 	document, found := fake.documents[path]
 	if !found {
-		document = operatorsettings.EmptyDocument()
+		document = operatorsettings.EmptyDocument
 	}
 	expected := strings.TrimSpace(request.ExpectedBackendScope)
 	if expected != "" && document.BackendScopeID != expected {
@@ -286,6 +287,56 @@ func (fake *servicePeerFake) ResolveEffective(
 	return fake.resolution.ResolveEffective(request)
 }
 
+func (fake *servicePeerFake) DefaultConfigPath(string) string { return "" }
+
+func (fake *servicePeerFake) LoadFileConfig(string) (operatorsettings.Config, error) {
+	return operatorsettings.Config{}, errors.New("fake config loader is not configured")
+}
+
+func (fake *servicePeerFake) ResolveFromHomeWithEnvironment(
+	string,
+	operatorsettings.Defaults,
+	operatorsettings.FlagOverrides,
+) (operatorsettings.ResolvedDefaults, error) {
+	return operatorsettings.ResolvedDefaults{}, errors.New("fake defaults resolver is not configured")
+}
+
+func (fake *servicePeerFake) EnsureLocalBackendScope(string) (operatorsettings.ResolvedBackendScope, error) {
+	return operatorsettings.ResolvedBackendScope{}, errors.New("fake identity resolver is not configured")
+}
+
+func (fake *servicePeerFake) ProjectInputInventory() operatorsettings.InputInventory {
+	return operatorsettings.InputInventory{}
+}
+
+func (fake *servicePeerFake) DeriveProviderBackendScopeID(string, string, string) string { return "" }
+
+func (fake *servicePeerFake) IsLocalBackendScopeID(string) bool { return false }
+
+func (fake *servicePeerFake) ConfigureACPIntegrationAdd(
+	context.Context,
+	string,
+	operatorsettings.ACPIntegration,
+) (operatorsettings.Document, error) {
+	return operatorsettings.Document{}, errors.New("fake ACP service is not configured")
+}
+
+func (fake *servicePeerFake) ConfigureACPIntegrationDelete(
+	context.Context,
+	string,
+	string,
+) (operatorsettings.Document, error) {
+	return operatorsettings.Document{}, errors.New("fake ACP service is not configured")
+}
+
+func (fake *servicePeerFake) EnsurePackagedACPIntegrations(
+	context.Context,
+	string,
+	[]operatorsettings.ACPIntegration,
+) (operatorsettings.Document, error) {
+	return operatorsettings.Document{}, errors.New("fake ACP service is not configured")
+}
+
 // TestRootContractInvariants_AllSlicesThroughSingularService seals the
 // Operator Settings root-contract packet: document operations and effective
 // resolution are reachable through one named operatorsettings.Service, a
@@ -303,7 +354,7 @@ func TestRootContractInvariants_AllSlicesThroughSingularService(t *testing.T) {
 			WorkerModelProvider: "codex",
 			WorkerModel:         "gpt-5",
 		},
-		Runtime: operatorsettings.EmptyDocument().Runtime,
+		Runtime: operatorsettings.EmptyDocument.Runtime,
 	}
 	service := newServicePeerFake(map[string]operatorsettings.Document{
 		configPath: initial,
@@ -430,7 +481,7 @@ func TestRootContract_ContractValuesStayInertWhenHeld(t *testing.T) {
 			WorkerModelProvider: "codex",
 			WorkerModel:         "gpt-5",
 		},
-		Runtime: operatorsettings.EmptyDocument().Runtime,
+		Runtime: operatorsettings.EmptyDocument.Runtime,
 	}
 	clonedDocument := document.Clone()
 	document.Defaults.WorkerModel = "mutated"

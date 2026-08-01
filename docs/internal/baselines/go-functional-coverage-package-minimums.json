@@ -1321,6 +1321,10 @@
       "minimum": 0.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/service",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle",
       "exception": {
         "kind": "measurement",
@@ -1845,10 +1849,6 @@
       }
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/providers/inference",
-      "minimum": 48.71
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/services/providers/internal/service",
       "exception": {
         "kind": "measurement",
@@ -2177,7 +2177,7 @@
       }
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/artifacts_export/artifacts",
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/artifacts",
       "minimum": 0.83
     },
     {
@@ -2199,11 +2199,11 @@
       }
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/events",
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events",
       "minimum": 52.41
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/events/kinds",
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events/kinds",
       "exception": {
         "kind": "measurement",
         "justification": "The active functional coverage profile contains no measurable statements for this package.",
@@ -2213,7 +2213,7 @@
       }
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/canonical_ledger/events/snapshot",
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events/snapshot",
       "minimum": 87.87
     },
     {
@@ -2257,15 +2257,15 @@
       }
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/projections",
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections",
       "minimum": 44.57
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/projections/dashboard",
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections/dashboard",
       "minimum": 0.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/projection_query/projections/workstation",
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/projections/workstation",
       "minimum": 0.00
     },
     {
@@ -2323,7 +2323,7 @@
       "minimum": 1.66
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/replay",
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay",
       "minimum": 42.54
     },
     {
