@@ -3,6 +3,8 @@ package application
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -36,7 +38,21 @@ func (*runtimeRole) SubscribeFactoryEvents(
 }
 
 type definitionRole struct{ factorydefinitions.Service }
-type sessionRole struct{ factorysessions.Service }
+type sessionRole struct {
+	factorysessions.Service
+	listSessions func(context.Context, factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error)
+}
+
+func (role *sessionRole) ListSessions(
+	ctx context.Context,
+	request factorysessions.ListSessionsRequest,
+) (factorysessions.ListSessionsResult, error) {
+	if role.listSessions == nil {
+		return factorysessions.ListSessionsResult{}, nil
+	}
+	return role.listSessions(ctx, request)
+}
+
 type invocationRole struct {
 	factorysessionmapping.SessionInvoker
 }
@@ -62,7 +78,15 @@ func (statusProjectorRole) ProjectFactoryStatusFromObservation(observation facto
 type contentStagingRole struct{ work.ContentStagingService }
 type contentPreparationRole struct{ work.ContentPreparation }
 type workRequestPreparationRole struct{ work.RequestPreparationService }
-type invocationWorkTypeRole struct{ factorydefinitions.InvocationWorkTypeService }
+type invocationWorkTypeRole struct {
+	factorydefinitions.InvocationWorkTypeService
+}
+
+func (role *requestPreparationRole) PrepareListSessions(
+	request factorysessions.ListSessionsRequest,
+) (factorysessions.ListSessionsRequest, error) {
+	return request, nil
+}
 
 func TestHandlerBindsOpenedRolesWithoutReconstructingStableGraph(t *testing.T) {
 	t.Parallel()
@@ -100,6 +124,62 @@ func TestHandlerBindsOpenedRolesWithoutReconstructingStableGraph(t *testing.T) {
 	}
 	if first == second {
 		t.Fatal("Bind reused session-owned handler state")
+	}
+}
+
+func TestHandlerBindForwardsSessionsRootToHTTPTransport(t *testing.T) {
+	t.Parallel()
+
+	mappings, err := mappingcomposition.NewHTTPBinder(statusProjectorRole{}, &contentPreparationRole{})
+	if err != nil {
+		t.Fatalf("NewHTTPBinder: %v", err)
+	}
+	handler, err := NewHandler(
+		mappings,
+		&contentPreparationRole{},
+		&validationRole{},
+		&invocationWorkTypeRole{},
+		&contentStagingRole{},
+		&workRequestPreparationRole{},
+		&requestPreparationRole{},
+	)
+	if err != nil {
+		t.Fatalf("NewHandler: %v", err)
+	}
+	root := &sessionRole{
+		listSessions: func(_ context.Context, request factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error) {
+			if request.Scope != factorysessions.SessionListScopeAll {
+				t.Fatalf("root durable listing scope = %q, want all", request.Scope)
+			}
+			return factorysessions.ListSessionsResult{
+				DurableSessions: []factorysessions.DurableSessionListSummary{{
+					SessionID: "root-session",
+					Status:    factorysessions.LifecycleStatusSucceeded,
+				}},
+			}, nil
+		},
+	}
+	opened := factorysessions.RuntimeHTTPServices{
+		FactoryRuntime: &runtimeRole{}, FactoryDefinitions: &definitionRole{},
+		FactorySessions: root, SessionInvocation: &invocationRole{},
+		SessionExecution: &executionRole{}, Work: &workRole{}, Models: &modelRole{},
+		Workers: &workerRole{}, ProviderSessions: &providerSessionRole{},
+		Logger: zap.NewNop(),
+	}
+
+	bound, err := handler.Bind(opened)
+	if err != nil {
+		t.Fatalf("Bind: %v", err)
+	}
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/factory-sessions?scope=persisted", nil)
+	bound.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s; want root-backed listing", response.Code, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), "root-session") {
+		t.Fatalf("body = %s; want root-session from opened Factory Sessions root", response.Body.String())
 	}
 }
 

@@ -74,6 +74,16 @@ func (a *Adapter) SubmitWorkBySessionId(
 		a.writeAdmissionDecodeError(w, err)
 		return
 	}
+	workRequest, err = a.invokePrepareWorkRequest(
+		r.Context(), string(sessionID), workRequest, decoded.CanonicalJSON,
+	)
+	if shouldEndOnRequestContext(r.Context(), err) {
+		return
+	}
+	if err != nil {
+		a.writeRootOrInternalError(w, err, "failed to prepare Work Request")
+		return
+	}
 
 	result, err := a.invokeSubmitWorkRequestForSession(r.Context(), string(sessionID), workRequest)
 	if shouldEndOnRequestContext(r.Context(), err) {
@@ -122,6 +132,16 @@ func (a *Adapter) UpsertWorkRequestBySessionId(
 		a.writeAdmissionDecodeError(w, err)
 		return
 	}
+	workRequest, err = a.invokePrepareWorkRequest(
+		r.Context(), string(sessionID), workRequest, decoded.CanonicalJSON,
+	)
+	if shouldEndOnRequestContext(r.Context(), err) {
+		return
+	}
+	if err != nil {
+		a.writeRootOrInternalError(w, err, "failed to prepare Work Request")
+		return
+	}
 	if requestContextEnded(r.Context()) {
 		return
 	}
@@ -142,6 +162,9 @@ func (a *Adapter) writeAdmissionDecodeError(w http.ResponseWriter, err error) {
 		a.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
 		return
 	}
+	if status, response, ok := RootErrorResponse(err); ok {
+		a.writeJSON(w, status, response)
+		return
+	}
 	a.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
 }
-

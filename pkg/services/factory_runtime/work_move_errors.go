@@ -1,12 +1,18 @@
 package factory
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/portpowered/infinite-you/pkg/services/work"
+)
 
 var (
-	ErrMoveWorkNotFound         = errors.New("work not found")
-	ErrMoveWorkInvalidState     = errors.New("invalid target state for work type")
-	ErrMoveWorkInFlightDispatch = errors.New("work is in an active dispatch")
-	ErrMoveWorkEngineTerminated = errors.New("engine has terminated")
+	// These aliases preserve the Runtime compatibility surface while Work owns
+	// the peer-facing move failure vocabulary.
+	ErrMoveWorkNotFound         = work.ErrMoveWorkNotFound
+	ErrMoveWorkInvalidState     = work.ErrMoveWorkInvalidState
+	ErrMoveWorkInFlightDispatch = work.ErrMoveWorkInFlightDispatch
+	ErrMoveWorkEngineTerminated = work.ErrMoveWorkEngineTerminated
 	// ErrMoveWorkRequestConflict indicates that an operator move request ID was
 	// already applied and cannot be accepted again.
 	ErrMoveWorkRequestConflict = errors.New("factory runtime move work request conflict")

@@ -1,12 +1,12 @@
 package http
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -41,17 +41,7 @@ func TestWorkRequestBoundary_ConstructsAndSubmitsThroughWorkService(t *testing.T
 	}
 
 	response := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/factory-sessions/session-1/work", nil)
-	server.submitWorkCore(
-		response,
-		request,
-		req,
-		nil,
-		"session-1",
-		func(ctx context.Context, workRequest work.WorkRequest) (work.WorkRequestSubmitResult, error) {
-			return recording.SubmitWorkRequestForSession(ctx, "session-1", workRequest)
-		},
-	)
+	submitWorkRequest(t, server, response, req)
 
 	if response.Code != http.StatusCreated {
 		t.Fatalf("status = %d, want %d: %s", response.Code, http.StatusCreated, response.Body.String())
@@ -99,17 +89,7 @@ func TestWorkRequestBoundary_RejectsPreparedRequestThroughWorkService(t *testing
 	}
 
 	response := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/factory-sessions/session-1/work", nil)
-	server.submitWorkCore(
-		response,
-		request,
-		req,
-		nil,
-		"session-1",
-		func(ctx context.Context, workRequest work.WorkRequest) (work.WorkRequestSubmitResult, error) {
-			return recording.SubmitWorkRequestForSession(ctx, "session-1", workRequest)
-		},
-	)
+	submitWorkRequest(t, server, response, req)
 
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d: %s", response.Code, http.StatusBadRequest, response.Body.String())
@@ -153,17 +133,7 @@ func TestWorkRequestBoundary_RejectsAdmissionThroughWorkService(t *testing.T) {
 	}
 
 	response := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/factory-sessions/session-1/work", nil)
-	server.submitWorkCore(
-		response,
-		request,
-		req,
-		nil,
-		"session-1",
-		func(ctx context.Context, workRequest work.WorkRequest) (work.WorkRequestSubmitResult, error) {
-			return recording.SubmitWorkRequestForSession(ctx, "session-1", workRequest)
-		},
-	)
+	submitWorkRequest(t, server, response, req)
 
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d: %s", response.Code, http.StatusBadRequest, response.Body.String())
@@ -191,4 +161,23 @@ func TestWorkRequestBoundary_RejectsAdmissionThroughWorkService(t *testing.T) {
 	if body.Message == "" {
 		t.Fatalf("error message = %q, want non-empty admission failure", body.Message)
 	}
+}
+
+func submitWorkRequest(
+	t *testing.T,
+	server *Adapter,
+	response *httptest.ResponseRecorder,
+	req factoryapi.SubmitWorkBySessionIdJSONRequestBody,
+) {
+	t.Helper()
+	payload, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal submit request: %v", err)
+	}
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/factory-sessions/session-1/work",
+		strings.NewReader(string(payload)),
+	)
+	server.SubmitWorkBySessionId(response, request, "session-1")
 }
