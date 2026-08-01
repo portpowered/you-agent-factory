@@ -382,7 +382,7 @@ func TestCatalog_ListAndGetReturnDetachedModelsOwnedShapes(t *testing.T) {
 			ProviderLocality: models.LocalityLocal,
 		}},
 	}
-	var service models.Service = catalogPeerService{
+	service := catalogPeerService{
 		entries: map[string]models.Detail{"local-model": detail},
 	}
 
@@ -415,7 +415,7 @@ func TestCatalog_ListAndGetReturnDetachedModelsOwnedShapes(t *testing.T) {
 func TestCatalog_MissingUnsupportedAndUnavailableAreDistinctTypedOutcomes(t *testing.T) {
 	t.Parallel()
 
-	var service models.Service = catalogPeerService{entries: map[string]models.Detail{}}
+	service := catalogPeerService{entries: map[string]models.Detail{}}
 
 	_, err := service.GetModel(context.Background(), "missing-model")
 	if err == nil {
@@ -437,7 +437,7 @@ func TestCatalog_MissingUnsupportedAndUnavailableAreDistinctTypedOutcomes(t *tes
 	}
 
 	unavailable := catalogPeerService{unavailable: true}
-	var unavailableService models.Service = unavailable
+	unavailableService := unavailable
 	_, err = unavailableService.ListModels(context.Background())
 	if !errors.Is(err, models.ErrUnavailable) {
 		t.Fatalf("ListModels error = %v, want ErrUnavailable", err)
@@ -468,7 +468,7 @@ func TestCatalog_PeerCompilesWithoutInternalCatalogImports(t *testing.T) {
 	}
 
 	_ = models.ListModelsRequest{}
-	var service models.Service = catalogPeerService{}
+	service := catalogPeerService{}
 	list, err := service.ListModels(context.Background())
 	if err != nil {
 		t.Fatalf("ListModels: %v", err)
@@ -542,7 +542,7 @@ func TestAssets_ValidPullReturnsModelsOwnedPullResult(t *testing.T) {
 		ReadinessState:     string(models.ReadinessStateReady),
 		LifecycleState:     string(models.LifecycleStateInstalled),
 	}
-	var service models.Service = assetsPeerService{
+	service := assetsPeerService{
 		results: map[string]models.PullResult{"local-model": want},
 	}
 
@@ -564,7 +564,7 @@ func TestAssets_ValidPullReturnsModelsOwnedPullResult(t *testing.T) {
 func TestAssets_NotAvailablePullUnsupportedAndSourceFetchFailedAreDistinct(t *testing.T) {
 	t.Parallel()
 
-	var service models.Service = assetsPeerService{
+	service := assetsPeerService{
 		fails: map[string]error{
 			"missing-assets": models.ErrNotAvailable,
 			"cloud-only":     models.ErrPullUnsupported,
@@ -624,7 +624,7 @@ func TestAssets_PeerCompilesWithoutNestedAssetGateway(t *testing.T) {
 		t.Fatal("ValidatePullModelRequest empty name must wrap ErrNotFound")
 	}
 
-	var service models.Service = assetsPeerService{
+	service := assetsPeerService{
 		results: map[string]models.PullResult{
 			"local-model": {
 				ModelName:          "local-model",
@@ -708,7 +708,7 @@ func TestInfer_ValidInvokeReturnsModelsOwnedHandledResult(t *testing.T) {
 	t.Parallel()
 
 	want := models.LocalInvocationResult{Handled: true, Content: "models-owned-output"}
-	var service models.Service = inferPeerService{
+	service := inferPeerService{
 		results: map[string]models.LocalInvocationResult{"local-model": want},
 	}
 
@@ -727,7 +727,7 @@ func TestInfer_ValidInvokeReturnsModelsOwnedHandledResult(t *testing.T) {
 func TestInfer_NotHandledDeclinesWithoutTypedFailure(t *testing.T) {
 	t.Parallel()
 
-	var service models.Service = inferPeerService{}
+	service := inferPeerService{}
 	got, err := service.InvokeLocal(context.Background(), models.LocalInvocationRequest{
 		Worker: models.LocalWorker{Name: "cloud-worker", Type: "AGENT_WORKER"},
 	})
@@ -742,7 +742,7 @@ func TestInfer_NotHandledDeclinesWithoutTypedFailure(t *testing.T) {
 func TestInfer_ReadinessAndUnsupportedResponseModeAreDistinct(t *testing.T) {
 	t.Parallel()
 
-	var service models.Service = inferPeerService{
+	service := inferPeerService{
 		fails: map[string]error{
 			"missing-model": (models.Runtime{
 				Identity:       "missing-model",
@@ -829,7 +829,7 @@ func TestInfer_PeerCompilesWithoutNestedInvoker(t *testing.T) {
 		t.Fatal("ValidateLocalInvocationRequest empty managed model must wrap ErrNotFound")
 	}
 
-	var service models.Service = inferPeerService{
+	service := inferPeerService{
 		results: map[string]models.LocalInvocationResult{
 			"local-model": {Handled: true, Content: "ok"},
 		},

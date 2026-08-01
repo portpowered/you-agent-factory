@@ -12,12 +12,12 @@ func (a *Adapter) PullModel(ctx context.Context, modelName string) (models.PullR
 	if a == nil || a.models == nil {
 		return models.PullResult{}, errModelsServiceRequired
 	}
+	if a.scope.IsZero() {
+		return models.PullResult{}, models.ErrRuntimeScopeInvalid
+	}
 	request, err := pullModelRequestFromHTTP(modelName, a.scope)
 	if err != nil {
 		return models.PullResult{}, err
-	}
-	if a.scope.IsZero() {
-		return a.models.PullModel(ctx, request.Name)
 	}
 	return a.models.PullModelForScope(ctx, request)
 }

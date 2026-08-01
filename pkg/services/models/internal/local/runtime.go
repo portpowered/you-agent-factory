@@ -17,7 +17,8 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
-	modelinference "github.com/portpowered/infinite-you/pkg/services/models/internal/inference"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
+	modelinference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
@@ -83,7 +84,7 @@ type Runtime interface {
 	Load(context.Context, LoadRequest) (Handle, error)
 }
 
-type Hooks = models.LocalRuntimeHooks
+type Hooks = modelseffects.LocalRuntimeHooks
 
 type Manager struct {
 	mu          sync.Mutex

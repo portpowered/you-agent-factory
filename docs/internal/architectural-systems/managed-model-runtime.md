@@ -103,7 +103,7 @@ Post-pull cache inspection classifies readiness and lifecycle without contacting
 upstream sources again. Pull lifecycle transitions are logged and emitted as
 `managed_runtime.pull.*` counters when a metrics recorder is configured at the
 service boundary. Model host load/lease/unload/crash activity additionally emits
-`model_host.*` diagnostics from `pkg/services/models/internal/host`; pull telemetry remains solely at
+`model_host.*` diagnostics from `pkg/services/models/internal/services/runtime_host`; pull telemetry remains solely at
 the canonical model-service boundary. See `docs/architecture/model-host.md`.
 These operations do not currently emit canonical
 `FactoryEvent` records; invocation and factory session surfaces remain the

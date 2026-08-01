@@ -94,14 +94,14 @@ func newModelsRootWireService(t *testing.T) models.Service {
 		http.DefaultClient,
 		os.Stat,
 		os.TempDir,
-		func(dir, pattern string) (models.RuntimeTempFile, error) { return os.CreateTemp(dir, pattern) },
+		func(dir, pattern string) (modelswire.RuntimeTempFile, error) { return os.CreateTemp(dir, pattern) },
 		zap.NewNop(),
 		time.Now,
 		platformrandom.CryptoSource{},
 		nil,
 		nil,
 		nil,
-		models.LocalRuntimeHooks{},
+		modelswire.LocalRuntimeHooks{},
 	)
 	if err != nil {
 		t.Fatalf("models/wire.NewService() error = %v", err)
@@ -114,7 +114,7 @@ func newModelsRootWireService(t *testing.T) models.Service {
 
 type modelsRootInertProcessLauncher struct{}
 
-func (modelsRootInertProcessLauncher) Start(context.Context, models.HostProcessStartSpec) (models.HostManagedProcess, error) {
+func (modelsRootInertProcessLauncher) Start(context.Context, modelswire.HostProcessStartSpec) (modelswire.HostManagedProcess, error) {
 	panic("Models host process launched during root boundary readiness proof")
 }
 
@@ -122,7 +122,7 @@ type modelsRootInertHostClock struct{}
 
 func (modelsRootInertHostClock) Now() time.Time { return time.Unix(0, 0) }
 
-func (modelsRootInertHostClock) NewTimer(time.Duration) models.HostTimer {
+func (modelsRootInertHostClock) NewTimer(time.Duration) modelswire.HostTimer {
 	panic("Models host timer created during root boundary readiness proof")
 }
 

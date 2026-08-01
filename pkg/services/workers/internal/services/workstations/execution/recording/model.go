@@ -13,7 +13,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -304,8 +304,8 @@ func Diagnostics(success *workerexecution.WorkDiagnostics, executionErr error) j
 }
 
 // Hooks returns the local-model trace hooks paired with NewRunner.
-func Hooks() models.LocalRuntimeHooks {
-	return models.LocalRuntimeHooks{
+func Hooks() modelswire.LocalRuntimeHooks {
+	return modelswire.LocalRuntimeHooks{
 		MarkResourceWaitStarted:  markResourceWaitStarted,
 		MarkResourceWaitFinished: markResourceWaitFinished,
 		MarkLoadRequested:        markLoadRequested,

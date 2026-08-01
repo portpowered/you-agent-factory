@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	assets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 )
@@ -20,18 +21,18 @@ const metadataFileName = ".managed-cache.json"
 type service struct {
 	scopes        runtimescopes.Service
 	platform      models.AssetHostPlatform
-	client        models.AssetHTTPDoer
+	client        modelseffects.AssetHTTPDoer
 	endpoints     models.RuntimeAssetEndpoints
-	makeDirectory models.AssetMakeDirectories
-	inspectPath   models.AssetInspectPath
-	resolveHome   models.AssetResolveHomeDirectory
-	writeFile     models.AssetWriteFile
-	renamePath    models.AssetRenamePath
-	removePath    models.AssetRemovePath
-	readFile      models.AssetReadFile
-	readDirectory models.AssetReadDirectory
-	createFile    models.AssetCreateFile
-	openFile      models.AssetOpenFile
+	makeDirectory modelseffects.AssetMakeDirectories
+	inspectPath   modelseffects.AssetInspectPath
+	resolveHome   modelseffects.AssetResolveHomeDirectory
+	writeFile     modelseffects.AssetWriteFile
+	renamePath    modelseffects.AssetRenamePath
+	removePath    modelseffects.AssetRemovePath
+	readFile      modelseffects.AssetReadFile
+	readDirectory modelseffects.AssetReadDirectory
+	createFile    modelseffects.AssetCreateFile
+	openFile      modelseffects.AssetOpenFile
 }
 
 type assetSpec struct {
@@ -59,18 +60,18 @@ var _ assets.Service = (*service)(nil)
 func New(
 	scopes runtimescopes.Service,
 	platform models.AssetHostPlatform,
-	client models.AssetHTTPDoer,
+	client modelseffects.AssetHTTPDoer,
 	endpoints models.RuntimeAssetEndpoints,
-	makeDirectory models.AssetMakeDirectories,
-	inspectPath models.AssetInspectPath,
-	resolveHome models.AssetResolveHomeDirectory,
-	writeFile models.AssetWriteFile,
-	renamePath models.AssetRenamePath,
-	removePath models.AssetRemovePath,
-	readFile models.AssetReadFile,
-	readDirectory models.AssetReadDirectory,
-	createFile models.AssetCreateFile,
-	openFile models.AssetOpenFile,
+	makeDirectory modelseffects.AssetMakeDirectories,
+	inspectPath modelseffects.AssetInspectPath,
+	resolveHome modelseffects.AssetResolveHomeDirectory,
+	writeFile modelseffects.AssetWriteFile,
+	renamePath modelseffects.AssetRenamePath,
+	removePath modelseffects.AssetRemovePath,
+	readFile modelseffects.AssetReadFile,
+	readDirectory modelseffects.AssetReadDirectory,
+	createFile modelseffects.AssetCreateFile,
+	openFile modelseffects.AssetOpenFile,
 ) assets.Service {
 	return &service{
 		scopes:        scopes,

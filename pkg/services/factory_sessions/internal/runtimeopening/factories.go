@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
@@ -26,7 +27,7 @@ import (
 type ExternalEffects struct {
 	Clock                            factoryruntime.Clock
 	ProviderOverride                 workers.Provider
-	ModelPullMetricsRecorder         models.PullMetricsRecorder
+	ModelPullMetricsRecorder         modelswire.PullMetricsRecorder
 	InvocationMetricsRecorder        roles.InvocationMetricsRecorder
 	ProviderCommandRunner            platformprocess.CommandRunner
 	ScriptCommandRunner              platformprocess.CommandRunner
@@ -103,7 +104,7 @@ type WorkersRuntimeFactory = func(
 
 type AutomationHostedSourcesFactory = automations.HostedSourcesFactory
 
-type WorkersLocalRuntimeHooksFactory = func() models.LocalRuntimeHooks
+type WorkersLocalRuntimeHooksFactory = func() modelswire.LocalRuntimeHooks
 
 type FactoryDefinitionsFactory = func(
 	factorysessions.DefinitionHost,

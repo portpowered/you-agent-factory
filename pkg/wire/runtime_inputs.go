@@ -19,6 +19,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -214,7 +215,7 @@ func provideInvocationOperation(
 	edges serviceedges.Edges,
 	workingDirectory platformfilesystem.WorkingDirectory,
 	resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver,
-	artifactExporter models.InvocationArtifactExporter,
+	artifactExporter modelswire.InvocationArtifactExporter,
 	modelTimeout factorysessions.ModelInvocationTimeout,
 	artifactRoots factoryruntime.RuntimeArtifactRootResolver,
 	generateSessionID factorysessions.SessionIDGenerator,

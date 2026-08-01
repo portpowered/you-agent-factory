@@ -181,7 +181,7 @@ flowchart LR
 
     subgraph currentModels[Managed models]
         currentModelService[[pkg/services/models/internal/service]]
-        currentModelHost[[pkg/services/models/internal/host]]
+        currentModelHost[[pkg/services/models/internal/services/runtime_host]]
         currentLocalModels[[pkg/services/models/internal/local]]
         currentModelAssets[[pkg/services/models/internal/services/assets]]
 
@@ -711,4 +711,3 @@ cmd/factory
 -> pkg/root
 -> pkg/wire
 -> pkg/initializer
-

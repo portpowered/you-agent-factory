@@ -207,10 +207,3 @@ func invocationAction(readiness ReadinessState) string {
 		return ""
 	}
 }
-
-// InvocationReadinessError exposes model readiness to consumers without
-// coupling them to a transport-specific error representation.
-type InvocationReadinessError interface {
-	error
-	ManagedRuntimeReadinessState() ReadinessState
-}

@@ -3,14 +3,14 @@ package service_test
 import (
 	"context"
 	"errors"
+	apisurface "github.com/portpowered/infinite-you/pkg/services/models"
+	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
+	managedruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/managedruntime"
+	modelsservice "github.com/portpowered/infinite-you/pkg/services/models/internal/service"
+	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
 	"strings"
 	"testing"
-	apisurface "github.com/portpowered/infinite-you/pkg/services/models"
-	managedruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/managedruntime"
-	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/catalog"
-	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/host"
-	models "github.com/portpowered/infinite-you/pkg/services/models"
-	modelsservice "github.com/portpowered/infinite-you/pkg/services/models/internal/service"
 )
 
 func TestService_ListModels_SummarizesConfiguredModelCapabilities(t *testing.T) {

@@ -10,22 +10,23 @@ import (
 	"sync"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
 )
 
 // Registrar materializes detached artifact metadata and exports runtime-owned
 // sources through an injected filesystem port.
 type Registrar struct {
-	filesystem models.InvocationArtifactFileSystem
+	filesystem modelseffects.InvocationArtifactFileSystem
 
-	mu     sync.Mutex
-	nextID int
+	mu      sync.Mutex
+	nextID  int
 	sources map[string]string
 }
 
 // NewRegistrar constructs an artifact registrar over the exact filesystem port
 // used for export. Construction validates the port without opening files.
-func NewRegistrar(filesystem models.InvocationArtifactFileSystem) (*Registrar, error) {
+func NewRegistrar(filesystem modelseffects.InvocationArtifactFileSystem) (*Registrar, error) {
 	if filesystem == nil {
 		return nil, fmt.Errorf(
 			"%w: Models Inference artifact filesystem is required",

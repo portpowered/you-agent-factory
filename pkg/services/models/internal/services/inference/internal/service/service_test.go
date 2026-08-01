@@ -545,7 +545,7 @@ func newInferenceServiceWithHost(
 	scopes runtimescopes.Service,
 	catalog modelcatalog.Service,
 	host runtimehost.Service,
-	runtime inference.InvocationRuntime,
+	runtime internalservice.InvocationRuntime,
 	clock func() time.Time,
 	assets scopedassets.Service,
 	deadline ...func() time.Duration,
@@ -652,7 +652,7 @@ func activeLease(
 ) models.ModelLease {
 	return models.ModelLease{
 		Lease: lease, Scope: scope, ModelName: model, Holder: holder,
-		Status: models.ModelLeaseStatusActive,
+		Status:    models.ModelLeaseStatusActive,
 		ExpiresAt: time.Date(2026, time.July, 28, 13, 0, 0, 0, time.UTC),
 	}
 }
@@ -682,11 +682,11 @@ func mustLeaseRef(t *testing.T, value string) models.ModelLeaseRef {
 }
 
 type recordingInvocationRuntime struct {
-	invokeCalls      int
-	reusedHostSlots  int
-	content          []models.InferenceContent
-	artifactSources  []inference.InvocationArtifactSource
-	invokeErr        error
+	invokeCalls     int
+	reusedHostSlots int
+	content         []models.InferenceContent
+	artifactSources []inference.InvocationArtifactSource
+	invokeErr       error
 }
 
 func (runtime *recordingInvocationRuntime) Invoke(
@@ -943,7 +943,7 @@ func TestInvokeModelWithLeaseReusesWarmHostSlotForConsecutiveInvokes(t *testing.
 	leaseTwo := mustLeaseRef(t, "lease-2")
 	host := &recordingInferenceHost{
 		leases: map[string]models.ModelLease{
-			lease.String():   activeLease(scope, lease, "scoped-model", "worker-1"),
+			lease.String():    activeLease(scope, lease, "scoped-model", "worker-1"),
 			leaseTwo.String(): activeLease(scope, leaseTwo, "scoped-model", "worker-1"),
 		},
 		warmHosts: make(map[string]bool),

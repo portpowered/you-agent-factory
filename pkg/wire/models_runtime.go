@@ -116,7 +116,7 @@ func provideModelsService(edges serviceedges.Edges) (models.Service, error) {
 	}
 	runtimeTempFile := edges.ModelRuntimeCreateTempFile
 	if runtimeTempFile == nil {
-		runtimeTempFile = func(dir, pattern string) (models.RuntimeTempFile, error) {
+		runtimeTempFile = func(dir, pattern string) (modelswire.RuntimeTempFile, error) {
 			return os.CreateTemp(dir, pattern)
 		}
 	}
@@ -184,7 +184,7 @@ type modelsClock struct{}
 
 func (modelsClock) Now() time.Time { return time.Now() }
 
-func (modelsClock) NewTimer(duration time.Duration) models.HostTimer {
+func (modelsClock) NewTimer(duration time.Duration) modelswire.HostTimer {
 	return modelsTimer{Timer: time.NewTimer(duration)}
 }
 
@@ -194,7 +194,7 @@ func (timer modelsTimer) C() <-chan time.Time { return timer.Timer.C }
 
 type modelsProcessLauncher struct{}
 
-func (modelsProcessLauncher) Start(ctx context.Context, spec models.HostProcessStartSpec) (models.HostManagedProcess, error) {
+func (modelsProcessLauncher) Start(ctx context.Context, spec modelswire.HostProcessStartSpec) (modelswire.HostManagedProcess, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

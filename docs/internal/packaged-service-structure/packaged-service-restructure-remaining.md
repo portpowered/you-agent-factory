@@ -1,6 +1,10 @@
 ## Audit result
 
-The decomposition is structurally far from complete. All 13 product-service roots still violate at least one packaged-service rule. The active Providers/Workers package-target, ownership, and boundary ledgers have since been reconciled with the live refactor; the broader service-shape debt remains.
+The decomposition is structurally far from complete. Twelve of the 13
+product-service roots still violate at least one packaged-service rule. The
+Models root has been converged and sealed; the active Providers/Workers
+package-target, ownership, and boundary ledgers have since been reconciled with
+the live refactor, while the broader service-shape debt remains.
 
 The governing rule requires exactly one named interface per service/subservice root, no exported root functions, and only `internal`, `wire`, and `transports` child directories ([general-backend-standards.md](C:/Users/andre/work/portos/infinite-you/docs/internal/standards/code/general-backend-standards.md:144)).
 
@@ -17,7 +21,7 @@ These are live counts from production `.go` files, not just the stale baseline:
 | `factory_runtime` | 36 | 50 | `testdata` | Major decomposition remaining |
 | `factory_sessions` | 4 | 13 | — | Contract/transport consolidation remaining |
 | `factory_visualization` | 4 | 20 | — | Contract not sealed |
-| `models` | 15 | 18 | — | Root surface frozen; legacy internal folds remain |
+| `models` | 1 | 6 | — | Root and production implementation converged; private compatibility helpers remain |
 | `operator_settings` | 4 | 28 | `testdata` | Root and document implementation debt |
 | `provider_sessions` | 1 | 2 | — | Closest to compliant; remove root helpers |
 | `providers` | 3 | 3 | `inference` | Active refactor is incomplete |
@@ -108,17 +112,14 @@ The service root also exposes `DefinitionActivationGatewayProvider`, `ExecutionS
 
 ### Models
 
-The root contract surface is now frozen and exercised through `models/wire` by
-the committed root inventory and boundary tests. This is a root-surface seal,
-not the completion of the implementation migration below.
-
-Still mapped for movement:
-
-- `internal/catalog` → `internal/services/catalog`
-- `internal/host` → `internal/services/runtime_host`
-- `internal/inference` → `internal/services/inference`
-
-The `inference` subservice and nested `runtime_host/.../leases` subservice also declare multiple interfaces.
+The Models root now exposes one `Service` interface and no root construction or
+external-effect ports. Catalog, inference, runtime host, leases, and invocation
+artifact implementation live under the canonical private service tree;
+construction ports are private in `internal/effects` and exposed only through
+the `models/wire` composition boundary. Models CLI/HTTP/MCP, Workers, Factory
+Sessions, Edges, and process wiring use the root contract with explicit runtime
+scope values. Legacy host/catalog helpers remain private and are not imported by
+peers.
 
 ### Operator Settings
 

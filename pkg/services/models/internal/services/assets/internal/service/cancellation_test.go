@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 )
 
 func TestPrepareModelAssetsRejectsPreCancelledRequestBeforeEffects(t *testing.T) {
@@ -217,7 +218,7 @@ func newAssetTestClient(
 	baseBody []byte,
 	tokenizerBody []byte,
 	baseOverride func() io.ReadCloser,
-) models.AssetHTTPDoer {
+) modelseffects.AssetHTTPDoer {
 	manifest, _ := json.Marshal(map[string]any{
 		"sha": revision,
 		"siblings": []map[string]any{

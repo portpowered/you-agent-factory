@@ -7,6 +7,28 @@ import (
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 )
 
+// The catalog implementation still projects the established Models value
+// vocabulary. Keeping these aliases at the canonical nested service boundary
+// lets private legacy/runtime adapters converge without reviving a sibling
+// package under models/internal.
+var ErrUnsupportedOperation = models.ErrUnsupportedOperation
+
+type Status = models.Status
+type LoadState = models.LoadState
+type ResourceSummary = models.ResourceSummary
+type Capability = models.Capability
+type Summary = models.Summary
+type Detail = models.Detail
+type Entry = models.Entry
+type List = models.List
+
+const (
+	StatusReady            = models.StatusReady
+	StatusUnavailable      = models.StatusUnavailable
+	LoadStateUnloaded      = models.LoadStateUnloaded
+	LoadStateNotApplicable = models.LoadStateNotApplicable
+)
+
 // Service serves detached, deterministically ordered discovery values for
 // runtime configuration held by the Models Runtime Scopes authority.
 type Service interface {

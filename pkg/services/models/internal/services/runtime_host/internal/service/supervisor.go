@@ -11,6 +11,7 @@ import (
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 )
 
 const (
@@ -24,14 +25,14 @@ type supervisorSettings struct {
 	ReadinessTimeout    time.Duration
 	HealthCheckInterval time.Duration
 	HealthCheckPath     string
-	ProcessLauncher     models.HostProcessLauncher
+	ProcessLauncher     modelseffects.HostProcessLauncher
 	HealthChecker       healthChecker
-	Clock               models.HostClock
+	Clock               modelseffects.HostClock
 	ServerStartBuilder  func(
 		supervisedIdentity,
 		cacheInspection,
 		*models.RuntimeWorker,
-	) (models.HostProcessStartSpec, error)
+	) (modelseffects.HostProcessStartSpec, error)
 	Diagnostics hostDiagnostics
 }
 
@@ -54,7 +55,7 @@ type supervisedRuntime struct {
 	failureClass hostFailureClass
 	failureErr   error
 	endpoint     string
-	process      models.HostManagedProcess
+	process      modelseffects.HostManagedProcess
 	loadDone     chan struct{}
 	cfg          supervisorSettings
 	identity     supervisedIdentity
@@ -113,7 +114,7 @@ func (r *supervisedRuntime) hostSnapshotOverlay(
 func (r *supervisedRuntime) ensureReady(
 	ctx context.Context,
 	identity supervisedIdentity,
-	spec models.HostProcessStartSpec,
+	spec modelseffects.HostProcessStartSpec,
 ) error {
 	if err := ctx.Err(); err != nil {
 		return cancelHostError(err)
@@ -252,7 +253,7 @@ func (r *supervisedRuntime) failureOutcomeLocked() error {
 	return r.failureErr
 }
 
-func (r *supervisedRuntime) watchProcessExit(identity supervisedIdentity, process models.HostManagedProcess) {
+func (r *supervisedRuntime) watchProcessExit(identity supervisedIdentity, process modelseffects.HostManagedProcess) {
 	waitErr := process.Wait()
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -312,7 +313,7 @@ func (r *supervisedRuntime) stop(ctx context.Context) error {
 
 // HTTPHealthChecker probes readiness through HTTP GET on a health endpoint.
 type HTTPHealthChecker struct {
-	Client models.HostHTTPDoer
+	Client modelseffects.HostHTTPDoer
 	Path   string
 }
 

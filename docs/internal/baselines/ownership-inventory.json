@@ -3939,25 +3939,13 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/models/internal/artifacts",
+      "packagePath": "pkg/services/models/internal/effects",
       "disposition": "retain",
       "destination": "models",
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/models/internal/catalog",
-      "disposition": "retain",
-      "destination": "models",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/models/internal/host",
-      "disposition": "retain",
-      "destination": "models",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/models/internal/inference",
+      "packagePath": "pkg/services/models/internal/legacyhost",
       "disposition": "retain",
       "destination": "models",
       "destinationKind": "owner"

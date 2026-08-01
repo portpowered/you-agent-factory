@@ -9,6 +9,7 @@ import (
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -149,7 +150,7 @@ func NewMockCommandRunner(
 }
 
 // LocalRuntimeHooks returns Workers-owned recording hooks for the Models runtime.
-func LocalRuntimeHooks() models.LocalRuntimeHooks {
+func LocalRuntimeHooks() modelswire.LocalRuntimeHooks {
 	return workersinternal.LocalRuntimeHooks()
 }
 

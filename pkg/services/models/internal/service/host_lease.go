@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
-	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/host"
+	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
 )
 
 // Scoped host and lease lifecycle is contract-only until the Models

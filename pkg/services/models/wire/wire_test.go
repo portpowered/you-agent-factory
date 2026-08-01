@@ -21,6 +21,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	"go.uber.org/zap"
 )
 
@@ -314,7 +315,7 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		models.LocalRuntimeHooks{},
+		modelseffects.LocalRuntimeHooks{},
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -367,26 +368,26 @@ func assertInertConstruction(t *testing.T, effect string, calls int) {
 
 type constructionEdges struct {
 	assetPlatform   models.AssetHostPlatform
-	assetHTTP       models.AssetHTTPDoer
+	assetHTTP       modelseffects.AssetHTTPDoer
 	assetEndpoints  models.RuntimeAssetEndpoints
-	assetMkdirAll   models.AssetMakeDirectories
-	assetStat       models.AssetInspectPath
-	assetHome       models.AssetResolveHomeDirectory
-	assetWriteFile  models.AssetWriteFile
-	assetRename     models.AssetRenamePath
-	assetRemove     models.AssetRemovePath
-	assetReadFile   models.AssetReadFile
-	assetReadDir    models.AssetReadDirectory
-	assetCreate     models.AssetCreateFile
-	assetOpen       models.AssetOpenFile
-	processLauncher models.HostProcessLauncher
-	hostHTTP        models.HostHTTPDoer
-	hostClock       models.HostClock
+	assetMkdirAll   modelseffects.AssetMakeDirectories
+	assetStat       modelseffects.AssetInspectPath
+	assetHome       modelseffects.AssetResolveHomeDirectory
+	assetWriteFile  modelseffects.AssetWriteFile
+	assetRename     modelseffects.AssetRenamePath
+	assetRemove     modelseffects.AssetRemovePath
+	assetReadFile   modelseffects.AssetReadFile
+	assetReadDir    modelseffects.AssetReadDirectory
+	assetCreate     modelseffects.AssetCreateFile
+	assetOpen       modelseffects.AssetOpenFile
+	processLauncher modelseffects.HostProcessLauncher
+	hostHTTP        modelseffects.HostHTTPDoer
+	hostClock       modelseffects.HostClock
 	runtimeRunner   platformprocess.CommandRunner
-	runtimeHTTP     models.RuntimeHTTPDoer
-	runtimeInspect  models.RuntimeInspectFile
-	runtimeTempDir  models.RuntimeTempDirectory
-	runtimeTempFile models.RuntimeCreateTempFile
+	runtimeHTTP     modelseffects.RuntimeHTTPDoer
+	runtimeInspect  modelseffects.RuntimeInspectFile
+	runtimeTempDir  modelseffects.RuntimeTempDirectory
+	runtimeTempFile modelseffects.RuntimeCreateTempFile
 	now             func() time.Time
 	issuerEntropy   platformrandom.Source
 }
@@ -415,7 +416,7 @@ func validConstructionEdges() constructionEdges {
 		runtimeHTTP:     http.DefaultClient,
 		runtimeInspect:  os.Stat,
 		runtimeTempDir:  os.TempDir,
-		runtimeTempFile: func(dir, pattern string) (models.RuntimeTempFile, error) {
+		runtimeTempFile: func(dir, pattern string) (modelseffects.RuntimeTempFile, error) {
 			return os.CreateTemp(dir, pattern)
 		},
 		now:           func() time.Time { return time.Unix(123, 456) },
@@ -452,7 +453,7 @@ func (edges constructionEdges) newService() (models.Service, error) {
 		nil,
 		nil,
 		nil,
-		models.LocalRuntimeHooks{},
+		modelseffects.LocalRuntimeHooks{},
 	)
 }
 
@@ -603,13 +604,6 @@ func TestProductionCompositionReportsCurrentScopedReadinessWithCompatibilityPari
 		t.Fatalf("initial scoped readiness = %s, want MISSING", missing.Readiness.ReadinessState)
 	}
 
-	bound, err := service.ForRuntime(models.RuntimeBinding{
-		CacheDirectory: cacheDirectory,
-		RuntimeConfig:  func() *models.RuntimeConfig { return &runtimeConfig },
-	})
-	if err != nil {
-		t.Fatalf("ForRuntime: %v", err)
-	}
 	revisionDirectory := filepath.Join(cacheDirectory, "OMNIVOICE_Q4_K_M", "rev-live")
 	if err := os.MkdirAll(revisionDirectory, 0o755); err != nil {
 		t.Fatalf("create model revision directory: %v", err)
@@ -631,11 +625,9 @@ func TestProductionCompositionReportsCurrentScopedReadinessWithCompatibilityPari
 		current.Readiness.LifecycleState != models.LifecycleStateInstalled {
 		t.Fatalf("current scoped readiness = %#v, want READY/INSTALLED", current.Readiness)
 	}
-	compatibility, err := bound.InspectRuntime(context.Background(), "OMNIVOICE_Q4_K_M")
-	if err != nil {
-		t.Fatalf("InspectRuntime after cache transition: %v", err)
+	if current.Readiness.Identity != "OMNIVOICE_Q4_K_M" {
+		t.Fatalf("current scoped readiness identity = %q, want model identity", current.Readiness.Identity)
 	}
-	assertReadinessParity(t, current.Readiness, compatibility)
 }
 
 func TestProductionCompositionInspectsScopedAssetsThroughModelsRoot(t *testing.T) {
@@ -891,15 +883,15 @@ func TestProductionRuntimeCompatibilityPullUsesScopedAssetsService(t *testing.T)
 			Model: "OMNIVOICE_Q4_K_M", Backend: "GGUF", LoadPolicy: "ON_DEMAND",
 		}},
 	}
-	bound, err := service.ForRuntime(models.RuntimeBinding{
-		CacheDirectory: t.TempDir(),
-		RuntimeConfig:  func() *models.RuntimeConfig { return &runtimeConfig },
+	opened, err := service.OpenRuntimeScope(context.Background(), models.OpenRuntimeScopeRequest{
+		Config: models.RuntimeScopeConfig{CacheDirectory: t.TempDir(), Runtime: runtimeConfig},
 	})
 	if err != nil {
-		t.Fatalf("ForRuntime: %v", err)
+		t.Fatalf("OpenRuntimeScope: %v", err)
 	}
 
-	prepared, err := bound.PullModel(context.Background(), "OMNIVOICE_Q4_K_M")
+	pullRequest := models.PullModelRequest{Scope: opened.Scope, Name: "OMNIVOICE_Q4_K_M"}
+	prepared, err := service.PullModelForScope(context.Background(), pullRequest)
 	if err != nil {
 		t.Fatalf("PullModel prepared: %v", err)
 	}
@@ -910,7 +902,7 @@ func TestProductionRuntimeCompatibilityPullUsesScopedAssetsService(t *testing.T)
 	}
 	firstRequestCount := requestCount.Load()
 
-	cached, err := bound.PullModel(context.Background(), "OMNIVOICE_Q4_K_M")
+	cached, err := service.PullModelForScope(context.Background(), pullRequest)
 	if err != nil {
 		t.Fatalf("PullModel cache hit: %v", err)
 	}
@@ -943,7 +935,7 @@ func newProductionTestServiceWithDependencies(
 
 func newProductionTestServiceWithAssetSource(
 	t *testing.T,
-	client models.AssetHTTPDoer,
+	client modelseffects.AssetHTTPDoer,
 	endpoints models.RuntimeAssetEndpoints,
 ) models.Service {
 	return newProductionTestServiceWithAssetEdges(
@@ -953,7 +945,7 @@ func newProductionTestServiceWithAssetSource(
 
 func newProductionTestServiceWithAssetEdges(
 	t *testing.T,
-	client models.AssetHTTPDoer,
+	client modelseffects.AssetHTTPDoer,
 	endpoints models.RuntimeAssetEndpoints,
 	now func() time.Time,
 	issuerEntropy platformrandom.Source,
@@ -980,7 +972,7 @@ func newProductionTestServiceWithAssetEdges(
 		http.DefaultClient,
 		os.Stat,
 		os.TempDir,
-		func(dir, pattern string) (models.RuntimeTempFile, error) {
+		func(dir, pattern string) (modelseffects.RuntimeTempFile, error) {
 			return os.CreateTemp(dir, pattern)
 		},
 		zap.NewNop(),
@@ -989,7 +981,7 @@ func newProductionTestServiceWithAssetEdges(
 		nil,
 		nil,
 		nil,
-		models.LocalRuntimeHooks{},
+		modelseffects.LocalRuntimeHooks{},
 	)
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
@@ -1078,8 +1070,8 @@ type inertProcessLauncher struct{}
 
 func (inertProcessLauncher) Start(
 	context.Context,
-	models.HostProcessStartSpec,
-) (models.HostManagedProcess, error) {
+	modelseffects.HostProcessStartSpec,
+) (modelseffects.HostManagedProcess, error) {
 	panic("process launcher called during readiness inspection")
 }
 
@@ -1089,7 +1081,7 @@ func (inertHostClock) Now() time.Time {
 	return time.Unix(0, 0)
 }
 
-func (inertHostClock) NewTimer(time.Duration) models.HostTimer {
+func (inertHostClock) NewTimer(time.Duration) modelseffects.HostTimer {
 	panic("host timer created during readiness inspection")
 }
 
@@ -1116,8 +1108,8 @@ type recordingProcessLauncher struct{ starts int }
 
 func (launcher *recordingProcessLauncher) Start(
 	context.Context,
-	models.HostProcessStartSpec,
-) (models.HostManagedProcess, error) {
+	modelseffects.HostProcessStartSpec,
+) (modelseffects.HostManagedProcess, error) {
 	launcher.starts++
 	panic("process launcher invoked during inert construction")
 }
@@ -1132,7 +1124,7 @@ func (clock *recordingHostClock) Now() time.Time {
 	panic("host clock invoked during inert construction")
 }
 
-func (clock *recordingHostClock) NewTimer(time.Duration) models.HostTimer {
+func (clock *recordingHostClock) NewTimer(time.Duration) modelseffects.HostTimer {
 	clock.timerCalls++
 	panic("host timer created during inert construction")
 }
@@ -1233,7 +1225,7 @@ func (effect *recordingRuntimeTempDir) tempDir() string {
 
 type recordingRuntimeTempFile struct{ calls int }
 
-func (effect *recordingRuntimeTempFile) create(string, string) (models.RuntimeTempFile, error) {
+func (effect *recordingRuntimeTempFile) create(string, string) (modelseffects.RuntimeTempFile, error) {
 	effect.calls++
 	panic("runtime temp file invoked during inert construction")
 }

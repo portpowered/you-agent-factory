@@ -6,9 +6,10 @@ import (
 	"reflect"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
-	internalservice "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/service"
 	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
+	internalservice "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/service"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 )
 
@@ -18,11 +19,11 @@ import (
 func NewService(
 	scopes runtimescopes.Service,
 	assets scopedassets.Service,
-	processLauncher models.HostProcessLauncher,
-	hostHTTP models.HostHTTPDoer,
-	hostClock models.HostClock,
-	hostLogger models.HostDiagnosticLogger,
-	hostMetrics models.HostMetricsRecorder,
+	processLauncher modelseffects.HostProcessLauncher,
+	hostHTTP modelseffects.HostHTTPDoer,
+	hostClock modelseffects.HostClock,
+	hostLogger modelseffects.HostDiagnosticLogger,
+	hostMetrics modelseffects.HostMetricsRecorder,
 ) (runtimehost.Service, error) {
 	if scopes == nil {
 		return nil, fmt.Errorf("%w: Models Runtime Scopes service is required", models.ErrInvalidHostDependencies)

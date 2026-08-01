@@ -2,14 +2,15 @@ package service_test
 
 import (
 	"context"
+	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
+	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
+	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
+	managedruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/managedruntime"
+	modelsservice "github.com/portpowered/infinite-you/pkg/services/models/internal/service"
 	"go.uber.org/zap"
 	"testing"
 	"time"
-	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
-	managedruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/managedruntime"
-	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/host"
-	models "github.com/portpowered/infinite-you/pkg/services/models"
-	modelsservice "github.com/portpowered/infinite-you/pkg/services/models/internal/service"
 )
 
 type modelServiceFixture struct {
@@ -18,7 +19,7 @@ type modelServiceFixture struct {
 	ModelAssetPuller localmodels.AssetPuller
 	Logger           *zap.Logger
 	Clock            func() time.Time
-	ModelPullMetrics models.PullMetricsRecorder
+	ModelPullMetrics modelseffects.PullMetricsRecorder
 }
 
 func mustConstructModelService(t *testing.T, fixture modelServiceFixture) *modelsservice.Service {

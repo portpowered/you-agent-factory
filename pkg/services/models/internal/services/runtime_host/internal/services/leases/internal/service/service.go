@@ -9,13 +9,14 @@ import (
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	hostleases "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases"
 )
 
 type service struct {
-	hostClock       models.HostClock
-	slotFacts       hostleases.SlotFactsProvider
-	coordinator     hostleases.SlotCapacityCoordinator
+	hostClock       modelseffects.HostClock
+	slotFacts       modelseffects.SlotFactsProvider
+	coordinator     modelseffects.SlotCapacityCoordinator
 	mu              sync.Mutex
 	leases          map[string]leaseRecord
 	capacityHolders map[string]int
@@ -27,13 +28,13 @@ type leaseRecord struct {
 }
 
 var _ hostleases.Service = (*service)(nil)
-var _ hostleases.CoordinatorBindable = (*service)(nil)
+var _ modelseffects.CoordinatorBindable = (*service)(nil)
 
 // New constructs an inert leases owner that retains injected effects and
 // allocates lease/capacity state without launching subprocesses or timers.
 func New(
-	hostClock models.HostClock,
-	slotFacts hostleases.SlotFactsProvider,
+	hostClock modelseffects.HostClock,
+	slotFacts modelseffects.SlotFactsProvider,
 ) hostleases.Service {
 	return &service{
 		hostClock:       hostClock,
@@ -44,7 +45,7 @@ func New(
 }
 
 func (s *service) BindSlotCapacityCoordinator(
-	coordinator hostleases.SlotCapacityCoordinator,
+	coordinator modelseffects.SlotCapacityCoordinator,
 ) {
 	s.coordinator = coordinator
 }
