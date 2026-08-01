@@ -321,11 +321,11 @@ func (s *Adapter) StageSubmitWorkFileBySessionId(
 		s.writeError(w, http.StatusInternalServerError, "failed to stage submit-work file", "INTERNAL_ERROR")
 		return
 	}
-	if s.Adapter == nil {
+	if s.WorkHTTP == nil {
 		s.writeError(w, http.StatusInternalServerError, "Work HTTP adapter is unavailable", "INTERNAL_ERROR")
 		return
 	}
-	s.Adapter.StageSubmitWorkFileBySessionId(w, r, sessionID)
+	s.WorkHTTP.StageSubmitWorkFileBySessionId(w, r, sessionID)
 }
 
 func (s *Server) handleLiveLifecycleControl(

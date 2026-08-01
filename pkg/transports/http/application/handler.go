@@ -3,6 +3,8 @@
 package application
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -11,8 +13,11 @@ import (
 	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
+	workhttp "github.com/portpowered/infinite-you/pkg/services/work/transports/http"
 	transporthttp "github.com/portpowered/infinite-you/pkg/transports/http"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	mappingcomposition "github.com/portpowered/infinite-you/pkg/transports/mapping/composition"
+	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	"go.uber.org/zap"
 )
@@ -72,6 +77,17 @@ func (handler *Handler) Bind(opened factorysessions.RuntimeHTTPServices) (http.H
 	if err != nil {
 		return nil, err
 	}
+	workService := work.AdmissionContentService(
+		handler.contentStaging,
+		handler.requestPreparation,
+	)
+	workHTTP := workhttp.NewAdapterFromRoles(
+		opened.Work,
+		workService,
+		mapped.Work,
+		mapped.WorkRead,
+		defaultWorkTypeResolver(mapped.FactoryDefinitions, handler.invocationWorkType),
+	)
 	sessionsHandler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
 		SessionsRoot: opened.FactorySessions,
 		Runtime:      mapped.Runtime, FactoryStatus: mapped.FactoryStatus,
@@ -80,16 +96,11 @@ func (handler *Handler) Bind(opened factorysessions.RuntimeHTTPServices) (http.H
 		FactoryValidation: handler.validation, WorkflowPreview: opened.WorkflowPreview,
 		DurableExecution: mapped.Durable, DurableLifecycle: mapped.Durable,
 		DurableListing: mapped.Durable, DurableProjection: mapped.Durable,
-		DurableLister:      opened.SessionExecution,
-		LiveSessionLister:  factorysessionshttp.ReadProjectionSessionListReader{Reader: opened.FactorySessions},
-		WorkerPrompts:      opened.WorkerPrompts,
-		InvocationWorkType: handler.invocationWorkType,
-		WorkService: work.AdmissionContentService(
-			handler.contentStaging,
-			handler.requestPreparation,
-		),
-		WorkRoot:        opened.Work,
-		SessionRequests: handler.sessionRequests,
+		DurableLister:     opened.SessionExecution,
+		LiveSessionLister: factorysessionshttp.ReadProjectionSessionListReader{Reader: opened.FactorySessions},
+		WorkerPrompts:     opened.WorkerPrompts,
+		WorkHTTP:          workHTTP,
+		SessionRequests:   handler.sessionRequests,
 	}, opened.Logger)
 	server := transporthttp.NewServer(sessionsHandler, modelsHandler, opened.ProviderSessions, opened.Logger)
 	return server.Handler(), nil
@@ -107,16 +118,44 @@ func (handler *Handler) BindDurableExecution(
 		return nil, fmt.Errorf("bind durable execution HTTP handler: process-scoped handler and execution are required")
 	}
 	durable := factorysessionmapping.NewDurableAPI(execution, lifecycle)
+	workService := work.AdmissionContentService(
+		handler.contentStaging,
+		handler.requestPreparation,
+	)
 	sessionsHandler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
 		DurableExecution: durable, DurableLifecycle: durable,
 		DurableListing: durable, DurableProjection: durable,
 		DurableLister: execution, FactoryValidation: handler.validation,
-		InvocationWorkType: handler.invocationWorkType,
-		WorkService: work.AdmissionContentService(
-			handler.contentStaging,
-			handler.requestPreparation,
-		),
+		WorkHTTP:        workhttp.NewAdapter(workService),
 		SessionRequests: handler.sessionRequests,
 	}, logger)
 	return transporthttp.NewServer(sessionsHandler, nil, nil, logger).Handler(), nil
+}
+
+func defaultWorkTypeResolver(
+	definitions apisurface.FactorySaveAPI,
+	invocationWorkType factorydefinitions.InvocationWorkTypeService,
+) workhttp.DefaultWorkTypeResolver {
+	if definitions == nil || invocationWorkType == nil {
+		return nil
+	}
+	return func(ctx context.Context, sessionID string) (string, error) {
+		namedFactory, err := definitions.GetCurrentFactoryForSession(ctx, sessionID)
+		if err != nil {
+			if errors.Is(err, apisurface.ErrFactorySessionNotFound) ||
+				errors.Is(err, apisurface.ErrCurrentFactoryNotFound) {
+				return "", nil
+			}
+			return "", err
+		}
+		factoryConfig, err := factorymapping.FactoryConfigFromOpenAPI(namedFactory)
+		if err != nil {
+			return "", err
+		}
+		defaultWorkTypeID, err := invocationWorkType.DefaultWorkType(&factoryConfig)
+		if err != nil {
+			return "", nil
+		}
+		return defaultWorkTypeID, nil
+	}
 }

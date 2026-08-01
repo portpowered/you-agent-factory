@@ -13,10 +13,9 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-// TestWorkRequestBoundary_ConstructsAndSubmitsThroughWorkService proves Factory
-// Sessions HTTP admission constructs and submits Work Requests only through the
-// published work.Service PrepareWorkRequest and SubmitWorkRequestForSession
-// contracts.
+// TestWorkRequestBoundary_ConstructsAndSubmitsThroughWorkService proves Work
+// HTTP constructs and submits Work Requests only through the published
+// work.Service PrepareWorkRequest and SubmitWorkRequestForSession contracts.
 func TestWorkRequestBoundary_ConstructsAndSubmitsThroughWorkService(t *testing.T) {
 	t.Parallel()
 
@@ -30,7 +29,7 @@ func TestWorkRequestBoundary_ConstructsAndSubmitsThroughWorkService(t *testing.T
 			WorkTypeName: "prd",
 		},
 	}
-	server := NewHandler(Dependencies{WorkService: recording}, nil)
+	server := NewAdapter(recording)
 
 	name := "draft-prd"
 	traceID := "trace-1"
@@ -72,15 +71,15 @@ func TestWorkRequestBoundary_ConstructsAndSubmitsThroughWorkService(t *testing.T
 }
 
 // TestWorkRequestBoundary_RejectsPreparedRequestThroughWorkService proves typed
-// Work Request preparation failures from work.Service surface as observable HTTP
-// rejections instead of bypassing the Work root.
+// Work Request preparation failures from work.Service surface as observable
+// HTTP rejections instead of bypassing the Work root.
 func TestWorkRequestBoundary_RejectsPreparedRequestThroughWorkService(t *testing.T) {
 	t.Parallel()
 
 	recording := &recordingAdmissionWorkService{
 		prepareRequestErr: &work.RequestPreparationError{Message: "works[0].name is required"},
 	}
-	server := NewHandler(Dependencies{WorkService: recording}, nil)
+	server := NewAdapter(recording)
 
 	name := "draft-prd"
 	req := factoryapi.SubmitWorkBySessionIdJSONRequestBody{
@@ -124,7 +123,7 @@ func TestWorkRequestBoundary_RejectsAdmissionThroughWorkService(t *testing.T) {
 	recording := &recordingAdmissionWorkService{
 		submitErr: fmt.Errorf("work_request: invalid Work Request: %w", work.ErrInvalidWorkRequest),
 	}
-	server := NewHandler(Dependencies{WorkService: recording}, nil)
+	server := NewAdapter(recording)
 
 	name := "draft-prd"
 	req := factoryapi.SubmitWorkBySessionIdJSONRequestBody{

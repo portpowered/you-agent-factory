@@ -15,32 +15,6 @@ import (
 
 var errUnsupportedAdmissionWorkServiceMethod = errors.New("unsupported admission work service method")
 
-type allowingFactoryDefinitions struct{}
-
-func (allowingFactoryDefinitions) GetCurrentFactoryForSession(
-	context.Context,
-	string,
-) (factoryapi.Factory, error) {
-	return factoryapi.Factory{}, nil
-}
-
-func (allowingFactoryDefinitions) SaveFactoryForSession(
-	context.Context,
-	string,
-	factoryapi.FactorySaveMode,
-	factoryapi.Factory,
-) (factoryapi.Factory, error) {
-	return factoryapi.Factory{}, nil
-}
-
-func (allowingFactoryDefinitions) SaveCurrentFactoryForSession(
-	context.Context,
-	string,
-	factoryapi.Factory,
-) (factoryapi.Factory, error) {
-	return factoryapi.Factory{}, nil
-}
-
 type recordingAdmissionWorkService struct {
 	stageCalls        int
 	prepareCalls      int
@@ -175,17 +149,14 @@ func (f *recordingAdmissionWorkService) ResolvePrimaryResult(
 	return work.PrimaryResultSelection{}, errUnsupportedAdmissionWorkServiceMethod
 }
 
-// TestWorkAdmissionContentBoundary_StagesContentThroughWorkService proves Factory
-// Sessions HTTP staging reaches Work only through the published work.Service
-// StageContent contract.
+// TestWorkAdmissionContentBoundary_StagesContentThroughWorkService proves Work
+// HTTP staging reaches Work only through the published work.Service StageContent
+// contract.
 func TestWorkAdmissionContentBoundary_StagesContentThroughWorkService(t *testing.T) {
 	t.Parallel()
 
 	recording := &recordingAdmissionWorkService{}
-	server := NewHandler(Dependencies{
-		FactoryDefinitions: allowingFactoryDefinitions{},
-		WorkService:        recording,
-	}, nil)
+	server := NewAdapter(recording)
 
 	request := httptest.NewRequest(
 		"POST",
@@ -213,15 +184,15 @@ func TestWorkAdmissionContentBoundary_StagesContentThroughWorkService(t *testing
 }
 
 // TestWorkAdmissionContentBoundary_PreparesWorkRequestThroughWorkService proves
-// Factory Sessions HTTP admission prep reaches Work only through the published
-// work.Service PrepareWorkRequest contract.
+// Work HTTP admission prep reaches Work only through the published work.Service
+// PrepareWorkRequest contract.
 func TestWorkAdmissionContentBoundary_PreparesWorkRequestThroughWorkService(t *testing.T) {
 	t.Parallel()
 
 	recording := &recordingAdmissionWorkService{
 		submitResult: work.WorkRequestSubmitResult{Accepted: true},
 	}
-	server := NewHandler(Dependencies{WorkService: recording}, nil)
+	server := NewAdapter(recording)
 
 	request := httptest.NewRequest(
 		http.MethodPost,
@@ -245,15 +216,15 @@ func TestWorkAdmissionContentBoundary_PreparesWorkRequestThroughWorkService(t *t
 }
 
 // TestWorkAdmissionContentBoundary_PrepareContentThroughWorkService proves
-// Factory Sessions structured submit content resolution reaches Work only through
-// the published work.Service PrepareContent contract.
+// Work HTTP structured submit content resolution reaches Work only through the
+// published work.Service PrepareContent contract.
 func TestWorkAdmissionContentBoundary_PrepareContentThroughWorkService(t *testing.T) {
 	t.Parallel()
 
 	recording := &recordingAdmissionWorkService{
 		submitResult: work.WorkRequestSubmitResult{Accepted: true},
 	}
-	server := NewHandler(Dependencies{WorkService: recording}, nil)
+	server := NewAdapter(recording)
 
 	request := httptest.NewRequest(
 		http.MethodPost,

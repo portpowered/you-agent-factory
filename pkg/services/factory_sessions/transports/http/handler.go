@@ -7,25 +7,22 @@
 package http
 
 import (
-	"context"
-	"errors"
+	"net/http"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
-	workhttp "github.com/portpowered/infinite-you/pkg/services/work/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"go.uber.org/zap"
 )
 
 // Handler owns the generated HTTP operation implementations for Factory
 // Sessions and their session-scoped Factory and Work resources.
 type Adapter struct {
-	*workhttp.Adapter
+	WorkHTTP
 
 	sessionsRoot       factorysessions.Service
 	runtime            apisurface.RuntimeAPI
@@ -44,13 +41,34 @@ type Adapter struct {
 	durableLister      DurableExecutionSessionLister
 	liveSessionLister  LiveSessionListReader
 	workerPrompts      workers.PromptTemplates
-	invocationWorkType factorydefinitions.InvocationWorkTypeService
 	workService        work.Service
 	workRoot           work.Service
-	defaultWorkType    workhttp.DefaultWorkTypeResolver
+	workHTTPFactory    WorkHTTPFactory
 	sessionRequests    RequestPreparation
 	logger             *zap.Logger
 }
+
+// WorkHTTP is the generated protocol surface implemented by Work HTTP. The
+// Factory Sessions adapter accepts this surface so the top-level transport can
+// compose the Work implementation without a peer transport import here.
+type WorkHTTP interface {
+	ListWorkBySessionId(http.ResponseWriter, *http.Request, factoryapi.SessionID, factoryapi.ListWorkBySessionIdParams)
+	SubmitWorkBySessionId(http.ResponseWriter, *http.Request, factoryapi.SessionID)
+	UpsertWorkRequestBySessionId(http.ResponseWriter, *http.Request, factoryapi.SessionID, string)
+	StageSubmitWorkFileBySessionId(http.ResponseWriter, *http.Request, factoryapi.SessionID)
+	GetWorkBySessionId(http.ResponseWriter, *http.Request, factoryapi.SessionID, factoryapi.WorkOrTokenID)
+	MoveWorkBySessionId(http.ResponseWriter, *http.Request, factoryapi.SessionID, factoryapi.WorkOrTokenID)
+}
+
+// WorkHTTPFactory is an optional compatibility seam for focused transport
+// tests that replace only the Work admission/content role. Production
+// composition should inject a completed WorkHTTP instead.
+type WorkHTTPFactory func(
+	primary work.Service,
+	admission work.Service,
+	submission apisurface.WorkAPI,
+	read apisurface.WorkReadAPI,
+) WorkHTTP
 
 const (
 	submitWorkItemTypeMetadataKey = "submissionItemType"
@@ -84,7 +102,8 @@ type Dependencies struct {
 	DurableLister      DurableExecutionSessionLister
 	LiveSessionLister  LiveSessionListReader
 	WorkerPrompts      workers.PromptTemplates
-	InvocationWorkType factorydefinitions.InvocationWorkTypeService
+	WorkHTTP           WorkHTTP
+	WorkHTTPFactory    WorkHTTPFactory
 	WorkService        work.Service
 	// WorkRoot is the complete Work root used by the Work-owned HTTP adapter
 	// when the process composition can provide it. WorkService remains the
@@ -120,15 +139,16 @@ func NewHandler(deps Dependencies, logger *zap.Logger) *Adapter {
 		durableExecution: deps.DurableExecution, durableLifecycle: deps.DurableLifecycle,
 		durableListing: deps.DurableListing, durableProjection: deps.DurableProjection,
 		durableLister: deps.DurableLister, liveSessionLister: deps.LiveSessionLister,
-		workerPrompts: deps.WorkerPrompts, invocationWorkType: deps.InvocationWorkType,
-		workService: deps.WorkService, workRoot: deps.WorkRoot,
-		defaultWorkType: newDefaultWorkTypeResolver(
-			deps.FactoryDefinitions, deps.InvocationWorkType,
-		),
+		workerPrompts:   deps.WorkerPrompts,
+		WorkHTTP:        deps.WorkHTTP,
+		workHTTPFactory: deps.WorkHTTPFactory,
+		workService:     deps.WorkService, workRoot: deps.WorkRoot,
 		sessionRequests: deps.SessionRequests,
 		logger:          logger,
 	}
-	handler.bindWorkHTTP()
+	if handler.WorkHTTP == nil {
+		handler.bindWorkHTTP()
+	}
 	return handler
 }
 
@@ -145,59 +165,26 @@ func (h *Adapter) WithWorkService(service work.Service) *Adapter {
 	return &bound
 }
 
-func (h *Adapter) bindWorkHTTP() {
+// WithWorkHTTP returns a copy bound to a completed Work HTTP protocol adapter.
+// It is used by composition and focused transport tests that already own the
+// Work adapter construction.
+func (h *Adapter) WithWorkHTTP(adapter WorkHTTP) *Adapter {
 	if h == nil {
-		return
-	}
-	h.Adapter = workhttp.NewAdapterFromRoles(
-		h.workRoot, h.workService, h.work, h.workRead, h.defaultWorkType,
-	)
-}
-
-func newDefaultWorkTypeResolver(
-	definitions apisurface.FactorySaveAPI,
-	invocationWorkType factorydefinitions.InvocationWorkTypeService,
-) workhttp.DefaultWorkTypeResolver {
-	if definitions == nil || invocationWorkType == nil {
 		return nil
 	}
-	return func(ctx context.Context, sessionID string) (string, error) {
-		namedFactory, err := definitions.GetCurrentFactoryForSession(ctx, sessionID)
-		if err != nil {
-			if errors.Is(err, apisurface.ErrFactorySessionNotFound) ||
-				errors.Is(err, apisurface.ErrCurrentFactoryNotFound) {
-				return "", nil
-			}
-			return "", err
-		}
-		factoryConfig, err := factorymapping.FactoryConfigFromOpenAPI(namedFactory)
-		if err != nil {
-			return "", err
-		}
-		defaultWorkTypeID, err := invocationWorkType.DefaultWorkType(&factoryConfig)
-		if err != nil {
-			return "", nil
-		}
-		return defaultWorkTypeID, nil
+	bound := *h
+	bound.WorkHTTP = adapter
+	return &bound
+}
+
+func (h *Adapter) bindWorkHTTP() {
+	if h == nil || h.workHTTPFactory == nil {
+		return
 	}
+	h.WorkHTTP = h.workHTTPFactory(h.workRoot, h.workService, h.work, h.workRead)
 }
 
 // Handler and Server aliases retain the generated transport's established
-// receiver names while the service-owned Work routes are promoted below them.
+// receiver names while the injected Work routes are promoted below them.
 type Handler = Adapter
 type Server = Adapter
-
-// SubmitWorkResponseFromResult maps a canonical submission result to the
-// generated HTTP response for compatibility callers outside this transport.
-func SubmitWorkResponseFromResult(
-	result work.WorkRequestSubmitResult,
-	sessionID string,
-) factoryapi.SubmitWorkResponse {
-	return workhttp.SubmitWorkResponseToAPI(result, sessionID)
-}
-
-// WorkReadModelToGenerated maps a canonical Work read model to the generated
-// HTTP representation for compatibility callers outside this transport.
-func WorkReadModelToGenerated(item work.ReadModel) factoryapi.Work {
-	return workhttp.WorkReadModelToAPI(item)
-}
