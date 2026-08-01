@@ -6,200 +6,183 @@ import (
 	"testing"
 )
 
+var factoryDefinitionsCommittedOwnerPackageMappingCases = []committedOwnerPackageMappingCase{
+	{
+		path:        "pkg/services/factory_definitions",
+		wantRetain:  true,
+		retainOwner: "factory_definitions",
+	},
+	{
+		path: "pkg/services/factory_definitions/definition",
+		want: PackageMapping{
+			PackagePath: "pkg/services/factory_definitions/definition",
+			Disposition: DispositionMove,
+			Destination: "factory_definitions/internal",
+		},
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal/services/snapshots_portability/wire",
+		wantRetain:  true,
+		retainOwner: "factory_definitions/internal/services/snapshots_portability",
+	},
+	{
+		path:        "pkg/services/factory_definitions/wire/defaultscaffold",
+		wantRetain:  true,
+		retainOwner: "factory_definitions",
+	},
+	{
+		path:        "pkg/services/factory_definitions/transports/http",
+		wantRetain:  true,
+		retainOwner: "factory_definitions",
+	},
+	{
+		path: "pkg/services/factory_definitions/internal/services/catalog/wire",
+		want: PackageMapping{
+			PackagePath: "pkg/services/factory_definitions/internal/services/catalog/wire",
+			Disposition: DispositionRetain,
+			Destination: "factory_definitions/internal/services/catalog",
+		},
+	},
+	{
+		path: "pkg/services/factory_definitions/internal/services/validation/internal/topology",
+		want: PackageMapping{
+			PackagePath: "pkg/services/factory_definitions/internal/services/validation/internal/topology",
+			Disposition: DispositionRetain,
+			Destination: "factory_definitions/internal/services/validation",
+		},
+	},
+	{
+		path: "pkg/services/factory_definitions/service",
+		want: PackageMapping{
+			PackagePath: "pkg/services/factory_definitions/service",
+			Disposition: DispositionMove,
+			Destination: "factory_definitions/internal",
+		},
+	},
+	{
+		path: "pkg/services/factory_definitions/internal/services/catalog/namedfactories",
+		want: PackageMapping{
+			PackagePath: "pkg/services/factory_definitions/internal/services/catalog/namedfactories",
+			Disposition: DispositionRetain,
+			Destination: "factory_definitions/internal/services/catalog",
+		},
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal/services/validation/impl",
+		wantRetain:  true,
+		retainOwner: "factory_definitions/internal/services/validation",
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal/services/distribution/goal",
+		wantRetain:  true,
+		retainOwner: "factory_definitions/internal/services/distribution",
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal/contracts",
+		wantRetain:  true,
+		retainOwner: "factory_definitions",
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal",
+		wantRetain:  true,
+		retainOwner: "factory_definitions/internal",
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal/services/validation/authoredmodel/namevalue",
+		wantRetain:  true,
+		retainOwner: "factory_definitions/internal/services/validation",
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers",
+		wantRetain:  true,
+		retainOwner: "factory_definitions/internal/services/validation",
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal/services/validation/authoredmodel/taxonomy",
+		wantRetain:  true,
+		retainOwner: "factory_definitions/internal/services/validation",
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal/services/snapshots_portability/replayconfig",
+		wantRetain:  true,
+		retainOwner: "factory_definitions/internal/services/snapshots_portability",
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal/services/catalog/resource",
+		wantRetain:  true,
+		retainOwner: "factory_definitions/internal/services/catalog",
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope",
+		wantRetain:  true,
+		retainOwner: "factory_definitions/internal/services/invocation_policy",
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal/services/invocation_policy/invocationinterpolation",
+		wantRetain:  true,
+		retainOwner: "factory_definitions/internal/services/invocation_policy",
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal/services/invocation_policy/invocationoutput",
+		wantRetain:  true,
+		retainOwner: "factory_definitions/internal/services/invocation_policy",
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal/services/invocation_policy/invocationworktype",
+		wantRetain:  true,
+		retainOwner: "factory_definitions/internal/services/invocation_policy",
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal/services/invocation_policy/quorumpolicy",
+		wantRetain:  true,
+		retainOwner: "factory_definitions/internal/services/invocation_policy",
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal/services/invocation_policy/workpropagation",
+		wantRetain:  true,
+		retainOwner: "factory_definitions/internal/services/invocation_policy",
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution",
+		wantRetain:  true,
+		retainOwner: "factory_definitions/internal/services/invocation_policy",
+	},
+	{
+		path:        "pkg/services/factory_definitions/internal/services/invocation_policy/ttsobservability",
+		wantRetain:  true,
+		retainOwner: "factory_definitions/internal/services/invocation_policy",
+	},
+	{
+		path: "pkg/services/factory_definitions/internal/testcomposition",
+		want: PackageMapping{
+			PackagePath: "pkg/services/factory_definitions/internal/testcomposition",
+			Disposition: DispositionMove,
+			Destination: "factory_definitions/internal",
+		},
+	},
+	{
+		path: "pkg/services/factory_definitions/clonetests",
+		want: PackageMapping{
+			PackagePath: "pkg/services/factory_definitions/clonetests",
+			Disposition: DispositionMove,
+			Destination: "factory_definitions/internal",
+		},
+	},
+	{
+		path: "pkg/services/factory_definitions/systeminitializationtests",
+		want: PackageMapping{
+			PackagePath: "pkg/services/factory_definitions/systeminitializationtests",
+			Disposition: DispositionMove,
+			Destination: "factory_definitions/internal",
+		},
+	},
+}
+
 func TestMapCommittedOwnerPackageFactoryDefinitionsMoveDestinations(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
-		path        string
-		want        PackageMapping
-		wantRetain  bool
-		retainOwner string
-	}{
-		{
-			path: "pkg/services/factory_definitions",
-			wantRetain: true,
-			retainOwner: "factory_definitions",
-		},
-		{
-			path: "pkg/services/factory_definitions/definition",
-			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/definition",
-				Disposition: DispositionMove,
-				Destination: "factory_definitions/internal",
-			},
-		},
-		{
-			path:        "pkg/services/factory_definitions/internal/services/snapshots_portability/wire",
-			wantRetain:  true,
-			retainOwner: "factory_definitions/internal/services/snapshots_portability",
-		},
-		{
-			path: "pkg/services/factory_definitions/wire/defaultscaffold",
-			wantRetain: true,
-			retainOwner: "factory_definitions",
-		},
-		{
-			path: "pkg/services/factory_definitions/transports/http",
-			wantRetain: true,
-			retainOwner: "factory_definitions",
-		},
-		{
-			path: "pkg/services/factory_definitions/internal/services/catalog/wire",
-			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/internal/services/catalog/wire",
-				Disposition: DispositionRetain,
-				Destination: "factory_definitions/internal/services/catalog",
-			},
-		},
-		{
-			path: "pkg/services/factory_definitions/internal/services/validation/internal/topology",
-			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/internal/services/validation/internal/topology",
-				Disposition: DispositionRetain,
-				Destination: "factory_definitions/internal/services/validation",
-			},
-		},
-		{
-			path: "pkg/services/factory_definitions/service",
-			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/service",
-				Disposition: DispositionMove,
-				Destination: "factory_definitions/internal",
-			},
-		},
-		{
-			path: "pkg/services/factory_definitions/internal/services/catalog/namedfactories",
-			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/internal/services/catalog/namedfactories",
-				Disposition: DispositionRetain,
-				Destination: "factory_definitions/internal/services/catalog",
-			},
-		},
-		{
-			path: "pkg/services/factory_definitions/internal/services/validation/impl",
-			wantRetain: true,
-			retainOwner: "factory_definitions/internal/services/validation",
-		},
-		{
-			path: "pkg/services/factory_definitions/internal/services/distribution/goal",
-			wantRetain: true,
-			retainOwner: "factory_definitions/internal/services/distribution",
-		},
-		{
-			path: "pkg/services/factory_definitions/internal/contracts",
-			wantRetain: true,
-			retainOwner: "factory_definitions",
-		},
-		{
-			path:        "pkg/services/factory_definitions/internal",
-			wantRetain:  true,
-			retainOwner: "factory_definitions/internal",
-		},
-		{
-			path: "pkg/services/factory_definitions/internal/services/validation/authoredmodel/namevalue",
-			wantRetain: true,
-			retainOwner: "factory_definitions/internal/services/validation",
-		},
-		{
-			path: "pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers",
-			wantRetain: true,
-			retainOwner: "factory_definitions/internal/services/validation",
-		},
-		{
-			path: "pkg/services/factory_definitions/internal/services/validation/authoredmodel/taxonomy",
-			wantRetain: true,
-			retainOwner: "factory_definitions/internal/services/validation",
-		},
-		{
-			path:        "pkg/services/factory_definitions/internal/services/snapshots_portability/replayconfig",
-			wantRetain:  true,
-			retainOwner: "factory_definitions/internal/services/snapshots_portability",
-		},
-		{
-			path:        "pkg/services/factory_definitions/internal/services/catalog/resource",
-			wantRetain:  true,
-			retainOwner: "factory_definitions/internal/services/catalog",
-		},
-		{
-			path:        "pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope",
-			wantRetain:  true,
-			retainOwner: "factory_definitions/internal/services/invocation_policy",
-		},
-		{
-			path:        "pkg/services/factory_definitions/internal/services/invocation_policy/invocationinterpolation",
-			wantRetain:  true,
-			retainOwner: "factory_definitions/internal/services/invocation_policy",
-		},
-		{
-			path:        "pkg/services/factory_definitions/internal/services/invocation_policy/invocationoutput",
-			wantRetain:  true,
-			retainOwner: "factory_definitions/internal/services/invocation_policy",
-		},
-		{
-			path:        "pkg/services/factory_definitions/internal/services/invocation_policy/invocationworktype",
-			wantRetain:  true,
-			retainOwner: "factory_definitions/internal/services/invocation_policy",
-		},
-		{
-			path:        "pkg/services/factory_definitions/internal/services/invocation_policy/quorumpolicy",
-			wantRetain:  true,
-			retainOwner: "factory_definitions/internal/services/invocation_policy",
-		},
-		{
-			path:        "pkg/services/factory_definitions/internal/services/invocation_policy/workpropagation",
-			wantRetain:  true,
-			retainOwner: "factory_definitions/internal/services/invocation_policy",
-		},
-		{
-			path:        "pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution",
-			wantRetain:  true,
-			retainOwner: "factory_definitions/internal/services/invocation_policy",
-		},
-		{
-			path:        "pkg/services/factory_definitions/internal/services/invocation_policy/ttsobservability",
-			wantRetain:  true,
-			retainOwner: "factory_definitions/internal/services/invocation_policy",
-		},
-		{
-			path: "pkg/services/factory_definitions/internal/testcomposition",
-			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/internal/testcomposition",
-				Disposition: DispositionMove,
-				Destination: "factory_definitions/internal",
-			},
-		},
-		{
-			path: "pkg/services/factory_definitions/clonetests",
-			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/clonetests",
-				Disposition: DispositionMove,
-				Destination: "factory_definitions/internal",
-			},
-		},
-		{
-			path: "pkg/services/factory_definitions/systeminitializationtests",
-			want: PackageMapping{
-				PackagePath: "pkg/services/factory_definitions/systeminitializationtests",
-				Disposition: DispositionMove,
-				Destination: "factory_definitions/internal",
-			},
-		},
-	}
-
-	for _, tc := range cases {
-		got, ok := mapCommittedOwnerPackage(tc.path)
-		if !ok {
-			t.Fatalf("mapCommittedOwnerPackage(%q) ok = false", tc.path)
-		}
-		if tc.wantRetain {
-			if got.Disposition != DispositionRetain || got.Destination != tc.retainOwner {
-				t.Fatalf("mapCommittedOwnerPackage(%q) = %#v, want retain→%s", tc.path, got, tc.retainOwner)
-			}
-			continue
-		}
-		if got != tc.want {
-			t.Fatalf("mapCommittedOwnerPackage(%q) = %#v, want %#v", tc.path, got, tc.want)
-		}
+	for _, tc := range factoryDefinitionsCommittedOwnerPackageMappingCases {
+		assertCommittedOwnerPackageMapping(t, tc)
 	}
 }
 

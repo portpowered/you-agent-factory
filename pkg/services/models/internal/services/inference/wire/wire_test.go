@@ -27,57 +27,71 @@ func TestNewServiceRequiresInferenceDependencies(t *testing.T) {
 	catalog := testCatalogService(t, scopes)
 	assets := recordingAssetsService{}
 	runtimeHost := testRuntimeHostService()
-	clock := testInferenceClock{}
 
-	tests := []struct {
-		name              string
-		scopes            runtimescopes.Service
-		assets            scopedassets.Service
-		catalog           modelcatalog.Service
-		runtimeHost       runtimehost.Service
-		invocationRuntime inferenceinternalservice.InvocationRuntime
-		fileSystem        modelseffects.InvocationArtifactFileSystem
-		clock             func() time.Time
-		wantContains      string
-		wantInvalidDeps   bool
-	}{
+	for _, test := range inferenceDependencyCases(scopes, assets, catalog, runtimeHost) {
+		t.Run(test.name, func(t *testing.T) {
+			assertInferenceConstruction(t, test)
+		})
+	}
+}
+
+type inferenceDependencyCase struct {
+	name              string
+	scopes            runtimescopes.Service
+	assets            scopedassets.Service
+	catalog           modelcatalog.Service
+	runtimeHost       runtimehost.Service
+	invocationRuntime inferenceinternalservice.InvocationRuntime
+	fileSystem        modelseffects.InvocationArtifactFileSystem
+	includeClock      bool
+	wantContains      string
+	wantInvalidDeps   bool
+}
+
+func inferenceDependencyCases(
+	scopes runtimescopes.Service,
+	assets scopedassets.Service,
+	catalog modelcatalog.Service,
+	runtimeHost runtimehost.Service,
+) []inferenceDependencyCase {
+	return []inferenceDependencyCase{
 		{
 			name: "valid", scopes: scopes, assets: assets, catalog: catalog,
 			runtimeHost: runtimeHost, invocationRuntime: inference.InputEchoInvocationRuntime{},
-			fileSystem: inference.InertArtifactFileSystem{}, clock: clock.Now,
+			fileSystem: inference.InertArtifactFileSystem{}, includeClock: true,
 		},
 		{
 			name: "scopes", assets: assets, catalog: catalog, runtimeHost: runtimeHost,
 			invocationRuntime: inference.InputEchoInvocationRuntime{},
-			fileSystem:        inference.InertArtifactFileSystem{}, clock: clock.Now,
+			fileSystem:        inference.InertArtifactFileSystem{}, includeClock: true,
 			wantContains: "Runtime Scopes", wantInvalidDeps: true,
 		},
 		{
 			name: "assets", scopes: scopes, catalog: catalog, runtimeHost: runtimeHost,
 			invocationRuntime: inference.InputEchoInvocationRuntime{},
-			fileSystem:        inference.InertArtifactFileSystem{}, clock: clock.Now,
+			fileSystem:        inference.InertArtifactFileSystem{}, includeClock: true,
 			wantContains: "Assets", wantInvalidDeps: true,
 		},
 		{
 			name: "catalog", scopes: scopes, assets: assets, runtimeHost: runtimeHost,
 			invocationRuntime: inference.InputEchoInvocationRuntime{},
-			fileSystem:        inference.InertArtifactFileSystem{}, clock: clock.Now,
+			fileSystem:        inference.InertArtifactFileSystem{}, includeClock: true,
 			wantContains: "Catalog", wantInvalidDeps: true,
 		},
 		{
 			name: "runtime host", scopes: scopes, assets: assets, catalog: catalog,
 			invocationRuntime: inference.InputEchoInvocationRuntime{},
-			fileSystem:        inference.InertArtifactFileSystem{}, clock: clock.Now,
+			fileSystem:        inference.InertArtifactFileSystem{}, includeClock: true,
 			wantContains: "Runtime Host", wantInvalidDeps: true,
 		},
 		{
 			name: "invocation runtime", scopes: scopes, assets: assets, catalog: catalog, runtimeHost: runtimeHost,
-			fileSystem: inference.InertArtifactFileSystem{}, clock: clock.Now,
+			fileSystem: inference.InertArtifactFileSystem{}, includeClock: true,
 			wantContains: "invocation runtime", wantInvalidDeps: true,
 		},
 		{
 			name: "filesystem", scopes: scopes, assets: assets, catalog: catalog, runtimeHost: runtimeHost,
-			invocationRuntime: inference.InputEchoInvocationRuntime{}, clock: clock.Now,
+			invocationRuntime: inference.InputEchoInvocationRuntime{}, includeClock: true,
 			wantContains: "filesystem", wantInvalidDeps: true,
 		},
 		{
@@ -87,33 +101,46 @@ func TestNewServiceRequiresInferenceDependencies(t *testing.T) {
 			wantContains:      "clock", wantInvalidDeps: true,
 		},
 	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			service, err := inferencewire.NewService(
-				test.scopes,
-				test.assets,
-				test.catalog,
-				test.runtimeHost,
-				test.invocationRuntime,
-				test.fileSystem,
-				test.clock,
-			)
-			if test.wantInvalidDeps {
-				if service != nil || err == nil {
-					t.Fatalf("NewService = (%#v, %v), want dependency error", service, err)
-				}
-				if !errors.Is(err, models.ErrInvalidInferenceDependencies) {
-					t.Fatalf("error = %v, want ErrInvalidInferenceDependencies", err)
-				}
-				if test.wantContains != "" && !strings.Contains(err.Error(), test.wantContains) {
-					t.Fatalf("error = %q, want substring %q", err.Error(), test.wantContains)
-				}
-				return
-			}
-			if service == nil || err != nil {
-				t.Fatalf("NewService = (%#v, %v), want service", service, err)
-			}
-		})
+}
+
+func assertInferenceConstruction(t *testing.T, test inferenceDependencyCase) {
+	t.Helper()
+
+	clock := &testInferenceClock{}
+	var clockFn func() time.Time
+	if test.includeClock {
+		clockFn = clock.Now
+	}
+
+	service, err := inferencewire.NewService(
+		test.scopes,
+		test.assets,
+		test.catalog,
+		test.runtimeHost,
+		test.invocationRuntime,
+		test.fileSystem,
+		clockFn,
+	)
+	if test.wantInvalidDeps {
+		if service != nil || err == nil {
+			t.Fatalf("NewService = (%#v, %v), want dependency error", service, err)
+		}
+		if !errors.Is(err, models.ErrInvalidInferenceDependencies) {
+			t.Fatalf("error = %v, want ErrInvalidInferenceDependencies", err)
+		}
+		if test.wantContains != "" && !strings.Contains(err.Error(), test.wantContains) {
+			t.Fatalf("error = %q, want substring %q", err.Error(), test.wantContains)
+		}
+		if clock.calls != 0 {
+			t.Fatalf("clock calls during validation = %d, want 0", clock.calls)
+		}
+		return
+	}
+	if service == nil || err != nil {
+		t.Fatalf("NewService = (%#v, %v), want service", service, err)
+	}
+	if clock.calls != 0 {
+		t.Fatalf("clock calls during construction = %d, want 0", clock.calls)
 	}
 }
 
@@ -139,9 +166,12 @@ func testRuntimeHostService() runtimehost.Service {
 	return recordingRuntimeHostService{}
 }
 
-type testInferenceClock struct{}
+type testInferenceClock struct {
+	calls int
+}
 
 func (clock *testInferenceClock) Now() time.Time {
+	clock.calls++
 	return time.Unix(0, 0)
 }
 
