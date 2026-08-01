@@ -11,8 +11,11 @@ Canonical lane names match [development.md](development.md): **Bun Unit** (Node,
 suffix is reserved for DOM-free, browser-free tests and is intentionally
 disjoint from `.bun.component.test.tsx`, ordinary component tests, browser or
 integration tests, performance tests, and Storybook tests. The required UI
-Coverage lane runs the Vitest Node unit project only; component, browser, and
-performance tests are separate confidence lanes and do not affect its threshold.
+unit seed lane is run with `cd ui && bun run test:unit:bun`; it discovers only
+the Bun suffix and reports the selected files plus Bun's terminal file/test
+totals. The required UI Coverage lane runs the Vitest Node unit project only;
+component, browser, and performance tests are separate confidence lanes and do
+not affect its threshold.
 
 The component lane runs browserless tests in two compatibility groups: Bun is
 the default for tests without Vitest-only capabilities, and Vitest temporarily

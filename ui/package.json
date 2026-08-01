@@ -61,6 +61,7 @@
     "test:component": "bun scripts/run-component-tests.ts",
     "test:component:bun": "bun scripts/run-bun-component-tests.ts",
     "test:component:vitest": "bun scripts/run-vitest-component-tests.ts",
+    "test:unit:bun": "bun scripts/run-bun-unit-tests.ts",
     "test:integration": "bun run build && node scripts/run-ui-integration-with-timings.mjs",
     "test:integration:durable-session-real-backend": "node scripts/run-durable-session-real-backend-integration-with-timings.mjs",
     "test:public-package-release": "vitest run scripts/verify-public-package-release.test.mjs scripts/public-package-publish.test.mjs",

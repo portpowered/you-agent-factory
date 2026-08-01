@@ -93,7 +93,7 @@ Run dashboard package commands from `ui/` with Bun 1.3.12+ on PATH. Root `make` 
 
 | Goal | Canonical command | Runner |
 | --- | --- | --- |
-| Bun-native unit tests (Node) | `.bun.unit.test.ts` files are reserved for the dedicated Bun unit lane | DOM-free and browser-free; disjoint from component, browser, performance, and Storybook conventions |
+| Bun-native unit tests (Node) | `cd ui && bun run test:unit:bun` | Discovers `.bun.unit.test.ts` files and runs them with Bun's native test API; DOM-free and browser-free, disjoint from component, browser, performance, and Storybook conventions |
 | Unmigrated unit tests (Node) | `cd ui && bun run test:unit` or `make ui-test` | Named Vitest `dashboard-unit` project; ordinary `.test.ts` and supported `.unit.test.mts` files only; no DOM setup |
 | Component tests (jsdom) | `cd ui && bun run test:component` | Named Vitest `dashboard-component` project |
 | Coverage thresholds and replay fixture guard | `make test-ui-coverage` | Node unit coverage via `test:coverage`, then replay check |
