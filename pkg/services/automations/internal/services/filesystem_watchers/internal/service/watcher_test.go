@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	filesystemwatchers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
@@ -31,8 +32,8 @@ func newTestWatcher(
 	logger *zap.Logger,
 	workTypes []string,
 	statesByType map[string]map[string]bool,
-	files filesystemwatchers.InputFileSystem,
-	walkDirectory filesystemwatchers.DirectoryWalker,
+	files automations.FilesystemInputReader,
+	walkDirectory automations.FilesystemDirectoryWalker,
 ) *watcher {
 	if walkDirectory == nil {
 		walkDirectory = filepath.WalkDir

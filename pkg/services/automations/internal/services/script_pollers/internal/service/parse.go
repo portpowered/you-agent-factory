@@ -1,4 +1,4 @@
-package script_pollers
+package service
 
 import (
 	"bytes"
@@ -9,75 +9,66 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
-// ScriptPollerStdout is the parsed stdout payload from one script-poller cycle.
-type ScriptPollerStdout struct {
-	Request          work.WorkRequest
-	HasRequest       bool
-	AdvancedCursor   string
-	Checkpoint       string
-	AdvancesPosition bool
+type scriptPollerStdout struct {
+	request          work.WorkRequest
+	hasRequest       bool
+	advancedCursor   string
+	checkpoint       string
+	advancesPosition bool
 }
 
-func parseScriptPollerOutput(stdout []byte) (work.WorkRequest, bool, error) {
-	parsed, err := parseScriptPollerStdout(stdout)
-	if err != nil {
-		return work.WorkRequest{}, parsed.HasRequest, err
-	}
-	return parsed.Request, parsed.HasRequest, nil
-}
-
-func parseScriptPollerStdout(stdout []byte) (ScriptPollerStdout, error) {
+func parseScriptPollerStdout(stdout []byte) (scriptPollerStdout, error) {
 	trimmed := bytes.TrimSpace(stdout)
 	if len(trimmed) == 0 {
-		return ScriptPollerStdout{}, nil
+		return scriptPollerStdout{}, nil
 	}
 
 	var envelope scriptPollerOutputEnvelope
 	if err := json.Unmarshal(trimmed, &envelope); err != nil {
-		return ScriptPollerStdout{HasRequest: true}, fmt.Errorf("script poller emitted malformed stdout: %w", err)
+		return scriptPollerStdout{hasRequest: true}, fmt.Errorf("script poller emitted malformed stdout: %w", err)
 	}
 	if len(envelope.Events) > 0 {
-		return ScriptPollerStdout{HasRequest: true}, fmt.Errorf("script poller emitted unsupported raw factory events")
+		return scriptPollerStdout{hasRequest: true}, fmt.Errorf("script poller emitted unsupported raw factory events")
 	}
 	if len(envelope.Request) > 0 && len(envelope.Submissions) > 0 {
-		return ScriptPollerStdout{HasRequest: true}, fmt.Errorf("script poller stdout must contain either request or submissions, not both")
+		return scriptPollerStdout{hasRequest: true}, fmt.Errorf("script poller stdout must contain either request or submissions, not both")
 	}
 
 	recovery := scriptPollerRecoveryFromEnvelope(envelope)
 	if len(envelope.Request) > 0 {
 		request, err := work.ParseCanonicalWorkRequestJSON(envelope.Request)
 		if err != nil {
-			return ScriptPollerStdout{HasRequest: true}, fmt.Errorf("script poller emitted malformed stdout: %w", err)
+			return scriptPollerStdout{hasRequest: true}, fmt.Errorf("script poller emitted malformed stdout: %w", err)
 		}
 		if err := validateScriptPollerWorkRequest(request); err != nil {
-			return ScriptPollerStdout{HasRequest: true}, err
+			return scriptPollerStdout{hasRequest: true}, err
 		}
-		return mergeScriptPollerStdout(ScriptPollerStdout{
-			Request:    request,
-			HasRequest: true,
+		return mergeScriptPollerStdout(scriptPollerStdout{
+			request:    request,
+			hasRequest: true,
 		}, recovery), nil
 	}
 	if len(envelope.Submissions) > 0 {
 		request, err := scriptPollerWorkRequestFromSubmissions(envelope.Submissions)
 		if err != nil {
-			return ScriptPollerStdout{HasRequest: true}, err
+			return scriptPollerStdout{hasRequest: true}, err
 		}
-		return mergeScriptPollerStdout(ScriptPollerStdout{
-			Request:    request,
-			HasRequest: true,
+		return mergeScriptPollerStdout(scriptPollerStdout{
+			request:    request,
+			hasRequest: true,
 		}, recovery), nil
 	}
 
 	request, err := work.ParseCanonicalWorkRequestJSON(trimmed)
 	if err != nil {
-		return ScriptPollerStdout{HasRequest: true}, fmt.Errorf("script poller emitted malformed stdout: %w", err)
+		return scriptPollerStdout{hasRequest: true}, fmt.Errorf("script poller emitted malformed stdout: %w", err)
 	}
 	if err := validateScriptPollerWorkRequest(request); err != nil {
-		return ScriptPollerStdout{HasRequest: true}, err
+		return scriptPollerStdout{hasRequest: true}, err
 	}
-	return mergeScriptPollerStdout(ScriptPollerStdout{
-		Request:    request,
-		HasRequest: true,
+	return mergeScriptPollerStdout(scriptPollerStdout{
+		request:    request,
+		hasRequest: true,
 	}, recovery), nil
 }
 
@@ -89,20 +80,20 @@ type scriptPollerOutputEnvelope struct {
 	Checkpoint  string          `json:"checkpoint"`
 }
 
-func scriptPollerRecoveryFromEnvelope(envelope scriptPollerOutputEnvelope) ScriptPollerStdout {
+func scriptPollerRecoveryFromEnvelope(envelope scriptPollerOutputEnvelope) scriptPollerStdout {
 	cursor := strings.TrimSpace(envelope.Cursor)
 	checkpoint := strings.TrimSpace(envelope.Checkpoint)
-	return ScriptPollerStdout{
-		AdvancedCursor:   cursor,
-		Checkpoint:       checkpoint,
-		AdvancesPosition: cursor != "" || checkpoint != "",
+	return scriptPollerStdout{
+		advancedCursor:   cursor,
+		checkpoint:       checkpoint,
+		advancesPosition: cursor != "" || checkpoint != "",
 	}
 }
 
-func mergeScriptPollerStdout(parsed, recovery ScriptPollerStdout) ScriptPollerStdout {
-	parsed.AdvancedCursor = recovery.AdvancedCursor
-	parsed.Checkpoint = recovery.Checkpoint
-	parsed.AdvancesPosition = recovery.AdvancesPosition
+func mergeScriptPollerStdout(parsed, recovery scriptPollerStdout) scriptPollerStdout {
+	parsed.advancedCursor = recovery.advancedCursor
+	parsed.checkpoint = recovery.checkpoint
+	parsed.advancesPosition = recovery.advancesPosition
 	return parsed
 }
 

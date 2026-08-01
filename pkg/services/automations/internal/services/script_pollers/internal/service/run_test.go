@@ -1,4 +1,4 @@
-package service_test
+package service
 
 import (
 	"context"
@@ -12,7 +12,6 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
-	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -48,7 +47,7 @@ func TestRunScriptPoller_SubmitsCanonicalWorkRequestStdout(t *testing.T) {
 		runtimeCfg,
 		poller,
 		worker,
-		scriptpollers.ScriptPollerSupervision{},
+		"",
 		submitted.submit,
 	)
 	if err == nil || !strings.Contains(err.Error(), "exited unexpectedly") {
@@ -98,7 +97,7 @@ func TestRunScriptPoller_SubmitsSubmitStyleRecordsStdout(t *testing.T) {
 		runtimeCfg,
 		poller,
 		worker,
-		scriptpollers.ScriptPollerSupervision{},
+		"",
 		submitted.submit,
 	)
 	if err == nil || !strings.Contains(err.Error(), "exited unexpectedly") {
@@ -166,7 +165,7 @@ func TestRunScriptPoller_RejectsMalformedStdoutWithoutSubmit(t *testing.T) {
 				runtimeCfg,
 				poller,
 				worker,
-				scriptpollers.ScriptPollerSupervision{},
+				"",
 				submitted.submit,
 			)
 			if err == nil || !strings.Contains(err.Error(), tc.wantErrSubstring) {
@@ -197,7 +196,7 @@ func TestRunScriptPoller_EmptyStdoutDoesNotSubmit(t *testing.T) {
 		runtimeCfg,
 		poller,
 		worker,
-		scriptpollers.ScriptPollerSupervision{},
+		"",
 		submitted.submit,
 	)
 	if err == nil || !strings.Contains(err.Error(), "exited unexpectedly") {
@@ -237,7 +236,7 @@ func TestRunScriptPoller_SubmitFailureReturnsTypedSubmitError(t *testing.T) {
 		runtimeCfg,
 		poller,
 		worker,
-		scriptpollers.ScriptPollerSupervision{},
+		"",
 		submitted.submit,
 	)
 	var typed *automations.Error
@@ -276,7 +275,7 @@ func TestScriptPollerCommandRequest_ResolvesCommandArgsWorkdirAndEnv(t *testing.
 	runtimeCfg := newScriptPollerLoadedRuntimeConfig(t, factoryDir, poller, worker)
 	runtimeCfg.SetRuntimeBaseDir(runtimeBaseDir)
 
-	req, err := scriptpollers.ScriptPollerCommandRequest(runtimeCfg, poller, worker, nil, scriptpollers.ResumeCursor{})
+	req, err := scriptPollerCommandRequest(runtimeCfg, poller, worker, nil, resumeCursor{})
 	if err != nil {
 		t.Fatalf("ScriptPollerCommandRequest: %v", err)
 	}
@@ -352,7 +351,7 @@ func (r *sequenceCommandRunner) callCount() int {
 	return r.calls
 }
 
-func newScriptPollersService(runner workers.CommandRunner) scriptpollers.Service {
+func newScriptPollersService(runner workers.CommandRunner) *service {
 	return newScriptPollersServiceWithOptions(scriptPollersServiceOptions{runner: runner})
 }
 

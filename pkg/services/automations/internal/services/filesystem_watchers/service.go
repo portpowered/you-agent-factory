@@ -4,43 +4,18 @@
 // Automations service root instead of this parent-private package.
 package filesystem_watchers
 
-import (
-	"context"
-	"io/fs"
-	"time"
+import automations "github.com/portpowered/infinite-you/pkg/services/automations"
 
-	"github.com/jonboulle/clockwork"
-	"github.com/portpowered/infinite-you/pkg/services/work"
-	"go.uber.org/zap"
-)
+// Config is the root-owned inert configuration for one watcher.
+type Config = automations.FilesystemWatcherConfig
 
-// WorkRequestSubmitter admits one Work Request materialized by a filesystem
-// watcher through the accepted Work boundary.
-type WorkRequestSubmitter func(context.Context, work.WorkRequest) error
-
-// InputFileSystem reads the watched input tree after Automations has selected
-// paths and collaborators.
-type InputFileSystem interface {
-	ReadDir(string) ([]fs.DirEntry, error)
-	ReadFile(string) ([]byte, error)
-	Stat(string) (fs.FileInfo, error)
-}
-
-// DirectoryWalker traverses the watched input tree. Wire supplies the
-// production implementation; owner tests may inject a deterministic traversal.
-type DirectoryWalker func(string, fs.WalkDirFunc) error
+// WorkRequestSubmitter is retained as a value alias for nested implementation
+// code; it is not a collaborator interface.
+type WorkRequestSubmitter = automations.WorkRequestSubmitter
 
 // ObservationIdentity is the stable Automations-owned cursor key for one watched
 // input path. Peers treat it as opaque; only filesystem_watchers derives it.
 type ObservationIdentity string
-
-// HandledIdentities records watcher cursor facts for paths whose Work commands
-// already succeeded. Implementations are Automations-owned; peers inject
-// durable stores without importing parent-private persistence types.
-type HandledIdentities interface {
-	Contains(ObservationIdentity) bool
-	Record(ObservationIdentity) error
-}
 
 // WatchIdentity identifies one configured filesystem watch root within an
 // Automation.
@@ -71,31 +46,9 @@ func (f WatcherFacts) CursorProjection() (Cursor, string) {
 // stores without importing parent-private persistence types.
 type CursorFactsPersist func(WatcherFacts) error
 
-// Config carries the inert construction inputs for one filesystem watcher.
-type Config struct {
-	Dir               string
-	Logger            *zap.Logger
-	KnownWorkTypes    []string
-	ValidStatesByType map[string]map[string]bool
-	Files             InputFileSystem
-	WalkDirectory     DirectoryWalker
-	WorkRequestIDs    work.RequestIDGenerator
-	Submitter         WorkRequestSubmitter
-	HandledIdentities HandledIdentities
-	Clock             clockwork.Clock
-	DebounceWindow    time.Duration
-}
-
-// Watcher supervises one configured input root. Construction is inert; Watch and
-// PreseedInputs perform effects only when explicitly invoked.
-type Watcher interface {
-	PreseedInputs(context.Context) error
-	Watch(context.Context) error
-}
-
 // Service constructs inert filesystem watchers for Automations composition.
 type Service interface {
-	NewWatcher(Config) Watcher
+	NewWatcher(Config) automations.FilesystemWatcher
 	// ResumeWatcherFacts validates detached committed facts on Automations restart.
 	// When authoritative facts already exist, resume must match them.
 	ResumeWatcherFacts(
@@ -109,13 +62,9 @@ type Service interface {
 	// WatcherFactsFromCursor rebuilds detached facts from opaque cursor/checkpoint
 	// values peers retrieved through Automations contracts.
 	WatcherFactsFromCursor(identity WatchIdentity, cursor Cursor, checkpoint string) (WatcherFacts, error)
-	// NewHandledIdentities constructs a cursor-backed identity store from resumed
-	// facts. Record commits updated facts through persist; persist failures do not
-	// report successful recovery.
-	NewHandledIdentities(facts WatcherFacts, persist CursorFactsPersist) (HandledIdentities, error)
 	// NewWatcherWithResume validates resume facts, wires cursor-backed handled
 	// identities into config, and returns an inert watcher for explicit preseed/watch.
-	NewWatcherWithResume(RestartRequest) (Watcher, WatcherFacts, error)
+	NewWatcherWithResume(RestartRequest) (automations.FilesystemWatcher, WatcherFacts, error)
 }
 
 // RestartRequest carries inputs for constructing a watcher after Automations restart.

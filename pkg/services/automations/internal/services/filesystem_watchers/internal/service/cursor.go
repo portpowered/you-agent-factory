@@ -96,10 +96,10 @@ func (s *service) WatcherFactsFromCursor(
 	return normalizeWatcherFacts(facts)
 }
 
-func (s *service) NewHandledIdentities(
+func (s *service) newHandledIdentities(
 	facts filesystemwatchers.WatcherFacts,
 	persist filesystemwatchers.CursorFactsPersist,
-) (filesystemwatchers.HandledIdentities, error) {
+) (handledIdentities, error) {
 	if persist == nil {
 		return nil, fmt.Errorf("filesystem watcher cursor persist collaborator is required")
 	}

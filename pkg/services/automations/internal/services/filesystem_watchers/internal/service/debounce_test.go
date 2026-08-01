@@ -21,16 +21,15 @@ func newDebouncedTestWatcher(
 	clock clockwork.Clock,
 	eventWatcher *scriptedEventWatcher,
 ) *watcher {
-	fw := newWatcher(filesystemwatchers.Config{
+	fw := newWatcherWithClock(filesystemwatchers.Config{
 		Dir:            dir,
 		Logger:         zap.NewNop(),
 		Files:          localInputFiles{},
 		WalkDirectory:  filepath.WalkDir,
 		WorkRequestIDs: testWorkRequestIDGenerator,
 		Submitter:      submitter.Submit,
-		Clock:          clock,
 		DebounceWindow: testDebounceWindow,
-	})
+	}, clock)
 	fw.newWatcher = func() (fileEventWatcher, error) { return eventWatcher, nil }
 	return fw
 }

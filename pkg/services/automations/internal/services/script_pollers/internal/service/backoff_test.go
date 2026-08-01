@@ -3,8 +3,6 @@ package service
 import (
 	"testing"
 	"time"
-
-	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
 )
 
 func TestScriptPollerRestartBackoff_ProgressionBounds(t *testing.T) {
@@ -14,10 +12,10 @@ func TestScriptPollerRestartBackoff_ProgressionBounds(t *testing.T) {
 		attempt int
 		want    time.Duration
 	}{
-		{attempt: 1, want: scriptpollers.ScriptPollerRestartBackoffMin},
-		{attempt: 2, want: 2 * scriptpollers.ScriptPollerRestartBackoffMin},
-		{attempt: 3, want: 4 * scriptpollers.ScriptPollerRestartBackoffMin},
-		{attempt: 4, want: 8 * scriptpollers.ScriptPollerRestartBackoffMin},
+		{attempt: 1, want: scriptPollerRestartBackoffMin},
+		{attempt: 2, want: 2 * scriptPollerRestartBackoffMin},
+		{attempt: 3, want: 4 * scriptPollerRestartBackoffMin},
+		{attempt: 4, want: 8 * scriptPollerRestartBackoffMin},
 		{attempt: 5, want: scriptPollerRestartBackoffMax},
 		{attempt: 10, want: scriptPollerRestartBackoffMax},
 	}

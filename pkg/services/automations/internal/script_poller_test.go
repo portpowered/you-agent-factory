@@ -2,9 +2,7 @@ package internal_test
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -16,7 +14,6 @@ import (
 
 	factorydefinitioncomposition "github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
-	automationinternal "github.com/portpowered/infinite-you/pkg/services/automations/internal"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -156,67 +153,6 @@ func TestRunScriptPoller_SubmitsSubmitStyleRecordsStdout(t *testing.T) {
 	}
 	if workRequest.Works[0].WorkID != "linear-issue-124" {
 		t.Fatalf("submitted work ID = %q, want linear-issue-124", workRequest.Works[0].WorkID)
-	}
-}
-
-func TestScriptPollerCommandRequest_DefaultsEmptyWorkingDirectoryToRuntimeBaseDirectory(t *testing.T) {
-	factoryDir := t.TempDir()
-	runtimeBaseDir := t.TempDir()
-	runtimeCfg := newScriptPollerLoadedRuntimeConfig(
-		t,
-		factoryDir,
-		scriptPollerRuntimeConfigOptions{
-			poller: newCanonicalScriptPollerWorkstation(),
-		},
-	)
-	runtimeCfg.SetRuntimeBaseDir(runtimeBaseDir)
-
-	req, err := automationinternal.ScriptPollerCommandRequest(
-		runtimeCfg,
-		newCanonicalScriptPollerWorkstation(),
-		newCanonicalScriptPollerWorker("--mode", "watch"),
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("ScriptPollerCommandRequest: %v", err)
-	}
-	if req.WorkDir != runtimeBaseDir {
-		t.Fatalf("poller workdir = %q, want %q", req.WorkDir, runtimeBaseDir)
-	}
-	if req.Command != filepath.Join(factoryDir, "scripts", "poller.sh") {
-		t.Fatalf("poller command = %q, want resolved factory script path", req.Command)
-	}
-}
-
-func TestParseScriptPollerOutput_RejectsUnsupportedRawFactoryEvents(t *testing.T) {
-	rawEventJSON, err := json.Marshal(map[string]any{
-		"events": []map[string]any{{
-			"type": "WORK_REQUEST",
-		}},
-	})
-	if err != nil {
-		t.Fatalf("marshal raw event payload: %v", err)
-	}
-
-	_, hasOutput, parseErr := automationinternal.ParseScriptPollerOutput(rawEventJSON)
-	if !hasOutput {
-		t.Fatal("expected raw event payload to count as poller output")
-	}
-	if parseErr == nil || !strings.Contains(parseErr.Error(), "unsupported raw factory events") {
-		t.Fatalf("parse error = %v, want unsupported raw factory events", parseErr)
-	}
-}
-
-func TestParseScriptPollerOutput_RejectsMalformedStdout(t *testing.T) {
-	_, hasOutput, err := automationinternal.ParseScriptPollerOutput([]byte("submitted work\n"))
-	if !hasOutput {
-		t.Fatal("expected non-empty stdout to count as poller output")
-	}
-	if err == nil {
-		t.Fatal("expected malformed stdout error")
-	}
-	if !strings.Contains(err.Error(), "malformed stdout") {
-		t.Fatalf("error = %v, want malformed stdout", err)
 	}
 }
 
@@ -370,7 +306,7 @@ func TestStartScriptPoller_RestartsOnMalformedOutputWithBackoff(t *testing.T) {
 
 	waitForPollerRunnerCalls(t, runner, 1, time.Second)
 	waitForFakeClockWaiters(t, fakeClock, 1)
-	fakeClock.Advance(automationinternal.ScriptPollerRestartBackoffMin)
+	fakeClock.Advance(25 * time.Millisecond)
 	waitForPollerRunnerCalls(t, runner, 2, time.Second)
 
 	if observedLogs.FilterMessage("script poller restarting").Len() == 0 {

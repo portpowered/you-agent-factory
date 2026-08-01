@@ -3,7 +3,6 @@ package internal_test
 import (
 	"context"
 	"errors"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -15,7 +14,6 @@ import (
 
 	factorydefinitioncomposition "github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
-	automationinternal "github.com/portpowered/infinite-you/pkg/services/automations/internal"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -104,32 +102,6 @@ func TestStartPollersForRuntime_LogsDisabledPaths(t *testing.T) {
 	}
 }
 
-func TestScriptPollerCommandRequest_ResolvesWorkstationEnvAndWorkerTimeout(t *testing.T) {
-	factoryDir := t.TempDir()
-	poller := newCanonicalScriptPollerWorkstation()
-	poller.Env = map[string]string{"POLLER_MODE": "watch"}
-	poller.WorkingDirectory = "relative/workdir"
-	worker := newCanonicalScriptPollerWorker()
-	worker.Timeout = "50ms"
-
-	runtimeCfg := newScriptPollerLoadedRuntimeConfig(
-		t,
-		factoryDir,
-		scriptPollerRuntimeConfigOptions{poller: poller, pollerWorker: worker},
-	)
-
-	req, err := automationinternal.ScriptPollerCommandRequest(runtimeCfg, poller, worker, nil)
-	if err != nil {
-		t.Fatalf("ScriptPollerCommandRequest: %v", err)
-	}
-	if len(req.Env) != 1 || req.Env[0] != "POLLER_MODE=watch" {
-		t.Fatalf("poller env = %#v, want POLLER_MODE=watch", req.Env)
-	}
-	if !strings.Contains(req.WorkDir, filepath.Join("relative", "workdir")) {
-		t.Fatalf("poller workdir = %q, want resolved relative path", req.WorkDir)
-	}
-}
-
 func TestRunScriptPoller_UsesWorkerTimeout(t *testing.T) {
 	factoryDir := t.TempDir()
 	runner := &pollerSequenceCommandRunner{
@@ -155,38 +127,6 @@ func TestRunScriptPoller_UsesWorkerTimeout(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "timed out") {
 		t.Fatalf("RunScriptPoller error = %v, want timeout", err)
-	}
-}
-
-func TestParseScriptPollerOutput_RejectsConflictingEnvelopeFields(t *testing.T) {
-	raw := []byte(`{"request":{"requestId":"a","type":"FACTORY_REQUEST_BATCH","works":[]},"submissions":[]}`)
-	_, hasOutput, err := automationinternal.ParseScriptPollerOutput(raw)
-	if !hasOutput {
-		t.Fatal("expected conflicting envelope to count as output")
-	}
-	if err == nil || !strings.Contains(err.Error(), "either request or submissions") {
-		t.Fatalf("error = %v, want request/submissions conflict", err)
-	}
-}
-
-func TestParseScriptPollerOutput_RejectsInvalidRequestTypeAndMissingRequestID(t *testing.T) {
-	invalidType := []byte(`{"requestId":"x","type":"UNSUPPORTED","works":[]}`)
-	_, _, err := automationinternal.ParseScriptPollerOutput(invalidType)
-	if err == nil || !strings.Contains(err.Error(), "unsupported work request type") {
-		t.Fatalf("invalid type error = %v", err)
-	}
-
-	missingID := []byte(`{"requestId":"","type":"FACTORY_REQUEST_BATCH","works":[{"name":"w","workTypeName":"task"}]}`)
-	_, _, err = automationinternal.ParseScriptPollerOutput(missingID)
-	if err == nil || !strings.Contains(err.Error(), "requestId") {
-		t.Fatalf("missing requestId error = %v", err)
-	}
-}
-
-func TestParseScriptPollerOutput_EmptyStdoutIsNotOutput(t *testing.T) {
-	_, hasOutput, err := automationinternal.ParseScriptPollerOutput(nil)
-	if hasOutput || err != nil {
-		t.Fatalf("empty stdout = hasOutput %v err %v, want no output", hasOutput, err)
 	}
 }
 

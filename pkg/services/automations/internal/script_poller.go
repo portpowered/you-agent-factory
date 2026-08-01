@@ -5,15 +5,9 @@ import (
 	"strings"
 	"sync"
 
-	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
-
-// ScriptPollerRestartBackoffMin is the minimum restart delay after an unexpected
-// script poller exit.
-const ScriptPollerRestartBackoffMin = scriptpollers.ScriptPollerRestartBackoffMin
 
 // StartScriptPoller supervises one script poller workstation until ctx is canceled.
 func (s *Service) StartScriptPoller(
@@ -33,7 +27,7 @@ func (s *Service) StartScriptPoller(
 		runtimeCfg,
 		workstation,
 		workerDef,
-		s.scriptPollerSupervision(workstation),
+		strings.TrimSpace(s.workflowID),
 		submitter,
 	)
 }
@@ -56,37 +50,7 @@ func (s *Service) RunScriptPoller(
 		runtimeCfg,
 		workstation,
 		workerDef,
-		s.scriptPollerSupervision(workstation),
+		strings.TrimSpace(s.workflowID),
 		submitter,
 	)
-}
-
-func (s *Service) scriptPollerSupervision(
-	workstation interfaces.FactoryWorkstationConfig,
-) scriptpollers.ScriptPollerSupervision {
-	if s == nil {
-		return scriptpollers.ScriptPollerSupervision{}
-	}
-	return scriptpollers.SupervisionFor(strings.TrimSpace(s.workflowID), workstation.Name)
-}
-
-// ScriptPollerCommandRequest builds the command invocation for a script poller worker.
-func ScriptPollerCommandRequest(
-	runtimeCfg interfaces.RuntimeConfigLookup,
-	workstation interfaces.FactoryWorkstationConfig,
-	workerDef *interfaces.FactoryWorkerConfig,
-	resolveTemplates workers.TemplateFieldResolver,
-) (workers.CommandRequest, error) {
-	return scriptpollers.ScriptPollerCommandRequest(
-		runtimeCfg,
-		workstation,
-		workerDef,
-		resolveTemplates,
-		scriptpollers.ResumeCursor{},
-	)
-}
-
-// ParseScriptPollerOutput parses stdout from a script poller into a work request.
-func ParseScriptPollerOutput(stdout []byte) (work.WorkRequest, bool, error) {
-	return scriptpollers.ParseScriptPollerOutput(stdout)
 }
