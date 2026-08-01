@@ -22,6 +22,18 @@ type snapshotSourceFake struct {
 	err      error
 }
 
+func newOSPublication() (artifactsexportservice.PortableArtifactPublication, error) {
+	return artifactsexportwire.NewPublication(
+		os.MkdirAll,
+		func(dir, pattern string) (recordings.RecordingTemporaryFile, error) {
+			return os.CreateTemp(dir, pattern)
+		},
+		os.Remove,
+		os.Rename,
+		os.ReadFile,
+	)
+}
+
 func (fake snapshotSourceFake) Snapshot(recordings.RecordingID) (recordinglifecycle.Snapshot, error) {
 	if fake.err != nil {
 		return recordinglifecycle.Snapshot{}, fake.err
@@ -237,9 +249,9 @@ func TestExportPortableArtifactPublishesCompleteReadableArtifact(t *testing.T) {
 		Payload:    "{}",
 	}
 	destination := filepath.Join(t.TempDir(), "public-export.json")
-	publication, err := artifactsexportwire.NewOSPublication()
+	publication, err := newOSPublication()
 	if err != nil {
-		t.Fatalf("NewOSPublication: %v", err)
+		t.Fatalf("NewPublication: %v", err)
 	}
 	service := artifactsexportservice.New(snapshotSourceFake{
 		snapshot: recordinglifecycle.Snapshot{
@@ -288,9 +300,9 @@ func TestReadPortableArtifactRejectsMissingRecordingAndHandle(t *testing.T) {
 			FinalizedAt: &finalizedAt,
 		},
 	}
-	publication, err := artifactsexportwire.NewOSPublication()
+	publication, err := newOSPublication()
 	if err != nil {
-		t.Fatalf("NewOSPublication: %v", err)
+		t.Fatalf("NewPublication: %v", err)
 	}
 	service := artifactsexportservice.New(snapshotSourceFake{snapshot: snapshot}, publication)
 
@@ -328,9 +340,9 @@ func TestReadPortableArtifactRejectsForeignHandle(t *testing.T) {
 		Payload:    `{"public":true}`,
 	}
 	destination := filepath.Join(t.TempDir(), "foreign-read.json")
-	publication, err := artifactsexportwire.NewOSPublication()
+	publication, err := newOSPublication()
 	if err != nil {
-		t.Fatalf("NewOSPublication: %v", err)
+		t.Fatalf("NewPublication: %v", err)
 	}
 	ownerSnapshot := recordinglifecycle.Snapshot{
 		Status: recordings.RecordingStatusFacts{
@@ -395,9 +407,9 @@ func TestReadPortableArtifactErrorsOmitPrivatePaths(t *testing.T) {
 			FinalizedAt: &finalizedAt,
 		},
 	}
-	publication, err := artifactsexportwire.NewOSPublication()
+	publication, err := newOSPublication()
 	if err != nil {
-		t.Fatalf("NewOSPublication: %v", err)
+		t.Fatalf("NewPublication: %v", err)
 	}
 	service := artifactsexportservice.New(snapshotSourceFake{snapshot: snapshot}, publication)
 
@@ -430,9 +442,9 @@ func TestExportPortableArtifactRejectsPreCancelledContext(t *testing.T) {
 
 	finalizedAt := time.Unix(1_700_000_000, 0).UTC()
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-cancel-export"}
-	publication, err := artifactsexportwire.NewOSPublication()
+	publication, err := newOSPublication()
 	if err != nil {
-		t.Fatalf("NewOSPublication: %v", err)
+		t.Fatalf("NewPublication: %v", err)
 	}
 	service := artifactsexportservice.New(snapshotSourceFake{
 		snapshot: recordinglifecycle.Snapshot{
@@ -539,9 +551,9 @@ func TestReadPortableArtifactRejectsPreCancelledContext(t *testing.T) {
 
 	finalizedAt := time.Unix(1_700_000_000, 0).UTC()
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-cancel-read"}
-	publication, err := artifactsexportwire.NewOSPublication()
+	publication, err := newOSPublication()
 	if err != nil {
-		t.Fatalf("NewOSPublication: %v", err)
+		t.Fatalf("NewPublication: %v", err)
 	}
 	service := artifactsexportservice.New(snapshotSourceFake{
 		snapshot: recordinglifecycle.Snapshot{
@@ -586,9 +598,9 @@ func TestReadPortableArtifactCancellationDuringReadDoesNotReturnPartialArtifact(
 		Payload:    "{}",
 	}
 	destination := filepath.Join(t.TempDir(), "public-read.json")
-	publication, err := artifactsexportwire.NewOSPublication()
+	publication, err := newOSPublication()
 	if err != nil {
-		t.Fatalf("NewOSPublication: %v", err)
+		t.Fatalf("NewPublication: %v", err)
 	}
 	service := artifactsexportservice.New(snapshotSourceFake{
 		snapshot: recordinglifecycle.Snapshot{

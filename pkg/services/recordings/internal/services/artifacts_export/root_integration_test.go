@@ -12,20 +12,41 @@ import (
 	"time"
 
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
-	recordingsinternal "github.com/portpowered/infinite-you/pkg/services/recordings/internal"
+	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 )
 
 type unusedLedger struct {
 	recordings.Ledger
 }
 
+func newRecordingsRoot(
+	t *testing.T,
+	planner recordings.LiveRecordingTargetPlanner,
+) recordings.Service {
+	t.Helper()
+	root, err := recordingswire.NewServiceWithProjectionAndEffects(
+		&unusedLedger{},
+		recordingswire.NewProjectionService(),
+		planner,
+		nil,
+		os.MkdirAll,
+		func(dir, pattern string) (recordings.RecordingTemporaryFile, error) {
+			return os.CreateTemp(dir, pattern)
+		},
+		os.Remove,
+		os.Rename,
+		os.ReadFile,
+	)
+	if err != nil {
+		t.Fatalf("construct Recordings root: %v", err)
+	}
+	return root
+}
+
 func TestAcceptedRecordingsRootUsesPrivateArtifactsExport(t *testing.T) {
 	t.Parallel()
 
-	root := recordingsinternal.NewService(
-		&unusedLedger{},
-		recordingsinternal.NewProjectionService(),
-	)
+	root := newRecordingsRoot(t, nil)
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-export-root"}
 	bound, err := root.BindRecording(recordings.BindRecordingRequest{
 		RecordingID: "recording-export-root",
@@ -100,11 +121,7 @@ func TestRecordingsRootPortableExportRoundTripOmitsPrivateStorage(t *testing.T) 
 			}, nil
 		},
 	)
-	root := recordingsinternal.NewService(
-		&unusedLedger{},
-		recordingsinternal.NewProjectionService(),
-		planner,
-	)
+	root := newRecordingsRoot(t, planner)
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-round-trip"}
 	started, err := root.StartRecording(recordings.StartRecordingRequest{
 		Enabled:     true,
@@ -199,10 +216,7 @@ func TestRecordingsRootFailedExportLeavesNoReadablePublicArtifact(t *testing.T) 
 	if err := os.Mkdir(destination, 0o700); err != nil {
 		t.Fatalf("Mkdir: %v", err)
 	}
-	root := recordingsinternal.NewService(
-		&unusedLedger{},
-		recordingsinternal.NewProjectionService(),
-	)
+	root := newRecordingsRoot(t, nil)
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-failed-root-export"}
 	bound, err := root.BindRecording(recordings.BindRecordingRequest{
 		RecordingID: "recording-failed-root-export",
@@ -253,10 +267,7 @@ func TestRecordingsRootFailedExportLeavesNoReadablePublicArtifact(t *testing.T) 
 func TestRecordingsRootReadPortableArtifactRejectsMissingAndForeignHandles(t *testing.T) {
 	t.Parallel()
 
-	root := recordingsinternal.NewService(
-		&unusedLedger{},
-		recordingsinternal.NewProjectionService(),
-	)
+	root := newRecordingsRoot(t, nil)
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-root-read-guards"}
 	owner, err := root.BindRecording(recordings.BindRecordingRequest{
 		RecordingID: "recording-root-owner",
@@ -310,10 +321,7 @@ func TestRecordingsRootReadPortableArtifactRejectsMissingAndForeignHandles(t *te
 func TestRecordingsRootExportCancellationLeavesNoReadableArtifact(t *testing.T) {
 	t.Parallel()
 
-	root := recordingsinternal.NewService(
-		&unusedLedger{},
-		recordingsinternal.NewProjectionService(),
-	)
+	root := newRecordingsRoot(t, nil)
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-root-cancel-export"}
 	bound, err := root.BindRecording(recordings.BindRecordingRequest{
 		RecordingID: "recording-root-cancel-export",
@@ -352,10 +360,7 @@ func TestRecordingsRootExportCancellationLeavesNoReadableArtifact(t *testing.T) 
 func TestRecordingsRootReadPortableArtifactRejectsCancelledContext(t *testing.T) {
 	t.Parallel()
 
-	root := recordingsinternal.NewService(
-		&unusedLedger{},
-		recordingsinternal.NewProjectionService(),
-	)
+	root := newRecordingsRoot(t, nil)
 	scope := recordings.CanonicalEventScope{FactorySessionID: "session-root-cancel-read"}
 	bound, err := root.BindRecording(recordings.BindRecordingRequest{
 		RecordingID: "recording-root-cancel-read",

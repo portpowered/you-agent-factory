@@ -208,6 +208,10 @@ type RecordingRemovePath func(string) error
 // RecordingRenamePath renames a path during portable recording writes.
 type RecordingRenamePath func(string, string) error
 
+// RecordingReadFile reads a completed portable artifact from its published
+// destination.
+type RecordingReadFile func(string) ([]byte, error)
+
 // PortableRecordingWriter validates and atomically persists one portable
 // recording.
 type PortableRecordingWriter interface {

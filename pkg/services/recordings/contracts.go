@@ -171,6 +171,7 @@ type (
 	RecordingLifecycleState                                    = recordingcontracts.RecordingLifecycleState
 	RecordingMakeDirectories                                   = recordingcontracts.RecordingMakeDirectories
 	RecordingPathJoiner                                        = recordingcontracts.RecordingPathJoiner
+	RecordingReadFile                                          = recordingcontracts.RecordingReadFile
 	RecordingRemovePath                                        = recordingcontracts.RecordingRemovePath
 	RecordingRenamePath                                        = recordingcontracts.RecordingRenamePath
 	RecordingSnapshot                                          = recordingcontracts.RecordingSnapshot

@@ -106,20 +106,77 @@ func NewServiceWithProjection(
 	writeFile func(string, []byte) error,
 	clocks ...recordings.RecordingClock,
 ) (recordings.Service, error) {
+	return newServiceWithProjection(
+		ledger,
+		projection,
+		targets,
+		writeFile,
+		nil,
+		true,
+		clocks...,
+	)
+}
+
+// NewServiceWithProjectionAndEffects constructs the Recordings root with the
+// exact filesystem effects selected by the application graph. The private
+// artifact implementation receives the resulting publication capability;
+// this package never selects host defaults itself.
+func NewServiceWithProjectionAndEffects(
+	ledger recordings.Ledger,
+	projection recordings.ProjectionService,
+	targets recordings.LiveRecordingTargetPlanner,
+	writeFile func(string, []byte) error,
+	makeDirectories recordings.RecordingMakeDirectories,
+	createTemporaryFile recordings.RecordingCreateTemporaryFile,
+	removePath recordings.RecordingRemovePath,
+	renamePath recordings.RecordingRenamePath,
+	readFile recordings.RecordingReadFile,
+	clocks ...recordings.RecordingClock,
+) (recordings.Service, error) {
+	publication, err := recordingsinternal.NewPortableArtifactPublication(
+		makeDirectories,
+		createTemporaryFile,
+		removePath,
+		renamePath,
+		readFile,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("construct Recordings publication: %w", err)
+	}
+	return newServiceWithProjection(
+		ledger,
+		projection,
+		targets,
+		writeFile,
+		publication,
+		false,
+		clocks...,
+	)
+}
+
+func newServiceWithProjection(
+	ledger recordings.Ledger,
+	projection recordings.ProjectionService,
+	targets recordings.LiveRecordingTargetPlanner,
+	writeFile func(string, []byte) error,
+	publication recordingsinternal.PortableArtifactPublication,
+	requireWriter bool,
+	clocks ...recordings.RecordingClock,
+) (recordings.Service, error) {
 	if ledger == nil {
 		return nil, fmt.Errorf("construct Recordings: ledger is required")
 	}
 	if projection == nil {
 		return nil, fmt.Errorf("construct Recordings: projection is required")
 	}
-	if writeFile == nil {
+	if requireWriter && writeFile == nil {
 		return nil, fmt.Errorf("construct Recordings: snapshot write function is required")
 	}
-	writer := recordingsinternal.NewReplayRecordingSnapshotWriter(writeFile)
-	tickers := recordingsinternal.NewRecordingFlushTickerFactory()
-	publication, err := recordingsinternal.NewPortableArtifactPublication()
-	if err != nil {
-		return nil, err
+	var writer recordings.RecordingSnapshotWriter
+	var tickers recordings.RecordingFlushTickerFactory
+	if writeFile != nil {
+		writer = recordingsinternal.NewReplayRecordingSnapshotWriter(writeFile)
+		tickers = recordingsinternal.NewRecordingFlushTickerFactory()
 	}
 	service := recordingsinternal.NewServiceWithLifecycleEffects(
 		ledger,

@@ -43,6 +43,7 @@ type recordingsEffectRecorder struct {
 	createTempFile  atomic.Int32
 	removePath      atomic.Int32
 	renamePath      atomic.Int32
+	readFile        atomic.Int32
 	submission      atomic.Int32
 	dispatch        atomic.Int32
 }
@@ -57,6 +58,7 @@ func (recorder *recordingsEffectRecorder) edges() serviceedges.Edges {
 		RecordingCreateTempFile:  recorder.recordCreateTempFile,
 		RecordingRemovePath:      recorder.recordRemovePath,
 		RecordingRenamePath:      recorder.recordRenamePath,
+		RecordingReadFile:        recorder.recordReadFile,
 		SubmissionRecorder:       recorder.recordSubmission,
 		DispatchRecorder:         recorder.recordDispatch,
 	}
@@ -66,7 +68,8 @@ func (recorder *recordingsEffectRecorder) totalPortableRecordingFilesystem() int
 	return recorder.makeDirectories.Load() +
 		recorder.createTempFile.Load() +
 		recorder.removePath.Load() +
-		recorder.renamePath.Load()
+		recorder.renamePath.Load() +
+		recorder.readFile.Load()
 }
 
 func (recorder *recordingsEffectRecorder) totalCanonicalRecording() int32 {
@@ -91,6 +94,11 @@ func (recorder *recordingsEffectRecorder) recordRemovePath(string) error {
 func (recorder *recordingsEffectRecorder) recordRenamePath(string, string) error {
 	recorder.renamePath.Add(1)
 	return errRecordingRecordingsEffect
+}
+
+func (recorder *recordingsEffectRecorder) recordReadFile(string) ([]byte, error) {
+	recorder.readFile.Add(1)
+	return nil, errRecordingRecordingsEffect
 }
 
 func (recorder *recordingsEffectRecorder) recordSubmission(work.FactorySubmissionRecord) {
