@@ -6,151 +6,142 @@ import (
 	"testing"
 )
 
+var workersTransitionalDebtCommittedOwnerPackageMappingCases = []committedOwnerPackageMappingCase{
+	{
+		path: "pkg/services/workers/service",
+		want: PackageMapping{
+			PackagePath: "pkg/services/workers/service",
+			Disposition: DispositionMove,
+			Destination: "workers/internal",
+		},
+	},
+	{
+		path: "pkg/services/workers/construction",
+		want: PackageMapping{
+			PackagePath: "pkg/services/workers/construction",
+			Disposition: DispositionMove,
+			Destination: "workers/internal/services/runtime_assembly",
+		},
+	},
+	{
+		path: "pkg/services/workers/diagnostics",
+		want: PackageMapping{
+			PackagePath: "pkg/services/workers/diagnostics",
+			Disposition: DispositionMove,
+			Destination: "workers/internal",
+		},
+	},
+	{
+		path: "pkg/services/workers/interface",
+		want: PackageMapping{
+			PackagePath: "pkg/services/workers/interface",
+			Disposition: DispositionMove,
+			Destination: "workers/internal",
+		},
+	},
+	{
+		path: "pkg/services/workers/execution",
+		want: PackageMapping{
+			PackagePath: "pkg/services/workers/execution",
+			Disposition: DispositionMove,
+			Destination: "workers/internal/services/workstations",
+		},
+	},
+	{
+		path: "pkg/services/workers/execution/recording",
+		want: PackageMapping{
+			PackagePath: "pkg/services/workers/execution/recording",
+			Disposition: DispositionMove,
+			Destination: "workers/internal/services/workstations",
+		},
+	},
+	{
+		path: "pkg/services/workers/executor",
+		want: PackageMapping{
+			PackagePath: "pkg/services/workers/executor",
+			Disposition: DispositionMove,
+			Destination: "workers/internal/services/workstations",
+		},
+	},
+	{
+		path: "pkg/services/workers/executor/agentrun",
+		want: PackageMapping{
+			PackagePath: "pkg/services/workers/executor/agentrun",
+			Disposition: DispositionMove,
+			Destination: "workers/internal/services/workstations",
+		},
+	},
+	{
+		path: "pkg/services/workers/invocation",
+		want: PackageMapping{
+			PackagePath: "pkg/services/workers/invocation",
+			Disposition: DispositionMove,
+			Destination: "workers/internal/services/workstations",
+		},
+	},
+	{
+		path: "pkg/services/workers/prompting",
+		want: PackageMapping{
+			PackagePath: "pkg/services/workers/prompting",
+			Disposition: DispositionMove,
+			Destination: "workers/internal/services/workstations",
+		},
+	},
+	{
+		path: "pkg/services/workers/skippermissions",
+		want: PackageMapping{
+			PackagePath: "pkg/services/workers/skippermissions",
+			Disposition: DispositionMove,
+			Destination: "workers/internal/services/workstations",
+		},
+	},
+	{
+		path: "pkg/services/workers/worktree",
+		want: PackageMapping{
+			PackagePath: "pkg/services/workers/worktree",
+			Disposition: DispositionMove,
+			Destination: "workers/internal/services/workstations",
+		},
+	},
+	{
+		path: "pkg/services/workers/process",
+		want: PackageMapping{
+			PackagePath: "pkg/services/workers/process",
+			Disposition: DispositionMove,
+			Destination: "workers/internal/services/runners",
+		},
+	},
+	{
+		path: "pkg/services/workers/runner",
+		want: PackageMapping{
+			PackagePath: "pkg/services/workers/runner",
+			Disposition: DispositionMove,
+			Destination: "workers/internal/services/runners",
+		},
+	},
+	{
+		path: "pkg/services/workers/services/inference",
+		want: PackageMapping{
+			PackagePath: "pkg/services/workers/services/inference",
+			Disposition: DispositionMove,
+			Destination: "workers/internal/services/runners",
+		},
+	},
+	{
+		path: "pkg/services/providers/internal/services/execution/internal/provider_test",
+		want: PackageMapping{
+			PackagePath: "pkg/services/providers/internal/services/execution/internal/provider_test",
+			Disposition: DispositionMove,
+			Destination: "providers/internal/services/execution",
+		},
+	},
+}
+
 func TestMapCommittedOwnerPackageWorkersTransitionalDebtMoves(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
-		path string
-		want PackageMapping
-	}{
-		{
-			path: "pkg/services/workers/service",
-			want: PackageMapping{
-				PackagePath: "pkg/services/workers/service",
-				Disposition: DispositionMove,
-				Destination: "workers/internal",
-			},
-		},
-		{
-			path: "pkg/services/workers/construction",
-			want: PackageMapping{
-				PackagePath: "pkg/services/workers/construction",
-				Disposition: DispositionMove,
-				Destination: "workers/internal/services/runtime_assembly",
-			},
-		},
-		{
-			path: "pkg/services/workers/diagnostics",
-			want: PackageMapping{
-				PackagePath: "pkg/services/workers/diagnostics",
-				Disposition: DispositionMove,
-				Destination: "workers/internal",
-			},
-		},
-		{
-			path: "pkg/services/workers/interface",
-			want: PackageMapping{
-				PackagePath: "pkg/services/workers/interface",
-				Disposition: DispositionMove,
-				Destination: "workers/internal",
-			},
-		},
-		{
-			path: "pkg/services/workers/execution",
-			want: PackageMapping{
-				PackagePath: "pkg/services/workers/execution",
-				Disposition: DispositionMove,
-				Destination: "workers/internal/services/workstations",
-			},
-		},
-		{
-			path: "pkg/services/workers/execution/recording",
-			want: PackageMapping{
-				PackagePath: "pkg/services/workers/execution/recording",
-				Disposition: DispositionMove,
-				Destination: "workers/internal/services/workstations",
-			},
-		},
-		{
-			path: "pkg/services/workers/executor",
-			want: PackageMapping{
-				PackagePath: "pkg/services/workers/executor",
-				Disposition: DispositionMove,
-				Destination: "workers/internal/services/workstations",
-			},
-		},
-		{
-			path: "pkg/services/workers/executor/agentrun",
-			want: PackageMapping{
-				PackagePath: "pkg/services/workers/executor/agentrun",
-				Disposition: DispositionMove,
-				Destination: "workers/internal/services/workstations",
-			},
-		},
-		{
-			path: "pkg/services/workers/invocation",
-			want: PackageMapping{
-				PackagePath: "pkg/services/workers/invocation",
-				Disposition: DispositionMove,
-				Destination: "workers/internal/services/workstations",
-			},
-		},
-		{
-			path: "pkg/services/workers/prompting",
-			want: PackageMapping{
-				PackagePath: "pkg/services/workers/prompting",
-				Disposition: DispositionMove,
-				Destination: "workers/internal/services/workstations",
-			},
-		},
-		{
-			path: "pkg/services/workers/skippermissions",
-			want: PackageMapping{
-				PackagePath: "pkg/services/workers/skippermissions",
-				Disposition: DispositionMove,
-				Destination: "workers/internal/services/workstations",
-			},
-		},
-		{
-			path: "pkg/services/workers/worktree",
-			want: PackageMapping{
-				PackagePath: "pkg/services/workers/worktree",
-				Disposition: DispositionMove,
-				Destination: "workers/internal/services/workstations",
-			},
-		},
-		{
-			path: "pkg/services/workers/process",
-			want: PackageMapping{
-				PackagePath: "pkg/services/workers/process",
-				Disposition: DispositionMove,
-				Destination: "workers/internal/services/runners",
-			},
-		},
-		{
-			path: "pkg/services/workers/runner",
-			want: PackageMapping{
-				PackagePath: "pkg/services/workers/runner",
-				Disposition: DispositionMove,
-				Destination: "workers/internal/services/runners",
-			},
-		},
-		{
-			path: "pkg/services/workers/services/inference",
-			want: PackageMapping{
-				PackagePath: "pkg/services/workers/services/inference",
-				Disposition: DispositionMove,
-				Destination: "workers/internal/services/runners",
-			},
-		},
-		{
-			path: "pkg/services/providers/internal/services/execution/internal/provider_test",
-			want: PackageMapping{
-				PackagePath: "pkg/services/providers/internal/services/execution/internal/provider_test",
-				Disposition: DispositionMove,
-				Destination: "providers/internal/services/execution",
-			},
-		},
-	}
-
-	for _, tc := range cases {
-		got, ok := mapCommittedOwnerPackage(tc.path)
-		if !ok {
-			t.Fatalf("mapCommittedOwnerPackage(%q) ok = false", tc.path)
-		}
-		if got != tc.want {
-			t.Fatalf("mapCommittedOwnerPackage(%q) = %#v, want %#v", tc.path, got, tc.want)
-		}
+	for _, tc := range workersTransitionalDebtCommittedOwnerPackageMappingCases {
+		assertCommittedOwnerPackageMapping(t, tc)
 	}
 }
 

@@ -99,27 +99,72 @@ func NewService(
 	); err != nil {
 		return nil, err
 	}
-	defaultEndpoints := models.RuntimeAssetEndpoints{
-		BaseURL: defaultAssetBaseURL, APIBaseURL: defaultAssetAPIBaseURL,
-	}
-	if assetEndpoints.BaseURL != "" {
-		defaultEndpoints.BaseURL = assetEndpoints.BaseURL
-	}
-	if assetEndpoints.APIBaseURL != "" {
-		defaultEndpoints.APIBaseURL = assetEndpoints.APIBaseURL
-	}
-	var launcher modelhost.ProcessLauncher
-	if processLauncher != nil {
-		launcher = hostProcessLauncher{next: processLauncher}
-	}
-	var clock modelhost.Clock
-	if hostClock != nil {
-		clock = hostClockAdapter{next: hostClock}
-	}
-	var createTempFile localmodels.CreateTempFile
-	if runtimeTempFile != nil {
-		createTempFile = runtimeTempFileAdapter{next: runtimeTempFile}.create
-	}
+	return composeModelsService(
+		assetPlatform,
+		assetHTTP,
+		assetEndpoints,
+		assetMkdirAll,
+		assetStat,
+		assetHome,
+		assetWriteFile,
+		assetRename,
+		assetRemove,
+		assetReadFile,
+		assetReadDir,
+		assetCreate,
+		assetOpen,
+		processLauncher,
+		hostHTTP,
+		hostClock,
+		runtimeRunner,
+		runtimeHTTP,
+		runtimeInspect,
+		runtimeTempDir,
+		runtimeTempFile,
+		logger,
+		now,
+		issuerEntropy,
+		pullMetrics,
+		hostLogger,
+		hostMetrics,
+		localHooks,
+	)
+}
+
+func composeModelsService(
+	assetPlatform models.AssetHostPlatform,
+	assetHTTP AssetHTTPDoer,
+	assetEndpoints models.RuntimeAssetEndpoints,
+	assetMkdirAll AssetMakeDirectories,
+	assetStat AssetInspectPath,
+	assetHome AssetResolveHomeDirectory,
+	assetWriteFile AssetWriteFile,
+	assetRename AssetRenamePath,
+	assetRemove AssetRemovePath,
+	assetReadFile AssetReadFile,
+	assetReadDir AssetReadDirectory,
+	assetCreate AssetCreateFile,
+	assetOpen AssetOpenFile,
+	processLauncher HostProcessLauncher,
+	hostHTTP HostHTTPDoer,
+	hostClock HostClock,
+	runtimeRunner platformprocess.CommandRunner,
+	runtimeHTTP RuntimeHTTPDoer,
+	runtimeInspect RuntimeInspectFile,
+	runtimeTempDir RuntimeTempDirectory,
+	runtimeTempFile RuntimeCreateTempFile,
+	logger *zap.Logger,
+	now func() time.Time,
+	issuerEntropy platformrandom.Source,
+	pullMetrics PullMetricsRecorder,
+	hostLogger HostDiagnosticLogger,
+	hostMetrics HostMetricsRecorder,
+	localHooks LocalRuntimeHooks,
+) (models.Service, error) {
+	resolvedEndpoints := resolveAssetEndpoints(assetEndpoints)
+	launcher, clock, createTempFile := adaptConstructionPorts(
+		processLauncher, hostClock, runtimeTempFile,
+	)
 	issuerID, err := runtimeScopeIssuerID(issuerEntropy)
 	if err != nil {
 		return nil, fmt.Errorf("construct Models Runtime Scopes issuer identity: %w", err)
@@ -129,10 +174,7 @@ func NewService(
 		return nil, err
 	}
 	assetService, err := assetswire.NewService(
-		runtimeScopes, assetPlatform, assetHTTP,
-		models.RuntimeAssetEndpoints{
-			BaseURL: defaultEndpoints.BaseURL, APIBaseURL: defaultEndpoints.APIBaseURL,
-		},
+		runtimeScopes, assetPlatform, assetHTTP, resolvedEndpoints,
 		assetMkdirAll, assetStat, assetHome, assetWriteFile, assetRename,
 		assetRemove, assetReadFile, assetReadDir, assetCreate, assetOpen,
 	)
@@ -147,22 +189,14 @@ func NewService(
 		return nil, err
 	}
 	runtimeHost, err := runtimehostwire.NewService(
-		runtimeScopes,
-		assetService,
-		processLauncher,
-		hostHTTP,
-		hostClock,
-		hostLogger,
-		hostMetrics,
+		runtimeScopes, assetService, processLauncher, hostHTTP, hostClock,
+		hostLogger, hostMetrics,
 	)
 	if err != nil {
 		return nil, err
 	}
 	inferenceService, err := inferencewire.NewService(
-		runtimeScopes,
-		assetService,
-		catalogService,
-		runtimeHost,
+		runtimeScopes, assetService, catalogService, runtimeHost,
 		inference.InputEchoInvocationRuntime{},
 		inference.InertArtifactFileSystem{},
 		now,
@@ -170,7 +204,7 @@ func NewService(
 	if err != nil {
 		return nil, err
 	}
-	service, err := modelsservice.NewRoot(
+	return modelsservice.NewRoot(
 		launcher, hostHTTP, clock,
 		runtimeRunner, runtimeHTTP, localmodels.InspectFile(runtimeInspect),
 		localmodels.TempDirectory(runtimeTempDir), createTempFile,
@@ -180,10 +214,39 @@ func NewService(
 			HostLogger: hostLogger, HostMetrics: hostMetrics, LocalHooks: localHooks,
 		},
 	)
-	if err != nil {
-		return nil, err
+}
+
+func resolveAssetEndpoints(overrides models.RuntimeAssetEndpoints) models.RuntimeAssetEndpoints {
+	resolved := models.RuntimeAssetEndpoints{
+		BaseURL: defaultAssetBaseURL, APIBaseURL: defaultAssetAPIBaseURL,
 	}
-	return service, nil
+	if overrides.BaseURL != "" {
+		resolved.BaseURL = overrides.BaseURL
+	}
+	if overrides.APIBaseURL != "" {
+		resolved.APIBaseURL = overrides.APIBaseURL
+	}
+	return resolved
+}
+
+func adaptConstructionPorts(
+	processLauncher HostProcessLauncher,
+	hostClock HostClock,
+	runtimeTempFile RuntimeCreateTempFile,
+) (modelhost.ProcessLauncher, modelhost.Clock, localmodels.CreateTempFile) {
+	var launcher modelhost.ProcessLauncher
+	if processLauncher != nil {
+		launcher = hostProcessLauncher{next: processLauncher}
+	}
+	var clock modelhost.Clock
+	if hostClock != nil {
+		clock = hostClockAdapter{next: hostClock}
+	}
+	var createTempFile localmodels.CreateTempFile
+	if runtimeTempFile != nil {
+		createTempFile = runtimeTempFileAdapter{next: runtimeTempFile}.create
+	}
+	return launcher, clock, createTempFile
 }
 
 func newCatalogReadinessQuery(assetService scopedassets.Service) catalog.ReadinessQuery {
