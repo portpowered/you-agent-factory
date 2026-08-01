@@ -1,8 +1,11 @@
 package wire
 
 import (
+	"context"
 	"errors"
+	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -22,12 +25,19 @@ type inertRecordingsLedger struct {
 func TestInjectBundleComposesRecordingsArtifactExportThroughWireFactory(t *testing.T) {
 	t.Parallel()
 
-	if _, err := InjectBundle(t.Context(), serviceedges.Edges{}); err != nil {
+	var readCalls atomic.Int32
+	edges := serviceedges.Edges{
+		RecordingReadFile: func(path string) ([]byte, error) {
+			readCalls.Add(1)
+			return os.ReadFile(path)
+		},
+	}
+	if _, err := InjectBundle(t.Context(), edges); err != nil {
 		t.Fatalf("InjectBundle() error = %v", err)
 	}
 
 	factory := provideRecordingsFactory(
-		serviceedges.Edges{},
+		edges,
 		provideLiveRecordingTargetPlanner(),
 		platformreplay.Local{},
 	)
@@ -115,6 +125,25 @@ func TestInjectBundleComposesRecordingsArtifactExportThroughWireFactory(t *testi
 	})
 	if err != nil || summarized.Summary.RecordingID != bound.Status.RecordingID {
 		t.Fatalf("SummarizePortableArtifact = (%#v, %v)", summarized, err)
+	}
+	exported, err := rootService.ExportPortableArtifact(context.Background(), recordings.ExportPortableArtifactRequest{
+		RecordingID: bound.Status.RecordingID,
+	})
+	if err != nil {
+		t.Fatalf("ExportPortableArtifact: %v", err)
+	}
+	read, err := rootService.ReadPortableArtifact(context.Background(), recordings.ReadPortableArtifactRequest{
+		RecordingID: bound.Status.RecordingID,
+		Reference:   exported.Reference,
+	})
+	if err != nil {
+		t.Fatalf("ReadPortableArtifact: %v", err)
+	}
+	if read.Artifact.Summary.RecordingID != bound.Status.RecordingID {
+		t.Fatalf("ReadPortableArtifact recording = %q, want %q", read.Artifact.Summary.RecordingID, bound.Status.RecordingID)
+	}
+	if got := readCalls.Load(); got == 0 {
+		t.Fatal("Recordings read-file edge was not used by portable artifact read")
 	}
 	if _, err := rootService.DecodePortableArtifact(recordings.DecodePortableArtifactRequest{
 		Payload: []byte(`{`),
