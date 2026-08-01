@@ -1217,6 +1217,10 @@
       "minimum": 86.83
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/effects",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost",
       "minimum": 69.65
     },
