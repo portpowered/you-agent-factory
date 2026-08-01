@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/validationassert"
@@ -529,10 +528,6 @@ func newWireFoldPreservationService(t *testing.T, options ...foldPreservationOpt
 
 	composition := newFoldPreservationComposition()
 	validator := factorydefinitionswire.NewValidationOperations(nil)
-	mapInput := func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
-		return validationentry.MapFactoryJSONForPersistence(payload, composition.LoadCanonicalJSON)
-	}
-	persistence := composition.Persistence(validator, mapInput)
 	loader := composition.Loader()
 	namedPaths := composition.NamedPaths()
 	fileSystem := platformfilesystem.Local{}
@@ -577,21 +572,18 @@ func newWireFoldPreservationService(t *testing.T, options ...foldPreservationOpt
 		requiredToolChecker = stubRequiredToolChecker{}
 	}
 
-	service, err := factorydefinitionswire.NewService(
-		stubSessionHost{},
-		wireStubActivationGateway{},
-		validator,
-		persistence,
-		loader,
-		applySupportedFiles,
-		applyStarterWork,
-		namedPaths,
-		fileSystem,
-		factorydefinitionswire.StaticClock(time.Unix(0, 0)),
-		fileSystem,
-		listEffective,
-		packagedCatalog,
-		factorydefinitions.PackagedFactoryInstallationOperations{
+	service, err := factorydefinitionswire.NewService(factorydefinitionswire.Dependencies{
+		Validator:                     validator,
+		DefinitionValidation:          validator,
+		EffectiveDefinitionValidation: validator,
+		Loader:                        loader,
+		ApplySupportedFiles:           applySupportedFiles,
+		ApplyStarterWork:              applyStarterWork,
+		NamedPaths:                    namedPaths,
+		NamedFactoryCatalogFileSystem: fileSystem,
+		ListEffective:                 listEffective,
+		PackagedCatalog:               packagedCatalog,
+		PackagedInstaller: factorydefinitions.PackagedFactoryInstallationOperations{
 			Install: func(
 				_ context.Context,
 				params factorydefinitions.PackagedFactoryInstallParams,
@@ -608,11 +600,11 @@ func newWireFoldPreservationService(t *testing.T, options ...foldPreservationOpt
 				}, nil
 			},
 		},
-		requiredToolChecker,
-		stubOrchestratorValidator{},
-		fileSystem,
-		directoryreplace.Local{},
-	)
+		RequiredToolChecker:       requiredToolChecker,
+		OrchestratorValidator:     stubOrchestratorValidator{},
+		PortableFileSystem:        fileSystem,
+		DirectoryReplacementStore: directoryreplace.Local{},
+	})
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}

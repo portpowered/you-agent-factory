@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -104,8 +105,8 @@ type sideEffectRecord struct {
 
 // NewSideEffects builds replay-aware side-effect substitutes from an artifact.
 func NewSideEffects(
-	decodeFactorySnapshot interfaces.FactorySnapshotJSONDecoder,
-	decodeRuntimeConfig interfaces.ReplayRuntimeConfigDecoder,
+	decodeFactorySnapshot factorydefinitionswire.FactorySnapshotJSONDecoder,
+	decodeRuntimeConfig factorydefinitionswire.ReplayRuntimeConfigDecoder,
 	artifact *interfaces.ReplayArtifact,
 ) (*SideEffects, error) {
 	eventLog, err := reduceReplayEvents(

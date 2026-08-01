@@ -119,6 +119,7 @@ func (fake *mcpDefinitionsValidationFake) ValidateSubmittedDefinition(
 }
 
 type mcpDefinitionsRootFake struct {
+	factorydefinitions.UnimplementedService
 	validateStructuralInvoked bool
 }
 

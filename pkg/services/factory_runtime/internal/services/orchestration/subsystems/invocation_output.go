@@ -2,6 +2,7 @@ package subsystems
 
 import (
 	"fmt"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -9,7 +10,7 @@ import (
 )
 
 func applyPackagedTTSInvocationMetadata(
-	outputShaping factorydefinitions.InvocationOutputShapingService,
+	outputShaping factorydefinitionswire.InvocationOutputShapingService,
 	token *factorytoken.Token,
 	workstation *factorydefinitions.FactoryWorkstationConfig,
 	workerOutput string,
@@ -54,7 +55,7 @@ func applyPackagedTTSInvocationMetadata(
 }
 
 func applyPackagedGoalInvocationSummary(
-	outputShaping factorydefinitions.InvocationOutputShapingService,
+	outputShaping factorydefinitionswire.InvocationOutputShapingService,
 	token *factorytoken.Token,
 	workstation *factorydefinitions.FactoryWorkstationConfig,
 	workerOutput string,
@@ -79,7 +80,7 @@ func applyPackagedGoalInvocationSummary(
 }
 
 func applyPackagedSubagentInvocationResponse(
-	outputShaping factorydefinitions.InvocationOutputShapingService,
+	outputShaping factorydefinitionswire.InvocationOutputShapingService,
 	token *factorytoken.Token,
 	workstation *factorydefinitions.FactoryWorkstationConfig,
 	workerOutput string,

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 )
 
 func TestPackagedFactoryGuardFailure_UnknownResolveAndInstallRejectWithCatalogInventory(t *testing.T) {
@@ -32,7 +33,7 @@ func TestPackagedFactoryGuardFailure_UnknownResolveAndInstallRejectWithCatalogIn
 		t.Fatalf("resolve error = %q, want stable public inventory", err.Error())
 	}
 
-	install := factorydefinitions.NewInstallPackagedFactoryOperation(
+	install := factorydefinitionswire.NewInstallPackagedFactoryOperation(
 		catalog,
 		factorydefinitions.PackagedFactoryInstallationOperations{
 			Install: func(

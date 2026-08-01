@@ -5,9 +5,20 @@ import (
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 )
+
+func projectDefinitionSession(session *livesession.LiveSession) *factorydefinitions.DefinitionSession {
+	if session == nil {
+		return nil
+	}
+	return &factorydefinitions.DefinitionSession{
+		ID:         session.ID,
+		IsDefault:  session.IsDefault,
+		FolderPath: session.FolderPath,
+		FactoryDir: session.FactoryDir,
+	}
+}
 
 type definitionActivationGateway struct {
 	runtime *SessionRuntime
@@ -16,18 +27,14 @@ type definitionActivationGateway struct {
 // NewDefinitionActivationGateway publishes the narrow Sessions-root activation
 // edge for definition save/activate/swap without the attach-capable SessionHost
 // bundle.
-func NewDefinitionActivationGateway(runtime *SessionRuntime) factorysessions.DefinitionActivationGateway {
+func NewDefinitionActivationGateway(runtime *SessionRuntime) *definitionActivationGateway {
 	if runtime == nil {
 		return nil
 	}
-	return definitionActivationGateway{runtime: runtime}
+	return &definitionActivationGateway{runtime: runtime}
 }
 
-// DefinitionActivationGateway returns the activation gateway owned by this
-// Factory Session runtime.
-var _ factorysessions.DefinitionActivationGatewayProvider = (*SessionRuntime)(nil)
-
-func (fs *SessionRuntime) DefinitionActivationGateway() factorysessions.DefinitionActivationGateway {
+func (fs *SessionRuntime) DefinitionActivationGateway() *definitionActivationGateway {
 	return NewDefinitionActivationGateway(fs)
 }
 
@@ -134,5 +141,3 @@ func (g definitionActivationGateway) liveSession(
 		IsDefault: session.IsDefault,
 	}
 }
-
-var _ factorysessions.DefinitionActivationGateway = definitionActivationGateway{}

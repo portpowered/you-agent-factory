@@ -4,8 +4,9 @@ import (
 	"context"
 
 	contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout"
-	authoringlayoutprepare "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/prepare"
+	factoryeffect "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/effects"
+	authoringlayoutwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/wire"
+	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	authoredmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/authored"
 )
@@ -21,22 +22,23 @@ func Persistence(
 	materializeFiles contracts.PortableBundledFilesMaterializer,
 	validateWrites contracts.PortableBundledFileWritesValidator,
 	copySupportedFiles contracts.PortableBundledFilesCopier,
-	fileSystem contracts.AuthoredLayoutWriterFileSystem,
-	ensureInbox contracts.InputInboxSentinelEnsurer,
-	persistenceFileSystem contracts.PersistenceFileSystem,
-	namedPaths contracts.NamedPathResolver,
-	replacement contracts.DirectoryReplacementStore,
+	fileSystem factoryeffect.AuthoredLayoutWriterFileSystem,
+	ensureInbox factoryeffect.InputInboxSentinelEnsurer,
+	persistenceFileSystem factoryeffect.PersistenceFileSystem,
+	namedPaths factoryeffect.NamedPathResolver,
+	replacement factoryeffect.DirectoryReplacementStore,
 ) (contracts.Persistence, error) {
 	mapper := factorymapping.NewFactoryConfigMapper()
-	writer := factoryauthoredlayout.NewWriter(
+	writer := authoringlayoutwire.NewWriter(
 		authoredmapping.RenderWorkerAgentsMarkdown,
 		authoredmapping.RenderWorkstationAgentsMarkdown,
 		authoredmapping.RenderAgentsBody,
-		factoryauthoredlayout.NewAgentsFileWriter(fileSystem),
+		authoringlayoutwire.NewAgentsFileWriter(fileSystem),
 		authoredmapping.SafeFactoryLayoutSegment,
 		authoredmapping.SafePromptFilePath,
 		fileSystem,
 		ensureInbox,
+		compilationwire.NormalizeCanonicalWorkstationRuntime,
 	)
 	return NewPersistence(
 		validator,
@@ -47,7 +49,7 @@ func Persistence(
 			payload []byte,
 			validator contracts.Validator,
 		) (*contracts.PreparedFactoryLayoutPayload, error) {
-			return authoringlayoutprepare.FactoryLayout(
+			return authoringlayoutwire.PrepareFactoryLayout(
 				ctx,
 				segment,
 				payload,

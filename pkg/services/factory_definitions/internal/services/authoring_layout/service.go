@@ -11,9 +11,16 @@ package authoring_layout
 
 import (
 	"context"
+	factoryeffects "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/effects"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/internal/persist"
 )
+
+// PersistPorts is the authoring-owned durable-write port bundle used by the
+// catalog composition facade. The concrete persistence algorithm remains
+// private to authoring_layout/internal/persist.
+type PersistPorts = persist.Ports
 
 // Service owns parse/render, flatten/expand, and atomic create/replace of one
 // Factory aggregate behind the CTR-DEF root authoring slice.
@@ -38,6 +45,10 @@ type Service interface {
 		context.Context,
 		factorydefinitions.ReplaceNamedFactoryRequest,
 	) (factorydefinitions.ReplaceNamedFactoryResult, error)
+	ReplaceFactoryLayoutAtDir(
+		context.Context,
+		factorydefinitions.ReplaceFactoryLayoutAtDirRequest,
+	) (factorydefinitions.ReplaceFactoryLayoutAtDirResult, error)
 }
 
 // Dependencies are the exact collaborator ports required by authoring_layout.
@@ -54,7 +65,7 @@ type Dependencies struct {
 	Validate             func(string) error
 	Flatten              factorydefinitions.FactoryLayoutFlattener
 	Expand               factorydefinitions.FactoryLayoutExpander
-	FileSystem           factorydefinitions.PersistenceFileSystem
-	RequireDefinitionDir factorydefinitions.DefinitionDirectoryRequirer
-	Directories          factorydefinitions.DirectoryReplacementStore
+	FileSystem           factoryeffects.PersistenceFileSystem
+	RequireDefinitionDir factoryeffects.DefinitionDirectoryRequirer
+	Directories          factoryeffects.DirectoryReplacementStore
 }

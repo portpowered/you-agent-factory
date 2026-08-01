@@ -98,7 +98,7 @@ func TestWireRootSnapshotSliceReplayReconstruction(t *testing.T) {
 		t.Fatal("CaptureFactorySnapshot() snapshot is nil")
 	}
 
-	replayConfig, err := factorydefinitionswire.ReplayRuntimeConfigDecoder()(captured.Snapshot)
+	replayConfig, err := factorydefinitionswire.NewReplayRuntimeConfigDecoder()(captured.Snapshot)
 	if err != nil {
 		t.Fatalf("ReplayRuntimeConfigDecoder() error = %v", err)
 	}

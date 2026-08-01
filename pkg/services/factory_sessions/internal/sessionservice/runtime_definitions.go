@@ -6,6 +6,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
@@ -99,18 +100,28 @@ func DefinitionCallbacks(runtime *SessionRuntime) DefinitionHostCallbacks {
 		return runtime.editableFactoryValidator(ctx, snapshot, dependencies.WorkstationLoader())
 	}
 	dependencies.GetCurrentFactorySnapshotForSession = func(ctx context.Context, sessionID string) (*interfaces.FactorySnapshot, error) {
-		definitions := runtime.requireDefinitions()
-		if definitions == nil {
-			return nil, fmt.Errorf("factory definition service is required")
-		}
-		current, err := definitions.GetCurrentFactoryForSession(ctx, sessionID)
-		if err != nil {
+		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if current.Snapshot == nil {
+		if sessionID == "" {
+			return nil, fmt.Errorf("factory session id is required")
+		}
+		if _, err := runtimebinding.RequireLiveSession(runtime.sessionState, sessionID); err != nil {
+			return nil, err
+		}
+		loaded := runtime.currentRuntimeConfig()
+		if loaded == nil {
 			return nil, fmt.Errorf("current factory snapshot is unavailable")
 		}
-		return current.Snapshot, nil
+		snapshot, err := factorydefinitionswire.LoadedFactorySnapshotCapturer()(
+			loaded,
+			loaded.FactoryDir(),
+			nil,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("capture current factory snapshot: %w", err)
+		}
+		return snapshot, nil
 	}
 	dependencies.WithActivationLock = runtime.sessionState.WithActivationLock
 	dependencies.RequireIdleRuntimeForSession = runtime.requireIdleRuntimeForSession

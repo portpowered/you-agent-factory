@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
@@ -33,7 +34,7 @@ func LoadRuntime(
 	root RuntimeRoot,
 	loadFactory factorydefinitions.LoadedFactoryLoader,
 	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
-	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
+	decodeReplayConfig factorydefinitionswire.ReplayRuntimeConfigDecoder,
 	loadReplay recording.ReplayArtifactLoader,
 	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
 	newSessionLogger factoryruntime.SessionLoggerFactory,
@@ -136,7 +137,7 @@ func loadRuntimeConfig(
 	workstationLoader factorydefinitions.WorkstationLoader,
 	loadFactory factorydefinitions.LoadedFactoryLoader,
 	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
-	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
+	decodeReplayConfig factorydefinitionswire.ReplayRuntimeConfigDecoder,
 	loadReplay recording.ReplayArtifactLoader,
 ) (factorydefinitions.MutableLoadedFactorySource, *factorydefinitions.ReplayArtifact, error) {
 	if replayPath == "" {

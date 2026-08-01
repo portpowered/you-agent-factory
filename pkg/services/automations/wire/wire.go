@@ -9,10 +9,10 @@ package wire
 
 import (
 	"fmt"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
 	automationinternal "github.com/portpowered/infinite-you/pkg/services/automations/internal"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
@@ -36,7 +36,7 @@ func NewService(
 	hostedSecrets automations.HostedLinearSecretResolver,
 	linearEndpoint string,
 	resolveTemplates workers.TemplateFieldResolver,
-	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
+	executionPolicy factorydefinitionswire.WorkstationExecutionPolicyService,
 ) (automations.Service, error) {
 	if err := validateDependencies(
 		logger,
@@ -88,7 +88,7 @@ func validateDependencies(
 	hostedSources automations.HostedSourcesFactory,
 	hostedClock automations.HostedLinearClock,
 	resolveTemplates workers.TemplateFieldResolver,
-	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
+	executionPolicy factorydefinitionswire.WorkstationExecutionPolicyService,
 ) error {
 	if logger == nil {
 		return fmt.Errorf("construct Automations: logger is required")

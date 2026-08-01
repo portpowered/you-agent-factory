@@ -1,7 +1,5 @@
 package factorydefinitions
 
-import "github.com/portpowered/infinite-you/pkg/services/work"
-
 const (
 	// PackagedTTSFactoryProject identifies the built-in @you/tts factory project id.
 	PackagedTTSFactoryProject = "builtin-tts"
@@ -21,16 +19,4 @@ type TTSInvocationMetadata struct {
 	Backend      string `json:"backend"`
 	TraceID      string `json:"traceId,omitempty"`
 	SessionID    string `json:"sessionId,omitempty"`
-}
-
-// InvocationOutputShapingService owns the packaged-factory policy that turns
-// raw worker output into canonical terminal Work content.
-type InvocationOutputShapingService interface {
-	ShouldFormatInvocationSummary(*FactoryWorkstationConfig) bool
-	SummaryContentFromWorkerOutput(string, string) ([]work.WorkContentPart, error)
-	ShouldFormatInvocationResponse(*FactoryWorkstationConfig) bool
-	ResponseContentFromWorkerOutput(string, string) ([]work.WorkContentPart, error)
-	ShouldFormatTTSInvocationMetadata(*FactoryWorkstationConfig) bool
-	TTSBackendLabelFromWorker(*FactoryWorkerConfig) string
-	TTSMetadataContentFromWorkerOutput(string, string, string, string) ([]work.WorkContentPart, error)
 }

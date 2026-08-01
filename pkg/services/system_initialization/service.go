@@ -13,6 +13,7 @@ package systeminitialization
 
 import (
 	"context"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
@@ -78,5 +79,5 @@ type Service interface {
 	Initialize(context.Context, Request) (Result, error)
 }
 
-type PackagedFactoryInstaller = factorydefinitions.PackagedFactoryInstaller
+type PackagedFactoryInstaller = factorydefinitionswire.PackagedFactoryInstaller
 type PackagedFactoryCatalogOperations = factorydefinitions.PackagedFactoryCatalogOperations

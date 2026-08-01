@@ -3,15 +3,15 @@ package factorycontracts
 import (
 	"errors"
 	"fmt"
-
-	catalognamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
 )
 
 var ErrInvalidNamedFactory = errors.New("invalid named factory")
 var ErrNamedFactoryAlreadyExists = errors.New("named factory already exists")
-var ErrInvalidNamedFactoryName = catalognamedpaths.ErrInvalidName
+var ErrInvalidName = errors.New("invalid named factory name")
+var ErrNamedFactoryPathNotFound = errors.New("named factory not found")
+var ErrInvalidNamedFactoryName = ErrInvalidName
 var ErrFactoryLayoutNotFound = errors.New("factory layout not found")
-var ErrNamedFactoryNotFound = catalognamedpaths.ErrNotFound
+var ErrNamedFactoryNotFound = ErrNamedFactoryPathNotFound
 var ErrNamedFactoryIsCurrent = errors.New("cannot delete current factory")
 
 type BlockingFactoryLoadError struct {

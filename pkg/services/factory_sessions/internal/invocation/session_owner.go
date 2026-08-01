@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/work"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
@@ -69,8 +70,8 @@ type SessionOwner struct {
 	waitNextFn    func(context.Context) error
 	telemetry     SessionInvocationTelemetry
 	specialCase   SessionInvocationSpecialCase
-	interpolation factorydefinitions.InvocationInterpolationService
-	workTypes     factorydefinitions.InvocationWorkTypeService
+	interpolation factorydefinitionswire.InvocationInterpolationService
+	workTypes     factorydefinitionswire.InvocationWorkTypeService
 	inputFiles    fileeffects.InvocationInputReader
 	workService   work.Service
 }
@@ -83,8 +84,8 @@ func NewSessionOwner(
 	waitNext func(context.Context) error,
 	telemetry SessionInvocationTelemetry,
 	specialCase SessionInvocationSpecialCase,
-	interpolation factorydefinitions.InvocationInterpolationService,
-	workTypes factorydefinitions.InvocationWorkTypeService,
+	interpolation factorydefinitionswire.InvocationInterpolationService,
+	workTypes factorydefinitionswire.InvocationWorkTypeService,
 	inputFiles fileeffects.InvocationInputReader,
 	workService work.Service,
 ) *SessionOwner {
@@ -129,7 +130,7 @@ func (o *SessionOwner) InvokeFactorySession(
 	if o.inputFiles == nil {
 		return FactoryInvocationResult{}, fmt.Errorf("Factory Session invocation input file reader is unavailable")
 	}
-	if err := o.interpolation.ValidateInvocationInterpolation(factoryCfg, work.RuntimeInvocationArguments(factoryCfg.InvocationSignature, resolved.NormalizedArguments), factorydefinitions.FileReader(o.inputFiles)); err != nil {
+	if err := o.interpolation.ValidateInvocationInterpolation(factoryCfg, work.RuntimeInvocationArguments(factoryCfg.InvocationSignature, resolved.NormalizedArguments), factorydefinitionswire.FileReader(o.inputFiles)); err != nil {
 		o.interpolationFailure(sessionID, factoryCfg, resolved, err)
 		return FactoryInvocationResult{}, qualifySessionInvocationError(factoryCfg, err)
 	}
@@ -435,7 +436,7 @@ func qualifySessionInvocationError(
 	if factoryCfg == nil {
 		return err
 	}
-	return work.QualifyInvocationArgumentError(err, factorydefinitions.CustomerVisibleFactoryName(factoryCfg))
+	return work.QualifyInvocationArgumentError(err, factorydefinitionswire.CustomerVisibleFactoryName(factoryCfg))
 }
 
 // SessionInvocationSourceHint reports a low-cardinality source before full normalization.

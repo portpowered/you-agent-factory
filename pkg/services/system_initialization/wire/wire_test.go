@@ -2,6 +2,7 @@ package systeminitializationwire
 
 import (
 	"context"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -211,7 +212,7 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 		name              string
 		operatorSettings  OperatorSettings
 		packagedCatalog   factorydefinitions.PackagedFactoryCatalogOperations
-		packagedInstaller factorydefinitions.PackagedFactoryInstaller
+		packagedInstaller factorydefinitionswire.PackagedFactoryInstaller
 		inspectPath       InspectPath
 		migrationFiles    LegacyFactoryMigrationFileSystem
 		wantErr           string

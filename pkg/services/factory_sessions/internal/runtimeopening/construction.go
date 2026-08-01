@@ -3,6 +3,7 @@ package runtimeopening
 import (
 	"context"
 	"fmt"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/services/automations"
@@ -46,10 +47,10 @@ func PrepareRuntime(
 	baseLogger *zap.Logger,
 	runtimeEdges ExternalEffects,
 	factoryDefinitionValidator factorydefinitions.Validator,
-	namedPaths factorydefinitions.NamedPathResolver,
+	namedPaths factorydefinitionswire.NamedPathResolver,
 	loadFactory factorydefinitions.LoadedFactoryLoader,
 	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
-	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
+	decodeReplayConfig factorydefinitionswire.ReplayRuntimeConfigDecoder,
 	loadReplay recordings.ReplayArtifactLoader,
 	replayClockFactory ReplayClockFactory,
 	hostedPollersFactory AutomationHostedSourcesFactory,

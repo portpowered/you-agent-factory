@@ -3,9 +3,6 @@ package factorycontracts
 import (
 	"strings"
 
-	catalogresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/resource"
-	workertaxonomy "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/taxonomy"
-	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -97,7 +94,7 @@ func IsProviderBackedWorkerType(workerType string) bool {
 // UsesModelhostLease reports whether local model calls for this worker should
 // acquire and release modelhost inferencer leases.
 func UsesModelhostLease(workerType string, locality string) bool {
-	return IsProviderBackedWorkerType(workerType) && locality == workerconfig.ModelLocalityLocal
+	return IsProviderBackedWorkerType(workerType) && locality == ModelLocalityLocal
 }
 
 // IsScriptWorkerType reports whether workerType is an accepted script-worker taxonomy value.
@@ -153,22 +150,22 @@ var publicFactoryHostedWorkerProviderAliases = map[string]string{
 }
 
 var publicFactoryWorkerModelLocalityAliases = map[string]string{
-	workerconfig.ModelLocalityLocal: workerconfig.ModelLocalityLocal,
-	workerconfig.ModelLocalityCloud: workerconfig.ModelLocalityCloud,
+	ModelLocalityLocal: ModelLocalityLocal,
+	ModelLocalityCloud: ModelLocalityCloud,
 }
 
 var publicFactoryWorkerModelOperationContentTypeAliases = map[string]string{
-	workerconfig.ModelOperationContentTypeText:   workerconfig.ModelOperationContentTypeText,
-	workerconfig.ModelOperationContentTypeImage:  workerconfig.ModelOperationContentTypeImage,
-	workerconfig.ModelOperationContentTypeAudio:  workerconfig.ModelOperationContentTypeAudio,
-	workerconfig.ModelOperationContentTypeJSON:   workerconfig.ModelOperationContentTypeJSON,
-	workerconfig.ModelOperationContentTypeBinary: workerconfig.ModelOperationContentTypeBinary,
+	ModelOperationContentTypeText:   ModelOperationContentTypeText,
+	ModelOperationContentTypeImage:  ModelOperationContentTypeImage,
+	ModelOperationContentTypeAudio:  ModelOperationContentTypeAudio,
+	ModelOperationContentTypeJSON:   ModelOperationContentTypeJSON,
+	ModelOperationContentTypeBinary: ModelOperationContentTypeBinary,
 }
 
 var publicFactoryResourceTypeAliases = map[string]string{
-	catalogresource.TypeModel:          catalogresource.TypeModel,
-	catalogresource.TypeProviderQuota:  catalogresource.TypeProviderQuota,
-	catalogresource.TypeInvocationSlot: catalogresource.TypeInvocationSlot,
+	ResourceTypeModel:          ResourceTypeModel,
+	ResourceTypeProviderQuota:  ResourceTypeProviderQuota,
+	ResourceTypeInvocationSlot: ResourceTypeInvocationSlot,
 }
 
 var publicFactoryWorkstationTypeAliases = map[string]string{
@@ -206,7 +203,7 @@ func IsAgentRunWorkstationType(workstationType string) bool {
 
 // IsScriptRunWorkstationType reports whether workstationType is an accepted script-run taxonomy value.
 func IsScriptRunWorkstationType(workstationType string) bool {
-	return workertaxonomy.IsScriptRunWorkstationType(workstationType)
+	return StrictPublicFactoryWorkstationType(workstationType) == WorkstationTypeScript
 }
 
 // IsPollerRunWorkstationType reports whether workstationType and workstation kind

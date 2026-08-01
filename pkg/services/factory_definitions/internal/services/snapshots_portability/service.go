@@ -15,6 +15,7 @@ package snapshotsportability
 
 import (
 	"context"
+	factoryeffects "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/effects"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
@@ -44,7 +45,7 @@ type Dependencies struct {
 	LoadCanonical             factorydefinitions.CanonicalFactoryJSONLoader
 	CaptureLoaded             factorydefinitions.LoadedFactorySnapshotCapturer
 	PreparePortable           factorydefinitions.PortableFactoryConfigPreparer
-	DecodeSnapshot            factorydefinitions.FactorySnapshotJSONDecoder
+	DecodeSnapshot            factoryeffects.FactorySnapshotJSONDecoder
 	MaterializePortableFiles  factorydefinitions.PortableBundledFilesMaterializer
 	ValidateMaterializeWrites factorydefinitions.PortableBundledFileWritesValidator
 }

@@ -10,8 +10,8 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorynamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
-	internalportableconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig"
+	catalogwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire"
+	snapshotswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/wire"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 )
 
@@ -84,26 +84,7 @@ func newWireRootWithCompileLoader(t *testing.T) (factorydefinitions.Service, *fa
 	ports := validConstructionPorts(t)
 	ports.loader = loader
 
-	service, err := factorydefinitionswire.NewService(
-		ports.sessionHost,
-		ports.activationGateway,
-		ports.validator,
-		ports.persistence,
-		ports.loader,
-		ports.applySupportedFiles,
-		ports.applyStarterWork,
-		ports.namedPaths,
-		ports.namedFactoryCatalogFileSystem,
-		ports.clock,
-		ports.versionFileSystem,
-		ports.listEffective,
-		ports.packagedCatalog,
-		ports.packagedInstaller,
-		ports.requiredToolChecker,
-		ports.orchestratorValidator,
-		ports.portableFileSystem,
-		ports.directoryReplacementStore,
-	)
+	service, err := factorydefinitionswire.NewService(definitionDependencies(ports))
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
@@ -116,11 +97,11 @@ func newCompileLoadLoader(
 ) *factorydefinitionswire.Loader {
 	t.Helper()
 
-	applySupportedFiles, err := internalportableconfig.NewPortableBundledFilesApplier(fileSystem)
+	applySupportedFiles, err := snapshotswire.NewPortableBundledFilesApplier(fileSystem)
 	if err != nil {
 		t.Fatalf("construct bundled-files applier: %v", err)
 	}
-	applyStarterWork, err := internalportableconfig.NewFactoryStarterWorkApplier(fileSystem)
+	applyStarterWork, err := snapshotswire.NewFactoryStarterWorkApplier(fileSystem)
 	if err != nil {
 		t.Fatalf("construct starter-Work applier: %v", err)
 	}
@@ -128,13 +109,13 @@ func newCompileLoadLoader(
 		targetDir string,
 		config *factorydefinitions.FactoryConfig,
 	) ([]factorydefinitions.PortableBundledFileReplacement, error) {
-		return internalportableconfig.MaterializeFiles(fileSystem, targetDir, config)
+		return snapshotswire.NewMaterializer(fileSystem)(targetDir, config)
 	}
-	namedPaths, err := factorynamedpaths.New(fileSystem)
+	namedPaths, err := catalogwire.NewPathResolver(fileSystem)
 	if err != nil {
 		t.Fatalf("construct named-path resolver: %v", err)
 	}
-	sourceResolver, err := internalportableconfig.NewSupportedSourceResolver(fileSystem)
+	sourceResolver, err := snapshotswire.NewPortableBundledFileSourceResolver(fileSystem)
 	if err != nil {
 		t.Fatalf("construct portable source resolver: %v", err)
 	}

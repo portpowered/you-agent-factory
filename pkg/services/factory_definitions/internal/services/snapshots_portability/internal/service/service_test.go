@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	factoryeffects "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/effects"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,10 +12,9 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	snapshotsportability "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability"
-	snapshotsportabilitycapture "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/capture"
-	snapshotsportabilitymaterialize "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/materialize"
+	snapshotsportabilitycapture "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/internal/capture"
+	snapshotsportabilitymaterialize "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/internal/materialize"
 	snapshotsportabilitywire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/wire"
-	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
 )
 
 type stubLoadedSource struct {
@@ -29,11 +29,15 @@ func (s stubLoadedSource) SetRuntimeBaseDir(string)                         {}
 func (s stubLoadedSource) PortableBundledFileReplacements() []factorydefinitions.PortableBundledFileReplacement {
 	return nil
 }
-func (s stubLoadedSource) MutateWorkers(func(*workerconfig.Config) error) error { return nil }
+func (s stubLoadedSource) MutateWorkers(func(*factorydefinitions.FactoryWorkerConfig) error) error {
+	return nil
+}
 func (s stubLoadedSource) Workstation(string) (*factorydefinitions.FactoryWorkstationConfig, bool) {
 	return nil, false
 }
-func (s stubLoadedSource) Worker(string) (*workerconfig.Config, bool) { return nil, false }
+func (s stubLoadedSource) Worker(string) (*factorydefinitions.FactoryWorkerConfig, bool) {
+	return nil, false
+}
 
 func stubLoadCanonical(payload []byte, _ factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 	var cfg factorydefinitions.FactoryConfig
@@ -62,7 +66,7 @@ func stubDecodeSnapshot(payload []byte) (*factorydefinitions.FactorySnapshot, er
 
 func newSnapshotService(
 	t *testing.T,
-	decode factorydefinitions.FactorySnapshotJSONDecoder,
+	decode factoryeffects.FactorySnapshotJSONDecoder,
 ) snapshotsportability.Service {
 	t.Helper()
 	fileSystem := platformfilesystem.Local{}

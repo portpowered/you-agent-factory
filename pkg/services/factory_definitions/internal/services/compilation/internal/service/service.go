@@ -76,6 +76,10 @@ func (s *Service) CompileEffectiveFactorySource(
 	if loaded == nil || loaded.FactoryConfig() == nil {
 		return factoryroot.CompileEffectiveFactorySourceResult{}, factoryroot.ErrInvalidAuthoredFactorySource
 	}
+	effectiveFactory, err := factoryroot.CloneFactoryConfig(loaded.FactoryConfig())
+	if err != nil || effectiveFactory == nil {
+		return factoryroot.CompileEffectiveFactorySourceResult{}, factoryroot.ErrInvalidAuthoredFactorySource
+	}
 
 	encoded, err := s.encodeFactory(loaded.FactoryConfig())
 	if err != nil {
@@ -97,6 +101,7 @@ func (s *Service) CompileEffectiveFactorySource(
 
 	return factoryroot.CompileEffectiveFactorySourceResult{
 		Effective: factoryroot.EffectiveFactorySource{
+			Factory:         effectiveFactory,
 			FactoryDir:      effectiveFactoryDir,
 			RuntimeBaseDir:  runtimeBaseDir,
 			ContentIdentity: contentIdentity,

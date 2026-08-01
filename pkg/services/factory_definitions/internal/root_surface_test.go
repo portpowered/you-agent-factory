@@ -4,12 +4,12 @@ import (
 	"context"
 	"io/fs"
 	"testing"
-	"time"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryinternal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
-	factorylifecycle "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle"
+	invocationpolicyservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy"
+	invocationpolicywire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/wire"
 )
 
 func TestNewWithAuthoringLayoutConstructsPublishedRootCatalogSurface(t *testing.T) {
@@ -26,56 +26,36 @@ func TestNewWithAuthoringLayoutConstructsPublishedRootCatalogSurface(t *testing.
 	if err != nil {
 		t.Fatalf("NewPackagedFactoryCatalog() error = %v", err)
 	}
+	invocationPolicy, err := invocationpolicywire.NewService(invocationpolicyservice.Dependencies{})
+	if err != nil {
+		t.Fatalf("New invocation policy service: %v", err)
+	}
 
-	root := factoryinternal.NewWithAuthoringLayout(
-		rootSurfaceSessionHost{},
-		factorylifecycle.StubActivationGateway(),
-		staticClock{instant: time.Unix(0, 0)},
-		platformfilesystem.Local{},
-		rootSurfaceValidator{},
-		func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
+	root, err := factoryinternal.NewService(factoryinternal.Dependencies{
+		Validator:                     rootSurfaceValidator{},
+		DefinitionValidation:          rootSurfaceValidator{},
+		EffectiveDefinitionValidation: rootSurfaceValidator{},
+		LoadCanonical: func([]byte, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
 			return nil, nil
 		},
-		func(string, factorydefinitions.WorkstationLoader) (factorydefinitions.MutableLoadedFactorySource, error) {
-			return nil, nil
-		},
-		func(string) (string, error) { return "", nil },
-		func(context.Context, string, []byte, factorydefinitions.Validator) (*factorydefinitions.PreparedFactoryLayoutPayload, error) {
-			return &factorydefinitions.PreparedFactoryLayoutPayload{}, nil
-		},
-		func(string, string, *factorydefinitions.PreparedFactoryLayoutPayload) (string, error) {
-			return "", nil
-		},
-		func(string, string) error { return nil },
-		func(string, *factorydefinitions.FactoryConfig, bool) (*factorydefinitions.FactoryConfig, error) {
-			return &factorydefinitions.FactoryConfig{}, nil
-		},
-		func(
-			string,
-			*factorydefinitions.FactoryConfig,
-			factorydefinitions.RuntimeDefinitionLookup,
-			string,
-			map[string]string,
-		) (*factorydefinitions.FactorySnapshot, error) {
-			return &factorydefinitions.FactorySnapshot{}, nil
-		},
-		func(string, *factorydefinitions.PreparedFactoryLayoutPayload) (*factorydefinitions.FactorySplitLayoutReplaceResult, error) {
-			return nil, nil
-		},
-		rootSurfaceNamedPaths{},
-		platformfilesystem.Local{},
-		packagedCatalog,
-		factorydefinitions.PackagedFactoryInstallationOperations{
+		NamedPaths:                    rootSurfaceNamedPaths{},
+		NamedFactoryCatalogFileSystem: platformfilesystem.Local{},
+		PackagedCatalog:               packagedCatalog,
+		PackagedInstaller: factorydefinitions.PackagedFactoryInstallationOperations{
 			Install: func(context.Context, factorydefinitions.PackagedFactoryInstallParams) (factorydefinitions.PackagedFactoryInstallResult, error) {
 				return factorydefinitions.PackagedFactoryInstallResult{}, nil
 			},
 		},
-		rootSurfaceRequiredToolChecker{},
-		rootSurfaceOrchestratorValidator{},
-		stubAuthoringLayout{},
-	)
+		RequiredToolChecker:   rootSurfaceRequiredToolChecker{},
+		OrchestratorValidator: rootSurfaceOrchestratorValidator{},
+		AuthoringLayout:       stubAuthoringLayout{},
+		InvocationPolicy:      invocationPolicy,
+	})
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
 	if root == nil {
-		t.Fatal("NewWithAuthoringLayout() = nil, want composed Factory Definitions root")
+		t.Fatal("NewService() = nil, want composed Factory Definitions root")
 	}
 
 	payload := []byte(`{"name":"alpha"}`)
@@ -102,82 +82,21 @@ func TestNewWithAuthoringLayoutConstructsPublishedRootCatalogSurface(t *testing.
 	}
 }
 
-type staticClock struct{ instant time.Time }
-
-func (c staticClock) Now() time.Time { return c.instant }
-
-type rootSurfaceSessionHost struct{}
-
-func (rootSurfaceSessionHost) PersistRootDir() string { return "/persist" }
-func (rootSurfaceSessionHost) WorkstationLoader() factorydefinitions.WorkstationLoader {
-	return nil
-}
-func (rootSurfaceSessionHost) CurrentRuntimeConfig() factorydefinitions.LoadedFactorySource {
-	return nil
-}
-func (rootSurfaceSessionHost) WorkflowID() string { return "workflow" }
-func (rootSurfaceSessionHost) RequireSession(string) (*factorydefinitions.DefinitionSession, error) {
-	return &factorydefinitions.DefinitionSession{}, nil
-}
-func (rootSurfaceSessionHost) SessionRuntimeConfig(string) (factorydefinitions.LoadedFactorySource, error) {
-	return nil, nil
-}
-func (rootSurfaceSessionHost) SessionFactoryPersistRoot(*factorydefinitions.DefinitionSession) string {
-	return "/persist"
-}
-func (rootSurfaceSessionHost) ValidateEditableFactorySnapshot(context.Context, *factorydefinitions.FactorySnapshot) error {
-	return nil
-}
-func (rootSurfaceSessionHost) GetCurrentFactorySnapshotForSession(context.Context, string) (*factorydefinitions.FactorySnapshot, error) {
-	return nil, nil
-}
-func (rootSurfaceSessionHost) WithActivationLock(func() error) error { return nil }
-func (rootSurfaceSessionHost) RequireIdleRuntimeForSession(context.Context, string) error {
-	return nil
-}
-func (rootSurfaceSessionHost) ActivateSessionEditableFactory(
-	context.Context,
-	*factorydefinitions.DefinitionSession,
-	string, string, string, string, string,
-) error {
-	return nil
-}
-func (rootSurfaceSessionHost) ReplaceFactoryLayoutAtDir(
-	string,
-	*factorydefinitions.PreparedFactoryLayoutPayload,
-) (*factorydefinitions.FactorySplitLayoutReplaceResult, error) {
-	return nil, nil
-}
-func (rootSurfaceSessionHost) SaveNow() time.Time   { return time.Unix(0, 0) }
-func (rootSurfaceSessionHost) RunSessionID() string { return "" }
-func (rootSurfaceSessionHost) SessionForActivation(string) *factorydefinitions.DefinitionSession {
-	return nil
-}
-func (rootSurfaceSessionHost) NamedFactoryActivationPaths(*factorydefinitions.DefinitionSession) (string, string) {
-	return "", ""
-}
-func (rootSurfaceSessionHost) RequireIdleBeforeNamedFactoryActivation(
-	context.Context,
-	string,
-	*factorydefinitions.DefinitionSession,
-) error {
-	return nil
-}
-func (rootSurfaceSessionHost) SwapPersistedNamedFactoryRuntime(
-	context.Context,
-	string,
-	*factorydefinitions.DefinitionSession,
-	string, string, string, string,
-) error {
-	return nil
-}
-func (rootSurfaceSessionHost) AttachFactoryDefinitions(
-	definitions factorydefinitions.Service,
-) factorydefinitions.Service {
-	return definitions
-}
-
 type rootSurfaceValidator struct{}
+
+func (rootSurfaceValidator) ValidateDefinition(
+	context.Context,
+	factorydefinitions.DefinitionValidationRequest,
+) (factorydefinitions.ValidationResult, error) {
+	return factorydefinitions.ValidationResult{}, nil
+}
+
+func (rootSurfaceValidator) ValidateEffectiveDefinition(
+	context.Context,
+	factorydefinitions.EffectiveDefinitionValidationRequest,
+) (factorydefinitions.ValidationResult, error) {
+	return factorydefinitions.ValidationResult{}, nil
+}
 
 func (rootSurfaceValidator) Validate(
 	context.Context,

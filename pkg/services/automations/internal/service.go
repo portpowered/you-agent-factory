@@ -3,18 +3,18 @@ package internal
 import (
 	"context"
 	"errors"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"sync"
 
 	"github.com/jonboulle/clockwork"
 	automations "github.com/portpowered/infinite-you/pkg/services/automations"
-	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
 	cron "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron"
 	cronwire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/cron/wire"
 	filesystemwatchers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers"
 	fswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/filesystem_watchers/wire"
+	reconciliation "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/reconciliation"
 	scriptpollers "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers"
 	scriptpollerswire "github.com/portpowered/infinite-you/pkg/services/automations/internal/services/script_pollers/wire"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"go.uber.org/zap"
 )
@@ -26,20 +26,20 @@ type Clock = automations.Clock
 
 // Service supervises cron, poller, and watcher automation using injected collaborators.
 type Service struct {
-	loggerValue       *zap.Logger
-	clock             Clock
-	commandRunnerEdge workers.CommandRunner
-	workflowID        string
-	defaultFactoryDir string
-	hostedPollers     automations.HostedPollers
-	resolveTemplates  workers.TemplateFieldResolver
-	executionPolicy   factorydefinitions.WorkstationExecutionPolicyService
-	reconciler        reconciliation.Service
-	scriptPollers     scriptpollers.Service
-	cron              cron.Service
+	loggerValue        *zap.Logger
+	clock              Clock
+	commandRunnerEdge  workers.CommandRunner
+	workflowID         string
+	defaultFactoryDir  string
+	hostedPollers      automations.HostedPollers
+	resolveTemplates   workers.TemplateFieldResolver
+	executionPolicy    factorydefinitionswire.WorkstationExecutionPolicyService
+	reconciler         reconciliation.Service
+	scriptPollers      scriptpollers.Service
+	cron               cron.Service
 	filesystemWatchers filesystemwatchers.Service
-	schedulerMu       sync.Mutex
-	schedulerSources  map[automations.SourceIdentity]*schedulerSource
+	schedulerMu        sync.Mutex
+	schedulerSources   map[automations.SourceIdentity]*schedulerSource
 }
 
 // New constructs the automation service from explicit worker-sidecar
@@ -52,7 +52,7 @@ func New(
 	defaultFactoryDir string,
 	hostedPollers automations.HostedPollers,
 	resolveTemplates workers.TemplateFieldResolver,
-	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
+	executionPolicy factorydefinitionswire.WorkstationExecutionPolicyService,
 ) *Service {
 	service := &Service{
 		loggerValue:       logger,
@@ -92,7 +92,7 @@ func NewService(
 	defaultFactoryDir string,
 	hostedPollers automations.HostedPollers,
 	resolveTemplates workers.TemplateFieldResolver,
-	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
+	executionPolicy factorydefinitionswire.WorkstationExecutionPolicyService,
 ) *Service {
 	return New(
 		logger,

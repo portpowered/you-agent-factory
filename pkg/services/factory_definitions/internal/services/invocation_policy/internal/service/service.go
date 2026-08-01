@@ -1,29 +1,29 @@
 package service
 
 import (
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryeffects "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/effects"
 	invocationpolicyservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy"
-	invocationpolicydecisionenvelope "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope"
-	invocationpolicyinterpolation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/invocationinterpolation"
-	invocationpolicyoutput "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/invocationoutput"
-	invocationpolicyworktype "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/invocationworktype"
-	invocationpolicyquorum "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/quorumpolicy"
-	invocationpolicytts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/ttsobservability"
-	invocationpolicyworkpropagation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/workpropagation"
-	invocationpolicyworkstationexecution "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution"
+	invocationpolicydecisionenvelope "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/internal/decisionenvelope"
+	invocationpolicyinterpolation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/internal/invocationinterpolation"
+	invocationpolicyoutput "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/internal/invocationoutput"
+	invocationpolicyworktype "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/internal/invocationworktype"
+	invocationpolicyquorum "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/internal/quorumpolicy"
+	invocationpolicytts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/internal/ttsobservability"
+	invocationpolicyworkpropagation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/internal/workpropagation"
+	invocationpolicyworkstationexecution "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy/internal/workstationexecution"
 )
 
 // Service is the private nested invocation_policy implementation behind the
 // published Definitions root policy contracts.
 type Service struct {
-	decisionEnvelope        factorydefinitions.DecisionEnvelopeService
-	invocationInterpolation factorydefinitions.InvocationInterpolationService
-	invocationOutput        factorydefinitions.InvocationOutputShapingService
-	invocationWorkType      factorydefinitions.InvocationWorkTypeService
-	quorumPolicy            factorydefinitions.QuorumPolicyService
-	workPropagation         factorydefinitions.WorkPropagationPolicyService
-	workstationExecution    factorydefinitions.WorkstationExecutionPolicyService
-	ttsObservability        factorydefinitions.TTSObservabilityService
+	decisionEnvelope        factoryeffects.DecisionEnvelopeService
+	invocationInterpolation factoryeffects.InvocationInterpolationService
+	invocationOutput        factoryeffects.InvocationOutputShapingService
+	invocationWorkType      factoryeffects.InvocationWorkTypeService
+	quorumPolicy            factoryeffects.QuorumPolicyService
+	workPropagation         factoryeffects.WorkPropagationPolicyService
+	workstationExecution    factoryeffects.WorkstationExecutionPolicyService
+	ttsObservability        factoryeffects.TTSObservabilityService
 }
 
 var _ invocationpolicyservice.Service = (*Service)(nil)
@@ -44,34 +44,34 @@ func New() *Service {
 	}
 }
 
-func (s *Service) DecisionEnvelope() factorydefinitions.DecisionEnvelopeService {
+func (s *Service) DecisionEnvelope() factoryeffects.DecisionEnvelopeService {
 	return s.decisionEnvelope
 }
 
-func (s *Service) InvocationInterpolation() factorydefinitions.InvocationInterpolationService {
+func (s *Service) InvocationInterpolation() factoryeffects.InvocationInterpolationService {
 	return s.invocationInterpolation
 }
 
-func (s *Service) InvocationOutput() factorydefinitions.InvocationOutputShapingService {
+func (s *Service) InvocationOutput() factoryeffects.InvocationOutputShapingService {
 	return s.invocationOutput
 }
 
-func (s *Service) InvocationWorkType() factorydefinitions.InvocationWorkTypeService {
+func (s *Service) InvocationWorkType() factoryeffects.InvocationWorkTypeService {
 	return s.invocationWorkType
 }
 
-func (s *Service) QuorumPolicy() factorydefinitions.QuorumPolicyService {
+func (s *Service) QuorumPolicy() factoryeffects.QuorumPolicyService {
 	return s.quorumPolicy
 }
 
-func (s *Service) WorkPropagation() factorydefinitions.WorkPropagationPolicyService {
+func (s *Service) WorkPropagation() factoryeffects.WorkPropagationPolicyService {
 	return s.workPropagation
 }
 
-func (s *Service) WorkstationExecution() factorydefinitions.WorkstationExecutionPolicyService {
+func (s *Service) WorkstationExecution() factoryeffects.WorkstationExecutionPolicyService {
 	return s.workstationExecution
 }
 
-func (s *Service) TTSObservability() factorydefinitions.TTSObservabilityService {
+func (s *Service) TTSObservability() factoryeffects.TTSObservabilityService {
 	return s.ttsObservability
 }

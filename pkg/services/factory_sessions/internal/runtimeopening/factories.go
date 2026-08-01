@@ -106,11 +106,10 @@ type AutomationHostedSourcesFactory = automations.HostedSourcesFactory
 
 type WorkersLocalRuntimeHooksFactory = func() workers.LocalRuntimeHooks
 
-type FactoryDefinitionsFactory = func(
-	factorysessions.DefinitionHost,
-	factorydefinitions.DefinitionActivationGateway,
-	factorydefinitions.Validator,
-) factorydefinitions.Service
+// FactoryDefinitionsFactory is the already-constructed process-scoped Factory
+// Definitions root. Runtime opening may create session state, but it must not
+// defer service construction or run a second dependency graph.
+type FactoryDefinitionsFactory = factorydefinitions.Service
 
 type DurableExecution struct {
 	Service         factorysessions.ExecutionService

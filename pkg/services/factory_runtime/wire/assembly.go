@@ -2,6 +2,7 @@ package wire
 
 import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryruntimeinternal "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -16,11 +17,11 @@ type Assembly = factoryruntimeinternal.Assembly
 
 // NewRuntimeFactory constructs a hosted runtime bundle factory.
 func NewRuntimeFactory(
-	quorumPolicy factorydefinitions.QuorumPolicyService,
-	outputShaping factorydefinitions.InvocationOutputShapingService,
-	workPropagation factorydefinitions.WorkPropagationPolicyService,
+	quorumPolicy factorydefinitionswire.QuorumPolicyService,
+	outputShaping factorydefinitionswire.InvocationOutputShapingService,
+	workPropagation factorydefinitionswire.WorkPropagationPolicyService,
 	workService work.Service,
-	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
+	decisionEnvelopes factorydefinitionswire.DecisionEnvelopeService,
 	loggerFactory factoryruntime.RuntimeLoggerFactory,
 	runtimeLogs factoryruntime.RuntimeLogSinkFactory,
 	runtimeMetrics factoryruntime.RuntimeMetricsSinkFactory,

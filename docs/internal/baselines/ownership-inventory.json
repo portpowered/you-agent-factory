@@ -1083,7 +1083,7 @@
       "toOwner": "factory_definitions",
       "class": "external_effect",
       "architectureException": true,
-      "evidence": "pkg/services/edges -\u003e pkg/services/factory_definitions"
+      "evidence": "pkg/services/edges -\u003e pkg/services/factory_definitions/wire"
     },
     {
       "fromOwner": "edges",
@@ -1159,7 +1159,7 @@
       "fromOwner": "factory_definitions",
       "toOwner": "automations",
       "class": "command",
-      "evidence": "pkg/services/factory_definitions/internal/services/validation/impl -\u003e pkg/services/automations"
+      "evidence": "pkg/services/factory_definitions/internal/services/validation/internal/impl -\u003e pkg/services/automations"
     },
     {
       "fromOwner": "factory_definitions",
@@ -1171,13 +1171,13 @@
       "fromOwner": "factory_definitions",
       "toOwner": "platform",
       "class": "external_effect",
-      "evidence": "pkg/services/factory_definitions/internal/services/snapshots_portability/materialize -\u003e pkg/platform/portablefiles"
+      "evidence": "pkg/services/factory_definitions/internal/services/snapshots_portability/internal/materialize -\u003e pkg/platform/portablefiles"
     },
     {
       "fromOwner": "factory_definitions",
       "toOwner": "transports",
       "class": "command",
-      "evidence": "pkg/services/factory_definitions/internal/services/compilation/canonical -\u003e pkg/transports/mapping/factoryconfig"
+      "evidence": "pkg/services/factory_definitions/internal/services/compilation/internal/canonical -\u003e pkg/transports/mapping/factoryconfig"
     },
     {
       "fromOwner": "factory_definitions",
@@ -2550,22 +2550,6 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/clonetests",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal",
-      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/definition",
-      "disposition": "move",
-      "destination": "factory_definitions",
-      "destinationKind": "owner",
-      "successor": "pkg/services/factory_definitions/internal",
-      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
-    },
-    {
       "packagePath": "pkg/services/factory_definitions/internal",
       "disposition": "retain",
       "destination": "factory_definitions",
@@ -2602,6 +2586,14 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_definitions/internal/effects",
+      "disposition": "move",
+      "destination": "factory_definitions",
+      "destinationKind": "owner",
+      "successor": "pkg/services/factory_definitions/internal",
+      "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
+    },
+    {
       "packagePath": "pkg/services/factory_definitions/internal/lifecycle",
       "disposition": "retain",
       "destination": "factory_definitions",
@@ -2614,37 +2606,37 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout",
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/internal/authoredlayout",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/expand",
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/internal/expand",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/flatten",
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/internal/flatten",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/internal/persist",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/internal/prepare",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/internal/service",
-      "disposition": "retain",
-      "destination": "factory_definitions",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/persist",
-      "disposition": "retain",
-      "destination": "factory_definitions",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/prepare",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
@@ -2662,37 +2654,37 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/internal/namedfactories",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/internal/namedpaths",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/internal/persistence",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/internal/persistence/integrationtests",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/internal/resource",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_definitions/internal/services/catalog/internal/service",
-      "disposition": "retain",
-      "destination": "factory_definitions",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/namedfactories",
-      "disposition": "retain",
-      "destination": "factory_definitions",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/namedpaths",
-      "disposition": "retain",
-      "destination": "factory_definitions",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/persistence",
-      "disposition": "retain",
-      "destination": "factory_definitions",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/persistence/integrationtests",
-      "disposition": "retain",
-      "destination": "factory_definitions",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/resource",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
@@ -2710,37 +2702,37 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/compilation/canonical",
+      "packagePath": "pkg/services/factory_definitions/internal/services/compilation/internal/canonical",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/compilation/internal/loadedsource",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/compilation/internal/loading",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/compilation/internal/runtimeconfig",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/compilation/internal/runtimetests",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/compilation/internal/service",
-      "disposition": "retain",
-      "destination": "factory_definitions",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/compilation/loadedsource",
-      "disposition": "retain",
-      "destination": "factory_definitions",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/compilation/loading",
-      "disposition": "retain",
-      "destination": "factory_definitions",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/compilation/runtimeconfig",
-      "disposition": "retain",
-      "destination": "factory_definitions",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/compilation/runtimetests",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
@@ -2758,7 +2750,43 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/goal",
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/internal/goal",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/internal/packageassets",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/internal/packagedcatalog",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/internal/packagedinstallation",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/internal/promptassets",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/internal/review",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/internal/scaffoldfacts",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
@@ -2770,49 +2798,19 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/packageassets",
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/internal/subagent",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/packagedcatalog",
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/internal/tts",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/packagedinstallation",
-      "disposition": "retain",
-      "destination": "factory_definitions",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/promptassets",
-      "disposition": "retain",
-      "destination": "factory_definitions",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/review",
-      "disposition": "retain",
-      "destination": "factory_definitions",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/scaffoldfacts",
-      "disposition": "retain",
-      "destination": "factory_definitions",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/subagent",
-      "disposition": "retain",
-      "destination": "factory_definitions",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/tts",
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/internal/validation",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
@@ -2824,13 +2822,43 @@
       "destinationKind": "owner"
     },
     {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/wire/assets",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
       "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope",
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/internal/decisionenvelope",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/internal/invocationinterpolation",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/internal/invocationoutput",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/internal/invocationworktype",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/internal/quorumpolicy",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
@@ -2842,31 +2870,19 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/invocationinterpolation",
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/internal/ttsobservability",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/invocationoutput",
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/internal/workpropagation",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/invocationworktype",
-      "disposition": "retain",
-      "destination": "factory_definitions",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/quorumpolicy",
-      "disposition": "retain",
-      "destination": "factory_definitions",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/ttsobservability",
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/internal/workstationexecution",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
@@ -2878,67 +2894,55 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/workpropagation",
-      "disposition": "retain",
-      "destination": "factory_definitions",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution",
-      "disposition": "retain",
-      "destination": "factory_definitions",
-      "destinationKind": "owner"
-    },
-    {
       "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/capture",
+      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/internal/capture",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/editable",
+      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/internal/editable",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/internal/materialize",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/internal/portableconfig",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/internal/portableconfig/integrationtests",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/internal/prepare",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/internal/replayconfig",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/internal/service",
-      "disposition": "retain",
-      "destination": "factory_definitions",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/materialize",
-      "disposition": "retain",
-      "destination": "factory_definitions",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig",
-      "disposition": "retain",
-      "destination": "factory_definitions",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig/integrationtests",
-      "disposition": "retain",
-      "destination": "factory_definitions",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/prepare",
-      "disposition": "retain",
-      "destination": "factory_definitions",
-      "destinationKind": "owner"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/replayconfig",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
@@ -2956,25 +2960,25 @@
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/validation/authoredmodel/namevalue",
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation/internal/authoredmodel/namevalue",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/validation/authoredmodel/taxonomy",
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation/internal/authoredmodel/taxonomy",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers",
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation/internal/authoredmodel/workers",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/validation/impl",
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation/internal/impl",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"
@@ -3024,7 +3028,7 @@
       "deletionCondition": "delete transitional top-level package after CLN-DEF-FOLD-TOPLEVEL cutover proof"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/systeminitializationtests",
+      "packagePath": "pkg/services/factory_definitions/internal/testutil",
       "disposition": "move",
       "destination": "factory_definitions",
       "destinationKind": "owner",
@@ -3051,6 +3055,12 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/wire",
+      "disposition": "retain",
+      "destination": "factory_definitions",
+      "destinationKind": "owner"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/wire/assets",
       "disposition": "retain",
       "destination": "factory_definitions",
       "destinationKind": "owner"

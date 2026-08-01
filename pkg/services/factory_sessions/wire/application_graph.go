@@ -3,6 +3,7 @@ package wire
 import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	applicationopening "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/applicationopening"
@@ -143,7 +144,7 @@ type RuntimeOpeningDependencies struct {
 	FactoryWorkflows                 factoryruntime.JavaScriptWorkflowDefinitions
 	WorkflowPreview                  factoryruntime.WorkflowPreviewOperation
 	FactoryDefinitionValidator       factorydefinitions.Validator
-	NamedPaths                       factorydefinitions.NamedPathResolver
+	NamedPaths                       factorydefinitionswire.NamedPathResolver
 	DurableExecutionFactory          DurableExecutionFactory
 	WorkerExecutionFactory           WorkerExecutionFactory
 	ModelService                     models.Service
@@ -170,7 +171,7 @@ type RuntimeOpeningDependencies struct {
 	ContentMaterializer              work.ContentMaterializer
 	LoadFactory                      factorydefinitions.LoadedFactoryLoader
 	NewLoadedFactory                 factorydefinitions.LoadedFactorySourceFactory
-	DecodeReplayConfig               factorydefinitions.ReplayRuntimeConfigDecoder
+	DecodeReplayConfig               factorydefinitionswire.ReplayRuntimeConfigDecoder
 	LoadReplay                       recordings.ReplayArtifactLoader
 	CaptureLoadedFactorySnapshot     factorydefinitions.LoadedFactorySnapshotCapturer
 	ResolveClock                     factoryruntime.ClockResolver

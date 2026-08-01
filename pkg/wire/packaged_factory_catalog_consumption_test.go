@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 )
 
 func TestPackagedFactoryCatalogConsumption_ListResolveInstallUsesPublishedCatalog(t *testing.T) {
@@ -91,7 +92,7 @@ func assertPublishedPackagedFactoryNames(t *testing.T, listed factorydefinitions
 func assertPublishedPackagedFactoryInstall(t *testing.T, catalog factorydefinitions.PackagedFactoryCatalogOperations, resolvedJSON []byte) {
 	t.Helper()
 	var installed factorydefinitions.PackagedDefinition
-	install := factorydefinitions.NewInstallPackagedFactoryOperation(
+	install := factorydefinitionswire.NewInstallPackagedFactoryOperation(
 		catalog,
 		factorydefinitions.PackagedFactoryInstallationOperations{
 			Install: func(

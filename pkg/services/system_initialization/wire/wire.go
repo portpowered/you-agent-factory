@@ -5,6 +5,7 @@ package systeminitializationwire
 
 import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	systeminitialization "github.com/portpowered/infinite-you/pkg/services/system_initialization"
 	bootstrapworkflow "github.com/portpowered/infinite-you/pkg/services/system_initialization/internal/workflow"
 )
@@ -16,7 +17,7 @@ import (
 func NewService(
 	operatorSettings OperatorSettings,
 	packagedCatalog factorydefinitions.PackagedFactoryCatalogOperations,
-	packagedInstaller factorydefinitions.PackagedFactoryInstaller,
+	packagedInstaller factorydefinitionswire.PackagedFactoryInstaller,
 	inspectPath InspectPath,
 	migrationFiles LegacyFactoryMigrationFileSystem,
 ) (systeminitialization.Service, error) {

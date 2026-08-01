@@ -14,13 +14,13 @@ import (
 var errUnsupportedAdmissionWorkServiceMethod = errors.New("unsupported admission work service method")
 
 type recordingAdmissionWorkService struct {
-	stageCalls   int
-	prepareCalls int
-	prepCalls    int
-	submitCalls  int
-	lastStage    work.StageContentRequest
-	lastItems    []work.StagedSubmissionItem
-	lastPrep     work.WorkRequestPreparation
+	stageCalls        int
+	prepareCalls      int
+	prepCalls         int
+	submitCalls       int
+	lastStage         work.StageContentRequest
+	lastItems         []work.StagedSubmissionItem
+	lastPrep          work.WorkRequestPreparation
 	lastSubmitSession string
 	lastSubmitRequest work.WorkRequest
 

@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -28,7 +29,7 @@ type deadlineCapturingExecutor struct {
 
 type contextBlockingExecutor struct{}
 
-func scriptedTimeoutExecutionPolicy() interfaces.WorkstationExecutionPolicyService {
+func scriptedTimeoutExecutionPolicy() factorydefinitionswire.WorkstationExecutionPolicyService {
 	return factorydefinitionfixtures.WorkstationExecutionPolicy{
 		Resolve: func(workstation *interfaces.FactoryWorkstationConfig) (time.Duration, error) {
 			if workstation == nil {

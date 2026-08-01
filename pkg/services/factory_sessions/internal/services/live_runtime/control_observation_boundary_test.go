@@ -244,7 +244,7 @@ func boundaryDependencies(runtime factoryruntime.Service) liveruntime.Dependenci
 			return factorysessions.ProjectionContext{}, nil
 		},
 		SessionFactory: func(string) (factoryruntime.Service, error) { return runtime, nil },
-		StopSession:      func(string) error { return nil },
+		StopSession:    func(string) error { return nil },
 		ObserveControl: func(string, factorysessions.LifecycleControlKind, factorysessions.ControlRequest, factorysessions.LifecycleControlOutcome, factorysessions.LifecycleStatus, error) {
 		},
 	}

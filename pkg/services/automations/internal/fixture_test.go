@@ -3,6 +3,7 @@ package internal_test
 import (
 	"context"
 	"errors"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"sync"
 	"time"
 
@@ -81,7 +82,7 @@ func (p programmableHostedPollers) ValidateLinearPoller(
 	return p.Validate(runtimeConfig, workstation, worker, submitter)
 }
 
-func automationWorkstationExecutionPolicy() factorydefinitions.WorkstationExecutionPolicyService {
+func automationWorkstationExecutionPolicy() factorydefinitionswire.WorkstationExecutionPolicyService {
 	return factorydefinitionfixtures.WorkstationExecutionPolicy{
 		Resolve: func(workstation *factorydefinitions.FactoryWorkstationConfig) (time.Duration, error) {
 			if workstation == nil {

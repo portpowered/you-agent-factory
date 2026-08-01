@@ -12,6 +12,7 @@ package catalog
 
 import (
 	"context"
+	factoryeffects "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/effects"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
@@ -31,6 +32,6 @@ type Service interface {
 // They are supplied by Factory Definitions composition and never selected here:
 // catalog does not choose host filesystem/SQL/OS adapters or Wire/root constructors.
 type Dependencies struct {
-	Paths      factorydefinitions.NamedPathResolver
-	FileSystem factorydefinitions.NamedFactoryCatalogFileSystem
+	Paths      factoryeffects.NamedPathResolver
+	FileSystem factoryeffects.NamedFactoryCatalogFileSystem
 }

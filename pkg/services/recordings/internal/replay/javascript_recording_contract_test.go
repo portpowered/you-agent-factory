@@ -9,6 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryevents "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events"
 	replay "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -16,7 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
 )
 
-var javascriptRecordingSnapshotDecoder interfaces.FactorySnapshotJSONDecoder = func(
+var javascriptRecordingSnapshotDecoder factorydefinitionswire.FactorySnapshotJSONDecoder = func(
 	data []byte,
 ) (*interfaces.FactorySnapshot, error) {
 	generated, err := factorymapping.GeneratedFactoryFromOpenAPIJSON(data)

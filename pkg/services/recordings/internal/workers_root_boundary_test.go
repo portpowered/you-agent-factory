@@ -2,6 +2,7 @@ package internal
 
 import (
 	"encoding/json"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -63,7 +64,7 @@ func workersRootBoundaryFactorySnapshotDecoder(data []byte) (*factorydefinitions
 
 func workersRootBoundaryRuntimeConfigDecoder(
 	snapshot *factorydefinitions.FactorySnapshot,
-) (factorydefinitions.ReplayRuntimeConfig, error) {
+) (factorydefinitionswire.ReplayRuntimeConfig, error) {
 	var generated factoryapi.Factory
 	if err := snapshot.Decode(&generated); err != nil {
 		return nil, err

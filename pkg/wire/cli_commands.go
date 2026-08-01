@@ -68,13 +68,13 @@ func provideBatchInputFileSystem() submitcli.BatchInputFileSystem {
 }
 
 func provideNamedFactoryRootsResolver() cli.NamedFactoryRootsResolver {
-	return factorydefinitions.ResolveNamedFactoryRoots
+	return factorydefinitionswire.ResolveNamedFactoryRoots
 }
 
 func provideNamedFactoryCandidatePathsResolver(
-	resolver factorydefinitions.NamedPathResolver,
+	resolver factorydefinitionswire.NamedPathResolver,
 ) factorydefinitions.NamedFactoryCandidatePathsResolver {
-	return resolver.ResolveCandidatePaths
+	return factorydefinitions.NamedFactoryCandidatePathsResolver(resolver.ResolveCandidatePaths)
 }
 
 func provideSubmitPayloadReader() work.PayloadFileReader {
@@ -167,7 +167,7 @@ func provideQueryFactoryOperation(transport standardCLIHTTPProtocol) cli.QueryFa
 
 func provideEffectiveFactoryCatalogDiscovery(
 	catalog factorydefinitions.NamedFactoryCatalog,
-	files factorydefinitions.AuthoredLayoutReaderFileSystem,
+	files factorydefinitionswire.AuthoredLayoutReaderFileSystem,
 	packaged []factorydefinitions.PackagedDefinition,
 ) (factorydefinitions.EffectiveFactoryCatalogDiscovery, error) {
 	return factorydefinitionswire.NewEffectiveCatalogDiscovery(
@@ -201,33 +201,27 @@ func provideEffectiveFactoryCatalogOperation(
 	return factorydefinitionswire.NewEffectiveCatalog(discovery, normalize)
 }
 
-func provideEffectiveFactoryDefinitionsService(
-	catalog factorydefinitions.EffectiveFactoryCatalogOperation,
-) (*factorydefinitionswire.EffectiveCatalogService, error) {
-	return factorydefinitionswire.NewEffectiveCatalogService(catalog)
-}
-
 func provideCurrentFactoryPointerReader(
-	namedPaths factorydefinitions.NamedPathResolver,
+	namedPaths factorydefinitionswire.NamedPathResolver,
 ) factorydefinitions.CurrentFactoryPointerReader {
 	return namedPaths.ReadCurrentPointer
 }
 
 func provideListFactoriesOperation(
-	definitions *factorydefinitionswire.EffectiveCatalogService,
+	definitions factorydefinitions.Service,
 	readCurrent factorydefinitions.CurrentFactoryPointerReader,
 ) cli.ListFactoriesOperation {
 	return factorycli.NewList(definitions.ListEffectiveFactories, readCurrent)
 }
 
 func provideFactoryNameCompletionOperation(
-	definitions *factorydefinitionswire.EffectiveCatalogService,
+	definitions factorydefinitions.Service,
 ) cobracompletion.FactoryNamesOperation {
 	return cobracompletion.NewFactoryNames(definitions.ListEffectiveFactories)
 }
 
 func provideSelectedFactorySignatureCompletionOperation(
-	definitions *factorydefinitionswire.EffectiveCatalogService,
+	definitions factorydefinitions.Service,
 ) (cobracompletion.SelectedFactorySignatureOperation, error) {
 	manifest, err := generated.RunSubmitFamilyManifest()
 	if err != nil {
@@ -271,16 +265,16 @@ func provideUpdateFactoryFromFileOperation(
 }
 
 func provideFactoryConfigRootResolver(
-	source factorydefinitions.AuthoredLayoutReaderFileSystem,
+	source factorydefinitionswire.AuthoredLayoutReaderFileSystem,
 ) factorydefinitions.FactoryConfigRootResolver {
-	return factorydefinitions.NewFactoryConfigRootResolver(source)
+	return factorydefinitionswire.NewFactoryConfigRootResolver(source)
 }
 
 func provideFactoryConfigFileLoader(
 	loadSource factorydefinitions.AuthoredFactorySourceLoader,
 ) factorydefinitions.FactoryConfigFileLoader {
 	mapper := factorymapping.NewFactoryConfigMapper()
-	return factorydefinitions.NewFactoryConfigFileLoader(loadSource, mapper.Expand)
+	return factorydefinitionswire.NewFactoryConfigFileLoader(loadSource, mapper.Expand)
 }
 
 func provideWorkRequestFileLoader() work.RequestFileLoader {

@@ -13,6 +13,18 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
 )
 
+// legacyDomain is kept private to the transitional adapter while the public
+// Definitions root exposes only its converged catalog/authoring contract. The
+// concrete lifecycle owner still carries the session bridge until the Sessions
+// transport cutover removes this adapter entirely.
+type legacyDomain interface {
+	ActivateNamedFactory(context.Context, string) error
+	Save(context.Context, string, factorydefinitions.SaveMode, factorydefinitions.EditableFactory) (factorydefinitions.EditableFactory, error)
+	GetCurrentNamedFactory(context.Context) (*factorydefinitions.FactorySnapshot, error)
+	GetCurrentFactoryForSession(context.Context, string) (factorydefinitions.EditableFactory, error)
+	CurrentFactoryDefinitionVersionAtRoot(string, string) (factorydefinitions.FactoryVersion, error)
+}
+
 // Service adapts one Factory-owned definition service to generated contracts.
 type Service struct{ domain factorydefinitions.Service }
 
@@ -24,7 +36,11 @@ func (s *Service) ActivateNamedFactory(ctx context.Context, name string) error {
 	if s == nil || s.domain == nil {
 		return fmt.Errorf("factory definition service is required")
 	}
-	return s.domain.ActivateNamedFactory(ctx, name)
+	legacy, ok := s.domain.(legacyDomain)
+	if !ok {
+		return fmt.Errorf("factory definition session bridge is unavailable")
+	}
+	return legacy.ActivateNamedFactory(ctx, name)
 }
 
 func (s *Service) Save(ctx context.Context, sessionID string, mode factoryapi.FactorySaveMode, request factoryapi.Factory) (factoryapi.Factory, error) {
@@ -35,7 +51,11 @@ func (s *Service) Save(ctx context.Context, sessionID string, mode factoryapi.Fa
 	if err != nil {
 		return factoryapi.Factory{}, err
 	}
-	saved, err := s.domain.Save(ctx, sessionID, saveModeFromAPI(mode), editable)
+	legacy, ok := s.domain.(legacyDomain)
+	if !ok {
+		return factoryapi.Factory{}, fmt.Errorf("factory definition session bridge is unavailable")
+	}
+	saved, err := legacy.Save(ctx, sessionID, saveModeFromAPI(mode), editable)
 	if err != nil {
 		return factoryapi.Factory{}, err
 	}
@@ -46,7 +66,11 @@ func (s *Service) GetCurrentNamedFactory(ctx context.Context) (factoryapi.Factor
 	if s == nil || s.domain == nil {
 		return factoryapi.Factory{}, fmt.Errorf("factory definition service is required")
 	}
-	snapshot, err := s.domain.GetCurrentNamedFactory(ctx)
+	legacy, ok := s.domain.(legacyDomain)
+	if !ok {
+		return factoryapi.Factory{}, fmt.Errorf("factory definition session bridge is unavailable")
+	}
+	snapshot, err := legacy.GetCurrentNamedFactory(ctx)
 	if err != nil {
 		return factoryapi.Factory{}, err
 	}
@@ -70,7 +94,11 @@ func GetCurrentFactoryForSession(
 	if domain == nil {
 		return factoryapi.Factory{}, fmt.Errorf("factory definition service is required")
 	}
-	editable, err := domain.GetCurrentFactoryForSession(ctx, sessionID)
+	legacy, ok := domain.(legacyDomain)
+	if !ok {
+		return factoryapi.Factory{}, fmt.Errorf("factory definition session bridge is unavailable")
+	}
+	editable, err := legacy.GetCurrentFactoryForSession(ctx, sessionID)
 	if err != nil {
 		return factoryapi.Factory{}, err
 	}
@@ -81,7 +109,11 @@ func (s *Service) CurrentFactoryDefinitionVersionAtRoot(rootDir string, name fac
 	if s == nil || s.domain == nil {
 		return factoryapi.HybridLogicalTimestamp{}, fmt.Errorf("factory definition service is required")
 	}
-	version, err := s.domain.CurrentFactoryDefinitionVersionAtRoot(rootDir, string(name))
+	legacy, ok := s.domain.(legacyDomain)
+	if !ok {
+		return factoryapi.HybridLogicalTimestamp{}, fmt.Errorf("factory definition session bridge is unavailable")
+	}
+	version, err := legacy.CurrentFactoryDefinitionVersionAtRoot(rootDir, string(name))
 	if err != nil {
 		return factoryapi.HybridLogicalTimestamp{}, err
 	}

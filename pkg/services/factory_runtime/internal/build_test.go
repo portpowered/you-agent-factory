@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryinternal "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal"
 	factoryruntimeorchestrationowner "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/orchestrationowner"
@@ -255,8 +256,8 @@ func testRuntimeFactoryWithSinks(logDir, metricsDir string) *factoryinternal.Run
 	)
 }
 
-func outputAsPayloadPolicy() interfaces.WorkPropagationPolicyService {
-	return interfaces.WorkPropagationPolicyFunc(func(
+func outputAsPayloadPolicy() factorydefinitionswire.WorkPropagationPolicyService {
+	return factorydefinitionswire.WorkPropagationPolicyFunc(func(
 		*interfaces.FactoryWorkstationConfig,
 	) interfaces.WorkPropagationMode {
 		return interfaces.WorkPropagationModeOutputAsPayload

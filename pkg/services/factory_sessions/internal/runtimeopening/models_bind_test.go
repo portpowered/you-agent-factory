@@ -3,6 +3,7 @@ package runtimeopening
 import (
 	"context"
 	"errors"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"slices"
 	"testing"
 	"time"
@@ -508,7 +509,7 @@ type openingCoordinatorValidator struct {
 }
 
 type openingCoordinatorNamedPaths struct {
-	factorydefinitions.NamedPathResolver
+	factorydefinitionswire.NamedPathResolver
 }
 
 func (openingCoordinatorNamedPaths) ResolveCurrentDir(rootDir string) (string, error) {

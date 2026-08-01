@@ -8,18 +8,18 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
 	responsestreamwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream/wire"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
 )
 
 type liveRuntimeEffectHost struct {
 	openTestHost
-	openCalls  int
-	listCalls  int
-	getCalls   int
-	stopCalls  int
-	factory    *gatewayLifecycleFactory
+	openCalls int
+	listCalls int
+	getCalls  int
+	stopCalls int
+	factory   *gatewayLifecycleFactory
 }
 
 func (h *liveRuntimeEffectHost) OpenLiveSessionForTarget(ctx context.Context, target factorysessions.Target) (string, error) {

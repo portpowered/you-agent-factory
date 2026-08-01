@@ -11,26 +11,10 @@ import (
 	"strings"
 	"time"
 
-	catalogresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/resource"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/namevalue"
-	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"gopkg.in/yaml.v3"
 )
-
-const NameValueTypeLocalizableAsset = namevalue.TypeLocalizableAsset
-
-type NameValueConfig = namevalue.Config
-type NameValueValidationError = namevalue.ValidationError
-
-func ValidateNameValue(value NameValueConfig) error {
-	return namevalue.Validate(value)
-}
-
-func ResolveNameValue(value NameValueConfig, locale string) string {
-	return namevalue.Resolve(value, locale)
-}
 
 // File directories
 
@@ -174,10 +158,10 @@ type FactoryConfig struct {
 	Examples            []InvocationExampleConfig       `json:"examples,omitempty" yaml:"examples,omitempty"`
 	Orchestrator        *FactoryOrchestratorConfig      `json:"orchestrator,omitempty"`
 	WorkTypes           []WorkTypeConfig                `json:"work_types"`
-	Resources           []catalogresource.Config        `json:"resources"`
+	Resources           []ResourceConfig                `json:"resources"`
 	ResourceManifest    *PortableResourceManifestConfig `json:"resourceManifest,omitempty"`
 	Layout              *FactoryLayoutConfig            `json:"layout,omitempty"`
-	Workers             []workerconfig.Config           `json:"workers"`
+	Workers             []Config                        `json:"workers"`
 	Workstations        []FactoryWorkstationConfig      `json:"workstations"`
 }
 
@@ -550,7 +534,7 @@ type FactoryWorkstationConfig struct {
 	OnContinue            []IOConfig                  `json:"on_continue,omitempty" yaml:"onContinue,omitempty"`
 	OnRejection           []IOConfig                  `json:"on_rejection,omitempty" yaml:"onRejection,omitempty"`
 	OnFailure             []IOConfig                  `json:"on_failure,omitempty" yaml:"onFailure,omitempty"`
-	Resources             []catalogresource.Config    `json:"resources,omitempty" yaml:"resources,omitempty"`
+	Resources             []ResourceConfig            `json:"resources,omitempty" yaml:"resources,omitempty"`
 	CopyReferencedScripts bool                        `json:"copy_referenced_scripts,omitempty" yaml:"-"`
 	Guards                []GuardConfig               `json:"guards,omitempty" yaml:"guards,omitempty"`
 	StopWords             []string                    `json:"stop_words,omitempty" yaml:"stopWords,omitempty"`

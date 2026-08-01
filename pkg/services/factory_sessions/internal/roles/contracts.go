@@ -292,5 +292,5 @@ type RuntimeAssembly interface {
 		reconnectCursorValidator factorysessions.ReconnectCursorValidator,
 		worldStateProjector factoryruntime.WorldStateProjector,
 		invocationMetricsRecorder InvocationMetricsRecorder,
-	) (ApplicationRuntime, factorysessions.Service, SessionInvoker, factorydefinitions.SessionHost, error)
+	) (ApplicationRuntime, factorysessions.Service, SessionInvoker, error)
 }

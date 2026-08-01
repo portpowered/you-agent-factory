@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 )
 
 // Retained within the replay implementation for package-local compatibility
@@ -19,7 +20,7 @@ const (
 
 func validatedFactorySnapshotFromJSON(
 	data []byte,
-	decode interfaces.FactorySnapshotJSONDecoder,
+	decode factorydefinitionswire.FactorySnapshotJSONDecoder,
 ) (*interfaces.FactorySnapshot, error) {
 	if decode == nil {
 		return nil, fmt.Errorf("Factory snapshot decoder is required")

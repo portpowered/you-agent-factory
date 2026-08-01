@@ -2,7 +2,7 @@ package internal
 
 import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	distributionpackagedcatalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedcatalog"
+	distributionwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/wire"
 )
 
 // NewPackagedFactoryCatalog constructs deterministic packaged Factory catalog
@@ -11,5 +11,5 @@ import (
 func NewPackagedFactoryCatalog(
 	definitions []factorydefinitions.PackagedDefinition,
 ) (factorydefinitions.PackagedFactoryCatalogOperations, error) {
-	return distributionpackagedcatalog.New(definitions)
+	return distributionwire.NewPackagedFactoryCatalog(definitions)
 }

@@ -85,69 +85,71 @@
     "pkg/services/automations/wire",
     "pkg/services/edges",
     "pkg/services/factory_definitions",
-    "pkg/services/factory_definitions/definition",
     "pkg/services/factory_definitions/internal",
     "pkg/services/factory_definitions/internal/contracts",
+    "pkg/services/factory_definitions/internal/effects",
     "pkg/services/factory_definitions/internal/lifecycle",
     "pkg/services/factory_definitions/internal/services/authoring_layout",
-    "pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout",
-    "pkg/services/factory_definitions/internal/services/authoring_layout/expand",
-    "pkg/services/factory_definitions/internal/services/authoring_layout/flatten",
+    "pkg/services/factory_definitions/internal/services/authoring_layout/internal/authoredlayout",
+    "pkg/services/factory_definitions/internal/services/authoring_layout/internal/expand",
+    "pkg/services/factory_definitions/internal/services/authoring_layout/internal/flatten",
+    "pkg/services/factory_definitions/internal/services/authoring_layout/internal/persist",
+    "pkg/services/factory_definitions/internal/services/authoring_layout/internal/prepare",
     "pkg/services/factory_definitions/internal/services/authoring_layout/internal/service",
-    "pkg/services/factory_definitions/internal/services/authoring_layout/persist",
-    "pkg/services/factory_definitions/internal/services/authoring_layout/prepare",
     "pkg/services/factory_definitions/internal/services/authoring_layout/wire",
     "pkg/services/factory_definitions/internal/services/catalog",
+    "pkg/services/factory_definitions/internal/services/catalog/internal/namedfactories",
+    "pkg/services/factory_definitions/internal/services/catalog/internal/namedpaths",
+    "pkg/services/factory_definitions/internal/services/catalog/internal/persistence",
+    "pkg/services/factory_definitions/internal/services/catalog/internal/resource",
     "pkg/services/factory_definitions/internal/services/catalog/internal/service",
-    "pkg/services/factory_definitions/internal/services/catalog/namedfactories",
-    "pkg/services/factory_definitions/internal/services/catalog/namedpaths",
-    "pkg/services/factory_definitions/internal/services/catalog/persistence",
-    "pkg/services/factory_definitions/internal/services/catalog/resource",
     "pkg/services/factory_definitions/internal/services/catalog/wire",
     "pkg/services/factory_definitions/internal/services/compilation",
-    "pkg/services/factory_definitions/internal/services/compilation/canonical",
+    "pkg/services/factory_definitions/internal/services/compilation/internal/canonical",
+    "pkg/services/factory_definitions/internal/services/compilation/internal/loadedsource",
+    "pkg/services/factory_definitions/internal/services/compilation/internal/loading",
+    "pkg/services/factory_definitions/internal/services/compilation/internal/runtimeconfig",
     "pkg/services/factory_definitions/internal/services/compilation/internal/service",
-    "pkg/services/factory_definitions/internal/services/compilation/loadedsource",
-    "pkg/services/factory_definitions/internal/services/compilation/loading",
-    "pkg/services/factory_definitions/internal/services/compilation/runtimeconfig",
     "pkg/services/factory_definitions/internal/services/compilation/wire",
     "pkg/services/factory_definitions/internal/services/distribution",
-    "pkg/services/factory_definitions/internal/services/distribution/goal",
+    "pkg/services/factory_definitions/internal/services/distribution/internal/goal",
+    "pkg/services/factory_definitions/internal/services/distribution/internal/packageassets",
+    "pkg/services/factory_definitions/internal/services/distribution/internal/packagedcatalog",
+    "pkg/services/factory_definitions/internal/services/distribution/internal/packagedinstallation",
+    "pkg/services/factory_definitions/internal/services/distribution/internal/promptassets",
+    "pkg/services/factory_definitions/internal/services/distribution/internal/review",
+    "pkg/services/factory_definitions/internal/services/distribution/internal/scaffoldfacts",
     "pkg/services/factory_definitions/internal/services/distribution/internal/service",
-    "pkg/services/factory_definitions/internal/services/distribution/packageassets",
-    "pkg/services/factory_definitions/internal/services/distribution/packagedcatalog",
-    "pkg/services/factory_definitions/internal/services/distribution/packagedinstallation",
-    "pkg/services/factory_definitions/internal/services/distribution/promptassets",
-    "pkg/services/factory_definitions/internal/services/distribution/review",
-    "pkg/services/factory_definitions/internal/services/distribution/scaffoldfacts",
-    "pkg/services/factory_definitions/internal/services/distribution/subagent",
-    "pkg/services/factory_definitions/internal/services/distribution/tts",
+    "pkg/services/factory_definitions/internal/services/distribution/internal/subagent",
+    "pkg/services/factory_definitions/internal/services/distribution/internal/tts",
+    "pkg/services/factory_definitions/internal/services/distribution/internal/validation",
     "pkg/services/factory_definitions/internal/services/distribution/wire",
+    "pkg/services/factory_definitions/internal/services/distribution/wire/assets",
     "pkg/services/factory_definitions/internal/services/invocation_policy",
-    "pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope",
+    "pkg/services/factory_definitions/internal/services/invocation_policy/internal/decisionenvelope",
+    "pkg/services/factory_definitions/internal/services/invocation_policy/internal/invocationinterpolation",
+    "pkg/services/factory_definitions/internal/services/invocation_policy/internal/invocationoutput",
+    "pkg/services/factory_definitions/internal/services/invocation_policy/internal/invocationworktype",
+    "pkg/services/factory_definitions/internal/services/invocation_policy/internal/quorumpolicy",
     "pkg/services/factory_definitions/internal/services/invocation_policy/internal/service",
-    "pkg/services/factory_definitions/internal/services/invocation_policy/invocationinterpolation",
-    "pkg/services/factory_definitions/internal/services/invocation_policy/invocationoutput",
-    "pkg/services/factory_definitions/internal/services/invocation_policy/invocationworktype",
-    "pkg/services/factory_definitions/internal/services/invocation_policy/quorumpolicy",
-    "pkg/services/factory_definitions/internal/services/invocation_policy/ttsobservability",
+    "pkg/services/factory_definitions/internal/services/invocation_policy/internal/ttsobservability",
+    "pkg/services/factory_definitions/internal/services/invocation_policy/internal/workpropagation",
+    "pkg/services/factory_definitions/internal/services/invocation_policy/internal/workstationexecution",
     "pkg/services/factory_definitions/internal/services/invocation_policy/wire",
-    "pkg/services/factory_definitions/internal/services/invocation_policy/workpropagation",
-    "pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution",
     "pkg/services/factory_definitions/internal/services/snapshots_portability",
-    "pkg/services/factory_definitions/internal/services/snapshots_portability/capture",
-    "pkg/services/factory_definitions/internal/services/snapshots_portability/editable",
+    "pkg/services/factory_definitions/internal/services/snapshots_portability/internal/capture",
+    "pkg/services/factory_definitions/internal/services/snapshots_portability/internal/editable",
+    "pkg/services/factory_definitions/internal/services/snapshots_portability/internal/materialize",
+    "pkg/services/factory_definitions/internal/services/snapshots_portability/internal/portableconfig",
+    "pkg/services/factory_definitions/internal/services/snapshots_portability/internal/prepare",
+    "pkg/services/factory_definitions/internal/services/snapshots_portability/internal/replayconfig",
     "pkg/services/factory_definitions/internal/services/snapshots_portability/internal/service",
-    "pkg/services/factory_definitions/internal/services/snapshots_portability/materialize",
-    "pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig",
-    "pkg/services/factory_definitions/internal/services/snapshots_portability/prepare",
-    "pkg/services/factory_definitions/internal/services/snapshots_portability/replayconfig",
     "pkg/services/factory_definitions/internal/services/snapshots_portability/wire",
     "pkg/services/factory_definitions/internal/services/validation",
-    "pkg/services/factory_definitions/internal/services/validation/authoredmodel/namevalue",
-    "pkg/services/factory_definitions/internal/services/validation/authoredmodel/taxonomy",
-    "pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers",
-    "pkg/services/factory_definitions/internal/services/validation/impl",
+    "pkg/services/factory_definitions/internal/services/validation/internal/authoredmodel/namevalue",
+    "pkg/services/factory_definitions/internal/services/validation/internal/authoredmodel/taxonomy",
+    "pkg/services/factory_definitions/internal/services/validation/internal/authoredmodel/workers",
+    "pkg/services/factory_definitions/internal/services/validation/internal/impl",
     "pkg/services/factory_definitions/internal/services/validation/internal/orchestrator",
     "pkg/services/factory_definitions/internal/services/validation/internal/requiredtools",
     "pkg/services/factory_definitions/internal/services/validation/internal/service",
@@ -159,6 +161,7 @@
     "pkg/services/factory_definitions/transports/http",
     "pkg/services/factory_definitions/transports/mcp",
     "pkg/services/factory_definitions/wire",
+    "pkg/services/factory_definitions/wire/assets",
     "pkg/services/factory_definitions/wire/defaultscaffold",
     "pkg/services/factory_definitions/wire/validation",
     "pkg/services/factory_runtime",
@@ -786,17 +789,17 @@
       "destination": "factory_definitions"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/definition",
-      "disposition": "move",
-      "destination": "factory_definitions/internal"
-    },
-    {
       "packagePath": "pkg/services/factory_definitions/internal",
       "disposition": "retain",
       "destination": "factory_definitions/internal"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/contracts",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/effects",
       "disposition": "retain",
       "destination": "factory_definitions"
     },
@@ -811,32 +814,32 @@
       "destination": "factory_definitions/internal/services/authoring_layout"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout",
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/internal/authoredlayout",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/authoring_layout"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/expand",
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/internal/expand",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/authoring_layout"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/flatten",
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/internal/flatten",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/authoring_layout"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/internal/persist",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/authoring_layout"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/internal/prepare",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/authoring_layout"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/internal/service",
-      "disposition": "retain",
-      "destination": "factory_definitions/internal/services/authoring_layout"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/persist",
-      "disposition": "retain",
-      "destination": "factory_definitions/internal/services/authoring_layout"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/authoring_layout/prepare",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/authoring_layout"
     },
@@ -851,27 +854,27 @@
       "destination": "factory_definitions/internal/services/catalog"
     },
     {
+      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/internal/namedfactories",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/catalog"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/internal/namedpaths",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/catalog"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/internal/persistence",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/catalog"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/internal/resource",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/catalog"
+    },
+    {
       "packagePath": "pkg/services/factory_definitions/internal/services/catalog/internal/service",
-      "disposition": "retain",
-      "destination": "factory_definitions/internal/services/catalog"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/namedfactories",
-      "disposition": "retain",
-      "destination": "factory_definitions/internal/services/catalog"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/namedpaths",
-      "disposition": "retain",
-      "destination": "factory_definitions/internal/services/catalog"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/persistence",
-      "disposition": "retain",
-      "destination": "factory_definitions/internal/services/catalog"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/catalog/resource",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/catalog"
     },
@@ -886,27 +889,27 @@
       "destination": "factory_definitions/internal/services/compilation"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/compilation/canonical",
+      "packagePath": "pkg/services/factory_definitions/internal/services/compilation/internal/canonical",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/compilation"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/compilation/internal/loadedsource",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/compilation"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/compilation/internal/loading",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/compilation"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/compilation/internal/runtimeconfig",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/compilation"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/compilation/internal/service",
-      "disposition": "retain",
-      "destination": "factory_definitions/internal/services/compilation"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/compilation/loadedsource",
-      "disposition": "retain",
-      "destination": "factory_definitions/internal/services/compilation"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/compilation/loading",
-      "disposition": "retain",
-      "destination": "factory_definitions/internal/services/compilation"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/compilation/runtimeconfig",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/compilation"
     },
@@ -921,7 +924,37 @@
       "destination": "factory_definitions/internal/services/distribution"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/goal",
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/internal/goal",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/distribution"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/internal/packageassets",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/distribution"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/internal/packagedcatalog",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/distribution"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/internal/packagedinstallation",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/distribution"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/internal/promptassets",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/distribution"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/internal/review",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/distribution"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/internal/scaffoldfacts",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/distribution"
     },
@@ -931,42 +964,17 @@
       "destination": "factory_definitions/internal/services/distribution"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/packageassets",
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/internal/subagent",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/distribution"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/packagedcatalog",
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/internal/tts",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/distribution"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/packagedinstallation",
-      "disposition": "retain",
-      "destination": "factory_definitions/internal/services/distribution"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/promptassets",
-      "disposition": "retain",
-      "destination": "factory_definitions/internal/services/distribution"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/review",
-      "disposition": "retain",
-      "destination": "factory_definitions/internal/services/distribution"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/scaffoldfacts",
-      "disposition": "retain",
-      "destination": "factory_definitions/internal/services/distribution"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/subagent",
-      "disposition": "retain",
-      "destination": "factory_definitions/internal/services/distribution"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/tts",
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/internal/validation",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/distribution"
     },
@@ -976,12 +984,37 @@
       "destination": "factory_definitions/internal/services/distribution"
     },
     {
+      "packagePath": "pkg/services/factory_definitions/internal/services/distribution/wire/assets",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/distribution"
+    },
+    {
       "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/invocation_policy"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope",
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/internal/decisionenvelope",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/invocation_policy"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/internal/invocationinterpolation",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/invocation_policy"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/internal/invocationoutput",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/invocation_policy"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/internal/invocationworktype",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/invocation_policy"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/internal/quorumpolicy",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/invocation_policy"
     },
@@ -991,27 +1024,17 @@
       "destination": "factory_definitions/internal/services/invocation_policy"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/invocationinterpolation",
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/internal/ttsobservability",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/invocation_policy"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/invocationoutput",
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/internal/workpropagation",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/invocation_policy"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/invocationworktype",
-      "disposition": "retain",
-      "destination": "factory_definitions/internal/services/invocation_policy"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/quorumpolicy",
-      "disposition": "retain",
-      "destination": "factory_definitions/internal/services/invocation_policy"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/ttsobservability",
+      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/internal/workstationexecution",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/invocation_policy"
     },
@@ -1021,52 +1044,42 @@
       "destination": "factory_definitions/internal/services/invocation_policy"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/workpropagation",
-      "disposition": "retain",
-      "destination": "factory_definitions/internal/services/invocation_policy"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/invocation_policy/workstationexecution",
-      "disposition": "retain",
-      "destination": "factory_definitions/internal/services/invocation_policy"
-    },
-    {
       "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/snapshots_portability"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/capture",
+      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/internal/capture",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/snapshots_portability"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/editable",
+      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/internal/editable",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/snapshots_portability"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/internal/materialize",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/snapshots_portability"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/internal/portableconfig",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/snapshots_portability"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/internal/prepare",
+      "disposition": "retain",
+      "destination": "factory_definitions/internal/services/snapshots_portability"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/internal/replayconfig",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/snapshots_portability"
     },
     {
       "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/internal/service",
-      "disposition": "retain",
-      "destination": "factory_definitions/internal/services/snapshots_portability"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/materialize",
-      "disposition": "retain",
-      "destination": "factory_definitions/internal/services/snapshots_portability"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig",
-      "disposition": "retain",
-      "destination": "factory_definitions/internal/services/snapshots_portability"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/prepare",
-      "disposition": "retain",
-      "destination": "factory_definitions/internal/services/snapshots_portability"
-    },
-    {
-      "packagePath": "pkg/services/factory_definitions/internal/services/snapshots_portability/replayconfig",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/snapshots_portability"
     },
@@ -1081,22 +1094,22 @@
       "destination": "factory_definitions/internal/services/validation"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/validation/authoredmodel/namevalue",
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation/internal/authoredmodel/namevalue",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/validation"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/validation/authoredmodel/taxonomy",
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation/internal/authoredmodel/taxonomy",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/validation"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers",
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation/internal/authoredmodel/workers",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/validation"
     },
     {
-      "packagePath": "pkg/services/factory_definitions/internal/services/validation/impl",
+      "packagePath": "pkg/services/factory_definitions/internal/services/validation/internal/impl",
       "disposition": "retain",
       "destination": "factory_definitions/internal/services/validation"
     },
@@ -1152,6 +1165,11 @@
     },
     {
       "packagePath": "pkg/services/factory_definitions/wire",
+      "disposition": "retain",
+      "destination": "factory_definitions"
+    },
+    {
+      "packagePath": "pkg/services/factory_definitions/wire/assets",
       "disposition": "retain",
       "destination": "factory_definitions"
     },

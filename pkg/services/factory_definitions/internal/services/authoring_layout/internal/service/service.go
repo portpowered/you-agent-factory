@@ -4,14 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	factoryeffects "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/effects"
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/expand"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/flatten"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/persist"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/prepare"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/internal/expand"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/internal/flatten"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/internal/persist"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/internal/prepare"
 )
 
 // Service is the private nested authoring_layout implementation behind the
@@ -27,9 +28,9 @@ type Service struct {
 	validate             func(string) error
 	flatten              factorydefinitions.FactoryLayoutFlattener
 	expand               factorydefinitions.FactoryLayoutExpander
-	fileSystem           factorydefinitions.PersistenceFileSystem
-	requireDefinitionDir factorydefinitions.DefinitionDirectoryRequirer
-	directories          factorydefinitions.DirectoryReplacementStore
+	fileSystem           factoryeffects.PersistenceFileSystem
+	requireDefinitionDir factoryeffects.DefinitionDirectoryRequirer
+	directories          factoryeffects.DirectoryReplacementStore
 }
 
 var _ authoringlayout.Service = (*Service)(nil)
@@ -196,6 +197,27 @@ func (s *Service) ReplaceNamedFactory(
 		Name:       strings.TrimSpace(request.Name),
 		FactoryDir: factoryDir,
 	}, nil
+}
+
+func (s *Service) ReplaceFactoryLayoutAtDir(
+	ctx context.Context,
+	request factorydefinitions.ReplaceFactoryLayoutAtDirRequest,
+) (factorydefinitions.ReplaceFactoryLayoutAtDirResult, error) {
+	if err := s.requirePorts(); err != nil {
+		return factorydefinitions.ReplaceFactoryLayoutAtDirResult{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return factorydefinitions.ReplaceFactoryLayoutAtDirResult{}, err
+	}
+	replacement, err := persist.ReplaceFactoryLayout(
+		request.TargetDir,
+		&request.Prepared,
+		s.persistPorts(),
+	)
+	if err != nil {
+		return factorydefinitions.ReplaceFactoryLayoutAtDirResult{}, err
+	}
+	return factorydefinitions.ReplaceFactoryLayoutAtDirResult{Replacement: replacement}, nil
 }
 
 func (s *Service) persistPorts() persist.Ports {

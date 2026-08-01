@@ -106,7 +106,7 @@ func (fs *SessionRuntime) buildSessionProjectionContext(
 	}
 	return sessionprojection.BuildProjectionContext(sessionprojection.ProjectionBuildInput{
 		Session: session, RuntimeConfig: runtimeCfg,
-		Observation: observationResult.Observation,
+		Observation:    observationResult.Observation,
 		BackendScopeID: backendScopeID, LogicalSessionKey: resolvedIdentity.LogicalSessionKeyID,
 		NormalizedTarget: &resolvedIdentity.RuntimeTarget, RuntimeStartedAt: startedAt,
 		CheckpointStore: checkpointStore, Events: runtimebinding.CanonicalEventsFromSession(session),

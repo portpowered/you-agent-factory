@@ -4,26 +4,27 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	factoryeffects "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/effects"
 	"os"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
-	internalnamedfactories "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedfactories"
+	internalnamedfactories "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/internal/namedfactories"
 )
 
 // Service is the private nested catalog implementation behind the CTR-DEF
 // root catalog slice.
 type Service struct {
-	paths      factorydefinitions.NamedPathResolver
-	fileSystem factorydefinitions.NamedFactoryCatalogFileSystem
+	paths      factoryeffects.NamedPathResolver
+	fileSystem factoryeffects.NamedFactoryCatalogFileSystem
 }
 
 var _ catalog.Service = (*Service)(nil)
 
 // New constructs the catalog implementation from exact injected ports.
 func New(
-	paths factorydefinitions.NamedPathResolver,
-	fileSystem factorydefinitions.NamedFactoryCatalogFileSystem,
+	paths factoryeffects.NamedPathResolver,
+	fileSystem factoryeffects.NamedFactoryCatalogFileSystem,
 ) *Service {
 	if paths == nil || fileSystem == nil {
 		return nil
@@ -205,7 +206,7 @@ func canonicalName(name string) (string, error) {
 }
 
 func readOptionalCurrent(
-	paths factorydefinitions.NamedPathResolver,
+	paths factoryeffects.NamedPathResolver,
 	rootDir string,
 ) (string, error) {
 	name, err := paths.ReadCurrentPointer(rootDir)

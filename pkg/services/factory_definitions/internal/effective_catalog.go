@@ -13,17 +13,6 @@ type effectiveCatalog struct {
 	normalize factorydefinitions.EffectiveFactoryDefinitionNormalizer
 }
 
-type effectiveCatalogService struct {
-	factorydefinitions.Service
-	listEffective factorydefinitions.EffectiveFactoryCatalogOperation
-}
-
-// EffectiveCatalogService is the read-only Factory Definitions owner used by
-// transports that do not require a Factory Session.
-type EffectiveCatalogService struct {
-	listEffective factorydefinitions.EffectiveFactoryCatalogOperation
-}
-
 // NewEffectiveCatalog constructs the stateless effective Factory catalog.
 func NewEffectiveCatalog(
 	discovery factorydefinitions.EffectiveFactoryCatalogDiscovery,
@@ -39,9 +28,9 @@ func NewEffectiveCatalog(
 	return catalog.listEffectiveFactories, nil
 }
 
-// AttachEffectiveCatalog returns the Factory Definitions service with
-// effective discovery delegated to listEffective while preserving every other
-// root operation.
+// AttachEffectiveCatalog returns the Factory Definitions service with effective
+// discovery delegated to listEffective while preserving every other root
+// operation.
 func AttachEffectiveCatalog(
 	service factorydefinitions.Service,
 	listEffective factorydefinitions.EffectiveFactoryCatalogOperation,
@@ -55,25 +44,12 @@ func AttachEffectiveCatalog(
 	return effectiveCatalogService{Service: service, listEffective: listEffective}, nil
 }
 
-// NewEffectiveCatalogService constructs the read-only Factory Definitions
-// service slice used by transports that do not require a Factory Session.
-func NewEffectiveCatalogService(
-	listEffective factorydefinitions.EffectiveFactoryCatalogOperation,
-) (*EffectiveCatalogService, error) {
-	if listEffective == nil {
-		return nil, fmt.Errorf("effective Factory catalog is required")
-	}
-	return &EffectiveCatalogService{listEffective: listEffective}, nil
+type effectiveCatalogService struct {
+	factorydefinitions.Service
+	listEffective factorydefinitions.EffectiveFactoryCatalogOperation
 }
 
 func (s effectiveCatalogService) ListEffectiveFactories(
-	ctx context.Context,
-	request factorydefinitions.ListEffectiveFactoriesRequest,
-) (factorydefinitions.ListEffectiveFactoriesResult, error) {
-	return s.listEffective(ctx, request)
-}
-
-func (s *EffectiveCatalogService) ListEffectiveFactories(
 	ctx context.Context,
 	request factorydefinitions.ListEffectiveFactoriesRequest,
 ) (factorydefinitions.ListEffectiveFactoriesResult, error) {

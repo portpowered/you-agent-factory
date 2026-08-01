@@ -11,6 +11,7 @@ package edges
 
 import (
 	"database/sql"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"io"
 	"io/fs"
 
@@ -23,7 +24,6 @@ import (
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
@@ -99,22 +99,22 @@ type Edges struct {
 	FactoryRuntimeWorkflowSourceResolveSymlinks     factoryruntime.WorkflowSourceResolveSymlinks
 	FactoryRuntimeWorkflowHome                      factoryruntime.WorkflowHomeResolver
 	FactoryDefinitionPortableFileSystem             portablefiles.FileSystem
-	FactoryDefinitionLoadingFileSystem              factorydefinitions.LoadingFileSystem
-	FactoryDefinitionClock                          factorydefinitions.Clock
-	FactoryDefinitionVersionFileSystem              factorydefinitions.VersionFileSystem
-	FactoryDefinitionPackagedGoalPromptFileSystem   factorydefinitions.PackagedGoalPromptFileSystem
-	FactoryDefinitionPortableBundledFileInspection  factorydefinitions.PortableBundledFileInspection
-	FactoryDefinitionRequiredToolPathLookup         factorydefinitions.RequiredToolPathLookup
-	FactoryDefinitionRequiredToolVersionProbe       factorydefinitions.RequiredToolVersionProbe
-	FactoryDefinitionPersistenceFileSystem          factorydefinitions.PersistenceFileSystem
-	FactoryDefinitionDirectoryReplacementStore      factorydefinitions.DirectoryReplacementStore
-	FactoryDefinitionNamedPathFileSystem            factorydefinitions.NamedPathFileSystem
-	FactoryDefinitionNamedFactoryCatalogFileSystem  factorydefinitions.NamedFactoryCatalogFileSystem
-	FactoryDefinitionPackagedInstallationFileSystem factorydefinitions.PackagedInstallationFileSystem
-	FactoryDefinitionAuthoredReaderFileSystem       factorydefinitions.AuthoredLayoutReaderFileSystem
-	FactoryDefinitionAuthoredWriterFileSystem       factorydefinitions.AuthoredLayoutWriterFileSystem
-	FactoryDefinitionScaffoldFileSystem             factorydefinitions.ScaffoldFileSystem
-	FactoryDefinitionScaffoldOutput                 factorydefinitions.ScaffoldOutput
+	FactoryDefinitionLoadingFileSystem              factorydefinitionswire.LoadingFileSystem
+	FactoryDefinitionClock                          factorydefinitionswire.Clock
+	FactoryDefinitionVersionFileSystem              factorydefinitionswire.VersionFileSystem
+	FactoryDefinitionPackagedGoalPromptFileSystem   factorydefinitionswire.PackagedGoalPromptFileSystem
+	FactoryDefinitionPortableBundledFileInspection  factorydefinitionswire.PortableBundledFileInspection
+	FactoryDefinitionRequiredToolPathLookup         factorydefinitionswire.RequiredToolPathLookup
+	FactoryDefinitionRequiredToolVersionProbe       factorydefinitionswire.RequiredToolVersionProbe
+	FactoryDefinitionPersistenceFileSystem          factorydefinitionswire.PersistenceFileSystem
+	FactoryDefinitionDirectoryReplacementStore      factorydefinitionswire.DirectoryReplacementStore
+	FactoryDefinitionNamedPathFileSystem            factorydefinitionswire.NamedPathFileSystem
+	FactoryDefinitionNamedFactoryCatalogFileSystem  factorydefinitionswire.NamedFactoryCatalogFileSystem
+	FactoryDefinitionPackagedInstallationFileSystem factorydefinitionswire.PackagedInstallationFileSystem
+	FactoryDefinitionAuthoredReaderFileSystem       factorydefinitionswire.AuthoredLayoutReaderFileSystem
+	FactoryDefinitionAuthoredWriterFileSystem       factorydefinitionswire.AuthoredLayoutWriterFileSystem
+	FactoryDefinitionScaffoldFileSystem             factorydefinitionswire.ScaffoldFileSystem
+	FactoryDefinitionScaffoldOutput                 factorydefinitionswire.ScaffoldOutput
 	ProviderSessionFileSystem                       interface {
 		Open(string) (io.ReadCloser, error)
 		Stat(string) (fs.FileInfo, error)

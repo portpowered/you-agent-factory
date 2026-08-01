@@ -2,6 +2,7 @@ package wire
 
 import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryeffect "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/effects"
 	wirevalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/validation"
 )
 
@@ -10,7 +11,7 @@ import (
 func NewValidationOperations(
 	orchestrators factorydefinitions.OrchestratorDefinitionValidator,
 	loadCanonical ...factorydefinitions.CanonicalFactoryJSONLoader,
-) factorydefinitions.ValidationOperations {
+) factoryeffect.ValidationOperations {
 	return wirevalidation.NewValidationOperations(orchestrators, loadCanonical...)
 }
 

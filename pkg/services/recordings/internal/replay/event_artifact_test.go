@@ -10,6 +10,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -38,7 +39,7 @@ func generatedFactoryHasConfig(generated factoryapi.Factory) bool {
 	return err == nil && factorySnapshotHasConfig(snapshot)
 }
 
-func RuntimeConfigFromGeneratedFactory(generated factoryapi.Factory) (interfaces.ReplayRuntimeConfig, error) {
+func RuntimeConfigFromGeneratedFactory(generated factoryapi.Factory) (factorydefinitionswire.ReplayRuntimeConfig, error) {
 	snapshot, err := interfaces.NewFactorySnapshot(generated)
 	if err != nil {
 		return nil, err

@@ -4,7 +4,7 @@ package requiredtools
 
 import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/impl"
 )
 
 // Validate runs declarative required-tool validation and returns Definition-owned

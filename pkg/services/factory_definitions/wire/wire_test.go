@@ -10,14 +10,14 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/portablefiles"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionsinternal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
-	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
-	distributionscaffoldfacts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/scaffoldfacts"
+	factoryeffect "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/effects"
+	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
+	distributionwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/wire"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factorydefaultscaffold "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/defaultscaffold"
 )
@@ -32,24 +32,9 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 		want   string
 	}{
 		{
-			name:   "session host",
-			mutate: func(ports *constructionPorts) { ports.sessionHost = nil },
-			want:   "session host is required",
-		},
-		{
-			name:   "activation gateway",
-			mutate: func(ports *constructionPorts) { ports.activationGateway = nil },
-			want:   "activation gateway is required",
-		},
-		{
 			name:   "validator",
 			mutate: func(ports *constructionPorts) { ports.validator = nil },
 			want:   "validator is required",
-		},
-		{
-			name:   "persistence",
-			mutate: func(ports *constructionPorts) { ports.persistence = nil },
-			want:   "persistence is required",
 		},
 		{
 			name:   "loader",
@@ -75,16 +60,6 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 			name:   "named Factory catalog filesystem",
 			mutate: func(ports *constructionPorts) { ports.namedFactoryCatalogFileSystem = nil },
 			want:   "named Factory catalog filesystem is required",
-		},
-		{
-			name:   "clock",
-			mutate: func(ports *constructionPorts) { ports.clock = nil },
-			want:   "clock is required",
-		},
-		{
-			name:   "version filesystem",
-			mutate: func(ports *constructionPorts) { ports.versionFileSystem = nil },
-			want:   "version filesystem is required",
 		},
 		{
 			name:   "effective Factory catalog",
@@ -137,23 +112,7 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			ports := base
 			test.mutate(&ports)
-			service, err := factorydefinitionswire.NewService(ports.sessionHost, ports.activationGateway, ports.validator,
-				ports.persistence,
-				ports.loader,
-				ports.applySupportedFiles,
-				ports.applyStarterWork,
-				ports.namedPaths,
-				ports.namedFactoryCatalogFileSystem,
-				ports.clock,
-				ports.versionFileSystem,
-				ports.listEffective,
-				ports.packagedCatalog,
-				ports.packagedInstaller,
-				ports.requiredToolChecker,
-				ports.orchestratorValidator,
-				ports.portableFileSystem,
-				ports.directoryReplacementStore,
-			)
+			service, err := factorydefinitionswire.NewService(definitionDependencies(ports))
 			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("NewService() error = %v, want %q", err, test.want)
 			}
@@ -168,11 +127,8 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 	t.Parallel()
 
 	baselineGoroutines := runtime.NumGoroutine()
-	sessionHost := &recordingSessionHost{}
 	namedPaths := &recordingNamedPathResolver{}
 	namedFactoryCatalogFileSystem := &recordingNamedFactoryCatalogFileSystem{}
-	versionFileSystem := &recordingVersionFileSystem{}
-	clock := &recordingClock{}
 
 	packagedCatalog, err := factorydefinitionsinternal.NewPackagedFactoryCatalog([]factorydefinitions.PackagedDefinition{{
 		Name:    "@you/wire-inert",
@@ -186,35 +142,27 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 		t.Fatalf("NewPackagedFactoryCatalog() error = %v", err)
 	}
 
-	service, err := factorydefinitionswire.NewService(sessionHost, wireStubActivationGateway{}, stubValidator{},
-		stubPersistence{},
-		&compilationloading.Loader{},
-		func(string, *factorydefinitions.FactoryConfig, bool, bool) error { return nil },
-		func(string, *factorydefinitions.FactoryConfig) error { return nil },
-		namedPaths,
-		namedFactoryCatalogFileSystem,
-		clock,
-		versionFileSystem,
-		func(
-			context.Context,
-			factorydefinitions.ListEffectiveFactoriesRequest,
-		) (factorydefinitions.ListEffectiveFactoriesResult, error) {
+	service, err := factorydefinitionswire.NewService(factorydefinitionswire.Dependencies{
+		Validator:                     stubValidator{},
+		DefinitionValidation:          stubValidator{},
+		EffectiveDefinitionValidation: stubValidator{},
+		Loader:                        &compilationwire.Loader{},
+		ApplySupportedFiles:           func(string, *factorydefinitions.FactoryConfig, bool, bool) error { return nil },
+		ApplyStarterWork:              func(string, *factorydefinitions.FactoryConfig) error { return nil },
+		NamedPaths:                    namedPaths,
+		NamedFactoryCatalogFileSystem: namedFactoryCatalogFileSystem,
+		ListEffective: func(context.Context, factorydefinitions.ListEffectiveFactoriesRequest) (factorydefinitions.ListEffectiveFactoriesResult, error) {
 			return factorydefinitions.ListEffectiveFactoriesResult{}, nil
 		},
-		packagedCatalog,
-		factorydefinitions.PackagedFactoryInstallationOperations{
-			Install: func(
-				context.Context,
-				factorydefinitions.PackagedFactoryInstallParams,
-			) (factorydefinitions.PackagedFactoryInstallResult, error) {
-				return factorydefinitions.PackagedFactoryInstallResult{}, nil
-			},
-		},
-		stubRequiredToolChecker{},
-		stubOrchestratorValidator{},
-		platformfilesystem.Local{},
-		stubDirectoryReplacementStore{},
-	)
+		PackagedCatalog: packagedCatalog,
+		PackagedInstaller: factorydefinitions.PackagedFactoryInstallationOperations{Install: func(context.Context, factorydefinitions.PackagedFactoryInstallParams) (factorydefinitions.PackagedFactoryInstallResult, error) {
+			return factorydefinitions.PackagedFactoryInstallResult{}, nil
+		}},
+		RequiredToolChecker:       stubRequiredToolChecker{},
+		OrchestratorValidator:     stubOrchestratorValidator{},
+		PortableFileSystem:        platformfilesystem.Local{},
+		DirectoryReplacementStore: stubDirectoryReplacementStore{},
+	})
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -235,18 +183,6 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 			namedFactoryCatalogFileSystem.calls,
 		)
 	}
-	if versionFileSystem.calls != 0 {
-		t.Fatalf("construction invoked version filesystem %d times, want no filesystem activity", versionFileSystem.calls)
-	}
-	if clock.calls != 0 {
-		t.Fatalf("construction read clock %d times, want no runtime activity", clock.calls)
-	}
-	if sessionHost.runtimeCalls != 0 {
-		t.Fatalf(
-			"construction invoked session-host runtime ports %d times, want no disk or runtime activity",
-			sessionHost.runtimeCalls,
-		)
-	}
 	if leaked := runtime.NumGoroutine() - baselineGoroutines; leaked > 4 {
 		t.Fatalf(
 			"construction started background goroutines: baseline=%d current=%d delta=%d",
@@ -254,6 +190,43 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 			runtime.NumGoroutine(),
 			leaked,
 		)
+	}
+}
+
+func TestNewServiceResolvesInvocationDefinitionThroughRoot(t *testing.T) {
+	t.Parallel()
+
+	service, err := factorydefinitionswire.NewService(definitionDependencies(validConstructionPorts(t)))
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	resolved, err := service.ResolveInvocationDefinition(
+		t.Context(),
+		factorydefinitions.ResolveInvocationDefinitionRequest{
+			Definition: factorydefinitions.EffectiveFactorySource{
+				Factory: &factorydefinitions.FactoryConfig{
+					Name: "root-invocation",
+					WorkTypes: []factorydefinitions.WorkTypeConfig{{
+						Name:             "default-work",
+						HandlingBehavior: []string{factorydefinitions.WorkTypeHandlingBehaviorDefault},
+					}},
+					Workstations: []factorydefinitions.FactoryWorkstationConfig{{
+						ID:   "main",
+						Name: "main",
+					}},
+				},
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("ResolveInvocationDefinition() error = %v", err)
+	}
+	if resolved.DefaultWork != "default-work" {
+		t.Fatalf("DefaultWork = %q, want default-work", resolved.DefaultWork)
+	}
+	if got := resolved.Workstations["main"].DecisionMode; got != factorydefinitions.DecisionEnvelopeModeNone {
+		t.Fatalf("main DecisionMode = %q, want none", got)
 	}
 }
 
@@ -282,23 +255,7 @@ func TestNewServiceServesPublishedPackagedCatalogPeerBehavior(t *testing.T) {
 
 	ports := validConstructionPorts(t)
 	ports.packagedCatalog = packagedCatalog
-	service, err := factorydefinitionswire.NewService(ports.sessionHost, ports.activationGateway, ports.validator,
-		ports.persistence,
-		ports.loader,
-		ports.applySupportedFiles,
-		ports.applyStarterWork,
-		ports.namedPaths,
-		ports.namedFactoryCatalogFileSystem,
-		ports.clock,
-		ports.versionFileSystem,
-		ports.listEffective,
-		ports.packagedCatalog,
-		ports.packagedInstaller,
-		ports.requiredToolChecker,
-		ports.orchestratorValidator,
-		ports.portableFileSystem,
-		ports.directoryReplacementStore,
-	)
+	service, err := factorydefinitionswire.NewService(definitionDependencies(ports))
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -340,26 +297,7 @@ func TestNewServiceServesPublishedCompilePeerBehavior(t *testing.T) {
 	t.Parallel()
 
 	ports := validConstructionPorts(t)
-	service, err := factorydefinitionswire.NewService(
-		ports.sessionHost,
-		ports.activationGateway,
-		ports.validator,
-		ports.persistence,
-		ports.loader,
-		ports.applySupportedFiles,
-		ports.applyStarterWork,
-		ports.namedPaths,
-		ports.namedFactoryCatalogFileSystem,
-		ports.clock,
-		ports.versionFileSystem,
-		ports.listEffective,
-		ports.packagedCatalog,
-		ports.packagedInstaller,
-		ports.requiredToolChecker,
-		ports.orchestratorValidator,
-		ports.portableFileSystem,
-		ports.directoryReplacementStore,
-	)
+	service, err := factorydefinitionswire.NewService(definitionDependencies(ports))
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -395,16 +333,6 @@ func TestNewServiceServesPublishedCompilePeerBehavior(t *testing.T) {
 	}
 }
 
-func TestStaticClockReturnsFixedInstant(t *testing.T) {
-	t.Parallel()
-
-	instant := time.Unix(42, 0)
-	clock := factorydefinitionswire.StaticClock(instant)
-	if got := clock.Now(); !got.Equal(instant) {
-		t.Fatalf("StaticClock.Now() = %v, want %v", got, instant)
-	}
-}
-
 func TestEffectiveFactoryDefinitionNormalizerFromMapperHonorsCancelledContext(t *testing.T) {
 	t.Parallel()
 
@@ -422,23 +350,7 @@ func TestNewServiceConstructsPublishedRoot(t *testing.T) {
 	t.Parallel()
 
 	ports := validConstructionPorts(t)
-	service, err := factorydefinitionswire.NewService(ports.sessionHost, ports.activationGateway, ports.validator,
-		ports.persistence,
-		ports.loader,
-		ports.applySupportedFiles,
-		ports.applyStarterWork,
-		ports.namedPaths,
-		ports.namedFactoryCatalogFileSystem,
-		ports.clock,
-		ports.versionFileSystem,
-		ports.listEffective,
-		ports.packagedCatalog,
-		ports.packagedInstaller,
-		ports.requiredToolChecker,
-		ports.orchestratorValidator,
-		ports.portableFileSystem,
-		ports.directoryReplacementStore,
-	)
+	service, err := factorydefinitionswire.NewService(definitionDependencies(ports))
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -455,26 +367,7 @@ func TestNewServiceDelegatesSnapshotPortabilityThroughRoot(t *testing.T) {
 	t.Parallel()
 
 	ports := validConstructionPorts(t)
-	service, err := factorydefinitionswire.NewService(
-		ports.sessionHost,
-		ports.activationGateway,
-		ports.validator,
-		ports.persistence,
-		ports.loader,
-		ports.applySupportedFiles,
-		ports.applyStarterWork,
-		ports.namedPaths,
-		ports.namedFactoryCatalogFileSystem,
-		ports.clock,
-		ports.versionFileSystem,
-		ports.listEffective,
-		ports.packagedCatalog,
-		ports.packagedInstaller,
-		ports.requiredToolChecker,
-		ports.orchestratorValidator,
-		ports.portableFileSystem,
-		ports.directoryReplacementStore,
-	)
+	service, err := factorydefinitionswire.NewService(definitionDependencies(ports))
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
@@ -521,24 +414,41 @@ func (stubOrchestratorValidator) ValidateJavaScriptFactoryDefinition(
 }
 
 type constructionPorts struct {
-	sessionHost                   factorydefinitions.SessionHost
-	activationGateway             factorydefinitions.DefinitionActivationGateway
 	validator                     factorydefinitions.Validator
-	persistence                   factorydefinitions.Persistence
-	loader                        *compilationloading.Loader
+	definitionValidation          factorydefinitions.DefinitionValidationOperation
+	effectiveDefinitionValidation factorydefinitions.EffectiveDefinitionValidationOperation
+	loader                        *compilationwire.Loader
 	applySupportedFiles           factorydefinitions.PortableBundledFilesApplier
 	applyStarterWork              factorydefinitions.FactoryStarterWorkApplier
-	namedPaths                    factorydefinitions.NamedPathResolver
-	namedFactoryCatalogFileSystem factorydefinitions.NamedFactoryCatalogFileSystem
-	clock                         factorydefinitions.Clock
-	versionFileSystem             factorydefinitions.VersionFileSystem
+	namedPaths                    factoryeffect.NamedPathResolver
+	namedFactoryCatalogFileSystem factoryeffect.NamedFactoryCatalogFileSystem
 	listEffective                 factorydefinitions.EffectiveFactoryCatalogOperation
 	packagedCatalog               factorydefinitions.PackagedFactoryCatalogOperations
 	packagedInstaller             factorydefinitions.PackagedFactoryInstallationOperations
 	requiredToolChecker           factorydefinitions.RequiredToolChecker
 	orchestratorValidator         factorydefinitions.OrchestratorDefinitionValidator
 	portableFileSystem            portablefiles.FileSystem
-	directoryReplacementStore     factorydefinitions.DirectoryReplacementStore
+	directoryReplacementStore     factoryeffect.DirectoryReplacementStore
+}
+
+func definitionDependencies(ports constructionPorts) factorydefinitionswire.Dependencies {
+	return factorydefinitionswire.Dependencies{
+		Validator:                     ports.validator,
+		DefinitionValidation:          ports.definitionValidation,
+		EffectiveDefinitionValidation: ports.effectiveDefinitionValidation,
+		Loader:                        ports.loader,
+		ApplySupportedFiles:           ports.applySupportedFiles,
+		ApplyStarterWork:              ports.applyStarterWork,
+		NamedPaths:                    ports.namedPaths,
+		NamedFactoryCatalogFileSystem: ports.namedFactoryCatalogFileSystem,
+		ListEffective:                 ports.listEffective,
+		PackagedCatalog:               ports.packagedCatalog,
+		PackagedInstaller:             ports.packagedInstaller,
+		RequiredToolChecker:           ports.requiredToolChecker,
+		OrchestratorValidator:         ports.orchestratorValidator,
+		PortableFileSystem:            ports.portableFileSystem,
+		DirectoryReplacementStore:     ports.directoryReplacementStore,
+	}
 }
 
 func validConstructionPorts(t *testing.T) constructionPorts {
@@ -556,19 +466,15 @@ func validConstructionPorts(t *testing.T) constructionPorts {
 		t.Fatalf("NewPackagedFactoryCatalog() error = %v", err)
 	}
 
-	host := stubSessionHost{}
 	return constructionPorts{
-		sessionHost:                   host,
-		activationGateway:             wireStubActivationGateway{},
 		validator:                     stubValidator{},
-		persistence:                   stubPersistence{},
-		loader:                        &compilationloading.Loader{},
+		definitionValidation:          stubValidator{},
+		effectiveDefinitionValidation: stubValidator{},
+		loader:                        &compilationwire.Loader{},
 		applySupportedFiles:           func(string, *factorydefinitions.FactoryConfig, bool, bool) error { return nil },
 		applyStarterWork:              func(string, *factorydefinitions.FactoryConfig) error { return nil },
 		namedPaths:                    stubNamedPathResolver{},
 		namedFactoryCatalogFileSystem: platformfilesystem.Local{},
-		clock:                         factorydefinitionswire.StaticClock(time.Unix(0, 0)),
-		versionFileSystem:             platformfilesystem.Local{},
 		listEffective: func(
 			context.Context,
 			factorydefinitions.ListEffectiveFactoriesRequest,
@@ -598,76 +504,21 @@ func (stubDirectoryReplacementStore) Commit(string, string, string) (string, err
 }
 func (stubDirectoryReplacementStore) Restore(string, string) {}
 
-type stubSessionHost struct{}
-
-func (stubSessionHost) PersistRootDir() string { return "" }
-func (stubSessionHost) WorkstationLoader() factorydefinitions.WorkstationLoader {
-	return nil
-}
-func (stubSessionHost) CurrentRuntimeConfig() factorydefinitions.LoadedFactorySource { return nil }
-func (stubSessionHost) WorkflowID() string                                           { return "" }
-func (stubSessionHost) RequireSession(string) (*factorydefinitions.DefinitionSession, error) {
-	return nil, errors.New("session not found")
-}
-func (stubSessionHost) SessionRuntimeConfig(string) (factorydefinitions.LoadedFactorySource, error) {
-	return nil, errors.New("session not found")
-}
-func (stubSessionHost) SessionFactoryPersistRoot(*factorydefinitions.DefinitionSession) string {
-	return ""
-}
-func (stubSessionHost) ValidateEditableFactorySnapshot(context.Context, *factorydefinitions.FactorySnapshot) error {
-	return nil
-}
-func (stubSessionHost) GetCurrentFactorySnapshotForSession(context.Context, string) (*factorydefinitions.FactorySnapshot, error) {
-	return nil, errors.New("session not found")
-}
-func (stubSessionHost) ReplaceFactoryLayoutAtDir(
-	string,
-	*factorydefinitions.PreparedFactoryLayoutPayload,
-) (*factorydefinitions.FactorySplitLayoutReplaceResult, error) {
-	return nil, nil
-}
-
-type wireStubActivationGateway struct{}
-
-func (wireStubActivationGateway) RunSessionID() string { return "" }
-func (wireStubActivationGateway) SessionForActivation(string) *factorydefinitions.DefinitionSession {
-	return nil
-}
-func (wireStubActivationGateway) RequireSession(string) (*factorydefinitions.DefinitionSession, error) {
-	return nil, errors.New("session not found")
-}
-func (wireStubActivationGateway) SessionFactoryPersistRoot(*factorydefinitions.DefinitionSession) string {
-	return ""
-}
-func (wireStubActivationGateway) NamedFactoryActivationPaths(*factorydefinitions.DefinitionSession) (string, string) {
-	return "", ""
-}
-func (wireStubActivationGateway) SaveNow() time.Time                       { return time.Unix(0, 0) }
-func (wireStubActivationGateway) WithActivationLock(fn func() error) error { return fn() }
-func (wireStubActivationGateway) RequireIdleRuntimeForSession(context.Context, string) error {
-	return nil
-}
-func (wireStubActivationGateway) RequireIdleBeforeNamedFactoryActivation(context.Context, string, *factorydefinitions.DefinitionSession) error {
-	return nil
-}
-func (wireStubActivationGateway) ActivateSessionEditableFactory(
-	context.Context,
-	*factorydefinitions.DefinitionSession,
-	string, string, string, string, string,
-) error {
-	return nil
-}
-func (wireStubActivationGateway) SwapPersistedNamedFactoryRuntime(
-	context.Context,
-	string,
-	*factorydefinitions.DefinitionSession,
-	string, string, string, string,
-) error {
-	return nil
-}
-
 type stubValidator struct{}
+
+func (stubValidator) ValidateDefinition(
+	context.Context,
+	factorydefinitions.DefinitionValidationRequest,
+) (factorydefinitions.ValidationResult, error) {
+	return factorydefinitions.ValidationResult{}, nil
+}
+
+func (stubValidator) ValidateEffectiveDefinition(
+	context.Context,
+	factorydefinitions.EffectiveDefinitionValidationRequest,
+) (factorydefinitions.ValidationResult, error) {
+	return factorydefinitions.ValidationResult{}, nil
+}
 
 func (stubValidator) Validate(
 	context.Context,
@@ -705,39 +556,6 @@ func (stubValidator) PruneLayout(
 	factorydefinitions.PendingFactoryGraphTopology,
 ) factorydefinitions.ValidationResult {
 	return factorydefinitions.ValidationResult{}
-}
-
-type stubPersistence struct{}
-
-func (stubPersistence) PersistNamedFactory(
-	context.Context,
-	factorydefinitions.NamedFactoryPersistenceRequest,
-) (factorydefinitions.NamedFactoryPersistenceResult, error) {
-	return factorydefinitions.NamedFactoryPersistenceResult{}, nil
-}
-func (stubPersistence) PrepareFactoryLayout(
-	context.Context,
-	string,
-	[]byte,
-) (*factorydefinitions.PreparedFactoryLayoutPayload, error) {
-	return nil, nil
-}
-func (stubPersistence) ValidateFactoryLayout(string) error          { return nil }
-func (stubPersistence) FlattenFactoryLayout(string) ([]byte, error) { return nil, nil }
-func (stubPersistence) ExpandFactoryLayout(string) (string, factorydefinitions.LayoutExpansionReport, error) {
-	return "", factorydefinitions.LayoutExpansionReport{}, nil
-}
-func (stubPersistence) CreateNamedFactory(string, string, *factorydefinitions.PreparedFactoryLayoutPayload) (string, error) {
-	return "", nil
-}
-func (stubPersistence) ReplaceNamedFactory(string, string, *factorydefinitions.PreparedFactoryLayoutPayload) (string, error) {
-	return "", nil
-}
-func (stubPersistence) ReplaceFactoryLayout(
-	string,
-	*factorydefinitions.PreparedFactoryLayoutPayload,
-) (*factorydefinitions.FactorySplitLayoutReplaceResult, error) {
-	return nil, nil
 }
 
 type stubNamedPathResolver struct{}
@@ -806,82 +624,6 @@ func (f *recordingNamedFactoryCatalogFileSystem) RemoveAll(string) error {
 	panic("named Factory catalog filesystem invoked during inert construction")
 }
 
-type recordingVersionFileSystem struct{ calls int }
-
-func (v *recordingVersionFileSystem) Stat(string) (fs.FileInfo, error) {
-	v.calls++
-	panic("version filesystem invoked during inert construction")
-}
-
-type recordingClock struct{ calls int }
-
-func (c *recordingClock) Now() time.Time {
-	c.calls++
-	panic("clock invoked during inert construction")
-}
-
-type recordingSessionHost struct {
-	runtimeCalls int
-}
-
-func (h *recordingSessionHost) recordRuntimeCall() {
-	h.runtimeCalls++
-	panic("session-host runtime port invoked during inert construction")
-}
-
-func (h *recordingSessionHost) PersistRootDir() string {
-	h.recordRuntimeCall()
-	return ""
-}
-
-func (h *recordingSessionHost) WorkstationLoader() factorydefinitions.WorkstationLoader {
-	h.recordRuntimeCall()
-	return nil
-}
-
-func (h *recordingSessionHost) CurrentRuntimeConfig() factorydefinitions.LoadedFactorySource {
-	h.recordRuntimeCall()
-	return nil
-}
-
-func (h *recordingSessionHost) WorkflowID() string {
-	h.recordRuntimeCall()
-	return ""
-}
-
-func (h *recordingSessionHost) RequireSession(string) (*factorydefinitions.DefinitionSession, error) {
-	h.recordRuntimeCall()
-	return nil, errors.New("session not found")
-}
-
-func (h *recordingSessionHost) SessionRuntimeConfig(string) (factorydefinitions.LoadedFactorySource, error) {
-	h.recordRuntimeCall()
-	return nil, errors.New("session not found")
-}
-
-func (h *recordingSessionHost) SessionFactoryPersistRoot(*factorydefinitions.DefinitionSession) string {
-	h.recordRuntimeCall()
-	return ""
-}
-
-func (h *recordingSessionHost) ValidateEditableFactorySnapshot(context.Context, *factorydefinitions.FactorySnapshot) error {
-	h.recordRuntimeCall()
-	return nil
-}
-
-func (h *recordingSessionHost) GetCurrentFactorySnapshotForSession(context.Context, string) (*factorydefinitions.FactorySnapshot, error) {
-	h.recordRuntimeCall()
-	return nil, errors.New("session not found")
-}
-
-func (h *recordingSessionHost) ReplaceFactoryLayoutAtDir(
-	string,
-	*factorydefinitions.PreparedFactoryLayoutPayload,
-) (*factorydefinitions.FactorySplitLayoutReplaceResult, error) {
-	h.recordRuntimeCall()
-	return nil, nil
-}
-
 func TestNewServiceInstallAndScaffoldReturnMatchingDistributedFacts(t *testing.T) {
 	t.Parallel()
 
@@ -925,27 +667,10 @@ func TestNewServiceInstallAndScaffoldReturnMatchingDistributedFacts(t *testing.T
 	}
 
 	service, err := factorydefinitionswire.NewService(
-		ports.sessionHost,
-		ports.activationGateway,
-		ports.validator,
-		ports.persistence,
-		ports.loader,
-		ports.applySupportedFiles,
-		ports.applyStarterWork,
-		ports.namedPaths,
-		ports.namedFactoryCatalogFileSystem,
-		ports.clock,
-		ports.versionFileSystem,
-		ports.listEffective,
-		ports.packagedCatalog,
-		ports.packagedInstaller,
-		ports.requiredToolChecker,
-		ports.orchestratorValidator,
-		ports.portableFileSystem,
-		ports.directoryReplacementStore,
+		definitionDependencies(ports),
 		factorydefinitionswire.WithDistributionScaffold(
 			scaffoldInitializer,
-			distributionscaffoldfacts.LocalFactoryNameResolver(),
+			distributionwire.LocalFactoryNameResolver(),
 		),
 	)
 	if err != nil {

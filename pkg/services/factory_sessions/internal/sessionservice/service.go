@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
@@ -20,13 +21,53 @@ import (
 
 // Service is the canonical Factory Session application gateway for open, read, and lifecycle behavior.
 type Service struct {
-	host           Host
-	liveRuntime    liveruntime.Service
-	streams        *stream.Manager
-	reconnects     factorysessions.ReconnectCursorValidator
-	results        factoryruntime.SessionResultProjectionOperation
-	responseEvents responsestreamservice.Service
-	durable        durableexecution.Service
+	host              Host
+	definitionRuntime *SessionRuntime
+	liveRuntime       liveruntime.Service
+	streams           *stream.Manager
+	reconnects        factorysessions.ReconnectCursorValidator
+	results           factoryruntime.SessionResultProjectionOperation
+	responseEvents    responsestreamservice.Service
+	durable           durableexecution.Service
+}
+
+// AttachDefinitionRuntime binds the session-scoped definition operations to
+// the already-constructed runtime. Construction remains one-way: the
+// Definitions root is supplied to the runtime after both roots exist.
+func (s *Service) AttachDefinitionRuntime(runtime *SessionRuntime) *Service {
+	if s != nil && runtime != nil {
+		s.definitionRuntime = runtime
+	}
+	return s
+}
+
+func (s *Service) GetCurrentFactoryForSession(
+	ctx context.Context,
+	sessionID string,
+) (factorydefinitions.EditableFactory, error) {
+	if s == nil || s.definitionRuntime == nil {
+		return factorydefinitions.EditableFactory{}, fmt.Errorf("Factory Session definition runtime is required")
+	}
+	return s.definitionRuntime.GetCurrentFactoryForSession(ctx, sessionID)
+}
+
+func (s *Service) SaveFactoryForSession(
+	ctx context.Context,
+	sessionID string,
+	mode factorydefinitions.SaveMode,
+	request factorydefinitions.EditableFactory,
+) (factorydefinitions.EditableFactory, error) {
+	if s == nil || s.definitionRuntime == nil {
+		return factorydefinitions.EditableFactory{}, fmt.Errorf("Factory Session definition runtime is required")
+	}
+	return s.definitionRuntime.SaveFactoryForSession(ctx, sessionID, mode, request)
+}
+
+func (s *Service) ActivateNamedFactory(ctx context.Context, name string) error {
+	if s == nil || s.definitionRuntime == nil {
+		return fmt.Errorf("Factory Session definition runtime is required")
+	}
+	return s.definitionRuntime.ActivateNamedFactory(ctx, name)
 }
 
 // ForRuntime keeps an already-bound Factory Sessions gateway stable.

@@ -13,6 +13,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
@@ -32,10 +33,10 @@ type TransitionerSubsystem struct {
 	logger            logging.Logger
 	now               func() time.Time
 	transformer       *token_transformer.Transformer
-	quorumPolicy      interfaces.QuorumPolicyService
-	outputShaping     interfaces.InvocationOutputShapingService
-	workPropagation   interfaces.WorkPropagationPolicyService
-	decisionEnvelopes interfaces.DecisionEnvelopeService
+	quorumPolicy      factorydefinitionswire.QuorumPolicyService
+	outputShaping     factorydefinitionswire.InvocationOutputShapingService
+	workPropagation   factorydefinitionswire.WorkPropagationPolicyService
+	decisionEnvelopes factorydefinitionswire.DecisionEnvelopeService
 }
 
 var _ Subsystem = (*TransitionerSubsystem)(nil)
@@ -69,9 +70,9 @@ type mutationCalculationInput struct {
 	inputColors     []factorytoken.Color
 	transformer     *token_transformer.Transformer
 	runtimeConfig   interfaces.RuntimeWorkstationLookup
-	quorumPolicy    interfaces.QuorumPolicyService
-	outputShaping   interfaces.InvocationOutputShapingService
-	workPropagation interfaces.WorkPropagationPolicyService
+	quorumPolicy    factorydefinitionswire.QuorumPolicyService
+	outputShaping   factorydefinitionswire.InvocationOutputShapingService
+	workPropagation factorydefinitionswire.WorkPropagationPolicyService
 }
 
 // NewTransitioner creates a TransitionerSubsystem that reads results and raw
@@ -82,10 +83,10 @@ func NewTransitioner(
 	now func() time.Time,
 	transformer *token_transformer.Transformer,
 	runtimeConfig interfaces.RuntimeWorkstationLookup,
-	quorumPolicy interfaces.QuorumPolicyService,
-	outputShaping interfaces.InvocationOutputShapingService,
-	workPropagation interfaces.WorkPropagationPolicyService,
-	decisionEnvelopes ...interfaces.DecisionEnvelopeService,
+	quorumPolicy factorydefinitionswire.QuorumPolicyService,
+	outputShaping factorydefinitionswire.InvocationOutputShapingService,
+	workPropagation factorydefinitionswire.WorkPropagationPolicyService,
+	decisionEnvelopes ...factorydefinitionswire.DecisionEnvelopeService,
 ) *TransitionerSubsystem {
 	if now == nil {
 		panic("Factory Runtime transitioner clock is required")
@@ -346,8 +347,8 @@ func (t *TransitionerSubsystem) calculateArcsForResolvedResult(currentTransition
 }
 
 func firstDecisionEnvelopeService(
-	services []interfaces.DecisionEnvelopeService,
-) interfaces.DecisionEnvelopeService {
+	services []factorydefinitionswire.DecisionEnvelopeService,
+) factorydefinitionswire.DecisionEnvelopeService {
 	if len(services) == 0 {
 		return nil
 	}
@@ -795,7 +796,7 @@ func calculateMutations(in mutationCalculationInput) ([]interfaces.MarkingMutati
 // topology to the shipped package. Customer factories own their relations,
 // even if they independently choose the same workstation or Work type names.
 func applyPackagedQuorumWorkRelations(
-	quorumPolicy interfaces.QuorumPolicyService,
+	quorumPolicy factorydefinitionswire.QuorumPolicyService,
 	output *factorytoken.Token,
 	workstation *interfaces.FactoryWorkstationConfig,
 	inputs []factorytoken.Color,

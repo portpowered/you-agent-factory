@@ -31,6 +31,18 @@ func (fake *hostedLiveSessionsFake) ForRuntime(factorysessions.OpeningBindingReq
 	return fake, nil
 }
 
+func (fake *hostedLiveSessionsFake) GetCurrentFactoryForSession(context.Context, string) (factorydefinitions.EditableFactory, error) {
+	return factorydefinitions.EditableFactory{}, factorysessions.ErrSessionNotFound
+}
+
+func (fake *hostedLiveSessionsFake) SaveFactoryForSession(context.Context, string, factorydefinitions.SaveMode, factorydefinitions.EditableFactory) (factorydefinitions.EditableFactory, error) {
+	return factorydefinitions.EditableFactory{}, factorysessions.ErrSessionNotFound
+}
+
+func (fake *hostedLiveSessionsFake) ActivateNamedFactory(context.Context, string) error {
+	return factorysessions.ErrSessionNotFound
+}
+
 func (fake *hostedLiveSessionsFake) OpenFactorySession(context.Context, factorysessions.OpenRequest) (*factorysessions.OpenResult, error) {
 	return &factorysessions.OpenResult{SessionID: factorysessions.DefaultSessionID}, nil
 }

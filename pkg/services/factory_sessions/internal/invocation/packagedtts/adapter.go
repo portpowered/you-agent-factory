@@ -7,9 +7,19 @@ import (
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation"
 )
 
+// Observability is the narrow Definitions-owned packaged-TTS policy consumed
+// by the Sessions invocation adapter. It lives at this consumer boundary so
+// Sessions does not publish a second cross-service effect interface.
+type Observability interface {
+	IsPackagedTTSFactory(*interfaces.FactoryConfig) bool
+	TTSBackendRuntimeLabel() string
+	ClassifyTTSInvocationWait(interfaces.FactoryWorldState, string, bool) (interfaces.TTSInvocationWaitOutcome, *interfaces.TTSInvocationFailure)
+	IsTTSModelNotReadyFailure(string) bool
+}
+
 // NewTelemetry supplies the packaged TTS telemetry descriptor.
 func NewTelemetry(
-	observability interfaces.TTSObservabilityService,
+	observability Observability,
 	recordMetric func(sessioninvocation.SessionInvocationMetric),
 	recordLog func(sessioninvocation.SessionInvocationLogRecord),
 ) sessioninvocation.SessionInvocationTelemetry {
@@ -33,10 +43,10 @@ func NewTelemetry(
 
 // SpecialCase supplies packaged TTS terminal classification.
 type SpecialCase struct {
-	observability interfaces.TTSObservabilityService
+	observability Observability
 }
 
-func NewSpecialCase(observability interfaces.TTSObservabilityService) SpecialCase {
+func NewSpecialCase(observability Observability) SpecialCase {
 	return SpecialCase{observability: observability}
 }
 

@@ -12,11 +12,16 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
-	factorysessionservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
+	factorysessionservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 )
 
-func newActivationGatewayTestGateway(t *testing.T) factorysessions.DefinitionActivationGateway {
+type activationGateway interface {
+	WithActivationLock(func() error) error
+	RequireIdleRuntimeForSession(context.Context, string) error
+}
+
+func newActivationGatewayTestGateway(t *testing.T) activationGateway {
 	t.Helper()
 
 	clock := platformclock.Real{}

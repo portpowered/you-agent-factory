@@ -1,7 +1,6 @@
 package factorycontracts
 
 import (
-	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	workerdiagnosticsmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/workerdiagnostics"
@@ -47,7 +46,7 @@ type (
 	WorkPayloadRef                  = work.WorkPayloadRef
 	WorkPayloadLineageProjection    = work.WorkPayloadLineageProjection
 	WorkResult                      = workerexecution.WorkResult
-	WorkerConfig                    = workerconfig.Config
+	WorkerConfig                    = Config
 )
 
 const (
@@ -58,8 +57,8 @@ const (
 	AgentRunMetadataToolCallCount             = workerexecution.AgentRunMetadataToolCallCount
 	AgentRunMetadataToolDiagnostics           = workerexecution.AgentRunMetadataToolDiagnostics
 	AgentRunMetadataToolPolicy                = workerexecution.AgentRunMetadataToolPolicy
-	AgentWorkerToolPolicyDisabled             = workerconfig.AgentToolPolicyDisabled
-	AgentWorkerToolPolicyReadOnly             = workerconfig.AgentToolPolicyReadOnly
+	AgentWorkerToolPolicyDisabled             = AgentToolPolicyDisabled
+	AgentWorkerToolPolicyReadOnly             = AgentToolPolicyReadOnly
 	ModelOperationBindingSourceInput          = workerexecution.ModelOperationBindingSourceInput
 	OutcomeAccepted                           = workerexecution.OutcomeAccepted
 	OutcomeContinue                           = workerexecution.OutcomeContinue

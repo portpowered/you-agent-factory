@@ -9,21 +9,21 @@
 package invocation_policy
 
 import (
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryeffects "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/effects"
 )
 
 // Service owns invocation-time policy implementations behind the published
 // Definitions root policy contracts consumed by Wire, Workers, Runtime, and
 // Sessions.
 type Service interface {
-	DecisionEnvelope() factorydefinitions.DecisionEnvelopeService
-	InvocationInterpolation() factorydefinitions.InvocationInterpolationService
-	InvocationOutput() factorydefinitions.InvocationOutputShapingService
-	InvocationWorkType() factorydefinitions.InvocationWorkTypeService
-	QuorumPolicy() factorydefinitions.QuorumPolicyService
-	WorkPropagation() factorydefinitions.WorkPropagationPolicyService
-	WorkstationExecution() factorydefinitions.WorkstationExecutionPolicyService
-	TTSObservability() factorydefinitions.TTSObservabilityService
+	DecisionEnvelope() factoryeffects.DecisionEnvelopeService
+	InvocationInterpolation() factoryeffects.InvocationInterpolationService
+	InvocationOutput() factoryeffects.InvocationOutputShapingService
+	InvocationWorkType() factoryeffects.InvocationWorkTypeService
+	QuorumPolicy() factoryeffects.QuorumPolicyService
+	WorkPropagation() factoryeffects.WorkPropagationPolicyService
+	WorkstationExecution() factoryeffects.WorkstationExecutionPolicyService
+	TTSObservability() factoryeffects.TTSObservabilityService
 }
 
 // Dependencies are the exact collaborator ports required by invocation_policy.

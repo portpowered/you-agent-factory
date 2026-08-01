@@ -189,7 +189,7 @@ var servicesSet = wire.NewSet(
 	provideAutomationHostedSourcesFactory,
 	provideWorkersLocalRuntimeHooksFactory,
 	provideWorkerCommandRunnerAdapter,
-	provideFactoryDefinitionsFactory,
+	provideFactoryDefinitionsService,
 	provideFactoryScaffoldInitializer,
 	provideEditableFactoryValidator,
 	provideInitialFactorySnapshotFactory,
@@ -218,6 +218,7 @@ var factoryDefinitionsServicesSet = wire.NewSet(
 	provideFactoryDefinitionValidationService,
 	provideFactoryDefinitionValidator,
 	provideDefinitionValidationOperation,
+	provideEffectiveDefinitionValidationOperation,
 	provideSubmittedDefinitionValidationOperation,
 	provideAuthoredFactorySourceLoader,
 	provideJavaScriptWorkflowDefinitions,
@@ -230,7 +231,6 @@ var factoryDefinitionsServicesSet = wire.NewSet(
 	provideEffectiveFactoryCatalogDiscovery,
 	provideEffectiveFactoryDefinitionNormalizer,
 	provideEffectiveFactoryCatalogOperation,
-	provideEffectiveFactoryDefinitionsService,
 )
 
 var workerServiceSet = wire.NewSet(

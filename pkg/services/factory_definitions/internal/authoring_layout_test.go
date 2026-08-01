@@ -57,12 +57,21 @@ func (stubAuthoringLayout) ReplaceNamedFactory(
 	}, nil
 }
 
+func (stubAuthoringLayout) ReplaceFactoryLayoutAtDir(
+	_ context.Context,
+	request factorydefinitions.ReplaceFactoryLayoutAtDirRequest,
+) (factorydefinitions.ReplaceFactoryLayoutAtDirResult, error) {
+	return factorydefinitions.ReplaceFactoryLayoutAtDirResult{
+		Replacement: &factorydefinitions.FactorySplitLayoutReplaceResult{},
+	}, nil
+}
+
 var _ authoringlayout.Service = stubAuthoringLayout{}
 
 func TestAttachAuthoringLayout_DelegatesCTRDEFAuthoringSlice(t *testing.T) {
 	t.Parallel()
 
-	base := factorylifecycle.New(nil, factorylifecycle.StubActivationGateway())
+	base := factorylifecycle.New()
 	attached, err := factoryinternal.AttachAuthoringLayout(base, stubAuthoringLayout{})
 	if err != nil {
 		t.Fatalf("AttachAuthoringLayout: %v", err)
@@ -128,7 +137,7 @@ func TestAttachAuthoringLayout_RejectsMissingDependencies(t *testing.T) {
 		t.Fatal("AttachAuthoringLayout(nil service) expected error")
 	}
 	if _, err := factoryinternal.AttachAuthoringLayout(
-		factorylifecycle.New(nil, factorylifecycle.StubActivationGateway()),
+		factorylifecycle.New(),
 		nil,
 	); err == nil {
 		t.Fatal("AttachAuthoringLayout(nil authoring) expected error")

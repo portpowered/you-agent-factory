@@ -3,7 +3,7 @@ package wire
 import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionsinternal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
-	distributionpackagedinstallation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedinstallation"
+	factoryeffect "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/effects"
 )
 
 // NewPackagedFactoryCatalog constructs deterministic packaged Factory catalog
@@ -18,8 +18,8 @@ func NewPackagedFactoryCatalog(
 // operations from exact persistence and filesystem ports.
 func NewPackagedFactoryInstaller(
 	persistence factorydefinitions.Persistence,
-	fileSystem factorydefinitions.PackagedInstallationFileSystem,
-) factorydefinitions.PackagedFactoryInstaller {
+	fileSystem factoryeffect.PackagedInstallationFileSystem,
+) factoryeffect.PackagedFactoryInstaller {
 	return factorydefinitionsinternal.NewPackagedFactoryInstaller(persistence, fileSystem)
 }
 
@@ -27,7 +27,7 @@ func NewPackagedFactoryInstaller(
 // installation service for composition paths that need the concrete type.
 func NewPackagedFactoryInstallationService(
 	persistence factorydefinitions.Persistence,
-	fileSystem factorydefinitions.PackagedInstallationFileSystem,
-) *distributionpackagedinstallation.Service {
+	fileSystem factoryeffect.PackagedInstallationFileSystem,
+) factorydefinitions.PackagedFactoryInstallationOperations {
 	return factorydefinitionsinternal.NewPackagedFactoryInstallationService(persistence, fileSystem)
 }

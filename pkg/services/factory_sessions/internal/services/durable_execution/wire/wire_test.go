@@ -266,10 +266,10 @@ func (s *controlSpy) Pause(_ context.Context, sessionID string, _ factorysession
 
 type restartReadSpy struct {
 	factorysessions.ExecutionService
-	inspectCalls   int
-	resultCalls    int
-	dispatchCalls  int
-	eventCalls     int
+	inspectCalls  int
+	resultCalls   int
+	dispatchCalls int
+	eventCalls    int
 }
 
 func (s *restartReadSpy) GetSession(_ context.Context, sessionID string) (factorysessions.SessionReadResult, error) {

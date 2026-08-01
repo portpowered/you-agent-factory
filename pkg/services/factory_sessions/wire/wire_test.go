@@ -2,6 +2,7 @@ package wire
 
 import (
 	"errors"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"io/fs"
 	"runtime"
 	"testing"
@@ -204,15 +205,15 @@ func (resultProjector) ProjectSessionResults(factoryruntime.SessionResultInput) 
 type newServiceInputs struct {
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory
 	sessionResultProjection      factoryruntime.SessionResultProjectionOperation
-	interpolation                factorydefinitions.InvocationInterpolationService
-	invocationWorkTypes          factorydefinitions.InvocationWorkTypeService
-	ttsObservability             factorydefinitions.TTSObservabilityService
+	interpolation                factorydefinitionswire.InvocationInterpolationService
+	invocationWorkTypes          factorydefinitionswire.InvocationWorkTypeService
+	ttsObservability             factorydefinitionswire.TTSObservabilityService
 	eventIDs                     factorysessions.ResponseEventIDGenerator
 	responseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits
 	sessionIDs                   factorysessions.SessionIDGenerator
 	resolveHome                  factorysessions.HomeDirectoryResolver
 	directoryInspection          DirectoryInspection
-	namedPaths                   factorydefinitions.NamedPathResolver
+	namedPaths                   factorydefinitionswire.NamedPathResolver
 	invocationInputFiles         fileeffects.InvocationInputReader
 	initialWorkFiles             fileeffects.InitialWorkReader
 	resolveSymlinks              factorysessions.LogicalTargetResolveSymlinks

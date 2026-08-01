@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"io/fs"
 	"path/filepath"
 	"strings"
@@ -21,7 +22,7 @@ import (
 type Initializer struct {
 	operatorSettings  OperatorSettings
 	packagedCatalog   factorydefinitions.PackagedFactoryCatalogOperations
-	packagedInstaller factorydefinitions.PackagedFactoryInstaller
+	packagedInstaller factorydefinitionswire.PackagedFactoryInstaller
 	inspectPath       InspectPath
 	migrationFiles    LegacyFactoryMigrationFileSystem
 }
@@ -32,7 +33,7 @@ var _ systeminitialization.Service = (*Initializer)(nil)
 func New(
 	operatorSettings OperatorSettings,
 	packagedCatalog factorydefinitions.PackagedFactoryCatalogOperations,
-	packagedInstaller factorydefinitions.PackagedFactoryInstaller,
+	packagedInstaller factorydefinitionswire.PackagedFactoryInstaller,
 	inspectPath InspectPath,
 	migrationFiles LegacyFactoryMigrationFileSystem,
 ) (*Initializer, error) {

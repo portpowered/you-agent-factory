@@ -3,9 +3,6 @@ package factorycontracts
 import (
 	"fmt"
 	"strings"
-
-	workertaxonomy "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/taxonomy"
-	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
 )
 
 type Workstation struct {
@@ -30,7 +27,7 @@ const (
 // skip worker/workstation behavior pairing checks.
 func ExemptFromWorkerWorkstationCompatibility(workstation Workstation) bool {
 	switch strings.TrimSpace(workstation.Type) {
-	case workertaxonomy.WorkstationTypeLogical, workertaxonomy.WorkstationTypeClassify:
+	case WorkstationTypeLogical, WorkstationTypeClassify:
 		return true
 	default:
 		return false
@@ -46,19 +43,19 @@ func EffectiveWorkstationTypeForCompatibility(workstation Workstation) string {
 	if workstation.Kind == WorkstationKindPoller {
 		return ""
 	}
-	return workertaxonomy.WorkstationTypeModel
+	return WorkstationTypeModel
 }
 
 // WorkerBehaviorClass maps a worker type to its customer-facing behavior class.
 func WorkerBehaviorClass(workerType string) (WorkerWorkstationBehaviorClass, bool) {
-	switch workertaxonomy.PublicWorkerTypeFromInternal(workerType) {
-	case workertaxonomy.WorkerTypeInference:
+	switch PublicWorkerTypeFromInternal(workerType) {
+	case WorkerTypeInference:
 		return WorkerWorkstationBehaviorInference, true
-	case workertaxonomy.WorkerTypeAgent:
+	case WorkerTypeAgent:
 		return WorkerWorkstationBehaviorAgent, true
-	case workertaxonomy.WorkerTypeScript:
+	case WorkerTypeScript:
 		return WorkerWorkstationBehaviorScript, true
-	case workertaxonomy.WorkerTypePoller:
+	case WorkerTypePoller:
 		return WorkerWorkstationBehaviorPoller, true
 	default:
 		return "", false
@@ -74,18 +71,18 @@ func ExpectedWorkerBehaviorClassForWorkstation(workstation Workstation, workerTy
 	}
 
 	workstationType := EffectiveWorkstationTypeForCompatibility(workstation)
-	if workertaxonomy.IsPollerRunPublicWorkstationType(workstationType, workertaxonomy.WorkstationKind(workstation.Kind)) {
+	if IsPollerRunPublicWorkstationType(workstationType, WorkstationKind(workstation.Kind)) {
 		return WorkerWorkstationBehaviorPoller, true
 	}
 
-	switch workertaxonomy.PublicWorkstationTypeFromInternalRuntime(workstationType, workerType, workertaxonomy.WorkstationKind(workstation.Kind)) {
-	case workertaxonomy.WorkstationTypeInference:
+	switch PublicWorkstationTypeFromInternalRuntime(workstationType, workerType, WorkstationKind(workstation.Kind)) {
+	case WorkstationTypeInference:
 		return WorkerWorkstationBehaviorInference, true
-	case workertaxonomy.WorkstationTypeAgent:
+	case WorkstationTypeAgent:
 		return WorkerWorkstationBehaviorAgent, true
-	case workertaxonomy.WorkstationTypeScript:
+	case WorkstationTypeScript:
 		return WorkerWorkstationBehaviorScript, true
-	case workertaxonomy.WorkstationTypePoller:
+	case WorkstationTypePoller:
 		return WorkerWorkstationBehaviorPoller, true
 	default:
 		return "", false
@@ -105,7 +102,7 @@ func WorkerMatchesWorkstationBehavior(workerType string, workstation Workstation
 	}
 
 	workstationType := EffectiveWorkstationTypeForCompatibility(workstation)
-	if workstationType == workertaxonomy.WorkstationTypeModel && workerType == workertaxonomy.WorkerTypeModel {
+	if workstationType == WorkstationTypeModel && workerType == WorkerTypeModel {
 		return true
 	}
 
@@ -123,14 +120,14 @@ func WorkerMatchesWorkstationBehavior(workerType string, workstation Workstation
 // PublicWorkerTypeForFactoryUsage maps an internal worker type to the preferred
 // public taxonomy name using workstation references to preserve legacy agent and
 // script pairings for MODEL_WORKER during the migration window.
-func PublicWorkerTypeForFactoryUsage(worker workerconfig.Config, workstations []Workstation) string {
-	if strings.TrimSpace(worker.Type) != workertaxonomy.WorkerTypeModel {
-		return workertaxonomy.PublicWorkerTypeFromInternal(worker.Type)
+func PublicWorkerTypeForFactoryUsage(worker Config, workstations []Workstation) string {
+	if strings.TrimSpace(worker.Type) != WorkerTypeModel {
+		return PublicWorkerTypeFromInternal(worker.Type)
 	}
 
 	usageClasses := modelWorkerUsageBehaviorClasses(worker.Name, workstations)
 	if len(usageClasses) == 0 {
-		return workertaxonomy.PublicWorkerTypeFromInternal(worker.Type)
+		return PublicWorkerTypeFromInternal(worker.Type)
 	}
 
 	publicTypes := make(map[string]struct{}, len(usageClasses))
@@ -141,26 +138,26 @@ func PublicWorkerTypeForFactoryUsage(worker workerconfig.Config, workstations []
 		// Legacy MODEL_WORKER factories may share one worker across agent and
 		// inference workstations; preserve the alias instead of projecting to a
 		// single taxonomy name that would invalidate the other pairing.
-		return workertaxonomy.WorkerTypeModel
+		return WorkerTypeModel
 	}
 	for publicType := range publicTypes {
 		return publicType
 	}
-	return workertaxonomy.PublicWorkerTypeFromInternal(worker.Type)
+	return PublicWorkerTypeFromInternal(worker.Type)
 }
 
 func publicWorkerTypeForBehaviorClass(class WorkerWorkstationBehaviorClass) string {
 	switch class {
 	case WorkerWorkstationBehaviorInference:
-		return workertaxonomy.WorkerTypeInference
+		return WorkerTypeInference
 	case WorkerWorkstationBehaviorPoller:
-		return workertaxonomy.WorkerTypePoller
+		return WorkerTypePoller
 	case WorkerWorkstationBehaviorScript:
-		return workertaxonomy.WorkerTypeScript
+		return WorkerTypeScript
 	case WorkerWorkstationBehaviorAgent:
-		return workertaxonomy.WorkerTypeAgent
+		return WorkerTypeAgent
 	default:
-		return workertaxonomy.WorkerTypeModel
+		return WorkerTypeModel
 	}
 }
 
@@ -179,7 +176,7 @@ func modelWorkerUsageBehaviorClasses(workerName string, workstations []Workstati
 		if ExemptFromWorkerWorkstationCompatibility(workstation) {
 			continue
 		}
-		class, ok := ExpectedWorkerBehaviorClassForWorkstation(workstation, workertaxonomy.WorkerTypeModel)
+		class, ok := ExpectedWorkerBehaviorClassForWorkstation(workstation, WorkerTypeModel)
 		if !ok {
 			continue
 		}
@@ -196,17 +193,17 @@ func modelWorkerUsageBehaviorClasses(workerName string, workstations []Workstati
 // workstation, including legacy defaulting for standard agent workstations that
 // omit an explicit type while binding a worker.
 func EffectiveWorkstationBehaviorClass(workstationType string, kind WorkstationKind, hasWorker bool) string {
-	if class := workertaxonomy.ProjectWorkstationBehaviorClass(workstationType, workertaxonomy.WorkstationKind(kind)); class != "" {
+	if class := ProjectWorkstationBehaviorClass(workstationType, WorkstationKind(kind)); class != "" {
 		return class
 	}
 	if !hasWorker {
 		return ""
 	}
 	if kind == WorkstationKindPoller {
-		return workertaxonomy.WorkstationTypePoller
+		return WorkstationTypePoller
 	}
 	if strings.TrimSpace(workstationType) == "" && (kind == "" || kind == WorkstationKindStandard) {
-		return workertaxonomy.WorkstationTypeAgent
+		return WorkstationTypeAgent
 	}
 	return ""
 }
@@ -216,22 +213,22 @@ func EffectiveWorkstationBehaviorClass(workstationType string, kind WorkstationK
 func IsLegacyGrandfatheredWorkerWorkstationPair(workerType, workstationType string, kind WorkstationKind) bool {
 	workerTrimmed := strings.TrimSpace(workerType)
 	wsTrimmed := strings.TrimSpace(workstationType)
-	if workerTrimmed == workertaxonomy.WorkerTypeModel && wsTrimmed == workertaxonomy.WorkstationTypeModel {
+	if workerTrimmed == WorkerTypeModel && wsTrimmed == WorkstationTypeModel {
 		return true
 	}
-	if wsTrimmed == workertaxonomy.WorkstationTypeModel && workerTrimmed == workertaxonomy.WorkerTypeScript {
+	if wsTrimmed == WorkstationTypeModel && workerTrimmed == WorkerTypeScript {
 		return true
 	}
 	if wsTrimmed == "" && (kind == "" || kind == WorkstationKindStandard) {
-		if workertaxonomy.IsInferenceWorkerType(workerType) || workerTrimmed == workertaxonomy.WorkerTypeScript {
+		if IsInferenceWorkerType(workerType) || workerTrimmed == WorkerTypeScript {
 			return true
 		}
 	}
-	if !workertaxonomy.IsPollerRunWorkstationType(workstationType, workertaxonomy.WorkstationKind(kind)) {
+	if !IsPollerRunWorkstationType(workstationType, WorkstationKind(kind)) {
 		return false
 	}
-	switch workertaxonomy.StrictWorkerType(workerType) {
-	case workertaxonomy.WorkerTypeScript, workertaxonomy.WorkerTypeHosted, workertaxonomy.WorkerTypePoller:
+	switch StrictWorkerType(workerType) {
+	case WorkerTypeScript, WorkerTypeHosted, WorkerTypePoller:
 		return true
 	default:
 		return false
@@ -245,7 +242,7 @@ func RequiresWorkerWorkstationBehaviorCompatibility(workstationType string, kind
 		return false
 	}
 	switch EffectiveWorkstationBehaviorClass(workstationType, kind, true) {
-	case workertaxonomy.WorkstationTypeLogical, workertaxonomy.WorkstationTypeClassify, "":
+	case WorkstationTypeLogical, WorkstationTypeClassify, "":
 		return false
 	default:
 		return true
@@ -262,7 +259,7 @@ func CompatibleWorkerWorkstationBehavior(workerType, workstationType string, kin
 	if IsLegacyGrandfatheredWorkerWorkstationPair(workerType, workstationType, kind) {
 		return true
 	}
-	workerClass := workertaxonomy.ProjectWorkerBehaviorClass(workerType)
+	workerClass := ProjectWorkerBehaviorClass(workerType)
 	wsClass := EffectiveWorkstationBehaviorClass(workstationType, kind, true)
 	if workerClass == "" || wsClass == "" {
 		return true
@@ -274,13 +271,13 @@ func CompatibleWorkerWorkstationBehavior(workerType, workstationType string, kin
 // validation findings.
 func RuntimeBehaviorClassLabel(behaviorClass string) string {
 	switch behaviorClass {
-	case workertaxonomy.WorkerTypeInference, workertaxonomy.WorkstationTypeInference:
+	case WorkerTypeInference, WorkstationTypeInference:
 		return "inference"
-	case workertaxonomy.WorkerTypeAgent, workertaxonomy.WorkstationTypeAgent:
+	case WorkerTypeAgent, WorkstationTypeAgent:
 		return "agent"
-	case workertaxonomy.WorkerTypeScript, workertaxonomy.WorkstationTypeScript:
+	case WorkerTypeScript, WorkstationTypeScript:
 		return "script"
-	case workertaxonomy.WorkerTypePoller, workertaxonomy.WorkstationTypePoller:
+	case WorkerTypePoller, WorkstationTypePoller:
 		return "poller"
 	default:
 		return strings.ToLower(strings.TrimSpace(behaviorClass))
@@ -306,7 +303,7 @@ func WorkerWorkstationBehaviorMismatchMessage(
 		RuntimeBehaviorClassLabel(wsClass),
 		workerName,
 		workerLabel,
-		RuntimeBehaviorClassLabel(workertaxonomy.ProjectWorkerBehaviorClass(workerType)),
+		RuntimeBehaviorClassLabel(ProjectWorkerBehaviorClass(workerType)),
 		RuntimeBehaviorClassLabel(wsClass),
 	)
 }

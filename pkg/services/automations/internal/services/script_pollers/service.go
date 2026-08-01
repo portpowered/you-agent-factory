@@ -6,6 +6,7 @@ package script_pollers
 
 import (
 	"context"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"sync"
 	"time"
 
@@ -53,7 +54,7 @@ type Dependencies struct {
 	Clock            func() clockwork.Clock
 	CommandRunner    func() workers.CommandRunner
 	ResolveTemplates workers.TemplateFieldResolver
-	ExecutionPolicy  factorydefinitions.WorkstationExecutionPolicyService
+	ExecutionPolicy  factorydefinitionswire.WorkstationExecutionPolicyService
 	CursorRecorder   CursorRecorder
 }
 

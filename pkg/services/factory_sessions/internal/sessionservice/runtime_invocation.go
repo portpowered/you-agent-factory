@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/invocation"
@@ -21,9 +22,9 @@ import (
 // session runtime's flat public callbacks.
 func NewInvocationOwner(
 	fs *SessionRuntime,
-	interpolation interfaces.InvocationInterpolationService,
-	invocationWorkTypes interfaces.InvocationWorkTypeService,
-	ttsObservability interfaces.TTSObservabilityService,
+	interpolation factorydefinitionswire.InvocationInterpolationService,
+	invocationWorkTypes factorydefinitionswire.InvocationWorkTypeService,
+	ttsObservability packagedtts.Observability,
 	inputFiles fileeffects.InvocationInputReader,
 ) (invocationservice.Service, error) {
 	if fs == nil {

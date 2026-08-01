@@ -6,6 +6,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/runtime/buffers"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
@@ -32,7 +33,7 @@ func newTestPipeline(n *state.Net) *testPipeline {
 			nil,
 			nil,
 			nil,
-			interfaces.WorkPropagationPolicyFunc(func(
+			factorydefinitionswire.WorkPropagationPolicyFunc(func(
 				*interfaces.FactoryWorkstationConfig,
 			) interfaces.WorkPropagationMode {
 				return interfaces.WorkPropagationModeOutputAsPayload

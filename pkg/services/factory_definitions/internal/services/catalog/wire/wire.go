@@ -4,13 +4,20 @@ package wire
 
 import (
 	"fmt"
+	factoryeffects "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/effects"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
+	catalognamedfactories "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/internal/namedfactories"
+	catalognamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/internal/namedpaths"
+	catalogpersistence "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/internal/persistence"
 	catalogservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/internal/service"
-	catalognamedfactories "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedfactories"
-	catalognamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
-	catalogpersistence "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/persistence"
+)
+
+var (
+	ErrInvalidName    = catalognamedpaths.ErrInvalidName
+	ErrNotFound       = catalognamedpaths.ErrNotFound
+	ErrLayoutNotFound = catalognamedpaths.ErrLayoutNotFound
 )
 
 // NewService constructs the private catalog subservice from exact injected
@@ -34,16 +41,28 @@ func NewService(deps catalog.Dependencies) (catalog.Service, error) {
 // NewPathResolver constructs the catalog-owned named-path resolver from the
 // exact filesystem port used by catalog composition.
 func NewPathResolver(
-	fileSystem factorydefinitions.NamedPathFileSystem,
-) (factorydefinitions.NamedPathResolver, error) {
+	fileSystem factoryeffects.NamedPathFileSystem,
+) (factoryeffects.NamedPathResolver, error) {
 	return catalognamedpaths.New(fileSystem)
+}
+
+func ValidateName(name string) error { return catalognamedpaths.ValidateName(name) }
+
+func PathSegments(name string) ([]string, error) { return catalognamedpaths.PathSegments(name) }
+
+func NameFromPathSegments(segments []string) (string, error) {
+	return catalognamedpaths.NameFromPathSegments(segments)
+}
+
+func MapDir(rootDir, name string) (string, error) {
+	return catalognamedpaths.MapDir(rootDir, name)
 }
 
 // NewNamedFactoryCatalog constructs the catalog-owned named-factory catalog
 // from the exact path and catalog-filesystem ports used by catalog composition.
 func NewNamedFactoryCatalog(
-	paths factorydefinitions.NamedPathResolver,
-	fileSystem factorydefinitions.NamedFactoryCatalogFileSystem,
+	paths factoryeffects.NamedPathResolver,
+	fileSystem factoryeffects.NamedFactoryCatalogFileSystem,
 ) (factorydefinitions.NamedFactoryCatalog, error) {
 	return catalognamedfactories.New(paths, fileSystem)
 }
@@ -51,7 +70,7 @@ func NewNamedFactoryCatalog(
 // ResolveCurrent resolves the active Factory definition under rootDir using
 // the catalog-owned named-factory helper and an injected path resolver.
 func ResolveCurrent(
-	paths factorydefinitions.NamedPathResolver,
+	paths factoryeffects.NamedPathResolver,
 	rootDir string,
 ) (string, error) {
 	return catalognamedfactories.ResolveCurrent(paths, rootDir)
@@ -69,9 +88,9 @@ func NewPersistence(
 	flatten factorydefinitions.FactoryLayoutFlattener,
 	expand factorydefinitions.FactoryLayoutExpander,
 	writeCurrent factorydefinitions.CurrentFactoryPointerWriter,
-	fileSystem factorydefinitions.PersistenceFileSystem,
-	requireDefinitionDir factorydefinitions.DefinitionDirectoryRequirer,
-	directories factorydefinitions.DirectoryReplacementStore,
+	fileSystem factoryeffects.PersistenceFileSystem,
+	requireDefinitionDir factoryeffects.DefinitionDirectoryRequirer,
+	directories factoryeffects.DirectoryReplacementStore,
 ) (factorydefinitions.Persistence, error) {
 	return catalogpersistence.New(
 		validator,

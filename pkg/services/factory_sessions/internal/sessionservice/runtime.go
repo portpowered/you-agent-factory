@@ -9,6 +9,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
@@ -79,22 +80,9 @@ type SessionRuntime struct {
 	directoryInspection          roles.DirectoryInspection
 	sessionIDs                   factorysessions.SessionIDGenerator
 	resolveHome                  factorysessions.HomeDirectoryResolver
-	namedPaths                   interfaces.NamedPathResolver
+	namedPaths                   factorydefinitionswire.NamedPathResolver
 	initialWorkFiles             fileeffects.InitialWorkReader
 	identity                     identity.Service
-}
-
-// ActivateNamedFactory builds a replacement runtime from a persisted named
-// factory directory and swaps it in only after the current runtime is idle.
-func (fs *SessionRuntime) ActivateNamedFactory(ctx context.Context, name string) error {
-	if fs == nil {
-		return fmt.Errorf("factory service is required")
-	}
-	svc := fs.requireDefinitions()
-	if svc == nil {
-		return fmt.Errorf("factory definition service is required")
-	}
-	return svc.ActivateNamedFactory(ctx, name)
 }
 
 func (fs *SessionRuntime) buildReplacementFactoryRuntime(

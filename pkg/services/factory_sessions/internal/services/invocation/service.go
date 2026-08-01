@@ -4,6 +4,7 @@ package invocation
 
 import (
 	"context"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
@@ -29,8 +30,8 @@ type Dependencies struct {
 	WaitNext      func(context.Context) error
 	Telemetry     legacyinvocation.SessionInvocationTelemetry
 	SpecialCase   legacyinvocation.SessionInvocationSpecialCase
-	Interpolation factorydefinitions.InvocationInterpolationService
-	WorkTypes     factorydefinitions.InvocationWorkTypeService
+	Interpolation factorydefinitionswire.InvocationInterpolationService
+	WorkTypes     factorydefinitionswire.InvocationWorkTypeService
 	InputFiles    fileeffects.InvocationInputReader
 	Work          work.Service
 }

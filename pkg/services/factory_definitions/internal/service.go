@@ -1,114 +1,122 @@
 // Package internal composes the Factory Definitions root from parent-private
-// subservices. Concrete persistence and snapshot packages remain private to
-// composition; callers depend on the factory_definitions root contract.
+// capability services. Concrete persistence, loading, and snapshot packages
+// remain private to composition; peers receive only factory_definitions.Service.
 package internal
 
 import (
-	"context"
+	"fmt"
 
 	factoryroot "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryeffects "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/effects"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/lifecycle"
 	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
 	catalog "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire"
+	distributionservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution"
+	invocationpolicyservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/invocation_policy"
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
 	validationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/wire"
 )
 
-// NewWithAuthoringLayout constructs the public Factory Definitions service
-// with the private authoring_layout subservice attached to the CTR-DEF root
-// authoring slice.
-func NewWithAuthoringLayout(
-	sessionHost factoryroot.SessionHost,
-	activationGateway factoryroot.DefinitionActivationGateway,
-	clock factoryroot.Clock,
-	versionFileSystem factoryroot.VersionFileSystem,
-	validator factoryroot.Validator,
-	loadCanonical factoryroot.CanonicalFactoryJSONLoader,
-	loadFactory factoryroot.LoadedFactoryLoader,
-	readCurrentFactoryPointer factoryroot.CurrentFactoryPointerReader,
-	prepareFactoryLayoutPayload factoryroot.FactoryLayoutPayloadPreparer,
-	persistNamedFactory factoryroot.NamedFactoryPersister,
-	writeCurrentFactoryPointer factoryroot.CurrentFactoryPointerWriter,
-	preparePortableFactoryConfig factoryroot.PortableFactoryConfigPreparer,
-	captureFactorySnapshot factoryroot.FactorySnapshotCapturer,
-	replaceFactoryLayout factoryroot.FactoryLayoutReplacer,
-	namedPaths factoryroot.NamedPathResolver,
-	namedFactoryCatalogFileSystem factoryroot.NamedFactoryCatalogFileSystem,
-	packagedCatalog factoryroot.PackagedFactoryCatalogOperations,
-	packagedInstaller factoryroot.PackagedFactoryInstallationOperations,
-	requiredToolChecker factoryroot.RequiredToolChecker,
-	orchestratorValidator factoryroot.OrchestratorDefinitionValidator,
-	authoringLayout authoringlayout.Service,
-	options ...CompositionOption,
-) factoryroot.Service {
-	if sessionHost == nil || activationGateway == nil || clock == nil || versionFileSystem == nil ||
-		namedPaths == nil || namedFactoryCatalogFileSystem == nil ||
-		packagedCatalog.List == nil || packagedCatalog.Resolve == nil ||
-		packagedInstaller.Install == nil {
-		return nil
-	}
-	host, err := lifecycle.NewHost(
-		sessionHost.PersistRootDir, sessionHost.WorkstationLoader,
-		loadFactory,
-		readCurrentFactoryPointer,
-		func(
-			segment string,
-			payload []byte,
-		) (*factoryroot.PreparedFactoryLayoutPayload, error) {
-			return prepareFactoryLayoutPayload(
-				context.Background(),
-				segment,
-				payload,
-				validator,
-			)
-		},
-		persistNamedFactory,
-		writeCurrentFactoryPointer,
-		preparePortableFactoryConfig,
-		captureFactorySnapshot,
-		sessionHost.CurrentRuntimeConfig, sessionHost.WorkflowID,
-		namedPaths.ResolveExistingDir,
-		sessionHost.RequireSession, sessionHost.SessionRuntimeConfig,
-		sessionHost.SessionFactoryPersistRoot, sessionHost.ValidateEditableFactorySnapshot,
-		sessionHost.GetCurrentFactorySnapshotForSession,
-		replaceFactoryLayout,
-	)
-	if err != nil {
-		return nil
-	}
-	// The exact ports were rejected above, which exhausts the catalog
-	// constructor's failure cases.
-	catalogService, _ := catalogwire.NewService(catalog.Dependencies{
-		Paths:      namedPaths,
-		FileSystem: namedFactoryCatalogFileSystem,
-	})
-	operations, _ := validator.(factoryroot.DefinitionValidationOperation)
-	effective, _ := validator.(factoryroot.EffectiveDefinitionValidationOperation)
-	validationService, _ := validationwire.NewService(validationservice.Dependencies{
-		Operations:            operations,
-		Effective:             effective,
-		LoadCanonical:         loadCanonical,
-		RequiredToolChecker:   requiredToolChecker,
-		OrchestratorValidator: orchestratorValidator,
-	})
+// Dependencies are the exact capabilities required to assemble the private
+// Factory Definitions subservices. Session/runtime effects intentionally do
+// not appear here; session-scoped operations belong to Factory Sessions.
+type Dependencies struct {
+	Validator                     factoryroot.Validator
+	DefinitionValidation          factoryroot.DefinitionValidationOperation
+	EffectiveDefinitionValidation factoryroot.EffectiveDefinitionValidationOperation
+	LoadCanonical                 factoryroot.CanonicalFactoryJSONLoader
+	NamedPaths                    factoryeffects.NamedPathResolver
+	NamedFactoryCatalogFileSystem factoryeffects.NamedFactoryCatalogFileSystem
+	PackagedCatalog               factoryroot.PackagedFactoryCatalogOperations
+	PackagedInstaller             factoryroot.PackagedFactoryInstallationOperations
+	RequiredToolChecker           factoryroot.RequiredToolChecker
+	OrchestratorValidator         factoryroot.OrchestratorDefinitionValidator
+	AuthoringLayout               authoringlayout.Service
+	DistributionScaffold          factoryroot.ScaffoldInitializer
+	ScaffoldFactoryNameResolver   distributionservice.ScaffoldFactoryNameResolver
+	InvocationPolicy              invocationpolicyservice.Service
+}
+
+// NewService constructs the singular Factory Definitions root from already
+// assembled private capabilities. It performs no lifecycle activation.
+func NewService(deps Dependencies, options ...CompositionOption) (factoryroot.Service, error) {
 	composition := applyCompositionOptions(options)
+	if composition.scaffoldInitializer != nil {
+		deps.DistributionScaffold = composition.scaffoldInitializer
+	}
+	if composition.scaffoldFactoryNameResolver != nil {
+		deps.ScaffoldFactoryNameResolver = composition.scaffoldFactoryNameResolver
+	}
+	if deps.Validator == nil {
+		return nil, fmt.Errorf("construct Factory Definitions: validator is required")
+	}
+	if deps.DefinitionValidation == nil {
+		return nil, fmt.Errorf("construct Factory Definitions: definition validation operation is required")
+	}
+	if deps.EffectiveDefinitionValidation == nil {
+		return nil, fmt.Errorf("construct Factory Definitions: effective definition validation operation is required")
+	}
+	if deps.LoadCanonical == nil {
+		return nil, fmt.Errorf("construct Factory Definitions: canonical Factory loader is required")
+	}
+	if deps.NamedPaths == nil {
+		return nil, fmt.Errorf("construct Factory Definitions: named path resolver is required")
+	}
+	if deps.NamedFactoryCatalogFileSystem == nil {
+		return nil, fmt.Errorf("construct Factory Definitions: named Factory catalog filesystem is required")
+	}
+	if deps.PackagedCatalog.List == nil || deps.PackagedCatalog.Resolve == nil {
+		return nil, fmt.Errorf("construct Factory Definitions: packaged Factory catalog is required")
+	}
+	if deps.PackagedInstaller.Install == nil {
+		return nil, fmt.Errorf("construct Factory Definitions: packaged Factory installer is required")
+	}
+	if deps.RequiredToolChecker == nil {
+		return nil, fmt.Errorf("construct Factory Definitions: required tool checker is required")
+	}
+	if deps.OrchestratorValidator == nil {
+		return nil, fmt.Errorf("construct Factory Definitions: orchestrator definition validator is required")
+	}
+	if deps.AuthoringLayout == nil {
+		return nil, fmt.Errorf("construct Factory Definitions: authoring_layout service is required")
+	}
+	if deps.InvocationPolicy == nil {
+		return nil, fmt.Errorf("construct Factory Definitions: invocation policy is required")
+	}
+
+	catalogService, err := catalogwire.NewService(catalog.Dependencies{
+		Paths:      deps.NamedPaths,
+		FileSystem: deps.NamedFactoryCatalogFileSystem,
+	})
+	if err != nil {
+		return nil, err
+	}
+	validationService, err := validationwire.NewService(validationservice.Dependencies{
+		Operations:            deps.DefinitionValidation,
+		Effective:             deps.EffectiveDefinitionValidation,
+		LoadCanonical:         deps.LoadCanonical,
+		RequiredToolChecker:   deps.RequiredToolChecker,
+		OrchestratorValidator: deps.OrchestratorValidator,
+	})
+	if err != nil {
+		return nil, err
+	}
 	distributionService := lifecycle.ComposeDistributionService(
-		packagedCatalog,
-		packagedInstaller,
-		composition.scaffoldInitializer,
-		composition.scaffoldFactoryNameResolver,
+		deps.PackagedCatalog,
+		deps.PackagedInstaller,
+		deps.DistributionScaffold,
+		deps.ScaffoldFactoryNameResolver,
 	)
 	if distributionService == nil {
-		return nil
+		return nil, fmt.Errorf("construct Factory Definitions: distribution service rejected its dependencies")
 	}
-	return lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
-		host,
-		activationGateway,
+	root := lifecycle.NewWithCatalogPackagesValidationDistributionAndAuthoring(
 		catalogService,
 		validationService,
-		authoringLayout,
+		deps.AuthoringLayout,
 		distributionService,
-		versionFileSystem,
+		deps.InvocationPolicy,
 	)
+	return root, nil
 }

@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"net/http"
 	"testing"
 
@@ -62,7 +63,9 @@ func (statusProjectorRole) ProjectFactoryStatusFromObservation(observation facto
 type contentStagingRole struct{ work.ContentStagingService }
 type contentPreparationRole struct{ work.ContentPreparation }
 type workRequestPreparationRole struct{ work.RequestPreparationService }
-type invocationWorkTypeRole struct{ factorydefinitions.InvocationWorkTypeService }
+type invocationWorkTypeRole struct {
+	factorydefinitionswire.InvocationWorkTypeService
+}
 
 func TestHandlerBindsOpenedRolesWithoutReconstructingStableGraph(t *testing.T) {
 	t.Parallel()

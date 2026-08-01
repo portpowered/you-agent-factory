@@ -6,20 +6,17 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/portablefiles"
 	contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorydefinitionsinternal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal"
-	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
-	snapshotsportabilitycapture "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/capture"
-	snapshotsportabilityeditable "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/editable"
-	internalportableconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig"
-	snapshotsportabilityprepare "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/prepare"
-	snapshotsportabilityreplayconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/replayconfig"
+	factoryeffect "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/effects"
+	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
+	snapshotsportabilitywire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/wire"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
 )
 
-// FactorySnapshotJSONDecoder binds the canonical public representation decoder
+// NewFactorySnapshotJSONDecoder binds the canonical public representation decoder
 // to Factory Definitions snapshot capture.
-func FactorySnapshotJSONDecoder() contracts.FactorySnapshotJSONDecoder {
-	return snapshotsportabilitycapture.NewJSONDecoder(
+func NewFactorySnapshotJSONDecoder() factoryeffect.FactorySnapshotJSONDecoder {
+	return snapshotsportabilitywire.NewJSONDecoder(
 		factorymapping.GeneratedFactoryFromOpenAPIJSON,
 	)
 }
@@ -27,16 +24,18 @@ func FactorySnapshotJSONDecoder() contracts.FactorySnapshotJSONDecoder {
 // LoadedFactorySnapshotCapturer binds canonical snapshot representation
 // mapping to the Factory Definitions capture implementation.
 func LoadedFactorySnapshotCapturer() contracts.LoadedFactorySnapshotCapturer {
-	return snapshotsportabilitycapture.NewLoaded(
+	return snapshotsportabilitywire.NewLoadedSnapshotCapturer(
 		factorysnapshot.ObjectFromFactoryConfig,
+		compilationwire.MergeRuntimeConfig,
 	)
 }
 
 // FactorySnapshotCapturer binds canonical representation mapping to explicit
 // Factory Definition snapshot capture.
 func FactorySnapshotCapturer() contracts.FactorySnapshotCapturer {
-	return snapshotsportabilitycapture.NewExplicit(
+	return snapshotsportabilitywire.NewExplicitSnapshotCapturer(
 		factorysnapshot.ObjectFromFactoryConfig,
+		compilationwire.MergeRuntimeConfig,
 	)
 }
 
@@ -54,11 +53,11 @@ func CaptureInitialSnapshot(
 	)
 }
 
-// FactorySnapshotDirectoryLoader composes authored Factory loading and
+// NewFactorySnapshotDirectoryLoader composes authored Factory loading and
 // snapshot capture for Recordings import paths.
-func FactorySnapshotDirectoryLoader(
-	loader *compilationloading.Loader,
-) contracts.FactorySnapshotDirectoryLoader {
+func NewFactorySnapshotDirectoryLoader(
+	loader *compilationwire.Loader,
+) factoryeffect.FactorySnapshotDirectoryLoader {
 	captureLoaded := LoadedFactorySnapshotCapturer()
 	return func(factoryDir string) (*contracts.FactorySnapshot, error) {
 		loaded, err := loader.LoadSourceFromFactoryDir(factoryDir, nil)
@@ -75,20 +74,20 @@ func PortableFactoryConfigPreparer(
 	applySupportedFiles contracts.PortableBundledFilesApplier,
 	applyStarterWork contracts.FactoryStarterWorkApplier,
 ) contracts.PortableFactoryConfigPreparer {
-	return snapshotsportabilityprepare.NewPreparer(
+	return snapshotsportabilitywire.NewPortableFactoryConfigPreparer(
 		contracts.CloneFactoryConfig,
 		applySupportedFiles,
 		applyStarterWork,
 	)
 }
 
-// ReplayRuntimeConfigDecoder binds replay lookup reconstruction to the
+// NewReplayRuntimeConfigDecoder binds replay lookup reconstruction to the
 // canonical Factory representation decoder.
-func ReplayRuntimeConfigDecoder() contracts.ReplayRuntimeConfigDecoder {
+func NewReplayRuntimeConfigDecoder() factoryeffect.ReplayRuntimeConfigDecoder {
 	return func(
 		snapshot *contracts.FactorySnapshot,
-	) (contracts.ReplayRuntimeConfig, error) {
-		return snapshotsportabilityreplayconfig.Decode(snapshot, factorymapping.FactoryConfigFromOpenAPIJSON)
+	) (factoryeffect.ReplayRuntimeConfig, error) {
+		return snapshotsportabilitywire.DecodeReplayRuntimeConfig(snapshot, factorymapping.FactoryConfigFromOpenAPIJSON)
 	}
 }
 
@@ -101,7 +100,7 @@ func ValidateEditableSnapshot(
 	mapInput contracts.EditableFactoryValidationRequestMapper,
 	validator contracts.DefinitionValidationOperation,
 ) error {
-	return snapshotsportabilityeditable.ValidateSnapshot(
+	return snapshotsportabilitywire.ValidateEditableSnapshot(
 		ctx,
 		snapshot,
 		workstationLoader,
@@ -115,7 +114,7 @@ func ValidateEditableSnapshot(
 func PrepareFactorySnapshotImport(
 	payload []byte,
 ) (contracts.PrepareFactorySnapshotImportResult, error) {
-	return snapshotsportabilityprepare.Import(payload, FactorySnapshotJSONDecoder())
+	return snapshotsportabilitywire.PrepareFactorySnapshotImport(payload, NewFactorySnapshotJSONDecoder())
 }
 
 // NewPortableBundledFilesApplier binds portable authored-file discovery to an
@@ -123,7 +122,7 @@ func PrepareFactorySnapshotImport(
 func NewPortableBundledFilesApplier(
 	fileSystem portablefiles.FileSystem,
 ) (contracts.PortableBundledFilesApplier, error) {
-	return internalportableconfig.NewPortableBundledFilesApplier(fileSystem)
+	return snapshotsportabilitywire.NewPortableBundledFilesApplier(fileSystem)
 }
 
 // NewFactoryStarterWorkApplier binds starter-Work discovery to an injected
@@ -131,7 +130,7 @@ func NewPortableBundledFilesApplier(
 func NewFactoryStarterWorkApplier(
 	fileSystem portablefiles.FileSystem,
 ) (contracts.FactoryStarterWorkApplier, error) {
-	return internalportableconfig.NewFactoryStarterWorkApplier(fileSystem)
+	return snapshotsportabilitywire.NewFactoryStarterWorkApplier(fileSystem)
 }
 
 // NewPortableBundledDocsPruner binds obsolete authored-document cleanup to an
@@ -139,7 +138,7 @@ func NewFactoryStarterWorkApplier(
 func NewPortableBundledDocsPruner(
 	fileSystem portablefiles.FileSystem,
 ) (contracts.PortableBundledDocsPruner, error) {
-	return internalportableconfig.NewPortableBundledDocsPruner(fileSystem)
+	return snapshotsportabilitywire.NewPortableBundledDocsPruner(fileSystem)
 }
 
 // NewPortableBundledFilesMaterializer binds portable file writes to an injected
@@ -147,7 +146,7 @@ func NewPortableBundledDocsPruner(
 func NewPortableBundledFilesMaterializer(
 	fileSystem portablefiles.FileSystem,
 ) contracts.PortableBundledFilesMaterializer {
-	return internalportableconfig.NewMaterializer(fileSystem)
+	return snapshotsportabilitywire.NewPortableBundledFilesMaterializer(fileSystem)
 }
 
 // NewPortableBundledFileWritesValidator binds portable write checks to an
@@ -155,7 +154,7 @@ func NewPortableBundledFilesMaterializer(
 func NewPortableBundledFileWritesValidator(
 	fileSystem portablefiles.FileSystem,
 ) contracts.PortableBundledFileWritesValidator {
-	return internalportableconfig.NewWritesValidator(fileSystem)
+	return snapshotsportabilitywire.NewPortableBundledFileWritesValidator(fileSystem)
 }
 
 // NewPortableBundledFilesCopier binds portable file copy to an injected
@@ -163,7 +162,7 @@ func NewPortableBundledFileWritesValidator(
 func NewPortableBundledFilesCopier(
 	fileSystem portablefiles.FileSystem,
 ) contracts.PortableBundledFilesCopier {
-	return internalportableconfig.NewFilesCopier(fileSystem)
+	return snapshotsportabilitywire.NewPortableBundledFilesCopier(fileSystem)
 }
 
 // NewPortableBundledFileSourceResolver binds portable source resolution to an
@@ -171,5 +170,5 @@ func NewPortableBundledFilesCopier(
 func NewPortableBundledFileSourceResolver(
 	fileSystem portablefiles.FileSystem,
 ) (contracts.PortableBundledFileSourceResolver, error) {
-	return internalportableconfig.NewSupportedSourceResolver(fileSystem)
+	return snapshotsportabilitywire.NewPortableBundledFileSourceResolver(fileSystem)
 }

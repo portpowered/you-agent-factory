@@ -12,6 +12,7 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
@@ -50,9 +51,9 @@ type Service struct {
 	processEnvironment                func() []string
 	currentWorkingDirectory           func() (string, error)
 	modelInvocationExecutorOverride   ModelInvocationExecutor
-	interpolation                     interfaces.InvocationInterpolationService
-	executionPolicy                   interfaces.WorkstationExecutionPolicyService
-	decisionEnvelopes                 interfaces.DecisionEnvelopeService
+	interpolation                     factorydefinitionswire.InvocationInterpolationService
+	executionPolicy                   factorydefinitionswire.WorkstationExecutionPolicyService
+	decisionEnvelopes                 factorydefinitionswire.DecisionEnvelopeService
 	factoryDocs                       workers.FactoryDocsLoader
 	worktreePreparer                  workers.FactoryWorktreePreparer
 	agentRunHarness                   workeragentrun.HarnessAdapter
@@ -153,8 +154,8 @@ func New(
 	currentWorkingDirectory func() (string, error),
 	modelInvocationExecutor ModelInvocationExecutor,
 	contentMaterializer work.ContentMaterializer,
-	interpolation interfaces.InvocationInterpolationService,
-	executionPolicy interfaces.WorkstationExecutionPolicyService,
+	interpolation factorydefinitionswire.InvocationInterpolationService,
+	executionPolicy factorydefinitionswire.WorkstationExecutionPolicyService,
 	factoryDocs workers.FactoryDocsLoader,
 	resolveSymlinks workers.ResolveExecutableSymlinks,
 	executableLocator platformprocess.ExecutableLocator,
@@ -166,7 +167,7 @@ func New(
 	retryRandom platformrandom.Source,
 	workstationFiles platformfilesystem.ReadFileInspector,
 	temporaryFiles platformfilesystem.TemporaryFileSystem,
-	decisionEnvelopes ...interfaces.DecisionEnvelopeService,
+	decisionEnvelopes ...factorydefinitionswire.DecisionEnvelopeService,
 ) (*Service, error) {
 	if sessions == nil {
 		return nil, fmt.Errorf("construct Worker execution service: Factory Session runtime is required")
@@ -259,8 +260,8 @@ func New(
 }
 
 func firstDecisionEnvelopeService(
-	services []interfaces.DecisionEnvelopeService,
-) interfaces.DecisionEnvelopeService {
+	services []factorydefinitionswire.DecisionEnvelopeService,
+) factorydefinitionswire.DecisionEnvelopeService {
 	if len(services) == 0 {
 		return nil
 	}

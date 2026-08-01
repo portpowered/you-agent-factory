@@ -3,6 +3,7 @@ package systeminitialization_test
 import (
 	"context"
 	"errors"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"os"
 	"path/filepath"
 	"strings"
@@ -113,7 +114,7 @@ func newDefinitionsRootService(
 	t *testing.T,
 	settings systeminitializationwire.OperatorSettings,
 	catalog factorydefinitions.PackagedFactoryCatalogOperations,
-	installer factorydefinitions.PackagedFactoryInstaller,
+	installer factorydefinitionswire.PackagedFactoryInstaller,
 ) systeminitialization.Service {
 	t.Helper()
 

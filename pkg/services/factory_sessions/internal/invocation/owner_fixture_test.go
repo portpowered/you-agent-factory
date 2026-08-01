@@ -5,6 +5,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
@@ -16,8 +17,8 @@ type sessionOwnerFixture struct {
 	WaitNext      func(context.Context) error
 	Telemetry     SessionInvocationTelemetry
 	SpecialCase   SessionInvocationSpecialCase
-	Interpolation interfaces.InvocationInterpolationService
-	WorkTypes     interfaces.InvocationWorkTypeService
+	Interpolation factorydefinitionswire.InvocationInterpolationService
+	WorkTypes     factorydefinitionswire.InvocationWorkTypeService
 	InputFiles    fileeffects.InvocationInputReader
 	Work          work.Service
 }
@@ -65,9 +66,9 @@ func (workType rejectingInvocationWorkType) DefaultWorkType(*interfaces.FactoryC
 	return "", workType.err
 }
 
-func rejectingInvocationInterpolation(parameter string) interfaces.InvocationInterpolationService {
+func rejectingInvocationInterpolation(parameter string) factorydefinitionswire.InvocationInterpolationService {
 	return factorydefinitionfixtures.InvocationInterpolation{
-		Validate: func(*interfaces.FactoryConfig, *work.InvocationArguments, interfaces.FileReader) error {
+		Validate: func(*interfaces.FactoryConfig, *work.InvocationArguments, factorydefinitionswire.FileReader) error {
 			return &work.ArgumentError{
 				Code:      work.ArgumentErrorCodeInvalidInterpolation,
 				Message:   "scripted invalid invocation interpolation",

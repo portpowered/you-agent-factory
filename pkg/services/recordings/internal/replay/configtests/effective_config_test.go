@@ -11,6 +11,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -566,7 +567,7 @@ func roundTripGeneratedFactoryThroughReplayArtifact(
 	t *testing.T,
 	factoryDir string,
 	generated factoryapi.Factory,
-) interfaces.ReplayRuntimeConfig {
+) factorydefinitionswire.ReplayRuntimeConfig {
 	t.Helper()
 	artifactPath := filepath.Join(t.TempDir(), "guarded-loop-breaker.replay.json")
 	artifact, err := replay.NewEventLogArtifact(time.Date(2026, 4, 22, 12, 0, 0, 0, time.UTC), mustFactorySnapshot(t, generated), nil, interfaces.ReplayDiagnostics{})

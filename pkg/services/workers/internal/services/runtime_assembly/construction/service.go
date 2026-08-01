@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/providers"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -68,9 +69,9 @@ type Result struct {
 type Service struct {
 	providers                         providers.Service
 	scriptFactory                     *workerexecutor.ScriptFactory
-	interpolation                     interfaces.InvocationInterpolationService
-	executionPolicy                   interfaces.WorkstationExecutionPolicyService
-	decisionEnvelopes                 interfaces.DecisionEnvelopeService
+	interpolation                     factorydefinitionswire.InvocationInterpolationService
+	executionPolicy                   factorydefinitionswire.WorkstationExecutionPolicyService
+	decisionEnvelopes                 factorydefinitionswire.DecisionEnvelopeService
 	factoryDocs                       workers.FactoryDocsLoader
 	worktreePreparer                  workers.FactoryWorktreePreparer
 	runWorktree                       string
@@ -87,16 +88,16 @@ type Service struct {
 func New(
 	providerFactory providers.Service,
 	scriptFactory *workerexecutor.ScriptFactory,
-	interpolation interfaces.InvocationInterpolationService,
-	executionPolicy interfaces.WorkstationExecutionPolicyService,
+	interpolation factorydefinitionswire.InvocationInterpolationService,
+	executionPolicy factorydefinitionswire.WorkstationExecutionPolicyService,
 	factoryDocs workers.FactoryDocsLoader,
 	worktreePreparer workers.FactoryWorktreePreparer,
 	agentRunHarness workeragentrun.HarnessAdapter,
 	retryRandom platformrandom.Source,
 	workstationFiles platformfilesystem.ReadFileInspector,
-	decisionEnvelopes ...interfaces.DecisionEnvelopeService,
+	decisionEnvelopes ...factorydefinitionswire.DecisionEnvelopeService,
 ) *Service {
-	var selected interfaces.DecisionEnvelopeService
+	var selected factorydefinitionswire.DecisionEnvelopeService
 	if len(decisionEnvelopes) > 0 {
 		selected = decisionEnvelopes[0]
 	}
@@ -463,8 +464,8 @@ func workstationResult(
 	workflowContext *workerexecution.Context,
 	logger logging.Logger,
 	direct workers.WorkstationRequestExecutor,
-	interpolation interfaces.InvocationInterpolationService,
-	executionPolicy interfaces.WorkstationExecutionPolicyService,
+	interpolation factorydefinitionswire.InvocationInterpolationService,
+	executionPolicy factorydefinitionswire.WorkstationExecutionPolicyService,
 	clock func() time.Time,
 	processEnvironment func() []string,
 	currentWorkingDirectory func() (string, error),

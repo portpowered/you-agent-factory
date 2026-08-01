@@ -306,3 +306,30 @@ func TestProvideListFactoriesOperationCallsFactoryDefinitionsOwner(t *testing.T)
 		t.Fatalf("service calls = %d, entries = %#v", calls, entries)
 	}
 }
+
+// provideEffectiveFactoryDefinitionsService is test-only composition for the
+// CLI provider characterization. Production CLI providers receive the
+// already-composed Factory Definitions root directly.
+func provideEffectiveFactoryDefinitionsService(
+	operation factorydefinitions.EffectiveFactoryCatalogOperation,
+) (factorydefinitions.Service, error) {
+	if operation == nil {
+		return nil, nil
+	}
+	return testEffectiveFactoryDefinitionsService{
+		Service:       factorydefinitions.UnimplementedService{},
+		listEffective: operation,
+	}, nil
+}
+
+type testEffectiveFactoryDefinitionsService struct {
+	factorydefinitions.Service
+	listEffective factorydefinitions.EffectiveFactoryCatalogOperation
+}
+
+func (s testEffectiveFactoryDefinitionsService) ListEffectiveFactories(
+	ctx context.Context,
+	request factorydefinitions.ListEffectiveFactoriesRequest,
+) (factorydefinitions.ListEffectiveFactoriesResult, error) {
+	return s.listEffective(ctx, request)
+}

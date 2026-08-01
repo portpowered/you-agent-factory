@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"io/fs"
 	"path/filepath"
 	"sort"
@@ -59,8 +60,8 @@ type WorkstationExecutor struct {
 	ResolveProviderIdentity workerexecution.ProviderIdentityResolver
 	WorkflowContext         *workerexecution.Context
 	Executor                WorkstationRequestExecutor
-	Interpolation           factorydefinitions.InvocationInterpolationService
-	ExecutionPolicy         factorydefinitions.WorkstationExecutionPolicyService
+	Interpolation           factorydefinitionswire.InvocationInterpolationService
+	ExecutionPolicy         factorydefinitionswire.WorkstationExecutionPolicyService
 	Renderer                workerprompting.PromptRenderer
 	Parser                  OutputParser
 	Logger                  logging.Logger // optional; nil → noop
@@ -149,7 +150,7 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 			Metrics:      workerexecution.WorkMetrics{Duration: we.Now().Sub(start)},
 		}, nil
 	}
-	var readFile factorydefinitions.FileReader
+	var readFile factorydefinitionswire.FileReader
 	if we.FileSystem != nil {
 		readFile = we.FileSystem.ReadFile
 	}
@@ -876,7 +877,7 @@ func workstationLookupKey(dispatch work.WorkDispatch) string {
 }
 
 func resolveExecutionTimeout(
-	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
+	executionPolicy factorydefinitionswire.WorkstationExecutionPolicyService,
 	workerDef *factorydefinitions.FactoryWorkerConfig,
 	workstationDef *interfaces.FactoryWorkstationConfig,
 ) (time.Duration, error) {

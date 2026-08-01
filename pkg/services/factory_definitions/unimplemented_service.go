@@ -11,6 +11,13 @@ import (
 // already connected to collaborators.
 type UnimplementedService struct{}
 
+func (UnimplementedService) ResolveInvocationDefinition(
+	context.Context,
+	ResolveInvocationDefinitionRequest,
+) (ResolveInvocationDefinitionResult, error) {
+	return ResolveInvocationDefinitionResult{}, fmt.Errorf("Factory Definitions invocation policy collaborator is required")
+}
+
 // ListEffectiveFactories returns a collaborator-required failure until nested
 // effective-catalog wiring lands.
 func (UnimplementedService) ListEffectiveFactories(
@@ -117,6 +124,18 @@ func (UnimplementedService) ReplaceNamedFactory(
 	ReplaceNamedFactoryRequest,
 ) (ReplaceNamedFactoryResult, error) {
 	return ReplaceNamedFactoryResult{}, &AtomicFactoryWriteFailure{
+		PreviousPreserved: true,
+		Cause:             fmt.Errorf("factory layout collaborator is required"),
+	}
+}
+
+// ReplaceFactoryLayoutAtDir returns an authoring collaborator failure until
+// direct current-layout replacement is wired.
+func (UnimplementedService) ReplaceFactoryLayoutAtDir(
+	context.Context,
+	ReplaceFactoryLayoutAtDirRequest,
+) (ReplaceFactoryLayoutAtDirResult, error) {
+	return ReplaceFactoryLayoutAtDirResult{}, &AtomicFactoryWriteFailure{
 		PreviousPreserved: true,
 		Cause:             fmt.Errorf("factory layout collaborator is required"),
 	}

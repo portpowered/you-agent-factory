@@ -6,13 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	factoryeffects "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/effects"
 	"strings"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	snapshotsportability "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability"
-	snapshotsportabilitycapture "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/capture"
-	snapshotsportabilitymaterialize "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/materialize"
-	snapshotsportabilityprepare "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/prepare"
+	snapshotsportabilitycapture "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/internal/capture"
+	snapshotsportabilitymaterialize "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/internal/materialize"
+	snapshotsportabilityprepare "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/internal/prepare"
 )
 
 // Service is the private nested snapshots_portability implementation behind
@@ -21,7 +22,7 @@ type Service struct {
 	loadCanonical             factorydefinitions.CanonicalFactoryJSONLoader
 	captureLoaded             factorydefinitions.LoadedFactorySnapshotCapturer
 	preparePortable           factorydefinitions.PortableFactoryConfigPreparer
-	decodeSnapshot            factorydefinitions.FactorySnapshotJSONDecoder
+	decodeSnapshot            factoryeffects.FactorySnapshotJSONDecoder
 	materializePortableFiles  factorydefinitions.PortableBundledFilesMaterializer
 	validateMaterializeWrites factorydefinitions.PortableBundledFileWritesValidator
 }
@@ -33,7 +34,7 @@ func New(
 	loadCanonical factorydefinitions.CanonicalFactoryJSONLoader,
 	captureLoaded factorydefinitions.LoadedFactorySnapshotCapturer,
 	preparePortable factorydefinitions.PortableFactoryConfigPreparer,
-	decodeSnapshot factorydefinitions.FactorySnapshotJSONDecoder,
+	decodeSnapshot factoryeffects.FactorySnapshotJSONDecoder,
 	materializePortableFiles factorydefinitions.PortableBundledFilesMaterializer,
 	validateMaterializeWrites factorydefinitions.PortableBundledFileWritesValidator,
 ) *Service {

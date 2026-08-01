@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
+	catalogresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
-	catalogresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/resource"
-	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
+	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -102,7 +102,7 @@ func publicFactoryEnumNormalizerProviderCases() []publicFactoryEnumNormalizerCas
 			name:       "resource type",
 			alias:      "MODEL",
 			unknown:    "custom-resource",
-			want:       catalogresource.TypeModel,
+			want:       catalogresource.ResourceTypeModel,
 			permissive: interfaces.PermissivePublicFactoryResourceType,
 			strict:     interfaces.StrictPublicFactoryResourceType,
 		},

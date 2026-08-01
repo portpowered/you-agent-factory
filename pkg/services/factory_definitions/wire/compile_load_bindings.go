@@ -4,9 +4,9 @@ import (
 	"fmt"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	internalauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout"
-	compilationloadedsource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loadedsource"
-	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
+	factoryeffect "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/effects"
+	authoringlayoutwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/wire"
+	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
 	wirevalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/validation"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	authoredmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/authored"
@@ -15,7 +15,7 @@ import (
 // Loader is the compilation-owned Factory Definitions loader selected by owner
 // wire composition. Root pkg/wire binds through this alias instead of public
 // transitional loading shims.
-type Loader = compilationloading.Loader
+type Loader = compilationwire.Loader
 
 // NewLoader binds Factory Definitions loading to the selected authored and
 // canonical representation adapters through compilation-owned loading.
@@ -23,24 +23,27 @@ func NewLoader(
 	applySupportedFiles factorydefinitions.PortableBundledFilesApplier,
 	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
 	materializeFiles factorydefinitions.PortableBundledFilesMaterializer,
-	loadingFileSystem factorydefinitions.LoadingFileSystem,
-	namedPaths factorydefinitions.NamedPathResolver,
-	fileSystem factorydefinitions.AuthoredLayoutReaderFileSystem,
+	loadingFileSystem factoryeffect.LoadingFileSystem,
+	namedPaths factoryeffect.NamedPathResolver,
+	fileSystem factoryeffect.AuthoredLayoutReaderFileSystem,
 	sourceResolver factorydefinitions.PortableBundledFileSourceResolver,
-	inspectSource factorydefinitions.PortableBundledFileInspection,
+	inspectSource factoryeffect.PortableBundledFileInspection,
 	requiredToolChecker factorydefinitions.RequiredToolChecker,
 ) *Loader {
 	mapper := factorymapping.NewFactoryConfigMapper()
-	authoredReader := internalauthoredlayout.NewReader(
+	authoredReader := authoringlayoutwire.NewReader(
 		authoredmapping.ParseWorkerConfig,
 		authoredmapping.ParseWorkstationConfig,
 		authoredmapping.ParseAgentsBody,
 		fileSystem,
 	)
-	return compilationloading.New(
+	return compilationwire.NewLoader(
+		applySupportedFiles,
+		applyStarterWork,
+		materializeFiles,
 		loadingFileSystem,
-		internalauthoredlayout.NewFactorySourceLoader(fileSystem),
 		namedPaths.ResolveCurrentDir,
+		authoringlayoutwire.NewFactorySourceLoader(fileSystem),
 		LoadedFactorySourceFactory(),
 		factorymapping.ExpandFactoryConfigForRuntimeLoad,
 		mapper.Expand,
@@ -73,9 +76,6 @@ func NewLoader(
 				)
 		},
 		wirevalidation.ValidateBlockingFactoryLoad,
-		applySupportedFiles,
-		applyStarterWork,
-		materializeFiles,
 		authoredReader.LoadWorkerConfig,
 		authoredReader.LoadWorkstationConfig,
 		authoredReader.LoadWorkerBody,
@@ -89,10 +89,10 @@ func NewLoader(
 // NewPathRequiredToolChecker constructs the Factory Definitions external-tool
 // checker through compilation-owned loading.
 func NewPathRequiredToolChecker(
-	lookPath factorydefinitions.RequiredToolPathLookup,
-	versionProbe factorydefinitions.RequiredToolVersionProbe,
+	lookPath factoryeffect.RequiredToolPathLookup,
+	versionProbe factoryeffect.RequiredToolVersionProbe,
 ) (factorydefinitions.RequiredToolChecker, error) {
-	return compilationloading.NewPathRequiredToolChecker(lookPath, versionProbe)
+	return compilationwire.NewPathRequiredToolChecker(lookPath, versionProbe)
 }
 
 // LoadedFactorySourceFactory binds the compilation-owned effective-source
@@ -104,12 +104,7 @@ func LoadedFactorySourceFactory() factorydefinitions.LoadedFactorySourceFactory 
 		runtimeDefinitions factorydefinitions.RuntimeDefinitionLookup,
 		replacements []factorydefinitions.PortableBundledFileReplacement,
 	) (factorydefinitions.MutableLoadedFactorySource, error) {
-		return compilationloadedsource.New(
-			factoryDir,
-			factoryConfig,
-			runtimeDefinitions,
-			replacements,
-		)
+		return compilationwire.LoadedFactorySourceFactory()(factoryDir, factoryConfig, runtimeDefinitions, replacements)
 	}
 }
 

@@ -1,16 +1,11 @@
 package factorysessions
 
-import factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-
-// DefinitionActivationGateway is the Factory Sessions-owned activation edge for
-// definition save, activate, and swap paths. The canonical interface definition
-// lives in factory_definitions so Definitions peers can consume the gateway
-// without importing Factory Sessions.
-type DefinitionActivationGateway = factorydefinitions.DefinitionActivationGateway
-
-// DefinitionActivationGatewayProvider exposes the Sessions-owned activation
-// gateway for Factory Definitions construction without the attach-capable
-// SessionHost bundle.
+// DefinitionActivationGatewayProvider preserves the existing Sessions-owned
+// construction edge while Factory Definitions owns the canonical gateway
+// contract. The provider is intentionally not part of the Definitions root.
+// The return value stays opaque here because no Sessions peer consumes this
+// transitional provider; the concrete activation edge is private to the
+// Sessions implementation.
 type DefinitionActivationGatewayProvider interface {
-	DefinitionActivationGateway() DefinitionActivationGateway
+	DefinitionActivationGateway() any
 }

@@ -341,7 +341,6 @@ var (
 	NewValidationError                     = newValidationError
 )
 
-
 // IsTerminalLifecycleStatus reports whether status is terminal and therefore
 // immutable except for explicitly allowed inspection or retry behaviors.
 func isTerminalLifecycleStatus(status LifecycleStatus) bool {

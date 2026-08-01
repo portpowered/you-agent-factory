@@ -58,7 +58,7 @@ import (
 )
 
 func provideCurrentFactoryDirectoryResolver(
-	namedPaths factorydefinitions.NamedPathResolver,
+	namedPaths factorydefinitionswire.NamedPathResolver,
 ) factorydefinitions.CurrentFactoryDirectoryResolver {
 	return func(rootDir string) (string, error) {
 		return factorydefinitionswire.ResolveCurrent(namedPaths, rootDir)
@@ -326,7 +326,7 @@ func provideModelInvocationOperation(
 
 func provideSystemInitializationService(
 	persistence factorydefinitions.Persistence,
-	packagedInstallationFileSystem factorydefinitions.PackagedInstallationFileSystem,
+	packagedInstallationFileSystem factorydefinitionswire.PackagedInstallationFileSystem,
 	packagedCatalog factorydefinitions.PackagedFactoryCatalogOperations,
 	loadOperatorConfig operatorsettings.ConfigLoader,
 	ensureOperatorBackendScope operatorsettings.BackendScopeEnsurer,
@@ -370,7 +370,7 @@ func providePackagedFactoryCatalog(
 
 func providePackagedFactoryInstallation(
 	persistence factorydefinitions.Persistence,
-	fileSystem factorydefinitions.PackagedInstallationFileSystem,
+	fileSystem factorydefinitionswire.PackagedInstallationFileSystem,
 ) factorydefinitions.PackagedFactoryInstallationOperations {
 	installer := factorydefinitionswire.NewPackagedFactoryInstallationService(persistence, fileSystem)
 	return factorydefinitions.PackagedFactoryInstallationOperations{

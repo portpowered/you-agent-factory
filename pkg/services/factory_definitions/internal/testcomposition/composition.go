@@ -7,19 +7,16 @@ package testcomposition
 import (
 	"context"
 	"fmt"
+	factoryeffects "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/effects"
 	"path/filepath"
 
 	"github.com/portpowered/infinite-you/pkg/platform/portablefiles"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	internalauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout"
-	authoringlayoutprepare "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/prepare"
-	internalnamedfactories "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedfactories"
-	catalognamedpaths "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/namedpaths"
-	catalogpersistence "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/persistence"
-	compilationloadedsource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loadedsource"
-	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
-	internalportableconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/portableconfig"
-	validationimpl "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
+	authoringlayoutwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/wire"
+	catalogwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire"
+	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
+	snapshotswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/wire"
+	validationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/wire"
 )
 
 type Representation struct {
@@ -27,9 +24,9 @@ type Representation struct {
 	DecodeAuthored    func([]byte) (*factorydefinitions.FactoryConfig, error)
 	EncodeFactory     func(*factorydefinitions.FactoryConfig) ([]byte, error)
 	NormalizeAuthored func(*factorydefinitions.FactoryConfig) (*factorydefinitions.FactoryConfig, error)
-	ParseWorker       internalauthoredlayout.WorkerParser
-	ParseWorkstation  internalauthoredlayout.WorkstationParser
-	ParseBody         internalauthoredlayout.BodyParser
+	ParseWorker       func([]byte, string) (*factorydefinitions.FactoryWorkerConfig, error)
+	ParseWorkstation  func([]byte, string) (*factorydefinitions.FactoryWorkstationConfig, error)
+	ParseBody         func([]byte, string) (string, error)
 	RenderWorker      func(factorydefinitions.FactoryWorkerConfig) ([]byte, error)
 	RenderWorkstation func(factorydefinitions.FactoryWorkstationConfig) ([]byte, error)
 	RenderBody        func(string) []byte
@@ -41,7 +38,7 @@ type Representation struct {
 type Composition struct {
 	representation Representation
 	fileSystem     portablefiles.FileSystem
-	directories    factorydefinitions.DirectoryReplacementStore
+	directories    factoryeffects.DirectoryReplacementStore
 	effects        Effects
 	requiredTools  factorydefinitions.RequiredToolChecker
 }
@@ -50,19 +47,19 @@ type Composition struct {
 // required by the owner-local test composition. Outer _test.go edges select
 // their policy-free Platform implementations explicitly.
 type Effects struct {
-	Loading             factorydefinitions.LoadingFileSystem
-	AuthoredReader      factorydefinitions.AuthoredLayoutReaderFileSystem
-	AuthoredWriter      factorydefinitions.AuthoredLayoutWriterFileSystem
-	Persistence         factorydefinitions.PersistenceFileSystem
-	NamedPaths          factorydefinitions.NamedPathFileSystem
-	NamedFactoryCatalog factorydefinitions.NamedFactoryCatalogFileSystem
-	InboxSentinels      factorydefinitions.InputInboxSentinelEnsurer
+	Loading             factoryeffects.LoadingFileSystem
+	AuthoredReader      factoryeffects.AuthoredLayoutReaderFileSystem
+	AuthoredWriter      factoryeffects.AuthoredLayoutWriterFileSystem
+	Persistence         factoryeffects.PersistenceFileSystem
+	NamedPaths          factoryeffects.NamedPathFileSystem
+	NamedFactoryCatalog factoryeffects.NamedFactoryCatalogFileSystem
+	InboxSentinels      factoryeffects.InputInboxSentinelEnsurer
 }
 
 func New(
 	representation Representation,
 	fileSystem portablefiles.FileSystem,
-	directories factorydefinitions.DirectoryReplacementStore,
+	directories factoryeffects.DirectoryReplacementStore,
 	effects Effects,
 	requiredTools ...factorydefinitions.RequiredToolChecker,
 ) Composition {
@@ -86,34 +83,37 @@ func loadedFactorySourceFactory() factorydefinitions.LoadedFactorySourceFactory 
 		runtimeDefinitions factorydefinitions.RuntimeDefinitionLookup,
 		replacements []factorydefinitions.PortableBundledFileReplacement,
 	) (factorydefinitions.MutableLoadedFactorySource, error) {
-		return compilationloadedsource.New(factoryDir, factoryConfig, runtimeDefinitions, replacements)
+		return compilationwire.LoadedFactorySourceFactory()(factoryDir, factoryConfig, runtimeDefinitions, replacements)
 	}
 }
 
 func mustSourceResolver(fileSystem portablefiles.FileSystem) factorydefinitions.PortableBundledFileSourceResolver {
-	resolver, err := internalportableconfig.NewSupportedSourceResolver(fileSystem)
+	resolver, err := snapshotswire.NewPortableBundledFileSourceResolver(fileSystem)
 	if err != nil {
 		panic(err)
 	}
 	return resolver
 }
 
-func (c Composition) Loader() *compilationloading.Loader {
+func (c Composition) Loader() *compilationwire.Loader {
 	representation := c.representation
 	applySupportedFiles, applyStarterWork, _ := PortableOperations(c.fileSystem)
-	authoredReader := internalauthoredlayout.NewReader(
+	authoredReader := authoringlayoutwire.NewReader(
 		representation.ParseWorker,
 		representation.ParseWorkstation,
 		representation.ParseBody,
 		c.effects.AuthoredReader,
 	)
 	materializeFiles := func(targetDir string, config *factorydefinitions.FactoryConfig) ([]factorydefinitions.PortableBundledFileReplacement, error) {
-		return internalportableconfig.MaterializeFiles(c.fileSystem, targetDir, config)
+		return snapshotswire.NewMaterializer(c.fileSystem)(targetDir, config)
 	}
-	return compilationloading.New(
+	return compilationwire.NewLoader(
+		applySupportedFiles,
+		applyStarterWork,
+		materializeFiles,
 		c.effects.Loading,
-		internalauthoredlayout.NewFactorySourceLoader(c.effects.AuthoredReader),
 		mustNamedPaths(c.effects.NamedPaths).ResolveCurrentDir,
+		authoringlayoutwire.NewFactorySourceLoader(c.effects.AuthoredReader),
 		loadedFactorySourceFactory(),
 		representation.DecodeFactory,
 		representation.DecodeAuthored,
@@ -138,21 +138,18 @@ func (c Composition) Loader() *compilationloading.Loader {
 			return config, nil
 		},
 		func(factoryDir string, config *factorydefinitions.FactoryConfig) error {
-			return validationimpl.ValidatePortableResourceManifestOnPathWithSourceResolver(
+			return validationwire.ValidatePortableResourceManifestOnPathWithSourceResolver(
 				factoryDir, config, mustSourceResolver(c.fileSystem),
 				c.fileSystem,
 				c.requiredTools,
 			)
 		},
 		func(factoryDir string, config *factorydefinitions.FactoryConfig) error {
-			return validationimpl.ValidatePortableBundledFilesForExpandOnPathWithSourceResolver(
+			return validationwire.ValidatePortableBundledFilesForExpandOnPathWithSourceResolver(
 				factoryDir, config, mustSourceResolver(c.fileSystem), c.fileSystem,
 			)
 		},
-		validationimpl.ValidateBlockingLoad,
-		applySupportedFiles,
-		applyStarterWork,
-		materializeFiles,
+		validationwire.ValidateBlockingFactoryLoad,
 		authoredReader.LoadWorkerConfig,
 		authoredReader.LoadWorkstationConfig,
 		authoredReader.LoadWorkerBody,
@@ -202,30 +199,30 @@ func (c Composition) Persistence(
 	loader := c.Loader()
 	_, _, pruneRemovedDocs := PortableOperations(c.fileSystem)
 	representation := c.representation
-	writer := internalauthoredlayout.NewWriter(
+	writer := authoringlayoutwire.NewWriter(
 		representation.RenderWorker,
 		representation.RenderWorkstation,
 		representation.RenderBody,
-		internalauthoredlayout.NewAgentsFileWriter(c.effects.AuthoredWriter),
+		authoringlayoutwire.NewAgentsFileWriter(c.effects.AuthoredWriter),
 		representation.SafeLayoutSegment,
 		representation.SafePromptPath,
 		c.effects.AuthoredWriter,
 		c.effects.InboxSentinels,
 	)
 	materializeFiles := func(targetDir string, config *factorydefinitions.FactoryConfig) ([]factorydefinitions.PortableBundledFileReplacement, error) {
-		return internalportableconfig.MaterializeFiles(c.fileSystem, targetDir, config)
+		return snapshotswire.NewMaterializer(c.fileSystem)(targetDir, config)
 	}
 	validateWrites := func(targetDir string, config *factorydefinitions.FactoryConfig) error {
-		return internalportableconfig.ValidateWrites(c.fileSystem, targetDir, config)
+		return snapshotswire.NewWritesValidator(c.fileSystem)(targetDir, config)
 	}
 	copySupportedFiles := func(sourceDir, targetDir string, config *factorydefinitions.FactoryConfig) error {
-		return internalportableconfig.CopySupportedFiles(c.fileSystem, sourceDir, targetDir, config)
+		return snapshotswire.NewPortableBundledFilesCopier(c.fileSystem)(sourceDir, targetDir, config)
 	}
-	persistence, err := catalogpersistence.New(
+	persistence, err := catalogwire.NewPersistence(
 		validator,
 		mapInput,
 		func(ctx context.Context, segment string, payload []byte, validator factorydefinitions.Validator) (*factorydefinitions.PreparedFactoryLayoutPayload, error) {
-			return authoringlayoutprepare.FactoryLayout(
+			return authoringlayoutwire.PrepareFactoryLayout(
 				ctx, segment, payload, validator, representation.DecodeAuthored,
 				representation.NormalizeAuthored, representation.EncodeFactory,
 			)
@@ -263,46 +260,27 @@ func (c Composition) Persistence(
 	return persistence
 }
 
-func mustNamedPaths(fileSystem factorydefinitions.NamedPathFileSystem) *catalognamedpaths.Resolver {
-	resolver, err := catalognamedpaths.New(fileSystem)
+func mustNamedPaths(fileSystem factoryeffects.NamedPathFileSystem) factoryeffects.NamedPathResolver {
+	resolver, err := catalogwire.NewPathResolver(fileSystem)
 	if err != nil {
 		panic(err)
 	}
 	return resolver
 }
 
-func (c Composition) NamedPaths() factorydefinitions.NamedPathResolver {
+func (c Composition) NamedPaths() factoryeffects.NamedPathResolver {
 	return mustNamedPaths(c.effects.NamedPaths)
 }
 
 func (c Composition) NamedFactoryCatalog() factorydefinitions.NamedFactoryCatalog {
-	return namedFactoryCatalog{
-		paths:      c.NamedPaths(),
-		fileSystem: c.effects.NamedFactoryCatalog,
+	catalog, err := catalogwire.NewNamedFactoryCatalog(
+		c.NamedPaths(),
+		c.effects.NamedFactoryCatalog,
+	)
+	if err != nil {
+		panic(err)
 	}
-}
-
-type namedFactoryCatalog struct {
-	paths      factorydefinitions.NamedPathResolver
-	fileSystem factorydefinitions.NamedFactoryCatalogFileSystem
-}
-
-func (c namedFactoryCatalog) ListNamedFactories(
-	rootDir string,
-) ([]factorydefinitions.NamedFactoryListEntry, error) {
-	return internalnamedfactories.List(c.paths, c.fileSystem, rootDir)
-}
-
-func (c namedFactoryCatalog) DeleteNamedFactory(rootDir, name string) error {
-	return internalnamedfactories.Delete(c.paths, c.fileSystem, rootDir, name)
-}
-
-func (c namedFactoryCatalog) ResolveNamedFactoryAcrossRoots(
-	projectRoot string,
-	globalRoot string,
-	name string,
-) (*factorydefinitions.NamedFactoryResolution, error) {
-	return internalnamedfactories.ResolveAcrossRoots(c.paths, projectRoot, globalRoot, name)
+	return catalog
 }
 
 // PortableOperations selects local filesystem effects for owner-local Factory
@@ -314,19 +292,19 @@ func PortableOperations(
 	factorydefinitions.FactoryStarterWorkApplier,
 	factorydefinitions.PortableBundledDocsPruner,
 ) {
-	applySupportedFiles, err := internalportableconfig.NewPortableBundledFilesApplier(
+	applySupportedFiles, err := snapshotswire.NewPortableBundledFilesApplier(
 		fileSystem,
 	)
 	if err != nil {
 		panic(err)
 	}
-	applyStarterWork, err := internalportableconfig.NewFactoryStarterWorkApplier(
+	applyStarterWork, err := snapshotswire.NewFactoryStarterWorkApplier(
 		fileSystem,
 	)
 	if err != nil {
 		panic(err)
 	}
-	pruneRemovedDocs, err := internalportableconfig.NewPortableBundledDocsPruner(
+	pruneRemovedDocs, err := snapshotswire.NewPortableBundledDocsPruner(
 		fileSystem,
 	)
 	if err != nil {

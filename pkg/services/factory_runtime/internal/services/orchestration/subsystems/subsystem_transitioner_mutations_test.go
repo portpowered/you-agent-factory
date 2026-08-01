@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
@@ -75,7 +76,7 @@ func newCalculateMutationsFixture() calculateMutationsFixture {
 func testTTSOutputShaping(
 	metadata string,
 	backendLabel string,
-) interfaces.InvocationOutputShapingService {
+) factorydefinitionswire.InvocationOutputShapingService {
 	return factorydefinitionfixtures.InvocationOutputShaping{
 		FormatTTS: func(*interfaces.FactoryWorkstationConfig) bool { return true },
 		TTSBackendLabel: func(*interfaces.FactoryWorkerConfig) string {

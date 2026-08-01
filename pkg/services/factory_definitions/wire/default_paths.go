@@ -1,0 +1,67 @@
+package wire
+
+import (
+	"fmt"
+	"path/filepath"
+	"strings"
+
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+)
+
+const (
+	sharedFactoryHomeDirName    = ".you-agent-factory"
+	namedFactoriesDirName       = "factories"
+	legacyNamedFactoriesDirName = "you-agent-factories"
+	projectFactoriesDirName     = "factory"
+)
+
+// NamedFactoryRoots contains the ordered project and global catalog roots used
+// for one named-Factory lookup.
+type NamedFactoryRoots = factorydefinitions.NamedFactoryRoots
+
+// TODO: remove the legacy factory names support completely.
+// LegacyNamedFactoriesRoot returns the retired global catalog root used only
+// for lossless initialization-time migration.
+func LegacyNamedFactoriesRoot(homeDir string) string {
+	return filepath.Join(homeDir, sharedFactoryHomeDirName, legacyNamedFactoriesDirName)
+}
+
+// NamedFactoriesRoot returns the Factory Definitions-owned global catalog root.
+func NamedFactoriesRoot(homeDir string) string {
+	return filepath.Join(homeDir, sharedFactoryHomeDirName, namedFactoriesDirName)
+}
+
+func NamedFactoriesRootForHome(homeDir string) (string, error) {
+	trimmed := strings.TrimSpace(homeDir)
+	if trimmed == "" {
+		return "", fmt.Errorf("user home directory is required")
+	}
+	return NamedFactoriesRoot(trimmed), nil
+}
+
+func ProjectFactoriesRoot(workingDir string) string {
+	return filepath.Join(workingDir, projectFactoriesDirName)
+}
+
+func ProjectFactoriesRootForWorkingDir(workingDir string) (string, error) {
+	trimmed := strings.TrimSpace(workingDir)
+	if trimmed == "" {
+		return "", fmt.Errorf("working directory is required")
+	}
+	return ProjectFactoriesRoot(trimmed), nil
+}
+
+// TODO: this shouldn't be visible to anyone but the factory definitions.
+// ResolveNamedFactoryRoots derives both catalog roots from explicit process
+// edges. The project root remains first in lookup order.
+func ResolveNamedFactoryRoots(homeDir, workingDir string) (NamedFactoryRoots, error) {
+	global, err := NamedFactoriesRootForHome(homeDir)
+	if err != nil {
+		return NamedFactoryRoots{}, err
+	}
+	project, err := ProjectFactoriesRootForWorkingDir(workingDir)
+	if err != nil {
+		return NamedFactoryRoots{}, err
+	}
+	return NamedFactoryRoots{Project: project, Global: global}, nil
+}

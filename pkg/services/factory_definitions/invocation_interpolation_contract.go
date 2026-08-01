@@ -4,13 +4,8 @@ import "github.com/portpowered/infinite-you/pkg/services/work"
 
 const ArgumentErrorCodeInvalidInterpolation = work.ArgumentErrorCodeInvalidInterpolation
 
-// FileReader resolves FILE_CONTENTS arguments at an explicit IO boundary.
+// FileReader is the small, effect-free callback shape used by invocation
+// policy. The owner wire package aliases it for construction boundaries; the
+// root keeps this value type available to existing worker adapters without
+// publishing an invocation service interface.
 type FileReader func(string) ([]byte, error)
-
-// InvocationInterpolationService owns runtime interpolation of normalized
-// invocation arguments into effective Factory Definition values.
-type InvocationInterpolationService interface {
-	ValidateInvocationInterpolation(*FactoryConfig, *work.InvocationArguments, FileReader) error
-	InterpolateWorkerConfig(FactoryWorkerConfig, *work.InvocationArguments, FileReader) (FactoryWorkerConfig, error)
-	InterpolateWorkstationConfig(FactoryWorkstationConfig, *work.InvocationArguments, FileReader) (FactoryWorkstationConfig, error)
-}

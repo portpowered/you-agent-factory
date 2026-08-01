@@ -14,6 +14,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil/recordingfixtures"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
@@ -74,7 +75,7 @@ func newTestFactory(opts ...testFactoryOption) (factory.Factory, error) {
 		cfg.completionDeliveryPlanner,
 		nil,
 		nil,
-		interfaces.WorkPropagationPolicyFunc(func(
+		factorydefinitionswire.WorkPropagationPolicyFunc(func(
 			*interfaces.FactoryWorkstationConfig,
 		) interfaces.WorkPropagationMode {
 			return interfaces.WorkPropagationModeOutputAsPayload

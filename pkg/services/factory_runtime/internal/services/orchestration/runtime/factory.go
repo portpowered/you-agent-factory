@@ -14,6 +14,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
 	checkpointrecovery "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/checkpoint_recovery"
@@ -96,11 +97,11 @@ type runtimeConfig struct {
 	petriMutationRecorder     factory.PetriMutationRecorder
 	completionDeliveryPlanner factory.CompletionDeliveryPlanner
 	inlineDispatch            bool
-	quorumPolicy              interfaces.QuorumPolicyService
-	outputShaping             interfaces.InvocationOutputShapingService
-	workPropagation           interfaces.WorkPropagationPolicyService
+	quorumPolicy              factorydefinitionswire.QuorumPolicyService
+	outputShaping             factorydefinitionswire.InvocationOutputShapingService
+	workPropagation           factorydefinitionswire.WorkPropagationPolicyService
 	workService               work.Service
-	decisionEnvelopes         interfaces.DecisionEnvelopeService
+	decisionEnvelopes         factorydefinitionswire.DecisionEnvelopeService
 }
 
 // Compile-time checks.
@@ -131,13 +132,13 @@ func New(
 	completionRecorder factory.CompletionRecorder,
 	petriMutationRecorder factory.PetriMutationRecorder,
 	completionDeliveryPlanner factory.CompletionDeliveryPlanner,
-	quorumPolicy interfaces.QuorumPolicyService,
-	outputShaping interfaces.InvocationOutputShapingService,
-	workPropagation interfaces.WorkPropagationPolicyService,
+	quorumPolicy factorydefinitionswire.QuorumPolicyService,
+	outputShaping factorydefinitionswire.InvocationOutputShapingService,
+	workPropagation factorydefinitionswire.WorkPropagationPolicyService,
 	workService work.Service,
 	workRequestIDs work.RequestIDGenerator,
 	newID factory.IDGenerator,
-	decisionEnvelopes ...interfaces.DecisionEnvelopeService,
+	decisionEnvelopes ...factorydefinitionswire.DecisionEnvelopeService,
 ) (factory.Factory, error) {
 	if net == nil {
 		return nil, fmt.Errorf("a factory specification is required")
@@ -298,8 +299,8 @@ func buildRuntimeSubsystems(cfg *runtimeConfig, sched scheduler.Scheduler, logge
 }
 
 func firstDecisionEnvelopeService(
-	services []interfaces.DecisionEnvelopeService,
-) interfaces.DecisionEnvelopeService {
+	services []factorydefinitionswire.DecisionEnvelopeService,
+) factorydefinitionswire.DecisionEnvelopeService {
 	if len(services) == 0 {
 		return nil
 	}

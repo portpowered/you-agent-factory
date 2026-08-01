@@ -92,6 +92,13 @@ type RuntimeBinding struct {
 type Service interface {
 	ExecutionService
 	ForRuntime(OpeningBindingRequest) (Service, error)
+	// Factory Definition persistence and activation are session-scoped
+	// operations. Definitions supplies immutable layout/validation authority;
+	// Sessions owns the addressed runtime, optimistic-concurrency check, and
+	// activation transaction.
+	GetCurrentFactoryForSession(context.Context, string) (factorydefinitions.EditableFactory, error)
+	SaveFactoryForSession(context.Context, string, factorydefinitions.SaveMode, factorydefinitions.EditableFactory) (factorydefinitions.EditableFactory, error)
+	ActivateNamedFactory(context.Context, string) error
 	OpenFactorySession(context.Context, OpenRequest) (*OpenResult, error)
 	OpenFactorySessionFromFolder(context.Context, string, *TargetRef, bool, bool) (*OpenResult, error)
 	ListFactorySessions(context.Context) ([]ReadProjection, error)

@@ -68,7 +68,7 @@ func TestWireSnapshotHelpersCapturePrepareMaterializeAndReplay(t *testing.T) {
 		t.Fatalf("Materializer() error = %v", err)
 	}
 
-	replayConfig, err := factorydefinitionswire.ReplayRuntimeConfigDecoder()(snapshot)
+	replayConfig, err := factorydefinitionswire.NewReplayRuntimeConfigDecoder()(snapshot)
 	if err != nil {
 		t.Fatalf("ReplayRuntimeConfigDecoder() error = %v", err)
 	}

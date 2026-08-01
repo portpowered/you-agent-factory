@@ -122,6 +122,7 @@ func (fake *httpDefinitionsValidationFake) ValidateSubmittedDefinition(
 }
 
 type httpDefinitionsRootFake struct {
+	factorydefinitions.UnimplementedService
 	validateStructuralInvoked bool
 }
 

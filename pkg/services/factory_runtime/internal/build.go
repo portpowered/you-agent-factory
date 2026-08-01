@@ -6,6 +6,7 @@ import (
 	"io/fs"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryhost "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/host"
 	factory_context "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/context"
@@ -27,11 +28,11 @@ type runtimeWorkstationService = workers.WorkstationExecutionService
 
 // RuntimeFactory constructs hosted runtime bundles. It is stateless.
 type RuntimeFactory struct {
-	quorumPolicy             interfaces.QuorumPolicyService
-	outputShaping            interfaces.InvocationOutputShapingService
-	workPropagation          interfaces.WorkPropagationPolicyService
+	quorumPolicy             factorydefinitionswire.QuorumPolicyService
+	outputShaping            factorydefinitionswire.InvocationOutputShapingService
+	workPropagation          factorydefinitionswire.WorkPropagationPolicyService
 	workService              work.Service
-	decisionEnvelopes        interfaces.DecisionEnvelopeService
+	decisionEnvelopes        factorydefinitionswire.DecisionEnvelopeService
 	loggerFactory            factory.RuntimeLoggerFactory
 	runtimeLogs              factory.RuntimeLogSinkFactory
 	runtimeMetrics           factory.RuntimeMetricsSinkFactory
@@ -44,11 +45,11 @@ type RuntimeFactory struct {
 }
 
 func NewRuntimeFactory(
-	quorumPolicy interfaces.QuorumPolicyService,
-	outputShaping interfaces.InvocationOutputShapingService,
-	workPropagation interfaces.WorkPropagationPolicyService,
+	quorumPolicy factorydefinitionswire.QuorumPolicyService,
+	outputShaping factorydefinitionswire.InvocationOutputShapingService,
+	workPropagation factorydefinitionswire.WorkPropagationPolicyService,
 	workService work.Service,
-	decisionEnvelopes interfaces.DecisionEnvelopeService,
+	decisionEnvelopes factorydefinitionswire.DecisionEnvelopeService,
 	loggerFactory factory.RuntimeLoggerFactory,
 	runtimeLogs factory.RuntimeLogSinkFactory,
 	runtimeMetrics factory.RuntimeMetricsSinkFactory,
@@ -266,15 +267,15 @@ func assembleRuntimeBundle(
 	workerExecutors map[string]workers.WorkerExecutor,
 	workerService runtimeWorkstationService,
 	workService work.Service,
-	quorumPolicy interfaces.QuorumPolicyService,
-	outputShaping interfaces.InvocationOutputShapingService,
-	workPropagation interfaces.WorkPropagationPolicyService,
+	quorumPolicy factorydefinitionswire.QuorumPolicyService,
+	outputShaping factorydefinitionswire.InvocationOutputShapingService,
+	workPropagation factorydefinitionswire.WorkPropagationPolicyService,
 	workRequestIDs work.RequestIDGenerator,
 	newID factory.IDGenerator,
 	runtimeDirs factory.RuntimeDirectoryFileSystem,
 	inputFiles factory.InputFileSystem,
 	inputDirectoryWalker factory.InputDirectoryWalker,
-	decisionEnvelopes interfaces.DecisionEnvelopeService,
+	decisionEnvelopes factorydefinitionswire.DecisionEnvelopeService,
 ) (*factoryhost.Bundle, error) {
 	bundle := factoryhost.NewBundle(
 		dir, folderPath, runtimeInstanceID, strings.TrimSpace(backendScopeID),

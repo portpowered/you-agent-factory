@@ -3,9 +3,9 @@ package graphtopologytests
 import (
 	"testing"
 
+	catalogresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
-	catalogresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/resource"
-	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
+	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
 )
 
 func TestBuildPendingFactoryGraphTopology_UsesCanonicalNodeAndEdgeIDs(t *testing.T) {
@@ -18,7 +18,7 @@ func TestBuildPendingFactoryGraphTopology_UsesCanonicalNodeAndEdgeIDs(t *testing
 				{Type: interfaces.BundledFileTypeScript, TargetPath: "factory/scripts/setup.py"},
 			},
 		},
-		Resources: []catalogresource.Config{{
+		Resources: []catalogresource.ResourceConfig{{
 			ID:   "resource-slot",
 			Name: "executor-slot",
 		}},
@@ -33,7 +33,7 @@ func TestBuildPendingFactoryGraphTopology_UsesCanonicalNodeAndEdgeIDs(t *testing
 		Workers: []workerconfig.Config{{
 			ID:   "worker-executor",
 			Name: "executor",
-			Resources: []catalogresource.Config{{
+			Resources: []catalogresource.ResourceConfig{{
 				Name: "executor-slot",
 			}},
 		}},
@@ -41,7 +41,7 @@ func TestBuildPendingFactoryGraphTopology_UsesCanonicalNodeAndEdgeIDs(t *testing
 			ID:             "workstation-plan",
 			Name:           "plan",
 			WorkerTypeName: "executor",
-			Resources: []catalogresource.Config{{
+			Resources: []catalogresource.ResourceConfig{{
 				ID:   "resource-slot",
 				Name: "executor-slot",
 			}},

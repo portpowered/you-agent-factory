@@ -1,6 +1,7 @@
 package wire
 
 import (
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"time"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -42,8 +43,8 @@ func NewRuntimeWithSelection(
 	processEnvironment func() []string,
 	currentWorkingDirectory func() (string, error),
 	contentMaterializer work.ContentMaterializer,
-	interpolation factorydefinitions.InvocationInterpolationService,
-	executionPolicy factorydefinitions.WorkstationExecutionPolicyService,
+	interpolation factorydefinitionswire.InvocationInterpolationService,
+	executionPolicy factorydefinitionswire.WorkstationExecutionPolicyService,
 	factoryDocs workers.FactoryDocsLoader,
 	resolveSymlinks workers.ResolveExecutableSymlinks,
 	executableLocator platformprocess.ExecutableLocator,
@@ -55,7 +56,7 @@ func NewRuntimeWithSelection(
 	retryRandom platformrandom.Source,
 	workstationFiles platformfilesystem.ReadFileInspector,
 	temporaryFiles platformfilesystem.TemporaryFileSystem,
-	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
+	decisionEnvelopes factorydefinitionswire.DecisionEnvelopeService,
 	providerCommandInjected bool,
 	scriptCommandInjected bool,
 	providersLifecycleOwned bool,

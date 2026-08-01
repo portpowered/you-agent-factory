@@ -2,22 +2,23 @@ package wire
 
 import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryeffect "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/effects"
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire"
 )
 
 // NewPathResolver constructs the catalog-owned named-path resolver from the
 // exact filesystem port used by Factory Definitions Wire composition.
 func NewPathResolver(
-	fileSystem factorydefinitions.NamedPathFileSystem,
-) (factorydefinitions.NamedPathResolver, error) {
+	fileSystem factoryeffect.NamedPathFileSystem,
+) (factoryeffect.NamedPathResolver, error) {
 	return catalogwire.NewPathResolver(fileSystem)
 }
 
 // NewNamedFactoryCatalog constructs the catalog-owned named-factory catalog
 // from the exact path and catalog-filesystem ports used by Wire composition.
 func NewNamedFactoryCatalog(
-	paths factorydefinitions.NamedPathResolver,
-	fileSystem factorydefinitions.NamedFactoryCatalogFileSystem,
+	paths factoryeffect.NamedPathResolver,
+	fileSystem factoryeffect.NamedFactoryCatalogFileSystem,
 ) (factorydefinitions.NamedFactoryCatalog, error) {
 	return catalogwire.NewNamedFactoryCatalog(paths, fileSystem)
 }
@@ -34,9 +35,9 @@ func NewPersistence(
 	flatten factorydefinitions.FactoryLayoutFlattener,
 	expand factorydefinitions.FactoryLayoutExpander,
 	writeCurrent factorydefinitions.CurrentFactoryPointerWriter,
-	fileSystem factorydefinitions.PersistenceFileSystem,
-	requireDefinitionDir factorydefinitions.DefinitionDirectoryRequirer,
-	directories factorydefinitions.DirectoryReplacementStore,
+	fileSystem factoryeffect.PersistenceFileSystem,
+	requireDefinitionDir factoryeffect.DefinitionDirectoryRequirer,
+	directories factoryeffect.DirectoryReplacementStore,
 ) (factorydefinitions.Persistence, error) {
 	return catalogwire.NewPersistence(
 		validator,
@@ -56,7 +57,7 @@ func NewPersistence(
 // ResolveCurrent resolves the active Factory definition under rootDir using
 // catalog-owned named-factory helpers and an injected path resolver.
 func ResolveCurrent(
-	paths factorydefinitions.NamedPathResolver,
+	paths factoryeffect.NamedPathResolver,
 	rootDir string,
 ) (string, error) {
 	return catalogwire.ResolveCurrent(paths, rootDir)

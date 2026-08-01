@@ -1,8 +1,8 @@
 package service
 
 import (
-	"context"
 	"fmt"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"path/filepath"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -29,14 +29,14 @@ type Assembly struct {
 	streams                      streamManager
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory
 	sessionResultProjection      factoryruntime.SessionResultProjectionOperation
-	interpolation                factorydefinitions.InvocationInterpolationService
-	invocationWorkTypes          factorydefinitions.InvocationWorkTypeService
-	ttsObservability             factorydefinitions.TTSObservabilityService
+	interpolation                factorydefinitionswire.InvocationInterpolationService
+	invocationWorkTypes          factorydefinitionswire.InvocationWorkTypeService
+	ttsObservability             factorydefinitionswire.TTSObservabilityService
 	eventIDs                     factorysessions.ResponseEventIDGenerator
 	sessionIDs                   factorysessions.SessionIDGenerator
 	resolveHome                  factorysessions.HomeDirectoryResolver
 	directoryInspection          roles.DirectoryInspection
-	namedPaths                   factorydefinitions.NamedPathResolver
+	namedPaths                   factorydefinitionswire.NamedPathResolver
 	invocationInputFiles         fileeffects.InvocationInputReader
 	initialWorkFiles             fileeffects.InitialWorkReader
 	identity                     identity.Service
@@ -52,15 +52,15 @@ type streamManager interface {
 func NewAssembly(
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory,
 	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
-	interpolation factorydefinitions.InvocationInterpolationService,
-	invocationWorkTypes factorydefinitions.InvocationWorkTypeService,
-	ttsObservability factorydefinitions.TTSObservabilityService,
+	interpolation factorydefinitionswire.InvocationInterpolationService,
+	invocationWorkTypes factorydefinitionswire.InvocationWorkTypeService,
+	ttsObservability factorydefinitionswire.TTSObservabilityService,
 	clock factoryruntime.Clock,
 	eventIDs factorysessions.ResponseEventIDGenerator,
 	sessionIDs factorysessions.SessionIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
 	directoryInspection roles.DirectoryInspection,
-	namedPaths factorydefinitions.NamedPathResolver,
+	namedPaths factorydefinitionswire.NamedPathResolver,
 	invocationInputFiles fileeffects.InvocationInputReader,
 	initialWorkFiles fileeffects.InitialWorkReader,
 	identityService identity.Service,
@@ -181,18 +181,17 @@ func (a *Assembly) Complete(
 	roles.ApplicationRuntime,
 	factorysessions.Service,
 	roles.SessionInvoker,
-	factorysessions.DefinitionHost,
 	error,
 ) {
 	if a == nil || a.state == nil || a.registry == nil {
-		return nil, nil, nil, nil, fmt.Errorf("Factory Sessions assembly is required")
+		return nil, nil, nil, fmt.Errorf("Factory Sessions assembly is required")
 	}
 	if startupRuntime == nil {
-		return nil, nil, nil, nil, fmt.Errorf("default Factory Runtime is required")
+		return nil, nil, nil, fmt.Errorf("default Factory Runtime is required")
 	}
 	runtimeConfig, ok := startupRuntime.LoadedRuntimeConfig().(factorydefinitions.LoadedFactorySource)
 	if !ok || runtimeConfig == nil {
-		return nil, nil, nil, nil, fmt.Errorf("constructed runtime config does not expose Factory Definition snapshots")
+		return nil, nil, nil, fmt.Errorf("constructed runtime config does not expose Factory Definition snapshots")
 	}
 	session := livesession.New(
 		factorysessions.DefaultSessionID,
@@ -208,11 +207,11 @@ func (a *Assembly) Complete(
 		a.eventIDs,
 	)
 	if session == nil {
-		return nil, nil, nil, nil, fmt.Errorf("construct live Factory Session: clock and response-event identity generator are required")
+		return nil, nil, nil, fmt.Errorf("construct live Factory Session: clock and response-event identity generator are required")
 	}
 	responseEvents, err := a.responseStreams.NewEventStore(livesession.CanonicalID(session), clock)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("construct live Factory Session response events: %w", err)
+		return nil, nil, nil, fmt.Errorf("construct live Factory Session response events: %w", err)
 	}
 	session.ResponseEvents = responseEvents
 	session.Runtime = &factorysessions.LiveRuntime{
@@ -261,7 +260,7 @@ func (a *Assembly) Complete(
 		a.identity,
 	)
 	if runtime == nil {
-		return nil, nil, nil, nil, fmt.Errorf("Factory Sessions runtime is required")
+		return nil, nil, nil, fmt.Errorf("Factory Sessions runtime is required")
 	}
 	gateway := NewWithResponseService(
 		SessionServiceHost(runtime),
@@ -273,88 +272,11 @@ func (a *Assembly) Complete(
 		a.responseStreams,
 	)
 	gateway = runtime.AttachSessionGateway(gateway)
+	gateway.AttachDefinitionRuntime(runtime)
 	a.Service = gateway
 	invoker, err := NewInvocationOwner(runtime, a.interpolation, a.invocationWorkTypes, a.ttsObservability, a.invocationInputFiles)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, err
 	}
-	return runtime, gateway, invoker, definitionHost{runtime: runtime}, nil
-}
-
-type definitionHost struct {
-	runtime *SessionRuntime
-}
-
-func (h definitionHost) callbacks() DefinitionHostCallbacks {
-	return DefinitionCallbacks(h.runtime)
-}
-
-func (h definitionHost) PersistRootDir() string { return h.callbacks().PersistRootDir() }
-func (h definitionHost) WorkstationLoader() factorydefinitions.WorkstationLoader {
-	return h.callbacks().WorkstationLoader()
-}
-func (h definitionHost) CurrentRuntimeConfig() factorydefinitions.LoadedFactorySource {
-	return h.callbacks().CurrentRuntimeConfig()
-}
-func (h definitionHost) WorkflowID() string { return h.callbacks().WorkflowID() }
-func (h definitionHost) RequireSession(id string) (*factorydefinitions.DefinitionSession, error) {
-	session, err := h.callbacks().RequireSession(id)
-	return projectDefinitionSession(session), err
-}
-func (h definitionHost) SessionRuntimeConfig(id string) (factorydefinitions.LoadedFactorySource, error) {
-	return h.callbacks().SessionRuntimeConfig(id)
-}
-func (h definitionHost) SessionFactoryPersistRoot(session *factorydefinitions.DefinitionSession) string {
-	return h.callbacks().SessionFactoryPersistRoot(h.liveSession(session))
-}
-func (h definitionHost) ValidateEditableFactorySnapshot(ctx context.Context, snapshot *factorydefinitions.FactorySnapshot) error {
-	return h.callbacks().ValidateEditableFactorySnapshot(ctx, snapshot)
-}
-func (h definitionHost) GetCurrentFactorySnapshotForSession(ctx context.Context, id string) (*factorydefinitions.FactorySnapshot, error) {
-	return h.callbacks().GetCurrentFactorySnapshotForSession(ctx, id)
-}
-func (h definitionHost) ReplaceFactoryLayoutAtDir(
-	targetDir string,
-	prepared *factorydefinitions.PreparedFactoryLayoutPayload,
-) (*factorydefinitions.FactorySplitLayoutReplaceResult, error) {
-	return h.callbacks().ReplaceFactoryLayoutAtDir(targetDir, prepared)
-}
-
-var _ factorysessions.DefinitionActivationGatewayProvider = definitionHost{}
-
-func (h definitionHost) DefinitionActivationGateway() factorysessions.DefinitionActivationGateway {
-	return h.runtime.DefinitionActivationGateway()
-}
-
-func projectDefinitionSession(
-	session *livesession.LiveSession,
-) *factorydefinitions.DefinitionSession {
-	if session == nil {
-		return nil
-	}
-	return &factorydefinitions.DefinitionSession{
-		ID:         session.ID,
-		IsDefault:  session.IsDefault,
-		FolderPath: session.FolderPath,
-		FactoryDir: session.FactoryDir,
-	}
-}
-
-func (h definitionHost) liveSession(
-	session *factorydefinitions.DefinitionSession,
-) *livesession.LiveSession {
-	if session == nil {
-		return nil
-	}
-	if live, err := h.callbacks().RequireSession(session.ID); err == nil && live != nil {
-		return live
-	}
-	return &livesession.LiveSession{
-		ID: session.ID,
-		SessionState: livesession.SessionState{
-			FolderPath: session.FolderPath,
-			FactoryDir: session.FactoryDir,
-		},
-		IsDefault: session.IsDefault,
-	}
+	return runtime, gateway, invoker, nil
 }

@@ -11,6 +11,7 @@ import (
 
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 )
 
 type OpenEventStreamFile func(string) (io.ReadCloser, error)
@@ -41,7 +42,7 @@ const legacyEventStreamCronPlaceholderSchedule = "* * * * *"
 // skipped so long as at least one complete event was already recovered.
 func ArtifactFromEventStream(
 	r io.Reader,
-	decodeFactorySnapshot interfaces.FactorySnapshotJSONDecoder,
+	decodeFactorySnapshot factorydefinitionswire.FactorySnapshotJSONDecoder,
 ) (*EventStreamArtifactResult, error) {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), maxEventStreamLineBytes)
@@ -137,8 +138,8 @@ func (b *eventStreamArtifactBuilder) decodeBlockError(atEOF bool, err error) err
 // replay artifact.
 func ArtifactFromEventStreamFile(
 	path string,
-	decodeFactorySnapshot interfaces.FactorySnapshotJSONDecoder,
-	loadAdjacentFactory interfaces.FactorySnapshotDirectoryLoader,
+	decodeFactorySnapshot factorydefinitionswire.FactorySnapshotJSONDecoder,
+	loadAdjacentFactory factorydefinitionswire.FactorySnapshotDirectoryLoader,
 	openFile OpenEventStreamFile,
 	inspectPath InspectAdjacentFactoryPath,
 ) (*EventStreamArtifactResult, error) {
@@ -172,8 +173,8 @@ func SaveArtifactFromEventStreamFile(
 	storage platformreplay.Storage,
 	eventStreamPath string,
 	artifactPath string,
-	decodeFactorySnapshot interfaces.FactorySnapshotJSONDecoder,
-	loadAdjacentFactory interfaces.FactorySnapshotDirectoryLoader,
+	decodeFactorySnapshot factorydefinitionswire.FactorySnapshotJSONDecoder,
+	loadAdjacentFactory factorydefinitionswire.FactorySnapshotDirectoryLoader,
 	openFile OpenEventStreamFile,
 	inspectPath InspectAdjacentFactoryPath,
 ) (*EventStreamArtifactResult, error) {
@@ -195,7 +196,7 @@ func SaveArtifactFromEventStreamFile(
 
 func normalizeEventStreamRunRequestFactories(
 	events []interfaces.FactoryEvent,
-	decodeFactorySnapshot interfaces.FactorySnapshotJSONDecoder,
+	decodeFactorySnapshot factorydefinitionswire.FactorySnapshotJSONDecoder,
 ) error {
 	for index := range events {
 		event := &events[index]
@@ -225,7 +226,7 @@ func normalizeEventStreamRunRequestFactories(
 func hydrateArtifactFromAdjacentFactory(
 	eventStreamPath string,
 	artifact *interfaces.ReplayArtifact,
-	loadFactory interfaces.FactorySnapshotDirectoryLoader,
+	loadFactory factorydefinitionswire.FactorySnapshotDirectoryLoader,
 	inspectPath InspectAdjacentFactoryPath,
 ) error {
 	if artifact == nil {

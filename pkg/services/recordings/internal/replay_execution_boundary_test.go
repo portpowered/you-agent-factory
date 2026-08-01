@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"encoding/json"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -94,7 +95,7 @@ func loadReplayExecutionBoundaryArtifact(t *testing.T) *recordings.ReplayArtifac
 	return artifact
 }
 
-var replayExecutionFactorySnapshotDecoder factorydefinitions.FactorySnapshotJSONDecoder = func(
+var replayExecutionFactorySnapshotDecoder factorydefinitionswire.FactorySnapshotJSONDecoder = func(
 	data []byte,
 ) (*factorydefinitions.FactorySnapshot, error) {
 	generated, err := factorymapping.GeneratedFactoryFromOpenAPIJSON(data)
@@ -106,7 +107,7 @@ var replayExecutionFactorySnapshotDecoder factorydefinitions.FactorySnapshotJSON
 
 func replayExecutionRuntimeConfigDecoder(
 	snapshot *factorydefinitions.FactorySnapshot,
-) (factorydefinitions.ReplayRuntimeConfig, error) {
+) (factorydefinitionswire.ReplayRuntimeConfig, error) {
 	var generated factoryapi.Factory
 	if err := snapshot.Decode(&generated); err != nil {
 		return nil, err

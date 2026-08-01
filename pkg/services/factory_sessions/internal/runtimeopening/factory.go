@@ -3,6 +3,7 @@ package runtimeopening
 import (
 	"context"
 	"fmt"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -53,12 +54,12 @@ type Factory struct {
 	workService                      work.Service
 	providerSessions                 providersessions.Service
 	factoryDefinitionValidator       factorydefinitions.Validator
-	namedPaths                       factorydefinitions.NamedPathResolver
+	namedPaths                       factorydefinitionswire.NamedPathResolver
 	factoryWorkflows                 factoryruntime.JavaScriptWorkflowDefinitions
 	workflowPreview                  factoryruntime.WorkflowPreviewOperation
 	loadFactory                      factorydefinitions.LoadedFactoryLoader
 	newLoadedFactory                 factorydefinitions.LoadedFactorySourceFactory
-	decodeReplayConfig               factorydefinitions.ReplayRuntimeConfigDecoder
+	decodeReplayConfig               factorydefinitionswire.ReplayRuntimeConfigDecoder
 	loadReplay                       recordings.ReplayArtifactLoader
 	captureLoadedFactorySnapshot     factorydefinitions.LoadedFactorySnapshotCapturer
 	resolveClock                     factoryruntime.ClockResolver
@@ -80,7 +81,7 @@ func NewFactory(
 	factoryWorkflows factoryruntime.JavaScriptWorkflowDefinitions,
 	workflowPreview factoryruntime.WorkflowPreviewOperation,
 	factoryDefinitionValidator factorydefinitions.Validator,
-	namedPaths factorydefinitions.NamedPathResolver,
+	namedPaths factorydefinitionswire.NamedPathResolver,
 	durableExecutionFactory DurableExecutionFactory,
 	workerExecutionFactory WorkerExecutionFactory,
 	modelService models.Service,
@@ -107,7 +108,7 @@ func NewFactory(
 	workService work.Service,
 	loadFactory factorydefinitions.LoadedFactoryLoader,
 	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
-	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
+	decodeReplayConfig factorydefinitionswire.ReplayRuntimeConfigDecoder,
 	loadReplay recordings.ReplayArtifactLoader,
 	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
 	resolveClock factoryruntime.ClockResolver,

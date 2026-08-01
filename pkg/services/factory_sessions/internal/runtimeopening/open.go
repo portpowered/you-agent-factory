@@ -3,6 +3,7 @@ package runtimeopening
 import (
 	"context"
 	"fmt"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"time"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -54,12 +55,12 @@ func openRuntime(
 	workService work.Service,
 	providerSessions providersessions.Service,
 	factoryDefinitionValidator factorydefinitions.Validator,
-	namedPaths factorydefinitions.NamedPathResolver,
+	namedPaths factorydefinitionswire.NamedPathResolver,
 	factoryWorkflows factoryruntime.JavaScriptWorkflowDefinitions,
 	workflowPreview factoryruntime.WorkflowPreviewOperation,
 	loadFactory factorydefinitions.LoadedFactoryLoader,
 	newLoadedFactory factorydefinitions.LoadedFactorySourceFactory,
-	decodeReplayConfig factorydefinitions.ReplayRuntimeConfigDecoder,
+	decodeReplayConfig factorydefinitionswire.ReplayRuntimeConfigDecoder,
 	loadReplay recordings.ReplayArtifactLoader,
 	captureLoadedFactorySnapshot factorydefinitions.LoadedFactorySnapshotCapturer,
 	resolveClock factoryruntime.ClockResolver,
@@ -334,7 +335,7 @@ func openRuntime(
 		return runtimeProducts{}, err
 	}
 	cleanup.Add(startupRuntime.CloseArtifacts)
-	sessionRuntime, service4, invocationDomain, definitionHost, err := runtimeService.Complete(
+	sessionRuntime, service4, invocationDomain, err := runtimeService.Complete(
 		root.FactoryRootDir,
 		clock,
 		logger,
@@ -369,20 +370,9 @@ func openRuntime(
 		return runtimeProducts{}, err
 	}
 	if factoryDefinitionsFactory == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Definitions factory is required")
+		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Definitions service is required")
 	}
-	activationGatewayProvider, ok := sessionRuntime.(factorysessions.DefinitionActivationGatewayProvider)
-	if !ok {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Session runtime must expose DefinitionActivationGateway")
-	}
-	factoryDefinitionOwner := factoryDefinitionsFactory(
-		definitionHost,
-		activationGatewayProvider.DefinitionActivationGateway(),
-		factoryDefinitionValidator,
-	)
-	if factoryDefinitionOwner == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Definitions factory returned nil service")
-	}
+	factoryDefinitionOwner := factoryDefinitionsFactory
 	if err := attachFactoryDefinitionServiceToRuntime(sessionRuntime, factoryDefinitionOwner); err != nil {
 		return runtimeProducts{}, err
 	}

@@ -12,13 +12,14 @@ import (
 	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
 // AgentRunExecutor executes AGENT_RUN workstations through a go-agent-harness adapter.
 type AgentRunExecutor struct {
 	runtimeConfig     interfaces.RuntimeDefinitionLookup
-	decisionEnvelopes interfaces.DecisionEnvelopeService
+	decisionEnvelopes factorydefinitionswire.DecisionEnvelopeService
 	runner            runnerContract
 	harness           HarnessAdapter
 	logger            logging.Logger
@@ -70,7 +71,7 @@ func NewAgentRunExecutorWithDependencies(
 	harness HarnessAdapter,
 	recorder AgentRunEventRecorder,
 	now func() time.Time,
-	decisionEnvelopes ...interfaces.DecisionEnvelopeService,
+	decisionEnvelopes ...factorydefinitionswire.DecisionEnvelopeService,
 ) *AgentRunExecutor {
 	return &AgentRunExecutor{
 		runtimeConfig:     runtimeConfig,
@@ -197,8 +198,8 @@ func (executor *AgentRunExecutor) publishFinalMessage(dispatchID string, content
 }
 
 func firstDecisionEnvelopeService(
-	services []interfaces.DecisionEnvelopeService,
-) interfaces.DecisionEnvelopeService {
+	services []factorydefinitionswire.DecisionEnvelopeService,
+) factorydefinitionswire.DecisionEnvelopeService {
 	if len(services) == 0 {
 		return nil
 	}

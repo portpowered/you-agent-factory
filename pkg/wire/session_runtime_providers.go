@@ -286,7 +286,7 @@ func provideFactoryDefinitionValidationService(
 	workflows factoryruntime.JavaScriptWorkflows,
 	loader *factorydefinitionswire.Loader,
 	orchestratorValidator factorydefinitions.OrchestratorDefinitionValidator,
-) factorydefinitions.ValidationOperations {
+) factorydefinitionswire.ValidationOperations {
 	_ = workflows
 	return factorydefinitionswire.NewValidationOperations(
 		orchestratorValidator,
@@ -295,19 +295,25 @@ func provideFactoryDefinitionValidationService(
 }
 
 func provideFactoryDefinitionValidator(
-	service factorydefinitions.ValidationOperations,
+	service factorydefinitionswire.ValidationOperations,
 ) factorydefinitions.Validator {
 	return service
 }
 
 func provideDefinitionValidationOperation(
-	service factorydefinitions.ValidationOperations,
+	service factorydefinitionswire.ValidationOperations,
 ) factorydefinitions.DefinitionValidationOperation {
 	return service
 }
 
+func provideEffectiveDefinitionValidationOperation(
+	service factorydefinitionswire.ValidationOperations,
+) factorydefinitions.EffectiveDefinitionValidationOperation {
+	return service
+}
+
 func provideSubmittedDefinitionValidationOperation(
-	service factorydefinitions.ValidationOperations,
+	service factorydefinitionswire.ValidationOperations,
 ) factorydefinitions.SubmittedDefinitionValidationOperation {
 	return service
 }
@@ -317,8 +323,8 @@ func provideLoadedFactorySourceFactory() factorydefinitions.LoadedFactorySourceF
 }
 
 func provideNamedFactoryCatalog(
-	namedPaths factorydefinitions.NamedPathResolver,
-	fileSystem factorydefinitions.NamedFactoryCatalogFileSystem,
+	namedPaths factorydefinitionswire.NamedPathResolver,
+	fileSystem factorydefinitionswire.NamedFactoryCatalogFileSystem,
 ) (factorydefinitions.NamedFactoryCatalog, error) {
 	return factorydefinitionswire.NewNamedFactoryCatalog(namedPaths, fileSystem)
 }
@@ -330,11 +336,11 @@ func provideFactoryDefinitionPersistence(
 	materializeFiles factorydefinitions.PortableBundledFilesMaterializer,
 	validateWrites factorydefinitions.PortableBundledFileWritesValidator,
 	copySupportedFiles factorydefinitions.PortableBundledFilesCopier,
-	fileSystem factorydefinitions.AuthoredLayoutWriterFileSystem,
-	ensureInbox factorydefinitions.InputInboxSentinelEnsurer,
-	persistenceFileSystem factorydefinitions.PersistenceFileSystem,
-	namedPaths factorydefinitions.NamedPathResolver,
-	directoryReplacementStore factorydefinitions.DirectoryReplacementStore,
+	fileSystem factorydefinitionswire.AuthoredLayoutWriterFileSystem,
+	ensureInbox factorydefinitionswire.InputInboxSentinelEnsurer,
+	persistenceFileSystem factorydefinitionswire.PersistenceFileSystem,
+	namedPaths factorydefinitionswire.NamedPathResolver,
+	directoryReplacementStore factorydefinitionswire.DirectoryReplacementStore,
 ) (factorydefinitions.Persistence, error) {
 	return factorydefinitionswire.Persistence(
 		validator,
@@ -418,7 +424,7 @@ func provideInitialFactorySnapshotFactory(
 
 func provideAutomationFactory(
 	edges serviceedges.Edges,
-	workstationExecution factorydefinitions.WorkstationExecutionPolicyService,
+	workstationExecution factorydefinitionswire.WorkstationExecutionPolicyService,
 ) factorysessionwire.AutomationFactory {
 	return func(
 		logger *zap.Logger,
@@ -471,15 +477,15 @@ func provideFactorySessionResponseEventRetentionLimits(
 
 func provideFactorySessionsService(
 	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
-	interpolation factorydefinitions.InvocationInterpolationService,
-	invocationWorkTypes factorydefinitions.InvocationWorkTypeService,
-	ttsObservability factorydefinitions.TTSObservabilityService,
+	interpolation factorydefinitionswire.InvocationInterpolationService,
+	invocationWorkTypes factorydefinitionswire.InvocationWorkTypeService,
+	ttsObservability factorydefinitionswire.TTSObservabilityService,
 	eventIDs factorysessions.ResponseEventIDGenerator,
 	responseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits,
 	sessionIDs factorysessions.SessionIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
 	directories factorysessionwire.DirectoryInspection,
-	namedPaths factorydefinitions.NamedPathResolver,
+	namedPaths factorydefinitionswire.NamedPathResolver,
 	invocationInputFiles factorysessionwire.InvocationInputReader,
 	initialWorkFiles factorysessionwire.InitialWorkReader,
 	resolveSymlinks factorysessions.LogicalTargetResolveSymlinks,
@@ -704,8 +710,8 @@ func provideReplayExecutionFactory() recordings.ReplayExecutionFactory {
 	) {
 		return recordingswire.NewReplayExecution(
 			artifact,
-			factorydefinitionswire.FactorySnapshotJSONDecoder(),
-			factorydefinitionswire.ReplayRuntimeConfigDecoder(),
+			factorydefinitionswire.NewFactorySnapshotJSONDecoder(),
+			factorydefinitionswire.NewReplayRuntimeConfigDecoder(),
 		)
 	}
 }
@@ -715,9 +721,9 @@ func provideReplayExecutionFactory() recordings.ReplayExecutionFactory {
 // pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func provideWorkersRuntimeFactory(
 	providersService providers.Service,
-	interpolation factorydefinitions.InvocationInterpolationService,
-	decisionEnvelopes factorydefinitions.DecisionEnvelopeService,
-	workstationExecution factorydefinitions.WorkstationExecutionPolicyService,
+	interpolation factorydefinitionswire.InvocationInterpolationService,
+	decisionEnvelopes factorydefinitionswire.DecisionEnvelopeService,
+	workstationExecution factorydefinitionswire.WorkstationExecutionPolicyService,
 	processEnvironment func() []string,
 	currentWorkingDirectory func() (string, error),
 	retryRandom platformrandom.Source,

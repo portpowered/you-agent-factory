@@ -3,6 +3,7 @@ package service
 
 import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
@@ -43,7 +44,7 @@ func NewSessionRuntime(
 	sessionIDs factorysessions.SessionIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
 	directoryInspection roles.DirectoryInspection,
-	namedPaths interfaces.NamedPathResolver,
+	namedPaths factorydefinitionswire.NamedPathResolver,
 	initialWorkFiles fileeffects.InitialWorkReader,
 	identityService identity.Service,
 ) *SessionRuntime {

@@ -33,14 +33,6 @@ func TestPublishedConstructionPorts_ExposeRootCompositionHelpers(t *testing.T) {
 		t.Fatal("NewEffectiveCatalog() returned nil operation")
 	}
 
-	service, err := factorydefinitionswire.NewEffectiveCatalogService(catalog)
-	if err != nil {
-		t.Fatalf("NewEffectiveCatalogService() error = %v", err)
-	}
-	if service == nil {
-		t.Fatal("NewEffectiveCatalogService() returned nil service")
-	}
-
 	packagedCatalog, err := factorydefinitionswire.NewPackagedFactoryCatalog(nil)
 	if err != nil {
 		t.Fatalf("NewPackagedFactoryCatalog() error = %v", err)

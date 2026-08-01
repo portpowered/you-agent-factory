@@ -6,6 +6,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	workerdiagnostics "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -153,7 +154,7 @@ func hydrateArtifactFromEvents(artifact *interfaces.ReplayArtifact) error {
 
 func hydrateArtifactFromEventsAtBoundary(
 	artifact *interfaces.ReplayArtifact,
-	decode interfaces.FactorySnapshotJSONDecoder,
+	decode factorydefinitionswire.FactorySnapshotJSONDecoder,
 ) error {
 	if decode == nil {
 		return fmt.Errorf("Factory snapshot decoder is required")
@@ -206,7 +207,7 @@ func runStartedPayloadFromEvent(event interfaces.FactoryEvent) (interfaces.RunRe
 
 func runStartedPayloadFromEventAtBoundary(
 	event interfaces.FactoryEvent,
-	decode interfaces.FactorySnapshotJSONDecoder,
+	decode factorydefinitionswire.FactorySnapshotJSONDecoder,
 ) (interfaces.RunRequestEventPayload, error) {
 	if decode == nil {
 		return interfaces.RunRequestEventPayload{}, fmt.Errorf("Factory snapshot decoder is required")

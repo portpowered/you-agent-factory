@@ -11,6 +11,7 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -77,8 +78,8 @@ var _ recordings.ReplayHook = (*SubmissionHook)(nil)
 // NewSubmissionHook builds an engine submission hook from recorded artifact
 // submissions.
 func NewSubmissionHook(
-	decodeFactorySnapshot interfaces.FactorySnapshotJSONDecoder,
-	decodeRuntimeConfig interfaces.ReplayRuntimeConfigDecoder,
+	decodeFactorySnapshot factorydefinitionswire.FactorySnapshotJSONDecoder,
+	decodeRuntimeConfig factorydefinitionswire.ReplayRuntimeConfigDecoder,
 	artifact *interfaces.ReplayArtifact,
 ) (*SubmissionHook, error) {
 	eventLog, err := reduceReplayEvents(
@@ -309,8 +310,8 @@ var _ recordings.ReplayHook = (*WorkStateChangeHook)(nil)
 // NewWorkStateChangeHook builds an engine submission hook from recorded
 // operator move events in a replay artifact.
 func NewWorkStateChangeHook(
-	decodeFactorySnapshot interfaces.FactorySnapshotJSONDecoder,
-	decodeRuntimeConfig interfaces.ReplayRuntimeConfigDecoder,
+	decodeFactorySnapshot factorydefinitionswire.FactorySnapshotJSONDecoder,
+	decodeRuntimeConfig factorydefinitionswire.ReplayRuntimeConfigDecoder,
 	artifact *interfaces.ReplayArtifact,
 ) (*WorkStateChangeHook, error) {
 	eventLog, err := reduceReplayEvents(
@@ -410,8 +411,8 @@ var _ recordings.CompletionDeliveryPlanner = (*CompletionDeliveryPlan)(nil)
 // NewCompletionDeliveryPlan builds the replay completion delivery contract
 // from an artifact.
 func NewCompletionDeliveryPlan(
-	decodeFactorySnapshot interfaces.FactorySnapshotJSONDecoder,
-	decodeRuntimeConfig interfaces.ReplayRuntimeConfigDecoder,
+	decodeFactorySnapshot factorydefinitionswire.FactorySnapshotJSONDecoder,
+	decodeRuntimeConfig factorydefinitionswire.ReplayRuntimeConfigDecoder,
 	artifact *interfaces.ReplayArtifact,
 ) (*CompletionDeliveryPlan, error) {
 	eventLog, err := reduceReplayEvents(

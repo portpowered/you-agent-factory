@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"io"
 	"io/fs"
 	"reflect"
@@ -17,7 +18,6 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	platformrandom "github.com/portpowered/infinite-you/pkg/platform/random"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	models "github.com/portpowered/infinite-you/pkg/services/models"
 	inference "github.com/portpowered/infinite-you/pkg/services/providers/wire"
@@ -320,7 +320,7 @@ func TestMergeUsesExplicitReplacementsAndPreservesDefaults(t *testing.T) {
 	}
 	var _ work.RequestIDGenerator = merged.WorkRequestIDGenerator
 	var _ work.SubmittedFileReader = merged.WorkSubmittedFileReader
-	var _ factorydefinitions.LoadingFileSystem = merged.FactoryDefinitionLoadingFileSystem
+	var _ factorydefinitionswire.LoadingFileSystem = merged.FactoryDefinitionLoadingFileSystem
 	if _, ok := merged.FactoryDefinitionNamedPathFileSystem.(platformfilesystem.Local); !ok {
 		t.Fatalf("FactoryDefinitionNamedPathFileSystem = %T, want explicit replacement", merged.FactoryDefinitionNamedPathFileSystem)
 	}

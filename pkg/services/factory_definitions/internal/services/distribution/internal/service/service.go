@@ -7,6 +7,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	distributionservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution"
+	distributionvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/internal/validation"
 )
 
 // Service is the private nested distribution implementation behind the CTR-DEF
@@ -70,7 +71,7 @@ func (s *Service) InstallPackagedFactory(
 	if err := ctx.Err(); err != nil {
 		return factorydefinitions.InstallPackagedFactoryResult{}, err
 	}
-	if err := factorydefinitions.ValidateInstallPackagedFactoryRequest(request); err != nil {
+	if err := distributionvalidation.ValidateInstallPackagedFactoryRequest(request); err != nil {
 		return factorydefinitions.InstallPackagedFactoryResult{}, err
 	}
 	resolved, err := s.ResolveBuiltInPackagedFactory(
@@ -113,7 +114,7 @@ func (s *Service) CreateFactoryScaffold(
 	if err := ctx.Err(); err != nil {
 		return factorydefinitions.CreateFactoryScaffoldResult{}, err
 	}
-	if err := factorydefinitions.ValidateCreateFactoryScaffoldRequest(request); err != nil {
+	if err := distributionvalidation.ValidateCreateFactoryScaffoldRequest(request); err != nil {
 		return factorydefinitions.CreateFactoryScaffoldResult{}, err
 	}
 	targetDir := strings.TrimSpace(request.TargetDir)

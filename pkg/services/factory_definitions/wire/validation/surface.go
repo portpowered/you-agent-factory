@@ -6,7 +6,8 @@ package validation
 
 import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	validationimpl "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/impl"
+	factoryeffect "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/effects"
+	validationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/wire"
 )
 
 // NewValidationOperations constructs the owner validation implementation from
@@ -14,13 +15,21 @@ import (
 func NewValidationOperations(
 	orchestrators factorydefinitions.OrchestratorDefinitionValidator,
 	loadCanonical ...factorydefinitions.CanonicalFactoryJSONLoader,
-) factorydefinitions.ValidationOperations {
-	return validationimpl.New(orchestrators, loadCanonical...)
+) factoryeffect.ValidationOperations {
+	return validationwire.NewValidationOperations(orchestrators, loadCanonical...)
+}
+
+// New constructs the public validation port through the owner wire boundary.
+func New(
+	orchestrators factorydefinitions.OrchestratorDefinitionValidator,
+	loadCanonical ...factorydefinitions.CanonicalFactoryJSONLoader,
+) factorydefinitions.Validator {
+	return validationwire.New(orchestrators, loadCanonical...)
 }
 
 var (
-	ValidateFactoryDefinition                                     = validationimpl.Validate
-	ValidateBlockingFactoryLoad                                   = validationimpl.ValidateBlockingLoad
-	ValidatePortableResourceManifestOnPathWithSourceResolver      = validationimpl.ValidatePortableResourceManifestOnPathWithSourceResolver
-	ValidatePortableBundledFilesForExpandOnPathWithSourceResolver = validationimpl.ValidatePortableBundledFilesForExpandOnPathWithSourceResolver
+	ValidateFactoryDefinition                                     = validationwire.ValidateFactoryDefinition
+	ValidateBlockingFactoryLoad                                   = validationwire.ValidateBlockingFactoryLoad
+	ValidatePortableResourceManifestOnPathWithSourceResolver      = validationwire.ValidatePortableResourceManifestOnPathWithSourceResolver
+	ValidatePortableBundledFilesForExpandOnPathWithSourceResolver = validationwire.ValidatePortableBundledFilesForExpandOnPathWithSourceResolver
 )

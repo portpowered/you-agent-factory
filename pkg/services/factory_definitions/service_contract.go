@@ -13,12 +13,6 @@ import (
 // distribute operations on this same Service using plain request, result,
 // value, and typed-error contracts rather than implementation-package types.
 type Service interface {
-	ActivateNamedFactory(context.Context, string) error
-	Save(context.Context, string, SaveMode, EditableFactory) (EditableFactory, error)
-	GetCurrentNamedFactory(context.Context) (*FactorySnapshot, error)
-	GetCurrentFactoryForSession(context.Context, string) (EditableFactory, error)
-	CurrentFactoryDefinitionVersionAtRoot(string, string) (FactoryVersion, error)
-
 	// Catalog slice: effective discovery, list, get/resolve, delete, and
 	// current-pointer read/write.
 	ListEffectiveFactories(context.Context, ListEffectiveFactoriesRequest) (ListEffectiveFactoriesResult, error)
@@ -35,6 +29,7 @@ type Service interface {
 	ExpandFactoryLayout(context.Context, ExpandFactoryLayoutRequest) (ExpandFactoryLayoutResult, error)
 	CreateNamedFactory(context.Context, CreateNamedFactoryRequest) (CreateNamedFactoryResult, error)
 	ReplaceNamedFactory(context.Context, ReplaceNamedFactoryRequest) (ReplaceNamedFactoryResult, error)
+	ReplaceFactoryLayoutAtDir(context.Context, ReplaceFactoryLayoutAtDirRequest) (ReplaceFactoryLayoutAtDirResult, error)
 
 	// Compile slice: authored/canonical source into one normalized effective source.
 	CompileEffectiveFactorySource(context.Context, CompileEffectiveFactorySourceRequest) (CompileEffectiveFactorySourceResult, error)
@@ -56,7 +51,28 @@ type Service interface {
 	ResolveBuiltInPackagedFactory(context.Context, ResolveBuiltInPackagedFactoryRequest) (ResolveBuiltInPackagedFactoryResult, error)
 	InstallPackagedFactory(context.Context, InstallPackagedFactoryRequest) (InstallPackagedFactoryResult, error)
 	CreateFactoryScaffold(context.Context, CreateFactoryScaffoldRequest) (CreateFactoryScaffoldResult, error)
+
+	// Invocation-time projection of authored policy.
+	ResolveInvocationDefinition(context.Context, ResolveInvocationDefinitionRequest) (ResolveInvocationDefinitionResult, error)
 }
+
+// InstallPackagedFactoryOperation is the pure invocation shape used by the
+// CLI/MCP representation adapters. Construction supplies it from the root
+// Service; adapters do not own catalog or installation policy.
+type InstallPackagedFactoryOperation func(
+	context.Context,
+	InstallPackagedFactoryRequest,
+) (InstallPackagedFactoryResult, error)
+
+// DefaultScaffoldType is the single supported scaffold type for a create
+// request with an explicit type.
+const DefaultScaffoldType = "default"
+
+// ErrIncompatibleFactoryDistributeOptions reports that packaged selection and
+// scaffold-specific inputs cannot be combined in one distribute request.
+var ErrIncompatibleFactoryDistributeOptions = fmt.Errorf(
+	"packaged factory selection cannot be combined with scaffold-specific options",
+)
 
 // ListEffectiveFactoriesRequest selects the project-local and global roots
 // merged with the published packaged Factory catalog.
@@ -323,6 +339,20 @@ type ReplaceNamedFactoryResult struct {
 	FactoryDir string
 }
 
+// ReplaceFactoryLayoutAtDirRequest replaces an already-selected current
+// Factory directory. Sessions uses this operation for the default Factory,
+// whose durable layout is the session root rather than a named-catalog child.
+type ReplaceFactoryLayoutAtDirRequest struct {
+	TargetDir string
+	Prepared  PreparedFactoryLayoutPayload
+}
+
+// ReplaceFactoryLayoutAtDirResult carries the atomic replacement handle. The
+// Sessions owner may restore the previous layout if runtime activation fails.
+type ReplaceFactoryLayoutAtDirResult struct {
+	Replacement *FactorySplitLayoutReplaceResult
+}
+
 // ErrInvalidAuthoredFactorySource reports that authored/canonical bytes could
 // not be compiled into one normalized effective source.
 var ErrInvalidAuthoredFactorySource = errors.New("invalid authored factory source")
@@ -348,6 +378,7 @@ type CompileEffectiveFactorySourceResult struct {
 // EffectiveFactorySource is the Definitions-owned effective-source value
 // equivalent to a detached LoadedFactorySource identity/facts projection.
 type EffectiveFactorySource struct {
+	Factory         *FactoryConfig
 	FactoryDir      string
 	RuntimeBaseDir  string
 	ContentIdentity string
@@ -644,19 +675,4 @@ type CreateFactoryScaffoldRequest struct {
 type CreateFactoryScaffoldResult struct {
 	Definition   DistributedFactoryDefinitionFacts
 	ScaffoldType string
-}
-
-// SessionHost is the Factory Definitions-owned port for session-scoped
-// persistence and activation behavior used while composing Service.
-type SessionHost interface {
-	PersistRootDir() string
-	WorkstationLoader() WorkstationLoader
-	CurrentRuntimeConfig() LoadedFactorySource
-	WorkflowID() string
-	RequireSession(string) (*DefinitionSession, error)
-	SessionRuntimeConfig(string) (LoadedFactorySource, error)
-	SessionFactoryPersistRoot(*DefinitionSession) string
-	ValidateEditableFactorySnapshot(context.Context, *FactorySnapshot) error
-	GetCurrentFactorySnapshotForSession(context.Context, string) (*FactorySnapshot, error)
-	ReplaceFactoryLayoutAtDir(string, *PreparedFactoryLayoutPayload) (*FactorySplitLayoutReplaceResult, error)
 }

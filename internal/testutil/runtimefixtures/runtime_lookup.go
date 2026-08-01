@@ -55,7 +55,6 @@ type RuntimeConfigLookupFixture struct {
 
 var _ interfaces.RuntimeConfigLookup = RuntimeConfigLookupFixture{}
 var _ interfaces.RuntimeFactoryConfigLookup = RuntimeConfigLookupFixture{}
-var _ interfaces.ReplayRuntimeConfig = RuntimeConfigLookupFixture{}
 
 func (f RuntimeConfigLookupFixture) FactoryDir() string {
 	return f.FactoryPath

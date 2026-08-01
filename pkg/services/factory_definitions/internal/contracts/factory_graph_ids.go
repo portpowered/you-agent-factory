@@ -2,9 +2,6 @@ package factorycontracts
 
 import (
 	"strings"
-
-	catalogresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/resource"
-	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
 )
 
 // CanonicalFactoryGraphEntityID resolves the durable public identifier used by
@@ -18,11 +15,11 @@ func CanonicalFactoryGraphEntityID(explicitID, fallbackName string) string {
 	return fallbackName
 }
 
-func CanonicalFactoryGraphResourceID(resource catalogresource.Config) string {
+func CanonicalFactoryGraphResourceID(resource ResourceConfig) string {
 	return CanonicalFactoryGraphEntityID(resource.ID, resource.Name)
 }
 
-func CanonicalFactoryGraphWorkerID(worker workerconfig.Config) string {
+func CanonicalFactoryGraphWorkerID(worker Config) string {
 	return CanonicalFactoryGraphEntityID(worker.ID, worker.Name)
 }
 

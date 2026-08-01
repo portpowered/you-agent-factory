@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
-	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
+	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 

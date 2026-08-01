@@ -31,8 +31,9 @@ var distributionDecisionEnvelopeForbiddenSymbols = []string{
 }
 
 // pss-cln-def-fold-distribution-004: distribution owns packaged asset/materialize
-// modules only. Decision-envelope interpretation remains in decisionenvelope and
-// the transitional packages/goal shim until invocation_policy cutover.
+// modules only. Decision-envelope interpretation remains in the owner-local
+// decisionenvelope implementation and the transitional packages/goal shim
+// until invocation_policy cutover.
 func TestDecisionEnvelopeOwnershipBoundary_DistributionDoesNotImportEnvelopeImplementation(t *testing.T) {
 	t.Parallel()
 
@@ -93,7 +94,7 @@ func TestDecisionEnvelopeOwnershipBoundary_DistributionDoesNotHostDecisionEnvelo
 func TestDecisionEnvelopeOwnershipBoundary_TransitionalGoalShimDelegatesToDecisionEnvelope(t *testing.T) {
 	t.Parallel()
 
-	envelopePath := filepath.Join("services", "invocation_policy", "decisionenvelope", "service.go")
+	envelopePath := filepath.Join("services", "invocation_policy", "internal", "decisionenvelope", "service.go")
 	if _, err := os.Stat(envelopePath); err != nil {
 		t.Fatalf("invocation_policy decisionenvelope owner path must exist after residual deletion: %v", err)
 	}
@@ -102,7 +103,7 @@ func TestDecisionEnvelopeOwnershipBoundary_TransitionalGoalShimDelegatesToDecisi
 func TestDecisionEnvelopeOwnershipBoundary_InventoryDoesNotSuccessorDecisionEnvelopeToDistribution(t *testing.T) {
 	t.Parallel()
 
-	got, err := ownershipinventory.MapPackage("pkg/services/factory_definitions/internal/services/invocation_policy/decisionenvelope")
+	got, err := ownershipinventory.MapPackage("pkg/services/factory_definitions/internal/services/invocation_policy/internal/decisionenvelope")
 	if err != nil {
 		t.Fatalf("MapPackage(decisionenvelope) error = %v", err)
 	}

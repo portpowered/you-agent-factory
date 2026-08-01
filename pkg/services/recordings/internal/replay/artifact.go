@@ -10,6 +10,7 @@ import (
 
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 )
 
 const (
@@ -154,7 +155,7 @@ func MarshalArtifact(artifact *interfaces.ReplayArtifact) ([]byte, error) {
 func Load(
 	storage platformreplay.Storage,
 	path string,
-	decodeFactorySnapshot interfaces.FactorySnapshotJSONDecoder,
+	decodeFactorySnapshot factorydefinitionswire.FactorySnapshotJSONDecoder,
 ) (*interfaces.ReplayArtifact, error) {
 	if storage == nil {
 		return nil, fmt.Errorf("replay artifact storage is required")

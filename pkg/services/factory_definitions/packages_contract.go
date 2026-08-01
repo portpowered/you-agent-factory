@@ -2,10 +2,8 @@ package factorydefinitions
 
 import (
 	"io/fs"
-	"strings"
 
 	contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
-	distributionpackageassets "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packageassets"
 )
 
 type PackagedDefinition = contracts.PackagedDefinition
@@ -16,12 +14,6 @@ const (
 	PackagedFactoryFormatYAML = contracts.PackagedFactoryFormatYAML
 	PackagedFactoryFormatYML  = contracts.PackagedFactoryFormatYML
 )
-
-// PackagedGoalPromptFileSystem is the exact filesystem effect used by the
-// packaged Goal drift check to read one already-resolved prompt path.
-type PackagedGoalPromptFileSystem interface {
-	ReadFile(string) ([]byte, error)
-}
 
 const (
 	PackagedDeepResearchFactoryName      = "@you/deep-research"
@@ -44,33 +36,62 @@ const (
 	PackagedFullFlowFactoryName          = "@you/full-flow"
 )
 
-// CustomerVisibleFactoryName returns the customer-facing Factory identifier for
-// diagnostics when runtime configs use authored or generated short names.
-func CustomerVisibleFactoryName(cfg *FactoryConfig) string {
-	if cfg == nil {
-		return ""
-	}
-	name := strings.TrimSpace(cfg.Name)
-	if strings.HasPrefix(name, "@you/") {
-		return name
-	}
-	project := strings.TrimSpace(cfg.Project)
-	if strings.HasPrefix(project, "builtin-") {
-		return "@you/" + strings.TrimPrefix(project, "builtin-")
-	}
-	return name
-}
-
 // PackagedFactoryAssetDefinition describes one authored packaged Factory and
 // the assets available beneath its package-owned asset root.
-type PackagedFactoryAssetDefinition = distributionpackageassets.Definition
-
-// AssemblePackagedFactoryAssets resolves package-owned assets and returns a
-// canonical JSON payload without persisting or installing the definition.
-func AssemblePackagedFactoryAssets(definition PackagedFactoryAssetDefinition) ([]byte, error) {
-	return distributionpackageassets.Assemble(definition)
-}
+type PackagedFactoryAssetDefinition = contracts.PackagedFactoryAssetDefinition
 
 // PackagedFactoryAssetFileSystem is the exact filesystem effect used when
 // assembling packaged Factory assets from an authored package directory.
 type PackagedFactoryAssetFileSystem = fs.FS
+
+// PackagedFactoryInstallOutcome is the detached result status returned by the
+// Definitions distribution capability.
+type PackagedFactoryInstallOutcome string
+
+const (
+	PackagedFactoryInstallCreated  PackagedFactoryInstallOutcome = "created"
+	PackagedFactoryInstallSkipped  PackagedFactoryInstallOutcome = "skipped"
+	PackagedFactoryInstallReplaced PackagedFactoryInstallOutcome = "replaced"
+)
+
+// PackagedFactoryInstallResult carries one concrete installation result.
+type PackagedFactoryInstallResult struct {
+	Name       string
+	FactoryDir string
+	Outcome    PackagedFactoryInstallOutcome
+	Format     PackagedFactoryFormat
+}
+
+// PackagedFactoryInstallParams is the private distribution input needed to
+// materialize one selected packaged Definition.
+type PackagedFactoryInstallParams struct {
+	NamedFactoriesRoot string
+	Definition         PackagedDefinition
+	Format             PackagedFactoryFormat
+	Replace            bool
+}
+
+// QuorumLineageInput is the detached lineage identity consumed by packaged
+// quorum relation policy.
+type QuorumLineageInput struct {
+	WorkID     string
+	WorkTypeID string
+}
+
+// TTSInvocationWaitOutcome identifies the detached packaged-TTS wait result.
+type TTSInvocationWaitOutcome string
+
+const (
+	TTSInvocationWaitOutcomeLoading           TTSInvocationWaitOutcome = "loading"
+	TTSInvocationWaitOutcomeModelNotReady     TTSInvocationWaitOutcome = "model_not_ready"
+	TTSInvocationWaitOutcomeGenerationFailed  TTSInvocationWaitOutcome = "generation_failed"
+	TTSInvocationWaitOutcomeUnresolvedFailure TTSInvocationWaitOutcome = "unresolved_failure"
+)
+
+// TTSInvocationFailure carries detached packaged-TTS failure facts.
+type TTSInvocationFailure struct {
+	Outcome      TTSInvocationWaitOutcome
+	ErrorCode    string
+	FailureClass string
+	Message      string
+}

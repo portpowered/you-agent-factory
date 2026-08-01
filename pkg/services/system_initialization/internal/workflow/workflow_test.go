@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"errors"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"os"
 	"path/filepath"
 	"sort"
@@ -81,7 +82,7 @@ type packagedInstallCall struct {
 func newTestInitializer(
 	t *testing.T,
 	settings OperatorSettings,
-	installer factorydefinitions.PackagedFactoryInstaller,
+	installer factorydefinitionswire.PackagedFactoryInstaller,
 	definitions []factorydefinitions.PackagedDefinition,
 ) *Initializer {
 	t.Helper()

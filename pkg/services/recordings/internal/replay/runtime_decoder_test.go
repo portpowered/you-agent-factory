@@ -2,6 +2,7 @@ package replay
 
 import (
 	"encoding/json"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -9,7 +10,7 @@ import (
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
 
-var testFactorySnapshotDecoder factorydefinitions.FactorySnapshotJSONDecoder = func(
+var testFactorySnapshotDecoder factorydefinitionswire.FactorySnapshotJSONDecoder = func(
 	data []byte,
 ) (*factorydefinitions.FactorySnapshot, error) {
 	generated, err := factorymapping.GeneratedFactoryFromOpenAPIJSON(data)
@@ -21,7 +22,7 @@ var testFactorySnapshotDecoder factorydefinitions.FactorySnapshotJSONDecoder = f
 
 func testRuntimeConfigDecoder(
 	snapshot *factorydefinitions.FactorySnapshot,
-) (factorydefinitions.ReplayRuntimeConfig, error) {
+) (factorydefinitionswire.ReplayRuntimeConfig, error) {
 	var generated factoryapi.Factory
 	if err := snapshot.Decode(&generated); err != nil {
 		return nil, err

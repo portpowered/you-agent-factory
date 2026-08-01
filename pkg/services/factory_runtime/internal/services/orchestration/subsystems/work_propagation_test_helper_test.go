@@ -2,10 +2,11 @@ package subsystems
 
 import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 )
 
-func testWorkPropagationPolicy() factorydefinitions.WorkPropagationPolicyService {
-	return factorydefinitions.WorkPropagationPolicyFunc(func(
+func testWorkPropagationPolicy() factorydefinitionswire.WorkPropagationPolicyService {
+	return factorydefinitionswire.WorkPropagationPolicyFunc(func(
 		workstation *factorydefinitions.FactoryWorkstationConfig,
 	) factorydefinitions.WorkPropagationMode {
 		if workstation != nil &&

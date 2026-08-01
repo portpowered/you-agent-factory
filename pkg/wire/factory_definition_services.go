@@ -78,49 +78,49 @@ func provideFactoryInvocationPolicyPorts() (factorydefinitionswire.InvocationPol
 
 func provideDecisionEnvelopeService(
 	ports factorydefinitionswire.InvocationPolicyPorts,
-) factorydefinitions.DecisionEnvelopeService {
+) factorydefinitionswire.DecisionEnvelopeService {
 	return ports.DecisionEnvelope
 }
 
 func provideInvocationInterpolationService(
 	ports factorydefinitionswire.InvocationPolicyPorts,
-) factorydefinitions.InvocationInterpolationService {
+) factorydefinitionswire.InvocationInterpolationService {
 	return ports.InvocationInterpolation
 }
 
 func provideInvocationOutputShapingService(
 	ports factorydefinitionswire.InvocationPolicyPorts,
-) factorydefinitions.InvocationOutputShapingService {
+) factorydefinitionswire.InvocationOutputShapingService {
 	return ports.InvocationOutput
 }
 
 func provideInvocationWorkTypeService(
 	ports factorydefinitionswire.InvocationPolicyPorts,
-) factorydefinitions.InvocationWorkTypeService {
+) factorydefinitionswire.InvocationWorkTypeService {
 	return ports.InvocationWorkType
 }
 
 func provideQuorumPolicyService(
 	ports factorydefinitionswire.InvocationPolicyPorts,
-) factorydefinitions.QuorumPolicyService {
+) factorydefinitionswire.QuorumPolicyService {
 	return ports.QuorumPolicy
 }
 
 func provideWorkPropagationPolicyService(
 	ports factorydefinitionswire.InvocationPolicyPorts,
-) factorydefinitions.WorkPropagationPolicyService {
+) factorydefinitionswire.WorkPropagationPolicyService {
 	return ports.WorkPropagation
 }
 
 func provideWorkstationExecutionPolicyService(
 	ports factorydefinitionswire.InvocationPolicyPorts,
-) factorydefinitions.WorkstationExecutionPolicyService {
+) factorydefinitionswire.WorkstationExecutionPolicyService {
 	return ports.WorkstationExecution
 }
 
 func provideTTSObservabilityService(
 	ports factorydefinitionswire.InvocationPolicyPorts,
-) factorydefinitions.TTSObservabilityService {
+) factorydefinitionswire.TTSObservabilityService {
 	return ports.TTSObservability
 }
 
@@ -135,14 +135,14 @@ func provideFactoryDefinitionPortableFileSystem(
 
 func provideFactoryDefinitionLoadingFileSystem(
 	edges serviceedges.Edges,
-) factorydefinitions.LoadingFileSystem {
+) factorydefinitionswire.LoadingFileSystem {
 	if edges.FactoryDefinitionLoadingFileSystem != nil {
 		return edges.FactoryDefinitionLoadingFileSystem
 	}
 	return platformfilesystem.Local{}
 }
 
-func provideFactoryDefinitionClock(edges serviceedges.Edges) factorydefinitions.Clock {
+func provideFactoryDefinitionClock(edges serviceedges.Edges) factorydefinitionswire.Clock {
 	if edges.FactoryDefinitionClock != nil {
 		return edges.FactoryDefinitionClock
 	}
@@ -151,7 +151,7 @@ func provideFactoryDefinitionClock(edges serviceedges.Edges) factorydefinitions.
 
 func provideFactoryDefinitionVersionFileSystem(
 	edges serviceedges.Edges,
-) factorydefinitions.VersionFileSystem {
+) factorydefinitionswire.VersionFileSystem {
 	if edges.FactoryDefinitionVersionFileSystem != nil {
 		return edges.FactoryDefinitionVersionFileSystem
 	}
@@ -160,7 +160,7 @@ func provideFactoryDefinitionVersionFileSystem(
 
 func provideFactoryDefinitionPackagedGoalPromptFileSystem(
 	edges serviceedges.Edges,
-) factorydefinitions.PackagedGoalPromptFileSystem {
+) factorydefinitionswire.PackagedGoalPromptFileSystem {
 	if edges.FactoryDefinitionPackagedGoalPromptFileSystem != nil {
 		return edges.FactoryDefinitionPackagedGoalPromptFileSystem
 	}
@@ -169,7 +169,7 @@ func provideFactoryDefinitionPackagedGoalPromptFileSystem(
 
 func provideFactoryDefinitionPortableBundledFileInspection(
 	edges serviceedges.Edges,
-) factorydefinitions.PortableBundledFileInspection {
+) factorydefinitionswire.PortableBundledFileInspection {
 	if edges.FactoryDefinitionPortableBundledFileInspection != nil {
 		return edges.FactoryDefinitionPortableBundledFileInspection
 	}
@@ -178,7 +178,7 @@ func provideFactoryDefinitionPortableBundledFileInspection(
 
 func provideFactoryDefinitionRequiredToolPathLookup(
 	edges serviceedges.Edges,
-) factorydefinitions.RequiredToolPathLookup {
+) factorydefinitionswire.RequiredToolPathLookup {
 	if edges.FactoryDefinitionRequiredToolPathLookup != nil {
 		return edges.FactoryDefinitionRequiredToolPathLookup
 	}
@@ -187,7 +187,7 @@ func provideFactoryDefinitionRequiredToolPathLookup(
 
 func provideFactoryDefinitionRequiredToolVersionProbe(
 	edges serviceedges.Edges,
-) factorydefinitions.RequiredToolVersionProbe {
+) factorydefinitionswire.RequiredToolVersionProbe {
 	if edges.FactoryDefinitionRequiredToolVersionProbe != nil {
 		return edges.FactoryDefinitionRequiredToolVersionProbe
 	}
@@ -197,15 +197,15 @@ func provideFactoryDefinitionRequiredToolVersionProbe(
 }
 
 func provideFactoryDefinitionRequiredToolChecker(
-	lookPath factorydefinitions.RequiredToolPathLookup,
-	versionProbe factorydefinitions.RequiredToolVersionProbe,
+	lookPath factorydefinitionswire.RequiredToolPathLookup,
+	versionProbe factorydefinitionswire.RequiredToolVersionProbe,
 ) (factorydefinitions.RequiredToolChecker, error) {
 	return factorydefinitionswire.NewPathRequiredToolChecker(lookPath, versionProbe)
 }
 
 func provideFactoryDefinitionPersistenceFileSystem(
 	edges serviceedges.Edges,
-) factorydefinitions.PersistenceFileSystem {
+) factorydefinitionswire.PersistenceFileSystem {
 	if edges.FactoryDefinitionPersistenceFileSystem != nil {
 		return edges.FactoryDefinitionPersistenceFileSystem
 	}
@@ -214,7 +214,7 @@ func provideFactoryDefinitionPersistenceFileSystem(
 
 func provideFactoryDefinitionDirectoryReplacementStore(
 	edges serviceedges.Edges,
-) factorydefinitions.DirectoryReplacementStore {
+) factorydefinitionswire.DirectoryReplacementStore {
 	if edges.FactoryDefinitionDirectoryReplacementStore != nil {
 		return edges.FactoryDefinitionDirectoryReplacementStore
 	}
@@ -223,7 +223,7 @@ func provideFactoryDefinitionDirectoryReplacementStore(
 
 func provideFactoryDefinitionNamedPathFileSystem(
 	edges serviceedges.Edges,
-) factorydefinitions.NamedPathFileSystem {
+) factorydefinitionswire.NamedPathFileSystem {
 	if edges.FactoryDefinitionNamedPathFileSystem != nil {
 		return edges.FactoryDefinitionNamedPathFileSystem
 	}
@@ -231,14 +231,14 @@ func provideFactoryDefinitionNamedPathFileSystem(
 }
 
 func provideFactoryDefinitionNamedPathResolver(
-	fileSystem factorydefinitions.NamedPathFileSystem,
-) (factorydefinitions.NamedPathResolver, error) {
+	fileSystem factorydefinitionswire.NamedPathFileSystem,
+) (factorydefinitionswire.NamedPathResolver, error) {
 	return factorydefinitionswire.NewPathResolver(fileSystem)
 }
 
 func provideFactoryDefinitionNamedFactoryCatalogFileSystem(
 	edges serviceedges.Edges,
-) factorydefinitions.NamedFactoryCatalogFileSystem {
+) factorydefinitionswire.NamedFactoryCatalogFileSystem {
 	if edges.FactoryDefinitionNamedFactoryCatalogFileSystem != nil {
 		return edges.FactoryDefinitionNamedFactoryCatalogFileSystem
 	}
@@ -247,7 +247,7 @@ func provideFactoryDefinitionNamedFactoryCatalogFileSystem(
 
 func provideFactoryDefinitionPackagedInstallationFileSystem(
 	edges serviceedges.Edges,
-) factorydefinitions.PackagedInstallationFileSystem {
+) factorydefinitionswire.PackagedInstallationFileSystem {
 	if edges.FactoryDefinitionPackagedInstallationFileSystem != nil {
 		return edges.FactoryDefinitionPackagedInstallationFileSystem
 	}
@@ -256,7 +256,7 @@ func provideFactoryDefinitionPackagedInstallationFileSystem(
 
 func provideFactoryDefinitionAuthoredReaderFileSystem(
 	edges serviceedges.Edges,
-) factorydefinitions.AuthoredLayoutReaderFileSystem {
+) factorydefinitionswire.AuthoredLayoutReaderFileSystem {
 	if edges.FactoryDefinitionAuthoredReaderFileSystem != nil {
 		return edges.FactoryDefinitionAuthoredReaderFileSystem
 	}
@@ -265,7 +265,7 @@ func provideFactoryDefinitionAuthoredReaderFileSystem(
 
 func provideFactoryDefinitionAuthoredWriterFileSystem(
 	edges serviceedges.Edges,
-) factorydefinitions.AuthoredLayoutWriterFileSystem {
+) factorydefinitionswire.AuthoredLayoutWriterFileSystem {
 	if edges.FactoryDefinitionAuthoredWriterFileSystem != nil {
 		return edges.FactoryDefinitionAuthoredWriterFileSystem
 	}
@@ -274,7 +274,7 @@ func provideFactoryDefinitionAuthoredWriterFileSystem(
 
 func provideFactoryDefinitionScaffoldFileSystem(
 	edges serviceedges.Edges,
-) factorydefinitions.ScaffoldFileSystem {
+) factorydefinitionswire.ScaffoldFileSystem {
 	if edges.FactoryDefinitionScaffoldFileSystem != nil {
 		return edges.FactoryDefinitionScaffoldFileSystem
 	}
@@ -283,7 +283,7 @@ func provideFactoryDefinitionScaffoldFileSystem(
 
 func provideFactoryDefinitionScaffoldOutput(
 	edges serviceedges.Edges,
-) factorydefinitions.ScaffoldOutput {
+) factorydefinitionswire.ScaffoldOutput {
 	if edges.FactoryDefinitionScaffoldOutput != nil {
 		return edges.FactoryDefinitionScaffoldOutput
 	}
@@ -291,15 +291,15 @@ func provideFactoryDefinitionScaffoldOutput(
 }
 
 func provideFactoryScaffoldCommandInitializer(
-	files factorydefinitions.ScaffoldFileSystem,
-	output factorydefinitions.ScaffoldOutput,
+	files factorydefinitionswire.ScaffoldFileSystem,
+	output factorydefinitionswire.ScaffoldOutput,
 ) (factorydefinitions.ScaffoldInitializer, error) {
 	return factorydefaultscaffold.NewScaffoldInitializer(files, output)
 }
 
 func provideFactoryDefinitionInputInboxSentinelEnsurer(
-	fileSystem factorydefinitions.AuthoredLayoutWriterFileSystem,
-) factorydefinitions.InputInboxSentinelEnsurer {
+	fileSystem factorydefinitionswire.AuthoredLayoutWriterFileSystem,
+) factorydefinitionswire.InputInboxSentinelEnsurer {
 	return inboxgitkeep.NewLocal(fileSystem)
 }
 
@@ -341,11 +341,11 @@ func provideFactoryDefinitionLoader(
 	applySupportedFiles factorydefinitions.PortableBundledFilesApplier,
 	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
 	materializeFiles factorydefinitions.PortableBundledFilesMaterializer,
-	loadingFileSystem factorydefinitions.LoadingFileSystem,
-	namedPaths factorydefinitions.NamedPathResolver,
-	fileSystem factorydefinitions.AuthoredLayoutReaderFileSystem,
+	loadingFileSystem factorydefinitionswire.LoadingFileSystem,
+	namedPaths factorydefinitionswire.NamedPathResolver,
+	fileSystem factorydefinitionswire.AuthoredLayoutReaderFileSystem,
 	sourceResolver factorydefinitions.PortableBundledFileSourceResolver,
-	inspectSource factorydefinitions.PortableBundledFileInspection,
+	inspectSource factorydefinitionswire.PortableBundledFileInspection,
 	requiredToolChecker factorydefinitions.RequiredToolChecker,
 ) *factorydefinitionswire.Loader {
 	return factorydefinitionswire.NewLoader(
@@ -362,7 +362,7 @@ func provideFactoryDefinitionLoader(
 }
 
 func provideAuthoredFactorySourceLoader(
-	fileSystem factorydefinitions.AuthoredLayoutReaderFileSystem,
+	fileSystem factorydefinitionswire.AuthoredLayoutReaderFileSystem,
 ) factorydefinitions.AuthoredFactorySourceLoader {
 	return factorydefinitionswire.AuthoredFactorySourceLoader(fileSystem)
 }
@@ -382,10 +382,10 @@ func provideReplayArtifactStorage() platformreplay.Storage {
 func provideReplayArtifactLoader(storage platformreplay.Storage) recordings.ReplayArtifactLoader {
 	return recordingswire.NewReplayArtifactLoader(
 		storage,
-		factorydefinitionswire.FactorySnapshotJSONDecoder(),
+		factorydefinitionswire.NewFactorySnapshotJSONDecoder(),
 	)
 }
 
-func provideReplayRuntimeConfigDecoder() factorydefinitions.ReplayRuntimeConfigDecoder {
-	return factorydefinitionswire.ReplayRuntimeConfigDecoder()
+func provideReplayRuntimeConfigDecoder() factorydefinitionswire.ReplayRuntimeConfigDecoder {
+	return factorydefinitionswire.NewReplayRuntimeConfigDecoder()
 }

@@ -3,6 +3,7 @@ package wire_test
 import (
 	"context"
 	"errors"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"io/fs"
 	"runtime"
 	"sync"
@@ -27,7 +28,7 @@ type constructionPorts struct {
 	hostedSources    automations.HostedSourcesFactory
 	hostedClock      automations.HostedLinearClock
 	resolveTemplates workers.TemplateFieldResolver
-	executionPolicy  factorydefinitions.WorkstationExecutionPolicyService
+	executionPolicy  factorydefinitionswire.WorkstationExecutionPolicyService
 }
 
 type runtimeAutomationService interface {

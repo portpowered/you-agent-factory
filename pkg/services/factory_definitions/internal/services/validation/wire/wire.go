@@ -4,9 +4,46 @@ package wire
 
 import (
 	"fmt"
+	factoryeffects "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/effects"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	validationservice "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation"
+	validationimpl "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/impl"
 	validationserviceimpl "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/internal/service"
+)
+
+func NewValidationOperations(
+	orchestrators factorydefinitions.OrchestratorDefinitionValidator,
+	loadCanonical ...factorydefinitions.CanonicalFactoryJSONLoader,
+) factoryeffects.ValidationOperations {
+	return validationimpl.New(orchestrators, loadCanonical...)
+}
+
+// New exposes the owner-local validator constructor through validation wire
+// for focused tests and owner composition. The implementation type remains
+// private to validation's internal tree.
+func New(
+	orchestrators factorydefinitions.OrchestratorDefinitionValidator,
+	loadCanonical ...factorydefinitions.CanonicalFactoryJSONLoader,
+) *validationimpl.Service {
+	return validationimpl.New(orchestrators, loadCanonical...)
+}
+
+var (
+	ValidateFactoryDefinition                                     = validationimpl.Validate
+	ValidateBlockingFactoryLoad                                   = validationimpl.ValidateBlockingLoad
+	ValidatePortableResourceManifestOnPathWithSourceResolver      = validationimpl.ValidatePortableResourceManifestOnPathWithSourceResolver
+	ValidatePortableBundledFilesForExpandOnPathWithSourceResolver = validationimpl.ValidatePortableBundledFilesForExpandOnPathWithSourceResolver
+)
+
+const (
+	CodeOrchestratorJavaScriptMissingSource = validationimpl.CodeOrchestratorJavaScriptMissingSource
+	CodeOrchestratorUnsupportedKind         = validationimpl.CodeOrchestratorUnsupportedKind
+	CodeRequiredToolMissing                 = validationimpl.CodeRequiredToolMissing
+	CodeRequiredToolVersionProbe            = validationimpl.CodeRequiredToolVersionProbe
+	CodeDanglingPlaceReference              = validationimpl.CodeDanglingPlaceReference
+	CodeDanglingWorkerReference             = validationimpl.CodeDanglingWorkerReference
+	CodeDuplicateIdentifier                 = validationimpl.CodeDuplicateIdentifier
 )
 
 // NewService constructs the private validation subservice from exact injected

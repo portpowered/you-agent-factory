@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	factoryeffects "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/effects"
 	"io/fs"
 	"path/filepath"
 
@@ -23,8 +24,8 @@ var defaultFactoryJSON string
 // NewScaffoldInitializer constructs the single supported default Factory
 // scaffold operation from exact filesystem and output effects.
 func NewScaffoldInitializer(
-	files factorydefinitions.ScaffoldFileSystem,
-	output factorydefinitions.ScaffoldOutput,
+	files factoryeffects.ScaffoldFileSystem,
+	output factoryeffects.ScaffoldOutput,
 ) (factorydefinitions.ScaffoldInitializer, error) {
 	if files == nil {
 		return nil, fmt.Errorf("Factory Definition scaffold filesystem is required")
@@ -38,8 +39,8 @@ func NewScaffoldInitializer(
 }
 
 func materializeDefaultScaffold(
-	files factorydefinitions.ScaffoldFileSystem,
-	output factorydefinitions.ScaffoldOutput,
+	files factoryeffects.ScaffoldFileSystem,
+	output factoryeffects.ScaffoldOutput,
 	dir string,
 ) error {
 	for _, relativeDir := range []string{
@@ -79,7 +80,7 @@ func materializeDefaultScaffold(
 }
 
 func writeScaffoldFileIfAbsent(
-	files factorydefinitions.ScaffoldFileSystem,
+	files factoryeffects.ScaffoldFileSystem,
 	path string,
 	contents string,
 ) error {

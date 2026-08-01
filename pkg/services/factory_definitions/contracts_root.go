@@ -2,13 +2,31 @@ package factorydefinitions
 
 import (
 	contracts "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/contracts"
-	catalogresource "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/resource"
-	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
 )
 
 // Root-owned aliases expose the Factory Definition vocabulary without making
 // peer services import implementation subpackages.
 type FactoryConfig = contracts.FactoryConfig
+type NamedFactoryCandidatePaths = contracts.NamedFactoryCandidatePaths
+
+// NamedFactoryCandidatePathsResolver is the CLI-facing resolver callback for
+// the candidate named-factory files. It is a value callback rather than a
+// service interface so the root contract does not grow another implementation
+// surface.
+type NamedFactoryCandidatePathsResolver func(projectRoot, globalRoot, name string) (NamedFactoryCandidatePaths, error)
+
+// NamedFactoryRoots and the two config-file function types are transport
+// neutral value/callback vocabulary used by the CLI boundary. They are not
+// construction ports or service interfaces.
+type NamedFactoryRoots struct {
+	Project string
+	Global  string
+}
+
+type FactoryConfigParser func([]byte) (*FactoryConfig, error)
+type FactoryConfigRootResolver func(string) (string, error)
+type FactoryConfigFileLoader func(string) (*FactoryConfig, error)
+
 type NameValueConfig = contracts.NameValueConfig
 type NameValueValidationError = contracts.NameValueValidationError
 type SaveMode = contracts.SaveMode
@@ -30,15 +48,15 @@ type ValidationTopologyError = contracts.ValidationTopologyError
 type FactoryOrchestratorJavaScriptConfig = contracts.FactoryOrchestratorJavaScriptConfig
 type FactoryGuardConfig = contracts.FactoryGuardConfig
 type FactoryWorkstationConfig = contracts.FactoryWorkstationConfig
-type FactoryWorkerConfig = workerconfig.Config
-type HostedLinearWorkerConfig = workerconfig.HostedLinearWorkerConfig
-type HostedLinearWorkerClaimConfig = workerconfig.HostedLinearWorkerClaimConfig
-type HostedLinearWorkerMappingConfig = workerconfig.HostedLinearWorkerMappingConfig
-type HostedWorkerAuthConfig = workerconfig.HostedWorkerAuthConfig
-type AgentToolsConfig = workerconfig.AgentToolsConfig
-type ModelOperation = workerconfig.ModelOperation
-type ModelOperationSlot = workerconfig.ModelOperationSlot
-type ResourceConfig = catalogresource.Config
+type FactoryWorkerConfig = contracts.FactoryWorkerConfig
+type HostedLinearWorkerConfig = contracts.HostedLinearWorkerConfig
+type HostedLinearWorkerClaimConfig = contracts.HostedLinearWorkerClaimConfig
+type HostedLinearWorkerMappingConfig = contracts.HostedLinearWorkerMappingConfig
+type HostedWorkerAuthConfig = contracts.HostedWorkerAuthConfig
+type AgentToolsConfig = contracts.AgentToolsConfig
+type ModelOperation = contracts.ModelOperation
+type ModelOperationSlot = contracts.ModelOperationSlot
+type ResourceConfig = contracts.ResourceConfig
 type InvocationSignatureConfig = contracts.InvocationSignatureConfig
 type InvocationExampleConfig = contracts.InvocationExampleConfig
 type InvocationExampleArguments = contracts.InvocationExampleArguments
@@ -139,25 +157,25 @@ type DefinitionSession = contracts.DefinitionSession
 
 const (
 	ResourceStateAvailable                               = contracts.ResourceStateAvailable
-	ResourceTypeModel                                    = catalogresource.TypeModel
-	ResourceTypeProviderQuota                            = catalogresource.TypeProviderQuota
-	ResourceTypeInvocationSlot                           = catalogresource.TypeInvocationSlot
+	ResourceTypeModel                                    = contracts.ResourceTypeModel
+	ResourceTypeProviderQuota                            = contracts.ResourceTypeProviderQuota
+	ResourceTypeInvocationSlot                           = contracts.ResourceTypeInvocationSlot
 	WorkerTypeAgent                                      = contracts.WorkerTypeAgent
 	WorkerTypeInference                                  = contracts.WorkerTypeInference
 	WorkerTypeModel                                      = contracts.WorkerTypeModel
 	WorkerTypeScript                                     = contracts.WorkerTypeScript
 	WorkerTypeHosted                                     = contracts.WorkerTypeHosted
 	WorkerTypePoller                                     = contracts.WorkerTypePoller
-	ModelLocalityLocal                                   = workerconfig.ModelLocalityLocal
-	ModelLocalityCloud                                   = workerconfig.ModelLocalityCloud
-	AgentToolPolicyDisabled                              = workerconfig.AgentToolPolicyDisabled
-	AgentToolPolicyEnabled                               = workerconfig.AgentToolPolicyEnabled
-	AgentToolPolicyReadOnly                              = workerconfig.AgentToolPolicyReadOnly
-	ModelOperationContentTypeAudio                       = workerconfig.ModelOperationContentTypeAudio
-	ModelOperationContentTypeBinary                      = workerconfig.ModelOperationContentTypeBinary
-	ModelOperationContentTypeImage                       = workerconfig.ModelOperationContentTypeImage
-	ModelOperationContentTypeJSON                        = workerconfig.ModelOperationContentTypeJSON
-	ModelOperationContentTypeText                        = workerconfig.ModelOperationContentTypeText
+	ModelLocalityLocal                                   = contracts.ModelLocalityLocal
+	ModelLocalityCloud                                   = contracts.ModelLocalityCloud
+	AgentToolPolicyDisabled                              = contracts.AgentToolPolicyDisabled
+	AgentToolPolicyEnabled                               = contracts.AgentToolPolicyEnabled
+	AgentToolPolicyReadOnly                              = contracts.AgentToolPolicyReadOnly
+	ModelOperationContentTypeAudio                       = contracts.ModelOperationContentTypeAudio
+	ModelOperationContentTypeBinary                      = contracts.ModelOperationContentTypeBinary
+	ModelOperationContentTypeImage                       = contracts.ModelOperationContentTypeImage
+	ModelOperationContentTypeJSON                        = contracts.ModelOperationContentTypeJSON
+	ModelOperationContentTypeText                        = contracts.ModelOperationContentTypeText
 	WorkerModelProviderDefault                           = contracts.WorkerModelProviderDefault
 	WorkstationTypeLogical                               = contracts.WorkstationTypeLogical
 	WorkstationTypePoller                                = contracts.WorkstationTypePoller
@@ -220,11 +238,11 @@ var RequiresWorkerWorkstationBehaviorCompatibility = contracts.RequiresWorkerWor
 var CompatibleWorkerWorkstationBehavior = contracts.CompatibleWorkerWorkstationBehavior
 var RuntimeBehaviorClassLabel = contracts.RuntimeBehaviorClassLabel
 var WorkerWorkstationBehaviorMismatchMessage = contracts.WorkerWorkstationBehaviorMismatchMessage
-var AgentToolsAllowExecution = workerconfig.AgentToolsAllowExecution
-var EffectiveAgentToolPolicy = workerconfig.EffectiveAgentToolPolicy
-var IsKnownAgentToolPolicy = workerconfig.IsKnownAgentToolPolicy
-var NormalizeAgentToolPolicy = workerconfig.NormalizeAgentToolPolicy
-var CloneWorkerConfig = workerconfig.Clone
+var AgentToolsAllowExecution = contracts.AgentToolsAllowExecution
+var EffectiveAgentToolPolicy = contracts.EffectiveAgentToolPolicy
+var IsKnownAgentToolPolicy = contracts.IsKnownAgentToolPolicy
+var NormalizeAgentToolPolicy = contracts.NormalizeAgentToolPolicy
+var CloneWorkerConfig = contracts.Clone
 
 // Foreign-vocabulary deletion-only aliases below are retained until
 // CLN-DEF-CONTRACTS story 007 deletes the contracts mega-barrel. Event envelope

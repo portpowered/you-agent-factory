@@ -3,7 +3,6 @@ package factorycontracts
 import (
 	"time"
 
-	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -93,7 +92,7 @@ type RuntimeWorkstationLookup interface {
 // RuntimeDefinitionLookup resolves runtime worker and workstation definitions by authored name.
 type RuntimeDefinitionLookup interface {
 	RuntimeWorkstationLookup
-	Worker(name string) (*workerconfig.Config, bool)
+	Worker(name string) (*Config, bool)
 }
 
 // RuntimeFactoryConfigLookup resolves the effective runtime factory config when

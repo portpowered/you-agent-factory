@@ -4,6 +4,7 @@ package application
 
 import (
 	"fmt"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"net/http"
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
@@ -24,7 +25,7 @@ type Handler struct {
 	mappings           *mappingcomposition.HTTPBinder
 	modelsContent      work.ContentPreparation
 	validation         factorydefinitions.SubmittedDefinitionValidationOperation
-	invocationWorkType factorydefinitions.InvocationWorkTypeService
+	invocationWorkType factorydefinitionswire.InvocationWorkTypeService
 	contentStaging     work.ContentStagingService
 	requestPreparation work.RequestPreparationService
 	sessionRequests    factorysessionshttp.RequestPreparation
@@ -34,7 +35,7 @@ func NewHandler(
 	mappings *mappingcomposition.HTTPBinder,
 	modelsContent work.ContentPreparation,
 	validation factorydefinitions.SubmittedDefinitionValidationOperation,
-	invocationWorkType factorydefinitions.InvocationWorkTypeService,
+	invocationWorkType factorydefinitionswire.InvocationWorkTypeService,
 	contentStaging work.ContentStagingService,
 	requestPreparation work.RequestPreparationService,
 	sessionRequests factorysessionshttp.RequestPreparation,
@@ -46,7 +47,7 @@ func NewHandler(
 	return &Handler{
 		mappings: mappings, modelsContent: modelsContent, validation: validation,
 		invocationWorkType: invocationWorkType,
-		contentStaging: contentStaging, requestPreparation: requestPreparation,
+		contentStaging:     contentStaging, requestPreparation: requestPreparation,
 		sessionRequests: sessionRequests,
 	}, nil
 }
@@ -79,9 +80,9 @@ func (handler *Handler) Bind(opened factorysessions.RuntimeHTTPServices) (http.H
 		FactoryValidation: handler.validation, WorkflowPreview: opened.WorkflowPreview,
 		DurableExecution: mapped.Durable, DurableLifecycle: mapped.Durable,
 		DurableListing: mapped.Durable, DurableProjection: mapped.Durable,
-		DurableLister:     opened.SessionExecution,
-		LiveSessionLister: factorysessionshttp.ReadProjectionSessionListReader{Reader: opened.FactorySessions},
-		WorkerPrompts: opened.WorkerPrompts,
+		DurableLister:      opened.SessionExecution,
+		LiveSessionLister:  factorysessionshttp.ReadProjectionSessionListReader{Reader: opened.FactorySessions},
+		WorkerPrompts:      opened.WorkerPrompts,
 		InvocationWorkType: handler.invocationWorkType,
 		WorkService: work.AdmissionContentService(
 			handler.contentStaging,

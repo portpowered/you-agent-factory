@@ -2,10 +2,10 @@ package wire
 
 import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryeffect "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/effects"
 	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
-	internalauthoredlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/authoredlayout"
 	authoringlayoutwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/wire"
-	compilationloading "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/loading"
+	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
 	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	authoredmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/authored"
 )
@@ -16,16 +16,16 @@ import (
 type AuthoringLayoutDependencies struct {
 	Validator          factorydefinitions.Validator
 	MapInput           factorydefinitions.FactoryLayoutPayloadMapper
-	Loader             *compilationloading.Loader
+	Loader             *compilationwire.Loader
 	MaterializeFiles   factorydefinitions.PortableBundledFilesMaterializer
 	ValidateWrites     factorydefinitions.PortableBundledFileWritesValidator
 	PruneRemovedDocs   factorydefinitions.PortableBundledDocsPruner
 	CopySupportedFiles factorydefinitions.PortableBundledFilesCopier
-	AuthoredWriterFS   factorydefinitions.AuthoredLayoutWriterFileSystem
-	EnsureInbox        factorydefinitions.InputInboxSentinelEnsurer
-	PersistenceFS      factorydefinitions.PersistenceFileSystem
-	NamedPaths         factorydefinitions.NamedPathResolver
-	Directories        factorydefinitions.DirectoryReplacementStore
+	AuthoredWriterFS   factoryeffect.AuthoredLayoutWriterFileSystem
+	EnsureInbox        factoryeffect.InputInboxSentinelEnsurer
+	PersistenceFS      factoryeffect.PersistenceFileSystem
+	NamedPaths         factoryeffect.NamedPathResolver
+	Directories        factoryeffect.DirectoryReplacementStore
 }
 
 // NewAuthoringLayoutService constructs the private authoring_layout subservice
@@ -34,15 +34,16 @@ func NewAuthoringLayoutService(
 	deps AuthoringLayoutDependencies,
 ) (authoringlayout.Service, error) {
 	mapper := factorymapping.NewFactoryConfigMapper()
-	writer := internalauthoredlayout.NewWriter(
+	writer := authoringlayoutwire.NewWriter(
 		authoredmapping.RenderWorkerAgentsMarkdown,
 		authoredmapping.RenderWorkstationAgentsMarkdown,
 		authoredmapping.RenderAgentsBody,
-		internalauthoredlayout.NewAgentsFileWriter(deps.AuthoredWriterFS),
+		authoringlayoutwire.NewAgentsFileWriter(deps.AuthoredWriterFS),
 		authoredmapping.SafeFactoryLayoutSegment,
 		authoredmapping.SafePromptFilePath,
 		deps.AuthoredWriterFS,
 		deps.EnsureInbox,
+		compilationwire.NormalizeCanonicalWorkstationRuntime,
 	)
 	return authoringlayoutwire.NewService(authoringlayout.Dependencies{
 		Validator:         deps.Validator,
@@ -98,7 +99,7 @@ func NewAuthoringLayoutService(
 // AuthoredFactorySourceLoader supplies the Factory Definitions-owned authored
 // source resolver to transport operations without exposing its implementation.
 func AuthoredFactorySourceLoader(
-	fileSystem factorydefinitions.AuthoredLayoutReaderFileSystem,
+	fileSystem factoryeffect.AuthoredLayoutReaderFileSystem,
 ) factorydefinitions.AuthoredFactorySourceLoader {
-	return internalauthoredlayout.NewFactorySourceLoader(fileSystem)
+	return authoringlayoutwire.NewFactorySourceLoader(fileSystem)
 }

@@ -17,6 +17,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	runnerinference "github.com/portpowered/infinite-you/pkg/services/workers/internal/services/runners/inference"
 )
@@ -29,7 +30,7 @@ import (
 type AgentExecutor struct {
 	providerExecutor  workerexecution.InvocationExecutor
 	runtimeConfig     interfaces.RuntimeDefinitionLookup
-	decisionEnvelopes interfaces.DecisionEnvelopeService
+	decisionEnvelopes factorydefinitionswire.DecisionEnvelopeService
 	logger            logging.Logger
 	retryConfig       providerRetryConfig
 	clock             func() time.Time
@@ -43,7 +44,7 @@ func NewAgentExecutor(
 	provider workerexecution.Provider,
 	logger logging.Logger,
 	clock func() time.Time,
-	decisionEnvelopes ...interfaces.DecisionEnvelopeService,
+	decisionEnvelopes ...factorydefinitionswire.DecisionEnvelopeService,
 ) *AgentExecutor {
 	return NewAgentExecutorWithRunner(
 		runtimeConfig,
@@ -61,7 +62,7 @@ func NewAgentExecutorWithRunner(
 	runner workerexecution.Runner,
 	logger logging.Logger,
 	clock func() time.Time,
-	decisionEnvelopes ...interfaces.DecisionEnvelopeService,
+	decisionEnvelopes ...factorydefinitionswire.DecisionEnvelopeService,
 ) *AgentExecutor {
 	return newAgentExecutor(
 		runtimeConfig,
@@ -79,7 +80,7 @@ func newAgentExecutor(
 	executor workerexecution.InvocationExecutor,
 	logger logging.Logger,
 	clock func() time.Time,
-	decisionEnvelopes interfaces.DecisionEnvelopeService,
+	decisionEnvelopes factorydefinitionswire.DecisionEnvelopeService,
 ) *AgentExecutor {
 	return &AgentExecutor{
 		providerExecutor:  executor,
@@ -221,7 +222,7 @@ func (ae *AgentExecutor) canonicalInferenceOutput(raw string, workerDef *interfa
 }
 
 func decisionEnvelopeWorkResult(
-	decisionEnvelopes interfaces.DecisionEnvelopeService,
+	decisionEnvelopes factorydefinitionswire.DecisionEnvelopeService,
 	request workerexecution.WorkstationExecutionRequest,
 	resp workerexecution.InferenceResponse,
 	diagnostics *workerexecution.WorkDiagnostics,
@@ -241,7 +242,7 @@ func decisionEnvelopeWorkResult(
 }
 
 func goalRoutingEnvelopeWorkResult(
-	decisionEnvelopes interfaces.DecisionEnvelopeService,
+	decisionEnvelopes factorydefinitionswire.DecisionEnvelopeService,
 	request workerexecution.WorkstationExecutionRequest,
 	resp workerexecution.InferenceResponse,
 	diagnostics *workerexecution.WorkDiagnostics,
@@ -262,8 +263,8 @@ func goalRoutingEnvelopeWorkResult(
 }
 
 func firstDecisionEnvelopeService(
-	services []interfaces.DecisionEnvelopeService,
-) interfaces.DecisionEnvelopeService {
+	services []factorydefinitionswire.DecisionEnvelopeService,
+) factorydefinitionswire.DecisionEnvelopeService {
 	if len(services) == 0 {
 		return nil
 	}

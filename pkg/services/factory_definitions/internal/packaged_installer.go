@@ -2,7 +2,8 @@ package internal
 
 import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	distributionpackagedinstallation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/packagedinstallation"
+	factoryeffects "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/effects"
+	distributionwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/wire"
 )
 
 // NewPackagedFactoryInstaller constructs packaged Factory ensure/install
@@ -11,16 +12,16 @@ import (
 // only the returned PackagedFactoryInstaller root contract.
 func NewPackagedFactoryInstaller(
 	persistence factorydefinitions.Persistence,
-	fileSystem factorydefinitions.PackagedInstallationFileSystem,
-) factorydefinitions.PackagedFactoryInstaller {
-	return NewPackagedFactoryInstallationService(persistence, fileSystem)
+	fileSystem factoryeffects.PackagedInstallationFileSystem,
+) factoryeffects.PackagedFactoryInstaller {
+	return distributionwire.NewPackagedFactoryInstaller(persistence, fileSystem)
 }
 
 // NewPackagedFactoryInstallationService constructs the private packaged
 // installation service for composition paths that need the concrete type.
 func NewPackagedFactoryInstallationService(
 	persistence factorydefinitions.Persistence,
-	fileSystem factorydefinitions.PackagedInstallationFileSystem,
-) *distributionpackagedinstallation.Service {
-	return distributionpackagedinstallation.New(persistence, fileSystem)
+	fileSystem factoryeffects.PackagedInstallationFileSystem,
+) factorydefinitions.PackagedFactoryInstallationOperations {
+	return distributionwire.NewPackagedFactoryInstallationOperations(persistence, fileSystem)
 }

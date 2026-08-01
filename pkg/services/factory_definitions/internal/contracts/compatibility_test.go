@@ -6,8 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	workertaxonomy "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/taxonomy"
-	workerconfig "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/validation/authoredmodel/workers"
 	"gopkg.in/yaml.v3"
 )
 
@@ -123,10 +121,10 @@ func TestWorkerWorkstationCompatibilityPreservesLegacyAndStrictPairings(t *testi
 		workstation Workstation
 		want        bool
 	}{
-		{workertaxonomy.WorkerTypeAgent, Workstation{Type: workertaxonomy.WorkstationTypeAgent}, true},
-		{workertaxonomy.WorkerTypeInference, Workstation{Type: workertaxonomy.WorkstationTypeAgent}, false},
-		{workertaxonomy.WorkerTypeModel, Workstation{Type: workertaxonomy.WorkstationTypeModel}, true},
-		{workertaxonomy.WorkerTypeHosted, Workstation{Kind: workertaxonomy.WorkstationKindPoller}, true},
+		{WorkerTypeAgent, Workstation{Type: WorkstationTypeAgent}, true},
+		{WorkerTypeInference, Workstation{Type: WorkstationTypeAgent}, false},
+		{WorkerTypeModel, Workstation{Type: WorkstationTypeModel}, true},
+		{WorkerTypeHosted, Workstation{Kind: WorkstationKindPoller}, true},
 	}
 	for _, tc := range cases {
 		if got := WorkerMatchesWorkstationBehavior(tc.worker, tc.workstation); got != tc.want {
@@ -137,9 +135,9 @@ func TestWorkerWorkstationCompatibilityPreservesLegacyAndStrictPairings(t *testi
 
 func TestPublicWorkerTypeForFactoryUsagePreservesMixedLegacyAlias(t *testing.T) {
 	t.Parallel()
-	worker := workerconfig.Config{Name: "executor", Type: workertaxonomy.WorkerTypeModel}
-	workstations := []Workstation{{Type: workertaxonomy.WorkstationTypeModel, WorkerTypeName: "executor"}, {Type: workertaxonomy.WorkstationTypeInvoke, WorkerTypeName: "executor"}}
-	if got := PublicWorkerTypeForFactoryUsage(worker, workstations); got != workertaxonomy.WorkerTypeModel {
+	worker := Config{Name: "executor", Type: WorkerTypeModel}
+	workstations := []Workstation{{Type: WorkstationTypeModel, WorkerTypeName: "executor"}, {Type: WorkstationTypeInvoke, WorkerTypeName: "executor"}}
+	if got := PublicWorkerTypeForFactoryUsage(worker, workstations); got != WorkerTypeModel {
 		t.Fatalf("mixed usage = %q", got)
 	}
 }

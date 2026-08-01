@@ -10,6 +10,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -163,7 +164,7 @@ func TestSaveArtifactFromEventStreamFile_HydratesAdjacentFactoryAndRewritesEmbed
 func scriptedHydratedFactorySnapshotDirectoryLoader(
 	t *testing.T,
 	wantFactoryDir string,
-) interfaces.FactorySnapshotDirectoryLoader {
+) factorydefinitionswire.FactorySnapshotDirectoryLoader {
 	t.Helper()
 	return func(factoryDir string) (*interfaces.FactorySnapshot, error) {
 		if factoryDir != wantFactoryDir {

@@ -8,8 +8,8 @@ package wire
 
 import (
 	"fmt"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
@@ -51,15 +51,15 @@ func NewWorkStopSummaryProjector() factorysessions.WorkStopSummaryProjector {
 func NewService(
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory,
 	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
-	interpolation factorydefinitions.InvocationInterpolationService,
-	invocationWorkTypes factorydefinitions.InvocationWorkTypeService,
-	ttsObservability factorydefinitions.TTSObservabilityService,
+	interpolation factorydefinitionswire.InvocationInterpolationService,
+	invocationWorkTypes factorydefinitionswire.InvocationWorkTypeService,
+	ttsObservability factorydefinitionswire.TTSObservabilityService,
 	eventIDs factorysessions.ResponseEventIDGenerator,
 	responseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits,
 	sessionIDs factorysessions.SessionIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
 	directoryInspection DirectoryInspection,
-	namedPaths factorydefinitions.NamedPathResolver,
+	namedPaths factorydefinitionswire.NamedPathResolver,
 	invocationInputFiles fileeffects.InvocationInputReader,
 	initialWorkFiles fileeffects.InitialWorkReader,
 	resolveSymlinks factorysessions.LogicalTargetResolveSymlinks,

@@ -21,6 +21,7 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
 
@@ -243,7 +244,7 @@ func newTestWorkstationExecutor(runtimeConfig interfaces.RuntimeConfigLookup, ex
 	}
 }
 
-func scriptedWorkstationExecutionPolicy() interfaces.WorkstationExecutionPolicyService {
+func scriptedWorkstationExecutionPolicy() factorydefinitionswire.WorkstationExecutionPolicyService {
 	return factorydefinitionfixtures.WorkstationExecutionPolicy{
 		Resolve: func(workstation *interfaces.FactoryWorkstationConfig) (time.Duration, error) {
 			if workstation == nil {
@@ -367,7 +368,7 @@ func TestWorkstationExecutor_ModelWorkstation_InterpolatesInvocationArguments(t 
 		InterpolateWorker: func(
 			worker interfaces.FactoryWorkerConfig,
 			_ *work.InvocationArguments,
-			readFile interfaces.FileReader,
+			readFile factorydefinitionswire.FileReader,
 		) (interfaces.FactoryWorkerConfig, error) {
 			provider, err := readFile("worker-provider.txt")
 			if err != nil {
@@ -380,7 +381,7 @@ func TestWorkstationExecutor_ModelWorkstation_InterpolatesInvocationArguments(t 
 		InterpolateWorkstation: func(
 			workstation interfaces.FactoryWorkstationConfig,
 			_ *work.InvocationArguments,
-			readFile interfaces.FileReader,
+			readFile factorydefinitionswire.FileReader,
 		) (interfaces.FactoryWorkstationConfig, error) {
 			input, err := readFile("workstation-input.txt")
 			if err != nil {
@@ -471,7 +472,7 @@ func TestWorkstationExecutor_ModelWorkstation_InterpolatesOmittedInvocationArgum
 		InterpolateWorker: func(
 			worker interfaces.FactoryWorkerConfig,
 			args *work.InvocationArguments,
-			_ interfaces.FileReader,
+			_ factorydefinitionswire.FileReader,
 		) (interfaces.FactoryWorkerConfig, error) {
 			if args != nil {
 				t.Fatalf("invocation arguments = %#v, want nil for omitted optional arguments", args)
@@ -509,7 +510,7 @@ func TestWorkstationExecutor_ScriptWorkerUsesInvocationInterpolatedArguments(t *
 		},
 	}, mock)
 	we.Interpolation = factorydefinitionfixtures.InvocationInterpolation{
-		InterpolateWorker: func(worker interfaces.FactoryWorkerConfig, _ *work.InvocationArguments, _ interfaces.FileReader) (interfaces.FactoryWorkerConfig, error) {
+		InterpolateWorker: func(worker interfaces.FactoryWorkerConfig, _ *work.InvocationArguments, _ factorydefinitionswire.FileReader) (interfaces.FactoryWorkerConfig, error) {
 			worker.Args = []string{"feature/customer-branch"}
 			return worker, nil
 		},
@@ -708,7 +709,7 @@ func interpolatedProviderExecutor(
 		InterpolateWorker: func(
 			worker interfaces.FactoryWorkerConfig,
 			_ *work.InvocationArguments,
-			_ interfaces.FileReader,
+			_ factorydefinitionswire.FileReader,
 		) (interfaces.FactoryWorkerConfig, error) {
 			worker.ModelProvider = resolved
 			return worker, nil

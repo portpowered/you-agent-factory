@@ -8,6 +8,7 @@ package http
 
 import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -36,7 +37,7 @@ type Adapter struct {
 	durableLister      DurableExecutionSessionLister
 	liveSessionLister  LiveSessionListReader
 	workerPrompts      workers.PromptTemplates
-	invocationWorkType factorydefinitions.InvocationWorkTypeService
+	invocationWorkType factorydefinitionswire.InvocationWorkTypeService
 	workService        work.Service
 	sessionRequests    RequestPreparation
 	logger             *zap.Logger
@@ -62,7 +63,7 @@ type Dependencies struct {
 	DurableLister      DurableExecutionSessionLister
 	LiveSessionLister  LiveSessionListReader
 	WorkerPrompts      workers.PromptTemplates
-	InvocationWorkType factorydefinitions.InvocationWorkTypeService
+	InvocationWorkType factorydefinitionswire.InvocationWorkTypeService
 	WorkService        work.Service
 	SessionRequests    RequestPreparation
 }
@@ -85,7 +86,7 @@ func NewHandler(deps Dependencies, logger *zap.Logger) *Adapter {
 	}
 	return &Adapter{
 		sessionsRoot: deps.SessionsRoot,
-		runtime: deps.Runtime, factoryStatus: deps.FactoryStatus,
+		runtime:      deps.Runtime, factoryStatus: deps.FactoryStatus,
 		sessions: deps.Sessions, work: deps.Work, workRead: deps.WorkRead,
 		invocation:         deps.Invocation,
 		factoryDefinitions: deps.FactoryDefinitions, factoryValidation: deps.FactoryValidation,
@@ -94,9 +95,9 @@ func NewHandler(deps Dependencies, logger *zap.Logger) *Adapter {
 		durableListing: deps.DurableListing, durableProjection: deps.DurableProjection,
 		durableLister: deps.DurableLister, liveSessionLister: deps.LiveSessionLister,
 		workerPrompts: deps.WorkerPrompts, invocationWorkType: deps.InvocationWorkType,
-		workService: deps.WorkService,
+		workService:     deps.WorkService,
 		sessionRequests: deps.SessionRequests,
-		logger: logger,
+		logger:          logger,
 	}
 }
 
