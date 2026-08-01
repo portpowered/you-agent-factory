@@ -525,7 +525,7 @@ javascript-contract-smoke:
 	$(GO) run ./cmd/javascriptcontractsmoke -root .
 	$(GO) test ./internal/javascriptcontractsmoke ./cmd/javascriptcontractsmoke -count=1 -timeout $(JAVASCRIPT_CONTRACT_SMOKE_TIMEOUT)
 	$(GO) test ./contracts -run '^TestJavaScriptRuntimeBehaviorDoesNotLoadContractManifests$$' -count=1 -timeout $(JAVASCRIPT_CONTRACT_SMOKE_TIMEOUT)
-	$(GO) test ./pkg/orchestrators/javascript/runtime -run '$(JAVASCRIPT_RUNTIME_REGRESSION_TESTS)' -count=1 -timeout $(JAVASCRIPT_CONTRACT_SMOKE_TIMEOUT)
+	$(GO) test ./pkg/services/factory_runtime/internal/services/orchestration/javascript/runtime -run '$(JAVASCRIPT_RUNTIME_REGRESSION_TESTS)' -count=1 -timeout $(JAVASCRIPT_CONTRACT_SMOKE_TIMEOUT)
 
 config-contract-smoke:
 	$(GO) run ./cmd/configcontractsmoke -root .
