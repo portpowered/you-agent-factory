@@ -73,7 +73,11 @@ func (h *Handler) getStatus(w http.ResponseWriter, r *http.Request, sessionID st
 }
 
 func (h *Handler) observeStatus(ctx context.Context, sessionID string) (factoryruntime.ObserveResult, error) {
-	root, err := common.RequireRuntimeRoot(h.root)
+	var configuredRoot factoryruntime.Service
+	if h != nil {
+		configuredRoot = h.root
+	}
+	root, err := common.RequireRuntimeRoot(configuredRoot)
 	if err != nil {
 		return factoryruntime.ObserveResult{}, err
 	}

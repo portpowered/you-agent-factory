@@ -53,7 +53,7 @@ func (h *Handler) invokePlanDispatch(
 	if common.WriteRequestContextOutcome(w, ctx.Err()) {
 		return
 	}
-	root, err := common.RequireRuntimeRoot(h.root)
+	root, err := h.runtimeRoot()
 	if err != nil {
 		common.WriteError(w, http.StatusInternalServerError, "factory runtime service is required", "INTERNAL_ERROR")
 		return
@@ -74,7 +74,7 @@ func (h *Handler) invokeAcceptDispatchResult(
 	if common.WriteRequestContextOutcome(w, ctx.Err()) {
 		return
 	}
-	root, err := common.RequireRuntimeRoot(h.root)
+	root, err := h.runtimeRoot()
 	if err != nil {
 		common.WriteError(w, http.StatusInternalServerError, "factory runtime service is required", "INTERNAL_ERROR")
 		return
@@ -85,4 +85,12 @@ func (h *Handler) invokeAcceptDispatchResult(
 		return
 	}
 	common.WriteJSON(w, http.StatusOK, dispatchPlanResponseFromAcceptResult(result))
+}
+
+func (h *Handler) runtimeRoot() (factoryruntime.Service, error) {
+	var configuredRoot factoryruntime.Service
+	if h != nil {
+		configuredRoot = h.root
+	}
+	return common.RequireRuntimeRoot(configuredRoot)
 }

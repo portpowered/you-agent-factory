@@ -59,7 +59,7 @@ func (h *Handler) invokeCaptureCheckpoint(w http.ResponseWriter, ctx context.Con
 	if common.WriteRequestContextOutcome(w, ctx.Err()) {
 		return
 	}
-	root, err := common.RequireRuntimeRoot(h.root)
+	root, err := h.runtimeRoot()
 	if err != nil {
 		common.WriteError(w, http.StatusInternalServerError, "factory runtime service is required", "INTERNAL_ERROR")
 		return
@@ -76,7 +76,7 @@ func (h *Handler) invokeLoadCheckpoint(w http.ResponseWriter, ctx context.Contex
 	if common.WriteRequestContextOutcome(w, ctx.Err()) {
 		return
 	}
-	root, err := common.RequireRuntimeRoot(h.root)
+	root, err := h.runtimeRoot()
 	if err != nil {
 		common.WriteError(w, http.StatusInternalServerError, "factory runtime service is required", "INTERNAL_ERROR")
 		return
@@ -93,7 +93,7 @@ func (h *Handler) invokeRestoreCheckpoint(w http.ResponseWriter, ctx context.Con
 	if common.WriteRequestContextOutcome(w, ctx.Err()) {
 		return
 	}
-	root, err := common.RequireRuntimeRoot(h.root)
+	root, err := h.runtimeRoot()
 	if err != nil {
 		common.WriteError(w, http.StatusInternalServerError, "factory runtime service is required", "INTERNAL_ERROR")
 		return
@@ -104,4 +104,12 @@ func (h *Handler) invokeRestoreCheckpoint(w http.ResponseWriter, ctx context.Con
 		return
 	}
 	common.WriteJSON(w, http.StatusOK, restoreCheckpointResponseFromResult(result))
+}
+
+func (h *Handler) runtimeRoot() (factoryruntime.Service, error) {
+	var configuredRoot factoryruntime.Service
+	if h != nil {
+		configuredRoot = h.root
+	}
+	return common.RequireRuntimeRoot(configuredRoot)
 }
