@@ -73,10 +73,102 @@ sample (`1380 ms`) is retained above for cold-ish context only.
 Verbose confirmation of the five named cases was re-run under the same command
 with `--reporter=verbose`; all five cases listed above passed.
 
-## After-migration placeholder
+## After migration — lane audit and latency report
 
-Bun after timings, migrated/retained counts, and lane-exclusivity proof belong
-in story `BUN-UNIT-features-current-selection-04-003` once migration completes.
-They must use the same host class, worker/retry settings for any remaining
-Vitest retained files, and a focused Bun invocation of the migrated
-`.bun.unit.test.ts` file under comparable warm-deps conditions.
+Recorded for story `BUN-UNIT-features-current-selection-04-003` on the same
+host class as the Vitest baseline (Windows 11 Home `10.0.26200`, i7-13700K,
+24 logical processors; Bun `1.3.12`). Repository revision for these
+measurements: `8ff7e969d`.
+
+### Migrated / retained counts
+
+| Lane ownership | Files | Named tests |
+| --- | ---: | ---: |
+| Migrated to Bun (exclusive) | 1 | 5 |
+| Retained on Vitest | 0 | 0 |
+
+Migrated file:
+
+- `ui/src/features/current-selection/hooks/helpers/useCurrentSelection.request-helpers.bun.unit.test.ts`
+
+No retained exceptions. The leased Vitest path
+`useCurrentSelection.request-helpers.test.ts` no longer exists in the tree.
+
+### Lane exclusivity audit
+
+Focused Bun invocation (exactly one file / five named cases):
+
+```text
+bun test src/features/current-selection/hooks/helpers/useCurrentSelection.request-helpers.bun.unit.test.ts
+```
+
+Result:
+
+```text
+bun test v1.3.12 (700fc117)
+src\features\current-selection\hooks\helpers\useCurrentSelection.request-helpers.bun.unit.test.ts:
+(pass) useCurrentSelection.request-helpers > resolves projected requests from explicit maps or runtime snapshots
+(pass) useCurrentSelection.request-helpers > filters provider-session attempts and selects the latest session per dispatch in request order
+(pass) useCurrentSelection.request-helpers > sorts and selects workstation requests by started time and related work items
+(pass) useCurrentSelection.request-helpers > derives selected-work dispatch attempts from requests and merges them with provider attempts
+(pass) useCurrentSelection.request-helpers > converts runtime requests to projected requests and exposes request-owned work items
+ 5 pass
+ 0 fail
+ 19 expect() calls
+Ran 5 tests across 1 file. [58.00ms]
+```
+
+Vitest `dashboard-unit` selection of the migrated path (must be zero):
+
+```text
+bunx --no-install vitest run --config vitest.lanes.config.ts --project=dashboard-unit --maxWorkers=4 --retry=0 src/features/current-selection/hooks/helpers/useCurrentSelection.request-helpers.bun.unit.test.ts
+```
+
+Result:
+
+```text
+No test files found, exiting with code 1
+filter: .../useCurrentSelection.request-helpers.bun.unit.test.ts
+projects: dashboard-unit
+exclude: ... src/**/*.bun.unit.test.ts ...
+```
+
+Vitest selection of the retired `.test.ts` path is also zero (`No test files
+found`); the file is gone after rename. Conclusion: the leased suite executes
+exactly once under Bun and zero times under Vitest.
+
+### Focused after wall-clock (comparable warm-deps)
+
+Command:
+
+```text
+bun test src/features/current-selection/hooks/helpers/useCurrentSelection.request-helpers.bun.unit.test.ts
+```
+
+Warm re-runs after one discarded warm-up (same host / Bun version as baseline):
+
+| Run | Wrapper wall | Bun reported | Result |
+| --- | ---: | ---: | --- |
+| 1 | 101ms | 66ms | 1 file / 5 tests passed |
+| 2 | 100ms | 68ms | 1 file / 5 tests passed |
+| 3 | 96ms | 62ms | 1 file / 5 tests passed |
+
+Median warm wrapper wall-clock after migration: **100 ms**.
+
+### Before / after comparison
+
+| Metric | Vitest baseline | Bun after |
+| --- | ---: | ---: |
+| Focused warm median wrapper wall | 1052 ms | 100 ms |
+| Files | 1 | 1 |
+| Named tests | 5 | 5 |
+| Expect calls (Bun after) | — | 19 |
+
+These are matched one-file focused observations only; they are not a
+repository-wide speedup claim.
+
+### Changed-line budget
+
+Against `origin/main` at measurement time the cohort patch is **2 files /
+83 insertions / 1 deletion** (baseline note + rename/import of the leased
+test). Well within the ~1,000 changed-line budget; no split required.
