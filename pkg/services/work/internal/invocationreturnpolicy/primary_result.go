@@ -788,7 +788,7 @@ func traceMatchedFailedWorkItem(
 	sort.Strings(ids)
 	for _, workID := range ids {
 		item := workItems[workID]
-		if _, ok := traceIDs[strings.TrimSpace(item.TraceID)]; ok {
+		if _, ok := traceIDs[strings.TrimSpace(item.TraceID)]; ok && currentWorkStateName(item) == "failed" {
 			return item, true
 		}
 	}
@@ -818,7 +818,10 @@ func requestMatchedFailedWorkItem(
 				continue
 			}
 			if item, ok := state.FailedWorkItemsByID[workID]; ok {
-				return item, true
+				if currentWorkStateName(item) == "failed" {
+					return item, true
+				}
+				continue
 			}
 			if item, ok := state.WorkItemsByID[workID]; ok {
 				return item, true

@@ -35,23 +35,15 @@ func (service *service) ResolveOperatorDefaults(
 	if homeDir == "" {
 		return operatorsettings.ResolvedDefaults{}, fmt.Errorf("home directory is required")
 	}
-	path := operatorsettings.DefaultConfigPath(homeDir)
-	loaded, err := service.root.LoadDocument(operatorsettings.LoadDocumentRequest{Path: path})
-	if err != nil {
-		return operatorsettings.ResolvedDefaults{}, err
-	}
-	return operatorsettings.Resolve(operatorsettings.ResolveInput{
-		File: operatorsettings.Defaults{
-			WorkerModelProvider: loaded.Document.Defaults.WorkerModelProvider,
-			WorkerModel:         loaded.Document.Defaults.WorkerModel,
-		},
-		Env: operatorsettings.Defaults{
+	return service.root.ResolveFromHomeWithEnvironment(
+		homeDir,
+		operatorsettings.Defaults{
 			WorkerModelProvider: strings.TrimSpace(cfg.Environment.WorkerModelProvider),
 			WorkerModel:         strings.TrimSpace(cfg.Environment.WorkerModel),
 		},
-		Flag: operatorsettings.Defaults{
+		operatorsettings.FlagOverrides{
 			WorkerModelProvider: strings.TrimSpace(cfg.Flags.WorkerModelProvider),
 			WorkerModel:         strings.TrimSpace(cfg.Flags.WorkerModel),
 		},
-	}, path)
+	)
 }

@@ -15,6 +15,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+
+	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 )
 
 func TestConfigDocumentServicePersist_AtomicallyPublishesCompleteConfig(t *testing.T) {
@@ -646,6 +648,13 @@ func persistedConfigService(files operatorsettings.FileSystem, create operatorse
 		Decoder:         decodeTestConfig,
 		Encoder:         encodeTestConfig,
 		PersistenceLock: &sync.Mutex{},
+		DocumentOwner: settingswire.NewDocumentOwner(
+			files,
+			create,
+			decodeTestConfig,
+			encodeTestConfig,
+			controlledProviderCatalog,
+		),
 	}
 }
 

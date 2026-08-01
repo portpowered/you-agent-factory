@@ -91,9 +91,9 @@ func provideOperatorConfigEncoder() operatorsettings.ConfigEncoder {
 	return globalconfigmapping.Encode
 }
 
-func provideOperatorDefaultsResolver(files operatorsettings.FileSystem, decode operatorsettings.ConfigDecoder) operatorsettings.DefaultsResolver {
+func provideOperatorDefaultsResolver(settings operatorsettings.Service) operatorsettings.DefaultsResolver {
 	return func(home string, environment operatorsettings.Defaults, flags operatorsettings.FlagOverrides) (operatorsettings.ResolvedDefaults, error) {
-		return operatorsettings.ResolveFromHomeWithEnvironment(files, decode, home, environment, flags)
+		return settings.ResolveFromHomeWithEnvironment(home, environment, flags)
 	}
 }
 
@@ -132,7 +132,7 @@ func provideExpandFactoryConfigOperation(
 }
 
 func provideConfigureInitOperation(
-	service operatorsettings.ConfigDocumentService,
+	service operatorsettings.Service,
 
 ) (cli.ConfigureInitOperation, error) {
 	packaged, err := providerswire.PackagedACPIntegrations()
@@ -156,7 +156,7 @@ func provideConfigureInitOperation(
 }
 
 func provideACPCLIService(
-	settings operatorsettings.ConfigDocumentService,
+	settings operatorsettings.Service,
 	providersService providers.Service,
 	generateID operatorsettings.IDGenerator,
 ) acpcli.Service {

@@ -1137,13 +1137,6 @@
     },
     {
       "fromOwner": "edges",
-      "toOwner": "system_initialization",
-      "class": "external_effect",
-      "architectureException": true,
-      "evidence": "pkg/services/edges -\u003e pkg/services/system_initialization"
-    },
-    {
-      "fromOwner": "edges",
       "toOwner": "work",
       "class": "external_effect",
       "architectureException": true,

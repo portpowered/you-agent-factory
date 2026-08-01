@@ -40,7 +40,7 @@ func TestAdapter_ApplyDocumentUpdateInvokesFakeRootAndEncodesSuccess(t *testing.
 						WorkerModelProvider: "codex",
 						WorkerModel:         nextModel,
 					},
-					Runtime: operatorsettings.EmptyDocument().Runtime,
+					Runtime: operatorsettings.EmptyDocument.Runtime,
 				},
 			}, nil
 		},

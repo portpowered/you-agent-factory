@@ -91,7 +91,7 @@ func (service *service) Configure(cfg ConfigureConfig) error {
 		model = &value
 	}
 
-	path := operatorsettings.DefaultConfigPath(homeDir)
+	path := service.root.DefaultConfigPath(homeDir)
 	document, err := service.applyProviderModelUpdate(cfg.Context, path, operatorsettings.DocumentProviderModelUpdate{
 		Provider: &provider,
 		Model:    model,
@@ -106,7 +106,7 @@ func (service *service) configurePrompted(cfg ConfigureConfig, homeDir string) e
 	if cfg.NewLineReader == nil {
 		return fmt.Errorf("interactive init line reader is required")
 	}
-	path := operatorsettings.DefaultConfigPath(homeDir)
+	path := service.root.DefaultConfigPath(homeDir)
 	if err := operationContextError(cfg.Context); err != nil {
 		return err
 	}

@@ -382,6 +382,24 @@ func TestClassifyFailedInvocation_MatchesFailedWorkBySubmittedTrace(t *testing.T
 	})
 }
 
+func TestClassifyFailedInvocation_IgnoresRetryRoutedFailedIndexEntry(t *testing.T) {
+	state := invocationWorldStateFixture()
+	rootInitial := invocationWorkItem("work-root", "goal", "init", "Recovering goal", "goal:init")
+	rootInitial.TraceID = "trace-shared"
+	recoveredChild := invocationWorkItem("work-recovered-child", "task", "ready", "Retry task", "task:ready")
+	recoveredChild.TraceID = "trace-shared"
+	recordInvocationSubmittedWork(&state, 1, "request-1", rootInitial)
+	state.WorkItemsByID[recoveredChild.ID] = recoveredChild
+	state.FailedWorkItemsByID[recoveredChild.ID] = recoveredChild
+
+	if got, ok := work.ClassifyFailedInvocation("session-1", work.PrimaryResultSelectionInput{
+		RequestID:  "request-1",
+		WorldState: state,
+	}); ok || got != nil {
+		t.Fatalf("ClassifyFailedInvocation() = (%#v, %v), want no failure for retry-routed work", got, ok)
+	}
+}
+
 func TestClassifyFailedInvocation_MatchesFailedWorkByRequestStateChange(t *testing.T) {
 	state := invocationWorldStateFixture()
 	rootInitial := invocationWorkItem("work-root", "goal", "init", "Failed goal", "goal:init")

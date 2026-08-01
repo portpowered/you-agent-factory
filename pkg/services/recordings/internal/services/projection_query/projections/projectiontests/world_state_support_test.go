@@ -773,7 +773,7 @@ func scriptResponseEvent(tick int, eventTime time.Time, payload factoryapi.Scrip
 }
 
 func generatedWorkForProjectionTest(item work.FactoryWorkItem, requestID string) factoryapi.Work {
-	return factoryapi.Work{
+	generated := factoryapi.Work{
 		Name:                     item.DisplayName,
 		RequestId:                stringPtrForProjectionTest(requestID),
 		Tags:                     generatedStringMapForProjectionTest(item.Tags),
@@ -784,6 +784,10 @@ func generatedWorkForProjectionTest(item work.FactoryWorkItem, requestID string)
 		WorkId:                   stringPtrForProjectionTest(item.ID),
 		WorkTypeName:             stringPtrForProjectionTest(item.WorkTypeID),
 	}
+	if item.State != "" {
+		generated.State = &factoryapi.WorkState{Name: item.State}
+	}
+	return generated
 }
 
 func generatedOutputWorkForProjectionTest(payload interfaces.WorkstationResponsePayload) []factoryapi.Work {

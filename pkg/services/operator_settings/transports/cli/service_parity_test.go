@@ -13,6 +13,7 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	internaltestproviders "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders"
 	operatorsettingscli "github.com/portpowered/infinite-you/pkg/services/operator_settings/transports/cli"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
@@ -302,7 +303,7 @@ func TestConstructedService_ConfigureSurfacesDocumentConflictParity(t *testing.T
 				WorkerModelProvider: "codex",
 				WorkerModel:         "gpt-5",
 			},
-			Runtime: operatorsettings.EmptyDocument().Runtime,
+			Runtime: operatorsettings.EmptyDocument.Runtime,
 		},
 	})
 	service := constructedSettingsCLIService(t, root)
@@ -396,7 +397,10 @@ func TestConstructedService_ConfigureHonorsContextCancellationOnSuppliedProvider
 
 func paritySettingsRoot(t *testing.T) operatorsettings.Service {
 	t.Helper()
-	root, err := settingswire.NewServiceFromConfigDocument(parityTestConfigService())
+	root, err := settingswire.NewServiceFromConfigDocument(
+		parityTestConfigService(),
+		internaltestproviders.StandardCatalog(),
+	)
 	if err != nil {
 		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
 	}

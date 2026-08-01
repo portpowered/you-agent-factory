@@ -1680,11 +1680,6 @@
     {
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/operator_settings/backend_scope.go",
-      "target": "ConfigureIdentityInputInventoryOperations"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/operator_settings/backend_scope.go",
       "target": "EnsureLocalBackendScope"
     },
     {
@@ -1696,31 +1691,6 @@
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/operator_settings/backend_scope.go",
       "target": "IsLocalBackendScopeID"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/operator_settings/config_document.go",
-      "target": "ConfigDocumentFromConfig"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/operator_settings/config_document.go",
-      "target": "ConfigureConfigDocumentOperations"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/operator_settings/config_document.go",
-      "target": "ConfigureDocumentOwnerConstructor"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/operator_settings/defaults_resolution.go",
-      "target": "ConfigureDefaultsResolutionFromHome"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/operator_settings/defaults_resolution.go",
-      "target": "ConfigureDefaultsResolutionOperations"
     },
     {
       "rule": "service-root-exported-function",
@@ -1746,71 +1716,6 @@
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/operator_settings/defaults_resolution.go",
       "target": "Resolve"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/operator_settings/defaults_resolution.go",
-      "target": "ResolveFromHomeWithEnvironment"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/operator_settings/document_contract.go",
-      "target": "EmptyDocument"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/operator_settings/input_inventory_contract.go",
-      "target": "ProjectInputInventory"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/operator_settings/internal/services/document/config_document_service.go",
-      "target": "ConfigureProviderModel"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/operator_settings/internal/services/document/config_document_service.go",
-      "target": "ConfigureProviderModelPrompted"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/operator_settings/internal/services/document/config_document_service.go",
-      "target": "EmptyConfigDocument"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/operator_settings/internal/services/document/config_document_service.go",
-      "target": "Load"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/operator_settings/internal/services/document/config_document_service.go",
-      "target": "Marshal"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/operator_settings/internal/services/document/config_document_service.go",
-      "target": "MergeProviderModelDefaults"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/operator_settings/internal/services/document/config_document_service.go",
-      "target": "Parse"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/operator_settings/internal/services/document/config_document_service.go",
-      "target": "Persist"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/operator_settings/internal/services/document/owner_construct.go",
-      "target": "ConfigureOwnerConstructor"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/operator_settings/internal/services/document/owner_construct.go",
-      "target": "ResolvedDocumentOwner"
     },
     {
       "rule": "service-root-exported-function",
@@ -2596,11 +2501,6 @@
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/recordings/internal/services/artifacts_export",
       "target": "pkg/services/recordings/internal/services/artifacts_export/service.go:PortableArtifactPublication,pkg/services/recordings/internal/services/artifacts_export/service.go:Service,pkg/services/recordings/internal/services/artifacts_export/service.go:SnapshotSource"
-    },
-    {
-      "rule": "service-root-interface-count",
-      "filePath": "pkg/services/system_initialization",
-      "target": "pkg/services/system_initialization/service.go:LegacyFactoryMigrationFileSystem,pkg/services/system_initialization/service.go:OperatorSettings,pkg/services/system_initialization/service.go:Service"
     },
     {
       "rule": "service-root-interface-count",

@@ -1,12 +1,18 @@
 package construct_test
 
 import (
+	"os"
 	"testing"
 
-	internaltestlink "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testlink"
+	settingsconstruct "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/construct"
+	internaltestproviders "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders"
+	providers "github.com/portpowered/infinite-you/pkg/services/providers"
 )
 
 func TestMain(m *testing.M) {
-	internaltestlink.RegisterComposition()
-	m.Run()
+	providersRoot := internaltestproviders.StandardCatalog()
+	settingsconstruct.SetConstructProvidersRootForTests(func() (providers.Service, error) {
+		return providersRoot, nil
+	})
+	os.Exit(m.Run())
 }

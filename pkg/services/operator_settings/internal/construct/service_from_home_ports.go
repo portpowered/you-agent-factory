@@ -24,5 +24,13 @@ func NewServiceFromHomePorts(
 	if err != nil {
 		return nil, err
 	}
-	return newServiceRoot(documentOwner, resolutionService)
+	return newServiceRoot(
+		documentOwner,
+		resolutionService,
+		files,
+		nil,
+		decode,
+		nil,
+		nil,
+	)
 }

@@ -38,7 +38,7 @@ func TestApplyDocumentUpdate_ModelOnlyUpdatePreservesProviderAndReturnsValidated
 	if updated.Document.Defaults.WorkerModelProvider != "claude" {
 		t.Fatalf("WorkerModelProvider = %q, want unchanged claude", updated.Document.Defaults.WorkerModelProvider)
 	}
-	if updated.Document.Runtime != operatorsettings.EmptyDocument().Runtime {
+	if updated.Document.Runtime != operatorsettings.EmptyDocument.Runtime {
 		t.Fatalf("Runtime = %#v, want production defaults", updated.Document.Runtime)
 	}
 

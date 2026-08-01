@@ -10,6 +10,7 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	internaltestproviders "github.com/portpowered/infinite-you/pkg/services/operator_settings/internal/testproviders"
 	settingswire "github.com/portpowered/infinite-you/pkg/services/operator_settings/wire"
 	globalconfigmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 )
@@ -17,7 +18,10 @@ import (
 func TestNewServiceFromConfigDocumentRequiresDocumentPorts(t *testing.T) {
 	t.Parallel()
 
-	_, err := settingswire.NewServiceFromConfigDocument(operatorsettings.ConfigDocumentService{})
+	_, err := settingswire.NewServiceFromConfigDocument(
+		operatorsettings.ConfigDocumentService{},
+		internaltestproviders.StandardCatalog(),
+	)
 	if err == nil || !strings.Contains(err.Error(), "operator settings document ports are required") {
 		t.Fatalf("NewServiceFromConfigDocument() error = %v, want document ports required", err)
 	}
@@ -26,7 +30,10 @@ func TestNewServiceFromConfigDocumentRequiresDocumentPorts(t *testing.T) {
 func TestNewServiceFromConfigDocumentConstructsFromPorts(t *testing.T) {
 	t.Parallel()
 
-	root, err := settingswire.NewServiceFromConfigDocument(testConfigDocumentService())
+	root, err := settingswire.NewServiceFromConfigDocument(
+		testConfigDocumentService(),
+		internaltestproviders.StandardCatalog(),
+	)
 	if err != nil {
 		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
 	}
@@ -47,7 +54,10 @@ func TestNewServiceFromConfigDocumentUsesInjectedDocumentOwner(t *testing.T) {
 		service.Providers,
 	)
 
-	root, err := settingswire.NewServiceFromConfigDocument(service)
+	root, err := settingswire.NewServiceFromConfigDocument(
+		service,
+		internaltestproviders.StandardCatalog(),
+	)
 	if err != nil {
 		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
 	}
@@ -91,7 +101,10 @@ func TestWireCompositionDelegatesDocumentAndResolutionOperations(t *testing.T) {
 		t.Fatalf("WriteFile(config): %v", err)
 	}
 
-	root, err := settingswire.NewServiceFromConfigDocument(testConfigDocumentService())
+	root, err := settingswire.NewServiceFromConfigDocument(
+		testConfigDocumentService(),
+		internaltestproviders.StandardCatalog(),
+	)
 	if err != nil {
 		t.Fatalf("NewServiceFromConfigDocument() error = %v", err)
 	}

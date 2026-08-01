@@ -3,13 +3,14 @@ package operatorsettings
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"strings"
 	"sync"
 )
 
-// ConfigDocument is one complete, validated operator configuration. It keeps
-// the encoded fields private so callers can only change it through semantic
-// operator-settings operations.
+// ConfigDocument is a detached compatibility value for older configuration
+// callers. New cross-service callers use Document through Service.
 type ConfigDocument struct {
 	config Config
 }
@@ -22,9 +23,9 @@ type ProviderModelUpdate struct {
 	Model    *string
 }
 
-// ConfigDocumentService owns complete operator-config loading, semantic merge,
-// and encoding. Files is required only by Load; pure operations remain usable
-// without a filesystem dependency.
+// ConfigDocumentService is a service-local compatibility adapter. It contains
+// injected ports and a private DocumentOwner; it is not the peer-facing
+// Operator Settings authority. New code should depend on Service.
 type ConfigDocumentService struct {
 	Files           FileSystem
 	CreateTemp      CreateTemporaryFile
@@ -35,87 +36,60 @@ type ConfigDocumentService struct {
 	PersistenceLock sync.Locker
 }
 
-// DocumentOwnerConstructor builds the parent-private document owner from
-// injected Operator Settings ports.
-type DocumentOwnerConstructor func(
-	FileSystem,
-	CreateTemporaryFile,
-	ConfigDecoder,
-	ConfigEncoder,
-	ProviderCatalog,
-) DocumentOwner
-
-// ConfigDocumentOperations wires private document construction behavior into
-// the published ConfigDocumentService surface without importing the document
-// subservice from the peer root package.
-type ConfigDocumentOperations struct {
-	ConfigureOwnerConstructor  func(DocumentOwnerConstructor)
-	Load                       func(ConfigDocumentService, string) (ConfigDocument, error)
-	Parse                      func(ConfigDocumentService, []byte) (ConfigDocument, error)
-	MergeProviderModelDefaults func(
-		ConfigDocumentService,
-		ConfigDocument,
-		ProviderModelUpdate,
-	) (ConfigDocument, error)
-	ConfigureProviderModel func(
-		ConfigDocumentService,
-		context.Context,
-		string,
-		ProviderModelUpdate,
-	) (ConfigDocument, error)
-	ConfigureProviderModelPrompted func(
-		ConfigDocumentService,
-		context.Context,
-		string,
-		ProviderModelPrompt,
-	) (ConfigDocument, error)
-	Marshal func(ConfigDocumentService, ConfigDocument) ([]byte, error)
-	Persist func(
-		ConfigDocumentService,
-		context.Context,
-		string,
-		ConfigDocument,
-	) error
-	EmptyConfigDocument func(func() RuntimeSettings) ConfigDocument
-}
-
-var configDocumentOperations ConfigDocumentOperations
-
 // ErrProviderModelInputCanceled is returned by a prompt when the operator
 // cancels or interrupts provider/model input. Prompt EOF is mapped to this
 // outcome as well.
 var ErrProviderModelInputCanceled = errors.New("provider/model input canceled")
 
-// ConfigureConfigDocumentOperations registers private document construction
-// behavior for the published ConfigDocumentService surface.
-func ConfigureConfigDocumentOperations(operations ConfigDocumentOperations) {
-	configDocumentOperations = operations
-}
-
-// ConfigureDocumentOwnerConstructor registers the nested document owner
-// constructor used when ConfigDocumentService.DocumentOwner is unset.
-// Wire and servicewire call this during process composition.
-func ConfigureDocumentOwnerConstructor(constructor DocumentOwnerConstructor) {
-	if configDocumentOperations.ConfigureOwnerConstructor == nil {
-		panic("operator settings config document operations are required")
+func (service ConfigDocumentService) owner() (DocumentOwner, error) {
+	if service.DocumentOwner == nil {
+		return nil, fmt.Errorf("operator settings document owner is required")
 	}
-	configDocumentOperations.ConfigureOwnerConstructor(constructor)
+	if rebindable, ok := service.DocumentOwner.(interface {
+		RebindDocumentOwner(FileSystem, CreateTemporaryFile, ConfigDecoder, ConfigEncoder, ProviderCatalog) DocumentOwner
+	}); ok {
+		return rebindable.RebindDocumentOwner(
+			service.Files,
+			service.CreateTemp,
+			service.Decoder,
+			service.Encoder,
+			service.Providers,
+		), nil
+	}
+	return service.DocumentOwner, nil
 }
 
-// ConfigDocumentFromConfig wraps validated configuration in a ConfigDocument.
-func ConfigDocumentFromConfig(config Config) ConfigDocument {
-	return ConfigDocument{config: config}
-}
-
-// Load reads and validates a complete operator configuration. A
-// missing destination is represented by an empty, valid document.
+// Load reads and validates a complete operator configuration. A missing
+// destination is represented by an empty, valid document.
 func (service ConfigDocumentService) Load(path string) (ConfigDocument, error) {
-	return configDocumentOperations.Load(service, path)
+	if service.Files == nil {
+		return ConfigDocument{}, fmt.Errorf("operator settings filesystem is required")
+	}
+	if service.PersistenceLock != nil {
+		service.PersistenceLock.Lock()
+		defer service.PersistenceLock.Unlock()
+	}
+	owner, err := service.owner()
+	if err != nil {
+		return ConfigDocument{}, err
+	}
+	result, err := owner.LoadDocument(LoadDocumentRequest{Path: path})
+	if err != nil {
+		return ConfigDocument{}, err
+	}
+	return ConfigDocument{config: configFromDocument(result.Document)}, nil
 }
 
 // Parse validates bytes through the injected canonical global-config codec.
 func (service ConfigDocumentService) Parse(data []byte) (ConfigDocument, error) {
-	return configDocumentOperations.Parse(service, data)
+	if service.Decoder == nil {
+		return ConfigDocument{}, fmt.Errorf("global config decoder is required")
+	}
+	config, err := service.Decoder(data)
+	if err != nil {
+		return ConfigDocument{}, err
+	}
+	return ConfigDocument{config: config}, nil
 }
 
 // FileConfig returns the validated semantic view of the document.
@@ -141,7 +115,18 @@ func (service ConfigDocumentService) MergeProviderModelDefaults(
 	document ConfigDocument,
 	update ProviderModelUpdate,
 ) (ConfigDocument, error) {
-	return configDocumentOperations.MergeProviderModelDefaults(service, document, update)
+	owner, err := service.owner()
+	if err != nil {
+		return ConfigDocument{}, err
+	}
+	merged, err := owner.MergeDocumentProviderModel(
+		documentFromConfigDocument(document),
+		DocumentProviderModelUpdate{Provider: update.Provider, Model: update.Model},
+	)
+	if err != nil {
+		return ConfigDocument{}, err
+	}
+	return ConfigDocument{config: configFromDocument(merged)}, nil
 }
 
 // ConfigureProviderModel applies pre-supplied values through the complete
@@ -151,7 +136,35 @@ func (service ConfigDocumentService) ConfigureProviderModel(
 	path string,
 	update ProviderModelUpdate,
 ) (ConfigDocument, error) {
-	return configDocumentOperations.ConfigureProviderModel(service, ctx, path, update)
+	if err := operationContextError(ctx); err != nil {
+		return ConfigDocument{}, err
+	}
+	if service.PersistenceLock == nil {
+		return ConfigDocument{}, fmt.Errorf("operator config persistence lock is required")
+	}
+	service.PersistenceLock.Lock()
+	defer service.PersistenceLock.Unlock()
+	if err := operationContextError(ctx); err != nil {
+		return ConfigDocument{}, err
+	}
+	owner, err := service.owner()
+	if err != nil {
+		return ConfigDocument{}, err
+	}
+	result, err := owner.ApplyDocumentUpdate(ApplyDocumentUpdateRequest{
+		Path: path,
+		ProviderModel: DocumentProviderModelUpdate{
+			Provider: update.Provider,
+			Model:    update.Model,
+		},
+	})
+	if err != nil {
+		return ConfigDocument{}, err
+	}
+	if err := operationContextError(ctx); err != nil {
+		return ConfigDocument{}, err
+	}
+	return ConfigDocument{config: configFromDocument(result.Document)}, nil
 }
 
 // ConfigureProviderModelPrompted acquires values through a write-free prompt,
@@ -161,19 +174,148 @@ func (service ConfigDocumentService) ConfigureProviderModelPrompted(
 	path string,
 	prompt ProviderModelPrompt,
 ) (ConfigDocument, error) {
-	return configDocumentOperations.ConfigureProviderModelPrompted(service, ctx, path, prompt)
+	if prompt == nil {
+		return ConfigDocument{}, fmt.Errorf("provider/model prompt is required")
+	}
+	if err := operationContextError(ctx); err != nil {
+		return ConfigDocument{}, err
+	}
+	document, err := service.Load(path)
+	if err != nil {
+		return ConfigDocument{}, err
+	}
+	if err := operationContextError(ctx); err != nil {
+		return ConfigDocument{}, err
+	}
+	update, err := prompt(ctx, document.FileConfig().Defaults)
+	if err != nil {
+		if errors.Is(err, io.EOF) || errors.Is(err, ErrProviderModelInputCanceled) {
+			return ConfigDocument{}, fmt.Errorf("acquire provider/model input: %w", ErrProviderModelInputCanceled)
+		}
+		return ConfigDocument{}, fmt.Errorf("acquire provider/model input: %w", err)
+	}
+	if err := operationContextError(ctx); err != nil {
+		return ConfigDocument{}, err
+	}
+	return service.ConfigureProviderModel(ctx, path, update)
 }
 
 // Marshal encodes the complete validated document as JSON.
 func (service ConfigDocumentService) Marshal(document ConfigDocument) ([]byte, error) {
-	return configDocumentOperations.Marshal(service, document)
+	if service.Encoder == nil {
+		return nil, fmt.Errorf("global config encoder is required")
+	}
+	config, err := document.FileConfig().Normalize()
+	if err != nil {
+		return nil, err
+	}
+	return service.Encoder(config)
 }
 
 // Persist atomically publishes one complete, validated operator configuration.
 func (service ConfigDocumentService) Persist(ctx context.Context, path string, document ConfigDocument) error {
-	return configDocumentOperations.Persist(service, ctx, path, document)
+	if ctx == nil {
+		return fmt.Errorf("operator config context is required")
+	}
+	if err := service.validatePersistencePorts(path); err != nil {
+		return err
+	}
+	if service.PersistenceLock == nil {
+		return fmt.Errorf("operator config persistence lock is required")
+	}
+	service.PersistenceLock.Lock()
+	defer service.PersistenceLock.Unlock()
+	owner, err := service.owner()
+	if err != nil {
+		return err
+	}
+	return owner.PersistDocument(ctx, PersistDocumentRequest{
+		Path:     path,
+		Document: documentFromConfigDocument(document),
+	})
+}
+
+func (service ConfigDocumentService) validatePersistencePorts(path string) error {
+	if strings.TrimSpace(path) == "" {
+		return fmt.Errorf("operator config path is required")
+	}
+	if service.Files == nil {
+		return fmt.Errorf("operator settings filesystem is required")
+	}
+	if service.CreateTemp == nil {
+		return fmt.Errorf("operator settings temporary-file creator is required")
+	}
+	return nil
+}
+
+func operationContextError(ctx context.Context) error {
+	if ctx == nil {
+		return fmt.Errorf("operator config context is required")
+	}
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("configure provider/model defaults: %w", err)
+	}
+	return nil
+}
+
+func documentFromConfigDocument(document ConfigDocument) Document {
+	return documentFromConfig(document.FileConfig())
+}
+
+func configFromDocument(document Document) Config {
+	config := Config{
+		BackendScopeID: document.BackendScopeID,
+		Defaults: Defaults{
+			WorkerModelProvider: document.Defaults.WorkerModelProvider,
+			WorkerModel:         document.Defaults.WorkerModel,
+		},
+		Runtime: RuntimeSettings{
+			Logging: RuntimeArtifactSettings(document.Runtime.Logging),
+			Metrics: RuntimeArtifactSettings(document.Runtime.Metrics),
+		},
+		Workers: WorkerSettings{ACP: ACPSettings{
+			Integrations: append([]ACPIntegration(nil), document.Workers.ACP.Integrations...),
+		}},
+	}
+	if document.WorkerPresets != nil {
+		config.WorkerPresets = make([]WorkerPreset, len(document.WorkerPresets))
+		for i, preset := range document.WorkerPresets {
+			config.WorkerPresets[i] = WorkerPreset{
+				ID: preset.ID, ModelProvider: preset.ModelProvider,
+				Model: preset.Model, ReasoningEffort: preset.ReasoningEffort,
+			}
+		}
+	}
+	return config
+}
+
+func documentFromConfig(config Config) Document {
+	document := Document{
+		BackendScopeID: config.BackendScopeID,
+		Defaults: DocumentDefaults{
+			WorkerModelProvider: config.Defaults.WorkerModelProvider,
+			WorkerModel:         config.Defaults.WorkerModel,
+		},
+		Runtime: DocumentRuntimeSettings{
+			Logging: DocumentRuntimeArtifactSettings(config.Runtime.Logging),
+			Metrics: DocumentRuntimeArtifactSettings(config.Runtime.Metrics),
+		},
+		Workers: DocumentWorkerSettings{ACP: DocumentACPSettings{
+			Integrations: append([]ACPIntegration(nil), config.Workers.ACP.Integrations...),
+		}},
+	}
+	if config.WorkerPresets != nil {
+		document.WorkerPresets = make([]DocumentWorkerPreset, len(config.WorkerPresets))
+		for i, preset := range config.WorkerPresets {
+			document.WorkerPresets[i] = DocumentWorkerPreset{
+				ID: preset.ID, ModelProvider: preset.ModelProvider,
+				Model: preset.Model, ReasoningEffort: preset.ReasoningEffort,
+			}
+		}
+	}
+	return document
 }
 
 func emptyConfigDocument() ConfigDocument {
-	return configDocumentOperations.EmptyConfigDocument(defaultRuntimeSettings)
+	return ConfigDocument{config: Config{Runtime: defaultRuntimeSettings()}}
 }

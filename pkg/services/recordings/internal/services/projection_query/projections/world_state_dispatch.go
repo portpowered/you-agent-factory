@@ -517,8 +517,16 @@ func (r *factoryWorldReducer) recordFailedCompletion(completion interfaces.Facto
 		r.recordFailedWorkDetail(completion, completion.TerminalWork.WorkItem)
 		return
 	}
+	outputWorkIDs := make(map[string]struct{}, len(completion.OutputWorkItems))
+	for _, item := range completion.OutputWorkItems {
+		outputWorkIDs[item.ID] = struct{}{}
+	}
 	for _, workID := range completion.WorkItemIDs {
 		if item, ok := r.stateValue.WorkItemsByID[workID]; ok {
+			if _, routed := outputWorkIDs[workID]; routed && !r.isFailedPlace(item.PlaceID) {
+				r.recordWorkFailureDetail(completion, item)
+				continue
+			}
 			r.recordFailedWorkDetail(completion, item)
 		}
 	}
@@ -669,6 +677,10 @@ func (r *factoryWorldReducer) recordFailedWorkDetail(completion interfaces.Facto
 	r.stateValue.FailedWorkItemsByID[item.ID] = item
 	delete(r.stateValue.ActiveWorkItemsByID, item.ID)
 	r.addTraceFailed(item.TraceID, item.ID)
+	r.recordWorkFailureDetail(completion, item)
+}
+
+func (r *factoryWorldReducer) recordWorkFailureDetail(completion interfaces.FactoryWorldDispatchCompletion, item workdomain.FactoryWorkItem) {
 	r.stateValue.FailureDetailsByWorkID[item.ID] = interfaces.FactoryWorldFailureDetail{
 		DispatchID:      completion.DispatchID,
 		TransitionID:    completion.TransitionID,
