@@ -31,7 +31,6 @@ import (
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	providercontract "github.com/portpowered/infinite-you/pkg/services/providers/inference"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
-	systeminitialization "github.com/portpowered/infinite-you/pkg/services/system_initialization"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -129,8 +128,14 @@ type Edges struct {
 	OperatorSettingsFileSystem              operatorsettings.FileSystem
 	OperatorSettingsCreateTemporaryFile     operatorsettings.CreateTemporaryFile
 	OperatorSettingsIDGenerator             operatorsettings.IDGenerator
-	SystemInitializationInspectPath         systeminitialization.InspectPath
-	SystemInitializationMigrationFileSystem systeminitialization.LegacyFactoryMigrationFileSystem
+	SystemInitializationInspectPath         func(string) (fs.FileInfo, error)
+	SystemInitializationMigrationFileSystem interface {
+		Stat(string) (fs.FileInfo, error)
+		ReadFile(string) ([]byte, error)
+		ReadDir(string) ([]fs.DirEntry, error)
+		MkdirAll(string, fs.FileMode) error
+		Rename(string, string) error
+	}
 
 	Clock                            platformclock.Source
 	SubmissionRecorder               recordings.SubmissionRecorder

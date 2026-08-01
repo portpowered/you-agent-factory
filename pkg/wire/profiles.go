@@ -273,7 +273,7 @@ func provideOperatorSettingsIDGenerator(edges serviceedges.Edges) operatorsettin
 
 func provideSystemInitializationInspectPath(
 	edges serviceedges.Edges,
-) systeminitialization.InspectPath {
+) systeminitializationwire.InspectPath {
 	if edges.SystemInitializationInspectPath != nil {
 		return edges.SystemInitializationInspectPath
 	}
@@ -282,7 +282,7 @@ func provideSystemInitializationInspectPath(
 
 func provideSystemInitializationLegacyFactoryMigrationFileSystem(
 	edges serviceedges.Edges,
-) systeminitialization.LegacyFactoryMigrationFileSystem {
+) systeminitializationwire.LegacyFactoryMigrationFileSystem {
 	if edges.SystemInitializationMigrationFileSystem != nil {
 		return edges.SystemInitializationMigrationFileSystem
 	}
@@ -333,11 +333,11 @@ func provideSystemInitializationService(
 	packagedCatalog factorydefinitions.PackagedFactoryCatalogOperations,
 	loadOperatorConfig operatorsettings.ConfigLoader,
 	ensureOperatorBackendScope operatorsettings.BackendScopeEnsurer,
-	inspectPath systeminitialization.InspectPath,
-	migrationFiles systeminitialization.LegacyFactoryMigrationFileSystem,
+	inspectPath systeminitializationwire.InspectPath,
+	migrationFiles systeminitializationwire.LegacyFactoryMigrationFileSystem,
 ) (systeminitialization.Service, error) {
 	return systeminitializationwire.NewService(
-		systeminitialization.OperatorSettingsFunctions{
+		systeminitializationwire.OperatorSettingsFunctions{
 			Load:   loadOperatorConfig,
 			Ensure: ensureOperatorBackendScope,
 		},
