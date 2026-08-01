@@ -4,6 +4,52 @@ import type { UserConfig } from "vite";
 import viteConfig, { isDashboardUnitVitestRun } from "./vite.config";
 
 const config = viteConfig as UserConfig;
+const vitestEnv = { VITEST: "true" };
+const projectSelectionCases = [
+  [
+    "inline dashboard-unit",
+    ["node", "vitest", "--project=dashboard-unit"],
+    true,
+  ],
+  [
+    "separate dashboard-unit",
+    ["node", "vitest", "run", "--project", "dashboard-unit"],
+    true,
+  ],
+  [
+    "dashboard-component",
+    ["node", "vitest", "--project=dashboard-component"],
+    false,
+  ],
+  [
+    "mixed inline projects",
+    [
+      "node",
+      "vitest",
+      "--project=dashboard-unit",
+      "--project=dashboard-component",
+    ],
+    false,
+  ],
+  [
+    "mixed separate projects",
+    [
+      "node",
+      "vitest",
+      "run",
+      "--project",
+      "dashboard-unit",
+      "--project",
+      "dashboard-component",
+    ],
+    false,
+  ],
+  [
+    "wildcard project",
+    ["node", "vitest", "--project=dashboard-unit", "--project=*"],
+    false,
+  ],
+] as const;
 
 describe("dashboard Vite config", () => {
   it("dedupes context-bearing packages used by linked component sources", () => {
@@ -26,27 +72,12 @@ describe("dashboard Vite config", () => {
     );
   });
 
-  it("recognizes only an explicit isolated dashboard-unit invocation", () => {
-    expect(
-      isDashboardUnitVitestRun(["node", "vitest", "--project=dashboard-unit"], {
-        VITEST: "true",
-      }),
-    ).toBe(true);
-    expect(
-      isDashboardUnitVitestRun(
-        ["node", "vitest", "run", "--project", "dashboard-unit"],
-        { VITEST: "true" },
-      ),
-    ).toBe(true);
-    expect(
-      isDashboardUnitVitestRun(
-        ["node", "vitest", "--project=dashboard-component"],
-        {
-          VITEST: "true",
-        },
-      ),
-    ).toBe(false);
-  });
+  it.each(projectSelectionCases)(
+    "classifies %s as dashboard-unit optimization: %s",
+    (_caseName, argv, expected) => {
+      expect(isDashboardUnitVitestRun(argv, vitestEnv)).toBe(expected);
+    },
+  );
 
   it("keeps preview and dev proxy coverage aligned for all OpenAPI-backed API paths", () => {
     const expectedProxyPaths = [

@@ -62,7 +62,11 @@ current workload fingerprint live in
 When a Vitest project extends the root config, an empty project array does not
 necessarily clear a root array such as `setupFiles`. If a Node-only project
 must avoid shared browser setup, gate that root value on the explicit project
-selection and keep the component/combined path unchanged.
+selection and keep the component/combined path unchanged. Because Vitest
+accepts repeated `--project=value` and `--project value` selectors, the gate
+must parse every selector and enable the optimization only when all selected
+projects are exactly `dashboard-unit`; mixed, wildcard, and component
+selections retain the shared setup and plugin preparation.
 
 ## Observable contracts by layer
 

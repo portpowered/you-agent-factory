@@ -34,13 +34,29 @@ export function isDashboardUnitVitestRun(
   argv: readonly string[],
   env: { VITEST?: string } = process.env,
 ): boolean {
-  const projectArgumentIndex = argv.indexOf("--project");
   const isVitestInvocation = argv.includes("vitest") || env.VITEST === "true";
+  const projectSelectors: string[] = [];
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const argument = argv[index];
+    if (argument.startsWith("--project=")) {
+      projectSelectors.push(argument.slice("--project=".length));
+      continue;
+    }
+
+    if (argument === "--project") {
+      const selector = argv[index + 1];
+      if (selector !== undefined && !selector.startsWith("--")) {
+        projectSelectors.push(selector);
+        index += 1;
+      }
+    }
+  }
 
   return (
     isVitestInvocation &&
-    (argv.includes("--project=dashboard-unit") ||
-      argv[projectArgumentIndex + 1] === "dashboard-unit")
+    projectSelectors.length > 0 &&
+    projectSelectors.every((selector) => selector === "dashboard-unit")
   );
 }
 
