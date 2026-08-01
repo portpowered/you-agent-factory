@@ -7,7 +7,9 @@ import {
 } from "./check-ui-test-lanes.mjs";
 
 it.each([
+  ["features/example/lib/value.bun.unit.test.ts", "bun-unit"],
   ["features/example/lib/value.unit.test.ts", "unit"],
+  ["features/example/lib/value.unit.test.mts", "unit"],
   ["features/example/lib/legacy.test.ts", "unit"],
   ["features/example/components/legacy.test.tsx", "component"],
   ["features/example/components/card.component.test.tsx", "component"],
@@ -17,6 +19,20 @@ it.each([
   ["integration/example.browser.test.mjs", "browser"],
 ])("classifies %s as %s", (relativePath, expected) => {
   expect(classifiedUiTestLane(relativePath)).toBe(expected);
+});
+
+it("leaves malformed Bun unit names unowned for an actionable audit error", () => {
+  expect(
+    classifiedUiTestLane("features/example/lib/value.bun.unit.test.tsx"),
+  ).toBe(null);
+  expect(
+    auditUiTestFile({
+      relativePath: "features/example/lib/value.bun.unit.test.tsx",
+      source: "",
+    }),
+  ).toEqual([
+    "features/example/lib/value.bun.unit.test.tsx: Bun-native unit tests must use the exact .bun.unit.test.ts suffix; this path is ambiguous or unowned",
+  ]);
 });
 
 it("rejects aggregate feature public imports", () => {
@@ -109,6 +125,39 @@ it("rejects DOM dependencies in unit tests", () => {
     }),
   ).toEqual([
     "features/example/lib/value.unit.test.ts: unit tests cannot import DOM or browser runners",
+  ]);
+});
+
+it("rejects DOM dependencies in Bun unit tests", () => {
+  expect(
+    auditUiTestFile({
+      relativePath: "features/example/lib/value.bun.unit.test.ts",
+      source: 'import { render } from "@testing-library/react";',
+    }),
+  ).toEqual([
+    "features/example/lib/value.bun.unit.test.ts: Bun unit tests cannot import DOM dependencies; move rendered behavior to a component test",
+  ]);
+});
+
+it("rejects browser dependencies in Bun unit tests", () => {
+  expect(
+    auditUiTestFile({
+      relativePath: "features/example/lib/value.bun.unit.test.ts",
+      source: 'import { chromium } from "playwright";',
+    }),
+  ).toEqual([
+    "features/example/lib/value.bun.unit.test.ts: Bun unit tests cannot import browser runners or integration harnesses; move browser behavior to an integration test",
+  ]);
+});
+
+it("rejects an unowned native Bun unit import", () => {
+  expect(
+    auditUiTestFile({
+      relativePath: "features/example/lib/value.test.ts",
+      source: 'import { expect, it } from "bun:test";',
+    }),
+  ).toEqual([
+    "features/example/lib/value.test.ts: files importing bun:test must use the exact .bun.unit.test.ts suffix so the Bun unit lane owns them",
   ]);
 });
 
