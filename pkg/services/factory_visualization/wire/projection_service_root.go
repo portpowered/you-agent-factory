@@ -1,4 +1,4 @@
-package service
+package wire
 
 import (
 	"context"

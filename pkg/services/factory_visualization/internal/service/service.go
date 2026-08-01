@@ -8,9 +8,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	activationlifecycle "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle"
-	activationlifecyclewire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle/wire"
 	liveviewprojection "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection"
-	liveviewprojectionwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection/wire"
 	responseeventpresentation "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/response_event_presentation"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
@@ -34,51 +32,19 @@ type Service struct {
 	presentations   map[PresentationSessionID]*rootPresentationSession
 }
 
-// New constructs an inert Factory visualization service.
+// New assembles an inert Factory Visualization root from already-constructed
+// parent-private owners. The owning wire package composes those owners before
+// calling this implementation constructor.
 func New(
+	activation activationlifecycle.Service,
+	projection liveviewprojection.Service,
+	presentation responseeventpresentation.Service,
 	source Source,
-	peer recordings.ProjectionService,
+	recordingsPeer recordings.Service,
 	clock Clock,
 	sink Sink,
-	presentation responseeventpresentation.Service,
 	reportError ErrorReporter,
 ) (*Service, error) {
-	switch {
-	case source == nil:
-		return nil, errors.New("initialize Factory visualization: event source is required")
-	case peer == nil:
-		return nil, errors.New("initialize Factory visualization: projection service is required")
-	case clock == nil:
-		return nil, errors.New("initialize Factory visualization: clock is required")
-	case sink == nil:
-		return nil, errors.New("initialize Factory visualization: presentation sink is required")
-	case presentation == nil:
-		return nil, errors.New("initialize Factory visualization: response event presentation service is required")
-	}
-	recordingsPeer, err := recordingsPeerFromProjectionService(peer)
-	if err != nil {
-		return nil, err
-	}
-	activation, err := activationlifecyclewire.NewService(
-		activationEventSource(source),
-		recordingsPeer,
-		clock,
-		activationViewSink(sink),
-		activationlifecycle.ErrorReporter(reportError),
-	)
-	if err != nil {
-		return nil, err
-	}
-	projection, err := liveviewprojectionwire.NewService(
-		source,
-		recordingsPeer,
-		clock,
-		projectionSink(sink),
-		reportError,
-	)
-	if err != nil {
-		return nil, err
-	}
 	return assembleRoot(
 		activation,
 		projection,
@@ -116,32 +82,32 @@ func (s *Service) Wait(ctx context.Context) error {
 	return s.activation.Wait(ctx)
 }
 
-func adaptSink(sink Sink) liveviewprojection.Sink {
-	return sink
+// ActivationEventSourceAdapter maps the public Visualization source port to
+// the activation lifecycle owner's private event-source port. It is exported
+// only within the parent-private internal package so the owning wire package
+// can construct the adapter without exposing activation internals to peers.
+type ActivationEventSourceAdapter struct {
+	Source Source
 }
 
-type activationSourceAdapter struct {
-	source Source
-}
-
-func (a activationSourceAdapter) SubscribeFactoryEvents(
+func (a ActivationEventSourceAdapter) SubscribeFactoryEvents(
 	ctx context.Context,
 	reconnect *factorydefinitions.FactoryEventReconnectCursor,
 	scope factorydefinitions.FactoryEventReconnectScope,
 ) (*factorydefinitions.FactoryEventStream, error) {
-	if a.source == nil {
+	if a.Source == nil {
 		return nil, errors.New("subscribe Factory visualization events: event source is required")
 	}
-	return a.source.SubscribeFactoryEvents(ctx, reconnect, scope)
+	return a.Source.SubscribeFactoryEvents(ctx, reconnect, scope)
 }
 
-func (a activationSourceAdapter) GetEngineObservation(
+func (a ActivationEventSourceAdapter) GetEngineObservation(
 	ctx context.Context,
 ) (*activationlifecycle.EngineObservation, error) {
-	if a.source == nil {
+	if a.Source == nil {
 		return nil, errors.New("read Factory visualization engine observation: event source is required")
 	}
-	facts, err := a.source.GetRuntimeSnapshotFacts(ctx)
+	facts, err := a.Source.GetRuntimeSnapshotFacts(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -154,15 +120,17 @@ func (a activationSourceAdapter) GetEngineObservation(
 	}, nil
 }
 
-type activationSinkAdapter struct {
-	sink Sink
+// ActivationViewSinkAdapter maps activation lifecycle views to the public
+// Visualization view sink without publishing activation-owned view types.
+type ActivationViewSinkAdapter struct {
+	Sink Sink
 }
 
-func (a activationSinkAdapter) PresentFactoryView(view activationlifecycle.View) {
-	if a.sink == nil {
+func (a ActivationViewSinkAdapter) PresentFactoryView(view activationlifecycle.View) {
+	if a.Sink == nil {
 		return
 	}
-	a.sink.PresentFactoryView(View{
+	a.Sink.PresentFactoryView(View{
 		Runtime: RuntimeObservation{
 			TickCount: view.EngineObservation.TickCount,
 		},

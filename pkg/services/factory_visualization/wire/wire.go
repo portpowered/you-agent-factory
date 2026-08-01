@@ -12,6 +12,9 @@ import (
 
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/service"
+	activationlifecycle "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle"
+	activationlifecyclewire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle/wire"
+	liveviewprojectionwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection/wire"
 	responseeventpresentationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/response_event_presentation/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
@@ -39,8 +42,41 @@ func NewRoot(
 	case sink == nil:
 		return nil, fmt.Errorf("construct Factory Visualization: presentation sink is required")
 	}
+	recordingsPeer, err := recordingsPeerFromProjectionService(peer)
+	if err != nil {
+		return nil, err
+	}
+	activation, err := activationlifecyclewire.NewService(
+		internalservice.ActivationEventSourceAdapter{Source: source},
+		recordingsPeer,
+		clock,
+		internalservice.ActivationViewSinkAdapter{Sink: sink},
+		activationlifecycle.ErrorReporter(reportError),
+	)
+	if err != nil {
+		return nil, err
+	}
+	projection, err := liveviewprojectionwire.NewService(
+		source,
+		recordingsPeer,
+		clock,
+		sink,
+		reportError,
+	)
+	if err != nil {
+		return nil, err
+	}
 	presentation := responseeventpresentationwire.NewService()
-	root, err := internalservice.New(source, peer, clock, sink, presentation, reportError)
+	root, err := internalservice.New(
+		activation,
+		projection,
+		presentation,
+		source,
+		recordingsPeer,
+		clock,
+		sink,
+		reportError,
+	)
 	if err != nil {
 		return nil, err
 	}

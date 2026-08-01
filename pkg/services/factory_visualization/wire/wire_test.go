@@ -19,6 +19,9 @@ import (
 
 type wireSourceStub struct {
 	subscribeHook func()
+	stream        *factorydefinitions.FactoryEventStream
+	snapshot      *liveviewprojection.RuntimeSnapshotFacts
+	snapshotErr   error
 }
 
 func (s wireSourceStub) SubscribeFactoryEvents(
@@ -29,12 +32,21 @@ func (s wireSourceStub) SubscribeFactoryEvents(
 	if s.subscribeHook != nil {
 		s.subscribeHook()
 	}
+	if s.stream != nil {
+		return s.stream, nil
+	}
 	return &factorydefinitions.FactoryEventStream{
 		Events: make(chan factorydefinitions.FactoryEvent),
 	}, nil
 }
 
 func (s wireSourceStub) GetRuntimeSnapshotFacts(context.Context) (*liveviewprojection.RuntimeSnapshotFacts, error) {
+	if s.snapshotErr != nil {
+		return nil, s.snapshotErr
+	}
+	if s.snapshot != nil {
+		return s.snapshot, nil
+	}
 	return &liveviewprojection.RuntimeSnapshotFacts{}, nil
 }
 
@@ -198,6 +210,75 @@ func TestNewRootServesPublishedPeerBehavior(t *testing.T) {
 	}
 	if opened.Mode != factoryvisualization.PresentationDeliveryBestEffort {
 		t.Fatalf("OpenPresentation mode = %q, want %q", opened.Mode, factoryvisualization.PresentationDeliveryBestEffort)
+	}
+}
+
+func TestNewRootActivatesAndObservesThroughComposedOwners(t *testing.T) {
+	t.Parallel()
+
+	history := factorydefinitions.FactoryEvent{
+		Id: "history",
+		Context: factorydefinitions.FactoryEventContext{
+			Sequence: 3,
+			Tick:     3,
+		},
+	}
+	source := wireSourceStub{
+		stream: &factorydefinitions.FactoryEventStream{
+			History: []factorydefinitions.FactoryEvent{history},
+			Events:  make(chan factorydefinitions.FactoryEvent),
+		},
+		snapshot: &liveviewprojection.RuntimeSnapshotFacts{
+			RuntimeObservation: liveviewprojection.RuntimeObservation{TickCount: 3},
+		},
+	}
+	presented := make(chan factoryvisualization.View, 1)
+	root, err := factoryvisualizationwire.NewRoot(
+		source,
+		&recordingsstub.Service{},
+		wireClock{},
+		factoryvisualization.SinkFunc(func(view factoryvisualization.View) {
+			presented <- view
+		}),
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewRoot() error = %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	activated, err := root.Activate(ctx, factoryvisualization.ActivateRequest{
+		Mode: factoryvisualization.ActivateModeRetainedThenLive,
+	})
+	if err != nil {
+		t.Fatalf("Activate() error = %v", err)
+	}
+	if activated.State != factoryvisualization.LifecycleStateStarted {
+		t.Fatalf("Activate() state = %q, want %q", activated.State, factoryvisualization.LifecycleStateStarted)
+	}
+	select {
+	case view := <-presented:
+		if view.Runtime.TickCount != 3 {
+			t.Fatalf("activated view tick = %d, want 3", view.Runtime.TickCount)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for activated view")
+	}
+
+	observed, err := root.Observe(context.Background(), factoryvisualization.ObserveRequest{
+		Mode: factoryvisualization.ObserveModeRetainedThenLive,
+	})
+	if err != nil {
+		t.Fatalf("Observe() error = %v", err)
+	}
+	if observed.View.TickCount != 3 || observed.View.RetainedEventCount != 1 {
+		t.Fatalf("Observe() view = %#v, want tick 3 and one retained event", observed.View)
+	}
+
+	cancel()
+	if _, err := root.StopDrain(context.Background(), factoryvisualization.StopDrainRequest{}); err != nil {
+		t.Fatalf("StopDrain() error = %v", err)
 	}
 }
 

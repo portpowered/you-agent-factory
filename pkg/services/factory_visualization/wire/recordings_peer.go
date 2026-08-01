@@ -1,4 +1,4 @@
-package service
+package wire
 
 import (
 	"errors"
@@ -6,14 +6,13 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
-// recordingsPeerFromProjectionService resolves the Recordings root contract from
-// a legacy projection peer. Runtime wiring still supplies ProjectionService
-// today, but Visualization presentation paths require recordings.Service.
+// recordingsPeerFromProjectionService adapts the legacy projection peer to
+// the Recordings root contract required by the private Visualization owners.
 func recordingsPeerFromProjectionService(
 	peer recordings.ProjectionService,
 ) (recordings.Service, error) {
 	if peer == nil {
-		return nil, errors.New("initialize Factory visualization: projection service is required")
+		return nil, errors.New("construct Factory Visualization: projection service is required")
 	}
 	if service, ok := peer.(recordings.Service); ok {
 		return service, nil

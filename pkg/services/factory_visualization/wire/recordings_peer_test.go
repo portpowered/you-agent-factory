@@ -1,4 +1,4 @@
-package service
+package wire
 
 import (
 	"testing"
@@ -14,7 +14,7 @@ func TestRecordingsPeerFromProjectionServiceAdaptsLegacyProjectionPeer(t *testin
 	peer := recordingswire.NewProjectionService()
 	service, err := recordingsPeerFromProjectionService(peer)
 	if err != nil {
-		t.Fatalf("RecordingsPeerFromProjectionService: %v", err)
+		t.Fatalf("recordingsPeerFromProjectionService: %v", err)
 	}
 	if service == nil {
 		t.Fatal("expected adapted recordings.Service, got nil")
@@ -65,7 +65,7 @@ func TestRecordingsPeerFromProjectionServiceWrapsProjectionOnlyPeer(t *testing.T
 
 	service, err := recordingsPeerFromProjectionService(projectionOnlyPeer{})
 	if err != nil {
-		t.Fatalf("RecordingsPeerFromProjectionService: %v", err)
+		t.Fatalf("recordingsPeerFromProjectionService: %v", err)
 	}
 	result, err := service.QuerySimpleDashboard(recordings.SimpleDashboardQueryRequest{
 		WorldState: recordings.WorldStateView{

@@ -12,7 +12,7 @@ import (
 )
 
 // assembleRoot constructs an inert Factory Visualization root from parent-private
-// owner services already wired by the service-local Wire packet.
+// owner services already wired by the owning wire package.
 func assembleRoot(
 	activation activationlifecycle.Service,
 	projection liveviewprojection.Service,
@@ -52,22 +52,4 @@ func assembleRoot(
 		sink:              sink,
 		reportError:       reportError,
 	}, nil
-}
-
-// activationEventSource adapts the root construction Source to the activation
-// lifecycle owner EventSource port.
-func activationEventSource(source Source) activationlifecycle.EventSource {
-	return activationSourceAdapter{source: source}
-}
-
-// activationViewSink adapts the root construction Sink to the activation
-// lifecycle owner ViewSink port.
-func activationViewSink(sink Sink) activationlifecycle.ViewSink {
-	return activationSinkAdapter{sink: sink}
-}
-
-// projectionSink adapts the root construction Sink to the live view projection
-// owner Sink port.
-func projectionSink(sink Sink) liveviewprojection.Sink {
-	return adaptSink(sink)
 }
