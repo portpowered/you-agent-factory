@@ -10,8 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/root"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 type exportImportSmokeHarness struct {
@@ -61,11 +63,29 @@ func (h exportImportSmokeHarness) Run(t *testing.T) exportImportSmokeHarnessResu
 	t.Helper()
 
 	rootDir := t.TempDir()
-	sourceFactoryDir := h.fixture.persistAndActivateAs(t, rootDir, h.options.sourceFactoryName)
-	if h.options.beforeExport != nil {
-		h.options.beforeExport(t, sourceFactoryDir)
+	var sourceFactoryDir string
+	baseServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                rootDir,
+		UseMockWorkers:            true,
+		WaitForServiceModeRuntime: true,
+		BeforeStart: func(tb testing.TB, process support.Process, inputs root.Input) {
+			sourceFactoryDir = h.fixture.persistAtCustomerBoundaryWithProcess(
+				tb,
+				process,
+				inputs.Env,
+				rootDir,
+				h.options.sourceFactoryName,
+				true,
+			)
+			if h.options.beforeExport != nil {
+				h.options.beforeExport(t, sourceFactoryDir)
+			}
+		},
+	})
+	server := &functionalAPIServer{FunctionalAPIServer: baseServer}
+	if sourceFactoryDir == "" {
+		t.Fatal("bootstrap setup did not return a source Factory directory")
 	}
-	server := startFunctionalServer(t, rootDir, true)
 	waitForCurrentFactoryRuntimeIdle(t, server.URL(), 5*time.Second)
 
 	exported := getCurrentFactory(t, server.URL())

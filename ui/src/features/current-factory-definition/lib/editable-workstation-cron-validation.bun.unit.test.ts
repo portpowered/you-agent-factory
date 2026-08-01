@@ -1,5 +1,5 @@
 import parser from "cron-parser";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 
 import {
   type EditableWorkstationCronValidationMessages,
@@ -7,7 +7,7 @@ import {
 } from "./editable-workstation-cron-validation";
 
 afterEach(() => {
-  vi.restoreAllMocks();
+  mock.restore();
 });
 
 const messages: EditableWorkstationCronValidationMessages = {
@@ -139,7 +139,7 @@ describe("validateEditableWorkstationCronDraft descriptor schedules", () => {
   });
 
   it("uses a generic parse failure message when cron-parser throws a non-Error", () => {
-    vi.spyOn(parser, "parseExpression").mockImplementation(() => {
+    spyOn(parser, "parseExpression").mockImplementation(() => {
       throw "broken parser";
     });
 

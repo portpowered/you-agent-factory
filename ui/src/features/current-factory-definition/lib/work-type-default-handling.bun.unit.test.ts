@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
 import { workTypeHasDefaultHandling } from "./work-type-default-handling";

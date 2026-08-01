@@ -51,7 +51,6 @@ func TestAutomationsReconciliationAdmitsThroughPublishedRootAfterComposition(t *
 	t.Parallel()
 
 	dir := support.ScaffoldFactory(t, reconciliationFactoryConfig())
-	_ = support.BuildProcess(t, serviceedges.Edges{})
 
 	root := support.AutomationsRootFromProcessEdges(t, serviceedges.Edges{}, dir)
 	result, err := root.Reconcile(context.Background(), automations.ReconcileRequest{
@@ -97,7 +96,6 @@ func TestAutomationsReconcileAdmitsAbsentSourceThroughPublishedRootAfterComposit
 	t.Parallel()
 
 	dir := support.ScaffoldFactory(t, reconciliationFactoryConfig())
-	_ = support.BuildProcess(t, serviceedges.Edges{})
 
 	root := support.AutomationsRootFromProcessEdges(t, serviceedges.Edges{}, dir)
 	result, err := root.Reconcile(context.Background(), automations.ReconcileRequest{
