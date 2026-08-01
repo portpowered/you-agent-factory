@@ -1,4 +1,4 @@
-package http
+package observation
 
 import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
