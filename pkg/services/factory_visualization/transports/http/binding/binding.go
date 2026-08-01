@@ -3,6 +3,7 @@ package binding
 import (
 	"context"
 	"errors"
+	"reflect"
 
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 )
@@ -18,6 +19,8 @@ type Handler struct {
 	visualization Root
 }
 
+var errVisualizationUnavailable = errors.New("Factory visualization API is unavailable")
+
 // New constructs a root binding for an already-selected Visualization root.
 func New(visualization Root) *Handler {
 	return &Handler{visualization: visualization}
@@ -26,10 +29,20 @@ func New(visualization Root) *Handler {
 // Require returns the bound root or the stable unavailable error used by the
 // existing HTTP adapter contract.
 func (h *Handler) Require() (Root, error) {
-	if h == nil || h.visualization == nil {
-		return nil, errors.New("Factory visualization API is unavailable")
+	if h == nil || h.visualization == nil || isNilRoot(h.visualization) {
+		return nil, errVisualizationUnavailable
 	}
 	return h.visualization, nil
+}
+
+func isNilRoot(root Root) bool {
+	value := reflect.ValueOf(root)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice:
+		return value.IsNil()
+	default:
+		return false
+	}
 }
 
 // Activate invokes the Visualization root Activate slice.

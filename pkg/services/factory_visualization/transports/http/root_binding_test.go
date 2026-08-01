@@ -2,6 +2,9 @@ package http_test
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
@@ -45,6 +48,33 @@ func TestHandlerFromRoot_ActivateRequiresInjectedRoot(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("Activate without injected root = nil, want error")
+	}
+}
+
+func TestHandlerFromRoot_RejectsTypedNilVisualizationRoot(t *testing.T) {
+	t.Parallel()
+
+	var root *httpVisualizationRootFake
+	handler := factoryvisualizationhttp.NewHandlerFromRoot(
+		factoryvisualizationhttp.RootBinding{Visualization: root},
+		zap.NewNop(),
+	)
+
+	if _, err := handler.Activate(context.Background(), factoryvisualization.ActivateRequest{
+		Mode: factoryvisualization.ActivateModeRetainedThenLive,
+	}); err == nil {
+		t.Fatal("Activate with typed nil root = nil, want unavailable-root error")
+	}
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/factory-visualization/lifecycle/activate",
+		strings.NewReader(`{"mode":"RETAINED_THEN_LIVE"}`),
+	)
+	handler.HandleActivateLifecycle(recorder, request)
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf("typed nil root HTTP status = %d, want %d", recorder.Code, http.StatusInternalServerError)
 	}
 }
 
