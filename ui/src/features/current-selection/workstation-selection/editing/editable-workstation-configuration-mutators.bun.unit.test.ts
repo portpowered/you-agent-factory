@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, mock } from "bun:test";
 
 import type {
   EditableWorkstationDraft,
@@ -59,7 +59,7 @@ type SessionState = {
 
 function buildMutatorHarness(initialState: SessionState) {
   let sessionState = initialState;
-  const setSessionState = vi.fn(
+  const setSessionState = mock(
     (updater: (current: SessionState | null) => SessionState | null) => {
       sessionState = updater(sessionState) ?? sessionState;
     },
@@ -181,7 +181,7 @@ describe("buildEditableWorkstationConfigurationMutators other draft fields", () 
   });
 
   it("no-ops mutators when session state is null", () => {
-    const setSessionState = vi.fn((updater: (current: null) => null) =>
+    const setSessionState = mock((updater: (current: null) => null) =>
       updater(null),
     );
     const mutators = buildEditableWorkstationConfigurationMutators({
