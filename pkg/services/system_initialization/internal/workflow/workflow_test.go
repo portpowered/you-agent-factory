@@ -80,7 +80,7 @@ type packagedInstallCall struct {
 
 func newTestInitializer(
 	t *testing.T,
-	settings systeminitialization.OperatorSettings,
+	settings OperatorSettings,
 	installer factorydefinitions.PackagedFactoryInstaller,
 	definitions []factorydefinitions.PackagedDefinition,
 ) *Initializer {

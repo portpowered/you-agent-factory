@@ -5,8 +5,8 @@ package systeminitializationwire
 
 import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	bootstrapworkflow "github.com/portpowered/infinite-you/pkg/services/system_initialization/internal/workflow"
 	systeminitialization "github.com/portpowered/infinite-you/pkg/services/system_initialization"
+	bootstrapworkflow "github.com/portpowered/infinite-you/pkg/services/system_initialization/internal/workflow"
 )
 
 // NewService constructs the canonical System Bootstrap service from
@@ -14,11 +14,11 @@ import (
 // systeminitialization.Service root contract rather than the internal workflow
 // package.
 func NewService(
-	operatorSettings systeminitialization.OperatorSettings,
+	operatorSettings OperatorSettings,
 	packagedCatalog factorydefinitions.PackagedFactoryCatalogOperations,
 	packagedInstaller factorydefinitions.PackagedFactoryInstaller,
-	inspectPath systeminitialization.InspectPath,
-	migrationFiles systeminitialization.LegacyFactoryMigrationFileSystem,
+	inspectPath InspectPath,
+	migrationFiles LegacyFactoryMigrationFileSystem,
 ) (systeminitialization.Service, error) {
 	initializer, err := bootstrapworkflow.New(
 		operatorSettings,

@@ -2599,11 +2599,6 @@
     },
     {
       "rule": "service-root-interface-count",
-      "filePath": "pkg/services/system_initialization",
-      "target": "pkg/services/system_initialization/service.go:LegacyFactoryMigrationFileSystem,pkg/services/system_initialization/service.go:OperatorSettings,pkg/services/system_initialization/service.go:Service"
-    },
-    {
-      "rule": "service-root-interface-count",
       "filePath": "pkg/services/work",
       "target": "pkg/services/work/admission_contract.go:ContentPreparation,pkg/services/work/admission_contract.go:FactoryRequestBatchPreparation,pkg/services/work/admission_contract.go:FileSource,pkg/services/work/admission_contract.go:RequestPreparationService,pkg/services/work/content_contract.go:ContentHTTPDoer,pkg/services/work/content_contract.go:ContentMaterializer,pkg/services/work/content_contract.go:ContentTemporaryFile,pkg/services/work/content_staging_contract.go:ContentStagingClock,pkg/services/work/content_staging_contract.go:ContentStagingFileSystem,pkg/services/work/content_staging_contract.go:ContentStagingRandom,pkg/services/work/content_staging_contract.go:ContentStagingService,pkg/services/work/contracts.go:InvocationWorldStateProvider,pkg/services/work/invocation_return_policy_contract.go:InvocationInputPreparation,pkg/services/work/lineage_contract.go:VisualizationFileSystem,pkg/services/work/read_contract.go:ListRequestPreparation,pkg/services/work/service_contract.go:FileSubmissionService,pkg/services/work/service_contract.go:Runtime,pkg/services/work/service_contract.go:RuntimeResolver,pkg/services/work/service_contract.go:Service"
     },

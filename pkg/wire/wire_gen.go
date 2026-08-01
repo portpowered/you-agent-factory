@@ -541,9 +541,9 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	inspectPath := provideSystemInitializationInspectPath(edges2)
-	legacyFactoryMigrationFileSystem := provideSystemInitializationLegacyFactoryMigrationFileSystem(edges2)
-	systeminitializationService, err := provideSystemInitializationService(v43, packagedInstallationFileSystem, packagedFactoryCatalogOperations, configLoader, backendScopeEnsurer, inspectPath, legacyFactoryMigrationFileSystem)
+	v78 := provideSystemInitializationInspectPath(edges2)
+	v79 := provideSystemInitializationLegacyFactoryMigrationFileSystem(edges2)
+	systeminitializationService, err := provideSystemInitializationService(v43, packagedInstallationFileSystem, packagedFactoryCatalogOperations, configLoader, backendScopeEnsurer, v78, v79)
 	if err != nil {
 		return nil, err
 	}
