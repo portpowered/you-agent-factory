@@ -1727,6 +1727,10 @@
       "minimum": 88.52
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/contracts",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/internal/events",
       "minimum": 81.33
     },
