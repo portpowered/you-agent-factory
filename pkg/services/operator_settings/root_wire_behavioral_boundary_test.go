@@ -119,142 +119,143 @@ func TestRootWireBehavioralBoundary_PublishedServiceResolvesEffectiveSelection(t
 	}
 }
 
-// TestRootWireBehavioralBoundary_PublishedServicePreservesScopeAndTypedFailures
-// keeps the remaining scope and failure observations on the published service
-// root for their focused follow-up scenarios.
-func TestRootWireBehavioralBoundary_PublishedServicePreservesScopeAndTypedFailures(t *testing.T) {
+// TestRootWireBehavioralBoundary_PublishedServicePreservesBackendScopeAndConflict
+// constructs Operator Settings through its wire boundary and proves that
+// persisted backend scope identity and stale-scope conflicts remain stable.
+func TestRootWireBehavioralBoundary_PublishedServicePreservesBackendScopeAndConflict(t *testing.T) {
 	internaltestlink.RegisterComposition()
+	t.Parallel()
 
-	t.Run("backend scope identity and conflict", func(t *testing.T) {
-		t.Parallel()
+	const scopeID = "local-aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+	configPath := writeRootWireIdentityFixtureToTemp(t)
 
-		const scopeID = "local-aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
-		configPath := writeRootWireIdentityFixtureToTemp(t)
+	root, err := settingswire.NewServiceFromConfigDocument(
+		rootWireConfigDocumentService(),
+		internaltestproviders.StandardCatalog(),
+	)
+	if err != nil {
+		t.Fatalf("NewServiceFromConfigDocument() = %v", err)
+	}
+	var service operatorsettings.Service = root
 
-		root, err := settingswire.NewServiceFromConfigDocument(
-			rootWireConfigDocumentService(),
-			internaltestproviders.StandardCatalog(),
-		)
-		if err != nil {
-			t.Fatalf("NewServiceFromConfigDocument() = %v", err)
-		}
-		var service operatorsettings.Service = root
-
-		loaded, err := service.LoadDocument(operatorsettings.LoadDocumentRequest{
-			Path:            configPath,
-			RequireExisting: true,
-		})
-		if err != nil {
-			t.Fatalf("LoadDocument() = %v", err)
-		}
-		if !loaded.Found || loaded.Document.BackendScopeID != scopeID {
-			t.Fatalf("LoadDocument() = %#v, want found document with scope %q", loaded, scopeID)
-		}
-
-		model := "gpt-5.2"
-		updated, err := service.ApplyDocumentUpdate(operatorsettings.ApplyDocumentUpdateRequest{
-			Path:                 configPath,
-			ExpectedBackendScope: scopeID,
-			ProviderModel: operatorsettings.DocumentProviderModelUpdate{
-				Model: &model,
-			},
-		})
-		if err != nil {
-			t.Fatalf("ApplyDocumentUpdate() = %v", err)
-		}
-		if !updated.Persisted || updated.Document.BackendScopeID != scopeID {
-			t.Fatalf("ApplyDocumentUpdate() = %#v, want persisted document with scope %q", updated, scopeID)
-		}
-
-		_, err = service.ApplyDocumentUpdate(operatorsettings.ApplyDocumentUpdateRequest{
-			Path:                 configPath,
-			ExpectedBackendScope: "local-stale-scope",
-			ProviderModel: operatorsettings.DocumentProviderModelUpdate{
-				Model: &model,
-			},
-		})
-		if !errors.Is(err, operatorsettings.ErrDocumentConflict) {
-			t.Fatalf("stale scope error = %v, want ErrDocumentConflict", err)
-		}
+	loaded, err := service.LoadDocument(operatorsettings.LoadDocumentRequest{
+		Path:            configPath,
+		RequireExisting: true,
 	})
+	if err != nil {
+		t.Fatalf("LoadDocument() = %v", err)
+	}
+	if !loaded.Found || loaded.Document.BackendScopeID != scopeID {
+		t.Fatalf("LoadDocument() = %#v, want found document with scope %q", loaded, scopeID)
+	}
 
-	t.Run("typed failures", func(t *testing.T) {
-		t.Parallel()
-
-		homeDir := t.TempDir()
-		configPath := filepath.Join(homeDir, "config.json")
-		if err := os.WriteFile(configPath, []byte(`{
-			"defaults": {
-				"workerModelProvider": "codex",
-				"workerModel": "gpt-5"
-			}
-		}`), 0o600); err != nil {
-			t.Fatalf("WriteFile(config): %v", err)
-		}
-
-		root := newRootWireBehavioralService(t)
-
-		_, err := root.LoadDocument(operatorsettings.LoadDocumentRequest{})
-		if !errors.Is(err, operatorsettings.ErrDocumentMalformed) {
-			t.Fatalf("empty load path error = %v, want ErrDocumentMalformed", err)
-		}
-
-		_, err = root.LoadDocument(operatorsettings.LoadDocumentRequest{
-			Path:            filepath.Join(homeDir, "missing.json"),
-			RequireExisting: true,
-		})
-		if !errors.Is(err, operatorsettings.ErrDocumentNotFound) {
-			t.Fatalf("missing required document error = %v, want ErrDocumentNotFound", err)
-		}
-
-		unsupported := "unsupported-provider"
-		_, err = root.ApplyDocumentUpdate(operatorsettings.ApplyDocumentUpdateRequest{
-			Path: configPath,
-			ProviderModel: operatorsettings.DocumentProviderModelUpdate{
-				Provider: &unsupported,
-			},
-		})
-		if !errors.Is(err, operatorsettings.ErrDocumentUnsupported) {
-			t.Fatalf("unsupported provider error = %v, want ErrDocumentUnsupported", err)
-		}
-
-		_, err = root.ResolveEffective(operatorsettings.ResolveEffectiveRequest{
-			InvocationOverrides: operatorsettings.EffectiveOverrideFacts{
-				WorkerModelProvider: "unsupported-provider",
-			},
-			ConfigPath: configPath,
-		})
-		if !errors.Is(err, operatorsettings.ErrResolutionUnsupportedOverride) {
-			t.Fatalf("unsupported override error = %v, want ErrResolutionUnsupportedOverride", err)
-		}
-
-		_, err = root.ResolveEffective(operatorsettings.ResolveEffectiveRequest{
-			InvocationOverrides: operatorsettings.EffectiveOverrideFacts{
-				WorkerModelProvider: "DEFAULT",
-			},
-			ConfigPath: configPath,
-		})
-		if !errors.Is(err, operatorsettings.ErrResolutionInvalidInput) {
-			t.Fatalf("unresolved DEFAULT error = %v, want ErrResolutionInvalidInput", err)
-		}
-
-		expected := operatorsettings.DocumentDefaults{
-			WorkerModelProvider: "codex",
-			WorkerModel:         "gpt-5",
-		}
-		stale := operatorsettings.DocumentDefaults{
-			WorkerModelProvider: "claude",
-			WorkerModel:         "gpt-5",
-		}
-		_, err = root.ResolveEffective(operatorsettings.ResolveEffectiveRequest{
-			DocumentBaseline:         stale,
-			ExpectedDocumentBaseline: &expected,
-			ConfigPath:               configPath,
-		})
-		if !errors.Is(err, operatorsettings.ErrResolutionConflict) {
-			t.Fatalf("baseline conflict error = %v, want ErrResolutionConflict", err)
-		}
+	model := "gpt-5.2"
+	updated, err := service.ApplyDocumentUpdate(operatorsettings.ApplyDocumentUpdateRequest{
+		Path:                 configPath,
+		ExpectedBackendScope: scopeID,
+		ProviderModel: operatorsettings.DocumentProviderModelUpdate{
+			Model: &model,
+		},
 	})
+	if err != nil {
+		t.Fatalf("ApplyDocumentUpdate() = %v", err)
+	}
+	if !updated.Persisted || updated.Document.BackendScopeID != scopeID {
+		t.Fatalf("ApplyDocumentUpdate() = %#v, want persisted document with scope %q", updated, scopeID)
+	}
+
+	_, err = service.ApplyDocumentUpdate(operatorsettings.ApplyDocumentUpdateRequest{
+		Path:                 configPath,
+		ExpectedBackendScope: "local-stale-scope",
+		ProviderModel: operatorsettings.DocumentProviderModelUpdate{
+			Model: &model,
+		},
+	})
+	if !errors.Is(err, operatorsettings.ErrDocumentConflict) {
+		t.Fatalf("stale scope error = %v, want ErrDocumentConflict", err)
+	}
+}
+
+// TestRootWireBehavioralBoundary_PublishedServicePreservesTypedFailures
+// constructs Operator Settings through its wire boundary and proves the
+// published document and effective-resolution errors retain their typed forms.
+func TestRootWireBehavioralBoundary_PublishedServicePreservesTypedFailures(t *testing.T) {
+	internaltestlink.RegisterComposition()
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	configPath := filepath.Join(homeDir, "config.json")
+	if err := os.WriteFile(configPath, []byte(`{
+		"defaults": {
+			"workerModelProvider": "codex",
+			"workerModel": "gpt-5"
+		}
+	}`), 0o600); err != nil {
+		t.Fatalf("WriteFile(config): %v", err)
+	}
+
+	root := newRootWireBehavioralService(t)
+
+	_, err := root.LoadDocument(operatorsettings.LoadDocumentRequest{})
+	if !errors.Is(err, operatorsettings.ErrDocumentMalformed) {
+		t.Fatalf("empty load path error = %v, want ErrDocumentMalformed", err)
+	}
+
+	_, err = root.LoadDocument(operatorsettings.LoadDocumentRequest{
+		Path:            filepath.Join(homeDir, "missing.json"),
+		RequireExisting: true,
+	})
+	if !errors.Is(err, operatorsettings.ErrDocumentNotFound) {
+		t.Fatalf("missing required document error = %v, want ErrDocumentNotFound", err)
+	}
+
+	unsupported := "unsupported-provider"
+	_, err = root.ApplyDocumentUpdate(operatorsettings.ApplyDocumentUpdateRequest{
+		Path: configPath,
+		ProviderModel: operatorsettings.DocumentProviderModelUpdate{
+			Provider: &unsupported,
+		},
+	})
+	if !errors.Is(err, operatorsettings.ErrDocumentUnsupported) {
+		t.Fatalf("unsupported provider error = %v, want ErrDocumentUnsupported", err)
+	}
+
+	_, err = root.ResolveEffective(operatorsettings.ResolveEffectiveRequest{
+		InvocationOverrides: operatorsettings.EffectiveOverrideFacts{
+			WorkerModelProvider: "unsupported-provider",
+		},
+		ConfigPath: configPath,
+	})
+	if !errors.Is(err, operatorsettings.ErrResolutionUnsupportedOverride) {
+		t.Fatalf("unsupported override error = %v, want ErrResolutionUnsupportedOverride", err)
+	}
+
+	_, err = root.ResolveEffective(operatorsettings.ResolveEffectiveRequest{
+		InvocationOverrides: operatorsettings.EffectiveOverrideFacts{
+			WorkerModelProvider: "DEFAULT",
+		},
+		ConfigPath: configPath,
+	})
+	if !errors.Is(err, operatorsettings.ErrResolutionInvalidInput) {
+		t.Fatalf("unresolved DEFAULT error = %v, want ErrResolutionInvalidInput", err)
+	}
+
+	expected := operatorsettings.DocumentDefaults{
+		WorkerModelProvider: "codex",
+		WorkerModel:         "gpt-5",
+	}
+	stale := operatorsettings.DocumentDefaults{
+		WorkerModelProvider: "claude",
+		WorkerModel:         "gpt-5",
+	}
+	_, err = root.ResolveEffective(operatorsettings.ResolveEffectiveRequest{
+		DocumentBaseline:         stale,
+		ExpectedDocumentBaseline: &expected,
+		ConfigPath:               configPath,
+	})
+	if !errors.Is(err, operatorsettings.ErrResolutionConflict) {
+		t.Fatalf("baseline conflict error = %v, want ErrResolutionConflict", err)
+	}
 }
 
 func newRootWireBehavioralService(t *testing.T) operatorsettings.Service {
