@@ -2,9 +2,9 @@
 //
 // Wire performs construction only, returns the singular factoryvisualization.Service
 // interface, and starts no lifecycle components. Parent-private activation_lifecycle,
-// live_view_projection, and response_event_presentation owner wiring stays inside
-// the owner service assembly path; peers depend on Root rather than owner internals
-// or construction ports.
+// live_view_projection, and response_event_presentation capabilities remain behind
+// this boundary; peers depend on Root rather than owner internals or construction
+// ports.
 package wire
 
 import (
@@ -39,7 +39,8 @@ func NewRoot(
 	case sink == nil:
 		return nil, fmt.Errorf("construct Factory Visualization: presentation sink is required")
 	}
-	root, err := internalservice.New(source, peer, clock, sink, reportError)
+	presentation := responseeventpresentationwire.NewService()
+	root, err := internalservice.New(source, peer, clock, sink, presentation, reportError)
 	if err != nil {
 		return nil, err
 	}

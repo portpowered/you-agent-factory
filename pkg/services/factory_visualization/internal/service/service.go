@@ -11,6 +11,7 @@ import (
 	activationlifecyclewire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/activation_lifecycle/wire"
 	liveviewprojection "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection"
 	liveviewprojectionwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection/wire"
+	responseeventpresentation "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/response_event_presentation"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
@@ -20,7 +21,7 @@ type Service struct {
 	activation activationlifecycle.Service
 	projection liveviewprojection.Service
 
-	presentationOwner responsePresentationOwner
+	presentationOwner responseeventpresentation.Service
 
 	source      Source
 	recordings  recordings.Service
@@ -39,6 +40,7 @@ func New(
 	peer recordings.ProjectionService,
 	clock Clock,
 	sink Sink,
+	presentation responseeventpresentation.Service,
 	reportError ErrorReporter,
 ) (*Service, error) {
 	switch {
@@ -50,6 +52,8 @@ func New(
 		return nil, errors.New("initialize Factory visualization: clock is required")
 	case sink == nil:
 		return nil, errors.New("initialize Factory visualization: presentation sink is required")
+	case presentation == nil:
+		return nil, errors.New("initialize Factory visualization: response event presentation service is required")
 	}
 	recordingsPeer, err := recordingsPeerFromProjectionService(peer)
 	if err != nil {
@@ -78,7 +82,7 @@ func New(
 	return assembleRoot(
 		activation,
 		projection,
-		defaultResponsePresentationOwner(),
+		presentation,
 		source,
 		recordingsPeer,
 		clock,

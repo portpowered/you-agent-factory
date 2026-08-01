@@ -9,6 +9,8 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	liveviewprojection "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/live_view_projection"
+	responseeventpresentation "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/response_event_presentation"
+	responseeventpresentationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/services/response_event_presentation/wire"
 	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/testing/recordingsstub"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
@@ -29,17 +31,20 @@ func TestNewRejectsMissingDependencies(t *testing.T) {
 		want string
 	}{
 		{"source", func() (*Service, error) {
-			return New(nil, projections, clock, sink, nil)
+			return New(nil, projections, clock, sink, newPresentationOwner(), nil)
 		}, "event source"},
 		{"projections", func() (*Service, error) {
-			return New(source, nil, clock, sink, nil)
+			return New(source, nil, clock, sink, newPresentationOwner(), nil)
 		}, "projection service"},
 		{"clock", func() (*Service, error) {
-			return New(source, projections, nil, sink, nil)
+			return New(source, projections, nil, sink, newPresentationOwner(), nil)
 		}, "clock"},
 		{"sink", func() (*Service, error) {
-			return New(source, projections, clock, nil, nil)
+			return New(source, projections, clock, nil, newPresentationOwner(), nil)
 		}, "presentation sink"},
+		{"presentation", func() (*Service, error) {
+			return New(source, projections, clock, sink, nil, nil)
+		}, "response event presentation service"},
 	}
 	for _, test := range tests {
 		test := test
@@ -51,6 +56,10 @@ func TestNewRejectsMissingDependencies(t *testing.T) {
 			}
 		})
 	}
+}
+
+func newPresentationOwner() responseeventpresentation.Service {
+	return responseeventpresentationwire.NewService()
 }
 
 // FND-12 captured visualization-activation success baseline: Start against a
@@ -99,6 +108,7 @@ func TestServiceProjectsRetainedAndLiveFactoryEvents(t *testing.T) {
 		projections,
 		fixedClock{now: now},
 		SinkFunc(func(view View) { rendered <- view }),
+		newPresentationOwner(),
 		nil,
 	)
 	if err != nil {
@@ -151,6 +161,7 @@ func TestServiceReportsProjectionReadFailureWithoutStoppingSubscription(t *testi
 		&recordingsstub.Service{},
 		fixedClock{},
 		SinkFunc(func(View) { t.Fatal("sink called after snapshot failure") }),
+		newPresentationOwner(),
 		func(err error) { reported <- err },
 	)
 	if err != nil {
@@ -193,6 +204,7 @@ func TestServiceRootLifecycleInertConstructionAndTypedActivate(t *testing.T) {
 		&recordingsstub.Service{},
 		fixedClock{now: time.Unix(1, 0)},
 		SinkFunc(func(View) { presentCalls++ }),
+		newPresentationOwner(),
 		nil,
 	)
 	if err != nil {
@@ -261,6 +273,7 @@ func TestServiceRootObserveDetachedViewAndTypedFailures(t *testing.T) {
 		&recordingsstub.Service{},
 		fixedClock{now: now},
 		SinkFunc(func(View) {}),
+		newPresentationOwner(),
 		nil,
 	)
 	if err != nil {
@@ -290,6 +303,7 @@ func TestServiceRootObserveDetachedViewAndTypedFailures(t *testing.T) {
 		},
 		fixedClock{now: now},
 		SinkFunc(func(View) {}),
+		newPresentationOwner(),
 		nil,
 	)
 	if err != nil {
@@ -306,6 +320,7 @@ func TestServiceRootObserveDetachedViewAndTypedFailures(t *testing.T) {
 		&recordingsstub.Service{},
 		fixedClock{now: now},
 		SinkFunc(func(View) {}),
+		newPresentationOwner(),
 		nil,
 	)
 	if err != nil {
@@ -365,6 +380,7 @@ func mustNewRootPresentationService(t *testing.T) *Service {
 		&recordingsstub.Service{},
 		fixedClock{now: time.Unix(1, 0)},
 		SinkFunc(func(View) {}),
+		newPresentationOwner(),
 		nil,
 	)
 	if err != nil {
@@ -444,7 +460,7 @@ func assertServicePresentationTypedFailures(t *testing.T, root Root, service *Se
 	writer := newGatedPresentationWriter()
 	blockedSession.mu.Lock()
 	_ = blockedSession.output.CloseAndDrain()
-	blockedSession.output = openBestEffortOutput(writer)
+	blockedSession.output = service.presentationOwner.OpenBestEffortOutput(writer)
 	blockedSession.closed = false
 	blockedSession.finalized = false
 	blockedSession.mu.Unlock()

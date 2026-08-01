@@ -156,9 +156,9 @@ func (s *Service) OpenPresentation(
 	var output Output
 	switch req.Mode {
 	case PresentationDeliveryBestEffort:
-		output = s.openBestEffortOutput(writer)
+		output = s.presentationOwner.OpenBestEffortOutput(writer)
 	case PresentationDeliveryLossless:
-		output = s.openLosslessOutput(writer)
+		output = s.presentationOwner.OpenLosslessOutput(writer)
 	default:
 		return OpenPresentationResult{}, &PresentationError{
 			Kind:    PresentationErrorInvalidInput,
