@@ -86,14 +86,59 @@ func TestMapPackageRecordingsMoveDestinations(t *testing.T) {
 			},
 		},
 		{
-			path:        "pkg/services/recordings/internal/services/replay/replay",
-			wantRetain:  true,
-			retainOwner: "recordings",
+			path: "pkg/services/recordings/internal/artifacts",
+			wantMove: &ownershipinventory.PackageRow{
+				PackagePath:       "pkg/services/recordings/internal/artifacts",
+				Disposition:       ownershipinventory.DispositionMove,
+				Destination:       "recordings",
+				DestinationKind:   ownershipinventory.DestinationKindOwner,
+				Successor:         "pkg/services/recordings/internal/services/artifacts_export",
+				DeletionCondition: "delete public package after IMP-REC-artifacts_export private subservice cutover proof",
+			},
 		},
 		{
-			path:        "pkg/services/recordings/internal/services/replay/replay/clocktests",
-			wantRetain:  true,
-			retainOwner: "recordings",
+			path: "pkg/services/recordings/internal/events/kinds",
+			wantMove: &ownershipinventory.PackageRow{
+				PackagePath:       "pkg/services/recordings/internal/events/kinds",
+				Disposition:       ownershipinventory.DispositionMove,
+				Destination:       "recordings",
+				DestinationKind:   ownershipinventory.DestinationKindOwner,
+				Successor:         "pkg/services/recordings/internal/services/canonical_ledger",
+				DeletionCondition: "delete public package after IMP-REC-canonical_ledger private subservice cutover proof",
+			},
+		},
+		{
+			path: "pkg/services/recordings/internal/projections/dashboard",
+			wantMove: &ownershipinventory.PackageRow{
+				PackagePath:       "pkg/services/recordings/internal/projections/dashboard",
+				Disposition:       ownershipinventory.DispositionMove,
+				Destination:       "recordings",
+				DestinationKind:   ownershipinventory.DestinationKindOwner,
+				Successor:         "pkg/services/recordings/internal/services/projection_query",
+				DeletionCondition: "delete public package after IMP-REC-projection_query private subservice cutover proof",
+			},
+		},
+		{
+			path: "pkg/services/recordings/internal/replay",
+			wantMove: &ownershipinventory.PackageRow{
+				PackagePath:       "pkg/services/recordings/internal/replay",
+				Disposition:       ownershipinventory.DispositionMove,
+				Destination:       "recordings",
+				DestinationKind:   ownershipinventory.DestinationKindOwner,
+				Successor:         "pkg/services/recordings/internal/services/replay",
+				DeletionCondition: "delete public package after IMP-REC-replay private subservice cutover proof",
+			},
+		},
+		{
+			path: "pkg/services/recordings/internal/replay/clocktests",
+			wantMove: &ownershipinventory.PackageRow{
+				PackagePath:       "pkg/services/recordings/internal/replay/clocktests",
+				Disposition:       ownershipinventory.DispositionMove,
+				Destination:       "recordings",
+				DestinationKind:   ownershipinventory.DestinationKindOwner,
+				Successor:         "pkg/services/recordings/internal/services/replay",
+				DeletionCondition: "delete public package after IMP-REC-replay private subservice cutover proof",
+			},
 		},
 	}
 

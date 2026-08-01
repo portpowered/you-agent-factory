@@ -19,8 +19,8 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	models "github.com/portpowered/infinite-you/pkg/services/models"
-	inference "github.com/portpowered/infinite-you/pkg/services/providers/inference"
+	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
+	inference "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 )
 
 func TestMain(m *testing.M) {
@@ -91,8 +91,8 @@ type rootRecordingModelHostLauncher struct {
 
 func (launcher *rootRecordingModelHostLauncher) Start(
 	context.Context,
-	models.HostProcessStartSpec,
-) (models.HostManagedProcess, error) {
+	modelswire.HostProcessStartSpec,
+) (modelswire.HostManagedProcess, error) {
 	launcher.starts++
 	panic("model host process launcher called during inert construction")
 }

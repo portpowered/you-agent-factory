@@ -13,20 +13,21 @@ import (
 // Exact documented leaf-effect ports that may be imported across owners.
 // This is not a private-root catalog; each entry is an approved contract path.
 var approvedPeerServiceContractImports = map[string]struct{}{
-	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty":                                                        {},
-	"pkg/platform/pty\x00github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty":                                                          {},
-	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/providers/inference":                                    {},
-	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/automations":                                         {},
-	"pkg/services/factory_runtime\x00github.com/portpowered/infinite-you/pkg/services/providers/inference":                          {},
-	"pkg/services/factory_runtime/internal/services/instance_host/build\x00github.com/portpowered/infinite-you/pkg/services/providers/inference":                    {},
-	"pkg/services/factory_sessions\x00github.com/portpowered/infinite-you/pkg/services/providers/inference":                         {},
-	"pkg/services/factory_sessions/internal/execution\x00github.com/portpowered/infinite-you/pkg/services/providers/inference":      {},
-	"pkg/services/factory_sessions/internal/runtimeopening\x00github.com/portpowered/infinite-you/pkg/services/providers/inference": {},
-	"pkg/services/factory_sessions/internal/executionopening\x00github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty":                   {},
-	"pkg/services/factory_sessions/internal/runtimeopening\x00github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty":                     {},
-	"pkg/services/recordings\x00github.com/portpowered/infinite-you/pkg/services/providers/inference":                               {},
-	"pkg/services/recordings/internal/services/artifacts_export/artifacts\x00github.com/portpowered/infinite-you/pkg/services/providers/inference": {},
-	"pkg/services/recordings/internal/services/replay/replay\x00github.com/portpowered/infinite-you/pkg/services/providers/inference": {},
+	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty":                                      {},
+	"pkg/platform/pty\x00github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty":                                        {},
+	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                                                                                          {},
+	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/automations":                                                                                             {},
+	"pkg/services/edges\x00github.com/portpowered/infinite-you/pkg/services/models/wire":                                                                                             {},
+	"pkg/services/factory_runtime\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                                                                                {},
+	"pkg/services/factory_runtime/internal/services/instance_host/build\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                                          {},
+	"pkg/services/factory_sessions\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                                                                               {},
+	"pkg/services/factory_sessions/internal/execution\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                                                            {},
+	"pkg/services/factory_sessions/internal/runtimeopening\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                                                       {},
+	"pkg/services/factory_sessions/internal/executionopening\x00github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty": {},
+	"pkg/services/factory_sessions/internal/runtimeopening\x00github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/agy/agypty":   {},
+	"pkg/services/recordings\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                                                                                     {},
+	"pkg/services/recordings/internal/artifacts\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                                                                  {},
+	"pkg/services/recordings/internal/replay\x00github.com/portpowered/infinite-you/pkg/services/providers/wire":                                                                     {},
 }
 
 func isApprovedPeerServiceContractImport(packagePath, importPath string) bool {
@@ -165,5 +166,3 @@ func scanPeerServiceImports(
 	}
 	return findings, nil
 }
-
-

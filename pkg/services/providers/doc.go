@@ -9,11 +9,13 @@
 //   - detached request, result, value, and typed-error contracts
 //
 // Construction/process-edge ports exist so Wire and owner constructors can
-// assemble a production Service. They are not the peer-facing source of truth
-// for catalog enumeration, availability/capability facts, or one normalized
-// execution attempt: cross-service callers invoke Service methods without
-// supplying Workers provider registry/conductor types, concrete adapters, or
-// transport/UI concerns.
+// assemble a production Service. The compatibility registration vocabulary is
+// owned by providers/wire and is not a second peer-facing Providers contract.
+// The root is the source of truth for catalog enumeration,
+// availability/capability facts, and one normalized execution attempt:
+// cross-service callers invoke Service methods without supplying Workers
+// provider registry/conductor types, concrete adapters, or transport/UI
+// concerns.
 //
 // Transitional pkg/services/providers/internal/services/execution/internal/provider/** implementations remain in place
 // for later IMP-PROV-* absorption. Nested catalog/execution implementation

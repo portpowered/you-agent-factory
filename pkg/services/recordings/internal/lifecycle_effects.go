@@ -8,7 +8,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
-	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/replay"
+	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay"
 )
 
 // NewRecordingSnapshotWriter adapts policy-free byte persistence to the

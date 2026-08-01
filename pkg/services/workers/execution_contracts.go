@@ -2,6 +2,7 @@ package workers
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
@@ -333,7 +334,15 @@ type ProviderSessionMetadata = providersessions.Metadata
 // diagnostics. Cursor keeps the CLI command name `agent` but stores `cursor`
 // as the provider-session contract.
 func CanonicalProviderSessionProvider(provider string) string {
-	return providersessions.CanonicalProvider(provider)
+	trimmed := strings.TrimSpace(provider)
+	switch trimmed {
+	case "", "cursor":
+		return trimmed
+	case "agent", "cursor-agent", "cursor-cli":
+		return "cursor"
+	default:
+		return trimmed
+	}
 }
 
 // WorkOutcome distinguishes the result routing behavior for worker output.
@@ -505,8 +514,14 @@ func FailureDecisionFromMetadata(metadata *WorkFailureMetadata) WorkFailureDecis
 	}
 }
 
+// CloneProviderSessionMetadata returns a detached provider-session metadata
+// value for Worker-owned execution and stream contracts.
 func CloneProviderSessionMetadata(session *ProviderSessionMetadata) *ProviderSessionMetadata {
-	return providersessions.CloneMetadata(session)
+	if session == nil {
+		return nil
+	}
+	clone := *session
+	return &clone
 }
 
 func CloneWorkFailureMetadata(failure *WorkFailureMetadata) *WorkFailureMetadata {

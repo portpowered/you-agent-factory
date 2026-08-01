@@ -1,11 +1,11 @@
 package service
 
 import (
-	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
+	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 	hostleases "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases"
 	leaseswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases/wire"
-	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 )
 
@@ -15,11 +15,11 @@ import (
 func NewWired(
 	scopes runtimescopes.Service,
 	assets scopedassets.Service,
-	processLauncher models.HostProcessLauncher,
-	hostHTTP models.HostHTTPDoer,
-	hostClock models.HostClock,
-	hostLogger models.HostDiagnosticLogger,
-	hostMetrics models.HostMetricsRecorder,
+	processLauncher modelseffects.HostProcessLauncher,
+	hostHTTP modelseffects.HostHTTPDoer,
+	hostClock modelseffects.HostClock,
+	hostLogger modelseffects.HostDiagnosticLogger,
+	hostMetrics modelseffects.HostMetricsRecorder,
 ) (runtimehost.Service, error) {
 	adapter := &slotFactsAdapter{}
 	leases, err := leaseswire.NewService(hostClock, adapter)

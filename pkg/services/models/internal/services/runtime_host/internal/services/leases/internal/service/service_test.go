@@ -7,8 +7,10 @@ import (
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	hostleases "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases/internal/service"
+	leaseswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases/wire"
 	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 )
 
@@ -511,7 +513,7 @@ func TestReleaseModelLeaseNotifiesCapacityCoordinator(t *testing.T) {
 	scope := mustRuntimeScopeRef(t, "leases-coordinator")
 	coordinator := &recordingSlotCapacityCoordinator{}
 	leasesSvc := internalservice.New(fixedHostClock{}, readySlotFacts{capacity: 1})
-	hostleases.BindCoordinator(leasesSvc, coordinator)
+	leaseswire.BindCoordinator(leasesSvc, coordinator)
 
 	acquired, err := leasesSvc.AcquireModelLease(context.Background(), models.AcquireModelLeaseRequest{
 		Scope:  scope,
@@ -592,7 +594,7 @@ func (clock *recordingHostClock) Now() time.Time {
 	return time.Unix(0, 0)
 }
 
-func (clock *recordingHostClock) NewTimer(time.Duration) models.HostTimer {
+func (clock *recordingHostClock) NewTimer(time.Duration) modelseffects.HostTimer {
 	clock.timerCreates++
 	panic("host timer created during inert leases owner")
 }
@@ -608,7 +610,7 @@ func (clock fixedHostClock) Now() time.Time {
 	return clock.now
 }
 
-func (clock fixedHostClock) NewTimer(time.Duration) models.HostTimer {
+func (clock fixedHostClock) NewTimer(time.Duration) modelseffects.HostTimer {
 	panic("host timer created during leases acquire tests")
 }
 
@@ -620,7 +622,7 @@ func (clock *advanceableHostClock) Now() time.Time {
 	return clock.now
 }
 
-func (clock *advanceableHostClock) NewTimer(time.Duration) models.HostTimer {
+func (clock *advanceableHostClock) NewTimer(time.Duration) modelseffects.HostTimer {
 	panic("host timer created during leases expiry tests")
 }
 
@@ -634,9 +636,9 @@ func (facts readySlotFacts) SlotFacts(
 	ctx context.Context,
 	scope models.RuntimeScopeRef,
 	name string,
-) (hostleases.SlotFacts, error) {
+) (modelseffects.SlotFacts, error) {
 	if name == "not-ready" {
-		return hostleases.SlotFacts{
+		return modelseffects.SlotFacts{
 			Readiness: models.ReadinessStateLoading,
 			Capacity:  facts.capacity,
 		}, nil
@@ -645,7 +647,7 @@ func (facts readySlotFacts) SlotFacts(
 	if readiness == "" {
 		readiness = models.ReadinessStateReady
 	}
-	return hostleases.SlotFacts{
+	return modelseffects.SlotFacts{
 		Readiness:       readiness,
 		Capacity:        facts.capacity,
 		ContendedHolder: facts.contendedHolder,

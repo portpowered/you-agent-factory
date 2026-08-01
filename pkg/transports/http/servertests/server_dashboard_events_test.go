@@ -34,7 +34,7 @@ func newAPITestServer(roles any) *api.Server {
 			invoker = unavailableModelInvoker{}
 		}
 		modelsHandler = modelshttp.NewHandler(
-			modelshttp.NewAdapter(modelsService, invoker, apiModelContentPreparation{}),
+			modelshttp.NewAdapter(modelsService, invoker, apiModelContentPreparation{}, modelHTTPTestScope()),
 			logger,
 		)
 	}
@@ -58,6 +58,14 @@ func newAPITestServer(roles any) *api.Server {
 		nil, nil, nil,
 		logger,
 	)
+}
+
+func modelHTTPTestScope() modelcontract.RuntimeScopeRef {
+	scope, err := (modelcontract.RuntimeScopeRef{}).Parse("factory-session:http-transport-test")
+	if err != nil {
+		panic(err)
+	}
+	return scope
 }
 
 type apiModelContentPreparation struct{}

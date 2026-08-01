@@ -10,6 +10,7 @@ import (
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	hostleases "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases/internal/service"
 )
@@ -490,7 +491,7 @@ func (clock *mutexAdvanceableHostClock) Now() time.Time {
 	return clock.now
 }
 
-func (clock *mutexAdvanceableHostClock) NewTimer(time.Duration) models.HostTimer {
+func (clock *mutexAdvanceableHostClock) NewTimer(time.Duration) modelseffects.HostTimer {
 	panic("host timer created during leases concurrency tests")
 }
 

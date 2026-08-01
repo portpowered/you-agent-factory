@@ -1219,21 +1219,6 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/automations/contracts.go",
-      "target": "NewPreparedInvocationSchedules"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/automations/hosted_effects.go",
-      "target": "NewHostedLinearSecretResolver"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/automations/hosted_sources_factory.go",
-      "target": "NewHostedSourcesFactory"
-    },
-    {
-      "rule": "service-root-exported-function",
       "filePath": "pkg/services/automations/internal/services/hosted_sources/service.go",
       "target": "NewCheckpointStore"
     },
@@ -1599,46 +1584,6 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_visualization/assemble_root.go",
-      "target": "ActivationEventSource"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_visualization/assemble_root.go",
-      "target": "ActivationViewSink"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_visualization/assemble_root.go",
-      "target": "AssembleRoot"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_visualization/assemble_root.go",
-      "target": "ProjectionSink"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_visualization/recordings_peer.go",
-      "target": "RecordingsPeerFromProjectionService"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_visualization/response_presentation.go",
-      "target": "NewResponsePresentation"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_visualization/runtime_source.go",
-      "target": "NewCurrentRuntimeSource"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_visualization/service.go",
-      "target": "New"
-    },
-    {
-      "rule": "service-root-exported-function",
       "filePath": "pkg/services/models/assets_contract.go",
       "target": "ValidatePullModelRequest"
     },
@@ -1661,11 +1606,6 @@
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/models/host_contract.go",
       "target": "ValidateReleaseLeaseRequest"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/models/internal/services/runtime_host/internal/services/leases/service.go",
-      "target": "BindCoordinator"
     },
     {
       "rule": "service-root-exported-function",
@@ -1719,16 +1659,6 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/provider_sessions/contracts.go",
-      "target": "CanonicalProvider"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/provider_sessions/contracts.go",
-      "target": "CloneMetadata"
-    },
-    {
-      "rule": "service-root-exported-function",
       "filePath": "pkg/services/providers/selection_contract.go",
       "target": "ResolveIdentity"
     },
@@ -1741,36 +1671,6 @@
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/providers/selection_contract.go",
       "target": "ValidatePrerequisites"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/recordings/contracts.go",
-      "target": "BuildFactoryWorldWorkstationRequestProjectionSlice"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/recordings/internal/services/recording_lifecycle/live_recording_target.go",
-      "target": "NewLiveRecordingTargetPlanner"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/recordings/metadata.go",
-      "target": "FactoryMetadataWarnings"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/recordings/portable_recording_build.go",
-      "target": "BuildPortableRecording"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/recordings/portable_recording_validate.go",
-      "target": "DecodePortableRecording"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/recordings/portable_recording_validate.go",
-      "target": "ValidatePortableRecording"
     },
     {
       "rule": "service-root-exported-function",
@@ -2409,11 +2309,6 @@
     },
     {
       "rule": "service-root-interface-count",
-      "filePath": "pkg/services/automations",
-      "target": "pkg/services/automations/contracts.go:Clock,pkg/services/automations/contracts.go:FilesystemInputReader,pkg/services/automations/contracts.go:FilesystemWatcher,pkg/services/automations/contracts.go:FilesystemWatcherFactory,pkg/services/automations/contracts.go:HostedPollers,pkg/services/automations/contracts.go:InvocationScheduleService,pkg/services/automations/contracts.go:Service,pkg/services/automations/hosted_effects.go:HostedLinearClock,pkg/services/automations/hosted_effects.go:HostedLinearHTTPDoer,pkg/services/automations/hosted_effects.go:HostedRuntimePaths"
-    },
-    {
-      "rule": "service-root-interface-count",
       "filePath": "pkg/services/automations/internal/services/filesystem_watchers",
       "target": "pkg/services/automations/internal/services/filesystem_watchers/service.go:HandledIdentities,pkg/services/automations/internal/services/filesystem_watchers/service.go:InputFileSystem,pkg/services/automations/internal/services/filesystem_watchers/service.go:Service,pkg/services/automations/internal/services/filesystem_watchers/service.go:Watcher"
     },
@@ -2454,11 +2349,6 @@
     },
     {
       "rule": "service-root-interface-count",
-      "filePath": "pkg/services/factory_visualization",
-      "target": "pkg/services/factory_visualization/response_presentation.go:ResponsePresentation,pkg/services/factory_visualization/response_presentation.go:responsePresentationOwner,pkg/services/factory_visualization/root_contract.go:Root,pkg/services/factory_visualization/service.go:Sink"
-    },
-    {
-      "rule": "service-root-interface-count",
       "filePath": "pkg/services/factory_visualization/internal/services/activation_lifecycle",
       "target": "pkg/services/factory_visualization/internal/services/activation_lifecycle/service.go:Clock,pkg/services/factory_visualization/internal/services/activation_lifecycle/service.go:EventSource,pkg/services/factory_visualization/internal/services/activation_lifecycle/service.go:Service,pkg/services/factory_visualization/internal/services/activation_lifecycle/service.go:ViewSink"
     },
@@ -2469,21 +2359,6 @@
     },
     {
       "rule": "service-root-interface-count",
-      "filePath": "pkg/services/models",
-      "target": "pkg/services/models/host_diagnostics_contract.go:HostDiagnosticLogger,pkg/services/models/host_diagnostics_contract.go:HostMetricsRecorder,pkg/services/models/invocation_artifacts.go:InvocationArtifactExporter,pkg/services/models/invocation_artifacts.go:InvocationArtifactFileSystem,pkg/services/models/managed_runtime_contract.go:InvocationReadinessError,pkg/services/models/runtime_construction_contract.go:AssetHTTPDoer,pkg/services/models/runtime_construction_contract.go:HostClock,pkg/services/models/runtime_construction_contract.go:HostHTTPDoer,pkg/services/models/runtime_construction_contract.go:HostManagedProcess,pkg/services/models/runtime_construction_contract.go:HostProcessLauncher,pkg/services/models/runtime_construction_contract.go:HostTimer,pkg/services/models/runtime_construction_contract.go:RuntimeHTTPDoer,pkg/services/models/runtime_construction_contract.go:RuntimeTempFile,pkg/services/models/service_contract.go:PullMetricsRecorder,pkg/services/models/service_contract.go:Service"
-    },
-    {
-      "rule": "service-root-interface-count",
-      "filePath": "pkg/services/models/internal/services/inference",
-      "target": "pkg/services/models/internal/services/inference/service.go:InvocationRuntime,pkg/services/models/internal/services/inference/service.go:Service"
-    },
-    {
-      "rule": "service-root-interface-count",
-      "filePath": "pkg/services/models/internal/services/runtime_host/internal/services/leases",
-      "target": "pkg/services/models/internal/services/runtime_host/internal/services/leases/service.go:CoordinatorBindable,pkg/services/models/internal/services/runtime_host/internal/services/leases/service.go:Service,pkg/services/models/internal/services/runtime_host/internal/services/leases/service.go:SlotCapacityCoordinator,pkg/services/models/internal/services/runtime_host/internal/services/leases/service.go:SlotFactsProvider"
-    },
-    {
-      "rule": "service-root-interface-count",
       "filePath": "pkg/services/operator_settings",
       "target": "pkg/services/operator_settings/construction_ports_contract.go:FileSystem,pkg/services/operator_settings/construction_ports_contract.go:TemporaryFile,pkg/services/operator_settings/document_contract.go:DocumentOwner,pkg/services/operator_settings/service_contract.go:Service"
     },
@@ -2491,16 +2366,6 @@
       "rule": "service-root-interface-count",
       "filePath": "pkg/services/providers",
       "target": "pkg/services/providers/acp_configuration_contract.go:ACPConfiguration,pkg/services/providers/lifecycle_contract.go:Lifecycle,pkg/services/providers/service_contract.go:Service"
-    },
-    {
-      "rule": "service-root-interface-count",
-      "filePath": "pkg/services/recordings",
-      "target": "pkg/services/recordings/contracts.go:Clock,pkg/services/recordings/contracts.go:CompletionDeliveryPlanner,pkg/services/recordings/contracts.go:InitialStructureSource,pkg/services/recordings/contracts.go:Ledger,pkg/services/recordings/contracts.go:LiveRecordingTargetPlanner,pkg/services/recordings/contracts.go:ProjectionService,pkg/services/recordings/contracts.go:RecordingClock,pkg/services/recordings/contracts.go:ReplayHook,pkg/services/recordings/contracts.go:RuntimeEventLedger,pkg/services/recordings/contracts.go:RuntimeLedger,pkg/services/recordings/contracts.go:RuntimeRecorder,pkg/services/recordings/contracts.go:Service,pkg/services/recordings/contracts.go:WorkerEventRecorder,pkg/services/recordings/contracts.go:WorkstationRequestProjector,pkg/services/recordings/portable_recording.go:PortableRecordingWriter,pkg/services/recordings/portable_recording.go:RecordingTemporaryFile"
-    },
-    {
-      "rule": "service-root-interface-count",
-      "filePath": "pkg/services/recordings/internal/services/artifacts_export",
-      "target": "pkg/services/recordings/internal/services/artifacts_export/service.go:PortableArtifactPublication,pkg/services/recordings/internal/services/artifacts_export/service.go:Service,pkg/services/recordings/internal/services/artifacts_export/service.go:SnapshotSource"
     },
     {
       "rule": "service-root-interface-count",
@@ -2841,31 +2706,6 @@
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/operator_settings/testdata",
       "target": "pkg/services/operator_settings"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/providers/inference",
-      "target": "pkg/services/providers"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/recordings/internal/services/artifacts_export/artifacts",
-      "target": "pkg/services/recordings/internal/services/artifacts_export"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/recordings/internal/services/canonical_ledger/events",
-      "target": "pkg/services/recordings/internal/services/canonical_ledger"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/recordings/internal/services/projection_query/projections",
-      "target": "pkg/services/recordings/internal/services/projection_query"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/recordings/internal/services/replay/replay",
-      "target": "pkg/services/recordings/internal/services/replay"
     },
     {
       "rule": "service-root-unexpected-directory",

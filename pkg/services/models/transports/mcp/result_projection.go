@@ -25,14 +25,14 @@ type ModelLeaseResult struct {
 
 // InvokeWithLeaseResult is the MCP JSON projection for you.model.invoke_with_lease.
 type InvokeWithLeaseResult struct {
-	Invocation       string                              `json:"Invocation"`
-	Scope            string                              `json:"Scope"`
-	Lease            string                              `json:"Lease"`
-	ModelName        string                              `json:"ModelName"`
-	Operation        string                              `json:"Operation"`
-	Status           models.ModelInvocationStatus        `json:"Status"`
-	Content          []models.InferenceContent           `json:"Content"`
-	Artifacts        []InferenceArtifactResult           `json:"Artifacts"`
+	Invocation       string                            `json:"Invocation"`
+	Scope            string                            `json:"Scope"`
+	Lease            string                            `json:"Lease"`
+	ModelName        string                            `json:"ModelName"`
+	Operation        string                            `json:"Operation"`
+	Status           models.ModelInvocationStatus      `json:"Status"`
+	Content          []models.InferenceContent         `json:"Content"`
+	Artifacts        []InferenceArtifactResult         `json:"Artifacts"`
 	LeaseDisposition models.InvocationLeaseDisposition `json:"LeaseDisposition"`
 }
 

@@ -9,32 +9,34 @@ import (
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
-	hostleases "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases"
-	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
+	hostleases "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases"
+	leaseswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases/wire"
+	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 )
 
 type service struct {
-	scopes          runtimescopes.Service
-	assets          scopedassets.Service
-	leases          hostleases.Service
-	processLauncher models.HostProcessLauncher
-	hostHTTP        models.HostHTTPDoer
-	hostClock       models.HostClock
-	hostLogger      models.HostDiagnosticLogger
-	hostMetrics     models.HostMetricsRecorder
-	supervisor      supervisorSettings
-	mu              sync.Mutex
-	runtimeSlots    map[string]*supervisedRuntime
-	capacityHolders map[string]int
-	idleUnloadTimers map[string]*time.Timer
-	idleUnloadAfter  time.Duration
+	scopes            runtimescopes.Service
+	assets            scopedassets.Service
+	leases            hostleases.Service
+	processLauncher   modelseffects.HostProcessLauncher
+	hostHTTP          modelseffects.HostHTTPDoer
+	hostClock         modelseffects.HostClock
+	hostLogger        modelseffects.HostDiagnosticLogger
+	hostMetrics       modelseffects.HostMetricsRecorder
+	supervisor        supervisorSettings
+	mu                sync.Mutex
+	runtimeSlots      map[string]*supervisedRuntime
+	capacityHolders   map[string]int
+	idleUnloadTimers  map[string]*time.Timer
+	idleUnloadAfter   time.Duration
 	maxLoadedRuntimes int
 }
 
 var _ runtimehost.Service = (*service)(nil)
-var _ hostleases.SlotCapacityCoordinator = (*service)(nil)
+var _ modelseffects.SlotCapacityCoordinator = (*service)(nil)
 
 // New constructs an inert Runtime Host that validates and retains injected
 // supervision effects without launching subprocesses or starting lifecycle.
@@ -42,11 +44,11 @@ func New(
 	scopes runtimescopes.Service,
 	assets scopedassets.Service,
 	leases hostleases.Service,
-	processLauncher models.HostProcessLauncher,
-	hostHTTP models.HostHTTPDoer,
-	hostClock models.HostClock,
-	hostLogger models.HostDiagnosticLogger,
-	hostMetrics models.HostMetricsRecorder,
+	processLauncher modelseffects.HostProcessLauncher,
+	hostHTTP modelseffects.HostHTTPDoer,
+	hostClock modelseffects.HostClock,
+	hostLogger modelseffects.HostDiagnosticLogger,
+	hostMetrics modelseffects.HostMetricsRecorder,
 ) runtimehost.Service {
 	diagnostics := hostDiagnostics{logger: hostLogger, metrics: hostMetrics}
 	supervisor := supervisorSettings{
@@ -75,7 +77,7 @@ func New(
 		idleUnloadAfter:   0,
 		maxLoadedRuntimes: 0,
 	}
-	hostleases.BindCoordinator(leases, s)
+	leaseswire.BindCoordinator(leases, s)
 	return s
 }
 

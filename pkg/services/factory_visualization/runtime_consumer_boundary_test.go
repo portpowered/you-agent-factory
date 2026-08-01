@@ -1,4 +1,4 @@
-package factory_visualization
+package factory_visualization_test
 
 import (
 	"context"
@@ -12,7 +12,9 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	. "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/factory_visualization/internal/testing/recordingsstub"
+	factoryvisualizationwire "github.com/portpowered/infinite-you/pkg/services/factory_visualization/wire"
 )
 
 // TestVisualizationConsumerObservationExercisesRuntimeRoot proves CUT-VIS-RUN story 004:
@@ -47,8 +49,8 @@ func TestVisualizationConsumerObservationExercisesRuntimeRoot(t *testing.T) {
 		},
 	}
 	emitted := make([]View, 0, 2)
-	service, err := New(
-		NewCurrentRuntimeSource(reader),
+	service, err := factoryvisualizationwire.NewRoot(
+		factoryvisualizationwire.NewCurrentRuntimeSource(reader),
 		&recordingsstub.Service{},
 		fixedClock{now: now},
 		SinkFunc(func(view View) {
@@ -88,7 +90,7 @@ func TestVisualizationConsumerObservationExercisesRuntimeRoot(t *testing.T) {
 		t.Fatalf("Observe ObservedAt = %v, want %v", result.View.ObservedAt, now)
 	}
 
-	facts, err := NewCurrentRuntimeSource(reader).GetRuntimeSnapshotFacts(context.Background())
+	facts, err := factoryvisualizationwire.NewCurrentRuntimeSource(reader).GetRuntimeSnapshotFacts(context.Background())
 	if err != nil {
 		t.Fatalf("GetRuntimeSnapshotFacts after Observe: %v", err)
 	}
@@ -124,7 +126,7 @@ func TestVisualizationConsumerObservationFailsClosedWithoutPetriSnapshot(t *test
 	runtimeFactory := &rootObservationOnlyFactory{
 		sessionBoundRuntimeFactory: sessionBoundRuntimeFactory{
 			observation: factoryruntime.Observation{
-				Status: factoryruntime.ObservationStatusActive,
+				Status:   factoryruntime.ObservationStatusActive,
 				Progress: factoryruntime.ObservationProgress{TickCount: 4},
 				Health: factoryruntime.ObservationHealth{
 					FactoryState: "RUNNING",
@@ -137,7 +139,7 @@ func TestVisualizationConsumerObservationFailsClosedWithoutPetriSnapshot(t *test
 			return fn(&factorysessions.LiveRuntime{Factory: runtimeFactory})
 		},
 	}
-	source := NewCurrentRuntimeSource(reader)
+	source := factoryvisualizationwire.NewCurrentRuntimeSource(reader)
 
 	facts, err := source.GetRuntimeSnapshotFacts(context.Background())
 	if err != nil {
@@ -175,8 +177,8 @@ func TestVisualizationConsumerDetachedObservePropagatesRootObserveFailure(t *tes
 			return fn(&factorysessions.LiveRuntime{Factory: runtimeFactory})
 		},
 	}
-	service, err := New(
-		NewCurrentRuntimeSource(reader),
+	service, err := factoryvisualizationwire.NewRoot(
+		factoryvisualizationwire.NewCurrentRuntimeSource(reader),
 		&recordingsstub.Service{},
 		fixedClock{now: time.Unix(1, 0)},
 		SinkFunc(func(View) {}),

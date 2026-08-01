@@ -252,7 +252,7 @@ func (s *Service) ensureInvocationReady(
 		return modelinference.Runtime{}, fmt.Errorf("Models service is not available")
 	}
 	if s.modelsScope.IsZero() {
-		return s.models.InspectRuntime(ctx, modelName)
+		return modelinference.Runtime{}, modelinference.ErrRuntimeScopeInvalid
 	}
 	readiness, err := s.models.GetModelReadiness(ctx, modelinference.GetModelReadinessRequest{
 		Scope:     s.modelsScope,

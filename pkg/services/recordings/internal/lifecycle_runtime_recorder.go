@@ -11,7 +11,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	canonicalpkg "github.com/portpowered/infinite-you/pkg/services/recordings/internal/canonical"
-	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/replay/replay"
+	replayimpl "github.com/portpowered/infinite-you/pkg/services/recordings/internal/replay"
 )
 
 // lifecycleRuntimeRecorder adapts Factory Runtime's focused recording port to

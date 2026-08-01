@@ -13,20 +13,15 @@ func (a *Adapter) ListModels(ctx context.Context) (factoryapi.ListModelsResponse
 	if a == nil || a.models == nil {
 		return factoryapi.ListModelsResponse{}, errModelsServiceRequired
 	}
-	request := listModelsRequestFromHTTP(a.scope)
-	var listed models.List
-	var err error
 	if a.scope.IsZero() {
-		listed, err = a.models.ListModels(ctx)
-	} else {
-		var scoped models.ListModelsResult
-		scoped, err = a.models.ListCatalog(ctx, request)
-		listed.Results = scoped.Models
+		return factoryapi.ListModelsResponse{}, models.ErrRuntimeScopeInvalid
 	}
+	request := listModelsRequestFromHTTP(a.scope)
+	scoped, err := a.models.ListCatalog(ctx, request)
 	if err != nil {
 		return factoryapi.ListModelsResponse{}, err
 	}
-	return listToGenerated(listed), nil
+	return listToGenerated(models.List{Results: scoped.Models}), nil
 }
 
 // GetModel decodes the owned get-model HTTP path input, invokes the accepted
@@ -35,22 +30,18 @@ func (a *Adapter) GetModel(ctx context.Context, modelName string) (factoryapi.Mo
 	if a == nil || a.models == nil {
 		return factoryapi.ModelDetail{}, errModelsServiceRequired
 	}
+	if a.scope.IsZero() {
+		return factoryapi.ModelDetail{}, models.ErrRuntimeScopeInvalid
+	}
 	request, err := getModelRequestFromHTTP(modelName, a.scope)
 	if err != nil {
 		return factoryapi.ModelDetail{}, err
 	}
-	var detail models.Detail
-	if a.scope.IsZero() {
-		detail, err = a.models.GetModel(ctx, request.Name)
-	} else {
-		var scoped models.GetModelResult
-		scoped, err = a.models.GetCatalogModel(ctx, request)
-		detail = scoped.Model
-	}
+	scoped, err := a.models.GetCatalogModel(ctx, request)
 	if err != nil {
 		return factoryapi.ModelDetail{}, err
 	}
-	return detailToGenerated(detail), nil
+	return detailToGenerated(scoped.Model), nil
 }
 
 func listModelsRequestFromHTTP(scope models.RuntimeScopeRef) models.ListModelsRequest {

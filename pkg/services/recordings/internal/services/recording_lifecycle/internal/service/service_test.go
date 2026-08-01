@@ -10,7 +10,7 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	recordings "github.com/portpowered/infinite-you/pkg/services/recordings"
 	recordingsinternal "github.com/portpowered/infinite-you/pkg/services/recordings/internal"
-	recordinglifecycle "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle"
+	lifecycleservice "github.com/portpowered/infinite-you/pkg/services/recordings/internal/services/recording_lifecycle/internal/service"
 )
 
 type unusedLedger struct {
@@ -21,7 +21,7 @@ func TestRecordingsRootSelectsAndBindsOneStableGeneratedTarget(t *testing.T) {
 	t.Parallel()
 
 	identityCalls := 0
-	planner := recordinglifecycle.NewLiveRecordingTargetPlanner(
+	planner := lifecycleservice.NewTargetPlanner(
 		platformclock.NewDeterministic(
 			time.Date(2026, 7, 27, 15, 4, 5, 0, time.UTC),
 			time.Second,

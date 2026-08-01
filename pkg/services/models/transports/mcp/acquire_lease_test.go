@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	testLeaseHolder    = "mcp-worker-1"
-	testLeaseRef       = "model-lease-test-001"
+	testLeaseHolder     = "mcp-worker-1"
+	testLeaseRef        = "model-lease-test-001"
 	testInvokeOperation = "generate"
 )
 

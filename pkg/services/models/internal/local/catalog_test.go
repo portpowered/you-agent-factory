@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	apisurface "github.com/portpowered/infinite-you/pkg/services/models"
-	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/catalog"
 	managedruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/managedruntime"
+	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
 )
 
 func TestCanonicalModelName_NormalizesCaseAndWhitespace(t *testing.T) {

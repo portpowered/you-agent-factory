@@ -8,6 +8,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/models"
@@ -26,7 +27,7 @@ import (
 type ExternalEffects struct {
 	Clock                            factoryruntime.Clock
 	ProviderOverride                 workers.Provider
-	ModelPullMetricsRecorder         models.PullMetricsRecorder
+	ModelPullMetricsRecorder         factorysessioncontracts.ModelPullMetricsRecorder
 	InvocationMetricsRecorder        roles.InvocationMetricsRecorder
 	ProviderCommandRunner            platformprocess.CommandRunner
 	ScriptCommandRunner              platformprocess.CommandRunner
@@ -103,7 +104,7 @@ type WorkersRuntimeFactory = func(
 
 type AutomationHostedSourcesFactory = automations.HostedSourcesFactory
 
-type WorkersLocalRuntimeHooksFactory = func() models.LocalRuntimeHooks
+type WorkersLocalRuntimeHooksFactory = func() workers.LocalRuntimeHooks
 
 type FactoryDefinitionsFactory = func(
 	factorysessions.DefinitionHost,

@@ -6,7 +6,8 @@ import (
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
-	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/host"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
+	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
@@ -29,7 +30,7 @@ func TestServiceOwnsLeaseAndLocalModelInvocation(t *testing.T) {
 	runtime := &leaseTestRuntime{}
 	execution, err := newLocalExecutor(
 		func() *modelRuntimeConfig { return loaded },
-		host, leaseTestAssets{}, runtime, nil, nil, models.LocalRuntimeHooks{},
+		host, leaseTestAssets{}, runtime, nil, nil, modelseffects.LocalRuntimeHooks{},
 		time.Now,
 	)
 	if err != nil {

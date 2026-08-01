@@ -1,10 +1,14 @@
 ## Audit result
 
-The decomposition is structurally far from complete. Twelve of the 13 product-service roots still violate at least one packaged-service rule. The active Providers/Workers package-target, ownership, and boundary ledgers have since been reconciled with the live refactor; the broader service-shape debt remains.
+The decomposition is structurally far from complete. Twelve of the 13
+product-service roots still violate at least one packaged-service rule. The
+Models root has been converged and sealed; the active Providers/Workers
+package-target, ownership, and boundary ledgers have since been reconciled with
+the live refactor, while the broader service-shape debt remains.
 
 The governing rule requires exactly one named interface per service/subservice root, no exported root functions, and only `internal`, `wire`, and `transports` child directories ([general-backend-standards.md](C:/Users/andre/work/portos/infinite-you/docs/internal/standards/code/general-backend-standards.md:144)).
 
-This note was originally captured before the Providers/Workers inventory repair and was updated on 2026-07-31 UTC to record that repair, the System Initialization contract seal, and the remaining scope.
+This note was originally captured before the Providers/Workers inventory repair and was updated on 2026-07-31 UTC to record that repair, the System Initialization and Provider Sessions contract seals, and the remaining scope.
 
 ## 1. Product services still incomplete
 
@@ -12,15 +16,15 @@ These are live counts from production `.go` files, not just the stale baseline:
 
 | Service | Root interfaces | Root exported functions | Noncanonical root directories | Status |
 |---|---:|---:|---|---|
-| `automations` | 7 | 3 | — | Contract not sealed |
+| `automations` | 1 | 0 | — | Root contract sealed; nested subservice debt remains |
 | `factory_definitions` | 31 | 19 | `clonetests`, `definition`, `systeminitializationtests` | Major decomposition remaining |
 | `factory_runtime` | 36 | 50 | `testdata` | Major decomposition remaining |
 | `factory_sessions` | 4 | 13 | — | Contract/transport consolidation remaining |
 | `factory_visualization` | 4 | 20 | — | Contract not sealed |
-| `models` | 15 | 18 | — | Contract not sealed |
+| `models` | 1 | 6 | — | Root and production implementation converged; private compatibility helpers remain |
 | `operator_settings` | 4 | 28 | `testdata` | Root and document implementation debt |
-| `provider_sessions` | 1 | 2 | — | Closest to compliant; remove root helpers |
-| `providers` | 3 | 3 | `inference` | Active refactor is incomplete |
+| `provider_sessions` | 1 | 0 | — | Contract sealed |
+| `providers` | 3 | 3 | — | Active refactor is incomplete |
 | `recordings` | 16 | 19 | — | Root directory cleaned, contract still broad |
 | `system_initialization` | 1 | 0 | — | Contract sealed |
 | `work` | 19 | 138 | `testdata` | Implementation moved, public root still extremely broad |
@@ -108,13 +112,14 @@ The service root also exposes `DefinitionActivationGatewayProvider`, `ExecutionS
 
 ### Models
 
-Still mapped for movement:
-
-- `internal/catalog` → `internal/services/catalog`
-- `internal/host` → `internal/services/runtime_host`
-- `internal/inference` → `internal/services/inference`
-
-The `inference` subservice and nested `runtime_host/.../leases` subservice also declare multiple interfaces.
+The Models root now exposes one `Service` interface and no root construction or
+external-effect ports. Catalog, inference, runtime host, leases, and invocation
+artifact implementation live under the canonical private service tree;
+construction ports are private in `internal/effects` and exposed only through
+the `models/wire` composition boundary. Models CLI/HTTP/MCP, Workers, Factory
+Sessions, Edges, and process wiring use the root contract with explicit runtime
+scope values. Legacy host/catalog helpers remain private and are not imported by
+peers.
 
 ### Operator Settings
 
@@ -161,23 +166,26 @@ ledgers now reflect that state:
 - `providers/internal/services/acp/**` and `providers/internal/services/builtins/**` are recorded under Providers.
 - Deleted provider adapter paths and the deleted `workers/cliprovider` path are no longer inventoried.
 - The remaining `execution/internal/provider/**` entries are explicit transitional Providers move rows.
-- The public `providers/inference` directory remains a structure violation and is deferred to the Providers root-contract packet.
+- The public `providers/inference` compatibility directory was folded into the
+  canonical `providers/wire` process-edge construction boundary by the
+  Providers root-contract packet. The root-level contract inventory and
+  canonical child-directory guard now cover the live Providers surface.
 
 The inventory repair is complete; further provider work is root-contract sealing
 and legacy execution-tree flattening, not reclassifying the live package ledger.
 
 ### Recordings
 
-The public transitional directories have now been removed, despite the older committed prose still listing them. Remaining nested wrappers are:
+The public transitional directories and nested wrapper paths have been removed.
+Artifact, event, projection, and replay implementations now live under the
+private `recordings/internal/{artifacts,events,projections,replay}` packages,
+with package-target ownership pointing at their canonical Recordings subservices.
+`artifacts_export` exposes only its subservice `Service`, and the lifecycle target
+constructor is private behind its `wire` package.
 
-- `artifacts_export/artifacts`
-- `canonical_ledger/events`
-- `projection_query/projections`
-- `replay/replay`
-
-`artifacts_export` also declares three interfaces, and `recording_lifecycle` retains an exported constructor.
-
-The root contract is still too broad: 16 named interfaces in `contracts.go` and `portable_recording.go`.
+The public root now exposes one `Service` interface and transport-neutral value
+vocabulary through `contracts.go`; implementation contract declarations and pure
+portable-recording helpers live under `recordings/internal/contracts`.
 
 ### Work
 
@@ -207,13 +215,12 @@ The old public directories recorded in the baseline have mostly been deleted; th
 
 `workstation_pool_boundary_impl.go` remains explicitly documented as a temporary root implementation exception. It should be relocated once a cycle-free bridge exists.
 
-### Automations, Visualization, and Provider Sessions
+### Automations and Visualization
 
 These do not have significant top-level directory migration debt, but they are not contract-complete:
 
 - Automations subservices `filesystem_watchers` and `script_pollers` expose multiple interfaces; `script_pollers` also exports substantial implementation behavior.
 - Visualization’s two projection/lifecycle subservices each expose four interfaces.
-- Provider Sessions must remove `CanonicalProvider` and `CloneMetadata` as exported root functions.
 
 ## 3. Broken dependency and test contracts
 
@@ -228,13 +235,21 @@ The live checks found these concrete violations:
 
 2. Petri implementation leakage:
 
-   - `pkg-boundary` rejects a Petri public-surface baseline entry covering  
-     `factory_runtime/internal/services/orchestration/definitionmapping/maptests/config_mapper_equivalence_test.go`.
+   - Repaired in the boundary-repair pass. The config-mapper equivalence
+     fixture now uses Runtime-internal Petri/state types, and the Runtime CLI
+     transport test constructs its marking fixture from the owning internal
+     Petri/token packages. Their exact public-surface baseline entries were
+     removed after the scanner confirmed no new or stale Petri findings.
+   - The remaining Petri edges are still tracked by the exact deletion-only
+     baseline for the broader IMP-RUN-01 retirement; this item no longer has an
+     unbaselined `pkg-boundary` violation.
 
 3. Functional test bypass:
 
-   - `tests/functional/providers/acp/daemon_concurrency_test.go` imports `providers/wire`.
-   - It should construct through `root.BuildProcess` and substitute effects through `edges.Edges`.
+   - Repaired in this pass; `tests/functional/workers/agent/root_build_test.go`
+     now constructs through `root.BuildProcess` and exercises only the public
+     process provider-identity capability. No functional test imports
+     `providers/wire` directly.
 
 4. Package-target inventory drift:
 

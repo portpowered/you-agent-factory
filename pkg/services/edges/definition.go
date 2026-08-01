@@ -28,8 +28,9 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/models"
+	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
-	providercontract "github.com/portpowered/infinite-you/pkg/services/providers/inference"
+	providercontract "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -52,28 +53,28 @@ type Edges struct {
 	HostedSecretResolver                            automations.HostedLinearSecretResolver
 	HostedLinearCheckpointStore                     automations.HostedLinearCheckpointStore
 	HostedClock                                     automations.HostedLinearClock
-	ModelAssetHTTPClient                            models.AssetHTTPDoer
+	ModelAssetHTTPClient                            modelswire.AssetHTTPDoer
 	ModelAssetEndpoints                             models.RuntimeAssetEndpoints
 	ModelAssetHostPlatform                          models.AssetHostPlatform
-	ModelAssetMakeDirectories                       models.AssetMakeDirectories
-	ModelAssetInspectPath                           models.AssetInspectPath
-	ModelAssetResolveHomeDirectory                  models.AssetResolveHomeDirectory
-	ModelAssetWriteFile                             models.AssetWriteFile
-	ModelAssetRenamePath                            models.AssetRenamePath
-	ModelAssetRemovePath                            models.AssetRemovePath
-	ModelAssetReadFile                              models.AssetReadFile
-	ModelAssetReadDirectory                         models.AssetReadDirectory
-	ModelAssetCreateFile                            models.AssetCreateFile
-	ModelAssetOpenFile                              models.AssetOpenFile
-	ModelHostProcessLauncher                        models.HostProcessLauncher
-	ModelHostHTTPClient                             models.HostHTTPDoer
-	ModelHostClock                                  models.HostClock
+	ModelAssetMakeDirectories                       modelswire.AssetMakeDirectories
+	ModelAssetInspectPath                           modelswire.AssetInspectPath
+	ModelAssetResolveHomeDirectory                  modelswire.AssetResolveHomeDirectory
+	ModelAssetWriteFile                             modelswire.AssetWriteFile
+	ModelAssetRenamePath                            modelswire.AssetRenamePath
+	ModelAssetRemovePath                            modelswire.AssetRemovePath
+	ModelAssetReadFile                              modelswire.AssetReadFile
+	ModelAssetReadDirectory                         modelswire.AssetReadDirectory
+	ModelAssetCreateFile                            modelswire.AssetCreateFile
+	ModelAssetOpenFile                              modelswire.AssetOpenFile
+	ModelHostProcessLauncher                        modelswire.HostProcessLauncher
+	ModelHostHTTPClient                             modelswire.HostHTTPDoer
+	ModelHostClock                                  modelswire.HostClock
 	ModelRuntimeCommandRunner                       platformprocess.CommandRunner
-	ModelRuntimeHTTPClient                          models.RuntimeHTTPDoer
-	ModelRuntimeInspectFile                         models.RuntimeInspectFile
-	ModelRuntimeTempDirectory                       models.RuntimeTempDirectory
-	ModelRuntimeCreateTempFile                      models.RuntimeCreateTempFile
-	ModelInvocationArtifactFileSystem               models.InvocationArtifactFileSystem
+	ModelRuntimeHTTPClient                          modelswire.RuntimeHTTPDoer
+	ModelRuntimeInspectFile                         modelswire.RuntimeInspectFile
+	ModelRuntimeTempDirectory                       modelswire.RuntimeTempDirectory
+	ModelRuntimeCreateTempFile                      modelswire.RuntimeCreateTempFile
+	ModelInvocationArtifactFileSystem               modelswire.InvocationArtifactFileSystem
 	FactorySessionsWorkingDirectory                 platformfilesystem.WorkingDirectory
 	FactorySessionExecutionOpeningFileSystem        factorysessions.ExecutionOpeningFileSystem
 	FactorySessionDirectoryInspection               factorysessions.DirectoryInspection
@@ -150,7 +151,7 @@ type Edges struct {
 	RuntimeHostObserver              factorysessions.RuntimeHostObserver
 	FactoryVisualizationSink         factoryvisualization.Sink
 	FactoryVisualizationRootObserver factoryvisualization.RootObserver
-	ModelPullMetricsRecorder         models.PullMetricsRecorder
+	ModelPullMetricsRecorder         modelswire.PullMetricsRecorder
 	ProviderOverride                 providercontract.Provider
 	providercontract.ProviderRegistrations
 	WorkersFactoryDocsFileSystem       platformfilesystem.ReadFileTree

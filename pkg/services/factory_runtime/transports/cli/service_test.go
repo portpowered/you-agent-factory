@@ -8,6 +8,8 @@ import (
 	"time"
 
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
+	factorytoken "github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/services/orchestration/token"
 	factoryruntimecli "github.com/portpowered/infinite-you/pkg/services/factory_runtime/transports/cli"
 )
 
@@ -139,8 +141,8 @@ func TestConstructedService_CountTokenStatesMatchesPackageFunction(t *testing.T)
 	t.Parallel()
 
 	service := constructedRuntimeCLIService(t, nil)
-	snap := &factoryruntime.PetriMarkingSnapshot{
-		Tokens: map[string]*factoryruntime.RuntimeToken{
+	snap := &petri.MarkingSnapshot{
+		Tokens: map[string]*factorytoken.Token{
 			"t1": {ID: "t1", PlaceID: "task:todo"},
 			"t2": {ID: "t2", PlaceID: "task:completed"},
 			"t3": {ID: "t3", PlaceID: "task:failed"},
@@ -233,7 +235,7 @@ func assertInvocationFailureParity(
 func assertCountTokenStatesParity(
 	t *testing.T,
 	service factoryruntimecli.Service,
-	snap *factoryruntime.PetriMarkingSnapshot,
+	snap *petri.MarkingSnapshot,
 ) {
 	t.Helper()
 	wipService, doneService, failedService := service.CountTokenStates(snap)

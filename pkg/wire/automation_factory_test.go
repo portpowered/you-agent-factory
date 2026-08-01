@@ -8,6 +8,7 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/services/automations"
+	automationswire "github.com/portpowered/infinite-you/pkg/services/automations/wire"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
@@ -26,7 +27,7 @@ func (automationFactoryCommandRunner) Run(
 func TestProvideAutomationFactoryConstructsThroughAutomationsWire(t *testing.T) {
 	t.Parallel()
 
-	store, err := automations.NewHostedLinearCheckpointStore(platformfilesystem.Local{})
+	store, err := automationswire.NewHostedLinearCheckpointStore(platformfilesystem.Local{})
 	if err != nil {
 		t.Fatalf("NewHostedLinearCheckpointStore() error = %v", err)
 	}

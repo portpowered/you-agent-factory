@@ -6,10 +6,10 @@ import (
 	"sort"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
-	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/catalog"
-	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/host"
+	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	managedruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/managedruntime"
+	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
 )
 
 // Scoped catalog discovery is contract-only until the Models implementation

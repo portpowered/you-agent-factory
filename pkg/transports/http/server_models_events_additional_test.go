@@ -54,18 +54,20 @@ type strictModelsServiceFake struct {
 	pull   func(context.Context, string) (modelinference.PullResult, error)
 }
 
-func (fake strictModelsServiceFake) ListModels(ctx context.Context) (modelinference.List, error) {
+func (fake strictModelsServiceFake) ListCatalog(ctx context.Context, _ modelinference.ListModelsRequest) (modelinference.ListModelsResult, error) {
 	if fake.list == nil {
-		panic("unexpected models.Service.ListModels call")
+		panic("unexpected models.Service.ListCatalog call")
 	}
-	return fake.list(ctx)
+	list, err := fake.list(ctx)
+	return modelinference.ListModelsResult{Models: list.Results}, err
 }
 
-func (fake strictModelsServiceFake) GetModel(ctx context.Context, name string) (modelinference.Detail, error) {
+func (fake strictModelsServiceFake) GetCatalogModel(ctx context.Context, request modelinference.GetModelRequest) (modelinference.GetModelResult, error) {
 	if fake.get == nil {
-		panic("unexpected models.Service.GetModel call")
+		panic("unexpected models.Service.GetCatalogModel call")
 	}
-	return fake.get(ctx, name)
+	detail, err := fake.get(ctx, request.Name)
+	return modelinference.GetModelResult{Model: detail}, err
 }
 
 func (fake strictModelsServiceFake) InvokeModel(ctx context.Context, name string, request modelinference.Request) (modelinference.Result, error) {
@@ -75,21 +77,29 @@ func (fake strictModelsServiceFake) InvokeModel(ctx context.Context, name string
 	return fake.invoke(ctx, name, request)
 }
 
-func (fake strictModelsServiceFake) PullModel(ctx context.Context, name string) (modelinference.PullResult, error) {
+func (fake strictModelsServiceFake) PullModelForScope(ctx context.Context, request modelinference.PullModelRequest) (modelinference.PullResult, error) {
 	if fake.pull == nil {
-		panic("unexpected models.Service.PullModel call")
+		panic("unexpected models.Service.PullModelForScope call")
 	}
-	return fake.pull(ctx, name)
+	return fake.pull(ctx, request.Name)
 }
 
 func newStrictModelTestServer(models strictModelsServiceFake) *Server {
 	logger := zap.NewNop()
 	return newServerFromRoles(
 		nil, nil, nil, nil, nil, nil,
-		modelshttp.NewHandler(modelshttp.NewAdapter(models, models, modelHTTPContentPreparation{}), logger),
+		modelshttp.NewHandler(modelshttp.NewAdapter(models, models, modelHTTPContentPreparation{}, modelHTTPTestScope()), logger),
 		nil, httpFactoryValidator{}, nil,
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, logger,
 	)
+}
+
+func modelHTTPTestScope() modelinference.RuntimeScopeRef {
+	scope, err := (modelinference.RuntimeScopeRef{}).Parse("factory-session:http-transport-test")
+	if err != nil {
+		panic(err)
+	}
+	return scope
 }
 
 type modelHTTPContentPreparation struct{}

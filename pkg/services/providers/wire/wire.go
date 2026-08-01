@@ -3,9 +3,10 @@
 // Wire performs construction only, returns the singular providers.Service root
 // interface, and starts no lifecycle components. Parent-private Catalog and
 // Execution owner wiring stays inside the owner service assembly path; peers
-// depend on Service rather than owner internals or construction ports. Missing
-// required construction ports fail with a deterministic construction error and
-// a nil service.
+// depend on Service rather than owner internals or construction ports. The
+// process-edge registration contract in this package is for root composition,
+// not a second peer-facing Providers service. Missing required construction
+// ports fail with a deterministic construction error and a nil service.
 package wire
 
 import (
@@ -17,7 +18,6 @@ import (
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
-	providerinference "github.com/portpowered/infinite-you/pkg/services/providers/inference"
 	providerservice "github.com/portpowered/infinite-you/pkg/services/providers/internal/service"
 	acpwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/acp/wire"
 	builtinswire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/builtins/wire"
@@ -55,20 +55,20 @@ type wireOptions struct {
 	acpIntegrations      []providers.ACPIntegration
 	commandFactory       platformprocess.CommandFactory
 	executableLocator    platformprocess.ExecutableLocator
-	registrations        providerinference.ProviderRegistrations
+	registrations        ProviderRegistrations
 }
 
 type registrationsOption struct {
-	registrations providerinference.ProviderRegistrations
+	registrations ProviderRegistrations
 }
 
 func (option registrationsOption) apply(config *wireOptions) {
-	config.registrations = append(providerinference.ProviderRegistrations(nil), option.registrations...)
+	config.registrations = append(ProviderRegistrations(nil), option.registrations...)
 }
 
 // WithRegistrations contributes process-edge compatibility integrations.
 // Provider execution still crosses the singular providers.Service boundary.
-func WithRegistrations(registrations ...providerinference.Registration) Option {
+func WithRegistrations(registrations ...Registration) Option {
 	return registrationsOption{registrations: registrations}
 }
 
@@ -220,7 +220,7 @@ func newRoot(
 	acpIntegrations []providers.ACPIntegration,
 	commandFactory platformprocess.CommandFactory,
 	executableLocator platformprocess.ExecutableLocator,
-	externalRegistrations ...providerinference.Registration,
+	externalRegistrations ...Registration,
 ) (providers.Service, error) {
 	if catalogService == nil {
 		return nil, fmt.Errorf("construct Providers: catalog is required")
@@ -258,7 +258,7 @@ func newRoot(
 	return providerservice.NewWithACP(catalogService, executionService, acpService, acpIntegrations, acpService)
 }
 
-func registrationDescriptor(manifest providerinference.Manifest) providers.Descriptor {
+func registrationDescriptor(manifest Manifest) providers.Descriptor {
 	capabilities := []providers.Capability{}
 	if manifest.MaximumExecutionCapabilities.PromptSubmission {
 		capabilities = append(capabilities, providers.CapabilityPromptSubmission)
@@ -279,7 +279,7 @@ func registrationDescriptor(manifest providerinference.Manifest) providers.Descr
 	}
 }
 
-func externalRegistrationAttempt(registration providerinference.Registration) (execution.Registration, error) {
+func externalRegistrationAttempt(registration Registration) (execution.Registration, error) {
 	if registration.Integration == nil {
 		return execution.Registration{}, fmt.Errorf("provider registry validation failed for %q: integration is required", registration.Manifest.ID)
 	}
@@ -290,7 +290,7 @@ func externalRegistrationAttempt(registration providerinference.Registration) (e
 		Provider: providers.ID(registration.Manifest.ID),
 		Attempt: func(ctx context.Context, request providers.ExecuteRequest) (providers.ExecuteResult, error) {
 			writer := &externalResponseWriter{}
-			err := registration.Integration.Invoke(ctx, providerinference.InvocationRequest{
+			err := registration.Integration.Invoke(ctx, InvocationRequest{
 				ID: request.AttemptID, ModelID: request.Model,
 				ReasoningEffort: request.ReasoningEffort, Prompt: request.UserMessage,
 			}, writer)
@@ -316,16 +316,16 @@ func externalRegistrationAttempt(registration providerinference.Registration) (e
 }
 
 type externalResponseWriter struct {
-	completion *providerinference.Completion
+	completion *Completion
 	progress   int
 }
 
-func (writer *externalResponseWriter) WriteEvent(context.Context, providerinference.EventDraft) error {
+func (writer *externalResponseWriter) WriteEvent(context.Context, EventDraft) error {
 	writer.progress++
 	return nil
 }
 
-func (writer *externalResponseWriter) Close(_ context.Context, completion providerinference.Completion) error {
+func (writer *externalResponseWriter) Close(_ context.Context, completion Completion) error {
 	clone := completion
 	writer.completion = &clone
 	return nil
