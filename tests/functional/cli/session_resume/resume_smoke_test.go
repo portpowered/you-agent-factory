@@ -27,6 +27,8 @@ import (
 )
 
 func TestCLIResumeSmoke_InterruptedJavaScriptFactorySessionResumesThroughSharedSessionCommands(t *testing.T) {
+	t.Parallel()
+
 	harness := newCLIResumeSmokeHarness(t)
 	sessionID := harness.startInterruptedSession(t)
 
@@ -74,6 +76,8 @@ func TestCLIResumeSmoke_InterruptedJavaScriptFactorySessionResumesThroughSharedS
 }
 
 func TestCLIResumeSmoke_DurableResumeContinuityPreservesCompletedChildDispatchesWithoutReplay(t *testing.T) {
+	t.Parallel()
+
 	harness := newCLIResumeSmokeHarness(t)
 	sessionID := harness.startInterruptedSession(t)
 
@@ -135,6 +139,8 @@ func TestCLIResumeSmoke_DurableResumeContinuityPreservesCompletedChildDispatches
 }
 
 func TestCLIResumeSmoke_TerminalSessionResumeReturnsTypedRejectionAndPreservesSessionRead(t *testing.T) {
+	t.Parallel()
+
 	harness := newCLIResumeSmokeSucceededHarness(t)
 	sessionID := harness.startSucceededSession(t)
 
@@ -184,6 +190,8 @@ func TestCLIResumeSmoke_TerminalSessionResumeReturnsTypedRejectionAndPreservesSe
 }
 
 func TestCLIResumeSmoke_RunningSessionResumeReturnsTypedNoOpAndPreservesSessionRead(t *testing.T) {
+	t.Parallel()
+
 	harness := newCLIResumeSmokeRunningHarness(t)
 	sessionID := harness.startRunningSession(t)
 

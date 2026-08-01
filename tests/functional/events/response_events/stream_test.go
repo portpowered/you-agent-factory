@@ -48,6 +48,8 @@ const functionalResponseEventRetentionByteLimit = 16 * 1024 * 1024
 // Factory Session reaches the documented response-event session boundary, rather
 // than leaving the SSE connection open indefinitely past that terminal boundary.
 func TestAPIResponseEventStreamClosesAtDocumentedBoundary(t *testing.T) {
+	t.Parallel()
+
 	start := time.Date(2026, 7, 28, 15, 0, 0, 0, time.UTC)
 	fakeClock := clockwork.NewFakeClockAt(start)
 	dir := scaffoldSessionExpiryWorkflow(t)
@@ -129,6 +131,8 @@ func TestAPIResponseEventStreamClosesAtDocumentedBoundary(t *testing.T) {
 // targeted session, without falling back to the default session or conflating
 // the outcome with unknown-session or invalid-cursor errors.
 func TestAPIResponseEventSessionExpiryReturnsTypedGone(t *testing.T) {
+	t.Parallel()
+
 	start := time.Date(2026, 7, 28, 14, 0, 0, 0, time.UTC)
 	fakeClock := clockwork.NewFakeClockAt(start)
 	dir := scaffoldSessionExpiryWorkflow(t)
@@ -205,6 +209,8 @@ func TestAPIResponseEventSessionExpiryReturnsTypedGone(t *testing.T) {
 // predates the currently retained response-event window instead of silently
 // skipping unavailable sequences.
 func TestAPIResponseEventCursorGapEmitsStreamGap(t *testing.T) {
+	t.Parallel()
+
 	loaded := loadCodexPartialStreamGoldenCase(t)
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(
@@ -313,6 +319,8 @@ func TestAPIResponseEventCursorGapEmitsStreamGap(t *testing.T) {
 // FactoryResponseEvent.sequence and then continues with later live matching
 // records on the same connection without reordering retained catch-up history.
 func TestAPIResponseEventSSEStreamsRetainedThenLiveEvents(t *testing.T) {
+	t.Parallel()
+
 	loaded := loadCodexPartialStreamGoldenCase(t)
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "executor_success"))
 	support.WriteAgentConfig(

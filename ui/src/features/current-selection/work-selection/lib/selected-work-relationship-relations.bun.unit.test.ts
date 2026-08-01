@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import type { SelectedWorkRelationshipGraph } from "./selected-work-relationship-graph";
 import { projectSelectedWorkRelationshipGraphToDashboardRelations } from "./selected-work-relationship-relations";
 

@@ -21,8 +21,10 @@ import (
 )
 
 func TestRunServe_RuntimeResumeSmoke_InterruptedSessionResumesThroughMCPControl(t *testing.T) {
+	t.Parallel()
+
 	harness := newMCPRuntimeResumeSmokeHarness(t)
-	client, shutdown, serveErr := startRootRuntimeMCPServer(t, harness.projectRoot, harness.provider)
+	client, shutdown := startRootRuntimeMCPServer(t, harness.projectRoot, harness.provider)
 	assertInstallSmokeInitialize(t, client)
 	assertRuntimeResumeSmokeDiscovery(t, client)
 
@@ -75,12 +77,13 @@ func TestRunServe_RuntimeResumeSmoke_InterruptedSessionResumesThroughMCPControl(
 	}
 
 	shutdown()
-	closeRunServeSmokeServer(t, nil, serveErr)
 }
 
 func TestRunServe_RuntimeResumeSmoke_DispatchContinuityPreservesCompletedChildDispatchesWithoutReplay(t *testing.T) {
+	t.Parallel()
+
 	harness := newMCPRuntimeResumeSmokeHarness(t)
-	client, shutdown, serveErr := startRootRuntimeMCPServer(t, harness.projectRoot, harness.provider)
+	client, shutdown := startRootRuntimeMCPServer(t, harness.projectRoot, harness.provider)
 	assertInstallSmokeInitialize(t, client)
 
 	sessionID := startMCPRuntimeResumeSmokeInterruptedSession(t, client, harness)
@@ -147,12 +150,13 @@ func TestRunServe_RuntimeResumeSmoke_DispatchContinuityPreservesCompletedChildDi
 	}
 
 	shutdown()
-	closeRunServeSmokeServer(t, nil, serveErr)
 }
 
 func TestRunServe_RuntimeResumeSmoke_TerminalSessionResumeReturnsTypedRejectionAndPreservesSessionRead(t *testing.T) {
+	t.Parallel()
+
 	harness := newMCPRuntimeResumeSmokeSucceededHarness(t)
-	client, shutdown, serveErr := startRootRuntimeMCPServer(t, harness.projectRoot, nil)
+	client, shutdown := startRootRuntimeMCPServer(t, harness.projectRoot, nil)
 	assertInstallSmokeInitialize(t, client)
 
 	sessionID := startMCPRuntimeResumeSmokeSucceededSession(t, client)
@@ -197,12 +201,13 @@ func TestRunServe_RuntimeResumeSmoke_TerminalSessionResumeReturnsTypedRejectionA
 	}
 
 	shutdown()
-	closeRunServeSmokeServer(t, nil, serveErr)
 }
 
 func TestRunServe_RuntimeResumeSmoke_RunningSessionResumeReturnsTypedNoOpAndPreservesSessionRead(t *testing.T) {
+	t.Parallel()
+
 	harness := newMCPRuntimeResumeSmokeRunningHarness(t)
-	client, shutdown, serveErr := startRootRuntimeMCPServer(t, harness.projectRoot, nil)
+	client, shutdown := startRootRuntimeMCPServer(t, harness.projectRoot, nil)
 	assertInstallSmokeInitialize(t, client)
 
 	sessionID := startMCPRuntimeResumeSmokeRunningSession(t, client)
@@ -237,7 +242,6 @@ func TestRunServe_RuntimeResumeSmoke_RunningSessionResumeReturnsTypedNoOpAndPres
 	}
 
 	shutdown()
-	closeRunServeSmokeServer(t, nil, serveErr)
 }
 
 type mcpRuntimeResumeSmokeHarness struct {
@@ -286,7 +290,7 @@ func startRootRuntimeMCPServer(
 	t *testing.T,
 	projectRoot string,
 	provider workerprovider.Provider,
-) (*stdioMCPClient, func(), <-chan error) {
+) (*stdioMCPClient, func()) {
 	t.Helper()
 
 	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{ProviderOverride: provider})
@@ -330,22 +334,18 @@ func startRootRuntimeMCPServer(
 			WorkingDirectory: projectRoot,
 		})
 	}()
-	select {
-	case err := <-serveErr:
-		t.Fatalf("start root MCP runtime process: %v; stderr=%s", err, stderr.String())
-	case <-time.After(100 * time.Millisecond):
-	}
 
 	var shutdownOnce sync.Once
 	shutdown := func() {
 		shutdownOnce.Do(func() {
 			cancel()
 			_ = stdinWrite.Close()
+			closeRunServeSmokeServer(t, nil, serveErr)
 		})
 	}
 	t.Cleanup(shutdown)
 
-	return newStdioMCPClient(t, stdinWrite, stdoutRead), shutdown, serveErr
+	return newStdioMCPClient(t, stdinWrite, stdoutRead), shutdown
 }
 
 func startMCPRuntimeResumeSmokeSucceededSession(t *testing.T, client *stdioMCPClient) string {

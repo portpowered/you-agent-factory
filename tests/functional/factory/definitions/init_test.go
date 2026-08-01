@@ -78,7 +78,9 @@ func TestFactoryInitIsIdempotent(t *testing.T) {
 		t.Fatalf("create init workspace: %v", err)
 	}
 
-	initFactoryViaSessionCreate(t, server.URL(), workspaceDir)
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
+	initFactoryViaSessionCreateWithProcess(t, process, server.URL(), workspaceDir)
 
 	factoryRoot := filepath.Join(workspaceDir, factorydefinitions.FactoryDir)
 	customPath := filepath.Join(factoryRoot, "workers", "processor", "AGENTS.md")
@@ -92,7 +94,7 @@ func TestFactoryInitIsIdempotent(t *testing.T) {
 		t.Fatalf("write customer-edited processor AGENTS.md: %v", err)
 	}
 
-	initFactoryViaSessionCreate(t, server.URL(), workspaceDir)
+	initFactoryViaSessionCreateWithProcess(t, process, server.URL(), workspaceDir)
 
 	got, err := os.ReadFile(customPath)
 	if err != nil {
@@ -178,6 +180,18 @@ func initHostFactoryConfig() map[string]any {
 
 func initFactoryViaSessionCreate(t *testing.T, serverURL, workspaceDir string) {
 	t.Helper()
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	support.CleanupProcess(t, process)
+	initFactoryViaSessionCreateWithProcess(t, process, serverURL, workspaceDir)
+}
+
+func initFactoryViaSessionCreateWithProcess(
+	t *testing.T,
+	process support.Process,
+	serverURL string,
+	workspaceDir string,
+) {
+	t.Helper()
 
 	homeDir := t.TempDir()
 	inputs := support.FakeInputs(t.Context(), []string{
@@ -188,7 +202,7 @@ func initFactoryViaSessionCreate(t *testing.T, serverURL, workspaceDir string) {
 	})
 	inputs.Input.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	inputs.Input.WorkingDirectory = workspaceDir
-	if err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
+	if err := process.Execute(inputs.Input); err != nil {
 		t.Fatalf(
 			"Process.Execute(session create --init-new-factory) error = %v; stdout=%q stderr=%q",
 			err, inputs.Stdout(), inputs.Stderr(),

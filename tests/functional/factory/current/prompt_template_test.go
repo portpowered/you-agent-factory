@@ -19,9 +19,9 @@ import (
 // validate a draft prompt that references variables exposed by that contract.
 func TestAPIPromptTemplateContractAndValidationRoundTrip(t *testing.T) {
 	rootDir := t.TempDir()
-	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
-
-	server := startCurrentFactoryServer(t, rootDir)
+	server := startCurrentFactoryServerWithSetup(t, rootDir, currentFactorySetup(t, func(process support.Process, env []string) {
+		seedNamedFactoryRootWithProcess(t, process, env, rootDir, "alpha", "alpha-task")
+	}))
 	defer server.Stop(t)
 
 	const sessionID = "~default"
@@ -60,9 +60,9 @@ func TestAPIPromptTemplateContractAndValidationRoundTrip(t *testing.T) {
 // workstation contract.
 func TestAPIInvalidPromptTemplateNamesMissingVariables(t *testing.T) {
 	rootDir := t.TempDir()
-	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
-
-	server := startCurrentFactoryServer(t, rootDir)
+	server := startCurrentFactoryServerWithSetup(t, rootDir, currentFactorySetup(t, func(process support.Process, env []string) {
+		seedNamedFactoryRootWithProcess(t, process, env, rootDir, "alpha", "alpha-task")
+	}))
 	defer server.Stop(t)
 
 	const sessionID = "~default"
@@ -119,9 +119,9 @@ func TestAPIInvalidPromptTemplateNamesMissingVariables(t *testing.T) {
 // Factory Session when validating both valid and invalid workstation prompt drafts.
 func TestAPITemplateValidationDoesNotMutateCurrentFactory(t *testing.T) {
 	rootDir := t.TempDir()
-	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
-
-	server := startCurrentFactoryServer(t, rootDir)
+	server := startCurrentFactoryServerWithSetup(t, rootDir, currentFactorySetup(t, func(process support.Process, env []string) {
+		seedNamedFactoryRootWithProcess(t, process, env, rootDir, "alpha", "alpha-task")
+	}))
 	defer server.Stop(t)
 
 	const sessionID = "~default"
