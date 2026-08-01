@@ -6,6 +6,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	applicationopening "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/applicationopening"
+	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/cursors/persistence"
 	execution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	runtimepersist "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution/runtimepersist"
@@ -113,6 +114,9 @@ type (
 	FactoryRuntimeAssembler                = runtimeopening.FactoryRuntimeAssembler
 	RuntimeOpeningFactory                  = runtimeopening.Factory
 	RuntimeRoot                            = runtimeopening.RuntimeRoot
+	ModelPullMetricsRecorder               = factorysessioncontracts.ModelPullMetricsRecorder
+	InvocationArtifactFileSystem           = factorysessioncontracts.InvocationArtifactFileSystem
+	InvocationArtifactExporter             = factorysessioncontracts.InvocationArtifactExporter
 
 	StandaloneSessionExecutionFactory   = executionopening.StandaloneSessionExecutionFactory
 	WorkerInvocationFactory             = executionopening.WorkerInvocationFactory
@@ -222,7 +226,7 @@ func NewInvocationOperation(
 	effects RuntimeOpeningExternalEffects,
 	workingDirectory platformfilesystem.WorkingDirectory,
 	resolveCurrentDir factorydefinitions.CurrentFactoryDirectoryResolver,
-	artifactExporter models.InvocationArtifactExporter,
+	artifactExporter InvocationArtifactExporter,
 	modelTimeout factorysessions.ModelInvocationTimeout,
 	artifactRoots factoryruntime.RuntimeArtifactRootResolver,
 	generateSessionID factorysessions.SessionIDGenerator,

@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
-	modelinference "github.com/portpowered/infinite-you/pkg/services/models/internal/inference"
+	modelinference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
 
 	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/pkg/services/work"

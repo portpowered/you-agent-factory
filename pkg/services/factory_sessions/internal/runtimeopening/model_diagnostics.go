@@ -4,19 +4,19 @@ import (
 	"strings"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessioncontracts "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/contracts"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/roles"
-	"github.com/portpowered/infinite-you/pkg/services/models"
 	"go.uber.org/zap"
 )
 
-func ModelHostDiagnosticLogger(logger *zap.Logger) models.HostDiagnosticLogger {
+func ModelHostDiagnosticLogger(logger *zap.Logger) factorysessioncontracts.ModelHostDiagnosticLogger {
 	if logger == nil {
 		return nil
 	}
 	return zapModelHostLogger{logger: logger.Named("modelhost")}
 }
 
-func ModelHostDiagnosticMetrics(recorder roles.InvocationMetricsRecorder) models.HostMetricsRecorder {
+func ModelHostDiagnosticMetrics(recorder roles.InvocationMetricsRecorder) factorysessioncontracts.ModelHostMetricsRecorder {
 	if recorder == nil {
 		return nil
 	}

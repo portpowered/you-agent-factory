@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
-	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/host"
+	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
 	managedruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/managedruntime"
 )
 

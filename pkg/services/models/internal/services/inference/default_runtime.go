@@ -11,8 +11,6 @@ import (
 // invocation input. It performs no network, process, or filesystem IO.
 type InputEchoInvocationRuntime struct{}
 
-var _ InvocationRuntime = InputEchoInvocationRuntime{}
-
 func (InputEchoInvocationRuntime) Invoke(
 	_ context.Context,
 	request InvocationRuntimeRequest,

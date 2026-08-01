@@ -14,14 +14,15 @@ import (
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
-	assetswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets/wire"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
-	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
-	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
+	assetswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets/wire"
+	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/service"
 	hostleases "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases"
 	leaseswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases/wire"
-	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
+	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
+	runtimescopeswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes/wire"
 )
 
 func TestConstructionAllocatesHostStateWithoutLaunchingProcess(t *testing.T) {
@@ -142,7 +143,7 @@ func (clock *recordingHostClock) Now() time.Time {
 	return time.Unix(0, 0)
 }
 
-func (clock *recordingHostClock) NewTimer(time.Duration) models.HostTimer {
+func (clock *recordingHostClock) NewTimer(time.Duration) modelseffects.HostTimer {
 	clock.timerCreates++
 	panic("host timer created during inert runtime host composition")
 }
@@ -184,7 +185,7 @@ func TestEnsureModelHostHealthyStartupReturnsReadyWithEndpoint(t *testing.T) {
 	scopes := newScopes(t, "healthy-startup")
 	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
 	launcher := &fakeProcessLauncher{
-		newProcess: func(spec models.HostProcessStartSpec) *fakeManagedProcess {
+		newProcess: func(spec modelseffects.HostProcessStartSpec) *fakeManagedProcess {
 			return newFakeManagedProcess(healthServer.URL, nil)
 		},
 	}
@@ -223,7 +224,7 @@ func TestEnsureModelHostConcurrentReuseSharesOneSupervisedProcess(t *testing.T) 
 	scopes := newScopes(t, "concurrent-reuse")
 	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
 	launcher := &fakeProcessLauncher{
-		newProcess: func(spec models.HostProcessStartSpec) *fakeManagedProcess {
+		newProcess: func(spec modelseffects.HostProcessStartSpec) *fakeManagedProcess {
 			return newFakeManagedProcess(healthServer.URL, nil)
 		},
 	}
@@ -268,7 +269,7 @@ func TestEnsureModelHostReturnsDetachedSnapshotWithoutPrivateHandles(t *testing.
 	scopes := newScopes(t, "detached-snapshot")
 	ref := openScope(t, scopes, cacheDirectory, supervisedRuntimeConfig())
 	launcher := &fakeProcessLauncher{
-		newProcess: func(spec models.HostProcessStartSpec) *fakeManagedProcess {
+		newProcess: func(spec modelseffects.HostProcessStartSpec) *fakeManagedProcess {
 			return newFakeManagedProcess(healthServer.URL, nil)
 		},
 	}
@@ -306,7 +307,7 @@ func newTestRuntimeHost(t *testing.T, launcher *recordingProcessLauncher) runtim
 func newTestRuntimeHostWithScopes(
 	t *testing.T,
 	scopes runtimescopes.Service,
-	launcher models.HostProcessLauncher,
+	launcher modelseffects.HostProcessLauncher,
 ) runtimehost.Service {
 	return newTestRuntimeHostWithScopesAndClock(t, scopes, launcher, testHostClock{})
 }
@@ -314,8 +315,8 @@ func newTestRuntimeHostWithScopes(
 func newTestRuntimeHostWithScopesAndClock(
 	t *testing.T,
 	scopes runtimescopes.Service,
-	launcher models.HostProcessLauncher,
-	clock models.HostClock,
+	launcher modelseffects.HostProcessLauncher,
+	clock modelseffects.HostClock,
 ) runtimehost.Service {
 	t.Helper()
 	return internalservice.New(
@@ -330,9 +331,9 @@ func newTestRuntimeHostWithScopesAndClock(
 	)
 }
 
-func mustLeasesService(t *testing.T, clock models.HostClock) hostleases.Service {
+func mustLeasesService(t *testing.T, clock modelseffects.HostClock) hostleases.Service {
 	t.Helper()
-	leases, err := leaseswire.NewService(clock, hostleases.UnconfiguredSlotFacts{})
+	leases, err := leaseswire.NewService(clock, modelseffects.UnconfiguredSlotFacts{})
 	if err != nil {
 		t.Fatalf("construct leases: %v", err)
 	}
@@ -371,8 +372,8 @@ type recordingProcessLauncher struct {
 
 func (launcher *recordingProcessLauncher) Start(
 	context.Context,
-	models.HostProcessStartSpec,
-) (models.HostManagedProcess, error) {
+	modelseffects.HostProcessStartSpec,
+) (modelseffects.HostManagedProcess, error) {
 	launcher.starts++
 	panic("process launcher called during inert runtime host")
 }
@@ -380,7 +381,7 @@ func (launcher *recordingProcessLauncher) Start(
 type testHostClock struct{}
 
 func (testHostClock) Now() time.Time { return time.Unix(0, 0) }
-func (testHostClock) NewTimer(time.Duration) models.HostTimer {
+func (testHostClock) NewTimer(time.Duration) modelseffects.HostTimer {
 	panic("host timer created during inert runtime host")
 }
 
@@ -495,13 +496,13 @@ func writeCacheFixture(t *testing.T, cacheDirectory string, includeMetadata bool
 type fakeProcessLauncher struct {
 	mu         sync.Mutex
 	starts     int
-	newProcess func(spec models.HostProcessStartSpec) *fakeManagedProcess
+	newProcess func(spec modelseffects.HostProcessStartSpec) *fakeManagedProcess
 }
 
 func (f *fakeProcessLauncher) Start(
 	_ context.Context,
-	spec models.HostProcessStartSpec,
-) (models.HostManagedProcess, error) {
+	spec modelseffects.HostProcessStartSpec,
+) (modelseffects.HostManagedProcess, error) {
 	f.mu.Lock()
 	f.starts++
 	newProcess := f.newProcess
@@ -566,7 +567,7 @@ func (realHostClock) Now() time.Time {
 	return time.Now()
 }
 
-func (realHostClock) NewTimer(duration time.Duration) models.HostTimer {
+func (realHostClock) NewTimer(duration time.Duration) modelseffects.HostTimer {
 	return realHostTimer{timer: time.NewTimer(duration)}
 }
 

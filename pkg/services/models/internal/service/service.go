@@ -7,7 +7,8 @@ import (
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
-	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/host"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
+	modelhost "github.com/portpowered/infinite-you/pkg/services/models/internal/legacyhost"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	"go.uber.org/zap"
 )
@@ -22,7 +23,7 @@ type Service struct {
 	assetPuller         localmodels.AssetPuller
 	loggerValue         *zap.Logger
 	clock               func() time.Time
-	pullMetrics         models.PullMetricsRecorder
+	pullMetrics         modelseffects.PullMetricsRecorder
 }
 
 // NewService constructs a model-domain service after validating every required
@@ -34,7 +35,7 @@ func NewService(
 	assetPuller localmodels.AssetPuller,
 	logger *zap.Logger,
 	clock func() time.Time,
-	pullMetrics models.PullMetricsRecorder,
+	pullMetrics modelseffects.PullMetricsRecorder,
 ) (*Service, error) {
 	if runtimeConfig == nil {
 		return nil, missingDependencyError("runtime configuration lookup")

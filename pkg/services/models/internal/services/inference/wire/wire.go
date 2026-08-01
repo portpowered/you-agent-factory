@@ -7,14 +7,24 @@ import (
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
-	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	scopedassets "github.com/portpowered/infinite-you/pkg/services/models/internal/services/assets"
+	modelcatalog "github.com/portpowered/infinite-you/pkg/services/models/internal/services/catalog"
 	inference "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference"
 	inferenceartifacts "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference/internal/artifacts"
 	internalservice "github.com/portpowered/infinite-you/pkg/services/models/internal/services/inference/internal/service"
 	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 	runtimescopes "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_scopes"
 )
+
+// NewInvocationArtifactExporter keeps artifact materialization behind the
+// Inference owner. Models wire composes this provider without importing the
+// private artifact implementation directly.
+func NewInvocationArtifactExporter(
+	fileSystem modelseffects.InvocationArtifactFileSystem,
+) (modelseffects.InvocationArtifactExporter, error) {
+	return inferenceartifacts.NewExporter(fileSystem)
+}
 
 // NewService constructs an inert Inference owner over accepted runtime-scope,
 // catalog, and runtime-host contracts. Construction validates injected effects
@@ -24,8 +34,8 @@ func NewService(
 	assets scopedassets.Service,
 	catalog modelcatalog.Service,
 	runtimeHost runtimehost.Service,
-	invocationRuntime inference.InvocationRuntime,
-	fileSystem models.InvocationArtifactFileSystem,
+	invocationRuntime internalservice.InvocationRuntime,
+	fileSystem modelseffects.InvocationArtifactFileSystem,
 	clock func() time.Time,
 ) (inference.Service, error) {
 	if scopes == nil {

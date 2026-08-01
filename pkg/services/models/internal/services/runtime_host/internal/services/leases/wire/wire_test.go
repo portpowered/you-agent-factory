@@ -7,7 +7,7 @@ import (
 	"time"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
-	hostleases "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 	leaseswire "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host/internal/services/leases/wire"
 )
 
@@ -15,12 +15,12 @@ func TestNewServiceRequiresLeaseDependencies(t *testing.T) {
 	t.Parallel()
 
 	clock := testHostClock{}
-	slotFacts := hostleases.UnconfiguredSlotFacts{}
+	slotFacts := modelseffects.UnconfiguredSlotFacts{}
 
 	tests := []struct {
 		name            string
-		clock           models.HostClock
-		slotFacts       hostleases.SlotFactsProvider
+		clock           modelseffects.HostClock
+		slotFacts       modelseffects.SlotFactsProvider
 		wantContains    string
 		wantInvalidDeps bool
 	}{
@@ -59,6 +59,6 @@ func TestNewServiceRequiresLeaseDependencies(t *testing.T) {
 type testHostClock struct{}
 
 func (testHostClock) Now() time.Time { return time.Unix(0, 0) }
-func (testHostClock) NewTimer(time.Duration) models.HostTimer {
+func (testHostClock) NewTimer(time.Duration) modelseffects.HostTimer {
 	panic("host timer created during inert leases construction")
 }

@@ -16,7 +16,7 @@ import (
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	models "github.com/portpowered/infinite-you/pkg/services/models"
+	modelswire "github.com/portpowered/infinite-you/pkg/services/models/wire"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -305,8 +305,8 @@ type recordingModelHostLauncher struct {
 
 func (launcher *recordingModelHostLauncher) Start(
 	context.Context,
-	models.HostProcessStartSpec,
-) (models.HostManagedProcess, error) {
+	modelswire.HostProcessStartSpec,
+) (modelswire.HostManagedProcess, error) {
 	launcher.mu.Lock()
 	launcher.calls++
 	endpoint := launcher.endpoint

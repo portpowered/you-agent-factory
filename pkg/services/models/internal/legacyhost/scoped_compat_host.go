@@ -8,9 +8,9 @@ import (
 	"sync"
 
 	models "github.com/portpowered/infinite-you/pkg/services/models"
-	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 	localmodels "github.com/portpowered/infinite-you/pkg/services/models/internal/local"
 	managedruntime "github.com/portpowered/infinite-you/pkg/services/models/internal/managedruntime"
+	runtimehost "github.com/portpowered/infinite-you/pkg/services/models/internal/services/runtime_host"
 )
 
 // ScopedCompatHost implements scoped runtime pull, readiness, and lease behavior

@@ -56,4 +56,3 @@ type Operation = models.Operation
 type OperationSlot = models.OperationSlot
 type Runtime = models.Runtime
 type InvocationError = models.InvocationError
-type InvocationReadinessError = models.InvocationReadinessError

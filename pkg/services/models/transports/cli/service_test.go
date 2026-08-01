@@ -12,11 +12,11 @@ import (
 )
 
 type stubModelsRoot struct {
-	listModels         func(context.Context) (modelinference.List, error)
-	getModel           func(context.Context, string) (modelinference.Detail, error)
-	pullModel          func(context.Context, string) (modelinference.PullResult, error)
-	getCatalogModel    func(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error)
-	acquireModelLease  func(context.Context, modelinference.AcquireModelLeaseRequest) (modelinference.AcquireModelLeaseResult, error)
+	listModels           func(context.Context) (modelinference.List, error)
+	getModel             func(context.Context, string) (modelinference.Detail, error)
+	pullModel            func(context.Context, string) (modelinference.PullResult, error)
+	getCatalogModel      func(context.Context, modelinference.GetModelRequest) (modelinference.GetModelResult, error)
+	acquireModelLease    func(context.Context, modelinference.AcquireModelLeaseRequest) (modelinference.AcquireModelLeaseResult, error)
 	invokeModelWithLease func(context.Context, modelinference.InvokeModelRequest) (modelinference.InvokeModelResult, error)
 }
 

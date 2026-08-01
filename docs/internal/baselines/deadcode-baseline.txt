@@ -180,9 +180,9 @@ pkg/services/factory_sessions/transports/cli/sessionexecution/run.go: unreachabl
 pkg/services/factory_sessions/transports/cli/sessionexecution/run.go: unreachable func: writeResultFailureHuman
 pkg/services/factory_sessions/transports/mcp/inventory_boundary.go: unreachable func: VerifyProjectedMCPBoundaryInventories
 pkg/services/factory_sessions/transports/mcp/registry_test.go: unreachable func: writeWorkflow
-pkg/services/models/internal/host/catalog_host.go: unreachable func: CatalogHost.InspectAssetReadiness
-pkg/services/models/internal/host/catalog_host.go: unreachable func: CatalogHost.ResolveIdentity
-pkg/services/models/internal/host/contract.go: unreachable func: cloneOperations
+pkg/services/models/internal/legacyhost/catalog_host.go: unreachable func: CatalogHost.InspectAssetReadiness
+pkg/services/models/internal/legacyhost/catalog_host.go: unreachable func: CatalogHost.ResolveIdentity
+pkg/services/models/internal/legacyhost/contract.go: unreachable func: cloneOperations
 pkg/services/models/internal/local/puller.go: unreachable func: NewDeferredScopedAssetPuller
 pkg/services/models/internal/services/runtime_host/internal/service/wired.go: unreachable func: LeasesOwner
 pkg/services/models/transports/cli/non_ready_invoke_test.go: unreachable func: nonReadyLocalModelFactoryConfig

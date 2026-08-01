@@ -5,14 +5,14 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/portpowered/infinite-you/pkg/services/models"
+	modelseffects "github.com/portpowered/infinite-you/pkg/services/models/internal/effects"
 )
 
 type Exporter struct {
-	filesystem models.InvocationArtifactFileSystem
+	filesystem modelseffects.InvocationArtifactFileSystem
 }
 
-func NewExporter(filesystem models.InvocationArtifactFileSystem) (*Exporter, error) {
+func NewExporter(filesystem modelseffects.InvocationArtifactFileSystem) (*Exporter, error) {
 	if filesystem == nil {
 		return nil, fmt.Errorf("construct model invocation artifact exporter: filesystem is required")
 	}
@@ -41,4 +41,4 @@ func (e *Exporter) ExportInvocationArtifact(sourcePath, destinationPath string) 
 	return nil
 }
 
-var _ models.InvocationArtifactExporter = (*Exporter)(nil)
+var _ modelseffects.InvocationArtifactExporter = (*Exporter)(nil)

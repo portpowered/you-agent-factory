@@ -170,7 +170,7 @@ func assertTypedToolErrorEnvelope(
 	t.Helper()
 
 	var response struct {
-		Result *json.RawMessage           `json:"result"`
+		Result *json.RawMessage            `json:"result"`
 		Error  *modelmcp.ToolErrorEnvelope `json:"error"`
 	}
 	if err := json.Unmarshal(raw, &response); err != nil {

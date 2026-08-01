@@ -9,6 +9,13 @@ import (
 
 const modelsCLIInvokeHolder = "you-models-cli-invoke"
 
+// ArtifactExporter is the narrow CLI transport capability used to copy a
+// streamed invocation artifact to the operator-selected destination. The
+// Models root does not publish this construction effect.
+type ArtifactExporter interface {
+	ExportInvocationArtifact(sourcePath, destinationPath string) error
+}
+
 // InvokeRuntimeScope carries one opened Models runtime scope for invoke.
 type InvokeRuntimeScope struct {
 	Scope models.RuntimeScopeRef
@@ -17,17 +24,17 @@ type InvokeRuntimeScope struct {
 
 // Config carries accepted Models-root collaborators for adapter construction.
 type Config struct {
-	Models          models.Service
-	HTTP            clihttp.Protocol
-	Artifacts       models.InvocationArtifactExporter
-	OpenInvokeScope func(context.Context, InvokeConfig) (InvokeRuntimeScope, error)
+	Models           models.Service
+	HTTP             clihttp.Protocol
+	Artifacts        ArtifactExporter
+	OpenInvokeScope  func(context.Context, InvokeConfig) (InvokeRuntimeScope, error)
 	OpenCatalogScope func(context.Context) (InvokeRuntimeScope, error)
 }
 
 type rootService struct {
 	models           models.Service
 	http             clihttp.Protocol
-	artifacts        models.InvocationArtifactExporter
+	artifacts        ArtifactExporter
 	openInvokeScope  func(context.Context, InvokeConfig) (InvokeRuntimeScope, error)
 	openCatalogScope func(context.Context) (InvokeRuntimeScope, error)
 }

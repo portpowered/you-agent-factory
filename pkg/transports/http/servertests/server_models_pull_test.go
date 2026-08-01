@@ -16,19 +16,11 @@ type modelPullService struct {
 	pull func(context.Context, string) (modelcontract.PullResult, error)
 }
 
-func (modelPullService) ListModels(context.Context) (modelcontract.List, error) {
-	panic("unexpected models.Service.ListModels call")
-}
-
-func (modelPullService) GetModel(context.Context, string) (modelcontract.Detail, error) {
-	panic("unexpected models.Service.GetModel call")
-}
-
-func (api modelPullService) PullModel(ctx context.Context, modelName string) (modelcontract.PullResult, error) {
+func (api modelPullService) PullModelForScope(ctx context.Context, request modelcontract.PullModelRequest) (modelcontract.PullResult, error) {
 	if api.pull == nil {
-		panic("unexpected models.Service.PullModel call")
+		panic("unexpected models.Service.PullModelForScope call")
 	}
-	return api.pull(ctx, modelName)
+	return api.pull(ctx, request.Name)
 }
 
 func TestPullModel_ReturnsManagedRuntimeSourceFetchFailureOutcome(t *testing.T) {
