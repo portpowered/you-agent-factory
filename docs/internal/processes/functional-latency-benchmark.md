@@ -276,3 +276,45 @@ each child had unique stdout/stderr files, every launched process was joined,
 and the diagnostic directories were removed only after collection. No
 file-lock, working-directory, environment, port, session, recording, cursor,
 event-state, or lifecycle collision was observed.
+
+## Combined seven-package proof after story 006
+
+The final proof used the exact seven package paths and `-short -count=1` command
+from the protocol above. It ran on 2026-08-01 (UTC) at commit
+`34c72c3cdfd9183c11fd42a75a4b95cf6c1aecab`, on the same Windows 11/amd64 host
+with Go 1.25.0 and 24 logical processors. `go clean -testcache` ran before
+each sample; no repository-wide Go command was started by the measurement.
+The outer wall time includes command/build setup, while `ok` is the Go test
+execution duration.
+
+| Group | Sample 1 wall / ok | Sample 2 wall / ok | Sample 3 wall / ok | Median wall / ok |
+| --- | ---: | ---: | ---: | ---: |
+| Automations | 4.317 / 1.925 | 2.238 / 0.674 | 2.334 / 0.699 | **2.334 / 0.699** |
+| CLI factory-run output | 8.424 / 1.272 | 2.831 / 0.997 | 2.652 / 1.068 | **2.831 / 1.068** |
+| CLI MCP resume | 3.545 / 0.704 | 2.573 / 0.717 | 2.568 / 0.906 | **2.573 / 0.717** |
+| CLI root discovery | 3.795 / 1.430 | 2.373 / 0.785 | 2.547 / 0.824 | **2.547 / 0.824** |
+| CLI session resume | 2.853 / 1.108 | 2.632 / 1.012 | 2.612 / 1.018 | **2.632 / 1.018** |
+| Factory Events | 2.778 / 1.281 | 2.972 / 1.253 | 3.738 / 1.548 | **2.972 / 1.281** |
+| Response Events | 3.038 / 1.408 | 3.072 / 1.444 | 4.546 / 1.835 | **3.072 / 1.444** |
+
+The seven per-sample combined outer wall times were 28.750, 18.691, and
+20.997 seconds; the required combined median is **20.997 seconds**. That is
+69.5% lower than the 68.850-second baseline combined median. The sum of the
+seven package medians is 18.961 seconds, 68.2% below the 59.580-second sum of
+the baseline package medians. All 21 sequential package executions passed.
+
+Three concurrent seven-package diagnostics then launched each package as its
+own child process with unique captured output. Every wave had seven zero exit
+codes; the maximum package wall times were 10.819, 10.113, and 10.475 seconds.
+The parent waited for every child before checking process state and removing
+the diagnostic directory. No file-lock, executable-lock, working-directory,
+environment, port, process, session, recording, cursor, event-state, or
+lifecycle collision was observed.
+
+The repository `make test-functional` lane was also invoked with its canonical
+`functional-boundary-check` and `go test -p=8 -short ./tests/functional/...`
+configuration. The seven target packages passed in that lane. The run was
+affected by an overlapping host-wide `go test ./...` workload and reported
+unrelated Windows process-API readiness timeouts plus a pre-existing Claude
+provider-session golden mismatch in other packages; those failures are not
+part of the seven-package proof and are recorded in the iteration log.
