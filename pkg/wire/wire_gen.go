@@ -462,17 +462,17 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	if err != nil {
 		return nil, err
 	}
-	responsePresentation := provideResponsePresentation()
-	v73 := provideDirectJavaScriptSyncRunner()
+	v73 := provideResponsePresentation()
+	v74 := provideDirectJavaScriptSyncRunner()
 	directJavaScriptHostAdapter, err := provideDirectJavaScriptHostAdapter(handler, starter, runnerFactory)
 	if err != nil {
 		return nil, err
 	}
-	v74, err := wire2.NewDirectJavaScriptRunOperation(v61, v73, v18, directJavaScriptHostAdapter)
+	v75, err := wire2.NewDirectJavaScriptRunOperation(v61, v74, v18, directJavaScriptHostAdapter)
 	if err != nil {
 		return nil, err
 	}
-	selectionFactory, err := provideRunSelectionFactory(runOpener, runRuntimeRunnerBuilder, v62, responsePresentation, v74, runtimeRunnerBuilder)
+	selectionFactory, err := provideRunSelectionFactory(runOpener, runRuntimeRunnerBuilder, v62, v73, v75, runtimeRunnerBuilder)
 	if err != nil {
 		return nil, err
 	}
@@ -527,17 +527,17 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	stdioOpener := stdio.NewOpener()
-	v75 := provideFixtureStdioApplicationBuilder(stdioRunnerBuilder, runnerFactory, stdioOpener, v63, workflowPreviewOperation)
+	v76 := provideFixtureStdioApplicationBuilder(stdioRunnerBuilder, runnerFactory, stdioOpener, v63, workflowPreviewOperation)
 	openedStdioRunnerBuilder, err := application.NewOpenedStdioRunnerBuilder(managedRunnerFactory)
 	if err != nil {
 		return nil, err
 	}
-	v76 := provideRuntimeStdioApplicationBuilder(openedStdioRunnerBuilder, runnerFactory, stdioOpener, v63)
-	v77, err := wire2.NewStdioOpeningService(v60, v75, v76)
+	v77 := provideRuntimeStdioApplicationBuilder(openedStdioRunnerBuilder, runnerFactory, stdioOpener, v63)
+	v78, err := wire2.NewStdioOpeningService(v60, v76, v77)
 	if err != nil {
 		return nil, err
 	}
-	processStdioApplicationOpener, err := provideStdioApplicationOpener(v77)
+	processStdioApplicationOpener, err := provideStdioApplicationOpener(v78)
 	if err != nil {
 		return nil, err
 	}
