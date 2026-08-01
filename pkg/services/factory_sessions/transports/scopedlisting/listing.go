@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	execution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 )
 
 var ErrDurableReaderRequired = errors.New("durable Factory Session list reader is required")
@@ -60,7 +59,7 @@ func List(
 		}
 		durableResult = result
 	}
-	scoped := execution.ApplySessionListScope(durableResult, request)
+	scoped := factorysessions.ApplySessionListScope(durableResult, request)
 	liveRows := append(workspace, projectDurableLiveSessions(scoped.LiveSessions)...)
 	sort.SliceStable(liveRows, func(left, right int) bool {
 		return strings.Compare(liveRows[left].ID, liveRows[right].ID) < 0
