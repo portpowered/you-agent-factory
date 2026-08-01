@@ -70,21 +70,23 @@ func TestGenerateArtifactsProducesEquivalentSelfContainedPairsForCompleteInvento
 	assertMetaPlannerContract(t, bySlug["full-flow"], "full-flow-planner")
 }
 
+type packagedFactoryPromptWorker struct {
+	Name       string `yaml:"name"`
+	PromptFile string `yaml:"promptFile"`
+}
+
+type packagedFactoryPromptWorkstation struct {
+	Worker     string `yaml:"worker"`
+	PromptFile string `yaml:"promptFile"`
+}
+
+type packagedFactoryPromptFactory struct {
+	Workers      []packagedFactoryPromptWorker      `yaml:"workers"`
+	Workstations []packagedFactoryPromptWorkstation `yaml:"workstations"`
+}
+
 func TestPackagedFactoryPromptFilesRemainWorkstationOwned(t *testing.T) {
 	t.Parallel()
-
-	type worker struct {
-		Name       string `yaml:"name"`
-		PromptFile string `yaml:"promptFile"`
-	}
-	type workstation struct {
-		Worker     string `yaml:"worker"`
-		PromptFile string `yaml:"promptFile"`
-	}
-	type authoredFactory struct {
-		Workers      []worker      `yaml:"workers"`
-		Workstations []workstation `yaml:"workstations"`
-	}
 
 	want := map[string]map[string]string{
 		"goal": {
@@ -128,53 +130,63 @@ func TestPackagedFactoryPromptFilesRemainWorkstationOwned(t *testing.T) {
 		slug := slug
 		wantPromptFiles := wantPromptFiles
 		t.Run(slug, func(t *testing.T) {
-			sourcePath := "factories/" + slug + "/factory.yaml"
-			payload, err := fs.ReadFile(packagedfactories.Source(), sourcePath)
-			if err != nil {
-				t.Fatalf("read authored Factory %s: %v", sourcePath, err)
-			}
-			var authored authoredFactory
-			if err := yaml.Unmarshal(payload, &authored); err != nil {
-				t.Fatalf("decode authored Factory %s: %v", sourcePath, err)
-			}
-
-			for _, worker := range authored.Workers {
-				if worker.PromptFile != "" {
-					t.Fatalf("worker %q owns promptFile %q; prompt files belong to workstations", worker.Name, worker.PromptFile)
-				}
-			}
-			authoredPromptFiles := make(map[string]string, len(authored.Workstations))
-			for _, workstation := range authored.Workstations {
-				if workstation.PromptFile != "" {
-					authoredPromptFiles[workstation.Worker] = workstation.PromptFile
-				}
-			}
-			if !reflect.DeepEqual(authoredPromptFiles, wantPromptFiles) {
-				t.Fatalf("authored workstation prompt files = %#v, want %#v", authoredPromptFiles, wantPromptFiles)
-			}
-
-			artifact, ok := bySlug[slug]
-			if !ok {
-				t.Fatalf("missing generated artifact %q", slug)
-			}
-			materializedPromptFiles := make(map[string]string, len(artifact.Factory.Workstations))
-			for _, workstation := range artifact.Factory.Workstations {
-				if workstation.PromptFile != "" {
-					materializedPromptFiles[workstation.WorkerTypeName] = workstation.PromptFile
-				}
-			}
-			if !reflect.DeepEqual(materializedPromptFiles, wantPromptFiles) {
-				t.Fatalf("materialized workstation prompt files = %#v, want %#v", materializedPromptFiles, wantPromptFiles)
-			}
-
-			root := decodeArtifactObject(t, artifact.JSON)
-			for _, value := range root["workers"].([]any) {
-				worker := value.(map[string]any)
-				if _, ok := worker["promptFile"]; ok {
-					t.Fatalf("materialized worker %q still contains promptFile", worker["name"])
-				}
-			}
+			assertPackagedFactoryPromptFiles(t, slug, wantPromptFiles, bySlug)
 		})
+	}
+}
+
+func assertPackagedFactoryPromptFiles(
+	t *testing.T,
+	slug string,
+	wantPromptFiles map[string]string,
+	bySlug map[string]packagedfactorycatalog.ArtifactPair,
+) {
+	t.Helper()
+	sourcePath := "factories/" + slug + "/factory.yaml"
+	payload, err := fs.ReadFile(packagedfactories.Source(), sourcePath)
+	if err != nil {
+		t.Fatalf("read authored Factory %s: %v", sourcePath, err)
+	}
+	var authored packagedFactoryPromptFactory
+	if err := yaml.Unmarshal(payload, &authored); err != nil {
+		t.Fatalf("decode authored Factory %s: %v", sourcePath, err)
+	}
+
+	for _, worker := range authored.Workers {
+		if worker.PromptFile != "" {
+			t.Fatalf("worker %q owns promptFile %q; prompt files belong to workstations", worker.Name, worker.PromptFile)
+		}
+	}
+	authoredPromptFiles := make(map[string]string, len(authored.Workstations))
+	for _, workstation := range authored.Workstations {
+		if workstation.PromptFile != "" {
+			authoredPromptFiles[workstation.Worker] = workstation.PromptFile
+		}
+	}
+	if !reflect.DeepEqual(authoredPromptFiles, wantPromptFiles) {
+		t.Fatalf("authored workstation prompt files = %#v, want %#v", authoredPromptFiles, wantPromptFiles)
+	}
+
+	artifact, ok := bySlug[slug]
+	if !ok {
+		t.Fatalf("missing generated artifact %q", slug)
+	}
+	materializedPromptFiles := make(map[string]string, len(artifact.Factory.Workstations))
+	for _, workstation := range artifact.Factory.Workstations {
+		if workstation.PromptFile != "" {
+			materializedPromptFiles[workstation.WorkerTypeName] = workstation.PromptFile
+		}
+	}
+	if !reflect.DeepEqual(materializedPromptFiles, wantPromptFiles) {
+		t.Fatalf("materialized workstation prompt files = %#v, want %#v", materializedPromptFiles, wantPromptFiles)
+	}
+
+	root := decodeArtifactObject(t, artifact.JSON)
+	for _, value := range root["workers"].([]any) {
+		worker := value.(map[string]any)
+		if _, ok := worker["promptFile"]; ok {
+			t.Fatalf("materialized worker %q still contains promptFile", worker["name"])
+		}
 	}
 }
 
