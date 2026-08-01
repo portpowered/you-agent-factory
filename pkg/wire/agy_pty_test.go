@@ -2,6 +2,8 @@ package wire
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"reflect"
 	"testing"
@@ -10,6 +12,7 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	platformpty "github.com/portpowered/infinite-you/pkg/platform/pty"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	providerswire "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
@@ -69,4 +72,39 @@ func TestProvideAgyPTYAllocatorPreservesInjectedNativeHost(t *testing.T) {
 	if !host.allocated {
 		t.Fatal("injected native host was not used")
 	}
+}
+
+func TestProviderPTYAdapterPreservesWorkersErrorIdentity(t *testing.T) {
+	t.Parallel()
+
+	providerCause := errors.New("native PTY timeout detail")
+	_, err := (providerPTYAllocatorAdapter{
+		allocator: failingProviderPTYAllocator{
+			err: fmt.Errorf("provider PTY session: %w: %w", providerswire.ErrPTYSessionTimedOut, providerCause),
+		},
+	}).Allocate(context.Background(), workers.PTYProcessLaunch{}, workers.DefaultPTYSessionConfig())
+	if !errors.Is(err, workers.ErrPTYSessionTimedOut) {
+		t.Fatalf("Allocate() error = %v, want Workers PTY timeout identity", err)
+	}
+	if !errors.Is(err, providerswire.ErrPTYSessionTimedOut) {
+		t.Fatalf("Allocate() error = %v, want Providers PTY timeout cause", err)
+	}
+	if !errors.Is(err, providerCause) {
+		t.Fatalf("Allocate() error = %v, want native PTY timeout cause", err)
+	}
+	if got, want := err.Error(), workers.ErrPTYSessionTimedOut.Error(); got != want {
+		t.Fatalf("Allocate() error text = %q, want %q without duplicated sentinel", got, want)
+	}
+}
+
+type failingProviderPTYAllocator struct {
+	err error
+}
+
+func (allocator failingProviderPTYAllocator) Allocate(
+	context.Context,
+	providerswire.PTYProcessLaunch,
+	providerswire.PTYSessionConfig,
+) (providerswire.PTYSession, error) {
+	return nil, allocator.err
 }

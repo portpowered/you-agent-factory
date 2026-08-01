@@ -5,32 +5,22 @@ import (
 	"errors"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	providers "github.com/portpowered/infinite-you/pkg/services/providers"
+	effects "github.com/portpowered/infinite-you/pkg/services/providers/internal/effects"
 	execution "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution"
 	codex "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/internal/adapters/codex"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
+	executionwire "github.com/portpowered/infinite-you/pkg/services/providers/internal/services/execution/wire"
 )
 
-func TestCommandEffectRoutesDispatchContextThroughMockWorkerRunner(t *testing.T) {
+func TestCommandEffectCarriesAttemptCorrelationToProvidersEffectRunner(t *testing.T) {
 	t.Parallel()
 
-	platformRunner := testutil.NewProviderCommandRunner(
-		platformprocess.CommandResult{Stdout: []byte("live provider should not run")},
-	)
-	effect := codex.NewCommandEffect(&workers.MockWorkerCommandRunner{
-		Config: &workers.MockWorkersConfig{
-			MockWorkers: []workers.MockWorkerConfig{{
-				WorkerName:      "mocked-worker",
-				WorkstationName: "mock-process",
-				RunType:         workers.MockWorkerRunTypeAccept,
-			}},
-		},
-		Next: workers.AdaptCommandRunner(platformRunner),
-	})
+	runner := &recordingCommandRunner{}
+	effect := codex.NewCommandEffect(runner)
 	if effect == nil {
 		t.Fatal("NewCommandEffect() returned nil")
 	}
@@ -45,8 +35,63 @@ func TestCommandEffectRoutesDispatchContextThroughMockWorkerRunner(t *testing.T)
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	if platformRunner.CallCount() != 0 {
-		t.Fatalf("platform runner calls = %d, want mock intercept", platformRunner.CallCount())
+	if runner.request.AttemptID != "mock-dispatch" ||
+		runner.request.WorkerType != "mocked-worker" ||
+		runner.request.WorkstationName != "mock-process" {
+		t.Fatalf("Providers effect request = %#v, want Providers-owned correlation", runner.request)
+	}
+}
+
+func TestCommandEffectPropagatesStreamingObserverFailure(t *testing.T) {
+	t.Parallel()
+
+	observerErr := errors.New("output observer failed")
+	effect := codex.NewCommandEffect(streamingObserverErrorRunner{})
+	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
+		Provider:    providers.IDCodex,
+		AttemptID:   "observer-failure",
+		UserMessage: "perform work",
+	}, func([]byte) error { return observerErr })
+	if !errors.Is(err, observerErr) {
+		t.Fatalf("Execute() error = %v, want observer failure", err)
+	}
+}
+
+func TestCommandEffectIsSafeForConcurrentAttempts(t *testing.T) {
+	t.Parallel()
+
+	runner := &concurrentCommandRunner{}
+	effect := codex.NewCommandEffect(runner)
+	if effect == nil {
+		t.Fatal("NewCommandEffect() returned nil")
+	}
+
+	const attempts = 32
+	var waitGroup sync.WaitGroup
+	waitGroup.Add(attempts)
+	errors := make(chan error, attempts)
+	for range attempts {
+		go func() {
+			defer waitGroup.Done()
+			_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
+				Provider:        providers.IDCodex,
+				AttemptID:       "concurrent-attempt",
+				UserMessage:     "perform work",
+				WorkerType:      "mocked-worker",
+				WorkstationName: "mock-process",
+			}, func([]byte) error { return nil })
+			if err != nil {
+				errors <- err
+			}
+		}()
+	}
+	waitGroup.Wait()
+	close(errors)
+	for err := range errors {
+		t.Errorf("Execute() error = %v", err)
+	}
+	if got := runner.RequestCount(); got != attempts {
+		t.Fatalf("runner request count = %d, want %d", got, attempts)
 	}
 }
 
@@ -54,7 +99,7 @@ func TestCommandEffectRejectsUnsupportedReasoningEffortBeforeDispatch(t *testing
 	t.Parallel()
 
 	platformRunner := testutil.NewProviderCommandRunner()
-	effect := codex.NewCommandEffect(workers.AdaptCommandRunner(platformRunner))
+	effect := codex.NewCommandEffect(executionwire.AdaptPlatformCommandRunner(platformRunner))
 	_, err := effect.Execute(context.Background(), providers.ExecuteRequest{
 		Provider:        providers.IDCodex,
 		AttemptID:       "invalid-effort-dispatch",
@@ -76,7 +121,7 @@ func TestCommandEffectRendersLunaXHighReasoningEffort(t *testing.T) {
 	t.Parallel()
 
 	platformRunner := testutil.NewProviderCommandRunner()
-	effect := codex.NewCommandEffect(workers.AdaptCommandRunner(platformRunner))
+	effect := codex.NewCommandEffect(executionwire.AdaptPlatformCommandRunner(platformRunner))
 	if effect == nil {
 		t.Fatal("NewCommandEffect() returned nil")
 	}
@@ -102,4 +147,54 @@ func TestCommandEffectRendersLunaXHighReasoningEffort(t *testing.T) {
 	if !reflect.DeepEqual(request.Args, want) {
 		t.Fatalf("command args = %#v, want %#v", request.Args, want)
 	}
+}
+
+type recordingCommandRunner struct {
+	request effects.CommandRequest
+}
+
+type streamingObserverErrorRunner struct{}
+
+func (streamingObserverErrorRunner) Run(
+	context.Context,
+	effects.CommandRequest,
+) (effects.CommandResult, error) {
+	return effects.CommandResult{}, nil
+}
+
+func (runner streamingObserverErrorRunner) RunStreaming(
+	_ context.Context,
+	_ effects.CommandRequest,
+	observer effects.OutputChunkObserver,
+) (effects.CommandResult, error) {
+	return effects.CommandResult{}, observer(effects.OutputStreamStdout, []byte("output"))
+}
+
+func (runner *recordingCommandRunner) Run(
+	_ context.Context,
+	request effects.CommandRequest,
+) (effects.CommandResult, error) {
+	runner.request = request
+	return effects.CommandResult{}, nil
+}
+
+type concurrentCommandRunner struct {
+	mu       sync.Mutex
+	requests int
+}
+
+func (runner *concurrentCommandRunner) Run(
+	_ context.Context,
+	_ effects.CommandRequest,
+) (effects.CommandResult, error) {
+	runner.mu.Lock()
+	runner.requests++
+	runner.mu.Unlock()
+	return effects.CommandResult{}, nil
+}
+
+func (runner *concurrentCommandRunner) RequestCount() int {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	return runner.requests
 }
