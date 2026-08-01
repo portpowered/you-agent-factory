@@ -55,6 +55,21 @@ func TestExecuteRootErrorResponse_MapsUnknownProviderFailures(t *testing.T) {
 	}
 }
 
+func TestExecuteRootErrorResponse_MapsUnavailableProviderFailures(t *testing.T) {
+	t.Parallel()
+
+	status, response, ok := providershttp.ExecuteRootErrorResponseForTest(providers.ErrProviderUnavailable)
+	if !ok {
+		t.Fatal("ExecuteRootErrorResponse(ErrProviderUnavailable) = not handled, want typed unavailable")
+	}
+	if status != http.StatusNotFound ||
+		response.Family != factoryapi.ErrorFamilyNotFound ||
+		response.Code != factoryapi.ErrorResponseCode("PROVIDER_UNAVAILABLE") ||
+		response.Message != providers.ErrProviderUnavailable.Error() {
+		t.Fatalf("ExecuteRootErrorResponse(ErrProviderUnavailable) = %d %#v, want unavailable", status, response)
+	}
+}
+
 func TestExecuteRootErrorResponse_MapsExecuteFailureKinds(t *testing.T) {
 	t.Parallel()
 
@@ -91,6 +106,13 @@ func TestExecuteRootErrorResponse_MapsExecuteFailureKinds(t *testing.T) {
 			wantStatus: http.StatusBadRequest,
 			wantCode:   "BAD_REQUEST",
 			wantFamily: factoryapi.ErrorFamilyBadRequest,
+		},
+		{
+			name:       "misconfigured",
+			err:        providers.ExecuteFailure{Kind: providers.ExecuteFailureKindMisconfigured},
+			wantStatus: http.StatusInternalServerError,
+			wantCode:   "PROVIDER_EXECUTION_MISCONFIGURED",
+			wantFamily: factoryapi.ErrorFamilyInternalServerError,
 		},
 		{
 			name: "authentication",
