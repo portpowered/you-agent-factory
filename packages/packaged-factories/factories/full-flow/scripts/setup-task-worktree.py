@@ -17,6 +17,15 @@ def run(root, *args):
     return result.stdout.strip()
 
 def persist_longpaths(root):
+    configured = subprocess.run(
+        ["git", "config", "--get", "core.longpaths"],
+        cwd=root,
+        text=True,
+        capture_output=True,
+    )
+    if configured.returncode == 0 and configured.stdout.strip().lower() == "true":
+        return
+
     last_error = ""
     for _ in range(20):
         result = subprocess.run(
