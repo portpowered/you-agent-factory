@@ -5,9 +5,13 @@ observable contracts belong at each layer, and the minimum browser-integration
 coverage for import/export and graph-editing flows. Use it when adding regressions
 or deciding whether an assertion belongs in unit/jsdom coverage or Chromium.
 
-Canonical lane names match [development.md](development.md): **Unit** (Node),
-**Component** (browserless DOM emulation), and **Browser** (`ui/integration/`). The required UI
-Coverage lane runs the Node unit project only; component, browser, and
+Canonical lane names match [development.md](development.md): **Bun Unit** (Node,
+`.bun.unit.test.ts`), **Unit** (Node, unmigrated `.test.ts`), **Component**
+(browserless DOM emulation), and **Browser** (`ui/integration/`). The Bun Unit
+suffix is reserved for DOM-free, browser-free tests and is intentionally
+disjoint from `.bun.component.test.tsx`, ordinary component tests, browser or
+integration tests, performance tests, and Storybook tests. The required UI
+Coverage lane runs the Vitest Node unit project only; component, browser, and
 performance tests are separate confidence lanes and do not affect its threshold.
 
 The component lane runs browserless tests in two compatibility groups: Bun is
@@ -119,7 +123,7 @@ When the same observable assertion appears in multiple lanes:
 
 ```
 New regression?
-├─ Pure function / fixture? → colocated *.test.ts or *.unit.test.ts in the Node project
+├─ Pure function / fixture? → colocated *.bun.unit.test.ts for Bun migration, or *.test.ts while it remains on Vitest
 ├─ Single card/widget? → colocated *.component.test.tsx with harness doubles
 ├─ Needs cross-owner dashboard stream/replay wiring? → feature-owned dashboard composition component test
 ├─ Needs download, preview server, multi-tab, or real drop path? → current ui/integration/*.integration.test.mjs browser lane
