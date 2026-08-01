@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	DefaultLedgerPath    = "docs/temp/functional-tests-expansion/migration-ledger-inventory.json"
-	DefaultChecklistPath = "docs/temp/functional-tests-expansion/test-file-checklist.md"
+	DefaultLedgerPath    = "docs/internal/functional-tests-expansion/migration-ledger-inventory.json"
+	DefaultChecklistPath = "docs/internal/functional-tests-expansion/test-file-checklist.md"
 	FunctionalRoot       = "tests/functional"
 	InternalPrefix       = "tests/functional/internal/"
 )
@@ -84,6 +84,7 @@ var RequiredSpecialtyTargets = []string{
 	"current-factory-watcher-switch-smoke",
 	"test-root-process-acceptance",
 	"script-timeout-companion-smoke-100",
+	"test-built-cli-acceptance",
 }
 
 // ExpectedDeletionOnlyBatches is the ordered catch-all retirement batch index.

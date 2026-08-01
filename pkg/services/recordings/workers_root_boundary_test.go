@@ -10,11 +10,11 @@ import (
 
 type workersRootPortProbe struct{}
 
-func (workersRootPortProbe) Infer(
+func (workersRootPortProbe) Execute(
 	_ context.Context,
-	_ workers.ProviderInferenceRequest,
-) (workers.InferenceResponse, error) {
-	return workers.InferenceResponse{}, nil
+	_ workers.RunnerExecutionRequest,
+) (workers.RunnerExecutionResult, error) {
+	return workers.RunnerExecutionResult{}, nil
 }
 
 func (workersRootPortProbe) Run(
@@ -31,7 +31,7 @@ func TestReplayBindingContractsAcceptWorkersRootPorts(t *testing.T) {
 	t.Parallel()
 
 	probe := workersRootPortProbe{}
-	var provider workers.Provider = probe
+	var provider workers.Runner = probe
 	var runner workers.CommandRunner = probe
 
 	binding := recordings.BindReplayExecutionResult{
@@ -45,7 +45,7 @@ func TestReplayBindingContractsAcceptWorkersRootPorts(t *testing.T) {
 	var factory recordings.ReplayExecutionFactory = func(
 		_ *recordings.ReplayArtifact,
 	) (
-		workers.Provider,
+		workers.Runner,
 		workers.CommandRunner,
 		[]recordings.ReplayHook,
 		recordings.CompletionDeliveryPlanner,

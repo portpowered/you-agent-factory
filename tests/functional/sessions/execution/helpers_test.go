@@ -63,7 +63,7 @@ func (p *partialResultBlockingProvider) waitForCanceledInfer(t *testing.T, timeo
 	t.Fatal("provider Infer did not observe canceled workflow context")
 }
 
-func (p *partialResultBlockingProvider) Infer(
+func (p *partialResultBlockingProvider) Execute(
 	ctx context.Context,
 	_ workerexecution.ProviderInferenceRequest,
 ) (workerexecution.InferenceResponse, error) {

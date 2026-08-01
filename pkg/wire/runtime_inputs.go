@@ -267,7 +267,7 @@ func projectRuntimeOpeningExternalEffects(edges serviceedges.Edges) factorysessi
 }
 
 type factorySessionModelPullMetricsAdapter struct {
-	next modelswire.PullMetricsRecorder
+	next serviceedges.PullMetricsRecorder
 }
 
 func (adapter factorySessionModelPullMetricsAdapter) RecordModelPullMetric(
@@ -280,14 +280,14 @@ func (adapter factorySessionModelPullMetricsAdapter) RecordModelPullMetric(
 	for key, value := range metric.Labels {
 		labels[key] = value
 	}
-	adapter.next.RecordModelPullMetric(modelswire.PullMetric{
+	adapter.next.RecordModelPullMetric(serviceedges.PullMetric{
 		Name:   metric.Name,
 		Labels: labels,
 	})
 }
 
 func adaptModelPullMetricsRecorder(
-	recorder modelswire.PullMetricsRecorder,
+	recorder serviceedges.PullMetricsRecorder,
 ) factorysessionwire.ModelPullMetricsRecorder {
 	if recorder == nil {
 		return nil

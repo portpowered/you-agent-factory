@@ -895,7 +895,7 @@ type BindReplayExecutionRequest struct {
 // Deprecated: provider and runner bindings are intentionally excluded from the
 // peer-facing Service replay slice.
 type BindReplayExecutionResult struct {
-	Provider           workerexecution.Provider
+	Provider           workerexecution.Runner
 	CommandRunner      workerexecution.CommandRunner
 	Hooks              []ReplayHook
 	CompletionDelivery CompletionDeliveryPlanner
@@ -1291,7 +1291,7 @@ type RuntimeRecorderFactory func(
 type ReplayExecutionFactory func(
 	*ReplayArtifact,
 ) (
-	workerexecution.Provider,
+	workerexecution.Runner,
 	workerexecution.CommandRunner,
 	[]ReplayHook,
 	CompletionDeliveryPlanner,

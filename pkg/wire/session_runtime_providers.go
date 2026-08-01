@@ -524,7 +524,7 @@ func provideFactorySessionExecutionFactory(
 	return func(
 		projectRoot string,
 		persistencePolicy factorysessions.PersistencePolicy,
-		provider workers.Provider,
+		provider workers.Runner,
 		clock factoryruntime.Clock,
 		workerPresetIDs map[string]struct{},
 		workerSettings factoryruntime.JavaScriptWorkerSettings,
@@ -696,7 +696,7 @@ func provideReplayExecutionFactory() recordings.ReplayExecutionFactory {
 	return func(
 		artifact *factorydefinitions.ReplayArtifact,
 	) (
-		workers.Provider,
+		workers.Runner,
 		workers.CommandRunner,
 		[]recordings.ReplayHook,
 		recordings.CompletionDeliveryPlanner,
@@ -787,7 +787,7 @@ func provideWorkersRuntimeFactory(
 		factoryRunnerID string,
 		runWorktree string,
 		invocationSkipPermissionsOverride *bool,
-		providerOverride workers.Provider,
+		providerOverride workers.Runner,
 		now func() time.Time,
 		contentMaterializer work.ContentMaterializer,
 		acpIntegrations []operatorsettings.ACPIntegration,
@@ -1091,7 +1091,7 @@ func provideProviderFromCommandRunnerFactory(
 	}
 	operatingSystem := resolveWorkersOperatingSystem(edges)
 	temporaryFiles := provideWorkersProviderTemporaryFileSystem(edges)
-	return func(runner workers.CommandRunner) (workers.Provider, error) {
+	return func(runner workers.CommandRunner) (workers.Runner, error) {
 		return workerswire.NewProviderFromCommandRunner(
 			providersService, runner, commandClock, allocator, resolveSymlinks,
 			executableLocator, executableInspector, executableFiles, operatingSystem, temporaryFiles,

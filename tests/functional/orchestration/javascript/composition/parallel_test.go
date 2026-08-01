@@ -16,7 +16,6 @@ import (
 	"time"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -622,7 +621,7 @@ func (p *gatedParallelChildProvider) peakActive() int {
 	return p.peak
 }
 
-func (p *gatedParallelChildProvider) Infer(
+func (p *gatedParallelChildProvider) Execute(
 	ctx context.Context,
 	req workerexecution.ProviderInferenceRequest,
 ) (workerexecution.InferenceResponse, error) {
@@ -677,7 +676,7 @@ func parallelChildLabelFromRequest(req workerexecution.ProviderInferenceRequest)
 	return message
 }
 
-var _ workerprovider.Provider = (*gatedParallelChildProvider)(nil)
+var _ workerexecution.Runner = (*gatedParallelChildProvider)(nil)
 
 type labelGatedParallelChildProvider struct {
 	mu              sync.Mutex
@@ -725,7 +724,7 @@ func (p *labelGatedParallelChildProvider) completionOrder() []string {
 	return append([]string(nil), p.completedLabels...)
 }
 
-func (p *labelGatedParallelChildProvider) Infer(
+func (p *labelGatedParallelChildProvider) Execute(
 	ctx context.Context,
 	req workerexecution.ProviderInferenceRequest,
 ) (workerexecution.InferenceResponse, error) {
@@ -750,7 +749,7 @@ func (p *labelGatedParallelChildProvider) Infer(
 	}, nil
 }
 
-var _ workerprovider.Provider = (*labelGatedParallelChildProvider)(nil)
+var _ workerexecution.Runner = (*labelGatedParallelChildProvider)(nil)
 
 type partialFailureParallelChildProvider struct{}
 
@@ -758,7 +757,7 @@ func newPartialFailureParallelChildProvider() *partialFailureParallelChildProvid
 	return &partialFailureParallelChildProvider{}
 }
 
-func (p *partialFailureParallelChildProvider) Infer(
+func (p *partialFailureParallelChildProvider) Execute(
 	_ context.Context,
 	req workerexecution.ProviderInferenceRequest,
 ) (workerexecution.InferenceResponse, error) {
@@ -776,4 +775,4 @@ func (p *partialFailureParallelChildProvider) Infer(
 	}, nil
 }
 
-var _ workerprovider.Provider = (*partialFailureParallelChildProvider)(nil)
+var _ workerexecution.Runner = (*partialFailureParallelChildProvider)(nil)

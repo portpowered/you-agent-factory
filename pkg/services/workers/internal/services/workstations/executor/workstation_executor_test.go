@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"io/fs"
 	"os"
@@ -23,9 +22,6 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 )
-
-type workstationRuntimeToken = factoryruntime.RuntimeToken
-type workstationRuntimeTokenColor = factoryruntime.RuntimeTokenColor
 
 func TestWorkstationExecutorUsesInjectedProviderSelectionAuthority(t *testing.T) {
 	t.Parallel()
@@ -303,9 +299,9 @@ func TestWorkstationExecutor_ModelWorkstation_RendersPromptAndDelegates(t *testi
 		TransitionID:    "t-1",
 		WorkerType:      "worker-a",
 		WorkstationName: "standard",
-		InputTokens: InputTokens(factoryruntime.RuntimeToken{
+		InputTokens: InputTokens(workerexecution.Token{
 			ID:    "tok-1",
-			Color: factoryruntime.RuntimeTokenColor{WorkID: "work-1", WorkTypeID: "code-changes"},
+			Color: workerexecution.Color{WorkID: "work-1", WorkTypeID: "code-changes"},
 		}),
 	})
 	if err != nil {
@@ -397,9 +393,9 @@ func TestWorkstationExecutor_ModelWorkstation_InterpolatesInvocationArguments(t 
 		TransitionID:    "t-interpolate",
 		WorkerType:      "worker-a",
 		WorkstationName: "standard",
-		InputTokens: InputTokens(factoryruntime.RuntimeToken{
+		InputTokens: InputTokens(workerexecution.Token{
 			ID: "tok-1",
-			Color: factoryruntime.RuntimeTokenColor{
+			Color: workerexecution.Color{
 				WorkID: "work-1",
 				InvocationArguments: &work.InvocationArguments{
 					Arguments: map[string]work.InvocationArgument{
@@ -485,7 +481,7 @@ func TestWorkstationExecutor_ModelWorkstation_InterpolatesOmittedInvocationArgum
 
 	result, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID: "d-omitted", TransitionID: "t-omitted", WorkerType: "worker-a", WorkstationName: "standard",
-		InputTokens: InputTokens(factoryruntime.RuntimeToken{ID: "tok-1", Color: factoryruntime.RuntimeTokenColor{WorkID: "work-1"}}),
+		InputTokens: InputTokens(workerexecution.Token{ID: "tok-1", Color: workerexecution.Color{WorkID: "work-1"}}),
 	})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
@@ -517,7 +513,7 @@ func TestWorkstationExecutor_ScriptWorkerUsesInvocationInterpolatedArguments(t *
 
 	result, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID: "d-script", TransitionID: "t-script", WorkerType: "script-a", WorkstationName: "script-run",
-		InputTokens: InputTokens(factoryruntime.RuntimeToken{ID: "tok-script", Color: factoryruntime.RuntimeTokenColor{
+		InputTokens: InputTokens(workerexecution.Token{ID: "tok-script", Color: workerexecution.Color{
 			WorkID: "work-script", InvocationArguments: &work.InvocationArguments{},
 		}}),
 	})
@@ -723,9 +719,9 @@ func interpolatedProviderDispatch() work.WorkDispatch {
 		TransitionID:    "transition-provider",
 		WorkerType:      "worker-a",
 		WorkstationName: "standard",
-		InputTokens: InputTokens(factoryruntime.RuntimeToken{
+		InputTokens: InputTokens(workerexecution.Token{
 			ID: "token-provider",
-			Color: factoryruntime.RuntimeTokenColor{
+			Color: workerexecution.Color{
 				InvocationArguments: &work.InvocationArguments{
 					Arguments: map[string]work.InvocationArgument{
 						"provider": {Values: []string{"unused-by-scripted-interpolator"}},
@@ -808,9 +804,9 @@ func TestResolveModelOperationBindings_UsesInputThenConfigThenDefaultAndRecordsS
 			Inputs: []interfaces.ModelOperationSlot{{Name: "text", Required: true}, {Name: "voice"}, {Name: "style"}, {Name: "optional"}},
 		}},
 	}
-	inputs := []factoryruntime.RuntimeToken{{
+	inputs := []workerexecution.Token{{
 		ID: "tok-1",
-		Color: factoryruntime.RuntimeTokenColor{Content: []work.WorkContentPart{
+		Color: workerexecution.Color{Content: []work.WorkContentPart{
 			{Type: work.WorkContentPartTypeText, Slot: "ignored", Label: "utterance", Text: "first"},
 			{Type: work.WorkContentPartTypeText, Slot: "text", Label: "utterance", Text: "second"},
 		}},
@@ -847,9 +843,9 @@ func TestResolveModelOperationBindings_ImplicitlyMatchesBySlotAndRejectsMissingR
 		}},
 	}
 
-	got, err := resolveModelOperationBindings(workstation, worker, []factoryruntime.RuntimeToken{{
+	got, err := resolveModelOperationBindings(workstation, worker, []workerexecution.Token{{
 		ID:    "tok-1",
-		Color: factoryruntime.RuntimeTokenColor{Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Slot: "text", Text: "hello"}}},
+		Color: workerexecution.Color{Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Slot: "text", Text: "hello"}}},
 	}})
 	if err != nil {
 		t.Fatalf("resolveModelOperationBindings implicit slot: %v", err)
@@ -908,9 +904,9 @@ func TestWorkstationExecutor_ModelWorkstation_PreservesDistinctMultiInputCanonic
 		WorkerType:      "worker-a",
 		WorkstationName: "standard",
 		InputTokens: InputTokens(
-			factoryruntime.RuntimeToken{
+			workerexecution.Token{
 				ID: "tok-text",
-				Color: factoryruntime.RuntimeTokenColor{
+				Color: workerexecution.Color{
 					WorkID: "work-text",
 					Content: []work.WorkContentPart{
 						{Type: work.WorkContentPartTypeText, Text: "plan"},
@@ -918,9 +914,9 @@ func TestWorkstationExecutor_ModelWorkstation_PreservesDistinctMultiInputCanonic
 					Payload: []byte("plan"),
 				},
 			},
-			factoryruntime.RuntimeToken{
+			workerexecution.Token{
 				ID: "tok-mixed",
-				Color: factoryruntime.RuntimeTokenColor{
+				Color: workerexecution.Color{
 					WorkID: "work-mixed",
 					Content: []work.WorkContentPart{
 						{Type: work.WorkContentPartTypeText, Text: "caption"},
@@ -1021,7 +1017,7 @@ func TestWorkstationExecutor_ResolvesRelativeWorkingDirectoryAgainstRuntimeConfi
 		TransitionID:    "t-relative",
 		WorkerType:      "worker-a",
 		WorkstationName: "standard",
-		InputTokens:     InputTokens(workstationRuntimeToken{ID: "tok-1", Color: workstationRuntimeTokenColor{WorkID: "work-1"}}),
+		InputTokens:     InputTokens(workerexecution.Token{ID: "tok-1", Color: workerexecution.Color{WorkID: "work-1"}}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1066,7 +1062,7 @@ func TestWorkstationExecutor_ResolvesRelativeWorkingDirectoryAgainstRuntimeBaseD
 		TransitionID:    "t-relative-runtime-base",
 		WorkerType:      "worker-a",
 		WorkstationName: "standard",
-		InputTokens:     InputTokens(workstationRuntimeToken{ID: "tok-1", Color: workstationRuntimeTokenColor{WorkID: "work-1"}}),
+		InputTokens:     InputTokens(workerexecution.Token{ID: "tok-1", Color: workerexecution.Color{WorkID: "work-1"}}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1109,7 +1105,7 @@ func TestWorkstationExecutor_ResolvesPortableRootedWorkingDirectoryAgainstRuntim
 		TransitionID:    "t-portable-rooted",
 		WorkerType:      "worker-a",
 		WorkstationName: "standard",
-		InputTokens:     InputTokens(factoryruntime.RuntimeToken{ID: "tok-1", Color: factoryruntime.RuntimeTokenColor{WorkID: "work-1"}}),
+		InputTokens:     InputTokens(workerexecution.Token{ID: "tok-1", Color: workerexecution.Color{WorkID: "work-1"}}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1156,7 +1152,7 @@ func TestWorkstationExecutor_PreservesExistingUnixAbsoluteWorkingDirectory(t *te
 		TransitionID:    "t-unix-absolute",
 		WorkerType:      "worker-a",
 		WorkstationName: "standard",
-		InputTokens:     InputTokens(factoryruntime.RuntimeToken{ID: "tok-1", Color: factoryruntime.RuntimeTokenColor{WorkID: "work-1"}}),
+		InputTokens:     InputTokens(workerexecution.Token{ID: "tok-1", Color: workerexecution.Color{WorkID: "work-1"}}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1205,7 +1201,7 @@ func TestWorkstationExecutor_LoadedRuntimeConfigRuntimeBaseDirOverrideDrivesRela
 		WorkerType:      "worker-a",
 		WorkstationName: "standard",
 		ProjectID:       "agent-factory",
-		InputTokens:     InputTokens(factoryruntime.RuntimeToken{ID: "tok-1", Color: factoryruntime.RuntimeTokenColor{WorkID: "work-1"}}),
+		InputTokens:     InputTokens(workerexecution.Token{ID: "tok-1", Color: workerexecution.Color{WorkID: "work-1"}}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1337,9 +1333,9 @@ func canonicalWorkstationDispatch() work.WorkDispatch {
 		WorkerType:      "stale-worker",
 		WorkstationName: "review",
 		ProjectID:       "agent-factory",
-		InputTokens: InputTokens(factoryruntime.RuntimeToken{
+		InputTokens: InputTokens(workerexecution.Token{
 			ID: "tok-1",
-			Color: factoryruntime.RuntimeTokenColor{
+			Color: workerexecution.Color{
 				WorkID: "work-1",
 				Tags:   map[string]string{"branch": "feature-runtime"},
 			},
@@ -1389,7 +1385,7 @@ func TestWorkstationExecutor_ExecutorError_ReturnsFailedResult(t *testing.T) {
 		TransitionID:    "t-1",
 		WorkerType:      "worker-a",
 		WorkstationName: "standard",
-		InputTokens:     InputTokens(factoryruntime.RuntimeToken{ID: "tok-1"}),
+		InputTokens:     InputTokens(workerexecution.Token{ID: "tok-1"}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1421,7 +1417,7 @@ func TestWorkstationExecutor_ClassifierTrimsLabelAndIgnoresNonFailureOutcomeKind
 		TransitionID:    "t-classifier-trim",
 		WorkerType:      "worker-a",
 		WorkstationName: "classifier",
-		InputTokens:     InputTokens(factoryruntime.RuntimeToken{ID: "tok-1"}),
+		InputTokens:     InputTokens(workerexecution.Token{ID: "tok-1"}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1453,7 +1449,7 @@ func TestWorkstationExecutor_ClassifierRejectsJSONStringLabel(t *testing.T) {
 		TransitionID:    "t-classifier-json-string",
 		WorkerType:      "worker-a",
 		WorkstationName: "classifier",
-		InputTokens:     InputTokens(factoryruntime.RuntimeToken{ID: "tok-1"}),
+		InputTokens:     InputTokens(workerexecution.Token{ID: "tok-1"}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1496,7 +1492,7 @@ func TestWorkstationExecutor_ClassifierRejectsEmptyOrNonStringOutput(t *testing.
 				TransitionID:    "t-classifier-invalid",
 				WorkerType:      "worker-a",
 				WorkstationName: "classifier",
-				InputTokens:     InputTokens(factoryruntime.RuntimeToken{ID: "tok-1"}),
+				InputTokens:     InputTokens(workerexecution.Token{ID: "tok-1"}),
 			})
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
@@ -1533,7 +1529,7 @@ func TestWorkstationExecutor_PromptRenderFailure_ReturnsFailedResult(t *testing.
 		TransitionID:    "t-prompt-failure",
 		WorkerType:      "worker-a",
 		WorkstationName: "broken",
-		InputTokens:     InputTokens(factoryruntime.RuntimeToken{ID: "tok-1", Color: factoryruntime.RuntimeTokenColor{WorkID: "work-1"}}),
+		InputTokens:     InputTokens(workerexecution.Token{ID: "tok-1", Color: workerexecution.Color{WorkID: "work-1"}}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1572,7 +1568,7 @@ func TestWorkstationExecutor_ResolvesWorkerAndWorkstationPerDispatch(t *testing.
 		TransitionID:    "t-1",
 		WorkerType:      "worker-a",
 		WorkstationName: "review-a",
-		InputTokens:     InputTokens(factoryruntime.RuntimeToken{ID: "tok-1", Color: factoryruntime.RuntimeTokenColor{WorkID: "work-1"}}),
+		InputTokens:     InputTokens(workerexecution.Token{ID: "tok-1", Color: workerexecution.Color{WorkID: "work-1"}}),
 	})
 	if err != nil {
 		t.Fatalf("first execute error: %v", err)
@@ -1592,7 +1588,7 @@ func TestWorkstationExecutor_ResolvesWorkerAndWorkstationPerDispatch(t *testing.
 		TransitionID:    "t-2",
 		WorkerType:      "worker-b",
 		WorkstationName: "review-b",
-		InputTokens:     InputTokens(factoryruntime.RuntimeToken{ID: "tok-2", Color: factoryruntime.RuntimeTokenColor{WorkID: "work-2"}}),
+		InputTokens:     InputTokens(workerexecution.Token{ID: "tok-2", Color: workerexecution.Color{WorkID: "work-2"}}),
 	})
 	if err != nil {
 		t.Fatalf("second execute error: %v", err)

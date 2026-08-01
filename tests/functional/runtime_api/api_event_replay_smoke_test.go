@@ -144,7 +144,7 @@ type eventReplayBlockingProvider struct {
 	release <-chan struct{}
 }
 
-func (p *eventReplayBlockingProvider) Infer(
+func (p *eventReplayBlockingProvider) Execute(
 	ctx context.Context,
 	_ workerexecution.ProviderInferenceRequest,
 ) (workerexecution.InferenceResponse, error) {

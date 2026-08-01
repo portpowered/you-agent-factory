@@ -10,7 +10,7 @@ import (
 	"time"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	providercontract "github.com/portpowered/infinite-you/pkg/services/providers/wire"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -75,7 +75,7 @@ func namedFactorySmokeEnvironment(homeDir string) []string {
 func runFactoryThroughCustomerProcess(
 	t *testing.T,
 	dir string,
-	provider providercontract.Provider,
+	provider workers.Runner,
 ) factoryapi.StatusResponse {
 	t.Helper()
 	server := support.NewProcessAPIServer()

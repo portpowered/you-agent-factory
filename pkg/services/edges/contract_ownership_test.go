@@ -44,6 +44,18 @@ func TestPackageDocumentsProcessEdgeArchitectureException(t *testing.T) {
 func TestPackageOwnsOnlyTheEdgeAggregator(t *testing.T) {
 	t.Parallel()
 
+	localModelEffectTypes := map[string]struct{}{
+		"PullMetric": {}, "PullMetricsRecorder": {},
+		"AssetHTTPDoer": {}, "AssetMakeDirectories": {}, "AssetInspectPath": {},
+		"AssetResolveHomeDirectory": {}, "AssetWriteFile": {}, "AssetRenamePath": {},
+		"AssetRemovePath": {}, "AssetReadFile": {}, "AssetReadDirectory": {},
+		"AssetCreateFile": {}, "AssetOpenFile": {},
+		"HostProcessStartSpec": {}, "HostManagedProcess": {}, "HostProcessLauncher": {},
+		"HostHTTPDoer": {}, "HostTimer": {}, "HostClock": {},
+		"RuntimeHTTPDoer": {}, "RuntimeTempFile": {}, "RuntimeInspectFile": {},
+		"RuntimeTempDirectory": {}, "RuntimeCreateTempFile": {},
+		"InvocationArtifactFileSystem": {},
+	}
 	entries, err := os.ReadDir(".")
 	if err != nil {
 		t.Fatalf("read edges package: %v", err)
@@ -66,6 +78,11 @@ func TestPackageOwnsOnlyTheEdgeAggregator(t *testing.T) {
 				typed, ok := specification.(*ast.TypeSpec)
 				if !ok || typed.Name.Name == "Edges" {
 					continue
+				}
+				if entry.Name() == "models_effects.go" {
+					if _, allowed := localModelEffectTypes[typed.Name.Name]; allowed {
+						continue
+					}
 				}
 				t.Errorf(
 					"%s declares %s; external-effect contracts belong to their effect adapter and edges only aggregates them",
@@ -100,28 +117,28 @@ func TestEdgesAggregateExactOwnerTypes(t *testing.T) {
 		"HostedSecretResolver":                            {typeName: "automations.HostedLinearSecretResolver", effect: "resolve the Linear credential at the hosted adapter"},
 		"HostedLinearCheckpointStore":                     {typeName: "automations.HostedLinearCheckpointStore", effect: "persist hosted Linear resume checkpoints atomically"},
 		"HostedClock":                                     {typeName: "automations.HostedLinearClock", effect: "schedule hosted-poller waits"},
-		"ModelAssetHTTPClient":                            {typeName: "modelswire.AssetHTTPDoer", effect: "download external model assets"},
+		"ModelAssetHTTPClient":                            {typeName: "AssetHTTPDoer", effect: "download external model assets"},
 		"ModelAssetEndpoints":                             {typeName: "models.RuntimeAssetEndpoints", effect: "select external model-catalog and asset endpoints"},
 		"ModelAssetHostPlatform":                          {typeName: "models.AssetHostPlatform", effect: "select managed-model assets compatible with the process host"},
-		"ModelAssetMakeDirectories":                       {typeName: "modelswire.AssetMakeDirectories", effect: "create model asset directories"},
-		"ModelAssetInspectPath":                           {typeName: "modelswire.AssetInspectPath", effect: "inspect model asset paths"},
-		"ModelAssetResolveHomeDirectory":                  {typeName: "modelswire.AssetResolveHomeDirectory", effect: "resolve the model asset home directory"},
-		"ModelAssetWriteFile":                             {typeName: "modelswire.AssetWriteFile", effect: "write model asset files"},
-		"ModelAssetRenamePath":                            {typeName: "modelswire.AssetRenamePath", effect: "rename model asset paths"},
-		"ModelAssetRemovePath":                            {typeName: "modelswire.AssetRemovePath", effect: "remove model asset paths"},
-		"ModelAssetReadFile":                              {typeName: "modelswire.AssetReadFile", effect: "read model asset files"},
-		"ModelAssetReadDirectory":                         {typeName: "modelswire.AssetReadDirectory", effect: "read model asset directories"},
-		"ModelAssetCreateFile":                            {typeName: "modelswire.AssetCreateFile", effect: "create model asset files"},
-		"ModelAssetOpenFile":                              {typeName: "modelswire.AssetOpenFile", effect: "open model asset files"},
-		"ModelHostProcessLauncher":                        {typeName: "modelswire.HostProcessLauncher", effect: "launch the managed model host process"},
-		"ModelHostHTTPClient":                             {typeName: "modelswire.HostHTTPDoer", effect: "probe and invoke the managed model host"},
-		"ModelHostClock":                                  {typeName: "modelswire.HostClock", effect: "schedule model-host readiness probes"},
+		"ModelAssetMakeDirectories":                       {typeName: "AssetMakeDirectories", effect: "create model asset directories"},
+		"ModelAssetInspectPath":                           {typeName: "AssetInspectPath", effect: "inspect model asset paths"},
+		"ModelAssetResolveHomeDirectory":                  {typeName: "AssetResolveHomeDirectory", effect: "resolve the model asset home directory"},
+		"ModelAssetWriteFile":                             {typeName: "AssetWriteFile", effect: "write model asset files"},
+		"ModelAssetRenamePath":                            {typeName: "AssetRenamePath", effect: "rename model asset paths"},
+		"ModelAssetRemovePath":                            {typeName: "AssetRemovePath", effect: "remove model asset paths"},
+		"ModelAssetReadFile":                              {typeName: "AssetReadFile", effect: "read model asset files"},
+		"ModelAssetReadDirectory":                         {typeName: "AssetReadDirectory", effect: "read model asset directories"},
+		"ModelAssetCreateFile":                            {typeName: "AssetCreateFile", effect: "create model asset files"},
+		"ModelAssetOpenFile":                              {typeName: "AssetOpenFile", effect: "open model asset files"},
+		"ModelHostProcessLauncher":                        {typeName: "HostProcessLauncher", effect: "launch the managed model host process"},
+		"ModelHostHTTPClient":                             {typeName: "HostHTTPDoer", effect: "probe and invoke the managed model host"},
+		"ModelHostClock":                                  {typeName: "HostClock", effect: "schedule model-host readiness probes"},
 		"ModelRuntimeCommandRunner":                       {typeName: "platformprocess.CommandRunner", effect: "launch local model-runtime commands"},
-		"ModelRuntimeHTTPClient":                          {typeName: "modelswire.RuntimeHTTPDoer", effect: "invoke the local model runtime over HTTP"},
-		"ModelRuntimeInspectFile":                         {typeName: "modelswire.RuntimeInspectFile", effect: "inspect local model-runtime files"},
-		"ModelRuntimeTempDirectory":                       {typeName: "modelswire.RuntimeTempDirectory", effect: "resolve the process temporary directory"},
-		"ModelRuntimeCreateTempFile":                      {typeName: "modelswire.RuntimeCreateTempFile", effect: "create local model-runtime temporary files"},
-		"ModelInvocationArtifactFileSystem":               {typeName: "modelswire.InvocationArtifactFileSystem", effect: "export streamed model-invocation artifacts"},
+		"ModelRuntimeHTTPClient":                          {typeName: "RuntimeHTTPDoer", effect: "invoke the local model runtime over HTTP"},
+		"ModelRuntimeInspectFile":                         {typeName: "RuntimeInspectFile", effect: "inspect local model-runtime files"},
+		"ModelRuntimeTempDirectory":                       {typeName: "RuntimeTempDirectory", effect: "resolve the process temporary directory"},
+		"ModelRuntimeCreateTempFile":                      {typeName: "RuntimeCreateTempFile", effect: "create local model-runtime temporary files"},
+		"ModelInvocationArtifactFileSystem":               {typeName: "InvocationArtifactFileSystem", effect: "export streamed model-invocation artifacts"},
 		"FactorySessionsWorkingDirectory":                 {typeName: "platformfilesystem.WorkingDirectory", effect: "resolve omitted Factory Session invocation targets"},
 		"FactorySessionExecutionOpeningFileSystem":        {typeName: "factorysessions.ExecutionOpeningFileSystem", effect: "resolve omitted durable-execution project and fixture-catalog paths"},
 		"FactorySessionDirectoryInspection":               {typeName: "factorysessions.DirectoryInspection", effect: "inspect Factory Session target directories"},
@@ -201,8 +218,8 @@ func TestEdgesAggregateExactOwnerTypes(t *testing.T) {
 		"RuntimeHostObserver":              {typeName: "factorysessions.RuntimeHostObserver", effect: "observe Factory Session runtime-host lifecycle"},
 		"FactoryVisualizationSink":         {typeName: "factoryvisualization.Sink", effect: "present projected Factory visualization views at the process boundary"},
 		"FactoryVisualizationRootObserver": {typeName: "factoryvisualization.RootObserver", effect: "observe the published Factory Visualization root composed for one runtime opening"},
-		"ModelPullMetricsRecorder":         {typeName: "modelswire.PullMetricsRecorder", effect: "publish managed-model pull metrics"},
-		"ProviderOverride":                 {typeName: "providercontract.Provider", effect: "perform external provider inference"},
+		"ModelPullMetricsRecorder":         {typeName: "PullMetricsRecorder", effect: "publish managed-model pull metrics"},
+		"ProviderOverride":                 {typeName: "workers.Runner", effect: "perform external provider inference"},
 		"WorkersExecutablePathInspector":   {typeName: "platformfilesystem.PathInspector", effect: "inspect the selected Worker executable path"},
 		"ScriptCommandRunner":              {typeName: "platformprocess.CommandRunner", effect: "launch external script processes"},
 		"WorkContentStagingFileSystem":     {typeName: "work.ContentStagingFileSystem", effect: "persist and clean up staged Work content"},

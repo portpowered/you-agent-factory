@@ -1478,7 +1478,7 @@ func testExecutionServiceChildExecutorHelpers(t *testing.T) {
 	}
 
 	smoke := SmokeLiveChildProvider()
-	response, err := smoke.Infer(context.Background(), workerexecution.ProviderInferenceRequest{})
+	response, err := smoke.Execute(context.Background(), workerexecution.RunnerExecutionRequest{})
 	if err != nil {
 		t.Fatalf("SmokeLiveChildProvider().Infer: %v", err)
 	}

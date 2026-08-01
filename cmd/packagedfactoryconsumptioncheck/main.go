@@ -44,9 +44,10 @@ var allowedPackagedFactoriesImporters = map[string]struct{}{
 }
 
 var allowedCatalogLoaderFiles = map[string]struct{}{
-	"pkg/wire/profiles.go": {},
+	"pkg/wire/profiles.go":                   {},
 	"pkg/transports/http/handlers_models.go": {},
 	"pkg/services/factory_definitions/internal/services/distribution/goal/prompt_drift.go": {},
+	"internal/migrationledgercheck/packaged_factory_matrix.go":                             {},
 }
 
 type config struct {

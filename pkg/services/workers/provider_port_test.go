@@ -7,21 +7,21 @@ import (
 	workers "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-type rootProviderStub struct{}
+type rootRunnerStub struct{}
 
-func (rootProviderStub) Infer(
+func (rootRunnerStub) Execute(
 	context.Context,
-	workers.ProviderInferenceRequest,
+	workers.RunnerExecutionRequest,
 ) (workers.InferenceResponse, error) {
 	return workers.InferenceResponse{}, nil
 }
 
-func TestProviderPortExposedAtWorkersRoot(t *testing.T) {
+func TestRunnerPortExposedAtWorkersRoot(t *testing.T) {
 	t.Parallel()
 
-	var provider workers.Provider = rootProviderStub{}
-	if provider == nil {
-		t.Fatal("workers.Provider assignment failed")
+	var runner workers.Runner = rootRunnerStub{}
+	if runner == nil {
+		t.Fatal("workers.Runner assignment failed")
 	}
 }
 

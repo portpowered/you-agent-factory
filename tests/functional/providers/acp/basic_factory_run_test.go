@@ -228,7 +228,7 @@ type availableExecutableLocator struct{}
 
 func (availableExecutableLocator) LookPath(file string) (string, error) { return file, nil }
 
-func (p *legacyProvider) Infer(context.Context, workers.ProviderInferenceRequest) (workers.InferenceResponse, error) {
+func (p *legacyProvider) Execute(context.Context, workers.ProviderInferenceRequest) (workers.InferenceResponse, error) {
 	p.calls.Add(1)
 	return p.response, p.err
 }

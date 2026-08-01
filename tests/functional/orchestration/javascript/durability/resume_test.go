@@ -663,7 +663,7 @@ func (p *javascriptDurabilityResumeBlockingProvider) callCount() int {
 	return p.calls
 }
 
-func (p *javascriptDurabilityResumeBlockingProvider) Infer(
+func (p *javascriptDurabilityResumeBlockingProvider) Execute(
 	ctx context.Context,
 	_ workerexecution.ProviderInferenceRequest,
 ) (workerexecution.InferenceResponse, error) {

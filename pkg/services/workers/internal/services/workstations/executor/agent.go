@@ -37,17 +37,18 @@ type AgentExecutor struct {
 
 var _ WorkstationRequestExecutor = (*AgentExecutor)(nil)
 
-// NewAgentExecutor creates an AgentExecutor from runtime-loaded config and a Provider.
+// NewAgentExecutor creates an AgentExecutor from runtime-loaded config and a
+// Workers Runner.
 func NewAgentExecutor(
 	runtimeConfig interfaces.RuntimeDefinitionLookup,
-	provider workerexecution.Provider,
+	runner workerexecution.Runner,
 	logger logging.Logger,
 	clock func() time.Time,
 	decisionEnvelopes ...interfaces.DecisionEnvelopeService,
 ) *AgentExecutor {
 	return NewAgentExecutorWithRunner(
 		runtimeConfig,
-		RunnerFromProvider(provider),
+		runner,
 		logger,
 		clock,
 		decisionEnvelopes...,
@@ -65,9 +66,7 @@ func NewAgentExecutorWithRunner(
 ) *AgentExecutor {
 	return newAgentExecutor(
 		runtimeConfig,
-		workerinvocation.NewProviderExecutor(
-			runnerProviderAdapter{inner: runner},
-		),
+		workerinvocation.NewRunnerExecutor(runner),
 		logger,
 		clock,
 		firstDecisionEnvelopeService(decisionEnvelopes),
@@ -610,43 +609,6 @@ func (ae *AgentExecutor) inferOnce(
 		return workerexecution.InferenceResponse{}, 0, err
 	}
 	return result.Response, 0, nil
-}
-
-type providerRunnerAdapter struct {
-	executor workerexecution.InvocationExecutor
-}
-
-type runnerProviderAdapter struct {
-	inner workerexecution.Runner
-}
-
-func (a runnerProviderAdapter) Infer(ctx context.Context, request workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
-	if a.inner == nil {
-		return workerexecution.InferenceResponse{}, workerexecution.NewProviderError(
-			workerexecution.WorkFailureTypeMisconfigured,
-			"runner requires an implementation",
-			nil,
-		)
-	}
-	return a.inner.Execute(ctx, request)
-}
-
-// RunnerFromProvider adapts a legacy provider implementation onto the shared
-// runner execution contract.
-func RunnerFromProvider(provider workerexecution.Provider) workerexecution.Runner {
-	return providerRunnerAdapter{executor: workerinvocation.NewExecutor(provider)}
-}
-
-func (a providerRunnerAdapter) Execute(ctx context.Context, request workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
-	if a.executor == nil {
-		return workerexecution.RunnerExecutionResult{}, workerexecution.NewProviderError(
-			workerexecution.WorkFailureTypeMisconfigured,
-			"runner requires a provider implementation",
-			nil,
-		)
-	}
-	result, err := a.executor.Execute(ctx, workerexecution.InvocationInput{Request: request, Attempt: 1})
-	return result.Response, err
 }
 
 func requiredRunnerOptionalCapabilities(request workerexecution.WorkstationExecutionRequest) []workerexecution.RunnerOptionalCapability {

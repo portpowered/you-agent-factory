@@ -20,7 +20,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	sessioncli "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/cli/session"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -370,7 +369,7 @@ func newCLIResumeSmokeRunningHarness(t *testing.T) *cliResumeSmokeHarness {
 func startRootCLIResumeAPIServer(
 	t *testing.T,
 	projectRoot string,
-	provider workerprovider.Provider,
+	provider workerexecution.Runner,
 ) (string, cliResumeProcess) {
 	t.Helper()
 
@@ -732,7 +731,7 @@ func (p *cliResumeSmokeBlockingProvider) callCount() int {
 	return p.calls
 }
 
-func (p *cliResumeSmokeBlockingProvider) Infer(ctx context.Context, _ workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
+func (p *cliResumeSmokeBlockingProvider) Execute(ctx context.Context, _ workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	p.mu.Lock()
 	p.calls++
 	call := p.calls

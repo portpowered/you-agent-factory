@@ -73,7 +73,7 @@ type WorkersRuntimeExecutorsFactory func(
 	logging.Logger,
 	bool,
 	*bool,
-	workers.Provider,
+	workers.Runner,
 	workers.ProgressPublisher,
 	workers.ScriptEventRecorder,
 	workers.InferenceEventRecorder,

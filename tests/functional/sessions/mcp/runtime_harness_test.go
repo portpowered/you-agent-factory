@@ -14,7 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/root"
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/mcp"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/wire"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -22,7 +22,7 @@ import (
 func startRootRuntimeMCPServer(
 	t *testing.T,
 	projectRoot string,
-	provider workerprovider.Provider,
+	provider workers.Runner,
 ) (*stdioMCPClient, func(), <-chan error) {
 	t.Helper()
 

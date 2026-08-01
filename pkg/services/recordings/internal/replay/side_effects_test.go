@@ -23,7 +23,7 @@ func TestSideEffects_InferReturnsRecordedProviderResponse(t *testing.T) {
 		t.Fatalf("NewSideEffects: %v", err)
 	}
 
-	resp, err := sideEffects.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
+	resp, err := sideEffects.Execute(context.Background(), workerexecution.RunnerExecutionRequest{
 		Dispatch: work.WorkDispatch{
 			WorkerType: "worker-a",
 			Execution: work.ExecutionMetadata{
@@ -96,7 +96,7 @@ func TestSideEffects_InferDiagnosticsStayDetachedFromRecordedMutation(t *testing
 	providerDiagnostics.Metadata["phase"] = "mutated"
 	providerDiagnostics.Panic.Message = "mutated panic"
 
-	resp, err := sideEffects.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
+	resp, err := sideEffects.Execute(context.Background(), workerexecution.RunnerExecutionRequest{
 		Dispatch: work.WorkDispatch{
 			WorkerType: "worker-a",
 			Execution: work.ExecutionMetadata{
@@ -166,7 +166,7 @@ func TestSideEffects_UnmatchedRequestFailsClearly(t *testing.T) {
 		t.Fatalf("NewSideEffects: %v", err)
 	}
 
-	_, err = sideEffects.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
+	_, err = sideEffects.Execute(context.Background(), workerexecution.RunnerExecutionRequest{
 		Dispatch: work.WorkDispatch{
 			WorkerType: "worker-a",
 			Execution: work.ExecutionMetadata{
@@ -233,7 +233,7 @@ func TestSideEffects_InferPreservesNilDiagnosticsWhenReplayArtifactOmitsThem(t *
 		t.Fatalf("NewSideEffects: %v", err)
 	}
 
-	resp, err := sideEffects.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
+	resp, err := sideEffects.Execute(context.Background(), workerexecution.RunnerExecutionRequest{
 		Dispatch: work.WorkDispatch{
 			WorkerType: "worker-a",
 			Execution: work.ExecutionMetadata{
@@ -288,7 +288,7 @@ func TestSideEffects_InferResolvesFailureMetadataOnlyRecordedFailure(t *testing.
 		t.Fatalf("NewSideEffects: %v", err)
 	}
 
-	_, err = sideEffects.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
+	_, err = sideEffects.Execute(context.Background(), workerexecution.RunnerExecutionRequest{
 		Dispatch: work.WorkDispatch{
 			WorkerType: "worker-a",
 			Execution: work.ExecutionMetadata{
@@ -332,7 +332,7 @@ func TestSideEffects_DispatchWithoutCompletionFailsExplicitly(t *testing.T) {
 		t.Fatalf("NewSideEffects: %v", err)
 	}
 
-	_, err = sideEffects.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
+	_, err = sideEffects.Execute(context.Background(), workerexecution.RunnerExecutionRequest{
 		Dispatch: work.WorkDispatch{
 			WorkerType: "worker-a",
 			Execution: work.ExecutionMetadata{
@@ -462,11 +462,11 @@ func TestSideEffects_CancellationDoesNotConsumeRecordedProviderResponse(t *testi
 
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := sideEffects.Infer(canceled, request); !errors.Is(err, context.Canceled) {
+	if _, err := sideEffects.Execute(canceled, request); !errors.Is(err, context.Canceled) {
 		t.Fatalf("Infer canceled error = %v, want context.Canceled", err)
 	}
 
-	response, err := sideEffects.Infer(context.Background(), request)
+	response, err := sideEffects.Execute(context.Background(), request)
 	if err != nil {
 		t.Fatalf("Infer after cancellation: %v", err)
 	}

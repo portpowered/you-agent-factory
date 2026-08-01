@@ -48,7 +48,7 @@ func (c constructorWorkflowContracts) ResumeJavaScript(
 type serviceConfig struct {
 	ProjectRoot       string
 	ChildExecutorMode string
-	Provider          workers.Provider
+	Provider          workers.Runner
 	ProviderExecutor  workers.InvocationExecutor
 	FakeScenarios     []FakeScenario
 	Persistence       PersistenceChoice
@@ -92,7 +92,7 @@ func newExecutionService(provider ExecutionProvider, config serviceConfig) (Serv
 	}
 }
 
-func firstInvocationExecutor(executor workers.InvocationExecutor, provider workers.Provider) workers.InvocationExecutor {
+func firstInvocationExecutor(executor workers.InvocationExecutor, provider workers.Runner) workers.InvocationExecutor {
 	if executor != nil {
 		return executor
 	}

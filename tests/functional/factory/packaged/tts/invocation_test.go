@@ -18,7 +18,6 @@ import (
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	providercontract "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -240,7 +239,7 @@ func (provider *packagedTTSFakeProvider) lastRequest() *workerexecution.Provider
 	return &cloned
 }
 
-func (provider *packagedTTSFakeProvider) Infer(
+func (provider *packagedTTSFakeProvider) Execute(
 	_ context.Context,
 	request workerexecution.ProviderInferenceRequest,
 ) (workerexecution.InferenceResponse, error) {
@@ -273,7 +272,7 @@ func (provider *packagedTTSFakeProvider) Infer(
 	return workerexecution.InferenceResponse{Content: string(encoded)}, nil
 }
 
-var _ providercontract.Provider = (*packagedTTSFakeProvider)(nil)
+var _ workerexecution.Runner = (*packagedTTSFakeProvider)(nil)
 
 type packagedTTSFailingFakeProvider struct {
 	mu          sync.Mutex
@@ -295,7 +294,7 @@ func (provider *packagedTTSFailingFakeProvider) callCount() int {
 	return provider.calls
 }
 
-func (provider *packagedTTSFailingFakeProvider) Infer(
+func (provider *packagedTTSFailingFakeProvider) Execute(
 	_ context.Context,
 	request workerexecution.ProviderInferenceRequest,
 ) (workerexecution.InferenceResponse, error) {
@@ -313,7 +312,7 @@ func (provider *packagedTTSFailingFakeProvider) Infer(
 	return workerexecution.InferenceResponse{}, errors.New(provider.failMessage)
 }
 
-var _ providercontract.Provider = (*packagedTTSFailingFakeProvider)(nil)
+var _ workerexecution.Runner = (*packagedTTSFailingFakeProvider)(nil)
 
 // overwritePackagedTTSFactoryWithProviderFakeTopology keeps the installed
 // @you/tts layout but replaces authored topology with a cloud-backed inference

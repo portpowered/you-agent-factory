@@ -26,7 +26,7 @@ import (
 // opening consumer.
 type ExternalEffects struct {
 	Clock                            factoryruntime.Clock
-	ProviderOverride                 workers.Provider
+	ProviderOverride                 workers.Runner
 	ModelPullMetricsRecorder         factorysessioncontracts.ModelPullMetricsRecorder
 	InvocationMetricsRecorder        roles.InvocationMetricsRecorder
 	ProviderCommandRunner            platformprocess.CommandRunner
@@ -61,7 +61,7 @@ type AutomationFactory = func(
 type FactorySessionExecutionFactory = func(
 	string,
 	factorysessions.PersistencePolicy,
-	workers.Provider,
+	workers.Runner,
 	factoryruntime.Clock,
 	map[string]struct{},
 	factoryruntime.JavaScriptWorkerSettings,
@@ -96,7 +96,7 @@ type WorkersRuntimeFactory = func(
 	string,
 	string,
 	*bool,
-	workers.Provider,
+	workers.Runner,
 	func() time.Time,
 	work.ContentMaterializer,
 	[]operatorsettings.ACPIntegration,
@@ -123,7 +123,7 @@ type DurableExecutionFactory func(
 	operatorsettings.ResolvedDefaults,
 	RuntimeRoot,
 	factoryruntime.Clock,
-	workers.Provider,
+	workers.Runner,
 	*workers.MockWorkersConfig,
 	FactorySessionExecutionFactory,
 	factorysessions.ProviderIdentityResolver,
@@ -137,7 +137,7 @@ type WorkerExecutionFactory func(
 	workers.CommandRunner,
 	workers.CommandRunner,
 	workers.PTYAllocator,
-	workers.Provider,
+	workers.Runner,
 	roles.CurrentRuntimeResolver,
 	models.Service,
 	models.RuntimeScopeRef,

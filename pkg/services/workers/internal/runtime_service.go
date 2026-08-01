@@ -45,7 +45,7 @@ type Service struct {
 	factoryRunnerID                   string
 	runWorktree                       string
 	invocationSkipPermissionsOverride *bool
-	providerOverride                  workers.Provider
+	providerOverride                  workers.Runner
 	clock                             func() time.Time
 	processEnvironment                func() []string
 	currentWorkingDirectory           func() (string, error)
@@ -147,7 +147,7 @@ func New(
 	factoryRunnerID string,
 	runWorktree string,
 	invocationSkipPermissionsOverride *bool,
-	providerOverride workers.Provider,
+	providerOverride workers.Runner,
 	clock func() time.Time,
 	processEnvironment func() []string,
 	currentWorkingDirectory func() (string, error),

@@ -26,7 +26,7 @@ func TestAdaptPreservesRecordingsReplayContracts(t *testing.T) {
 	replayFactory := factoryruntime.ReplayExecutionFactory(func(
 		artifact *recordings.ReplayArtifact,
 	) (
-		workers.Provider,
+		workers.Runner,
 		workers.CommandRunner,
 		[]recordings.ReplayHook,
 		recordings.CompletionDeliveryPlanner,

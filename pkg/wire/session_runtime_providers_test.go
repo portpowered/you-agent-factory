@@ -25,8 +25,8 @@ func codexWireTestOutput(content string) []byte {
 
 type wireTestProvider struct{}
 
-func (wireTestProvider) Infer(context.Context, workers.ProviderInferenceRequest) (workers.InferenceResponse, error) {
-	return workers.InferenceResponse{}, nil
+func (wireTestProvider) Execute(context.Context, workers.RunnerExecutionRequest) (workers.RunnerExecutionResult, error) {
+	return workers.RunnerExecutionResult{}, nil
 }
 
 type wireTestProviderRegistry struct{}

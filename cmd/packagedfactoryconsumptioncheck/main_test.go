@@ -77,6 +77,7 @@ func fixtureRepository(t *testing.T) string {
 		"pkg/wire",
 		"pkg/transports/http",
 		"pkg/services/factory_definitions/internal/services/distribution/goal",
+		"internal/migrationledgercheck",
 		"internal/packagedfactorycatalog",
 		"packages/packaged-factories",
 	} {
@@ -107,6 +108,15 @@ func handlers() error {
 import "github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
 
 func promptDrift() error {
+	_, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
+	return err
+}
+`)
+	writeFixture(t, root, "internal/migrationledgercheck/packaged_factory_matrix.go", `package migrationledgercheck
+
+import "github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
+
+func matrix() error {
 	_, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
 	return err
 }

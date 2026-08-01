@@ -15,7 +15,6 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
-	providercontract "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -318,7 +317,7 @@ func (client *rejectingModelAssetHTTP) Calls() int {
 	return client.calls
 }
 
-func (p *modelTransportSmokeProvider) Infer(_ context.Context, req workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
+func (p *modelTransportSmokeProvider) Execute(_ context.Context, req workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -337,4 +336,4 @@ func (p *modelTransportSmokeProvider) Calls() []workerexecution.ProviderInferenc
 	return calls
 }
 
-var _ providercontract.Provider = (*modelTransportSmokeProvider)(nil)
+var _ workerexecution.Runner = (*modelTransportSmokeProvider)(nil)

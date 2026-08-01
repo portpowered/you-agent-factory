@@ -12,7 +12,6 @@ import (
 	"time"
 
 	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
-	workerprovider "github.com/portpowered/infinite-you/pkg/services/providers/wire"
 	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -21,7 +20,7 @@ import (
 func startRecoveryAPIServer(
 	t *testing.T,
 	factoryDir string,
-	provider workerprovider.Provider,
+	provider workerexecution.Runner,
 ) *support.FunctionalAPIServer {
 	t.Helper()
 	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
@@ -185,7 +184,7 @@ type recoveryRedispatchBlockingProvider struct {
 	mu           sync.Mutex
 }
 
-var _ workerprovider.Provider = (*recoveryRedispatchBlockingProvider)(nil)
+var _ workerexecution.Runner = (*recoveryRedispatchBlockingProvider)(nil)
 
 func newRecoveryRedispatchBlockingProvider(failWorker, blockWorker string) *recoveryRedispatchBlockingProvider {
 	return &recoveryRedispatchBlockingProvider{
@@ -197,7 +196,7 @@ func newRecoveryRedispatchBlockingProvider(failWorker, blockWorker string) *reco
 	}
 }
 
-func (p *recoveryRedispatchBlockingProvider) Infer(
+func (p *recoveryRedispatchBlockingProvider) Execute(
 	ctx context.Context,
 	req workerexecution.ProviderInferenceRequest,
 ) (workerexecution.InferenceResponse, error) {

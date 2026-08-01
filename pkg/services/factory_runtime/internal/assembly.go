@@ -45,7 +45,7 @@ func (a *Assembly) Assemble(
 	defaultSessionID string,
 	workstationLoader factorydefinitions.WorkstationLoader,
 	loadFactory factoryruntime.LoadedFactoryLoader,
-	providerOverride workers.Provider,
+	providerOverride workers.Runner,
 	providerCommandRunner workers.CommandRunner,
 	scriptCommandRunner workers.CommandRunner,
 	mockWorkersConfig *workers.MockWorkersConfig,

@@ -31,7 +31,7 @@ type Builder interface {
 		*workerexecution.Context,
 		logging.Logger,
 		*bool,
-		workers.Provider,
+		workers.Runner,
 		workers.ProgressPublisher,
 		workerexecutor.ScriptEventRecorder,
 		workers.InferenceEventRecorder,
@@ -199,7 +199,7 @@ func (s *Service) Build(
 	workflowContext *workerexecution.Context,
 	logger logging.Logger,
 	invocationSkipPermissionsOverride *bool,
-	providerOverride workers.Provider,
+	providerOverride workers.Runner,
 	inferenceProgressPublisher workers.ProgressPublisher,
 	scriptRecorder workerexecutor.ScriptEventRecorder,
 	inferenceRecorder workers.InferenceEventRecorder,
@@ -330,12 +330,12 @@ func (s *Service) agentRunner(
 	def *interfaces.FactoryWorkerConfig,
 	logger logging.Logger,
 	effectiveSkipPermissions bool,
-	providerOverride workers.Provider,
+	providerOverride workers.Runner,
 	inferenceProgressPublisher workers.ProgressPublisher,
 ) (workers.Runner, error) {
 	usesNamedExecutorProvider := def != nil && workers.UsesNamedProvider(def.ExecutorProvider, def.ModelProvider)
 	if providerOverride != nil && !usesNamedExecutorProvider {
-		return workerexecutor.RunnerFromProvider(providerOverride), nil
+		return providerOverride, nil
 	}
 	return s.resolveRegisteredAgentRunner(
 		runtimeConfig,
@@ -383,33 +383,12 @@ func agentProgressPublisherOrNoop(
 	return func(_ workers.ProgressFragment) {}
 }
 
-// runnerProviderAdapter lets the provider-boundary recorder observe the final
-// decorated runner. Registry-selected conductor routes and retained native
-// routes therefore emit the same canonical inference events exactly once.
-type runnerProviderAdapter struct {
-	runner workers.Runner
-}
-
 func recordProviderRunner(
 	runner workers.Runner,
 	recorder workers.InferenceEventRecorder,
 	clock func() time.Time,
 ) workers.Runner {
 	return runner
-}
-
-func (a runnerProviderAdapter) Infer(
-	ctx context.Context,
-	request workerexecution.ProviderInferenceRequest,
-) (workerexecution.InferenceResponse, error) {
-	if a.runner == nil {
-		return workerexecution.InferenceResponse{}, workers.NewProviderError(
-			workerexecution.WorkFailureTypeMisconfigured,
-			"recording runner requires an implementation",
-			nil,
-		)
-	}
-	return a.runner.Execute(ctx, request)
 }
 
 // effectiveSkipPermissionsRunner installs invocation-local policy outside all

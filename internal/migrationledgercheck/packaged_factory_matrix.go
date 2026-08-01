@@ -1,14 +1,12 @@
 package migrationledgercheck
 
 import (
-	"context"
 	"fmt"
 	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/portpowered/infinite-you/internal/packagedfactorycatalog"
-	packagedfactories "github.com/portpowered/infinite-you/packages/packaged-factories"
 )
 
 const packagedFactoryInvocationMatrixPrefix = "tests/functional/factory/packaged/"
@@ -49,17 +47,22 @@ func CheckPackagedFactoryInvocationMatrix(repoRoot, checklistPath string) error 
 }
 
 func embeddedPackagedFactorySlugs() ([]string, error) {
-	inventory, err := packagedfactorycatalog.Discover(
-		context.Background(),
-		packagedfactories.Source(),
-		"factories",
-	)
+	catalog, err := packagedfactorycatalog.LoadPublishedDefinitionCatalog()
 	if err != nil {
-		return nil, fmt.Errorf("embedded packaged Factory inventory: %w", err)
+		return nil, fmt.Errorf("published packaged Factory catalog: %w", err)
 	}
-	slugs := make([]string, len(inventory.Entries))
-	for index, entry := range inventory.Entries {
-		slugs[index] = entry.Slug
+	definitions := catalog.All()
+	slugs := make([]string, len(definitions))
+	for index, definition := range definitions {
+		project, ok := strings.CutPrefix(strings.TrimSpace(definition.Project), "builtin-")
+		if !ok || project == "" {
+			return nil, fmt.Errorf(
+				"published packaged Factory catalog entry %q has invalid builtin project %q",
+				definition.Name,
+				definition.Project,
+			)
+		}
+		slugs[index] = project
 	}
 	slices.Sort(slugs)
 	return slugs, nil
@@ -68,25 +71,30 @@ func embeddedPackagedFactorySlugs() ([]string, error) {
 func packagedFactoryInvocationMatrixSlugsFromChecklist(checklistPaths map[string]struct{}) map[string]struct{} {
 	matrixSlugs := make(map[string]struct{})
 	for checklistPath := range checklistPaths {
-		slug, ok := packagedFactorySlugFromInvocationMatrixDestination(checklistPath)
+		slugs, ok := packagedFactorySlugsFromInvocationMatrixDestination(checklistPath)
 		if !ok {
 			continue
 		}
-		matrixSlugs[slug] = struct{}{}
+		for _, slug := range slugs {
+			matrixSlugs[slug] = struct{}{}
+		}
 	}
 	return matrixSlugs
 }
 
-func packagedFactorySlugFromInvocationMatrixDestination(destination string) (string, bool) {
+func packagedFactorySlugsFromInvocationMatrixDestination(destination string) ([]string, bool) {
 	remainder, ok := strings.CutPrefix(destination, packagedFactoryInvocationMatrixPrefix)
 	if !ok {
-		return "", false
+		return nil, false
 	}
 	subsection, suffix, ok := strings.Cut(remainder, "/")
 	if !ok || suffix != "invocation_test.go" || subsection == "" {
-		return "", false
+		return nil, false
 	}
-	return strings.ReplaceAll(subsection, "_", "-"), true
+	if subsection == "javascript_families" {
+		return []string{"spawn", "tournament"}, true
+	}
+	return []string{strings.ReplaceAll(subsection, "_", "-")}, true
 }
 
 func symmetricStringDiff(want, got []string) (missing, extra []string) {

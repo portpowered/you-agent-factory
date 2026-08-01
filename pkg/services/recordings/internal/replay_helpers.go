@@ -21,7 +21,7 @@ func NewReplayExecution(
 	decodeFactorySnapshot factorydefinitions.FactorySnapshotJSONDecoder,
 	decodeRuntimeConfig factorydefinitions.ReplayRuntimeConfigDecoder,
 ) (
-	workers.Provider,
+	workers.Runner,
 	workers.CommandRunner,
 	[]recordings.ReplayHook,
 	recordings.CompletionDeliveryPlanner,

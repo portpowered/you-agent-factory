@@ -28,7 +28,7 @@ type Service struct {
 	workflowID                 string
 	workstationLoader          factorydefinitions.WorkstationLoader
 	loadFactory                factory.LoadedFactoryLoader
-	providerOverride           workers.Provider
+	providerOverride           workers.Runner
 	providerCommandRunner      workers.CommandRunner
 	scriptCommandRunner        workers.CommandRunner
 	mockWorkersConfig          *workers.MockWorkersConfig
@@ -51,7 +51,7 @@ func New(
 	workflowID string,
 	workstationLoader factorydefinitions.WorkstationLoader,
 	loadFactory factory.LoadedFactoryLoader,
-	providerOverride workers.Provider,
+	providerOverride workers.Runner,
 	providerCommandRunner workers.CommandRunner,
 	scriptCommandRunner workers.CommandRunner,
 	mockWorkersConfig *workers.MockWorkersConfig,
@@ -114,7 +114,7 @@ func (s *Service) BuildSpec(
 	executionBaseDir string,
 	loadedFactoryCfg factorydefinitions.MutableLoadedFactorySource,
 	runtimeInstanceID string,
-	replayProvider workers.Provider,
+	replayProvider workers.Runner,
 	replayCommandRunner workers.CommandRunner,
 	submissionHooks []factory.SubmissionHook,
 	completionPlanner factory.CompletionDeliveryPlanner,

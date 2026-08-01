@@ -60,7 +60,7 @@ func TestResolveDurableExecutionProvider_PrefersOverride(t *testing.T) {
 			t.Fatal("mock command runner factory should not run when override is present")
 			return nil
 		},
-		func(workers.CommandRunner) (workers.Provider, error) {
+		func(workers.CommandRunner) (workers.Runner, error) {
 			t.Fatal("build provider should not run when override is present")
 			return nil, nil
 		},
@@ -92,7 +92,7 @@ func TestResolveDurableExecutionProvider_BuildsFromMockWrappedRunner(t *testing.
 		testutil.NewProviderCommandRunner(),
 		func(platformprocess.CommandRunner) workers.CommandRunner { return baseRunner },
 		recordingMockCommandRunnerFactory(&builtRunner),
-		func(runner workers.CommandRunner) (workers.Provider, error) {
+		func(runner workers.CommandRunner) (workers.Runner, error) {
 			if runner != builtRunner {
 				t.Fatalf("build provider runner = %#v, want wrapped %#v", runner, builtRunner)
 			}
@@ -120,7 +120,7 @@ func TestResolveDurableExecutionProvider_ReturnsNilWithoutPassthroughPolicy(t *t
 			t.Fatal("mock command runner factory should not run without passthrough unmatched policy")
 			return nil
 		},
-		func(workers.CommandRunner) (workers.Provider, error) {
+		func(workers.CommandRunner) (workers.Runner, error) {
 			t.Fatal("build provider should not run without passthrough unmatched policy")
 			return nil, nil
 		},
@@ -146,7 +146,7 @@ func TestResolveDurableExecutionProvider_ReturnsNilWithoutMockWorkers(t *testing
 			t.Fatal("mock command runner factory should not run without mock workers")
 			return nil
 		},
-		func(workers.CommandRunner) (workers.Provider, error) {
+		func(workers.CommandRunner) (workers.Runner, error) {
 			t.Fatal("build provider should not run without mock workers")
 			return nil, nil
 		},

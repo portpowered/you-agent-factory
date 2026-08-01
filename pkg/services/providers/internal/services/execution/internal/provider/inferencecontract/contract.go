@@ -4,11 +4,16 @@
 package inferencecontract
 
 import (
-	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"context"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // Provider performs one inference request against an external model provider.
 //
-// Deprecated: Provider is the runtime port implemented by the repository's
-// built-in adapters. New provider integrations should implement Integration.
-type Provider = workers.Provider
+// Deprecated: Provider is the Providers-owned compatibility port implemented
+// by the retained built-in adapters. Workers consumers use workers.Runner and
+// never import this package.
+type Provider interface {
+	Infer(context.Context, workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error)
+}

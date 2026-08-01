@@ -19,7 +19,7 @@ import (
 
 var (
 	_ factoryruntime.HostedInstance = (*factoryhost.Bundle)(nil)
-	_ factoryruntime.HostedLedger     = (*recordingfixtures.ScriptedRuntimeLedger)(nil)
+	_ factoryruntime.HostedLedger   = (*recordingfixtures.ScriptedRuntimeLedger)(nil)
 )
 
 // TestRuntimeRecordingsConsumerBehaviorPreserved proves CUT-RUN-REC story 004:
@@ -104,7 +104,7 @@ func testReplayExecutionHandoffConsumesRecordingsRootVocabulary(t *testing.T) {
 	var replayFactory recordings.ReplayExecutionFactory = func(
 		artifact *recordings.ReplayArtifact,
 	) (
-		workers.Provider,
+		workers.Runner,
 		workers.CommandRunner,
 		[]recordings.ReplayHook,
 		recordings.CompletionDeliveryPlanner,

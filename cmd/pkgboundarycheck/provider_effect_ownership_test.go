@@ -139,6 +139,33 @@ type Edges struct {
 	}
 }
 
+func TestRunAllowsEdgesReferencingWorkersRunnerContract(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoSourceFile(t, repoRoot, "pkg/services/workers/runner.go", `package workers
+
+type Runner interface {
+	Execute()
+}
+`)
+	writeGoSourceFile(t, repoRoot, "pkg/services/edges/definition.go", `package edges
+
+import "github.com/portpowered/infinite-you/pkg/services/workers"
+
+// Deliberate fixture: Workers owns request-scoped execution through Runner;
+// this is not a Providers Infer effect port.
+type Edges struct {
+	ProviderOverride workers.Runner
+}
+`)
+
+	stderr := &bytes.Buffer{}
+	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err != nil {
+		t.Fatalf("run() error = %v, want Workers Runner edge accepted; stderr=%q", err, stderr.String())
+	}
+}
+
 func TestRunRejectsEdgesAnonymousFieldProviderEffectRedefinitions(t *testing.T) {
 	t.Parallel()
 
@@ -778,4 +805,3 @@ type Provider interface {
 		}
 	}
 }
-

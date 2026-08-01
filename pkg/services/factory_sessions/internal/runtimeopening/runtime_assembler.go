@@ -26,7 +26,7 @@ type FactoryRuntimeAssembler interface {
 		string,
 		factorydefinitions.WorkstationLoader,
 		factoryruntime.LoadedFactoryLoader,
-		workers.Provider,
+		workers.Runner,
 		workers.CommandRunner,
 		workers.CommandRunner,
 		*workers.MockWorkersConfig,
