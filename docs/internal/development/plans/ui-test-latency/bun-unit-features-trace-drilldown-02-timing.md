@@ -67,23 +67,74 @@ Duration  927ms (transform 666ms, setup 0ms, import 935ms, tests 32ms, environme
 [timing] exit_code=0
 ```
 
-### Bun after (pending migration)
+### Bun after (partial migration + retained Vitest exception)
 
-Command (after both files adopt `.bun.unit.test.ts` + `bun:test`):
+Migrated file command:
 
 ```text
-bun run test:unit:bun -- src/features/trace-drilldown/lib/trace-relation-factory-graph.bun.unit.test.ts src/features/trace-drilldown/lib/trace-relation-factory-graph-flow.bun.unit.test.ts
+bun test src/features/trace-drilldown/lib/trace-relation-factory-graph.bun.unit.test.ts
 ```
 
-Raw result: reserved for story
-`BUN-UNIT-features-trace-drilldown-02-004` after migration completes.
+Migrated file raw result (story `002`, revision `c2af26995`):
+
+```text
+bun test v1.3.12 (700fc117)
+src\features\trace-drilldown\lib\trace-relation-factory-graph.bun.unit.test.ts:
+(pass) ... 7 named cases ...
+7 pass
+0 fail
+16 expect() calls
+Ran 7 tests across 1 file. [63.00ms]
+```
+
+### Retained Vitest exception: `trace-relation-factory-graph-flow.test.ts`
+
+Decision (story `003`, recorded 2026-08-01 UTC): keep this leased file on
+Vitest. A filename/`bun:test` migration attempt fails before any case runs
+because Bun resolves `@you-agent-factory/factory-graph` →
+`@you-agent-factory/components/graphs` through package `exports` into
+`dist/graphs/index.d.ts`, then cannot load `./graph-edge` from that types entry.
+Vitest continues to resolve the same imports through dashboard source aliases.
+
+Bun incompatibility probe (temporary `.bun.unit.test.ts` + `bun:test` /
+`mock(() => {})` adaptation of the leased file; not retained in tree):
+
+```text
+bun test v1.3.12 (700fc117)
+src\features\trace-drilldown\lib\_tmp-flow.bun.unit.test.ts:
+# Unhandled error between tests
+error: Cannot find module './graph-edge' from '.../ui/packages/components/dist/graphs/index.d.ts'
+0 pass
+1 fail
+1 error
+Ran 1 test across 1 file. [106.00ms]
+```
+
+Retained Vitest execution evidence (same host/revision family; 7 named cases
+unchanged):
+
+```text
+bunx --no-install vitest run --config vitest.lanes.config.ts --project=dashboard-unit --maxWorkers=4 --retry=0 src/features/trace-drilldown/lib/trace-relation-factory-graph-flow.test.ts
+Test Files  1 passed (1)
+Tests  7 passed (7)
+Duration  874ms (transform 433ms, setup 0ms, import 623ms, tests 19ms, environment 0ms)
+[timing] elapsed_ms=1515
+[timing] exit_code=0
+```
+
+No broad Bun shim, assertion weakening, or production-source change was
+introduced. Fixing this requires Bun unit-lane package/source resolution owned
+by the foundation lane, not this leased cohort.
+
+Cohort-level before/after wall-clock comparison remains reserved for story
+`BUN-UNIT-features-trace-drilldown-02-004`.
 
 ## Comparison fields retained for later
 
-| Field | Vitest baseline | Bun after |
+| Field | Vitest baseline | After story 003 |
 | --- | --- | --- |
-| Migrated files | 0 | pending |
-| Retained Vitest files | 2 | pending |
-| Passing tests | 14 | pending |
-| Wall-clock `elapsed_ms` | 1870 | pending |
-| Vitest duration summary | 927ms | n/a |
+| Migrated files | 0 | 1 (`trace-relation-factory-graph`) |
+| Retained Vitest files | 2 | 1 (`trace-relation-factory-graph-flow`) |
+| Passing tests | 14 | 14 (7 Bun + 7 Vitest) |
+| Wall-clock `elapsed_ms` | 1870 | pending story 004 focused compare |
+| Vitest duration summary | 927ms | retained file alone 874ms / 1515ms wall |
