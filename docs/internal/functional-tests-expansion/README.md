@@ -23,3 +23,7 @@ The checker also accepts absolute paths without prefixing them with the
 repository root. The ignored `docs/temp/functional-tests-expansion/` planner
 mirror is not a fallback; with the default routing, the live `tests/functional`
 tree is scanned against the committed pair above.
+
+Run `go run ./cmd/migrationledgercheck` from the repository root to validate
+that committed pair against the live tree and packaged-Factory invocation
+matrix.
