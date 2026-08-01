@@ -37,6 +37,19 @@ func TestRunAcceptsYAMLRootDocument(t *testing.T) {
 	}
 }
 
+func TestRunAcceptsStandaloneJavaScriptRoot(t *testing.T) {
+	root := fixtureRepository(t)
+	goalDir := filepath.Join(root, filepath.FromSlash(authoredBoundary), "goal")
+	if err := os.Remove(filepath.Join(goalDir, "factory.json")); err != nil {
+		t.Fatalf("remove JSON root: %v", err)
+	}
+	writeFixture(t, root, authoredBoundary+"/goal/factory.js", validJavaScriptFactory("@you/goal", "builtin-goal"))
+
+	if err := run(config{root: root}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("run() error = %v", err)
+	}
+}
+
 func TestRunRejectsAmbiguousRootDocumentsWithActionablePaths(t *testing.T) {
 	root := fixtureRepository(t)
 	writeFixture(t, root, authoredBoundary+"/goal/factory.yaml", "name: '@you/goal'\n")
@@ -71,6 +84,32 @@ func TestRunRejectsFirstPartyDefinitionAuthoredAsGoLiteral(t *testing.T) {
 		`declares shipped first-party Factory "@you/new-literal"`,
 		authoredBoundary,
 	)
+}
+
+func TestRunRejectsFirstPartyDefinitionAuthoredAsJavaScriptOutsideBoundary(t *testing.T) {
+	root := fixtureRepository(t)
+	writeFixture(
+		t,
+		root,
+		"pkg/services/factory_definitions/packages/new/factory.js",
+		validJavaScriptFactory("@you/new-javascript", "builtin-new-javascript"),
+	)
+
+	err := run(config{root: root}, &bytes.Buffer{})
+	assertErrorContains(t, err,
+		"pkg/services/factory_definitions/packages/new/factory.js",
+		`declares shipped first-party Factory "@you/new-javascript"`,
+		authoredBoundary,
+	)
+}
+
+func TestRunIgnoresJavaScriptWithoutFactoryMetadata(t *testing.T) {
+	root := fixtureRepository(t)
+	writeFixture(t, root, "pkg/services/factory_definitions/packages/new/factory.js", "const name = '@you/not-a-factory';\n")
+
+	if err := run(config{root: root}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("run() error = %v", err)
+	}
 }
 
 func TestRunIgnoresGeneratedGoFactoryLiteral(t *testing.T) {
@@ -110,6 +149,10 @@ func validJSONFactory(name, id string) string {
 
 func validYAMLFactory(name, id string) string {
 	return "name: '" + name + "'\nid: " + id + "\nworkTypes: []\nresources: []\nworkers: []\nworkstations: []\n"
+}
+
+func validJavaScriptFactory(name, id string) string {
+	return "/* @you-factory-meta\n{\"name\":\"" + name + "\",\"version\":1,\"id\":\"" + id + "\"}\n*/\nreturn null;\n"
 }
 
 func writeFixture(t *testing.T, root, relative, content string) {

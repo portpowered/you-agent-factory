@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """Regression tests for the packaged full-flow worktree setup boundary."""
 
+import importlib.util
 import json
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -54,6 +57,34 @@ class FullFlowWorktreeSetupTest(unittest.TestCase):
             check=False,
             capture_output=True,
             text=True,
+        )
+
+    def test_skips_config_write_when_long_path_support_is_already_enabled(self):
+        spec = importlib.util.spec_from_file_location("setup_task_worktree", SCRIPT_PATH)
+        setup_task_worktree = importlib.util.module_from_spec(spec)
+        previous_dont_write_bytecode = sys.dont_write_bytecode
+        sys.dont_write_bytecode = True
+        try:
+            spec.loader.exec_module(setup_task_worktree)
+        finally:
+            sys.dont_write_bytecode = previous_dont_write_bytecode
+        configured = subprocess.CompletedProcess(
+            ["git", "config", "--get", "core.longpaths"],
+            0,
+            stdout="true\n",
+            stderr="",
+        )
+
+        with mock.patch.object(
+            setup_task_worktree.subprocess, "run", return_value=configured
+        ) as run:
+            setup_task_worktree.persist_longpaths(self.repository)
+
+        run.assert_called_once_with(
+            ["git", "config", "--get", "core.longpaths"],
+            cwd=self.repository,
+            text=True,
+            capture_output=True,
         )
 
     def test_persists_long_path_support_and_creates_matching_worktree(self):
