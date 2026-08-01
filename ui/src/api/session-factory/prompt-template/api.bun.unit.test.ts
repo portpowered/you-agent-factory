@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "bun:test";
 
+import { bunVi as vi } from "../../../testing/bun/vi-compat";
 import {
   CurrentFactoryPromptTemplateAPIError,
   getCurrentFactoryWorkstationPromptTemplateContract,
