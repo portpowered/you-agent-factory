@@ -1,14 +1,16 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 
-import { discoverSessionNamedFactoryNames } from "./import-activation";
+import { bunVi as vi } from "../../testing/bun/vi-compat";
 
 const listFactorySessions = vi.fn();
 const openFactorySession = vi.fn();
 
-vi.mock("../factory-sessions", () => ({
+mock.module("../factory-sessions", () => ({
   listFactorySessions: (...args: unknown[]) => listFactorySessions(...args),
   openFactorySession: (...args: unknown[]) => openFactorySession(...args),
 }));
+
+const { discoverSessionNamedFactoryNames } = await import("./import-activation");
 
 describe("discoverSessionNamedFactoryNames", () => {
   beforeEach(() => {
