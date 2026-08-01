@@ -96,32 +96,11 @@ type EngineObservation struct {
 	ActiveThrottlePauses []factorydefinitions.ActiveThrottlePause
 }
 
-// EventSource supplies retained-then-live canonical events and engine
-// observation facts for the selected Factory Session runtime.
-type EventSource interface {
-	SubscribeFactoryEvents(
-		context.Context,
-		*factorydefinitions.FactoryEventReconnectCursor,
-		factorydefinitions.FactoryEventReconnectScope,
-	) (*factorydefinitions.FactoryEventStream, error)
-	GetEngineObservation(context.Context) (*EngineObservation, error)
-}
-
-// Clock supplies observation timestamps.
-type Clock interface {
-	Now() time.Time
-}
-
 // View is the transport-independent presentation input emitted after projection.
 type View struct {
 	EngineObservation EngineObservation
 	RenderData        recordings.SimpleDashboardRenderData
 	ObservedAt        time.Time
-}
-
-// ViewSink presents one projected Factory view.
-type ViewSink interface {
-	PresentFactoryView(View)
 }
 
 // ErrorReporter receives non-fatal projection or presentation-read failures.

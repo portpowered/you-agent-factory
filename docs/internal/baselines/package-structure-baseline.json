@@ -2219,16 +2219,6 @@
     },
     {
       "rule": "service-root-interface-count",
-      "filePath": "pkg/services/factory_visualization/internal/services/activation_lifecycle",
-      "target": "pkg/services/factory_visualization/internal/services/activation_lifecycle/service.go:Clock,pkg/services/factory_visualization/internal/services/activation_lifecycle/service.go:EventSource,pkg/services/factory_visualization/internal/services/activation_lifecycle/service.go:Service,pkg/services/factory_visualization/internal/services/activation_lifecycle/service.go:ViewSink"
-    },
-    {
-      "rule": "service-root-interface-count",
-      "filePath": "pkg/services/factory_visualization/internal/services/live_view_projection",
-      "target": "pkg/services/factory_visualization/internal/services/live_view_projection/service.go:Clock,pkg/services/factory_visualization/internal/services/live_view_projection/service.go:Service,pkg/services/factory_visualization/internal/services/live_view_projection/service.go:Sink,pkg/services/factory_visualization/internal/services/live_view_projection/service.go:Source"
-    },
-    {
-      "rule": "service-root-interface-count",
       "filePath": "pkg/services/operator_settings",
       "target": "pkg/services/operator_settings/construction_ports_contract.go:FileSystem,pkg/services/operator_settings/construction_ports_contract.go:TemporaryFile,pkg/services/operator_settings/document_contract.go:DocumentOwner,pkg/services/operator_settings/service_contract.go:Service"
     },

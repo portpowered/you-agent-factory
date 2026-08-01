@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
@@ -19,6 +20,7 @@ func LoadDetails(ctx context.Context, files providersessionsinternal.FileSystem,
 	if err := ins.checkCanceled(); err != nil {
 		return providersessions.Detail{}, providersessions.ErrOperationCanceled
 	}
+	id = strings.TrimSpace(id)
 	if err := ValidateSessionID(id); err != nil {
 		return providersessions.Detail{}, providersessions.ErrInvalidIdentifier
 	}
@@ -51,9 +53,9 @@ func LoadDetails(ctx context.Context, files providersessionsinternal.FileSystem,
 				info, statErr := files.Stat(resolved.AbsolutePath)
 				if statErr == nil {
 					modifiedAt := info.ModTime().UTC()
-					return mapSessionToProviderSessionDetail(ins, id, resolved.RelativePath, info.Size(), &modifiedAt, session), nil
+					return mapSessionToProviderSessionDetail(ins, id, resolved.RelativePath, info.Size(), &modifiedAt, session)
 				}
-				return mapSessionToProviderSessionDetail(ins, id, resolved.RelativePath, 0, nil, session), nil
+				return mapSessionToProviderSessionDetail(ins, id, resolved.RelativePath, 0, nil, session)
 			}
 			return providersessions.Detail{}, limitLookupError(root, err)
 		default:
@@ -67,7 +69,7 @@ func LoadDetails(ctx context.Context, files providersessionsinternal.FileSystem,
 	}
 	modifiedAt := info.ModTime().UTC()
 
-	return mapSessionToProviderSessionDetail(ins, id, resolved.RelativePath, info.Size(), &modifiedAt, session), nil
+	return mapSessionToProviderSessionDetail(ins, id, resolved.RelativePath, info.Size(), &modifiedAt, session)
 }
 
 func limitLookupError(root AgentStorageRoot, err error) error {
@@ -85,10 +87,16 @@ func mapSessionToProviderSessionDetail(
 	sizeBytes int64,
 	modifiedAt *time.Time,
 	session *SessionData,
-) providersessions.Detail {
+) (providersessions.Detail, error) {
+	if err := ins.checkCanceled(); err != nil {
+		return providersessions.Detail{}, providersessions.ErrOperationCanceled
+	}
 	stats := session.ParseStats
 	ins.mergeStats(&stats)
 	facts := reconstructSessionFacts(ins, session)
+	if err := ins.checkCanceled(); err != nil {
+		return providersessions.Detail{}, providersessions.ErrOperationCanceled
+	}
 	unknownCount := stats.UnavailableBlobCount + facts.unknownCount + ins.unknownRecords
 	summary := providersessions.ParseSummary{
 		LineCount:          stats.BlobCount + stats.MetaCount,
@@ -116,7 +124,7 @@ func mapSessionToProviderSessionDetail(
 		},
 		Parse:      summary,
 		Transcript: facts.transcript,
-	}
+	}, nil
 }
 
 func mapTokenUsage(usage SessionTokenUsage) *providersessions.TokenUsage {
