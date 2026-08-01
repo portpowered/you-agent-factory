@@ -63,6 +63,9 @@ func newWithCursorRecorder(
 	if logger == nil {
 		logger = zap.NewNop()
 	}
+	if clock == nil {
+		clock = clockwork.NewRealClock()
+	}
 	if commandRunner == nil {
 		commandRunner = unavailableCommandRunner{}
 	}
