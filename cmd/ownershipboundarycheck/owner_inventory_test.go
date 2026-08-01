@@ -36,6 +36,7 @@ func TestLoadOwnerInventoryCoversCommittedServiceTreeAndProcessEdges(t *testing.
 func TestClassifyServicePackageRootVsNonRootForDistinctOwners(t *testing.T) {
 	root := fixtureRepository(t, map[string]string{
 		"pkg/services/factory_sessions/doc.go": "package factory_sessions\n",
+		"pkg/services/providers/doc.go":        "package providers\n",
 		"pkg/services/workers/doc.go":          "package workers\n",
 	})
 
@@ -52,7 +53,7 @@ func TestClassifyServicePackageRootVsNonRootForDistinctOwners(t *testing.T) {
 		{path: "pkg/services/factory_sessions", owner: "factory_sessions", surface: surfaceRoot},
 		{path: "pkg/services/factory_sessions/internal/execution", owner: "factory_sessions", surface: surfaceNonRoot},
 		{path: "pkg/services/workers", owner: "workers", surface: surfaceRoot},
-		{path: "pkg/services/providers/internal/services/execution/internal/provider", owner: "workers", surface: surfaceNonRoot},
+		{path: "pkg/services/providers/internal/services/execution/internal/provider", owner: "providers", surface: surfaceNonRoot},
 		{path: "pkg/platform/logging", owner: "", surface: surfaceNone},
 	}
 	for _, tc := range cases {
@@ -111,6 +112,7 @@ func TestClassifyTreatsNewDeeperPathAsNonRootWithoutPrivateCatalog(t *testing.T)
 func TestServiceImplementationImportUsesOwnerInventory(t *testing.T) {
 	root := fixtureRepository(t, map[string]string{
 		"pkg/services/factory_sessions/doc.go": "package factory_sessions\n",
+		"pkg/services/providers/doc.go":        "package providers\n",
 		"pkg/services/workers/doc.go":          "package workers\n",
 		"pkg/initializer/runtime.go": `package initializer
 import (
@@ -126,7 +128,7 @@ var (
 	})
 
 	findings := scanFixture(t, root)
-	assertFinding(t, findings, ruleInitializerServiceImplementation, "/workers/provider")
+	assertFinding(t, findings, ruleInitializerServiceImplementation, "/providers/internal")
 	assertFinding(t, findings, ruleInitializerServiceImplementation, "/workers/never_listed_before")
 	for _, item := range findings {
 		if item.Rule == ruleInitializerServiceImplementation &&
@@ -135,4 +137,3 @@ var (
 		}
 	}
 }
-
