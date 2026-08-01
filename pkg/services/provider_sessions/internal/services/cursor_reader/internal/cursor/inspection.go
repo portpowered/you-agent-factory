@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 )
@@ -11,19 +12,19 @@ import (
 var errInspectionCanceled = providersessions.ErrOperationCanceled
 
 type inspection struct {
-	ctx              context.Context
-	bytesRead        int64
-	walkEntries      int
-	candidates       int
-	rowsQueried      int
-	transcriptFacts  int
-	malformedBlobs   int
-	malformedMeta    int
-	unknownRecords   int
-	protobufWork     int
-	exhaustedLimit   string
-	diagnostics      []providersessions.LineError
-	stopReconstruct  bool
+	ctx             context.Context
+	bytesRead       int64
+	walkEntries     int
+	candidates      int
+	rowsQueried     int
+	transcriptFacts int
+	malformedBlobs  int
+	malformedMeta   int
+	unknownRecords  int
+	protobufWork    int
+	exhaustedLimit  string
+	diagnostics     []providersessions.LineError
+	stopReconstruct bool
 }
 
 func newInspection(ctx context.Context) *inspection {
@@ -214,4 +215,95 @@ func (ins *inspection) parseErrors(fallback []providersessions.LineError) []prov
 	out := make([]providersessions.LineError, len(ins.diagnostics))
 	copy(out, ins.diagnostics)
 	return out
+}
+
+// Named inspection limits bound store traversal, SQLite reads, blob decoding,
+// reconstruction work, and public diagnostics for one Cursor session inspection.
+const (
+	LimitStoreWalkEntries   = "store_walk_entries"
+	LimitStoreCandidates    = "store_candidates"
+	LimitQueriedRows        = "queried_rows"
+	LimitBlobBytes          = "blob_bytes"
+	LimitInspectionBytes    = "inspection_bytes"
+	LimitProtobufNesting    = "protobuf_nesting"
+	LimitProtobufDecodeWork = "protobuf_decode_work"
+	LimitTranscriptFacts    = "transcript_facts"
+	LimitParseDiagnostics   = "parse_diagnostics"
+	LimitDiagnosticMessage  = "diagnostic_message_length"
+)
+
+const (
+	maxStoreWalkEntries   = 100_000
+	maxStoreCandidates    = 16
+	maxQueriedRows        = 50_000
+	maxBlobBytes          = 4 * 1024 * 1024
+	maxInspectionBytes    = 64 * 1024 * 1024
+	maxProtobufNesting    = 16
+	maxProtobufDecodeWork = 512
+	maxTranscriptFacts    = 10_000
+	maxParseDiagnostics   = 64
+	maxDiagnosticMessage  = 256
+)
+
+var testLimitOverrides struct {
+	storeWalkEntries   int
+	storeCandidates    int
+	queriedRows        int
+	blobBytes          int
+	inspectionBytes    int
+	protobufNesting    int
+	protobufDecodeWork int
+	transcriptFacts    int
+	parseDiagnostics   int
+}
+
+func effectiveLimit(override, fallback int) int {
+	if override > 0 {
+		return override
+	}
+	return fallback
+}
+
+func sanitizeDiagnosticMessage(class string, position int, extra ...string) string {
+	class = strings.TrimSpace(class)
+	if class == "" {
+		class = "cursor_record_error"
+	}
+	message := class
+	if position > 0 {
+		message = fmt.Sprintf("%s at row %d", class, position)
+	}
+	if len(extra) > 0 && strings.TrimSpace(extra[0]) != "" {
+		message = fmt.Sprintf("%s (%s)", message, strings.TrimSpace(extra[0]))
+	}
+	return truncateDiagnosticMessage(message)
+}
+
+func truncateDiagnosticMessage(message string) string {
+	if len(message) <= maxDiagnosticMessage {
+		return message
+	}
+	if maxDiagnosticMessage <= 3 {
+		return message[:maxDiagnosticMessage]
+	}
+	return message[:maxDiagnosticMessage-3] + "..."
+}
+
+func sanitizeStructuralError(message string) string {
+	trimmed := strings.TrimSpace(message)
+	if trimmed == "" {
+		return "cursor session store could not be read"
+	}
+	lower := strings.ToLower(trimmed)
+	switch {
+	case strings.Contains(lower, "select "),
+		strings.Contains(lower, "pragma "),
+		strings.Contains(lower, "sqlite"),
+		strings.Contains(lower, "\\"),
+		strings.Contains(lower, "/"),
+		strings.Contains(lower, ":"):
+		return "cursor session store could not be read"
+	default:
+		return truncateDiagnosticMessage(trimmed)
+	}
 }
