@@ -2,11 +2,11 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/livesession"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
@@ -113,15 +113,32 @@ func DefinitionCallbacks(runtime *SessionRuntime) DefinitionHostCallbacks {
 		if loaded == nil {
 			return nil, fmt.Errorf("current factory snapshot is unavailable")
 		}
-		snapshot, err := factorydefinitionswire.LoadedFactorySnapshotCapturer()(
-			loaded,
-			loaded.FactoryDir(),
-			nil,
+		if runtime.definitions == nil {
+			return nil, fmt.Errorf("factory definitions service is unavailable")
+		}
+		factoryConfig := loaded.FactoryConfig()
+		if factoryConfig == nil {
+			return nil, fmt.Errorf("current factory snapshot is unavailable")
+		}
+		canonical, err := json.Marshal(factoryConfig)
+		if err != nil {
+			return nil, fmt.Errorf("serialize current factory: %w", err)
+		}
+		result, err := runtime.definitions.CaptureFactorySnapshot(
+			ctx,
+			interfaces.CaptureFactorySnapshotRequest{
+				FactoryDir: loaded.FactoryDir(),
+				Canonical:  canonical,
+				Name:       factoryConfig.Name,
+			},
 		)
 		if err != nil {
 			return nil, fmt.Errorf("capture current factory snapshot: %w", err)
 		}
-		return snapshot, nil
+		if result.Snapshot == nil {
+			return nil, fmt.Errorf("current factory snapshot is unavailable")
+		}
+		return result.Snapshot, nil
 	}
 	dependencies.WithActivationLock = runtime.sessionState.WithActivationLock
 	dependencies.RequireIdleRuntimeForSession = runtime.requireIdleRuntimeForSession

@@ -23,7 +23,9 @@ func provideFactoryDefinitionsService(
 	scaffoldInitializer factorydefinitions.ScaffoldInitializer,
 	portableFileSystem portablefiles.FileSystem,
 	directoryReplacementStore factorydefinitionswire.DirectoryReplacementStore,
-	invocationPolicyPorts factorydefinitionswire.InvocationPolicyPorts,
+	representation factorydefinitionswire.Representation,
+	mapFactoryJSONForPersistence factorydefinitions.FactoryLayoutPayloadMapper,
+	invocationPolicy factorydefinitionswire.InvocationPolicy,
 ) (factorydefinitions.Service, error) {
 	return factorydefinitionswire.NewService(
 		factorydefinitionswire.Dependencies{
@@ -42,7 +44,9 @@ func provideFactoryDefinitionsService(
 			OrchestratorValidator:         orchestratorValidator,
 			PortableFileSystem:            portableFileSystem,
 			DirectoryReplacementStore:     directoryReplacementStore,
-			InvocationPolicyPorts:         invocationPolicyPorts,
+			Representation:                representation,
+			MapFactoryJSONForPersistence:  mapFactoryJSONForPersistence,
+			InvocationPolicy:              invocationPolicy,
 		},
 		factorydefinitionswire.WithDistributionScaffold(
 			scaffoldInitializer,

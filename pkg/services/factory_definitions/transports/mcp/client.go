@@ -63,6 +63,9 @@ func callValidateTool(
 		envelope := decodeInputErrorEnvelope("decode validate input", err)
 		return json.Marshal(ToolResponse[factoryapi.FactoryValidationResult]{Error: &envelope})
 	}
+	if binding.Definitions != nil {
+		return json.Marshal(ValidateRoot(ctx, binding.Definitions, factory))
+	}
 	validation, err := resolveSubmittedDefinitionValidation(binding)
 	if err != nil {
 		envelope := unavailableValidationErrorEnvelope()

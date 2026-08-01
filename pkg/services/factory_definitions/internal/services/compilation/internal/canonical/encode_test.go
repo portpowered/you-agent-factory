@@ -35,7 +35,10 @@ func TestMarshalFactoryConfig_MatchesTransportCanonicalEncoder(t *testing.T) {
 		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
 	}
 
-	ownerLocal, err := compilationcanonical.MarshalFactoryConfig(cfg)
+	ownerLocal, err := compilationcanonical.MarshalFactoryConfig(
+		factorymapping.MarshalCanonicalFactoryConfig,
+		cfg,
+	)
 	if err != nil {
 		t.Fatalf("MarshalFactoryConfig: %v", err)
 	}

@@ -91,9 +91,7 @@ func TestFactorySessionsServiceRequiresRuntimeClockBinding(t *testing.T) {
 
 	service, err := provideFactorySessionsService(
 		factoryruntime.NewSessionResultProjectionOperation(),
-		nil,
-		nil,
-		nil,
+		factorydefinitionswire.InvocationPolicy{},
 		func() string { return "response-event-test-id" },
 		nil,
 		func() string { return "session-test-id" },

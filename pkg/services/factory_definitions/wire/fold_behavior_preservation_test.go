@@ -604,6 +604,10 @@ func newWireFoldPreservationService(t *testing.T, options ...foldPreservationOpt
 		OrchestratorValidator:     stubOrchestratorValidator{},
 		PortableFileSystem:        fileSystem,
 		DirectoryReplacementStore: directoryreplace.Local{},
+		Representation:            testRepresentation(),
+		MapFactoryJSONForPersistence: func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
+			return validationentry.MapFactoryJSONForPersistence(payload, loader.LoadSourceFromCanonicalJSON)
+		},
 	})
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)

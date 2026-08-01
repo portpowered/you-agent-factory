@@ -20,6 +20,7 @@ import (
 	distributionwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/wire"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
 	factorydefaultscaffold "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/defaultscaffold"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 )
 
 func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
@@ -162,6 +163,10 @@ func TestNewServiceConstructsInertRoot(t *testing.T) {
 		OrchestratorValidator:     stubOrchestratorValidator{},
 		PortableFileSystem:        platformfilesystem.Local{},
 		DirectoryReplacementStore: stubDirectoryReplacementStore{},
+		Representation:            testRepresentation(),
+		MapFactoryJSONForPersistence: func([]byte) (factorydefinitions.DefinitionValidationRequest, error) {
+			return factorydefinitions.DefinitionValidationRequest{}, nil
+		},
 	})
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -448,6 +453,10 @@ func definitionDependencies(ports constructionPorts) factorydefinitionswire.Depe
 		OrchestratorValidator:         ports.orchestratorValidator,
 		PortableFileSystem:            ports.portableFileSystem,
 		DirectoryReplacementStore:     ports.directoryReplacementStore,
+		Representation:                testRepresentation(),
+		MapFactoryJSONForPersistence: func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
+			return validationentry.MapFactoryJSONForPersistence(payload, ports.loader.LoadSourceFromCanonicalJSON)
+		},
 	}
 }
 

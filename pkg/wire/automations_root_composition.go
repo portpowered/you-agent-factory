@@ -57,12 +57,12 @@ func AutomationsRootFromEdges(
 		commandRunner = workers.AdaptCommandRunner(edges.ScriptCommandRunner)
 	}
 
-	ports, err := factorydefinitionswire.InvocationPolicyPortsFromNestedOwner()
+	invocationPolicy, err := factorydefinitionswire.NewInvocationPolicy()
 	if err != nil {
 		return automations.Root{}, fmt.Errorf("compose Automations root: %w", err)
 	}
 
-	service := provideAutomationFactory(edges, ports.WorkstationExecution)(
+	service := provideAutomationFactory(edges, invocationPolicy)(
 		zap.NewNop(),
 		platformclock.Real{},
 		commandRunner,

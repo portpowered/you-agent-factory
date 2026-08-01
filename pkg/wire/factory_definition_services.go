@@ -21,6 +21,10 @@ import (
 	recordingswire "github.com/portpowered/infinite-you/pkg/services/recordings/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	workwire "github.com/portpowered/infinite-you/pkg/services/work/wire"
+	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
+	authoredmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/authored"
+	factorysnapshot "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 )
 
 func provideWorkContentHostPlatform(edges serviceedges.Edges) work.ContentHostPlatform {
@@ -72,56 +76,100 @@ func provideContentMaterializer(
 	)
 }
 
-func provideFactoryInvocationPolicyPorts() (factorydefinitionswire.InvocationPolicyPorts, error) {
-	return factorydefinitionswire.InvocationPolicyPortsFromNestedOwner()
+func provideFactoryInvocationPolicy() (factorydefinitionswire.InvocationPolicy, error) {
+	return factorydefinitionswire.NewInvocationPolicy()
 }
 
+// These adapters project one already-constructed invocation policy for legacy
+// execution-owner constructor shapes. They never construct a second policy
+// service; the immutable projection comes from provideFactoryInvocationPolicy.
 func provideDecisionEnvelopeService(
-	ports factorydefinitionswire.InvocationPolicyPorts,
+	policy factorydefinitionswire.InvocationPolicy,
 ) factorydefinitionswire.DecisionEnvelopeService {
-	return ports.DecisionEnvelope
+	return policy.DecisionEnvelope
 }
 
 func provideInvocationInterpolationService(
-	ports factorydefinitionswire.InvocationPolicyPorts,
+	policy factorydefinitionswire.InvocationPolicy,
 ) factorydefinitionswire.InvocationInterpolationService {
-	return ports.InvocationInterpolation
+	return policy.InvocationInterpolation
 }
 
 func provideInvocationOutputShapingService(
-	ports factorydefinitionswire.InvocationPolicyPorts,
+	policy factorydefinitionswire.InvocationPolicy,
 ) factorydefinitionswire.InvocationOutputShapingService {
-	return ports.InvocationOutput
+	return policy.InvocationOutput
 }
 
 func provideInvocationWorkTypeService(
-	ports factorydefinitionswire.InvocationPolicyPorts,
+	policy factorydefinitionswire.InvocationPolicy,
 ) factorydefinitionswire.InvocationWorkTypeService {
-	return ports.InvocationWorkType
+	return policy.InvocationWorkType
 }
 
 func provideQuorumPolicyService(
-	ports factorydefinitionswire.InvocationPolicyPorts,
+	policy factorydefinitionswire.InvocationPolicy,
 ) factorydefinitionswire.QuorumPolicyService {
-	return ports.QuorumPolicy
+	return policy.QuorumPolicy
 }
 
 func provideWorkPropagationPolicyService(
-	ports factorydefinitionswire.InvocationPolicyPorts,
+	policy factorydefinitionswire.InvocationPolicy,
 ) factorydefinitionswire.WorkPropagationPolicyService {
-	return ports.WorkPropagation
+	return policy.WorkPropagation
 }
 
 func provideWorkstationExecutionPolicyService(
-	ports factorydefinitionswire.InvocationPolicyPorts,
+	policy factorydefinitionswire.InvocationPolicy,
 ) factorydefinitionswire.WorkstationExecutionPolicyService {
-	return ports.WorkstationExecution
+	return policy.WorkstationExecution
 }
 
 func provideTTSObservabilityService(
-	ports factorydefinitionswire.InvocationPolicyPorts,
+	policy factorydefinitionswire.InvocationPolicy,
 ) factorydefinitionswire.TTSObservabilityService {
-	return ports.TTSObservability
+	return policy.TTSObservability
+}
+
+func provideFactoryDefinitionRepresentation() factorydefinitionswire.Representation {
+	mapper := factorymapping.NewFactoryConfigMapper()
+	return factorydefinitionswire.Representation{
+		DecodeFactoryRuntime: factorymapping.ExpandFactoryConfigForRuntimeLoad,
+		DecodeFactory:        mapper.Expand,
+		EncodeFactory:        factorymapping.MarshalCanonicalFactoryConfig,
+		NormalizeAuthored:    authoredmapping.AuthoredFactoryConfigForExpandedLayout,
+		ParseWorker:          authoredmapping.ParseWorkerConfig,
+		ParseWorkstation:     authoredmapping.ParseWorkstationConfig,
+		ParseAgentsBody:      authoredmapping.ParseAgentsBody,
+		SafeLayoutSegment:    authoredmapping.SafeFactoryLayoutSegment,
+		SafePromptPath:       authoredmapping.SafePromptFilePath,
+		RenderWorker:         authoredmapping.RenderWorkerAgentsMarkdown,
+		RenderWorkstation:    authoredmapping.RenderWorkstationAgentsMarkdown,
+		RenderAgentsBody:     authoredmapping.RenderAgentsBody,
+		DecodeSnapshot:       decodeFactorySnapshotJSON,
+		SnapshotObject:       factorysnapshot.ObjectFromFactoryConfig,
+	}
+}
+
+func decodeFactorySnapshotJSON(
+	payload []byte,
+) (*factorydefinitions.FactorySnapshot, error) {
+	boundary, err := factorymapping.GeneratedFactoryFromOpenAPIJSON(payload)
+	if err != nil {
+		return nil, err
+	}
+	return factorydefinitions.NewFactorySnapshot(boundary)
+}
+
+func provideFactoryDefinitionLayoutPayloadMapper(
+	loader *factorydefinitionswire.Loader,
+) factorydefinitions.FactoryLayoutPayloadMapper {
+	return func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
+		return validationentry.MapFactoryJSONForPersistence(
+			payload,
+			loader.LoadSourceFromCanonicalJSON,
+		)
+	}
 }
 
 func provideFactoryDefinitionPortableFileSystem(
@@ -347,6 +395,7 @@ func provideFactoryDefinitionLoader(
 	sourceResolver factorydefinitions.PortableBundledFileSourceResolver,
 	inspectSource factorydefinitionswire.PortableBundledFileInspection,
 	requiredToolChecker factorydefinitions.RequiredToolChecker,
+	representation factorydefinitionswire.Representation,
 ) *factorydefinitionswire.Loader {
 	return factorydefinitionswire.NewLoader(
 		applySupportedFiles,
@@ -358,6 +407,7 @@ func provideFactoryDefinitionLoader(
 		sourceResolver,
 		inspectSource,
 		requiredToolChecker,
+		representation,
 	)
 }
 
@@ -379,13 +429,18 @@ func provideReplayArtifactStorage() platformreplay.Storage {
 	return platformreplay.NewLocal(runtime.GOOS)
 }
 
-func provideReplayArtifactLoader(storage platformreplay.Storage) recordings.ReplayArtifactLoader {
+func provideReplayArtifactLoader(
+	storage platformreplay.Storage,
+	representation factorydefinitionswire.Representation,
+) recordings.ReplayArtifactLoader {
 	return recordingswire.NewReplayArtifactLoader(
 		storage,
-		factorydefinitionswire.NewFactorySnapshotJSONDecoder(),
+		factorydefinitionswire.NewFactorySnapshotJSONDecoder(representation),
 	)
 }
 
-func provideReplayRuntimeConfigDecoder() factorydefinitionswire.ReplayRuntimeConfigDecoder {
-	return factorydefinitionswire.NewReplayRuntimeConfigDecoder()
+func provideReplayRuntimeConfigDecoder(
+	representation factorydefinitionswire.Representation,
+) factorydefinitionswire.ReplayRuntimeConfigDecoder {
+	return factorydefinitionswire.NewReplayRuntimeConfigDecoder(representation)
 }

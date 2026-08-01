@@ -6,8 +6,6 @@ import (
 	authoringlayout "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout"
 	authoringlayoutwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/wire"
 	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
-	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
-	authoredmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/authored"
 )
 
 // AuthoringLayoutDependencies are the exact owner-local ports required to
@@ -16,6 +14,7 @@ import (
 type AuthoringLayoutDependencies struct {
 	Validator          factorydefinitions.Validator
 	MapInput           factorydefinitions.FactoryLayoutPayloadMapper
+	Representation     Representation
 	Loader             *compilationwire.Loader
 	MaterializeFiles   factorydefinitions.PortableBundledFilesMaterializer
 	ValidateWrites     factorydefinitions.PortableBundledFileWritesValidator
@@ -33,14 +32,13 @@ type AuthoringLayoutDependencies struct {
 func NewAuthoringLayoutService(
 	deps AuthoringLayoutDependencies,
 ) (authoringlayout.Service, error) {
-	mapper := factorymapping.NewFactoryConfigMapper()
 	writer := authoringlayoutwire.NewWriter(
-		authoredmapping.RenderWorkerAgentsMarkdown,
-		authoredmapping.RenderWorkstationAgentsMarkdown,
-		authoredmapping.RenderAgentsBody,
+		deps.Representation.RenderWorker,
+		deps.Representation.RenderWorkstation,
+		deps.Representation.RenderAgentsBody,
 		authoringlayoutwire.NewAgentsFileWriter(deps.AuthoredWriterFS),
-		authoredmapping.SafeFactoryLayoutSegment,
-		authoredmapping.SafePromptFilePath,
+		deps.Representation.SafeLayoutSegment,
+		deps.Representation.SafePromptPath,
 		deps.AuthoredWriterFS,
 		deps.EnsureInbox,
 		compilationwire.NormalizeCanonicalWorkstationRuntime,
@@ -48,9 +46,9 @@ func NewAuthoringLayoutService(
 	return authoringlayoutwire.NewService(authoringlayout.Dependencies{
 		Validator:         deps.Validator,
 		MapInput:          deps.MapInput,
-		DecodeFactory:     mapper.Expand,
-		NormalizeAuthored: authoredmapping.AuthoredFactoryConfigForExpandedLayout,
-		EncodeFactory:     mapper.Flatten,
+		DecodeFactory:     deps.Representation.DecodeFactory,
+		NormalizeAuthored: deps.Representation.NormalizeAuthored,
+		EncodeFactory:     deps.Representation.EncodeFactory,
 		Write: func(
 			targetDir string,
 			prepared *factorydefinitions.PreparedFactoryLayoutPayload,

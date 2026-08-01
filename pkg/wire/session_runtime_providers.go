@@ -331,6 +331,7 @@ func provideNamedFactoryCatalog(
 
 func provideFactoryDefinitionPersistence(
 	validator factorydefinitions.Validator,
+	mapFactoryJSONForPersistence factorydefinitions.FactoryLayoutPayloadMapper,
 	loader *factorydefinitionswire.Loader,
 	pruneRemovedDocs factorydefinitions.PortableBundledDocsPruner,
 	materializeFiles factorydefinitions.PortableBundledFilesMaterializer,
@@ -341,15 +342,11 @@ func provideFactoryDefinitionPersistence(
 	persistenceFileSystem factorydefinitionswire.PersistenceFileSystem,
 	namedPaths factorydefinitionswire.NamedPathResolver,
 	directoryReplacementStore factorydefinitionswire.DirectoryReplacementStore,
+	representation factorydefinitionswire.Representation,
 ) (factorydefinitions.Persistence, error) {
 	return factorydefinitionswire.Persistence(
 		validator,
-		func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
-			return validationentry.MapFactoryJSONForPersistence(
-				payload,
-				loader.LoadSourceFromCanonicalJSON,
-			)
-		},
+		mapFactoryJSONForPersistence,
 		loader,
 		pruneRemovedDocs,
 		materializeFiles,
@@ -360,6 +357,7 @@ func provideFactoryDefinitionPersistence(
 		persistenceFileSystem,
 		namedPaths,
 		directoryReplacementStore,
+		representation,
 	)
 }
 
@@ -407,6 +405,7 @@ func provideEditableFactoryValidator(
 func provideInitialFactorySnapshotFactory(
 	applySupportedFiles factorydefinitions.PortableBundledFilesApplier,
 	applyStarterWork factorydefinitions.FactoryStarterWorkApplier,
+	representation factorydefinitionswire.Representation,
 ) factorydefinitions.InitialFactorySnapshotFactory {
 	return func(
 		loaded factorydefinitions.LoadedFactorySource,
@@ -417,14 +416,14 @@ func provideInitialFactorySnapshotFactory(
 				applySupportedFiles,
 				applyStarterWork,
 			),
-			factorydefinitionswire.FactorySnapshotCapturer(),
+			factorydefinitionswire.FactorySnapshotCapturer(representation),
 		)
 	}
 }
 
 func provideAutomationFactory(
 	edges serviceedges.Edges,
-	workstationExecution factorydefinitionswire.WorkstationExecutionPolicyService,
+	invocationPolicy factorydefinitionswire.InvocationPolicy,
 ) factorysessionwire.AutomationFactory {
 	return func(
 		logger *zap.Logger,
@@ -460,7 +459,7 @@ func provideAutomationFactory(
 			nil,
 			"",
 			workerswire.ResolveTemplateFields,
-			workstationExecution,
+			invocationPolicy.WorkstationExecution,
 		)
 		if err != nil {
 			return nil
@@ -477,9 +476,7 @@ func provideFactorySessionResponseEventRetentionLimits(
 
 func provideFactorySessionsService(
 	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
-	interpolation factorydefinitionswire.InvocationInterpolationService,
-	invocationWorkTypes factorydefinitionswire.InvocationWorkTypeService,
-	ttsObservability factorydefinitionswire.TTSObservabilityService,
+	invocationPolicy factorydefinitionswire.InvocationPolicy,
 	eventIDs factorysessions.ResponseEventIDGenerator,
 	responseEventRetentionLimits *factorysessions.ResponseEventRetentionLimits,
 	sessionIDs factorysessions.SessionIDGenerator,
@@ -492,7 +489,7 @@ func provideFactorySessionsService(
 ) (factorysessions.Service, error) {
 	return factorysessionwire.NewService(func() factoryruntime.JavaScriptCheckpointStore {
 		return factoryruntimewire.NewJavaScriptCheckpointStore()
-	}, sessionResultProjection, interpolation, invocationWorkTypes, ttsObservability, eventIDs, responseEventRetentionLimits, sessionIDs, resolveHome, directories, namedPaths, invocationInputFiles, initialWorkFiles, resolveSymlinks)
+	}, sessionResultProjection, invocationPolicy.InvocationInterpolation, invocationPolicy.InvocationWorkType, invocationPolicy.TTSObservability, eventIDs, responseEventRetentionLimits, sessionIDs, resolveHome, directories, namedPaths, invocationInputFiles, initialWorkFiles, resolveSymlinks)
 }
 
 func provideOrchestrationJavaScriptExecution(
@@ -671,8 +668,10 @@ func providePortableRecordingWriter(edges serviceedges.Edges) (recordings.Portab
 	return recordingswire.NewPortableRecordingWriter(makeDirectories, createTemporaryFile, removePath, renamePath)
 }
 
-func provideLoadedFactorySnapshotCapturer() factorydefinitions.LoadedFactorySnapshotCapturer {
-	return factorydefinitionswire.LoadedFactorySnapshotCapturer()
+func provideLoadedFactorySnapshotCapturer(
+	representation factorydefinitionswire.Representation,
+) factorydefinitions.LoadedFactorySnapshotCapturer {
+	return factorydefinitionswire.LoadedFactorySnapshotCapturer(representation)
 }
 
 func provideRuntimeRecorderFactory(
@@ -698,7 +697,9 @@ func provideReplayClockFactory() factorysessionwire.ReplayClockFactory {
 	return recordingswire.NewReplayClock
 }
 
-func provideReplayExecutionFactory() recordings.ReplayExecutionFactory {
+func provideReplayExecutionFactory(
+	representation factorydefinitionswire.Representation,
+) recordings.ReplayExecutionFactory {
 	return func(
 		artifact *factorydefinitions.ReplayArtifact,
 	) (
@@ -710,8 +711,8 @@ func provideReplayExecutionFactory() recordings.ReplayExecutionFactory {
 	) {
 		return recordingswire.NewReplayExecution(
 			artifact,
-			factorydefinitionswire.NewFactorySnapshotJSONDecoder(),
-			factorydefinitionswire.NewReplayRuntimeConfigDecoder(),
+			factorydefinitionswire.NewFactorySnapshotJSONDecoder(representation),
+			factorydefinitionswire.NewReplayRuntimeConfigDecoder(representation),
 		)
 	}
 }
@@ -721,9 +722,7 @@ func provideReplayExecutionFactory() recordings.ReplayExecutionFactory {
 // pkgmaintcheck:ignore-function-lines service-ownership migration preserves this orchestration flow; extract focused helpers and remove this exemption.
 func provideWorkersRuntimeFactory(
 	providersService providers.Service,
-	interpolation factorydefinitionswire.InvocationInterpolationService,
-	decisionEnvelopes factorydefinitionswire.DecisionEnvelopeService,
-	workstationExecution factorydefinitionswire.WorkstationExecutionPolicyService,
+	invocationPolicy factorydefinitionswire.InvocationPolicy,
 	processEnvironment func() []string,
 	currentWorkingDirectory func() (string, error),
 	retryRandom platformrandom.Source,
@@ -853,8 +852,8 @@ func provideWorkersRuntimeFactory(
 			processEnvironment,
 			currentWorkingDirectory,
 			contentMaterializer,
-			interpolation,
-			workstationExecution,
+			invocationPolicy.InvocationInterpolation,
+			invocationPolicy.WorkstationExecution,
 			factoryDocs,
 			resolveSymlinks,
 			executableLocator,
@@ -866,7 +865,7 @@ func provideWorkersRuntimeFactory(
 			retryRandom,
 			workstationFiles,
 			temporaryFiles,
-			decisionEnvelopes,
+			invocationPolicy.DecisionEnvelope,
 			providerInjected,
 			scriptInjected,
 			providersLifecycleOwned,

@@ -45,12 +45,12 @@ func TestProvideAutomationFactoryConstructsThroughAutomationsWire(t *testing.T) 
 		"",
 	)
 
-	ports, err := factorydefinitionswire.InvocationPolicyPortsFromNestedOwner()
+	invocationPolicy, err := factorydefinitionswire.NewInvocationPolicy()
 	if err != nil {
-		t.Fatalf("InvocationPolicyPortsFromNestedOwner() error = %v", err)
+		t.Fatalf("NewInvocationPolicy() error = %v", err)
 	}
 
-	factory := provideAutomationFactory(serviceedges.Edges{}, ports.WorkstationExecution)
+	factory := provideAutomationFactory(serviceedges.Edges{}, invocationPolicy)
 	service := factory(
 		zap.NewNop(),
 		platformclock.Real{},

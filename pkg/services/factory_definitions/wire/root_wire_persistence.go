@@ -7,8 +7,6 @@ import (
 	factoryeffect "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/effects"
 	authoringlayoutwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/wire"
 	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
-	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
-	authoredmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/authored"
 )
 
 // Persistence constructs the Factory Definitions persistence implementation
@@ -27,15 +25,15 @@ func Persistence(
 	persistenceFileSystem factoryeffect.PersistenceFileSystem,
 	namedPaths factoryeffect.NamedPathResolver,
 	replacement factoryeffect.DirectoryReplacementStore,
+	representation Representation,
 ) (contracts.Persistence, error) {
-	mapper := factorymapping.NewFactoryConfigMapper()
 	writer := authoringlayoutwire.NewWriter(
-		authoredmapping.RenderWorkerAgentsMarkdown,
-		authoredmapping.RenderWorkstationAgentsMarkdown,
-		authoredmapping.RenderAgentsBody,
+		representation.RenderWorker,
+		representation.RenderWorkstation,
+		representation.RenderAgentsBody,
 		authoringlayoutwire.NewAgentsFileWriter(fileSystem),
-		authoredmapping.SafeFactoryLayoutSegment,
-		authoredmapping.SafePromptFilePath,
+		representation.SafeLayoutSegment,
+		representation.SafePromptPath,
 		fileSystem,
 		ensureInbox,
 		compilationwire.NormalizeCanonicalWorkstationRuntime,
@@ -54,9 +52,9 @@ func Persistence(
 				segment,
 				payload,
 				validator,
-				mapper.Expand,
-				authoredmapping.AuthoredFactoryConfigForExpandedLayout,
-				mapper.Flatten,
+				representation.DecodeFactory,
+				representation.NormalizeAuthored,
+				representation.EncodeFactory,
 			)
 		},
 		func(

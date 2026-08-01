@@ -8,8 +8,6 @@ import (
 	authoringlayoutwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/authoring_layout/wire"
 	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
 	wirevalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire/validation"
-	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
-	authoredmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/authored"
 )
 
 // Loader is the compilation-owned Factory Definitions loader selected by owner
@@ -29,12 +27,12 @@ func NewLoader(
 	sourceResolver factorydefinitions.PortableBundledFileSourceResolver,
 	inspectSource factoryeffect.PortableBundledFileInspection,
 	requiredToolChecker factorydefinitions.RequiredToolChecker,
+	representation Representation,
 ) *Loader {
-	mapper := factorymapping.NewFactoryConfigMapper()
 	authoredReader := authoringlayoutwire.NewReader(
-		authoredmapping.ParseWorkerConfig,
-		authoredmapping.ParseWorkstationConfig,
-		authoredmapping.ParseAgentsBody,
+		representation.ParseWorker,
+		representation.ParseWorkstation,
+		representation.ParseAgentsBody,
 		fileSystem,
 	)
 	return compilationwire.NewLoader(
@@ -45,11 +43,13 @@ func NewLoader(
 		namedPaths.ResolveCurrentDir,
 		authoringlayoutwire.NewFactorySourceLoader(fileSystem),
 		LoadedFactorySourceFactory(),
-		factorymapping.ExpandFactoryConfigForRuntimeLoad,
-		mapper.Expand,
-		factorymapping.MarshalCanonicalFactoryConfig,
-		authoredmapping.AuthoredFactoryConfigForExpandedLayout,
-		normalizeCanonicalFactory,
+		representation.DecodeFactoryRuntime,
+		representation.DecodeFactory,
+		representation.EncodeFactory,
+		representation.NormalizeAuthored,
+		func(payload []byte) (*factorydefinitions.FactoryConfig, error) {
+			return normalizeCanonicalFactory(representation, payload)
+		},
 		func(
 			factoryDir string,
 			factoryConfig *factorydefinitions.FactoryConfig,
@@ -81,7 +81,7 @@ func NewLoader(
 		authoredReader.LoadWorkerBody,
 		authoredReader.LoadWorkstationBody,
 		authoredReader.LoadWorkstationPromptTemplate,
-		authoredmapping.SafeFactoryLayoutSegment,
+		representation.SafeLayoutSegment,
 		authoredReader.SplitRuntimeEntityDirExists,
 	)
 }
@@ -109,20 +109,20 @@ func LoadedFactorySourceFactory() factorydefinitions.LoadedFactorySourceFactory 
 }
 
 func normalizeCanonicalFactory(
+	representation Representation,
 	payload []byte,
 ) (*factorydefinitions.FactoryConfig, error) {
-	mapper := factorymapping.NewFactoryConfigMapper()
-	factoryConfig, err := mapper.Expand(payload)
+	factoryConfig, err := representation.DecodeFactory(payload)
 	if err != nil {
 		return nil, fmt.Errorf("parse factory config: %w", err)
 	}
-	authoredFactoryConfig, err := authoredmapping.AuthoredFactoryConfigForExpandedLayout(
+	authoredFactoryConfig, err := representation.NormalizeAuthored(
 		factoryConfig,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("normalize authored factory config: %w", err)
 	}
-	canonical, err := mapper.Flatten(authoredFactoryConfig)
+	canonical, err := representation.EncodeFactory(authoredFactoryConfig)
 	if err != nil {
 		return nil, fmt.Errorf("normalize factory config: %w", err)
 	}

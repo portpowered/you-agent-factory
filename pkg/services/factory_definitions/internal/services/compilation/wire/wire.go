@@ -17,8 +17,10 @@ import (
 
 type Loader = compilationloading.Loader
 
-func EncodeFactoryPort() factorydefinitions.FactoryConfigJSONEncoder {
-	return compilationcanonical.EncodeFactoryPort()
+func EncodeFactoryPort(
+	encode factorydefinitions.FactoryConfigJSONEncoder,
+) factorydefinitions.FactoryConfigJSONEncoder {
+	return compilationcanonical.EncodeFactoryPort(encode)
 }
 
 // NormalizeCanonicalWorkstationRuntime exposes the compilation-owned pure

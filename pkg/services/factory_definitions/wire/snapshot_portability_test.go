@@ -41,7 +41,8 @@ func TestWireSnapshotHelpersCapturePrepareMaterializeAndReplay(t *testing.T) {
 		t.Fatalf("PortableFactoryConfigPreparer() = %#v, want alpha config", prepared)
 	}
 
-	capture := factorydefinitionswire.FactorySnapshotCapturer()
+	representation := testRepresentation()
+	capture := factorydefinitionswire.FactorySnapshotCapturer(representation)
 	snapshot, err := capture("/factories/alpha", prepared, nil, "", nil)
 	if err != nil {
 		t.Fatalf("FactorySnapshotCapturer() error = %v", err)
@@ -54,7 +55,7 @@ func TestWireSnapshotHelpersCapturePrepareMaterializeAndReplay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Marshal(snapshot) error = %v", err)
 	}
-	imported, err := factorydefinitionswire.PrepareFactorySnapshotImport(payload)
+	imported, err := factorydefinitionswire.PrepareFactorySnapshotImport(payload, representation)
 	if err != nil {
 		t.Fatalf("prepare.Import() error = %v", err)
 	}
@@ -68,7 +69,7 @@ func TestWireSnapshotHelpersCapturePrepareMaterializeAndReplay(t *testing.T) {
 		t.Fatalf("Materializer() error = %v", err)
 	}
 
-	replayConfig, err := factorydefinitionswire.NewReplayRuntimeConfigDecoder()(snapshot)
+	replayConfig, err := factorydefinitionswire.NewReplayRuntimeConfigDecoder(representation)(snapshot)
 	if err != nil {
 		t.Fatalf("ReplayRuntimeConfigDecoder() error = %v", err)
 	}

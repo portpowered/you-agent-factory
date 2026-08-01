@@ -19,9 +19,46 @@ import (
 	distributionwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/distribution/wire"
 	snapshotsportability "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability"
 	snapshotsportabilitywire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/wire"
-	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 )
+
+// Representation contains the pure authored/canonical and generated-boundary
+// functions selected by process Wire. The Definitions owner decides when each
+// callback is used; it does not import the central transport-mapping package.
+type Representation struct {
+	DecodeFactoryRuntime factorydefinitions.FactoryConfigJSONDecoder
+	DecodeFactory        factorydefinitions.FactoryConfigJSONDecoder
+	EncodeFactory        factorydefinitions.FactoryConfigJSONEncoder
+	NormalizeAuthored    func(*factorydefinitions.FactoryConfig) (*factorydefinitions.FactoryConfig, error)
+
+	ParseWorker       func([]byte, string) (*factorydefinitions.FactoryWorkerConfig, error)
+	ParseWorkstation  func([]byte, string) (*factorydefinitions.FactoryWorkstationConfig, error)
+	ParseAgentsBody   func([]byte, string) (string, error)
+	SafeLayoutSegment func(string, string) (string, error)
+	SafePromptPath    func(string, string) (string, error)
+	RenderWorker      func(factorydefinitions.FactoryWorkerConfig) ([]byte, error)
+	RenderWorkstation func(factorydefinitions.FactoryWorkstationConfig) ([]byte, error)
+	RenderAgentsBody  func(string) []byte
+
+	DecodeSnapshot func([]byte) (*factorydefinitions.FactorySnapshot, error)
+	SnapshotObject factorydefinitions.FactorySnapshotObjectMapper
+}
+
+func (r Representation) valid() bool {
+	return r.DecodeFactoryRuntime != nil &&
+		r.DecodeFactory != nil &&
+		r.EncodeFactory != nil &&
+		r.NormalizeAuthored != nil &&
+		r.ParseWorker != nil &&
+		r.ParseWorkstation != nil &&
+		r.ParseAgentsBody != nil &&
+		r.SafeLayoutSegment != nil &&
+		r.SafePromptPath != nil &&
+		r.RenderWorker != nil &&
+		r.RenderWorkstation != nil &&
+		r.RenderAgentsBody != nil &&
+		r.DecodeSnapshot != nil &&
+		r.SnapshotObject != nil
+}
 
 // Dependencies are the exact process-edge ports required to construct the
 // private Factory Definitions capabilities. Session/runtime ports intentionally
@@ -42,7 +79,9 @@ type Dependencies struct {
 	OrchestratorValidator         factorydefinitions.OrchestratorDefinitionValidator
 	PortableFileSystem            portablefiles.FileSystem
 	DirectoryReplacementStore     factoryeffect.DirectoryReplacementStore
-	InvocationPolicyPorts         InvocationPolicyPorts
+	Representation                Representation
+	MapFactoryJSONForPersistence  factorydefinitions.FactoryLayoutPayloadMapper
+	InvocationPolicy              InvocationPolicy
 }
 
 // NewService constructs an inert Factory Definitions root from one dependency
@@ -53,7 +92,7 @@ func NewService(deps Dependencies, options ...CompositionOption) (factorydefinit
 		return nil, err
 	}
 
-	invocationPolicy, err := invocationPolicyService(deps.InvocationPolicyPorts)
+	invocationPolicy, err := invocationPolicyService(deps.InvocationPolicy)
 	if err != nil {
 		return nil, err
 	}
@@ -63,9 +102,9 @@ func NewService(deps Dependencies, options ...CompositionOption) (factorydefinit
 	)
 	snapshotsPortability, err := snapshotsportabilitywire.NewService(snapshotsportability.Dependencies{
 		LoadCanonical:             deps.Loader.LoadSourceFromCanonicalJSON,
-		CaptureLoaded:             LoadedFactorySnapshotCapturer(),
+		CaptureLoaded:             LoadedFactorySnapshotCapturer(deps.Representation),
 		PreparePortable:           preparePortableFactoryConfig,
-		DecodeSnapshot:            NewFactorySnapshotJSONDecoder(),
+		DecodeSnapshot:            NewFactorySnapshotJSONDecoder(deps.Representation),
 		MaterializePortableFiles:  snapshotsportabilitywire.NewMaterializer(deps.PortableFileSystem),
 		ValidateMaterializeWrites: snapshotsportabilitywire.NewWritesValidator(deps.PortableFileSystem),
 	})
@@ -76,7 +115,7 @@ func NewService(deps Dependencies, options ...CompositionOption) (factorydefinit
 	compilation, err := compilationwire.NewService(compilationservice.Dependencies{
 		LoadCanonical:      deps.Loader.LoadSourceFromCanonicalJSON,
 		LoadFromFactoryDir: deps.Loader.LoadSourceFromFactoryDir,
-		EncodeFactory:      compilationwire.EncodeFactoryPort(),
+		EncodeFactory:      deps.Representation.EncodeFactory,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("construct Factory Definitions compilation: %w", err)
@@ -94,10 +133,9 @@ func NewService(deps Dependencies, options ...CompositionOption) (factorydefinit
 		return nil, fmt.Errorf("construct Factory Definitions authoring layout: %w", err)
 	}
 	authoringLayout, err := NewAuthoringLayoutService(AuthoringLayoutDependencies{
-		Validator: deps.Validator,
-		MapInput: func(payload []byte) (factorydefinitions.DefinitionValidationRequest, error) {
-			return validationentry.MapFactoryJSONForPersistence(payload, deps.Loader.LoadSourceFromCanonicalJSON)
-		},
+		Validator:          deps.Validator,
+		MapInput:           deps.MapFactoryJSONForPersistence,
+		Representation:     deps.Representation,
 		Loader:             deps.Loader,
 		MaterializeFiles:   snapshotsportabilitywire.NewMaterializer(deps.PortableFileSystem),
 		ValidateWrites:     snapshotsportabilitywire.NewWritesValidator(deps.PortableFileSystem),
@@ -185,6 +223,12 @@ func validateDependencies(deps Dependencies) error {
 	if deps.DirectoryReplacementStore == nil {
 		return fmt.Errorf("construct Factory Definitions: directory replacement store is required")
 	}
+	if !deps.Representation.valid() {
+		return fmt.Errorf("construct Factory Definitions: representation adapters are required")
+	}
+	if deps.MapFactoryJSONForPersistence == nil {
+		return fmt.Errorf("construct Factory Definitions: persistence payload mapper is required")
+	}
 	return nil
 }
 
@@ -198,8 +242,9 @@ func LocalFactoryNameResolver() func(string) (string, error) {
 
 // EffectiveFactoryDefinitionNormalizerFromMapper binds the canonical Factory
 // config mapper to effective-catalog normalization for wire composition.
-func EffectiveFactoryDefinitionNormalizerFromMapper() factorydefinitions.EffectiveFactoryDefinitionNormalizer {
-	mapper := factorymapping.NewFactoryConfigMapper()
+func EffectiveFactoryDefinitionNormalizerFromMapper(
+	decode ...factorydefinitions.FactoryConfigJSONDecoder,
+) factorydefinitions.EffectiveFactoryDefinitionNormalizer {
 	return func(
 		ctx context.Context,
 		candidate factorydefinitions.EffectiveFactoryCatalogCandidate,
@@ -207,7 +252,10 @@ func EffectiveFactoryDefinitionNormalizerFromMapper() factorydefinitions.Effecti
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		definition, err := mapper.Expand(candidate.Canonical)
+		if len(decode) == 0 || decode[0] == nil {
+			return nil, fmt.Errorf("effective Factory definition decoder is required")
+		}
+		definition, err := decode[0](candidate.Canonical)
 		if contextErr := ctx.Err(); contextErr != nil {
 			return nil, contextErr
 		}

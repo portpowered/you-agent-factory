@@ -1,23 +1,28 @@
 // Package canonical owns compilation-local canonical Factory encode behavior.
 //
-// Decode and normalize for authored/canonical loading remain on injected loader
-// ports composed from process wire; only the effective-source content-identity
-// encoder lives here so Factory Definitions wire does not bind compilation to
-// transport-mapping codecs directly.
+// Decode, normalize, and encode for authored/canonical loading remain on
+// injected owner ports composed from process Wire. This package only preserves
+// the compilation test seam; it does not select a transport codec.
 package canonical
 
 import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
 
 // MarshalFactoryConfig serializes one effective Factory definition into canonical
 // JSON bytes used for compilation content identity.
-func MarshalFactoryConfig(cfg *factorydefinitions.FactoryConfig) ([]byte, error) {
-	return factorymapping.MarshalCanonicalFactoryConfig(cfg)
+func MarshalFactoryConfig(
+	encode factorydefinitions.FactoryConfigJSONEncoder,
+	cfg *factorydefinitions.FactoryConfig,
+) ([]byte, error) {
+	return encode(cfg)
 }
 
 // EncodeFactoryPort is the contracts encoder port bound by compilation wire.
-func EncodeFactoryPort() factorydefinitions.FactoryConfigJSONEncoder {
-	return factorydefinitions.FactoryConfigJSONEncoder(MarshalFactoryConfig)
+func EncodeFactoryPort(
+	encode factorydefinitions.FactoryConfigJSONEncoder,
+) factorydefinitions.FactoryConfigJSONEncoder {
+	return func(cfg *factorydefinitions.FactoryConfig) ([]byte, error) {
+		return MarshalFactoryConfig(encode, cfg)
+	}
 }

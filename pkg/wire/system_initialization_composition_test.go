@@ -38,6 +38,7 @@ func bootstrapCompositionTestPersistence(t *testing.T) factorydefinitions.Persis
 		t.Fatalf("providePortableBundledFileSourceResolver() error = %v", err)
 	}
 	inspection := provideFactoryDefinitionPortableBundledFileInspection(edges)
+	representation := provideFactoryDefinitionRepresentation()
 	toolPathLookup := provideFactoryDefinitionRequiredToolPathLookup(edges)
 	toolVersionProbe := provideFactoryDefinitionRequiredToolVersionProbe(edges)
 	requiredToolChecker, err := provideFactoryDefinitionRequiredToolChecker(toolPathLookup, toolVersionProbe)
@@ -54,17 +55,20 @@ func bootstrapCompositionTestPersistence(t *testing.T) factorydefinitions.Persis
 		sourceResolver,
 		inspection,
 		requiredToolChecker,
+		representation,
 	)
 	pruneRemovedDocs, err := factorydefinitionswire.NewPortableBundledDocsPruner(portableFileSystem)
 	if err != nil {
 		t.Fatalf("NewPortableBundledDocsPruner() error = %v", err)
 	}
+	payloadMapper := provideFactoryDefinitionLayoutPayloadMapper(loader)
 	authoredWriterFileSystem := provideFactoryDefinitionAuthoredWriterFileSystem(edges)
 	inboxEnsurer := provideFactoryDefinitionInputInboxSentinelEnsurer(authoredWriterFileSystem)
 	persistenceFileSystem := provideFactoryDefinitionPersistenceFileSystem(edges)
 	directoryReplacementStore := provideFactoryDefinitionDirectoryReplacementStore(edges)
 	persistence, err := provideFactoryDefinitionPersistence(
 		factorydefinitionswire.NewValidationOperations(nil, loader.LoadSourceFromCanonicalJSON),
+		payloadMapper,
 		loader,
 		pruneRemovedDocs,
 		materializer,
@@ -75,6 +79,7 @@ func bootstrapCompositionTestPersistence(t *testing.T) factorydefinitions.Persis
 		persistenceFileSystem,
 		namedPaths,
 		directoryReplacementStore,
+		representation,
 	)
 	if err != nil {
 		t.Fatalf("provideFactoryDefinitionPersistence() error = %v", err)

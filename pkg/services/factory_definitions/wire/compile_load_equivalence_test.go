@@ -13,6 +13,9 @@ import (
 	catalogwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/catalog/wire"
 	snapshotswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/wire"
 	factorydefinitionswire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/wire"
+	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
+	authoredmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig/authored"
+	factorysnapshot "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
 )
 
 func TestWireCompileLoadEquivalence_SuccessThroughDefinitionsRoot(t *testing.T) {
@@ -129,7 +132,34 @@ func newCompileLoadLoader(
 		sourceResolver,
 		fileSystem,
 		stubRequiredToolChecker{},
+		testRepresentation(),
 	)
+}
+
+func testRepresentation() factorydefinitionswire.Representation {
+	mapper := factorymapping.NewFactoryConfigMapper()
+	return factorydefinitionswire.Representation{
+		DecodeFactoryRuntime: factorymapping.ExpandFactoryConfigForRuntimeLoad,
+		DecodeFactory:        mapper.Expand,
+		EncodeFactory:        factorymapping.MarshalCanonicalFactoryConfig,
+		NormalizeAuthored:    authoredmapping.AuthoredFactoryConfigForExpandedLayout,
+		ParseWorker:          authoredmapping.ParseWorkerConfig,
+		ParseWorkstation:     authoredmapping.ParseWorkstationConfig,
+		ParseAgentsBody:      authoredmapping.ParseAgentsBody,
+		SafeLayoutSegment:    authoredmapping.SafeFactoryLayoutSegment,
+		SafePromptPath:       authoredmapping.SafePromptFilePath,
+		RenderWorker:         authoredmapping.RenderWorkerAgentsMarkdown,
+		RenderWorkstation:    authoredmapping.RenderWorkstationAgentsMarkdown,
+		RenderAgentsBody:     authoredmapping.RenderAgentsBody,
+		DecodeSnapshot: func(payload []byte) (*factorydefinitions.FactorySnapshot, error) {
+			boundary, err := factorymapping.GeneratedFactoryFromOpenAPIJSON(payload)
+			if err != nil {
+				return nil, err
+			}
+			return factorydefinitions.NewFactorySnapshot(boundary)
+		},
+		SnapshotObject: factorysnapshot.ObjectFromFactoryConfig,
+	}
 }
 
 func exerciseWireRootCompileSuccess(

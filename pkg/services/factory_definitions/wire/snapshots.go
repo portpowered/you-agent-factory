@@ -9,32 +9,36 @@ import (
 	factoryeffect "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/effects"
 	compilationwire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/compilation/wire"
 	snapshotsportabilitywire "github.com/portpowered/infinite-you/pkg/services/factory_definitions/internal/services/snapshots_portability/wire"
-	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
 )
 
 // NewFactorySnapshotJSONDecoder binds the canonical public representation decoder
 // to Factory Definitions snapshot capture.
-func NewFactorySnapshotJSONDecoder() factoryeffect.FactorySnapshotJSONDecoder {
+func NewFactorySnapshotJSONDecoder(
+	representation Representation,
+) factoryeffect.FactorySnapshotJSONDecoder {
 	return snapshotsportabilitywire.NewJSONDecoder(
-		factorymapping.GeneratedFactoryFromOpenAPIJSON,
+		representation.DecodeSnapshot,
 	)
 }
 
 // LoadedFactorySnapshotCapturer binds canonical snapshot representation
 // mapping to the Factory Definitions capture implementation.
-func LoadedFactorySnapshotCapturer() contracts.LoadedFactorySnapshotCapturer {
+func LoadedFactorySnapshotCapturer(
+	representation Representation,
+) contracts.LoadedFactorySnapshotCapturer {
 	return snapshotsportabilitywire.NewLoadedSnapshotCapturer(
-		factorysnapshot.ObjectFromFactoryConfig,
+		representation.SnapshotObject,
 		compilationwire.MergeRuntimeConfig,
 	)
 }
 
 // FactorySnapshotCapturer binds canonical representation mapping to explicit
 // Factory Definition snapshot capture.
-func FactorySnapshotCapturer() contracts.FactorySnapshotCapturer {
+func FactorySnapshotCapturer(
+	representation Representation,
+) contracts.FactorySnapshotCapturer {
 	return snapshotsportabilitywire.NewExplicitSnapshotCapturer(
-		factorysnapshot.ObjectFromFactoryConfig,
+		representation.SnapshotObject,
 		compilationwire.MergeRuntimeConfig,
 	)
 }
@@ -57,8 +61,9 @@ func CaptureInitialSnapshot(
 // snapshot capture for Recordings import paths.
 func NewFactorySnapshotDirectoryLoader(
 	loader *compilationwire.Loader,
+	representation Representation,
 ) factoryeffect.FactorySnapshotDirectoryLoader {
-	captureLoaded := LoadedFactorySnapshotCapturer()
+	captureLoaded := LoadedFactorySnapshotCapturer(representation)
 	return func(factoryDir string) (*contracts.FactorySnapshot, error) {
 		loaded, err := loader.LoadSourceFromFactoryDir(factoryDir, nil)
 		if err != nil {
@@ -83,11 +88,13 @@ func PortableFactoryConfigPreparer(
 
 // NewReplayRuntimeConfigDecoder binds replay lookup reconstruction to the
 // canonical Factory representation decoder.
-func NewReplayRuntimeConfigDecoder() factoryeffect.ReplayRuntimeConfigDecoder {
+func NewReplayRuntimeConfigDecoder(
+	representation Representation,
+) factoryeffect.ReplayRuntimeConfigDecoder {
 	return func(
 		snapshot *contracts.FactorySnapshot,
 	) (factoryeffect.ReplayRuntimeConfig, error) {
-		return snapshotsportabilitywire.DecodeReplayRuntimeConfig(snapshot, factorymapping.FactoryConfigFromOpenAPIJSON)
+		return snapshotsportabilitywire.DecodeReplayRuntimeConfig(snapshot, representation.DecodeFactory)
 	}
 }
 
@@ -113,8 +120,9 @@ func ValidateEditableSnapshot(
 // snapshots_portability-owned prepare-import logic.
 func PrepareFactorySnapshotImport(
 	payload []byte,
+	representation Representation,
 ) (contracts.PrepareFactorySnapshotImportResult, error) {
-	return snapshotsportabilitywire.PrepareFactorySnapshotImport(payload, NewFactorySnapshotJSONDecoder())
+	return snapshotsportabilitywire.PrepareFactorySnapshotImport(payload, NewFactorySnapshotJSONDecoder(representation))
 }
 
 // NewPortableBundledFilesApplier binds portable authored-file discovery to an
