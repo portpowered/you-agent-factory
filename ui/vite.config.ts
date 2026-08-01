@@ -354,6 +354,7 @@ export default defineConfig({
     testTimeout: isCoverageRun ? 180000 : 30000,
     coverage: {
       provider: "v8",
+      reporter: [...coverageConfigDefaults.reporter, "lcov"],
       exclude: [
         ...coverageConfigDefaults.exclude,
         "src/api/generated/**",
