@@ -16,12 +16,33 @@ func TestCheckPassesOnRepositoryLedger(t *testing.T) {
 	}
 }
 
+func TestCheckPassesWithAbsoluteCanonicalPaths(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := findRepoRoot(t)
+	ledgerPath := filepath.Join(repoRoot, filepath.FromSlash(CanonicalLedgerPath))
+	checklistPath := filepath.Join(repoRoot, filepath.FromSlash(CanonicalChecklistPath))
+	if err := Check(repoRoot, ledgerPath, checklistPath); err != nil {
+		t.Fatalf("Check() with absolute canonical paths error = %v", err)
+	}
+}
+
 func TestCheckPackagedFactoryInvocationMatrixPassesOnRepositoryLedger(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := findRepoRoot(t)
 	if err := CheckPackagedFactoryInvocationMatrix(repoRoot, DefaultChecklistPath); err != nil {
 		t.Fatalf("CheckPackagedFactoryInvocationMatrix() error = %v", err)
+	}
+}
+
+func TestCheckPackagedFactoryInvocationMatrixAcceptsAbsoluteChecklistPath(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := findRepoRoot(t)
+	checklistPath := filepath.Join(repoRoot, filepath.FromSlash(CanonicalChecklistPath))
+	if err := CheckPackagedFactoryInvocationMatrix(repoRoot, checklistPath); err != nil {
+		t.Fatalf("CheckPackagedFactoryInvocationMatrix() with absolute path error = %v", err)
 	}
 }
 

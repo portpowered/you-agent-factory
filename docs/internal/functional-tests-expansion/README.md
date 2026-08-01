@@ -11,3 +11,15 @@ live beside this routing note:
 These files are intentionally under `docs/internal/`, not `docs/temp/`, so
 `migrationledgercheck` validates the committed repository state in every
 worktree and CI checkout.
+
+## Canonical checker routing
+
+`migrationledgercheck` resolves its default paths from the repository root:
+
+- ledger: `docs/internal/functional-tests-expansion/migration-ledger-inventory.json`
+- destination checklist: `docs/internal/functional-tests-expansion/test-file-checklist.md`
+
+The checker also accepts absolute paths without prefixing them with the
+repository root. The ignored `docs/temp/functional-tests-expansion/` planner
+mirror is not a fallback; with the default routing, the live `tests/functional`
+tree is scanned against the committed pair above.

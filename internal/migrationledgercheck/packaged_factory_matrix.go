@@ -2,7 +2,6 @@ package migrationledgercheck
 
 import (
 	"fmt"
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -15,11 +14,19 @@ const packagedFactoryInvocationMatrixPrefix = "tests/functional/factory/packaged
 // slug is bound to a declared packaged invocation-matrix destination cell in the
 // functional-test checklist.
 func CheckPackagedFactoryInvocationMatrix(repoRoot, checklistPath string) error {
+	root, err := resolveRepositoryRoot(repoRoot)
+	if err != nil {
+		return err
+	}
 	embeddedSlugs, err := embeddedPackagedFactorySlugs()
 	if err != nil {
 		return err
 	}
-	checklistPaths, err := LoadChecklistPaths(filepath.Join(repoRoot, checklistPath))
+	resolvedChecklistPath, err := resolveRepositoryPath(root, checklistPath)
+	if err != nil {
+		return err
+	}
+	checklistPaths, err := LoadChecklistPaths(resolvedChecklistPath)
 	if err != nil {
 		return err
 	}
