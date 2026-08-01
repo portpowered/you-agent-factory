@@ -40,6 +40,8 @@ func TestBuildProcessRemainsCronInertBeforeRuntimeLifecycle(t *testing.T) {
 // TestAutomationsCronActivatesThroughRuntimeLifecycle proves cron workstations submit
 // scheduled Work after the runtime lifecycle starts.
 func TestAutomationsCronActivatesThroughRuntimeLifecycle(t *testing.T) {
+	t.Parallel()
+
 	start := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
 	fakeClock := clockwork.NewFakeClockAt(start)
 
@@ -71,6 +73,8 @@ func TestAutomationsCronActivatesThroughRuntimeLifecycle(t *testing.T) {
 // TestAutomationsCronJitterProducesStableSubmissionTiming proves cron jitter payloads
 // remain stable across repeated scheduled submissions.
 func TestAutomationsCronJitterProducesStableSubmissionTiming(t *testing.T) {
+	t.Parallel()
+
 	start := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
 	fakeClock := clockwork.NewFakeClockAt(start)
 
@@ -100,6 +104,8 @@ func TestAutomationsCronJitterProducesStableSubmissionTiming(t *testing.T) {
 // TestAutomationsCronSkipsMalformedWorkstationAndFiresValid proves cron scheduling
 // ignores malformed workstations while still firing valid cron Work.
 func TestAutomationsCronSkipsMalformedWorkstationAndFiresValid(t *testing.T) {
+	t.Parallel()
+
 	start := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
 	fakeClock := clockwork.NewFakeClockAt(start)
 
