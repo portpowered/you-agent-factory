@@ -49,6 +49,11 @@ reported with the same aggregate semantics. The reproducible baseline and the
 current workload fingerprint live in
 [`dashboard-unit-baseline.md`](plans/ui-test-latency/dashboard-unit-baseline.md).
 
+When a Vitest project extends the root config, an empty project array does not
+necessarily clear a root array such as `setupFiles`. If a Node-only project
+must avoid shared browser setup, gate that root value on the explicit project
+selection and keep the component/combined path unchanged.
+
 ## Observable contracts by layer
 
 Place regressions at the **shallowest layer that still observes the

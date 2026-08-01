@@ -104,6 +104,36 @@ and retries disabled. Worker-count changes are not justified by this baseline
 alone. Any accepted change must repeat the same workload fingerprint and three
 matched runs before it can claim a throughput improvement.
 
+## Story 002 implementation
+
+Recorded: 2026-08-01T09:59:42Z
+
+The redundant preparation path was the root Vitest setup inherited by the
+Node-only project. The project already declared `setupFiles: []`, but Vitest's
+`extends: true` merge preserves array values from the root config, so the
+dashboard-unit workers still installed the shared Testing Library and guarded
+console setup for every file. The leased runner now detects an explicit
+`dashboard-unit` project invocation and removes that setup at the root-config
+boundary. The same condition also omits the React SWC transform plugin and
+React/Radix/charting dependency optimization and inlining hints that the
+Node-only workload does not import.
+
+The change does not alter the unit file globs, Node environment, per-file
+isolation, four-worker policy, retries-disabled policy, aliases, or any other
+test project. Component and combined Vitest invocations retain the shared
+setup and browser-oriented preparation.
+
+The first validation run after the change kept the baseline fingerprint at 390
+files and 3,161 tests, all passing:
+
+| Run | Wrapper wall | Vitest wall | Transform | Setup | Collection/import | Test bodies | Environment | Result |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 1 | 70.34s | 67.09s | 29.11s | 0ms | 88.27s | 12.32s | 64ms | 390 files / 3,161 tests passed |
+
+This initial sample is directional evidence for the hypothesis, not the final
+three-run throughput claim. Story 003 must repeat three matched after-change
+runs and record the resulting median against the baseline above.
+
 ## Verification
 
 - `bun run typecheck` passed.
